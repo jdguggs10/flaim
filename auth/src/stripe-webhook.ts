@@ -3,7 +3,10 @@
  * Handles subscription lifecycle events and updates KV cache
  */
 
+import Stripe from 'stripe';
+
 export interface Env {
+  STRIPE_API_KEY: string;
   STRIPE_WEBHOOK_SECRET: string;
   SUBSCRIPTION_KV: KVNamespace;
 }
@@ -18,7 +21,13 @@ export interface StripeEvent {
 }
 
 export class StripeWebhookHandler {
-  constructor(private env: Env) {}
+  private stripe: Stripe;
+
+  constructor(private env: Env) {
+    this.stripe = new Stripe(env.STRIPE_API_KEY, {
+      apiVersion: '2023-10-16'
+    });
+  }
 
   async handleWebhook(request: Request): Promise<Response> {
     const corsHeaders = {
@@ -49,15 +58,21 @@ export class StripeWebhookHandler {
 
       const body = await request.text();
       
-      // Verify webhook signature
-      if (!(await this.verifySignature(body, signature))) {
+      // Use Stripe's constructEvent for proper signature verification
+      let event: Stripe.Event;
+      try {
+        event = this.stripe.webhooks.constructEvent(
+          body,
+          signature,
+          this.env.STRIPE_WEBHOOK_SECRET
+        );
+      } catch (error) {
+        console.error('Webhook signature verification failed:', error);
         return new Response('Invalid signature', { 
           status: 400, 
           headers: corsHeaders 
         });
       }
-
-      const event: StripeEvent = JSON.parse(body);
       
       await this.processEvent(event);
 
@@ -77,7 +92,7 @@ export class StripeWebhookHandler {
     }
   }
 
-  private async processEvent(event: StripeEvent): Promise<void> {
+  private async processEvent(event: Stripe.Event): Promise<void> {
     console.log(`Processing Stripe event: ${event.type}`);
 
     switch (event.type) {
@@ -103,28 +118,36 @@ export class StripeWebhookHandler {
     }
   }
 
-  private async handleSubscriptionUpdate(event: StripeEvent): Promise<void> {
-    const subscription = event.data.object;
-    const customerId = subscription.customer;
+  private async handleSubscriptionUpdate(event: Stripe.Event): Promise<void> {
+    const subscription = event.data.object as Stripe.Subscription;
+    const customerId = typeof subscription.customer === 'string' 
+      ? subscription.customer 
+      : subscription.customer.id;
     
     await this.updateSubscriptionCache(customerId, subscription);
     console.log(`Updated subscription for customer ${customerId}: ${subscription.status}`);
   }
 
-  private async handleSubscriptionCancellation(event: StripeEvent): Promise<void> {
-    const subscription = event.data.object;
-    const customerId = subscription.customer;
+  private async handleSubscriptionCancellation(event: Stripe.Event): Promise<void> {
+    const subscription = event.data.object as Stripe.Subscription;
+    const customerId = typeof subscription.customer === 'string' 
+      ? subscription.customer 
+      : subscription.customer.id;
     
     await this.updateSubscriptionCache(customerId, { 
       ...subscription, 
-      status: 'cancelled' 
+      status: 'canceled' // Stripe uses 'canceled' not 'cancelled'
     });
     console.log(`Cancelled subscription for customer ${customerId}`);
   }
 
-  private async handlePaymentFailure(event: StripeEvent): Promise<void> {
-    const invoice = event.data.object;
-    const customerId = invoice.customer;
+  private async handlePaymentFailure(event: Stripe.Event): Promise<void> {
+    const invoice = event.data.object as Stripe.Invoice;
+    const customerId = typeof invoice.customer === 'string' 
+      ? invoice.customer 
+      : invoice.customer?.id;
+
+    if (!customerId) return;
     
     // Mark subscription as past due
     const key = `subscription:${customerId}`;
@@ -141,9 +164,13 @@ export class StripeWebhookHandler {
     console.log(`Payment failed for customer ${customerId}`);
   }
 
-  private async handlePaymentSuccess(event: StripeEvent): Promise<void> {
-    const invoice = event.data.object;
-    const customerId = invoice.customer;
+  private async handlePaymentSuccess(event: Stripe.Event): Promise<void> {
+    const invoice = event.data.object as Stripe.Invoice;
+    const customerId = typeof invoice.customer === 'string' 
+      ? invoice.customer 
+      : invoice.customer?.id;
+
+    if (!customerId) return;
     
     // Mark subscription as active
     const key = `subscription:${customerId}`;
@@ -176,66 +203,4 @@ export class StripeWebhookHandler {
     });
   }
 
-  private async verifySignature(body: string, signature: string): Promise<boolean> {
-    const elements = signature.split(',');
-    const timestamp = elements.find(el => el.startsWith('t='))?.split('=')[1];
-    const sig = elements.find(el => el.startsWith('v1='))?.split('=')[1];
-
-    if (!timestamp || !sig) {
-      return false;
-    }
-
-    // Check timestamp (within 5 minutes)
-    const webhookTimestamp = parseInt(timestamp);
-    const now = Math.floor(Date.now() / 1000);
-    if (now - webhookTimestamp > 300) {
-      return false;
-    }
-
-    // Verify signature using HMAC-SHA256 with WebCrypto API
-    try {
-      const payload = `${timestamp}.${body}`;
-      const expectedSig = await this.createSignature(payload, this.env.STRIPE_WEBHOOK_SECRET);
-      return this.compareSignatures(sig, expectedSig);
-    } catch (error) {
-      console.error('Signature verification error:', error);
-      return false;
-    }
-  }
-
-  private async createSignature(payload: string, secret: string): Promise<string> {
-    // Import key for HMAC-SHA256
-    const key = await crypto.subtle.importKey(
-      'raw',
-      new TextEncoder().encode(secret),
-      { name: 'HMAC', hash: 'SHA-256' },
-      false,
-      ['sign']
-    );
-
-    // Create signature
-    const signature = await crypto.subtle.sign(
-      'HMAC',
-      key,
-      new TextEncoder().encode(payload)
-    );
-
-    // Convert to hex string
-    const hashArray = Array.from(new Uint8Array(signature));
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-  }
-
-  private compareSignatures(sig1: string, sig2: string): boolean {
-    // Constant-time comparison to prevent timing attacks
-    if (sig1.length !== sig2.length) {
-      return false;
-    }
-
-    let result = 0;
-    for (let i = 0; i < sig1.length; i++) {
-      result |= sig1.charCodeAt(i) ^ sig2.charCodeAt(i);
-    }
-
-    return result === 0;
-  }
 }

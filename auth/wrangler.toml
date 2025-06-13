@@ -7,15 +7,19 @@ compatibility_date = "2024-12-01"
 # STRIPE_WEBHOOK_SECRET  
 # JWT_SECRET
 
+# Cron job for quarterly key rotation
+[triggers]
+crons = ["0 0 1 */3 *"] # Every 3 months on the 1st at midnight
+
 # KV for subscription caching
 [[kv_namespaces]]
 binding = "SUBSCRIPTION_KV"
 id = "flaim_subscription_cache"
 
-# Routes for authentication flow
+# Routes for authentication flow - specific paths to avoid conflicts
 [[routes]]
-pattern = "auth.flaim.app/*"
-zone_name = "flaim.app"
+pattern = "flaim-auth.gerrygugger.workers.dev/*"
+zone_name = "gerrygugger.workers.dev"
 
 [[routes]]
 pattern = "*/login"
@@ -31,6 +35,14 @@ zone_name = "gerrygugger.workers.dev"
 
 [[routes]]
 pattern = "*/webhook/stripe"
+zone_name = "gerrygugger.workers.dev"
+
+[[routes]]
+pattern = "*/validate"
+zone_name = "gerrygugger.workers.dev"
+
+[[routes]]
+pattern = "*/jwt/jwks"
 zone_name = "gerrygugger.workers.dev"
 
 [env.dev]
@@ -52,3 +64,6 @@ id = "flaim_subscription_cache_prod"
 
 [[env.prod.routes]]
 pattern = "auth.flaim.app/*"
+
+[[env.prod.routes]]
+pattern = "flaim-auth.gerrygugger.workers.dev/*"

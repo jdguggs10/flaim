@@ -12,17 +12,13 @@ name = "USER_DO"
 class_name = "UserCredentials"
 script_name = "fantasy-sports-mcp"
 
-# Routes for ESPN MCP endpoints only
+# Routes for ESPN MCP endpoints only - avoid conflicts with auth service
 [[routes]]
-pattern = "baseball-mcp.flaim.app/*"
-zone_name = "flaim.app"
-
-[[routes]]
-pattern = "*/mcp*"
+pattern = "baseball-espn-mcp.gerrygugger.workers.dev/*"
 zone_name = "gerrygugger.workers.dev"
 
 [[routes]]
-pattern = "*/credential/espn*"
+pattern = "espn-mcp.gerrygugger.workers.dev/*"
 zone_name = "gerrygugger.workers.dev"
 
 [env.dev]
@@ -50,4 +46,7 @@ class_name = "UserCredentials"
 script_name = "fantasy-sports-mcp-prod"
 
 [[env.prod.routes]]
-pattern = "fantasy-sports-mcp-prod.gerrygugger.workers.dev/*"
+pattern = "baseball-espn-mcp.gerrygugger.workers.dev/*"
+
+[[env.prod.routes]]
+pattern = "espn-mcp.gerrygugger.workers.dev/*"

@@ -259,6 +259,27 @@ export class StripeAuthGate {
   }
 
   /**
+   * Get JWKS for public key distribution
+   */
+  async getJWKS(): Promise<any> {
+    // For simplicity, we're using HMAC (symmetric key)
+    // In production, consider RSA keys for better JWKS support
+    return {
+      keys: [
+        {
+          kty: 'oct', // Octet sequence (for HMAC)
+          kid: 'flaim-auth-key-1',
+          use: 'sig',
+          alg: 'HS256',
+          // NOTE: Don't expose the actual secret in JWKS for HMAC
+          // This is a placeholder structure
+          k: 'protected'
+        }
+      ]
+    };
+  }
+
+  /**
    * Get frontend URL based on environment
    */
   private getFrontendUrl(): string {

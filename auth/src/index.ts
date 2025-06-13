@@ -13,12 +13,14 @@
 
 import { StripeAuthGate } from './stripe-gate.js';
 import { StripeWebhookHandler } from './stripe-webhook.js';
+import { JWTKeyRotation } from './key-rotation.js';
 
 export interface Env {
   STRIPE_API_KEY: string;
   STRIPE_WEBHOOK_SECRET: string;
   JWT_SECRET: string;
   SUBSCRIPTION_KV: KVNamespace;
+  KEY_ROTATION_LOG?: string;
 }
 
 export default {
@@ -64,6 +66,11 @@ export default {
       // JWT validation endpoint for other services
       if (url.pathname === '/validate') {
         return this.handleJWTValidation(request, stripeGate, corsHeaders);
+      }
+      
+      // JWKS endpoint for public key distribution
+      if (url.pathname === '/jwt/jwks') {
+        return this.handleJWKS(request, stripeGate, corsHeaders);
       }
       
       // Health check
@@ -162,6 +169,68 @@ export default {
         status: 401,
         headers: { 'Content-Type': 'application/json', ...corsHeaders }
       });
+    }
+  },
+
+  /**
+   * Handle JWKS endpoint for public key distribution
+   */
+  async handleJWKS(request: Request, stripeGate: StripeAuthGate, corsHeaders: any): Promise<Response> {
+    if (request.method !== 'GET') {
+      return new Response('Method not allowed', { 
+        status: 405,
+        headers: corsHeaders
+      });
+    }
+
+    try {
+      const jwks = await stripeGate.getJWKS();
+      
+      return new Response(JSON.stringify(jwks), {
+        headers: { 
+          'Content-Type': 'application/json',
+          'Cache-Control': 'public, max-age=3600', // Cache for 1 hour
+          ...corsHeaders 
+        }
+      });
+
+    } catch (error) {
+      console.error('JWKS error:', error);
+      
+      return new Response(JSON.stringify({
+        error: 'JWKS unavailable',
+        message: error instanceof Error ? error.message : 'Failed to get signing keys'
+      }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders }
+      });
+    }
+  },
+
+  /**
+   * Handle scheduled cron jobs (key rotation)
+   */
+  async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+    const keyRotation = new JWTKeyRotation(env);
+    
+    console.log('Running scheduled key rotation check...');
+    
+    if (keyRotation.shouldRotateKey()) {
+      console.log('Rotating JWT signing key...');
+      
+      try {
+        const { newSecret, keyId } = await keyRotation.rotateKey();
+        
+        // In production, you would update the JWT_SECRET environment variable
+        // For now, just log the rotation event
+        console.log(`Key rotated successfully. New key ID: ${keyId}`);
+        console.log('IMPORTANT: Update JWT_SECRET environment variable with the new key');
+        
+      } catch (error) {
+        console.error('Key rotation failed:', error);
+      }
+    } else {
+      console.log('Key rotation not needed at this time');
     }
   }
 };
