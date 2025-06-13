@@ -1,21 +1,16 @@
-// Fantasy Sports MCP Server v2.0 - Dual-Layer Authentication Architecture
-// Reference: New authentication plan implementation
+// Baseball ESPN MCP Server v3.0 - JWT-Only Authentication
+// Focuses purely on ESPN API integration with JWT validation
+// Authentication is handled by the separate flaim-auth service
 
-import { GitHubOAuthProvider } from './oauth/oauth-provider.js';
+import { JWTValidator } from '../auth/src/jwt-validator.js';
 import { McpServerWithAuth } from './mcp/mcp-server.js';
-import { StripeWebhookHandler } from './billing/stripe-webhook.js';
 import { UserCredentials } from './storage/user-credentials.js';
 
 export interface Env {
-  // OAuth secrets
-  GITHUB_CLIENT_ID: string;
-  GITHUB_CLIENT_SECRET: string;
+  // JWT validation (shared secret with auth service)
   JWT_SECRET: string;
   
-  // Stripe
-  STRIPE_WEBHOOK_SECRET: string;
-  
-  // Encryption
+  // Encryption for ESPN credentials
   ENCRYPTION_KEY: string;
   
   // Durable Objects
@@ -26,70 +21,97 @@ export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     
+    // CORS headers
+    const corsHeaders = {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    };
+
+    // Handle CORS preflight
+    if (request.method === 'OPTIONS') {
+      return new Response(null, { headers: corsHeaders });
+    }
+    
     try {
-      // Route to appropriate handlers
+      const jwtValidator = new JWTValidator(env.JWT_SECRET);
+      
+      // MCP endpoints - require JWT authentication from auth service
       if (url.pathname.startsWith('/mcp')) {
-        // MCP endpoints - require JWT authentication
         const mcpServer = new McpServerWithAuth(env);
         return mcpServer.fetch(request);
       }
       
-      if (url.pathname === '/webhook/stripe') {
-        // Stripe webhook handler
-        const stripeHandler = new StripeWebhookHandler(env);
-        return stripeHandler.handleWebhook(request);
-      }
-      
-      if (url.pathname.startsWith('/user/')) {
-        // Direct user credential management (for frontend)
-        const pathParts = url.pathname.split('/');
-        if (pathParts.length >= 3) {
-          const userId = pathParts[2];
-          const userStoreId = env.USER_DO.idFromString(userId);
+      // ESPN credential management endpoints
+      if (url.pathname.startsWith('/credential/espn')) {
+        return jwtValidator.requireAuth(request, async (request, user) => {
+          // Route to user's Durable Object for ESPN credential storage
+          const userStoreId = env.USER_DO.idFromString(user.sub);
           const userStore = env.USER_DO.get(userStoreId);
           
-          // Forward request to user's Durable Object
-          const newUrl = new URL(request.url);
-          newUrl.pathname = '/' + pathParts.slice(3).join('/');
-          
-          return userStore.fetch(newUrl.toString(), {
-            method: request.method,
-            headers: request.headers,
-            body: request.body
+          // Forward request with auth context
+          const authenticatedRequest = new Request(request, {
+            headers: {
+              ...Object.fromEntries(request.headers.entries()),
+              'X-User-ID': user.sub,
+              'X-User-Email': user.email,
+              'X-User-Plan': user.plan
+            }
           });
-        }
-      }
-      
-      // OAuth handlers for everything else
-      const oauthProvider = new GitHubOAuthProvider(env);
-      
-      if (url.pathname === '/') {
-        return new Response(oauthProvider.getLandingPageHtml(), {
-          headers: { 'Content-Type': 'text/html' }
+          
+          return userStore.fetch(authenticatedRequest);
         });
       }
       
-      if (url.pathname === '/authorize') {
-        return oauthProvider.handleAuthorize(request);
+      // Health check for service monitoring
+      if (url.pathname === '/health') {
+        return new Response(JSON.stringify({ 
+          status: 'healthy',
+          service: 'baseball-espn-mcp',
+          timestamp: new Date().toISOString()
+        }), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
       }
       
-      if (url.pathname === '/callback') {
-        return oauthProvider.handleCallback(request);
+      // Service info endpoint
+      if (url.pathname === '/') {
+        return new Response(JSON.stringify({
+          service: 'Baseball ESPN MCP Server',
+          version: '3.0.0',
+          description: 'ESPN fantasy baseball integration with MCP tools',
+          authentication: 'JWT validation (handled by flaim-auth service)',
+          endpoints: {
+            '/mcp': 'MCP server endpoints',
+            '/credential/espn': 'ESPN S2/SWID credential management',
+            '/health': 'Health check'
+          }
+        }), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
       }
       
-      return new Response('Not Found', { status: 404 });
+      return new Response('Not Found', { 
+        status: 404,
+        headers: corsHeaders
+      });
       
     } catch (error) {
-      console.error('Worker error:', error);
+      console.error('ESPN MCP server error:', error);
+      
+      if (error instanceof Response) {
+        return error; // Authentication error response
+      }
+      
       return new Response(JSON.stringify({ 
-        error: 'Internal server error',
+        error: 'ESPN MCP server error',
         message: error instanceof Error ? error.message : 'Unknown error'
       }), {
         status: 500,
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json', ...corsHeaders }
       });
     }
-  },
+  }
 };
 
 // Export the Durable Object class

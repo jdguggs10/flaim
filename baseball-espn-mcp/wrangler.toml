@@ -2,11 +2,8 @@ name = "fantasy-sports-mcp"
 main = "src/index.ts"
 compatibility_date = "2024-12-01"
 
-# OAuth secrets (set via wrangler secret put)
-# GITHUB_CLIENT_ID
-# GITHUB_CLIENT_SECRET
+# JWT validation secret (shared with flaim-auth service)
 # JWT_SECRET
-# STRIPE_WEBHOOK_SECRET
 # ENCRYPTION_KEY
 
 # Durable Objects for user credential storage
@@ -15,25 +12,17 @@ name = "USER_DO"
 class_name = "UserCredentials"
 script_name = "fantasy-sports-mcp"
 
-# Routes for proper endpoint handling
+# Routes for ESPN MCP endpoints only
 [[routes]]
-pattern = "*/authorize"
-zone_name = "gerrygugger.workers.dev"
-
-[[routes]]
-pattern = "*/callback"
-zone_name = "gerrygugger.workers.dev"
+pattern = "baseball-mcp.flaim.app/*"
+zone_name = "flaim.app"
 
 [[routes]]
 pattern = "*/mcp*"
 zone_name = "gerrygugger.workers.dev"
 
 [[routes]]
-pattern = "*/webhook/stripe"
-zone_name = "gerrygugger.workers.dev"
-
-[[routes]]
-pattern = "*/user/*"
+pattern = "*/credential/espn*"
 zone_name = "gerrygugger.workers.dev"
 
 [env.dev]
@@ -46,6 +35,11 @@ script_name = "fantasy-sports-mcp-dev"
 
 [[env.dev.routes]]
 pattern = "fantasy-sports-mcp-dev.gerrygugger.workers.dev/*"
+
+# Durable Object migrations
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["UserCredentials"]
 
 [env.prod]
 name = "fantasy-sports-mcp-prod"

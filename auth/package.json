@@ -1,7 +1,7 @@
 {
-  "name": "fantasy-sports-mcp",
-  "version": "2.0.0",
-  "description": "Dual-layer authenticated MCP server for fantasy sports integration",
+  "name": "flaim-auth-service",
+  "version": "1.0.0",
+  "description": "Stripe-first authentication service for FLAIM fantasy sports platform",
   "main": "src/index.ts",
   "scripts": {
     "dev": "wrangler dev",
@@ -16,8 +16,8 @@
   },
   "dependencies": {
     "@cloudflare/workers-types": "^4.0.0",
-    "@cloudflare/agents": "0.0.16",
-    "jose": "^4.14.4"
+    "jose": "^4.14.4",
+    "stripe": "^13.9.0"
   },
   "devDependencies": {
     "typescript": "^5.0.0",
@@ -27,6 +27,6 @@
     "@types/jest": "^29.0.0"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=18.0.0"
   }
 }

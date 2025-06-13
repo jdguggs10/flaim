@@ -4,7 +4,7 @@
  */
 
 import { Agent } from '@cloudflare/agents';
-import { JWTHandler } from '../auth/jwt-handler.js';
+import { JWTValidator } from '../../auth/src/jwt-validator.js';
 import { McpAgent } from './agent.js';
 
 export interface Env {
@@ -13,12 +13,12 @@ export interface Env {
 }
 
 export class McpServerWithAuth extends Agent {
-  private jwtHandler: JWTHandler;
+  private jwtValidator: JWTValidator;
   private mcpAgent: McpAgent;
 
   constructor(env: Env) {
     super();
-    this.jwtHandler = new JWTHandler(env);
+    this.jwtValidator = new JWTValidator(env.JWT_SECRET);
     this.mcpAgent = new McpAgent(env);
   }
 
@@ -42,39 +42,22 @@ export class McpServerWithAuth extends Agent {
     try {
       // Authenticate all MCP requests except info endpoint
       if (url.pathname !== '/mcp' && url.pathname !== '/mcp/') {
-        const authHeader = request.headers.get('Authorization');
-        const token = this.jwtHandler.extractTokenFromHeader(authHeader);
-        
-        if (!token) {
-          return new Response(JSON.stringify({ 
-            error: 'Authentication required',
-            message: 'Bearer token required for MCP access'
-          }), {
-            status: 401,
-            headers: { 
-              'Content-Type': 'application/json',
-              'Access-Control-Allow-Origin': '*'
+        return this.jwtValidator.requireAuth(request, async (request, user) => {
+          // Add authentication context to request
+          const authenticatedRequest = new Request(request, {
+            headers: {
+              ...Object.fromEntries(request.headers.entries()),
+              'X-User-ID': user.sub,
+              'X-User-Plan': user.plan,
+              'X-User-Email': user.email
             }
           });
-        }
 
-        // Validate JWT token
-        const payload = await this.jwtHandler.validateToken(token);
-        
-        // Add authentication context to request
-        const authenticatedRequest = new Request(request, {
-          headers: {
-            ...Object.fromEntries(request.headers.entries()),
-            'X-User-ID': payload.sub,
-            'X-User-Plan': payload.plan,
-            'X-User-Email': payload.email || ''
-          }
+          return this.mcpAgent.handleRequest(authenticatedRequest);
         });
-
-        return this.mcpAgent.handleRequest(authenticatedRequest);
       }
 
-      // Handle unauthenticated info requests
+      // Handle unauthenticated info requests (server capabilities, etc.)
       return this.mcpAgent.handleRequest(request);
 
     } catch (error) {
@@ -102,9 +85,9 @@ export class McpServerWithAuth extends Agent {
    */
   async getServerInfo(): Promise<any> {
     return {
-      name: 'Fantasy Sports MCP',
-      version: '2.0.0',
-      description: 'Dual-layer authenticated MCP server for fantasy sports integration',
+      name: 'Baseball ESPN MCP',
+      version: '3.0.0',
+      description: 'ESPN fantasy baseball integration with MCP tools - authentication handled by flaim-auth service',
       capabilities: {
         tools: true,
         resources: false,
@@ -112,7 +95,9 @@ export class McpServerWithAuth extends Agent {
       },
       authentication: {
         type: 'Bearer',
-        description: 'JWT token required for all authenticated endpoints'
+        description: 'JWT token minted by flaim-auth service required',
+        issuer: 'flaim-auth',
+        audience: 'flaim-platform'
       },
       tools: await this.mcpAgent.getAvailableTools()
     };
