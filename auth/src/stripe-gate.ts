@@ -6,12 +6,14 @@
 
 import Stripe from 'stripe';
 import { SignJWT, jwtVerify } from 'jose';
+import { JWTKeyRotation } from './key-rotation.js';
 
 export interface Env {
   STRIPE_API_KEY: string;
   STRIPE_WEBHOOK_SECRET: string;
-  JWT_SECRET: string;
+  JWT_SECRET: string; // Fallback for initial setup
   SUBSCRIPTION_KV: KVNamespace;
+  JWT_KEYS_KV: KVNamespace;
 }
 
 export interface JWTPayload {
@@ -26,13 +28,13 @@ export interface JWTPayload {
 
 export class StripeAuthGate {
   private stripe: Stripe;
-  private jwtSecret: Uint8Array;
+  private keyRotation: JWTKeyRotation;
 
   constructor(private env: Env) {
     this.stripe = new Stripe(env.STRIPE_API_KEY, {
       apiVersion: '2023-10-16'
     });
-    this.jwtSecret = new TextEncoder().encode(env.JWT_SECRET);
+    this.keyRotation = new JWTKeyRotation(env);
   }
 
   /**
@@ -133,7 +135,7 @@ export class StripeAuthGate {
       return new Response(this.getRedirectPageHtml(frontendUrl, jwt), {
         headers: {
           'Content-Type': 'text/html',
-          'Set-Cookie': `Auth=${jwt}; HttpOnly; Secure; Path=/; Max-Age=900; SameSite=Strict`
+          'Set-Cookie': `Auth=${jwt}; HttpOnly; Secure; Path=/; Max-Age=900; SameSite=Lax`
         }
       });
 
@@ -153,6 +155,18 @@ export class StripeAuthGate {
    * Mint a short-lived JWT token (15 minutes)
    */
   async mintJWT(customerId: string, email: string): Promise<string> {
+    // Get current active key from KV
+    const currentKey = await this.keyRotation.getCurrentJWTKey();
+    let jwtSecret: Uint8Array;
+    
+    if (currentKey) {
+      jwtSecret = new TextEncoder().encode(currentKey.secret);
+    } else {
+      // Fallback to env var for initial setup
+      console.warn('No KV key found, using fallback JWT_SECRET');
+      jwtSecret = new TextEncoder().encode(this.env.JWT_SECRET);
+    }
+    
     const now = Math.floor(Date.now() / 1000);
     
     const payload: JWTPayload = {
@@ -167,7 +181,7 @@ export class StripeAuthGate {
 
     return await new SignJWT(payload)
       .setProtectedHeader({ alg: 'HS256' })
-      .sign(this.jwtSecret);
+      .sign(jwtSecret);
   }
 
   /**
@@ -259,23 +273,23 @@ export class StripeAuthGate {
   }
 
   /**
-   * Get JWKS for public key distribution
+   * Get JWKS for public key distribution (includes grace period keys)
    */
   async getJWKS(): Promise<any> {
-    // For simplicity, we're using HMAC (symmetric key)
-    // In production, consider RSA keys for better JWKS support
+    const validKeys = await this.keyRotation.getValidKeysForJWKS();
+    
     return {
-      keys: [
-        {
-          kty: 'oct', // Octet sequence (for HMAC)
-          kid: 'flaim-auth-key-1',
-          use: 'sig',
-          alg: 'HS256',
-          // NOTE: Don't expose the actual secret in JWKS for HMAC
-          // This is a placeholder structure
-          k: 'protected'
-        }
-      ]
+      keys: validKeys.map(keyMeta => ({
+        kty: 'oct', // Octet sequence (for HMAC)
+        kid: keyMeta.id,
+        use: 'sig',
+        alg: 'HS256',
+        // NOTE: Don't expose the actual secret in JWKS for HMAC
+        // This provides key metadata for validation
+        status: keyMeta.status,
+        created: keyMeta.created,
+        rotated: keyMeta.rotated
+      }))
     };
   }
 

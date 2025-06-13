@@ -56,13 +56,16 @@ export class StripeWebhookHandler {
         });
       }
 
-      const body = await request.text();
+      // Get raw body as ArrayBuffer for Stripe signature verification
+      const rawBody = await request.arrayBuffer();
+      const bodyString = new TextDecoder().decode(rawBody);
       
       // Use Stripe's constructEvent for proper signature verification
       let event: Stripe.Event;
       try {
+        // Stripe requires the exact raw bytes for signature verification
         event = this.stripe.webhooks.constructEvent(
-          body,
+          bodyString,
           signature,
           this.env.STRIPE_WEBHOOK_SECRET
         );

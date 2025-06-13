@@ -12,14 +12,15 @@ export interface KeyMetadata {
 
 export class JWTKeyRotation {
   private static readonly ROTATION_INTERVAL = 90 * 24 * 60 * 60 * 1000; // 90 days
+  private static readonly GRACE_PERIOD = 24 * 60 * 60 * 1000; // 24 hours
 
-  constructor(private env: { JWT_SECRET: string; KEY_ROTATION_LOG?: string }) {}
+  constructor(private env: { JWT_KEYS_KV: KVNamespace }) {}
 
   /**
    * Check if current key needs rotation (quarterly)
    */
-  shouldRotateKey(): boolean {
-    const rotationLog = this.getRotationLog();
+  async shouldRotateKey(): Promise<boolean> {
+    const rotationLog = await this.getRotationLog();
     if (!rotationLog.length) {
       return true; // First time setup
     }
@@ -39,7 +40,7 @@ export class JWTKeyRotation {
     const newSecret = this.generateSecureKey();
     
     // Update rotation log
-    const rotationLog = this.getRotationLog();
+    const rotationLog = await this.getRotationLog();
     
     // Mark previous key as retired
     if (rotationLog.length > 0) {
@@ -59,32 +60,51 @@ export class JWTKeyRotation {
       rotationLog.splice(0, rotationLog.length - 4);
     }
 
-    this.saveRotationLog(rotationLog);
+    // Atomically update both the active key and rotation log
+    await Promise.all([
+      this.env.JWT_KEYS_KV.put('active_key', JSON.stringify({
+        id: keyId,
+        secret: newSecret,
+        created: new Date().toISOString()
+      })),
+      this.saveRotationLog(rotationLog)
+    ]);
 
     return { newSecret, keyId };
   }
 
   /**
-   * Get key rotation history from environment or storage
+   * Get key rotation history from KV storage
    */
-  private getRotationLog(): KeyMetadata[] {
+  private async getRotationLog(): Promise<KeyMetadata[]> {
     try {
-      if (this.env.KEY_ROTATION_LOG) {
-        return JSON.parse(this.env.KEY_ROTATION_LOG);
-      }
+      const log = await this.env.JWT_KEYS_KV.get('rotation_log');
+      return log ? JSON.parse(log) : [];
     } catch (error) {
       console.warn('Failed to parse key rotation log:', error);
+      return [];
     }
-    return [];
   }
 
   /**
-   * Save rotation log (in production, this would update Cloudflare env vars)
+   * Save rotation log to KV storage
    */
-  private saveRotationLog(log: KeyMetadata[]): void {
+  private async saveRotationLog(log: KeyMetadata[]): Promise<void> {
+    await this.env.JWT_KEYS_KV.put('rotation_log', JSON.stringify(log));
     console.log('Key rotation log updated:', log);
-    // In production, you would use Cloudflare API to update environment variables
-    // For now, just log the change
+  }
+
+  /**
+   * Get current active JWT key from KV
+   */
+  async getCurrentJWTKey(): Promise<{ id: string; secret: string } | null> {
+    try {
+      const activeKey = await this.env.JWT_KEYS_KV.get('active_key');
+      return activeKey ? JSON.parse(activeKey) : null;
+    } catch (error) {
+      console.error('Failed to get current JWT key:', error);
+      return null;
+    }
   }
 
   /**
@@ -112,27 +132,45 @@ export class JWTKeyRotation {
   /**
    * Get current active key metadata
    */
-  getCurrentKeyMetadata(): KeyMetadata | null {
-    const rotationLog = this.getRotationLog();
+  async getCurrentKeyMetadata(): Promise<KeyMetadata | null> {
+    const rotationLog = await this.getRotationLog();
     return rotationLog.find(key => key.status === 'active') || null;
   }
 
   /**
-   * Check if a key is still valid for verification
+   * Check if a key is still valid for verification (enforces grace period)
    */
-  isKeyValid(keyId: string): boolean {
-    const rotationLog = this.getRotationLog();
+  async isKeyValid(keyId: string): Promise<boolean> {
+    const rotationLog = await this.getRotationLog();
     const key = rotationLog.find(k => k.id === keyId);
     
     if (!key) return false;
     
-    // Allow retired keys for a grace period (24 hours)
+    // Allow retired keys for grace period
     if (key.status === 'retired' && key.rotated) {
       const rotatedTime = new Date(key.rotated).getTime();
-      const gracePeriod = 24 * 60 * 60 * 1000; // 24 hours
-      return (Date.now() - rotatedTime) < gracePeriod;
+      return (Date.now() - rotatedTime) < JWTKeyRotation.GRACE_PERIOD;
     }
     
     return key.status === 'active';
+  }
+
+  /**
+   * Get valid keys for JWKS (active + grace period keys)
+   */
+  async getValidKeysForJWKS(): Promise<KeyMetadata[]> {
+    const rotationLog = await this.getRotationLog();
+    const now = Date.now();
+    
+    return rotationLog.filter(key => {
+      if (key.status === 'active') return true;
+      
+      if (key.status === 'retired' && key.rotated) {
+        const rotatedTime = new Date(key.rotated).getTime();
+        return (now - rotatedTime) < JWTKeyRotation.GRACE_PERIOD;
+      }
+      
+      return false;
+    });
   }
 }

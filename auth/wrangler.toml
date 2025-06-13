@@ -16,6 +16,11 @@ crons = ["0 0 1 */3 *"] # Every 3 months on the 1st at midnight
 binding = "SUBSCRIPTION_KV"
 id = "flaim_subscription_cache"
 
+# KV for JWT key management and rotation
+[[kv_namespaces]]
+binding = "JWT_KEYS_KV"
+id = "flaim_jwt_keys"
+
 # Routes for authentication flow - specific paths to avoid conflicts
 [[routes]]
 pattern = "flaim-auth.gerrygugger.workers.dev/*"
@@ -52,6 +57,10 @@ name = "flaim-auth-dev"
 binding = "SUBSCRIPTION_KV"
 id = "flaim_subscription_cache_dev"
 
+[[env.dev.kv_namespaces]]
+binding = "JWT_KEYS_KV"
+id = "flaim_jwt_keys_dev"
+
 [[env.dev.routes]]
 pattern = "flaim-auth-dev.gerrygugger.workers.dev/*"
 
@@ -61,6 +70,10 @@ name = "flaim-auth-prod"
 [[env.prod.kv_namespaces]]
 binding = "SUBSCRIPTION_KV"
 id = "flaim_subscription_cache_prod"
+
+[[env.prod.kv_namespaces]]
+binding = "JWT_KEYS_KV"
+id = "flaim_jwt_keys_prod"
 
 [[env.prod.routes]]
 pattern = "auth.flaim.app/*"

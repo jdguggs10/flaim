@@ -18,9 +18,9 @@ import { JWTKeyRotation } from './key-rotation.js';
 export interface Env {
   STRIPE_API_KEY: string;
   STRIPE_WEBHOOK_SECRET: string;
-  JWT_SECRET: string;
+  JWT_SECRET: string; // Fallback for initial setup
   SUBSCRIPTION_KV: KVNamespace;
-  KEY_ROTATION_LOG?: string;
+  JWT_KEYS_KV: KVNamespace;
 }
 
 export default {
@@ -215,16 +215,15 @@ export default {
     
     console.log('Running scheduled key rotation check...');
     
-    if (keyRotation.shouldRotateKey()) {
+    if (await keyRotation.shouldRotateKey()) {
       console.log('Rotating JWT signing key...');
       
       try {
         const { newSecret, keyId } = await keyRotation.rotateKey();
         
-        // In production, you would update the JWT_SECRET environment variable
-        // For now, just log the rotation event
+        // Key is now automatically stored in KV - no manual intervention needed!
         console.log(`Key rotated successfully. New key ID: ${keyId}`);
-        console.log('IMPORTANT: Update JWT_SECRET environment variable with the new key');
+        console.log('New key automatically stored in KV - services will pick it up immediately');
         
       } catch (error) {
         console.error('Key rotation failed:', error);
