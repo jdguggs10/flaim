@@ -1,0 +1,59 @@
+name = "fantasy-sports-mcp"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+
+# OAuth secrets (set via wrangler secret put)
+# GITHUB_CLIENT_ID
+# GITHUB_CLIENT_SECRET
+# JWT_SECRET
+# STRIPE_WEBHOOK_SECRET
+# ENCRYPTION_KEY
+
+# Durable Objects for user credential storage
+[[durable_objects.bindings]]
+name = "USER_DO"
+class_name = "UserCredentials"
+script_name = "fantasy-sports-mcp"
+
+# Routes for proper endpoint handling
+[[routes]]
+pattern = "*/authorize"
+zone_name = "gerrygugger.workers.dev"
+
+[[routes]]
+pattern = "*/callback"
+zone_name = "gerrygugger.workers.dev"
+
+[[routes]]
+pattern = "*/mcp*"
+zone_name = "gerrygugger.workers.dev"
+
+[[routes]]
+pattern = "*/webhook/stripe"
+zone_name = "gerrygugger.workers.dev"
+
+[[routes]]
+pattern = "*/user/*"
+zone_name = "gerrygugger.workers.dev"
+
+[env.dev]
+name = "fantasy-sports-mcp-dev"
+
+[[env.dev.durable_objects.bindings]]
+name = "USER_DO"
+class_name = "UserCredentials"
+script_name = "fantasy-sports-mcp-dev"
+
+[[env.dev.routes]]
+pattern = "fantasy-sports-mcp-dev.gerrygugger.workers.dev/*"
+
+[env.prod]
+name = "fantasy-sports-mcp-prod"
+
+[[env.prod.durable_objects.bindings]]
+name = "USER_DO"
+class_name = "UserCredentials"
+script_name = "fantasy-sports-mcp-prod"
+
+[[env.prod.routes]]
+pattern = "fantasy-sports-mcp-prod.gerrygugger.workers.dev/*"
