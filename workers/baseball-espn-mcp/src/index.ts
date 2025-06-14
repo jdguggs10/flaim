@@ -137,7 +137,7 @@ export default {
           authentication: 'None required (open access)',
           endpoints: {
             '/mcp': 'MCP server endpoints (open access)',
-            '/credential/espn': 'ESPN S2/SWID credential management (requires userId)',
+            '/credential/espn': 'ESPN S2/SWID credential management (requires Clerk authentication)',
             '/health': 'Health check'
           }
         }), {

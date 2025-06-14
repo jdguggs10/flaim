@@ -74,19 +74,30 @@ export const VERSION = '1.0.0';
 /**
  * Initialize the auth system with platform-specific providers
  * 
+ * ⚠️  NOTE: tokenRefreshProvider is currently unused in web implementation.
+ * Clerk web sessions refresh automatically. This parameter is provided for
+ * future mobile/iOS implementations.
+ * 
  * @example
  * ```typescript
+ * // Current web usage (tokenRefreshProvider not needed):
  * import { initializeAuth } from '@flaim/auth';
  * import { ClerkSessionVerifier } from '@flaim/auth/clerk/web';
  * 
  * initializeAuth({
  *   sessionVerifier: new ClerkSessionVerifier()
  * });
+ * 
+ * // Future mobile usage:
+ * initializeAuth({
+ *   sessionVerifier: new ClerkSessionVerifier(),
+ *   tokenRefreshProvider: new ClerkTokenRefreshProvider(clerkSecretKey)
+ * });
  * ```
  */
 export function initializeAuth(options: {
   sessionVerifier?: import('./interfaces.js').SessionVerifier;
-  tokenRefreshProvider?: import('./token-manager.js').TokenRefreshProvider;
+  tokenRefreshProvider?: import('./token-manager.js').TokenRefreshProvider; // Currently unused - for future mobile apps
 }) {
   if (options.sessionVerifier) {
     setSessionVerifier(options.sessionVerifier);

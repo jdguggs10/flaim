@@ -26,17 +26,15 @@ export interface Env {
 
 // Verify Clerk session server-side for security
 async function verifyClerkSession(request: Request, env: Env): Promise<{ userId: string | null; error?: string }> {
-  // Skip verification in development mode for easier testing
-  if (env.NODE_ENV === 'development') {
-    const fallbackUserId = request.headers.get('X-Clerk-User-ID') || 'development-user';
-    console.log(`⚠️ Development mode: Skipping Clerk verification, using fallback user ID: ${fallbackUserId}`);
-    return { userId: fallbackUserId };
-  }
-
-  // Production mode: require Clerk secret key
+  // Skip verification in development mode if no Clerk secret provided
   if (!env.CLERK_SECRET_KEY) {
-    console.error('CLERK_SECRET_KEY not found in production environment');
-    return { userId: null, error: 'Authentication service unavailable' };
+    if (env.NODE_ENV === 'development') {
+      console.warn('⚠️ Development mode: Skipping Clerk verification. Add CLERK_SECRET_KEY for security.');
+      // In development, return a default user ID for testing
+      return { userId: 'dev_user_default' };
+    } else {
+      return { userId: null, error: 'Clerk authentication required in production' };
+    }
   }
 
   const authHeader = request.headers.get('Authorization');
@@ -73,7 +71,7 @@ export default {
 
     try {
       // Handle ESPN credential endpoints (require Clerk auth in production)
-      if (url.pathname.startsWith('/credential/espn')) {
+      if (url.pathname === '/credential/espn') {
         const { userId, error } = await verifyClerkSession(request, env);
         
         if (!userId) {
@@ -86,10 +84,15 @@ export default {
           });
         }
 
-        // Forward to ESPN credential storage (uses shared auth module)
+        // Route to user's Durable Object for ESPN credential storage
         const userStoreId = env.USER_DO.idFromString(userId);
         const userStore = env.USER_DO.get(userStoreId);
-        return userStore.fetch(request);
+        
+        // Use the direct method that accepts userId parameter (matches baseball worker pattern)
+        const credentialHandler = userStore as any;
+        
+        // Forward to the handler method with verified user ID
+        return credentialHandler.handleEspnCredentialsWithUserId(request, corsHeaders, userId);
       }
 
       // Handle MCP endpoints (open access, no auth required)

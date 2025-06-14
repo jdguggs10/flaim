@@ -90,52 +90,14 @@ export class UserCredentials {
   }
 
   private async getEspnCredentials(corsHeaders: Record<string, string>): Promise<Response> {
-    // Extract Clerk user ID from headers
-    const clerkUserId = this.getClerkUserIdFromHeaders();
-    if (!clerkUserId) {
-      return new Response(JSON.stringify({ 
-        error: 'Clerk user ID required',
-        hasCredentials: false 
-      }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json', ...corsHeaders }
-      });
-    }
-
-    const encrypted = await this.state.storage.get(`espn_creds:${clerkUserId}`) as string;
-    if (!encrypted) {
-      return new Response(JSON.stringify({ 
-        error: 'ESPN account not linked',
-        hasCredentials: false,
-        clerkUserId 
-      }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json', ...corsHeaders }
-      });
-    }
-    
-    try {
-      const decrypted = await this.decrypt(encrypted);
-      const credentials = JSON.parse(decrypted) as EspnCredentials;
-      
-      // Return credentials without sensitive data for validation
-      return new Response(JSON.stringify({
-        hasCredentials: true,
-        clerkUserId: credentials.clerkUserId,
-        email: credentials.email,
-        updated_at: credentials.updated_at
-      }), {
-        headers: { 'Content-Type': 'application/json', ...corsHeaders }
-      });
-    } catch (error) {
-      console.error('Failed to decrypt ESPN credentials:', error);
-      return new Response(JSON.stringify({ 
-        error: 'Failed to retrieve credentials' 
-      }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json', ...corsHeaders }
-      });
-    }
+    // This method is kept for backward compatibility but should use getEspnCredentialsForUser instead
+    return new Response(JSON.stringify({ 
+      error: 'This endpoint requires a Clerk user ID. Please use the getEspnCredentialsForUser method instead.',
+      hasCredentials: false 
+    }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders }
+    });
   }
 
   private async setEspnCredentials(request: Request, corsHeaders: Record<string, string>): Promise<Response> {
@@ -174,23 +136,11 @@ export class UserCredentials {
   }
 
   private async deleteEspnCredentials(corsHeaders: Record<string, string>): Promise<Response> {
-    const clerkUserId = this.getClerkUserIdFromHeaders();
-    if (!clerkUserId) {
-      return new Response(JSON.stringify({ 
-        error: 'Clerk user ID required' 
-      }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json', ...corsHeaders }
-      });
-    }
-
-    await this.state.storage.delete(`espn_creds:${clerkUserId}`);
-    
+    // This method is kept for backward compatibility but should use deleteEspnCredentialsForUser instead
     return new Response(JSON.stringify({ 
-      success: true,
-      message: 'ESPN credentials deleted successfully',
-      clerkUserId 
+      error: 'This endpoint requires a Clerk user ID. Please use the deleteEspnCredentialsForUser method instead.'
     }), {
+      status: 400,
       headers: { 'Content-Type': 'application/json', ...corsHeaders }
     });
   }
@@ -293,14 +243,48 @@ export class UserCredentials {
     }
   }
 
-  // Helper method to extract Clerk user ID from request headers
-  private getClerkUserIdFromHeaders(): string | null {
-    // This will be accessed via the current request context
-    // For now, return null - this needs to be passed from the calling context
-    return null;
+  // Direct method calls for credential operations (preferred approach)
+  async getCredentials(clerkUserId: string): Promise<EspnCredentials | null> {
+    return this.getEspnCredentialsForApi(clerkUserId);
   }
 
-  // Update methods to accept clerkUserId parameter
+  async setCredentials(clerkUserId: string, swid: string, espn_s2: string, email?: string): Promise<boolean> {
+    try {
+      const now = new Date().toISOString();
+      const credentials: EspnCredentials = {
+        clerkUserId,
+        swid,
+        espn_s2,
+        email,
+        created_at: now,
+        updated_at: now
+      };
+
+      const encrypted = await this.encrypt(JSON.stringify(credentials));
+      await this.state.storage.put(`espn_creds:${clerkUserId}`, encrypted);
+      return true;
+    } catch (error) {
+      console.error('Failed to set ESPN credentials:', error);
+      return false;
+    }
+  }
+
+  async deleteCredentials(clerkUserId: string): Promise<boolean> {
+    try {
+      await this.state.storage.delete(`espn_creds:${clerkUserId}`);
+      return true;
+    } catch (error) {
+      console.error('Failed to delete ESPN credentials:', error);
+      return false;
+    }
+  }
+
+  async hasCredentials(clerkUserId: string): Promise<boolean> {
+    const encrypted = await this.state.storage.get(`espn_creds:${clerkUserId}`) as string;
+    return !!encrypted;
+  }
+
+  // HTTP-style method for backwards compatibility (when called from external HTTP requests)
   async handleEspnCredentialsWithUserId(request: Request, corsHeaders: Record<string, string>, clerkUserId: string): Promise<Response> {
     switch (request.method) {
       case 'GET':
@@ -419,42 +403,16 @@ export class UserCredentials {
     });
   }
 
-  // Static method to get ESPN credentials for MCP tools
+  // Static method to get ESPN credentials for MCP tools - Direct method call approach
   static async getEspnCredentialsForMcp(env: any, clerkUserId: string): Promise<EspnCredentials | null> {
     if (!clerkUserId) return null;
     
     try {
       const userStoreId = env.USER_DO.idFromString(clerkUserId);
-      const userStore = env.USER_DO.get(userStoreId);
+      const userStore = env.USER_DO.get(userStoreId) as any;
       
-      // Create a request to check and get credentials
-      const credentialRequest = new Request('https://dummy.com/credentials/espn', {
-        method: 'GET',
-        headers: {
-          'X-Clerk-User-ID': clerkUserId
-        }
-      });
-      
-      // Use the new method that accepts clerkUserId
-      const response = await (userStore as any).handleEspnCredentialsWithUserId(
-        credentialRequest, 
-        {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-        }, 
-        clerkUserId
-      );
-      
-      const data = await response.json();
-      
-      if (data.hasCredentials) {
-        // Get the actual credentials
-        const credentialsInstance = userStore as any;
-        return await credentialsInstance.getEspnCredentialsForApi(clerkUserId);
-      }
-      
-      return null;
+      // Direct method call - no HTTP overhead or dummy requests
+      return await userStore.getEspnCredentialsForApi(clerkUserId);
     } catch (error) {
       console.error('Failed to get ESPN credentials for MCP:', error);
       return null;

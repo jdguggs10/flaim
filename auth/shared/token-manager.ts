@@ -1,6 +1,83 @@
 /**
  * Token lifecycle management for cross-platform authentication
- * Handles token refresh, validation, and session lifecycle events
+ * 
+ * ⚠️  CURRENT STATUS: STUB CODE - NOT ACTIVELY USED
+ * 
+ * Clerk handles session refresh transparently on the client side for web applications.
+ * This TokenManager infrastructure is currently unused but provides a foundation
+ * for future mobile/iOS implementations that may require explicit token management.
+ * 
+ * FUTURE IMPLEMENTATION EXAMPLE:
+ * 
+ * ```typescript
+ * // For iOS/mobile apps, implement a Clerk token refresh provider:
+ * class ClerkTokenRefreshProvider implements TokenRefreshProvider {
+ *   constructor(private clerkSecretKey: string) {}
+ * 
+ *   async refreshToken(token: string): Promise<TokenRefreshResult> {
+ *     try {
+ *       const response = await fetch('https://api.clerk.com/v1/sessions/refresh', {
+ *         method: 'POST',
+ *         headers: {
+ *           'Authorization': `Bearer ${this.clerkSecretKey}`,
+ *           'Content-Type': 'application/json'
+ *         },
+ *         body: JSON.stringify({ session_token: token })
+ *       });
+ *       
+ *       if (response.ok) {
+ *         const data = await response.json();
+ *         return {
+ *           success: true,
+ *           token: data.session_token,
+ *           expiresAt: data.expires_at * 1000 // Convert to milliseconds
+ *         };
+ *       } else {
+ *         return { success: false, error: 'Refresh failed' };
+ *       }
+ *     } catch (error) {
+ *       return { success: false, error: error.message };
+ *     }
+ *   }
+ * 
+ *   async validateToken(token: string): Promise<boolean> {
+ *     try {
+ *       const response = await fetch('https://api.clerk.com/v1/sessions/verify', {
+ *         method: 'POST',
+ *         headers: { 'Authorization': `Bearer ${token}` }
+ *       });
+ *       return response.ok;
+ *     } catch {
+ *       return false;
+ *     }
+ *   }
+ * 
+ *   async revokeToken(token: string): Promise<void> {
+ *     await fetch('https://api.clerk.com/v1/sessions/revoke', {
+ *       method: 'POST',
+ *       headers: { 'Authorization': `Bearer ${token}` }
+ *     });
+ *   }
+ * }
+ * 
+ * // Then initialize in mobile app:
+ * const clerkProvider = new ClerkTokenRefreshProvider(process.env.CLERK_SECRET_KEY);
+ * TokenManager.setRefreshProvider(clerkProvider);
+ * 
+ * // Handle token lifecycle events:
+ * TokenManager.addEventListener('token-refreshed', (event) => {
+ *   // Update stored token in mobile app
+ *   AsyncStorage.setItem('session_token', event.data.newToken);
+ * });
+ * 
+ * TokenManager.addEventListener('token-expired', (event) => {
+ *   // Redirect to login screen
+ *   NavigationService.navigate('Login');
+ * });
+ * ```
+ * 
+ * CURRENT USAGE: None - Clerk web SDK handles session management automatically
+ * FUTURE USAGE: Mobile apps, long-lived tokens, custom session management
  */
 
 import { AuthSession } from './interfaces.js';
@@ -46,6 +123,12 @@ class TokenManagerImpl {
 
   /**
    * Set the platform-specific token refresh provider
+   * 
+   * ⚠️  CURRENTLY UNUSED: No provider is set in the current web implementation.
+   * Clerk web sessions refresh automatically via client-side SDK.
+   * 
+   * This would be used in future mobile implementations:
+   * TokenManager.setRefreshProvider(new ClerkTokenRefreshProvider(clerkSecretKey));
    */
   setRefreshProvider(provider: TokenRefreshProvider): void {
     this.refreshProvider = provider;
@@ -92,6 +175,12 @@ class TokenManagerImpl {
 
   /**
    * Refresh an expired or soon-to-expire token
+   * 
+   * ⚠️  CURRENTLY UNUSED: This method is never called in the current web implementation.
+   * Clerk web sessions refresh automatically. This would be used for:
+   * - Mobile app token refresh
+   * - Long-lived background sessions
+   * - Custom authentication providers
    */
   async refreshToken(token: string, userId: string): Promise<TokenRefreshResult> {
     if (!this.refreshProvider) {

@@ -1,4 +1,3 @@
-import { EspnCredentials, EspnMcpProvider } from '../../../../auth/espn';
 
 export interface Env {
   USER_DO: DurableObjectNamespace;
@@ -35,9 +34,8 @@ export class McpAgent {
     }
 
     try {
-      // Extract Clerk user ID from headers (preferred) or fallback to anonymous
+      // Extract Clerk user ID from headers or fallback to anonymous
       const clerkUserId = request.headers.get('X-Clerk-User-ID') || 
-                         request.headers.get('X-User-ID') || 
                          new URL(request.url).searchParams.get('clerkUserId') ||
                          'anonymous';
 
@@ -93,7 +91,7 @@ export class McpAgent {
     });
   }
 
-  private async handleToolsList(clerkUserId: string, corsHeaders: Record<string, string>): Promise<Response> {
+  private async handleToolsList(_clerkUserId: string, corsHeaders: Record<string, string>): Promise<Response> {
     const tools = [
       {
         name: 'get_espn_league_info',
@@ -198,7 +196,10 @@ export class McpAgent {
       const league = await espnClient.fetchLeague(leagueId, parseInt(seasonId), 'mSettings', clerkUserId);
       
       const { getLeagueMeta } = await import('../tools/getLeagueMeta');
-      const metadata = getLeagueMeta(league);
+      const metadata = await getLeagueMeta(
+        { leagueId: league.id.toString(), year: league.seasonId },
+        this.env
+      );
 
       return {
         content: {
@@ -266,8 +267,5 @@ export class McpAgent {
     }
   }
 
-  private async getEspnCredentials(clerkUserId: string): Promise<EspnCredentials | null> {
-    // Use the new ESPN auth provider
-    return EspnMcpProvider.getCredentialsForMcp(this.env, clerkUserId);
-  }
+
 }

@@ -6,6 +6,20 @@ Cross-platform authentication system for the FLAIM Fantasy Sports Platform.
 
 FLAIM Auth provides a unified authentication layer that works across web (Next.js), mobile (iOS), and server environments. Built on top of Clerk with extensible interfaces for other auth providers.
 
+### Current Implementation Status
+
+**✅ Fully Implemented:**
+- Web authentication (Next.js + Clerk)
+- Server-side session verification
+- Usage tracking and limits
+- Cross-platform interfaces
+
+**🚧 Stub Code (Future Implementation):**
+- TokenManager for explicit token refresh
+- Mobile-specific token lifecycle management
+
+**Note:** Clerk handles session refresh automatically in web applications. The TokenManager infrastructure is provided for future mobile implementations that may require explicit token management.
+
 ## Quick Start
 
 ### Installation
