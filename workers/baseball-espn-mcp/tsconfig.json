@@ -1,0 +1,39 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "allowJs": true,
+    "checkJs": false,
+    "declaration": true,
+    "declarationMap": true,
+    "emitDeclarationOnly": true,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitReturns": true,
+    "forceConsistentCasingInFileNames": true,
+    "types": [
+      "@cloudflare/workers-types",
+      "jest"
+    ]
+  },
+  "include": [
+    "src/**/*",
+    "tests/**/*",
+    "../../auth/espn/types.ts",
+    "../../auth/espn/storage.ts",
+    "../../auth/espn/mcp-integration.ts",
+    "../../auth/shared/encryption.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
+}

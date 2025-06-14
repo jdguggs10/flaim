@@ -1,0 +1,44 @@
+name = "football-espn-mcp"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+
+# Default environment variables
+[vars]
+NODE_ENV = "production"
+
+# Environment secrets (set via wrangler secret put)
+# ENCRYPTION_KEY (for ESPN credential storage)
+# CLERK_SECRET_KEY (for production security)
+
+# Durable Objects for user credential storage
+[[durable_objects.bindings]]
+name = "USER_DO"
+class_name = "EspnStorage"
+script_name = "football-espn-mcp"
+
+[env.dev]
+name = "football-espn-mcp-dev"
+
+[env.dev.vars]
+NODE_ENV = "development"
+
+[[env.dev.durable_objects.bindings]]
+name = "USER_DO"
+class_name = "EspnStorage"
+script_name = "football-espn-mcp-dev"
+
+# Durable Object migrations
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["EspnStorage"]
+
+[env.prod]
+name = "football-espn-mcp-prod"
+
+[env.prod.vars]
+NODE_ENV = "production"
+
+[[env.prod.durable_objects.bindings]]
+name = "USER_DO"
+class_name = "EspnStorage"
+script_name = "football-espn-mcp-prod"

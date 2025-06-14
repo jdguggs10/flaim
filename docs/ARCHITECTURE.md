@@ -1,264 +1,450 @@
-# OpenAI Responses API Starter App Architecture
+# FLAIM Platform Architecture v4.0
 
 ## Overview
 
-This is a Next.js application that demonstrates how to build a conversational AI assistant using OpenAI's **Responses API**. The app provides a chat interface with tool integration capabilities including web search, file search, code interpretation, custom functions, and MCP (Model Context Protocol) servers.
+FLAIM (Fantasy League AI Manager) is a **modern microservices platform** that provides AI-powered fantasy sports management through MCP (Model Context Protocol) tools. The architecture uses **Clerk authentication** for seamless user management with usage-based access controls.
 
-## Key Technologies
-
-- **Next.js 15.2.3** - React framework for the web application
-- **TypeScript** - Type safety throughout the application
-- **OpenAI SDK 4.87.3** - Integration with OpenAI's Responses API
-- **Zustand** - State management for conversation and tools
-- **Tailwind CSS** - Styling and responsive design
-- **Radix UI** - Accessible UI components
-
-## Core Architecture
-
-### 1. Application Structure
+## Architecture Diagram
 
 ```
-├── app/                          # Next.js app directory
-│   ├── api/turn_response/        # Responses API endpoint
-│   ├── layout.tsx               # Root layout
-│   └── page.tsx                 # Main page component
-├── components/                   # React components
-│   ├── assistant.tsx            # Main assistant container
-│   ├── chat.tsx                 # Chat interface
-│   ├── tools-panel.tsx          # Tool configuration panel
-│   └── ui/                      # Reusable UI components
-├── lib/                         # Core logic
-│   ├── assistant.ts             # Responses API integration
-│   └── tools/                   # Tool handling logic
-├── stores/                      # State management
-│   ├── useConversationStore.ts  # Chat state
-│   └── useToolsStore.ts         # Tool configuration state
-└── config/                      # Configuration
-    ├── constants.ts             # App constants
-    ├── functions.ts             # Custom function definitions
-    └── tools-list.ts            # Available tools list
+┌─────────────────┐    ┌──────────────────┐    ┌───────────────────┐
+│   Next.js       │    │   flaim/auth     │    │ workers/baseball  │
+│   Frontend      │◄──►│   Module         │◄──►│     espn-mcp      │
+│                 │    │                  │    │                   │
+│ - React UI      │    │ - Cross-platform │    │ - ESPN API        │
+│ - Auth module   │    │ - Usage tracking │    │ - Open access     │
+│ - Usage limits  │    │ - Token mgmt     │    │ - MCP tools       │
+│ - Chat interface│    │ - Clerk web impl │    │ - Shared auth     │
+└─────────────────┘    └──────────────────┘    └───────────────────┘
+         │                       │                       │
+         │              ┌────────▼────────┐              │
+         │              │   Durable       │              │
+         │              │   Objects       │              │
+         │              │ (ESPN Creds)    │              │
+         │              └─────────────────┘              │
+         │                                               │
+         └───────────────────────────────────────────────┘
+                         Shared Authentication
 ```
 
-### 2. OpenAI Responses API Integration
+## Core Services
 
-The heart of the application is the **Responses API** integration, which enables multi-turn conversations with tool calling capabilities.
+### 1. Next.js Frontend (`/openai`) - **Main Application**
 
-#### Key Components:
+**Purpose**: AI-powered fantasy sports assistant with modular authentication
 
-**API Route (`app/api/turn_response/route.ts`)**
+**Responsibilities**:
+- flaim/auth integration
+- Usage tracking (100 free messages/month)
+- OpenAI API integration
+- MCP tools configuration
+- Multi-sport support
+- Responsive web interface
+
+**Key Features**:
+- **Free Tier**: 100 AI messages per month
+- **Paid Tier**: Unlimited AI messages
+- Real-time usage tracking
+- Upgrade/downgrade functionality
+- Cross-platform ready authentication
+
+**API Endpoints**:
+- `POST /api/turn_response` → OpenAI chat completion (auth required)
+- `GET /api/usage` → Usage statistics (auth required)
+- `POST /api/usage` → Plan management (auth required)
+- `POST /api/vector_stores/*` → File management (auth required)
+
+**Technology Stack**:
+- Next.js 15 (App Router)
+- React 18
+- Clerk authentication
+- OpenAI API
+- Tailwind CSS
+- TypeScript
+
+---
+
+### 2. FLAIM Auth Module (`/auth`) - **Cross-Platform Authentication**
+
+**Purpose**: Modular authentication system for web, iOS, and workers
+
+**Responsibilities**:
+- Cross-platform authentication interfaces
+- Clerk web implementation
+- Usage tracking and limits
+- Token lifecycle management
+- Environment-agnostic configuration
+
+**Architecture**:
+- `shared/` - Platform-agnostic core logic
+- `clerk/web/` - Next.js/React implementation
+- `clerk/ios/` - Ready for Swift integration
+
+**Key Features**:
+- Strict public API boundaries
+- Automated testing suite
+- Token refresh handling
+- Usage limit enforcement
+
+---
+
+### 3. Baseball ESPN MCP (`/workers/baseball-espn-mcp`) - **Open Access Service**
+
+**Purpose**: ESPN fantasy baseball integration with shared authentication
+
+**Responsibilities**:
+- Open access MCP endpoints
+- Shared ESPN credential storage via flaim/auth
+- ESPN API integration
+- Fantasy baseball data retrieval
+- MCP protocol implementation
+
+**Authentication Model**: **Shared Module**
+- Uses flaim/auth for credential management
+- MCP endpoints publicly accessible
+- Clerk session verification for credentials
+
+**Endpoints**:
+- `GET /mcp` → MCP server info and capabilities
+- `POST /mcp/tools/call` → Execute MCP tools
+- `POST /credential/espn` → Store ESPN credentials (auth required)
+- `GET /health` → Service health check
+
+**MCP Tools**:
+- `get_espn_league_info` - League settings and metadata
+- `get_espn_team_roster` - Team roster for scoring periods
+- `get_espn_matchups` - Current week matchups
+
+**Technology Stack**:
+- Cloudflare Workers
+- Durable Objects (credential storage)
+- flaim/auth shared module
+- TypeScript
+
+---
+
+### 4. Football ESPN MCP (`/workers/football-espn-mcp`) - **Multi-Sport Extension**
+
+**Purpose**: ESPN fantasy football integration using shared authentication
+
+**Responsibilities**:
+- Sport-specific MCP tools for football
+- Shared authentication infrastructure  
+- ESPN football API integration
+- Fantasy football data retrieval
+
+**MCP Tools**:
+- `get_espn_football_league_info` - League settings and metadata
+- `get_espn_football_team` - Team roster and details
+- `get_espn_football_matchups` - Weekly matchups and scores
+- `get_espn_football_standings` - League standings
+
+**Architecture Benefits**:
+- Shared authentication with baseball worker
+- Independent deployment and scaling
+- Sport-specific customization
+- Easy addition of new sports (basketball, hockey, etc.)
+- @cloudflare/agents (MCP implementation)
+- AES-GCM encryption (credential security)
+
+---
+
+---
+
+## Authentication & Authorization
+
+### Clerk Integration
+
+**Frontend Authentication**:
 ```typescript
-// Creates streaming connection to OpenAI Responses API
-const events = await openai.responses.create({
-  model: MODEL,
-  input: messages,
-  tools,
-  stream: true,
-  parallel_tool_calls: false,
-});
+// middleware.ts
+import { clerkMiddleware } from '@clerk/nextjs/server'
+export default clerkMiddleware()
+
+// layout.tsx
+<ClerkProvider>
+  <SignedOut>
+    <SignInButton />
+    <SignUpButton />
+  </SignedOut>
+  <SignedIn>
+    <UserButton />
+  </SignedIn>
+</ClerkProvider>
 ```
 
-**Assistant Logic (`lib/assistant.ts`)**
-- Handles real-time streaming from the Responses API
-- Processes different event types (text deltas, tool calls, completions)
-- Manages conversation state and tool execution
-- Coordinates between UI updates and API responses
-
-### 3. Event-Driven Architecture
-
-The Responses API operates on an event-driven model with the following key events:
-
-#### Message Events
-- `response.output_text.delta` - Streaming text content
-- `response.output_text.annotation.added` - File/web search annotations
-- `response.output_item.added` - New conversation items
-- `response.output_item.done` - Item completion
-
-#### Tool Call Events
-- `response.function_call_arguments.delta` - Streaming function arguments
-- `response.function_call_arguments.done` - Complete function arguments
-- `response.web_search_call.completed` - Web search results
-- `response.file_search_call.completed` - File search results
-- `response.code_interpreter_call_code.delta` - Streaming code execution
-- `response.mcp_call_arguments.delta` - MCP tool streaming
-
-#### Completion Events
-- `response.completed` - Full response completion with metadata
-
-### 4. Tool System
-
-The application supports multiple tool types that extend the assistant's capabilities:
-
-#### Built-in OpenAI Tools
-1. **Web Search** - Internet search capabilities
-2. **File Search** - Vector store knowledge base search
-3. **Code Interpreter** - Python code execution in sandboxed environment
-
-#### Custom Tools
-1. **Functions** - Locally defined JavaScript functions
-2. **MCP (Model Context Protocol)** - Remote tool servers
-
-#### Tool Configuration (`lib/tools/tools.ts`)
+**Frontend API Calls**:
 ```typescript
-const getTools = () => {
-  const tools = [];
+import { useAuth } from '@clerk/nextjs'
+
+const { getToken } = useAuth()
+const token = await getToken()
+
+fetch('/api/endpoint', {
+  headers: {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json'
+  }
+})
+```
+
+**Server-Side Verification (MCP Service)**:
+```typescript
+import { clerkClient } from '@clerk/backend'
+
+async function verifyClerkSession(request: Request, env: Env) {
+  const authHeader = request.headers.get('Authorization')
+  const sessionToken = authHeader?.replace('Bearer ', '')
   
-  if (webSearchEnabled) {
-    tools.push({ type: "web_search", user_location: {...} });
+  if (!sessionToken) {
+    return { userId: null, error: 'No session token found' }
+  }
+
+  const clerk = clerkClient({ secretKey: env.CLERK_SECRET_KEY })
+  const session = await clerk.sessions.verifySession(sessionToken)
+  
+  return { userId: session.userId }
+}
+```
+
+**API Protection (Frontend)**:
+```typescript
+import { auth } from '@clerk/nextjs/server'
+
+export async function POST(request: Request) {
+  const { userId } = await auth()
+  
+  if (!userId) {
+    return NextResponse.json({ error: "Authentication required" }, { status: 401 })
   }
   
-  if (fileSearchEnabled) {
-    tools.push({ 
-      type: "file_search", 
-      vector_store_ids: [vectorStore?.id] 
-    });
-  }
-  
-  if (codeInterpreterEnabled) {
-    tools.push({ type: "code_interpreter", container: { type: "auto" } });
-  }
-  
-  // Add custom functions and MCP tools...
-  
-  return tools;
-};
+  // Protected logic here
+}
 ```
 
-### 5. State Management
+### Usage Tracking System
 
-The application uses Zustand for lightweight state management with two main stores:
+**Free Tier Limits**:
+- 15 AI messages per month
+- Automatic reset every 30 days
+- Clear usage indicators in UI
+- Upgrade prompts when approaching limits
 
-#### Conversation Store (`stores/useConversationStore.ts`)
-- `chatMessages` - UI-displayed conversation items
-- `conversationItems` - API-sent conversation history
-- `isAssistantLoading` - Loading state management
+**Paid Tier Benefits**:
+- Unlimited AI messages
+- All ESPN features
+- Priority support
 
-#### Tools Store (`stores/useToolsStore.ts`)
-- Tool enable/disable states
-- Configuration for each tool type
-- Vector store management
-- MCP server configuration
-
-### 6. User Interface
-
-#### Main Components
-
-**Assistant Component (`components/assistant.tsx`)**
-- Container for the chat interface
-- Handles message sending and tool approval
-- Coordinates between UI and processing logic
-
-**Chat Component (`components/chat.tsx`)**
-- Renders conversation messages and tool calls
-- Manages input handling and auto-scrolling
-- Supports different message types (text, tools, annotations)
-
-**Tools Panel (`components/tools-panel.tsx`)**
-- Configuration interface for all available tools
-- Real-time tool enable/disable
-- Tool-specific settings (web search location, vector stores, etc.)
-
-### 7. Streaming and Real-time Updates
-
-The application implements real-time streaming in several layers:
-
-#### Server-Sent Events (SSE)
+**Implementation**:
 ```typescript
-// API route streams events to client
-const stream = new ReadableStream({
-  async start(controller) {
-    for await (const event of events) {
-      controller.enqueue(`data: ${JSON.stringify(event)}\n\n`);
-    }
-  }
-});
+class UsageTracker {
+  static canSendMessage(userId: string): { allowed: boolean; remaining?: number }
+  static incrementUsage(userId: string): UserUsage
+  static upgradeToPaid(userId: string): UserUsage
+}
 ```
 
-#### Client-side Event Processing
+## Security Model
+
+### Production-Grade Security Features
+- **Server-Side Clerk Verification**: All credential endpoints verify session tokens with Clerk backend
+- **Anti-Spoofing Protection**: User ID extracted from verified session, never trusted from headers
+- **Per-user Data Isolation**: Usage tracking per verified Clerk user ID
+- **AES-GCM Encryption**: ESPN credentials encrypted in Durable Objects with key rotation planning
+- **Environment Isolation**: Development fallbacks disabled in production
+- **API Protection**: All sensitive endpoints require verified Clerk sessions
+- **CORS Policies**: Restrict cross-origin access
+- **Open MCP Access**: Baseball data freely accessible via MCP
+- **Comprehensive Error Handling**: User-friendly messages without exposing internals
+
+### Secure Data Protection Flow
+```
+1. User signs in via Clerk → Gets session token
+2. Frontend sends requests with Authorization: Bearer <token>
+3. MCP service verifies token with Clerk backend API
+4. Server extracts verified userId from session
+5. ESPN credentials stored/retrieved using verified userId only
+6. Usage tracking updated with verified user ID
+7. MCP tools work without authentication for public data access
+8. Premium features require valid verified Clerk session
+```
+
+### Security Hardening Features
+- **No Header Spoofing**: Requests cannot fake user identity via headers
+- **Production Environment Validation**: NODE_ENV checks prevent development shortcuts in production
+- **Audit Logging**: Security events logged for monitoring and compliance
+- **Session Validation**: Each credential request validates session server-side
+
+## Data Storage
+
+### Usage Tracking (In-Memory/Database)
 ```typescript
-// Process streaming events and update UI
-await handleTurn(allConversationItems, tools, async ({ event, data }) => {
-  switch (event) {
-    case "response.output_text.delta":
-      // Update message content in real-time
-      break;
-    case "response.function_call_arguments.delta":
-      // Show streaming tool arguments
-      break;
-    // Handle other events...
-  }
-});
+interface UserUsage {
+  userId: string;           // Clerk user ID
+  messageCount: number;     // Messages sent this period
+  resetDate: string;        // When usage resets
+  plan: 'free' | 'paid';   // User's current plan
+}
 ```
 
-### 8. Tool Execution Flow
+### ESPN Credential Storage (Durable Objects)
+```
+1. User provides ESPN S2/SWID via frontend
+2. Frontend sends to baseball-espn-mcp with user ID
+3. Credentials encrypted (AES-GCM) → User's Durable Object
+4. MCP tools decrypt credentials for ESPN API calls
+```
 
-#### Custom Functions
-1. Function call detected in stream
-2. Arguments parsed from streaming JSON
-3. Local function executed via `handleTool()`
-4. Result added to conversation
-5. New turn initiated with function output
+## Environment Variables
 
-#### Built-in Tools (Web/File Search, Code Interpreter)
-1. Tool call initiated by API
-2. OpenAI handles execution server-side
-3. Results streamed back via completion events
-4. UI updated with tool outputs
+### Next.js Frontend (Required)
+```bash
+# OpenAI
+OPENAI_API_KEY=sk-...
 
-#### MCP Tools
-1. MCP server configured with URL and label
-2. Tool calls routed to remote MCP server
-3. Optional approval workflow for security
-4. Results returned and displayed
+# Clerk Authentication
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
+CLERK_SECRET_KEY=sk_test_...
 
-### 9. Security and Approval
+# Optional Clerk URLs
+NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in
+NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up
+NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL=/
+NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL=/
+```
 
-The application includes approval mechanisms for potentially sensitive operations:
+### Baseball ESPN MCP (Required)
+```bash
+# Required for all environments
+ENCRYPTION_KEY=32-char-key-for-aes-encryption
 
-- **MCP Tool Approval** - Optional user confirmation for MCP tool calls
-- **Tool Restrictions** - Configurable allowed tools for MCP servers
-- **Environment Isolation** - Code interpreter runs in sandboxed containers
+# Required for production security
+CLERK_SECRET_KEY=sk_test_your-clerk-secret-key
 
-### 10. Configuration
+# Environment configuration (set via wrangler.toml)
+NODE_ENV=production  # or "development"
 
-#### Model Configuration (`config/constants.ts`)
+# Optional development fallback (only works when NODE_ENV=development)
+ESPN_S2=your-espn-s2-cookie
+ESPN_SWID=your-espn-swid-cookie
+```
+
+## Deployment Guide
+
+### 1. Set Up Clerk
+```bash
+# Create account at https://clerk.com
+# Create new application
+# Get publishable and secret keys
+# Configure in frontend environment
+```
+
+### 2. Deploy Baseball ESPN MCP
+```bash
+cd /flaim/baseball-espn-mcp
+wrangler secret put ENCRYPTION_KEY
+# Optional: wrangler secret put ESPN_S2
+# Optional: wrangler secret put ESPN_SWID
+wrangler deploy --env prod
+```
+
+### 3. Deploy Next.js Frontend
+```bash
+cd /flaim/openai
+# Configure .env.local with Clerk keys
+npm run build
+npm run start
+# Or deploy to Vercel/Netlify
+```
+
+## MCP Integration
+
+### Tool Configuration in Frontend
 ```typescript
-export const MODEL = "gpt-4.1";
-export const DEVELOPER_PROMPT = `...`; // System prompt
+const mcpTool = {
+  type: "mcp",
+  server_label: "fantasy-baseball",
+  server_url: "https://baseball-espn-mcp.your-domain.workers.dev/mcp",
+  allowed_tools: ["get_espn_league_info", "get_espn_team_roster", "get_espn_matchups"],
+  require_approval: "never"
+}
 ```
 
-#### Tool Definitions (`config/functions.ts`, `config/tools-list.ts`)
-- Custom function schemas
-- Tool parameters and descriptions
-- Validation and type definitions
+### Available Tools
+- `get_espn_league_info(leagueId, seasonId?)` - League settings and metadata
+- `get_espn_team_roster(leagueId, teamId, seasonId?)` - Team roster details
+- `get_espn_matchups(leagueId, week?, seasonId?)` - Current week matchups
 
-## Key Features
+## User Experience Flow
 
-### Multi-turn Conversations
-- Maintains conversation context across multiple exchanges
-- Supports complex reasoning with tool use
-- Handles interruptions and clarifications
+### New User Journey
+```
+1. Visit FLAIM application
+2. See welcome screen with authentication prompt
+3. Click "Sign Up" → Clerk registration flow
+4. Account created → redirect to main app
+5. Start with 15 free messages
+6. Configure ESPN credentials for private leagues
+7. Use AI assistant for fantasy sports help
+```
 
-### Tool Integration
-- Seamless integration of multiple tool types
-- Real-time tool execution with streaming feedback
-- Configurable tool availability
+### Returning User Experience
+```
+1. Visit FLAIM application
+2. Automatic sign-in via Clerk session
+3. See usage dashboard (messages remaining)
+4. Continue conversations
+5. Upgrade prompt when approaching limits
+```
 
-### Streaming Experience
-- Real-time message display as content is generated
-- Live tool execution progress
-- Instant UI updates for better user experience
+## Monitoring & Health Checks
 
-### Extensibility
-- Plugin architecture for custom tools
-- MCP protocol support for remote tools
-- Configurable tool parameters and behaviors
+### Health Endpoints
+- `GET /health` on baseball-espn-mcp
+- `GET /api/usage` for usage statistics
+- Clerk dashboard for authentication metrics
+- Cloudflare Analytics for MCP service usage
 
-## Data Flow
+### Error Handling
+- Graceful authentication errors
+- Usage limit notifications
+- ESPN API error translation
+- Proper error boundaries in React
 
-1. **User Input** → Conversation Store → Process Messages
-2. **API Call** → OpenAI Responses API with tools configuration
-3. **Streaming Response** → Event processing → UI updates
-4. **Tool Calls** → Local/Remote execution → Results integration
-5. **Completion** → Final state update → Ready for next turn
+## Extensibility
 
-This architecture provides a robust foundation for building conversational AI applications with OpenAI's Responses API, offering both built-in capabilities and extensive customization options through the tool system.
+### Additional Sports Platforms
+```
+/flaim/yahoo-mcp        # Yahoo fantasy integration
+/flaim/nfl-mcp          # NFL-specific tools  
+/flaim/basketball-mcp   # NBA fantasy tools
+```
+
+### Payment Integration
+- Clerk webhooks for subscription events
+- Stripe integration for plan upgrades
+- Automatic usage tier management
+
+---
+
+## Benefits of v4.0 Architecture
+
+✅ **Modern Authentication**: Clerk provides industry-standard auth  
+✅ **Usage-Based Monetization**: Clear free/paid tiers  
+✅ **Open MCP Access**: Fantasy data accessible without barriers  
+✅ **Developer Friendly**: Simple setup and configuration  
+✅ **Scalable**: Serverless architecture scales automatically  
+✅ **User-Centric**: Smooth onboarding and upgrade flows  
+✅ **Secure**: Encrypted data storage and session management  
+
+## Migration from v3.0
+
+Key changes in v4.0:
+- **Replaced custom JWT auth** with Clerk authentication
+- **Added usage tracking** with free/paid tiers
+- **Simplified MCP service** to open access
+- **Enhanced user experience** with modern auth flows
+- **Removed Stripe billing** complexity (can be re-added)
+- **Consolidated documentation** for easier setup
+
+The v4.0 architecture provides a production-ready foundation for scaling FLAIM while maintaining security and user experience best practices.

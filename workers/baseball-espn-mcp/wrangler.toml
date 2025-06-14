@@ -1,0 +1,69 @@
+name = "fantasy-sports-mcp"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+
+# Default environment variables
+[vars]
+NODE_ENV = "production"
+
+# Environment secrets (set via wrangler secret put)
+# ENCRYPTION_KEY (for ESPN credential storage)
+
+# Durable Objects for user credential storage
+[[durable_objects.bindings]]
+name = "USER_DO"
+class_name = "EspnStorage"
+script_name = "fantasy-sports-mcp"
+
+# Custom routes commented out for now - use default workers.dev URL
+# [[routes]]
+# pattern = "baseball-espn-mcp.gerrygugger.workers.dev/*"
+# zone_name = "gerrygugger.workers.dev"
+
+# [[routes]]
+# pattern = "espn-mcp.gerrygugger.workers.dev/*"
+# zone_name = "gerrygugger.workers.dev"
+
+[env.dev]
+name = "fantasy-sports-mcp-dev"
+
+[env.dev.vars]
+NODE_ENV = "development"
+
+[[env.dev.durable_objects.bindings]]
+name = "USER_DO"
+class_name = "EspnStorage"
+script_name = "fantasy-sports-mcp-dev"
+
+# [[env.dev.routes]]
+# pattern = "fantasy-sports-mcp-dev.gerrygugger.workers.dev/*"
+# zone_name = "gerrygugger.workers.dev"
+
+# Durable Object migrations
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["UserCredentials"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["EspnStorage"]
+deleted_classes = ["UserCredentials"]
+
+[env.prod]
+name = "fantasy-sports-mcp-prod"
+
+[env.prod.vars]
+NODE_ENV = "production"
+
+[[env.prod.durable_objects.bindings]]
+name = "USER_DO"
+class_name = "EspnStorage"
+script_name = "fantasy-sports-mcp-prod"
+
+# [[env.prod.routes]]
+# pattern = "baseball-espn-mcp.gerrygugger.workers.dev/*"
+# zone_name = "gerrygugger.workers.dev"
+
+# [[env.prod.routes]]
+# pattern = "espn-mcp.gerrygugger.workers.dev/*"
+# zone_name = "gerrygugger.workers.dev"

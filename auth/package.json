@@ -1,31 +1,80 @@
 {
-  "name": "flaim-auth-service",
+  "name": "@flaim/auth",
   "version": "1.0.0",
-  "description": "Stripe-first authentication service for FLAIM fantasy sports platform",
-  "main": "src/index.ts",
+  "description": "Cross-platform authentication system for FLAIM Fantasy Sports Platform",
+  "main": "shared/index.js",
+  "types": "shared/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./shared/index.js",
+      "require": "./shared/index.js",
+      "types": "./shared/index.d.ts"
+    },
+    "./clerk/web": {
+      "import": "./clerk/web/index.js",
+      "require": "./clerk/web/index.js",
+      "types": "./clerk/web/index.d.ts"
+    }
+  },
   "scripts": {
-    "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
-    "deploy:dev": "wrangler deploy --env dev",
-    "deploy:prod": "wrangler deploy --env prod",
     "test": "jest",
     "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "build": "tsc",
     "type-check": "tsc --noEmit",
-    "tail": "wrangler tail",
-    "tail:dev": "wrangler tail --env dev"
+    "lint": "eslint . --ext .ts,.tsx",
+    "format": "prettier --write ."
   },
-  "dependencies": {
-    "@cloudflare/workers-types": "^4.0.0",
-    "jose": "^4.14.4",
-    "stripe": "^13.9.0"
+  "keywords": [
+    "authentication",
+    "clerk",
+    "cross-platform",
+    "typescript",
+    "nextjs",
+    "react",
+    "ios",
+    "fantasy-sports"
+  ],
+  "author": "FLAIM Team",
+  "license": "MIT",
+  "peerDependencies": {
+    "@clerk/nextjs": "^6.22.0",
+    "next": "^14.0.0",
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0"
   },
   "devDependencies": {
-    "typescript": "^5.0.0",
-    "wrangler": "^3.0.0",
+    "@types/jest": "^29.5.0",
     "@types/node": "^20.0.0",
-    "jest": "^29.0.0",
-    "@types/jest": "^29.0.0"
+    "@types/react": "^18.0.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "eslint": "^8.0.0",
+    "eslint-config-prettier": "^9.0.0",
+    "jest": "^29.5.0",
+    "prettier": "^3.0.0",
+    "ts-jest": "^29.1.0",
+    "typescript": "^5.0.0"
   },
+  "jest": {
+    "preset": "ts-jest",
+    "testEnvironment": "node",
+    "testMatch": ["**/tests/**/*.test.ts"],
+    "collectCoverageFrom": [
+      "shared/**/*.ts",
+      "!shared/tests/**",
+      "!shared/**/*.d.ts"
+    ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-org/flaim.git",
+    "directory": "auth"
+  },
+  "bugs": {
+    "url": "https://github.com/your-org/flaim/issues"
+  },
+  "homepage": "https://github.com/your-org/flaim/tree/main/auth#readme",
   "engines": {
     "node": ">=18.0.0"
   }
