@@ -101,7 +101,8 @@ export class UserCredentials {
   }
 
   private async setEspnCredentials(request: Request, corsHeaders: Record<string, string>): Promise<Response> {
-    const { clerkUserId, swid, espn_s2, email } = await request.json();
+    const body = await request.json() as { clerkUserId?: string; swid?: string; espn_s2?: string; email?: string };
+    const { clerkUserId, swid, espn_s2, email } = body;
     
     if (!clerkUserId || !swid || !espn_s2) {
       return new Response(JSON.stringify({ 
@@ -181,7 +182,8 @@ export class UserCredentials {
   }
 
   private async setYahooCredentials(request: Request, corsHeaders: Record<string, string>): Promise<Response> {
-    const { access_token, refresh_token, expires_in, email } = await request.json();
+    const body = await request.json() as { access_token?: string; refresh_token?: string; expires_in?: number; email?: string };
+    const { access_token, refresh_token, expires_in, email } = body;
     
     if (!access_token || !refresh_token) {
       return new Response(JSON.stringify({ 
@@ -193,7 +195,7 @@ export class UserCredentials {
     }
 
     const now = new Date().toISOString();
-    const expiresAt = new Date(Date.now() + (expires_in * 1000)).toISOString();
+    const expiresAt = new Date(Date.now() + ((expires_in || 3600) * 1000)).toISOString();
     
     const credentials: YahooCredentials = {
       access_token,
@@ -349,7 +351,8 @@ export class UserCredentials {
   }
 
   private async setEspnCredentialsForUser(request: Request, corsHeaders: Record<string, string>, clerkUserId: string): Promise<Response> {
-    const { swid, espn_s2, email } = await request.json();
+    const body = await request.json() as { swid?: string; espn_s2?: string; email?: string };
+    const { swid, espn_s2, email } = body;
     
     if (!clerkUserId || !swid || !espn_s2) {
       return new Response(JSON.stringify({ 
@@ -456,7 +459,7 @@ export class UserCredentials {
   }
 
   private async decrypt(encryptedData: string): Promise<string> {
-    const { credentialEncryption } = await import('../../../auth/shared/encryption.js');
+    const { credentialEncryption } = await import('../../../../auth/shared/encryption.js');
     await credentialEncryption.initialize(this.env.ENCRYPTION_KEY);
     
     const [iv, ciphertext] = encryptedData.split(':');

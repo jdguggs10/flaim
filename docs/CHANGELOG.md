@@ -13,6 +13,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Nothing yet
 
+## [4.1.1] - 2024-12-15
+
+### Added
+- **🎉 Automatic League Discovery**: ESPN gambit dashboard integration for instant league detection
+- **Multi-Sport Discovery**: Automatically finds leagues across baseball, football, basketball, and hockey
+- **Enhanced UI**: Real-time league display after ESPN authentication
+- **New API Endpoint**: `/discover-leagues` for programmatic league discovery
+- **Comprehensive Testing**: Full test suite for league discovery functionality
+- **Documentation**: Complete ESPN gambit module documentation and integration guides
+
+### Changed
+- **User Experience**: No more manual league ID entry - leagues discovered automatically after ESPN login
+- **Authentication Flow**: Enhanced ESPN auth component with automatic discovery integration
+- **Error Handling**: Graceful fallbacks to manual entry if auto-discovery fails
+- **Performance**: Single-call discovery using ESPN's internal gambit endpoint (≤150ms response time)
+
+### Security
+- **Rate Limiting**: Respect ESPN API limits (~60 req/min per IP)
+- **Credential Protection**: Discovery uses encrypted stored credentials
+- **Session Verification**: All discovery endpoints require verified Clerk sessions
+
 ## [4.1.0] - 2024-12-14
 
 ### Added

@@ -38,6 +38,7 @@ npm run build && npm start
 - **🤖 AI-Powered Chat**: Natural language fantasy sports assistant
 - **🔐 Cross-Platform Auth**: Modular authentication system ready for web, iOS, and workers
 - **⚾ Multi-Sport Support**: Baseball and football with shared authentication infrastructure
+- **🔍 Auto League Discovery**: Automatically finds all your fantasy leagues after ESPN login
 - **💰 Usage Tiers**: 100 free messages/month, unlimited paid tier
 - **🌐 Serverless**: Cloudflare Workers + Vercel deployment
 
@@ -52,12 +53,14 @@ npm run build && npm start
 | [🤝 Contributing](docs/contributing.md) | Development workflow and guidelines |
 | [📋 Changelog](docs/changelog.md) | Release history and breaking changes |
 
-## 🆕 What's New in v4.0
+## 🆕 What's New in v4.1
 
-- ✅ **Modular Authentication**: Extracted `flaim/auth` for cross-platform reuse
-- ✅ **Multi-Sport Workers**: Baseball and football workers with shared auth 
+- ✅ **Automatic League Discovery**: ESPN gambit integration finds all your leagues instantly
+- ✅ **Enhanced UX**: No more manual league ID entry - just login and go
+- ✅ **Multi-Sport Detection**: Automatic discovery across baseball, football, and more
+- ✅ **Graceful Fallbacks**: Manual entry available if auto-discovery fails
 - ✅ **Production Security**: Server-side Clerk verification, anti-spoofing protection
-- ✅ **Streamlined Architecture**: Organized workers and auth modules for scalability
+- ✅ **Modular Architecture**: Clean separation between auth, discovery, and MCP services
 
 ## 🤝 Contributing
 

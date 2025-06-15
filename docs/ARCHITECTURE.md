@@ -95,6 +95,7 @@ FLAIM (Fantasy League AI Manager) is a **modern microservices platform** that pr
 **Responsibilities**:
 - Open access MCP endpoints
 - Shared ESPN credential storage via flaim/auth
+- **Automatic league discovery** via ESPN gambit dashboard
 - ESPN API integration
 - Fantasy baseball data retrieval
 - MCP protocol implementation
@@ -108,6 +109,7 @@ FLAIM (Fantasy League AI Manager) is a **modern microservices platform** that pr
 - `GET /mcp` → MCP server info and capabilities
 - `POST /mcp/tools/call` → Execute MCP tools
 - `POST /credential/espn` → Store ESPN credentials (auth required)
+- `GET /discover-leagues` → Automatic league discovery (auth required)
 - `GET /health` → Service health check
 
 **MCP Tools**:
@@ -247,7 +249,7 @@ class UsageTracker {
 ## Security Model
 
 ### Production-Grade Security Features
-- **Server-Side Clerk Verification**: All credential endpoints verify session tokens with Clerk backend
+- **Server-Side Clerk Verification**: All credential and discovery endpoints verify session tokens with Clerk backend
 - **Anti-Spoofing Protection**: User ID extracted from verified session, never trusted from headers
 - **Per-user Data Isolation**: Usage tracking per verified Clerk user ID
 - **AES-GCM Encryption**: ESPN credentials encrypted in Durable Objects with key rotation planning
@@ -255,6 +257,7 @@ class UsageTracker {
 - **API Protection**: All sensitive endpoints require verified Clerk sessions
 - **CORS Policies**: Restrict cross-origin access
 - **Open MCP Access**: Baseball data freely accessible via MCP
+- **Secure League Discovery**: ESPN gambit calls use encrypted credentials with rate limiting
 - **Comprehensive Error Handling**: User-friendly messages without exposing internals
 
 ### Secure Data Protection Flow

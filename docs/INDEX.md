@@ -41,12 +41,13 @@ FLAIM v4.0 features production-grade security:
 - **Encrypted credential storage** with AES-GCM in Durable Objects
 - **Comprehensive error handling** with user-friendly messages
 
-## 🆕 What's New in v4.0
+## 🆕 What's New in v4.1
 
-- ✅ Production security hardening with anti-spoofing protection
-- ✅ Enhanced error handling and user experience
-- ✅ Streamlined deployment with security-first configuration
-- ✅ Complete documentation restructure
+- ✅ **Automatic League Discovery**: ESPN gambit integration finds all your leagues instantly
+- ✅ **Enhanced UX**: No more manual league ID entry - just login and go
+- ✅ **Multi-Sport Detection**: Automatic discovery across baseball, football, and more
+- ✅ **Production security hardening** with anti-spoofing protection
+- ✅ **Enhanced error handling** and user experience
 
 ## 🤝 Getting Help
 

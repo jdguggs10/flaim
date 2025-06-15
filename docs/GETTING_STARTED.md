@@ -151,7 +151,8 @@ For private league access, configure ESPN credentials in the tools panel.
 1. Go to tools panel → Select "Baseball" + "ESPN"
 2. Enter ESPN S2 and SWID cookies
 3. Credentials encrypted and stored securely
-4. AI can now access your private league data
+4. 🎉 Leagues automatically discovered across all sports
+5. AI can now access your private league data
 ```
 
 ## Example Conversations
@@ -169,7 +170,7 @@ For private league access, configure ESPN credentials in the tools panel.
 ### Private League Access
 **You:** *"I want to analyze my private league team. How do I give you access?"*
 
-**AI:** *"To access your private ESPN league, you'll need to provide your ESPN credentials. Go to the tools panel on the right, select 'Baseball' and 'ESPN', then enter your S2 and SWID cookies. I'll walk you through getting these values from your browser."*
+**AI:** *"To access your private ESPN league, you'll need to provide your ESPN credentials. Go to the tools panel on the right, select 'Baseball' and 'ESPN', then enter your S2 and SWID cookies. Once saved, I'll automatically discover all your fantasy leagues across all sports!"*
 
 ### Usage Awareness
 **You:** *"How many messages do I have left this month?"*
@@ -193,6 +194,7 @@ For private league access, configure ESPN credentials in the tools panel.
    - They're encrypted and stored securely per user
 
 3. **What You Get**:
+   - **Automatic league discovery** across all sports (baseball, football, etc.)
    - Access to your private league data
    - Team roster analysis
    - Lineup optimization suggestions

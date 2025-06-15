@@ -117,6 +117,42 @@ export default {
         return credentialHandler.handleEspnCredentialsWithUserId(request, corsHeaders, clerkUserId);
       }
       
+      // League discovery endpoint - require verified Clerk session
+      if (url.pathname === '/discover-leagues') {
+        // Verify Clerk session and get authenticated user ID
+        const { userId: clerkUserId, error } = await verifyClerkSession(request, env);
+        
+        if (!clerkUserId || error) {
+          return new Response(JSON.stringify({ 
+            error: error || 'Authentication required',
+            message: 'Valid Clerk session required for league discovery'
+          }), {
+            status: 401,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          });
+        }
+
+        // Import league discovery tool
+        const { discoverUserLeagues } = await import('./tools/discoverLeagues.js');
+        
+        try {
+          const result = await discoverUserLeagues({ clerkUserId }, env);
+          
+          return new Response(JSON.stringify(result), {
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          });
+        } catch (error) {
+          console.error('League discovery endpoint error:', error);
+          return new Response(JSON.stringify({
+            success: false,
+            error: 'Internal error during league discovery'
+          }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          });
+        }
+      }
+
       // Health check for service monitoring
       if (url.pathname === '/health') {
         return new Response(JSON.stringify({ 
@@ -138,6 +174,7 @@ export default {
           endpoints: {
             '/mcp': 'MCP server endpoints (open access)',
             '/credential/espn': 'ESPN S2/SWID credential management (requires Clerk authentication)',
+            '/discover-leagues': 'Automatic league discovery via ESPN gambit dashboard (requires Clerk authentication)',
             '/health': 'Health check'
           }
         }), {

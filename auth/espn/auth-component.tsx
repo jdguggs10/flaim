@@ -30,6 +30,7 @@ export default function EspnAuth() {
   const [showS2, setShowS2] = useState(false);
   const [showSWID, setShowSWID] = useState(false);
   const [toast, setToast] = useState<{type: 'error' | 'success' | 'warning', message: string} | null>(null);
+  const [discoveredLeagues, setDiscoveredLeagues] = useState<any[]>([]);
 
   // Check if we have complete credentials
   const hasCompleteCredentials = espnS2 && espnSWID;
@@ -151,6 +152,9 @@ export default function EspnAuth() {
         setIsAuthenticated(true);
         setSuccess("ESPN credentials saved successfully!");
         
+        // Auto-discover leagues after successful authentication
+        await discoverUserLeagues();
+        
         // Auto-configure MCP with Clerk-based auth
         setMcpConfig({
           server_label: "fantasy-baseball",
@@ -188,6 +192,57 @@ export default function EspnAuth() {
     }
   };
 
+  // Discover user's fantasy leagues after successful authentication
+  const discoverUserLeagues = async () => {
+    if (!clerkUserId) return;
+
+    try {
+      console.log('🔍 Discovering leagues for user after ESPN authentication...');
+      
+      // Get session token for authentication
+      const token = await getToken();
+      
+      const response = await fetch(`${mcpBaseUrl}/discover-leagues`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+      });
+
+      const result = await response.json();
+
+      if (response.ok && result.success) {
+        setDiscoveredLeagues(result.data.allLeagues || []);
+        
+        const totalLeagues = result.data.totalLeagues || 0;
+        const baseballCount = result.data.baseballLeagues?.length || 0;
+        const footballCount = result.data.footballLeagues?.length || 0;
+        
+        if (totalLeagues > 0) {
+          const sportBreakdown = [];
+          if (baseballCount > 0) sportBreakdown.push(`${baseballCount} baseball`);
+          if (footballCount > 0) sportBreakdown.push(`${footballCount} football`);
+          
+          const discoveryMessage = `🎉 Discovered ${totalLeagues} league${totalLeagues > 1 ? 's' : ''}: ${sportBreakdown.join(' and ')}.`;
+          setSuccess(discoveryMessage);
+          
+          console.log('League discovery successful:', result.data);
+        } else {
+          setSuccess("ESPN credentials saved! No active leagues found - you can manually enter league IDs.");
+        }
+      } else {
+        // Discovery failed, but auth was successful
+        console.warn('League discovery failed:', result.error);
+        setSuccess("ESPN credentials saved! Auto-discovery failed - you can manually enter league IDs.");
+      }
+    } catch (error) {
+      console.error('League discovery error:', error);
+      // Don't show error to user since auth was successful
+      setSuccess("ESPN credentials saved! Auto-discovery unavailable - you can manually enter league IDs.");
+    }
+  };
+
   const deleteEspnCredentials = async () => {
     if (!clerkUserId) {
       setError("Please sign in with Clerk first");
@@ -216,6 +271,7 @@ export default function EspnAuth() {
         setIsAuthenticated(false);
         setEspnS2("");
         setEspnSWID("");
+        setDiscoveredLeagues([]);
         setMcpEnabled(false);
         setSuccess("ESPN credentials deleted successfully!");
       } else if (response.status === 401) {
@@ -339,6 +395,23 @@ export default function EspnAuth() {
           <p className="text-sm text-gray-600">
             Your ESPN credentials are securely stored and encrypted. You can now access private league data.
           </p>
+
+          {/* Discovered Leagues */}
+          {discoveredLeagues.length > 0 && (
+            <div className="space-y-2">
+              <h4 className="text-sm font-medium text-gray-700">Discovered Leagues:</h4>
+              <div className="space-y-1 max-h-32 overflow-y-auto">
+                {discoveredLeagues.map((league, index) => (
+                  <div key={index} className="text-xs bg-white p-2 rounded border">
+                    <div className="font-medium text-gray-800">{league.leagueName}</div>
+                    <div className="text-gray-600">
+                      {league.sport.toUpperCase()} • League ID: {league.leagueId} • Team: {league.teamName}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           
           <Button 
             onClick={deleteEspnCredentials}
