@@ -3,8 +3,7 @@
 // No authentication required for MCP endpoints
 
 import { McpAgent } from './mcp/agent.js';
-import { UserCredentials } from './storage/user-credentials.js';
-import { EspnStorage } from '../../../auth/espn';
+import { EspnStorage, EspnMcpProvider } from '../../../auth/espn';
 import { createClerkClient } from '@clerk/backend';
 
 export interface Env {
@@ -108,13 +107,10 @@ export default {
         
         // Route to user's Durable Object for ESPN credential storage
         const userStoreId = env.USER_DO.idFromString(clerkUserId);
-        const userStore = env.USER_DO.get(userStoreId);
+        const userStore = env.USER_DO.get(userStoreId) as unknown as EspnStorage;
         
-        // Use the new method that accepts clerkUserId parameter
-        const credentialHandler = userStore as any;
-        
-        // Forward to the new handler method
-        return credentialHandler.handleEspnCredentialsWithUserId(request, corsHeaders, clerkUserId);
+        // Use the modular EspnStorage method with proper typing
+        return userStore.handleEspnCredentialsWithUserId(request, corsHeaders, clerkUserId);
       }
       
       // League discovery endpoint - require verified Clerk session
@@ -205,5 +201,5 @@ export default {
   }
 };
 
-// Export the Durable Object classes
-export { UserCredentials, EspnStorage };
+// Export the Durable Object class
+export { EspnStorage };

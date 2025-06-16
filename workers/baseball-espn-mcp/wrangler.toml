@@ -42,12 +42,7 @@ script_name = "fantasy-sports-mcp-dev"
 # Durable Object migrations
 [[migrations]]
 tag = "v1"
-new_sqlite_classes = ["UserCredentials"]
-
-[[migrations]]
-tag = "v2"
 new_sqlite_classes = ["EspnStorage"]
-deleted_classes = ["UserCredentials"]
 
 [env.prod]
 name = "fantasy-sports-mcp-prod"
