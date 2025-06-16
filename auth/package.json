@@ -59,7 +59,9 @@
   "jest": {
     "preset": "ts-jest",
     "testEnvironment": "node",
-    "testMatch": ["**/tests/**/*.test.ts"],
+    "testMatch": [
+      "**/tests/**/*.test.ts"
+    ],
     "collectCoverageFrom": [
       "shared/**/*.ts",
       "!shared/tests/**",
@@ -77,5 +79,8 @@
   "homepage": "https://github.com/your-org/flaim/tree/main/auth#readme",
   "engines": {
     "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "lucide-react": "^0.515.0"
   }
 }

@@ -34,7 +34,7 @@ export class CredentialEncryption {
     this.key = await crypto.subtle.deriveKey(
       {
         name: 'PBKDF2',
-        salt: new TextEncoder().encode('fantasy-sports-mcp-salt'), // Static salt for deterministic key
+        salt: new TextEncoder().encode('baseball-espn-mcp-salt'), // Static salt for deterministic key
         iterations: 10000,
         hash: 'SHA-256'
       },

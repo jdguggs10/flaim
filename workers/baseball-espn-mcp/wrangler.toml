@@ -1,4 +1,4 @@
-name = "fantasy-sports-mcp"
+name = "baseball-espn-mcp"
 main = "src/index.ts"
 compatibility_date = "2024-12-01"
 
@@ -13,7 +13,7 @@ NODE_ENV = "production"
 [[durable_objects.bindings]]
 name = "USER_DO"
 class_name = "EspnStorage"
-script_name = "fantasy-sports-mcp"
+script_name = "baseball-espn-mcp"
 
 # Custom routes commented out for now - use default workers.dev URL
 # [[routes]]
@@ -25,7 +25,7 @@ script_name = "fantasy-sports-mcp"
 # zone_name = "gerrygugger.workers.dev"
 
 [env.dev]
-name = "fantasy-sports-mcp-dev"
+name = "baseball-espn-mcp-dev"
 
 [env.dev.vars]
 NODE_ENV = "development"
@@ -33,10 +33,10 @@ NODE_ENV = "development"
 [[env.dev.durable_objects.bindings]]
 name = "USER_DO"
 class_name = "EspnStorage"
-script_name = "fantasy-sports-mcp-dev"
+script_name = "baseball-espn-mcp-dev"
 
 # [[env.dev.routes]]
-# pattern = "fantasy-sports-mcp-dev.gerrygugger.workers.dev/*"
+# pattern = "baseball-espn-mcp-dev.gerrygugger.workers.dev/*"
 # zone_name = "gerrygugger.workers.dev"
 
 # Durable Object migrations
@@ -45,7 +45,7 @@ tag = "v1"
 new_sqlite_classes = ["EspnStorage"]
 
 [env.prod]
-name = "fantasy-sports-mcp-prod"
+name = "baseball-espn-mcp-prod"
 
 [env.prod.vars]
 NODE_ENV = "production"
@@ -53,7 +53,7 @@ NODE_ENV = "production"
 [[env.prod.durable_objects.bindings]]
 name = "USER_DO"
 class_name = "EspnStorage"
-script_name = "fantasy-sports-mcp-prod"
+script_name = "baseball-espn-mcp-prod"
 
 # [[env.prod.routes]]
 # pattern = "baseball-espn-mcp.gerrygugger.workers.dev/*"

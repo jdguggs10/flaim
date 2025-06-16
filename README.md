@@ -11,24 +11,19 @@ FLAIM is your AI-powered fantasy sports assistant featuring server-side Clerk au
 
 ## 🚀 Quick Start
 
+### One-Click Local Development
 ```bash
-# 1. Clone and setup
 git clone https://github.com/yourusername/flaim
 cd flaim
+./setup.sh              # One-time setup for local development
+./start-dev.sh          # Start all services for development
+```
 
-# 2. Deploy MCP services 
-cd workers/baseball-espn-mcp
-npm install
-wrangler secret put ENCRYPTION_KEY      # openssl rand -base64 32
-wrangler secret put CLERK_SECRET_KEY    # from Clerk dashboard
-wrangler deploy --env prod
-
-# 3. Deploy frontend
-cd ../openai
-npm install
-cp .env.example .env.local
-# Edit .env.local with your API keys
-npm run build && npm start
+### One-Click Production Deployment
+```bash
+git clone https://github.com/yourusername/flaim
+cd flaim
+./start-prod.sh    # Deploys everything to Cloudflare
 ```
 
 **Ready in 5 minutes!** See [Getting Started Guide](docs/getting-started.md) for detailed setup.

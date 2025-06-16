@@ -12,16 +12,17 @@ import {
   SignUpButton as ClerkSignUpButton,
   SignedIn, 
   SignedOut, 
-  UserButton as ClerkUserButton 
+  UserButton as ClerkUserButton
 } from '@clerk/nextjs';
 
 // Component props interfaces
-export interface AuthButtonProps {
+type BaseButtonProps = {
   className?: string;
   children?: React.ReactNode;
-  mode?: 'modal' | 'redirect';
-  redirectUrl?: string;
-}
+};
+
+type SignInButtonCustomProps = BaseButtonProps & Omit<React.ComponentProps<typeof ClerkSignInButton>, 'children'>;
+type SignUpButtonCustomProps = BaseButtonProps & Omit<React.ComponentProps<typeof ClerkSignUpButton>, 'children'>;
 
 export interface UserButtonProps {
   className?: string;
@@ -33,20 +34,15 @@ export interface UserButtonProps {
  * Styled Sign In button with FLAIM branding
  */
 export function SignInButton({ 
-  className = "px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700", 
   children,
-  mode = "modal",
-  redirectUrl
-}: AuthButtonProps) {
+  ...props
+}: SignInButtonCustomProps) {
   return (
-    <ClerkSignInButton 
-      mode={mode}
-      redirectUrl={redirectUrl}
-    >
-      <button className={className}>
+    <span className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+      <ClerkSignInButton {...props}>
         {children || "Sign In"}
-      </button>
-    </ClerkSignInButton>
+      </ClerkSignInButton>
+    </span>
   );
 }
 
@@ -54,20 +50,15 @@ export function SignInButton({
  * Styled Sign Up button with FLAIM branding
  */
 export function SignUpButton({ 
-  className = "px-4 py-2 border border-blue-600 text-blue-600 rounded hover:bg-blue-50", 
   children,
-  mode = "modal",
-  redirectUrl
-}: AuthButtonProps) {
+  ...props
+}: SignUpButtonCustomProps) {
   return (
-    <ClerkSignUpButton 
-      mode={mode}
-      redirectUrl={redirectUrl}
-    >
-      <button className={className}>
+    <span className="px-4 py-2 border border-blue-600 text-blue-600 rounded hover:bg-blue-50">
+      <ClerkSignUpButton {...props}>
         {children || "Sign Up"}
-      </button>
-    </ClerkSignUpButton>
+      </ClerkSignUpButton>
+    </span>
   );
 }
 

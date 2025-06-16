@@ -1,5 +1,5 @@
 {
-  "name": "fantasy-sports-mcp",
+  "name": "baseball-espn-mcp",
   "version": "4.0.0",
   "description": "Open access MCP server for fantasy sports integration",
   "main": "src/index.ts",

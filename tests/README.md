@@ -129,7 +129,7 @@ TEST_ENCRYPTION_KEY=test-32-char-encryption-key-here
 TEST_OPENAI_API_KEY=sk-test-...
 
 # Deployed Worker URLs (updated after modular migration)
-TEST_BASEBALL_WORKER_URL=https://fantasy-sports-mcp.gerrygugger.workers.dev
+TEST_BASEBALL_WORKER_URL=https://baseball-espn-mcp.gerrygugger.workers.dev
 TEST_FOOTBALL_WORKER_URL=https://football-espn-mcp.gerrygugger.workers.dev
 
 # Cloudflare Workers Test Environment
@@ -315,7 +315,7 @@ The test suite has been updated to reflect the successful migration to modular a
 
 ### Current Worker Architecture
 ```
-auth/espn/EspnStorage ──→ baseball-espn-mcp (fantasy-sports-mcp.gerrygugger.workers.dev)
+auth/espn/EspnStorage ──→ baseball-espn-mcp (baseball-espn-mcp.gerrygugger.workers.dev)
                      └──→ football-espn-mcp (football-espn-mcp.gerrygugger.workers.dev)
 ```
 
