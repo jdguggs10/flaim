@@ -73,3 +73,6 @@ coverage/
 
 # Stores VSCode versions used for testing VSCode extensions
 .vscode-test
+
+# Test environment files with secrets
+tests/config/.env.test
