@@ -1,0 +1,9 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@flaim/auth/*": ["auth/dist/*"]
+    },
+    "moduleResolution": "NodeNext"
+  }
+}

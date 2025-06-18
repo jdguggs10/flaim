@@ -37,7 +37,7 @@ function getEnv(key: string): string | undefined {
 }
 
 // Centralized auth configuration
-export const AuthConfig: AuthConfig = {
+export const authConfig: AuthConfig = {
   clerkApiKey: getEnv('CLERK_SECRET_KEY'),
   jwtSecret: getEnv('JWT_SECRET') || getEnv('CLERK_SECRET_KEY'), // fallback
   usageLimits: {
@@ -57,11 +57,11 @@ export const isProduction = () => getEnv('NODE_ENV') === 'production';
 export function validateAuthConfig(): { valid: boolean; errors: string[] } {
   const errors: string[] = [];
   
-  if (!AuthConfig.clerkApiKey && isProduction()) {
+  if (!authConfig.clerkApiKey && isProduction()) {
     errors.push('CLERK_SECRET_KEY is required in production');
   }
   
-  if (AuthConfig.usageLimits.free <= 0) {
+  if (authConfig.usageLimits.free <= 0) {
     errors.push('FREE_TIER_LIMIT must be greater than 0');
   }
   

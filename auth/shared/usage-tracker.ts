@@ -5,7 +5,7 @@
  */
 
 import { UserUsage, UsageCheckResult, UsageStats, UserPlan } from './interfaces.js';
-import { AuthConfig } from './config.js';
+import { authConfig } from './config.js';
 
 // In-memory storage for demo - in production, use a database
 const userUsageStore = new Map<string, UserUsage>();
@@ -56,7 +56,7 @@ export class UsageTracker {
     }
 
     // Free users have limited access
-    const limit = AuthConfig.usageLimits.free;
+    const limit = authConfig.usageLimits.free;
     const allowed = usage.messageCount < limit;
     const remaining = Math.max(0, limit - usage.messageCount);
     
@@ -104,7 +104,7 @@ export class UsageTracker {
       };
     }
 
-    const limit = AuthConfig.usageLimits.free;
+    const limit = authConfig.usageLimits.free;
     return {
       plan: 'free',
       messageCount: usage.messageCount,

@@ -1,4 +1,4 @@
-# FLAIM Platform Deployment Guide v4.1
+# FLAIM Platform Deployment Guide v6.0
 
 ## 🚀 One-Click Deployment (Recommended)
 
@@ -40,14 +40,98 @@ FLAIM consists of three main components:
 ### Prerequisites
 - **OpenAI API key** - Get from [platform.openai.com](https://platform.openai.com)
 - **Cloudflare Workers account** - For MCP service hosting  
+- **Cloudflare KV** - For encrypted credential storage (v6.0+)
 - **Node.js 18+** and npm
 - **Clerk already configured** (keys available)
 
 ### Manual Steps (if not using quickstart scripts)
 
-1. **Deploy Baseball Worker**: `cd workers/baseball-espn-mcp && wrangler deploy --env prod`
-2. **Deploy Football Worker**: `cd workers/football-espn-mcp && wrangler deploy --env prod`  
-3. **Deploy Frontend**: `cd openai && npm run build && npx @cloudflare/next-on-pages`
+#### 1. Setup CF KV Credential Storage (v6.0+)
+
+FLAIM v6.0 introduces secure credential storage using Cloudflare KV with encryption:
+
+```bash
+# Create KV namespace for credential storage
+wrangler kv:namespace create espn_credentials
+
+# Note the namespace ID from output - add to wrangler.toml:
+# [[kv_namespaces]]
+# binding = "CF_KV_CREDENTIALS"
+# id = "your-namespace-id-here"
+
+# Generate encryption key
+openssl rand -base64 32
+
+# Set encryption key in CF Secrets (for workers)
+wrangler secret put CF_ENCRYPTION_KEY
+# Paste the base64 key when prompted
+
+# For Next.js app, add to .env.local:
+CF_ENCRYPTION_KEY=your-32-byte-base64-key
+CF_KV_CREDENTIALS_NAMESPACE=espn_credentials
+```
+
+#### 2. Deploy Workers
+
+```bash
+# Deploy Baseball Worker with KV access
+cd workers/baseball-espn-mcp
+wrangler deploy --env prod
+
+# Deploy Football Worker with KV access  
+cd workers/football-espn-mcp
+wrangler deploy --env prod
+```
+
+#### 3. Deploy Frontend
+
+```bash
+cd openai
+npm run build
+npx @cloudflare/next-on-pages  # Or deploy to Vercel
+```
+
+#### 4. Environment Configuration
+
+Copy `ENV_SAMPLE` to `.env.local` and configure:
+
+```bash
+cp ENV_SAMPLE .env.local
+```
+
+Key variables for v6.0:
+- `CF_KV_CREDENTIALS_NAMESPACE=espn_credentials`
+- `CF_ENCRYPTION_KEY=your-base64-key`
+- `BASEBALL_ESPN_MCP_URL=https://your-worker.workers.dev`
+- `FOOTBALL_ESPN_MCP_URL=https://your-worker.workers.dev`
+
+## 🔄 Migration from v5.x to v6.0
+
+### Credential Storage Changes
+
+v6.0 replaces Durable Object credential storage with CF KV + encryption:
+
+**Before (v5.x):**
+- Credentials stored in Durable Objects
+- Auto league discovery via Gambit
+
+**After (v6.0):**
+- Credentials stored in encrypted CF KV
+- Manual league entry + auto-pull team selection
+- Up to 10 leagues per user
+
+### Migration Steps
+
+1. **Existing users**: Zustand store migration handles legacy data automatically
+2. **New deployments**: Use CF KV setup above
+3. **Legacy API**: Old `/api/onboarding/leagues` redirects with deprecation headers
+
+### Breaking Changes
+
+- Removed Gambit auto-discovery 
+- New manual league entry flow
+- CF KV required for credential storage
+- Legacy Durable Object endpoints deprecated
 
 ### Development URLs (Local)
 - Frontend: `http://localhost:3000`

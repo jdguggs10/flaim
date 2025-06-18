@@ -1,4 +1,4 @@
-# Getting Started with FLAIM v4.1
+# Getting Started with FLAIM v5.0
 
 **FLAIM (Fantasy League AI Manager)** is your AI-powered fantasy sports assistant with modular authentication, usage limits, and multi-sport ESPN integration through MCP (Model Context Protocol) tools.
 
@@ -32,16 +32,34 @@ Instead of juggling multiple apps and spreadsheets, you can ask natural language
 3. Get your **Publishable Key** and **Secret Key**
 4. Configure sign-in options (email/password recommended)
 
-### Step 2: Deploy MCP Workers
+### Step 2: Install Dependencies
 
 ```bash
 # Clone the repository
 git clone https://github.com/yourusername/flaim
 cd flaim
 
-# Deploy Baseball Worker
-cd workers/baseball-espn-mcp
+# Install all dependencies from monorepo root (hoists shared packages)
 npm install
+
+# Build the shared auth package
+cd auth
+npm run build  # Builds shared, workers, and web targets
+
+# The auth package now provides scoped imports:
+# @flaim/auth/shared - Core authentication logic
+# @flaim/auth/workers/espn/storage - ESPN credential storage for workers
+# @flaim/auth/web/components - React components for Next.js
+# @flaim/auth/web/server - Server-side auth helpers
+# @flaim/auth/web/middleware - Clerk middleware
+```
+
+### Step 3: Deploy MCP Workers
+
+```bash
+# Deploy Baseball Worker
+cd ../workers/baseball-espn-mcp
+# No need to npm install - dependencies already hoisted from root
 
 # Required: Set encryption key for credential storage
 wrangler secret put ENCRYPTION_KEY  # Generate: openssl rand -base64 32
@@ -59,19 +77,18 @@ wrangler deploy --env prod
 
 # Optional: Deploy Football Worker
 cd ../football-espn-mcp
-npm install
+# No need to npm install - dependencies already hoisted from root
 wrangler secret put ENCRYPTION_KEY  # Same key as baseball worker
 wrangler secret put CLERK_SECRET_KEY  # Same key as baseball worker
 wrangler deploy --env prod
 ```
 
-### Step 3: Deploy Next.js Frontend
+### Step 4: Deploy Next.js Frontend
 
 ```bash
 cd ../../openai
 
-# Install dependencies
-npm install
+# Dependencies already installed from root npm workspace
 
 # Create environment file
 cp .env.example .env.local
@@ -88,19 +105,45 @@ npm run dev
 npx vercel deploy --prod
 ```
 
-### Step 4: Create Your Account
+### Step 5: Create Your Account
 
 1. Visit your FLAIM application
 2. Click **"Sign Up"** to create your account
 3. Complete Clerk registration flow
 4. You'll start with **15 free AI messages**
 
-### Step 5: Start Chatting!
+### Step 6: Start Chatting!
 
 Ask your AI assistant:
 > *"Hello! Help me understand my fantasy baseball team performance."*
 
 For private league access, configure ESPN credentials in the tools panel.
+
+## What's New in v5.0
+
+### 🏗️ **Monorepo Architecture**
+- **True NPM workspace**: Root package.json with proper dependency hoisting
+- **Single Next.js instance**: Eliminates duplicate dependencies and type conflicts
+- **Separated build targets**: Shared, workers, and web code compile independently
+- **Scoped imports**: Clean `@flaim/auth/*` imports instead of relative paths
+- **Client/server separation**: Prevents "server-only" errors in React components
+
+### 🔗 **Import Cheatsheet**
+
+| Target | Example Import |
+|--------|---------------|
+| **Next.js Components** | `import { ClerkProvider, useAuth } from '@flaim/auth/web/components'` |
+| **API Routes** | `import { withAuth, requireAuth } from '@flaim/auth/web/server'` |
+| **Middleware** | `import { clerkMiddleware } from '@flaim/auth/web/middleware'` |
+| **Workers** | `import { EspnStorage } from '@flaim/auth/workers/espn/storage'` |
+| **Shared Logic** | `import { UsageTracker } from '@flaim/auth/shared'` |
+
+### 🚀 **Developer Experience**
+- **ESLint v9 compatible**: Modern linting with typescript-eslint v8
+- **Type-safe auth wrappers**: Explicit union types for all response shapes
+- **TypeScript path mapping**: Automatic import resolution across monorepo
+- **Hot reloading**: Changes reflect immediately in development
+- **Consistent API**: Same auth interface across all platforms
 
 ## Key Features
 
@@ -122,9 +165,9 @@ For private league access, configure ESPN credentials in the tools panel.
 - **Automatic reset** every 30 days
 
 ### ⚾ ESPN Integration
-- **Public leagues**: No credentials needed
-- **Private leagues**: Secure credential storage
-- **Real-time data** from ESPN API
+- **Manual league entry**: Add up to 10 ESPN leagues with credentials
+- **Auto-pull team setup**: Automatically fetch league data and team selection
+- **Real-time data** from ESPN API  
 - **MCP tools** for external AI assistants
 
 ## User Experience Flow
@@ -146,13 +189,14 @@ For private league access, configure ESPN credentials in the tools panel.
 4. Limit reached → Upgrade or wait for reset
 ```
 
-### ESPN Private League Setup
+### ESPN League Setup
 ```
-1. Go to tools panel → Select "Baseball" + "ESPN"
-2. Enter ESPN S2 and SWID cookies
-3. Credentials encrypted and stored securely
-4. 🎉 Leagues automatically discovered across all sports
-5. AI can now access your private league data
+1. Complete account setup → Access league management
+2. Click "Add League" → Select sport (Baseball, Football, etc.)
+3. Enter league ID, ESPN S2 and SWID cookies
+4. Save league → Credentials encrypted and stored securely
+5. Use "Auto-pull" → Fetch league data and select your team
+6. 🎉 AI can now access your league data for insights
 ```
 
 ## Example Conversations
@@ -167,10 +211,10 @@ For private league access, configure ESPN credentials in the tools panel.
 
 **AI:** *"I'll check that league for you... This is a 10-team head-to-head points league with standard scoring. The season runs through week 23. Would you like me to look at specific teams or matchups?"*
 
-### Private League Access
-**You:** *"I want to analyze my private league team. How do I give you access?"*
+### Private League Access  
+**You:** *"I want to analyze my private league team. How do you give you access?"*
 
-**AI:** *"To access your private ESPN league, you'll need to provide your ESPN credentials. Go to the tools panel on the right, select 'Baseball' and 'ESPN', then enter your S2 and SWID cookies. Once saved, I'll automatically discover all your fantasy leagues across all sports!"*
+**AI:** *"To access your ESPN league, complete the league setup flow. Click 'Add League', select your sport, enter your league ID along with your S2 and SWID cookies. You can add up to 10 leagues. Use the 'Auto-pull' feature to fetch league data and identify your team automatically!"*
 
 ### Usage Awareness
 **You:** *"How many messages do I have left this month?"*
@@ -188,14 +232,15 @@ For private league access, configure ESPN credentials in the tools panel.
    - Copy `espn_s2` and `SWID` values
 
 2. **Store in FLAIM**:
-   - Open tools panel in FLAIM
-   - Select "Baseball" + "ESPN"
-   - Paste your credentials
+   - Complete onboarding to access league management
+   - Click "Add League" and select your sport
+   - Enter league ID and paste your credentials
    - They're encrypted and stored securely per user
 
 3. **What You Get**:
-   - **Automatic league discovery** across all sports (baseball, football, etc.)
-   - Access to your private league data
+   - **Manual league management** - add up to 10 leagues across all sports
+   - **Auto-pull team setup** - automatically identify your team
+   - Access to your league data and standings
    - Team roster analysis
    - Lineup optimization suggestions
    - Trade evaluation help

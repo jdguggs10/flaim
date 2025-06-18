@@ -7,7 +7,7 @@
 
 > **Transform your fantasy sports experience with AI-powered insights and production-grade security**
 
-FLAIM is your AI-powered fantasy sports assistant featuring server-side Clerk authentication, usage-based access tiers, and seamless ESPN integration through the Model Context Protocol (MCP). Get personalized insights, strategic advice, and league management tools through natural language conversations with enterprise-grade security.
+FLAIM is your AI-powered fantasy sports assistant featuring a streamlined onboarding experience, server-side Clerk authentication, and seamless multi-platform fantasy sports integration through the Model Context Protocol (MCP). Get personalized insights, strategic advice, and league management tools through natural language conversations with enterprise-grade security.
 
 ## 🚀 Quick Start
 
@@ -30,10 +30,12 @@ cd flaim
 
 ## ✨ Key Features
 
-- **🤖 AI-Powered Chat**: Natural language fantasy sports assistant
-- **🔐 Cross-Platform Auth**: Modular authentication system ready for web, iOS, and workers
-- **⚾ Multi-Sport Support**: Baseball and football with shared authentication infrastructure
-- **🔍 Auto League Discovery**: Automatically finds all your fantasy leagues after ESPN login
+- **🛤️ Guided Onboarding**: 8-step setup from sign-in to chat activation
+- **🤖 AI-Powered Chat**: Natural language fantasy sports assistant  
+- **🔐 Multi-Platform Auth**: ESPN active, Yahoo coming soon
+- **⚾ Multi-Sport Support**: Baseball, football, basketball, and hockey
+- **🔍 Auto League Discovery**: Automatically finds and configures your fantasy leagues
+- **🛠️ Auto-Configuration**: MCP tools configured automatically based on your leagues
 - **💰 Usage Tiers**: 100 free messages/month, unlimited paid tier
 - **🌐 Serverless**: Cloudflare Workers + Vercel deployment
 
@@ -42,20 +44,35 @@ cd flaim
 | Document | Description |
 |----------|-------------|
 | [📖 Getting Started](docs/getting-started.md) | Installation, setup, and first steps |
+| [🛤️ Onboarding Flow](docs/onboarding-flow.md) | Complete user onboarding experience guide |
 | [🚀 Deployment Guide](docs/deployment.md) | Production deployment and configuration |
 | [🏗️ Architecture](docs/architecture.md) | System design and security model |
 | [❓ FAQ](docs/faq.md) | Common questions and troubleshooting |
 | [🤝 Contributing](docs/contributing.md) | Development workflow and guidelines |
 | [📋 Changelog](docs/changelog.md) | Release history and breaking changes |
 
-## 🆕 What's New in v4.1
+## 🆕 What's New in v5.0
 
-- ✅ **Automatic League Discovery**: ESPN gambit integration finds all your leagues instantly
-- ✅ **Enhanced UX**: No more manual league ID entry - just login and go
-- ✅ **Multi-Sport Detection**: Automatic discovery across baseball, football, and more
-- ✅ **Graceful Fallbacks**: Manual entry available if auto-discovery fails
-- ✅ **Production Security**: Server-side Clerk verification, anti-spoofing protection
-- ✅ **Modular Architecture**: Clean separation between auth, discovery, and MCP services
+### 🏗️ **Modular Build Architecture**
+- ✅ **Build Target Separation**: Shared, workers, and web code compile independently
+- ✅ **Scoped Imports**: Clean `@flaim/auth/*` imports replace brittle relative paths
+- ✅ **Client/Server Separation**: Prevents "server-only" errors in React components
+- ✅ **TypeScript Path Mapping**: Automatic import resolution across the monorepo
+
+### 🔗 **Developer Experience**
+- ✅ **True NPM Workspace**: Root package.json with proper dependency hoisting
+- ✅ **Single Next.js Installation**: No more duplicate dependencies or type conflicts
+- ✅ **ESLint v9 Support**: Modern linting with typescript-eslint v8 compatibility
+- ✅ **Hot Reloading**: Changes reflect immediately during development
+- ✅ **Consistent API**: Same auth interface across all platforms
+- ✅ **Type-Safe Auth Wrappers**: Explicit union types for redirect/success/error responses
+
+### 🎯 **Platform Features**
+- ✅ **Complete Onboarding Redesign**: Streamlined 8-step setup flow from sign-in to chat
+- ✅ **Multi-Platform Architecture**: ESPN active, Yahoo framework ready
+- ✅ **Auto-Sport Detection**: Automatic sport identification from league data
+- ✅ **Smart MCP Configuration**: Tools auto-configure based on platform and sport selection
+- ✅ **Mobile-First Design**: Responsive onboarding experience across all devices
 
 ## 🤝 Contributing
 

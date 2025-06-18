@@ -3,7 +3,7 @@
 // No authentication required for MCP endpoints
 
 import { McpAgent } from './mcp/agent.js';
-import { EspnStorage, EspnMcpProvider } from '../../../auth/espn';
+import { EspnStorage } from '@flaim/auth/workers/espn/storage';
 import { createClerkClient } from '@clerk/backend';
 
 export interface Env {
@@ -50,10 +50,8 @@ async function verifyClerkSession(request: Request, env: Env): Promise<{ userId:
       return { userId: null, error: 'No session token found' };
     }
 
-    // Verify the session
-    const session = await clerk.sessions.verifySession(sessionToken, {
-      jwtKey: env.CLERK_SECRET_KEY
-    });
+    // Verify the session with current API signature (2.1.0)
+    const session = await clerk.sessions.verifySession(sessionToken, env.CLERK_SECRET_KEY);
 
     if (!session || !session.userId) {
       return { userId: null, error: 'Invalid session' };
@@ -68,7 +66,7 @@ async function verifyClerkSession(request: Request, env: Env): Promise<{ userId:
 }
 
 export default {
-  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     
     // CORS headers
@@ -86,6 +84,30 @@ export default {
     try {
       // MCP endpoints - open access, no authentication required
       if (url.pathname.startsWith('/mcp')) {
+        // Handle specific basic league info endpoint for onboarding
+        if (url.pathname === '/mcp/espn/v3/basic' && request.method === 'POST') {
+          const { getBasicLeagueInfo } = await import('./mcp/basic-league-info.js');
+          
+          try {
+            const requestData = await request.json();
+            const result = await getBasicLeagueInfo(requestData, env);
+            
+            return new Response(JSON.stringify(result), {
+              headers: { 'Content-Type': 'application/json', ...corsHeaders }
+            });
+          } catch (error) {
+            console.error('Basic league info endpoint error:', error);
+            return new Response(JSON.stringify({
+              success: false,
+              error: 'Failed to process basic league info request'
+            }), {
+              status: 500,
+              headers: { 'Content-Type': 'application/json', ...corsHeaders }
+            });
+          }
+        }
+        
+        // Default MCP agent handling
         const mcpAgent = new McpAgent(env);
         return mcpAgent.handleRequest(request);
       }
@@ -169,8 +191,9 @@ export default {
           authentication: 'None required (open access)',
           endpoints: {
             '/mcp': 'MCP server endpoints (open access)',
+            '/mcp/espn/v3/basic': 'Basic league information for onboarding auto-pull (open access)',
             '/credential/espn': 'ESPN S2/SWID credential management (requires Clerk authentication)',
-            '/discover-leagues': 'Automatic league discovery via ESPN gambit dashboard (requires Clerk authentication)',
+            '/discover-leagues': 'Automatic league discovery via ESPN v3 API (requires Clerk authentication)',
             '/health': 'Health check'
           }
         }), {

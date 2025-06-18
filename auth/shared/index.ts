@@ -24,7 +24,10 @@ export {
 export { UsageTracker } from './usage-tracker.js';
 
 // Configuration - environment setup
-export { AuthConfig, validateAuthConfig, isDevelopment, isProduction } from './config.js';
+export { authConfig, validateAuthConfig, isDevelopment, isProduction } from './config.js';
+
+// Platform detection utilities
+export { isWorker, isBrowser, isNode, isNextJS, getPlatform } from './platform.js';
 
 // Token management - session lifecycle
 export { TokenManager } from './token-manager.js';
@@ -35,7 +38,6 @@ export type {
   AuthUser,
   AuthSession,
   AuthProvider,
-  SessionVerifier,
   
   // Usage tracking types
   UserPlan,
@@ -52,13 +54,18 @@ export type {
   
   // Configuration types
   AuthConfig as AuthConfigType,
-  ConfigAdapter,
-  
-  // Token management types
+  ConfigAdapter
+} from './interfaces.js';
+
+// Export from auth-middleware
+export type { SessionVerifier } from './auth-middleware.js';
+
+// Export from token-manager
+export type {
   TokenRefreshProvider,
   SessionEvent,
   TokenEventListener
-} from './interfaces.js';
+} from './token-manager.js';
 
 // Constants for common use
 export const AUTH_ERRORS = {
@@ -96,9 +103,13 @@ export const VERSION = '1.0.0';
  * ```
  */
 export function initializeAuth(options: {
-  sessionVerifier?: import('./interfaces.js').SessionVerifier;
+  sessionVerifier?: import('./auth-middleware.js').SessionVerifier;
   tokenRefreshProvider?: import('./token-manager.js').TokenRefreshProvider; // Currently unused - for future mobile apps
 }) {
+  // Import functions dynamically to avoid circular dependencies
+  const { setSessionVerifier } = require('./auth-middleware.js');
+  const { TokenManager } = require('./token-manager.js');
+  
   if (options.sessionVerifier) {
     setSessionVerifier(options.sessionVerifier);
   }
@@ -112,6 +123,8 @@ export function initializeAuth(options: {
  * Health check function for the auth system
  */
 export function getAuthSystemHealth() {
+  // Import functions dynamically to avoid circular dependencies
+  const { validateAuthConfig, isDevelopment } = require('./config.js');
   const config = validateAuthConfig();
   
   return {

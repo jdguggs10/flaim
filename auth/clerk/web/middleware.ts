@@ -19,8 +19,8 @@ export function createClerkMiddleware(options: {
   ignoredRoutes?: string[];
   afterAuth?: (auth: any, request: NextRequest) => NextResponse | void;
 } = {}) {
-  return clerkMiddleware((auth, request) => {
-    const { userId } = auth();
+  return clerkMiddleware(async (auth, request) => {
+    const { userId } = await auth();
     const { pathname } = request.nextUrl;
 
     // Apply custom after-auth logic

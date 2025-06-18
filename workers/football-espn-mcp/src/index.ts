@@ -3,7 +3,7 @@
 // Uses flaim/auth/espn for credential management
 
 import { FootballMcpAgent } from './mcp/football-agent.js';
-import { EspnStorage } from '../../../auth/espn';
+import { EspnStorage } from '@flaim/auth/workers/espn/storage';
 import { createClerkClient } from '@clerk/backend';
 
 export interface Env {
@@ -46,7 +46,7 @@ async function verifyClerkSession(request: Request, env: Env): Promise<{ userId:
 
   try {
     const clerk = createClerkClient({ secretKey: env.CLERK_SECRET_KEY });
-    const session = await clerk.sessions.verifySession(sessionToken);
+    const session = await clerk.sessions.verifySession(sessionToken, env.CLERK_SECRET_KEY);
     
     return { userId: session.userId };
   } catch (error) {
@@ -97,6 +97,30 @@ export default {
 
       // Handle MCP endpoints (open access, no auth required)
       if (url.pathname.startsWith('/mcp') || url.pathname === '/') {
+        // Handle specific basic league info endpoint for onboarding
+        if (url.pathname === '/mcp/espn/v3/basic' && request.method === 'POST') {
+          const { getBasicLeagueInfo } = await import('./mcp/basic-league-info.js');
+          
+          try {
+            const requestData = await request.json();
+            const result = await getBasicLeagueInfo(requestData, env);
+            
+            return new Response(JSON.stringify(result), {
+              headers: { 'Content-Type': 'application/json', ...corsHeaders }
+            });
+          } catch (error) {
+            console.error('Basic league info endpoint error:', error);
+            return new Response(JSON.stringify({
+              success: false,
+              error: 'Failed to process basic league info request'
+            }), {
+              status: 500,
+              headers: { 'Content-Type': 'application/json', ...corsHeaders }
+            });
+          }
+        }
+        
+        // Default MCP agent handling
         const footballAgent = new FootballMcpAgent(env);
         return footballAgent.handleRequest(request);
       }
@@ -107,7 +131,13 @@ export default {
           status: 'healthy',
           service: 'football-espn-mcp',
           version: '1.0.0',
-          sport: 'football',
+          sports: ['football', 'basketball', 'hockey'],
+          endpoints: {
+            '/mcp': 'MCP server endpoints (open access)',
+            '/mcp/espn/v3/basic': 'Basic league information for onboarding auto-pull (all sports)',
+            '/credential/espn': 'ESPN S2/SWID credential management (requires Clerk authentication)',
+            '/health': 'Health check'
+          },
           timestamp: new Date().toISOString()
         }), {
           headers: { 'Content-Type': 'application/json', ...corsHeaders }

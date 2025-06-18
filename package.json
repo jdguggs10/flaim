@@ -1,0 +1,24 @@
+{
+  "name": "flaim-monorepo",
+  "private": true,
+  "workspaces": [
+    "auth",
+    "openai",
+    "tests",
+    "workers/baseball-espn-mcp",
+    "workers/football-espn-mcp"
+  ],
+  "dependencies": {
+    "next": "15.2.3",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "@clerk/nextjs": "6.22.0",
+    "@clerk/backend": "2.1.0",
+    "eslint": "^9.13.0"
+  },
+  "overrides": {
+    "next": "15.2.3",
+    "@clerk/backend": "2.1.0",
+    "eslint": "^9.13.0"
+  }
+}

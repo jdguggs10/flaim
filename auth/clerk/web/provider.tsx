@@ -7,7 +7,7 @@
 
 import React from 'react';
 import { ClerkProvider as ClerkProviderBase } from '@clerk/nextjs';
-import { AuthConfig } from '../../shared/config.js';
+import { authConfig } from '../../shared/config.js';
 
 // Props for the Clerk provider
 export interface ClerkProviderProps {

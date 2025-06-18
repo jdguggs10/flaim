@@ -1,3 +1,5 @@
+/// <reference types="@cloudflare/workers-types" />
+
 import { EspnCredentials } from './types';
 
 export interface Env {
@@ -49,11 +51,8 @@ export class EspnMcpProvider {
     if (this.env.NODE_ENV === 'development' && this.env.ESPN_S2 && this.env.ESPN_SWID) {
       console.log('⚠️ Development mode: Using fallback environment ESPN credentials');
       return {
-        clerkUserId: 'development',
         swid: this.env.ESPN_SWID,
-        espn_s2: this.env.ESPN_S2,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        s2: this.env.ESPN_S2
       };
     }
     return null;

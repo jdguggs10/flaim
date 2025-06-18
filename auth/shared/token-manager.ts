@@ -81,7 +81,7 @@
  */
 
 import { AuthSession } from './interfaces.js';
-import { AuthConfig } from './config.js';
+import { authConfig } from './config.js';
 
 // Token event types
 export type TokenEvent = 
@@ -372,5 +372,4 @@ class TokenManagerImpl {
 // Export singleton instance
 export const TokenManager = new TokenManagerImpl();
 
-// Export types and interfaces
-export type { TokenRefreshProvider, SessionEvent, TokenEventListener };
+// Types are already exported above as interfaces, no need to re-export

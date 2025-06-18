@@ -5,8 +5,17 @@
 
 import { auth } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
-import { AuthSession, SessionVerifier } from '../../shared/interfaces.js';
+import { SessionVerifier } from '../../shared/auth-middleware.js';
+import { AuthSession } from '../../shared/interfaces.js';
 import { setSessionVerifier } from '../../shared/auth-middleware.js';
+
+/**
+ * Union type for all possible auth wrapper responses
+ */
+type AuthResponse<TSuccess> =
+  | NextResponse            // redirect or early exit (auth failure)
+  | NextResponse<TSuccess>  // successful JSON response
+  | NextResponse<{ error: string }>; // error JSON response
 
 /**
  * Clerk session verifier implementation for Next.js
@@ -71,27 +80,32 @@ export async function requireAuth(): Promise<{ userId: string } | NextResponse> 
  * Create authenticated API route handler
  * Wrapper that ensures authentication before calling handler
  */
-export function withAuth<T = any>(
-  handler: (userId: string, request: NextRequest) => Promise<NextResponse<T>>
-) {
-  return async (request: NextRequest): Promise<NextResponse<T>> => {
+export function withAuth<TSuccess>(
+  handler: (userId: string, request: NextRequest) => Promise<NextResponse<TSuccess>>
+): (request: NextRequest) => Promise<AuthResponse<TSuccess>> {
+  return async (request: NextRequest) => {
     const authResult = await requireAuth();
     
     if (authResult instanceof NextResponse) {
-      return authResult as NextResponse<T>;
+      return authResult; // redirect or auth failure
     }
 
-    return handler(authResult.userId, request);
+    try {
+      return await handler(authResult.userId, request); // success
+    } catch (err: any) {
+      console.error(`[withAuth] user=${authResult.userId} error=`, err);
+      return NextResponse.json({ error: err.message || "Unknown error" }, { status: 500 }); // error
+    }
   };
 }
 
 /**
  * Create authenticated API route handler with usage checking
  */
-export function withAuthAndUsage<T = any>(
-  handler: (userId: string, request: NextRequest) => Promise<NextResponse<T>>
-) {
-  return async (request: NextRequest): Promise<NextResponse<T>> => {
+export function withAuthAndUsage<TSuccess>(
+  handler: (userId: string, request: NextRequest) => Promise<NextResponse<TSuccess>>
+): (request: NextRequest) => Promise<AuthResponse<TSuccess>> {
+  return async (request: NextRequest) => {
     // Import here to avoid circular dependency
     const { requireSessionWithUsage, incrementUsage } = await import('../../shared/auth-middleware.js');
     
@@ -100,11 +114,11 @@ export function withAuthAndUsage<T = any>(
     if (result instanceof Response) {
       return NextResponse.json(await result.json(), { 
         status: result.status 
-      }) as NextResponse<T>;
+      }); // auth failure or usage limit
     }
 
     try {
-      const response = await handler(result.userId, request);
+      const response = await handler(result.userId, request); // success
       
       // Increment usage after successful API call
       if (response.ok) {
@@ -112,12 +126,12 @@ export function withAuthAndUsage<T = any>(
       }
       
       return response;
-    } catch (error) {
-      console.error('API handler error:', error);
+    } catch (err: any) {
+      console.error(`[withAuthAndUsage] user=${result.userId} error=`, err);
       return NextResponse.json(
-        { error: 'Internal server error' },
+        { error: err.message || 'Internal server error' },
         { status: 500 }
-      ) as NextResponse<T>;
+      ); // error
     }
   };
 }

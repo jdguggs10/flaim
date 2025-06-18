@@ -1,4 +1,4 @@
-# FLAIM Platform Architecture v4.0
+# FLAIM Platform Architecture v5.0
 
 ## Overview
 
@@ -57,10 +57,11 @@ FLAIM (Fantasy League AI Manager) is a **modern microservices platform** that pr
 **Technology Stack**:
 - Next.js 15 (App Router)
 - React 18
-- Clerk authentication
+- Clerk authentication v2.1.0
 - OpenAI API
 - Tailwind CSS
 - TypeScript
+- ESLint v9 with typescript-eslint v8
 
 ---
 
@@ -77,11 +78,41 @@ FLAIM (Fantasy League AI Manager) is a **modern microservices platform** that pr
 
 **Architecture**:
 - `shared/` - Platform-agnostic core logic
-- `clerk/web/` - Next.js/React implementation
+- `clerk/web/` - Next.js/React implementation  
 - `clerk/ios/` - Ready for Swift integration
+- `dist/` - Built packages with separate targets
+
+**Build Targets**:
+- `dist/shared/` - Core authentication logic (platform-agnostic)
+- `dist/workers/` - Cloudflare Workers-specific builds
+- `dist/web/` - Next.js/React-specific builds
+
+**Import Structure**:
+```typescript
+// Next.js Components
+import { ClerkProvider, useAuth } from '@flaim/auth/web/components';
+
+// API Routes  
+import { withAuth, requireAuth } from '@flaim/auth/web/server';
+
+// Middleware
+import { clerkMiddleware } from '@flaim/auth/web/middleware';
+
+// Workers
+import { EspnStorage } from '@flaim/auth/workers/espn/storage';
+
+// Shared Logic
+import { UsageTracker } from '@flaim/auth/shared';
+```
 
 **Key Features**:
-- Strict public API boundaries
+- **NPM workspace hoisting** eliminates dependency conflicts
+- **Single Next.js instance** prevents type mismatches
+- **Scoped imports** prevent brittle relative paths
+- **Build target separation** avoids client/server conflicts
+- **Type-safe auth wrappers** with explicit union return types
+- **TypeScript path mapping** for automatic resolution
+- **ESM-first** with Node.js compatibility
 - Automated testing suite
 - Token refresh handling
 - Usage limit enforcement
@@ -95,7 +126,7 @@ FLAIM (Fantasy League AI Manager) is a **modern microservices platform** that pr
 **Responsibilities**:
 - Open access MCP endpoints
 - Shared ESPN credential storage via flaim/auth
-- **Automatic league discovery** via ESPN gambit dashboard
+- **Automatic league discovery** via ESPN Fantasy v3 dashboard
 - ESPN API integration
 - Fantasy baseball data retrieval
 - MCP protocol implementation
@@ -257,7 +288,7 @@ class UsageTracker {
 - **API Protection**: All sensitive endpoints require verified Clerk sessions
 - **CORS Policies**: Restrict cross-origin access
 - **Open MCP Access**: Baseball data freely accessible via MCP
-- **Secure League Discovery**: ESPN gambit calls use encrypted credentials with rate limiting
+- **Secure League Discovery**: ESPN Fantasy v3 calls use encrypted credentials with rate limiting
 - **Comprehensive Error Handling**: User-friendly messages without exposing internals
 
 ### Secure Data Protection Flow
@@ -430,9 +461,13 @@ const mcpTool = {
 
 ---
 
-## Benefits of v4.0 Architecture
+## Benefits of v5.0 Architecture
 
-✅ **Modern Authentication**: Clerk provides industry-standard auth  
+✅ **Modern Authentication**: Clerk v2.1.0 with industry-standard auth  
+✅ **True Monorepo**: NPM workspace with proper dependency hoisting  
+✅ **Type Safety**: Explicit union types for all auth response shapes  
+✅ **Single Dependencies**: No more duplicate Next.js or ESLint conflicts  
+✅ **Modern Tooling**: ESLint v9 with typescript-eslint v8 compatibility  
 ✅ **Usage-Based Monetization**: Clear free/paid tiers  
 ✅ **Open MCP Access**: Fantasy data accessible without barriers  
 ✅ **Developer Friendly**: Simple setup and configuration  
@@ -440,14 +475,15 @@ const mcpTool = {
 ✅ **User-Centric**: Smooth onboarding and upgrade flows  
 ✅ **Secure**: Encrypted data storage and session management  
 
-## Migration from v3.0
+## Migration from v4.0
 
-Key changes in v4.0:
-- **Replaced custom JWT auth** with Clerk authentication
-- **Added usage tracking** with free/paid tiers
-- **Simplified MCP service** to open access
-- **Enhanced user experience** with modern auth flows
-- **Removed Stripe billing** complexity (can be re-added)
-- **Consolidated documentation** for easier setup
+Key improvements in v5.0:
+- **True NPM workspace** with root package.json dependency hoisting
+- **Single Next.js installation** eliminates type conflicts permanently
+- **ESLint v9 upgrade** with typescript-eslint v8 for modern linting
+- **Type-safe auth wrappers** with explicit union return types
+- **Clerk v2.1.0 upgrade** for latest authentication features
+- **Eliminated symlink hacks** through proper monorepo structure
+- **Resolved build issues** from duplicate dependency conflicts
 
-The v4.0 architecture provides a production-ready foundation for scaling FLAIM while maintaining security and user experience best practices.
+The v5.0 architecture provides a rock-solid monorepo foundation for scaling FLAIM with no dependency conflicts and full type safety.

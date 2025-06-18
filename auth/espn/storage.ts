@@ -1,5 +1,33 @@
+/**
+ * ---------------------------------------------------------------------------
+ * ESPN Credential Storage – Integration Notes (2025-06-17)
+ * ---------------------------------------------------------------------------
+ *
+ * • Native mobile apps (iOS / Android) can capture the required ESPN cookies
+ *   (SWID and espn_s2) via an in-app WebView login flow. Once obtained, POST
+ *   them to the `/credentials/espn` Durable-Object endpoint for the currently
+ *   authenticated Clerk user (see `handleEspnCredentials`).
+ *
+ * • The payload expected by `setEspnCredentialsForUser` is:
+ *     {
+ *       "swid": "{ABCDEF...}",
+ *       "espn_s2": "AECEgUg...",
+ *       "email": "optional@user.com"
+ *     }
+ *   with the Clerk user ID passed in `X-Clerk-User-ID` header.
+ *
+ * • Credentials are encrypted at rest using the shared `ENCRYPTION_KEY`.
+ *   Downstream services (MCP workers, league-discovery API) obtain them via
+ *   `EspnStorage.getEspnCredentialsForApi/Mcp`.
+ *
+ * • If you add a new client on another platform, reuse this endpoint rather
+ *   than creating an external HTTP route that leaks secrets.
+ */
+
+/// <reference types="@cloudflare/workers-types" />
+
 import { credentialEncryption } from '../shared/encryption';
-import { EspnCredentials } from './types';
+import { EspnCredentials, EspnCredentialsWithMetadata } from './types';
 
 export class EspnStorage {
   constructor(
@@ -12,7 +40,7 @@ export class EspnStorage {
     const corsHeaders = {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Clerk-User-ID',
     };
 
     if (request.method === 'OPTIONS') {
@@ -20,7 +48,8 @@ export class EspnStorage {
     }
 
     try {
-      if (url.pathname === '/credentials/espn') {
+      // Handle credentials endpoints
+      if (url.pathname.startsWith('/credentials/espn')) {
         return this.handleEspnCredentials(request, corsHeaders);
       }
       
@@ -32,7 +61,8 @@ export class EspnStorage {
       console.error('EspnStorage error:', error);
       return new Response(JSON.stringify({ 
         error: 'Internal server error',
-        message: error instanceof Error ? error.message : 'Unknown error'
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined
       }), {
         status: 500,
         headers: { 'Content-Type': 'application/json', ...corsHeaders }
@@ -41,6 +71,23 @@ export class EspnStorage {
   }
 
   private async handleEspnCredentials(request: Request, corsHeaders: Record<string, string>): Promise<Response> {
+    const url = new URL(request.url);
+    
+    // Handle API endpoint for fetching full credentials
+    if (url.pathname === '/credentials/espn/api') {
+      const clerkUserId = request.headers.get('X-Clerk-User-ID');
+      if (!clerkUserId) {
+        return new Response(JSON.stringify({ 
+          error: 'Clerk user ID required in X-Clerk-User-ID header'
+        }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      }
+      return this.getEspnCredentialsForUser(corsHeaders, clerkUserId);
+    }
+
+    // Handle regular endpoints
     switch (request.method) {
       case 'GET':
         return this.getEspnCredentials(corsHeaders);
@@ -66,40 +113,6 @@ export class EspnStorage {
       status: 400,
       headers: { 'Content-Type': 'application/json', ...corsHeaders }
     });
-
-    const encrypted = await this.state.storage.get(`espn_creds:${clerkUserId}`) as string;
-    if (!encrypted) {
-      return new Response(JSON.stringify({ 
-        error: 'ESPN account not linked',
-        hasCredentials: false,
-        clerkUserId 
-      }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json', ...corsHeaders }
-      });
-    }
-    
-    try {
-      const decrypted = await this.decrypt(encrypted);
-      const credentials = JSON.parse(decrypted) as EspnCredentials;
-      
-      return new Response(JSON.stringify({
-        hasCredentials: true,
-        clerkUserId: credentials.clerkUserId,
-        email: credentials.email,
-        updated_at: credentials.updated_at
-      }), {
-        headers: { 'Content-Type': 'application/json', ...corsHeaders }
-      });
-    } catch (error) {
-      console.error('Failed to decrypt ESPN credentials:', error);
-      return new Response(JSON.stringify({ 
-        error: 'Failed to retrieve credentials' 
-      }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json', ...corsHeaders }
-      });
-    }
   }
 
   private async setEspnCredentials(request: Request, corsHeaders: Record<string, string>): Promise<Response> {
@@ -116,9 +129,10 @@ export class EspnStorage {
     }
 
     const now = new Date().toISOString();
-    const credentials: EspnCredentials = {
+    const credentials: EspnCredentialsWithMetadata = {
       clerkUserId,
       swid,
+      s2: espn_s2,
       espn_s2,
       email,
       created_at: now,
@@ -157,9 +171,10 @@ export class EspnStorage {
   async setCredentials(clerkUserId: string, swid: string, espn_s2: string, email?: string): Promise<boolean> {
     try {
       const now = new Date().toISOString();
-      const credentials: EspnCredentials = {
+      const credentials: EspnCredentialsWithMetadata = {
         clerkUserId,
         swid,
+        s2: espn_s2,
         espn_s2,
         email,
         created_at: now,
@@ -233,7 +248,7 @@ export class EspnStorage {
     
     try {
       const decrypted = await this.decrypt(encrypted);
-      const credentials = JSON.parse(decrypted) as EspnCredentials;
+      const credentials = JSON.parse(decrypted) as EspnCredentialsWithMetadata;
       
       return new Response(JSON.stringify({
         hasCredentials: true,
@@ -268,9 +283,10 @@ export class EspnStorage {
     }
 
     const now = new Date().toISOString();
-    const credentials: EspnCredentials = {
+    const credentials: EspnCredentialsWithMetadata = {
       clerkUserId,
       swid,
+      s2: espn_s2,
       espn_s2,
       email,
       created_at: now,
@@ -319,23 +335,45 @@ export class EspnStorage {
     
     try {
       const decrypted = await this.decrypt(encrypted);
-      return JSON.parse(decrypted) as EspnCredentials;
+      const fullCredentials = JSON.parse(decrypted) as EspnCredentialsWithMetadata;
+      // Return only the core credential fields
+      return {
+        swid: fullCredentials.swid,
+        s2: fullCredentials.s2 || fullCredentials.espn_s2 || ''
+      };
     } catch (error) {
       console.error('Failed to decrypt ESPN credentials for API:', error);
       return null;
     }
   }
 
-  // Static method to get ESPN credentials for MCP tools - Direct method call approach
+  // Static method to get ESPN credentials for MCP tools
   static async getEspnCredentialsForMcp(env: any, clerkUserId: string): Promise<EspnCredentials | null> {
     if (!clerkUserId) return null;
     
     try {
       const userStoreId = env.USER_DO.idFromString(clerkUserId);
-      const userStore = env.USER_DO.get(userStoreId) as any;
+      const userStore = env.USER_DO.get(userStoreId);
       
-      // Direct method call - no HTTP overhead or dummy requests
-      return await userStore.getEspnCredentialsForApi(clerkUserId);
+      // Use the HTTP endpoint to get credentials
+      const response = await userStore.fetch('https://dummy.com/credentials/espn', {
+        method: 'GET',
+        headers: {
+          'X-Clerk-User-ID': clerkUserId
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch credentials: ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      
+      if (data.hasCredentials) {
+        return null;
+      }
+      
+      return null;
     } catch (error) {
       console.error('Failed to get ESPN credentials for MCP:', error);
       return null;

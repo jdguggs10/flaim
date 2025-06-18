@@ -1,4 +1,5 @@
-import { EspnCredentials, EspnMcpProvider } from '../../../../auth/espn';
+import { EspnCredentials } from '@flaim/auth/workers/espn/types';
+import { EspnMcpProvider } from '@flaim/auth/workers/espn/mcp-integration';
 import { EspnFootballApiClient } from '../espn-football-client';
 
 export interface Env {

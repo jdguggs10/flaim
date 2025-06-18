@@ -1,27 +1,67 @@
 {
   "name": "@flaim/auth",
   "version": "1.0.0",
+  "type": "module",
   "description": "Cross-platform authentication system for FLAIM Fantasy Sports Platform",
-  "main": "shared/index.js",
-  "types": "shared/index.d.ts",
+  "main": "dist/shared/shared/index.js",
+  "types": "dist/shared/shared/index.d.ts",
   "exports": {
     ".": {
-      "import": "./shared/index.js",
-      "require": "./shared/index.js",
-      "types": "./shared/index.d.ts"
+      "import": "./dist/shared/shared/index.js",
+      "require": "./dist/shared/shared/index.js",
+      "types": "./dist/shared/shared/index.d.ts"
     },
-    "./clerk/web": {
-      "import": "./clerk/web/index.js",
-      "require": "./clerk/web/index.js",
-      "types": "./clerk/web/index.d.ts"
+    "./shared": {
+      "import": "./dist/shared/shared/index.js",
+      "types": "./dist/shared/shared/index.d.ts"
+    },
+    "./workers": {
+      "import": "./dist/workers/espn/index.js",
+      "types": "./dist/workers/espn/index.d.ts"
+    },
+    "./workers/espn/storage": {
+      "import": "./dist/workers/espn/storage.js",
+      "types": "./dist/workers/espn/storage.d.ts"
+    },
+    "./workers/espn/types": {
+      "import": "./dist/workers/espn/types.js",
+      "types": "./dist/workers/espn/types.d.ts"
+    },
+    "./workers/espn/v3": {
+      "import": "./dist/workers/espn/v3/index.js",
+      "types": "./dist/workers/espn/v3/index.d.ts"
+    },
+    "./workers/espn/mcp-integration": {
+      "import": "./dist/workers/espn/mcp-integration.js",
+      "types": "./dist/workers/espn/mcp-integration.d.ts"
+    },
+    "./web/components": {
+      "import": "./dist/web/clerk/web/components.js",
+      "types": "./dist/web/clerk/web/components.d.ts"
+    },
+    "./web/server": {
+      "import": "./dist/web/clerk/web/server-auth.js",
+      "types": "./dist/web/clerk/web/server-auth.d.ts"
+    },
+    "./web/middleware": {
+      "import": "./dist/web/clerk/web/middleware.js",
+      "types": "./dist/web/clerk/web/middleware.d.ts"
     }
   },
   "scripts": {
+    "build": "npm run clean && npm run build:shared && npm run build:workers && npm run build:web",
+    "build:shared": "tsc -p tsconfig.shared.json",
+    "build:workers": "tsc -p tsconfig.workers.json",
+    "build:web": "tsc -p tsconfig.web.json",
+    "build:dev": "npm run build:shared && npm run build:workers",
+    "clean": "rm -rf dist",
+    "type-check": "npm run type-check:shared && npm run type-check:workers && npm run type-check:web",
+    "type-check:shared": "tsc -p tsconfig.shared.json --noEmit",
+    "type-check:workers": "tsc -p tsconfig.workers.json --noEmit",
+    "type-check:web": "tsc -p tsconfig.web.json --noEmit",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
-    "build": "tsc",
-    "type-check": "tsc --noEmit",
     "lint": "eslint . --ext .ts,.tsx",
     "format": "prettier --write ."
   },
@@ -39,17 +79,20 @@
   "license": "MIT",
   "peerDependencies": {
     "@clerk/nextjs": "^6.22.0",
-    "next": "^14.0.0",
+    "@clerk/backend": "^2.1.0",
+    "next": "^15.2.3",
     "react": "^18.0.0",
     "react-dom": "^18.0.0"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^4.0.0",
     "@types/jest": "^29.5.0",
     "@types/node": "^20.0.0",
     "@types/react": "^18.0.0",
-    "@typescript-eslint/eslint-plugin": "^6.0.0",
-    "@typescript-eslint/parser": "^6.0.0",
-    "eslint": "^8.0.0",
+    "@types/react-dom": "^18.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.34.0",
+    "@typescript-eslint/parser": "^8.34.0",
+    "eslint": "^9.13.0",
     "eslint-config-prettier": "^9.0.0",
     "jest": "^29.5.0",
     "prettier": "^3.0.0",

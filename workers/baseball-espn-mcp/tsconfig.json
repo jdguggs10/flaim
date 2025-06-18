@@ -1,4 +1,5 @@
 {
+  "extends": "../../tsconfig.json",
   "compilerOptions": {
     "target": "ES2022",
     "lib": ["ES2022"],
@@ -26,11 +27,7 @@
   },
   "include": [
     "src/**/*",
-    "tests/**/*",
-    "../../auth/espn/types.ts",
-    "../../auth/espn/storage.ts",
-    "../../auth/espn/mcp-integration.ts",
-    "../../auth/shared/encryption.ts"
+    "tests/**/*"
   ],
   "exclude": [
     "node_modules",

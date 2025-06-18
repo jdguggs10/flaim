@@ -184,3 +184,6 @@ export function useAuth() {
 
 // Re-export Clerk components for convenience
 export { SignedIn, SignedOut };
+
+// Re-export the provider so it’s available from the “components” entrypoint
+export { ClerkProvider } from './provider';
