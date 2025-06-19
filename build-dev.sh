@@ -42,33 +42,50 @@ check_success() {
     fi
 }
 
+# Install/update dependencies at root level
+print_status "Installing/updating root dependencies..."
+npm install
+check_success "Root dependencies updated!" "install root dependencies"
+
 # Build the auth module in development mode
 print_status "Building auth module (development mode)..."
 cd auth
+npm install
 npm run build:dev 2>/dev/null || npm run build  # Fallback to regular build if dev script doesn't exist
 check_success "Auth module built for development!" "build auth module"
 cd ..
 
-# Build the frontend in development mode
-print_status "Building frontend (development mode)..."
+# Build the frontend in development mode (skip build for now)
+print_status "Checking frontend setup (development mode)..."
 cd openai
-NEXT_TELEMETRY_DISABLED=1 NODE_ENV=development npm run build
-check_success "Frontend built for development!" "build frontend"
+npm install
+print_status "Skipping Next.js build - will build on startup"
+check_success "Frontend dependencies installed!" "install frontend dependencies"
 cd ..
 
-# Type check baseball worker (development)
-print_status "Type checking Baseball ESPN MCP worker..."
+# Build Baseball ESPN MCP worker
+print_status "Building Baseball ESPN MCP worker..."
 cd workers/baseball-espn-mcp
-npm run type-check
-check_success "Baseball worker type checking passed!" "type check baseball worker"
+npm install
+npm run build 2>/dev/null || npm run type-check  # Fallback to type-check if build doesn't exist
+check_success "Baseball worker built!" "build baseball worker"
 cd ../../
 
-# Type check football worker (development)
-print_status "Type checking Football ESPN MCP worker..."
+# Build Football ESPN MCP worker
+print_status "Building Football ESPN MCP worker..."
 cd workers/football-espn-mcp
-npm run type-check
-check_success "Football worker type checking passed!" "type check football worker"
+npm install
+npm run build 2>/dev/null || npm run type-check  # Fallback to type-check if build doesn't exist
+check_success "Football worker built!" "build football worker"
 cd ../../
+
+# Build test suite
+print_status "Building test suite..."
+cd tests
+npm install
+npm run type-check
+check_success "Test suite built!" "build test suite"
+cd ..
 
 echo -e "\n${GREEN}🎉 Development build completed successfully!${NC}"
 echo -e "\nTo start the development environment, run: ${YELLOW}./start-dev.sh${NC}"

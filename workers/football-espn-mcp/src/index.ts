@@ -130,7 +130,7 @@ export default {
         return new Response(JSON.stringify({
           status: 'healthy',
           service: 'football-espn-mcp',
-          version: '1.0.0',
+          version: '1.1.0',
           sports: ['football', 'basketball', 'hockey'],
           endpoints: {
             '/mcp': 'MCP server endpoints (open access)',

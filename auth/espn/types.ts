@@ -46,6 +46,24 @@ export interface EspnLeagueInfo {
   gameId: string;
   standings: EspnStanding[];
   teams: EspnTeam[];
+  scoringPeriodId?: number;
+  firstScoringPeriod?: number;
+  finalScoringPeriod?: number;
+  status?: {
+    currentMatchupPeriod: number;
+    isActive: boolean;
+    previousSeasons: number[];
+  };
+  settings?: {
+    name: string;
+    size: number;
+    status: string;
+    season: number;
+    currentMatchupPeriod: number;
+    gameId: number;
+    gameName: string;
+    isActive: boolean;
+  };
 }
 
 /**
@@ -242,6 +260,20 @@ export class EspnAuthenticationFailed extends Error {
   constructor(message: string = 'ESPN authentication failed - invalid credentials') {
     super(message);
     this.name = 'EspnAuthenticationFailed';
+  }
+}
+
+export class EspnLeagueNotFound extends Error {
+  constructor(message: string = 'ESPN league not found') {
+    super(message);
+    this.name = 'EspnLeagueNotFound';
+  }
+}
+
+export class EspnApiError extends Error {
+  constructor(message: string = 'ESPN API error') {
+    super(message);
+    this.name = 'EspnApiError';
   }
 }
 

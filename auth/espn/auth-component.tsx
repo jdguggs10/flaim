@@ -78,7 +78,7 @@ export default function EspnAuth() {
         },
       });
 
-      const data = await response.json();
+      const data = await response.json() as { hasCredentials?: boolean; error?: string };
       
       if (response.ok && data.hasCredentials) {
         setIsAuthenticated(true);
@@ -146,7 +146,7 @@ export default function EspnAuth() {
         }),
       });
 
-      const data = await response.json();
+      const data = await response.json() as { success?: boolean; error?: string | { message?: string } };
 
       if (response.ok && data.success) {
         setIsAuthenticated(true);
@@ -171,13 +171,15 @@ export default function EspnAuth() {
         setError("ESPN service temporarily unavailable. Please try again later.");
       } else if (response.status === 400) {
         // Bad request - usually invalid credentials format
-        const errMsg = data.error || "Invalid ESPN credentials format. Please check your S2 and SWID values.";
+        const errMsg = typeof data.error === "string" 
+          ? data.error 
+          : (typeof data.error === "object" && data.error?.message) || "Invalid ESPN credentials format. Please check your S2 and SWID values.";
         setError(errMsg);
       } else {
         // Generic error with fallback message
         const errMsg = typeof data.error === "string" 
           ? data.error 
-          : data.error?.message || `Failed to save credentials (${response.status})`;
+          : (typeof data.error === "object" && data.error?.message) || `Failed to save credentials (${response.status})`;
         setError(errMsg);
       }
     } catch (err) {
@@ -210,14 +212,23 @@ export default function EspnAuth() {
         },
       });
 
-      const result = await response.json();
+      const result = await response.json() as { 
+        success?: boolean; 
+        data?: { 
+          allLeagues?: any[]; 
+          totalLeagues?: number; 
+          baseballLeagues?: any[]; 
+          footballLeagues?: any[]; 
+        }; 
+        error?: string; 
+      };
 
       if (response.ok && result.success) {
-        setDiscoveredLeagues(result.data.allLeagues || []);
+        setDiscoveredLeagues(result.data?.allLeagues || []);
         
-        const totalLeagues = result.data.totalLeagues || 0;
-        const baseballCount = result.data.baseballLeagues?.length || 0;
-        const footballCount = result.data.footballLeagues?.length || 0;
+        const totalLeagues = result.data?.totalLeagues || 0;
+        const baseballCount = result.data?.baseballLeagues?.length || 0;
+        const footballCount = result.data?.footballLeagues?.length || 0;
         
         if (totalLeagues > 0) {
           const sportBreakdown = [];
@@ -265,7 +276,7 @@ export default function EspnAuth() {
         },
       });
 
-      const data = await response.json();
+      const data = await response.json() as { success?: boolean; error?: string | { message?: string } };
 
       if (response.ok && data.success) {
         setIsAuthenticated(false);
@@ -281,7 +292,7 @@ export default function EspnAuth() {
       } else {
         const errMsg = typeof data.error === "string" 
           ? data.error 
-          : data.error?.message || `Failed to delete credentials (${response.status})`;
+          : (typeof data.error === "object" && data.error?.message) || `Failed to delete credentials (${response.status})`;
         setError(errMsg);
       }
     } catch (err) {
@@ -337,7 +348,7 @@ export default function EspnAuth() {
                 type={showS2 ? "text" : "password"}
                 placeholder="Enter your ESPN S2 value"
                 value={espnS2}
-                onChange={(e) => setEspnS2(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEspnS2(e.target.value)}
                 disabled={loading}
                 className="pr-10"
               />
@@ -359,7 +370,7 @@ export default function EspnAuth() {
                 type={showSWID ? "text" : "password"}
                 placeholder="Enter your ESPN SWID value"
                 value={espnSWID}
-                onChange={(e) => setEspnSWID(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEspnSWID(e.target.value)}
                 disabled={loading}
                 className="pr-10"
               />

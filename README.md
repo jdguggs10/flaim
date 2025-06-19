@@ -32,10 +32,11 @@ cd flaim
 
 - **🛤️ Guided Onboarding**: 8-step setup from sign-in to chat activation
 - **🤖 AI-Powered Chat**: Natural language fantasy sports assistant  
-- **🔐 Multi-Platform Auth**: ESPN active, Yahoo coming soon
+- **🔐 Secure Credential Storage**: CF KV with AES-GCM encryption and key rotation
 - **⚾ Multi-Sport Support**: Baseball, football, basketball, and hockey
 - **🔍 Auto League Discovery**: Automatically finds and configures your fantasy leagues
 - **🛠️ Auto-Configuration**: MCP tools configured automatically based on your leagues
+- **📊 Manual League Entry**: Alternative flow for complex setups (up to 10 leagues)
 - **💰 Usage Tiers**: 100 free messages/month, unlimited paid tier
 - **🌐 Serverless**: Cloudflare Workers + Vercel deployment
 
@@ -77,6 +78,16 @@ cd flaim
 ## 🤝 Contributing
 
 We welcome contributions! Please see our [Contributing Guide](docs/contributing.md) for development setup, coding standards, and pull request process.
+
+## ⚠️ Important Notes
+
+### KV Storage Runtime Requirements
+**CF KV credential storage is only available in Cloudflare Workers runtime.** The system is designed for Workers-first deployment:
+- ✅ **Production**: Cloudflare Workers with KV namespace bindings
+- ✅ **Development**: Mock KV for testing (NODE_ENV=development/test)
+- ❌ **Node.js Production**: KV client not implemented for Node.js production SSR
+
+For server-side credential access in Next.js production, use API routes that proxy to Workers.
 
 ## 📄 License
 

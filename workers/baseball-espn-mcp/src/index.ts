@@ -89,7 +89,7 @@ export default {
           const { getBasicLeagueInfo } = await import('./mcp/basic-league-info.js');
           
           try {
-            const requestData = await request.json();
+            const requestData = await request.json() as BasicLeagueInfoRequest;
             const result = await getBasicLeagueInfo(requestData, env);
             
             return new Response(JSON.stringify(result), {
@@ -186,7 +186,7 @@ export default {
       if (url.pathname === '/') {
         return new Response(JSON.stringify({
           service: 'Baseball ESPN MCP Server',
-          version: '4.0.0',
+          version: '1.1.0',
           description: 'ESPN fantasy baseball integration with MCP tools',
           authentication: 'None required (open access)',
           endpoints: {

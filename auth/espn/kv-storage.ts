@@ -15,13 +15,56 @@
 import { credentialEncryption } from '../shared/encryption';
 import { EspnCredentials, EspnCredentialsWithMetadata, EspnLeague, EspnUserData } from './types';
 
+export interface EspnKVOptions {
+  kv?: KVNamespace;        // Cloudflare Workers KV binding
+  envVarName?: string;     // Node.js/Next.js environment variable name
+  encryptionKey: string;   // Base64 encryption key
+}
+
+// Legacy interface for backward compatibility
 export interface CFKVEnvironment {
   CF_KV_CREDENTIALS: KVNamespace;
   CF_ENCRYPTION_KEY: string;
 }
 
 export class EspnKVStorage {
-  constructor(private env: CFKVEnvironment) {}
+  private kvNamespace: KVNamespace;
+  private encryptionKey: string;
+
+  constructor(options: EspnKVOptions | CFKVEnvironment) {
+    // Handle new options interface
+    if ('kv' in options || 'envVarName' in options) {
+      const opts = options as EspnKVOptions;
+      
+      if (opts.kv) {
+        // Cloudflare Workers environment - KV binding provided
+        this.kvNamespace = opts.kv;
+      } else if (opts.envVarName) {
+        // Node.js/Next.js environment - get KV from environment variable
+        const kvEnv = process.env[opts.envVarName];
+        if (!kvEnv) {
+          throw new Error(`Environment variable ${opts.envVarName} not found`);
+        }
+        // In development/test, allow mock KV for testing
+        if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test') {
+          // Mock KV will be injected by test setup
+          this.kvNamespace = kvEnv as any;
+        } else {
+          // In Node.js production, we'd need to create a KV client - this is a placeholder
+          throw new Error('Node.js KV client not implemented yet - use CF Workers');
+        }
+      } else {
+        throw new Error('Either kv or envVarName must be provided');
+      }
+      
+      this.encryptionKey = opts.encryptionKey;
+    } else {
+      // Legacy CFKVEnvironment interface for backward compatibility
+      const env = options as CFKVEnvironment;
+      this.kvNamespace = env.CF_KV_CREDENTIALS;
+      this.encryptionKey = env.CF_ENCRYPTION_KEY;
+    }
+  }
 
   // =============================================================================
   // CORE CREDENTIAL OPERATIONS
@@ -50,7 +93,7 @@ export class EspnKVStorage {
       const encrypted = await this.encrypt(JSON.stringify(credentials));
       const key = this.getCredentialKey(clerkUserId);
       
-      await this.env.CF_KV_CREDENTIALS.put(key, encrypted, {
+      await this.kvNamespace.put(key, encrypted, {
         metadata: {
           clerkUserId,
           lastUpdated: now,
@@ -73,7 +116,7 @@ export class EspnKVStorage {
       if (!clerkUserId) return null;
 
       const key = this.getCredentialKey(clerkUserId);
-      const encrypted = await this.env.CF_KV_CREDENTIALS.get(key);
+      const encrypted = await this.kvNamespace.get(key);
       
       if (!encrypted) return null;
 
@@ -99,7 +142,7 @@ export class EspnKVStorage {
       if (!clerkUserId) return null;
 
       const key = this.getCredentialKey(clerkUserId);
-      const { value: encrypted, metadata } = await this.env.CF_KV_CREDENTIALS.getWithMetadata(key);
+      const { value: encrypted, metadata } = await this.kvNamespace.getWithMetadata(key);
       
       if (!encrypted) {
         return { hasCredentials: false };
@@ -107,8 +150,8 @@ export class EspnKVStorage {
 
       return {
         hasCredentials: true,
-        email: metadata?.hasEmail ? 'Available' : undefined,
-        lastUpdated: metadata?.lastUpdated as string
+        email: (metadata as any)?.hasEmail ? 'Available' : undefined,
+        lastUpdated: (metadata as any)?.lastUpdated as string
       };
     } catch (error) {
       console.error('Failed to get credential metadata:', error);
@@ -124,7 +167,7 @@ export class EspnKVStorage {
       if (!clerkUserId) return false;
       
       const key = this.getCredentialKey(clerkUserId);
-      const value = await this.env.CF_KV_CREDENTIALS.get(key);
+      const value = await this.kvNamespace.get(key);
       return !!value;
     } catch (error) {
       console.error('Failed to check credentials:', error);
@@ -144,8 +187,8 @@ export class EspnKVStorage {
       
       // Delete both credentials and leagues
       await Promise.all([
-        this.env.CF_KV_CREDENTIALS.delete(credentialKey),
-        this.env.CF_KV_CREDENTIALS.delete(leagueKey)
+        this.kvNamespace.delete(credentialKey),
+        this.kvNamespace.delete(leagueKey)
       ]);
       
       return true;
@@ -178,7 +221,7 @@ export class EspnKVStorage {
       const encrypted = await this.encrypt(JSON.stringify(userData));
       const key = this.getLeagueKey(clerkUserId);
       
-      await this.env.CF_KV_CREDENTIALS.put(key, encrypted, {
+      await this.kvNamespace.put(key, encrypted, {
         metadata: {
           clerkUserId,
           leagueCount: leagues.length,
@@ -202,7 +245,7 @@ export class EspnKVStorage {
       if (!clerkUserId) return [];
 
       const key = this.getLeagueKey(clerkUserId);
-      const encrypted = await this.env.CF_KV_CREDENTIALS.get(key);
+      const encrypted = await this.kvNamespace.get(key);
       
       if (!encrypted) return [];
 
@@ -332,6 +375,38 @@ export class EspnKVStorage {
   }
 
   // =============================================================================
+  // KV CONSISTENCY HELPERS
+  // =============================================================================
+
+  /**
+   * Retry read operation with backoff for eventual consistency
+   * Useful when you need to read immediately after a write operation
+   */
+  async retryReadWithBackoff<T>(
+    readOperation: () => Promise<T>, 
+    validateResult: (result: T) => boolean,
+    maxRetries: number = 3,
+    baseDelayMs: number = 1000
+  ): Promise<T> {
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      const result = await readOperation();
+      
+      if (validateResult(result)) {
+        return result;
+      }
+      
+      if (attempt < maxRetries - 1) {
+        // Exponential backoff: 1s, 2s, 4s
+        const delay = baseDelayMs * Math.pow(2, attempt);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+    
+    // Final attempt without delay
+    return await readOperation();
+  }
+
+  // =============================================================================
   // PRIVATE HELPER METHODS
   // =============================================================================
 
@@ -344,20 +419,36 @@ export class EspnKVStorage {
   }
 
   private async encrypt(data: string): Promise<string> {
-    await credentialEncryption.initialize(this.env.CF_ENCRYPTION_KEY);
+    await credentialEncryption.initialize(this.encryptionKey);
     const encrypted = await credentialEncryption.encrypt(data);
-    return `${encrypted.iv}:${encrypted.ciphertext}`;
+    // Format: keyId:iv:ciphertext (backward compatible with old iv:ciphertext format)
+    return encrypted.keyId ? `${encrypted.keyId}:${encrypted.iv}:${encrypted.ciphertext}` : `${encrypted.iv}:${encrypted.ciphertext}`;
   }
 
   private async decrypt(encryptedData: string): Promise<string> {
-    await credentialEncryption.initialize(this.env.CF_ENCRYPTION_KEY);
+    await credentialEncryption.initialize(this.encryptionKey);
     
-    const [iv, ciphertext] = encryptedData.split(':');
-    if (!iv || !ciphertext) {
+    const parts = encryptedData.split(':');
+    let keyId: string | undefined;
+    let iv: string;
+    let ciphertext: string;
+    
+    if (parts.length === 3) {
+      // New format: keyId:iv:ciphertext
+      [keyId, iv, ciphertext] = parts;
+    } else if (parts.length === 2) {
+      // Legacy format: iv:ciphertext
+      [iv, ciphertext] = parts;
+    } else {
       throw new Error('Invalid encrypted data format');
     }
     
-    return await credentialEncryption.decrypt({ iv, ciphertext });
+    if (!iv || !ciphertext) {
+      throw new Error('Invalid encrypted data format');
+    }
+
+    // TODO: Handle key rotation - for now, assume current key can decrypt all data
+    return await credentialEncryption.decrypt({ iv, ciphertext, keyId });
   }
 }
 

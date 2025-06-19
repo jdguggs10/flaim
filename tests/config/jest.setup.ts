@@ -3,14 +3,8 @@
  * Configures test environment, mocks, and global utilities
  */
 
-import { config } from 'dotenv';
-import path from 'path';
-
-// Load test environment variables
-config({ path: path.join(__dirname, '.env.test') });
-
-// Global test timeout (30 seconds)
-jest.setTimeout(30000);
+// Global test timeout (15 seconds)
+jest.setTimeout(15000);
 
 // Mock console methods in tests to reduce noise
 const originalConsoleError = console.error;
@@ -38,12 +32,12 @@ afterEach(() => {
 // Global test utilities
 (global as any).testUtils = {
   // Generate test user ID
-  generateTestUserId: () => `test_user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+  generateTestUserId: () => `test_user_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
   
   // Generate test credentials
   generateTestCredentials: () => ({
-    swid: `test_swid_${Math.random().toString(36).substr(2, 16)}`,
-    espn_s2: `test_s2_${Math.random().toString(36).substr(2, 32)}`,
+    swid: `test_swid_${Math.random().toString(36).slice(2, 18)}`,
+    espn_s2: `test_s2_${Math.random().toString(36).slice(2, 34)}`,
     email: `test${Date.now()}@example.com`
   }),
   
@@ -70,13 +64,5 @@ afterEach(() => {
   }
 };
 
-// Type declaration for global test utilities
-declare global {
-  var testUtils: {
-    generateTestUserId(): string;
-    generateTestCredentials(): { swid: string; espn_s2: string; email: string };
-    wait(ms: number): Promise<void>;
-    isTestEnvironment(): boolean;
-    createMockFetch(responses: Array<{ url: RegExp; response: any }>): jest.Mock;
-  };
-}
+// Export module to allow global augmentation
+export {};

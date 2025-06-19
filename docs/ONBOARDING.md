@@ -92,6 +92,8 @@ OnboardingFlow.tsx (orchestrator)
 /api/onboarding/status              # Track progress
 ```
 
+> **Type Safety Note**: All onboarding request/response payloads are typed via shared DTO interfaces in `types/api-responses.ts`. Route handlers follow the Next.js 15 Promise-based `params` signature for full type safety.
+
 ### Auto-Configuration Logic
 ```typescript
 // Sport detection from ESPN gameId
@@ -182,4 +184,4 @@ HOCKEY_ESPN_MCP_URL=https://hockey-espn-mcp.workers.dev
 ---
 
 **Built with**: Next.js 15, Zustand, Clerk Auth, shadcn/ui, ESPN API
-**Last Updated**: 2025-01-16
+**Last Updated**: 2025-06-18

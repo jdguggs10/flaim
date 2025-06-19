@@ -367,7 +367,7 @@ export class EspnStorage {
         throw new Error(`Failed to fetch credentials: ${response.status} ${response.statusText}`);
       }
 
-      const data = await response.json();
+      const data = await response.json() as { hasCredentials?: boolean };
       
       if (data.hasCredentials) {
         return null;

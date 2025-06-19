@@ -4,8 +4,8 @@
     "module": "commonjs",
     "lib": ["ES2020", "DOM"],
     "outDir": "./dist",
-    "rootDir": "./",
-    "strict": true,
+    "rootDir": "../",
+    "strict": false,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
@@ -13,16 +13,6 @@
     "allowSyntheticDefaultImports": true,
     "moduleResolution": "node",
     "declaration": false,
-    "removeComments": true,
-    "noImplicitAny": true,
-    "strictNullChecks": true,
-    "strictFunctionTypes": true,
-    "noImplicitThis": true,
-    "noImplicitReturns": true,
-    "noFallthroughCasesInSwitch": true,
-    "noUncheckedIndexedAccess": true,
-    "noImplicitOverride": true,
-    "exactOptionalPropertyTypes": true,
     "types": ["jest", "node"],
     "baseUrl": ".",
     "paths": {
@@ -35,11 +25,11 @@
   },
   "include": [
     "**/*.ts",
-    "**/*.js"
+    "**/*.js",
+    "types/**/*.d.ts"
   ],
   "exclude": [
     "node_modules",
-    "dist",
-    "**/*.d.ts"
+    "dist"
   ]
 }

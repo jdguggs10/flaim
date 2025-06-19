@@ -15,7 +15,12 @@ OPENAI_API_KEY=sk-your-openai-api-key
 # =============================================================================
 # CF KV CREDENTIAL STORAGE (New v6.0)
 # =============================================================================
-# KV Namespace for encrypted credential storage
+# IMPORTANT: KV is only available in Cloudflare Workers runtime
+# - Workers: Use KV namespace binding (set in wrangler.toml)
+# - Next.js: Use for dev/test only with NODE_ENV=development/test
+# - Production Next.js: Access credentials via API routes that proxy to Workers
+
+# KV Namespace binding name (for wrangler.toml configuration)
 CF_KV_CREDENTIALS_NAMESPACE=espn_credentials
 
 # Base64 encryption key for credential encryption (generate with: openssl rand -base64 32)

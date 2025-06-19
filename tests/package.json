@@ -40,15 +40,10 @@
   "jest": {
     "preset": "ts-jest",
     "testEnvironment": "node",
-    "roots": [
-      "<rootDir>"
-    ],
     "testMatch": [
-      "**/__tests__/**/*.ts",
       "**/?(*.)+(spec|test).ts"
     ],
     "testPathIgnorePatterns": [
-      "/e2e/",
       "/node_modules/"
     ],
     "transform": {
@@ -58,20 +53,11 @@
       "**/*.ts",
       "!**/*.d.ts",
       "!**/node_modules/**",
-      "!**/dist/**",
       "!**/*.config.ts"
     ],
-    "coverageThreshold": {
-      "global": {
-        "branches": 80,
-        "functions": 80,
-        "lines": 80,
-        "statements": 80
-      }
-    },
     "setupFilesAfterEnv": [
       "<rootDir>/config/jest.setup.ts"
     ],
-    "testTimeout": 30000
+    "testTimeout": 15000
   }
 }

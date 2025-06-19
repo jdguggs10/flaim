@@ -5,13 +5,46 @@ All notable changes to FLAIM will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.0-rc1] - 2024-12-XX
+
+### 🏗️ Major Infrastructure Overhaul
+
+#### Added
+- **CF KV Credential Storage**: Enterprise-grade credential storage with AES-GCM encryption
+- **Key Rotation Support**: Future-proof encryption with keyId tracking in encrypted blobs
+- **Manual League Entry Flow**: Alternative onboarding for complex setups (up to 10 leagues)
+- **Eventual Consistency Handling**: Helpful error messages for KV propagation delays
+- **Comprehensive Test Suite**: Jest tests with @miniflare/kv mocks for reliable testing
+- **Path Aliases**: Clean import structure with @/auth/* and @/components/ui aliases
+- **Worker Binding Detection**: Smart constructor for CF Workers vs Node.js environments
+
+#### Changed
+- **Security**: Replaced Durable Objects with encrypted CF KV for credential storage
+- **Architecture**: Memoized KV storage utilities with shared context for better performance
+- **UI/UX**: 200ms tooltip delays for improved accessibility
+- **Build System**: Tailwind safelist with regex patterns for Radix data attributes
+- **Developer Experience**: Enhanced error messages and runtime environment detection
+
+#### Technical Improvements
+- Worker health endpoints now return v1.1.0
+- ESLint rules enforced with 100% clean codebase
+- TypeScript strict mode compliance
+- Consistent barrel exports across components
+
+### Migration Notes
+- CF KV namespace required for credential storage
+- Encryption key must be set in CF Secrets
+- See ENV_SAMPLE and DEPLOYMENT.md for setup details
+
 ## [Unreleased]
 
-### Added
-- Nothing yet
+### Fixed
+- **Next.js 15 Route Handler Signatures**: Updated onboarding route handlers to use Promise-based `params` destructuring for compatibility with `app/api` in Next.js 15.
+- **TypeScript API DTOs**: Introduced reusable request/response interfaces in `types/api-responses.ts` and cast all JSON responses accordingly, eliminating `unknown` types during builds.
+- **Build Failures**: Resolved compilation errors in `platform-selection`, `platform-credentials`, and `status` onboarding routes.
 
-### Changed
-- Nothing yet
+### Documentation
+- Updated `docs/ONBOARDING.md` with new endpoints, DTO type location, and type safety notes.
 
 ## [4.1.1] - 2024-12-15
 

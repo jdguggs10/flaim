@@ -6,11 +6,13 @@
 export interface EncryptedData {
   ciphertext: string; // base64-encoded
   iv: string; // base64-encoded initialization vector
+  keyId?: string; // for future key rotation support
   tag?: string; // base64-encoded auth tag (included in ciphertext for AES-GCM)
 }
 
 export class CredentialEncryption {
   private key: CryptoKey | null = null;
+  private currentKeyId: string = 'default-key-v1'; // TODO: Make configurable for rotation
 
   /**
    * Initialize encryption key from environment variable
@@ -71,7 +73,8 @@ export class CredentialEncryption {
 
     return {
       ciphertext: this.arrayBufferToBase64(ciphertext),
-      iv: this.arrayBufferToBase64(iv)
+      iv: this.arrayBufferToBase64(iv.buffer),
+      keyId: this.currentKeyId ?? 'default'
     };
   }
 

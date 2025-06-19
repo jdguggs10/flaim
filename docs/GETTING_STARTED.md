@@ -1,4 +1,4 @@
-# Getting Started with FLAIM v5.0
+# Getting Started with FLAIM v6.0
 
 **FLAIM (Fantasy League AI Manager)** is your AI-powered fantasy sports assistant with modular authentication, usage limits, and multi-sport ESPN integration through MCP (Model Context Protocol) tools.
 
@@ -23,7 +23,8 @@ Instead of juggling multiple apps and spreadsheets, you can ask natural language
 1. **Email address** for account creation
 2. **OpenAI API key** (for AI chat)
 3. **Cloudflare Workers account** (free tier)
-4. **ESPN Fantasy Baseball league** (optional, for private leagues)
+4. **ESPN Fantasy league** (optional, for private leagues)
+5. **Cloudflare KV namespace** (for secure credential storage in v6.0)
 
 ### Step 1: Set Up Authentication
 

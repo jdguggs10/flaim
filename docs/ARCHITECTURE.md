@@ -1,4 +1,4 @@
-# FLAIM Platform Architecture v5.0
+# FLAIM Platform Architecture v6.0
 
 ## Overview
 
@@ -14,17 +14,18 @@ FLAIM (Fantasy League AI Manager) is a **modern microservices platform** that pr
 │ - React UI      │    │ - Cross-platform │    │ - ESPN API        │
 │ - Auth module   │    │ - Usage tracking │    │ - Open access     │
 │ - Usage limits  │    │ - Token mgmt     │    │ - MCP tools       │
-│ - Chat interface│    │ - Clerk web impl │    │ - Shared auth     │
+│ - Chat interface│    │ - Clerk web impl │    │ - KV storage      │
 └─────────────────┘    └──────────────────┘    └───────────────────┘
          │                       │                       │
          │              ┌────────▼────────┐              │
-         │              │   Durable       │              │
-         │              │   Objects       │              │
-         │              │ (ESPN Creds)    │              │
+         │              │ Cloudflare KV   │              │
+         │              │ (Encrypted      │              │
+         │              │  ESPN Creds)    │              │
+         │              │ 🔒 AES-GCM      │              │
          │              └─────────────────┘              │
          │                                               │
          └───────────────────────────────────────────────┘
-                         Shared Authentication
+                    Shared Authentication + Secure Storage
 ```
 
 ## Core Services
@@ -116,6 +117,31 @@ import { UsageTracker } from '@flaim/auth/shared';
 - Automated testing suite
 - Token refresh handling
 - Usage limit enforcement
+
+---
+
+## 🔒 Security Architecture (v6.0)
+
+### Credential Storage
+**CF KV with AES-GCM Encryption**:
+- ESPN credentials encrypted before storage
+- 256-bit AES-GCM with random 96-bit IVs
+- Key rotation support with keyId tracking
+- CF Secrets for encryption key management
+
+### Runtime Security
+**Workers-First Design**:
+- KV namespace bindings in CF Workers (production)
+- Mock KV for development/testing (Node.js)
+- No credential decryption in browser/client-side
+- API routes proxy to Workers for credential access
+
+### Authentication Flow
+1. User authenticates via Clerk
+2. ESPN credentials captured and encrypted
+3. Stored in CF KV with user ID as key
+4. Workers decrypt credentials server-side for ESPN API calls
+5. No credentials transmitted to client after initial setup
 
 ---
 

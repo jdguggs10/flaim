@@ -23,7 +23,7 @@ export class EspnApiClient {
 
     // Add authentication cookies if available (user-specific or development fallback)
     if (credentials) {
-      headers['Cookie'] = `s2=${credentials.espn_s2}; SWID=${credentials.swid}`;
+      headers['Cookie'] = `s2=${credentials.s2}; SWID=${credentials.swid}`;
     } else if (this.env.NODE_ENV === 'development' && this.env.ESPN_S2 && this.env.ESPN_SWID) {
       console.log('⚠️ Development mode: Using fallback environment ESPN credentials');
       headers['Cookie'] = `s2=${this.env.ESPN_S2}; SWID=${this.env.ESPN_SWID}`;
@@ -74,7 +74,7 @@ export class EspnApiClient {
 
     // Authentication required for roster data
     if (credentials) {
-      headers['Cookie'] = `s2=${credentials.espn_s2}; SWID=${credentials.swid}`;
+      headers['Cookie'] = `s2=${credentials.s2}; SWID=${credentials.swid}`;
     } else if (this.env.NODE_ENV === 'development' && this.env.ESPN_S2 && this.env.ESPN_SWID) {
       console.log('⚠️ Development mode: Using fallback environment ESPN credentials');
       headers['Cookie'] = `s2=${this.env.ESPN_S2}; SWID=${this.env.ESPN_SWID}`;
