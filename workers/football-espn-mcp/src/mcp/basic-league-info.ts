@@ -9,7 +9,6 @@
  * Supports: Football, Basketball, Hockey (and Baseball as fallback)
  */
 
-import { Env } from '../index.js';
 
 interface BasicLeagueInfoRequest {
   leagueId: string;
@@ -44,8 +43,7 @@ interface BasicLeagueInfoResponse {
 }
 
 export async function getBasicLeagueInfo(
-  request: BasicLeagueInfoRequest,
-  env: Env
+  request: BasicLeagueInfoRequest
 ): Promise<BasicLeagueInfoResponse> {
   try {
     const { leagueId, gameId, credentials, sport } = request;

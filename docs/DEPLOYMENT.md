@@ -48,28 +48,20 @@ FLAIM consists of three main components:
 
 #### 1. Setup CF KV Credential Storage (v6.0+)
 
-FLAIM v6.0 introduces secure credential storage using Cloudflare KV with encryption:
+FLAIM v6.0 introduces secure credential storage using Cloudflare KV with encryption.
 
+**Quick Setup:**
 ```bash
-# Create KV namespace for credential storage
-wrangler kv:namespace create espn_credentials
-
-# Note the namespace ID from output - add to wrangler.toml:
-# [[kv_namespaces]]
-# binding = "CF_KV_CREDENTIALS"
-# id = "your-namespace-id-here"
-
-# Generate encryption key
-openssl rand -base64 32
-
-# Set encryption key in CF Secrets (for workers)
-wrangler secret put CF_ENCRYPTION_KEY
-# Paste the base64 key when prompted
-
-# For Next.js app, add to .env.local:
-CF_ENCRYPTION_KEY=your-32-byte-base64-key
-CF_KV_CREDENTIALS_NAMESPACE=espn_credentials
+# Follow the complete setup guide
+see docs/KV_SETUP.md
 ```
+
+**Summary:**
+1. Create KV namespace: `wrangler kv:namespace create espn_credentials`
+2. Update both workers' wrangler.toml with namespace IDs
+3. Generate encryption key: `openssl rand -base64 32`
+4. Set secrets in both workers: `wrangler secret put CF_ENCRYPTION_KEY`
+5. Add key to Next.js .env.local: `CF_ENCRYPTION_KEY=your-key`
 
 #### 2. Deploy Workers
 
@@ -100,10 +92,9 @@ cp ENV_SAMPLE .env.local
 ```
 
 Key variables for v6.0:
-- `CF_KV_CREDENTIALS_NAMESPACE=espn_credentials`
-- `CF_ENCRYPTION_KEY=your-base64-key`
-- `BASEBALL_ESPN_MCP_URL=https://your-worker.workers.dev`
-- `FOOTBALL_ESPN_MCP_URL=https://your-worker.workers.dev`
+- `CF_ENCRYPTION_KEY=your-base64-key` (REQUIRED)
+- `NEXT_PUBLIC_BASEBALL_ESPN_MCP_URL=https://your-worker.workers.dev` (optional)
+- `NEXT_PUBLIC_FOOTBALL_ESPN_MCP_URL=https://your-worker.workers.dev` (optional)
 
 ## 🔄 Migration from v5.x to v6.0
 
@@ -155,8 +146,8 @@ CLERK_SECRET_KEY=sk_test_...
 
 #### Worker Secrets (Both Workers)
 ```bash
-ENCRYPTION_KEY=32-character-base64-key  # openssl rand -base64 32
-CLERK_SECRET_KEY=sk_test_...           # Same as frontend
+CF_ENCRYPTION_KEY=32-character-base64-key  # openssl rand -base64 32
+CLERK_SECRET_KEY=sk_test_...              # Same as frontend
 ```
 
 **Note**: Quickstart scripts handle all secret configuration automatically.

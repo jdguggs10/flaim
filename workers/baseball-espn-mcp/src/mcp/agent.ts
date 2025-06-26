@@ -1,10 +1,11 @@
 
 export interface Env {
-  USER_DO: DurableObjectNamespace;
-  ENCRYPTION_KEY: string;
+  CF_KV_CREDENTIALS: KVNamespace;
+  CF_ENCRYPTION_KEY: string;
   ESPN_S2?: string;
   ESPN_SWID?: string;
   NODE_ENV?: string;
+  CLERK_SECRET_KEY?: string;
 }
 
 export interface McpToolCall {
@@ -18,11 +19,9 @@ export interface McpResponse {
 }
 
 export class McpAgent {
-  constructor(private env: Env) {
-    // No authentication required
-  }
+  constructor() {}
 
-  async handleRequest(request: Request): Promise<Response> {
+  async handleRequest(request: Request, env: Env): Promise<Response> {
     const corsHeaders = {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
@@ -47,7 +46,7 @@ export class McpAgent {
       }
       
       if (url.pathname === '/mcp/tools/call') {
-        return this.handleToolCall(request, clerkUserId, corsHeaders);
+        return this.handleToolCall(request, clerkUserId, corsHeaders, env);
       }
       
       if (url.pathname === '/mcp') {
@@ -145,11 +144,11 @@ export class McpAgent {
     });
   }
 
-  private async handleToolCall(request: Request, clerkUserId: string, corsHeaders: Record<string, string>): Promise<Response> {
+  private async handleToolCall(request: Request, clerkUserId: string, corsHeaders: Record<string, string>, env: Env): Promise<Response> {
     const { tool, arguments: args } = await request.json() as McpToolCall;
 
     try {
-      const result = await this.executeTool(tool, args, clerkUserId);
+      const result = await this.executeTool(tool, args, clerkUserId, env);
       
       return new Response(JSON.stringify({
         content: result.content,
@@ -171,26 +170,26 @@ export class McpAgent {
     }
   }
 
-  private async executeTool(tool: string, args: Record<string, any>, clerkUserId: string): Promise<McpResponse> {
+  private async executeTool(tool: string, args: Record<string, any>, clerkUserId: string, env: Env): Promise<McpResponse> {
     switch (tool) {
       case 'get_espn_league_info':
-        return this.getEspnLeagueInfo(args, clerkUserId);
+        return this.getEspnLeagueInfo(args, clerkUserId, env);
       
       case 'get_espn_team_roster':
-        return this.getEspnTeamRoster(args, clerkUserId);
+        return this.getEspnTeamRoster(args, clerkUserId, env);
       
       case 'get_espn_matchups':
-        return this.getEspnMatchups(args, clerkUserId);
+        return this.getEspnMatchups(args, clerkUserId, env);
       
       default:
         throw new Error(`Unknown tool: ${tool}`);
     }
   }
 
-  private async getEspnLeagueInfo(args: Record<string, any>, clerkUserId: string): Promise<McpResponse> {
+  private async getEspnLeagueInfo(args: Record<string, any>, clerkUserId: string, env: Env): Promise<McpResponse> {
     try {
       const { EspnApiClient } = await import('../espn');
-      const espnClient = new EspnApiClient(this.env);
+      const espnClient = new EspnApiClient(env);
       
       const { leagueId, seasonId = new Date().getFullYear().toString() } = args;
       const league = await espnClient.fetchLeague(leagueId, parseInt(seasonId), 'mSettings', clerkUserId);
@@ -198,7 +197,7 @@ export class McpAgent {
       const { getLeagueMeta } = await import('../tools/getLeagueMeta');
       const metadata = await getLeagueMeta(
         { leagueId: league.id.toString(), year: league.seasonId },
-        this.env
+        env
       );
 
       return {
@@ -217,10 +216,10 @@ export class McpAgent {
     }
   }
 
-  private async getEspnTeamRoster(args: Record<string, any>, clerkUserId: string): Promise<McpResponse> {
+  private async getEspnTeamRoster(args: Record<string, any>, clerkUserId: string, env: Env): Promise<McpResponse> {
     try {
       const { EspnApiClient } = await import('../espn');
-      const espnClient = new EspnApiClient(this.env);
+      const espnClient = new EspnApiClient(env);
       
       const { leagueId, teamId, seasonId = new Date().getFullYear().toString() } = args;
       const roster = await espnClient.fetchRoster(leagueId, teamId, parseInt(seasonId), undefined, clerkUserId);
@@ -242,10 +241,10 @@ export class McpAgent {
     }
   }
 
-  private async getEspnMatchups(args: Record<string, any>, clerkUserId: string): Promise<McpResponse> {
+  private async getEspnMatchups(args: Record<string, any>, clerkUserId: string, env: Env): Promise<McpResponse> {
     try {
       const { EspnApiClient } = await import('../espn');
-      const espnClient = new EspnApiClient(this.env);
+      const espnClient = new EspnApiClient(env);
       
       const { leagueId, week, seasonId = new Date().getFullYear().toString() } = args;
       const league = await espnClient.fetchLeague(leagueId, parseInt(seasonId), 'mMatchup', clerkUserId);

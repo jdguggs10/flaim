@@ -1,12 +1,14 @@
-import { EspnCredentials, EspnMcpProvider } from '../../../auth/espn';
-import { EspnFootballLeagueResponse } from './types/espn-football';
+import { EspnCredentials } from '../../../auth/espn';
+import { EspnKVStorage } from '../../../auth/espn/kv-storage';
+import { EspnFootballLeagueResponse, EspnFootballTeamResponse, FootballTeam } from './types/espn-football';
 
 export interface Env {
-  USER_DO: DurableObjectNamespace;
-  ENCRYPTION_KEY: string;
+  CF_KV_CREDENTIALS: KVNamespace;
+  CF_ENCRYPTION_KEY: string;
   ESPN_S2?: string;
   ESPN_SWID?: string;
   NODE_ENV?: string;
+  CLERK_SECRET_KEY?: string;
 }
 
 export class EspnFootballApiClient {
@@ -22,15 +24,15 @@ export class EspnFootballApiClient {
       'Accept': 'application/json',
     };
 
-    // Get ESPN credentials using shared auth module
+    // Get ESPN credentials using KV storage
     let credentials: EspnCredentials | null = null;
     if (clerkUserId) {
-      credentials = await EspnMcpProvider.getCredentialsForMcp(this.env, clerkUserId);
+      credentials = await this.getEspnCredentialsForUser(clerkUserId);
     }
 
     // Add authentication cookies if available
     if (credentials) {
-      headers['Cookie'] = `s2=${credentials.espn_s2}; SWID=${credentials.swid}`;
+      headers['Cookie'] = `s2=${credentials.s2}; SWID=${credentials.swid}`;
     } else if (this.env.NODE_ENV === 'development' && this.env.ESPN_S2 && this.env.ESPN_SWID) {
       console.log('⚠️ Development mode: Using fallback environment ESPN credentials for football');
       headers['Cookie'] = `s2=${this.env.ESPN_S2}; SWID=${this.env.ESPN_SWID}`;
@@ -55,84 +57,104 @@ export class EspnFootballApiClient {
       if (response.status === 403) {
         throw new Error(`Access denied to football league ${leagueId} - may require authentication`);
       }
-      throw new Error(`ESPN Football API error: ${response.status} ${response.statusText}`);
+      
+      const errorText = await response.text();
+      throw new Error(`ESPN Football API error ${response.status}: ${errorText}`);
     }
-    
-    return response.json();
+
+    return await response.json();
   }
 
-  async fetchTeam(leagueId: string, teamId: string, year: number = 2024, scoringPeriodId?: number, clerkUserId?: string) {
-    let url = `${this.baseUrl}/games/ffl/seasons/${year}/segments/0/leagues/${leagueId}?forTeamId=${teamId}&view=mRoster&view=mTeam`;
-    
-    if (scoringPeriodId) {
-      url += `&scoringPeriodId=${scoringPeriodId}`;
-    }
-
-    const headers: Record<string, string> = {
-      'User-Agent': 'football-espn-mcp/1.0',
-      'Accept': 'application/json',
-    };
-
-    // Get ESPN credentials using shared auth module
-    let credentials: EspnCredentials | null = null;
-    if (clerkUserId) {
-      credentials = await EspnMcpProvider.getCredentialsForMcp(this.env, clerkUserId);
-    }
-
-    // Authentication required for team/roster data
-    if (credentials) {
-      headers['Cookie'] = `s2=${credentials.espn_s2}; SWID=${credentials.swid}`;
-    } else if (this.env.NODE_ENV === 'development' && this.env.ESPN_S2 && this.env.ESPN_SWID) {
-      console.log('⚠️ Development mode: Using fallback environment ESPN credentials for football');
-      headers['Cookie'] = `s2=${this.env.ESPN_S2}; SWID=${this.env.ESPN_SWID}`;
-    } else {
-      throw new Error('ESPN authentication required for football team data - please provide ESPN credentials');
-    }
-
-    const response = await fetch(url, {
-      headers,
-      cf: { cacheEverything: false }
-    });
-    
-    if (!response.ok) {
-      if (response.status === 401) {
-        throw new Error('ESPN authentication failed - check ESPN_S2 and ESPN_SWID credentials');
-      }
-      if (response.status === 429) {
-        throw new Error('ESPN rate limit exceeded - please retry later');
-      }
-      if (response.status === 404) {
-        throw new Error(`Football team ${teamId} not found in league ${leagueId}`);
-      }
-      throw new Error(`ESPN Football API error: ${response.status} ${response.statusText}`);
-    }
-    
-    return response.json();
-  }
-
-  async fetchMatchups(leagueId: string, week?: number, year: number = 2024, clerkUserId?: string) {
-    let url = `${this.baseUrl}/games/ffl/seasons/${year}/segments/0/leagues/${leagueId}?view=mMatchup`;
-    
+  async fetchTeam(leagueId: string, teamId: string, year: number = 2024, week?: number, clerkUserId?: string): Promise<FootballTeam> {
+    let url = `${this.baseUrl}/games/ffl/seasons/${year}/segments/0/leagues/${leagueId}?view=mRoster`;
     if (week) {
       url += `&scoringPeriodId=${week}`;
     }
-
+    
     const headers: Record<string, string> = {
       'User-Agent': 'football-espn-mcp/1.0',
       'Accept': 'application/json',
     };
 
-    // Get ESPN credentials using shared auth module
+    // Get user credentials for team data
     let credentials: EspnCredentials | null = null;
     if (clerkUserId) {
-      credentials = await EspnMcpProvider.getCredentialsForMcp(this.env, clerkUserId);
+      credentials = await this.getEspnCredentialsForUser(clerkUserId);
     }
 
-    // Add authentication cookies if available
+    // Authentication required for team data
     if (credentials) {
-      headers['Cookie'] = `s2=${credentials.espn_s2}; SWID=${credentials.swid}`;
+      headers['Cookie'] = `s2=${credentials.s2}; SWID=${credentials.swid}`;
     } else if (this.env.NODE_ENV === 'development' && this.env.ESPN_S2 && this.env.ESPN_SWID) {
-      console.log('⚠️ Development mode: Using fallback environment ESPN credentials for football');
+      console.log('⚠️ Development mode: Using fallback environment ESPN credentials');
+      headers['Cookie'] = `s2=${this.env.ESPN_S2}; SWID=${this.env.ESPN_SWID}`;
+    } else {
+      throw new Error('ESPN authentication required for team data - please provide ESPN credentials');
+    }
+
+    const response = await fetch(url, {
+      headers,
+      cf: { cacheEverything: false }
+    });
+    
+    if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('ESPN authentication failed - check ESPN_S2 and ESPN_SWID credentials');
+      }
+      if (response.status === 429) {
+        throw new Error('ESPN rate limit exceeded - please retry later');
+      }
+      if (response.status === 404) {
+        throw new Error(`Football league ${leagueId} or team ${teamId} not found`);
+      }
+      if (response.status === 403) {
+        throw new Error(`Access denied to football league ${leagueId} team data`);
+      }
+      
+      const errorText = await response.text();
+      throw new Error(`ESPN Football API error ${response.status}: ${errorText}`);
+    }
+
+    const data = await response.json() as EspnFootballTeamResponse;
+    
+    // Filter to the specific team if teamId is provided
+    if (teamId && data.teams) {
+      const team = data.teams.find((t: FootballTeam) => t.id.toString() === teamId);
+      if (!team) {
+        throw new Error(`Team ${teamId} not found in football league ${leagueId}`);
+      }
+      return team;
+    }
+    
+    // If no specific teamId requested, return the first team or throw error
+    if (data.teams && data.teams.length > 0) {
+      return data.teams[0];
+    }
+    
+    throw new Error(`No teams found in football league ${leagueId}`);
+  }
+
+  async fetchMatchups(leagueId: string, week?: number, year: number = 2024, clerkUserId?: string): Promise<any> {
+    let url = `${this.baseUrl}/games/ffl/seasons/${year}/segments/0/leagues/${leagueId}?view=mMatchup`;
+    if (week) {
+      url += `&scoringPeriodId=${week}`;
+    }
+    
+    const headers: Record<string, string> = {
+      'User-Agent': 'football-espn-mcp/1.0',
+      'Accept': 'application/json',
+    };
+
+    // Get user credentials
+    let credentials: EspnCredentials | null = null;
+    if (clerkUserId) {
+      credentials = await this.getEspnCredentialsForUser(clerkUserId);
+    }
+
+    if (credentials) {
+      headers['Cookie'] = `s2=${credentials.s2}; SWID=${credentials.swid}`;
+    } else if (this.env.NODE_ENV === 'development' && this.env.ESPN_S2 && this.env.ESPN_SWID) {
+      console.log('⚠️ Development mode: Using fallback environment ESPN credentials');
       headers['Cookie'] = `s2=${this.env.ESPN_S2}; SWID=${this.env.ESPN_SWID}`;
     }
 
@@ -149,15 +171,20 @@ export class EspnFootballApiClient {
         throw new Error('ESPN rate limit exceeded - please retry later');
       }
       if (response.status === 404) {
-        throw new Error(`Football league ${leagueId} not found or not accessible`);
+        throw new Error(`Football league ${leagueId} not found`);
       }
-      throw new Error(`ESPN Football API error: ${response.status} ${response.statusText}`);
+      if (response.status === 403) {
+        throw new Error(`Access denied to football league ${leagueId} matchup data`);
+      }
+      
+      const errorText = await response.text();
+      throw new Error(`ESPN Football API error ${response.status}: ${errorText}`);
     }
-    
-    return response.json();
+
+    return await response.json();
   }
 
-  async fetchStandings(leagueId: string, year: number = 2024, clerkUserId?: string) {
+  async fetchStandings(leagueId: string, year: number = 2024, clerkUserId?: string): Promise<any> {
     const url = `${this.baseUrl}/games/ffl/seasons/${year}/segments/0/leagues/${leagueId}?view=mStandings`;
     
     const headers: Record<string, string> = {
@@ -165,17 +192,16 @@ export class EspnFootballApiClient {
       'Accept': 'application/json',
     };
 
-    // Get ESPN credentials using shared auth module
+    // Get user credentials
     let credentials: EspnCredentials | null = null;
     if (clerkUserId) {
-      credentials = await EspnMcpProvider.getCredentialsForMcp(this.env, clerkUserId);
+      credentials = await this.getEspnCredentialsForUser(clerkUserId);
     }
 
-    // Add authentication cookies if available
     if (credentials) {
-      headers['Cookie'] = `s2=${credentials.espn_s2}; SWID=${credentials.swid}`;
+      headers['Cookie'] = `s2=${credentials.s2}; SWID=${credentials.swid}`;
     } else if (this.env.NODE_ENV === 'development' && this.env.ESPN_S2 && this.env.ESPN_SWID) {
-      console.log('⚠️ Development mode: Using fallback environment ESPN credentials for football');
+      console.log('⚠️ Development mode: Using fallback environment ESPN credentials');
       headers['Cookie'] = `s2=${this.env.ESPN_S2}; SWID=${this.env.ESPN_SWID}`;
     }
 
@@ -192,11 +218,33 @@ export class EspnFootballApiClient {
         throw new Error('ESPN rate limit exceeded - please retry later');
       }
       if (response.status === 404) {
-        throw new Error(`Football league ${leagueId} not found or not accessible`);
+        throw new Error(`Football league ${leagueId} not found`);
       }
-      throw new Error(`ESPN Football API error: ${response.status} ${response.statusText}`);
+      if (response.status === 403) {
+        throw new Error(`Access denied to football league ${leagueId} standings`);
+      }
+      
+      const errorText = await response.text();
+      throw new Error(`ESPN Football API error ${response.status}: ${errorText}`);
     }
-    
-    return response.json();
+
+    return await response.json();
+  }
+
+  /**
+   * Get ESPN credentials from KV storage
+   */
+  private async getEspnCredentialsForUser(clerkUserId: string): Promise<EspnCredentials | null> {
+    try {
+      const kvStorage = new EspnKVStorage({
+        kv: this.env.CF_KV_CREDENTIALS,
+        encryptionKey: this.env.CF_ENCRYPTION_KEY
+      });
+      
+      return await kvStorage.getCredentials(clerkUserId);
+    } catch (error) {
+      console.error('Failed to get ESPN credentials from KV:', error);
+      return null;
+    }
   }
 }

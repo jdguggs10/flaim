@@ -19,9 +19,13 @@
       "import": "./dist/workers/espn/index.js",
       "types": "./dist/workers/espn/index.d.ts"
     },
-    "./workers/espn/storage": {
-      "import": "./dist/workers/espn/storage.js",
-      "types": "./dist/workers/espn/storage.d.ts"
+    "./workers/espn/kv-storage": {
+      "import": "./dist/workers/espn/kv-storage.js",
+      "types": "./dist/workers/espn/kv-storage.d.ts"
+    },
+    "./espn/kv-storage": {
+      "import": "./dist/workers/espn/kv-storage.js",
+      "types": "./dist/workers/espn/kv-storage.d.ts"
     },
     "./workers/espn/types": {
       "import": "./dist/workers/espn/types.js",

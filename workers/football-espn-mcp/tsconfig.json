@@ -16,7 +16,7 @@
     "sourceMap": true,
     "outDir": "./dist",
     "resolveJsonModule": true,
-    "types": ["@cloudflare/workers-types"]
+    "types": ["@cloudflare/workers-types", "node"]
   },
   "include": [
     "src/**/*"

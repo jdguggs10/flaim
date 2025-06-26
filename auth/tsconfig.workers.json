@@ -12,7 +12,7 @@
   "include": [
     "shared/**/*",
     "espn/index.ts",
-    "espn/storage.ts",
+    "espn/kv-storage.ts",
     "espn/mcp-integration.ts", 
     "espn/v3/**/*",
     "espn/types.ts"

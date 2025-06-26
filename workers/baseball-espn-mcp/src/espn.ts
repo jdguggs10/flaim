@@ -1,6 +1,7 @@
 import { Env } from './index';
-import { EspnLeagueResponse } from './types/espn';
+import { EspnLeagueResponse, EspnRosterResponse, EspnTeam } from './types/espn';
 import { EspnCredentials } from '../../../auth/espn';
+import { EspnKVStorage } from '../../../auth/espn/kv-storage';
 
 export class EspnApiClient {
   private baseUrl = 'https://fantasy.espn.com/apis/v3';
@@ -48,25 +49,26 @@ export class EspnApiClient {
       if (response.status === 403) {
         throw new Error(`Access denied to league ${leagueId} - may require authentication`);
       }
-      throw new Error(`ESPN API error: ${response.status} ${response.statusText}`);
+      
+      const errorText = await response.text();
+      throw new Error(`ESPN API error ${response.status}: ${errorText}`);
     }
-    
-    return response.json();
+
+    return await response.json();
   }
 
-  async fetchRoster(leagueId: string, teamId: string, year: number = 2025, scoringPeriodId?: number, clerkUserId?: string) {
-    let url = `${this.baseUrl}/games/flb/seasons/${year}/segments/0/leagues/${leagueId}?forTeamId=${teamId}&view=mRoster`;
-    
-    if (scoringPeriodId) {
-      url += `&scoringPeriodId=${scoringPeriodId}`;
+  async fetchRoster(leagueId: string, teamId: string, year: number = 2025, week?: number, clerkUserId?: string): Promise<EspnTeam> {
+    let url = `${this.baseUrl}/games/flb/seasons/${year}/segments/0/leagues/${leagueId}?view=mRoster`;
+    if (week) {
+      url += `&scoringPeriodId=${week}`;
     }
-
+    
     const headers: Record<string, string> = {
       'User-Agent': 'baseball-espn-mcp/1.0',
       'Accept': 'application/json',
     };
 
-    // Try to get user-specific ESPN credentials first
+    // Get user credentials for roster data (typically requires authentication)
     let credentials: EspnCredentials | null = null;
     if (clerkUserId) {
       credentials = await this.getEspnCredentialsForUser(clerkUserId);
@@ -95,41 +97,48 @@ export class EspnApiClient {
         throw new Error('ESPN rate limit exceeded - please retry later');
       }
       if (response.status === 404) {
+        throw new Error(`League ${leagueId} or team ${teamId} not found`);
+      }
+      if (response.status === 403) {
+        throw new Error(`Access denied to league ${leagueId} roster data`);
+      }
+      
+      const errorText = await response.text();
+      throw new Error(`ESPN API error ${response.status}: ${errorText}`);
+    }
+
+    const data = await response.json() as EspnRosterResponse;
+    
+    // Filter to the specific team if teamId is provided
+    if (teamId && data.teams) {
+      const team = data.teams.find((t: EspnTeam) => t.id.toString() === teamId);
+      if (!team) {
         throw new Error(`Team ${teamId} not found in league ${leagueId}`);
       }
-      throw new Error(`ESPN API error: ${response.status} ${response.statusText}`);
+      return team;
     }
     
-    return response.json();
+    // If no specific teamId requested, return the first team or throw error
+    if (data.teams && data.teams.length > 0) {
+      return data.teams[0];
+    }
+    
+    throw new Error(`No teams found in league ${leagueId}`);
   }
 
-  // Helper method to get ESPN credentials for a specific user
+  /**
+   * Get ESPN credentials from KV storage
+   */
   private async getEspnCredentialsForUser(clerkUserId: string): Promise<EspnCredentials | null> {
     try {
-      const userStoreId = this.env.USER_DO.idFromString(clerkUserId);
-      const userStore = this.env.USER_DO.get(userStoreId);
-      
-      // Create a request to get credentials
-      const credentialRequest = new Request('https://dummy.com/credentials/espn', {
-        method: 'GET',
-        headers: {
-          'X-Clerk-User-ID': clerkUserId
-        }
+      const kvStorage = new EspnKVStorage({
+        kv: this.env.CF_KV_CREDENTIALS,
+        encryptionKey: this.env.CF_ENCRYPTION_KEY
       });
       
-      const response = await userStore.fetch(credentialRequest);
-      const data = await response.json() as any;
-      
-      if (data.hasCredentials) {
-        // We need to call the internal API method to get the actual credentials
-        // This is a workaround since we can't directly access the Durable Object methods
-        const userCredentials = userStore as any;
-        return await userCredentials.getEspnCredentialsForApi(clerkUserId);
-      }
-      
-      return null;
+      return await kvStorage.getCredentials(clerkUserId);
     } catch (error) {
-      console.error('Failed to get ESPN credentials for user:', error);
+      console.error('Failed to get ESPN credentials from KV:', error);
       return null;
     }
   }

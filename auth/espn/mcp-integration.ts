@@ -1,13 +1,15 @@
 /// <reference types="@cloudflare/workers-types" />
 
 import { EspnCredentials } from './types';
+import { EspnKVStorage } from './kv-storage';
 
 export interface Env {
-  USER_DO: DurableObjectNamespace;
-  ENCRYPTION_KEY: string;
+  CF_KV_CREDENTIALS: KVNamespace;
+  CF_ENCRYPTION_KEY: string;
   ESPN_S2?: string;
   ESPN_SWID?: string;
   NODE_ENV?: string;
+  CLERK_SECRET_KEY?: string;
 }
 
 export class EspnMcpProvider {
@@ -20,22 +22,16 @@ export class EspnMcpProvider {
     }
 
     try {
-      const userStoreId = this.env.USER_DO.idFromString(clerkUserId);
-      const userStore = this.env.USER_DO.get(userStoreId);
-      
-      const credentialRequest = new Request('https://dummy.com/credentials/espn', {
-        method: 'GET',
-        headers: {
-          'X-Clerk-User-ID': clerkUserId
-        }
+      // Use KV storage instead of Durable Objects
+      const kvStorage = new EspnKVStorage({
+        kv: this.env.CF_KV_CREDENTIALS,
+        encryptionKey: this.env.CF_ENCRYPTION_KEY
       });
       
-      const response = await userStore.fetch(credentialRequest);
-      const data = await response.json() as any;
+      const credentials = await kvStorage.getCredentials(clerkUserId);
       
-      if (data.hasCredentials) {
-        const userCredentials = userStore as any;
-        return await userCredentials.getEspnCredentialsForApi(clerkUserId);
+      if (credentials) {
+        return credentials;
       }
       
       // Fallback to environment credentials if no user credentials

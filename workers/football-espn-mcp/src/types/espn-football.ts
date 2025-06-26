@@ -168,3 +168,7 @@ export interface FootballToolResponse<T = any> {
   year?: number;
   sport: 'football';
 }
+
+export interface EspnFootballTeamResponse {
+  teams: FootballTeam[];
+}

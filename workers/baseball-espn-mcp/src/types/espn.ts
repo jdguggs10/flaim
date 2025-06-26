@@ -78,3 +78,17 @@ export interface LeagueMetaData {
     playoffMatchupPeriodLength: number;
   };
 }
+
+export interface EspnTeam {
+  id: number;
+  abbrev: string;
+  location: string;
+  nickname: string;
+  roster?: {
+    entries: any[];
+  };
+}
+
+export interface EspnRosterResponse {
+  teams: EspnTeam[];
+}

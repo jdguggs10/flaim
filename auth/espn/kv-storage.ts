@@ -109,6 +109,80 @@ export class EspnKVStorage {
   }
 
   /**
+   * Store ESPN credentials for a user (backward compatibility method)
+   * @param clerkUserId - Clerk user ID
+   * @param credentials - ESPN credentials object with swid, espn_s2, and optional email
+   */
+  async setEspnCredentialsForUser(clerkUserId: string, credentials: { swid: string; espn_s2: string; email?: string }): Promise<boolean> {
+    return this.setCredentials(clerkUserId, credentials.swid, credentials.espn_s2, credentials.email);
+  }
+
+  /**
+   * Store league IDs and sports for a user
+   * @param clerkUserId - Clerk user ID
+   * @param leagues - Array of league objects with leagueId and sport
+   */
+  async setUserLeagues(clerkUserId: string, leagues: Array<{ leagueId: string; sport: string }>): Promise<boolean> {
+    try {
+      if (!clerkUserId || !leagues) {
+        throw new Error('Missing required parameters: clerkUserId, leagues');
+      }
+
+      const now = new Date().toISOString();
+      const leagueData = {
+        clerkUserId,
+        leagues,
+        updated_at: now,
+        created_at: now
+      };
+
+      const encrypted = await this.encrypt(JSON.stringify(leagueData));
+      const key = this.getLeagueKey(clerkUserId);
+      
+      await this.kvNamespace.put(key, encrypted, {
+        metadata: {
+          clerkUserId,
+          lastUpdated: now,
+          leagueCount: leagues.length
+        }
+      });
+
+      return true;
+    } catch (error) {
+      console.error('Failed to store user leagues:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Retrieve user leagues
+   * @param clerkUserId - Clerk user ID
+   */
+  async getUserLeagues(clerkUserId: string): Promise<Array<{ leagueId: string; sport: string }> | null> {
+    try {
+      if (!clerkUserId) return null;
+
+      const key = this.getLeagueKey(clerkUserId);
+      const encrypted = await this.kvNamespace.get(key);
+      
+      if (!encrypted) return null;
+
+      const decrypted = await this.decrypt(encrypted);
+      const leagueData = JSON.parse(decrypted) as {
+        clerkUserId: string;
+        leagues: Array<{ leagueId: string; sport: string }>;
+        updated_at: string;
+        created_at: string;
+      };
+      
+      return leagueData.leagues || [];
+    } catch (error) {
+      console.error('Failed to retrieve user leagues:', error);
+      return null;
+    }
+  }
+
+  /**
    * Retrieve and decrypt ESPN credentials for a user
    */
   async getCredentials(clerkUserId: string): Promise<EspnCredentials | null> {

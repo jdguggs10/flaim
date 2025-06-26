@@ -11,13 +11,8 @@ import {
   EspnApiError,
   SportName,
   gameIdToSport,
-  type EspnLeagueInfo,
-  type EspnStanding,
-  type EspnTeam
+  type EspnLeagueInfo
 } from '../types.js';
-
-const ESPN_API_BASE = 'https://fantasy.espn.com/apis/v3/games';
-const ESPN_API_LEAGUE_ENDPOINT = 'https://fantasy.espn.com/apis/v3/games/ffl/seasons/{{season}}/segments/0/leagues/{{leagueId}}';
 
 interface EspnApiLeagueResponse {
   id: string;
@@ -82,9 +77,7 @@ export async function getLeagueInfo(
         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
         'X-Fantasy-Source': 'kona',
         'X-Fantasy-Platform': 'kona-web-2.0.0'
-      },
-      credentials: 'include',
-      redirect: 'follow'
+      }
     });
 
     // Clone the response so we can read it multiple times if needed

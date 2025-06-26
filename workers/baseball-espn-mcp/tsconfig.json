@@ -22,6 +22,7 @@
     "forceConsistentCasingInFileNames": true,
     "types": [
       "@cloudflare/workers-types",
+      "node",
       "jest"
     ]
   },

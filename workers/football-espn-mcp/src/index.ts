@@ -1,164 +1,151 @@
 // Football ESPN MCP Server v1.0 - Open Access
-// Focuses on ESPN Fantasy Football API integration with shared authentication
-// Uses flaim/auth/espn for credential management
+// Focuses on ESPN Fantasy Football API integration with KV storage
 
 import { FootballMcpAgent } from './mcp/football-agent.js';
-import { EspnStorage } from '@flaim/auth/workers/espn/storage';
-import { createClerkClient } from '@clerk/backend';
+import { EspnKVStorage, EspnKVStorageAPI } from '@flaim/auth/espn/kv-storage';
 
 export interface Env {
-  // Shared encryption for ESPN credentials (from auth module)
-  ENCRYPTION_KEY: string;
-  
-  // Clerk authentication (required for production)
-  CLERK_SECRET_KEY?: string;
-  
-  // ESPN credentials fallback (for development only)
+  CF_KV_CREDENTIALS: KVNamespace;
+  CF_ENCRYPTION_KEY: string;
   ESPN_S2?: string;
   ESPN_SWID?: string;
-  
-  // Environment
   NODE_ENV?: string;
-  
-  // Durable Object binding for credential storage
-  USER_DO: DurableObjectNamespace;
+  CLERK_SECRET_KEY?: string;
 }
 
-// Verify Clerk session server-side for security
-async function verifyClerkSession(request: Request, env: Env): Promise<{ userId: string | null; error?: string }> {
-  // Skip verification in development mode if no Clerk secret provided
-  if (!env.CLERK_SECRET_KEY) {
-    if (env.NODE_ENV === 'development') {
-      console.warn('⚠️ Development mode: Skipping Clerk verification. Add CLERK_SECRET_KEY for security.');
-      // In development, return a default user ID for testing
-      return { userId: 'dev_user_default' };
-    } else {
-      return { userId: null, error: 'Clerk authentication required in production' };
-    }
-  }
-
-  const authHeader = request.headers.get('Authorization');
-  const sessionToken = authHeader?.replace('Bearer ', '');
-  
-  if (!sessionToken) {
-    return { userId: null, error: 'No session token found' };
-  }
-
-  try {
-    const clerk = createClerkClient({ secretKey: env.CLERK_SECRET_KEY });
-    const session = await clerk.sessions.verifySession(sessionToken, env.CLERK_SECRET_KEY);
-    
-    return { userId: session.userId };
-  } catch (error) {
-    console.error('Clerk session verification failed:', error);
-    return { userId: null, error: 'Invalid session' };
-  }
+// Helper function for CORS headers
+function getCorsHeaders() {
+  return {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Clerk-User-ID',
+  };
 }
 
-export default {
-  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-    const corsHeaders = {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Clerk-User-ID',
-    };
-
-    if (request.method === 'OPTIONS') {
-      return new Response(null, { headers: corsHeaders });
-    }
-
-    const url = new URL(request.url);
-
+async function handleCredentialStorage(request: Request, env: Env, corsHeaders: Record<string, string>): Promise<Response> {
     try {
-      // Handle ESPN credential endpoints (require Clerk auth in production)
-      if (url.pathname === '/credential/espn') {
-        const { userId, error } = await verifyClerkSession(request, env);
-        
-        if (!userId) {
-          return new Response(JSON.stringify({
-            error: 'Authentication required',
-            message: error || 'Please sign in to manage ESPN credentials'
-          }), {
-            status: 401,
-            headers: { 'Content-Type': 'application/json', ...corsHeaders }
-          });
-        }
-
-        // Route to user's Durable Object for ESPN credential storage
-        const userStoreId = env.USER_DO.idFromString(userId);
-        const userStore = env.USER_DO.get(userStoreId);
-        
-        // Use the direct method that accepts userId parameter (matches baseball worker pattern)
-        const credentialHandler = userStore as any;
-        
-        // Forward to the handler method with verified user ID
-        return credentialHandler.handleEspnCredentialsWithUserId(request, corsHeaders, userId);
-      }
-
-      // Handle MCP endpoints (open access, no auth required)
-      if (url.pathname.startsWith('/mcp') || url.pathname === '/') {
-        // Handle specific basic league info endpoint for onboarding
-        if (url.pathname === '/mcp/espn/v3/basic' && request.method === 'POST') {
-          const { getBasicLeagueInfo } = await import('./mcp/basic-league-info.js');
-          
-          try {
-            const requestData = await request.json();
-            const result = await getBasicLeagueInfo(requestData, env);
-            
-            return new Response(JSON.stringify(result), {
-              headers: { 'Content-Type': 'application/json', ...corsHeaders }
-            });
-          } catch (error) {
-            console.error('Basic league info endpoint error:', error);
-            return new Response(JSON.stringify({
-              success: false,
-              error: 'Failed to process basic league info request'
-            }), {
-              status: 500,
-              headers: { 'Content-Type': 'application/json', ...corsHeaders }
-            });
-          }
-        }
-        
-        // Default MCP agent handling
-        const footballAgent = new FootballMcpAgent(env);
-        return footballAgent.handleRequest(request);
-      }
-
-      // Health check endpoint
-      if (url.pathname === '/health') {
+      // Get Clerk user ID from header
+      const clerkUserId = request.headers.get('X-Clerk-User-ID');
+      if (!clerkUserId) {
         return new Response(JSON.stringify({
-          status: 'healthy',
-          service: 'football-espn-mcp',
-          version: '1.1.0',
-          sports: ['football', 'basketball', 'hockey'],
-          endpoints: {
-            '/mcp': 'MCP server endpoints (open access)',
-            '/mcp/espn/v3/basic': 'Basic league information for onboarding auto-pull (all sports)',
-            '/credential/espn': 'ESPN S2/SWID credential management (requires Clerk authentication)',
-            '/health': 'Health check'
-          },
-          timestamp: new Date().toISOString()
+          error: 'Missing X-Clerk-User-ID header'
         }), {
+          status: 400,
           headers: { 'Content-Type': 'application/json', ...corsHeaders }
         });
       }
 
-      return new Response('Not Found', { 
-        status: 404, 
-        headers: corsHeaders
-      });
-      
-    } catch (error) {
-      console.error('Football ESPN MCP server error:', error);
-      
-      if (error instanceof Response) {
-        return error; // Error response
+      const api = new EspnKVStorageAPI(
+        new EspnKVStorage({ 
+          kv: env.CF_KV_CREDENTIALS, 
+          encryptionKey: env.CF_ENCRYPTION_KEY 
+        })
+      );
+
+      if (request.method === 'POST' || request.method === 'PUT') {
+        const body = await request.json() as { swid: string; s2: string; email?: string };
+        return await api.handleSetCredentials(clerkUserId, body);
+      } else if (request.method === 'GET') {
+        return await api.handleGetCredentials(clerkUserId);
+      } else if (request.method === 'DELETE') {
+        return await api.handleDeleteCredentials(clerkUserId);
       }
-      
-      return new Response(JSON.stringify({ 
-        error: 'Football ESPN MCP server error',
-        message: error instanceof Error ? error.message : 'Unknown error'
+
+      return new Response(JSON.stringify({
+        error: 'Method not allowed'
+      }), {
+        status: 405,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders }
+      });
+
+    } catch (error) {
+      console.error('Credential storage error:', error);
+      return new Response(JSON.stringify({
+        error: 'Failed to process credentials',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders }
+      });
+    }
+}
+
+export default {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    const url = new URL(request.url);
+    const corsHeaders = getCorsHeaders();
+
+    // Handle CORS preflight
+    if (request.method === 'OPTIONS') {
+      return new Response(null, { headers: corsHeaders });
+    }
+
+    try {
+      // Health check endpoint with KV connectivity test
+      if (url.pathname === '/health') {
+        const healthData: any = {
+          status: 'healthy', 
+          service: 'football-espn-mcp',
+          version: '1.0.0',
+          timestamp: new Date().toISOString()
+        };
+
+        // Test KV connectivity
+        try {
+          if (env.CF_KV_CREDENTIALS) {
+            // Try a simple KV operation to verify connectivity
+            await env.CF_KV_CREDENTIALS.get('__health_check__');
+            healthData.kv_status = 'connected';
+          } else {
+            healthData.kv_status = 'not_configured';
+            healthData.status = 'degraded';
+          }
+        } catch (error) {
+          healthData.kv_status = 'error';
+          healthData.kv_error = error instanceof Error ? error.message : 'Unknown KV error';
+          healthData.status = 'degraded';
+        }
+
+        // Test encryption key
+        if (env.CF_ENCRYPTION_KEY) {
+          healthData.encryption_status = 'configured';
+        } else {
+          healthData.encryption_status = 'missing';
+          healthData.status = 'degraded';
+        }
+
+        const statusCode = healthData.status === 'healthy' ? 200 : 503;
+
+        return new Response(JSON.stringify(healthData), {
+          status: statusCode,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      }
+
+      // Credential storage endpoint
+      if (url.pathname === '/credentials') {
+        return await handleCredentialStorage(request, env, corsHeaders);
+      }
+
+      // MCP endpoints - delegate to agent
+      if (url.pathname === '/mcp' || url.pathname.startsWith('/mcp/')) {
+        const agent = new FootballMcpAgent();
+        return await agent.handleRequest(request, env);
+      }
+
+      // 404 for unknown endpoints
+      return new Response(JSON.stringify({
+        error: 'Endpoint not found'
+      }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders }
+      });
+
+    } catch (error) {
+      console.error('Worker error:', error);
+      return new Response(JSON.stringify({
+        error: 'Internal server error',
+        details: error instanceof Error ? error.message : 'Unknown error'
       }), {
         status: 500,
         headers: { 'Content-Type': 'application/json', ...corsHeaders }
@@ -166,6 +153,3 @@ export default {
     }
   }
 };
-
-// Export the Durable Object class (shared from auth module)
-export { EspnStorage };
