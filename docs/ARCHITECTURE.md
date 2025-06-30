@@ -57,7 +57,7 @@ FLAIM (Fantasy League AI Manager) is a **modern microservices platform** that pr
 
 **Technology Stack**:
 - [Next.js 15](https://nextjs.org/docs) (App Router)
-- [React 18](https://react.dev/)
+- [React 19](https://react.dev/)
 - [Clerk](https://clerk.com/docs) (Authentication)
 - [OpenAI API](https://platform.openai.com/docs)
 - [Tailwind CSS](https://tailwindcss.com/docs)

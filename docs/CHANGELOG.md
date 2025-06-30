@@ -43,6 +43,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **TypeScript API DTOs**: Introduced reusable request/response interfaces in `types/api-responses.ts` and cast all JSON responses accordingly, eliminating `unknown` types during builds.
 - **Build Failures**: Resolved compilation errors in `platform-selection`, `platform-credentials`, and `status` onboarding routes.
 
+### Changed
+- **React Upgrade**: Core platform migrated from React 18 to **React 19.1.0** with unified type definitions (`@types/react` 19.0.0) across all workspaces.
+- **Next.js Upgrade**: Bumped framework to **Next.js 15.3.4** and aligned `eslint-config-next` accordingly.
+- **Dependency Hygiene**: Removed workspace-local `@types/react*` declarations; root `overrides` now enforces a single version of React runtime and types, eliminating duplicate-types build errors.
+- **Radix & ShadCN Primitives**: Refactored remaining UI primitives to the new `ComponentPropsWithoutRef` pattern required by React 19.
+- **Docs**: Updated Architecture and Onboarding docs to reflect React 19 stack.
+
 ### Documentation
 - Updated `docs/ONBOARDING.md` with new endpoints, DTO type location, and type safety notes.
 

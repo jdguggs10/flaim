@@ -1,0 +1,44 @@
+diff --git a/node_modules/@reach/polymorphic/package.json.orig b/node_modules/@reach/polymorphic/package.json.orig
+new file mode 100644
+index 0000000..31c5961
+--- /dev/null
++++ b/node_modules/@reach/polymorphic/package.json.orig
+@@ -0,0 +1,37 @@
++{
++  "name": "@reach/polymorphic",
++  "version": "0.18.0",
++  "description": "Internal utility types for polymorphism in Reach UI.",
++  "author": "React Training <hello@reacttraining.com>",
++  "license": "MIT",
++  "repository": {
++    "type": "git",
++    "url": "git+https://github.com/reach/reach-ui.git",
++    "directory": "packages/polymorphic"
++  },
++  "dependencies": {},
++  "devDependencies": {
++    "@reach-internal/dev": "0.0.0",
++    "@reach-internal/tsconfig": "0.0.0",
++    "react": "^17.0.2",
++    "tsup": "^6.1.3"
++  },
++  "peerDependencies": {
++    "react": "^16.8.0 || 17.x"
++  },
++  "main": "./dist/reach-polymorphic.cjs.js",
++  "types": "./dist/reach-polymorphic.d.ts",
++  "files": [
++    "CHANGELOG.md",
++    "LICENSE",
++    "README.md",
++    "dist"
++  ],
++  "publishConfig": {
++    "access": "public"
++  },
++  "module": "./dist/reach-polymorphic.mjs",
++  "scripts": {
++    "build": "tsup"
++  }
++}
+\ No newline at end of file

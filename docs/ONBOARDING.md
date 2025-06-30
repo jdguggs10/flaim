@@ -183,5 +183,5 @@ HOCKEY_ESPN_MCP_URL=https://hockey-espn-mcp.workers.dev
 
 ---
 
-**Built with**: Next.js 15, Zustand, Clerk Auth, shadcn/ui, ESPN API
+**Built with**: Next.js 15, React 19, Zustand, Clerk Auth, shadcn/ui, ESPN API
 **Last Updated**: 2025-06-18

@@ -408,6 +408,135 @@ export default {
         });
       }
 
+      // -------------------------------------------------------------------
+      // League management endpoint (ESPN only for now)
+      // POST /leagues  -> store leagues array
+      // GET  /leagues  -> retrieve leagues array metadata
+      // -------------------------------------------------------------------
+
+      if (url.pathname === '/leagues') {
+        // Extract Clerk User ID from header
+        const { userId: clerkUserId, error: authError } = getClerkUserId(request);
+        if (!clerkUserId) {
+          return new Response(JSON.stringify({
+            error: 'Authentication required',
+            message: authError || 'Missing X-Clerk-User-ID header'
+          }), {
+            status: 401,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          });
+        }
+
+        // Lazily import to keep worker bundle size small
+        // eslint-disable-next-line  @typescript-eslint/consistent-type-imports
+        const { EspnKVStorage } = await import('../../../auth/espn/kv-storage');
+
+        const storage = new EspnKVStorage({
+          kv: env.CF_KV_CREDENTIALS,
+          encryptionKey: env.CF_ENCRYPTION_KEY
+        });
+
+        if (request.method === 'POST' || request.method === 'PUT') {
+          // Save leagues
+          const body = (await request.json()) as any;
+          const leagues = body?.leagues as Array<{ leagueId: string; sport: string }> | undefined;
+
+          if (!leagues || !Array.isArray(leagues)) {
+            return new Response(JSON.stringify({
+              error: 'Invalid request: leagues array is required'
+            }), {
+              status: 400,
+              headers: { 'Content-Type': 'application/json', ...corsHeaders }
+            });
+          }
+
+          // Basic validation (duplicate check handled by storage layer)
+          if (leagues.length > 10) {
+            return new Response(JSON.stringify({
+              error: 'Maximum of 10 leagues allowed per user'
+            }), {
+              status: 400,
+              headers: { 'Content-Type': 'application/json', ...corsHeaders }
+            });
+          }
+
+          const success = await storage.setUserLeagues(clerkUserId, leagues);
+
+          if (!success) {
+            return new Response(JSON.stringify({
+              error: 'Failed to store leagues'
+            }), {
+              status: 500,
+              headers: { 'Content-Type': 'application/json', ...corsHeaders }
+            });
+          }
+
+          return new Response(JSON.stringify({
+            success: true,
+            message: 'Leagues saved successfully',
+            totalLeagues: leagues.length,
+            leagues
+          }), {
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          });
+
+        } else if (request.method === 'GET') {
+          const leagues = await storage.getUserLeagues(clerkUserId);
+
+          return new Response(JSON.stringify({
+            success: true,
+            leagues: leagues || [],
+            totalLeagues: leagues?.length || 0
+          }), {
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          });
+        } else if (request.method === 'DELETE') {
+          // Remove a single league
+          const urlObj = new URL(request.url);
+          const leagueId = urlObj.searchParams.get('leagueId');
+          const sport = urlObj.searchParams.get('sport');
+
+          if (!leagueId || !sport) {
+            return new Response(JSON.stringify({
+              error: 'leagueId and sport query parameters are required'
+            }), {
+              status: 400,
+              headers: { 'Content-Type': 'application/json', ...corsHeaders }
+            });
+          }
+
+          const currentLeagues = await storage.getUserLeagues(clerkUserId) || [];
+          const updatedLeagues = currentLeagues.filter(l => !(l.leagueId === leagueId && l.sport === sport));
+
+          const success = await storage.setUserLeagues(clerkUserId, updatedLeagues);
+
+          if (!success) {
+            return new Response(JSON.stringify({
+              error: 'Failed to remove league'
+            }), {
+              status: 500,
+              headers: { 'Content-Type': 'application/json', ...corsHeaders }
+            });
+          }
+
+          return new Response(JSON.stringify({
+            success: true,
+            message: 'League removed',
+            totalLeagues: updatedLeagues.length,
+            leagues: updatedLeagues
+          }), {
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          });
+        }
+
+        return new Response(JSON.stringify({
+          error: 'Method not allowed'
+        }), {
+          status: 405,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      }
+
       // 404 for unknown endpoints
       return new Response(JSON.stringify({
         error: 'Endpoint not found',
