@@ -126,41 +126,18 @@ echo "   tail -f /tmp/football.log"
 echo "   tail -f /tmp/frontend.log"
 echo ""
 
-# Check if we should run in detached mode
-if [[ "${START_DETACHED:-}" == "true" ]] || [[ ! -t 0 && ! -t 1 ]]; then
-    # Detached mode - start services and exit (services continue in background)
-    echo "✅ Services started successfully and running in background!"
-    echo "🔧 To stop services later: pkill -f 'wrangler dev'; pkill -f 'next dev'"
-    echo "📊 Check status: curl http://localhost:3000"
-    
-    # Detach from cleanup trap since we want services to continue
-    trap - SIGINT SIGTERM EXIT
-    exit 0
-fi
-
-# Interactive mode - give user choice
-echo "Choose an option:"
-echo "  [1] Keep services running (press Ctrl+C to stop)"
-echo "  [2] Start services and exit script (services continue in background)"
 echo ""
-read -p "Enter choice [1-2]: " choice
-
-case $choice in
-    2)
-        echo ""
-        echo "✅ Services started successfully and running in background!"
-        echo "🔧 To stop services later: pkill -f 'wrangler dev'; pkill -f 'next dev'"
-        echo "📊 Check status: curl http://localhost:3000"
-        
-        # Detach from cleanup trap since we want services to continue
-        trap - SIGINT SIGTERM EXIT
-        exit 0
-        ;;
-    *)
-        echo ""
-        echo "📡 Keeping services running... Press Ctrl+C to stop all services"
-        ;;
-esac
+echo "🎉 All services started successfully!"
+echo ""
+echo "✅ Summary:"
+echo "   🔐 Auth Worker:     http://localhost:8786 (healthy)"
+echo "   ⚾ Baseball Worker: http://localhost:8787 (healthy)"
+echo "   🏈 Football Worker: http://localhost:8788 (healthy)"
+echo "   🌐 Frontend:        http://localhost:3000 (ready)"
+echo ""
+echo "📡 Services are running in foreground mode"
+echo "🛑 Press Ctrl+C to stop all services and exit"
+echo ""
 
 # Wait for any process to exit
 wait

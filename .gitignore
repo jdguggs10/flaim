@@ -77,3 +77,6 @@ coverage/
 
 # Test environment files with secrets
 tests/config/.env.test
+
+# Ignore per-worker sensitive env files
+workers/auth-worker/.env

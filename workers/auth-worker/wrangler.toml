@@ -14,5 +14,12 @@ NODE_ENV = "production"
 [env.dev]
 name = "auth-worker-dev"
 
+[[env.dev.kv_namespaces]]
+binding = "CF_KV_CREDENTIALS"
+id = "${CF_KV_CREDENTIALS_ID}"
+preview_id = "${CF_KV_CREDENTIALS_PREVIEW_ID}"
+
 [env.dev.vars]
+# Local-only; override with real key via .env or shell export
+CF_ENCRYPTION_KEY = "YOUR-32-BYTE-BASE64-KEY"
 NODE_ENV = "development"
