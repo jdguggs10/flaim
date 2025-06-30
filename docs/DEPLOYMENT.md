@@ -53,7 +53,7 @@ FLAIM v6.0 introduces secure credential storage using Cloudflare KV with encrypt
 **Quick Setup:**
 ```bash
 # Follow the complete setup guide
-see docs/KV_SETUP.md
+see docs/dev/KV_SETUP.md
 ```
 
 **Summary:**

@@ -191,7 +191,7 @@ wrangler secret put MISSING_SECRET_NAME
 
 ## Related Documentation
 
-- `docs/KV_SETUP.md` - Complete KV storage setup guide
+- `docs/dev/KV_SETUP.md` - Complete KV storage setup guide
 - `docs/DEPLOYMENT.md` - Full deployment guide  
 - `scripts/generate-encryption-key.sh` - Encryption key generator
 - `openai/ENV_SAMPLE` - Next.js environment variables

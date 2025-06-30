@@ -21,14 +21,14 @@ Instead of juggling multiple apps and spreadsheets, you can ask natural language
 ### What You'll Need
 
 1. **Email address** for account creation
-2. **OpenAI API key** (for AI chat)
-3. **Cloudflare Workers account** (free tier)
+2. **[OpenAI API key](https://platform.openai.com/docs/api-reference/authentication)** (for AI chat)
+3. **[Cloudflare Workers account](https://developers.cloudflare.com/workers/get-started/guide/)** (free tier)
 4. **ESPN Fantasy league** (optional, for private leagues)
-5. **Cloudflare KV namespace** (for secure credential storage in v6.0)
+5. **[Cloudflare KV namespace](https://developers.cloudflare.com/kv/get-started/)** (for secure credential storage in v6.0)
 
 ### Step 1: Set Up Authentication
 
-1. Create a **Clerk account** at [clerk.com](https://clerk.com)
+1. Create a **[Clerk account](https://clerk.com/docs/quickstarts/setup-clerk)**
 2. Create a new application in Clerk dashboard
 3. Get your **Publishable Key** and **Secret Key**
 4. Configure sign-in options (email/password recommended)
@@ -149,18 +149,18 @@ For private league access, configure ESPN credentials in the tools panel.
 ## Key Features
 
 ### 🔐 Production-Grade Authentication
-- **Server-side Clerk verification** for secure credential storage
+- **Server-side [Clerk](https://clerk.com/docs) verification** for secure credential storage
 - **Anti-spoofing protection** - user identity verified server-side
 - **Social logins** (Google, GitHub, etc.)
 - **Session management** with automatic renewal and validation
 
 ### 💬 AI Chat Assistant
-- **OpenAI integration** for natural language conversations
+- **[OpenAI](https://platform.openai.com/docs) integration** for natural language conversations
 - **Fantasy sports expertise** built into prompts
 - **Context-aware** responses about your teams
 
 ### 📊 Usage Management
-- **Free tier**: 15 messages per month
+- **Free tier**: 100 messages per month
 - **Usage tracking** with real-time dashboard
 - **Upgrade options** for unlimited access
 - **Automatic reset** every 30 days
@@ -362,12 +362,7 @@ Deploy with your own domain for branded experience:
 ```
 
 ### Database Integration
-Replace in-memory usage tracking with persistent storage:
-```bash
-# Add PostgreSQL/MySQL database
-# Update usage tracker implementation
-# Migrate existing user data
-```
+Replace in-memory usage tracking with persistent storage. See the [Hono documentation](https://hono.dev/guides/best-practices#database) for best practices on database integration.
 
 ### Payment Integration
 Set up Stripe for automated plan management:

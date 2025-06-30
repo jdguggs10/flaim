@@ -56,13 +56,13 @@ FLAIM (Fantasy League AI Manager) is a **modern microservices platform** that pr
 - `POST /api/vector_stores/*` → File management (auth required)
 
 **Technology Stack**:
-- Next.js 15 (App Router)
-- React 18
-- Clerk authentication v2.1.0
-- OpenAI API
-- Tailwind CSS
-- TypeScript
-- ESLint v9 with typescript-eslint v8
+- [Next.js 15](https://nextjs.org/docs) (App Router)
+- [React 18](https://react.dev/)
+- [Clerk](https://clerk.com/docs) (Authentication)
+- [OpenAI API](https://platform.openai.com/docs)
+- [Tailwind CSS](https://tailwindcss.com/docs)
+- [TypeScript](https://www.typescriptlang.org/docs/)
+- [ESLint v9](https://eslint.org/docs/latest/) with [typescript-eslint v8](https://typescript-eslint.io/)
 
 ---
 
@@ -214,13 +214,18 @@ import { UsageTracker } from '@flaim/auth/shared';
 
 ### Clerk Integration
 
-**Frontend Authentication**:
+FLAIM uses [Clerk](https://clerk.com/docs) for user authentication and management.
+
+**Frontend Authentication** is handled by the `@clerk/nextjs` package, which provides components like `<ClerkProvider>`, `<SignInButton>`, `<SignUpButton>`, and `<UserButton>` for a seamless authentication experience.
+
 ```typescript
 // middleware.ts
 import { clerkMiddleware } from '@clerk/nextjs/server'
 export default clerkMiddleware()
 
 // layout.tsx
+import { ClerkProvider, SignedIn, SignedOut, SignInButton, UserButton } from "@clerk/nextjs";
+
 <ClerkProvider>
   <SignedOut>
     <SignInButton />
@@ -232,7 +237,8 @@ export default clerkMiddleware()
 </ClerkProvider>
 ```
 
-**Frontend API Calls**:
+**Frontend API Calls** are authenticated using a JWT token obtained from the `useAuth` hook.
+
 ```typescript
 import { useAuth } from '@clerk/nextjs'
 
@@ -247,7 +253,8 @@ fetch('/api/endpoint', {
 })
 ```
 
-**Server-Side Verification (MCP Service)**:
+**Server-Side Verification** in the MCP services is done using the `@clerk/backend` package, which verifies the session token.
+
 ```typescript
 import { clerkClient } from '@clerk/backend'
 
@@ -266,7 +273,8 @@ async function verifyClerkSession(request: Request, env: Env) {
 }
 ```
 
-**API Protection (Frontend)**:
+**API Protection** in the Next.js frontend is handled by the `auth` middleware from `@clerk/nextjs/server`.
+
 ```typescript
 import { auth } from '@clerk/nextjs/server'
 

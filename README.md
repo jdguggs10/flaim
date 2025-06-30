@@ -26,7 +26,7 @@ cd flaim
 ./start-prod.sh    # Deploys everything to Cloudflare
 ```
 
-**Ready in 5 minutes!** See [Getting Started Guide](docs/getting-started.md) for detailed setup.
+**Ready in 5 minutes!** See [Getting Started Guide](docs/GETTING_STARTED.md) for detailed setup.
 
 ## ✨ Key Features
 
@@ -44,13 +44,12 @@ cd flaim
 
 | Document | Description |
 |----------|-------------|
-| [📖 Getting Started](docs/getting-started.md) | Installation, setup, and first steps |
-| [🛤️ Onboarding Flow](docs/onboarding-flow.md) | Complete user onboarding experience guide |
-| [🚀 Deployment Guide](docs/deployment.md) | Production deployment and configuration |
-| [🏗️ Architecture](docs/architecture.md) | System design and security model |
-| [❓ FAQ](docs/faq.md) | Common questions and troubleshooting |
-| [🤝 Contributing](docs/contributing.md) | Development workflow and guidelines |
-| [📋 Changelog](docs/changelog.md) | Release history and breaking changes |
+| [📖 Getting Started](docs/GETTING_STARTED.md) | Installation, setup, and first steps |
+| [🛤️ Onboarding Flow](docs/ONBOARDING.md) | Complete user onboarding experience guide |
+| [🚀 Deployment Guide](docs/DEPLOYMENT.md) | Production deployment and configuration |
+| [🏗️ Architecture](docs/ARCHITECTURE.md) | System design and security model |
+| [❓ FAQ](docs/FAQ.md) | Common questions and troubleshooting |
+| [📋 Changelog](docs/CHANGELOG.md) | Release history and breaking changes |
 
 ## 🆕 What's New in v5.0
 
@@ -75,9 +74,6 @@ cd flaim
 - ✅ **Smart MCP Configuration**: Tools auto-configure based on platform and sport selection
 - ✅ **Mobile-First Design**: Responsive onboarding experience across all devices
 
-## 🤝 Contributing
-
-We welcome contributions! Please see our [Contributing Guide](docs/contributing.md) for development setup, coding standards, and pull request process.
 
 ## ⚠️ Important Notes
 

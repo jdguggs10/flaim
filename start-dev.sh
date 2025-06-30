@@ -22,6 +22,7 @@ cleanup() {
     echo ""
     echo "🛑 Shutting down services..."
     jobs -p | xargs kill 2>/dev/null || true
+    kill_port 8786
     kill_port 8787
     kill_port 8788  
     kill_port 3000
@@ -33,6 +34,7 @@ trap cleanup SIGINT SIGTERM EXIT
 
 # Kill any existing processes on our ports
 echo "🧹 Cleaning up existing processes..."
+kill_port 8786
 kill_port 8787
 kill_port 8788
 kill_port 3000
@@ -46,6 +48,10 @@ echo ""
 echo "🚀 Starting all services in parallel..."
 
 # Start all services in background simultaneously
+echo "🔐 Starting Auth Worker (port 8786)..."
+(cd workers/auth-worker && NODE_OPTIONS="--inspect=9229" wrangler dev --env dev --port 8786 > /tmp/auth.log 2>&1) &
+AUTH_PID=$!
+
 echo "📊 Starting Baseball ESPN MCP Worker (port 8787)..."
 (cd workers/baseball-espn-mcp && NODE_OPTIONS="--inspect=9230" wrangler dev --env dev --port 8787 > /tmp/baseball.log 2>&1) &
 BASEBALL_PID=$!
@@ -59,6 +65,7 @@ echo "🖥️  Starting Next.js Frontend (port 3000)..."
 FRONTEND_PID=$!
 
 # Store PIDs for cleanup
+echo $AUTH_PID > /tmp/auth.pid
 echo $BASEBALL_PID > /tmp/baseball.pid
 echo $FOOTBALL_PID > /tmp/football.pid  
 echo $FRONTEND_PID > /tmp/frontend.pid
@@ -87,6 +94,9 @@ check_service() {
 }
 
 # Wait for all services to be ready
+echo -n "🔄 Auth Worker "
+check_service "http://localhost:8786/health" "Auth Worker"
+
 echo -n "🔄 Baseball Worker "
 check_service "http://localhost:8787/health" "Baseball Worker"
 
@@ -100,14 +110,17 @@ echo ""
 echo "🎉 All services are running!"
 echo ""
 echo "🌐 Frontend:        http://localhost:3000"
+echo "🔐 Auth Worker:     http://localhost:8786"
 echo "⚾ Baseball Worker: http://localhost:8787"  
 echo "🏈 Football Worker: http://localhost:8788"
 echo ""
 echo "📊 Health Checks:"
+echo "   curl http://localhost:8786/health"
 echo "   curl http://localhost:8787/health"
 echo "   curl http://localhost:8788/health"
 echo ""
 echo "📝 Logs:"
+echo "   tail -f /tmp/auth.log"
 echo "   tail -f /tmp/baseball.log"
 echo "   tail -f /tmp/football.log"
 echo "   tail -f /tmp/frontend.log"

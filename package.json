@@ -5,6 +5,7 @@
     "auth",
     "openai",
     "tests",
+    "workers/auth-worker",
     "workers/baseball-espn-mcp",
     "workers/football-espn-mcp"
   ],

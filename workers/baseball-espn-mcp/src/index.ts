@@ -2,8 +2,6 @@
 // Focuses purely on ESPN API integration with KV storage
 
 import { McpAgent } from './mcp/agent.js';
-// Use path alias instead of dynamic import (CLAUDE.md rule)
-import { EspnKVStorage, EspnKVStorageAPI } from '@flaim/auth/espn/kv-storage';
 
 export interface Env {
   CF_KV_CREDENTIALS: KVNamespace;
@@ -23,53 +21,6 @@ function getCorsHeaders() {
   };
 }
 
-async function handleCredentialStorage(request: Request, env: Env, corsHeaders: Record<string, string>): Promise<Response> {
-    try {
-      const api = new EspnKVStorageAPI(
-        new EspnKVStorage({ 
-          kv: env.CF_KV_CREDENTIALS, 
-          encryptionKey: env.CF_ENCRYPTION_KEY 
-        })
-      );
-
-      // Extract Clerk user ID from request header
-      const clerkUserId = request.headers.get('X-Clerk-User-ID');
-      if (!clerkUserId) {
-        return new Response(JSON.stringify({
-          error: 'Missing X-Clerk-User-ID header'
-        }), {
-          status: 400,
-          headers: { 'Content-Type': 'application/json', ...corsHeaders }
-        });
-      }
-
-      if (request.method === 'POST' || request.method === 'PUT') {
-        const body = await request.json() as { swid: string; s2: string; email?: string };
-        return await api.handleSetCredentials(clerkUserId, body);
-      } else if (request.method === 'GET') {
-        return await api.handleGetCredentials(clerkUserId);
-      } else if (request.method === 'DELETE') {
-        return await api.handleDeleteCredentials(clerkUserId);
-      }
-
-      return new Response(JSON.stringify({
-        error: 'Method not allowed'
-      }), {
-        status: 405,
-        headers: { 'Content-Type': 'application/json', ...corsHeaders }
-      });
-
-    } catch (error) {
-      console.error('Credential storage error:', error);
-      return new Response(JSON.stringify({
-        error: 'Failed to process credentials',
-        details: error instanceof Error ? error.message : 'Unknown error'
-      }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json', ...corsHeaders }
-      });
-    }
-}
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -91,7 +42,7 @@ export default {
           timestamp: new Date().toISOString()
         };
 
-        // Test KV connectivity
+        // Test KV connectivity (still needed for reading credentials from auth-worker)
         try {
           if (env.CF_KV_CREDENTIALS) {
             // Try a simple KV operation to verify connectivity
@@ -107,13 +58,8 @@ export default {
           healthData.status = 'degraded';
         }
 
-        // Test encryption key
-        if (env.CF_ENCRYPTION_KEY) {
-          healthData.encryption_status = 'configured';
-        } else {
-          healthData.encryption_status = 'missing';
-          healthData.status = 'degraded';
-        }
+        // Note: Credential storage now handled by auth-worker
+        healthData.credential_storage = 'handled_by_auth_worker';
 
         const statusCode = healthData.status === 'healthy' ? 200 : 503;
 
@@ -123,10 +69,6 @@ export default {
         });
       }
 
-      // Credential storage endpoint
-      if (url.pathname === '/credentials') {
-        return await handleCredentialStorage(request, env, corsHeaders);
-      }
 
       // MCP endpoints - delegate to agent
       if (url.pathname === '/mcp' || url.pathname.startsWith('/mcp/')) {
