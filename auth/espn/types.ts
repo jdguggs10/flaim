@@ -12,15 +12,16 @@
 // =============================================================================
 
 /**
- * Represents a single ESPN fantasy league with user credentials
- * Used for the new manual entry + auto-pull flow
+ * Represents a single ESPN fantasy league entry for auth-worker pattern
+ * Credentials are stored separately in auth-worker, not embedded with leagues
  */
 export interface EspnLeague {
   leagueId: string;
   sport: 'football' | 'hockey' | 'baseball' | 'basketball';
-  swid: string;
-  s2: string;
+  swid?: string;             // Optional for backward compatibility
+  s2?: string;               // Optional for backward compatibility  
   teamId?: string;           // Set after user identifies their team
+  teamName?: string;         // Optional: user's team name for display
   leagueName?: string;       // Filled after auto-pull
   seasonYear?: number;       // Filled after auto-pull
 }

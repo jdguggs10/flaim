@@ -4,7 +4,7 @@ import { EspnCredentials } from '../../../auth/espn';
 import { EspnKVStorage } from '../../../auth/espn/kv-storage';
 
 export class EspnApiClient {
-  private baseUrl = 'https://fantasy.espn.com/apis/v3';
+  private baseUrl = 'https://lm-api-reads.fantasy.espn.com/apis/v3';
   
   constructor(private env: Env) {}
 
@@ -14,6 +14,8 @@ export class EspnApiClient {
     const headers: Record<string, string> = {
       'User-Agent': 'baseball-espn-mcp/1.0',
       'Accept': 'application/json',
+      'X-Fantasy-Source': 'kona',
+      'X-Fantasy-Platform': 'kona-web-2.0.0'
     };
 
     // Try to get user-specific ESPN credentials first
@@ -24,10 +26,10 @@ export class EspnApiClient {
 
     // Add authentication cookies if available (user-specific or development fallback)
     if (credentials) {
-      headers['Cookie'] = `s2=${credentials.s2}; SWID=${credentials.swid}`;
+      headers['Cookie'] = `SWID=${credentials.swid}; espn_s2=${credentials.s2}`;
     } else if (this.env.NODE_ENV === 'development' && this.env.ESPN_S2 && this.env.ESPN_SWID) {
       console.log('⚠️ Development mode: Using fallback environment ESPN credentials');
-      headers['Cookie'] = `s2=${this.env.ESPN_S2}; SWID=${this.env.ESPN_SWID}`;
+      headers['Cookie'] = `SWID=${this.env.ESPN_SWID}; espn_s2=${this.env.ESPN_S2}`;
     }
 
     const response = await fetch(url, {
@@ -66,6 +68,8 @@ export class EspnApiClient {
     const headers: Record<string, string> = {
       'User-Agent': 'baseball-espn-mcp/1.0',
       'Accept': 'application/json',
+      'X-Fantasy-Source': 'kona',
+      'X-Fantasy-Platform': 'kona-web-2.0.0'
     };
 
     // Get user credentials for roster data (typically requires authentication)
@@ -76,10 +80,10 @@ export class EspnApiClient {
 
     // Authentication required for roster data
     if (credentials) {
-      headers['Cookie'] = `s2=${credentials.s2}; SWID=${credentials.swid}`;
+      headers['Cookie'] = `SWID=${credentials.swid}; espn_s2=${credentials.s2}`;
     } else if (this.env.NODE_ENV === 'development' && this.env.ESPN_S2 && this.env.ESPN_SWID) {
       console.log('⚠️ Development mode: Using fallback environment ESPN credentials');
-      headers['Cookie'] = `s2=${this.env.ESPN_S2}; SWID=${this.env.ESPN_SWID}`;
+      headers['Cookie'] = `SWID=${this.env.ESPN_SWID}; espn_s2=${this.env.ESPN_S2}`;
     } else {
       throw new Error('ESPN authentication required for roster data - please provide ESPN credentials');
     }

@@ -56,7 +56,7 @@ export async function getBasicLeagueInfo(
     }
 
     const currentYear = new Date().getFullYear();
-    const apiUrl = `https://fantasy.espn.com/apis/v3/games/${gameId}/seasons/${currentYear}/segments/0/leagues/${leagueId}?view=mStandings&view=mTeam`;
+    const apiUrl = `https://lm-api-reads.fantasy.espn.com/apis/v3/games/${gameId}/seasons/${currentYear}/segments/0/leagues/${leagueId}?view=mStandings&view=mTeam`;
 
     console.log(`🏈 Fetching basic ${sport} league info: ${apiUrl}`);
     console.log(`🍪 Using credentials: SWID=${credentials.swid.substring(0, 10)}... s2=${credentials.s2.substring(0, 20)}...`);
@@ -65,7 +65,9 @@ export async function getBasicLeagueInfo(
       headers: {
         'Cookie': `SWID=${credentials.swid}; espn_s2=${credentials.s2}`,
         'User-Agent': 'flaim-onboarding-autopull/1.0',
-        'Accept': 'application/json'
+        'Accept': 'application/json',
+        'X-Fantasy-Source': 'kona',
+        'X-Fantasy-Platform': 'kona-web-2.0.0'
       }
     });
 

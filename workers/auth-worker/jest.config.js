@@ -1,11 +1,14 @@
 /** @type {import('jest').Config} */
-module.exports = {
-  preset: 'ts-jest',
+export default {
+  preset: 'ts-jest/presets/default-esm',
+  extensionsToTreatAsEsm: ['.ts'],
   testEnvironment: 'node',
   roots: ['<rootDir>/src', '<rootDir>/tests'],
   testMatch: ['**/__tests__/**/*.ts', '**/?(*.)+(spec|test).ts'],
   transform: {
-    '^.+\\.ts$': 'ts-jest',
+    '^.+\\.ts$': ['ts-jest', {
+      useESM: true,
+    }],
   },
   moduleFileExtensions: ['ts', 'js', 'json'],
   setupFilesAfterEnv: [],
@@ -15,4 +18,9 @@ module.exports = {
   ],
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov', 'html'],
+  globals: {
+    'ts-jest': {
+      useESM: true,
+    },
+  },
 };

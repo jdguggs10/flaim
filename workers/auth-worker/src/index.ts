@@ -203,12 +203,13 @@ class PlatformCredentialStorage {
   }
 }
 
-// CORS helper
+// CORS helper - Allow sport workers and Next.js origins
 function getCorsHeaders() {
   return {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+    'Access-Control-Allow-Origin': '*', // Allow all origins for development (tighten in production)
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Clerk-User-ID',
+    'Access-Control-Max-Age': '86400', // Cache preflight for 24 hours
   };
 }
 
@@ -357,27 +358,53 @@ export default {
           });
 
         } else if (request.method === 'GET') {
-          // Get credential metadata
-          const metadata = await storage.getCredentialMetadata(platform, clerkUserId);
+          // Check if this is a request for actual credentials (from sport workers)
+          const getRawCredentials = url.searchParams.get('raw') === 'true';
           
-          if (!metadata?.hasCredentials) {
+          if (getRawCredentials) {
+            // Return actual credentials for sport workers
+            const credentials = await storage.getCredentials(platform, clerkUserId);
+            
+            if (!credentials) {
+              return new Response(JSON.stringify({
+                error: 'Credentials not found',
+                message: `No ${platform} credentials found for user`
+              }), {
+                status: 404,
+                headers: { 'Content-Type': 'application/json', ...corsHeaders }
+              });
+            }
+
             return new Response(JSON.stringify({
-              hasCredentials: false,
-              message: `No ${platform} credentials found`
+              success: true,
+              platform,
+              credentials
             }), {
-              status: 404,
+              headers: { 'Content-Type': 'application/json', ...corsHeaders }
+            });
+          } else {
+            // Get credential metadata (default behavior for frontend)
+            const metadata = await storage.getCredentialMetadata(platform, clerkUserId);
+            
+            if (!metadata?.hasCredentials) {
+              return new Response(JSON.stringify({
+                hasCredentials: false,
+                message: `No ${platform} credentials found`
+              }), {
+                status: 404,
+                headers: { 'Content-Type': 'application/json', ...corsHeaders }
+              });
+            }
+
+            return new Response(JSON.stringify({
+              hasCredentials: true,
+              platform,
+              email: metadata.email,
+              lastUpdated: metadata.lastUpdated
+            }), {
               headers: { 'Content-Type': 'application/json', ...corsHeaders }
             });
           }
-
-          return new Response(JSON.stringify({
-            hasCredentials: true,
-            platform,
-            email: metadata.email,
-            lastUpdated: metadata.lastUpdated
-          }), {
-            headers: { 'Content-Type': 'application/json', ...corsHeaders }
-          });
 
         } else if (request.method === 'DELETE') {
           // Delete credentials
@@ -460,7 +487,7 @@ export default {
             });
           }
 
-          const success = await storage.setUserLeagues(clerkUserId, leagues);
+          const success = await storage.setLeagues(clerkUserId, leagues as any);
 
           if (!success) {
             return new Response(JSON.stringify({
@@ -481,7 +508,7 @@ export default {
           });
 
         } else if (request.method === 'GET') {
-          const leagues = await storage.getUserLeagues(clerkUserId);
+          const leagues = await storage.getLeagues(clerkUserId);
 
           return new Response(JSON.stringify({
             success: true,
@@ -505,10 +532,10 @@ export default {
             });
           }
 
-          const currentLeagues = await storage.getUserLeagues(clerkUserId) || [];
+          const currentLeagues = await storage.getLeagues(clerkUserId) || [];
           const updatedLeagues = currentLeagues.filter(l => !(l.leagueId === leagueId && l.sport === sport));
 
-          const success = await storage.setUserLeagues(clerkUserId, updatedLeagues);
+          const success = await storage.setLeagues(clerkUserId, updatedLeagues);
 
           if (!success) {
             return new Response(JSON.stringify({
@@ -537,10 +564,106 @@ export default {
         });
       }
 
+      // -------------------------------------------------------------------
+      // League team selection endpoint
+      // PATCH /leagues/:leagueId/team  -> update specific league's team selection
+      // -------------------------------------------------------------------
+
+      const leagueTeamMatch = url.pathname.match(/^\/leagues\/([^\/]+)\/team$/);
+      if (leagueTeamMatch && request.method === 'PATCH') {
+        const leagueId = leagueTeamMatch[1];
+        
+        // Extract Clerk User ID from header
+        const { userId: clerkUserId, error: authError } = getClerkUserId(request);
+        if (!clerkUserId) {
+          return new Response(JSON.stringify({
+            error: 'Authentication required',
+            message: authError || 'Missing X-Clerk-User-ID header'
+          }), {
+            status: 401,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          });
+        }
+
+        const body = await request.json() as any;
+        const { teamId, sport } = body;
+
+        if (!teamId) {
+          return new Response(JSON.stringify({
+            error: 'teamId is required in request body'
+          }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          });
+        }
+
+        // Import storage
+        const { EspnKVStorage } = await import('../../../auth/espn/kv-storage');
+        const storage = new EspnKVStorage({
+          kv: env.CF_KV_CREDENTIALS,
+          encryptionKey: env.CF_ENCRYPTION_KEY
+        });
+
+        // Get current leagues (use full league data with teamId support)
+        const currentLeagues = await storage.getLeagues(clerkUserId) || [];
+        
+        // Find and update the specific league
+        const leagueIndex = currentLeagues.findIndex(league => 
+          league.leagueId === leagueId && 
+          (sport ? league.sport === sport : true)
+        );
+
+        if (leagueIndex === -1) {
+          return new Response(JSON.stringify({
+            error: 'League not found',
+            message: `League ${leagueId}${sport ? ` for sport ${sport}` : ''} not found for user`
+          }), {
+            status: 404,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          });
+        }
+
+        // Update league with team selection
+        const updatedLeagues = [...currentLeagues];
+        updatedLeagues[leagueIndex] = {
+          ...updatedLeagues[leagueIndex],
+          teamId: teamId
+        };
+
+        // Save updated leagues (use full league data method)
+        const success = await storage.setLeagues(clerkUserId, updatedLeagues);
+
+        if (!success) {
+          return new Response(JSON.stringify({
+            error: 'Failed to update team selection'
+          }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          });
+        }
+
+        return new Response(JSON.stringify({
+          success: true,
+          message: 'Team selection updated successfully',
+          league: updatedLeagues[leagueIndex]
+        }), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      }
+
       // 404 for unknown endpoints
       return new Response(JSON.stringify({
         error: 'Endpoint not found',
-        message: 'Available endpoints: /health, /credentials/:platform'
+        message: 'Available endpoints',
+        endpoints: {
+          '/health': 'GET - Health check with KV connectivity test',
+          '/credentials/:platform': 'GET/POST/DELETE - Platform credential management (ESPN, Yahoo, Sleeper)',
+          '/credentials/:platform?raw=true': 'GET - Retrieve actual credentials for sport workers',
+          '/leagues': 'GET/POST/DELETE - League management (list, store, remove)',
+          '/leagues/:leagueId/team': 'PATCH - Update team selection for specific league'
+        },
+        supportedPlatforms: ['espn', 'yahoo', 'sleeper'],
+        version: '1.0.0'
       }), {
         status: 404,
         headers: { 'Content-Type': 'application/json', ...corsHeaders }

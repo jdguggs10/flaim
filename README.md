@@ -7,7 +7,9 @@
 
 > **Transform your fantasy sports experience with AI-powered insights and production-grade security**
 
-FLAIM is your AI-powered fantasy sports assistant featuring a streamlined onboarding experience, server-side Clerk authentication, and seamless multi-platform fantasy sports integration through the Model Context Protocol (MCP). Get personalized insights, strategic advice, and league management tools through natural language conversations with enterprise-grade security.
+FLAIM is your AI-powered fantasy sports assistant featuring a streamlined onboarding experience, server-side Clerk authentication, and seamless multi-platform fantasy sports integration through **Model Context Protocol (MCP) servers**. Get personalized insights, strategic advice, and league management tools through natural language conversations with enterprise-grade security.
+
+**🔧 MCP Architecture**: Dedicated Cloudflare Workers provide real-time ESPN fantasy data access via standardized MCP protocol, enabling Claude to analyze your leagues, rosters, matchups, and standings with live data integration.
 
 ## 🚀 Quick Start
 
@@ -31,14 +33,15 @@ cd flaim
 ## ✨ Key Features
 
 - **🛤️ Guided Onboarding**: 8-step setup from sign-in to chat activation
-- **🤖 AI-Powered Chat**: Natural language fantasy sports assistant  
+- **🤖 AI-Powered Chat**: Natural language fantasy sports assistant with live ESPN data
+- **🔧 MCP Integration**: Real-time fantasy data via Model Context Protocol servers
 - **🔐 Secure Credential Storage**: CF KV with AES-GCM encryption and key rotation
-- **⚾ Multi-Sport Support**: Baseball, football, basketball, and hockey
+- **⚾ Multi-Sport Support**: Baseball, football, basketball, and hockey MCP workers
 - **🔍 Auto League Discovery**: Automatically finds and configures your fantasy leagues
 - **🛠️ Auto-Configuration**: MCP tools configured automatically based on your leagues
-- **📊 Manual League Entry**: Alternative flow for complex setups (up to 10 leagues)
+- **📊 Live Data Access**: Real-time rosters, matchups, standings, and league settings
 - **💰 Usage Tiers**: 100 free messages/month, unlimited paid tier
-- **🌐 Serverless**: Cloudflare Workers + Vercel deployment
+- **🌐 Serverless**: Cloudflare Workers + Next.js deployment
 
 ## 📚 Documentation
 
@@ -46,6 +49,7 @@ cd flaim
 |----------|-------------|
 | [📖 Getting Started](docs/GETTING_STARTED.md) | Installation, setup, and first steps |
 | [🛤️ Onboarding Flow](docs/ONBOARDING.md) | Complete user onboarding experience guide |
+| [🔧 MCP Integration](docs/MCP_INTEGRATION.md) | Model Context Protocol servers and tools |
 | [🚀 Deployment Guide](docs/DEPLOYMENT.md) | Production deployment and configuration |
 | [🏗️ Architecture](docs/ARCHITECTURE.md) | System design and security model |
 | [❓ FAQ](docs/FAQ.md) | Common questions and troubleshooting |
@@ -77,13 +81,13 @@ cd flaim
 
 ## ⚠️ Important Notes
 
-### KV Storage Runtime Requirements
-**CF KV credential storage is only available in Cloudflare Workers runtime.** The system is designed for Workers-first deployment:
-- ✅ **Production**: Cloudflare Workers with KV namespace bindings
+### MCP & KV Storage Runtime Requirements
+**CF KV credential storage and MCP servers are only available in Cloudflare Workers runtime.** The system is designed for Workers-first deployment:
+- ✅ **Production**: Cloudflare Workers with KV namespace bindings and MCP protocol support
 - ✅ **Development**: Mock KV for testing (NODE_ENV=development/test)
-- ❌ **Node.js Production**: KV client not implemented for Node.js production SSR
+- ❌ **Node.js Production**: KV client and MCP servers not implemented for Node.js production SSR
 
-For server-side credential access in Next.js production, use API routes that proxy to Workers.
+**MCP Architecture**: Dedicated sport-specific Cloudflare Workers provide standardized ESPN fantasy data access via Model Context Protocol, enabling real-time league analysis and management through AI assistants.
 
 ## 📄 License
 

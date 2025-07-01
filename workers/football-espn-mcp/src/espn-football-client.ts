@@ -12,7 +12,7 @@ export interface Env {
 }
 
 export class EspnFootballApiClient {
-  private baseUrl = 'https://fantasy.espn.com/apis/v3';
+  private baseUrl = 'https://lm-api-reads.fantasy.espn.com/apis/v3';
   
   constructor(private env: Env) {}
 
@@ -22,6 +22,8 @@ export class EspnFootballApiClient {
     const headers: Record<string, string> = {
       'User-Agent': 'football-espn-mcp/1.0',
       'Accept': 'application/json',
+      'X-Fantasy-Source': 'kona',
+      'X-Fantasy-Platform': 'kona-web-2.0.0'
     };
 
     // Get ESPN credentials using KV storage
@@ -32,10 +34,10 @@ export class EspnFootballApiClient {
 
     // Add authentication cookies if available
     if (credentials) {
-      headers['Cookie'] = `s2=${credentials.s2}; SWID=${credentials.swid}`;
+      headers['Cookie'] = `SWID=${credentials.swid}; espn_s2=${credentials.s2}`;
     } else if (this.env.NODE_ENV === 'development' && this.env.ESPN_S2 && this.env.ESPN_SWID) {
       console.log('⚠️ Development mode: Using fallback environment ESPN credentials for football');
-      headers['Cookie'] = `s2=${this.env.ESPN_S2}; SWID=${this.env.ESPN_SWID}`;
+      headers['Cookie'] = `SWID=${this.env.ESPN_SWID}; espn_s2=${this.env.ESPN_S2}`;
     }
 
     const response = await fetch(url, {
@@ -74,6 +76,8 @@ export class EspnFootballApiClient {
     const headers: Record<string, string> = {
       'User-Agent': 'football-espn-mcp/1.0',
       'Accept': 'application/json',
+      'X-Fantasy-Source': 'kona',
+      'X-Fantasy-Platform': 'kona-web-2.0.0'
     };
 
     // Get user credentials for team data
@@ -84,10 +88,10 @@ export class EspnFootballApiClient {
 
     // Authentication required for team data
     if (credentials) {
-      headers['Cookie'] = `s2=${credentials.s2}; SWID=${credentials.swid}`;
+      headers['Cookie'] = `SWID=${credentials.swid}; espn_s2=${credentials.s2}`;
     } else if (this.env.NODE_ENV === 'development' && this.env.ESPN_S2 && this.env.ESPN_SWID) {
       console.log('⚠️ Development mode: Using fallback environment ESPN credentials');
-      headers['Cookie'] = `s2=${this.env.ESPN_S2}; SWID=${this.env.ESPN_SWID}`;
+      headers['Cookie'] = `SWID=${this.env.ESPN_SWID}; espn_s2=${this.env.ESPN_S2}`;
     } else {
       throw new Error('ESPN authentication required for team data - please provide ESPN credentials');
     }
@@ -143,6 +147,8 @@ export class EspnFootballApiClient {
     const headers: Record<string, string> = {
       'User-Agent': 'football-espn-mcp/1.0',
       'Accept': 'application/json',
+      'X-Fantasy-Source': 'kona',
+      'X-Fantasy-Platform': 'kona-web-2.0.0'
     };
 
     // Get user credentials
@@ -152,10 +158,10 @@ export class EspnFootballApiClient {
     }
 
     if (credentials) {
-      headers['Cookie'] = `s2=${credentials.s2}; SWID=${credentials.swid}`;
+      headers['Cookie'] = `SWID=${credentials.swid}; espn_s2=${credentials.s2}`;
     } else if (this.env.NODE_ENV === 'development' && this.env.ESPN_S2 && this.env.ESPN_SWID) {
       console.log('⚠️ Development mode: Using fallback environment ESPN credentials');
-      headers['Cookie'] = `s2=${this.env.ESPN_S2}; SWID=${this.env.ESPN_SWID}`;
+      headers['Cookie'] = `SWID=${this.env.ESPN_SWID}; espn_s2=${this.env.ESPN_S2}`;
     }
 
     const response = await fetch(url, {
@@ -190,6 +196,8 @@ export class EspnFootballApiClient {
     const headers: Record<string, string> = {
       'User-Agent': 'football-espn-mcp/1.0',
       'Accept': 'application/json',
+      'X-Fantasy-Source': 'kona',
+      'X-Fantasy-Platform': 'kona-web-2.0.0'
     };
 
     // Get user credentials
@@ -199,10 +207,10 @@ export class EspnFootballApiClient {
     }
 
     if (credentials) {
-      headers['Cookie'] = `s2=${credentials.s2}; SWID=${credentials.swid}`;
+      headers['Cookie'] = `SWID=${credentials.swid}; espn_s2=${credentials.s2}`;
     } else if (this.env.NODE_ENV === 'development' && this.env.ESPN_S2 && this.env.ESPN_SWID) {
       console.log('⚠️ Development mode: Using fallback environment ESPN credentials');
-      headers['Cookie'] = `s2=${this.env.ESPN_S2}; SWID=${this.env.ESPN_SWID}`;
+      headers['Cookie'] = `SWID=${this.env.ESPN_SWID}; espn_s2=${this.env.ESPN_S2}`;
     }
 
     const response = await fetch(url, {

@@ -5,6 +5,7 @@ compatibility_date = "2024-12-01"
 # Default environment variables
 [vars]
 NODE_ENV = "production"
+AUTH_WORKER_URL = "http://localhost:8786"
 
 # Environment secrets (set via wrangler secret put)
 # CF_ENCRYPTION_KEY (for ESPN credential storage)
@@ -22,6 +23,7 @@ name = "football-espn-mcp-dev"
 
 [env.dev.vars]
 NODE_ENV = "development"
+AUTH_WORKER_URL = "http://localhost:8786"
 
 [[env.dev.kv_namespaces]]
 binding = "CF_KV_CREDENTIALS"
@@ -33,6 +35,7 @@ name = "football-espn-mcp-prod"
 
 [env.prod.vars]
 NODE_ENV = "production"
+AUTH_WORKER_URL = "https://auth-worker-prod.your-subdomain.workers.dev"
 
 [[env.prod.kv_namespaces]]
 binding = "CF_KV_CREDENTIALS"

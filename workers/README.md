@@ -1,18 +1,26 @@
 # FLAIM Workers
 
-Cloudflare Workers for fantasy sports MCP integration with shared authentication.
+Cloudflare Workers providing **Model Context Protocol (MCP)** servers for fantasy sports data integration with centralized auth-worker credential management.
 
 ## Structure
 
 ```
 workers/
+├── auth-worker/                # Centralized credential management
+│   ├── src/
+│   │   ├── index.ts            # Auth API endpoints
+│   │   ├── storage/            # KV credential encryption
+│   │   └── types/              # Auth API types
+│   ├── package.json
+│   ├── wrangler.toml
+│   └── tsconfig.json
+│
 ├── baseball-espn-mcp/          # ESPN Fantasy Baseball MCP server
 │   ├── src/
-│   │   ├── index.ts            # Main worker entry point
+│   │   ├── index.ts            # MCP server endpoints
 │   │   ├── espn.ts             # ESPN Baseball API client
-│   │   ├── mcp/agent.ts        # MCP agent for baseball tools
-│   │   ├── storage/            # User credential storage
-│   │   ├── tools/              # Baseball-specific tools
+│   │   ├── mcp/agent.ts        # MCP protocol implementation
+│   │   ├── tools/              # Baseball-specific MCP tools
 │   │   └── types/              # Baseball API types
 │   ├── package.json
 │   ├── wrangler.toml
@@ -20,80 +28,126 @@ workers/
 │
 └── football-espn-mcp/          # ESPN Fantasy Football MCP server
     ├── src/
-    │   ├── index.ts            # Main worker entry point
+    │   ├── index.ts            # MCP server endpoints
     │   ├── espn-football-client.ts # ESPN Football API client
-    │   ├── mcp/football-agent.ts   # MCP agent for football tools
+    │   ├── mcp/football-agent.ts   # MCP protocol implementation
+    │   ├── tools/              # Football-specific MCP tools
     │   └── types/              # Football API types
     ├── package.json
     ├── wrangler.toml
     └── tsconfig.json
 ```
 
-## Shared Dependencies
+## Architecture & Dependencies
 
-Both workers use the shared authentication module:
-- **`../auth/espn`** - ESPN credential management, storage, and MCP integration
-- **`../auth/shared`** - Common encryption utilities
+### Auth-Worker Centralization
+All ESPN credential management is centralized through the dedicated **auth-worker**:
+- **Credential Storage**: AES-GCM encrypted storage in Cloudflare KV
+- **User Authentication**: Clerk-based verification with `X-Clerk-User-ID` headers
+- **API Endpoints**: `/credentials/espn` for credential CRUD operations
+- **League Management**: `/leagues` endpoints for user league associations
+
+### MCP Integration
+Both sport workers integrate with the **Model Context Protocol**:
+- **`@flaim/auth/espn`** - Shared ESPN credential management and MCP utilities
+- **`@flaim/auth/shared`** - Common encryption and authentication patterns
+- **Auth-worker Communication**: Internal API calls to retrieve user credentials
 
 ## Quick Start
 
-### Baseball Worker
+### Auth Worker (Required First)
 ```bash
-cd workers/baseball-espn-mcp
+cd workers/auth-worker
 npm install
 wrangler secret put ENCRYPTION_KEY
 wrangler secret put CLERK_SECRET_KEY
+wrangler kv:namespace create CF_KV_CREDENTIALS
 wrangler deploy --env prod
 ```
 
-### Football Worker
+### Baseball MCP Worker
 ```bash
-cd workers/football-espn-mcp
+cd workers/baseball-espn-mcp
 npm install
-wrangler secret put ENCRYPTION_KEY
-wrangler secret put CLERK_SECRET_KEY
+wrangler secret put AUTH_WORKER_URL  # URL of deployed auth-worker
+wrangler deploy --env prod
+```
+
+### Football MCP Worker
+```bash
+cd workers/football-espn-mcp  
+npm install
+wrangler secret put AUTH_WORKER_URL  # URL of deployed auth-worker
 wrangler deploy --env prod
 ```
 
 ## Available MCP Tools
 
-### Baseball Tools
-- `get_espn_league_info` - League settings and metadata
-- `get_espn_team_roster` - Team roster details
-- `get_espn_matchups` - Current week matchups
+### Baseball MCP Tools (`/workers/baseball-espn-mcp/`)
+- **`get_espn_league_info`** - League settings, standings, and metadata
+- **`get_espn_team_roster`** - Detailed team roster information
+- **`get_espn_matchups`** - Current week matchups and scores
 
-### Football Tools
-- `get_espn_football_league_info` - League settings and metadata
-- `get_espn_football_team` - Team roster and details
-- `get_espn_football_matchups` - Weekly matchups and scores
-- `get_espn_football_standings` - League standings
+### Football MCP Tools (`/workers/football-espn-mcp/`)
+- **`get_espn_football_league_info`** - League settings and metadata  
+- **`get_espn_football_team`** - Team roster and details
+- **`get_espn_football_matchups`** - Weekly matchups and scores
+- **`get_espn_football_standings`** - League standings and rankings
 
-## Configuration
+### MCP Protocol Endpoints
+Both workers implement standard MCP endpoints:
+- **`GET /mcp`** - Server capabilities and metadata
+- **`GET /mcp/tools/list`** - Available tools with schemas
+- **`POST /mcp/tools/call`** - Execute MCP tools with arguments
 
-Both workers share the same authentication infrastructure:
+## Configuration & Integration
 
-- **Durable Objects**: `EspnStorage` from shared auth module
-- **Encryption**: AES-GCM encryption for credential security
-- **Authentication**: Clerk-based user verification
-- **Fallback**: Development mode environment credentials
+### Auth-Worker Integration
+Both MCP workers communicate with the centralized auth-worker:
+- **Credential Retrieval**: `GET /credentials/espn` via internal API calls
+- **League Management**: `GET /leagues` for user league associations
+- **User Context**: `X-Clerk-User-ID` header for user identification
+- **Secure Communication**: Internal worker-to-worker authentication
+
+### MCP Client Configuration
+Configure AI assistants to use these MCP servers:
+```json
+{
+  "server_label": "flaim-baseball",
+  "server_url": "https://baseball-espn-mcp.your-account.workers.dev/mcp",
+  "allowed_tools": "get_espn_league_info,get_espn_team_roster,get_espn_matchups",
+  "skip_approval": false
+}
+```
+
+### Environment Variables
+- **Production**: All credentials managed through Cloudflare Workers secrets
+- **Development**: Fallback to local environment variables for testing
 
 ## Development
 
-Each worker can be developed independently:
+Multi-worker development setup:
 ```bash
-# Terminal 1: Baseball worker
+# Terminal 1: Auth worker (required for credential management)
+cd workers/auth-worker
+wrangler dev --env dev
+
+# Terminal 2: Baseball MCP worker
 cd workers/baseball-espn-mcp
 wrangler dev --env dev
 
-# Terminal 2: Football worker  
+# Terminal 3: Football MCP worker  
 cd workers/football-espn-mcp
 wrangler dev --env dev
 ```
 
 ## Architecture Benefits
 
-- **Modularity**: Sport-specific workers with shared auth
-- **Scalability**: Independent deployment and scaling
-- **Maintainability**: Clear separation of concerns
-- **Extensibility**: Easy to add more sports (basketball, hockey, etc.)
-- **Security**: Centralized credential management with per-user encryption
+- **MCP Standardization**: Standardized protocol for AI tool integration
+- **Centralized Authentication**: Single auth-worker handles all credential management
+- **Modular Sports**: Each sport has dedicated MCP server with specialized tools
+- **Real-time Data**: Live ESPN fantasy data accessible via MCP protocol
+- **Scalability**: Independent deployment and scaling per sport
+- **Security**: AES-GCM encrypted credential storage with user isolation
+- **Extensibility**: Easy to add more sports (basketball, hockey, soccer, etc.)
+- **AI Integration**: Direct Claude access to user's fantasy league data

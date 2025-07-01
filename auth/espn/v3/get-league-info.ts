@@ -65,7 +65,7 @@ export async function getLeagueInfo(
   }
 
   // First, try the simpler endpoint with just mSettings view
-  const url = `https://fantasy.espn.com/apis/v3/games/ffl/seasons/${season}/segments/0/leagues/${leagueId}?view=mSettings`;
+  const url = `https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/${season}/segments/0/leagues/${leagueId}?view=mSettings`;
   
   try {
     const response = await fetch(url, {

@@ -2,6 +2,8 @@
 // Focuses purely on ESPN API integration with KV storage
 
 import { McpAgent } from './mcp/agent.js';
+import { getCredentials, getUserLeagues } from './utils/auth-worker.js';
+import { getBasicLeagueInfo } from './mcp/basic-league-info.js';
 
 export interface Env {
   CF_KV_CREDENTIALS: KVNamespace;
@@ -10,6 +12,7 @@ export interface Env {
   ESPN_SWID?: string;
   NODE_ENV?: string;
   CLERK_SECRET_KEY?: string;
+  AUTH_WORKER_URL?: string;
 }
 
 // Helper function for CORS headers
@@ -69,6 +72,124 @@ export default {
         });
       }
 
+      // Onboarding initialize endpoint
+      if (url.pathname === '/onboarding/initialize' && request.method === 'POST') {
+        try {
+          const clerkUserId = request.headers.get('X-Clerk-User-ID');
+
+          if (!clerkUserId) {
+            return new Response(JSON.stringify({
+              error: 'Authentication required - X-Clerk-User-ID header missing'
+            }), {
+              status: 401,
+              headers: { 'Content-Type': 'application/json', ...corsHeaders }
+            });
+          }
+
+          const body = await request.json() as { sport?: string; leagueId?: string };
+          const { sport, leagueId } = body;
+
+          console.log(`🚀 Initialize onboarding for user: ${clerkUserId}, sport: ${sport}, leagueId: ${leagueId}`);
+
+          // Get credentials from auth-worker
+          const authWorkerConfig = {
+            authWorkerUrl: env.AUTH_WORKER_URL,
+            defaultUrl: 'http://localhost:8786'
+          };
+
+          const credentials = await getCredentials(clerkUserId, authWorkerConfig);
+          if (!credentials) {
+            return new Response(JSON.stringify({
+              error: 'ESPN credentials not found. Please add your ESPN credentials first.',
+              code: 'CREDENTIALS_MISSING'
+            }), {
+              status: 404,
+              headers: { 'Content-Type': 'application/json', ...corsHeaders }
+            });
+          }
+
+          // Get user's leagues from auth-worker
+          const leagues = await getUserLeagues(clerkUserId, authWorkerConfig);
+          const baseballLeagues = leagues.filter(league => league.sport === 'baseball');
+
+          if (baseballLeagues.length === 0) {
+            return new Response(JSON.stringify({
+              error: 'No baseball leagues found. Please add baseball leagues first.',
+              code: 'LEAGUES_MISSING'
+            }), {
+              status: 404,
+              headers: { 'Content-Type': 'application/json', ...corsHeaders }
+            });
+          }
+
+          // Filter to specific league if leagueId provided
+          let targetLeagues = baseballLeagues;
+          if (leagueId) {
+            targetLeagues = baseballLeagues.filter(league => league.leagueId === leagueId);
+            
+            if (targetLeagues.length === 0) {
+              return new Response(JSON.stringify({
+                error: `Baseball league ${leagueId} not found for user.`,
+                code: 'LEAGUE_NOT_FOUND'
+              }), {
+                status: 404,
+                headers: { 'Content-Type': 'application/json', ...corsHeaders }
+              });
+            }
+          }
+
+          console.log(`🏈 Found ${targetLeagues.length} baseball leagues for user`);
+
+          // Fetch basic info for the target league(s)
+          const leagueResults = [];
+          for (const league of targetLeagues) {
+            try {
+              const basicInfo = await getBasicLeagueInfo({
+                leagueId: league.leagueId,
+                sport: league.sport,
+                gameId: 'flb', // ESPN Fantasy Baseball game ID
+                credentials
+              });
+
+              leagueResults.push({
+                leagueId: league.leagueId,
+                sport: league.sport,
+                teamId: league.teamId,
+                ...basicInfo
+              });
+            } catch (error) {
+              console.error(`❌ Failed to get info for league ${league.leagueId}:`, error);
+              leagueResults.push({
+                leagueId: league.leagueId,
+                sport: league.sport,
+                teamId: league.teamId,
+                success: false,
+                error: error instanceof Error ? error.message : 'Unknown error'
+              });
+            }
+          }
+
+          return new Response(JSON.stringify({
+            success: true,
+            message: 'Onboarding initialized successfully',
+            sport: 'baseball',
+            totalLeagues: targetLeagues.length,
+            leagues: leagueResults
+          }), {
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          });
+
+        } catch (error) {
+          console.error('❌ Onboarding initialize error:', error);
+          return new Response(JSON.stringify({
+            error: 'Failed to initialize onboarding',
+            details: error instanceof Error ? error.message : 'Unknown error'
+          }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          });
+        }
+      }
 
       // MCP endpoints - delegate to agent
       if (url.pathname === '/mcp' || url.pathname.startsWith('/mcp/')) {
@@ -78,7 +199,14 @@ export default {
 
       // 404 for unknown endpoints
       return new Response(JSON.stringify({
-        error: 'Endpoint not found'
+        error: 'Endpoint not found',
+        message: 'Available endpoints',
+        endpoints: {
+          '/health': 'GET - Health check with KV connectivity test',
+          '/onboarding/initialize': 'POST - Initialize onboarding with league data fetching (requires X-Clerk-User-ID header)',
+          '/mcp': 'POST - MCP protocol endpoints for Claude integration'
+        },
+        version: '4.0.0'
       }), {
         status: 404,
         headers: { 'Content-Type': 'application/json', ...corsHeaders }

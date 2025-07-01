@@ -18,7 +18,7 @@ import {
 } from '../types.js';
 import { getLeagueInfo } from './get-league-info.js';
 
-const V3_BASE = 'https://fantasy.espn.com/apis/v3/games';
+const V3_BASE = 'https://lm-api-reads.fantasy.espn.com/apis/v3/games';
 
 /**
  * Discover all leagues for a user across all supported sports
@@ -45,7 +45,9 @@ export async function discoverLeaguesV3(swid: string, s2: string): Promise<Gambi
         headers: {
           Cookie: `SWID=${swid}; espn_s2=${s2}`,
           "User-Agent": "flaim-league-discovery/1.0",
-          Accept: "application/json"
+          Accept: "application/json",
+          'X-Fantasy-Source': 'kona',
+          'X-Fantasy-Platform': 'kona-web-2.0.0'
         },
         signal: AbortSignal.timeout(7000) // 7 second timeout
       });

@@ -8,15 +8,21 @@
     "deploy": "wrangler deploy",
     "test": "jest"
   },
-  "keywords": ["cloudflare", "workers", "auth", "credentials"],
+  "keywords": [
+    "cloudflare",
+    "workers",
+    "auth",
+    "credentials"
+  ],
   "author": "",
   "license": "MIT",
   "type": "module",
-  "dependencies": {},
   "devDependencies": {
-    "@types/node": "^22.0.0",
+    "@jest/globals": "^29.7.0",
     "@types/jest": "^30.0.0",
+    "@types/node": "^22.0.0",
     "jest": "^29.7.0",
+    "ts-jest": "^29.4.0",
     "typescript": "^5.0.0",
     "wrangler": "^3.0.0"
   }
