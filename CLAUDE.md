@@ -34,8 +34,9 @@ Be brutally honest, don't be a yes man. If I am wrong, point it out bluntly. I n
 
 ## Tool & Workflow
 - # Bash commands
-  - npm run build: Build the app
+  - ./build.sh: Build production artifacts (consolidated build script)
   - npm run test: Run unit tests
+  - ./start.sh: Interactive development and deployment launcher
 - ALLOWLIST:
   - Always allow: Edit
   - Always allow: Bash(git commit:*)

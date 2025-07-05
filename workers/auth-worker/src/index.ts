@@ -586,7 +586,7 @@ export default {
         }
 
         const body = await request.json() as any;
-        const { teamId, sport } = body;
+        const { teamId, sport, teamName, leagueName, seasonYear } = body;
 
         if (!teamId) {
           return new Response(JSON.stringify({
@@ -627,7 +627,10 @@ export default {
         const updatedLeagues = [...currentLeagues];
         updatedLeagues[leagueIndex] = {
           ...updatedLeagues[leagueIndex],
-          teamId: teamId
+          teamId,
+          ...(teamName ? { teamName } : {}),
+          ...(leagueName ? { leagueName } : {}),
+          ...(seasonYear ? { seasonYear } : {})
         };
 
         // Save updated leagues (use full league data method)

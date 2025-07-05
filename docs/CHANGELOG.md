@@ -5,6 +5,28 @@ All notable changes to FLAIM will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.0-rc2] - 2024-12-XX
+
+### 🚀 Interactive Development Launcher
+
+#### Added
+- **Interactive Deployment Wizard**: `start.sh` now prompts for each worker's deployment mode
+- **Consolidated Build Script**: `build.sh` provides deterministic production builds for CI/CD
+- **Mixed Deployment Support**: Run workers in local/remote/deployed combinations
+- **Smart Environment Management**: Automatic `NEXT_PUBLIC_*` variable handling
+- **CF_ACCOUNT_ID Validation**: Hard stop on deployment without proper configuration
+- **Enhanced URL Capture**: 60-second retry with manual fallback for remote URLs
+- **Configuration Confirmation**: Summary and confirmation before execution
+- **Environment Cleanup**: Automatic cleanup of remote URLs when switching to local mode
+- **CI-Friendly Build**: `build.sh --prod` for non-interactive builds with fail-fast behavior
+
+#### Changed
+- **Development Workflow**: `start-dev.sh` replaced with interactive `start.sh`
+- **Build Process**: `build-prod.sh` replaced with consolidated `build.sh` (interactive + CI modes)
+- **Deployment Flexibility**: Single script handles all deployment scenarios
+- **Error Handling**: Comprehensive validation and user-friendly error messages
+- **Documentation**: Updated README and deployment guides for new launcher and build script
+
 ## [6.0.0-rc1] - 2024-12-XX
 
 ### 🏗️ Major Infrastructure Overhaul

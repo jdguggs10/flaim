@@ -1,23 +1,168 @@
 # FLAIM Platform Deployment Guide v6.0
 
-## 🚀 One-Click Deployment (Recommended)
+## 🚀 Interactive Deployment (Recommended)
 
-### Local Development
+### One-Command Flexible Setup
 ```bash
 git clone https://github.com/yourusername/flaim
 cd flaim
 ./setup.sh              # One-time setup
-./start-dev.sh          # Start all services
+./start.sh              # Interactive deployment wizard
 ```
 
-### Production Deployment
+The interactive launcher lets you choose how each worker runs:
+- **Local dev**: Traditional local development with health checks
+- **Remote preview**: Wrangler remote development with live URLs  
+- **Deploy preview**: Deploy to Cloudflare preview environment
+- **Deploy production**: Deploy to Cloudflare production
+- **Skip**: Disable specific workers
+
+### Legacy Quick Deployment
 ```bash
 git clone https://github.com/yourusername/flaim  
 cd flaim
-./start-prod.sh         # Deploy to production
+./start-prod.sh         # Deploy everything to production
 ```
 
-**Done!** The setup and deployment scripts handle all configuration, dependencies, secrets, and deployment automatically.
+**Ready in minutes!** The interactive launcher provides maximum flexibility for development and deployment scenarios.
+
+## 🔨 Production Build Script
+
+### Overview
+
+The `build.sh` script provides a consolidated build process for creating production-ready artifacts:
+
+```bash
+./build.sh              # Interactive build menu
+./build.sh --prod       # Non-interactive production build (for CI)
+```
+
+### What It Does
+
+1. **Builds auth module**: Compiles shared authentication library with scoped imports
+2. **Builds Next.js frontend**: Creates optimized production build
+3. **Type-checks workers**: Validates TypeScript without compilation (workers transpile on-the-fly)
+4. **Fail-fast behavior**: Stops on first error for reliable CI/CD
+
+### Build Order
+
+The script follows a deterministic build sequence:
+```
+auth module → Next.js frontend → worker type-checks
+```
+
+### When to Use
+
+| Scenario | Command | Purpose |
+|----------|---------|---------|
+| **CI/CD Pipeline** | `./build.sh --prod` | Non-interactive, fails fast |
+| **Pre-deployment** | `./build.sh` | Interactive, catch errors early |
+| **Local development** | Not needed | Dev servers transpile on-the-fly |
+
+### Output
+
+After successful completion:
+- `auth/dist/` - Compiled authentication module
+- `openai/.next/` - Next.js production build  
+- All workers type-checked and ready for deployment
+
+## 🎯 Interactive Launcher Guide
+
+### How It Works
+
+The `start.sh` script prompts you to configure each worker individually:
+
+```
+▶  How should the auth worker run?
+    1) Local dev          (wrangler dev --port)
+    2) Remote preview     (wrangler dev --remote)
+    3) Deploy  preview    (wrangler deploy --env preview)
+    4) Deploy  prod       (wrangler deploy --env prod)
+    0) Skip
+    Select [1-4/0, default 1]:
+```
+
+### Deployment Modes Explained
+
+| Mode | Description | Use Case | Environment Variables |
+|------|-------------|----------|----------------------|
+| **Local dev** | `wrangler dev --port` | Traditional development | Uses localhost URLs |
+| **Remote preview** | `wrangler dev --remote` | Testing with live URLs | Auto-captures remote URLs |
+| **Deploy preview** | `wrangler deploy --env preview` | Staging environment | Uses preview URLs |
+| **Deploy prod** | `wrangler deploy --env prod` | Production deployment | Uses production URLs |
+| **Skip** | Disabled | Minimal setups | No environment variables |
+
+### Environment Variable Management
+
+The launcher automatically manages `NEXT_PUBLIC_*` environment variables:
+
+- **Local mode**: Cleans up remote URLs, uses `localhost`
+- **Remote mode**: Captures live URLs from wrangler logs (60s timeout + manual fallback)
+- **Deploy modes**: Constructs URLs using `CF_ACCOUNT_ID`
+
+### Prerequisites for Deployment
+
+```bash
+# Required for deploy modes (preview/prod)
+export CF_ACCOUNT_ID=your-account-id    # Get from: wrangler whoami
+
+# Configure secrets for workers you're deploying
+cd workers/auth-worker
+wrangler secret put ENCRYPTION_KEY      # Generate: openssl rand -base64 32
+wrangler secret put CLERK_SECRET_KEY    # From Clerk dashboard
+```
+
+### Common Scenarios
+
+**Full Local Development:**
+```
+auth: 1 (Local dev)
+baseball: 1 (Local dev)  
+football: 1 (Local dev)
+```
+
+**Hybrid Development:**
+```
+auth: 1 (Local dev)           # Debug authentication locally
+baseball: 2 (Remote preview)  # Test with live MLB data
+football: 0 (Skip)            # Focus on baseball only
+```
+
+**Production Deployment:**
+```
+auth: 4 (Deploy prod)
+baseball: 4 (Deploy prod)
+football: 4 (Deploy prod)
+```
+
+**Staging Testing:**
+```
+auth: 3 (Deploy preview)
+baseball: 3 (Deploy preview)
+football: 0 (Skip)
+```
+
+### Troubleshooting
+
+**CF_ACCOUNT_ID Missing:**
+```
+❌  Error: CF_ACCOUNT_ID environment variable is required for deployment
+    Please set it with: export CF_ACCOUNT_ID=your-account-id
+    Or run: wrangler whoami to see your account ID
+```
+
+**Remote URL Capture Timeout:**
+```
+⚠️  Could not auto-capture remote URL for auth worker after 60s
+📋 Please check the log file and enter the URL manually:
+   tail -f /tmp/auth.log
+
+Enter the remote URL (or press Enter to skip):
+```
+
+**Environment Cleanup:**
+- Local mode automatically cleans up `NEXT_PUBLIC_*` variables
+- Prevents conflicts when switching between modes in the same terminal
 
 ---
 

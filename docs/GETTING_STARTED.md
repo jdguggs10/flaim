@@ -24,7 +24,8 @@ Instead of juggling multiple apps and spreadsheets, you can ask natural language
 2. **[OpenAI API key](https://platform.openai.com/docs/api-reference/authentication)** (for AI chat)
 3. **[Cloudflare Workers account](https://developers.cloudflare.com/workers/get-started/guide/)** (free tier)
 4. **ESPN Fantasy league** (optional, for private leagues)
-5. **[Cloudflare KV namespace](https://developers.cloudflare.com/kv/get-started/)** (for secure credential storage in v6.0)
+5. **[Cloudflare KV namespace](https://developers.cloudflare.com/kv/get-started/)** (for secure credential storage)
+6. **[Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/install-and-update/)** (`npm install -g wrangler`)
 
 ### Step 1: Set Up Authentication
 
@@ -43,45 +44,64 @@ cd flaim
 # Install all dependencies from monorepo root (hoists shared packages)
 npm install
 
-# Build the shared auth package
-cd auth
-npm run build  # Builds shared, workers, and web targets
+# Optional: Build production artifacts (recommended for CI/production)
+./build.sh              # Interactive build menu, or use ./build.sh --prod for CI
 
-# The auth package now provides scoped imports:
-# @flaim/auth/shared - Core authentication logic
-# @flaim/auth/workers/espn/storage - ESPN credential storage for workers
-# @flaim/auth/web/components - React components for Next.js
-# @flaim/auth/web/server - Server-side auth helpers
-# @flaim/auth/web/middleware - Clerk middleware
+# The build script creates:
+# - Compiled auth module with scoped imports (@flaim/auth/*)
+# - Next.js production build
+# - Type-checked worker artifacts
 ```
 
-### Step 3: Deploy MCP Workers
+### Step 3: Interactive Development Setup
 
 ```bash
-# Deploy Baseball Worker
-cd ../workers/baseball-espn-mcp
-# No need to npm install - dependencies already hoisted from root
+# Use the interactive launcher for flexible development
+cd ../..  # Return to project root
+./start.sh              # Interactive deployment wizard
 
-# Required: Set encryption key for credential storage
-wrangler secret put ENCRYPTION_KEY  # Generate: openssl rand -base64 32
+# The launcher will prompt for each worker:
+# ▶  How should the auth worker run?
+#     1) Local dev          (wrangler dev --port)
+#     2) Remote preview     (wrangler dev --remote)
+#     3) Deploy  preview    (wrangler deploy --env preview)
+#     4) Deploy  prod       (wrangler deploy --env prod)
+#     0) Skip
 
-# Required for production: Set Clerk secret for server-side verification
-wrangler secret put CLERK_SECRET_KEY  # sk_test_... from Clerk dashboard
+# For production deployment, choose option 4 for all workers
+# For development, mix and match based on your needs:
+# - Local (1): Traditional development with health checks
+# - Remote (2): Remote preview with live URLs for testing
+# - Deploy (3/4): Full deployment to Cloudflare environments
+# - Skip (0): Disable specific workers
 
-# Optional: Set ESPN credentials for development testing only
-# (These only work when NODE_ENV=development)
-# wrangler secret put ESPN_S2      # Your espn_s2 cookie
-# wrangler secret put ESPN_SWID    # Your SWID cookie
+# Before deploying (options 3/4), ensure you have:
+# 1. Set CF_ACCOUNT_ID environment variable
+# 2. Configure secrets for each worker you're deploying
+```
 
-# Deploy to Cloudflare (NODE_ENV=production set automatically)
-wrangler deploy --env prod
+### Step 3a: Configure Secrets (For Deployment)
 
-# Optional: Deploy Football Worker
+```bash
+# Required for all workers being deployed:
+export CF_ACCOUNT_ID=your-cloudflare-account-id  # Get from: wrangler whoami
+
+# For auth worker:
+cd workers/auth-worker
+wrangler secret put ENCRYPTION_KEY      # Generate: openssl rand -base64 32
+wrangler secret put CLERK_SECRET_KEY    # sk_test_... from Clerk dashboard
+
+# For baseball worker:
+cd ../baseball-espn-mcp
+wrangler secret put ENCRYPTION_KEY      # Same key as auth worker
+wrangler secret put CLERK_SECRET_KEY    # Same key as auth worker
+
+# For football worker:
 cd ../football-espn-mcp
-# No need to npm install - dependencies already hoisted from root
-wrangler secret put ENCRYPTION_KEY  # Same key as baseball worker
-wrangler secret put CLERK_SECRET_KEY  # Same key as baseball worker
-wrangler deploy --env prod
+wrangler secret put ENCRYPTION_KEY      # Same key as auth worker
+wrangler secret put CLERK_SECRET_KEY    # Same key as auth worker
+
+cd ../..  # Return to root for interactive launcher
 ```
 
 ### Step 4: Deploy Next.js Frontend

@@ -13,13 +13,20 @@ FLAIM is your AI-powered fantasy sports assistant featuring a streamlined onboar
 
 ## 🚀 Quick Start
 
-### One-Click Local Development
+### Interactive Development Launcher
 ```bash
 git clone https://github.com/yourusername/flaim
 cd flaim
 ./setup.sh              # One-time setup for local development
-./start-dev.sh          # Start all services for development
+./build.sh              # Build production artifacts (optional)
+./start.sh              # Interactive launcher for flexible deployment
 ```
+
+The interactive launcher lets you mix and match deployment modes:
+- **Local dev**: Traditional local development with health checks
+- **Remote preview**: Wrangler remote development with live URLs
+- **Deploy preview/prod**: Deploy to Cloudflare environments
+- **Skip**: Disable specific workers
 
 ### One-Click Production Deployment
 ```bash
@@ -40,6 +47,7 @@ cd flaim
 - **🔍 Auto League Discovery**: Automatically finds and configures your fantasy leagues
 - **🛠️ Auto-Configuration**: MCP tools configured automatically based on your leagues
 - **📊 Live Data Access**: Real-time rosters, matchups, standings, and league settings
+- **🚀 Interactive Deployment**: Mix local/remote/deployed workers with single command
 - **💰 Usage Tiers**: 100 free messages/month, unlimited paid tier
 - **🌐 Serverless**: Cloudflare Workers + Next.js deployment
 
@@ -64,6 +72,7 @@ cd flaim
 - ✅ **TypeScript Path Mapping**: Automatic import resolution across the monorepo
 
 ### 🔗 **Developer Experience**
+- ✅ **Interactive Development Launcher**: Mix local/remote/deployed workers in one command
 - ✅ **True NPM Workspace**: Root package.json with proper dependency hoisting
 - ✅ **Single Next.js Installation**: No more duplicate dependencies or type conflicts
 - ✅ **ESLint v9 Support**: Modern linting with typescript-eslint v8 compatibility
