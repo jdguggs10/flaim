@@ -2,7 +2,7 @@
 // Focuses on ESPN Fantasy Football API integration with KV storage
 
 import { FootballMcpAgent } from './mcp/football-agent.js';
-import { getCredentials, getUserLeagues } from './utils/auth-worker.js';
+import { getCredentials, getUserLeagues } from '../../../auth/dist/shared/shared/auth-worker-client.js';
 import { getBasicLeagueInfo } from './mcp/basic-league-info.js';
 
 export interface Env {

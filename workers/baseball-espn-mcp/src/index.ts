@@ -2,7 +2,7 @@
 // Focuses purely on ESPN API integration with KV storage
 
 import { McpAgent } from './mcp/agent.js';
-import { getCredentials, getUserLeagues } from './utils/auth-worker.js';
+import { getCredentials, getUserLeagues } from '../../../auth/dist/shared/shared/auth-worker-client.js';
 import { getBasicLeagueInfo } from './mcp/basic-league-info.js';
 
 export interface Env {
@@ -110,7 +110,7 @@ export default {
 
           // Get user's leagues from auth-worker
           const leagues = await getUserLeagues(clerkUserId, authWorkerConfig);
-          const baseballLeagues = leagues.filter(league => league.sport === 'baseball');
+          const baseballLeagues = leagues.filter((league: { leagueId: string; sport: string; teamId?: string }) => league.sport === 'baseball');
 
           if (baseballLeagues.length === 0) {
             return new Response(JSON.stringify({
@@ -125,7 +125,7 @@ export default {
           // Filter to specific league if leagueId provided
           let targetLeagues = baseballLeagues;
           if (leagueId) {
-            targetLeagues = baseballLeagues.filter(league => league.leagueId === leagueId);
+            targetLeagues = baseballLeagues.filter((league: { leagueId: string; sport: string; teamId?: string }) => league.leagueId === leagueId);
             
             if (targetLeagues.length === 0) {
               return new Response(JSON.stringify({
