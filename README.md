@@ -9,7 +9,7 @@
 
 FLAIM is your AI-powered fantasy sports assistant featuring a streamlined onboarding experience, server-side Clerk authentication, and seamless multi-platform fantasy sports integration through **Model Context Protocol (MCP) servers**. Get personalized insights, strategic advice, and league management tools through natural language conversations with enterprise-grade security.
 
-**🔧 MCP Architecture**: Dedicated Cloudflare Workers provide real-time ESPN fantasy data access via standardized MCP protocol, enabling Claude to analyze your leagues, rosters, matchups, and standings with live data integration.
+**🔧 MCP Architecture**: A dedicated `auth-worker` provides centralized, secure credential management while sport-specific Cloudflare Workers serve real-time ESPN fantasy data via the standardized MCP protocol. This enables AI assistants to analyze your leagues, rosters, matchups, and standings with live, user-specific data.
 
 ## 🚀 Quick Start
 
@@ -22,70 +22,56 @@ cd flaim
 ./start.sh              # Interactive launcher for flexible deployment
 ```
 
-The interactive launcher lets you mix and match deployment modes:
+The interactive launcher is the recommended way to run FLAIM for all scenarios. It lets you mix and match deployment modes for each service:
 - **Local dev**: Traditional local development with health checks
 - **Remote preview**: Wrangler remote development with live URLs
 - **Deploy preview/prod**: Deploy to Cloudflare environments
 - **Skip**: Disable specific workers
 
-### One-Click Production Deployment
-```bash
-git clone https://github.com/yourusername/flaim
-cd flaim
-./start-prod.sh    # Deploys everything to Cloudflare
-```
-
-**Ready in 5 minutes!** See [Getting Started Guide](docs/GETTING_STARTED.md) for detailed setup.
+**Ready in 5 minutes!** See the [Getting Started Guide](docs/GETTING_STARTED.md) for detailed setup.
 
 ## ✨ Key Features
 
 - **🛤️ Guided Onboarding**: 8-step setup from sign-in to chat activation
 - **🤖 AI-Powered Chat**: Natural language fantasy sports assistant with live ESPN data
 - **🔧 MCP Integration**: Real-time fantasy data via Model Context Protocol servers
-- **🔐 Secure Credential Storage**: CF KV with AES-GCM encryption and key rotation
-- **⚾ Multi-Sport Support**: Baseball, football, basketball, and hockey MCP workers
-- **🔍 Auto League Discovery**: Automatically finds and configures your fantasy leagues
-- **🛠️ Auto-Configuration**: MCP tools configured automatically based on your leagues
-- **📊 Live Data Access**: Real-time rosters, matchups, standings, and league settings
-- **🚀 Interactive Deployment**: Mix local/remote/deployed workers with single command
-- **💰 Usage Tiers**: 100 free messages/month, unlimited paid tier
-- **🌐 Serverless**: Cloudflare Workers + Next.js deployment
+- **🔐 Secure Credential Storage**: CF KV with AES-GCM encryption managed by a central `auth-worker`.
+- **⚾ Multi-Sport Support**: Baseball and football MCP workers ready, with a framework for more.
+- **🔍 Auto League Discovery**: Automatically finds and configures your fantasy leagues.
+- **🛠️ Auto-Configuration**: MCP tools configured automatically based on your leagues.
+- **📊 Live Data Access**: Real-time rosters, matchups, standings, and league settings.
+- **🚀 Interactive Deployment**: A single, powerful script to manage all deployment scenarios.
+- **💰 Usage Tiers**: 100 free messages/month, with an unlimited paid tier.
+- **🌐 Serverless**: Cloudflare Workers + Next.js deployment.
 
 ## 📚 Documentation
 
 | Document | Description |
 |----------|-------------|
 | [📖 Getting Started](docs/GETTING_STARTED.md) | Installation, setup, and first steps |
-| [🛤️ Onboarding Flow](docs/ONBOARDING.md) | Complete user onboarding experience guide |
-| [🔧 MCP Integration](docs/MCP_INTEGRATION.md) | Model Context Protocol servers and tools |
 | [🚀 Deployment Guide](docs/DEPLOYMENT.md) | Production deployment and configuration |
 | [🏗️ Architecture](docs/ARCHITECTURE.md) | System design and security model |
+| [🛤️ Onboarding Flow](docs/ONBOARDING.md) | Complete user onboarding experience guide |
+| [🔧 MCP Integration](docs/MCP_INTEGRATION.md) | Model Context Protocol servers and tools |
 | [❓ FAQ](docs/FAQ.md) | Common questions and troubleshooting |
 | [📋 Changelog](docs/CHANGELOG.md) | Release history and breaking changes |
 
-## 🆕 What's New in v5.0
+## 🆕 What's New in v6.0
 
-### 🏗️ **Modular Build Architecture**
-- ✅ **Build Target Separation**: Shared, workers, and web code compile independently
-- ✅ **Scoped Imports**: Clean `@flaim/auth/*` imports replace brittle relative paths
-- ✅ **Client/Server Separation**: Prevents "server-only" errors in React components
-- ✅ **TypeScript Path Mapping**: Automatic import resolution across the monorepo
+### 🏗️ **Major Architectural Enhancements**
+- ✅ **Centralized Auth Worker**: All credential and league management is now handled by a dedicated `auth-worker`, making sport-specific workers stateless and more secure.
+- ✅ **Encrypted KV Storage**: Migrated from Durable Objects to Cloudflare KV with AES-GCM encryption for enterprise-grade credential security.
+- ✅ **Upgraded Stack**: Core frameworks updated to **React 19** and **Next.js 15**.
 
 ### 🔗 **Developer Experience**
-- ✅ **Interactive Development Launcher**: Mix local/remote/deployed workers in one command
-- ✅ **True NPM Workspace**: Root package.json with proper dependency hoisting
-- ✅ **Single Next.js Installation**: No more duplicate dependencies or type conflicts
-- ✅ **ESLint v9 Support**: Modern linting with typescript-eslint v8 compatibility
-- ✅ **Hot Reloading**: Changes reflect immediately during development
-- ✅ **Consistent API**: Same auth interface across all platforms
-- ✅ **Type-Safe Auth Wrappers**: Explicit union types for redirect/success/error responses
+- ✅ **Interactive Development Launcher**: A single `start.sh` script now manages all deployment scenarios (local, remote, production), replacing the legacy `start-prod.sh`.
+- ✅ **True NPM Workspace**: A single root `package.json` with proper dependency hoisting eliminates duplicate dependencies and type conflicts.
+- ✅ **Scoped Imports**: Clean `@flaim/auth/*` imports replace brittle relative paths.
 
 ### 🎯 **Platform Features**
-- ✅ **Complete Onboarding Redesign**: Streamlined 8-step setup flow from sign-in to chat
-- ✅ **Multi-Platform Architecture**: ESPN active, Yahoo framework ready
-- ✅ **Auto-Sport Detection**: Automatic sport identification from league data
-- ✅ **Smart MCP Configuration**: Tools auto-configure based on platform and sport selection
-- ✅ **Mobile-First Design**: Responsive onboarding experience across all devices
+- ✅ **Complete Onboarding Redesign**: Streamlined 8-step setup flow from sign-in to chat.
+- ✅ **Auto-Sport Detection**: Automatic sport identification from league data.
+- ✅ **Smart MCP Configuration**: Tools auto-configure based on platform and sport selection.
 
 
 ## ⚠️ Important Notes
