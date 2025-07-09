@@ -1,0 +1,57 @@
+{
+  "name": "baseball-espn-mcp",
+  "main": "src/index.ts",
+  "compatibility_date": "2024-12-01",
+  
+  // Environment configurations
+  "env": {
+    // Production environment
+    "prod": {
+      "name": "baseball-espn-mcp",
+      
+      // Custom domain routes for production
+      "routes": [
+        {
+          "pattern": "api.flaim.gg/baseball/*",
+          "zone_name": "flaim.gg"
+        }
+      ],
+      
+      // Environment variables for production
+      "vars": {
+        "NODE_ENV": "production",
+        "AUTH_WORKER_URL": "https://api.flaim.gg/auth"
+      },
+      
+      // KV bindings for user credential storage
+      "kv_namespaces": [
+        {
+          "binding": "CF_KV_CREDENTIALS",
+          "id": "3c946fc92ef84fd58d11c670d2e4120b",
+          "preview_id": "3c946fc92ef84fd58d11c670d2e4120b"
+        }
+      ]
+    },
+    
+    // Development environment
+    "dev": {
+      "name": "baseball-espn-mcp-dev",
+      "workers_dev": true,  // Use workers.dev URL for development
+      
+      // Environment variables for dev
+      "vars": {
+        "NODE_ENV": "development",
+        "AUTH_WORKER_URL": "https://auth-worker-dev.gerrygugger.workers.dev"
+      },
+      
+      // KV namespace for dev
+      "kv_namespaces": [
+        {
+          "binding": "CF_KV_CREDENTIALS",
+          "id": "3c946fc92ef84fd58d11c670d2e4120b",
+          "preview_id": "3c946fc92ef84fd58d11c670d2e4120b"
+        }
+      ]
+    }
+  }
+}

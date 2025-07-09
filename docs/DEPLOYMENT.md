@@ -203,7 +203,7 @@ see docs/dev/KV_SETUP.md
 
 **Summary:**
 1. Create KV namespace: `wrangler kv:namespace create espn_credentials`
-2. Update both workers' wrangler.toml with namespace IDs
+2. Update both workers' wrangler.jsonc with namespace IDs
 3. Generate encryption key: `openssl rand -base64 32`
 4. Set secrets in both workers: `wrangler secret put CF_ENCRYPTION_KEY`
 5. Add key to Next.js .env.local: `CF_ENCRYPTION_KEY=your-key`

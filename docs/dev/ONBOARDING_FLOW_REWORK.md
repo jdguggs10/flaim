@@ -139,26 +139,31 @@ The system is now ready for final validation and deployment phases:
 
 **Goal**: Manually verify the complete user journey to ensure seamless functionality.
 
-**Status**: ⏳ **PENDING** - Ready to execute
+**Status**: ⏳ **Hybrid Testing Required** - Local validation complete, remote validation pending.
 
-*   **Task 3.1: Positive Path Testing**
+*   **Task 3.1: Local Positive Path Testing (COMPLETE)**
     *   **Checklist**:
-        1.  Start all services locally using `./start.sh`
-        2.  Sign up as a brand-new user through the web interface
-        3.  Navigate the onboarding flow and successfully save ESPN credentials
-        4.  Add a valid ESPN league using the discovery flow
-        5.  Select a team from that league
-        6.  Refresh the application and confirm all settings persist (credentials, league, team)
-        7.  Ask the AI assistant a question requiring MCP tool usage for the configured league
-        8.  Verify the AI provides correct, data-driven response from ESPN API
+        1.  ✅ Start all services locally using `./start.sh`
+        2.  ✅ Sign up as a brand-new user through the web interface
+        3.  ✅ Navigate the onboarding flow and successfully save ESPN credentials
+        4.  ✅ Add a valid ESPN league using the discovery flow
+        5.  ✅ Select a team from that league
+        6.  ✅ Refresh the application and confirm all settings persist (credentials, league, team)
 
-*   **Task 3.2: Negative Path Testing**
+*   **Task 3.2: Remote MCP Tool Testing (PENDING)**
     *   **Checklist**:
-        1.  Attempt to save invalid/empty ESPN credentials → verify user-friendly error
-        2.  Attempt to add league before credentials saved → verify proper error handling
-        3.  Attempt to use AI for private league before configuration → verify graceful degradation
+        1.  Deploy all workers to the remote dev environment using `./start.sh`.
+        2.  Ask the AI assistant a question requiring MCP tool usage for the configured league.
+        3.  Verify the AI provides a correct, data-driven response from the remote ESPN API.
+    *   **Note**: This step is blocked by the inability of the LLM to call local servers. The MCP workers must be remotely deployed to test this functionality.
 
-**Prerequisites**: 
+*   **Task 3.3: Negative Path Testing (COMPLETE)**
+    *   **Checklist**:
+        1.  ✅ Attempt to save invalid/empty ESPN credentials → verify user-friendly error
+        2.  ✅ Attempt to add league before credentials saved → verify proper error handling
+        3.  ✅ Attempt to use AI for private league before configuration → verify graceful degradation
+
+**Prerequisites**:
 - All services must be deployable via `./start.sh`
 - ESPN credentials (SWID/S2) needed for testing
 - Test leagues available for validation

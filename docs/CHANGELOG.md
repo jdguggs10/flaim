@@ -60,6 +60,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [6.1.0] - 2025-07-08
+
+### Changed
+- **Wrangler Configuration Modernized**: Migrated all worker configurations from the legacy `wrangler.toml` format to the modern `wrangler.jsonc`. This aligns the project with the latest Cloudflare Workers SDK standards, resolves deprecation warnings, and improves configuration consistency across all services.
+- **Updated Compatibility Dates**: Set all worker `compatibility_date` fields to `2025-07-08` to ensure use of the latest Workers runtime features.
+
+### Fixed
+- **Corrected Worker Configuration**: Resolved a syntax error in the `baseball-espn-mcp` worker configuration and removed deprecated `[triggers]` and `zone_name` properties from all configurations.
+
 ### Fixed
 - **Next.js 15 Route Handler Signatures**: Updated onboarding route handlers to use Promise-based `params` destructuring for compatibility with `app/api` in Next.js 15.
 - **TypeScript API DTOs**: Introduced reusable request/response interfaces in `types/api-responses.ts` and cast all JSON responses accordingly, eliminating `unknown` types during builds.

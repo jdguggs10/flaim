@@ -2,6 +2,9 @@
   "name": "flaim-tests",
   "version": "1.0.0",
   "description": "Comprehensive test suite for FLAIM platform",
+  "engines": {
+    "node": "20"
+  },
   "scripts": {
     "test": "jest",
     "test:unit": "jest --testPathPattern=unit",

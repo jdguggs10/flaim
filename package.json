@@ -9,6 +9,9 @@
     "workers/baseball-espn-mcp",
     "workers/football-espn-mcp"
   ],
+  "engines": {
+    "node": "20"
+  },
   "scripts": {
     "postinstall": "patch-package"
   },

@@ -1,0 +1,56 @@
+{
+  "name": "auth-worker",
+  "main": "./src/index.ts",
+  "compatibility_date": "2024-12-01",
+  
+  // Environment configurations
+  "env": {
+    // Production environment
+    "prod": {
+      "name": "auth-worker",
+      
+      // Custom domain routes for production
+      "routes": [
+        {
+          "pattern": "api.flaim.gg/auth/*",
+          "zone_name": "flaim.gg"
+        }
+      ],
+      
+      // KV namespaces for production
+      "kv_namespaces": [
+        {
+          "binding": "CF_KV_CREDENTIALS",
+          "id": "3c946fc92ef84fd58d11c670d2e4120b"
+        }
+      ],
+      
+      // Environment variables for production
+      "vars": {
+        "CF_ENCRYPTION_KEY": "YOUR-32-BYTE-BASE64-KEY",
+        "NODE_ENV": "production"
+      }
+    },
+    
+    // Development environment
+    "dev": {
+      "name": "auth-worker-dev",
+      "workers_dev": true,  // Use workers.dev URL for development
+      
+      // KV namespace for dev (using same as production for now)
+      "kv_namespaces": [
+        {
+          "binding": "CF_KV_CREDENTIALS",
+          "id": "3c946fc92ef84fd58d11c670d2e4120b"
+        }
+      ],
+      
+      // Environment variables for dev
+      "vars": {
+        "NODE_ENV": "development",
+        // Local-only; override with real key via .env or shell export
+        "CF_ENCRYPTION_KEY": "YOUR-32-BYTE-BASE64-KEY"
+      }
+    }
+  }
+}

@@ -29,12 +29,12 @@ preview_id = "xyz789abc123456..."
 
 **Important:** Save both IDs from the output - you'll need them in the next step.
 
-## Step 2: Update wrangler.toml Files
+## Step 2: Update wrangler.jsonc Files
 
 Update both worker configuration files with your namespace IDs:
 
 ### Baseball Worker
-Edit `workers/baseball-espn-mcp/wrangler.toml`:
+Edit `workers/baseball-espn-mcp/wrangler.jsonc`:
 
 ```toml
 # Replace placeholder with your actual namespace ID
@@ -57,7 +57,7 @@ preview_id = "xyz789abc123456..."
 ```
 
 ### Football Worker
-Edit `workers/football-espn-mcp/wrangler.toml` with the **same namespace IDs** (both workers share the same credential storage):
+Edit `workers/football-espn-mcp/wrangler.jsonc` with the **same namespace IDs** (both workers share the same credential storage):
 
 ```toml
 [[kv_namespaces]]
@@ -227,7 +227,7 @@ npm run build
 ### Common Issues
 
 **"Cannot find KV namespace"**
-- Check that your namespace IDs in wrangler.toml match the output from step 1
+- Check that your namespace IDs in wrangler.jsonc match the output from step 1
 - Ensure you're using the correct environment (dev/prod)
 
 **"Encryption failed"**

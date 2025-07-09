@@ -2,6 +2,9 @@
   "name": "auth-worker",
   "version": "1.0.0",
   "description": "Platform-agnostic credential storage worker for FLAIM",
+  "engines": {
+    "node": "20"
+  },
   "main": "./src/index.ts",
   "scripts": {
     "dev": "wrangler dev --port 8786",
