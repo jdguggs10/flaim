@@ -37,7 +37,12 @@ error()   { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 # 1. Parse mode
 # ----------------------------------------------------------------------------
 MODE="interactive"
-if [[ "$1" == "--prod" ]]; then MODE="prod"; fi
+case "$1" in
+  --prod) MODE="prod" ;;
+  --remote-dev) MODE="remote-dev" ;;
+  --remote-prod|--prod-deploy) MODE="remote-prod" ;;
+  --local-dev) MODE="local-dev" ;;
+esac
 
 # ----------------------------------------------------------------------------
 # 2. Interactive prompt (optional)
@@ -47,11 +52,17 @@ if [[ "$MODE" == "interactive" ]]; then
   echo "========================\n"
   echo "What kind of build would you like to run?"
   echo "  1) Production build (sequential, fails on first error)"
+  echo "  2) Local dev preview (wrangler pages dev)"
+  echo "  3) Remote DEV deploy (Cloudflare Pages dev branch)"
+  echo "  4) Remote PROD deploy (Cloudflare Pages main branch)"
   echo "  0) Cancel"
   read -rp "Select [1/0, default 1]: " CHOICE
   CHOICE=${CHOICE:-1}
   case "$CHOICE" in
     1) MODE="prod" ;;
+    2) MODE="local-dev" ;;
+    3) MODE="remote-dev" ;;
+    4) MODE="remote-prod" ;;
     0) echo "Cancelled."; exit 0 ;;
     *) echo "Invalid selection"; exit 1 ;;
   esac
@@ -76,8 +87,8 @@ build_auth() {
 
 build_frontend() {
   info "Building Next.js frontend…"
-  (cd openai && npm run build) || error "Frontend build failed"
-  success "Frontend built"
+  (cd openai && npm run build && npx next-on-pages) || error "Frontend build failed"
+  success "Frontend built & adapted with next-on-pages"
 }
 
 typecheck_worker() {
@@ -87,19 +98,43 @@ typecheck_worker() {
   success "$label worker type-checked"
 }
 
+deploy_frontend_remote() {
+  local branch="$1" # dev or main
+  local project="flaim-frontend-dev" # adjust if production project differs
+  info "Deploying frontend to Cloudflare Pages (branch: $branch)…"
+  (cd openai && wrangler pages deploy .vercel/output/static --project-name "$project" --branch "$branch") || error "Pages deploy failed"
+  success "Frontend deployed to $branch"
+}
+
+run_local_preview() {
+  info "Starting local Pages preview… (Ctrl+C to exit)"
+  (cd openai && wrangler pages dev .vercel/output/static) || error "Pages dev exited with error"
+}
+
 if [[ "$MODE" == "prod" ]]; then
   build_auth
   build_frontend
   typecheck_worker workers/baseball-espn-mcp "Baseball"
   typecheck_worker workers/football-espn-mcp "Football"
-  # Note: auth-worker doesn't have a separate type-check script, 
-  # but TypeScript errors are caught during auth module build above
+elif [[ "$MODE" == "local-dev" ]]; then
+  build_frontend
+  run_local_preview
+elif [[ "$MODE" == "remote-dev" ]]; then
+  build_frontend
+  deploy_frontend_remote dev
+elif [[ "$MODE" == "remote-prod" ]]; then
+  build_frontend
+  deploy_frontend_remote main
 fi
 
 # ----------------------------------------------------------------------------
 # 4. Outro
 # ----------------------------------------------------------------------------
 
-echo -e "\n${GREEN}🎉 Build completed successfully.${NC}"
+echo -e "\n${GREEN}🎉 Task completed for mode: $MODE.${NC}"
 
-echo "Artefacts ready for deployment. Run \`${YELLOW}./start.sh${NC}\` and choose deploy options, or use your CI pipeline." 
+if [[ "$MODE" == "local-dev" ]]; then
+  echo "Local preview running. Remember to stop with Ctrl+C when done."
+elif [[ "$MODE" == remote-* ]]; then
+  echo "Visit the deployment URL printed above to verify the site."
+fi
