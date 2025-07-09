@@ -397,33 +397,13 @@ ESPN_S2=your-espn-s2-cookie
 ESPN_SWID=your-espn-swid-cookie
 ```
 
-## Deployment Guide
+## Deployment
 
-### 1. Set Up Clerk
-```bash
-# Create account at https://clerk.com
-# Create new application
-# Get publishable and secret keys
-# Configure in frontend environment
-```
+The FLAIM frontend is deployed as a Next.js application to **Cloudflare Pages**, which provides a scalable, serverless environment with first-class support for Edge Functions.
 
-### 2. Deploy Baseball ESPN MCP
-```bash
-cd /flaim/baseball-espn-mcp
-wrangler secret put ENCRYPTION_KEY
-# Optional: wrangler secret put ESPN_S2
-# Optional: wrangler secret put ESPN_SWID
-wrangler deploy --env prod
-```
+The backend workers are deployed as **Cloudflare Workers**.
 
-### 3. Deploy Next.js Frontend
-```bash
-cd /flaim/openai
-# Configure .env.local with Clerk keys
-npm run build
-npm run start
-# Or deploy to Vercel/Netlify
-```
+For complete, up-to-date instructions, please see the [**Deployment Guide**](./DEPLOYMENT.md).
 
 ## MCP Integration
 

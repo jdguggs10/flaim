@@ -104,27 +104,32 @@ wrangler secret put CLERK_SECRET_KEY    # Same key as auth worker
 cd ../..  # Return to root for interactive launcher
 ```
 
-### Step 4: Deploy Next.js Frontend
+### Step 4: Configure and Deploy Frontend
 
-```bash
-cd ../../openai
+The frontend is designed for Cloudflare Pages. Configuration is managed via three files in the `openai/` directory: `.env.local` (local development), `wrangler.jsonc` (Pages configuration), and secrets for sensitive data.
 
-# Dependencies already installed from root npm workspace
+1.  **Configure Local Environment**:
+    ```bash
+    cd openai
+    cp .env.example .env.local
+    ```
+    Fill in `.env.local` with your `OPENAI_API_KEY` and Clerk keys for local development.
 
-# Create environment file
-cp .env.example .env.local
+2.  **Configure Production Environment (`wrangler.jsonc`)**:
+    - Open `openai/wrangler.jsonc`.
+    - Under the `vars` and `env.preview.vars` sections, add the required `NEXT_PUBLIC_*` variables, such as your Clerk publishable key and the URLs of your deployed workers.
 
-# Edit .env.local with your keys:
-# OPENAI_API_KEY=sk-your-openai-api-key
-# NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
-# CLERK_SECRET_KEY=sk_test_...
+3.  **Set Production Secrets**:
+    - Use the `wrangler pages secret put` command to add your `OPENAI_API_KEY` and `CLERK_SECRET_KEY` to your Pages project.
 
-# Start locally
-npm run dev
-
-# Or deploy to Vercel
-npx vercel deploy --prod
-```
+4.  **Deploy**:
+    - The `build.sh` script provides the easiest way to deploy.
+    ```bash
+    # From the project root
+    ./build.sh --remote-dev   # Deploy to the dev branch
+    ./build.sh --remote-prod  # Deploy to the main branch
+    ```
+    - For detailed manual deployment steps, see the [Deployment Guide](DEPLOYMENT.md).
 
 ### Step 5: Create Your Account
 
