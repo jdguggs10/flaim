@@ -41,6 +41,7 @@ The interactive launcher is the recommended way to run FLAIM for all scenarios. 
 - **🛠️ Auto-Configuration**: MCP tools configured automatically based on your leagues.
 - **📊 Live Data Access**: Real-time rosters, matchups, standings, and league settings.
 - **🚀 Interactive Deployment**: A single, powerful script to manage all deployment scenarios.
+- **🌐 Cloudflare Pages**: Modern deployment with Direct Upload and automatic branch previews.
 - **💰 Usage Tiers**: 100 free messages/month, with an unlimited paid tier.
 - **🌐 Serverless**: Cloudflare Workers + Next.js deployment.
 
@@ -67,6 +68,7 @@ The interactive launcher is the recommended way to run FLAIM for all scenarios. 
 - ✅ **Interactive Development Launcher**: A single `start.sh` script now manages all deployment scenarios (local, remote, production), replacing the legacy `start-prod.sh`.
 - ✅ **True NPM Workspace**: A single root `package.json` with proper dependency hoisting eliminates duplicate dependencies and type conflicts.
 - ✅ **Scoped Imports**: Clean `@flaim/auth/*` imports replace brittle relative paths.
+- ✅ **Wrangler v4.0 Support**: Latest Cloudflare CLI with modern JavaScript features and improved local development.
 
 ### 🎯 **Platform Features**
 - ✅ **Complete Onboarding Redesign**: Streamlined 8-step setup flow from sign-in to chat.
@@ -80,6 +82,7 @@ The interactive launcher is the recommended way to run FLAIM for all scenarios. 
 **CF KV credential storage and MCP servers are only available in Cloudflare Workers runtime.** The system is designed for Workers-first deployment:
 - ✅ **Production**: Cloudflare Workers with KV namespace bindings and MCP protocol support
 - ✅ **Development**: Mock KV for testing (NODE_ENV=development/test)
+- ✅ **Cloudflare Pages**: Direct Upload deployment with automatic branch previews
 - ❌ **Node.js Production**: KV client and MCP servers not implemented for Node.js production SSR
 
 **MCP Architecture**: Dedicated sport-specific Cloudflare Workers provide standardized ESPN fantasy data access via Model Context Protocol, enabling real-time league analysis and management through AI assistants.

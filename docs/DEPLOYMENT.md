@@ -44,6 +44,15 @@ The `build.sh` script provides a consolidated build process for creating product
 3. **Type-checks workers**: Validates TypeScript without compilation (workers transpile on-the-fly)
 4. **Fail-fast behavior**: Stops on first error for reliable CI/CD
 
+### Wrangler v4.0 Compatibility (2025)
+
+FLAIM is compatible with the latest Wrangler v4.0 features:
+- **Modern JavaScript Support**: Uses latest esbuild for ES2022+ features
+- **Import Attributes**: Supports `import data from "./data.json" with { type: "json" }`
+- **Node.js 18+**: Follows Node.js official support lifecycle
+- **Local-First Commands**: All commands now run in local mode by default
+- **JSON Configuration**: Supports `wrangler.json` and `wrangler.jsonc` formats
+
 ### Build Order
 
 The script follows a deterministic build sequence:
@@ -222,10 +231,34 @@ wrangler deploy --env prod
 
 #### 3. Deploy Frontend
 
+**Option A: Cloudflare Pages (Recommended)**
 ```bash
 cd openai
 npm run build
-npx @cloudflare/next-on-pages  # Or deploy to Vercel
+# Direct upload to Pages (2025 method)
+wrangler pages deploy dist --project-name flaim-frontend
+```
+
+**Option B: Pages with Git Integration**
+```bash
+# Configure Pages project via dashboard or CLI
+wrangler pages project create flaim-frontend
+# Push to connected Git repository
+```
+
+**Option C: Next.js on Cloudflare Workers**
+```bash
+cd openai
+npm run build
+npx @cloudflare/next-on-pages
+wrangler deploy
+```
+
+**Option D: Vercel (Legacy)**
+```bash
+cd openai
+npm run build
+vercel --prod
 ```
 
 #### 4. Environment Configuration
@@ -273,6 +306,140 @@ v6.0 replaces Durable Object credential storage with CF KV + encryption:
 - Frontend: `http://localhost:3000`
 - Baseball Worker: `http://localhost:8787`
 - Football Worker: `http://localhost:8788`
+
+---
+
+## 🌐 Cloudflare Pages Deployment (2025)
+
+### Overview
+
+Cloudflare Pages offers multiple deployment strategies for modern web applications:
+
+### Direct Upload Method (Recommended)
+
+**Prerequisites:**
+- Wrangler v4.0+ installed
+- Cloudflare account with Pages access
+- Built application assets
+
+**Basic Deployment:**
+```bash
+# Build your application
+npm run build
+
+# Create Pages project
+wrangler pages project create flaim-frontend
+
+# Deploy prebuilt assets
+wrangler pages deploy dist --project-name flaim-frontend
+
+# Production deployment will be available at:
+# https://flaim-frontend.pages.dev
+```
+
+**Branch Deployments:**
+```bash
+# Deploy to branch (creates branch alias)
+wrangler pages deploy dist --project-name flaim-frontend --branch feature-branch
+
+# Available at: https://feature-branch.flaim-frontend.pages.dev
+```
+
+### Configuration Management
+
+**Download Existing Configuration:**
+```bash
+# If you have existing Pages project configured via dashboard
+wrangler pages download config
+
+# This creates/updates wrangler.toml with your current settings
+```
+
+**Wrangler Configuration for Pages:**
+```json
+{
+  "name": "flaim-frontend",
+  "compatibility_date": "2025-01-01",
+  "pages_build_output_dir": "dist",
+  "build": {
+    "command": "npm run build",
+    "cwd": ".",
+    "watch_dir": "src"
+  }
+}
+```
+
+### Continuous Integration
+
+**GitHub Actions Example:**
+```yaml
+name: Deploy to Cloudflare Pages
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Setup Node
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+      - name: Install dependencies
+        run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Deploy to Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          command: pages deploy dist --project-name flaim-frontend
+```
+
+### Environment Variables
+
+**Setting Environment Variables:**
+```bash
+# For Pages projects
+wrangler pages secret put DATABASE_URL --env production
+wrangler pages secret put API_KEY --env production
+
+# List current secrets
+wrangler pages secret list --env production
+```
+
+### Advanced Features
+
+**Functions (Edge Functions):**
+```bash
+# Pages supports Cloudflare Functions in /functions directory
+mkdir functions
+# API routes will be automatically deployed
+```
+
+**Custom Domains:**
+```bash
+# Add custom domain via dashboard or API
+# SSL certificates are automatically managed
+```
+
+**Preview Deployments:**
+- Every branch gets automatic preview deployment
+- Pull requests get unique preview URLs
+- Production deployments only from main branch
+
+### Monitoring and Logs
+
+**View Deployment Logs:**
+```bash
+# List deployments
+wrangler pages deployment list --project-name flaim-frontend
+
+# View specific deployment
+wrangler pages deployment tail --project-name flaim-frontend
+```
 
 ---
 
