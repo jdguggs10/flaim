@@ -37,7 +37,7 @@ Be brutally honest, don't be a yes man. If I am wrong, point it out bluntly. I n
   - ./build.sh: frontend build and deployment script
   - ./start.sh: Interactive worker deployment launcher
 - IMPORTANT: Always pull updated documentation before diving into a coding request
-  - use /Users/geraldgugger/Code/flaim/docs/dev/CONTEXT7_DOCUMENTATION_INDEX.md to find the available documentation
+  - use ./docs/dev/CONTEXT7_DOCUMENTATION_INDEX.md to find the available documentation
   - then, mcp tool call to context7 mcp servers to retreive the documents
 - Slash Commands Directory: `.claude/commands`
 
