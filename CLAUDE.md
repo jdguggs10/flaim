@@ -34,12 +34,11 @@ Be brutally honest, don't be a yes man. If I am wrong, point it out bluntly. I n
 
 ## Tool & Workflow
 - # Bash commands
-  - ./build.sh: Build production artifacts (consolidated build script)
-  - npm run test: Run unit tests
-  - ./start.sh: Interactive development and deployment launcher
-- ALLOWLIST:
-  - Always allow: Edit
-  - Always allow: Bash(git commit:*)
+  - ./build.sh: frontend build and deployment script
+  - ./start.sh: Interactive worker deployment launcher
+- IMPORTANT: Always pull updated documentation before diving into a coding request
+  - use /Users/geraldgugger/Code/flaim/docs/dev/CONTEXT7_DOCUMENTATION_INDEX.md to find the available documentation
+  - then, mcp tool call to context7 mcp servers to retreive the documents
 - Slash Commands Directory: `.claude/commands`
 
 ## Performance & Cleanup
