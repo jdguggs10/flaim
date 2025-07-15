@@ -8,6 +8,7 @@ export interface Env {
   ESPN_S2?: string;
   ESPN_SWID?: string;
   NODE_ENV?: string;
+  ENVIRONMENT?: string;
   CLERK_SECRET_KEY?: string;
 }
 

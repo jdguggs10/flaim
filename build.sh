@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# ============================================================================
-#  FLAIM Production Build Script (build.sh)
-# ---------------------------------------------------------------------------
-#  Purpose   : Pure artifact builder for CI/CD pipelines and deployment prep.
-#              Creates production-ready, deployable artifacts with zero side effects.
-#              No interactive modes, no deployment logic - just deterministic building.
+# ╔═══════════════════════════════════════════════════════════════════════════╗
+# ║                   FLAIM Production Build Script                           ║
+# ║                                                                           ║
+# ║  Deterministic artifact builder for CI/CD pipelines and deployment prep.  ║
+# ║  No deployment logic – just pure production artifacts.                    ║
+# ╚═══════════════════════════════════════════════════════════════════════════╝
 #
 #  What it does:
 #    • Installs dependencies (npm ci)
@@ -22,16 +22,40 @@
 
 set -e  # Abort on first error
 
-# Colour helpers -------------------------------------------------------------
-GREEN='\033[0;32m'
-RED='\033[0;31m'
-BLUE='\033[0;34m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Colour
+# ┌─────────────────────────────────────────────────────────────────────────┐
+# │                           Color & Styling                              │
+# └─────────────────────────────────────────────────────────────────────────┘
+readonly RED='\033[0;31m'
+readonly GREEN='\033[0;32m'
+readonly YELLOW='\033[1;33m'
+readonly BLUE='\033[0;34m'
+readonly PURPLE='\033[0;35m'
+readonly CYAN='\033[0;36m'
+readonly WHITE='\033[1;37m'
+readonly GRAY='\033[0;90m'
+readonly BOLD='\033[1m'
+readonly DIM='\033[2m'
+readonly NC='\033[0m'
 
-info()    { echo -e "${BLUE}[BUILD]${NC} $1"; }
-success() { echo -e "${GREEN}[OK]${NC} $1"; }
-error()   { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
+# Visual helpers for consistent section banners
+# --------------------------------------------
+
+draw_rule() {
+  echo -e "${DIM}────────────────────────────────────────────────────────────${NC}"
+}
+
+banner() {
+  local color="$1"; shift
+  echo
+  draw_rule
+  echo -e "${color}${BOLD}$*${NC}"
+  draw_rule
+  echo
+}
+
+info()    { echo -e "${BLUE}▶${NC} $1"; }
+success() { echo -e "${GREEN}✓${NC} $1"; }
+error()   { echo -e "${RED}✘${NC} $1"; exit 1; }
 
 # ----------------------------------------------------------------------------
 # 1. Parse flags
@@ -49,7 +73,7 @@ case "$1" in
 esac
 
 if [ "$QUIET_MODE" = false ]; then
-  echo -e "\n🔨 ${BOLD}Building FLAIM Production Artifacts${NC}"
+  banner "${BLUE}" "🔨 Building FLAIM Production Artifacts"
 fi
 
 # ----------------------------------------------------------------------------
@@ -101,8 +125,8 @@ typecheck_worker workers/football-espn-mcp "Football"
 # ----------------------------------------------------------------------------
 
 if [ "$QUIET_MODE" = false ]; then
-  echo -e "\n${GREEN}🎉 Build artifacts ready for deployment${NC}"
-  echo -e "${DIM}  Frontend: openai/.vercel/output/static/${NC}"
-  echo -e "${DIM}  Auth module: auth/dist/${NC}"
-  echo -e "${DIM}  Workers: type-checked and ready${NC}"
+  banner "${GREEN}" "🎉 Build artifacts ready"
+  echo -e "${DIM}Frontend:${NC} openai/.vercel/output/static/"
+  echo -e "${DIM}Auth module:${NC} auth/dist/"
+  echo -e "${DIM}Workers:${NC} type-checked and ready"
 fi

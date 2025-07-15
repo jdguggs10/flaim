@@ -51,6 +51,24 @@ declare FOOTBALL_MODE=""
 # │                           Utility Functions                             │
 # └─────────────────────────────────────────────────────────────────────────┘
 
+# Visual helpers for consistent section banners
+# Usage: banner "$COLOR" "Title text"
+# -------------------------------------------------------------------------
+
+draw_rule() {
+  echo -e "${DIM}────────────────────────────────────────────────────────────${NC}"
+} 
+
+banner() {
+  local color="$1"; shift
+  echo
+  draw_rule
+  echo -e "${color}${BOLD}$*${NC}"
+  draw_rule
+  echo
+}
+
+
 show_help() {
   cat << EOF
 ${BOLD}${BLUE}FLAIM Development Environment v${VERSION}${NC}
@@ -141,11 +159,8 @@ fi
 # │                           Script Banner                                 │
 # └─────────────────────────────────────────────────────────────────────────┘
 
-echo -e "${BOLD}${BLUE}╔═══════════════════════════════════════════════════════════════════╗${NC}"
-echo -e "${BOLD}${BLUE}║${NC}  🚀 ${BOLD}${WHITE}FLAIM Development Environment v${VERSION}${NC}${BOLD}${BLUE}                     ║${NC}"
-echo -e "${BOLD}${BLUE}║${NC}     ${DIM}Fantasy League AI Manager - Development Orchestrator${NC}${BOLD}${BLUE}      ║${NC}"
-echo -e "${BOLD}${BLUE}╚═══════════════════════════════════════════════════════════════════╝${NC}"
-echo
+banner "${BLUE}" "🚀 FLAIM Development Environment v${VERSION}"
+echo -e "${DIM}Fantasy League AI Manager - Development Orchestrator${NC}"
 
 if [ "$DRY_RUN" = true ]; then
   echo -e "${YELLOW}${BOLD}⚠️  DRY RUN MODE:${NC} ${DIM}No changes will be made${NC}"
@@ -209,7 +224,8 @@ select_global_mode() {
   echo
   
   while true; do
-    read -rp "  ${BOLD}Select [1-3/0, default 1]:${NC} " CHOICE
+    echo -ne "  ${BOLD}Select [1-3/0, default 1]:${NC} "
+    read -r CHOICE
     CHOICE=${CHOICE:-1}
     
     case "$CHOICE" in
@@ -224,7 +240,8 @@ select_global_mode() {
       3) 
         if [ "$CONFIRM_PROD" = true ]; then
           echo
-          read -rp "  ${RED}${BOLD}⚠ Deploy ALL workers to PRODUCTION? [y/N]:${NC} " confirm
+          echo -ne "  ${RED}${BOLD}⚠ Deploy ALL workers to PRODUCTION? [y/N]:${NC} "
+          read -r confirm
           if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
             echo -e "  ${DIM}Skipping production deployment.${NC}"
             continue
@@ -288,7 +305,8 @@ prompt_worker_mode() {
   echo
   
   while true; do
-    read -rp "  ${BOLD}Select [1-3/0, default $default_choice]:${NC} " choice
+    echo -ne "  ${BOLD}Select [1-3/0, default $default_choice]:${NC} "
+    read -r choice
     choice=${choice:-$default_choice}
     
     case "$choice" in
@@ -303,7 +321,8 @@ prompt_worker_mode() {
       3) 
         if [ "$CONFIRM_PROD" = true ]; then
           echo
-          read -rp "  ${RED}${BOLD}⚠ Deploy ${worker_display} to PRODUCTION? [y/N]:${NC} " confirm
+          echo -ne "  ${RED}${BOLD}⚠ Deploy ${worker_display} to PRODUCTION? [y/N]:${NC} "
+          read -r confirm
           if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
             echo -e "  ${DIM}Skipping production deployment.${NC}"
             continue
@@ -342,9 +361,7 @@ else
 fi
 
 # Display final configuration
-echo
-echo -e "${BOLD}${BLUE}📋 Configuration Summary${NC}"
-echo -e "${BLUE}═══════════════════════════${NC}"
+banner "${BLUE}" "📋 Configuration Summary"
 
 get_mode_display() {
   local mode="$1"
@@ -415,7 +432,7 @@ trap cleanup SIGINT SIGTERM EXIT
 # Initialize cleanup
 rm -f /tmp/inspector_ports.list
 
-echo -e "${BOLD}${BLUE}🧹 Environment Preparation${NC}"
+banner "${BLUE}" "🧹 Environment Preparation"
 
 # Terminate existing processes only for ports we'll use
 [ "$(get_worker_mode auth)" = "dev" ] && kill_port 8786
@@ -456,7 +473,9 @@ launch_or_deploy() {
   case "$deployment_mode" in
     dev)
       if ! lsof -i ":$worker_port" >/dev/null 2>&1; then
+        echo
         echo -e "${CYAN}${BOLD}🛠 Starting ${worker_display} Worker${NC} ${DIM}(port $worker_port)${NC}"
+        echo
         
         # Use unique inspector port to prevent conflicts
         local inspector_port=$((worker_port + 4000))
@@ -466,20 +485,27 @@ launch_or_deploy() {
         echo "$inspector_port" >> /tmp/inspector_ports.list
         echo $! > "/tmp/${worker_name}.pid"
       else
+        echo
         echo -e "${YELLOW}${BOLD}⚠${NC} Port $worker_port in use. Skipping ${worker_display} worker."
+        echo
         return 1
       fi
       ;;
       
     preview)
+      echo
       echo -e "${YELLOW}${BOLD}🚀 Deploying ${worker_display} Worker${NC} ${DIM}(preview environment)${NC}"
       echo -e "${DIM}  Running: cd \"$worker_dir\" && wrangler deploy --env preview --minify${NC}"
       
       if (cd "$worker_dir" && wrangler deploy --env preview --minify 2>&1); then
+        echo
         echo -e "${GREEN}${BOLD}✅ ${worker_display} deployed successfully${NC}"
+        echo
       else
+        echo
         echo -e "${RED}${BOLD}✘ Failed to deploy ${worker_display}${NC}"
         echo -e "${DIM}  Check logs: $log_file${NC}"
+        echo
         return 1
       fi
       ;;
@@ -487,31 +513,41 @@ launch_or_deploy() {
     prod)
       if [ "$CONFIRM_PROD" = true ]; then
         echo
-        read -rp "  ${RED}${BOLD}⚠ Deploy ${worker_display} to PRODUCTION? [y/N]:${NC} " confirm
+        echo -ne "  ${RED}${BOLD}⚠ Deploy ${worker_display} to PRODUCTION? [y/N]:${NC} "
+        read -r confirm
         if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
           echo -e "${DIM}  Skipping production deployment of ${worker_display}.${NC}"
           return 0
         fi
       fi
       
+      echo
       echo -e "${RED}${BOLD}🚀 Deploying ${worker_display} Worker${NC} ${DIM}(PRODUCTION)${NC}"
       echo -e "${DIM}  Running: cd \"$worker_dir\" && wrangler deploy --env prod --minify${NC}"
       
       if (cd "$worker_dir" && wrangler deploy --env prod --minify 2>&1); then
+        echo
         echo -e "${GREEN}${BOLD}✅ ${worker_display} deployed to PRODUCTION${NC}"
+        echo
       else
+        echo
         echo -e "${RED}${BOLD}✘ Failed to deploy ${worker_display} to PRODUCTION${NC}"
         echo -e "${DIM}  Check logs: $log_file${NC}"
+        echo
         return 1
       fi
       ;;
       
     skip)
+      echo
       echo -e "${GRAY}${BOLD}⏭ Skipping ${worker_display} Worker${NC}"
+      echo
       ;;
       
     *)
+      echo
       echo -e "${RED}${BOLD}✘ Unknown deployment mode for ${worker_display}: $deployment_mode${NC}"
+      echo
       return 1
       ;;
   esac
@@ -547,22 +583,30 @@ build_and_deploy_frontend() {
       ;;
   esac
   
+  echo
   echo -e "${PURPLE}${BOLD}🏗️  Building Frontend Artifacts${NC}"
   echo -e "${DIM}  Running: ./build.sh --quiet${NC}"
   
   if ! ./build.sh --quiet; then
+    echo
     echo -e "${RED}${BOLD}✘ Frontend build failed${NC}"
+    echo
     return 1
   fi
   
+  echo
   echo -e "${PURPLE}${BOLD}🚀 Deploying Frontend${NC} ${DIM}(branch: $branch)${NC}"
   echo -e "${DIM}  Running: wrangler pages deploy .vercel/output --project-name \"$project\" --branch \"$branch\"${NC}"
   
   if (cd openai && wrangler pages deploy .vercel/output --project-name "$project" --branch "$branch" 2>&1); then
+    echo
     echo -e "${GREEN}${BOLD}✅ Frontend deployed successfully${NC}"
+    echo
     return 0
   else
+    echo
     echo -e "${RED}${BOLD}✘ Failed to deploy frontend${NC}"
+    echo
     return 1
   fi
 }
@@ -583,9 +627,15 @@ if [ "$needs_frontend_deployment" = true ]; then
   else
     # Determine deployment mode from worker modes
     if [ "$(get_worker_mode auth)" = "prod" ] || [ "$(get_worker_mode baseball)" = "prod" ] || [ "$(get_worker_mode football)" = "prod" ]; then
-      build_and_deploy_frontend "prod"
+      if ! build_and_deploy_frontend "prod"; then
+        echo -e "${RED}${BOLD}✘ Frontend deployment failed${NC}"
+        exit 1
+      fi
     else
-      build_and_deploy_frontend "preview"
+      if ! build_and_deploy_frontend "preview"; then
+        echo -e "${RED}${BOLD}✘ Frontend deployment failed${NC}"
+        exit 1
+      fi
     fi
   fi
 fi
@@ -594,8 +644,7 @@ fi
 # │                    Environment Configuration                            │
 # └─────────────────────────────────────────────────────────────────────────┘
 
-echo
-echo -e "${BOLD}${PURPLE}🔧 Environment Configuration${NC}"
+banner "${PURPLE}" "🔧 Environment Configuration"
 
 # Generate .env.local file for local development or clean it up for remote deployment
 generate_local_env_file() {
@@ -650,6 +699,68 @@ EOF
 
 generate_local_env_file
 
+# -------------------------------------------------------------------------
+# Worker information helper (needs to be defined before first use)
+
+# Get the appropriate URL for a worker based on its deployment mode
+get_worker_url() {
+  local worker_name="$1"
+  local worker_port="$2" 
+  local worker_label="$3"
+  
+  local deployment_mode
+  deployment_mode=$(get_worker_mode "$worker_name")
+  
+  case "$deployment_mode" in
+    dev)        echo "http://localhost:$worker_port" ;;
+    preview)    echo "https://${worker_label}-preview.${CF_ACCOUNT_DOMAIN}" ;;
+    prod)       echo "https://${worker_label}.${CF_ACCOUNT_DOMAIN}" ;;
+    skip)       echo "disabled" ;;
+    *)          echo "unknown" ;;
+  esac
+}
+
+# Worker information helper
+print_worker_info() {
+  local worker_name="$1"
+  local worker_port="$2"
+  local worker_label="$3"
+  
+  local deployment_mode
+  local worker_url
+  local mode_display
+  local worker_display
+  
+  deployment_mode=$(get_worker_mode "$worker_name")
+  
+  # Skip if worker is disabled
+  if [ "$deployment_mode" = "skip" ]; then
+    return
+  fi
+  
+  worker_url=$(get_worker_url "$worker_name" "$worker_port" "$worker_label")
+  worker_display=$(echo "$worker_name" | awk '{print toupper(substr($0,1,1)) substr($0,2)}')
+  
+  # Format deployment mode with colors
+  case "$deployment_mode" in
+    dev)        mode_display="${CYAN}${BOLD}Local Dev${NC}" ;;
+    preview)    mode_display="${YELLOW}${BOLD}Preview${NC}" ;;
+    prod)       mode_display="${RED}${BOLD}Production${NC}" ;;
+    *)          mode_display="${GRAY}${deployment_mode}${NC}" ;;
+  esac
+  
+  echo -e "${GREEN}${BOLD}${worker_display} Worker${NC} ${DIM}(${mode_display}${DIM})${NC}"
+  echo -e "${DIM}  URL:${NC}     ${CYAN}${worker_url}${NC}"
+  
+  # Show additional info for local workers
+  if [ "$deployment_mode" = "dev" ]; then
+    echo -e "${DIM}  Health:${NC}  ${GRAY}http://localhost:${worker_port}/health${NC}"
+    echo -e "${DIM}  Logs:${NC}    ${GRAY}tail -f /tmp/${worker_name}.log${NC}"
+  fi
+  
+  echo
+}
+
 # ┌─────────────────────────────────────────────────────────────────────────┐
 # │                    Deployment Mode Detection                            │
 # └─────────────────────────────────────────────────────────────────────────┘
@@ -698,8 +809,7 @@ fi
 # │                       Frontend Startup                                 │
 # └─────────────────────────────────────────────────────────────────────────┘
 
-echo
-echo -e "${BOLD}${PURPLE}🖥️  Starting Next.js Frontend${NC} ${DIM}(port 3000)${NC}"
+banner "${PURPLE}" "🖥️  Starting Next.js Frontend (port 3000)"
 
 (cd openai && npm run dev > /tmp/frontend.log 2>&1) &
 FRONTEND_PID=$!
@@ -711,8 +821,7 @@ echo $FRONTEND_PID > /tmp/frontend.pid
 # │                      Service Health Checks                             │
 # └─────────────────────────────────────────────────────────────────────────┘
 
-echo
-echo -e "${BOLD}${BLUE}⏳ Service Health Checks${NC}"
+banner "${BLUE}" "⏳ Service Health Checks"
 
 # Check if a service is responding to health checks
 check_service() {
@@ -777,31 +886,11 @@ else
   echo -e "${YELLOW}${BOLD}⚠ DRY RUN:${NC} ${DIM}Skipping health checks${NC}"
 fi
 
-# Get the appropriate URL for a worker based on its deployment mode
-get_worker_url() {
-  local worker_name="$1"
-  local worker_port="$2" 
-  local worker_label="$3"
-  
-  local deployment_mode
-  deployment_mode=$(get_worker_mode "$worker_name")
-  
-  case "$deployment_mode" in
-    dev)        echo "http://localhost:$worker_port" ;;
-    preview)    echo "https://${worker_label}-preview.${CF_ACCOUNT_DOMAIN}" ;;
-    prod)       echo "https://${worker_label}.${CF_ACCOUNT_DOMAIN}" ;;
-    skip)       echo "disabled" ;;
-    *)          echo "unknown" ;;
-  esac
-}
-
 # ┌─────────────────────────────────────────────────────────────────────────┐
 # │                       Service Information                               │
 # └─────────────────────────────────────────────────────────────────────────┘
 
-echo
-echo -e "${BOLD}${BLUE}🌐 Service Information${NC}"
-echo -e "${BLUE}═══════════════════════${NC}"
+banner "${BLUE}" "🌐 Service Information"
 
 # Frontend information  
 echo -e "${GREEN}${BOLD}Frontend${NC}"
@@ -809,47 +898,6 @@ echo -e "${DIM}  URL:${NC}     ${CYAN}http://localhost:3000${NC}"
 echo -e "${DIM}  Logs:${NC}    ${GRAY}tail -f /tmp/frontend.log${NC}"
 echo
 
-# Display information for a worker service
-print_worker_info() {
-  local worker_name="$1"
-  local worker_port="$2"
-  local worker_label="$3"
-  
-  local deployment_mode
-  local worker_url
-  local mode_display
-  local worker_display
-  
-  deployment_mode=$(get_worker_mode "$worker_name")
-  
-  # Skip if worker is disabled
-  if [ "$deployment_mode" = "skip" ]; then
-    return
-  fi
-  
-  worker_url=$(get_worker_url "$worker_name" "$worker_port" "$worker_label")
-  worker_display=$(echo "$worker_name" | awk '{print toupper(substr($0,1,1)) substr($0,2)}')
-  
-  # Format deployment mode with colors
-  case "$deployment_mode" in
-    dev)         mode_display="${CYAN}${BOLD}Local${NC}" ;;
-    preview)     mode_display="${YELLOW}${BOLD}Preview${NC}" ;;
-    prod)        mode_display="${RED}${BOLD}Production${NC}" ;;
-    *)           mode_display="${GRAY}${deployment_mode}${NC}" ;;
-  esac
-  
-  # Display worker information
-  echo -e "${GREEN}${BOLD}${worker_display} Worker${NC} ${DIM}(${mode_display}${DIM})${NC}"
-  echo -e "${DIM}  URL:${NC}     ${CYAN}${worker_url}${NC}"
-  echo -e "${DIM}  Logs:${NC}    ${GRAY}tail -f /tmp/${worker_name}.log${NC}"
-  
-  # Show health endpoint for local workers
-  if [ "$deployment_mode" = "dev" ]; then
-    echo -e "${DIM}  Health:${NC}  ${GRAY}http://localhost:${worker_port}/health${NC}"
-  fi
-  
-  echo
-}
 
 # Display worker information
 print_worker_info "auth"     "8786" "auth-worker"
