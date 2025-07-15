@@ -28,7 +28,7 @@ export async function getCredentials(
 ): Promise<EspnCredentials | null> {
   try {
     // Use provided URL or default to local development
-    const authWorkerUrl = config.authWorkerUrl || config.defaultUrl || 'http://localhost:8786';
+    const authWorkerUrl = config.authWorkerUrl || config.defaultUrl;
     const url = `${authWorkerUrl}/credentials/espn?raw=true`;
     
     console.log(`🔑 Fetching ESPN credentials for user ${clerkUserId} from ${url}`);
@@ -82,7 +82,7 @@ export async function getUserLeagues(
   config: AuthWorkerConfig = {}
 ): Promise<Array<{ leagueId: string; sport: string; teamId?: string }>> {
   try {
-    const authWorkerUrl = config.authWorkerUrl || config.defaultUrl || 'http://localhost:8786';
+    const authWorkerUrl = config.authWorkerUrl || config.defaultUrl;
     const url = `${authWorkerUrl}/leagues`;
     
     console.log(`🏈 Fetching user leagues for ${clerkUserId} from ${url}`);

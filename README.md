@@ -13,20 +13,31 @@ FLAIM is your AI-powered fantasy sports assistant featuring a streamlined onboar
 
 ## 🚀 Quick Start
 
-### Interactive Development Launcher
+### Three-Environment Deployment
+FLAIM uses industry-standard environment terminology:
+- **`dev`**: Local development on your machine with hot-reloading
+- **`preview`**: Remote staging environment for testing and review  
+- **`prod`**: Live production environment
+
+Development workflow managed by two core scripts:
+- `./build.sh`: Non-interactive production artifact builder (ideal for CI/CD)
+- `./start.sh`: Interactive orchestrator for all environments **← Your main entry point**
+
 ```bash
 git clone https://github.com/yourusername/flaim
 cd flaim
-./setup.sh              # One-time setup for local development
-./build.sh              # Build production artifacts (optional)
-./start.sh              # Interactive launcher for flexible deployment
+
+# 1. Build production artifacts
+./build.sh
+
+# 2. Deploy to any environment interactively
+./start.sh
 ```
 
-The interactive launcher is the recommended way to run FLAIM for all scenarios. It lets you mix and match deployment modes for each service:
-- **Local dev**: Traditional local development with health checks
-- **Remote preview**: Wrangler remote development with live URLs
-- **Deploy preview/prod**: Deploy to Cloudflare environments
-- **Skip**: Disable specific workers
+Choose your target environment in the interactive menu:
+- **Option 1**: `dev` - Run all services locally
+- **Option 2**: `preview` - Deploy to staging environment
+- **Option 3**: `prod` - Deploy to production
 
 **Ready in 5 minutes!** See the [Getting Started Guide](docs/GETTING_STARTED.md) for detailed setup.
 
@@ -65,10 +76,11 @@ The interactive launcher is the recommended way to run FLAIM for all scenarios. 
 - ✅ **Upgraded Stack**: Core frameworks updated to **React 19** and **Next.js 15**.
 
 ### 🔗 **Developer Experience**
-- ✅ **Interactive Development Launcher**: A single `start.sh` script now manages all deployment scenarios (local, remote, production), replacing the legacy `start-prod.sh`.
-- ✅ **True NPM Workspace**: A single root `package.json` with proper dependency hoisting eliminates duplicate dependencies and type conflicts.
-- ✅ **Scoped Imports**: Clean `@flaim/auth/*` imports replace brittle relative paths.
-- ✅ **Wrangler v4.0 Support**: Latest Cloudflare CLI with modern JavaScript features and improved local development.
+- ✅ **Three-Environment Architecture**: Industry-standard `dev`/`preview`/`prod` terminology with secure environment separation
+- ✅ **Interactive Development Launcher**: Single `start.sh` script manages all deployment scenarios, replacing legacy tools
+- ✅ **True NPM Workspace**: Single root `package.json` with proper dependency hoisting eliminates conflicts
+- ✅ **Scoped Imports**: Clean `@flaim/auth/*` imports replace brittle relative paths
+- ✅ **Wrangler v4.0 Support**: Latest Cloudflare CLI with modern JavaScript features
 
 ### 🎯 **Platform Features**
 - ✅ **Complete Onboarding Redesign**: Streamlined 8-step setup flow from sign-in to chat.
@@ -78,10 +90,11 @@ The interactive launcher is the recommended way to run FLAIM for all scenarios. 
 
 ## ⚠️ Important Notes
 
-### MCP & KV Storage Runtime Requirements
+### Environment & Runtime Requirements
 **CF KV credential storage and MCP servers are only available in Cloudflare Workers runtime.** The system is designed for Workers-first deployment:
-- ✅ **Production**: Cloudflare Workers with KV namespace bindings and MCP protocol support
-- ✅ **Development**: Mock KV for testing (NODE_ENV=development/test)
+- ✅ **Production (`prod`)**: Cloudflare Workers with KV namespace bindings and MCP protocol support
+- ✅ **Preview (`preview`)**: Production-like staging environment with full security features
+- ✅ **Development (`dev`)**: Local development with mock KV for testing
 - ✅ **Cloudflare Pages**: Direct Upload deployment with automatic branch previews
 - ❌ **Node.js Production**: KV client and MCP servers not implemented for Node.js production SSR
 

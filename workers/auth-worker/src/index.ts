@@ -204,13 +204,27 @@ class PlatformCredentialStorage {
 }
 
 // CORS helper - Allow sport workers and Next.js origins
-function getCorsHeaders() {
-  return {
-    'Access-Control-Allow-Origin': '*', // Allow all origins for development (tighten in production)
+const ALLOWED_ORIGINS = [
+  'https://dev.flaim-frontend-dev.pages.dev',      // Stable Dev Preview URL
+  'https://flaim.app',                             // Production URL (Assumed)
+  'http://localhost:8787',                         // Local Wrangler dev server
+  'https://localhost:8787',                        // Local Wrangler dev server (HTTPS)
+  'http://localhost:3000',                         // Local Next.js dev server
+];
+
+function getCorsHeaders(request: Request) {
+  const origin = request.headers.get('Origin');
+  const headers: { [key: string]: string } = {
     'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Clerk-User-ID',
     'Access-Control-Max-Age': '86400', // Cache preflight for 24 hours
   };
+
+  if (origin && ALLOWED_ORIGINS.includes(origin)) {
+    headers['Access-Control-Allow-Origin'] = origin;
+  }
+
+  return headers;
 }
 
 // Extract Clerk User ID from header
@@ -253,7 +267,7 @@ function validateCredentials(platform: string, credentials: any): { valid: boole
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
-    const corsHeaders = getCorsHeaders();
+    const corsHeaders = getCorsHeaders(request);
 
     // Handle CORS preflight
     if (request.method === 'OPTIONS') {

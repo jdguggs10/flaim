@@ -53,11 +53,16 @@ export { getConfigAdapter, getEnv };
 export const isDevelopment = () => getEnv('NODE_ENV') === 'development';
 export const isProduction = () => getEnv('NODE_ENV') === 'production';
 
+// Application environment helpers (use these for logic control)
+export const isLocalDev = () => getEnv('ENVIRONMENT') === 'dev';
+export const isPreview = () => getEnv('ENVIRONMENT') === 'preview';
+export const isProd = () => getEnv('ENVIRONMENT') === 'prod';
+
 // Validation helper
 export function validateAuthConfig(): { valid: boolean; errors: string[] } {
   const errors: string[] = [];
   
-  if (!authConfig.clerkApiKey && isProduction()) {
+  if (!authConfig.clerkApiKey && isProd()) {
     errors.push('CLERK_SECRET_KEY is required in production');
   }
   

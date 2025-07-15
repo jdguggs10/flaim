@@ -20,6 +20,7 @@
       // Environment variables for production
       "vars": {
         "NODE_ENV": "production",
+        "ENVIRONMENT": "prod",
         "AUTH_WORKER_URL": "https://api.flaim.gg/auth"
       },
       
@@ -33,7 +34,29 @@
       ]
     },
     
-    // Development environment
+    // Preview environment (remote dev/staging)
+    "preview": {
+      "name": "football-espn-mcp-preview",
+      "workers_dev": true,  // Use workers.dev URL for preview
+      
+      // Environment variables for preview
+      "vars": {
+        "NODE_ENV": "production",
+        "ENVIRONMENT": "preview",
+        "AUTH_WORKER_URL": "https://auth-worker-preview.gerrygugger.workers.dev"
+      },
+      
+      // KV namespace for preview
+      "kv_namespaces": [
+        {
+          "binding": "CF_KV_CREDENTIALS",
+          "id": "3c946fc92ef84fd58d11c670d2e4120b",
+          "preview_id": "3c946fc92ef84fd58d11c670d2e4120b"
+        }
+      ]
+    },
+    
+    // Development environment (local)
     "dev": {
       "name": "football-espn-mcp-dev", 
       "workers_dev": true,  // Use workers.dev URL for development
@@ -41,6 +64,7 @@
       // Environment variables for dev
       "vars": {
         "NODE_ENV": "development",
+        "ENVIRONMENT": "dev",
         "AUTH_WORKER_URL": "https://auth-worker-dev.gerrygugger.workers.dev"
       },
       

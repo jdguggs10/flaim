@@ -9,7 +9,8 @@
   "scripts": {
     "dev": "wrangler dev --port 8786",
     "deploy": "wrangler deploy",
-    "test": "jest"
+    "test": "jest",
+    "type-check": "tsc --noEmit"
   },
   "keywords": [
     "cloudflare",

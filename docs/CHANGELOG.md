@@ -60,6 +60,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🚀 Terminology Standardization & Security Enhancement
+
+#### Added  
+- **Three-Environment Architecture**: Standardized industry terminology across entire codebase
+  - `dev`: Local development environment with hot-reloading
+  - `preview`: Remote staging environment for testing and review
+  - `prod`: Live production environment
+- **Environment Variable Separation**: New `ENVIRONMENT` variable controls application logic, decoupled from `NODE_ENV`
+- **Enhanced Security**: Preview environments now use production security settings (`NODE_ENV=production`)
+- **Configuration Centralization**: Removed all hardcoded localhost fallbacks from source code
+
+#### Changed
+- **Critical Security Fix**: Eliminated dangerous `NODE_ENV === 'development'` logic control in production-critical code paths
+- **Environment Configuration**: All `wrangler.jsonc` files now use consistent `env.dev`/`env.preview`/`env.prod` structure  
+- **Script Modernization**: `start.sh` updated with new terminology and proper environment flags
+- **Helper Functions**: Added `isLocalDev()`, `isPreview()`, `isProd()` functions in `auth/shared/config.ts`
+
+#### Security
+- **CRITICAL**: Fixed security vulnerability where preview environments used development security features
+- **IMPORTANT**: Application logic now explicitly controlled by `ENVIRONMENT` variable instead of build flag
+- **IMPORTANT**: Production-like environments (`preview`) now maintain full security posture
+
+### 🚀 Developer Experience  
+- **Refactored Build & Deploy Scripts**: Overhauled the development workflow by separating build and deployment logic.
+  - `build.sh`: Is now a pure, non-interactive artifact builder, optimized for CI/CD environments. It no longer handles any deployment or local server logic.
+  - `start.sh`: Is now the single, unified orchestrator for all developer workflows, including local development and remote deployments of the entire stack (workers and frontend).
+  - **Benefit**: This creates a cleaner separation of concerns and a more intuitive developer experience. Developers now use a single script (`start.sh`) for all runtime and deployment tasks.
+
 ## [6.1.0] - 2025-07-08
 
 ### Changed

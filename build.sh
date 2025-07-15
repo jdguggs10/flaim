@@ -1,22 +1,22 @@
 #!/bin/bash
 
 # ============================================================================
-#  FLAIM Consolidated Build Script (build.sh)
+#  FLAIM Production Build Script (build.sh)
 # ---------------------------------------------------------------------------
-#  Purpose   : One-stop build entrypoint primarily for CI / prod artefact builds.
-#              Development servers already transpile on-the-fly, so an extra
-#              "dev build" is unnecessary.  This script focuses on a deterministic
-#              sequential production build (equivalent to the old build-prod.sh)
-#              but leaves room for future options.
+#  Purpose   : Pure artifact builder for CI/CD pipelines and deployment prep.
+#              Creates production-ready, deployable artifacts with zero side effects.
+#              No interactive modes, no deployment logic - just deterministic building.
 #
-#  Why keep this script?
-#    • CI pipelines run it to fail fast on any TypeScript or bundling errors.
-#    • Produces release artefacts ready for `wrangler deploy` and `next start`.
-#    • Keeps build logic in one maintained place instead of scattered.
+#  What it does:
+#    • Installs dependencies (npm ci)
+#    • Builds auth module
+#    • Builds Next.js frontend with next-on-pages adapter
+#    • Type-checks all workers
+#    • Outputs clean artifacts ready for deployment
 #
-#  Usage examples:
-#      ./build.sh            # interactive menu (default)
-#      ./build.sh --prod     # non-interactive production build (CI)
+#  Usage:
+#      ./build.sh           # Build everything
+#      ./build.sh --quiet   # Silent mode for CI
 #
 # ============================================================================
 
@@ -34,41 +34,23 @@ success() { echo -e "${GREEN}[OK]${NC} $1"; }
 error()   { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 
 # ----------------------------------------------------------------------------
-# 1. Parse mode
+# 1. Parse flags
 # ----------------------------------------------------------------------------
-MODE="interactive"
+QUIET_MODE=false
 case "$1" in
-  --prod) MODE="prod" ;;
-  --remote-dev) MODE="remote-dev" ;;
-  --remote-prod|--prod-deploy) MODE="remote-prod" ;;
-  --local-dev) MODE="local-dev" ;;
+  --quiet) QUIET_MODE=true ;;
+  --help) 
+    echo -e "${BLUE}FLAIM Build Script${NC}"
+    echo "Usage: $0 [--quiet] [--help]"
+    echo "  --quiet  Silent mode (minimal output)"
+    echo "  --help   Show this help"
+    exit 0
+    ;;
 esac
 
-# ----------------------------------------------------------------------------
-# 2. Interactive prompt (optional)
-# ----------------------------------------------------------------------------
-if [[ "$MODE" == "interactive" ]]; then
-  echo -e "${YELLOW}FLAIM Build Launcher${NC}"
-  echo "========================\n"
-  echo "What kind of build would you like to run?"
-  echo "  1) Production build (sequential, fails on first error)"
-  echo "  2) Local dev preview (wrangler pages dev)"
-  echo "  3) Remote DEV deploy (Cloudflare Pages dev branch)"
-  echo "  4) Remote PROD deploy (Cloudflare Pages main branch)"
-  echo "  0) Cancel"
-  read -rp "Select [1/0, default 1]: " CHOICE
-  CHOICE=${CHOICE:-1}
-  case "$CHOICE" in
-    1) MODE="prod" ;;
-    2) MODE="local-dev" ;;
-    3) MODE="remote-dev" ;;
-    4) MODE="remote-prod" ;;
-    0) echo "Cancelled."; exit 0 ;;
-    *) echo "Invalid selection"; exit 1 ;;
-  esac
+if [ "$QUIET_MODE" = false ]; then
+  echo -e "\n🔨 ${BOLD}Building FLAIM Production Artifacts${NC}"
 fi
-
-echo -e "\n🔨 Starting $(echo $MODE | tr '[:lower:]' '[:upper:]') build"
 
 # ----------------------------------------------------------------------------
 # 3. Build steps (production)
@@ -98,43 +80,29 @@ typecheck_worker() {
   success "$label worker type-checked"
 }
 
-deploy_frontend_remote() {
-  local branch="$1" # dev or main
-  local project="flaim-frontend-dev" # adjust if production project differs
-  info "Deploying frontend to Cloudflare Pages (branch: $branch)…"
-  (cd openai && wrangler pages deploy .vercel/output/static --project-name "$project" --branch "$branch") || error "Pages deploy failed"
-  success "Frontend deployed to $branch"
-}
 
-run_local_preview() {
-  info "Starting local Pages preview… (Ctrl+C to exit)"
-  (cd openai && wrangler pages dev .vercel/output/static) || error "Pages dev exited with error"
-}
+# ----------------------------------------------------------------------------
+# 3. Execute build sequence
+# ----------------------------------------------------------------------------
+# Deterministic build order - auth first, then frontend, then type-checks
 
-if [[ "$MODE" == "prod" ]]; then
-  build_auth
-  build_frontend
-  typecheck_worker workers/baseball-espn-mcp "Baseball"
-  typecheck_worker workers/football-espn-mcp "Football"
-elif [[ "$MODE" == "local-dev" ]]; then
-  build_frontend
-  run_local_preview
-elif [[ "$MODE" == "remote-dev" ]]; then
-  build_frontend
-  deploy_frontend_remote dev
-elif [[ "$MODE" == "remote-prod" ]]; then
-  build_frontend
-  deploy_frontend_remote main
-fi
+build_auth
+build_frontend
+typecheck_worker workers/auth-worker "Auth"
+typecheck_worker workers/baseball-espn-mcp "Baseball"
+typecheck_worker workers/football-espn-mcp "Football"
 
 # ----------------------------------------------------------------------------
 # 4. Outro
 # ----------------------------------------------------------------------------
 
-echo -e "\n${GREEN}🎉 Task completed for mode: $MODE.${NC}"
+# ----------------------------------------------------------------------------
+# 4. Build complete
+# ----------------------------------------------------------------------------
 
-if [[ "$MODE" == "local-dev" ]]; then
-  echo "Local preview running. Remember to stop with Ctrl+C when done."
-elif [[ "$MODE" == remote-* ]]; then
-  echo "Visit the deployment URL printed above to verify the site."
+if [ "$QUIET_MODE" = false ]; then
+  echo -e "\n${GREEN}🎉 Build artifacts ready for deployment${NC}"
+  echo -e "${DIM}  Frontend: openai/.vercel/output/static/${NC}"
+  echo -e "${DIM}  Auth module: auth/dist/${NC}"
+  echo -e "${DIM}  Workers: type-checked and ready${NC}"
 fi

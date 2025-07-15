@@ -45,8 +45,8 @@ export class EspnKVStorage {
         if (!kvEnv) {
           throw new Error(`Environment variable ${opts.envVarName} not found`);
         }
-        // In development/test, allow mock KV for testing
-        if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test') {
+        // In local development/test, allow mock KV for testing
+        if (process.env.ENVIRONMENT === 'dev' || process.env.NODE_ENV === 'test') {
           // Mock KV will be injected by test setup
           this.kvNamespace = kvEnv as any;
         } else {

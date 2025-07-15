@@ -36,7 +36,7 @@ export function ClerkProvider({
     process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
   if (!clerkPublishableKey) {
-    if (process.env.NODE_ENV === 'development') {
+    if (process.env.ENVIRONMENT === 'dev') {
       console.warn('⚠️ NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY not found. Authentication will not work.');
       return <>{children}</>;
     }

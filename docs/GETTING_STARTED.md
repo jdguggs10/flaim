@@ -34,46 +34,42 @@ Instead of juggling multiple apps and spreadsheets, you can ask natural language
 3. Get your **Publishable Key** and **Secret Key**
 4. Configure sign-in options (email/password recommended)
 
-### Step 2: Install Dependencies
+### Step 2: Install Dependencies & Build Artifacts
 
 ```bash
 # Clone the repository
 git clone https://github.com/yourusername/flaim
 cd flaim
 
-# Install all dependencies from monorepo root (hoists shared packages)
+# Install all dependencies from monorepo root
 npm install
 
-# Optional: Build production artifacts (recommended for CI/production)
-./build.sh              # Interactive build menu, or use ./build.sh --prod for CI
+# Build all production artifacts. This is required before deploying.
+./build.sh
 
 # The build script creates:
 # - Compiled auth module with scoped imports (@flaim/auth/*)
-# - Next.js production build
+# - Next.js production build adapted for Cloudflare Pages
 # - Type-checked worker artifacts
 ```
 
-### Step 3: Interactive Development Setup
+### Step 3: Interactive Development & Deployment
+
+The `./start.sh` script is the single entry point for all development and deployment workflows. It will guide you through running services locally or deploying them to Cloudflare.
 
 ```bash
-# Use the interactive launcher for flexible development
-cd ../..  # Return to project root
-./start.sh              # Interactive deployment wizard
+# Use the interactive orchestrator for all workflows
+./start.sh
 
-# The launcher will prompt for each worker:
-# ▶  How should the auth worker run?
-#     1) Local dev          (wrangler dev --port)
-#     2) Remote preview     (wrangler dev --remote)
-#     3) Deploy  preview    (wrangler deploy --env preview)
-#     4) Deploy  prod       (wrangler deploy --env prod)
-#     0) Skip
+# The launcher will prompt you to choose a mode:
+# ▶  Deployment Mode Selection
+#     1) Local dev          (all services run locally)
+#     2) Remote dev         (deploy workers + frontend to dev)
+#     3) Deploy prod        (deploy workers + frontend to production)
+#     0) Custom             (configure each worker individually)
 
-# For production deployment, choose option 4 for all workers
-# For development, mix and match based on your needs:
-# - Local (1): Traditional development with health checks
-# - Remote (2): Remote preview with live URLs for testing
-# - Deploy (3/4): Full deployment to Cloudflare environments
-# - Skip (0): Disable specific workers
+# For local development, choose option 1 (dev).
+# For production deployment, choose option 3.
 
 # Before deploying (options 3/4), ensure you have:
 # 1. Set CF_ACCOUNT_ID environment variable
@@ -126,7 +122,7 @@ The frontend is designed for Cloudflare Pages. Configuration is managed via thre
     - The `build.sh` script provides the easiest way to deploy.
     ```bash
     # From the project root
-    ./build.sh --remote-dev   # Deploy to the dev branch
+    ./build.sh --remote-dev   # Deploy to the preview branch
     ./build.sh --remote-prod  # Deploy to the main branch
     ```
     - For detailed manual deployment steps, see the [Deployment Guide](DEPLOYMENT.md).

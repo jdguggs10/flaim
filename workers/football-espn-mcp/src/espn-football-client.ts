@@ -35,7 +35,7 @@ export class EspnFootballApiClient {
     // Add authentication cookies if available
     if (credentials) {
       headers['Cookie'] = `SWID=${credentials.swid}; espn_s2=${credentials.s2}`;
-    } else if (this.env.NODE_ENV === 'development' && this.env.ESPN_S2 && this.env.ESPN_SWID) {
+    } else if (this.env.ENVIRONMENT === 'dev' && this.env.ESPN_S2 && this.env.ESPN_SWID) {
       console.log('⚠️ Development mode: Using fallback environment ESPN credentials for football');
       headers['Cookie'] = `SWID=${this.env.ESPN_SWID}; espn_s2=${this.env.ESPN_S2}`;
     }
@@ -89,7 +89,7 @@ export class EspnFootballApiClient {
     // Authentication required for team data
     if (credentials) {
       headers['Cookie'] = `SWID=${credentials.swid}; espn_s2=${credentials.s2}`;
-    } else if (this.env.NODE_ENV === 'development' && this.env.ESPN_S2 && this.env.ESPN_SWID) {
+    } else if (this.env.ENVIRONMENT === 'dev' && this.env.ESPN_S2 && this.env.ESPN_SWID) {
       console.log('⚠️ Development mode: Using fallback environment ESPN credentials');
       headers['Cookie'] = `SWID=${this.env.ESPN_SWID}; espn_s2=${this.env.ESPN_S2}`;
     } else {
@@ -159,7 +159,7 @@ export class EspnFootballApiClient {
 
     if (credentials) {
       headers['Cookie'] = `SWID=${credentials.swid}; espn_s2=${credentials.s2}`;
-    } else if (this.env.NODE_ENV === 'development' && this.env.ESPN_S2 && this.env.ESPN_SWID) {
+    } else if (this.env.ENVIRONMENT === 'dev' && this.env.ESPN_S2 && this.env.ESPN_SWID) {
       console.log('⚠️ Development mode: Using fallback environment ESPN credentials');
       headers['Cookie'] = `SWID=${this.env.ESPN_SWID}; espn_s2=${this.env.ESPN_S2}`;
     }
@@ -208,7 +208,7 @@ export class EspnFootballApiClient {
 
     if (credentials) {
       headers['Cookie'] = `SWID=${credentials.swid}; espn_s2=${credentials.s2}`;
-    } else if (this.env.NODE_ENV === 'development' && this.env.ESPN_S2 && this.env.ESPN_SWID) {
+    } else if (this.env.ENVIRONMENT === 'dev' && this.env.ESPN_S2 && this.env.ESPN_SWID) {
       console.log('⚠️ Development mode: Using fallback environment ESPN credentials');
       headers['Cookie'] = `SWID=${this.env.ESPN_SWID}; espn_s2=${this.env.ESPN_S2}`;
     }

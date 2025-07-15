@@ -9,6 +9,7 @@ export interface Env {
   ESPN_S2?: string;
   ESPN_SWID?: string;
   NODE_ENV?: string;
+  ENVIRONMENT?: string;
   CLERK_SECRET_KEY?: string;
 }
 
@@ -44,7 +45,7 @@ export class EspnMcpProvider {
 
   // Fallback credentials for development or anonymous access
   private getFallbackCredentials(): EspnCredentials | null {
-    if (this.env.NODE_ENV === 'development' && this.env.ESPN_S2 && this.env.ESPN_SWID) {
+    if (this.env.ENVIRONMENT === 'dev' && this.env.ESPN_S2 && this.env.ESPN_SWID) {
       console.log('⚠️ Development mode: Using fallback environment ESPN credentials');
       return {
         swid: this.env.ESPN_SWID,

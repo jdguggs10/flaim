@@ -28,11 +28,33 @@
       // Environment variables for production
       "vars": {
         "CF_ENCRYPTION_KEY": "YOUR-32-BYTE-BASE64-KEY",
-        "NODE_ENV": "production"
+        "NODE_ENV": "production",
+        "ENVIRONMENT": "prod"
       }
     },
     
-    // Development environment
+    // Preview environment (remote dev/staging)
+    "preview": {
+      "name": "auth-worker-preview",
+      "workers_dev": true,  // Use workers.dev URL for preview
+      
+      // KV namespace for preview
+      "kv_namespaces": [
+        {
+          "binding": "CF_KV_CREDENTIALS",
+          "id": "3c946fc92ef84fd58d11c670d2e4120b"
+        }
+      ],
+      
+      // Environment variables for preview
+      "vars": {
+        "NODE_ENV": "production",
+        "ENVIRONMENT": "preview",
+        "CF_ENCRYPTION_KEY": "YOUR-32-BYTE-BASE64-KEY"
+      }
+    },
+    
+    // Development environment (local)
     "dev": {
       "name": "auth-worker-dev",
       "workers_dev": true,  // Use workers.dev URL for development
@@ -48,6 +70,7 @@
       // Environment variables for dev
       "vars": {
         "NODE_ENV": "development",
+        "ENVIRONMENT": "dev",
         // Local-only; override with real key via .env or shell export
         "CF_ENCRYPTION_KEY": "YOUR-32-BYTE-BASE64-KEY"
       }

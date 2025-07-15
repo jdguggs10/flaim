@@ -11,24 +11,39 @@ export interface Env {
   ESPN_S2?: string;
   ESPN_SWID?: string;
   NODE_ENV?: string;
+  ENVIRONMENT?: string;
   CLERK_SECRET_KEY?: string;
   AUTH_WORKER_URL?: string;
 }
 
 // Helper function for CORS headers
-function getCorsHeaders() {
-  return {
-    'Access-Control-Allow-Origin': '*',
+const ALLOWED_ORIGINS = [
+  'https://dev.flaim-frontend-dev.pages.dev',      // Stable Dev Preview URL
+  'https://flaim.app',                             // Production URL (Assumed)
+  'http://localhost:8787',                         // Local Wrangler dev server
+  'https://localhost:8787',                        // Local Wrangler dev server (HTTPS)
+  'http://localhost:3000',                         // Local Next.js dev server
+];
+
+function getCorsHeaders(request: Request) {
+  const origin = request.headers.get('Origin');
+  const headers: { [key: string]: string } = {
     'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Clerk-User-ID',
   };
+
+  if (origin && ALLOWED_ORIGINS.includes(origin)) {
+    headers['Access-Control-Allow-Origin'] = origin;
+  }
+
+  return headers;
 }
 
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
-    const corsHeaders = getCorsHeaders();
+    const corsHeaders = getCorsHeaders(request);
 
     // Handle CORS preflight
     if (request.method === 'OPTIONS') {
@@ -94,7 +109,7 @@ export default {
           // Get credentials from auth-worker
           const authWorkerConfig = {
             authWorkerUrl: env.AUTH_WORKER_URL,
-            defaultUrl: 'http://localhost:8786'
+            defaultUrl: env.AUTH_WORKER_URL
           };
 
           const credentials = await getCredentials(clerkUserId, authWorkerConfig);

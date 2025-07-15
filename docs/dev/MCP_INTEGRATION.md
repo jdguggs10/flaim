@@ -322,7 +322,7 @@ Enable debug logging in development:
 
 ```typescript
 // In your MCP worker
-const DEBUG = env.NODE_ENV === 'development';
+const DEBUG = env.ENVIRONMENT === 'dev';
 if (DEBUG) {
   console.log('MCP Tool Call:', { tool, arguments });
   console.log('ESPN API Response:', response);

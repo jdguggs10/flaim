@@ -55,8 +55,8 @@ export const flaimClerkMiddleware = createClerkMiddleware({
     const { userId } = auth();
     const { pathname } = request.nextUrl;
 
-    // Add custom headers for debugging in development
-    if (process.env.NODE_ENV === 'development') {
+    // Add custom headers for debugging in local development
+    if (process.env.ENVIRONMENT === 'dev') {
       const response = NextResponse.next();
       response.headers.set('x-user-id', userId || 'anonymous');
       response.headers.set('x-pathname', pathname);
