@@ -21,9 +21,9 @@ VERSION="1.1.0"
 
 # Cloudflare configuration - customize these for your setup
 CF_ACCOUNT_DOMAIN="${CF_ACCOUNT_DOMAIN:-gerrygugger.workers.dev}"
-CF_PAGES_PROJECT_NAME="${CF_PAGES_PROJECT_NAME:-flaim-frontend-dev}"
-CF_PAGES_PROD_DOMAIN="${CF_PAGES_PROD_DOMAIN:-flaim-frontend-dev.pages.dev}"
-CF_PAGES_DEV_DOMAIN="${CF_PAGES_DEV_DOMAIN:-dev.flaim-frontend-dev.pages.dev}"
+CF_PAGES_PROJECT_NAME="${CF_PAGES_PROJECT_NAME:-flaim-frontend}"
+CF_PAGES_PROD_DOMAIN="${CF_PAGES_PROD_DOMAIN:-flaim-frontend.pages.dev}"
+CF_PAGES_DEV_DOMAIN="${CF_PAGES_DEV_DOMAIN:-preview.flaim-frontend.pages.dev}"
 
 # Enhanced color palette
 readonly RED='\033[0;31m'
@@ -531,12 +531,12 @@ launch_or_deploy "football" "workers/football-espn-mcp" 8788
 # Build and deploy frontend for remote environments
 build_and_deploy_frontend() {
   local deployment_mode="$1"
-  local branch="dev"
+  local branch="preview"
   local project="$CF_PAGES_PROJECT_NAME"
   
   case "$deployment_mode" in
     preview)
-      branch="dev"
+      branch="preview"
       ;;
     prod)
       branch="main"
@@ -556,9 +556,9 @@ build_and_deploy_frontend() {
   fi
   
   echo -e "${PURPLE}${BOLD}🚀 Deploying Frontend${NC} ${DIM}(branch: $branch)${NC}"
-  echo -e "${DIM}  Running: wrangler pages deploy .vercel/output/static --project-name \"$project\" --branch \"$branch\"${NC}"
+  echo -e "${DIM}  Running: wrangler pages deploy .vercel/output --project-name \"$project\" --branch \"$branch\"${NC}"
   
-  if (cd openai && wrangler pages deploy .vercel/output/static --project-name "$project" --branch "$branch" 2>&1); then
+  if (cd openai && wrangler pages deploy .vercel/output --project-name "$project" --branch "$branch" 2>&1); then
     echo -e "${GREEN}${BOLD}✅ Frontend deployed successfully${NC}"
     return 0
   else
@@ -788,7 +788,7 @@ get_worker_url() {
   
   case "$deployment_mode" in
     dev)        echo "http://localhost:$worker_port" ;;
-    preview)    echo "https://${worker_label}-dev.${CF_ACCOUNT_DOMAIN}" ;;
+    preview)    echo "https://${worker_label}-preview.${CF_ACCOUNT_DOMAIN}" ;;
     prod)       echo "https://${worker_label}.${CF_ACCOUNT_DOMAIN}" ;;
     skip)       echo "disabled" ;;
     *)          echo "unknown" ;;
