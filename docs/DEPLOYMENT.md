@@ -2,16 +2,31 @@
 
 Complete deployment guide for all three environments: `dev` (local), `preview` (staging), and `prod` (production).
 
+## 📋 Prerequisites
+
+Before deploying, ensure you have the following installed:
+
+- **Node.js 20** (LTS) - Required for consistent builds
+  - Install: `nvm install 20 && nvm use 20`
+  - Verify: `node --version` (should show v20.x.x)
+- **npm** (comes with Node.js)
+- **Wrangler CLI** - Install with `npm install -g wrangler`
+
+> **Note**: Using a different Node version will cause EBADENGINE warnings during builds. Always use Node 20 for development and deployment.
+
 ## 🚀 Quick Deploy
 
 ```bash
 git clone https://github.com/yourusername/flaim
 cd flaim
 
-# 1. Build production artifacts
+# 1. Switch to Node 20 (required)
+nvm use 20
+
+# 2. Build production artifacts
 ./build.sh
 
-# 2. Deploy everything
+# 3. Deploy everything
 ./start.sh
 ```
 
@@ -278,6 +293,40 @@ curl https://your-frontend.pages.dev
 **Credential storage errors:**
 - Ensure `CF_ENCRYPTION_KEY` is identical across all workers
 - Verify KV namespace is bound correctly in `wrangler.jsonc`
+
+### Known Build Warnings
+
+**EBADENGINE warnings during build:**
+- **Cause**: Local Node.js version differs from project's `engines.node` specification
+- **Solution**: Run `nvm use 20` to switch to Node 20 LTS before building
+- **Impact**: No functional impact, just noisy logs
+
+**"Using edge runtime disables static generation":**
+- **Cause**: API routes use `export const runtime = 'edge'` for Cloudflare Pages compatibility
+- **Solution**: Normal behavior for dynamic routes requiring auth/external API calls
+- **Impact**: Pages render dynamically instead of statically (acceptable for API routes)
+
+**"npm warn Unknown cli config '--unsafe-perm'":**
+- **Cause**: Next-on-Pages uses deprecated npm flag during build process
+- **Solution**: No action needed - upstream issue in `@cloudflare/next-on-pages`
+- **Impact**: No functional impact, warning will be resolved in future npm/next-on-pages updates
+
+**"git repo has uncommitted changes":**
+- **Cause**: Wrangler warns when deploying from dirty git repository
+- **Solution**: Commit changes before deployment, or use `CI=true` environment variable to auto-silence
+- **Impact**: No functional impact, deployment proceeds normally
+
+---
+
+---
+
+## 📝 Recent Changes
+
+### Build Script Improvements (2025-07-16)
+- **CI Integration**: Added automatic `--commit-dirty=true` flag when `CI=true` environment is detected
+- **Node Version Documentation**: Added Prerequisites section emphasizing Node 20 LTS requirement
+- **Warning Documentation**: Expanded Known Build Warnings section with comprehensive explanations
+- **Developer Experience**: Enhanced Quick Deploy instructions with Node version switching
 
 ---
 

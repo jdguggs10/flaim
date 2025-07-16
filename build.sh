@@ -93,7 +93,29 @@ build_auth() {
 
 build_frontend() {
   info "Building Next.js frontend…"
-  (cd openai && npm run build && npx next-on-pages) || error "Frontend build failed"
+  
+  if [ "$QUIET_MODE" = true ]; then
+    # Filter noise in quiet mode while preserving errors
+    local build_log="/tmp/frontend_build.log"
+    if (cd openai && npm run build && npx next-on-pages) 2>&1 | \
+       tee "$build_log" | \
+       grep --line-buffered -v "EBADENGINE" | \
+       grep --line-buffered -v "unsafe-perm" > /dev/null; then
+      
+      # Show summary of filtered warnings
+      local ebad_count=$(grep -c "EBADENGINE" "$build_log" 2>/dev/null || echo 0)
+      local unsafe_count=$(grep -c "unsafe-perm" "$build_log" 2>/dev/null || echo 0)
+      
+      if [ "$ebad_count" -gt 0 ] || [ "$unsafe_count" -gt 0 ]; then
+        echo -e "${DIM}  Filtered warnings: ${ebad_count} EBADENGINE, ${unsafe_count} unsafe-perm${NC}"
+      fi
+    else
+      error "Frontend build failed"
+    fi
+  else
+    (cd openai && npm run build && npx next-on-pages) || error "Frontend build failed"
+  fi
+  
   success "Frontend built & adapted with next-on-pages"
 }
 

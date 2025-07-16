@@ -41,6 +41,7 @@ readonly NC='\033[0m'
 # Script configuration
 DRY_RUN=${DRY_RUN:-false}
 CONFIRM_PROD=${CONFIRM_PROD:-false}
+CI=${CI:-false}
 
 # Worker deployment modes
 declare AUTH_MODE=""
@@ -155,12 +156,50 @@ if ! wrangler whoami >/dev/null 2>&1; then
   exit 1
 fi
 
+# Check Node version
+required_node_major=20
+current_major=$(node -v | sed -E 's/^v([0-9]+).*/\1/')
+if [ "$current_major" -ne "$required_node_major" ]; then
+  echo -e "${YELLOW}${BOLD}⚠ Node $current_major detected – Node $required_node_major required.${NC}"
+  echo -e "  Use ${GREEN}nvm use 20${NC} (or volta) and re-run."
+  read -p "Continue anyway? [y/N]: " ans
+  [[ ! $ans =~ ^[Yy]$ ]] && exit 1
+fi
+
+# Check Wrangler version
+check_wrangler_version() {
+  local latest
+  latest=$(timeout 3 npm view wrangler@latest version 2>/dev/null)
+  local current
+  current=$(wrangler --version | awk '{print $2}')
+  if [ "$latest" != "$current" ] && [ -n "$latest" ]; then
+    echo -e "${YELLOW}⚠ Wrangler $current installed; $latest available.${NC}"
+    echo -e "  Update with: ${GREEN}npm i -g wrangler@latest${NC}"
+  fi
+}
+
+check_wrangler_version
+
 # ┌─────────────────────────────────────────────────────────────────────────┐
 # │                           Script Banner                                 │
 # └─────────────────────────────────────────────────────────────────────────┘
 
 banner "${BLUE}" "🚀 FLAIM Development Environment v${VERSION}"
 echo -e "${DIM}Fantasy League AI Manager - Development Orchestrator${NC}"
+
+# Display warning guidance
+show_warning_guidance() {
+  if [ "$DRY_RUN" = false ]; then
+    echo -e "${YELLOW}${BOLD}📋 Common Build Warnings${NC}"
+    echo -e "${DIM}  • EBADENGINE: Use Node 20 to eliminate warnings${NC}"
+    echo -e "${DIM}  • unsafe-perm: Upstream issue, no action needed${NC}"
+    echo -e "${DIM}  • Edge runtime: Normal for API routes${NC}"
+    echo -e "${DIM}  • Git dirty: Auto-handled or commit changes${NC}"
+    echo
+  fi
+}
+
+show_warning_guidance
 
 if [ "$DRY_RUN" = true ]; then
   echo -e "${YELLOW}${BOLD}⚠️  DRY RUN MODE:${NC} ${DIM}No changes will be made${NC}"
@@ -596,9 +635,24 @@ build_and_deploy_frontend() {
   
   echo
   echo -e "${PURPLE}${BOLD}🚀 Deploying Frontend${NC} ${DIM}(branch: $branch)${NC}"
-  echo -e "${DIM}  Running: wrangler pages deploy .vercel/output --project-name \"$project\" --branch \"$branch\"${NC}"
   
-  if (cd openai && wrangler pages deploy .vercel/output --project-name "$project" --branch "$branch" 2>&1); then
+  # Build wrangler command with conditional --commit-dirty flag
+  local deploy_cmd="wrangler pages deploy .vercel/output --project-name \"$project\" --branch \"$branch\""
+  
+  # Check if repo is dirty
+  local repo_dirty=false
+  if ! git diff-index --quiet HEAD --; then
+    repo_dirty=true
+  fi
+  
+  # Apply --commit-dirty flag for CI or dirty repo
+  if [ "$CI" = true ] || [ "$repo_dirty" = true ]; then
+    deploy_cmd="$deploy_cmd --commit-dirty=true"
+  fi
+  
+  echo -e "${DIM}  Running: $deploy_cmd${NC}"
+  
+  if (cd openai && eval "$deploy_cmd" 2>&1); then
     echo
     echo -e "${GREEN}${BOLD}✅ Frontend deployed successfully${NC}"
     echo

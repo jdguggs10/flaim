@@ -60,6 +60,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🔧 Build Script Improvements (2025-07-16)
+
+#### Added
+- **CI Integration**: Added automatic `--commit-dirty=true` flag to `start.sh` when `CI=true` environment is detected
+- **Prerequisites Documentation**: Added Node.js 20 LTS requirement to `DEPLOYMENT.md` with installation instructions
+- **Known Build Warnings**: Comprehensive documentation of all common build warnings with causes and solutions
+- **Enhanced Quick Deploy**: Updated deployment instructions to include Node version switching
+
+#### Changed
+- **Deployment Guide**: Enhanced `DEPLOYMENT.md` with Prerequisites section and expanded Common Issues
+- **Developer Onboarding**: Improved first-time setup experience with clear Node version requirements
+
+#### Fixed
+- **CI/CD Dirty Git Warnings**: Eliminated "git repo has uncommitted changes" warnings in CI environments
+- **Build Warning Documentation**: All EBADENGINE, edge runtime, and npm deprecation warnings now documented
+
+#### Technical Details
+- **Edge Runtime Analysis**: Audited all 15 API routes; confirmed all legitimately require edge runtime
+- **Node Version Consistency**: Documented requirement for Node 20 LTS to eliminate EBADENGINE warnings
+- **CI Detection**: Added `CI=${CI:-false}` environment detection to deployment scripts
+
 ### 🚀 Terminology Standardization & Security Enhancement
 
 #### Added  
