@@ -18,11 +18,12 @@ export interface Env {
 
 // Helper function for CORS headers
 const ALLOWED_ORIGINS = [
-  'https://dev.flaim-frontend-dev.pages.dev',      // Stable Dev Preview URL
-  'https://flaim.app',                             // Production URL (Assumed)
-  'http://localhost:8787',                         // Local Wrangler dev server
-  'https://localhost:8787',                        // Local Wrangler dev server (HTTPS)
-  'http://localhost:3000',                         // Local Next.js dev server
+  'https://preview.flaim-frontend.pages.dev',      // Remote preview (primary)
+  'https://preview.flaim.pages.dev',               // Legacy preview subdomain
+  'https://flaim.app',                             // Production
+  'http://localhost:8787',                         // Wrangler dev server (HTTP)
+  'https://localhost:8787',                        // Wrangler dev server (HTTPS)
+  'http://localhost:3000'                          // Next.js dev server
 ];
 
 function getCorsHeaders(request: Request) {
