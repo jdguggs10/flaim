@@ -18,8 +18,8 @@ wrangler kv:namespace create espn_credentials
 
 **Expected Output:**
 ```
-🌀 Creating namespace with title "espn_credentials"
-✅ Success!
+Creating namespace with title "espn_credentials"
+Success!
 Add the following to your configuration file in your kv_namespaces array:
 [[kv_namespaces]]
 binding = "NAMESPACE"

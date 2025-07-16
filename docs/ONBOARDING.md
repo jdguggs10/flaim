@@ -6,7 +6,7 @@
 
 FLAIM's onboarding system guides new users from initial sign-up to active chat functionality in 8 seamless steps. The flow automatically configures fantasy sports tools, discovers leagues, and sets up AI assistants based on user selections.
 
-## 🎯 User Journey
+## User Journey
 
 ### Step 1: Authentication
 - **Component**: Clerk sign-in/sign-up modal
@@ -58,7 +58,7 @@ FLAIM's onboarding system guides new users from initial sign-up to active chat f
 - **Action**: User clicks "Start Chatting"
 - **Outcome**: Chat interface activated with configured tools
 
-## 🏗️ Technical Architecture
+## Technical Architecture
 
 ### State Management
 ```typescript
@@ -111,7 +111,7 @@ MCP_CONFIG[platform][sport] = {
 }
 ```
 
-## 🎨 User Experience
+## User Experience
 
 ### Progressive Disclosure
 - Only show relevant options at each step
@@ -153,7 +153,7 @@ return <Chat />
 - Sets sport-specific tool permissions
 - Integrates with existing tools store
 
-## 🚀 Deployment Considerations
+## Deployment Considerations
 
 ### Environment Variables
 ```bash
@@ -168,7 +168,7 @@ HOCKEY_ESPN_MCP_URL=https://hockey-espn-mcp.workers.dev
 - Individual sport support can be toggled
 - Manual configuration remains available as fallback
 
-## 🔮 Future Enhancements
+## Future Enhancements
 
 ### Yahoo Integration
 - OAuth 2.0 flow implementation

@@ -1,419 +1,190 @@
-# Getting Started with FLAIM v6.0
+# Getting Started & Deployment Guide
 
-**FLAIM (Fantasy League AI Manager)** is your AI-powered fantasy sports assistant with modular authentication, usage limits, and multi-sport ESPN integration through MCP (Model Context Protocol) tools.
+This guide is the single source of truth for setting up, configuring, and deploying the FLAIM platform across all three environments: `dev` (local), `preview` (staging), and `prod` (production).
 
 ## What is FLAIM?
 
-FLAIM revolutionizes fantasy sports management by providing:
-- **AI-powered chat assistant** for fantasy sports questions
-- **Free tier**: 100 AI messages per month
-- **Multi-sport ESPN integration** for baseball and football
-- **Cross-platform authentication** ready for web and iOS
-- **Open MCP access** for external AI assistants
+FLAIM (Fantasy League AI Manager) is your AI-powered fantasy sports assistant with modular authentication, usage limits, and multi-sport ESPN integration through MCP (Model Context Protocol) tools.
 
 Instead of juggling multiple apps and spreadsheets, you can ask natural language questions like:
 - *"How did my team perform this week?"*
 - *"Who should I start at shortstop today?"*
 - *"Analyze this trade proposal for me"*
 
-## Quick Start (10 minutes)
+---
 
-### What You'll Need
+## Quick Start (5 Minutes)
 
-1. **Email address** for account creation
-2. **[OpenAI API key](https://platform.openai.com/docs/api-reference/authentication)** (for AI chat)
-3. **[Cloudflare Workers account](https://developers.cloudflare.com/workers/get-started/guide/)** (free tier)
-4. **ESPN Fantasy league** (optional, for private leagues)
-5. **[Cloudflare KV namespace](https://developers.cloudflare.com/kv/get-started/)** (for secure credential storage)
-6. **[Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/install-and-update/)** (`npm install -g wrangler`)
-
-### Step 1: Set Up Authentication
-
-1. Create a **[Clerk account](https://clerk.com/docs/quickstarts/setup-clerk)**
-2. Create a new application in Clerk dashboard
-3. Get your **Publishable Key** and **Secret Key**
-4. Configure sign-in options (email/password recommended)
-
-### Step 2: Install Dependencies & Build Artifacts
+This will get you up and running with a local development environment.
 
 ```bash
-# Clone the repository
+# 1. Clone the repository
 git clone https://github.com/yourusername/flaim
 cd flaim
 
-# Install all dependencies from monorepo root
+# 2. Install dependencies
 npm install
 
-# Build all production artifacts. This is required before deploying.
+# 3. Build all production artifacts (required once before first run)
 ./build.sh
 
-# The build script creates:
-# - Compiled auth module with scoped imports (@flaim/auth/*)
-# - Next.js production build adapted for Cloudflare Pages
-# - Type-checked worker artifacts
-```
-
-### Step 3: Interactive Development & Deployment
-
-The `./start.sh` script is the single entry point for all development and deployment workflows. It will guide you through running services locally or deploying them to Cloudflare.
-
-```bash
-# Use the interactive orchestrator for all workflows
+# 4. Run the interactive launcher for local development
 ./start.sh
-
-# The launcher will prompt you to choose a mode:
-# ▶  Deployment Mode Selection
-#     1) Local dev          (all services run locally)
-#     2) Remote dev         (deploy workers + frontend to dev)
-#     3) Deploy prod        (deploy workers + frontend to production)
-#     0) Custom             (configure each worker individually)
-
-# For local development, choose option 1 (dev).
-# For production deployment, choose option 3.
-
-# Before deploying (options 3/4), ensure you have:
-# 1. Set CF_ACCOUNT_ID environment variable
-# 2. Configure secrets for each worker you're deploying
+# ==> Choose Option 1 for 'dev' mode
 ```
 
-### Step 3a: Configure Secrets (For Deployment)
+After running `start.sh`, the script will guide you through creating a `openai/.env.local` file with the necessary environment variables.
 
+### Prerequisites
+
+Before you begin, ensure you have the following installed:
+
+- **Node.js v20 (LTS)**: Required for consistent builds.
+  - **Verification**: The `start.sh` script will automatically check your Node.js version and prompt you if it's incorrect. You can use a version manager like `nvm` (`nvm use 20`) to switch easily.
+- **npm**: Comes bundled with Node.js.
+- **Wrangler CLI**: The command-line tool for Cloudflare Workers.
+  - **Installation**: `npm install -g wrangler`
+  - **Verification**: The `start.sh` script will also check if a newer version of Wrangler is available and recommend updating.
+
+---
+
+## Deployment & Configuration
+
+The `./start.sh` script is the primary tool for managing all environments.
+
+### Environment Breakdown
+
+FLAIM uses a three-environment architecture:
+
+| Environment | `ENVIRONMENT` Var | `NODE_ENV`   | Description                                             |
+| :---------- | :---------------- | :----------- | :------------------------------------------------------ |
+| **`dev`**       | `dev`             | `development`| For local development, using local mock services.       |
+| **`preview`**   | `preview`         | `production` | A remote staging environment with production-like security. |
+| **`prod`**      | `prod`            | `production` | The live, public-facing application.                    |
+
+### Environment Variables & Secrets
+
+#### Local (`dev`)
+- **File**: `openai/.env.local` (auto-generated by `start.sh`).
+- **Variables**:
+  ```bash
+  ENVIRONMENT=dev
+  OPENAI_API_KEY=sk-proj-your-openai-key
+  NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_your-clerk-key
+  CLERK_SECRET_KEY=sk_test_your-clerk-secret
+  CF_ENCRYPTION_KEY=your-32-byte-base64-key
+  ```
+
+#### Preview & Production (`preview` / `prod`)
+- **Configuration**: Managed in the `env.preview` and `env.prod` blocks within each service's `wrangler.jsonc` file.
+- **Secrets**: Must be set using the `wrangler secret put` command for each worker and environment.
+
+First, generate a secure encryption key:
 ```bash
-# Required for all workers being deployed:
-export CF_ACCOUNT_ID=your-cloudflare-account-id  # Get from: wrangler whoami
+# Generate a secure 32-byte encryption key
+openssl rand -base64 32
+```
 
-# For auth worker:
+Then, set the secrets for each worker:
+```bash
+# Example: Set secrets for the auth-worker in the 'preview' environment
 cd workers/auth-worker
-wrangler secret put ENCRYPTION_KEY      # Generate: openssl rand -base64 32
-wrangler secret put CLERK_SECRET_KEY    # sk_test_... from Clerk dashboard
+wrangler secret put CF_ENCRYPTION_KEY --env preview
+wrangler secret put CLERK_SECRET_KEY --env preview
 
-# For baseball worker:
-cd ../baseball-espn-mcp
-wrangler secret put ENCRYPTION_KEY      # Same key as auth worker
-wrangler secret put CLERK_SECRET_KEY    # Same key as auth worker
-
-# For football worker:
-cd ../football-espn-mcp
-wrangler secret put ENCRYPTION_KEY      # Same key as auth worker
-wrangler secret put CLERK_SECRET_KEY    # Same key as auth worker
-
-cd ../..  # Return to root for interactive launcher
-```
-
-### Step 4: Configure and Deploy Frontend
-
-The frontend is designed for Cloudflare Pages. Configuration is managed via three files in the `openai/` directory: `.env.local` (local development), `wrangler.jsonc` (Pages configuration), and secrets for sensitive data.
-
-1.  **Configure Local Environment**:
-    ```bash
-    cd openai
-    cp .env.example .env.local
-    ```
-    Fill in `.env.local` with your `OPENAI_API_KEY` and Clerk keys for local development.
-
-2.  **Configure Production Environment (`wrangler.jsonc`)**:
-    - Open `openai/wrangler.jsonc`.
-    - Under the `vars` and `env.preview.vars` sections, add the required `NEXT_PUBLIC_*` variables, such as your Clerk publishable key and the URLs of your deployed workers.
-
-3.  **Set Production Secrets**:
-    - Use the `wrangler pages secret put` command to add your `OPENAI_API_KEY` and `CLERK_SECRET_KEY` to your Pages project.
-
-4.  **Deploy**:
-    - The `build.sh` script provides the easiest way to deploy.
-    ```bash
-    # From the project root
-    ./build.sh --remote-dev   # Deploy to the preview branch
-    ./build.sh --remote-prod  # Deploy to the main branch
-    ```
-    - For detailed manual deployment steps, see the [Deployment Guide](DEPLOYMENT.md).
-
-### Step 5: Create Your Account
-
-1. Visit your FLAIM application
-2. Click **"Sign Up"** to create your account
-3. Complete Clerk registration flow
-4. You'll start with **15 free AI messages**
-
-### Step 6: Start Chatting!
-
-Ask your AI assistant:
-> *"Hello! Help me understand my fantasy baseball team performance."*
-
-For private league access, configure ESPN credentials in the tools panel.
-
-## What's New in v5.0
-
-### 🏗️ **Monorepo Architecture**
-- **True NPM workspace**: Root package.json with proper dependency hoisting
-- **Single Next.js instance**: Eliminates duplicate dependencies and type conflicts
-- **Separated build targets**: Shared, workers, and web code compile independently
-- **Scoped imports**: Clean `@flaim/auth/*` imports instead of relative paths
-- **Client/server separation**: Prevents "server-only" errors in React components
-
-### 🔗 **Import Cheatsheet**
-
-| Target | Example Import |
-|--------|---------------|
-| **Next.js Components** | `import { ClerkProvider, useAuth } from '@flaim/auth/web/components'` |
-| **API Routes** | `import { withAuth, requireAuth } from '@flaim/auth/web/server'` |
-| **Middleware** | `import { clerkMiddleware } from '@flaim/auth/web/middleware'` |
-| **Workers** | `import { EspnStorage } from '@flaim/auth/workers/espn/storage'` |
-| **Shared Logic** | `import { UsageTracker } from '@flaim/auth/shared'` |
-
-### 🚀 **Developer Experience**
-- **ESLint v9 compatible**: Modern linting with typescript-eslint v8
-- **Type-safe auth wrappers**: Explicit union types for all response shapes
-- **TypeScript path mapping**: Automatic import resolution across monorepo
-- **Hot reloading**: Changes reflect immediately in development
-- **Consistent API**: Same auth interface across all platforms
-
-## Key Features
-
-### 🔐 Production-Grade Authentication
-- **Server-side [Clerk](https://clerk.com/docs) verification** for secure credential storage
-- **Anti-spoofing protection** - user identity verified server-side
-- **Social logins** (Google, GitHub, etc.)
-- **Session management** with automatic renewal and validation
-
-### 💬 AI Chat Assistant
-- **[OpenAI](https://platform.openai.com/docs) integration** for natural language conversations
-- **Fantasy sports expertise** built into prompts
-- **Context-aware** responses about your teams
-
-### 📊 Usage Management
-- **Free tier**: 100 messages per month
-- **Usage tracking** with real-time dashboard
-- **Upgrade options** for unlimited access
-- **Automatic reset** every 30 days
-
-### ⚾ ESPN Integration
-- **Manual league entry**: Add up to 10 ESPN leagues with credentials
-- **Auto-pull team setup**: Automatically fetch league data and team selection
-- **Real-time data** from ESPN API  
-- **MCP tools** for external AI assistants
-
-## User Experience Flow
-
-### New User Journey
-```
-1. Visit FLAIM → Welcome screen
-2. Click "Sign Up" → Clerk registration
-3. Account created → Start with 15 free messages
-4. Optional: Add ESPN credentials for private leagues
-5. Chat with AI about fantasy sports
-```
-
-### Free Tier Experience
-```
-1. Sign in → See usage dashboard (X/15 messages)
-2. Ask fantasy questions → Get AI responses
-3. Approaching limit → See upgrade prompts
-4. Limit reached → Upgrade or wait for reset
-```
-
-### ESPN League Setup
-```
-1. Complete account setup → Access league management
-2. Click "Add League" → Select sport (Baseball, Football, etc.)
-3. Enter league ID, ESPN S2 and SWID cookies
-4. Save league → Credentials encrypted and stored securely
-5. Use "Auto-pull" → Fetch league data and select your team
-6. 🎉 AI can now access your league data for insights
-```
-
-## Example Conversations
-
-### Getting Started
-**You:** *"I'm new to fantasy baseball. Can you help me understand the basics?"*
-
-**AI:** *"Welcome to fantasy baseball! I can help you understand scoring, lineup management, and strategy. Do you have a league set up on ESPN? If so, I can analyze your specific team and league settings."*
-
-### League Analysis (Public)
-**You:** *"Can you look up information about ESPN league 12345?"*
-
-**AI:** *"I'll check that league for you... This is a 10-team head-to-head points league with standard scoring. The season runs through week 23. Would you like me to look at specific teams or matchups?"*
-
-### Private League Access  
-**You:** *"I want to analyze my private league team. How do you give you access?"*
-
-**AI:** *"To access your ESPN league, complete the league setup flow. Click 'Add League', select your sport, enter your league ID along with your S2 and SWID cookies. You can add up to 10 leagues. Use the 'Auto-pull' feature to fetch league data and identify your team automatically!"*
-
-### Usage Awareness
-**You:** *"How many messages do I have left this month?"*
-
-**AI:** *"You can check your usage in the panel on the right. As a free user, you get 15 messages per month. You can upgrade anytime for unlimited conversations about your fantasy teams!"*
-
-## ESPN Credential Setup
-
-### For Private League Access
-
-1. **Get ESPN Cookies**:
-   - Log into [ESPN Fantasy Sports](https://fantasy.espn.com)
-   - Open Developer Tools (`F12` or right-click → Inspect)
-   - Go to Application tab → Cookies → `https://fantasy.espn.com`
-   - Copy `espn_s2` and `SWID` values
-
-2. **Store in FLAIM**:
-   - Complete onboarding to access league management
-   - Click "Add League" and select your sport
-   - Enter league ID and paste your credentials
-   - They're encrypted and stored securely per user
-
-3. **What You Get**:
-   - **Manual league management** - add up to 10 leagues across all sports
-   - **Auto-pull team setup** - automatically identify your team
-   - Access to your league data and standings
-   - Team roster analysis
-   - Lineup optimization suggestions
-   - Trade evaluation help
-
-## MCP Integration for External AIs
-
-### For Claude Desktop, ChatGPT, etc.
-
-Configure external AI assistants to use your MCP server:
-
-```json
-{
-  "type": "mcp",
-  "server_label": "fantasy-baseball",
-  "server_url": "https://your-mcp-service.workers.dev/mcp",
-  "allowed_tools": [
-    "get_espn_league_info",
-    "get_espn_team_roster", 
-    "get_espn_matchups"
-  ],
-  "require_approval": "never"
-}
-```
-
-### Available MCP Tools
-
-- **`get_espn_league_info`**: League settings and metadata
-- **`get_espn_team_roster`**: Detailed team roster information  
-- **`get_espn_matchups`**: Current week matchups and scores
-
-## Tips for Better Results
-
-### Be Specific with Requests
-❌ *"How's my team?"*  
-✅ *"How did my team perform this week in my ESPN league?"*
-
-### Provide Context
-❌ *"Who should I start?"*  
-✅ *"Based on this week's matchups, who should I start at 2B and OF?"*
-
-### Use Your Free Messages Wisely
-❌ Multiple simple questions  
-✅ *"Give me a comprehensive analysis of my team's performance, lineup optimization suggestions, and trade targets for this week"*
-
-### Take Advantage of ESPN Integration
-✅ *"Compare the stats of my starting pitchers with available waiver wire options"*  
-✅ *"Analyze the trade value of players on my bench"*
-
-## Troubleshooting
-
-### Authentication Issues
-**Problem**: Can't sign in or session expired  
-**Solution**: 
-- Check Clerk configuration in environment variables
-- Clear browser cache and cookies
-- Try incognito/private browsing mode
-
-### Usage Limit Reached
-**Problem**: "Free tier limit exceeded" message  
-**Solution**:
-- Upgrade to paid plan for unlimited messages
-- Wait for monthly reset (shown in usage panel)
-- Use external AI assistants with MCP integration
-
-### ESPN Access Problems
-**Problem**: "ESPN credentials not found" or API errors  
-**Solution**:
-- Re-enter ESPN credentials (they may have expired)
-- Check that you're a member of the private league
-- Verify league ID is correct
-- Try accessing a public league first to test
-
-### MCP Connection Issues
-**Problem**: External AI can't connect to MCP server  
-**Solution**:
-- Verify MCP service is deployed and healthy
-- Check the server URL in your AI assistant configuration
-- Test with `curl https://your-service.workers.dev/mcp`
-
-## Upgrade Options
-
-### Paid Plan Benefits
-- **Unlimited AI messages** per month
-- **Priority support** and feature access
-- **Advanced analytics** (coming soon)
-- **Multi-league management** tools
-
-### How to Upgrade
-1. Use upgrade button in usage panel
-2. Payment processing via Stripe (secure)
-3. Instant access to unlimited messaging
-4. Cancel anytime
-
-## What's Next?
-
-### Planned Features
-- **Yahoo Fantasy Sports** integration
-- **NFL and NBA** fantasy tools
-- **Advanced analytics** and projections
-- **League comparison** tools
-- **Mobile-optimized** interface
-- **Team collaboration** features
-
-### Community & Support
-- **GitHub**: [github.com/your-repo/flaim](https://github.com)
-- **Documentation**: Comprehensive guides and API reference
-- **Feature Requests**: Submit ideas and vote on improvements
-- **Discord**: Community chat and support
-
-## Advanced Setup
-
-### Custom Domain
-Deploy with your own domain for branded experience:
-```bash
-# Configure custom domain in Vercel/Cloudflare
-# Update CORS settings for your domain
-# Configure Clerk allowed origins
-```
-
-### Database Integration
-Replace in-memory usage tracking with persistent storage. See the [Hono documentation](https://hono.dev/guides/best-practices#database) for best practices on database integration.
-
-### Payment Integration
-Set up Stripe for automated plan management:
-```bash
-# Configure Stripe webhooks
-# Implement plan upgrade/downgrade automation
-# Add billing portal for users
+# Repeat for other workers and the 'prod' environment as needed.
 ```
 
 ---
 
-## Support & Resources
+## Manual Deployment
 
-### Documentation
-- **[ARCHITECTURE.md](./ARCHITECTURE.md)**: Technical overview and system design
-- **[DEPLOYMENT.md](./DEPLOYMENT.md)**: Detailed deployment instructions
-- **API Reference**: MCP tool schemas and endpoints
+While `start.sh` is recommended, you can deploy services manually if needed.
 
-### Getting Help
-- **GitHub Issues**: Report bugs and request features
-- **Community Support**: Connect with other FLAIM users
-- **Email Support**: Direct contact with maintainers
+### Deploy Workers
 
-### Contributing
-- **Open Source**: Full codebase available on GitHub
-- **Pull Requests**: Contribute improvements and fixes
-- **Feature Development**: Help build new integrations
+```bash
+# Navigate to the worker's directory
+cd workers/auth-worker
+
+# Deploy to the desired environment
+wrangler deploy --env preview
+# or
+wrangler deploy --env prod
+```
+
+### Deploy Frontend (Cloudflare Pages)
+
+The frontend uses `@cloudflare/next-on-pages` which creates a `.vercel/output` directory.
+
+```bash
+# Navigate to the frontend directory
+cd openai
+
+# Deploy to the 'preview' branch on Cloudflare Pages
+wrangler pages deploy .vercel/output --project-name flaim-frontend --branch preview
+
+# Deploy to the 'production' branch
+wrangler pages deploy .vercel/output --project-name flaim-frontend --branch production
+```
 
 ---
 
-**Ready to transform your fantasy sports experience?** 
+## Verification
 
-Set up your FLAIM assistant in 10 minutes and start having AI-powered conversations about your fantasy teams with modern authentication and usage management!
+After deployment, you can verify the services are running correctly using health checks.
+
+```bash
+# Local development
+curl http://localhost:8787/health # auth-worker (check port from start.sh output)
+curl http://localhost:3000        # frontend
+
+# Preview environment (replace with your actual URLs)
+curl https://auth-worker-dev.your-domain.workers.dev/health
+curl https://preview.flaim.pages.dev
+
+# Production
+curl https://auth-worker.flaim.app/health
+curl https://flaim.app
+```
+
+---
+
+## FAQ & Troubleshooting
+
+### Deployment & Build Issues
+
+- **Why does the `start.sh` script check my Node.js version?**
+  - The project requires **Node.js v20 (LTS)** for all development and builds. This ensures a consistent environment and prevents `EBADENGINE` warnings from `npm`. The `start.sh` script automatically verifies your version to prevent these issues. If it detects a mismatch, it will prompt you to switch using a tool like `nvm` (`nvm use 20`).
+
+- **Why do I see a "git repo has uncommitted changes" warning during deployment?**
+  - This is a standard warning from Wrangler. The `start.sh` script **handles this automatically** for you. It detects if your repository is "dirty" (has uncommitted changes) or if it's running in a CI environment and automatically appends the `--commit-dirty=true` flag to the deployment command. You can safely ignore this warning.
+
+- **Why do I see a "Using edge runtime disables static generation" warning?**
+  - This is expected behavior. FLAIM's API routes use `export const runtime = 'edge'` for Cloudflare compatibility and require dynamic execution for authentication and external API calls. This is not an error.
+
+- **Why do I see an "npm warn Unknown cli config '--unsafe-perm'" warning?**
+  - This is a known, temporary warning from an upstream dependency (`@cloudflare/next-on-pages`). It does not affect the build and will be resolved in a future update of the dependency.
+
+### ESPN API
+
+- **Why do we call `https://lm-api-reads.fantasy.espn.com` instead of the old `fantasy.espn.com/apis/v3` host?**
+  - ESPN silently migrated its Fantasy front‑end to the **“League‑Manager API”** (`lm-api-reads`) in 2023‑24. The old host still resolves but increasingly returns 403s or HTML when you request private‑league data. All modern scrapers have switched to the new host.
+
+- **What are the minimum headers required for the ESPN API?**
+  ```text
+  Cookie: SWID={uuid}; espn_s2={token}
+  Accept: application/json
+  X-Fantasy-Source: kona
+  X-Fantasy-Platform: kona-web-2.0.0
+  ```
+  - **`SWID` / `espn_s2`**: User-specific cookies that are stored encrypted in Cloudflare KV.
+  - **Kona headers**: Required by ESPN's edge servers to return JSON instead of HTML.
+
+---
+
+## Next Steps
+
+1.  **Custom Domains**: See `docs/dev/FLAIM_APP_DOMAIN_MIGRATION.md` for production domain setup.
+2.  **Monitoring**: Set up Cloudflare Analytics and Worker logs for your deployed services.
+3.  **CI/CD**: Integrate `./build.sh` and `./start.sh` into your deployment pipeline. The scripts are CI-aware.

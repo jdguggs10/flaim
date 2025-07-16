@@ -7,7 +7,7 @@
 
 ---
 
-## 🏗️ Project Overview
+## Project Overview
 
 **FLAIM** (Fantasy League AI Manager) is an AI-powered fantasy sports assistant featuring:
 - **Architecture**: Centralized `auth-worker` + sport-specific Cloudflare Workers + Next.js frontend
@@ -23,7 +23,7 @@
 
 ---
 
-## 🚀 Frontend Stack
+## Frontend Stack
 
 ### Next.js 15 + React 19
 - **Version**: Next.js 15 with React 19 RC
@@ -33,7 +33,7 @@
 #### Key Features (2025)
 - **App Router**: File-system routing with Server Components
 - **Route Handlers**: Modern Web Platform Request/Response APIs
-- **Caching**: ⚠️ **GET handlers are uncached by default** (breaking change from v14)
+- **Caching**: **WARNING**: **GET handlers are uncached by default** (breaking change from v14)
 - **Performance**: Enhanced build times and Fast Refresh
 
 #### Development Patterns
@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
 
 ---
 
-## ⚡ Backend Infrastructure
+## Backend Infrastructure
 
 ### Cloudflare Workers + Wrangler
 - **Runtime**: `workerd` (not Node.js)
@@ -96,7 +96,7 @@ wrangler deploy --env prod
 
 ---
 
-## 🔐 Authentication & Security
+## Authentication & Security
 
 ### Clerk Authentication
 - **Version**: Latest with 2025 MCP integration
@@ -131,7 +131,7 @@ export default clerkMiddleware((auth, req) => {
 
 ---
 
-## 🔌 Model Context Protocol (MCP)
+## Model Context Protocol (MCP)
 
 ### Specification Version
 - **Current**: June 18, 2025 specification
@@ -161,7 +161,7 @@ ESPN API integration
 
 ---
 
-## 🔥 API Framework
+## API Framework
 
 ### Hono Framework
 - **Purpose**: Ultra-fast API framework for Cloudflare Workers
@@ -194,7 +194,7 @@ export default app;
 
 ---
 
-## 📦 Package Management & Build
+## Package Management & Build
 
 ### NPM Workspace Configuration
 - **Root**: Single `package.json` with workspace configuration
@@ -220,11 +220,11 @@ npm run dev
 
 ---
 
-## 🚨 Critical Development Guidelines
+## Critical Development Guidelines
 
 ### For AI Agents Working on FLAIM
 
-#### ✅ DO
+#### DO
 - Use App Router patterns, not Pages Router
 - Implement MCP servers as stateless functions
 - Use `@flaim/auth/*` imports for shared code
@@ -233,7 +233,7 @@ npm run dev
 - Use Hono for Worker APIs
 - Follow June 2025 MCP security patterns
 
-#### ❌ DON'T
+#### DON'T
 - Use Node.js APIs in Workers (use Web Platform APIs)
 - Store credentials in individual MCP servers
 - Use `process.env` in Workers (use `c.env`)
@@ -241,7 +241,7 @@ npm run dev
 - Use Pages Router for new features
 - Bypass the centralized auth-worker pattern
 
-#### 🔧 Common Patterns
+#### Common Patterns
 ```typescript
 // Shared auth client usage
 import { AuthWorkerClient } from '@flaim/auth/shared/auth-worker-client';
@@ -255,7 +255,7 @@ import { EspnKVStorage } from '@flaim/auth/espn/kv-storage';
 
 ---
 
-## 📚 Documentation References
+## Documentation References
 
 ### Official Documentation
 - **Next.js 15**: https://nextjs.org/docs/app
@@ -272,20 +272,20 @@ import { EspnKVStorage } from '@flaim/auth/espn/kv-storage';
 
 ---
 
-## 🔄 Version Compatibility Matrix
+## Version Compatibility Matrix
 
 | Technology | Version | Status | Notes |
 |------------|---------|---------|-------|
-| Next.js | 15.x | ✅ Current | App Router, React 19 |
-| React | 19.x RC | ✅ Current | Server Components |
-| Cloudflare Workers | Latest | ✅ Current | Wrangler v4 |
-| Clerk | 2025 | ✅ Current | MCP integration |
-| MCP Spec | June 2025 | ✅ Current | Enhanced security |
-| Hono | Latest | ✅ Current | Production ready |
+| Next.js | 15.x | Current | App Router, React 19 |
+| React | 19.x RC | Current | Server Components |
+| Cloudflare Workers | Latest | Current | Wrangler v4 |
+| Clerk | 2025 | Current | MCP integration |
+| MCP Spec | June 2025 | Current | Enhanced security |
+| Hono | Latest | Current | Production ready |
 
 ---
 
-## 🎯 Future Considerations
+## Future Considerations
 
 ### Upcoming Technologies
 - **Cloudflare Containers**: Coming June 2025

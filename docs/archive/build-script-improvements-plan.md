@@ -29,7 +29,7 @@ implementation_date: 2025-07-16
 | Goal | Decide for each route whether Edge runtime is needed. Preserve static generation when possible. |
 | Actions | 1. Audit routes listed in build log (15 API routes + `/`).<br>2. For purely static pages, remove `export const runtime = 'edge'` or similar.<br>3. If edge is required (e.g. KV reads), accept dynamic behaviour and document impact on TTFB. |
 | Research | • Measure performance difference (Pages → Edge → Cache) vs. static.<br>• Validate Cloudflare Pages cost for dynamic edge functions. |
-| **Status** | **✅ COMPLETED** |
+| **Status** | COMPLETED |
 | **Implementation** | • Audited all 15 API routes for edge runtime necessity<br>• **Finding**: All routes legitimately require edge runtime (13/15 use auth, 13/15 make external calls, 12/15 use env vars)<br>• **Decision**: Keep all `export const runtime = 'edge'` declarations<br>• Added documentation explaining this is normal behavior for dynamic routes |
 
 ---
@@ -56,7 +56,7 @@ implementation_date: 2025-07-16
 | Goal | CI logs show only warnings/errors. |
 | Actions | 1. Wrap `banner` calls inside `if [ "$QUIET_MODE" = false ]`.<br>2. Optionally pipe npm output to `--silent` when `QUIET_MODE=true`. |
 | Research | • Confirm Vercel / Next-on-Pages builders respect `NEXT_TELEMETRY_DISABLED=1` for extra silence. |
-| **Status** | **✅ ALREADY IMPLEMENTED** |
+| **Status** | ALREADY IMPLEMENTED |
 | **Implementation** | • Verified `build.sh` already properly wraps banner calls with `if [ "$QUIET_MODE" = false ]`<br>• Script correctly suppresses non-essential output in quiet mode<br>• Issue appears to have been resolved in previous updates |
 
 ---
@@ -68,7 +68,7 @@ implementation_date: 2025-07-16
 | Context | Next-on-Pages invokes `npm i --unsafe-perm`. npm 11 issues a deprecation notice; no functional impact. |
 | Decision | Monitor npm 12 release; rely on upstream fix. No immediate action required. |
 | Research | • Track https://github.com/cloudflare/next-on-pages issues for flag removal. |
-| **Status** | **✅ DOCUMENTED** |
+| **Status** | DOCUMENTED |
 | **Implementation** | • Added to Known Build Warnings section in `DEPLOYMENT.md`<br>• Documented as upstream issue requiring no action<br>• Noted that warning will be resolved in future npm/next-on-pages updates |
 
 ---
@@ -79,7 +79,7 @@ implementation_date: 2025-07-16
 2. Add a **GitHub Issue** for each table row with `dev-exp` label.
 3. Once changes are implemented, update this file and change `status` front-matter to `done`.
 
-| **Status** | **✅ COMPLETED** |
+| **Status** | COMPLETED |
 |------------|------------------|
 | **Implementation** | • Added comprehensive "Known Build Warnings" section to `DEPLOYMENT.md`<br>• Added Prerequisites section with Node 20 requirement<br>• Updated Quick Deploy instructions<br>• Updated this plan file with completion status<br>• Updated `CHANGELOG.md` with implementation details |
 
@@ -93,7 +93,7 @@ implementation_date: 2025-07-16
 | Goal | Actively check Node version at runtime and provide clear guidance to users |
 | Actions | 1. Add `check_node_version()` function to `start.sh` after prerequisites check<br>2. Check current Node version against required version (20.x)<br>3. Provide clear instructions for switching versions<br>4. Allow user to continue with warning if needed |
 | Research | • Test behavior with different Node versions<br>• Verify `.nvmrc` integration works correctly |
-| **Status** | **✅ COMPLETED** |
+| **Status** | COMPLETED |
 | **Implementation** | • Add Node version check function to `start.sh` after line 157<br>• Display clear error message with solution steps<br>• Allow override with user confirmation for non-blocking experience |
 | **Code Snippet** | ```bash<br>required_node_major=20<br>current_major=$(node -v | sed -E 's/^v([0-9]+).*/\1/')<br>if [ "$current_major" -ne "$required_node_major" ]; then<br>  echo -e "${YELLOW}${BOLD}⚠ Node $current_major detected – Node $required_node_major required.${NC}"<br>  echo -e "  Use ${GREEN}nvm use 20${NC} (or volta) and re-run."<br>  read -p "Continue anyway? [y/N]: " ans<br>  [[ ! $ans =~ ^[Yy]$ ]] && exit 1<br>fi<br>``` |
 
@@ -107,7 +107,7 @@ implementation_date: 2025-07-16
 | Goal | Properly handle git dirty state for both CI and local development scenarios |
 | Actions | 1. Fix conditional logic for `--commit-dirty=true` flag<br>2. Apply flag when CI=true OR when git repo has uncommitted changes<br>3. Improve user messaging around git state |
 | Research | • Test git dirty detection logic<br>• Verify flag behavior in different scenarios |
-| **Status** | **✅ COMPLETED** |
+| **Status** | COMPLETED |
 | **Implementation** | • Update `build_and_deploy_frontend()` function in `start.sh`<br>• Add git status check using `git diff-index --quiet HEAD --`<br>• Apply flag automatically when repo is dirty |
 | **Code Snippet** | ```bash<br>repo_dirty=false<br>if ! git diff-index --quiet HEAD --; then<br>  repo_dirty=true<br>fi<br>if [ "$CI" = true ] || [ "$repo_dirty" = true ]; then<br>  deploy_cmd+=" --commit-dirty=true"<br>fi<br>``` |
 
@@ -121,9 +121,9 @@ implementation_date: 2025-07-16
 | Goal | Proactively check and recommend Wrangler updates |
 | Actions | 1. Add `check_wrangler_version()` function to detect available updates<br>2. Display update recommendation with installation command<br>3. Integrate into existing prerequisites check |
 | Research | • Parse wrangler version output format<br>• Determine optimal timing for version checks |
-| **Status** | **✅ COMPLETED** |
+| **Status** | COMPLETED |
 | **Implementation** | • Add version check function after Node version check<br>• Parse wrangler output to detect "update available" message<br>• Provide `npm install -g wrangler@latest` guidance |
-| **Code Snippet** | ```bash<br>check_wrangler_version() {<br>  local latest<br>  latest=$(timeout 3 npm view wrangler@latest version 2>/dev/null)<br>  local current<br>  current=$(wrangler -V | awk '{print $2}')<br>  if [ "$latest" != "$current" ]; then<br>    echo -e "${YELLOW}⚠ Wrangler $current installed; $latest available.${NC}"<br>    echo -e "  Update with: ${GREEN}npm i -g wrangler@latest${NC}"<br>  fi<br>}<br>``` |
+| **Code Snippet** | ```bash<br>check_wrangler_version() {<br>  local latest<br>  latest=$(timeout 3 npm view wrangler@latest version 2>/dev/null)<br>  local current<br>  current=$(wrangler --version | awk '{print $2}')<br>  if [ "$latest" != "$current" ]; then<br>    echo -e "${YELLOW}⚠ Wrangler $current installed; $latest available.${NC}"<br>    echo -e "  Update with: ${GREEN}npm i -g wrangler@latest${NC}"<br>  fi<br>}<br>``` |
 
 ---
 
@@ -135,7 +135,7 @@ implementation_date: 2025-07-16
 | Goal | Filter repetitive warnings while preserving important build information |
 | Actions | 1. Create `build_with_reduced_noise()` wrapper function<br>2. Filter known repetitive warnings from output<br>3. Provide summary of filtered warnings<br>4. Maintain full logs for debugging |
 | Research | • Identify all repetitive warning patterns<br>• Test filtering impact on build debugging |
-| **Status** | **✅ COMPLETED** |
+| **Status** | COMPLETED |
 | **Implementation** | • Add build wrapper function to filter grep patterns<br>• Count and summarize filtered warnings<br>• Maintain full logs in temporary files |
 | **Code Snippet** | ```bash<br># Pipe build output through filters when QUIET_MODE=true<br>if [ "$QUIET_MODE" = true ]; then<br>  npm run build 2>&1 | tee build.log | \ <br>    grep --line-buffered -v "EBADENGINE" | \<br>    grep --line-buffered -v "unsafe-perm"<br>else<br>  npm run build<br>fi<br>``` |
 
@@ -149,7 +149,7 @@ implementation_date: 2025-07-16
 | Goal | Provide proactive guidance and explanations for common build warnings |
 | Actions | 1. Add `show_warning_guidance()` function to display known warnings<br>2. Provide context and solutions for each warning type<br>3. Display guidance early in script execution |
 | Research | • Collect common user questions about build warnings<br>• Test effectiveness of guidance messages |
-| **Status** | **✅ COMPLETED** |
+| **Status** | COMPLETED |
 | **Implementation** | • Add warning guidance function to display after banner<br>• Include explanations for EBADENGINE, unsafe-perm, edge runtime, git dirty<br>• Format with consistent styling and colors |
 | **Code Snippet** | ```bash<br>show_warning_guidance() {<br>  if [ "$DRY_RUN" = false ]; then<br>    echo -e "${YELLOW}${BOLD}📋 Common Build Warnings${NC}"<br>    echo -e "${DIM}  • EBADENGINE: Use Node 20 to eliminate warnings${NC}"<br>    echo -e "${DIM}  • unsafe-perm: Upstream issue, no action needed${NC}"<br>    echo -e "${DIM}  • Edge runtime: Normal for API routes${NC}"<br>    echo -e "${DIM}  • Git dirty: Auto-handled or commit changes${NC}"<br>    echo<br>  fi<br>}<br>``` |
 
@@ -222,3 +222,47 @@ implementation_date: 2025-07-16
 - **Comprehensive Coverage**: All identified issues from terminal logs addressed
 
 **Testing Status:** All improvements work together seamlessly without conflicts
+
+## Post-Implementation Fixes
+
+### Issue: Misleading Cleanup Messages for Remote Deployments
+
+**Problem Identified:** After successful remote deployments, the script would show "🛑 Shutting down services... ✓ All services stopped" due to the cleanup trap firing on script exit, even when no local services were running.
+
+**Root Cause:** The `trap cleanup SIGINT SIGTERM EXIT` would always run the cleanup function, which assumed local services needed shutdown.
+
+**Solution Implemented:** Modified the `cleanup()` function to:
+- Check for running background jobs and processes on local ports
+- Only show shutdown messages when local services actually need cleanup
+- Silent cleanup for remote-only deployments
+
+**Files Modified:**
+- `start.sh` - Enhanced cleanup function with context awareness
+
+### Issue: Integer Expression Error in Build Noise Reduction
+
+**Problem Identified:** Build logs showed `./build.sh: line 109: [: 0\n0: integer expression expected` error during build noise filtering.
+
+**Root Cause:** `grep -c` output concatenation causing malformed integer values in variable comparisons.
+
+**Solution Implemented:** Replaced `grep -c` with `grep | wc -l | tr -d ' '` for cleaner integer counting.
+
+**Files Modified:**
+- `build.sh` - Fixed warning count logic in build noise reduction
+
+### Issue: Incorrect Wrangler Version Command
+
+**Problem Identified:** Used `wrangler -V` instead of `wrangler --version`, causing error "Unknown argument: V".
+
+**Root Cause:** Assumed wrangler used `-V` flag like many CLI tools, but wrangler uses `--version`.
+
+**Solution Implemented:** Corrected to use `wrangler --version` command.
+
+**Files Modified:**
+- `start.sh` - Fixed wrangler version check command
+
+**Documentation Note:** Wrangler CLI uses `--version` (not `-V`) for version information. The correct pattern is:
+```bash
+wrangler --version | awk '{print $2}'  # Correct
+wrangler -V | awk '{print $2}'         # Incorrect - causes error
+```

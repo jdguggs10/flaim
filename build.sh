@@ -103,8 +103,10 @@ build_frontend() {
        grep --line-buffered -v "unsafe-perm" > /dev/null; then
       
       # Show summary of filtered warnings
-      local ebad_count=$(grep -c "EBADENGINE" "$build_log" 2>/dev/null || echo 0)
-      local unsafe_count=$(grep -c "unsafe-perm" "$build_log" 2>/dev/null || echo 0)
+      local ebad_count=$(grep "EBADENGINE" "$build_log" 2>/dev/null | wc -l | tr -d ' ')
+      local unsafe_count=$(grep "unsafe-perm" "$build_log" 2>/dev/null | wc -l | tr -d ' ')
+      ebad_count=${ebad_count:-0}
+      unsafe_count=${unsafe_count:-0}
       
       if [ "$ebad_count" -gt 0 ] || [ "$unsafe_count" -gt 0 ]; then
         echo -e "${DIM}  Filtered warnings: ${ebad_count} EBADENGINE, ${unsafe_count} unsafe-perm${NC}"

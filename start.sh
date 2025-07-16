@@ -443,8 +443,27 @@ kill_port() {
 
 # Comprehensive cleanup on script exit
 cleanup() {
-  echo
-  echo -e "${BOLD}${BLUE}🛑 Shutting down services...${NC}"
+  # Check if we have local services that need cleanup
+  local has_local_cleanup=false
+  
+  # Check for running background jobs (local services)
+  if [ -n "$(jobs -p 2>/dev/null)" ]; then
+    has_local_cleanup=true
+  fi
+  
+  # Check for processes on our ports
+  for port in 8786 8787 8788 3000; do
+    if lsof -ti ":$port" >/dev/null 2>&1; then
+      has_local_cleanup=true
+      break
+    fi
+  done
+  
+  # Only show shutdown messages if we have local services to clean up
+  if [ "$has_local_cleanup" = true ]; then
+    echo
+    echo -e "${BOLD}${BLUE}🛑 Shutting down services...${NC}"
+  fi
   
   # Kill background jobs
   jobs -p | xargs kill 2>/dev/null || true
@@ -458,10 +477,16 @@ cleanup() {
   # Clean up auto-generated files
   if [ -f "openai/.env.local" ]; then
     rm -f "openai/.env.local"
-    echo -e "${DIM}  Cleaned up auto-generated .env.local${NC}"
+    if [ "$has_local_cleanup" = true ]; then
+      echo -e "${DIM}  Cleaned up auto-generated .env.local${NC}"
+    fi
   fi
   
-  echo -e "${GREEN}${BOLD}✓${NC} ${DIM}All services stopped${NC}"
+  # Only show completion message if we actually cleaned up services
+  if [ "$has_local_cleanup" = true ]; then
+    echo -e "${GREEN}${BOLD}✓${NC} ${DIM}All services stopped${NC}"
+  fi
+  
   exit 0
 }
 

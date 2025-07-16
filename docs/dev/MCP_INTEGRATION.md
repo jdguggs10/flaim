@@ -4,7 +4,7 @@
 
 FLAIM implements dedicated **Model Context Protocol (MCP)** servers that provide Claude with direct access to your ESPN fantasy league data. This enables real-time analysis, strategic insights, and league management through natural language conversations.
 
-## 🏗️ Architecture Overview
+## Architecture Overview
 
 ### MCP Server Infrastructure
 
@@ -39,7 +39,7 @@ FLAIM uses a **microservices architecture** with specialized Cloudflare Workers 
 3. **MCP Protocol** - Standardized tool execution and data access
 4. **Claude Integration** - Natural language access to fantasy data
 
-## 🔧 Available MCP Tools
+## Available MCP Tools
 
 ### Baseball MCP Server (`baseball-espn-mcp`)
 
@@ -58,7 +58,7 @@ FLAIM uses a **microservices architecture** with specialized Cloudflare Workers 
 | `get_espn_football_matchups` | Weekly matchups | `leagueId` (required), `week`, `seasonId` (optional) | Matchup data for specified week |
 | `get_espn_football_standings` | League standings | `leagueId` (required), `seasonId` (optional) | Current league standings and rankings |
 
-## 📡 MCP Protocol Implementation
+## MCP Protocol Implementation
 
 ### Standard MCP Endpoints
 
@@ -100,7 +100,7 @@ const espnClient = new EspnClient(credentials);
 const data = await espnClient.getLeagueInfo(leagueId);
 ```
 
-## 🔐 Security & Authentication
+## Security & Authentication
 
 ### Multi-Layer Security
 
@@ -130,7 +130,7 @@ interface UserLeague {
 }
 ```
 
-## 🎯 Integration Examples
+## Integration Examples
 
 ### Claude Conversation Examples
 
@@ -179,7 +179,7 @@ const result = await mcpClient.callTool({
 });
 ```
 
-## 🚀 Setup & Configuration
+## Setup & Configuration
 
 ### 1. Deploy MCP Workers
 
@@ -274,7 +274,7 @@ try {
 }
 ```
 
-## 📊 Performance & Caching
+## Performance & Caching
 
 ### Caching Strategy
 
@@ -289,7 +289,7 @@ try {
 - **MCP Tools**: No internal rate limiting (ESPN API is the bottleneck)
 - **Auth Worker**: 1000 requests/minute per user
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
 ### Common Issues
 
@@ -368,7 +368,7 @@ if (DEBUG) {
 - 🚧 **Hockey** (`fhl`) - Framework ready
 - 🚧 **Soccer** (`fso`) - Framework ready
 
-## 🤝 Contributing
+## Contributing
 
 ### Development Setup
 

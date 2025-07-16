@@ -120,7 +120,7 @@ import { UsageTracker } from '@flaim/auth/shared';
 
 ---
 
-## 🔒 Security Architecture (v6.0)
+## Security Architecture (v6.0)
 
 ### Credential Storage
 **CF KV with AES-GCM Encryption**:
@@ -176,7 +176,7 @@ import { UsageTracker } from '@flaim/auth/shared';
 
 **Technology Stack**:
 - Cloudflare Workers
-- Durable Objects (credential storage)
+- Cloudflare KV (credential storage)
 - flaim/auth shared module
 - TypeScript
 
@@ -475,19 +475,7 @@ const mcpTool = {
 
 ---
 
-## Benefits of v5.0 Architecture
-
-✅ **Modern Authentication**: Clerk v2.1.0 with industry-standard auth  
-✅ **True Monorepo**: NPM workspace with proper dependency hoisting  
-✅ **Type Safety**: Explicit union types for all auth response shapes  
-✅ **Single Dependencies**: No more duplicate Next.js or ESLint conflicts  
-✅ **Modern Tooling**: ESLint v9 with typescript-eslint v8 compatibility  
-✅ **Usage-Based Monetization**: Clear free/paid tiers  
-✅ **Open MCP Access**: Fantasy data accessible without barriers  
-✅ **Developer Friendly**: Simple setup and configuration  
-✅ **Scalable**: Serverless architecture scales automatically  
-✅ **User-Centric**: Smooth onboarding and upgrade flows  
-✅ **Secure**: Encrypted data storage and session management  
+## Benefits of v5.0 Architecture  
 
 ## Migration from v4.0
 
