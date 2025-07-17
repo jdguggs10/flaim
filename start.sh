@@ -662,7 +662,7 @@ build_and_deploy_frontend() {
   echo -e "${PURPLE}${BOLD}🚀 Deploying Frontend${NC} ${DIM}(branch: $branch)${NC}"
   
   # Build wrangler command with conditional --commit-dirty flag
-  local deploy_cmd="wrangler pages deploy .vercel/output --project-name \"$project\" --branch \"$branch\""
+  local deploy_cmd="wrangler pages deploy .vercel/output/static --project-name \"$project\" --branch \"$branch\""
   
   # Check if repo is dirty
   local repo_dirty=false
