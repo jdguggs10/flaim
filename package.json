@@ -13,7 +13,13 @@
     "node": "20"
   },
   "scripts": {
-    "postinstall": "patch-package"
+    "postinstall": "patch-package",
+    "dev": "concurrently \"npm:dev:frontend\" \"npm:dev:workers\"",
+    "dev:frontend": "cd openai && npm run dev",
+    "dev:workers": "concurrently \"cd workers/auth-worker && wrangler dev --env dev --port 8786\" \"cd workers/baseball-espn-mcp && wrangler dev --env dev --port 8787\" \"cd workers/football-espn-mcp && wrangler dev --env dev --port 8788\"",
+    "build": "cd openai && npm run build",
+    "deploy:workers:preview": "concurrently \"cd workers/auth-worker && wrangler deploy --env preview\" \"cd workers/baseball-espn-mcp && wrangler deploy --env preview\" \"cd workers/football-espn-mcp && wrangler deploy --env preview\"",
+    "deploy:workers:prod": "concurrently \"cd workers/auth-worker && wrangler deploy --env prod\" \"cd workers/baseball-espn-mcp && wrangler deploy --env prod\" \"cd workers/football-espn-mcp && wrangler deploy --env prod\""
   },
   "dependencies": {
     "@clerk/backend": "2.1.0",
@@ -37,6 +43,7 @@
     "@types/jest": "^30.0.0",
     "@types/node": "^24.0.3",
     "@types/react-dom": "19.0.0",
+    "concurrently": "^9.2.0",
     "dotenv": "^16.5.0",
     "jest": "^29.7.0",
     "patch-package": "^8.0.0",

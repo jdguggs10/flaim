@@ -12,8 +12,8 @@
       // Custom domain routes for production
       "routes": [
         {
-          "pattern": "api.flaim.gg/auth/*",
-          "zone_name": "flaim.gg"
+          "pattern": "api.flaim.app/auth/*",
+          "zone_name": "flaim.app"
         }
       ],
       

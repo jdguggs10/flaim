@@ -15,9 +15,22 @@ FLAIM (Fantasy League AI Manager) is a modern microservices platform providing A
 
 ## Development Commands
 
-### Core Scripts
-- `./build.sh` - Production artifact builder (non-interactive, CI-friendly)
-- `./start.sh` - Interactive development orchestrator (main entry point)
+### Modern GitOps Workflow
+```bash
+# Start all services locally (recommended)
+npm run dev
+
+# Individual development commands
+npm run dev:frontend                # Next.js development server only
+npm run dev:workers                 # All workers via wrangler dev
+
+# Production deployment
+npm run deploy:workers:preview      # Deploy all workers to preview
+npm run deploy:workers:prod         # Deploy all workers to production
+
+# Build commands
+npm run build                       # Build frontend for deployment
+```
 
 ### Frontend (Next.js in `/openai`)
 ```bash
@@ -36,7 +49,7 @@ npm test             # Run Jest tests
 npm run test:coverage # Test coverage report
 ```
 
-### Workers
+### Individual Worker Development (if needed)
 ```bash
 # Auth Worker
 cd workers/auth-worker
@@ -94,11 +107,11 @@ Workers expose MCP tools for fantasy sports data:
 
 ## Development Workflow
 
-1. **Environment Setup**: Use `./start.sh` for interactive development
+1. **Environment Setup**: Use `npm run dev` for local development (all services)
 2. **Local Development**: All services run on localhost (workers on 8786-8788, frontend on 3000)
 3. **Testing**: Run tests before committing (`npm test` in respective directories)
 4. **Type Checking**: Ensure all workers pass type-check before deployment
-5. **Building**: Use `./build.sh` for production artifacts
+5. **Deployment**: Push to PR for preview, merge to main for production (GitOps)
 
 ## Key Considerations
 
@@ -131,3 +144,45 @@ Check `mcp__context7__resolve-library-id` and `mcp__context7__get-library-docs` 
 - Clerk authentication flows
 - Cloudflare Workers best practices
 - Next.js 15 App Router features
+
+## Technical Analysis Best Practices
+
+When conducting technical assessments, architectural evaluations, or infrastructure migration analysis:
+
+### **Balanced Assessment Approach**
+- Present both benefits and challenges honestly
+- Avoid advocacy for either option - remain neutral
+- Acknowledge when current systems work well
+- Focus on facts and measurable outcomes, not preferences
+- Base analysis on current technology, not assumptions
+
+### **Prototype-First Methodology**
+- Recommend testing/validation before committing to major changes
+- Emphasize validation of critical functionality over theoretical benefits
+- Provide concrete validation steps and success criteria
+- Use data-driven decision making approach
+
+### **Risk-Based Framework**
+- Categorize risks by severity (High/Medium/Low)
+- Identify specific technical dependencies and compatibility issues
+- Acknowledge operational complexity trade-offs
+- Provide clear, objective decision criteria
+
+### **Concise, Actionable Structure**
+- Dramatically reduce verbosity while maintaining completeness
+- Focus on essential information only
+- Provide practical implementation guidance
+- Include concrete next steps and validation methods
+
+### **Respect for Working Systems**
+- Don't recommend changes just for the sake of change
+- Apply "if it ain't broke, don't fix it" principle appropriately
+- Require compelling evidence for infrastructure migrations
+- Consider opportunity cost of technical changes vs. product features
+- Acknowledge technical debt vs. functional systems honestly
+
+### **Verification Standards**
+- Verify claims against actual codebase before making assertions
+- Cross-reference version numbers and dependencies
+- Check for file existence before referencing implementations
+- Use web search to validate technology capabilities and limitations

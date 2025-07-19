@@ -8,20 +8,26 @@ FLAIM is your AI-powered fantasy sports assistant featuring a streamlined onboar
 
 ## Quick Start
 
-Development workflow is managed by two core scripts:
-- `./build.sh`: Non-interactive production artifact builder (ideal for CI/CD).
-- `./start.sh`: Interactive orchestrator for all environments **(Your main entry point)**.
+Modern GitOps workflow with standard npm commands:
 
 ```bash
 git clone https://github.com/yourusername/flaim
 cd flaim
 
-# 1. Build production artifacts
-./build.sh
+# Install dependencies
+npm install
 
-# 2. Deploy to any environment interactively
-./start.sh
+# Start local development (all services)
+npm run dev
+
+# Deploy workers to preview environment
+npm run deploy:workers:preview
+
+# Deploy workers to production
+npm run deploy:workers:prod
 ```
+
+**Frontend deployment is automatic**: Push to a PR for preview deployment, merge to `main` for production deployment via Cloudflare Pages Git integration.
 
 **For detailed setup and deployment instructions, see the [Getting Started & Deployment Guide](docs/GETTING_STARTED.md).**
 
@@ -33,7 +39,7 @@ cd flaim
 - **Secure Credential Storage**: CF KV with AES-GCM encryption managed by a central `auth-worker`.
 - **Multi-Sport Support**: Baseball and football MCP workers ready, with a framework for more.
 - **Auto League Discovery**: Automatically finds and configures your fantasy leagues.
-- **Interactive Deployment**: A single, powerful script manages all deployment scenarios with proactive environment checks.
+- **GitOps Deployment**: Automatic preview deployments for PRs, production deployment on main branch merge.
 - **Usage Tiers**: 100 free messages/month, with an unlimited paid tier.
 - **Serverless**: Cloudflare Workers + Next.js deployment.
 

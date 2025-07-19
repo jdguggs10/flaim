@@ -12,8 +12,8 @@
       // Custom domain routes for production
       "routes": [
         {
-          "pattern": "api.flaim.gg/baseball/*",
-          "zone_name": "flaim.gg"
+          "pattern": "api.flaim.app/baseball/*",
+          "zone_name": "flaim.app"
         }
       ],
       
@@ -21,7 +21,7 @@
       "vars": {
         "NODE_ENV": "production",
         "ENVIRONMENT": "prod",
-        "AUTH_WORKER_URL": "https://api.flaim.gg/auth"
+        "AUTH_WORKER_URL": "https://api.flaim.app/auth"
       },
       
       // KV bindings for user credential storage

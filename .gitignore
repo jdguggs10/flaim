@@ -8,11 +8,13 @@ yarn-error.log*
 .env
 .env.local
 .env.development.local
-.env.example
 .env.test
 .env.test.example
 .env.test.local
 .env.production.local
+
+# Wrangler development variables (contains secrets)
+.dev.vars
 
 # Build outputs
 dist/
