@@ -40,7 +40,6 @@ npm run deploy:workers:prod
 - **Multi-Sport Support**: Baseball and football MCP workers ready, with a framework for more.
 - **Auto League Discovery**: Automatically finds and configures your fantasy leagues.
 - **GitOps Deployment**: Automatic preview deployments for PRs, production deployment on main branch merge.
-- **Usage Tiers**: 100 free messages/month, with an unlimited paid tier.
 - **Serverless**: Cloudflare Workers + Next.js deployment.
 
 ## Documentation
