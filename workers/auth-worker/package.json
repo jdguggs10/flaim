@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Platform-agnostic credential storage worker for FLAIM",
   "engines": {
-    "node": "20"
+    "node": ">=22"
   },
   "main": "./src/index.ts",
   "scripts": {
@@ -28,6 +28,6 @@
     "jest": "^29.7.0",
     "ts-jest": "^29.4.0",
     "typescript": "^5.0.0",
-    "wrangler": "^3.0.0"
+    "wrangler": "^4.25.0"
   }
 }

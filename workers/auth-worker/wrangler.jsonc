@@ -49,8 +49,7 @@
       // Environment variables for preview
       "vars": {
         "NODE_ENV": "production",
-        "ENVIRONMENT": "preview",
-        "CF_ENCRYPTION_KEY": "YOUR-32-BYTE-BASE64-KEY"
+        "ENVIRONMENT": "preview"
       }
     },
     

@@ -10,34 +10,25 @@
     "workers/football-espn-mcp"
   ],
   "engines": {
-    "node": "20"
+    "node": ">=22"
   },
   "scripts": {
     "postinstall": "patch-package",
     "dev": "concurrently \"npm:dev:frontend\" \"npm:dev:workers\"",
     "dev:frontend": "cd openai && npm run dev",
-    "dev:workers": "concurrently \"cd workers/auth-worker && wrangler dev --env dev --port 8786\" \"cd workers/baseball-espn-mcp && wrangler dev --env dev --port 8787\" \"cd workers/football-espn-mcp && wrangler dev --env dev --port 8788\"",
+    "dev:workers": "concurrently \"cd workers/auth-worker && wrangler dev --env dev --port 8786 --inspector-port 9229\" \"cd workers/baseball-espn-mcp && wrangler dev --env dev --port 8787 --inspector-port 9230\" \"cd workers/football-espn-mcp && wrangler dev --env dev --port 8788 --inspector-port 9231\"",
     "build": "cd openai && npm run build",
     "deploy:workers:preview": "concurrently \"cd workers/auth-worker && wrangler deploy --env preview\" \"cd workers/baseball-espn-mcp && wrangler deploy --env preview\" \"cd workers/football-espn-mcp && wrangler deploy --env preview\"",
     "deploy:workers:prod": "concurrently \"cd workers/auth-worker && wrangler deploy --env prod\" \"cd workers/baseball-espn-mcp && wrangler deploy --env prod\" \"cd workers/football-espn-mcp && wrangler deploy --env prod\""
   },
   "dependencies": {
-    "@clerk/backend": "2.1.0",
-    "@clerk/nextjs": "6.22.0",
+    "@clerk/backend": "^2.5.0",
+    "@clerk/nextjs": "^6.25.4",
     "eslint": "^9.13.0",
-    "lucide-react": "0.525.0",
-    "next": "15.3.4",
-    "react": "19.1.0",
-    "react-dom": "19.1.0"
-  },
-  "overrides": {
-    "next": "15.3.4",
-    "@clerk/backend": "2.1.0",
-    "eslint": "^9.13.0",
-    "react": "19.1.0",
-    "react-dom": "19.1.0",
-    "@types/react": "19.0.0",
-    "@types/react-dom": "19.0.0"
+    "lucide-react": "^0.525.0",
+    "next": "^15.4.2",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",

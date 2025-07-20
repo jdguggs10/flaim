@@ -61,8 +61,15 @@ FLAIM uses a GitOps workflow for all deployments. The complex `start.sh` script 
 ### Environment Variables & Secrets
 
 #### Local (`dev`)
-- **File**: `openai/.env.local` (create this from `openai/.env.example`).
-- **Secrets**: All secrets (OpenAI, Clerk, etc.) are managed in this file for local development.
+For local development, secrets are managed in two separate files: one for the frontend and one for the backend workers.
+
+1.  **Frontend Secrets (`openai/.env.local`)**
+    -   **Purpose**: Provides secrets and public keys to the Next.js application.
+    -   **Setup**: Copy `openai/.env.example` to `openai/.env.local` and add your keys.
+
+2.  **Backend Secrets (`.dev.vars`)**
+    -   **Purpose**: Provides secrets to the Cloudflare Workers.
+    -   **Setup**: Create a `.dev.vars` file in the project root and add the keys needed by the workers (e.g., `CLERK_SECRET_KEY`, `CF_ENCRYPTION_KEY`).
 
 #### Preview & Production (`preview` / `prod`)
 - **Frontend**: All variables and secrets are managed in the Cloudflare Pages project settings (`Settings` > `Environment variables`).
