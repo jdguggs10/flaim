@@ -2,6 +2,24 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## 🚨 CRITICAL PROJECT CONTEXT
+
+**This is a SOLO DEVELOPER'S FIRST PRODUCTION PROJECT**
+
+- 👤 **One person** managing everything (frontend, backend, devops, design)
+- 🎓 **Learning project** - First time building production-grade software
+- ⏰ **Part-time development** - Limited bandwidth, not a full-time job
+- 🎯 **Goal: Ship working product** - Not winning architecture awards
+
+**AI Assistant Mandate:**
+- ✅ **Recommend proven, stable solutions** - Next.js, Vercel, Clerk
+- ✅ **Prioritize "boring" technology** - Battle-tested over cutting-edge  
+- ✅ **Start simple, scale when needed** - No premature optimization
+- ✅ **Working over perfect** - Functional features beat elegant architecture
+- ❌ **Avoid complex patterns** - No microservices, enterprise architectures
+- ❌ **No experimental tech** - Stick to mainstream, well-documented tools
+- ❌ **Don't over-engineer** - This is a learning project with bandwidth constraints
+
 ## Project Overview
 
 FLAIM (Fantasy League AI Manager) is a modern microservices platform providing AI-powered fantasy sports management through MCP (Model Context Protocol) tools. The architecture uses Clerk authentication with usage-based access controls and Cloudflare infrastructure.
@@ -186,3 +204,54 @@ When conducting technical assessments, architectural evaluations, or infrastruct
 - Cross-reference version numbers and dependencies
 - Check for file existence before referencing implementations
 - Use web search to validate technology capabilities and limitations
+
+## Solo Developer Decision Framework
+
+### ✅ Good Recommendations
+**Implementation Time:** 1-2 hours max
+**Complexity:** Uses existing tools/patterns
+**Documentation:** Clear, step-by-step guides available
+**Reversibility:** Easy to undo if it doesn't work
+**Learning:** Builds on current knowledge
+
+### ❌ Bad Recommendations  
+**Implementation Time:** Requires weekend project
+**Complexity:** Introduces 3+ new concepts
+**Documentation:** "Just read the advanced docs"
+**Reversibility:** Major refactor to undo
+**Learning:** Requires learning entirely new paradigms
+
+### Decision Checklist
+Before recommending any solution, ask:
+1. **Can this be done in a 1-2 hour session?**
+2. **Does this use tools already in the stack?**
+3. **Is there official documentation with examples?**
+4. **Can this be easily reverted if it breaks?**
+5. **Does this solve an immediate problem vs future scaling?**
+
+If any answer is "no", suggest a simpler alternative.
+
+### Emergency Brake Principles
+**When user seems overwhelmed:**
+1. **Stop adding features** - Fix what's broken first
+2. **Revert to working state** - Git is your safety net
+3. **Ask for simpler alternatives** - There's usually an easier way
+4. **Focus on user needs** - What do they actually want to accomplish?
+5. **Take breaks** - Complex decisions need fresh perspective
+
+### Technology Stack Constraints
+**Current stack is intentionally simple - don't suggest adding:**
+- Additional databases or storage systems
+- Complex state management libraries
+- Custom authentication or authorization
+- Advanced caching or performance optimizations
+- Sophisticated monitoring or observability
+- Enterprise-grade deployment patterns
+
+**Focus on mastering what's already there:**
+- Next.js fundamentals and App Router
+- React hooks and component patterns
+- TypeScript basics and type safety
+- Cloudflare Workers API and deployment
+- Clerk authentication flows
+- Basic debugging and troubleshooting
