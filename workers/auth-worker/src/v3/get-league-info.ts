@@ -12,7 +12,7 @@ import {
   SportName,
   gameIdToSport,
   type EspnLeagueInfo
-} from '../types.js';
+} from '../espn-types';
 
 interface EspnApiLeagueResponse {
   id: string;

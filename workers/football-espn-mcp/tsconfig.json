@@ -17,10 +17,6 @@
     "outDir": "./dist",
     "resolveJsonModule": true,
     "baseUrl": "../../",
-    "paths": {
-      "@flaim/auth/espn/*": ["auth/dist/workers/espn/*"],
-      "@flaim/auth/*": ["auth/dist/*"]
-    },
     "types": ["@cloudflare/workers-types", "node"]
   },
   "include": [

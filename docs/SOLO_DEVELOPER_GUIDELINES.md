@@ -129,20 +129,12 @@
 
 ## Technology Stack Constraints
 
-**Current stack is intentionally simple:**
-- **Frontend:** Next.js (standard setup, minimal config)
-- **Backend:** Cloudflare Workers (serverless, managed)
-- **Auth:** Clerk (managed service, no custom auth)
-- **Database:** Cloudflare KV (simple key-value, managed)
-- **Deployment:** Vercel + Wrangler (platform-managed)
+**Current stack is intentionally simple** - see [Architecture Guide](ARCHITECTURE.md) for detailed technology choices.
 
 **Don't suggest adding:**
-- Custom databases (PostgreSQL, MongoDB, etc.)
-- Additional backend services
-- Complex state management
-- Custom authentication
-- Advanced caching layers
-- Sophisticated monitoring
+- Additional databases or backend services
+- Complex state management or custom authentication  
+- Advanced caching, monitoring, or performance optimizations
 
 ## Learning Path
 

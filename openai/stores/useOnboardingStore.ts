@@ -4,7 +4,7 @@ import type {
   EspnLeague,
   EspnLeagueInfo,
   SportName
-} from '@/auth/espn/types';
+} from '@/lib/espn-types';
 
 export type OnboardingStep = 
   | 'NOT_STARTED'

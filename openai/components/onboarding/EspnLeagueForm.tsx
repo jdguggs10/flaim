@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, Button, Inpu
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui';
 import { Loader2, Plus } from 'lucide-react';
 import useOnboardingStore from '@/stores/useOnboardingStore';
-import type { SportName } from '../../../auth/espn/types';
+import type { SportName } from '@/lib/espn-types';
 import SkipStepBanner from './SkipStepBanner';
 
 interface SaveLeagueResponse {

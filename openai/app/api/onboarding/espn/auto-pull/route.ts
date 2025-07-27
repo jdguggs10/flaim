@@ -11,7 +11,7 @@ import type {
   AutoPullResponse,
   EspnLeagueInfo,
   SportName
-} from '@/auth/espn/types';
+} from '@/lib/espn-types';
 
 export const runtime = 'edge';
 

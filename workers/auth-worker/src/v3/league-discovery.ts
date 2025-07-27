@@ -15,8 +15,8 @@ import {
   GambitLeague,
   ESPN_GAME_IDS,
   type SportName
-} from '../types.js';
-import { getLeagueInfo } from './get-league-info.js';
+} from '../espn-types';
+import { getLeagueInfo } from './get-league-info';
 
 const V3_BASE = 'https://lm-api-reads.fantasy.espn.com/apis/v3/games';
 

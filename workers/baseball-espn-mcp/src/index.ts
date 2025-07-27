@@ -1,25 +1,132 @@
 // Baseball ESPN MCP Server v4.0 - Open Access
-// Focuses purely on ESPN API integration with KV storage
+// Focuses purely on ESPN API integration with auth-worker service
 
 import { McpAgent } from './mcp/agent.js';
-import { getCredentials, getUserLeagues } from '../../../auth/dist/shared/shared/auth-worker-client.js';
 import { getBasicLeagueInfo } from './mcp/basic-league-info.js';
 
 export interface Env {
-  CF_KV_CREDENTIALS: KVNamespace;
-  CF_ENCRYPTION_KEY: string;
-  ESPN_S2?: string;
-  ESPN_SWID?: string;
   NODE_ENV?: string;
   ENVIRONMENT?: string;
   CLERK_SECRET_KEY?: string;
-  AUTH_WORKER_URL?: string;
+  AUTH_WORKER_URL: string;
+}
+
+// ESPN Credentials interface
+export interface EspnCredentials {
+  swid: string;
+  s2: string;
+  email?: string;
+}
+
+// Auth Worker Config interface
+export interface AuthWorkerConfig {
+  authWorkerUrl?: string;
+  defaultUrl?: string;
+}
+
+/**
+ * Fetch ESPN credentials from auth-worker for a given Clerk user ID
+ */
+async function getCredentials(
+  clerkUserId: string,
+  config: AuthWorkerConfig = {}
+): Promise<EspnCredentials | null> {
+  try {
+    const authWorkerUrl = config.authWorkerUrl || config.defaultUrl;
+    const url = `${authWorkerUrl}/credentials/espn?raw=true`;
+    
+    console.log(`🔑 Fetching ESPN credentials for user ${clerkUserId} from ${url}`);
+    
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'X-Clerk-User-ID': clerkUserId,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    console.log(`📡 Auth-worker response: ${response.status} ${response.statusText}`);
+    
+    if (response.status === 404) {
+      console.log('ℹ️ No ESPN credentials found for user');
+      return null;
+    }
+    
+    if (!response.ok) {
+      console.error(`❌ Auth-worker error: ${response.status} ${response.statusText}`);
+      const errorData = await response.json().catch(() => ({})) as { error?: string };
+      throw new Error(`Auth-worker error: ${errorData.error || response.statusText}`);
+    }
+    
+    const data = await response.json() as { success?: boolean; credentials?: EspnCredentials };
+    
+    if (!data.success || !data.credentials) {
+      console.error('❌ Invalid response from auth-worker:', data);
+      throw new Error('Invalid credentials response from auth-worker');
+    }
+    
+    console.log('✅ Successfully retrieved ESPN credentials');
+    return data.credentials;
+    
+  } catch (error) {
+    console.error('❌ Failed to fetch credentials from auth-worker:', error);
+    throw error;
+  }
+}
+
+/**
+ * Fetch user's leagues from auth-worker
+ */
+async function getUserLeagues(
+  clerkUserId: string,
+  config: AuthWorkerConfig = {}
+): Promise<Array<{ leagueId: string; sport: string; teamId?: string }>> {
+  try {
+    const authWorkerUrl = config.authWorkerUrl || config.defaultUrl;
+    const url = `${authWorkerUrl}/leagues`;
+    
+    console.log(`🏈 Fetching user leagues for ${clerkUserId} from ${url}`);
+    
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'X-Clerk-User-ID': clerkUserId,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    console.log(`📡 Auth-worker leagues response: ${response.status} ${response.statusText}`);
+    
+    if (response.status === 404) {
+      console.log('ℹ️ No leagues found for user');
+      return [];
+    }
+    
+    if (!response.ok) {
+      console.error(`❌ Auth-worker leagues error: ${response.status} ${response.statusText}`);
+      const errorData = await response.json().catch(() => ({})) as { error?: string };
+      throw new Error(`Auth-worker error: ${errorData.error || response.statusText}`);
+    }
+    
+    const data = await response.json() as { success?: boolean; leagues?: Array<{ leagueId: string; sport: string; teamId?: string }> };
+    
+    if (!data.success) {
+      console.error('❌ Invalid leagues response from auth-worker:', data);
+      return [];
+    }
+    
+    console.log(`✅ Successfully retrieved ${data.leagues?.length || 0} leagues`);
+    return data.leagues || [];
+    
+  } catch (error) {
+    console.error('❌ Failed to fetch leagues from auth-worker:', error);
+    throw error;
+  }
 }
 
 // Helper function for CORS headers
 const ALLOWED_ORIGINS = [
-  'https://preview.flaim-frontend.pages.dev',      // Remote preview (primary)
-  'https://preview.flaim.pages.dev',               // Legacy preview subdomain
+  'https://*.vercel.app',                          // All Vercel preview deployments
   'https://flaim.app',                             // Production
   'http://localhost:8787',                         // Wrangler dev server (HTTP)
   'https://localhost:8787',                        // Wrangler dev server (HTTPS)
@@ -33,11 +140,23 @@ function getCorsHeaders(request: Request) {
     'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Clerk-User-ID',
   };
 
-  if (origin && ALLOWED_ORIGINS.includes(origin)) {
+  if (origin && isOriginAllowed(origin)) {
     headers['Access-Control-Allow-Origin'] = origin;
   }
 
   return headers;
+}
+
+function isOriginAllowed(origin: string): boolean {
+  return ALLOWED_ORIGINS.some(allowedOrigin => {
+    if (allowedOrigin.includes('*')) {
+      // Handle wildcard patterns
+      const pattern = allowedOrigin.replace(/\*/g, '.*');
+      const regex = new RegExp(`^${pattern}$`);
+      return regex.test(origin);
+    }
+    return allowedOrigin === origin;
+  });
 }
 
 
@@ -52,7 +171,7 @@ export default {
     }
 
     try {
-      // Health check endpoint with KV connectivity test
+      // Health check endpoint with auth-worker connectivity test
       if (url.pathname === '/health') {
         const healthData: any = {
           status: 'healthy', 
@@ -61,24 +180,26 @@ export default {
           timestamp: new Date().toISOString()
         };
 
-        // Test KV connectivity (still needed for reading credentials from auth-worker)
+        // Test auth-worker connectivity
         try {
-          if (env.CF_KV_CREDENTIALS) {
-            // Try a simple KV operation to verify connectivity
-            await env.CF_KV_CREDENTIALS.get('__health_check__');
-            healthData.kv_status = 'connected';
+          if (env.AUTH_WORKER_URL) {
+            const authHealthUrl = `${env.AUTH_WORKER_URL}/health`;
+            const authResponse = await fetch(authHealthUrl);
+            healthData.auth_worker_status = authResponse.ok ? 'connected' : 'error';
+            if (!authResponse.ok) {
+              healthData.status = 'degraded';
+            }
           } else {
-            healthData.kv_status = 'not_configured';
+            healthData.auth_worker_status = 'not_configured';
             healthData.status = 'degraded';
           }
         } catch (error) {
-          healthData.kv_status = 'error';
-          healthData.kv_error = error instanceof Error ? error.message : 'Unknown KV error';
+          healthData.auth_worker_status = 'error';
+          healthData.auth_worker_error = error instanceof Error ? error.message : 'Unknown auth-worker error';
           healthData.status = 'degraded';
         }
 
-        // Note: Credential storage now handled by auth-worker
-        healthData.credential_storage = 'handled_by_auth_worker';
+        healthData.credential_storage = 'supabase_via_auth_worker';
 
         const statusCode = healthData.status === 'healthy' ? 200 : 503;
 
@@ -218,7 +339,7 @@ export default {
         error: 'Endpoint not found',
         message: 'Available endpoints',
         endpoints: {
-          '/health': 'GET - Health check with KV connectivity test',
+          '/health': 'GET - Health check with auth-worker connectivity test',
           '/onboarding/initialize': 'POST - Initialize onboarding with league data fetching (requires X-Clerk-User-ID header)',
           '/mcp': 'POST - MCP protocol endpoints for Claude integration'
         },

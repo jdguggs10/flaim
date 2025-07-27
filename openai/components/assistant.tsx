@@ -1,6 +1,6 @@
 "use client";
 import React from "react";
-import { useAuth, SignInButton, SignUpButton } from '@flaim/auth/web/components';
+import { useUser, SignInButton, SignUpButton } from '@clerk/nextjs';
 import Chat from "./chat";
 import useConversationStore from "@/stores/useConversationStore";
 import { Item, processMessages } from "@/lib/assistant";
@@ -57,7 +57,8 @@ export default function Assistant() {
     }
   };
 
-  const { isAuthenticated: isSignedIn, isLoading } = useAuth();
+  const { isSignedIn, isLoaded } = useUser();
+  const isLoading = !isLoaded;
   
   // Onboarding integration
   const { 
@@ -192,17 +193,15 @@ export default function Assistant() {
             </div>
             
             <div className="flex flex-col sm:flex-row gap-3 justify-center">
-              <SignInButton 
-                mode="modal"
-                className="px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 font-medium transition-colors"
-              >
-                Sign In
+              <SignInButton mode="modal">
+                <button className="px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 font-medium transition-colors">
+                  Sign In
+                </button>
               </SignInButton>
-              <SignUpButton 
-                mode="modal"
-                className="px-6 py-3 border border-primary text-primary rounded-lg hover:bg-primary/10 font-medium transition-colors"
-              >
-                Create Account
+              <SignUpButton mode="modal">
+                <button className="px-6 py-3 border border-primary text-primary rounded-lg hover:bg-primary/10 font-medium transition-colors">
+                  Create Account
+                </button>
               </SignUpButton>
             </div>
           </div>

@@ -133,7 +133,7 @@ Workers expose MCP tools for fantasy sports data:
 
 ## Key Considerations
 
-- **Node.js 20 required** (check engines in package.json files)
+- **Node.js 22 required** (check engines in package.json files)
 - **Wrangler CLI** needed for worker development and deployment
 - **Environment variables** configured per service (see docs/ARCHITECTURE.md)
 - **Clerk session verification** required for protected endpoints

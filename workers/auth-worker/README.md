@@ -1,27 +1,54 @@
 # Auth Worker
 
-Platform-agnostic credential storage worker for FLAIM.
+Supabase-based credential storage worker for FLAIM.
 
 ## Overview
 
-The Auth Worker is a centralized Cloudflare Worker responsible for storing, retrieving, and managing user platform credentials (ESPN, Yahoo, Sleeper, etc.) with encrypted KV storage.
+The Auth Worker is a centralized Cloudflare Worker responsible for storing, retrieving, and managing user ESPN credentials with Supabase PostgreSQL storage.
 
 ## Endpoints
 
-- `GET /health` - Health check with KV connectivity test
-- `POST /credentials/:platform` - Store platform credentials
-- `GET /credentials/:platform` - Get credential metadata
-- `DELETE /credentials/:platform` - Delete platform credentials
+- `GET /health` - Health check with Supabase connectivity test
+- `POST /credentials/espn` - Store ESPN credentials
+- `GET /credentials/espn` - Get ESPN credential metadata
+- `DELETE /credentials/espn` - Delete ESPN credentials
+- `GET /credentials/espn?raw=true` - Get raw credentials for MCP workers
+- `POST /leagues` - Store ESPN leagues
+- `GET /leagues` - Get ESPN leagues
+- `DELETE /leagues` - Remove specific league
+- `PATCH /leagues/:leagueId/team` - Update team selection
 
 ## Supported Platforms
 
 - `espn` - ESPN Fantasy credentials (swid, s2)
-- `yahoo` - Yahoo Fantasy credentials (access_token, refresh_token)
-- `sleeper` - Sleeper credentials (access_token)
 
 ## Authentication
 
 All credential endpoints require the `X-Clerk-User-ID` header containing the Clerk user ID.
+
+## Setup
+
+### 1. Create Supabase Project
+- Go to https://supabase.com/dashboard
+- Create new project and note the project URL
+- Run the database schema from `docs/dev/KV_TO_SUPABASE_CONVERSION_GUIDE.md`
+
+### 2. Configure Cloudflare Secrets
+```bash
+# Set Supabase credentials as Cloudflare secrets for each environment
+wrangler secret put SUPABASE_URL --env preview
+wrangler secret put SUPABASE_SERVICE_KEY --env preview
+
+wrangler secret put SUPABASE_URL --env prod  
+wrangler secret put SUPABASE_SERVICE_KEY --env prod
+```
+
+### 3. Local Development
+Create `.env.local` in the `openai` directory:
+```bash
+SUPABASE_URL=https://your-project-ref.supabase.co
+SUPABASE_SERVICE_KEY=your-service-role-key
+```
 
 ## Development
 
@@ -32,8 +59,8 @@ npm run dev
 # Type check
 npx tsc --noEmit
 
-# Run tests
-npm test
+# Run tests (manual with Supabase credentials)
+npx tsx src/test-supabase.ts
 
 # Deploy
 npm run deploy
@@ -41,15 +68,15 @@ npm run deploy
 
 ## Environment Variables
 
-- `CF_KV_CREDENTIALS` - KV namespace binding for credential storage
-- `CF_ENCRYPTION_KEY` - AES-GCM encryption key for credentials
+- `SUPABASE_URL` - Supabase project URL
+- `SUPABASE_SERVICE_KEY` - Supabase service role key (set via wrangler secret)
 - `NODE_ENV` - Environment (development/production)
 
-## Phase 1.5 Compliance
+## Supabase Integration
 
-This implementation follows the Phase 1.5 requirements:
-- ✅ Uses `X-Clerk-User-ID` header (no Bearer token verification)
-- ✅ Proper encryption initialization
-- ✅ No `@clerk/backend` dependency
-- ✅ Type-safe credential handling
-- ✅ Unit test structure for header-based auth
+This implementation uses Supabase PostgreSQL for reliable credential storage:
+- ✅ ACID compliance (no eventual consistency issues)
+- ✅ Rich dashboard for data management and debugging
+- ✅ No client-side encryption complexity
+- ✅ Structured relational data with foreign keys
+- ✅ Built-in backup and monitoring capabilities

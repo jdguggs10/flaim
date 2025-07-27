@@ -1,213 +1,36 @@
 /**
- * Auth Worker - Platform-Agnostic Credential Storage
+ * Auth Worker - Supabase-based Credential Storage
  * 
- * Centralized Cloudflare Worker for handling all platform credentials
- * (ESPN, Yahoo, Sleeper, etc.) with encrypted KV storage.
+ * Centralized Cloudflare Worker for handling ESPN credentials
+ * with Supabase PostgreSQL storage.
  * 
  * Endpoints:
- * - GET /health - Health check with KV connectivity test
- * - POST /credentials/:platform - Store platform credentials
- * - GET /credentials/:platform - Get credential metadata
- * - DELETE /credentials/:platform - Delete platform credentials
+ * - GET /health - Health check with Supabase connectivity test
+ * - POST /credentials/espn - Store ESPN credentials
+ * - GET /credentials/espn - Get ESPN credential metadata
+ * - DELETE /credentials/espn - Delete ESPN credentials
+ * - GET /credentials/espn?raw=true - Get raw credentials for MCP workers
+ * - POST /leagues - Store ESPN leagues
+ * - GET /leagues - Get ESPN leagues
+ * - DELETE /leagues - Remove specific league
+ * - PATCH /leagues/:leagueId/team - Update team selection
  * 
- * @version 1.0.0
+ * @version 2.0.0 - Supabase implementation
  */
 
+import { EspnSupabaseStorage } from './supabase-storage';
+import { EspnCredentials, EspnLeague } from './espn-types';
+
 export interface Env {
-  CF_KV_CREDENTIALS: KVNamespace;
-  CF_ENCRYPTION_KEY: string;
+  SUPABASE_URL: string;
+  SUPABASE_SERVICE_KEY: string;
   NODE_ENV?: string;
-}
-
-// Platform-specific credential interfaces
-interface EspnCredentials {
-  swid: string;
-  s2: string;
-  email?: string;
-}
-
-interface YahooCredentials {
-  access_token: string;
-  refresh_token?: string;
-  email?: string;
-}
-
-interface SleeperCredentials {
-  access_token: string;
-  email?: string;
-}
-
-type PlatformCredentials = EspnCredentials | YahooCredentials | SleeperCredentials;
-
-interface CredentialMetadata {
-  platform: string;
-  clerkUserId: string;
-  created_at: string;
-  updated_at: string;
-  email?: string;
-}
-
-// Simple encryption/decryption utilities
-class CredentialEncryption {
-  private key: CryptoKey | null = null;
-
-  async initialize(encryptionKey: string): Promise<void> {
-    if (this.key) return;
-    
-    const keyBuffer = new TextEncoder().encode(encryptionKey.padEnd(32, '0').slice(0, 32));
-    this.key = await crypto.subtle.importKey(
-      'raw',
-      keyBuffer,
-      { name: 'AES-GCM' },
-      false,
-      ['encrypt', 'decrypt']
-    );
-  }
-
-  async encrypt(data: string): Promise<{ iv: string; ciphertext: string }> {
-    if (!this.key) throw new Error('Encryption key not initialized');
-    
-    const iv = crypto.getRandomValues(new Uint8Array(12));
-    const encodedData = new TextEncoder().encode(data);
-    
-    const ciphertext = await crypto.subtle.encrypt(
-      { name: 'AES-GCM', iv },
-      this.key,
-      encodedData
-    );
-    
-    return {
-      iv: Array.from(iv).map(b => b.toString(16).padStart(2, '0')).join(''),
-      ciphertext: Array.from(new Uint8Array(ciphertext)).map(b => b.toString(16).padStart(2, '0')).join('')
-    };
-  }
-
-  async decrypt(encryptedData: { iv: string; ciphertext: string }): Promise<string> {
-    if (!this.key) throw new Error('Encryption key not initialized');
-    
-    const iv = new Uint8Array(encryptedData.iv.match(/.{2}/g)!.map(byte => parseInt(byte, 16)));
-    const ciphertext = new Uint8Array(encryptedData.ciphertext.match(/.{2}/g)!.map(byte => parseInt(byte, 16)));
-    
-    const decrypted = await crypto.subtle.decrypt(
-      { name: 'AES-GCM', iv },
-      this.key,
-      ciphertext
-    );
-    
-    return new TextDecoder().decode(decrypted);
-  }
-}
-
-// Platform-agnostic credential storage
-class PlatformCredentialStorage {
-  private kvNamespace: KVNamespace;
-  private encryption: CredentialEncryption;
-  private encryptionKey: string;
-
-  constructor(kvNamespace: KVNamespace, encryptionKey: string) {
-    this.kvNamespace = kvNamespace;
-    this.encryption = new CredentialEncryption();
-    this.encryptionKey = encryptionKey;
-  }
-
-  private async ensureEncryptionInitialized(): Promise<void> {
-    await this.encryption.initialize(this.encryptionKey);
-  }
-
-  private getCredentialKey(platform: string, clerkUserId: string): string {
-    return `${platform}_creds:${clerkUserId}`;
-  }
-
-  async storeCredentials(platform: string, clerkUserId: string, credentials: PlatformCredentials): Promise<boolean> {
-    try {
-      await this.ensureEncryptionInitialized();
-      
-      const now = new Date().toISOString();
-      const credentialData: CredentialMetadata & { credentials: PlatformCredentials } = {
-        platform,
-        clerkUserId,
-        created_at: now,
-        updated_at: now,
-        email: 'email' in credentials ? credentials.email : undefined,
-        credentials
-      };
-
-      const encrypted = await this.encryption.encrypt(JSON.stringify(credentialData));
-      const key = this.getCredentialKey(platform, clerkUserId);
-      
-      await this.kvNamespace.put(key, JSON.stringify(encrypted), {
-        metadata: {
-          platform,
-          clerkUserId,
-          lastUpdated: now,
-          hasEmail: !!credentialData.email
-        }
-      });
-
-      return true;
-    } catch (error) {
-      console.error(`Failed to store ${platform} credentials:`, error);
-      return false;
-    }
-  }
-
-  async getCredentials(platform: string, clerkUserId: string): Promise<PlatformCredentials | null> {
-    try {
-      await this.ensureEncryptionInitialized();
-      
-      const key = this.getCredentialKey(platform, clerkUserId);
-      const encryptedData = await this.kvNamespace.get(key);
-      
-      if (!encryptedData) return null;
-
-      const encrypted = JSON.parse(encryptedData);
-      const decrypted = await this.encryption.decrypt(encrypted);
-      const credentialData = JSON.parse(decrypted);
-      
-      return credentialData.credentials;
-    } catch (error) {
-      console.error(`Failed to retrieve ${platform} credentials:`, error);
-      return null;
-    }
-  }
-
-  async getCredentialMetadata(platform: string, clerkUserId: string): Promise<{ hasCredentials: boolean; email?: string; lastUpdated?: string } | null> {
-    try {
-      const key = this.getCredentialKey(platform, clerkUserId);
-      const { value, metadata } = await this.kvNamespace.getWithMetadata(key);
-      
-      if (!value) {
-        return { hasCredentials: false };
-      }
-
-      return {
-        hasCredentials: true,
-        email: (metadata as any)?.hasEmail ? 'Available' : undefined,
-        lastUpdated: (metadata as any)?.lastUpdated as string
-      };
-    } catch (error) {
-      console.error(`Failed to get ${platform} credential metadata:`, error);
-      return { hasCredentials: false };
-    }
-  }
-
-  async deleteCredentials(platform: string, clerkUserId: string): Promise<boolean> {
-    try {
-      const key = this.getCredentialKey(platform, clerkUserId);
-      await this.kvNamespace.delete(key);
-      return true;
-    } catch (error) {
-      console.error(`Failed to delete ${platform} credentials:`, error);
-      return false;
-    }
-  }
 }
 
 // CORS helper - Allow sport workers and Next.js origins
 const ALLOWED_ORIGINS = [
-  // Cloudflare Pages preview and branch deployments
-  'https://preview.flaim-frontend.pages.dev',      // Remote preview (primary)
-  'https://preview.flaim.pages.dev',               // Legacy preview subdomain
+  // Vercel deployments
+  'https://*.vercel.app',                          // All Vercel preview deployments
   // Production
   'https://flaim.app',
   // Local development
@@ -224,11 +47,23 @@ function getCorsHeaders(request: Request) {
     'Access-Control-Max-Age': '86400', // Cache preflight for 24 hours
   };
 
-  if (origin && ALLOWED_ORIGINS.includes(origin)) {
+  if (origin && isOriginAllowed(origin)) {
     headers['Access-Control-Allow-Origin'] = origin;
   }
 
   return headers;
+}
+
+function isOriginAllowed(origin: string): boolean {
+  return ALLOWED_ORIGINS.some(allowedOrigin => {
+    if (allowedOrigin.includes('*')) {
+      // Handle wildcard patterns
+      const pattern = allowedOrigin.replace(/\*/g, '.*');
+      const regex = new RegExp(`^${pattern}$`);
+      return regex.test(origin);
+    }
+    return allowedOrigin === origin;
+  });
 }
 
 // Extract Clerk User ID from header
@@ -242,26 +77,10 @@ function getClerkUserId(request: Request): { userId: string | null; error?: stri
   return { userId: clerkUserId };
 }
 
-// Validate platform credentials
-function validateCredentials(platform: string, credentials: any): { valid: boolean; error?: string } {
-  switch (platform.toLowerCase()) {
-    case 'espn':
-      if (!credentials.swid || !credentials.s2) {
-        return { valid: false, error: 'ESPN credentials require swid and s2 fields' };
-      }
-      break;
-    case 'yahoo':
-      if (!credentials.access_token) {
-        return { valid: false, error: 'Yahoo credentials require access_token field' };
-      }
-      break;
-    case 'sleeper':
-      if (!credentials.access_token) {
-        return { valid: false, error: 'Sleeper credentials require access_token field' };
-      }
-      break;
-    default:
-      return { valid: false, error: `Unsupported platform: ${platform}` };
+// Validate ESPN credentials
+function validateEspnCredentials(credentials: any): { valid: boolean; error?: string } {
+  if (!credentials.swid || !credentials.s2) {
+    return { valid: false, error: 'ESPN credentials require swid and s2 fields' };
   }
   
   return { valid: true };
@@ -284,35 +103,28 @@ export default {
         const healthData: any = {
           status: 'healthy',
           service: 'auth-worker',
-          version: '1.0.0',
+          version: '2.0.0',
           timestamp: new Date().toISOString(),
-          supportedPlatforms: ['espn', 'yahoo', 'sleeper']
+          storage: 'supabase'
         };
 
-        // Test KV connectivity
+        // Test Supabase connectivity
         try {
-          if (env.CF_KV_CREDENTIALS) {
-            await env.CF_KV_CREDENTIALS.get('__health_check__');
-            healthData.kv_status = 'connected';
+          if (env.SUPABASE_URL && env.SUPABASE_SERVICE_KEY) {
+            const storage = EspnSupabaseStorage.fromEnvironment(env);
+            // Simple connectivity test
+            await storage.hasCredentials('health-check-test');
+            healthData.supabase_status = 'connected';
           } else {
-            healthData.kv_status = 'not_configured';
+            healthData.supabase_status = 'not_configured';
             healthData.status = 'degraded';
           }
         } catch (error) {
-          healthData.kv_status = 'error';
-          healthData.kv_error = error instanceof Error ? error.message : 'Unknown KV error';
+          healthData.supabase_status = 'error';
+          healthData.supabase_error = error instanceof Error ? error.message : 'Unknown Supabase error';
           healthData.status = 'degraded';
         }
 
-        // Test encryption key
-        if (env.CF_ENCRYPTION_KEY) {
-          healthData.encryption_status = 'configured';
-        } else {
-          healthData.encryption_status = 'missing';
-          healthData.status = 'degraded';
-        }
-
-        // Health check does not require Clerk configuration
         healthData.auth_method = 'X-Clerk-User-ID header';
 
         const statusCode = healthData.status === 'healthy' ? 200 : 503;
@@ -323,11 +135,8 @@ export default {
         });
       }
 
-      // Credential management endpoints
-      const credentialMatch = url.pathname.match(/^\/credentials\/([^\/]+)$/);
-      if (credentialMatch) {
-        const platform = credentialMatch[1];
-        
+      // ESPN credential management endpoints
+      if (url.pathname === '/credentials/espn') {
         // Extract Clerk User ID from header
         const { userId: clerkUserId, error: authError } = getClerkUserId(request);
         if (!clerkUserId) {
@@ -340,12 +149,12 @@ export default {
           });
         }
 
-        const storage = new PlatformCredentialStorage(env.CF_KV_CREDENTIALS, env.CF_ENCRYPTION_KEY);
+        const storage = EspnSupabaseStorage.fromEnvironment(env);
 
         if (request.method === 'POST' || request.method === 'PUT') {
-          // Store credentials
+          // Store ESPN credentials
           const body = await request.json();
-          const validation = validateCredentials(platform, body);
+          const validation = validateEspnCredentials(body);
           
           if (!validation.valid) {
             return new Response(JSON.stringify({
@@ -357,7 +166,7 @@ export default {
             });
           }
 
-          const success = await storage.storeCredentials(platform, clerkUserId, body as PlatformCredentials);
+          const success = await storage.setCredentials(clerkUserId, body.swid, body.s2, body.email);
           
           if (!success) {
             return new Response(JSON.stringify({
@@ -370,7 +179,7 @@ export default {
 
           return new Response(JSON.stringify({
             success: true,
-            message: `${platform} credentials stored successfully`
+            message: 'ESPN credentials stored successfully'
           }), {
             headers: { 'Content-Type': 'application/json', ...corsHeaders }
           });
@@ -381,12 +190,12 @@ export default {
           
           if (getRawCredentials) {
             // Return actual credentials for sport workers
-            const credentials = await storage.getCredentials(platform, clerkUserId);
+            const credentials = await storage.getCredentials(clerkUserId);
             
             if (!credentials) {
               return new Response(JSON.stringify({
                 error: 'Credentials not found',
-                message: `No ${platform} credentials found for user`
+                message: 'No ESPN credentials found for user'
               }), {
                 status: 404,
                 headers: { 'Content-Type': 'application/json', ...corsHeaders }
@@ -395,19 +204,19 @@ export default {
 
             return new Response(JSON.stringify({
               success: true,
-              platform,
+              platform: 'espn',
               credentials
             }), {
               headers: { 'Content-Type': 'application/json', ...corsHeaders }
             });
           } else {
             // Get credential metadata (default behavior for frontend)
-            const metadata = await storage.getCredentialMetadata(platform, clerkUserId);
+            const metadata = await storage.getCredentialMetadata(clerkUserId);
             
             if (!metadata?.hasCredentials) {
               return new Response(JSON.stringify({
                 hasCredentials: false,
-                message: `No ${platform} credentials found`
+                message: 'No ESPN credentials found'
               }), {
                 status: 404,
                 headers: { 'Content-Type': 'application/json', ...corsHeaders }
@@ -416,7 +225,7 @@ export default {
 
             return new Response(JSON.stringify({
               hasCredentials: true,
-              platform,
+              platform: 'espn',
               email: metadata.email,
               lastUpdated: metadata.lastUpdated
             }), {
@@ -425,8 +234,8 @@ export default {
           }
 
         } else if (request.method === 'DELETE') {
-          // Delete credentials
-          const success = await storage.deleteCredentials(platform, clerkUserId);
+          // Delete ESPN credentials
+          const success = await storage.deleteCredentials(clerkUserId);
           
           if (!success) {
             return new Response(JSON.stringify({
@@ -439,7 +248,7 @@ export default {
 
           return new Response(JSON.stringify({
             success: true,
-            message: `${platform} credentials deleted successfully`
+            message: 'ESPN credentials deleted successfully'
           }), {
             headers: { 'Content-Type': 'application/json', ...corsHeaders }
           });
@@ -453,12 +262,7 @@ export default {
         });
       }
 
-      // -------------------------------------------------------------------
-      // League management endpoint (ESPN only for now)
-      // POST /leagues  -> store leagues array
-      // GET  /leagues  -> retrieve leagues array metadata
-      // -------------------------------------------------------------------
-
+      // League management endpoints
       if (url.pathname === '/leagues') {
         // Extract Clerk User ID from header
         const { userId: clerkUserId, error: authError } = getClerkUserId(request);
@@ -472,19 +276,12 @@ export default {
           });
         }
 
-        // Lazily import to keep worker bundle size small
-        // eslint-disable-next-line  @typescript-eslint/consistent-type-imports
-        const { EspnKVStorage } = await import('../../../auth/espn/kv-storage');
-
-        const storage = new EspnKVStorage({
-          kv: env.CF_KV_CREDENTIALS,
-          encryptionKey: env.CF_ENCRYPTION_KEY
-        });
+        const storage = EspnSupabaseStorage.fromEnvironment(env);
 
         if (request.method === 'POST' || request.method === 'PUT') {
           // Save leagues
           const body = (await request.json()) as any;
-          const leagues = body?.leagues as Array<{ leagueId: string; sport: string }> | undefined;
+          const leagues = body?.leagues as EspnLeague[] | undefined;
 
           if (!leagues || !Array.isArray(leagues)) {
             return new Response(JSON.stringify({
@@ -495,7 +292,7 @@ export default {
             });
           }
 
-          // Basic validation (duplicate check handled by storage layer)
+          // Basic validation
           if (leagues.length > 10) {
             return new Response(JSON.stringify({
               error: 'Maximum of 10 leagues allowed per user'
@@ -505,7 +302,7 @@ export default {
             });
           }
 
-          const success = await storage.setLeagues(clerkUserId, leagues as any);
+          const success = await storage.setLeagues(clerkUserId, leagues);
 
           if (!success) {
             return new Response(JSON.stringify({
@@ -530,11 +327,12 @@ export default {
 
           return new Response(JSON.stringify({
             success: true,
-            leagues: leagues || [],
-            totalLeagues: leagues?.length || 0
+            leagues,
+            totalLeagues: leagues.length
           }), {
             headers: { 'Content-Type': 'application/json', ...corsHeaders }
           });
+
         } else if (request.method === 'DELETE') {
           // Remove a single league
           const urlObj = new URL(request.url);
@@ -550,10 +348,7 @@ export default {
             });
           }
 
-          const currentLeagues = await storage.getLeagues(clerkUserId) || [];
-          const updatedLeagues = currentLeagues.filter(l => !(l.leagueId === leagueId && l.sport === sport));
-
-          const success = await storage.setLeagues(clerkUserId, updatedLeagues);
+          const success = await storage.removeLeague(clerkUserId, leagueId, sport);
 
           if (!success) {
             return new Response(JSON.stringify({
@@ -563,6 +358,9 @@ export default {
               headers: { 'Content-Type': 'application/json', ...corsHeaders }
             });
           }
+
+          // Get updated leagues list
+          const updatedLeagues = await storage.getLeagues(clerkUserId);
 
           return new Response(JSON.stringify({
             success: true,
@@ -582,11 +380,7 @@ export default {
         });
       }
 
-      // -------------------------------------------------------------------
       // League team selection endpoint
-      // PATCH /leagues/:leagueId/team  -> update specific league's team selection
-      // -------------------------------------------------------------------
-
       const leagueTeamMatch = url.pathname.match(/^\/leagues\/([^\/]+)\/team$/);
       if (leagueTeamMatch && request.method === 'PATCH') {
         const leagueId = leagueTeamMatch[1];
@@ -615,23 +409,18 @@ export default {
           });
         }
 
-        // Import storage
-        const { EspnKVStorage } = await import('../../../auth/espn/kv-storage');
-        const storage = new EspnKVStorage({
-          kv: env.CF_KV_CREDENTIALS,
-          encryptionKey: env.CF_ENCRYPTION_KEY
-        });
+        const storage = EspnSupabaseStorage.fromEnvironment(env);
 
-        // Get current leagues (use full league data with teamId support)
-        const currentLeagues = await storage.getLeagues(clerkUserId) || [];
+        // Get current leagues
+        const currentLeagues = await storage.getLeagues(clerkUserId);
         
-        // Find and update the specific league
-        const leagueIndex = currentLeagues.findIndex(league => 
-          league.leagueId === leagueId && 
-          (sport ? league.sport === sport : true)
+        // Find the specific league
+        const league = currentLeagues.find(l => 
+          l.leagueId === leagueId && 
+          (sport ? l.sport === sport : true)
         );
 
-        if (leagueIndex === -1) {
+        if (!league) {
           return new Response(JSON.stringify({
             error: 'League not found',
             message: `League ${leagueId}${sport ? ` for sport ${sport}` : ''} not found for user`
@@ -641,18 +430,13 @@ export default {
           });
         }
 
-        // Update league with team selection
-        const updatedLeagues = [...currentLeagues];
-        updatedLeagues[leagueIndex] = {
-          ...updatedLeagues[leagueIndex],
-          teamId,
-          ...(teamName ? { teamName } : {}),
-          ...(leagueName ? { leagueName } : {}),
-          ...(seasonYear ? { seasonYear } : {})
-        };
+        // Update league with new team information
+        const updates: Partial<EspnLeague> = { teamId };
+        if (teamName) updates.teamName = teamName;
+        if (leagueName) updates.leagueName = leagueName;
+        if (seasonYear) updates.seasonYear = seasonYear;
 
-        // Save updated leagues (use full league data method)
-        const success = await storage.setLeagues(clerkUserId, updatedLeagues);
+        const success = await storage.updateLeague(clerkUserId, leagueId, updates);
 
         if (!success) {
           return new Response(JSON.stringify({
@@ -663,10 +447,14 @@ export default {
           });
         }
 
+        // Get updated league info
+        const updatedLeagues = await storage.getLeagues(clerkUserId);
+        const updatedLeague = updatedLeagues.find(l => l.leagueId === leagueId && l.sport === league.sport);
+
         return new Response(JSON.stringify({
           success: true,
           message: 'Team selection updated successfully',
-          league: updatedLeagues[leagueIndex]
+          league: updatedLeague
         }), {
           headers: { 'Content-Type': 'application/json', ...corsHeaders }
         });
@@ -677,14 +465,14 @@ export default {
         error: 'Endpoint not found',
         message: 'Available endpoints',
         endpoints: {
-          '/health': 'GET - Health check with KV connectivity test',
-          '/credentials/:platform': 'GET/POST/DELETE - Platform credential management (ESPN, Yahoo, Sleeper)',
-          '/credentials/:platform?raw=true': 'GET - Retrieve actual credentials for sport workers',
+          '/health': 'GET - Health check with Supabase connectivity test',
+          '/credentials/espn': 'GET/POST/DELETE - ESPN credential management',
+          '/credentials/espn?raw=true': 'GET - Retrieve actual credentials for sport workers',
           '/leagues': 'GET/POST/DELETE - League management (list, store, remove)',
           '/leagues/:leagueId/team': 'PATCH - Update team selection for specific league'
         },
-        supportedPlatforms: ['espn', 'yahoo', 'sleeper'],
-        version: '1.0.0'
+        storage: 'supabase',
+        version: '2.0.0'
       }), {
         status: 404,
         headers: { 'Content-Type': 'application/json', ...corsHeaders }

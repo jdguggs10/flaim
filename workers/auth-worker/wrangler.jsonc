@@ -17,17 +17,9 @@
         }
       ],
       
-      // KV namespaces for production
-      "kv_namespaces": [
-        {
-          "binding": "CF_KV_CREDENTIALS",
-          "id": "3c946fc92ef84fd58d11c670d2e4120b"
-        }
-      ],
-      
       // Environment variables for production
+      // Note: SUPABASE_URL and SUPABASE_SERVICE_KEY set via Cloudflare secrets
       "vars": {
-        "CF_ENCRYPTION_KEY": "YOUR-32-BYTE-BASE64-KEY",
         "NODE_ENV": "production",
         "ENVIRONMENT": "prod"
       }
@@ -38,15 +30,8 @@
       "name": "auth-worker-preview",
       "workers_dev": true,  // Use workers.dev URL for preview
       
-      // KV namespace for preview
-      "kv_namespaces": [
-        {
-          "binding": "CF_KV_CREDENTIALS",
-          "id": "3c946fc92ef84fd58d11c670d2e4120b"
-        }
-      ],
-      
       // Environment variables for preview
+      // Note: SUPABASE_URL and SUPABASE_SERVICE_KEY set via Cloudflare secrets
       "vars": {
         "NODE_ENV": "production",
         "ENVIRONMENT": "preview"
@@ -58,20 +43,11 @@
       "name": "auth-worker-dev",
       "workers_dev": true,  // Use workers.dev URL for development
       
-      // KV namespace for dev (using same as production for now)
-      "kv_namespaces": [
-        {
-          "binding": "CF_KV_CREDENTIALS",
-          "id": "3c946fc92ef84fd58d11c670d2e4120b"
-        }
-      ],
-      
-      // Environment variables for dev
+      // Environment variables for dev  
+      // Note: SUPABASE_URL and SUPABASE_SERVICE_KEY loaded from .env.local for local development
       "vars": {
         "NODE_ENV": "development",
-        "ENVIRONMENT": "dev",
-        // Local-only; override with real key via .env or shell export
-        "CF_ENCRYPTION_KEY": "YOUR-32-BYTE-BASE64-KEY"
+        "ENVIRONMENT": "dev"
       }
     }
   }

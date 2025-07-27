@@ -6,9 +6,17 @@ All notable changes to FLAIM will be documented in this file. The format is base
 
 ## [Unreleased]
 
+### Database Migration & Infrastructure Enhancement
+
+- **Breaking**: Migrated credential storage from Cloudflare KV to **Supabase PostgreSQL** for improved reliability.
+- **Added**: ACID transaction guarantees, rich dashboard, real-time monitoring.
+- **Removed**: KV dependencies, encryption complexity, retry logic.
+- **Changed**: Reduced auth-worker by 31% (714→492 lines), maintained API compatibility.
+- **Security**: Simplified architecture eliminates encryption overhead and debugging difficulties.
+
 ### Terminology Standardization & Security Enhancement
 
-- **Added**: The `start.sh` script now automatically checks for the correct Node.js version (v20) and for Wrangler updates, providing user-friendly prompts to guide developers.
+- **Added**: The `start.sh` script now automatically checks for the correct Node.js version (v22) and for Wrangler updates, providing user-friendly prompts to guide developers.
 - **Added**: A comprehensive `Known Build Warnings` section was added to the `DEPLOYMENT.md` guide to explain common, non-blocking warnings.
 - **Fixed**: The `start.sh` script now automatically handles "dirty git" warnings in both local and CI environments by appending `--commit-dirty=true` to deployment commands.
 - **Changed**: The `DEPLOYMENT.md` guide has been streamlined to be the single source of truth, reflecting the new script automations and providing clearer instructions.

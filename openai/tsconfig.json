@@ -25,9 +25,7 @@
     ],
     "paths": {
       "@/*": ["./*"],
-      "@/auth/*": ["../auth/*"],
-      "@/components/ui": ["components/ui"],
-      "@flaim/auth/*": ["../auth/dist/*"]
+      "@/components/ui": ["components/ui"]
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],

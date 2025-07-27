@@ -24,6 +24,7 @@ FLAIM's onboarding system guides new users from initial sign-up to active chat f
 - **Component**: `EspnAuth.tsx` 
 - **Required**: ESPN SWID and espn_s2 cookies
 - **Features**: Clear instructions, privacy assurance, real-time validation
+- **Storage**: Credentials stored securely in Supabase PostgreSQL via auth-worker
 - **Action**: User enters ESPN credentials
 - **Outcome**: Credentials validated and stored securely
 
@@ -60,39 +61,9 @@ FLAIM's onboarding system guides new users from initial sign-up to active chat f
 
 ## Technical Architecture
 
-### State Management
-```typescript
-// Zustand store with persistence
-interface OnboardingState {
-  step: 'NOT_STARTED' | 'PLATFORM_SELECTION' | 'PLATFORM_AUTH' | 
-        'LEAGUE_SELECTION' | 'COMPLETED'
-  selectedPlatform: 'ESPN' | 'Yahoo' | null
-  platformCredentials: PlatformCredentials | null
-  discoveredLeagues: League[]
-  selectedLeague: SelectedLeague | null
-  isComplete: boolean
-}
-```
-
-### Component Flow
-```
-OnboardingFlow.tsx (orchestrator)
-├── PlatformSelection.tsx
-├── EspnAuth.tsx
-├── LeagueDiscovery.tsx  
-├── LeagueSelector.tsx
-└── SetupComplete.tsx
-```
-
-### API Integration
-```
-/api/onboarding/platform-selection  # Store platform choice
-/api/onboarding/platform-credentials # Store and validate credentials
-/api/onboarding/leagues             # Discover leagues via ESPN API
-/api/onboarding/status              # Track progress
-```
-
-> **Type Safety Note**: All onboarding request/response payloads are typed via shared DTO interfaces in `types/api-responses.ts`. Route handlers follow the Next.js 15 Promise-based `params` signature for full type safety.
+**State Management**: Zustand store with step tracking, platform selection, credentials, and league data  
+**Components**: OnboardingFlow orchestrates PlatformSelection → EspnAuth → LeagueDiscovery → LeagueSelector → SetupComplete  
+**APIs**: `/api/onboarding/*` endpoints for platform/credentials/leagues/status with typed DTOs
 
 ### Auto-Configuration Logic
 ```typescript
@@ -156,12 +127,7 @@ return <Chat />
 ## Deployment Considerations
 
 ### Environment Variables
-```bash
-BASEBALL_ESPN_MCP_URL=https://baseball-espn-mcp.workers.dev
-FOOTBALL_ESPN_MCP_URL=https://football-espn-mcp.workers.dev
-BASKETBALL_ESPN_MCP_URL=https://basketball-espn-mcp.workers.dev
-HOCKEY_ESPN_MCP_URL=https://hockey-espn-mcp.workers.dev
-```
+MCP server URLs are configured as environment variables - see [Getting Started Guide](./GETTING_STARTED.md#complete-environment-variable-reference) for complete setup.
 
 ### Feature Flags
 - Onboarding can be disabled for development

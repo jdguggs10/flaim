@@ -1,7 +1,12 @@
 import { Env } from './index';
 import { EspnLeagueResponse, EspnRosterResponse, EspnTeam } from './types/espn';
-import { EspnCredentials } from '../../../auth/espn';
-import { EspnKVStorage } from '../../../auth/espn/kv-storage';
+
+// ESPN Credentials interface - local definition for HTTP calls
+interface EspnCredentials {
+  swid: string;
+  s2: string;
+  email?: string;
+}
 
 export class EspnApiClient {
   private baseUrl = 'https://lm-api-reads.fantasy.espn.com/apis/v3';
@@ -24,12 +29,9 @@ export class EspnApiClient {
       credentials = await this.getEspnCredentialsForUser(clerkUserId);
     }
 
-    // Add authentication cookies if available (user-specific or development fallback)
+    // Add authentication cookies if available
     if (credentials) {
       headers['Cookie'] = `SWID=${credentials.swid}; espn_s2=${credentials.s2}`;
-    } else if (this.env.ENVIRONMENT === 'dev' && this.env.ESPN_S2 && this.env.ESPN_SWID) {
-      console.log('⚠️ Development mode: Using fallback environment ESPN credentials');
-      headers['Cookie'] = `SWID=${this.env.ESPN_SWID}; espn_s2=${this.env.ESPN_S2}`;
     }
 
     const response = await fetch(url, {
@@ -40,7 +42,7 @@ export class EspnApiClient {
     if (!response.ok) {
       // Handle ESPN-specific error codes
       if (response.status === 401) {
-        throw new Error('ESPN authentication failed - check ESPN_S2 and ESPN_SWID credentials');
+        throw new Error('ESPN authentication failed - check auth-worker credentials');
       }
       if (response.status === 429) {
         throw new Error('ESPN rate limit exceeded - please retry later');
@@ -81,9 +83,6 @@ export class EspnApiClient {
     // Authentication required for roster data
     if (credentials) {
       headers['Cookie'] = `SWID=${credentials.swid}; espn_s2=${credentials.s2}`;
-    } else if (this.env.ENVIRONMENT === 'dev' && this.env.ESPN_S2 && this.env.ESPN_SWID) {
-      console.log('⚠️ Development mode: Using fallback environment ESPN credentials');
-      headers['Cookie'] = `SWID=${this.env.ESPN_SWID}; espn_s2=${this.env.ESPN_S2}`;
     } else {
       throw new Error('ESPN authentication required for roster data - please provide ESPN credentials');
     }
@@ -95,7 +94,7 @@ export class EspnApiClient {
     
     if (!response.ok) {
       if (response.status === 401) {
-        throw new Error('ESPN authentication failed - check ESPN_S2 and ESPN_SWID credentials');
+        throw new Error('ESPN authentication failed - check auth-worker credentials');
       }
       if (response.status === 429) {
         throw new Error('ESPN rate limit exceeded - please retry later');
@@ -131,18 +130,49 @@ export class EspnApiClient {
   }
 
   /**
-   * Get ESPN credentials from KV storage
+   * Get ESPN credentials from auth-worker
    */
   private async getEspnCredentialsForUser(clerkUserId: string): Promise<EspnCredentials | null> {
     try {
-      const kvStorage = new EspnKVStorage({
-        kv: this.env.CF_KV_CREDENTIALS,
-        encryptionKey: this.env.CF_ENCRYPTION_KEY
+      // HTTP call to auth worker for credentials (stateless pattern)
+      const authWorkerUrl = this.env.AUTH_WORKER_URL || 'http://localhost:8786';
+      const url = `${authWorkerUrl}/credentials/espn?raw=true`;
+      
+      console.log(`🔑 Fetching ESPN credentials for user ${clerkUserId} from ${url}`);
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'X-Clerk-User-ID': clerkUserId,
+          'Content-Type': 'application/json'
+        }
       });
       
-      return await kvStorage.getCredentials(clerkUserId);
+      console.log(`📡 Auth-worker response: ${response.status} ${response.statusText}`);
+      
+      if (response.status === 404) {
+        console.log('ℹ️ No ESPN credentials found for user');
+        return null;
+      }
+      
+      if (!response.ok) {
+        console.error(`❌ Auth-worker error: ${response.status} ${response.statusText}`);
+        const errorData = await response.json().catch(() => ({})) as { error?: string };
+        throw new Error(`Auth-worker error: ${errorData.error || response.statusText}`);
+      }
+      
+      const data = await response.json() as { success?: boolean; credentials?: EspnCredentials };
+      
+      if (!data.success || !data.credentials) {
+        console.error('❌ Invalid response from auth-worker:', data);
+        throw new Error('Invalid credentials response from auth-worker');
+      }
+      
+      console.log('✅ Successfully retrieved ESPN credentials');
+      return data.credentials;
+      
     } catch (error) {
-      console.error('Failed to get ESPN credentials from KV:', error);
+      console.error('❌ Failed to fetch credentials from auth-worker:', error);
       return null;
     }
   }

@@ -2,16 +2,6 @@
 
 This guide is the single source of truth for setting up, configuring, and deploying the FLAIM platform across all three environments: `dev` (local), `preview`, and `prod` (production).
 
-## What is FLAIM?
-
-FLAIM (Fantasy League AI Manager) is your AI-powered fantasy sports assistant with modular authentication, usage limits, and multi-sport ESPN integration through MCP (Model Context Protocol) tools.
-
-Instead of juggling multiple apps and spreadsheets, you can ask natural language questions like:
-- *"How did my team perform this week?"*
-- *"Who should I start at shortstop today?"*
-- *"Analyze this trade proposal for me"*
-
----
 
 ## Quick Start (5 Minutes)
 
@@ -39,7 +29,7 @@ npm run dev
 
 Before you begin, ensure you have the following installed:
 
-- **Node.js v20 (LTS)**: Required for consistent builds.
+- **Node.js v22**: Required for consistent builds.
 - **npm**: Comes bundled with Node.js.
 - **Wrangler CLI**: The command-line tool for Cloudflare Workers.
   - **Installation**: `npm install -g wrangler`
@@ -67,28 +57,64 @@ For local development, secrets are managed in two separate files: one for the fr
     -   **Purpose**: Provides secrets and public keys to the Next.js application.
     -   **Setup**: Copy `openai/.env.example` to `openai/.env.local` and add your keys.
 
-2.  **Backend Secrets (`.dev.vars`)**
-    -   **Purpose**: Provides secrets to the Cloudflare Workers.
-    -   **Setup**: Create a `.dev.vars` file in the project root and add the keys needed by the workers (e.g., `CLERK_SECRET_KEY`, `CF_ENCRYPTION_KEY`).
+2.  **Backend Secrets (`.env.local` in openai directory)**
+    -   **Purpose**: Provides secrets to the Cloudflare Workers during local development.
+    -   **Setup**: Add Supabase credentials to `openai/.env.local` (e.g., `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`).
 
 #### Preview & Production (`preview` / `prod`)
 - **Frontend**: All variables and secrets are managed in the Cloudflare Pages project settings (`Settings` > `Environment variables`).
 - **Workers**: Secrets are managed using the `wrangler secret put` command for each worker and environment.
 
-First, generate a secure encryption key:
-```bash
-# Generate a secure 32-byte encryption key
-openssl rand -base64 32
-```
-
-Then, set the secrets for each worker:
+Set the secrets for each worker:
 ```bash
 # Example: Set secrets for the auth-worker in the 'preview' environment
 cd workers/auth-worker
-wrangler secret put CF_ENCRYPTION_KEY --env preview
+wrangler secret put SUPABASE_URL --env preview
+wrangler secret put SUPABASE_SERVICE_KEY --env preview
 wrangler secret put CLERK_SECRET_KEY --env preview
 
 # Repeat for other workers and the 'prod' environment as needed.
+```
+
+### Complete Environment Variable Reference
+
+#### Next.js Frontend (Required)
+```bash
+# OpenAI
+OPENAI_API_KEY=sk-...
+
+# Clerk Authentication
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
+CLERK_SECRET_KEY=sk_test_...
+
+# Optional Clerk URLs
+NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in
+NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up
+NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL=/
+NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL=/
+```
+
+#### Auth Worker (Required)
+```bash
+# Required for Supabase integration
+SUPABASE_URL=https://your-project-ref.supabase.co
+SUPABASE_SERVICE_KEY=your-service-role-key
+
+# Required for production security
+CLERK_SECRET_KEY=sk_test_your-clerk-secret-key
+
+# Environment configuration (set via wrangler.jsonc)
+NODE_ENV=production  # or "development"
+ENVIRONMENT=prod     # or "preview", "dev"
+```
+
+#### MCP Workers (Required)
+```bash
+# Required for auth-worker communication
+AUTH_WORKER_URL=https://your-auth-worker.workers.dev
+
+# Optional for Clerk verification
+CLERK_SECRET_KEY=sk_test_your-clerk-secret-key
 ```
 
 ---
@@ -115,23 +141,9 @@ Frontend deployment is handled **automatically** by Cloudflare Pages when you pu
 
 ## Verification
 
-After deployment, you can verify the services are running correctly using health checks.
-
-```bash
-# Local development
-curl http://localhost:8786/health # auth-worker
-curl http://localhost:8787/health # baseball-worker
-curl http://localhost:8788/health # football-worker
-curl http://localhost:3000        # frontend
-
-# Preview environment (replace with your actual URLs)
-curl https://auth-worker-preview.your-domain.workers.dev/health
-curl https://preview.flaim.pages.dev
-
-# Production
-curl https://auth-worker.flaim.app/health
-curl https://flaim.app
-```
+Verify deployments with health checks:
+- **Local**: `curl http://localhost:8786/health` (auth-worker), `localhost:3000` (frontend)
+- **Preview/Prod**: Use your deployed worker URLs + `/health`
 
 ---
 
@@ -160,7 +172,7 @@ curl https://flaim.app
   X-Fantasy-Source: kona
   X-Fantasy-Platform: kona-web-2.0.0
   ```
-  - **`SWID` / `espn_s2`**: User-specific cookies that are stored encrypted in Cloudflare KV.
+  - **`SWID` / `espn_s2`**: User-specific cookies that are stored securely in Supabase PostgreSQL.
   - **Kona headers**: Required by ESPN's edge servers to return JSON instead of HTML.
 
 ---

@@ -12,8 +12,8 @@
  * @version 1.0 - CF KV implementation
  */
 
-import { credentialEncryption } from '../shared/encryption';
-import { EspnCredentials, EspnCredentialsWithMetadata, EspnLeague, EspnUserData } from './types';
+import { credentialEncryption } from './encryption';
+import { EspnCredentials, EspnCredentialsWithMetadata, EspnLeague, EspnUserData } from './espn-types';
 
 export interface EspnKVOptions {
   kv?: KVNamespace;        // Cloudflare Workers KV binding

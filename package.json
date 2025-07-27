@@ -2,7 +2,6 @@
   "name": "flaim-monorepo",
   "private": true,
   "workspaces": [
-    "auth",
     "openai",
     "tests",
     "workers/auth-worker",

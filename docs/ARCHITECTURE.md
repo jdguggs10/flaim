@@ -8,20 +8,20 @@ FLAIM (Fantasy League AI Manager) is a **modern microservices platform** that pr
 
 ```
 ┌─────────────────┐    ┌──────────────────┐    ┌───────────────────┐
-│   Next.js       │    │   flaim/auth     │    │ workers/baseball  │
+│   Next.js       │    │   auth-worker     │    │ workers/baseball  │
 │   Frontend      │◄──►│   Module         │◄──►│     espn-mcp      │
 │                 │    │                  │    │                   │
 │ - React UI      │    │ - Cross-platform │    │ - ESPN API        │
 │ - Auth module   │    │ - Usage tracking │    │ - Open access     │
 │ - Usage limits  │    │ - Token mgmt     │    │ - MCP tools       │
-│ - Chat interface│    │ - Clerk web impl │    │ - KV storage      │
+│ - Chat interface│    │ - Clerk web impl │    │ - Supabase calls  │
 └─────────────────┘    └──────────────────┘    └───────────────────┘
          │                       │                       │
          │              ┌────────▼────────┐              │
-         │              │ Cloudflare KV   │              │
-         │              │ (Encrypted      │              │
-         │              │  ESPN Creds)    │              │
-         │              │ 🔒 AES-GCM      │              │
+         │              │ Supabase        │              │
+         │              │ PostgreSQL      │              │
+         │              │ (ESPN Creds)    │              │
+         │              │ 🔒 ACID         │              │
          │              └─────────────────┘              │
          │                                               │
          └───────────────────────────────────────────────┘
@@ -32,179 +32,65 @@ FLAIM (Fantasy League AI Manager) is a **modern microservices platform** that pr
 
 ### 1. Next.js Frontend (`/openai`) - **Main Application**
 
-**Purpose**: AI-powered fantasy sports assistant with modular authentication
+AI-powered fantasy sports assistant with auth-worker integration, usage tracking (100 free/unlimited paid messages), OpenAI API integration, and MCP tools configuration.
 
-**Responsibilities**:
-- flaim/auth integration
-- Usage tracking (100 free messages/month)
-- OpenAI API integration
-- MCP tools configuration
-- Multi-sport support
-- Responsive web interface
-
-**Key Features**:
-- **Free Tier**: 100 AI messages per month
-- **Paid Tier**: Unlimited AI messages
-- Real-time usage tracking
-- Upgrade/downgrade functionality
-- Cross-platform ready authentication
-
-**API Endpoints**:
-- `POST /api/turn_response` → OpenAI chat completion (auth required)
-- `GET /api/usage` → Usage statistics (auth required)
-- `POST /api/usage` → Plan management (auth required)
-- `POST /api/vector_stores/*` → File management (auth required)
-
-**Technology Stack**:
-- [Next.js 15](https://nextjs.org/docs) (App Router)
-- [React 19](https://react.dev/)
-- [Clerk](https://clerk.com/docs) (Authentication)
-- [OpenAI API](https://platform.openai.com/docs)
-- [Tailwind CSS](https://tailwindcss.com/docs)
-- [TypeScript](https://www.typescriptlang.org/docs/)
-- [ESLint v9](https://eslint.org/docs/latest/) with [typescript-eslint v8](https://typescript-eslint.io/)
+**Tech Stack**: Next.js 15, React 19, Clerk auth, OpenAI API, Tailwind CSS, TypeScript
 
 ---
 
 ### 2. FLAIM Auth Module (`/auth`) - **Cross-Platform Authentication**
 
-**Purpose**: Modular authentication system for web, iOS, and workers
+Modular authentication system with cross-platform interfaces, Clerk implementation, usage tracking, and token management.
 
-**Responsibilities**:
-- Cross-platform authentication interfaces
-- Clerk web implementation
-- Usage tracking and limits
-- Token lifecycle management
-- Environment-agnostic configuration
+**Architecture**: `shared/` (core logic), `clerk/web/` (Next.js), `dist/` (build targets)
 
-**Architecture**:
-- `shared/` - Platform-agnostic core logic
-- `clerk/web/` - Next.js/React implementation  
-- `clerk/ios/` - Ready for Swift integration
-- `dist/` - Built packages with separate targets
-
-**Build Targets**:
-- `dist/shared/` - Core authentication logic (platform-agnostic)
-- `dist/workers/` - Cloudflare Workers-specific builds
-- `dist/web/` - Next.js/React-specific builds
-
-**Import Structure**:
-```typescript
-// Next.js Components
-import { ClerkProvider, useAuth } from '@flaim/auth/web/components';
-
-// API Routes  
-import { withAuth, requireAuth } from '@flaim/auth/web/server';
-
-// Middleware
-import { clerkMiddleware } from '@flaim/auth/web/middleware';
-
-// Workers
-import { EspnStorage } from '@flaim/auth/workers/espn/storage';
-
-// Shared Logic
-import { UsageTracker } from '@flaim/auth/shared';
-```
-
-**Key Features**:
-- **NPM workspace hoisting** eliminates dependency conflicts
-- **Single Next.js instance** prevents type mismatches
-- **Scoped imports** prevent brittle relative paths
-- **Build target separation** avoids client/server conflicts
-- **Type-safe auth wrappers** with explicit union return types
-- **TypeScript path mapping** for automatic resolution
-- **ESM-first** with Node.js compatibility
-- Automated testing suite
-- Token refresh handling
-- Usage limit enforcement
+**Features**: NPM workspace hoisting, single Next.js instance, type-safe wrappers, ESM-first
 
 ---
 
 ## Security Architecture (v6.0)
 
 ### Credential Storage
-**CF KV with AES-GCM Encryption**:
-- ESPN credentials encrypted before storage
-- 256-bit AES-GCM with random 96-bit IVs
-- Key rotation support with keyId tracking
-- CF Secrets for encryption key management
+**Supabase PostgreSQL Database**:
+- ESPN credentials stored in structured relational tables
+- ACID transaction guarantees eliminate eventual consistency issues
+- Rich dashboard for visual data management and debugging
+- Built-in backup and monitoring capabilities
+- No client-side encryption complexity
 
 ### Runtime Security
-**Workers-First Design**:
-- KV namespace bindings in CF Workers (production)
-- Mock KV for development/testing (Node.js)
-- No credential decryption in browser/client-side
-- API routes proxy to Workers for credential access
+**Auth-Worker Design**:
+- Centralized credential management via auth-worker service
+- Stateless HTTP calls from MCP workers to auth-worker
+- No credential storage in individual MCP workers
+- API routes proxy to auth-worker for credential access
 
 ### Authentication Flow
 1. User authenticates via Clerk
-2. ESPN credentials captured and encrypted
-3. Stored in CF KV with user ID as key
-4. Workers decrypt credentials server-side for ESPN API calls
+2. ESPN credentials captured and validated
+3. Stored in Supabase PostgreSQL via auth-worker service
+4. MCP workers retrieve credentials via HTTP calls to auth-worker
 5. No credentials transmitted to client after initial setup
 
 ---
 
 ### 3. Baseball ESPN MCP (`/workers/baseball-espn-mcp`) - **Open Access Service**
 
-**Purpose**: ESPN fantasy baseball integration with shared authentication
+ESPN fantasy baseball integration with open MCP endpoints, auth-worker credential management, and automatic league discovery.
 
-**Responsibilities**:
-- Open access MCP endpoints
-- Shared ESPN credential storage via flaim/auth
-- **Automatic league discovery** via ESPN Fantasy v3 dashboard
-- ESPN API integration
-- Fantasy baseball data retrieval
-- MCP protocol implementation
+**MCP Tools**: `get_espn_league_info`, `get_espn_team_roster`, `get_espn_matchups`
 
-**Authentication Model**: **Shared Module**
-- Uses flaim/auth for credential management
-- MCP endpoints publicly accessible
-- Clerk session verification for credentials
-
-**Endpoints**:
-- `GET /mcp` → MCP server info and capabilities
-- `POST /mcp/tools/call` → Execute MCP tools
-- `POST /credential/espn` → Store ESPN credentials (auth required)
-- `GET /discover-leagues` → Automatic league discovery (auth required)
-- `GET /health` → Service health check
-
-**MCP Tools**:
-- `get_espn_league_info` - League settings and metadata
-- `get_espn_team_roster` - Team roster for scoring periods
-- `get_espn_matchups` - Current week matchups
-
-**Technology Stack**:
-- Cloudflare Workers
-- Cloudflare KV (credential storage)
-- flaim/auth shared module
-- TypeScript
+**Tech Stack**: Cloudflare Workers, Supabase (via auth-worker), TypeScript
 
 ---
 
 ### 4. Football ESPN MCP (`/workers/football-espn-mcp`) - **Multi-Sport Extension**
 
-**Purpose**: ESPN fantasy football integration using shared authentication
+ESPN fantasy football integration with sport-specific MCP tools and shared authentication.
 
-**Responsibilities**:
-- Sport-specific MCP tools for football
-- Shared authentication infrastructure  
-- ESPN football API integration
-- Fantasy football data retrieval
+**MCP Tools**: `get_espn_football_league_info`, `get_espn_football_team`, `get_espn_football_matchups`, `get_espn_football_standings`
 
-**MCP Tools**:
-- `get_espn_football_league_info` - League settings and metadata
-- `get_espn_football_team` - Team roster and details
-- `get_espn_football_matchups` - Weekly matchups and scores
-- `get_espn_football_standings` - League standings
-
-**Architecture Benefits**:
-- Shared authentication with baseball worker
-- Independent deployment and scaling
-- Sport-specific customization
-- Easy addition of new sports (basketball, hockey, etc.)
-- @cloudflare/agents (MCP implementation)
-- AES-GCM encryption (credential security)
+**Benefits**: Independent deployment, sport-specific customization, framework for additional sports
 
 ---
 
@@ -214,102 +100,12 @@ import { UsageTracker } from '@flaim/auth/shared';
 
 ### Clerk Integration
 
-FLAIM uses [Clerk](https://clerk.com/docs) for user authentication and management.
-
-**Frontend Authentication** is handled by the `@clerk/nextjs` package, which provides components like `<ClerkProvider>`, `<SignInButton>`, `<SignUpButton>`, and `<UserButton>` for a seamless authentication experience.
-
-```typescript
-// middleware.ts
-import { clerkMiddleware } from '@clerk/nextjs/server'
-export default clerkMiddleware()
-
-// layout.tsx
-import { ClerkProvider, SignedIn, SignedOut, SignInButton, UserButton } from "@clerk/nextjs";
-
-<ClerkProvider>
-  <SignedOut>
-    <SignInButton />
-    <SignUpButton />
-  </SignedOut>
-  <SignedIn>
-    <UserButton />
-  </SignedIn>
-</ClerkProvider>
-```
-
-**Frontend API Calls** are authenticated using a JWT token obtained from the `useAuth` hook.
-
-```typescript
-import { useAuth } from '@clerk/nextjs'
-
-const { getToken } = useAuth()
-const token = await getToken()
-
-fetch('/api/endpoint', {
-  headers: {
-    'Authorization': `Bearer ${token}`,
-    'Content-Type': 'application/json'
-  }
-})
-```
-
-**Server-Side Verification** in the MCP services is done using the `@clerk/backend` package, which verifies the session token.
-
-```typescript
-import { clerkClient } from '@clerk/backend'
-
-async function verifyClerkSession(request: Request, env: Env) {
-  const authHeader = request.headers.get('Authorization')
-  const sessionToken = authHeader?.replace('Bearer ', '')
-  
-  if (!sessionToken) {
-    return { userId: null, error: 'No session token found' }
-  }
-
-  const clerk = clerkClient({ secretKey: env.CLERK_SECRET_KEY })
-  const session = await clerk.sessions.verifySession(sessionToken)
-  
-  return { userId: session.userId }
-}
-```
-
-**API Protection** in the Next.js frontend is handled by the `auth` middleware from `@clerk/nextjs/server`.
-
-```typescript
-import { auth } from '@clerk/nextjs/server'
-
-export async function POST(request: Request) {
-  const { userId } = await auth()
-  
-  if (!userId) {
-    return NextResponse.json({ error: "Authentication required" }, { status: 401 })
-  }
-  
-  // Protected logic here
-}
-```
+FLAIM uses Clerk for user authentication with frontend components (`ClerkProvider`, `SignInButton`, `UserButton`), JWT token-based API calls, server-side session verification, and protected API routes.
 
 ### Usage Tracking System
 
-**Free Tier Limits**:
-- 15 AI messages per month
-- Automatic reset every 30 days
-- Clear usage indicators in UI
-- Upgrade prompts when approaching limits
-
-**Paid Tier Benefits**:
-- Unlimited AI messages
-- All ESPN features
-- Priority support
-
-**Implementation**:
-```typescript
-class UsageTracker {
-  static canSendMessage(userId: string): { allowed: boolean; remaining?: number }
-  static incrementUsage(userId: string): UserUsage
-  static upgradeToPaid(userId: string): UserUsage
-}
-```
+**Free Tier**: 100 AI messages/month with automatic reset, usage indicators, upgrade prompts
+**Paid Tier**: Unlimited messages, all features, priority support
 
 ## Security Model
 
@@ -317,7 +113,7 @@ class UsageTracker {
 - **Server-Side Clerk Verification**: All credential and discovery endpoints verify session tokens with Clerk backend
 - **Anti-Spoofing Protection**: User ID extracted from verified session, never trusted from headers
 - **Per-user Data Isolation**: Usage tracking per verified Clerk user ID
-- **AES-GCM Encryption**: ESPN credentials encrypted in Durable Objects with key rotation planning
+- **Supabase Storage**: ESPN credentials stored in PostgreSQL with ACID guarantees
 - **Environment Isolation**: Development fallbacks disabled in production
 - **API Protection**: All sensitive endpoints require verified Clerk sessions
 - **CORS Policies**: Restrict cross-origin access
@@ -355,47 +151,19 @@ interface UserUsage {
 }
 ```
 
-### ESPN Credential Storage (Durable Objects)
+### ESPN Credential Storage (Supabase PostgreSQL)
 ```
 1. User provides ESPN S2/SWID via frontend
-2. Frontend sends to baseball-espn-mcp with user ID
-3. Credentials encrypted (AES-GCM) → User's Durable Object
-4. MCP tools decrypt credentials for ESPN API calls
+2. Frontend sends to auth-worker with verified Clerk user ID
+3. Credentials stored in Supabase PostgreSQL via auth-worker
+4. MCP workers retrieve credentials via HTTP calls to auth-worker
 ```
 
 ## Environment Variables
 
-### Next.js Frontend (Required)
-```bash
-# OpenAI
-OPENAI_API_KEY=sk-...
+The platform requires environment variables for OpenAI API, Clerk authentication, Supabase integration, and service communication. 
 
-# Clerk Authentication
-NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
-CLERK_SECRET_KEY=sk_test_...
-
-# Optional Clerk URLs
-NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in
-NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up
-NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL=/
-NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL=/
-```
-
-### Baseball ESPN MCP (Required)
-```bash
-# Required for all environments
-ENCRYPTION_KEY=32-char-key-for-aes-encryption
-
-# Required for production security
-CLERK_SECRET_KEY=sk_test_your-clerk-secret-key
-
-# Environment configuration (set via wrangler.toml)
-NODE_ENV=production  # or "development"
-
-# Optional development fallback (only works when NODE_ENV=development)
-ESPN_S2=your-espn-s2-cookie
-ESPN_SWID=your-espn-swid-cookie
-```
+**For complete environment variable setup and configuration, see [Getting Started Guide](./GETTING_STARTED.md#complete-environment-variable-reference).**
 
 ## Deployment
 

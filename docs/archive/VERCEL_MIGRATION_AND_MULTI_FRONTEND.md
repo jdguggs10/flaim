@@ -125,7 +125,7 @@ vercel --yes
 **Success Criteria**:
 - ✅ Deployment completes without errors
 - ✅ Authentication works (Clerk sign-in/sign-up)
-- ✅ OpenAI chat streams properly
+- ✅ OpenAI chat streams properly (test with 2025 Vercel AI SDK: `ai` + `@ai-sdk/openai`)
 - ✅ Workers respond to API calls
 
 ### Phase 2: Environment Configuration 🔧
@@ -138,6 +138,7 @@ vercel env pull .env.local
 ```
 
 **Environment Variables Migration**:
+_Note: Vercel 2025 features encryption at rest and sensitive variables that cannot be decrypted once created._
 
 | Variable | Environment | Source |
 |----------|-------------|---------|
@@ -210,6 +211,9 @@ npm run deploy:workers:prod
 
 ## Technical Requirements
 
+### Node.js Version Requirement ⚠️
+**CRITICAL (July 2025)**: Node.js 18 end of life on April 30, 2025. Vercel is deprecating Node.js 18 for Builds and Functions on September 1, 2025. Ensure project uses Node.js 20+ before migration.
+
 ### Code Changes Required
 1. **Remove Cloudflare Pages references** (already done)
 2. **Update CORS in workers** (3 files)
@@ -255,7 +259,7 @@ npm run deploy:workers:prod
 ## Success Metrics
 
 ### Performance Targets
-- **Build time** < 2 minutes (vs current Cloudflare Pages)
+- **Build time** < 1 minute (2025 Vercel optimizations)
 - **First Contentful Paint** < 1.5s
 - **Time to Interactive** < 3s
 - **Deployment reliability** > 99%
@@ -394,7 +398,7 @@ npm install file:../auth
 
 ```typescript
 // web-app/app/layout.tsx
-import { ClerkProvider } from '@flaim/auth/web/components';
+import { ClerkProvider } from '@clerk/nextjs';
 
 export default function RootLayout({
   children,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useAuth } from '@flaim/auth/web/components';
+import { useUser } from '@clerk/nextjs';
 import { useEffect, useState, useCallback } from "react";
 import useHasMounted from "@/hooks/useHasMounted";
 
@@ -15,7 +15,7 @@ interface UsageStats {
 export default function UsageDisplay() {
   // Prevent SSR–client HTML mismatch while keeping hook order intact
   const hasMounted = useHasMounted();
-  const { isAuthenticated: isSignedIn } = useAuth();
+  const { isSignedIn } = useUser();
   const [usage, setUsage] = useState<UsageStats | null>(null);
   const [loading, setLoading] = useState(false);
 

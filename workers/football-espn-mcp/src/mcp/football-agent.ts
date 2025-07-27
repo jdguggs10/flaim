@@ -1,12 +1,9 @@
 import { EspnFootballApiClient } from '../espn-football-client';
 
 export interface Env {
-  CF_KV_CREDENTIALS: KVNamespace;
-  CF_ENCRYPTION_KEY: string;
-  ESPN_S2?: string;
-  ESPN_SWID?: string;
   NODE_ENV?: string;
   CLERK_SECRET_KEY?: string;
+  AUTH_WORKER_URL: string;
 }
 
 export interface McpToolCall {
