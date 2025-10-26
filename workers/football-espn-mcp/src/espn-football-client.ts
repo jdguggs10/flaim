@@ -16,8 +16,11 @@ export interface Env {
 
 export class EspnFootballApiClient {
   private baseUrl = 'https://lm-api-reads.fantasy.espn.com/apis/v3';
+  private authHeader?: string | null;
   
-  constructor(private env: Env) {}
+  constructor(private env: Env, opts?: { authHeader?: string | null }) {
+    this.authHeader = opts?.authHeader;
+  }
 
   async fetchLeague(leagueId: string, year: number = 2024, view: string = 'mSettings', clerkUserId?: string): Promise<EspnFootballLeagueResponse> {
     const url = `${this.baseUrl}/games/ffl/seasons/${year}/segments/0/leagues/${leagueId}?view=${view}`;
@@ -31,7 +34,7 @@ export class EspnFootballApiClient {
 
     // Get ESPN credentials using KV storage
     let credentials: EspnCredentials | null = null;
-    if (clerkUserId) {
+    if (clerkUserId && this.authHeader) {
       credentials = await this.getEspnCredentialsForUser(clerkUserId);
     }
 
@@ -82,7 +85,7 @@ export class EspnFootballApiClient {
 
     // Get user credentials for team data
     let credentials: EspnCredentials | null = null;
-    if (clerkUserId) {
+    if (clerkUserId && this.authHeader) {
       credentials = await this.getEspnCredentialsForUser(clerkUserId);
     }
 
@@ -150,7 +153,7 @@ export class EspnFootballApiClient {
 
     // Get user credentials
     let credentials: EspnCredentials | null = null;
-    if (clerkUserId) {
+    if (clerkUserId && this.authHeader) {
       credentials = await this.getEspnCredentialsForUser(clerkUserId);
     }
 
@@ -196,7 +199,7 @@ export class EspnFootballApiClient {
 
     // Get user credentials
     let credentials: EspnCredentials | null = null;
-    if (clerkUserId) {
+    if (clerkUserId && this.authHeader) {
       credentials = await this.getEspnCredentialsForUser(clerkUserId);
     }
 
@@ -245,7 +248,8 @@ export class EspnFootballApiClient {
         method: 'GET',
         headers: {
           'X-Clerk-User-ID': clerkUserId,
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          ...(this.authHeader ? { 'Authorization': this.authHeader } : {})
         }
       });
       

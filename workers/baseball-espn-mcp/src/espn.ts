@@ -10,8 +10,11 @@ interface EspnCredentials {
 
 export class EspnApiClient {
   private baseUrl = 'https://lm-api-reads.fantasy.espn.com/apis/v3';
+  private authHeader?: string | null;
   
-  constructor(private env: Env) {}
+  constructor(private env: Env, opts?: { authHeader?: string | null }) {
+    this.authHeader = opts?.authHeader;
+  }
 
   async fetchLeague(leagueId: string, year: number = 2025, view: string = 'mSettings', clerkUserId?: string): Promise<EspnLeagueResponse> {
     const url = `${this.baseUrl}/games/flb/seasons/${year}/segments/0/leagues/${leagueId}?view=${view}`;
@@ -25,7 +28,7 @@ export class EspnApiClient {
 
     // Try to get user-specific ESPN credentials first
     let credentials: EspnCredentials | null = null;
-    if (clerkUserId) {
+    if (clerkUserId && this.authHeader) {
       credentials = await this.getEspnCredentialsForUser(clerkUserId);
     }
 
@@ -76,7 +79,7 @@ export class EspnApiClient {
 
     // Get user credentials for roster data (typically requires authentication)
     let credentials: EspnCredentials | null = null;
-    if (clerkUserId) {
+    if (clerkUserId && this.authHeader) {
       credentials = await this.getEspnCredentialsForUser(clerkUserId);
     }
 
@@ -144,7 +147,8 @@ export class EspnApiClient {
         method: 'GET',
         headers: {
           'X-Clerk-User-ID': clerkUserId,
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          ...(this.authHeader ? { 'Authorization': this.authHeader } : {})
         }
       });
       

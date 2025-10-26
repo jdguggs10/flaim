@@ -29,7 +29,8 @@ export interface AuthWorkerConfig {
  */
 async function getCredentials(
   clerkUserId: string,
-  config: AuthWorkerConfig = {}
+  config: AuthWorkerConfig = {},
+  authHeader?: string | null
 ): Promise<EspnCredentials | null> {
   try {
     const authWorkerUrl = config.authWorkerUrl || config.defaultUrl;
@@ -41,7 +42,8 @@ async function getCredentials(
       method: 'GET',
       headers: {
         'X-Clerk-User-ID': clerkUserId,
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        ...(authHeader ? { 'Authorization': authHeader } : {})
       }
     });
     
@@ -79,7 +81,8 @@ async function getCredentials(
  */
 async function getUserLeagues(
   clerkUserId: string,
-  config: AuthWorkerConfig = {}
+  config: AuthWorkerConfig = {},
+  authHeader?: string | null
 ): Promise<Array<{ leagueId: string; sport: string; teamId?: string }>> {
   try {
     const authWorkerUrl = config.authWorkerUrl || config.defaultUrl;
@@ -91,7 +94,8 @@ async function getUserLeagues(
       method: 'GET',
       headers: {
         'X-Clerk-User-ID': clerkUserId,
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        ...(authHeader ? { 'Authorization': authHeader } : {})
       }
     });
     
@@ -248,7 +252,7 @@ export default {
             defaultUrl: env.AUTH_WORKER_URL
           };
 
-          const credentials = await getCredentials(clerkUserId, authWorkerConfig);
+          const credentials = await getCredentials(clerkUserId, authWorkerConfig, request.headers.get('Authorization'));
           if (!credentials) {
             return new Response(JSON.stringify({
               error: 'ESPN credentials not found. Please add your ESPN credentials first.',
@@ -260,7 +264,7 @@ export default {
           }
 
           // Get user's leagues from auth-worker
-          const leagues = await getUserLeagues(clerkUserId, authWorkerConfig);
+          const leagues = await getUserLeagues(clerkUserId, authWorkerConfig, request.headers.get('Authorization'));
           let targetLeagues = leagues.filter(league => league.sport === targetSport);
 
           if (targetLeagues.length === 0) {

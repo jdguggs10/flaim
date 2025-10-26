@@ -21,6 +21,122 @@
 import { EspnSupabaseStorage } from './supabase-storage';
 import { EspnCredentials, EspnLeague } from './espn-types';
 
+// ------------------------------------------------------------
+// Clerk JWT verification (JWKS-based)
+// ------------------------------------------------------------
+type Jwk = {
+  kty: string;
+  kid: string;
+  n: string;
+  e: string;
+  alg?: string;
+  use?: string;
+};
+
+type JwtHeader = { alg: string; kid?: string; typ?: string };
+type JwtPayload = { sub?: string; iss?: string; exp?: number; [k: string]: any };
+
+const jwksCache: Map<string, { keysByKid: Map<string, Jwk>; fetchedAt: number }> = new Map();
+const JWKS_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+function b64urlToUint8Array(b64url: string): Uint8Array {
+  const pad = b64url.length % 4 === 2 ? '==' : b64url.length % 4 === 3 ? '=' : '';
+  const b64 = b64url.replace(/-/g, '+').replace(/_/g, '/') + pad;
+  const str = atob(b64);
+  const bytes = new Uint8Array(str.length);
+  for (let i = 0; i < str.length; i++) bytes[i] = str.charCodeAt(i);
+  return bytes;
+}
+
+function decodeSection<T = any>(b64url: string): T {
+  const bytes = b64urlToUint8Array(b64url);
+  const json = new TextDecoder().decode(bytes);
+  return JSON.parse(json) as T;
+}
+
+async function fetchJwks(issuer: string): Promise<Map<string, Jwk>> {
+  const now = Date.now();
+  const cached = jwksCache.get(issuer);
+  if (cached && now - cached.fetchedAt < JWKS_TTL_MS) {
+    return cached.keysByKid;
+  }
+
+  const wellKnown = issuer.replace(/\/$/, '') + '/.well-known/jwks.json';
+  const res = await fetch(wellKnown, { cf: { cacheTtl: 300, cacheEverything: true } });
+  if (!res.ok) throw new Error(`Failed to fetch JWKS from ${wellKnown}: ${res.status}`);
+  const data = await res.json() as { keys: Jwk[] };
+  const map = new Map<string, Jwk>();
+  for (const k of data.keys || []) {
+    if (k.kid) map.set(k.kid, k);
+  }
+  jwksCache.set(issuer, { keysByKid: map, fetchedAt: now });
+  return map;
+}
+
+async function importRsaPublicKey(jwk: Jwk): Promise<CryptoKey> {
+  return crypto.subtle.importKey(
+    'jwk',
+    {
+      kty: jwk.kty,
+      n: jwk.n,
+      e: jwk.e,
+      alg: 'RS256',
+      ext: true,
+      key_ops: ['verify']
+    } as any,
+    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+    false,
+    ['verify']
+  );
+}
+
+async function verifyJwtAndGetUserId(authorization: string | null): Promise<string | null> {
+  if (!authorization || !authorization.toLowerCase().startsWith('bearer ')) return null;
+  const token = authorization.slice(7).trim();
+  const parts = token.split('.');
+  if (parts.length !== 3) throw new Error('Invalid JWT format');
+
+  const [h, p, s] = parts;
+  const header = decodeSection<JwtHeader>(h);
+  const payload = decodeSection<JwtPayload>(p);
+  const sig = b64urlToUint8Array(s);
+
+  if (header.alg !== 'RS256') throw new Error('Unsupported JWT alg');
+  if (!payload.iss) throw new Error('JWT missing iss');
+  if (!header.kid) throw new Error('JWT missing kid');
+  if (payload.exp && Date.now() / 1000 > payload.exp) throw new Error('JWT expired');
+
+  const keys = await fetchJwks(payload.iss);
+  const jwk = keys.get(header.kid);
+  if (!jwk) throw new Error('JWKS key not found');
+
+  const key = await importRsaPublicKey(jwk);
+  const data = new TextEncoder().encode(`${h}.${p}`);
+  const ok = await crypto.subtle.verify('RSASSA-PKCS1-v1_5', key, sig, data);
+  if (!ok) throw new Error('JWT signature invalid');
+
+  return payload.sub || null;
+}
+
+async function getVerifiedUserId(request: Request, env: Env): Promise<{ userId: string | null; error?: string }> {
+  try {
+    const authz = request.headers.get('Authorization');
+    const verified = await verifyJwtAndGetUserId(authz);
+    if (verified) return { userId: verified };
+  } catch (e) {
+    // fall through to dev fallback or return error below
+  }
+
+  // Dev fallback only: allow header for local testing
+  const isDev = (env as any).ENVIRONMENT === 'dev' || env.NODE_ENV === 'development';
+  if (isDev) {
+    const clerkHeader = request.headers.get('X-Clerk-User-ID');
+    if (clerkHeader) return { userId: clerkHeader };
+  }
+
+  return { userId: null, error: 'Missing or invalid Authorization token' };
+}
+
 export interface Env {
   SUPABASE_URL: string;
   SUPABASE_SERVICE_KEY: string;
@@ -67,15 +183,7 @@ function isOriginAllowed(origin: string): boolean {
 }
 
 // Extract Clerk User ID from header
-function getClerkUserId(request: Request): { userId: string | null; error?: string } {
-  const clerkUserId = request.headers.get('X-Clerk-User-ID');
-  
-  if (!clerkUserId) {
-    return { userId: null, error: 'Missing X-Clerk-User-ID header' };
-  }
-
-  return { userId: clerkUserId };
-}
+// getClerkUserId is replaced by getVerifiedUserId for prod; dev keeps header fallback
 
 // Validate ESPN credentials
 function validateEspnCredentials(credentials: any): { valid: boolean; error?: string } {
@@ -138,11 +246,11 @@ export default {
       // ESPN credential management endpoints
       if (url.pathname === '/credentials/espn') {
         // Extract Clerk User ID from header
-        const { userId: clerkUserId, error: authError } = getClerkUserId(request);
+        const { userId: clerkUserId, error: authError } = await getVerifiedUserId(request, env);
         if (!clerkUserId) {
           return new Response(JSON.stringify({
             error: 'Authentication required',
-            message: authError || 'Missing X-Clerk-User-ID header'
+            message: authError || 'Missing or invalid Authorization token'
           }), {
             status: 401,
             headers: { 'Content-Type': 'application/json', ...corsHeaders }
@@ -265,11 +373,11 @@ export default {
       // League management endpoints
       if (url.pathname === '/leagues') {
         // Extract Clerk User ID from header
-        const { userId: clerkUserId, error: authError } = getClerkUserId(request);
+        const { userId: clerkUserId, error: authError } = await getVerifiedUserId(request, env);
         if (!clerkUserId) {
           return new Response(JSON.stringify({
             error: 'Authentication required',
-            message: authError || 'Missing X-Clerk-User-ID header'
+            message: authError || 'Missing or invalid Authorization token'
           }), {
             status: 401,
             headers: { 'Content-Type': 'application/json', ...corsHeaders }
@@ -386,11 +494,11 @@ export default {
         const leagueId = leagueTeamMatch[1];
         
         // Extract Clerk User ID from header
-        const { userId: clerkUserId, error: authError } = getClerkUserId(request);
+        const { userId: clerkUserId, error: authError } = await getVerifiedUserId(request, env);
         if (!clerkUserId) {
           return new Response(JSON.stringify({
             error: 'Authentication required',
-            message: authError || 'Missing X-Clerk-User-ID header'
+            message: authError || 'Missing or invalid Authorization token'
           }), {
             status: 401,
             headers: { 'Content-Type': 'application/json', ...corsHeaders }

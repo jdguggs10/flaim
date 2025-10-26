@@ -19,7 +19,7 @@ interface EspnCredentialsStatus {
  */
 export async function GET() {
   try {
-    const { userId } = await auth();
+    const { userId, getToken } = await auth();
 
     if (!userId) {
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
@@ -30,9 +30,11 @@ export async function GET() {
       return NextResponse.json({ error: 'NEXT_PUBLIC_AUTH_WORKER_URL is not configured' }, { status: 500 });
     }
 
+    const bearer = (await getToken?.()) || undefined;
     const workerRes = await fetch(`${authWorkerUrl}/credentials/espn`, {
       headers: {
         'X-Clerk-User-ID': userId,
+        ...(bearer ? { 'Authorization': `Bearer ${bearer}` } : {})
       },
     });
 

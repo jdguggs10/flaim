@@ -12,7 +12,7 @@ export const runtime = 'edge';
 
 export async function GET() {
   try {
-    const { userId } = await auth();
+    const { userId, getToken } = await auth();
     
     if (!userId) {
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
@@ -27,12 +27,14 @@ export async function GET() {
       return NextResponse.json({ error: 'NEXT_PUBLIC_AUTH_WORKER_URL is not configured' }, { status: 500 });
     }
 
+    const bearer = (await getToken?.()) || undefined;
     const workerResponse = await fetch(`${authWorkerUrl}/leagues`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
         // Pass Clerk user in header (Auth-Worker uses this instead of JWT)
-        'X-Clerk-User-ID': userId
+        'X-Clerk-User-ID': userId,
+        ...(bearer ? { 'Authorization': `Bearer ${bearer}` } : {})
       }
     });
 
@@ -62,7 +64,7 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const { userId } = await auth();
+    const { userId, getToken } = await auth();
     
     if (!userId) {
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
@@ -124,12 +126,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'NEXT_PUBLIC_AUTH_WORKER_URL is not configured' }, { status: 500 });
     }
 
+    const bearer = (await getToken?.()) || undefined;
     const workerResponse = await fetch(`${authWorkerUrl}/leagues`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         // Pass Clerk user in header (Auth-Worker uses this instead of JWT)
-        'X-Clerk-User-ID': userId
+        'X-Clerk-User-ID': userId,
+        ...(bearer ? { 'Authorization': `Bearer ${bearer}` } : {})
       },
       body: JSON.stringify({ leagues: body.leagues })
     });
@@ -155,7 +159,7 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const { userId } = await auth();
+    const { userId, getToken } = await auth();
 
     if (!userId) {
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
@@ -176,11 +180,13 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'NEXT_PUBLIC_AUTH_WORKER_URL is not configured' }, { status: 500 });
     }
 
+    const bearer = (await getToken?.()) || undefined;
     const workerResponse = await fetch(`${authWorkerUrl}/leagues?leagueId=${encodeURIComponent(leagueId)}&sport=${encodeURIComponent(sport)}`, {
       method: 'DELETE',
       headers: {
         'Content-Type': 'application/json',
-        'X-Clerk-User-ID': userId
+        'X-Clerk-User-ID': userId,
+        ...(bearer ? { 'Authorization': `Bearer ${bearer}` } : {})
       }
     });
 
@@ -201,4 +207,3 @@ export async function DELETE(request: NextRequest) {
     }, { status: 500 });
   }
 }
-

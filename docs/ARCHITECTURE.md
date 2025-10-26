@@ -66,11 +66,13 @@ Modular authentication system with cross-platform interfaces, Clerk implementati
 - API routes proxy to auth-worker for credential access
 
 ### Authentication Flow
-1. User authenticates via Clerk
+1. User authenticates via Clerk → JWT session token issued
 2. ESPN credentials captured and validated
 3. Stored in Supabase PostgreSQL via auth-worker service
-4. MCP workers retrieve credentials via HTTP calls to auth-worker
-5. No credentials transmitted to client after initial setup
+4. Frontend obtains bearer token via `getToken()` and forwards to auth-worker
+5. Auth-worker verifies JWT using JWKS before credential operations
+6. MCP workers retrieve credentials via HTTP calls with forwarded tokens
+7. No credentials transmitted to client after initial setup
 
 ---
 
@@ -110,34 +112,39 @@ FLAIM uses Clerk for user authentication with frontend components (`ClerkProvide
 ## Security Model
 
 ### Production-Grade Security Features
-- **Server-Side Clerk Verification**: All credential and discovery endpoints verify session tokens with Clerk backend
-- **Anti-Spoofing Protection**: User ID extracted from verified session, never trusted from headers
+- **JWKS-Based JWT Verification**: Auth-worker locally verifies Clerk JWTs using cached public keys (5min TTL)
+- **Production Token Enforcement**: Production environments require valid bearer tokens, dev allows header fallback
+- **Anti-Spoofing Protection**: User ID extracted from verified JWT `sub` claim, never trusted from headers
+- **Centralized Security Model**: Only auth-worker verifies tokens, MCP workers forward Authorization headers
 - **Per-user Data Isolation**: Usage tracking per verified Clerk user ID
 - **Supabase Storage**: ESPN credentials stored in PostgreSQL with ACID guarantees
 - **Environment Isolation**: Development fallbacks disabled in production
 - **API Protection**: All sensitive endpoints require verified Clerk sessions
 - **CORS Policies**: Restrict cross-origin access
-- **Open MCP Access**: Baseball data freely accessible via MCP
-- **Secure League Discovery**: ESPN Fantasy v3 calls use encrypted credentials with rate limiting
+- **Open MCP Access**: Public league data accessible without authentication
+- **Secure League Discovery**: ESPN Fantasy v3 calls use authenticated credentials with rate limiting
 - **Comprehensive Error Handling**: User-friendly messages without exposing internals
 
 ### Secure Data Protection Flow
 ```
-1. User signs in via Clerk → Gets session token
-2. Frontend sends requests with Authorization: Bearer <token>
-3. MCP service verifies token with Clerk backend API
-4. Server extracts verified userId from session
+1. User signs in via Clerk → Gets JWT session token
+2. Frontend obtains bearer token via getToken() and sends requests with Authorization: Bearer <token>
+3. Auth-worker verifies JWT locally using JWKS public keys (cached 5min)
+4. Server extracts verified userId from JWT sub claim
 5. ESPN credentials stored/retrieved using verified userId only
-6. Usage tracking updated with verified user ID
-7. MCP tools work without authentication for public data access
-8. Premium features require valid verified Clerk session
+6. MCP workers forward Authorization header for credential requests
+7. Usage tracking updated with verified user ID
+8. MCP tools work without authentication for public data access
+9. Premium features require valid verified Clerk session
 ```
 
 ### Security Hardening Features
-- **No Header Spoofing**: Requests cannot fake user identity via headers
-- **Production Environment Validation**: NODE_ENV checks prevent development shortcuts in production
+- **No Header Spoofing**: Production rejects requests without valid JWT tokens, eliminating header-based attacks
+- **Local JWT Verification**: Auth-worker verifies tokens using cached JWKS keys, avoiding remote API calls per request
+- **Environment-Aware Security**: Production enforces JWT requirements, development allows header fallback for iteration
+- **Centralized Verification**: Only auth-worker validates tokens, MCP workers remain stateless
 - **Audit Logging**: Security events logged for monitoring and compliance
-- **Session Validation**: Each credential request validates session server-side
+- **Session Validation**: Each credential request validates JWT signature and expiration
 
 ## Data Storage
 

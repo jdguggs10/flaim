@@ -6,6 +6,15 @@ All notable changes to FLAIM will be documented in this file. The format is base
 
 ## [Unreleased]
 
+### Production Security Enhancement - JWT Authentication
+
+- **Security**: **CRITICAL**: Implemented **JWKS-based JWT verification** in auth-worker to eliminate header spoofing vulnerabilities. Production environments now require valid Clerk bearer tokens for all credential operations.
+- **Added**: Local JWKS caching (5min TTL) for fast token verification using WebCrypto RS256 signatures.
+- **Changed**: MCP workers now forward `Authorization` headers to auth-worker instead of trusting `X-Clerk-User-ID` headers in production.
+- **Changed**: Frontend API routes updated to obtain and forward Clerk bearer tokens via `getToken()` calls.
+- **Fixed**: Production auth-worker rejects requests without valid JWT tokens, while development maintains header fallback for local iteration.
+- **Architecture**: Centralized security model - only auth-worker verifies tokens, MCP workers remain stateless.
+
 ### Database Migration & Infrastructure Enhancement
 
 - **Breaking**: Migrated credential storage from Cloudflare KV to **Supabase PostgreSQL** for improved reliability.
