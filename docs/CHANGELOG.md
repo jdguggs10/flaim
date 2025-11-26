@@ -25,10 +25,8 @@ All notable changes to FLAIM will be documented in this file. The format is base
 
 ### Terminology Standardization & Security Enhancement
 
-- **Added**: The `start.sh` script now automatically checks for the correct Node.js version (v22) and for Wrangler updates, providing user-friendly prompts to guide developers.
-- **Added**: A comprehensive `Known Build Warnings` section was added to the `DEPLOYMENT.md` guide to explain common, non-blocking warnings.
-- **Fixed**: The `start.sh` script now automatically handles "dirty git" warnings in both local and CI environments by appending `--commit-dirty=true` to deployment commands.
-- **Changed**: The `DEPLOYMENT.md` guide has been streamlined to be the single source of truth, reflecting the new script automations and providing clearer instructions.
+- **Removed**: The `start.sh` script has been removed in favor of standard `npm` scripts and Cloudflare's native GitOps integration. See `GETTING_STARTED.md` for the new workflow.
+- **Changed**: The `GETTING_STARTED.md` guide (formerly `DEPLOYMENT.md`) has been streamlined to be the single source of truth for deployment and configuration.
 - **Changed**: Standardized all environment terminology to `dev`, `preview`, and `prod` across the entire codebase, scripts, and documentation.
 - **Security**: Fixed a critical vulnerability where `preview` environments could use insecure `development` features. Application logic is now explicitly controlled by the `ENVIRONMENT` variable, not `NODE_ENV`.
 

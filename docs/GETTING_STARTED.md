@@ -139,6 +139,22 @@ Frontend deployment is handled **automatically** by Cloudflare Pages when you pu
 
 ---
 
+## CI/CD & GitHub Actions
+
+The project uses a restored GitHub Actions workflow (`.github/workflows/deploy-workers.yml`) to automate worker deployments.
+
+### 1. Required GitHub Secrets
+To enable automated deployments, you must add the following secrets to your GitHub repository (**Settings** > **Secrets and variables** > **Actions**):
+
+- `CLOUDFLARE_ACCOUNT_ID`: Your Cloudflare Account ID.
+- `CLOUDFLARE_API_TOKEN`: An API Token with "Edit Cloudflare Workers" permissions.
+
+### 2. Deployment Workflow
+- **Preview**: Open a **Pull Request** to automatically deploy workers to the `preview` environment.
+- **Production**: Merge changes to the `main` branch to automatically deploy workers to the `prod` environment.
+
+---
+
 ## Verification
 
 Verify deployments with health checks:

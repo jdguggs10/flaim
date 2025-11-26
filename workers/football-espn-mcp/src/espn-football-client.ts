@@ -17,14 +17,14 @@ export interface Env {
 export class EspnFootballApiClient {
   private baseUrl = 'https://lm-api-reads.fantasy.espn.com/apis/v3';
   private authHeader?: string | null;
-  
+
   constructor(private env: Env, opts?: { authHeader?: string | null }) {
     this.authHeader = opts?.authHeader;
   }
 
   async fetchLeague(leagueId: string, year: number = 2024, view: string = 'mSettings', clerkUserId?: string): Promise<EspnFootballLeagueResponse> {
     const url = `${this.baseUrl}/games/ffl/seasons/${year}/segments/0/leagues/${leagueId}?view=${view}`;
-    
+
     const headers: Record<string, string> = {
       'User-Agent': 'football-espn-mcp/1.0',
       'Accept': 'application/json',
@@ -32,7 +32,7 @@ export class EspnFootballApiClient {
       'X-Fantasy-Platform': 'kona-web-2.0.0'
     };
 
-    // Get ESPN credentials using KV storage
+    // Get ESPN credentials from auth-worker
     let credentials: EspnCredentials | null = null;
     if (clerkUserId && this.authHeader) {
       credentials = await this.getEspnCredentialsForUser(clerkUserId);
@@ -47,7 +47,7 @@ export class EspnFootballApiClient {
       headers,
       cf: { cacheEverything: false }
     });
-    
+
     if (!response.ok) {
       // Handle ESPN-specific error codes for football
       if (response.status === 401) {
@@ -62,7 +62,7 @@ export class EspnFootballApiClient {
       if (response.status === 403) {
         throw new Error(`Access denied to football league ${leagueId} - may require authentication`);
       }
-      
+
       const errorText = await response.text();
       throw new Error(`ESPN Football API error ${response.status}: ${errorText}`);
     }
@@ -75,7 +75,7 @@ export class EspnFootballApiClient {
     if (week) {
       url += `&scoringPeriodId=${week}`;
     }
-    
+
     const headers: Record<string, string> = {
       'User-Agent': 'football-espn-mcp/1.0',
       'Accept': 'application/json',
@@ -100,7 +100,7 @@ export class EspnFootballApiClient {
       headers,
       cf: { cacheEverything: false }
     });
-    
+
     if (!response.ok) {
       if (response.status === 401) {
         throw new Error('ESPN authentication failed - check auth-worker credentials');
@@ -114,13 +114,13 @@ export class EspnFootballApiClient {
       if (response.status === 403) {
         throw new Error(`Access denied to football league ${leagueId} team data`);
       }
-      
+
       const errorText = await response.text();
       throw new Error(`ESPN Football API error ${response.status}: ${errorText}`);
     }
 
     const data = await response.json() as EspnFootballTeamResponse;
-    
+
     // Filter to the specific team if teamId is provided
     if (teamId && data.teams) {
       const team = data.teams.find((t: FootballTeam) => t.id.toString() === teamId);
@@ -129,12 +129,12 @@ export class EspnFootballApiClient {
       }
       return team;
     }
-    
+
     // If no specific teamId requested, return the first team or throw error
     if (data.teams && data.teams.length > 0) {
       return data.teams[0];
     }
-    
+
     throw new Error(`No teams found in football league ${leagueId}`);
   }
 
@@ -143,7 +143,7 @@ export class EspnFootballApiClient {
     if (week) {
       url += `&scoringPeriodId=${week}`;
     }
-    
+
     const headers: Record<string, string> = {
       'User-Agent': 'football-espn-mcp/1.0',
       'Accept': 'application/json',
@@ -165,7 +165,7 @@ export class EspnFootballApiClient {
       headers,
       cf: { cacheEverything: false }
     });
-    
+
     if (!response.ok) {
       if (response.status === 401) {
         throw new Error('ESPN authentication failed - check auth-worker credentials');
@@ -179,7 +179,7 @@ export class EspnFootballApiClient {
       if (response.status === 403) {
         throw new Error(`Access denied to football league ${leagueId} matchup data`);
       }
-      
+
       const errorText = await response.text();
       throw new Error(`ESPN Football API error ${response.status}: ${errorText}`);
     }
@@ -189,7 +189,7 @@ export class EspnFootballApiClient {
 
   async fetchStandings(leagueId: string, year: number = 2024, clerkUserId?: string): Promise<any> {
     const url = `${this.baseUrl}/games/ffl/seasons/${year}/segments/0/leagues/${leagueId}?view=mStandings`;
-    
+
     const headers: Record<string, string> = {
       'User-Agent': 'football-espn-mcp/1.0',
       'Accept': 'application/json',
@@ -211,7 +211,7 @@ export class EspnFootballApiClient {
       headers,
       cf: { cacheEverything: false }
     });
-    
+
     if (!response.ok) {
       if (response.status === 401) {
         throw new Error('ESPN authentication failed - check auth-worker credentials');
@@ -225,7 +225,7 @@ export class EspnFootballApiClient {
       if (response.status === 403) {
         throw new Error(`Access denied to football league ${leagueId} standings`);
       }
-      
+
       const errorText = await response.text();
       throw new Error(`ESPN Football API error ${response.status}: ${errorText}`);
     }
@@ -234,16 +234,16 @@ export class EspnFootballApiClient {
   }
 
   /**
-   * Get ESPN credentials from KV storage
+   * Get ESPN credentials from auth-worker
    */
   private async getEspnCredentialsForUser(clerkUserId: string): Promise<EspnCredentials | null> {
     try {
       // HTTP call to auth worker for credentials (stateless pattern)
       const authWorkerUrl = this.env.AUTH_WORKER_URL || 'http://localhost:8786';
       const url = `${authWorkerUrl}/credentials/espn?raw=true`;
-      
+
       console.log(`🔑 Fetching ESPN credentials for user ${clerkUserId} from ${url}`);
-      
+
       const response = await fetch(url, {
         method: 'GET',
         headers: {
@@ -252,30 +252,30 @@ export class EspnFootballApiClient {
           ...(this.authHeader ? { 'Authorization': this.authHeader } : {})
         }
       });
-      
+
       console.log(`📡 Auth-worker response: ${response.status} ${response.statusText}`);
-      
+
       if (response.status === 404) {
         console.log('ℹ️ No ESPN credentials found for user');
         return null;
       }
-      
+
       if (!response.ok) {
         console.error(`❌ Auth-worker error: ${response.status} ${response.statusText}`);
         const errorData = await response.json().catch(() => ({})) as { error?: string };
         throw new Error(`Auth-worker error: ${errorData.error || response.statusText}`);
       }
-      
+
       const data = await response.json() as { success?: boolean; credentials?: EspnCredentials };
-      
+
       if (!data.success || !data.credentials) {
         console.error('❌ Invalid response from auth-worker:', data);
         throw new Error('Invalid credentials response from auth-worker');
       }
-      
+
       console.log('✅ Successfully retrieved ESPN credentials');
       return data.credentials;
-      
+
     } catch (error) {
       console.error('❌ Failed to fetch credentials from auth-worker:', error);
       return null;

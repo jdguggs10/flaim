@@ -19,10 +19,10 @@ export default function EspnLeagueForm() {
     sport: '' as SportName | ''
   });
   const [leagues, setLeagues] = useState<Array<{ leagueId: string; sport: SportName }>>([]);
-  
-  const { 
-    setError, 
-    error, 
+
+  const {
+    setError,
+    error,
     isAutoSaving,
     setIsAutoSaving,
     setStep,
@@ -45,25 +45,25 @@ export default function EspnLeagueForm() {
 
   const validateForm = (): string[] => {
     const errors: string[] = [];
-    
+
     if (!formData.leagueId.trim()) {
       errors.push('League ID is required');
     }
-    
+
     if (!formData.sport) {
       errors.push('Sport selection is required');
     }
-    
+
     // Check for duplicates in local state
     if (formData.leagueId && formData.sport) {
-      const exists = leagues.some(league => 
+      const exists = leagues.some(league =>
         league.leagueId === formData.leagueId.trim() && league.sport === formData.sport
       );
       if (exists) {
         errors.push(`League ${formData.leagueId} for ${formData.sport} already exists`);
       }
     }
-    
+
     return errors;
   };
 
@@ -95,7 +95,7 @@ export default function EspnLeagueForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (leagues.length === 0) {
       setError('Please add at least one league');
       return;
@@ -114,7 +114,7 @@ export default function EspnLeagueForm() {
         }
       }
 
-      // Save combined list to KV storage
+      // Save combined list to auth-worker (Supabase)
       const response = await fetch('/api/onboarding/espn/leagues', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -132,14 +132,14 @@ export default function EspnLeagueForm() {
         leagues.forEach((l) => {
           addEspnLeague({ leagueId: l.leagueId, sport: l.sport } as any);
         });
-        
+
         // Clear local form state
         setLeagues([]);
-        
+
         console.log(`✅ Successfully saved ${leagues.length} leagues`);
         setStep('CONFIRMATION');
       }
-      
+
     } catch (error) {
       console.error('League save error:', error);
       setError(error instanceof Error ? error.message : 'Failed to save leagues');
@@ -155,7 +155,7 @@ export default function EspnLeagueForm() {
           <div className="text-center space-y-4">
             <h3 className="text-lg font-semibold">Maximum Leagues Reached</h3>
             <p className="text-muted-foreground">
-              You&apos;ve reached the maximum of 10 leagues. 
+              You&apos;ve reached the maximum of 10 leagues.
             </p>
             <Button onClick={() => setStep('CONFIRMATION')}>
               Continue to Summary
@@ -169,7 +169,7 @@ export default function EspnLeagueForm() {
   return (
     <div className="space-y-6">
       {espnLeagues.length > 0 && (
-        <SkipStepBanner 
+        <SkipStepBanner
           text="Leagues already imported."
           onSkip={() => setStep('CONFIRMATION')}
         />
@@ -194,7 +194,7 @@ export default function EspnLeagueForm() {
             Enter your ESPN league ID and select the sport
           </CardDescription>
         </CardHeader>
-        
+
         <CardContent className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
@@ -210,8 +210,8 @@ export default function EspnLeagueForm() {
 
             <div className="space-y-2">
               <Label htmlFor="sport">Sport</Label>
-              <Select 
-                value={formData.sport} 
+              <Select
+                value={formData.sport}
                 onValueChange={(value: SportName) => handleInputChange('sport', value)}
               >
                 <SelectTrigger>
@@ -231,8 +231,8 @@ export default function EspnLeagueForm() {
             </div>
           </div>
 
-          <Button 
-            type="button" 
+          <Button
+            type="button"
             onClick={addLeague}
             disabled={!formData.leagueId.trim() || !formData.sport || leagues.length >= 10}
             className="w-full"
@@ -287,9 +287,9 @@ export default function EspnLeagueForm() {
       )}
 
       <div className="flex gap-2">
-        <Button 
-          onClick={handleSubmit} 
-          className="flex-1" 
+        <Button
+          onClick={handleSubmit}
+          className="flex-1"
           disabled={isAutoSaving || leagues.length === 0}
         >
           {isAutoSaving ? (
