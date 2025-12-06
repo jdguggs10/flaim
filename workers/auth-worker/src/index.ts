@@ -149,6 +149,7 @@ const ALLOWED_ORIGINS = [
   'https://*.vercel.app',                          // All Vercel preview deployments
   // Production
   'https://flaim.app',
+  'https://www.flaim.app',                         // Production with www subdomain
   // Local development
   'http://localhost:8787',                         // Wrangler dev server (HTTP)
   'https://localhost:8787',                        // Wrangler dev server (HTTPS)
@@ -261,9 +262,9 @@ export default {
 
         if (request.method === 'POST' || request.method === 'PUT') {
           // Store ESPN credentials
-          const body = await request.json();
+          const body = await request.json() as { swid?: string; s2?: string; email?: string };
           const validation = validateEspnCredentials(body);
-          
+
           if (!validation.valid) {
             return new Response(JSON.stringify({
               error: 'Invalid credentials',
@@ -274,7 +275,7 @@ export default {
             });
           }
 
-          const success = await storage.setCredentials(clerkUserId, body.swid, body.s2, body.email);
+          const success = await storage.setCredentials(clerkUserId, body.swid!, body.s2!, body.email);
           
           if (!success) {
             return new Response(JSON.stringify({

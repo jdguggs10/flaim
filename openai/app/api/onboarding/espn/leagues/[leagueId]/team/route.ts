@@ -12,18 +12,18 @@ export const runtime = 'edge';
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ leagueId: string }> }) {
   try {
-    const { userId } = await auth();
-    
+    const { userId, getToken } = await auth();
+
     if (!userId) {
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
     }
 
     const { leagueId } = await params;
     const body: { teamId: string; sport?: string } = await request.json();
-    
+
     if (!body.teamId) {
-      return NextResponse.json({ 
-        error: 'teamId is required' 
+      return NextResponse.json({
+        error: 'teamId is required'
       }, { status: 400 });
     }
 
@@ -32,11 +32,14 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     if (!authWorkerUrl) {
       return NextResponse.json({ error: 'NEXT_PUBLIC_AUTH_WORKER_URL is not configured' }, { status: 500 });
     }
+
+    const bearer = (await getToken?.()) || undefined;
     const response = await fetch(`${authWorkerUrl}/leagues/${leagueId}/team`, {
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',
-        'X-Clerk-User-ID': userId
+        'X-Clerk-User-ID': userId,
+        ...(bearer ? { 'Authorization': `Bearer ${bearer}` } : {})
       },
       body: JSON.stringify({
         teamId: body.teamId,
@@ -73,8 +76,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ leagueId: string }> }) {
   try {
-    const { userId } = await auth();
-    
+    const { userId, getToken } = await auth();
+
     if (!userId) {
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
     }
@@ -88,11 +91,14 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     if (!authWorkerUrl) {
       return NextResponse.json({ error: 'NEXT_PUBLIC_AUTH_WORKER_URL is not configured' }, { status: 500 });
     }
+
+    const bearer = (await getToken?.()) || undefined;
     const response = await fetch(`${authWorkerUrl}/leagues`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-        'X-Clerk-User-ID': userId
+        'X-Clerk-User-ID': userId,
+        ...(bearer ? { 'Authorization': `Bearer ${bearer}` } : {})
       }
     });
 

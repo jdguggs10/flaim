@@ -41,24 +41,15 @@ export default function EspnAuth({ platform = 'ESPN' }: PlatformAuthProps = {}) 
 
   const [hasStoredCreds, setHasStoredCreds] = useState(false);
 
-  // Auto-check stored credentials via auth-worker on mount
+  // Auto-check stored credentials via API proxy on mount
   useEffect(() => {
     (async () => {
       if (!userId) return;
       try {
-        const authWorkerUrl = process.env.NEXT_PUBLIC_AUTH_WORKER_URL;
-        if (!authWorkerUrl) {
-          throw new Error('NEXT_PUBLIC_AUTH_WORKER_URL is not configured');
-        }
-        const res = await fetch(`${authWorkerUrl}/credentials/espn`, {
-          headers: {
-            'X-Clerk-User-ID': userId
-          }
-        });
+        const res = await fetch('/api/auth/espn/credentials');
         if (res.ok) {
-          const data = await res.json() as { swid?: string; s2?: string };
-          if (data?.swid && data?.s2) {
-            setPlatformCredentials(platform, { swid: data.swid, espn_s2: data.s2 });
+          const data = await res.json() as { hasCredentials?: boolean };
+          if (data?.hasCredentials) {
             setHasStoredCreds(true);
           }
         }
@@ -66,7 +57,7 @@ export default function EspnAuth({ platform = 'ESPN' }: PlatformAuthProps = {}) 
         /* network error ignored */
       }
     })();
-  }, [platform, setPlatformCredentials, userId]);
+  }, [userId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -87,20 +78,12 @@ export default function EspnAuth({ platform = 'ESPN' }: PlatformAuthProps = {}) 
     try {
       // Store credentials in onboarding store
       setPlatformCredentials(platform, credentials);
-      
-      // Store credentials via auth-worker (platform-agnostic)
-      const authWorkerUrl = process.env.NEXT_PUBLIC_AUTH_WORKER_URL;
-      if (!authWorkerUrl) {
-        throw new Error('NEXT_PUBLIC_AUTH_WORKER_URL is not configured');
-      }
-      
-      // Call auth-worker endpoint to store credentials (platform-specific endpoint)
-      const platformEndpoint = platform.toLowerCase(); // 'espn', 'yahoo', 'sleeper'
-      const response = await fetch(`${authWorkerUrl}/credentials/${platformEndpoint}`, {
+
+      // Store credentials via API proxy
+      const response = await fetch('/api/auth/espn/credentials', {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'X-Clerk-User-ID': userId
+        headers: {
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           swid: credentials.swid,
@@ -116,7 +99,7 @@ export default function EspnAuth({ platform = 'ESPN' }: PlatformAuthProps = {}) 
       // Credentials stored successfully, move to manual league entry
       console.log(`✅ ${platform} credentials stored, moving to league entry step`);
       setStep('LEAGUE_ENTRY');
-      
+
     } catch (error) {
       console.error(`${platform} authentication error:`, error);
       setError(error instanceof Error ? error.message : 'Authentication failed');

@@ -17,8 +17,8 @@ export const runtime = 'edge';
 
 export async function POST(request: NextRequest) {
   try {
-    const { userId } = await auth();
-    
+    const { userId, getToken } = await auth();
+
     if (!userId) {
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
     }
@@ -52,11 +52,13 @@ export async function POST(request: NextRequest) {
 
     try {
       // Call the sport worker's onboarding initialize endpoint
+      const bearer = (await getToken?.()) || undefined;
       const workerResponse = await fetch(`${workerUrl}/onboarding/initialize`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Clerk-User-ID': userId
+          'X-Clerk-User-ID': userId,
+          ...(bearer ? { 'Authorization': `Bearer ${bearer}` } : {})
         },
         body: JSON.stringify({
           sport: sport,
