@@ -52,10 +52,9 @@ export async function GET() {
       );
     }
 
-    // We only care that some object is returned – presence of swid+s2 is success
-    const data = (await workerRes.json()) as { swid?: string; s2?: string };
+    const data = (await workerRes.json()) as { hasCredentials?: boolean; swid?: string; s2?: string };
     const response: EspnCredentialsStatus = {
-      hasCredentials: !!data.swid && !!data.s2,
+      hasCredentials: data.hasCredentials ?? (!!data.swid && !!data.s2),
     };
 
     return NextResponse.json(response);

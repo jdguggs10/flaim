@@ -6,6 +6,12 @@ All notable changes to FLAIM will be documented in this file. The format is base
 
 ## [Unreleased]
 
+### ESPN Auth Flow Reliability
+
+- **Fixed**: Correctly detect stored ESPN credentials from auth-worker responses by honoring the `hasCredentials` metadata (with swid/s2 fallback), ensuring the UI can skip credential entry when data already exists.
+- **Changed**: Frontend ESPN auth now uses the `/api/auth/espn/credentials` proxy so Clerk JWTs are forwarded server-side instead of hitting auth-worker directly.
+- **Security**: Added `https://www.flaim.app` to the auth-worker CORS allowlist to restore production preflight success for the primary hostname.
+
 ### Production Security Enhancement - JWT Authentication
 
 - **Security**: **CRITICAL**: Implemented **JWKS-based JWT verification** in auth-worker to eliminate header spoofing vulnerabilities. Production environments now require valid Clerk bearer tokens for all credential operations.
