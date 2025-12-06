@@ -119,7 +119,7 @@ Workers expose MCP tools for fantasy sports data:
 
 - **Frontend**: Next.js 15, React 19, TypeScript, Tailwind CSS
 - **Authentication**: Clerk v6.22.0 with @clerk/backend v2.1.0
-- **Infrastructure**: Cloudflare Workers, Pages, Supabase
+- **Infrastructure**: Vercel (frontend), Cloudflare Workers (backend), Supabase (database)
 - **Testing**: Jest, Playwright
 - **Linting**: ESLint v9 with typescript-eslint v8
 

@@ -38,7 +38,7 @@ Before you begin, ensure you have the following installed:
 
 ## Deployment & Configuration
 
-FLAIM uses a GitOps workflow for all deployments. The complex `start.sh` script has been removed in favor of standard npm commands and Cloudflare's native Git integration.
+FLAIM uses a GitOps workflow for all deployments. The complex `start.sh` script has been removed in favor of standard npm commands and Vercel's native Git integration for the frontend.
 
 ### Environment Breakdown
 
@@ -62,7 +62,7 @@ For local development, secrets are managed in two separate files: one for the fr
     -   **Setup**: Add Supabase credentials to `openai/.env.local` (e.g., `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`).
 
 #### Preview & Production (`preview` / `prod`)
-- **Frontend**: All variables and secrets are managed in the Cloudflare Pages project settings (`Settings` > `Environment variables`).
+- **Frontend**: All variables and secrets are managed in the Vercel project settings (`Settings` > `Environment Variables`).
 - **Workers**: Secrets are managed using the `wrangler secret put` command for each worker and environment.
 
 Set the secrets for each worker:
@@ -135,7 +135,7 @@ npm run deploy:workers:prod
 
 ### Frontend Deployment
 
-Frontend deployment is handled **automatically** by Cloudflare Pages when you push to a pull request (for previews) or merge to the `main` branch (for production).
+Frontend deployment is handled **automatically** by Vercel when you push to a pull request (for previews) or merge to the `main` branch (for production). The frontend is deployed to `flaim.app`.
 
 ---
 
@@ -168,13 +168,13 @@ Verify deployments with health checks:
 ### Build & Deployment Issues
 
 - **Why were `start.sh` and `build.sh` removed?**
-  - They were replaced with a modern GitOps workflow using standard `npm` scripts and Cloudflare's native Git integration. This new system is more reliable, secure, and easier to maintain. See `docs/MIGRATION_TO_GITOPS.md` for details.
+  - They were replaced with a modern GitOps workflow using standard `npm` scripts and Vercel's native Git integration for the frontend. This new system is more reliable, secure, and easier to maintain.
 
 - **How do I deploy now?**
   - Create a pull request to deploy a preview. Merge to `main` to deploy to production. The system is now fully automated.
 
 - **Where do my environment variables go?**
-  - For local development, they go in `openai/.env.local`. For remote environments, they are set in the Cloudflare Pages UI for the frontend and via `wrangler secret put` for the workers.
+  - For local development, they go in `openai/.env.local`. For remote environments, they are set in the Vercel dashboard for the frontend and via `wrangler secret put` for the workers.
 
 ### ESPN API
 
@@ -195,6 +195,6 @@ Verify deployments with health checks:
 
 ## Next Steps
 
-1.  **Custom Domains**: See `docs/dev/FLAIM_APP_DOMAIN_MIGRATION.md` for production domain setup.
-2.  **Monitoring**: Set up Cloudflare Analytics and Worker logs for your deployed services.
-3.  **CI/CD**: The new CI/CD pipeline is already configured in `.github/workflows/deploy-workers.yml`.
+1.  **Custom Domains**: Configure your domain in the Vercel project settings under `Settings` > `Domains`.
+2.  **Monitoring**: Use Vercel Analytics for frontend performance and Cloudflare dashboard for Worker logs.
+3.  **CI/CD**: The CI/CD pipeline is configured via Vercel's GitHub integration (frontend) and `.github/workflows/deploy-workers.yml` (workers).

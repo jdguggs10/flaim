@@ -174,11 +174,11 @@ The platform requires environment variables for OpenAI API, Clerk authentication
 
 ## Deployment
 
-The FLAIM frontend is deployed as a Next.js application to **Cloudflare Pages**, which provides a scalable, serverless environment with first-class support for Edge Functions.
+The FLAIM frontend is deployed as a Next.js application to **Vercel**, which provides zero-configuration deployment, automatic previews, and native Next.js support.
 
 The backend workers are deployed as **Cloudflare Workers**.
 
-For complete, up-to-date instructions, please see the [**Deployment Guide**](./DEPLOYMENT.md).
+For complete, up-to-date instructions, please see the [**Getting Started Guide**](./GETTING_STARTED.md).
 
 ## MCP Integration
 
