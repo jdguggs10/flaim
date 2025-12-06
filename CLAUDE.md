@@ -43,8 +43,8 @@ npm run dev:frontend                # Next.js development server only
 npm run dev:workers                 # All workers via wrangler dev
 
 # Production deployment
-npm run deploy:workers:preview      # Deploy all workers to preview
-npm run deploy:workers:prod         # Deploy all workers to production
+npm run deploy:workers:preview      # Manual deploy (use GitHub PRs instead)
+npm run deploy:workers:prod         # Manual deploy (use GitHub main branch instead)
 
 # Build commands
 npm run build                       # Build frontend for deployment
@@ -105,7 +105,7 @@ npm run test:coverage      # Coverage report
 
 ### Security Model
 - **Clerk authentication** with server-side verification
-- **AES-GCM encryption** for ESPN credentials in CF KV
+- **Supabase PostgreSQL** for credential storage (encrypted)
 - **Per-user data isolation** with verified Clerk user IDs
 - **Usage tracking** (100 free messages/month, unlimited paid)
 
@@ -119,7 +119,7 @@ Workers expose MCP tools for fantasy sports data:
 
 - **Frontend**: Next.js 15, React 19, TypeScript, Tailwind CSS
 - **Authentication**: Clerk v6.22.0 with @clerk/backend v2.1.0
-- **Infrastructure**: Cloudflare Workers, Pages, KV
+- **Infrastructure**: Cloudflare Workers, Pages, Supabase
 - **Testing**: Jest, Playwright
 - **Linting**: ESLint v9 with typescript-eslint v8
 
@@ -129,7 +129,7 @@ Workers expose MCP tools for fantasy sports data:
 2. **Local Development**: All services run on localhost (workers on 8786-8788, frontend on 3000)
 3. **Testing**: Run tests before committing (`npm test` in respective directories)
 4. **Type Checking**: Ensure all workers pass type-check before deployment
-5. **Deployment**: Push to PR for preview, merge to main for production (GitOps)
+5. **Deployment**: Push to PR for preview, merge to main for production (GitHub Actions)
 
 ## Key Considerations
 
@@ -137,7 +137,7 @@ Workers expose MCP tools for fantasy sports data:
 - **Wrangler CLI** needed for worker development and deployment
 - **Environment variables** configured per service (see docs/ARCHITECTURE.md)
 - **Clerk session verification** required for protected endpoints
-- **ESPN credentials** encrypted in CF KV with user-specific keys
+- **ESPN credentials** stored in Supabase with user-specific keys
 
 ## File Structure Patterns
 
