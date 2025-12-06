@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "engines": {
-    "node": ">=22"
+    "node": "24.x"
   },
   "scripts": {
     "dev": "next dev",
@@ -47,7 +47,7 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250618.0",
-    "@types/node": "^20.16.10",
+    "@types/node": "^24.0.3",
     "@types/react-syntax-highlighter": "^15.5.13",
     "eslint": "^9.13.0",
     "eslint-config-next": "^15.3.4",

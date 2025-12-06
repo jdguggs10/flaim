@@ -9,7 +9,7 @@
     "workers/football-espn-mcp"
   ],
   "engines": {
-    "node": ">=22"
+    "node": "24.x"
   },
   "scripts": {
     "postinstall": "patch-package",
