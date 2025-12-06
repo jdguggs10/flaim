@@ -28,9 +28,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        <ClerkProvider>
+    <ClerkProvider>
+      <html lang="en">
+        <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
           <div className="flex h-screen bg-muted w-full flex-col text-foreground">
             {/* Simple authentication header */}
             <header className="flex justify-between items-center p-4 bg-white border-b">
@@ -57,8 +57,8 @@ export default function RootLayout({
             </header>
             <main className="flex-1 bg-background">{children}</main>
           </div>
-        </ClerkProvider>
-      </body>
-    </html>
+        </body>
+      </html>
+    </ClerkProvider>
   );
 }
