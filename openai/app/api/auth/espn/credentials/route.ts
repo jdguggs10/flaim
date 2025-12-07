@@ -30,9 +30,9 @@ export async function GET() {
       },
     });
 
-    // auth-worker returns 404 when user has no stored credentials
+    // auth-worker returns 404 when user has no stored credentials; treat as empty state
     if (workerRes.status === 404) {
-      return NextResponse.json({ hasCredentials: false }, { status: 404 });
+      return NextResponse.json({ hasCredentials: false }, { status: 200 });
     }
 
     if (!workerRes.ok) {
