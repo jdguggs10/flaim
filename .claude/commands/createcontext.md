@@ -1,4 +1,4 @@
-# .claude/commands/start.md
+# .claude/commands/createcontext.md
 
 This command is usually launched at the start of a new Claude Code session, and it is designed to give additional context on my project. Please read each of the documents. No need to restate what you read. Digest the information and return.
 
