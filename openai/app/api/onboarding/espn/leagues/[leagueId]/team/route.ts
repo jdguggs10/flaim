@@ -19,7 +19,13 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     }
 
     const { leagueId } = await params;
-    const body: { teamId: string; sport?: string } = await request.json();
+    const body: {
+      teamId: string;
+      sport?: string;
+      teamName?: string;
+      leagueName?: string;
+      seasonYear?: number;
+    } = await request.json();
 
     if (!body.teamId) {
       return NextResponse.json({
@@ -43,7 +49,10 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       },
       body: JSON.stringify({
         teamId: body.teamId,
-        sport: body.sport
+        sport: body.sport,
+        teamName: body.teamName,
+        leagueName: body.leagueName,
+        seasonYear: body.seasonYear
       })
     });
 
