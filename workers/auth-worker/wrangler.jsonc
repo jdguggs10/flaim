@@ -25,15 +25,16 @@
     // Production environment
     "prod": {
       "name": "auth-worker",
-      
-      // Custom domain routes for production
+      "workers_dev": true,  // Enable .workers.dev URL for worker-to-worker calls
+
+      // Custom domain routes for production (external clients)
       "routes": [
         {
           "pattern": "api.flaim.app/auth/*",
           "zone_name": "flaim.app"
         }
       ],
-      
+
       // Environment variables for production
       // Note: SUPABASE_URL and SUPABASE_SERVICE_KEY set via Cloudflare secrets
       "vars": {

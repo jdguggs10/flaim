@@ -12,6 +12,7 @@ All notable changes to FLAIM will be documented in this file. The format is base
 - **Fixed**: Baseball and football workers strip `/baseball` and `/football` prefixes respectively for custom domain routing
 - **Fixed**: Credential check endpoint returns 200 with `hasCredentials: false` instead of 404 when no credentials exist, eliminating misleading console errors
 - **Fixed**: Onboarding auto-pull timeouts caused by worker-to-worker communication using custom domain URLs instead of direct `.workers.dev` URLs
+- **Fixed**: Auth-worker production deployment now enables `workers_dev: true` to make the worker accessible via direct URL for internal worker-to-worker calls
 - **Fixed**: Trailing slashes in Vercel worker URLs causing double-slash 404 errors (e.g., `baseball//onboarding/initialize`)
 - **Changed**: Production deployment now requires Cloudflare worker secrets to be set via Dashboard (not `wrangler secret put`) for workers with custom routes
 - **Documentation**: Added comprehensive onboarding flow explanation, worker-to-worker URL requirements, DNS setup guide, and troubleshooting for timeout/404 errors

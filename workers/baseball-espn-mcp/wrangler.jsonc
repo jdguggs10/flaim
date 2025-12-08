@@ -38,7 +38,7 @@
       "vars": {
         "NODE_ENV": "production",
         "ENVIRONMENT": "prod",
-        "AUTH_WORKER_URL": "https://api.flaim.app/auth"
+        "AUTH_WORKER_URL": "https://auth-worker.gerrygugger.workers.dev"
       }
     },
     

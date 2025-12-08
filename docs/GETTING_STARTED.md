@@ -191,6 +191,7 @@ ENVIRONMENT=prod     # or "preview", "dev"
 - ✅ CORRECT: `https://auth-worker.YOUR-ACCOUNT.workers.dev`
 - Custom domains are for external clients only (Vercel frontend)
 - Worker-to-worker calls need direct URLs to avoid routing overhead
+- **IMPORTANT**: Auth-worker production config MUST have `"workers_dev": true` in wrangler.jsonc to enable the `.workers.dev` URL alongside custom domain routes
 
 ---
 
@@ -300,13 +301,11 @@ if (pathname.startsWith('/auth')) {
 3. Request hangs or times out waiting for response
 4. Vercel edge function hits 25-second limit before sport worker responds
 
-**Fix:** Update `AUTH_WORKER_URL` in Cloudflare Dashboard for baseball and football workers:
-1. Go to **Cloudflare Dashboard** → **Workers & Pages** → Select worker (baseball-espn-mcp or football-espn-mcp)
-2. Click **Settings** → **Variables and Secrets**
-3. Update `AUTH_WORKER_URL` to direct worker URL:
-   - ❌ WRONG: `https://api.flaim.app/auth`
-   - ✅ CORRECT: `https://auth-worker.YOUR-ACCOUNT.workers.dev`
-4. Redeploy workers or wait for automatic propagation
+**Fix:**
+1. **Enable workers.dev URL on auth-worker**: Edit `workers/auth-worker/wrangler.jsonc` and add `"workers_dev": true` to the `prod` environment config
+2. **Update AUTH_WORKER_URL**: Edit `workers/baseball-espn-mcp/wrangler.jsonc` and `workers/football-espn-mcp/wrangler.jsonc`:
+   - Change `AUTH_WORKER_URL` from `https://api.flaim.app/auth` to `https://auth-worker.YOUR-ACCOUNT.workers.dev`
+3. **Deploy**: Run `npm run deploy:workers:prod` or deploy workers individually with `npx wrangler deploy --env prod`
 
 **Verification:**
 ```bash

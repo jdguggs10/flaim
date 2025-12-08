@@ -318,12 +318,14 @@ export default {
         } else if (request.method === 'GET') {
           // Check if this is a request for actual credentials (from sport workers)
           const getRawCredentials = url.searchParams.get('raw') === 'true';
-          
+
           if (getRawCredentials) {
             // Return actual credentials for sport workers
+            console.log(`🔍 [auth-worker] GET credentials for user: ${clerkUserId}`);
             const credentials = await storage.getCredentials(clerkUserId);
-            
+
             if (!credentials) {
+              console.log(`❌ [auth-worker] No credentials found for user: ${clerkUserId}`);
               return new Response(JSON.stringify({
                 error: 'Credentials not found',
                 message: 'No ESPN credentials found for user'
