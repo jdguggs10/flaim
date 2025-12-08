@@ -201,6 +201,12 @@ export default {
     const url = new URL(request.url);
     const corsHeaders = getCorsHeaders(request);
 
+    // Strip /auth prefix if present (for custom domain routing)
+    let pathname = url.pathname;
+    if (pathname.startsWith('/auth')) {
+      pathname = pathname.slice(5) || '/';
+    }
+
     // Handle CORS preflight
     if (request.method === 'OPTIONS') {
       return new Response(null, { headers: corsHeaders });
@@ -208,7 +214,7 @@ export default {
 
     try {
       // Health check endpoint
-      if (url.pathname === '/health') {
+      if (pathname === '/health') {
         const healthData: any = {
           status: 'healthy',
           service: 'auth-worker',
@@ -245,7 +251,7 @@ export default {
       }
 
       // ESPN credential management endpoints
-      if (url.pathname === '/credentials/espn') {
+      if (pathname === '/credentials/espn') {
         // Extract Clerk User ID from header
         const { userId: clerkUserId, error: authError } = await getVerifiedUserId(request, env);
         if (!clerkUserId) {
@@ -372,7 +378,7 @@ export default {
       }
 
       // League management endpoints
-      if (url.pathname === '/leagues') {
+      if (pathname === '/leagues') {
         // Extract Clerk User ID from header
         const { userId: clerkUserId, error: authError } = await getVerifiedUserId(request, env);
         if (!clerkUserId) {
@@ -490,7 +496,7 @@ export default {
       }
 
       // League team selection endpoint
-      const leagueTeamMatch = url.pathname.match(/^\/leagues\/([^\/]+)\/team$/);
+      const leagueTeamMatch = pathname.match(/^\/leagues\/([^\/]+)\/team$/);
       if (leagueTeamMatch && request.method === 'PATCH') {
         const leagueId = leagueTeamMatch[1];
         

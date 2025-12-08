@@ -6,6 +6,13 @@ All notable changes to FLAIM will be documented in this file. The format is base
 
 ## [Unreleased]
 
+### Custom Domain Routing & Production Deployment
+
+- **Fixed**: Auth-worker now correctly handles custom domain routes by stripping `/auth` prefix from incoming requests (e.g., `api.flaim.app/auth/health` → checks `/health`)
+- **Fixed**: Credential check endpoint returns 200 with `hasCredentials: false` instead of 404 when no credentials exist, eliminating misleading console errors
+- **Changed**: Production deployment now requires Cloudflare worker secrets to be set via Dashboard (not `wrangler secret put`) for workers with custom routes
+- **Documentation**: Added DNS setup guide, environment variable format requirements, and troubleshooting for common production errors
+
 ### ESPN Auth Flow Reliability
 
 - **Fixed**: Correctly detect stored ESPN credentials from auth-worker responses by honoring the `hasCredentials` metadata (with swid/s2 fallback), ensuring the UI can skip credential entry when data already exists.

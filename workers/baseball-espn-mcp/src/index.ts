@@ -169,6 +169,12 @@ export default {
     const url = new URL(request.url);
     const corsHeaders = getCorsHeaders(request);
 
+    // Strip /baseball prefix if present (for custom domain routing)
+    let pathname = url.pathname;
+    if (pathname.startsWith('/baseball')) {
+      pathname = pathname.slice(9) || '/';
+    }
+
     // Handle CORS preflight
     if (request.method === 'OPTIONS') {
       return new Response(null, { headers: corsHeaders });
@@ -176,7 +182,7 @@ export default {
 
     try {
       // Health check endpoint with auth-worker connectivity test
-      if (url.pathname === '/health') {
+      if (pathname === '/health') {
         const healthData: any = {
           status: 'healthy', 
           service: 'baseball-espn-mcp',
@@ -214,7 +220,7 @@ export default {
       }
 
       // Onboarding initialize endpoint
-      if (url.pathname === '/onboarding/initialize' && request.method === 'POST') {
+      if (pathname === '/onboarding/initialize' && request.method === 'POST') {
         try {
           const clerkUserId = request.headers.get('X-Clerk-User-ID');
 
@@ -333,7 +339,7 @@ export default {
       }
 
       // MCP endpoints - delegate to agent
-      if (url.pathname === '/mcp' || url.pathname.startsWith('/mcp/')) {
+      if (pathname === '/mcp' || pathname.startsWith('/mcp/')) {
         const agent = new McpAgent();
         return await agent.handleRequest(request, env);
       }

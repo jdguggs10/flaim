@@ -63,18 +63,18 @@ For local development, secrets are managed in two separate files: one for the fr
 
 #### Preview & Production (`preview` / `prod`)
 - **Frontend**: All variables and secrets are managed in the Vercel project settings (`Settings` > `Environment Variables`).
-- **Workers**: Secrets are managed using the `wrangler secret put` command for each worker and environment.
+- **Workers**: Secrets MUST be set via **Cloudflare Dashboard** (`Workers & Pages` > `[worker-name]` > `Settings` > `Variables and Secrets`).
 
-Set the secrets for each worker:
-```bash
-# Example: Set secrets for the auth-worker in the 'preview' environment
-cd workers/auth-worker
-wrangler secret put SUPABASE_URL --env preview
-wrangler secret put SUPABASE_SERVICE_KEY --env preview
-wrangler secret put CLERK_SECRET_KEY --env preview
+**Critical:** For production workers with custom routes, secrets cannot be set via `wrangler secret put`. Use the Cloudflare dashboard:
 
-# Repeat for other workers and the 'prod' environment as needed.
-```
+1. Go to **Cloudflare Dashboard** → **Workers & Pages** → Select worker
+2. Click **Settings** → **Variables and Secrets** → **Add variable**
+3. Set type to **Secret** (encrypted) for sensitive values
+4. Required secrets for **auth-worker**:
+   - `SUPABASE_URL`
+   - `SUPABASE_SERVICE_KEY`
+   - `CLERK_SECRET_KEY`
+5. Changes take effect immediately (no redeploy needed)
 
 ### Complete Environment Variable Reference
 
@@ -87,12 +87,21 @@ OPENAI_API_KEY=sk-...
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
 CLERK_SECRET_KEY=sk_test_...
 
+# Worker URLs - MUST include https:// and NO trailing wildcards
+NEXT_PUBLIC_AUTH_WORKER_URL=https://api.flaim.app/auth
+NEXT_PUBLIC_BASEBALL_ESPN_MCP_URL=https://api.flaim.app/baseball
+NEXT_PUBLIC_FOOTBALL_ESPN_MCP_URL=https://api.flaim.app/football
+
 # Optional Clerk URLs
 NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in
 NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up
 NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL=/
 NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL=/
 ```
+
+**Common Mistake:** Do NOT include route wildcards (`/*`) in worker URLs. These are used in Cloudflare route config, not environment variables:
+- ❌ Wrong: `api.flaim.app/auth/*` or `api.flaim.app/auth`
+- ✅ Correct: `https://api.flaim.app/auth`
 
 #### Auth Worker (Required)
 ```bash
@@ -117,6 +126,25 @@ AUTH_WORKER_URL=https://your-auth-worker.workers.dev
 # Optional for Clerk verification
 CLERK_SECRET_KEY=sk_test_your-clerk-secret-key
 ```
+
+---
+
+## DNS Setup for Custom Worker Routes
+
+To use custom domain routes (e.g., `api.flaim.app/auth/*`), configure DNS in Cloudflare:
+
+1. **Cloudflare Dashboard** → **DNS** → **Records**
+2. Click **Add record** with these settings:
+   - **Type**: `A` (IPv4)
+   - **Name**: `api` (creates `api.flaim.app`)
+   - **IPv4 address**: `192.0.2.1` (dummy IP, actual routing handled by Workers)
+   - **Proxy status**: **Proxied** (orange cloud) ← **Critical!**
+   - **TTL**: Auto
+
+3. DNS propagates in 1-5 minutes
+4. Verify: `curl https://api.flaim.app/auth/health`
+
+**Why dummy IP?** When proxied through Cloudflare, the Workers route configuration intercepts requests before they reach the IP. The orange cloud (proxied) setting is what makes routing work.
 
 ---
 
@@ -165,6 +193,35 @@ Verify deployments with health checks:
 ---
 
 ## FAQ & Troubleshooting
+
+### Production 500 Errors
+
+**Error:** API routes return 500 errors in production, but work locally.
+
+**Common causes:**
+1. **Missing Cloudflare secrets** - Check auth-worker has `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `CLERK_SECRET_KEY` in Cloudflare Dashboard (not just wrangler.jsonc)
+2. **Wrong URL format** - Vercel `NEXT_PUBLIC_AUTH_WORKER_URL` must be `https://api.flaim.app/auth` (not `api.flaim.app/auth/*`)
+3. **Missing DNS** - Verify `api.flaim.app` resolves and DNS record is **Proxied** (orange cloud)
+
+**Debug steps:**
+1. Test health endpoint: `curl https://api.flaim.app/auth/health`
+2. Check Vercel logs for "TypeError: Invalid URL" or auth errors
+3. Check Cloudflare Dashboard → Workers → Logs for actual error messages
+
+### Worker Route 404 Errors
+
+**Error:** Worker returns 404 for valid endpoints like `/health`.
+
+**Cause:** Custom domain routes (e.g., `api.flaim.app/auth/*`) add path prefix to requests. Worker receives `/auth/health` but checks for `/health`.
+
+**Fix:** Ensure worker strips route prefix. See `workers/auth-worker/src/index.ts:204-208`:
+```typescript
+// Strip /auth prefix if present (for custom domain routing)
+let pathname = url.pathname;
+if (pathname.startsWith('/auth')) {
+  pathname = pathname.slice(5) || '/';
+}
+```
 
 ### Build & Deployment Issues
 
