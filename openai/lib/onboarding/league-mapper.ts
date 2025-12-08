@@ -135,6 +135,19 @@ export function getMcpConfig(platform: Platform, sport: Sport) {
 }
 
 /**
+ * Ensure MCP server URL points at the /mcp base (Responses API expects this path)
+ */
+function normalizeMcpUrl(url: string): string {
+  if (!url) return "";
+  // drop trailing slashes
+  let normalized = url.replace(/\/+$/, "");
+  if (!normalized.endsWith("/mcp")) {
+    normalized = `${normalized}/mcp`;
+  }
+  return normalized;
+}
+
+/**
  * Get sport display information
  */
 export function getSportConfig(sport: Sport) {
@@ -202,7 +215,7 @@ export function generateMcpToolsConfig(platform: Platform, sport: Sport) {
   return {
     type: "mcp",
     server_label: `fantasy-${sport}`,
-    server_url: mcpConfig.serverUrl,
+    server_url: normalizeMcpUrl(mcpConfig.serverUrl),
     allowed_tools: mcpConfig.tools,
     require_approval: "never"
   };

@@ -25,6 +25,7 @@
     // Production environment
     "prod": {
       "name": "baseball-espn-mcp",
+      "workers_dev": true,
       
       // Custom domain routes for production
       "routes": [

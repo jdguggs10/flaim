@@ -87,8 +87,8 @@ export default function Assistant() {
   // Sync onboarding completion with tools store
   React.useEffect(() => {
     if (onboardingComplete && selectedPlatform && espnLeagues.length > 0) {
-      // Get the first league or selected league for configuration
-      const active = getActiveLeague() || selectedLeague || espnLeagues[0];
+      // Get the active league (prioritize activeLeagueKey, then first league)
+      const active = getActiveLeague() || espnLeagues[0];
       
       // Update tools store with onboarding selections
       setSelectedSport(active.sport);
@@ -112,7 +112,7 @@ export default function Assistant() {
         setMcpEnabled(true);
       }
     }
-  }, [onboardingComplete, activeLeagueKey, selectedPlatform, espnLeagues, getActiveLeague, selectedLeague, setMcpEnabled, setMcpConfig, setSelectedSport, setToolsPlatform, setToolsAuthenticated]);
+  }, [onboardingComplete, activeLeagueKey, selectedPlatform, espnLeagues, getActiveLeague, setMcpEnabled, setMcpConfig, setSelectedSport, setToolsPlatform, setToolsAuthenticated]);
 
   // Hydrate leagues once Clerk has finished loading and the user is signed in
   React.useEffect(() => {
