@@ -1,5 +1,7 @@
 # Context7 Documentation Index for FLAIM
 
+Note: OpenAI usage in this project is via the **Responses API** (not legacy chat completions).
+
 > **Purpose**: Comprehensive reference guide for accessing relevant technical documentation via Context7 when developing, debugging, or extending the FLAIM platform.
 
 ## Quick Reference - Most Critical Documentation

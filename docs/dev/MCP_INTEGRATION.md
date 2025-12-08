@@ -1,5 +1,7 @@
 # MCP Integration Guide
 
+Note: OpenAI calls in this project use the **Responses API** (not chat completions).
+
 > **Model Context Protocol (MCP)** integration for real-time ESPN fantasy sports data access
 
 FLAIM implements dedicated **Model Context Protocol (MCP)** servers that provide Claude with direct access to your ESPN fantasy league data. This enables real-time analysis, strategic insights, and league management through natural language conversations.

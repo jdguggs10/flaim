@@ -1,5 +1,7 @@
 # Supabase Setup & Restoration Guide
 
+Note: Application responses come from the OpenAI **Responses API** (not legacy chat completions).
+
 This guide details how to set up the Supabase backend for FLAIM. Use this if you are setting up a new environment or restoring the project from scratch.
 
 ## 1. Create Supabase Project

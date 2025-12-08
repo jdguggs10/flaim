@@ -1,91 +1,38 @@
-# Changelog
+# Changelog (Condensed)
 
-All notable changes to FLAIM will be documented in this file. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
-> **Note on Documentation**: For planning documents related to upcoming or in-progress work, see the `docs/dev` directory. For historical documents, see `docs/archive`.
+Follow Keep a Changelog; SemVer applies. Planning docs live in `docs/dev`.
 
 ## [Unreleased]
-
-### Custom Domain Routing & Production Deployment
-
-- **Fixed**: Auth-worker now correctly handles custom domain routes by stripping `/auth` prefix from incoming requests (e.g., `api.flaim.app/auth/health` → checks `/health`)
-- **Fixed**: Baseball and football workers strip `/baseball` and `/football` prefixes respectively for custom domain routing
-- **Fixed**: Credential check endpoint returns 200 with `hasCredentials: false` instead of 404 when no credentials exist, eliminating misleading console errors
-- **Fixed**: Onboarding auto-pull timeouts caused by worker-to-worker communication using custom domain URLs instead of direct `.workers.dev` URLs
-- **Fixed**: Auth-worker production deployment now enables `workers_dev: true` to make the worker accessible via direct URL for internal worker-to-worker calls
-- **Fixed**: Trailing slashes in Vercel worker URLs causing double-slash 404 errors (e.g., `baseball//onboarding/initialize`)
-- **Changed**: Production deployment now requires Cloudflare worker secrets to be set via Dashboard (not `wrangler secret put`) for workers with custom routes
-- **Documentation**: Added comprehensive onboarding flow explanation, worker-to-worker URL requirements, DNS setup guide, and troubleshooting for timeout/404 errors
-
-### ESPN Auth Flow Reliability
-
-- **Fixed**: Correctly detect stored ESPN credentials from auth-worker responses by honoring the `hasCredentials` metadata (with swid/s2 fallback), ensuring the UI can skip credential entry when data already exists.
-- **Changed**: Frontend ESPN auth now uses the `/api/auth/espn/credentials` proxy so Clerk JWTs are forwarded server-side instead of hitting auth-worker directly.
-- **Security**: Added `https://www.flaim.app` to the auth-worker CORS allowlist to restore production preflight success for the primary hostname.
-
-### Production Security Enhancement - JWT Authentication
-
-- **Security**: **CRITICAL**: Implemented **JWKS-based JWT verification** in auth-worker to eliminate header spoofing vulnerabilities. Production environments now require valid Clerk bearer tokens for all credential operations.
-- **Added**: Local JWKS caching (5min TTL) for fast token verification using WebCrypto RS256 signatures.
-- **Changed**: MCP workers now forward `Authorization` headers to auth-worker instead of trusting `X-Clerk-User-ID` headers in production.
-- **Changed**: Frontend API routes updated to obtain and forward Clerk bearer tokens via `getToken()` calls.
-- **Fixed**: Production auth-worker rejects requests without valid JWT tokens, while development maintains header fallback for local iteration.
-- **Architecture**: Centralized security model - only auth-worker verifies tokens, MCP workers remain stateless.
-
-### Database Migration & Infrastructure Enhancement
-
-- **Breaking**: Migrated credential storage from Cloudflare KV to **Supabase PostgreSQL** for improved reliability.
-- **Added**: ACID transaction guarantees, rich dashboard, real-time monitoring.
-- **Removed**: KV dependencies, encryption complexity, retry logic.
-- **Changed**: Reduced auth-worker by 31% (714→492 lines), maintained API compatibility.
-- **Security**: Simplified architecture eliminates encryption overhead and debugging difficulties.
-
-### Terminology Standardization & Security Enhancement
-
-- **Removed**: The `start.sh` script has been removed in favor of standard `npm` scripts and Cloudflare's native GitOps integration. See `GETTING_STARTED.md` for the new workflow.
-- **Changed**: The `GETTING_STARTED.md` guide (formerly `DEPLOYMENT.md`) has been streamlined to be the single source of truth for deployment and configuration.
-- **Changed**: Standardized all environment terminology to `dev`, `preview`, and `prod` across the entire codebase, scripts, and documentation.
-- **Security**: Fixed a critical vulnerability where `preview` environments could use insecure `development` features. Application logic is now explicitly controlled by the `ENVIRONMENT` variable, not `NODE_ENV`.
+- Note: OpenAI usage now references the **Responses API** (not legacy chat completions).
+- Fix: Strip custom-domain prefixes for auth/baseball/football workers; avoid 404s.
+- Fix: Worker-to-worker must use `.workers.dev`; prod auth-worker enables `workers_dev: true`.
+- Fix: Credential check returns 200 with `hasCredentials: false` instead of 404.
+- Fix: Trailing slash env URLs no longer break onboarding; timeouts resolved by direct URLs.
+- Security: JWKS-based JWT verification enforced in prod; workers forward `Authorization`.
+- Infra: Secrets for prod workers set via Cloudflare Dashboard (not `wrangler secret put`).
+- Docs: Added onboarding explanation, DNS setup, and timeout/404 troubleshooting.
 
 ## [6.1.0] - 2025-07-08
+- Updated to React 19.1.0 / Next.js 15.3.4. 
+- Migrated worker configs to `wrangler.jsonc`; fixed Next.js route handler builds.
 
-- **Changed**: Modernized all worker configurations from `wrangler.toml` to `wrangler.jsonc` and updated compatibility dates.
-- **Changed**: Upgraded the platform to **React 19.1.0** and **Next.js 15.3.4**.
-- **Fixed**: Resolved build failures related to Next.js 15 Route Handler signatures and introduced reusable DTOs in `types/api-responses.ts`.
+## [6.0.0]
+- Added unified dev/prod scripts (now replaced by GitOps); centralized auth-worker; moved credentials to Supabase.
 
-## [6.0.0] - 2024-12-XX
+## [4.1.1]
+- Added automatic ESPN league discovery.
 
-- **Added**: Introduced a unified, interactive development launcher (`start.sh`) and a deterministic production build script (`build.sh`).
-- **Added**: Migrated credential storage from Durable Objects to **Cloudflare KV with AES-GCM encryption**.
-- **Changed**: Replaced the development workflow (`start-dev.sh`, `build-prod.sh`) with the new unified scripts.
-- **Changed**: The architecture was overhauled to use a centralized `auth-worker`, making sport-specific workers stateless and more secure.
+## [4.1.0]
+- Extracted modular `flaim/auth`; added football MCP worker; raised free tier limit to 100 messages/month.
 
-## [4.1.1] - 2024-12-15
+## [4.0.0]
+- Security fix: removed header spoofing by enforcing server-side Clerk verification.
 
-- **Added**: **Automatic League Discovery** via ESPN's v3 dashboard API, eliminating the need for manual league ID entry.
+## [3.0.0]
+- Integrated Clerk auth; added usage tracking and secure credential management.
 
-## [4.1.0] - 2024-12-14
+## [2.0.0]
+- Introduced Stripe-first microservices architecture with OpenAI chat (later simplified).
 
-- **Added**: Extracted a modular `flaim/auth` module for cross-platform authentication.
-- **Added**: Introduced multi-sport support with a dedicated Football MCP worker.
-- **Changed**: Increased the free tier usage limit from 15 to 100 messages per month.
-
-## [4.0.0] - 2024-12-01
-
-- **Security**: **CRITICAL**: Fixed a header spoofing vulnerability (CVE-2024-FLAIM-001) that could allow credential access impersonation. Implemented server-side Clerk session verification for all sensitive operations.
-- **Changed**: Replaced header-based authentication with token-based server-side verification.
-- **Deprecated**: Legacy OAuth components and header-based authentication.
-
-## [3.0.0] - 2024-11-15
-
-- **Added**: Integrated **Clerk** for authentication, replacing the previous custom JWT solution.
-- **Added**: Introduced a usage tracking system and secure, per-user credential management.
-- **Removed**: Simplified the architecture by removing the complex, Stripe-first microservices approach to focus on core functionality.
-
-## [2.0.0] - 2024-10-01
-
-- **Added**: Introduced a Stripe-first microservices architecture with custom JWT authentication and a full OpenAI chat interface.
-
-## [1.0.0] - 2024-09-01
-
-- **Added**: Initial release with basic, read-only fantasy sports data fetching from ESPN and a simple web interface.
+## [1.0.0]
+- Initial release with basic ESPN data and simple web UI.
