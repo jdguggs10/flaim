@@ -139,7 +139,7 @@ export class EspnSupabaseStorage {
 
       const { data, error } = await this.supabase
         .from('espn_credentials')
-        .select('id')
+        .select('clerk_user_id')
         .eq('clerk_user_id', clerkUserId)
         .single();
 
@@ -194,7 +194,7 @@ export class EspnSupabaseStorage {
   async getUserLeagues(clerkUserId: string): Promise<Array<{ leagueId: string; sport: string }> | null> {
     const leagues = await this.getLeagues(clerkUserId);
     if (!leagues || leagues.length === 0) return null;
-    
+
     return leagues.map(league => ({
       leagueId: league.leagueId,
       sport: league.sport
@@ -207,7 +207,7 @@ export class EspnSupabaseStorage {
   async setLeagues(clerkUserId: string, leagues: EspnLeague[]): Promise<boolean> {
     try {
       if (!clerkUserId) return false;
-      
+
       if (leagues.length > 10) {
         throw new Error('Maximum of 10 leagues allowed per user');
       }
@@ -284,16 +284,16 @@ export class EspnSupabaseStorage {
   async addLeague(clerkUserId: string, league: EspnLeague): Promise<boolean> {
     try {
       const existingLeagues = await this.getLeagues(clerkUserId);
-      
+
       // Check for duplicates
       const isDuplicate = existingLeagues.some(
         existing => existing.leagueId === league.leagueId && existing.sport === league.sport
       );
-      
+
       if (isDuplicate) {
         throw new Error(`League ${league.leagueId} for ${league.sport} already exists`);
       }
-      
+
       // Check league limit
       if (existingLeagues.length >= 10) {
         throw new Error('Maximum of 10 leagues allowed per user');
@@ -353,7 +353,7 @@ export class EspnSupabaseStorage {
   async updateLeague(clerkUserId: string, leagueId: string, updates: Partial<EspnLeague>): Promise<boolean> {
     try {
       const updateData: any = {};
-      
+
       if (updates.teamId !== undefined) updateData.team_id = updates.teamId;
       if (updates.teamName !== undefined) updateData.team_name = updates.teamName;
       if (updates.leagueName !== undefined) updateData.league_name = updates.leagueName;
@@ -384,10 +384,10 @@ export class EspnSupabaseStorage {
   /**
    * Get all data for a user (credentials + leagues)
    */
-  async getUserData(clerkUserId: string): Promise<{ 
-    hasCredentials: boolean; 
-    leagues: EspnLeague[]; 
-    metadata?: any 
+  async getUserData(clerkUserId: string): Promise<{
+    hasCredentials: boolean;
+    leagues: EspnLeague[];
+    metadata?: any
   }> {
     try {
       const [hasCredentials, leagues, metadata] = await Promise.all([

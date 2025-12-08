@@ -28,7 +28,7 @@
     "jest": "^29.7.0",
     "ts-jest": "^29.4.0",
     "typescript": "^5.0.0",
-    "wrangler": "^4.25.0"
+    "wrangler": "^4.53.0"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.52.0"

@@ -31,7 +31,8 @@ All credential endpoints require the `X-Clerk-User-ID` header containing the Cle
 ### 1. Create Supabase Project
 - Go to https://supabase.com/dashboard
 - Create new project and note the project URL
-- Run the database schema from `docs/dev/KV_TO_SUPABASE_CONVERSION_GUIDE.md`
+- Create new project and note the project URL
+- Run the database schema from `docs/SUPABASE_SETUP.md`
 
 ### 2. Configure Cloudflare Secrets
 ```bash
@@ -69,7 +70,8 @@ npm run deploy
 ## Environment Variables
 
 - `SUPABASE_URL` - Supabase project URL
-- `SUPABASE_SERVICE_KEY` - Supabase service role key (set via wrangler secret)
+- `SUPABASE_URL` - Supabase project URL
+- `SUPABASE_SERVICE_KEY` - Supabase Secret Key (sb_secret_...) (set via wrangler secret)
 - `NODE_ENV` - Environment (development/production)
 
 ## Supabase Integration

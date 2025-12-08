@@ -98,7 +98,8 @@ NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL=/
 ```bash
 # Required for Supabase integration
 SUPABASE_URL=https://your-project-ref.supabase.co
-SUPABASE_SERVICE_KEY=your-service-role-key
+# Use your "Secret Key" (sb_secret_...) for new projects (post-May 2025)
+SUPABASE_SERVICE_KEY=sb_secret_...
 
 # Required for production security
 CLERK_SECRET_KEY=sk_test_your-clerk-secret-key
