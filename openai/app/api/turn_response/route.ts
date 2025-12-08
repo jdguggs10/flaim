@@ -145,7 +145,8 @@ export async function POST(request: NextRequest) {
     // Increment usage after successful API call setup
     SimpleUsageTracker.incrementUsage(userId);
 
-    // Create a ReadableStream that emits SSE data
+    // Create a ReadableStream that emits SSE data (edge runtime requires Uint8Array)
+    const encoder = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {
         try {
@@ -155,7 +156,7 @@ export async function POST(request: NextRequest) {
               event: event.type,
               data: event,
             });
-            controller.enqueue(`data: ${data}\n\n`);
+            controller.enqueue(encoder.encode(`data: ${data}\n\n`));
           }
           // End of stream
           controller.close();
