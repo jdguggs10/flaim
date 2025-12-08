@@ -37,16 +37,22 @@ export class McpAgent {
 
       const url = new URL(request.url);
       
+      // Strip /baseball prefix if present (custom domain routing)
+      let pathname = url.pathname;
+      if (pathname.startsWith('/baseball')) {
+        pathname = pathname.slice(9) || '/';
+      }
+      
       // Handle MCP endpoints
-      if (url.pathname === '/mcp/tools/list') {
+      if (pathname === '/mcp/tools/list') {
         return this.handleToolsList(clerkUserId, corsHeaders);
       }
       
-      if (url.pathname === '/mcp/tools/call') {
+      if (pathname === '/mcp/tools/call') {
         return this.handleToolCall(request, clerkUserId, corsHeaders, env);
       }
       
-      if (url.pathname === '/mcp') {
+      if (pathname === '/mcp') {
         return this.handleMcpRoot(corsHeaders);
       }
 
