@@ -123,6 +123,7 @@ export async function POST(request: NextRequest) {
     const { messages, tools } = await request.json() as TurnResponseRequest;
     
     console.log("Received messages:", messages);
+    console.log("Received tools:", tools);
     console.log(`User ${userId} making API call`);
 
     if (!messages) {
