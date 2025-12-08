@@ -36,6 +36,59 @@ Before you begin, ensure you have the following installed:
 
 ---
 
+## User Onboarding Flow
+
+Understanding the complete onboarding flow is critical for debugging and extending FLAIM. Here's how a user progresses from signup to using the AI assistant:
+
+### Step 1: Authentication (Clerk)
+- User visits the site and signs in/up via Clerk
+- Clerk establishes user identity with a unique `userId`
+- Frontend receives Clerk session with JWT token
+
+### Step 2: ESPN Credentials Setup
+- User navigates to ESPN credential input page
+- User provides their ESPN `SWID` and `espn_s2` cookies
+- Frontend calls `/api/auth/espn/credentials` (POST)
+- Vercel API route forwards request to auth-worker with Clerk JWT
+- Auth-worker stores credentials in Supabase `espn_credentials` table, keyed by Clerk `userId`
+
+### Step 3: League Selection
+- User inputs league IDs for their fantasy leagues (baseball, football, etc.)
+- Frontend calls `/api/auth/espn/leagues` (POST)
+- Vercel API route forwards to auth-worker
+- Auth-worker stores league data in Supabase `espn_leagues` table, linked to user's Clerk ID
+
+### Step 4: Auto-Pull League Details
+- User clicks "Setup League" to fetch additional league metadata
+- Frontend calls `/api/onboarding/espn/auto-pull` (POST) with `{sport, leagueId}`
+- Vercel route determines which sport worker to call (baseball/football)
+- Vercel forwards request to sport worker's `/onboarding/initialize` endpoint
+- **Sport worker flow:**
+  1. Receives Clerk userId and JWT via headers
+  2. Calls auth-worker `/credentials/espn` to retrieve ESPN cookies
+  3. Calls auth-worker `/leagues` to retrieve user's leagues
+  4. Calls ESPN API with credentials to fetch league name, standings, teams
+  5. Returns enriched league data to frontend
+- Frontend displays league details and completes onboarding
+
+### Critical Architecture Notes
+
+**Worker-to-Worker Communication:**
+- MCP workers (baseball, football) call auth-worker internally
+- These internal calls MUST use direct `.workers.dev` URLs
+- Custom domain routes (`api.flaim.app/*`) are for external clients only
+
+**External Client Communication:**
+- Frontend (Vercel) calls workers via custom domain routes
+- These use `https://api.flaim.app/auth`, `https://api.flaim.app/baseball`, etc.
+
+**Why This Matters:**
+- Custom domain routes add path prefixes and may require additional auth
+- Worker-to-worker calls with custom domains can cause timeouts or routing loops
+- Always use direct worker URLs for internal communication
+
+---
+
 ## Deployment & Configuration
 
 FLAIM uses a GitOps workflow for all deployments. The complex `start.sh` script has been removed in favor of standard npm commands and Vercel's native Git integration for the frontend.
@@ -118,14 +171,26 @@ NODE_ENV=production  # or "development"
 ENVIRONMENT=prod     # or "preview", "dev"
 ```
 
-#### MCP Workers (Required)
+#### MCP Workers (Baseball/Football) (Required)
 ```bash
 # Required for auth-worker communication
-AUTH_WORKER_URL=https://your-auth-worker.workers.dev
+# CRITICAL: Use direct .workers.dev URL, NOT custom domain
+AUTH_WORKER_URL=https://auth-worker.YOUR-ACCOUNT.workers.dev
 
 # Optional for Clerk verification
 CLERK_SECRET_KEY=sk_test_your-clerk-secret-key
+
+# Environment configuration (set via wrangler.jsonc)
+NODE_ENV=production  # or "development"
+ENVIRONMENT=prod     # or "preview", "dev"
 ```
+
+**CRITICAL - Worker-to-Worker URLs:**
+- `AUTH_WORKER_URL` MUST use the direct `.workers.dev` URL
+- ❌ WRONG: `https://api.flaim.app/auth` (custom domain - causes timeouts)
+- ✅ CORRECT: `https://auth-worker.YOUR-ACCOUNT.workers.dev`
+- Custom domains are for external clients only (Vercel frontend)
+- Worker-to-worker calls need direct URLs to avoid routing overhead
 
 ---
 
@@ -222,6 +287,48 @@ if (pathname.startsWith('/auth')) {
   pathname = pathname.slice(5) || '/';
 }
 ```
+
+### Onboarding Auto-Pull Timeouts (504 Gateway Timeout)
+
+**Error:** Auto-pull during onboarding times out after 25-30 seconds. Vercel logs show "504 Gateway Timeout" or "Your function was stopped as it did not return an initial response within 25s".
+
+**Cause:** MCP workers (baseball/football) have `AUTH_WORKER_URL` set to custom domain (`https://api.flaim.app/auth`) instead of direct worker URL.
+
+**Why it fails:**
+1. Baseball worker calls `AUTH_WORKER_URL/credentials/espn`
+2. Custom domain adds routing overhead and may trigger additional auth checks
+3. Request hangs or times out waiting for response
+4. Vercel edge function hits 25-second limit before sport worker responds
+
+**Fix:** Update `AUTH_WORKER_URL` in Cloudflare Dashboard for baseball and football workers:
+1. Go to **Cloudflare Dashboard** → **Workers & Pages** → Select worker (baseball-espn-mcp or football-espn-mcp)
+2. Click **Settings** → **Variables and Secrets**
+3. Update `AUTH_WORKER_URL` to direct worker URL:
+   - ❌ WRONG: `https://api.flaim.app/auth`
+   - ✅ CORRECT: `https://auth-worker.YOUR-ACCOUNT.workers.dev`
+4. Redeploy workers or wait for automatic propagation
+
+**Verification:**
+```bash
+# Test that onboarding endpoint responds quickly (should be < 10 seconds)
+curl -X POST https://api.flaim.app/baseball/onboarding/initialize \
+  -H "Content-Type: application/json" \
+  -H "X-Clerk-User-ID: test" \
+  -d '{"sport":"baseball","leagueId":"123"}' \
+  --max-time 15
+```
+
+**Remember:** Custom domains are for external clients (Vercel frontend) only. Worker-to-worker communication must use direct `.workers.dev` URLs.
+
+### Trailing Slash in Worker URLs
+
+**Error:** Auto-pull returns 404 even though worker is deployed and accessible.
+
+**Cause:** Environment variables have trailing slashes (e.g., `https://api.flaim.app/baseball/`), creating double-slash URLs like `https://api.flaim.app/baseball//onboarding/initialize`.
+
+**Fix:** Remove trailing slashes from all worker URLs in Vercel environment variables:
+- ❌ WRONG: `https://api.flaim.app/baseball/`
+- ✅ CORRECT: `https://api.flaim.app/baseball`
 
 ### Build & Deployment Issues
 

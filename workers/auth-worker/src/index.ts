@@ -62,15 +62,31 @@ async function fetchJwks(issuer: string): Promise<Map<string, Jwk>> {
   }
 
   const wellKnown = issuer.replace(/\/$/, '') + '/.well-known/jwks.json';
-  const res = await fetch(wellKnown, { cf: { cacheTtl: 300, cacheEverything: true } });
-  if (!res.ok) throw new Error(`Failed to fetch JWKS from ${wellKnown}: ${res.status}`);
-  const data = await res.json() as { keys: Jwk[] };
-  const map = new Map<string, Jwk>();
-  for (const k of data.keys || []) {
-    if (k.kid) map.set(k.kid, k);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+  try {
+    const res = await fetch(wellKnown, {
+      signal: controller.signal,
+      cf: { cacheTtl: 300, cacheEverything: true }
+    });
+    clearTimeout(timeoutId);
+
+    if (!res.ok) throw new Error(`Failed to fetch JWKS from ${wellKnown}: ${res.status}`);
+    const data = await res.json() as { keys: Jwk[] };
+    const map = new Map<string, Jwk>();
+    for (const k of data.keys || []) {
+      if (k.kid) map.set(k.kid, k);
+    }
+    jwksCache.set(issuer, { keysByKid: map, fetchedAt: now });
+    return map;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error(`JWKS fetch timeout for ${wellKnown}`);
+    }
+    throw error;
   }
-  jwksCache.set(issuer, { keysByKid: map, fetchedAt: now });
-  return map;
 }
 
 async function importRsaPublicKey(jwk: Jwk): Promise<CryptoKey> {

@@ -9,9 +9,12 @@ All notable changes to FLAIM will be documented in this file. The format is base
 ### Custom Domain Routing & Production Deployment
 
 - **Fixed**: Auth-worker now correctly handles custom domain routes by stripping `/auth` prefix from incoming requests (e.g., `api.flaim.app/auth/health` → checks `/health`)
+- **Fixed**: Baseball and football workers strip `/baseball` and `/football` prefixes respectively for custom domain routing
 - **Fixed**: Credential check endpoint returns 200 with `hasCredentials: false` instead of 404 when no credentials exist, eliminating misleading console errors
+- **Fixed**: Onboarding auto-pull timeouts caused by worker-to-worker communication using custom domain URLs instead of direct `.workers.dev` URLs
+- **Fixed**: Trailing slashes in Vercel worker URLs causing double-slash 404 errors (e.g., `baseball//onboarding/initialize`)
 - **Changed**: Production deployment now requires Cloudflare worker secrets to be set via Dashboard (not `wrangler secret put`) for workers with custom routes
-- **Documentation**: Added DNS setup guide, environment variable format requirements, and troubleshooting for common production errors
+- **Documentation**: Added comprehensive onboarding flow explanation, worker-to-worker URL requirements, DNS setup guide, and troubleshooting for timeout/404 errors
 
 ### ESPN Auth Flow Reliability
 
