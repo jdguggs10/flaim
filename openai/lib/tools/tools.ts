@@ -24,6 +24,8 @@ export const getTools = () => {
     selectedSport,
     selectedPlatform,
     isAuthenticated,
+    clerkUserId,
+    clerkToken,
   } = useToolsStore.getState();
 
   const tools = [];
@@ -77,19 +79,24 @@ export const getTools = () => {
     );
   }
 
-  // Only enable MCP when both Baseball and ESPN are selected AND user is authenticated
-  const shouldEnableMcp = selectedSport === "baseball" && selectedPlatform === "ESPN" && isAuthenticated;
-  
-  if (mcpEnabled && shouldEnableMcp && mcpConfig.server_url && mcpConfig.server_label) {
+  // Enable MCP for authenticated ESPN users when a server is configured
+  const shouldEnableMcp =
+    selectedPlatform === "ESPN" &&
+    isAuthenticated &&
+    !!mcpConfig.server_url &&
+    !!mcpConfig.server_label;
+
+  if (mcpEnabled && shouldEnableMcp) {
     // Follow documented pattern from Responses API & MCP Tools docs
     const mcpTool: any = {
       type: "mcp",
       server_label: mcpConfig.server_label,
       server_url: mcpConfig.server_url,
-      // Add headers for authentication if needed (following docs pattern)
       headers: {
-        "Content-Type": "application/json"
-      }
+        "Content-Type": "application/json",
+        ...(clerkUserId ? { "X-Clerk-User-ID": clerkUserId } : {}),
+        ...(clerkToken ? { Authorization: `Bearer ${clerkToken}` } : {}),
+      },
     };
     
     // Set approval requirement (following docs pattern)

@@ -1,6 +1,6 @@
 "use client";
 import React from "react";
-import { useUser, SignInButton, SignUpButton } from '@clerk/nextjs';
+import { useUser, SignInButton, SignUpButton, useAuth } from '@clerk/nextjs';
 import Chat from "./chat";
 import useConversationStore from "@/stores/useConversationStore";
 import { Item, processMessages } from "@/lib/assistant";
@@ -81,8 +81,28 @@ export default function Assistant() {
     setMcpConfig,
     setSelectedSport,
     setSelectedPlatform: setToolsPlatform,
-    setIsAuthenticated: setToolsAuthenticated
+    setIsAuthenticated: setToolsAuthenticated,
+    setClerkUserId,
+    setClerkToken
   } = useToolsStore();
+
+  // Sync Clerk identity + token into tools store for MCP auth headers
+  const { userId: clerkUserId, getToken } = useAuth();
+  React.useEffect(() => {
+    const syncClerkAuth = async () => {
+      if (!isSignedIn || isLoading) return;
+      setClerkUserId(clerkUserId || "");
+      try {
+        const token = (await getToken?.()) || "";
+        if (token) {
+          setClerkToken(token);
+        }
+      } catch (error) {
+        console.warn("Unable to fetch Clerk token for MCP", error);
+      }
+    };
+    void syncClerkAuth();
+  }, [isSignedIn, isLoading, clerkUserId, getToken, setClerkUserId, setClerkToken]);
 
   // Sync onboarding completion with tools store
   React.useEffect(() => {

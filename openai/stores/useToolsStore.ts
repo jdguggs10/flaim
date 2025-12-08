@@ -54,6 +54,10 @@ interface StoreState {
   selectedPlatform: string;
   setSelectedPlatform: (platform: string) => void;
   // ESPN Authentication
+  clerkUserId: string;
+  clerkToken: string;
+  setClerkUserId: (id: string) => void;
+  setClerkToken: (token: string) => void;
   userEmail: string;
   setUserEmail: (email: string) => void;
   espnS2: string;
@@ -85,6 +89,8 @@ const useToolsStore = create<StoreState>()(
       selectedSport: "none",
       selectedPlatform: "None",
       // ESPN Authentication
+      clerkUserId: "",
+      clerkToken: "",
       userEmail: "",
       espnS2: "",
       espnSWID: "",
@@ -117,6 +123,8 @@ const useToolsStore = create<StoreState>()(
       setSelectedSport: (sport) => set({ selectedSport: sport.toLowerCase() }),
       setSelectedPlatform: (platform) => set({ selectedPlatform: platform }),
       // ESPN Authentication actions
+      setClerkUserId: (id) => set({ clerkUserId: id }),
+      setClerkToken: (token) => set({ clerkToken: token }),
       setUserEmail: (email) => set({ userEmail: email }),
       setEspnS2: (s2) => set({ espnS2: s2 }),
       setEspnSWID: (swid) => set({ espnSWID: swid }),
