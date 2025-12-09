@@ -28,6 +28,9 @@ export const getTools = () => {
     clerkToken,
   } = useToolsStore.getState();
 
+  // Allow disabling MCP entirely via env flag
+  const mcpGloballyDisabled = process.env.NEXT_PUBLIC_DISABLE_MCP === "true";
+
   const tools = [];
 
   if (webSearchEnabled) {
@@ -86,7 +89,7 @@ export const getTools = () => {
     !!mcpConfig.server_url &&
     !!mcpConfig.server_label;
 
-  if (mcpEnabled && shouldEnableMcp) {
+  if (!mcpGloballyDisabled && mcpEnabled && shouldEnableMcp) {
     // Follow documented pattern from Responses API & MCP Tools docs
     const mcpTool: any = {
       type: "mcp",

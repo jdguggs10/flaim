@@ -136,8 +136,8 @@ export default function ContextPanel() {
         {/* MCP Tools */}
         {shouldShowMcp && (
           <PanelConfig
-            title={`Fantasy ${sportConfig?.name || 'Sports'} Tools`}
-            tooltip={`Enable fantasy ${sportConfig?.name?.toLowerCase() || 'sports'} analysis tools via ${onboardingPlatform || selectedPlatform} MCP server`}
+            title={`Fantasy ${sportConfig?.name || 'Sports'} Tools (AI toggle)`}
+            tooltip={`Turn this off to hide MCP tools from the AI (no tools advertised to OpenAI). Turn on to enable fantasy ${sportConfig?.name?.toLowerCase() || 'sports'} tools via ${onboardingPlatform || selectedPlatform} MCP.`}
             enabled={mcpEnabled}
             setEnabled={setMcpEnabled}
             icon={<Zap size={16} />}

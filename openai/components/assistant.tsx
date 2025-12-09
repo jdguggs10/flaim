@@ -88,6 +88,7 @@ export default function Assistant() {
 
   // Sync Clerk identity + token into tools store for MCP auth headers
   const { userId: clerkUserId, getToken } = useAuth();
+  const mcpGloballyDisabled = process.env.NEXT_PUBLIC_DISABLE_MCP === "true";
   React.useEffect(() => {
     const syncClerkAuth = async () => {
       if (!isSignedIn || isLoading) return;
@@ -129,10 +130,10 @@ export default function Assistant() {
           allowed_tools: mcpConfig.allowed_tools.join(','),
           skip_approval: mcpConfig.require_approval === 'never'
         });
-        setMcpEnabled(true);
+        setMcpEnabled(!mcpGloballyDisabled);
       }
     }
-  }, [onboardingComplete, activeLeagueKey, selectedPlatform, espnLeagues, getActiveLeague, setMcpEnabled, setMcpConfig, setSelectedSport, setToolsPlatform, setToolsAuthenticated]);
+  }, [onboardingComplete, activeLeagueKey, selectedPlatform, espnLeagues, getActiveLeague, setMcpEnabled, setMcpConfig, setSelectedSport, setToolsPlatform, setToolsAuthenticated, mcpGloballyDisabled]);
 
   // Hydrate leagues once Clerk has finished loading and the user is signed in
   React.useEffect(() => {
