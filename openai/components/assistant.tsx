@@ -94,7 +94,7 @@ export default function Assistant() {
       if (!isSignedIn || isLoading) return;
       setClerkUserId(clerkUserId || "");
       try {
-        const token = (await getToken?.()) || "";
+        const token = (await getToken?.({ template: "cf-worker" })) || "";
         if (token) {
           setClerkToken(token);
         }
