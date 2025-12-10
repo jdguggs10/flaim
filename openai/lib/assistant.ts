@@ -89,7 +89,24 @@ export const handleTurn = async (
     });
 
     if (!response.ok) {
-      console.error(`Error: ${response.status} - ${response.statusText}`);
+      let errorDetails = `${response.status} - ${response.statusText}`;
+      try {
+        const errorData = (await response.json()) as any;
+        errorDetails = errorData?.error || errorData?.details || errorDetails;
+        console.error(`[ERROR] API request failed:`, errorData);
+      } catch {
+        console.error(
+          `[ERROR] API request failed: ${response.status} - ${response.statusText}`
+        );
+      }
+      // Add error message to chat
+      onMessage({
+        event: 'error',
+        data: {
+          error: errorDetails,
+          status: response.status
+        }
+      });
       return;
     }
 
@@ -538,6 +555,27 @@ export const processMessages = async () => {
           setChatMessages([...chatMessages]);
         }
 
+        break;
+      }
+
+      case "error": {
+        // Handle API errors
+        const { error, status } = data;
+        console.error(`[ERROR] API error:`, error);
+
+        // Add error message to chat
+        chatMessages.push({
+          type: "message",
+          role: "assistant",
+          content: [
+            {
+              type: "output_text",
+              text: `❌ Error: ${error}${status ? ` (Status: ${status})` : ''}\n\nPlease try again or check your configuration.`,
+            },
+          ],
+        });
+        setChatMessages([...chatMessages]);
+        setAssistantLoading(false);
         break;
       }
 
