@@ -90,6 +90,26 @@ export const getTools = () => {
     !!mcpConfig.server_label;
 
   if (!mcpGloballyDisabled && mcpEnabled && shouldEnableMcp) {
+    // Validate MCP server URL
+    if (
+      !mcpConfig.server_url.startsWith("http://") &&
+      !mcpConfig.server_url.startsWith("https://")
+    ) {
+      console.error("[ERROR] Invalid MCP server URL:", mcpConfig.server_url);
+      return tools;
+    }
+
+    // Validate required auth headers are present
+    if (!clerkUserId || !clerkToken) {
+      console.warn(
+        "[WARN] MCP enabled but missing Clerk authentication. User ID:",
+        !!clerkUserId,
+        "Token:",
+        !!clerkToken
+      );
+      // Still proceed - some MCP servers might not require auth
+    }
+
     // Follow documented pattern from Responses API & MCP Tools docs
     const mcpTool: any = {
       type: "mcp",
@@ -101,27 +121,24 @@ export const getTools = () => {
         ...(clerkToken ? { Authorization: `Bearer ${clerkToken}` } : {}),
       },
     };
-    
+
     // Set approval requirement (following docs pattern)
     if (mcpConfig.skip_approval) {
       mcpTool.require_approval = "never";
     } else {
       mcpTool.require_approval = "manual";
     }
-    
+
     // Set allowed tools to limit what gets exposed (following docs pattern)
-    if (mcpConfig.allowed_tools.trim()) {
-      mcpTool.allowed_tools = mcpConfig.allowed_tools
-        .split(",")
+    const allowedTools = (mcpConfig.allowed_tools || "").trim();
+    if (allowedTools) {
+      mcpTool.allowed_tools = allowedTools.split(",")
         .map((t) => t.trim())
         .filter((t) => t);
     }
-    
-    console.log("MCP Tool Configuration:", JSON.stringify(mcpTool, null, 2));
+
     tools.push(mcpTool);
   }
-
-  console.log("tools", tools);
 
   return tools;
 };

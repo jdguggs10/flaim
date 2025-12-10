@@ -121,10 +121,6 @@ export async function POST(request: NextRequest) {
 
     const { userId } = authResult;
     const { messages, tools } = await request.json() as TurnResponseRequest;
-    
-    console.log("Received messages:", messages);
-    console.log("Received tools:", tools);
-    console.log(`User ${userId} making API call`);
 
     if (!messages) {
       return NextResponse.json(
@@ -133,15 +129,57 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Debug: Log tool configuration (without sensitive headers)
+    if (tools && tools.length > 0) {
+      const sanitizedTools = tools.map(tool => {
+        if (tool.type === 'mcp') {
+          return {
+            type: tool.type,
+            server_label: tool.server_label,
+            server_url: tool.server_url,
+            has_auth: !!tool.headers?.Authorization,
+            has_user_id: !!tool.headers?.['X-Clerk-User-ID'],
+            allowed_tools: tool.allowed_tools,
+            require_approval: tool.require_approval
+          };
+        }
+        return { type: tool.type };
+      });
+      console.log(`[DEBUG] User ${userId} sending ${tools.length} tools:`, JSON.stringify(sanitizedTools));
+    }
+
     const openai = new OpenAI();
 
-    const events = await openai.responses.create({
-      model: MODEL,
-      input: messages,
-      tools: tools || [],
-      stream: true,
-      parallel_tool_calls: false,
-    });
+    let events;
+    try {
+      events = await openai.responses.create({
+        model: MODEL,
+        input: messages,
+        tools: tools || [],
+        stream: true,
+        parallel_tool_calls: false,
+      });
+    } catch (error: any) {
+      const statusCode =
+        typeof error?.status === "number" && error.status >= 100
+          ? error.status
+          : 500;
+      const message = error?.message || "Unknown error";
+      console.error(`[ERROR] OpenAI API call failed for user ${userId}:`, {
+        message,
+        status: statusCode,
+        type: error?.type,
+        code: error?.code,
+      });
+      return NextResponse.json(
+        {
+          error: "Failed to process request",
+          details: message,
+          debug: process.env.NODE_ENV === "development" ? error : undefined,
+        },
+        { status: statusCode }
+      );
+    }
 
     // Increment usage after successful API call setup
     SimpleUsageTracker.incrementUsage(userId);
