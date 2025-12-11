@@ -16,6 +16,25 @@ export interface McpResponse {
   isError?: boolean;
 }
 
+// JSON-RPC 2.0 types for MCP protocol
+interface JsonRpcRequest {
+  jsonrpc: "2.0";
+  method: string;
+  params?: Record<string, any>;
+  id?: string | number | null;
+}
+
+interface JsonRpcResponse {
+  jsonrpc: "2.0";
+  result?: any;
+  error?: {
+    code: number;
+    message: string;
+    data?: any;
+  };
+  id: string | number | null;
+}
+
 export class FootballMcpAgent {
   constructor() {}
 
@@ -23,7 +42,7 @@ export class FootballMcpAgent {
     const corsHeaders = {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Clerk-User-ID',
     };
 
     if (request.method === 'OPTIONS') {
@@ -32,44 +51,45 @@ export class FootballMcpAgent {
 
     try {
       // Extract Clerk user ID from headers (preferred) or fallback to anonymous
-      const clerkUserId = request.headers.get('X-Clerk-User-ID') || 
+      const clerkUserId = request.headers.get('X-Clerk-User-ID') ||
                          new URL(request.url).searchParams.get('clerkUserId') ||
                          'anonymous';
 
       const url = new URL(request.url);
-      
+
       // Strip /football prefix if present (custom domain routing)
       let pathname = url.pathname;
       if (pathname.startsWith('/football')) {
         pathname = pathname.slice(9) || '/';
       }
-      
-      // Handle MCP endpoints
+
+      // Legacy REST endpoints (for backwards compatibility with direct testing)
       if (pathname === '/mcp/tools/list') {
-        return this.handleToolsList(clerkUserId, corsHeaders);
-      }
-      
-      if (pathname === '/mcp/tools/call') {
-        return this.handleToolCall(request, clerkUserId, corsHeaders, env);
-      }
-      
-      if (pathname === '/mcp') {
-        return this.handleMcpRoot(corsHeaders);
+        return this.handleToolsListLegacy(clerkUserId, corsHeaders);
       }
 
-      return new Response('Not Found', { 
-        status: 404, 
-        headers: corsHeaders 
+      if (pathname === '/mcp/tools/call') {
+        return this.handleToolCallLegacy(request, clerkUserId, corsHeaders, env);
+      }
+
+      // Main MCP endpoint - handles JSON-RPC 2.0 protocol (required by OpenAI)
+      if (pathname === '/mcp') {
+        return this.handleJsonRpc(request, clerkUserId, corsHeaders, env);
+      }
+
+      return new Response('Not Found', {
+        status: 404,
+        headers: corsHeaders
       });
 
     } catch (error) {
       console.error('Football MCP Agent error:', error);
-      
+
       if (error instanceof Response) {
         return error;
       }
 
-      return new Response(JSON.stringify({ 
+      return new Response(JSON.stringify({
         error: 'Internal server error',
         message: error instanceof Error ? error.message : 'Unknown error'
       }), {
@@ -79,24 +99,175 @@ export class FootballMcpAgent {
     }
   }
 
-  private async handleMcpRoot(corsHeaders: Record<string, string>): Promise<Response> {
-    return new Response(JSON.stringify({
-      name: 'ESPN Fantasy Football MCP Server',
-      version: '1.0.0',
-      description: 'Open access MCP server for ESPN fantasy football data',
-      sport: 'football',
+  /**
+   * Handle JSON-RPC 2.0 requests (MCP Streamable HTTP transport)
+   * This is the protocol OpenAI's Responses API uses for MCP tools
+   */
+  private async handleJsonRpc(request: Request, clerkUserId: string, corsHeaders: Record<string, string>, env: Env): Promise<Response> {
+    // GET requests return server info (for discovery)
+    if (request.method === 'GET') {
+      return new Response(JSON.stringify({
+        name: 'fantasy-football-mcp',
+        version: '1.0.0',
+        description: 'ESPN Fantasy Football MCP Server',
+        capabilities: {
+          tools: true,
+          resources: false,
+          prompts: false
+        }
+      }), {
+        headers: { 'Content-Type': 'application/json', ...corsHeaders }
+      });
+    }
+
+    // POST requests are JSON-RPC 2.0
+    let rpcRequest: JsonRpcRequest;
+    try {
+      rpcRequest = await request.json() as JsonRpcRequest;
+      console.log(`[MCP Football] JSON-RPC request: method=${rpcRequest.method}, id=${rpcRequest.id}`);
+    } catch (e) {
+      return this.jsonRpcError(-32700, 'Parse error: Invalid JSON', null, corsHeaders);
+    }
+
+    // Validate JSON-RPC format
+    if (rpcRequest.jsonrpc !== '2.0') {
+      return this.jsonRpcError(-32600, 'Invalid Request: jsonrpc must be "2.0"', rpcRequest.id ?? null, corsHeaders);
+    }
+
+    const authHeader = request.headers.get('Authorization');
+
+    // Route to appropriate handler based on method
+    switch (rpcRequest.method) {
+      case 'initialize':
+        return this.handleInitialize(rpcRequest, corsHeaders);
+
+      case 'tools/list':
+        return this.handleToolsList(rpcRequest, corsHeaders);
+
+      case 'tools/call':
+        return this.handleToolsCall(rpcRequest, clerkUserId, env, authHeader, corsHeaders);
+
+      case 'ping':
+        return this.jsonRpcSuccess({}, rpcRequest.id ?? null, corsHeaders);
+
+      default:
+        return this.jsonRpcError(-32601, `Method not found: ${rpcRequest.method}`, rpcRequest.id ?? null, corsHeaders);
+    }
+  }
+
+  /**
+   * Handle MCP initialize request
+   */
+  private handleInitialize(rpcRequest: JsonRpcRequest, corsHeaders: Record<string, string>): Response {
+    const result = {
+      protocolVersion: '2024-11-05',
+      serverInfo: {
+        name: 'fantasy-football-mcp',
+        version: '1.0.0'
+      },
       capabilities: {
-        tools: true,
-        resources: false,
-        prompts: false
+        tools: {}
       }
-    }), {
+    };
+    return this.jsonRpcSuccess(result, rpcRequest.id ?? null, corsHeaders);
+  }
+
+  /**
+   * Handle tools/list JSON-RPC method
+   */
+  private handleToolsList(rpcRequest: JsonRpcRequest, corsHeaders: Record<string, string>): Response {
+    const tools = this.getToolDefinitions();
+    return this.jsonRpcSuccess({ tools }, rpcRequest.id ?? null, corsHeaders);
+  }
+
+  /**
+   * Handle tools/call JSON-RPC method
+   */
+  private async handleToolsCall(
+    rpcRequest: JsonRpcRequest,
+    clerkUserId: string,
+    env: Env,
+    authHeader: string | null,
+    corsHeaders: Record<string, string>
+  ): Promise<Response> {
+    const params = rpcRequest.params || {};
+    const toolName = params.name;
+    const toolArgs = params.arguments || {};
+
+    if (!toolName) {
+      return this.jsonRpcError(-32602, 'Invalid params: missing tool name', rpcRequest.id ?? null, corsHeaders);
+    }
+
+    console.log(`[MCP Football] Executing tool: ${toolName} with args:`, JSON.stringify(toolArgs));
+
+    try {
+      const result = await this.executeTool(toolName, toolArgs, clerkUserId, env, authHeader);
+
+      // MCP tools/call response format
+      const callResult = {
+        content: [
+          {
+            type: 'text',
+            text: typeof result.content === 'string' ? result.content : JSON.stringify(result.content)
+          }
+        ],
+        isError: result.isError || false
+      };
+
+      return this.jsonRpcSuccess(callResult, rpcRequest.id ?? null, corsHeaders);
+    } catch (error) {
+      console.error(`[MCP Football] Tool execution error for ${toolName}:`, error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+      // Return error as tool result (not JSON-RPC error) so OpenAI can handle it gracefully
+      const errorResult = {
+        content: [
+          {
+            type: 'text',
+            text: `Tool execution failed: ${errorMessage}`
+          }
+        ],
+        isError: true
+      };
+
+      return this.jsonRpcSuccess(errorResult, rpcRequest.id ?? null, corsHeaders);
+    }
+  }
+
+  /**
+   * Create a JSON-RPC 2.0 success response
+   */
+  private jsonRpcSuccess(result: any, id: string | number | null, corsHeaders: Record<string, string>): Response {
+    const response: JsonRpcResponse = {
+      jsonrpc: '2.0',
+      result,
+      id
+    };
+    return new Response(JSON.stringify(response), {
       headers: { 'Content-Type': 'application/json', ...corsHeaders }
     });
   }
 
-  private async handleToolsList(_clerkUserId: string, corsHeaders: Record<string, string>): Promise<Response> {
-    const tools = [
+  /**
+   * Create a JSON-RPC 2.0 error response
+   */
+  private jsonRpcError(code: number, message: string, id: string | number | null, corsHeaders: Record<string, string>): Response {
+    const response: JsonRpcResponse = {
+      jsonrpc: '2.0',
+      error: { code, message },
+      id
+    };
+    return new Response(JSON.stringify(response), {
+      status: 200, // JSON-RPC errors still return 200 HTTP status
+      headers: { 'Content-Type': 'application/json', ...corsHeaders }
+    });
+  }
+
+  /**
+   * Get tool definitions in MCP format
+   */
+  private getToolDefinitions() {
+    return [
       {
         name: 'get_espn_football_league_info',
         description: 'Get ESPN fantasy football league information',
@@ -156,19 +327,28 @@ export class FootballMcpAgent {
         }
       }
     ];
+  }
 
+  /**
+   * Legacy REST endpoint for tools list (backwards compatibility with curl testing)
+   */
+  private handleToolsListLegacy(_clerkUserId: string, corsHeaders: Record<string, string>): Response {
+    const tools = this.getToolDefinitions();
     return new Response(JSON.stringify({ tools }), {
       headers: { 'Content-Type': 'application/json', ...corsHeaders }
     });
   }
 
-  private async handleToolCall(request: Request, clerkUserId: string, corsHeaders: Record<string, string>, env: Env): Promise<Response> {
+  /**
+   * Legacy REST endpoint for tool calls (backwards compatibility)
+   */
+  private async handleToolCallLegacy(request: Request, clerkUserId: string, corsHeaders: Record<string, string>, env: Env): Promise<Response> {
     const { tool, arguments: args } = await request.json() as McpToolCall;
 
     try {
       const authHeader = request.headers.get('Authorization');
       const result = await this.executeTool(tool, args, clerkUserId, env, authHeader);
-      
+
       return new Response(JSON.stringify({
         content: result.content,
         isError: result.isError || false
@@ -178,7 +358,7 @@ export class FootballMcpAgent {
 
     } catch (error) {
       console.error(`Football tool execution error for ${tool}:`, error);
-      
+
       return new Response(JSON.stringify({
         content: `Football tool execution failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
         isError: true
@@ -193,16 +373,16 @@ export class FootballMcpAgent {
     switch (tool) {
       case 'get_espn_football_league_info':
         return this.getEspnFootballLeagueInfo(args, clerkUserId, env, authHeader);
-      
+
       case 'get_espn_football_team':
         return this.getEspnFootballTeam(args, clerkUserId, env, authHeader);
-      
+
       case 'get_espn_football_matchups':
         return this.getEspnFootballMatchups(args, clerkUserId, env, authHeader);
-        
+
       case 'get_espn_football_standings':
         return this.getEspnFootballStandings(args, clerkUserId, env, authHeader);
-      
+
       default:
         throw new Error(`Unknown football tool: ${tool}`);
     }
@@ -211,7 +391,7 @@ export class FootballMcpAgent {
   private async getEspnFootballLeagueInfo(args: Record<string, any>, clerkUserId: string, env: Env, authHeader?: string | null): Promise<McpResponse> {
     try {
       const footballClient = new EspnFootballApiClient(env, { authHeader });
-      
+
       const { leagueId, seasonId = new Date().getFullYear().toString() } = args;
       const league = await footballClient.fetchLeague(leagueId, parseInt(seasonId), 'mSettings', clerkUserId);
 
@@ -246,7 +426,7 @@ export class FootballMcpAgent {
   private async getEspnFootballTeam(args: Record<string, any>, clerkUserId: string, env: Env, authHeader?: string | null): Promise<McpResponse> {
     try {
       const footballClient = new EspnFootballApiClient(env, { authHeader });
-      
+
       const { leagueId, teamId, seasonId = new Date().getFullYear().toString(), week } = args;
       const teamData = await footballClient.fetchTeam(leagueId, teamId, parseInt(seasonId), week, clerkUserId);
 
@@ -271,7 +451,7 @@ export class FootballMcpAgent {
   private async getEspnFootballMatchups(args: Record<string, any>, clerkUserId: string, env: Env, authHeader?: string | null): Promise<McpResponse> {
     try {
       const footballClient = new EspnFootballApiClient(env, { authHeader });
-      
+
       const { leagueId, week, seasonId = new Date().getFullYear().toString() } = args;
       const matchups = await footballClient.fetchMatchups(leagueId, week, parseInt(seasonId), clerkUserId);
 
@@ -296,7 +476,7 @@ export class FootballMcpAgent {
   private async getEspnFootballStandings(args: Record<string, any>, clerkUserId: string, env: Env, authHeader?: string | null): Promise<McpResponse> {
     try {
       const footballClient = new EspnFootballApiClient(env, { authHeader });
-      
+
       const { leagueId, seasonId = new Date().getFullYear().toString() } = args;
       const standings = await footballClient.fetchStandings(leagueId, parseInt(seasonId), clerkUserId);
 
