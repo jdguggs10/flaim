@@ -59,6 +59,7 @@ ENVIRONMENT=prod|preview|dev
 NODE_ENV=production|development
 ```
 Ensure auth-worker `wrangler.jsonc` enables `"workers_dev": true` in prod so the `.workers.dev` URL exists.
+- MCP transport is JSON-RPC 2.0 via `POST /mcp` (methods: `initialize`, `tools/list`, `tools/call`, `ping`). `GET /mcp` only returns metadata; legacy `/mcp/tools/*` exists solely for manual curl testing.
 
 ## DNS for custom routes
 Cloudflare DNS: `A`, name `api`, IPv4 `192.0.2.1`, proxied (orange). Verify: `curl https://api.flaim.app/auth/health`.
@@ -78,5 +79,6 @@ Cloudflare DNS: `A`, name `api`, IPv4 `192.0.2.1`, proxied (orange). Verify: `cu
 - 500s in prod: missing Cloudflare secrets or wrong `NEXT_PUBLIC_*` URLs.  
 - 404s on custom routes: strip `/auth`, `/baseball`, `/football` prefixes in workers.  
 - 504 onboarding: MCP using custom domain → switch to `.workers.dev`, redeploy; ensure `"workers_dev": true`.  
+- 424 from Responses API: ensure `server_url` ends with `/mcp` and the worker responds to JSON-RPC 2.0 methods (`initialize`, `tools/list`, `tools/call`, `ping`) instead of legacy REST paths.
 - Double slashes: remove trailing slash in env URLs.  
 - ESPN host: use `https://lm-api-reads.fantasy.espn.com` with headers `Cookie: SWID=...; espn_s2=...`, `Accept: application/json`, `X-Fantasy-Source: kona`, `X-Fantasy-Platform: kona-web-2.0.0`.

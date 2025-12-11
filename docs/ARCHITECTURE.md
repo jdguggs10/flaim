@@ -13,6 +13,7 @@ AI-powered fantasy sports assistant using Clerk auth, Supabase storage, and spor
 - MCP workers forward `Authorization`; auth-worker alone validates tokens.
 - Per-user isolation via verified `sub`; credentials never sent back to client after setup.
 - Use `.workers.dev` URLs for worker-to-worker calls; custom domains are frontend-only.
+- MCP transport: `POST /mcp` JSON-RPC 2.0 (Responses API). Methods: `initialize`, `tools/list`, `tools/call`, `ping`. `GET /mcp` returns metadata. Legacy REST under `/mcp/tools/*` kept only for manual curl testing.
 
 ## Data Flow (credentialed requests)
 1) Frontend gets JWT via Clerk → sends to auth-worker.  

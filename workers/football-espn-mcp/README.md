@@ -90,9 +90,13 @@ Configure external AI assistants to use this server:
 ## Endpoints
 
 ### MCP Endpoints (Open Access)
-- `GET /mcp` - Server capabilities
-- `GET /mcp/tools/list` - Available tools
-- `POST /mcp/tools/call` - Execute tools
+- `GET /mcp` - Server metadata (discovery)
+- `POST /mcp` - JSON-RPC 2.0 (Responses API MCP transport) with methods:
+  - `initialize` - Handshake + capabilities
+  - `tools/list` - Tool definitions
+  - `tools/call` - Execute tools (params: `name`, `arguments`)
+  - `ping` - Health check
+  - Legacy REST (`/mcp/tools/list`, `/mcp/tools/call`) remains for manual curl testing only; OpenAI must use `POST /mcp` JSON-RPC.
 
 ### Management Endpoints
 - `GET /health` - Health check
