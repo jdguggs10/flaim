@@ -122,7 +122,12 @@ export class McpAgent {
     // POST requests are JSON-RPC 2.0
     let rpcRequest: JsonRpcRequest;
     try {
-      rpcRequest = await request.json() as JsonRpcRequest;
+      const payload = await request.json();
+      // Validate payload structure before type assertion
+      if (!payload || typeof payload !== 'object' || typeof payload.method !== 'string') {
+        return this.jsonRpcError(-32600, 'Invalid Request: Malformed request payload', payload?.id ?? null, corsHeaders);
+      }
+      rpcRequest = payload as JsonRpcRequest;
       console.log(`[MCP] JSON-RPC request: method=${rpcRequest.method}, id=${rpcRequest.id}`);
     } catch (e) {
       return this.jsonRpcError(-32700, 'Parse error: Invalid JSON', null, corsHeaders);
@@ -193,8 +198,14 @@ export class McpAgent {
     const toolName = params.name;
     const toolArgs = params.arguments || {};
 
-    if (!toolName) {
-      return this.jsonRpcError(-32602, 'Invalid params: missing tool name', rpcRequest.id ?? null, corsHeaders);
+    // Validate tool name is a non-empty string
+    if (typeof toolName !== 'string' || !toolName) {
+      return this.jsonRpcError(-32602, 'Invalid params: missing or invalid tool name', rpcRequest.id ?? null, corsHeaders);
+    }
+
+    // Validate arguments is an object (not array, null, or primitive)
+    if (typeof toolArgs !== 'object' || toolArgs === null || Array.isArray(toolArgs)) {
+      return this.jsonRpcError(-32602, 'Invalid params: "arguments" must be an object', rpcRequest.id ?? null, corsHeaders);
     }
 
     console.log(`[MCP] Executing tool: ${toolName} with args:`, JSON.stringify(toolArgs));
@@ -329,12 +340,39 @@ export class McpAgent {
    * Legacy REST endpoint for tool calls (backwards compatibility)
    */
   private async handleToolCallLegacy(request: Request, clerkUserId: string, corsHeaders: Record<string, string>, env: Env): Promise<Response> {
-    const { tool, arguments: args } = await request.json() as McpToolCall;
+    // Parse and validate request body
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return new Response(JSON.stringify({ content: 'Invalid JSON in request body', isError: true }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders }
+      });
+    }
+
+    // Validate body structure
+    if (typeof body !== 'object' || body === null || typeof (body as any).tool !== 'string') {
+      return new Response(JSON.stringify({ content: 'Invalid request body: missing or invalid "tool" field', isError: true }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders }
+      });
+    }
+
+    const { tool, arguments: args } = body as McpToolCall;
+
+    // Validate arguments if provided
+    if (args !== undefined && (typeof args !== 'object' || args === null || Array.isArray(args))) {
+      return new Response(JSON.stringify({ content: 'Invalid arguments: must be an object', isError: true }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders }
+      });
+    }
 
     try {
       const authHeader = request.headers.get('Authorization');
-      const result = await this.executeTool(tool, args, clerkUserId, env, authHeader);
-      
+      const result = await this.executeTool(tool, args || {}, clerkUserId, env, authHeader);
+
       return new Response(JSON.stringify({
         content: result.content,
         isError: result.isError || false
@@ -344,7 +382,7 @@ export class McpAgent {
 
     } catch (error) {
       console.error(`Tool execution error for ${tool}:`, error);
-      
+
       return new Response(JSON.stringify({
         content: `Tool execution failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
         isError: true
