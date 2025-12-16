@@ -22,6 +22,7 @@ Eight-step flow from sign-in to live chat with ESPN data.
 ## Integration
 - Gate chat: if not signed in → `SignInPrompt`; if onboarding incomplete → `OnboardingFlow`; else `Chat`.
 - Tools panel shows selected platform/sport and allows reconfigure.
+- Active league from `useOnboardingStore` is injected into LLM context via `lib/prompts/league-context.ts` so assistant knows which league_id to use for tool calls.
 
 ## Deployment Considerations
 - MCP server URLs come from env vars (see `docs/GETTING_STARTED.md`).
