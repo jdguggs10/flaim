@@ -16,9 +16,15 @@ AI-powered fantasy sports assistant using Clerk auth, Supabase storage, and spor
 - MCP transport: `POST /mcp` JSON-RPC 2.0 (Responses API). Methods: `initialize`, `tools/list`, `tools/call`, `ping`. `GET /mcp` returns metadata. Legacy REST under `/mcp/tools/*` kept only for manual curl testing.
 
 ## Data Flow (credentialed requests)
-1) Frontend gets JWT via Clerk → sends to auth-worker.  
-2) Auth-worker verifies JWT, fetches creds/leagues from Supabase.  
+1) Frontend gets JWT via Clerk → sends to auth-worker.
+2) Auth-worker verifies JWT, fetches creds/leagues from Supabase.
 3) Sport worker calls auth-worker (direct `.workers.dev`) to get creds → calls ESPN → returns to frontend/assistant.
+
+## LLM Context Injection
+- **System prompt** (`lib/prompts/system-prompt.ts`): Static instructions defining assistant behavior and available tools.
+- **League context** (`lib/prompts/league-context.ts`): Dynamic context built from `useOnboardingStore.getActiveLeague()` — injects active league ID, sport, team name so LLM knows which league to query.
+- Both injected as `developer` role messages in `processMessages()` before conversation history.
+- Edit templates in `lib/prompts/` to tweak LLM behavior without touching core logic.
 
 ## MCP Tools (live data)
 - Baseball: `get_espn_league_info`, `get_espn_team_roster`, `get_espn_matchups`.
