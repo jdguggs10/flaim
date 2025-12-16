@@ -1,4 +1,4 @@
-import { DEVELOPER_PROMPT } from "@/config/constants";
+import { SYSTEM_PROMPT, buildLeagueContext } from "@/lib/prompts";
 import { parse } from "partial-json";
 import { handleTool } from "@/lib/tools/tools-handling";
 import useConversationStore from "@/stores/useConversationStore";
@@ -161,12 +161,26 @@ export const processMessages = async () => {
   } = useConversationStore.getState();
 
   const tools = getTools();
+
+  // Build dynamic league context based on user's active league
+  const leagueContext = buildLeagueContext();
+
   const allConversationItems = [
-    // Adding developer prompt as first item in the conversation
+    // Static system instructions (defines assistant behavior)
     {
       role: "developer",
-      content: DEVELOPER_PROMPT,
+      content: SYSTEM_PROMPT,
     },
+    // Dynamic league context (only injected if user has leagues configured)
+    ...(leagueContext
+      ? [
+          {
+            role: "developer",
+            content: leagueContext,
+          },
+        ]
+      : []),
+    // Conversation history
     ...conversationItems,
   ];
 
