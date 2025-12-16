@@ -51,14 +51,10 @@ const OTHER_LEAGUE_ITEM_TEMPLATE = `- {{leagueName}} ({{sport}}, ID: {{leagueId}
 // =============================================================================
 
 /**
- * Fills template placeholders with actual values
+ * Fills template placeholders with actual values (single-pass)
  */
 function fillTemplate(template: string, values: Record<string, string>): string {
-  let result = template;
-  for (const [key, value] of Object.entries(values)) {
-    result = result.replace(new RegExp(`\\{\\{${key}\\}\\}`, "g"), value);
-  }
-  return result;
+  return template.replace(/\{\{([^{}]+)\}\}/g, (_, key) => values[key] ?? "");
 }
 
 /**
@@ -84,8 +80,8 @@ export function buildLeagueContext(): string {
   const { espnLeagues, getActiveLeague } = useOnboardingStore.getState();
   const activeLeague = getActiveLeague();
 
-  // No leagues configured - return empty (no context to inject)
-  if (!activeLeague || espnLeagues.length === 0) {
+  // No active league - return empty (no context to inject)
+  if (!activeLeague) {
     return "";
   }
 
