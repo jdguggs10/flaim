@@ -122,12 +122,12 @@ export class McpAgent {
     // POST requests are JSON-RPC 2.0
     let rpcRequest: JsonRpcRequest;
     try {
-      const payload = await request.json();
+      const payload = await request.json() as Record<string, unknown>;
       // Validate payload structure before type assertion
       if (!payload || typeof payload !== 'object' || typeof payload.method !== 'string') {
-        return this.jsonRpcError(-32600, 'Invalid Request: Malformed request payload', payload?.id ?? null, corsHeaders);
+        return this.jsonRpcError(-32600, 'Invalid Request: Malformed request payload', (payload?.id as string | number | null) ?? null, corsHeaders);
       }
-      rpcRequest = payload as JsonRpcRequest;
+      rpcRequest = payload as unknown as JsonRpcRequest;
       console.log(`[MCP] JSON-RPC request: method=${rpcRequest.method}, id=${rpcRequest.id}`);
     } catch (e) {
       return this.jsonRpcError(-32700, 'Parse error: Invalid JSON', null, corsHeaders);
