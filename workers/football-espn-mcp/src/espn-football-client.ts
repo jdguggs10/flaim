@@ -112,7 +112,6 @@ export class EspnFootballApiClient {
         throw new Error(`ESPN_ACCESS_DENIED: Access denied to football league ${leagueId}. Make sure you're a member of this league.`);
       }
 
-      const errorText = await response.text();
       throw new Error(`ESPN_API_ERROR: ESPN returned error ${response.status}. Please try again.`);
     }
 
@@ -175,7 +174,6 @@ export class EspnFootballApiClient {
         throw new Error(`ESPN_ACCESS_DENIED: Access denied to football league ${leagueId} matchup data. Make sure your ESPN credentials are set up in Settings.`);
       }
 
-      const errorText = await response.text();
       throw new Error(`ESPN_API_ERROR: ESPN returned error ${response.status}. Please try again.`);
     }
 
@@ -219,7 +217,6 @@ export class EspnFootballApiClient {
         throw new Error(`ESPN_ACCESS_DENIED: Access denied to football league ${leagueId} standings. Make sure your ESPN credentials are set up in Settings.`);
       }
 
-      const errorText = await response.text();
       throw new Error(`ESPN_API_ERROR: ESPN returned error ${response.status}. Please try again.`);
     }
 

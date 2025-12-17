@@ -106,7 +106,6 @@ export class EspnApiClient {
         throw new Error(`ESPN_ACCESS_DENIED: Access denied to baseball league ${leagueId}. Make sure you're a member of this league.`);
       }
 
-      const errorText = await response.text();
       throw new Error(`ESPN_API_ERROR: ESPN returned error ${response.status}. Please try again.`);
     }
 
