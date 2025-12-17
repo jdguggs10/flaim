@@ -15,7 +15,7 @@
 - Cloudflare Workers: Auth worker (`/workers/auth-worker`), Sport MCP workers (`/workers/baseball-espn-mcp`, `/workers/football-espn-mcp`).
 - Supabase: Data: Supabase Postgres tables `espn_credentials`, `espn_leagues`.
 - LLM: OpenAI's new Responses API; NOT chat completions! DO NOT USE CHAT COMPLETIONS!
-- Rule: Worker-to-worker calls use direct `.workers.dev`; custom domains are frontend-only.
+- Rule: Worker-to-worker calls use custom domain (`api.flaim.app`); Cloudflare blocks `.workers.dev` to `.workers.dev` fetches with error 1042.
 
 ## MCP Tools
 - Baseball: `get_espn_league_info`, `get_espn_team_roster`, `get_espn_matchups`.
