@@ -32,6 +32,38 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
+    const bearer = (await getToken?.()) || undefined;
+
+    // Fail fast if the user hasn't saved credentials in auth-worker yet.
+    const authWorkerUrl = process.env.NEXT_PUBLIC_AUTH_WORKER_URL;
+    if (!authWorkerUrl) {
+      return NextResponse.json({
+        error: 'NEXT_PUBLIC_AUTH_WORKER_URL is not configured'
+      }, { status: 500 });
+    }
+
+    const credentialCheck = await fetch(`${authWorkerUrl}/credentials/espn`, {
+      headers: {
+        'X-Clerk-User-ID': userId,
+        ...(bearer ? { 'Authorization': `Bearer ${bearer}` } : {})
+      },
+      cache: 'no-store'
+    });
+
+    if (credentialCheck.status === 404) {
+      return NextResponse.json({
+        error: 'ESPN credentials not found. Please add your ESPN credentials first.',
+        code: 'CREDENTIALS_MISSING'
+      }, { status: 404 });
+    }
+
+    if (!credentialCheck.ok) {
+      const err = await credentialCheck.json().catch(() => ({})) as { error?: string };
+      return NextResponse.json({
+        error: err.error || 'Failed to verify ESPN credentials'
+      }, { status: credentialCheck.status });
+    }
+
     // Determine which sport worker to call based on sport
     const sportWorkerUrls = {
       'baseball': process.env.NEXT_PUBLIC_BASEBALL_ESPN_MCP_URL,
@@ -44,7 +76,7 @@ export async function POST(request: NextRequest) {
     const workerUrl = sportWorkerUrls[sport as keyof typeof sportWorkerUrls];
     if (!workerUrl) {
       const supportedSports = Object.keys(sportWorkerUrls).join(', ');
-      return NextResponse.json({ 
+      return NextResponse.json({
         error: `Sport "${sport}" is not yet supported. Currently supported sports: ${supportedSports}`,
         code: 'SPORT_NOT_SUPPORTED'
       }, { status: 503 });
@@ -52,7 +84,6 @@ export async function POST(request: NextRequest) {
 
     try {
       // Call the sport worker's onboarding initialize endpoint
-      const bearer = (await getToken?.()) || undefined;
       const workerResponse = await fetch(`${workerUrl}/onboarding/initialize`, {
         method: 'POST',
         headers: {
