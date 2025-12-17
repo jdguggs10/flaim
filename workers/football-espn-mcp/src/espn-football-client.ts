@@ -32,14 +32,12 @@ export class EspnFootballApiClient {
       'X-Fantasy-Platform': 'kona-web-2.0.0'
     };
 
-    // Get ESPN credentials from auth-worker (required for private leagues)
+    // Get ESPN credentials from auth-worker (optional - public leagues work without)
     if (clerkUserId && clerkUserId !== 'anonymous' && this.authHeader) {
       const credentials = await this.getEspnCredentialsForUser(clerkUserId);
-      headers['Cookie'] = `SWID=${credentials.swid}; espn_s2=${credentials.s2}`;
-    } else if (!clerkUserId || clerkUserId === 'anonymous') {
-      console.warn('⚠️ No user ID provided - attempting unauthenticated ESPN request');
-    } else if (!this.authHeader) {
-      console.warn('⚠️ No auth header provided - attempting unauthenticated ESPN request');
+      if (credentials) {
+        headers['Cookie'] = `SWID=${credentials.swid}; espn_s2=${credentials.s2}`;
+      }
     }
 
     const response = await fetch(url, {
@@ -62,7 +60,6 @@ export class EspnFootballApiClient {
         throw new Error(`ESPN_ACCESS_DENIED: Access denied to football league ${leagueId}. This league may be private - make sure your ESPN credentials are set up in Settings.`);
       }
 
-      const errorText = await response.text();
       throw new Error(`ESPN_API_ERROR: ESPN returned error ${response.status}. Please try again.`);
     }
 
@@ -91,6 +88,9 @@ export class EspnFootballApiClient {
     }
 
     const credentials = await this.getEspnCredentialsForUser(clerkUserId);
+    if (!credentials) {
+      throw new Error('ESPN_CREDENTIALS_NOT_FOUND: Please set up your ESPN credentials in Settings. Go to Settings > ESPN Authentication to add your espn_s2 and SWID cookies.');
+    }
     headers['Cookie'] = `SWID=${credentials.swid}; espn_s2=${credentials.s2}`;
 
     const response = await fetch(url, {
@@ -148,14 +148,12 @@ export class EspnFootballApiClient {
       'X-Fantasy-Platform': 'kona-web-2.0.0'
     };
 
-    // Get user credentials for matchup data
+    // Get user credentials for matchup data (optional - public leagues work without)
     if (clerkUserId && clerkUserId !== 'anonymous' && this.authHeader) {
       const credentials = await this.getEspnCredentialsForUser(clerkUserId);
-      headers['Cookie'] = `SWID=${credentials.swid}; espn_s2=${credentials.s2}`;
-    } else if (!clerkUserId || clerkUserId === 'anonymous') {
-      console.warn('⚠️ No user ID provided - attempting unauthenticated ESPN matchup request');
-    } else if (!this.authHeader) {
-      console.warn('⚠️ No auth header provided - attempting unauthenticated ESPN matchup request');
+      if (credentials) {
+        headers['Cookie'] = `SWID=${credentials.swid}; espn_s2=${credentials.s2}`;
+      }
     }
 
     const response = await fetch(url, {
@@ -194,14 +192,12 @@ export class EspnFootballApiClient {
       'X-Fantasy-Platform': 'kona-web-2.0.0'
     };
 
-    // Get user credentials for standings data
+    // Get user credentials for standings data (optional - public leagues work without)
     if (clerkUserId && clerkUserId !== 'anonymous' && this.authHeader) {
       const credentials = await this.getEspnCredentialsForUser(clerkUserId);
-      headers['Cookie'] = `SWID=${credentials.swid}; espn_s2=${credentials.s2}`;
-    } else if (!clerkUserId || clerkUserId === 'anonymous') {
-      console.warn('⚠️ No user ID provided - attempting unauthenticated ESPN standings request');
-    } else if (!this.authHeader) {
-      console.warn('⚠️ No auth header provided - attempting unauthenticated ESPN standings request');
+      if (credentials) {
+        headers['Cookie'] = `SWID=${credentials.swid}; espn_s2=${credentials.s2}`;
+      }
     }
 
     const response = await fetch(url, {
@@ -232,14 +228,20 @@ export class EspnFootballApiClient {
 
   /**
    * Get ESPN credentials from auth-worker
-   * Throws errors with specific messages instead of returning null silently
+   * Returns null if credentials not found (allows public league access)
+   * Throws specific errors for auth failures and other issues
    */
-  private async getEspnCredentialsForUser(clerkUserId: string): Promise<EspnCredentials> {
-    // HTTP call to auth worker for credentials (stateless pattern)
+  private async getEspnCredentialsForUser(clerkUserId: string): Promise<EspnCredentials | null> {
+    // Validate AUTH_WORKER_URL in production
+    const isProd = this.env.ENVIRONMENT === 'production' || this.env.NODE_ENV === 'production';
+    if (!this.env.AUTH_WORKER_URL && isProd) {
+      throw new Error('ESPN_CONFIG_ERROR: AUTH_WORKER_URL not configured. Please contact support.');
+    }
+
     const authWorkerUrl = this.env.AUTH_WORKER_URL || 'http://localhost:8786';
     const url = `${authWorkerUrl}/credentials/espn?raw=true`;
 
-    console.log(`🔑 Fetching ESPN credentials for user ${clerkUserId} from ${url}`);
+    console.log(`🔑 Fetching ESPN credentials for user ${clerkUserId}`);
     console.log(`🔑 Auth header present: ${!!this.authHeader}`);
 
     const response = await fetch(url, {
@@ -253,9 +255,10 @@ export class EspnFootballApiClient {
 
     console.log(`📡 Auth-worker response: ${response.status} ${response.statusText}`);
 
+    // 404 = no credentials found - return null to allow public league access
     if (response.status === 404) {
-      console.log('ℹ️ No ESPN credentials found for user');
-      throw new Error('ESPN_CREDENTIALS_NOT_FOUND: Please set up your ESPN credentials in Settings. Go to Settings > ESPN Authentication to add your espn_s2 and SWID cookies.');
+      console.log('ℹ️ No ESPN credentials found for user - proceeding without auth');
+      return null;
     }
 
     if (response.status === 401) {
@@ -265,7 +268,6 @@ export class EspnFootballApiClient {
 
     if (!response.ok) {
       console.error(`❌ Auth-worker error: ${response.status} ${response.statusText}`);
-      const errorData = await response.json().catch(() => ({})) as { error?: string };
       throw new Error(`ESPN_AUTH_WORKER_ERROR: Unable to retrieve credentials (${response.status}). Please try again.`);
     }
 
