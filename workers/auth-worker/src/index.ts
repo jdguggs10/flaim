@@ -270,6 +270,8 @@ export default {
       if (pathname === '/credentials/espn') {
         // Extract Clerk User ID from header
         const { userId: clerkUserId, error: authError } = await getVerifiedUserId(request, env);
+        console.log(`🔐 [auth-worker] /credentials/espn - Verified user: ${clerkUserId || 'null'}, authError: ${authError || 'none'}`);
+
         if (!clerkUserId) {
           return new Response(JSON.stringify({
             error: 'Authentication required',
@@ -321,7 +323,9 @@ export default {
 
           if (getRawCredentials) {
             // Return actual credentials for sport workers
-            console.log(`🔍 [auth-worker] GET credentials for user: ${clerkUserId}`);
+            console.log(`🔍 [auth-worker] GET raw credentials for user: ${clerkUserId}`);
+            console.log(`🔍 [auth-worker] Authorization header present: ${!!request.headers.get('Authorization')}`);
+            console.log(`🔍 [auth-worker] X-Clerk-User-ID header: ${request.headers.get('X-Clerk-User-ID')}`);
             const credentials = await storage.getCredentials(clerkUserId);
 
             if (!credentials) {
