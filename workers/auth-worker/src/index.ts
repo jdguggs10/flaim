@@ -207,8 +207,14 @@ function validateEspnCredentials(credentials: any): { valid: boolean; error?: st
   if (!credentials.swid || !credentials.s2) {
     return { valid: false, error: 'ESPN credentials require swid and s2 fields' };
   }
-  
+
   return { valid: true };
+}
+
+// Mask user ID for logging to avoid PII exposure
+function maskUserId(userId: string): string {
+  if (!userId || userId.length <= 8) return '***';
+  return `${userId.substring(0, 8)}...`;
 }
 
 // Main request handler
@@ -270,7 +276,7 @@ export default {
       if (pathname === '/credentials/espn') {
         // Extract Clerk User ID from header
         const { userId: clerkUserId, error: authError } = await getVerifiedUserId(request, env);
-        console.log(`🔐 [auth-worker] /credentials/espn - Verified user: ${clerkUserId || 'null'}, authError: ${authError || 'none'}`);
+        console.log(`🔐 [auth-worker] /credentials/espn - Verified user: ${clerkUserId ? maskUserId(clerkUserId) : 'null'}, authError: ${authError || 'none'}`);
 
         if (!clerkUserId) {
           return new Response(JSON.stringify({
@@ -323,13 +329,12 @@ export default {
 
           if (getRawCredentials) {
             // Return actual credentials for sport workers
-            console.log(`🔍 [auth-worker] GET raw credentials for user: ${clerkUserId}`);
+            console.log(`🔍 [auth-worker] GET raw credentials for user: ${maskUserId(clerkUserId)}`);
             console.log(`🔍 [auth-worker] Authorization header present: ${!!request.headers.get('Authorization')}`);
-            console.log(`🔍 [auth-worker] X-Clerk-User-ID header: ${request.headers.get('X-Clerk-User-ID')}`);
             const credentials = await storage.getCredentials(clerkUserId);
 
             if (!credentials) {
-              console.log(`❌ [auth-worker] No credentials found for user: ${clerkUserId}`);
+              console.log(`❌ [auth-worker] No credentials found for user: ${maskUserId(clerkUserId)}`);
               return new Response(JSON.stringify({
                 error: 'Credentials not found',
                 message: 'No ESPN credentials found for user'

@@ -1,19 +1,28 @@
 /**
  * Supabase-based ESPN Credential Storage
  * ---------------------------------------------------------------------------
- * 
+ *
  * Replaces Cloudflare KV storage with Supabase PostgreSQL for credential storage.
  * Provides the same interface as the previous KV implementation (archived) for seamless replacement.
- * 
+ *
  * Environment Variables Required:
  * - SUPABASE_URL: Project URL (https://your-project-ref.supabase.co)
  * - SUPABASE_SERVICE_KEY: Service role key for full access
- * 
+ *
  * @version 1.0 - Supabase implementation
  */
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { EspnCredentials, EspnCredentialsWithMetadata, EspnLeague, EspnUserData } from './espn-types';
+
+/**
+ * Mask user ID for logging to avoid PII exposure
+ * Shows first 8 chars + "..." for debugging while protecting privacy
+ */
+function maskUserId(userId: string): string {
+  if (!userId || userId.length <= 8) return '***';
+  return `${userId.substring(0, 8)}...`;
+}
 
 export interface SupabaseStorageOptions {
   supabaseUrl: string;
@@ -87,7 +96,7 @@ export class EspnSupabaseStorage {
         return null;
       }
 
-      console.log(`[supabase-storage] getCredentials: fetching for user ${clerkUserId}`);
+      console.log(`[supabase-storage] getCredentials: fetching for user ${maskUserId(clerkUserId)}`);
 
       const { data, error } = await this.supabase
         .from('espn_credentials')
@@ -96,7 +105,7 @@ export class EspnSupabaseStorage {
         .single();
 
       if (error) {
-        console.log(`[supabase-storage] getCredentials error:`, error.code, error.message);
+        console.error(`[supabase-storage] getCredentials error:`, error.code, error.message);
         return null;
       }
 
@@ -132,7 +141,7 @@ export class EspnSupabaseStorage {
         return null;
       }
 
-      console.log(`[supabase-storage] getCredentialMetadata: checking for user ${clerkUserId}`);
+      console.log(`[supabase-storage] getCredentialMetadata: checking for user ${maskUserId(clerkUserId)}`);
 
       const { data, error } = await this.supabase
         .from('espn_credentials')
@@ -141,7 +150,7 @@ export class EspnSupabaseStorage {
         .single();
 
       if (error) {
-        console.log(`[supabase-storage] getCredentialMetadata error:`, error.code, error.message);
+        console.error(`[supabase-storage] getCredentialMetadata error:`, error.code, error.message);
         return { hasCredentials: false };
       }
 
@@ -150,7 +159,7 @@ export class EspnSupabaseStorage {
         return { hasCredentials: false };
       }
 
-      console.log(`[supabase-storage] getCredentialMetadata: found record, email=${data.email || 'none'}, updated_at=${data.updated_at}`);
+      console.log(`[supabase-storage] getCredentialMetadata: found record, hasEmail=${!!data.email}, updated_at=${data.updated_at}`);
 
       return {
         hasCredentials: true,
