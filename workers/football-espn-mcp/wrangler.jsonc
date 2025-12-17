@@ -36,10 +36,12 @@
       ],
       
       // Environment variables for production
+      // Note: Using custom domain for auth-worker to avoid Cloudflare error 1042
+      // (worker-to-worker fetch blocked on .workers.dev URLs)
       "vars": {
         "NODE_ENV": "production",
         "ENVIRONMENT": "prod",
-        "AUTH_WORKER_URL": "https://auth-worker.gerrygugger.workers.dev"
+        "AUTH_WORKER_URL": "https://api.flaim.app/auth"
       }
     },
     
