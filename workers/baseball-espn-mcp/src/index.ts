@@ -34,28 +34,52 @@ async function getCredentials(
 ): Promise<EspnCredentials | null> {
   try {
     const authWorkerUrl = config.authWorkerUrl || config.defaultUrl;
+    
+    // Debug: Log configuration
+    console.log(`🔧 [baseball] getCredentials config: authWorkerUrl=${authWorkerUrl}, hasAuthHeader=${!!authHeader}, authHeaderLength=${authHeader?.length || 0}`);
+    
+    if (!authWorkerUrl) {
+      console.error('❌ [baseball] AUTH_WORKER_URL is not configured!');
+      throw new Error('AUTH_WORKER_URL is not configured');
+    }
+    
     const url = `${authWorkerUrl}/credentials/espn?raw=true`;
     
-    console.log(`🔑 Fetching ESPN credentials for user ${clerkUserId} from ${url}`);
+    console.log(`🔑 [baseball] Fetching ESPN credentials for user ${clerkUserId} from ${url}`);
+    
+    const headers: Record<string, string> = {
+      'X-Clerk-User-ID': clerkUserId,
+      'Content-Type': 'application/json',
+    };
+    
+    if (authHeader) {
+      headers['Authorization'] = authHeader;
+      console.log(`🔐 [baseball] Authorization header present, starts with: ${authHeader.substring(0, 15)}...`);
+    } else {
+      console.warn(`⚠️ [baseball] No Authorization header provided - auth-worker may reject this request`);
+    }
     
     const response = await fetch(url, {
       method: 'GET',
-      headers: {
-        'X-Clerk-User-ID': clerkUserId,
-        'Content-Type': 'application/json',
-        ...(authHeader ? { 'Authorization': authHeader } : {})
-      }
+      headers
     });
     
-    console.log(`📡 Auth-worker response: ${response.status} ${response.statusText}`);
+    console.log(`📡 [baseball] Auth-worker response: ${response.status} ${response.statusText}`);
     
     if (response.status === 404) {
-      console.log('ℹ️ No ESPN credentials found for user');
+      const errorBody = await response.text().catch(() => 'unknown');
+      console.log(`ℹ️ [baseball] 404 response body: ${errorBody}`);
       return null;
     }
     
+    if (response.status === 401) {
+      const errorBody = await response.text().catch(() => 'unknown');
+      console.error(`❌ [baseball] Auth failed (401): ${errorBody}`);
+      throw new Error(`Auth-worker authentication failed: ${errorBody}`);
+    }
+    
     if (!response.ok) {
-      console.error(`❌ Auth-worker error: ${response.status} ${response.statusText}`);
+      console.error(`❌ [baseball] Auth-worker error: ${response.status} ${response.statusText}`);
       const errorData = await response.json().catch(() => ({})) as { error?: string };
       throw new Error(`Auth-worker error: ${errorData.error || response.statusText}`);
     }
@@ -63,15 +87,15 @@ async function getCredentials(
     const data = await response.json() as { success?: boolean; credentials?: EspnCredentials };
     
     if (!data.success || !data.credentials) {
-      console.error('❌ Invalid response from auth-worker:', data);
+      console.error('❌ [baseball] Invalid response from auth-worker:', JSON.stringify(data));
       throw new Error('Invalid credentials response from auth-worker');
     }
     
-    console.log('✅ Successfully retrieved ESPN credentials');
+    console.log('✅ [baseball] Successfully retrieved ESPN credentials');
     return data.credentials;
     
   } catch (error) {
-    console.error('❌ Failed to fetch credentials from auth-worker:', error);
+    console.error('❌ [baseball] Failed to fetch credentials from auth-worker:', error);
     throw error;
   }
 }
@@ -223,6 +247,13 @@ export default {
       if (pathname === '/onboarding/initialize' && request.method === 'POST') {
         try {
           const clerkUserId = request.headers.get('X-Clerk-User-ID');
+          const authHeader = request.headers.get('Authorization');
+          
+          // Debug: Log all relevant headers
+          console.log(`🔍 [baseball] /onboarding/initialize - Headers received:`);
+          console.log(`   X-Clerk-User-ID: ${clerkUserId || 'MISSING'}`);
+          console.log(`   Authorization: ${authHeader ? `present (${authHeader.length} chars, starts with: ${authHeader.substring(0, 15)}...)` : 'MISSING'}`);
+          console.log(`   AUTH_WORKER_URL env: ${env.AUTH_WORKER_URL || 'NOT SET'}`);
 
           if (!clerkUserId) {
             return new Response(JSON.stringify({
@@ -236,7 +267,7 @@ export default {
           const body = await request.json() as { sport?: string; leagueId?: string };
           const { sport, leagueId } = body;
 
-          console.log(`🚀 Initialize onboarding for user: ${clerkUserId}, sport: ${sport}, leagueId: ${leagueId}`);
+          console.log(`🚀 [baseball] Initialize onboarding for user: ${clerkUserId}, sport: ${sport}, leagueId: ${leagueId}`);
 
           // Get credentials from auth-worker
           const authWorkerConfig = {
