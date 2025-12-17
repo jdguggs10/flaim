@@ -133,6 +133,8 @@ export class EspnSupabaseStorage {
 
   /**
    * Get full credential metadata (without sensitive data)
+   * Note: Also checks that swid and s2 are non-empty to ensure consistency
+   * with getCredentials() which returns null if swid/s2 are missing.
    */
   async getCredentialMetadata(clerkUserId: string): Promise<{ hasCredentials: boolean; email?: string; lastUpdated?: string } | null> {
     try {
@@ -143,9 +145,10 @@ export class EspnSupabaseStorage {
 
       console.log(`[supabase-storage] getCredentialMetadata: checking for user ${maskUserId(clerkUserId)}`);
 
+      // Select swid and s2 to verify credentials are actually present (not just an empty row)
       const { data, error } = await this.supabase
         .from('espn_credentials')
-        .select('email, updated_at')
+        .select('email, updated_at, swid, s2')
         .eq('clerk_user_id', clerkUserId)
         .single();
 
@@ -159,7 +162,16 @@ export class EspnSupabaseStorage {
         return { hasCredentials: false };
       }
 
-      console.log(`[supabase-storage] getCredentialMetadata: found record, hasEmail=${!!data.email}, updated_at=${data.updated_at}`);
+      // Check that swid and s2 are actually present and non-empty
+      // This ensures consistency with getCredentials() which returns null if these are missing
+      const hasValidCredentials = !!(data.swid && data.s2);
+      
+      console.log(`[supabase-storage] getCredentialMetadata: found record, hasValidCredentials=${hasValidCredentials}, hasEmail=${!!data.email}, updated_at=${data.updated_at}`);
+
+      if (!hasValidCredentials) {
+        console.log(`[supabase-storage] getCredentialMetadata: row exists but swid or s2 is empty/null`);
+        return { hasCredentials: false };
+      }
 
       return {
         hasCredentials: true,
