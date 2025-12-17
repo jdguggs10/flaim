@@ -51,9 +51,14 @@ export class FootballMcpAgent {
 
     try {
       // Extract Clerk user ID from headers (preferred) or fallback to anonymous
-      const clerkUserId = request.headers.get('X-Clerk-User-ID') ||
+      const clerkUserIdHeader = request.headers.get('X-Clerk-User-ID');
+      const authHeader = request.headers.get('Authorization');
+      const clerkUserId = clerkUserIdHeader ||
                          new URL(request.url).searchParams.get('clerkUserId') ||
                          'anonymous';
+
+      // Debug logging for auth issues
+      console.log(`[MCP Football Auth] User ID header: ${clerkUserIdHeader ? 'present' : 'MISSING'}, Auth header: ${authHeader ? 'present' : 'MISSING'}, Resolved userId: ${clerkUserId}`);
 
       const url = new URL(request.url);
 

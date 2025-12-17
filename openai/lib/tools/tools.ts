@@ -89,6 +89,10 @@ export const getTools = () => {
     !!mcpConfig.server_url &&
     !!mcpConfig.server_label;
 
+  // Debug logging for MCP auth troubleshooting (avoid logging token metadata for security)
+  console.log(`[MCP Config] Platform: ${selectedPlatform}, Authenticated: ${isAuthenticated}, Server URL: ${mcpConfig.server_url ? 'set' : 'NOT SET'}, Should enable: ${shouldEnableMcp}`);
+  console.log(`[MCP Auth] User ID: ${clerkUserId ? 'present' : 'MISSING'}, Token: ${clerkToken ? 'present' : 'MISSING'}`);
+
   if (!mcpGloballyDisabled && mcpEnabled && shouldEnableMcp) {
     // Validate MCP server URL
     if (
@@ -107,6 +111,7 @@ export const getTools = () => {
         "Token:",
         !!clerkToken
       );
+      console.warn("[WARN] MCP calls may fail - user should refresh the page to get a fresh token");
       // Still proceed - some MCP servers might not require auth
     }
 

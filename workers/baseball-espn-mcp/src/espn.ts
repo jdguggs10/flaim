@@ -18,7 +18,7 @@ export class EspnApiClient {
 
   async fetchLeague(leagueId: string, year: number = 2025, view: string = 'mSettings', clerkUserId?: string): Promise<EspnLeagueResponse> {
     const url = `${this.baseUrl}/games/flb/seasons/${year}/segments/0/leagues/${leagueId}?view=${view}`;
-    
+
     const headers: Record<string, string> = {
       'User-Agent': 'baseball-espn-mcp/1.0',
       'Accept': 'application/json',
@@ -26,39 +26,35 @@ export class EspnApiClient {
       'X-Fantasy-Platform': 'kona-web-2.0.0'
     };
 
-    // Try to get user-specific ESPN credentials first
-    let credentials: EspnCredentials | null = null;
-    if (clerkUserId && this.authHeader) {
-      credentials = await this.getEspnCredentialsForUser(clerkUserId);
-    }
-
-    // Add authentication cookies if available
-    if (credentials) {
-      headers['Cookie'] = `SWID=${credentials.swid}; espn_s2=${credentials.s2}`;
+    // Get ESPN credentials from auth-worker (optional - public leagues work without)
+    if (clerkUserId && clerkUserId !== 'anonymous' && this.authHeader) {
+      const credentials = await this.getEspnCredentialsForUser(clerkUserId);
+      if (credentials) {
+        headers['Cookie'] = `SWID=${credentials.swid}; espn_s2=${credentials.s2}`;
+      }
     }
 
     const response = await fetch(url, {
       headers,
       cf: { cacheEverything: false }
     });
-    
+
     if (!response.ok) {
       // Handle ESPN-specific error codes
       if (response.status === 401) {
-        throw new Error('ESPN authentication failed - check auth-worker credentials');
+        throw new Error('ESPN_COOKIES_EXPIRED: Your ESPN cookies may have expired. Please update them in Settings > ESPN Authentication.');
       }
       if (response.status === 429) {
-        throw new Error('ESPN rate limit exceeded - please retry later');
+        throw new Error('ESPN_RATE_LIMIT: ESPN rate limit exceeded. Please wait a moment and try again.');
       }
       if (response.status === 404) {
-        throw new Error(`League ${leagueId} not found or not accessible`);
+        throw new Error(`ESPN_NOT_FOUND: Baseball league ${leagueId} not found. Please check the league ID.`);
       }
       if (response.status === 403) {
-        throw new Error(`Access denied to league ${leagueId} - may require authentication`);
+        throw new Error(`ESPN_ACCESS_DENIED: Access denied to baseball league ${leagueId}. This league may be private - make sure your ESPN credentials are set up in Settings.`);
       }
-      
-      const errorText = await response.text();
-      throw new Error(`ESPN API error ${response.status}: ${errorText}`);
+
+      throw new Error(`ESPN_API_ERROR: ESPN returned error ${response.status}. Please try again.`);
     }
 
     return await response.json();
@@ -69,7 +65,7 @@ export class EspnApiClient {
     if (week) {
       url += `&scoringPeriodId=${week}`;
     }
-    
+
     const headers: Record<string, string> = {
       'User-Agent': 'baseball-espn-mcp/1.0',
       'Accept': 'application/json',
@@ -77,40 +73,40 @@ export class EspnApiClient {
       'X-Fantasy-Platform': 'kona-web-2.0.0'
     };
 
-    // Get user credentials for roster data (typically requires authentication)
-    let credentials: EspnCredentials | null = null;
-    if (clerkUserId && this.authHeader) {
-      credentials = await this.getEspnCredentialsForUser(clerkUserId);
+    // Authentication required for roster data
+    if (!clerkUserId || clerkUserId === 'anonymous') {
+      throw new Error('ESPN_AUTH_REQUIRED: User authentication required for roster data. Please sign in and try again.');
+    }
+    if (!this.authHeader) {
+      throw new Error('ESPN_AUTH_REQUIRED: Authorization header missing. Please refresh the page and try again.');
     }
 
-    // Authentication required for roster data
-    if (credentials) {
-      headers['Cookie'] = `SWID=${credentials.swid}; espn_s2=${credentials.s2}`;
-    } else {
-      throw new Error('ESPN authentication required for roster data - please provide ESPN credentials');
+    const credentials = await this.getEspnCredentialsForUser(clerkUserId);
+    if (!credentials) {
+      throw new Error('ESPN_CREDENTIALS_NOT_FOUND: Please set up your ESPN credentials in Settings. Go to Settings > ESPN Authentication to add your espn_s2 and SWID cookies.');
     }
+    headers['Cookie'] = `SWID=${credentials.swid}; espn_s2=${credentials.s2}`;
 
     const response = await fetch(url, {
       headers,
       cf: { cacheEverything: false }
     });
-    
+
     if (!response.ok) {
       if (response.status === 401) {
-        throw new Error('ESPN authentication failed - check auth-worker credentials');
+        throw new Error('ESPN_COOKIES_EXPIRED: Your ESPN cookies may have expired. Please update them in Settings > ESPN Authentication.');
       }
       if (response.status === 429) {
-        throw new Error('ESPN rate limit exceeded - please retry later');
+        throw new Error('ESPN_RATE_LIMIT: ESPN rate limit exceeded. Please wait a moment and try again.');
       }
       if (response.status === 404) {
-        throw new Error(`League ${leagueId} or team ${teamId} not found`);
+        throw new Error(`ESPN_NOT_FOUND: Baseball league ${leagueId} or team ${teamId} not found.`);
       }
       if (response.status === 403) {
-        throw new Error(`Access denied to league ${leagueId} roster data`);
+        throw new Error(`ESPN_ACCESS_DENIED: Access denied to baseball league ${leagueId}. Make sure you're a member of this league.`);
       }
-      
-      const errorText = await response.text();
-      throw new Error(`ESPN API error ${response.status}: ${errorText}`);
+
+      throw new Error(`ESPN_API_ERROR: ESPN returned error ${response.status}. Please try again.`);
     }
 
     const data = await response.json() as EspnRosterResponse;
@@ -134,50 +130,57 @@ export class EspnApiClient {
 
   /**
    * Get ESPN credentials from auth-worker
+   * Returns null if credentials not found (allows public league access)
+   * Throws specific errors for auth failures and other issues
    */
   private async getEspnCredentialsForUser(clerkUserId: string): Promise<EspnCredentials | null> {
-    try {
-      // HTTP call to auth worker for credentials (stateless pattern)
-      const authWorkerUrl = this.env.AUTH_WORKER_URL || 'http://localhost:8786';
-      const url = `${authWorkerUrl}/credentials/espn?raw=true`;
-      
-      console.log(`🔑 Fetching ESPN credentials for user ${clerkUserId} from ${url}`);
-      
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'X-Clerk-User-ID': clerkUserId,
-          'Content-Type': 'application/json',
-          ...(this.authHeader ? { 'Authorization': this.authHeader } : {})
-        }
-      });
-      
-      console.log(`📡 Auth-worker response: ${response.status} ${response.statusText}`);
-      
-      if (response.status === 404) {
-        console.log('ℹ️ No ESPN credentials found for user');
-        return null;
+    // Validate AUTH_WORKER_URL in production
+    const isProd = this.env.ENVIRONMENT === 'production' || this.env.NODE_ENV === 'production';
+    if (!this.env.AUTH_WORKER_URL && isProd) {
+      throw new Error('ESPN_CONFIG_ERROR: AUTH_WORKER_URL not configured. Please contact support.');
+    }
+
+    const authWorkerUrl = this.env.AUTH_WORKER_URL || 'http://localhost:8786';
+    const url = `${authWorkerUrl}/credentials/espn?raw=true`;
+
+    console.log(`🔑 Fetching ESPN credentials for user ${clerkUserId}`);
+    console.log(`🔑 Auth header present: ${!!this.authHeader}`);
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'X-Clerk-User-ID': clerkUserId,
+        'Content-Type': 'application/json',
+        ...(this.authHeader ? { 'Authorization': this.authHeader } : {})
       }
-      
-      if (!response.ok) {
-        console.error(`❌ Auth-worker error: ${response.status} ${response.statusText}`);
-        const errorData = await response.json().catch(() => ({})) as { error?: string };
-        throw new Error(`Auth-worker error: ${errorData.error || response.statusText}`);
-      }
-      
-      const data = await response.json() as { success?: boolean; credentials?: EspnCredentials };
-      
-      if (!data.success || !data.credentials) {
-        console.error('❌ Invalid response from auth-worker:', data);
-        throw new Error('Invalid credentials response from auth-worker');
-      }
-      
-      console.log('✅ Successfully retrieved ESPN credentials');
-      return data.credentials;
-      
-    } catch (error) {
-      console.error('❌ Failed to fetch credentials from auth-worker:', error);
+    });
+
+    console.log(`📡 Auth-worker response: ${response.status} ${response.statusText}`);
+
+    // 404 = no credentials found - return null to allow public league access
+    if (response.status === 404) {
+      console.log('ℹ️ No ESPN credentials found for user - proceeding without auth');
       return null;
     }
+
+    if (response.status === 401) {
+      console.error('❌ Auth-worker rejected token');
+      throw new Error('ESPN_AUTH_TOKEN_INVALID: Your session has expired. Please refresh the page and try again.');
+    }
+
+    if (!response.ok) {
+      console.error(`❌ Auth-worker error: ${response.status} ${response.statusText}`);
+      throw new Error(`ESPN_AUTH_WORKER_ERROR: Unable to retrieve credentials (${response.status}). Please try again.`);
+    }
+
+    const data = await response.json() as { success?: boolean; credentials?: EspnCredentials };
+
+    if (!data.success || !data.credentials) {
+      console.error('❌ Invalid response from auth-worker:', data);
+      throw new Error('ESPN_CREDENTIALS_INVALID: Received invalid credentials from server. Please re-enter your ESPN credentials in Settings.');
+    }
+
+    console.log('✅ Successfully retrieved ESPN credentials');
+    return data.credentials;
   }
 }
