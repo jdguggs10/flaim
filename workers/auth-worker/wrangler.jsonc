@@ -46,7 +46,15 @@
     // Preview environment (remote dev/staging)
     "preview": {
       "name": "auth-worker-preview",
-      "workers_dev": true,  // Use workers.dev URL for preview
+      "workers_dev": true,  // Also keep workers.dev URL available
+      
+      // Custom domain routes for preview (needed for worker-to-worker calls)
+      "routes": [
+        {
+          "pattern": "api.flaim.app/auth-preview/*",
+          "zone_name": "flaim.app"
+        }
+      ],
       
       // Environment variables for preview
       // Note: SUPABASE_URL and SUPABASE_SERVICE_KEY set via Cloudflare secrets

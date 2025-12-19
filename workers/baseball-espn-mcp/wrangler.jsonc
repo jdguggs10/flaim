@@ -51,10 +51,11 @@
       "workers_dev": true,  // Use workers.dev URL for preview
       
       // Environment variables for preview
+      // Note: Using custom domain for auth-worker to avoid Cloudflare error 1042
       "vars": {
         "NODE_ENV": "production",
         "ENVIRONMENT": "preview",
-        "AUTH_WORKER_URL": "https://auth-worker-preview.gerrygugger.workers.dev"
+        "AUTH_WORKER_URL": "https://api.flaim.app/auth-preview"
       }
     },
     

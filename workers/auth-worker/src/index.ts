@@ -223,10 +223,12 @@ export default {
     const url = new URL(request.url);
     const corsHeaders = getCorsHeaders(request);
 
-    // Strip /auth prefix if present (for custom domain routing)
+    // Strip /auth or /auth-preview prefix if present (for custom domain routing)
     let pathname = url.pathname;
-    if (pathname.startsWith('/auth')) {
-      pathname = pathname.slice(5) || '/';
+    if (pathname.startsWith('/auth-preview')) {
+      pathname = pathname.slice(13) || '/';  // Strip '/auth-preview' (13 chars)
+    } else if (pathname.startsWith('/auth')) {
+      pathname = pathname.slice(5) || '/';   // Strip '/auth' (5 chars)
     }
 
     // Handle CORS preflight
