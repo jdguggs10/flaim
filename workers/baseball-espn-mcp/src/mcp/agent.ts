@@ -183,6 +183,27 @@ export class McpAgent {
 
     const authHeader = request.headers.get('Authorization');
 
+    // Require authentication for all MCP operations - return 401 to trigger OAuth on connect
+    // This follows MCP spec: "When an MCP client attempts to connect to a protected MCP server,
+    // the server will initially respond with a 401 Unauthorized status."
+    if (!authHeader) {
+      return new Response(JSON.stringify({
+        jsonrpc: '2.0',
+        error: {
+          code: -32001,
+          message: 'Authentication required. Please authorize via OAuth.'
+        },
+        id: rpcRequest.id ?? null
+      }), {
+        status: 401,
+        headers: {
+          'Content-Type': 'application/json',
+          'WWW-Authenticate': 'Bearer resource_metadata="https://api.flaim.app/auth/.well-known/oauth-authorization-server"',
+          ...corsHeaders
+        }
+      });
+    }
+
     // Route to appropriate handler based on method
     switch (rpcRequest.method) {
       case 'initialize':
@@ -192,26 +213,6 @@ export class McpAgent {
         return this.handleToolsList(rpcRequest, corsHeaders);
 
       case 'tools/call':
-        // Require authentication for tool calls - triggers OAuth if not authenticated
-        if (!authHeader) {
-          // Return 401 to trigger OAuth flow per MCP spec
-          // WWW-Authenticate header tells Claude where to find OAuth metadata
-          return new Response(JSON.stringify({
-            jsonrpc: '2.0',
-            error: {
-              code: -32001,
-              message: 'Authentication required. Please authorize via OAuth.'
-            },
-            id: rpcRequest.id ?? null
-          }), {
-            status: 401,
-            headers: {
-              'Content-Type': 'application/json',
-              'WWW-Authenticate': 'Bearer resource_metadata="https://api.flaim.app/auth/.well-known/oauth-authorization-server"',
-              ...corsHeaders
-            }
-          });
-        }
         return this.handleToolsCall(rpcRequest, clerkUserId, env, authHeader, corsHeaders);
 
       case 'ping':
