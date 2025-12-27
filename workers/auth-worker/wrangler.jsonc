@@ -2,31 +2,28 @@
   "name": "auth-worker",
   "main": "./src/index.ts",
   "compatibility_date": "2024-12-01",
-
   // Enable Cloudflare Workers Logs/Observability
-    "observability": {
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "logs": {
       "enabled": true,
       "head_sampling_rate": 1,
-      "logs": {
-        "enabled": true,
-        "head_sampling_rate": 1,
-        "persist": true,
-        "invocation_logs": true
-      },
-      "traces": {
-        "enabled": false,
-        "persist": true,
-        "head_sampling_rate": 1
-      }
+      "persist": true,
+      "invocation_logs": true
     },
-  
+    "traces": {
+      "enabled": false,
+      "persist": true,
+      "head_sampling_rate": 1
+    }
+  },
   // Environment configurations
   "env": {
     // Production environment
     "prod": {
       "name": "auth-worker",
-      "workers_dev": true,  // Enable .workers.dev URL for worker-to-worker calls
-
+      "workers_dev": true, // Enable .workers.dev URL for worker-to-worker calls
       // Custom domain routes for production (external clients)
       // OAuth routes at root level for MCP spec compliance
       "routes": [
@@ -49,9 +46,12 @@
         {
           "pattern": "api.flaim.app/revoke",
           "zone_name": "flaim.app"
+        },
+        {
+          "pattern": "api.flaim.app/register",
+          "zone_name": "flaim.app"
         }
       ],
-
       // Environment variables for production
       // Note: SUPABASE_URL and SUPABASE_SERVICE_KEY set via Cloudflare secrets
       "vars": {
@@ -59,12 +59,10 @@
         "ENVIRONMENT": "prod"
       }
     },
-    
     // Preview environment (remote dev/staging)
     "preview": {
       "name": "auth-worker-preview",
-      "workers_dev": true,  // Also keep workers.dev URL available
-
+      "workers_dev": true, // Also keep workers.dev URL available
       // Custom domain routes for preview (needed for worker-to-worker calls)
       // Note: OAuth routes are shared with prod at base URL (api.flaim.app)
       // Preview testers can use .workers.dev URLs for isolated testing
@@ -74,7 +72,6 @@
           "zone_name": "flaim.app"
         }
       ],
-      
       // Environment variables for preview
       // Note: SUPABASE_URL and SUPABASE_SERVICE_KEY set via Cloudflare secrets
       "vars": {
@@ -82,12 +79,10 @@
         "ENVIRONMENT": "preview"
       }
     },
-    
     // Development environment (local)
     "dev": {
       "name": "auth-worker-dev",
-      "workers_dev": true,  // Use workers.dev URL for development
-      
+      "workers_dev": true, // Use workers.dev URL for development
       // Environment variables for dev  
       // Note: SUPABASE_URL and SUPABASE_SERVICE_KEY loaded from .env.local for local development
       "vars": {
