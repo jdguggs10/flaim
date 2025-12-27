@@ -52,13 +52,37 @@ interface TokenRequest {
 // =============================================================================
 
 // Claude OAuth callback URLs (allowlist these)
+// Claude.ai web uses:
+//   - https://claude.ai/api/mcp/auth_callback
+//   - https://claude.com/api/mcp/auth_callback
+// Claude Desktop native app uses dynamic loopback redirect URIs (RFC 8252):
+//   - http://127.0.0.1:<dynamic_port>/callback
+//   - http://localhost:<dynamic_port>/callback
 const ALLOWED_REDIRECT_URIS = [
+  // Claude.ai web
   'https://claude.ai/api/mcp/auth_callback',
   'https://claude.com/api/mcp/auth_callback',
   // For local development/testing
   'http://localhost:3000/oauth/callback',
   'http://localhost:6274/oauth/callback',
 ];
+
+// Check if a redirect URI is valid
+// Supports both static URIs and dynamic loopback URIs for native apps (RFC 8252)
+function isLoopbackRedirectUri(uri: string): boolean {
+  try {
+    const parsed = new URL(uri);
+    // Check for http scheme (required for loopback)
+    if (parsed.protocol !== 'http:') return false;
+    // Check for loopback hostname
+    const isLoopback = parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1';
+    // Check for /callback path (Claude Desktop pattern)
+    const isCallback = parsed.pathname === '/callback' || parsed.pathname === '/oauth/callback';
+    return isLoopback && isCallback;
+  } catch {
+    return false;
+  }
+}
 
 // OAuth client ID (static for now, no DCR)
 const OAUTH_CLIENT_ID = 'flaim-mcp';
@@ -87,10 +111,15 @@ const getBaseUrl = (env: OAuthEnv): string => {
 // =============================================================================
 
 function isValidRedirectUri(uri: string): boolean {
-  return ALLOWED_REDIRECT_URIS.some(allowed => {
+  // First check static allowlist
+  const isAllowed = ALLOWED_REDIRECT_URIS.some(allowed => {
     // Exact match or starts with (for local dev with ports)
     return uri === allowed || uri.startsWith(allowed);
   });
+  if (isAllowed) return true;
+
+  // Also allow dynamic loopback URIs for Claude Desktop (RFC 8252)
+  return isLoopbackRedirectUri(uri);
 }
 
 function buildErrorRedirect(redirectUri: string, error: string, description: string, state?: string): string {
