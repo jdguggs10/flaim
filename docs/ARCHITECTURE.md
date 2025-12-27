@@ -34,3 +34,15 @@ AI-powered fantasy sports assistant using Clerk auth, Supabase storage, and spor
 - Frontend on Vercel; workers on Cloudflare. GitOps: PR → preview, main → prod.  
 - Keep `"workers_dev": true` on auth-worker prod to expose the direct URL.  
 - Environment setup and troubleshooting live in `docs/GETTING_STARTED.md`.
+
+## Claude Direct Access (OAuth 2.1)
+
+End users can connect Claude Desktop/Claude.ai directly to FLAIM's MCP servers:
+- **OAuth Flow**: Full OAuth 2.1 with PKCE, Dynamic Client Registration (RFC 7591), and Protected Resource Metadata (RFC 9728).
+- **Endpoints**: `/auth/register` (DCR), `/auth/authorize`, `/auth/token`, `/auth/revoke`.
+- **Metadata**: `/.well-known/oauth-authorization-server` (auth server), `/{sport}/.well-known/oauth-protected-resource` (MCP workers).
+- **User flow**: Claude adds MCP URL → 401 triggers OAuth → user consents at `flaim.app/oauth/consent` → token exchange → Claude accesses tools.
+- **Rate limiting**: 200 calls/day per user via `rate_limits` table.
+- **Token storage**: `oauth_codes` and `oauth_tokens` tables in Supabase.
+
+See `docs/MCP_CONNECTOR_RESEARCH.md` for full implementation details.

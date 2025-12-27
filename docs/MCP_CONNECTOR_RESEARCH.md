@@ -6,7 +6,7 @@
 > - **Developer**: You, the FLAIM maintainer operating the domain, workers, and OAuth flow.
 > - **End user**: The person using Claude and connecting your MCP server.
 >
-> **Last Updated**: December 20, 2025
+> **Last Updated**: December 27, 2025
 > **Research Context**: FLAIM uses Cloudflare Workers implementing MCP (Model Context Protocol) for ESPN fantasy sports data. Current architecture uses OpenAI Responses API with custom MCP workers.
 
 ---
@@ -214,21 +214,49 @@ https://claude.com/api/mcp/auth_callback  (future)
 **OAuth Specification**:
 - **OAuth 2.1** with **PKCE (S256) MANDATORY** for all clients.
 - Authorization Code grant for end users.
-- Dynamic Client Registration (RFC 7591) supported but optional.
-- Custom client ID/secret supported for private connectors.
+- **Dynamic Client Registration (RFC 7591) REQUIRED** for MCP clients like Claude Desktop.
 - **Header Required**: `MCP-Protocol-Version: 2025-03-26` (Client must send this; server should default to it if missing). [Source: MCP Spec](https://modelcontextprotocol.io/specification/2025-03-26)
 
-**Required OAuth Endpoints** (default paths per MCP spec):
-| Endpoint | Default Path | Purpose |
-|----------|--------------|---------|
-| Authorization | `/authorize` | User consent flow |
-| Token | `/token` | Code → token exchange |
-| Revocation | `/revoke` | Token revocation (RFC 7009) |
-| Registration | `/register` | Dynamic client registration (optional) |
+**OAuth Discovery Chain** (per RFC 9728 + RFC 8414):
 
-**Metadata Discovery** (Recommended):
-- Path: `/.well-known/oauth-authorization-server` at MCP server base URL.
-- Used by Claude to discover `authorization_endpoint`, `token_endpoint`, etc.
+1. MCP server returns `401 Unauthorized` on connect with:
+   ```
+   WWW-Authenticate: Bearer resource_metadata="https://api.flaim.app/football/.well-known/oauth-protected-resource"
+   ```
+
+2. Claude fetches **Protected Resource Metadata** (RFC 9728) from the MCP server:
+   ```
+   GET https://api.flaim.app/football/.well-known/oauth-protected-resource
+   ```
+   Returns: `authorization_servers`, `scopes_supported`, etc.
+
+3. Claude fetches **Authorization Server Metadata** (RFC 8414) from the auth server:
+   ```
+   GET https://api.flaim.app/.well-known/oauth-authorization-server
+   ```
+   Returns: `authorization_endpoint`, `token_endpoint`, `registration_endpoint`, etc.
+
+4. Claude uses **Dynamic Client Registration** (RFC 7591):
+   ```
+   POST https://api.flaim.app/auth/register
+   ```
+   Returns: `client_id`, `grant_types`, etc.
+
+5. Claude starts OAuth Authorization Code flow with PKCE.
+
+**Required OAuth Endpoints** (FLAIM implementation):
+| Endpoint | Path | Purpose |
+|----------|------|---------|
+| Protected Resource Metadata | `/{sport}/.well-known/oauth-protected-resource` | Points to auth server |
+| Authorization Server Metadata | `/.well-known/oauth-authorization-server` | OAuth server discovery |
+| Client Registration | `/auth/register` or `/register` | Dynamic client registration |
+| Authorization | `/auth/authorize` | User consent flow + redirect |
+| Token | `/auth/token` | Code → token exchange |
+| Revocation | `/auth/revoke` | Token revocation (RFC 7009) |
+
+**Note on Fallback URLs**: The MCP spec defines fallback paths if metadata discovery fails:
+- `/authorize`, `/token`, `/register` at the authorization base URL.
+- FLAIM supports both `/auth/*` prefixed and base paths.
 
 **Claude Outbound IPs** (for optional allowlisting) [Source: Claude Docs](https://docs.anthropic.com/en/docs/resources/ip-addresses):
 ```
@@ -237,6 +265,8 @@ https://claude.com/api/mcp/auth_callback  (future)
 ```
 
 **Transport**: Streamable HTTP is current standard; SSE deprecated but supported.
+
+**Loopback Redirect URIs**: Claude Desktop uses dynamic loopback URIs (e.g., `http://127.0.0.1:<PORT>/callback`). Per RFC 8252, these must be validated by host/path only, ignoring port.
 
 **DCR Client Deletion Signal**: Return HTTP 401 with `invalid_client` error from token endpoint to trigger re-registration.
 
@@ -286,6 +316,24 @@ Status: Complete (December 27, 2025).
 - Rate limit headers: `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`, `Retry-After`
 - Rate limit storage: `rate_limits` table with SQL RPC function for atomic increment
 - 429 response with clear error message and reset time when limit exceeded
+
+### Phase 4: MCP OAuth 2.1 Compliance (December 27, 2025)
+
+Status: Complete.
+
+8) **Protected Resource Metadata (RFC 9728)**: Added `/.well-known/oauth-protected-resource` endpoint to MCP workers.
+9) **Dynamic Client Registration (RFC 7591)**: Added `/register` endpoint for Claude Desktop to obtain `client_id`.
+10) **401 on Connect**: MCP workers now return 401 Unauthorized on ANY unauthenticated request (including `initialize`).
+11) **WWW-Authenticate Header**: Points to Protected Resource Metadata URL.
+12) **Loopback Redirect URIs**: Added support for Claude Desktop's dynamic `http://127.0.0.1:<PORT>/callback` patterns.
+
+**Key Files Modified:**
+- `workers/auth-worker/src/oauth-handlers.ts`: Added DCR handler, updated metadata
+- `workers/auth-worker/src/index.ts`: Added `/register` route
+- `workers/auth-worker/wrangler.jsonc`: Added route for `/register`
+- `workers/football-espn-mcp/src/index.ts`: Added Protected Resource Metadata endpoint
+- `workers/baseball-espn-mcp/src/index.ts`: Added Protected Resource Metadata endpoint
+- `workers/*/src/mcp/agent.ts`: Moved 401 check before method routing
 
 ---
 
@@ -457,11 +505,14 @@ ORDER BY duration_ms DESC;
 
 | Symptom | Check | Fix |
 |---------|-------|-----|
-| OAuth redirect fails | Wrangler routes include `/authorize`, `/token` | Verify `wrangler.jsonc` prod routes |
+| OAuth redirect fails | Wrangler routes include `/authorize`, `/token`, `/register` | Verify `wrangler.jsonc` prod routes |
+| Claude shows "authentication error" | Protected Resource Metadata not found | Verify `/.well-known/oauth-protected-resource` returns correctly |
+| DCR fails | Registration endpoint not routed | Add `/register` route to wrangler.jsonc |
 | 401 on tool calls | Token validation in auth-worker | Check `oauth_tokens` table, verify not revoked/expired |
 | 500 on ESPN calls | ESPN credentials in Supabase | Verify `espn_credentials` table has valid SWID/s2 |
 | CORS errors | `ALLOWED_ORIGINS` in workers | Add missing origin to allowlist |
 | Worker-to-worker timeout | Using custom domain for internal calls | Use `.workers.dev` URL, ensure `workers_dev: true` |
+| Claude loopback redirect rejected | Loopback URI validation | Verify `isLoopbackRedirectUri` function in oauth-handlers.ts |
 
 ### Useful Supabase Queries
 
@@ -525,7 +576,16 @@ ORDER BY created_at DESC;
 - [ ] Log `request_id`, `user_id`, `tool_name`, and status for debugging. *(Basic logging exists; structured logging is a future enhancement)*
 - [x] Keep tool output compact (summary-first; expand only when requested).
 
-### Phase 3 — Testing ⏳
+### Phase 4 — MCP OAuth 2.1 Full Compliance ✅
+
+- [x] Protected Resource Metadata (RFC 9728): `/.well-known/oauth-protected-resource` on MCP workers.
+- [x] Dynamic Client Registration (RFC 7591): `/register` endpoint for Claude Desktop.
+- [x] 401 on Connect: MCP returns 401 on `initialize` to trigger OAuth immediately.
+- [x] WWW-Authenticate header: Points to Protected Resource Metadata URL.
+- [x] Loopback redirect URIs: Support for Claude Desktop's `http://127.0.0.1:<PORT>/callback`.
+- [x] Authorization Server Metadata: Includes `registration_endpoint`.
+
+### Phase 5 — Testing ⏳
 
 - [ ] Manual: Claude Desktop → add custom connector → OAuth → tool call.
 - [ ] Token expiry: verify re-auth on expired token.
@@ -543,3 +603,7 @@ ORDER BY created_at DESC;
 
 ### Authentication References
 - [MCP Authorization Spec](https://modelcontextprotocol.io/specification/2025-03-26/basic/authorization)
+- [RFC 9728 - OAuth 2.0 Protected Resource Metadata](https://datatracker.ietf.org/doc/html/rfc9728)
+- [RFC 7591 - OAuth 2.0 Dynamic Client Registration](https://datatracker.ietf.org/doc/html/rfc7591)
+- [RFC 8414 - OAuth 2.0 Authorization Server Metadata](https://datatracker.ietf.org/doc/html/rfc8414)
+- [RFC 8252 - OAuth 2.0 for Native Apps (Loopback URIs)](https://datatracker.ietf.org/doc/html/rfc8252)

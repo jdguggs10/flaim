@@ -3,6 +3,20 @@
 Follow Keep a Changelog; SemVer applies. Planning docs live in `docs/dev`.
 
 ## [Unreleased]
+
+### OAuth 2.1 for Claude Direct Access
+- **Added**: Full MCP OAuth 2.1 implementation for Claude Desktop/Claude.ai integration.
+- **Added**: Dynamic Client Registration (RFC 7591) - `/register` and `/auth/register` endpoints.
+- **Added**: Protected Resource Metadata (RFC 9728) - `/.well-known/oauth-protected-resource` on MCP workers.
+- **Added**: Authorization Server Metadata (RFC 8414) - includes `registration_endpoint`.
+- **Added**: Support for loopback redirect URIs (RFC 8252) for Claude Desktop.
+- **Changed**: MCP servers now return 401 on `initialize` to trigger OAuth immediately on connect.
+- **Changed**: WWW-Authenticate header points to Protected Resource Metadata URL.
+- **Added**: Rate limiting (200 calls/day per user) with appropriate headers.
+- **Added**: Consent screen at `/oauth/consent` for user authorization.
+- **Added**: Connectors page at `/connectors` for connection management.
+
+### Fixes
 - Note: OpenAI usage now references the **Responses API** (not legacy chat completions).
 - Fix: Strip custom-domain prefixes for auth/baseball/football workers; avoid 404s.
 - Fix: Worker-to-worker must use `.workers.dev`; prod auth-worker enables `workers_dev: true`.
