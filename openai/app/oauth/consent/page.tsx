@@ -173,8 +173,8 @@ function OAuthConsentContent() {
           </div>
           <SignIn
             routing="hash"
-            afterSignInUrl={returnUrl}
-            afterSignUpUrl={returnUrl}
+            forceRedirectUrl={returnUrl}
+            signUpForceRedirectUrl={returnUrl}
           />
         </div>
       </div>
