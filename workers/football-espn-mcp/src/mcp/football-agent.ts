@@ -59,7 +59,7 @@ async function fetchUserLeagues(
   env: Env,
   clerkUserId: string,
   authHeader?: string | null
-): Promise<UserLeague[]> {
+): Promise<{ leagues: UserLeague[], error?: string, status?: number }> {
   try {
     const authWorkerUrl = env.AUTH_WORKER_URL;
     const url = `${authWorkerUrl}/leagues`;
@@ -77,16 +77,24 @@ async function fetchUserLeagues(
 
     if (!response.ok) {
       console.error(`❌ [agent] Leagues fetch failed: ${response.status}`);
-      return [];
+      const text = await response.text().catch(() => 'no body');
+      return {
+        leagues: [],
+        error: `Auth-worker returned ${response.status}: ${text}`,
+        status: response.status
+      };
     }
 
     const data = await response.json() as { success?: boolean; leagues?: UserLeague[] };
     const leagues = data.leagues || [];
     console.log(`✅ [agent] Found ${leagues.length} leagues`);
-    return leagues;
+    return { leagues };
   } catch (error) {
     console.error('❌ [agent] Failed to fetch leagues:', error);
-    return [];
+    return {
+      leagues: [],
+      error: `Fetch failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+    };
   }
 }
 
@@ -425,21 +433,33 @@ export class FootballMcpAgent {
    * Get tool definitions in MCP format
    */
   private getToolDefinitions() {
+    const currentYear = new Date().getFullYear().toString();
+    const currentDate = new Date().toISOString().split('T')[0];
+
     return [
       {
+        name: 'get_user_session',
+        description: 'IMPORTANT: Call this tool FIRST before any other tool. Returns the user\'s configured ESPN leagues, team IDs, current date/time, and current season. Use the returned leagueId and teamId values for all subsequent tool calls.',
+        inputSchema: {
+          type: 'object',
+          properties: {},
+          required: []
+        }
+      },
+      {
         name: 'get_espn_football_league_info',
-        description: 'Get ESPN fantasy football league information',
+        description: `Get ESPN fantasy football league information. Use leagueId from get_user_session. Current season is ${currentYear}.`,
         inputSchema: {
           type: 'object',
           properties: {
             leagueId: {
               type: 'string',
-              description: 'ESPN football league ID'
+              description: 'ESPN football league ID (get from get_user_session)'
             },
             seasonId: {
               type: 'string',
-              description: 'Season year (e.g., "2024")',
-              default: new Date().getFullYear().toString()
+              description: `Season year (default: ${currentYear})`,
+              default: currentYear
             }
           },
           required: ['leagueId']
@@ -447,13 +467,13 @@ export class FootballMcpAgent {
       },
       {
         name: 'get_espn_football_team',
-        description: 'Get detailed team information from ESPN fantasy football league',
+        description: `Get detailed team information from ESPN fantasy football league. Use leagueId and teamId from get_user_session. Current season is ${currentYear}.`,
         inputSchema: {
           type: 'object',
           properties: {
-            leagueId: { type: 'string', description: 'ESPN football league ID' },
-            teamId: { type: 'string', description: 'Team ID within the league' },
-            seasonId: { type: 'string', description: 'Season year', default: new Date().getFullYear().toString() },
+            leagueId: { type: 'string', description: 'ESPN football league ID (get from get_user_session)' },
+            teamId: { type: 'string', description: 'Team ID within the league (get from get_user_session)' },
+            seasonId: { type: 'string', description: `Season year (default: ${currentYear})`, default: currentYear },
             week: { type: 'number', description: 'Week number (optional)' }
           },
           required: ['leagueId', 'teamId']
@@ -461,25 +481,25 @@ export class FootballMcpAgent {
       },
       {
         name: 'get_espn_football_matchups',
-        description: 'Get current week matchups from ESPN fantasy football league',
+        description: `Get current week matchups from ESPN fantasy football league. Use leagueId from get_user_session. Current season is ${currentYear}, current date is ${currentDate}.`,
         inputSchema: {
           type: 'object',
           properties: {
-            leagueId: { type: 'string', description: 'ESPN football league ID' },
+            leagueId: { type: 'string', description: 'ESPN football league ID (get from get_user_session)' },
             week: { type: 'number', description: 'Week number (optional, defaults to current week)' },
-            seasonId: { type: 'string', description: 'Season year', default: new Date().getFullYear().toString() }
+            seasonId: { type: 'string', description: `Season year (default: ${currentYear})`, default: currentYear }
           },
           required: ['leagueId']
         }
       },
       {
         name: 'get_espn_football_standings',
-        description: 'Get league standings from ESPN fantasy football league',
+        description: `Get league standings from ESPN fantasy football league. Use leagueId from get_user_session. Current season is ${currentYear}.`,
         inputSchema: {
           type: 'object',
           properties: {
-            leagueId: { type: 'string', description: 'ESPN football league ID' },
-            seasonId: { type: 'string', description: 'Season year', default: new Date().getFullYear().toString() }
+            leagueId: { type: 'string', description: 'ESPN football league ID (get from get_user_session)' },
+            seasonId: { type: 'string', description: `Season year (default: ${currentYear})`, default: currentYear }
           },
           required: ['leagueId']
         }
@@ -563,26 +583,75 @@ export class FootballMcpAgent {
     logContext?: { resolvedUserId?: string }
   ): Promise<McpResponse> {
     // Fetch user's configured leagues to validate/override leagueId
-    const userLeagues = await fetchUserLeagues(env, clerkUserId, authHeader);
-    const footballLeagues = userLeagues.filter(l => l.sport === 'football');
+    const { leagues: userLeagues, error: fetchError, status: fetchStatus } = await fetchUserLeagues(env, clerkUserId, authHeader);
 
-    // If no football leagues configured, return error
-    if (footballLeagues.length === 0) {
+    // Normalize sport filtering: case-insensitive and include 'nfl' as alias
+    const footballLeagues = userLeagues.filter((l: any) =>
+      l.sport?.toLowerCase() === 'football' || l.sport?.toLowerCase() === 'nfl'
+    );
+
+    // Check if we found ANY leagues
+    const hasAnyLeagues = userLeagues.length > 0;
+    const hasFootballLeagues = footballLeagues.length > 0;
+
+    console.log(`📋 [agent] executeTool: total leagues=${userLeagues.length}, football leagues=${footballLeagues.length}`);
+
+    // SPECIAL CASE: get_user_session should always work if authenticated
+    if (tool === 'get_user_session') {
+      const hasMultipleLeagues = footballLeagues.length > 1;
+      const sessionMessage = hasFootballLeagues
+        ? (hasMultipleLeagues
+          ? `User has ${footballLeagues.length} football leagues configured. ASK the user which league they want to query before making other tool calls. List their leagues by leagueId and let them choose.`
+          : 'Use defaultLeague.leagueId and defaultLeague.teamId for all subsequent tool calls. Use currentSeason for seasonId parameter.')
+        : (hasAnyLeagues
+          ? `No football leagues found, but found leagues for: ${userLeagues.map(l => l.sport).join(', ')}. Please add a football league in settings.`
+          : 'No leagues configured. Please go to flaim.app/settings/espn to add your ESPN credentials.');
+
       return {
-        content: 'No football leagues configured. Please go to flaim.app/settings/espn to add your ESPN credentials and select a league.',
+        content: {
+          success: true,
+          currentDate: new Date().toISOString(),
+          currentSeason: new Date().getFullYear().toString(),
+          timezone: 'America/New_York',
+          totalLeaguesFound: userLeagues.length,
+          footballLeaguesFound: footballLeagues.length,
+          allLeagues: userLeagues,
+          instructions: sessionMessage,
+          debug: {
+            clerkUserId: clerkUserId === 'oauth-user' ? 'oauth-user' : `${clerkUserId.substring(0, 8)}...`,
+            hasAuthHeader: !!authHeader,
+            fetchStatus
+          }
+        }
+      };
+    }
+
+    // For other tools: If no football leagues configured, return error
+    if (!hasFootballLeagues) {
+      let message = 'No football leagues configured. Please go to flaim.app/settings/espn to add your ESPN credentials and select a league.';
+      if (fetchError) {
+        console.error(`❌ [agent] Fetch leagues error (status ${fetchStatus}): ${fetchError}`);
+        message = `Unable to fetch your leagues: ${fetchError}`;
+      } else if (hasAnyLeagues) {
+        const sports = [...new Set(userLeagues.map((l: any) => l.sport))].join(', ');
+        message = `No football leagues found, but found leagues for: ${sports}. Please add a football league in settings.`;
+      }
+
+      return {
+        content: message,
         isError: true
       };
     }
 
     // Use the first football league as default (or find one with teamId set)
-    const defaultLeague = footballLeagues.find(l => l.teamId) || footballLeagues[0];
+    const defaultLeague = (footballLeagues as any).find((l: any) => l.teamId) || footballLeagues[0];
 
     // Normalize args: use user's configured league if not provided or invalid
     const normalizedArgs = { ...args };
 
     // Override leagueId if not provided or if it doesn't match user's leagues
     const providedLeagueId = args.leagueId?.toString();
-    const userHasLeague = providedLeagueId && footballLeagues.some(l => l.leagueId === providedLeagueId);
+    const userHasLeague = providedLeagueId && (footballLeagues as any).some((l: any) => l.leagueId === providedLeagueId);
 
     if (!providedLeagueId || !userHasLeague) {
       console.log(`📋 [agent] Using default league ${defaultLeague.leagueId} (provided: ${providedLeagueId || 'none'}, valid: ${userHasLeague})`);
@@ -600,6 +669,12 @@ export class FootballMcpAgent {
     console.log(`🔧 [agent] Executing ${tool} with normalized args:`, JSON.stringify(normalizedArgs));
 
     switch (tool) {
+      case 'get_user_session':
+        // This case is now handled at the beginning of the function.
+        // This `break` or `throw` should ideally not be reached if the above `if (tool === 'get_user_session')` is correctly placed.
+        // Keeping it here for structural integrity if the outer `if` is ever removed, but it's effectively dead code now.
+        throw new Error('get_user_session should have been handled earlier.');
+
       case 'get_espn_football_league_info':
         return this.getEspnFootballLeagueInfo(normalizedArgs, clerkUserId, env, authHeader, logContext);
 

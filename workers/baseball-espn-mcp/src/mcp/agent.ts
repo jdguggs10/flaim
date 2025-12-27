@@ -63,6 +63,59 @@ interface JsonRpcResponse {
   id: string | number | null;
 }
 
+// User league data from auth-worker
+interface UserLeague {
+  leagueId: string;
+  sport: string;
+  teamId?: string;
+}
+
+/**
+ * Fetch user's configured leagues from auth-worker
+ */
+async function fetchUserLeagues(
+  env: Env,
+  clerkUserId: string,
+  authHeader?: string | null
+): Promise<{ leagues: UserLeague[], error?: string, status?: number }> {
+  try {
+    const authWorkerUrl = env.AUTH_WORKER_URL;
+    const url = `${authWorkerUrl}/leagues`;
+
+    console.log(`⚾️ [agent] Fetching leagues for ${clerkUserId} from ${url}`);
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'X-Clerk-User-ID': clerkUserId,
+        'Content-Type': 'application/json',
+        ...(authHeader ? { 'Authorization': authHeader } : {})
+      }
+    });
+
+    if (!response.ok) {
+      console.error(`❌ [agent] Leagues fetch failed: ${response.status}`);
+      const text = await response.text().catch(() => 'no body');
+      return {
+        leagues: [],
+        error: `Auth-worker returned ${response.status}: ${text}`,
+        status: response.status
+      };
+    }
+
+    const data = await response.json() as { success?: boolean; leagues?: UserLeague[] };
+    const leagues = data.leagues || [];
+    console.log(`✅ [agent] Found ${leagues.length} leagues`);
+    return { leagues };
+  } catch (error) {
+    console.error('❌ [agent] Failed to fetch leagues:', error);
+    return {
+      leagues: [],
+      error: `Fetch failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+    };
+  }
+}
+
 export class McpAgent {
   constructor() { }
 
@@ -379,21 +432,33 @@ export class McpAgent {
    * Get tool definitions in MCP format
    */
   private getToolDefinitions() {
+    const currentYear = new Date().getFullYear().toString();
+    const currentDate = new Date().toISOString().split('T')[0];
+
     return [
       {
+        name: 'get_user_session',
+        description: 'IMPORTANT: Call this tool FIRST before any other tool. Returns the user\'s configured ESPN leagues, team IDs, current date/time, and current season. Use the returned leagueId and teamId values for all subsequent tool calls.',
+        inputSchema: {
+          type: 'object',
+          properties: {},
+          required: []
+        }
+      },
+      {
         name: 'get_espn_league_info',
-        description: 'Get ESPN fantasy league information',
+        description: `Get ESPN fantasy baseball league information. Use leagueId from get_user_session. Current season is ${currentYear}.`,
         inputSchema: {
           type: 'object',
           properties: {
             leagueId: {
               type: 'string',
-              description: 'ESPN league ID'
+              description: 'ESPN league ID (get from get_user_session)'
             },
             seasonId: {
               type: 'string',
-              description: 'Season year (e.g., "2024")',
-              default: new Date().getFullYear().toString()
+              description: `Season year (default: ${currentYear})`,
+              default: currentYear
             }
           },
           required: ['leagueId']
@@ -401,26 +466,26 @@ export class McpAgent {
       },
       {
         name: 'get_espn_team_roster',
-        description: 'Get detailed team roster from ESPN fantasy league',
+        description: `Get detailed team roster from ESPN fantasy baseball league. Use leagueId and teamId from get_user_session. Current season is ${currentYear}.`,
         inputSchema: {
           type: 'object',
           properties: {
-            leagueId: { type: 'string', description: 'ESPN league ID' },
-            teamId: { type: 'string', description: 'Team ID within the league' },
-            seasonId: { type: 'string', description: 'Season year', default: new Date().getFullYear().toString() }
+            leagueId: { type: 'string', description: 'ESPN league ID (get from get_user_session)' },
+            teamId: { type: 'string', description: 'Team ID within the league (get from get_user_session)' },
+            seasonId: { type: 'string', description: `Season year (default: ${currentYear})`, default: currentYear }
           },
           required: ['leagueId', 'teamId']
         }
       },
       {
         name: 'get_espn_matchups',
-        description: 'Get current week matchups from ESPN fantasy league',
+        description: `Get current week matchups from ESPN fantasy baseball league. Use leagueId from get_user_session. Current season is ${currentYear}, current date is ${currentDate}.`,
         inputSchema: {
           type: 'object',
           properties: {
-            leagueId: { type: 'string', description: 'ESPN league ID' },
+            leagueId: { type: 'string', description: 'ESPN league ID (get from get_user_session)' },
             week: { type: 'number', description: 'Week number (optional, defaults to current week)' },
-            seasonId: { type: 'string', description: 'Season year', default: new Date().getFullYear().toString() }
+            seasonId: { type: 'string', description: `Season year (default: ${currentYear})`, default: currentYear }
           },
           required: ['leagueId']
         }
@@ -503,15 +568,101 @@ export class McpAgent {
     authHeader?: string | null,
     logContext?: { resolvedUserId?: string }
   ): Promise<McpResponse> {
+    // Fetch user's configured leagues to validate/override leagueId
+    const { leagues: userLeagues, error: fetchError, status: fetchStatus } = await fetchUserLeagues(env, clerkUserId, authHeader);
+
+    // Normalize sport filtering: case-insensitive
+    const baseballLeagues = userLeagues.filter((l: any) =>
+      l.sport?.toLowerCase() === 'baseball' || l.sport?.toLowerCase() === 'mlb'
+    );
+
+    // Check if we found ANY leagues
+    const hasAnyLeagues = userLeagues.length > 0;
+    const hasBaseballLeagues = baseballLeagues.length > 0;
+
+    console.log(`📋 [agent] executeTool: total leagues=${userLeagues.length}, baseball leagues=${baseballLeagues.length}`);
+
+    // SPECIAL CASE: get_user_session should always work if authenticated
+    if (tool === 'get_user_session') {
+      const hasMultipleLeagues = baseballLeagues.length > 1;
+      const sessionMessage = hasBaseballLeagues
+        ? (hasMultipleLeagues
+          ? `User has ${baseballLeagues.length} baseball leagues configured. ASK the user which league they want to query before making other tool calls. List their leagues by leagueId and let them choose.`
+          : 'Use defaultLeague.leagueId and defaultLeague.teamId for all subsequent tool calls. Use currentSeason for seasonId parameter.')
+        : (hasAnyLeagues
+          ? `No baseball leagues found, but found leagues for: ${userLeagues.map(l => l.sport).join(', ')}. Please add a baseball league in settings.`
+          : 'No leagues configured. Please go to flaim.app/settings/espn to add your ESPN credentials.');
+
+      return {
+        content: {
+          success: true,
+          currentDate: new Date().toISOString(),
+          currentSeason: new Date().getFullYear().toString(),
+          timezone: 'America/New_York',
+          totalLeaguesFound: userLeagues.length,
+          baseballLeaguesFound: baseballLeagues.length,
+          allLeagues: userLeagues,
+          instructions: sessionMessage,
+          debug: {
+            clerkUserId: clerkUserId === 'oauth-user' ? 'oauth-user' : `${clerkUserId.substring(0, 8)}...`,
+            hasAuthHeader: !!authHeader,
+            fetchStatus
+          }
+        }
+      };
+    }
+
+    // For other tools: If no baseball leagues configured, return error
+    if (!hasBaseballLeagues) {
+      let message = 'No baseball leagues configured. Please go to flaim.app/settings/espn to add your ESPN credentials and select a league.';
+      if (fetchError) {
+        console.error(`❌ [agent] Fetch leagues error (status ${fetchStatus}): ${fetchError}`);
+        message = `Unable to fetch your leagues: ${fetchError}`;
+      } else if (hasAnyLeagues) {
+        const sports = [...new Set(userLeagues.map((l: any) => l.sport))].join(', ');
+        message = `No baseball leagues found, but found leagues for: ${sports}. Please add a baseball league in settings.`;
+      }
+
+      return {
+        content: message,
+        isError: true
+      };
+    }
+
+    // Use the first baseball league as default (or find one with teamId set)
+    const defaultLeague = (baseballLeagues as any).find((l: any) => l.teamId) || baseballLeagues[0];
+
+    // Normalize args: use user's configured league if not provided or invalid
+    const normalizedArgs = { ...args };
+
+    // Override leagueId if not provided or if it doesn't match user's leagues
+    const providedLeagueId = args.leagueId?.toString();
+    const userHasLeague = providedLeagueId && (baseballLeagues as any).some((l: any) => l.leagueId === providedLeagueId);
+
+    if (!providedLeagueId || !userHasLeague) {
+      console.log(`📋 [agent] Using default league ${defaultLeague.leagueId} (provided: ${providedLeagueId || 'none'}, valid: ${userHasLeague})`);
+      normalizedArgs.leagueId = defaultLeague.leagueId;
+      if (defaultLeague.teamId) {
+        normalizedArgs.teamId = normalizedArgs.teamId || defaultLeague.teamId;
+      }
+    }
+
+    // Default seasonId to current year
+    if (!normalizedArgs.seasonId) {
+      normalizedArgs.seasonId = new Date().getFullYear().toString();
+    }
+
+    console.log(`🔧 [agent] Executing ${tool} with normalized args:`, JSON.stringify(normalizedArgs));
+
     switch (tool) {
       case 'get_espn_league_info':
-        return this.getEspnLeagueInfo(args, clerkUserId, env, authHeader, logContext);
+        return this.getEspnLeagueInfo(normalizedArgs, clerkUserId, env, authHeader, logContext);
 
       case 'get_espn_team_roster':
-        return this.getEspnTeamRoster(args, clerkUserId, env, authHeader, logContext);
+        return this.getEspnTeamRoster(normalizedArgs, clerkUserId, env, authHeader, logContext);
 
       case 'get_espn_matchups':
-        return this.getEspnMatchups(args, clerkUserId, env, authHeader, logContext);
+        return this.getEspnMatchups(normalizedArgs, clerkUserId, env, authHeader, logContext);
 
       default:
         throw new Error(`Unknown tool: ${tool}`);

@@ -2,7 +2,6 @@
   "name": "football-espn-mcp",
   "main": "src/index.ts",
   "compatibility_date": "2024-12-01",
-
   // Enable Cloudflare Workers Logs/Observability
   "observability": {
     "enabled": true,
@@ -19,14 +18,12 @@
       "head_sampling_rate": 1
     }
   },
-  
   // Environment configurations
   "env": {
     // Production environment
     "prod": {
       "name": "football-espn-mcp",
       "workers_dev": true,
-      
       // Custom domain routes for production
       "routes": [
         {
@@ -34,7 +31,6 @@
           "zone_name": "flaim.app"
         }
       ],
-      
       // Environment variables for production
       // Note: Using custom domain for auth-worker to avoid Cloudflare error 1042
       // (worker-to-worker fetch blocked on .workers.dev URLs)
@@ -44,12 +40,10 @@
         "AUTH_WORKER_URL": "https://api.flaim.app/auth"
       }
     },
-    
     // Preview environment (remote dev/staging)
     "preview": {
       "name": "football-espn-mcp-preview",
-      "workers_dev": true,  // Use workers.dev URL for preview
-      
+      "workers_dev": true, // Use workers.dev URL for preview
       // Environment variables for preview
       // Note: Using custom domain for auth-worker to avoid Cloudflare error 1042
       "vars": {
@@ -58,12 +52,10 @@
         "AUTH_WORKER_URL": "https://api.flaim.app/auth-preview"
       }
     },
-    
     // Development environment (local)
     "dev": {
-      "name": "football-espn-mcp-dev", 
-      "workers_dev": true,  // Use workers.dev URL for development
-      
+      "name": "football-espn-mcp-dev",
+      "workers_dev": true, // Use workers.dev URL for development
       // Environment variables for dev
       "vars": {
         "NODE_ENV": "development",
