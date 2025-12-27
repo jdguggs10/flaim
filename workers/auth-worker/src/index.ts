@@ -29,6 +29,7 @@ import { EspnSupabaseStorage } from './supabase-storage';
 import { EspnCredentials, EspnLeague } from './espn-types';
 import {
   handleMetadataDiscovery,
+  handleClientRegistration,
   handleAuthorize,
   handleCreateCode,
   handleToken,
@@ -56,7 +57,7 @@ type Jwk = {
 };
 
 type JwtHeader = { alg: string; kid?: string; typ?: string };
-type JwtPayload = { sub?: string; iss?: string; exp?: number; [k: string]: any };
+type JwtPayload = { sub?: string; iss?: string; exp?: number;[k: string]: any };
 
 const jwksCache: Map<string, { keysByKid: Map<string, Jwk>; fetchedAt: number }> = new Map();
 const JWKS_TTL_MS = 5 * 60 * 1000; // 5 minutes
@@ -326,6 +327,11 @@ export default {
         return handleMetadataDiscovery(env as OAuthEnv, corsHeaders);
       }
 
+      // Dynamic Client Registration (RFC 7591)
+      if (pathname === '/register') {
+        return handleClientRegistration(request, env as OAuthEnv, corsHeaders);
+      }
+
       // Authorization endpoint - redirects to frontend consent page
       if (pathname === '/authorize' && request.method === 'GET') {
         return handleAuthorize(request, env as OAuthEnv);
@@ -420,7 +426,7 @@ export default {
           }
 
           const success = await storage.setCredentials(clerkUserId, body.swid!, body.s2!, body.email);
-          
+
           if (!success) {
             return new Response(JSON.stringify({
               error: 'Failed to store credentials'
@@ -483,13 +489,13 @@ export default {
                 message: 'No ESPN credentials found for user. Add your ESPN credentials at /settings/espn'
               }), {
                 status: 404,
-                headers: { 
+                headers: {
                   'Content-Type': 'application/json',
                   'X-User-Id': clerkUserId,
                   'X-RateLimit-Limit': String(RATE_LIMIT_PER_DAY),
                   'X-RateLimit-Remaining': String(remaining),
                   'X-RateLimit-Reset': String(Math.floor(rateLimit.resetAt.getTime() / 1000)),
-                  ...corsHeaders 
+                  ...corsHeaders
                 }
               });
             }
@@ -511,7 +517,7 @@ export default {
           } else {
             // Get credential metadata (default behavior for frontend)
             const metadata = await storage.getCredentialMetadata(clerkUserId);
-            
+
             if (!metadata?.hasCredentials) {
               return new Response(JSON.stringify({
                 hasCredentials: false,
@@ -535,7 +541,7 @@ export default {
         } else if (request.method === 'DELETE') {
           // Delete ESPN credentials
           const success = await storage.deleteCredentials(clerkUserId);
-          
+
           if (!success) {
             return new Response(JSON.stringify({
               error: 'Failed to delete credentials'
@@ -683,7 +689,7 @@ export default {
       const leagueTeamMatch = pathname.match(/^\/leagues\/([^\/]+)\/team$/);
       if (leagueTeamMatch && request.method === 'PATCH') {
         const leagueId = leagueTeamMatch[1];
-        
+
         // Extract Clerk User ID from header
         const { userId: clerkUserId, error: authError } = await getVerifiedUserId(request, env);
         if (!clerkUserId) {
@@ -712,10 +718,10 @@ export default {
 
         // Get current leagues
         const currentLeagues = await storage.getLeagues(clerkUserId);
-        
+
         // Find the specific league
-        const league = currentLeagues.find(l => 
-          l.leagueId === leagueId && 
+        const league = currentLeagues.find(l =>
+          l.leagueId === leagueId &&
           (sport ? l.sport === sport : true)
         );
 

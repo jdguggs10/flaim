@@ -154,6 +154,8 @@ export function handleMetadataDiscovery(env: OAuthEnv, corsHeaders: Record<strin
     authorization_endpoint: `${baseUrl}/auth/authorize`,
     token_endpoint: `${baseUrl}/auth/token`,
     revocation_endpoint: `${baseUrl}/auth/revoke`,
+    // Dynamic Client Registration (RFC 7591) - required for MCP clients
+    registration_endpoint: `${baseUrl}/auth/register`,
     // Token introspection not implemented
     // introspection_endpoint: `${baseUrl}/introspect`,
 
@@ -176,6 +178,110 @@ export function handleMetadataDiscovery(env: OAuthEnv, corsHeaders: Record<strin
       ...corsHeaders,
     },
   });
+}
+
+// =============================================================================
+// DYNAMIC CLIENT REGISTRATION (RFC 7591)
+// =============================================================================
+
+interface ClientRegistrationRequest {
+  redirect_uris?: string[];
+  client_name?: string;
+  client_uri?: string;
+  logo_uri?: string;
+  software_id?: string;
+  software_version?: string;
+  grant_types?: string[];
+  response_types?: string[];
+  token_endpoint_auth_method?: string;
+}
+
+/**
+ * Dynamic Client Registration endpoint (RFC 7591)
+ * POST /register
+ * 
+ * This allows MCP clients like Claude Desktop to dynamically register
+ * and obtain a client_id without manual pre-registration.
+ */
+export async function handleClientRegistration(
+  request: Request,
+  env: OAuthEnv,
+  corsHeaders: Record<string, string>
+): Promise<Response> {
+  // Only accept POST
+  if (request.method !== 'POST') {
+    return new Response(JSON.stringify({
+      error: 'invalid_request',
+      error_description: 'Method not allowed. Use POST.'
+    }), {
+      status: 405,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders }
+    });
+  }
+
+  let body: ClientRegistrationRequest;
+  try {
+    body = await request.json() as ClientRegistrationRequest;
+  } catch {
+    return new Response(JSON.stringify({
+      error: 'invalid_request',
+      error_description: 'Invalid JSON body'
+    }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders }
+    });
+  }
+
+  // Validate redirect_uris if provided
+  const redirectUris = body.redirect_uris || [];
+  for (const uri of redirectUris) {
+    if (!isValidRedirectUri(uri)) {
+      return new Response(JSON.stringify({
+        error: 'invalid_redirect_uri',
+        error_description: `Invalid redirect URI: ${uri}`
+      }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders }
+      });
+    }
+  }
+
+  // Generate a deterministic client_id based on software_id or first redirect_uri
+  // This ensures the same client gets the same ID on repeat registrations
+  const identifier = body.software_id || redirectUris[0] || 'anonymous';
+  const clientId = `mcp_${await hashString(identifier)}`;
+
+  // For public MCP clients, we don't issue a client_secret
+  // Per RFC 7591, this is allowed for public clients
+  const response = {
+    client_id: clientId,
+    client_id_issued_at: Math.floor(Date.now() / 1000),
+    redirect_uris: redirectUris,
+    client_name: body.client_name || 'MCP Client',
+    grant_types: body.grant_types || ['authorization_code', 'refresh_token'],
+    response_types: body.response_types || ['code'],
+    token_endpoint_auth_method: 'none', // Public client
+  };
+
+  console.log(`📝 DCR: Registered client ${clientId} for ${body.client_name || 'MCP Client'}`);
+
+  return new Response(JSON.stringify(response), {
+    status: 201,
+    headers: {
+      'Content-Type': 'application/json',
+      ...corsHeaders
+    }
+  });
+}
+
+// Simple hash function for generating deterministic client IDs
+async function hashString(str: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(str);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  return hashHex.substring(0, 16); // First 16 chars for shorter client_id
 }
 
 // =============================================================================
