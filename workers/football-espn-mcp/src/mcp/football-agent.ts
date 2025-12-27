@@ -199,7 +199,7 @@ export class FootballMcpAgent {
         status: 401,
         headers: {
           'Content-Type': 'application/json',
-          'WWW-Authenticate': 'Bearer resource_metadata="https://api.flaim.app/auth/.well-known/oauth-authorization-server"',
+          'WWW-Authenticate': 'Bearer resource_metadata="https://api.flaim.app/football/.well-known/oauth-protected-resource"',
           ...corsHeaders
         }
       });

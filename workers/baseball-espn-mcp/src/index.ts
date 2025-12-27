@@ -34,66 +34,66 @@ async function getCredentials(
 ): Promise<EspnCredentials | null> {
   try {
     const authWorkerUrl = config.authWorkerUrl || config.defaultUrl;
-    
+
     // Debug: Log configuration
     console.log(`🔧 [baseball] getCredentials config: authWorkerUrl=${authWorkerUrl}, hasAuthHeader=${!!authHeader}, authHeaderLength=${authHeader?.length || 0}`);
-    
+
     if (!authWorkerUrl) {
       console.error('❌ [baseball] AUTH_WORKER_URL is not configured!');
       throw new Error('AUTH_WORKER_URL is not configured');
     }
-    
+
     const url = `${authWorkerUrl}/credentials/espn?raw=true`;
-    
+
     console.log(`🔑 [baseball] Fetching ESPN credentials for user ${clerkUserId} from ${url}`);
-    
+
     const headers: Record<string, string> = {
       'X-Clerk-User-ID': clerkUserId,
       'Content-Type': 'application/json',
     };
-    
+
     if (authHeader) {
       headers['Authorization'] = authHeader;
       console.log(`🔐 [baseball] Authorization header present, starts with: ${authHeader.substring(0, 15)}...`);
     } else {
       console.warn(`⚠️ [baseball] No Authorization header provided - auth-worker may reject this request`);
     }
-    
+
     const response = await fetch(url, {
       method: 'GET',
       headers
     });
-    
+
     console.log(`📡 [baseball] Auth-worker response: ${response.status} ${response.statusText}`);
-    
+
     if (response.status === 404) {
       const errorBody = await response.text().catch(() => 'unknown');
       console.log(`ℹ️ [baseball] 404 response body: ${errorBody}`);
       return null;
     }
-    
+
     if (response.status === 401) {
       const errorBody = await response.text().catch(() => 'unknown');
       console.error(`❌ [baseball] Auth failed (401): ${errorBody}`);
       throw new Error(`Auth-worker authentication failed: ${errorBody}`);
     }
-    
+
     if (!response.ok) {
       console.error(`❌ [baseball] Auth-worker error: ${response.status} ${response.statusText}`);
       const errorData = await response.json().catch(() => ({})) as { error?: string };
       throw new Error(`Auth-worker error: ${errorData.error || response.statusText}`);
     }
-    
+
     const data = await response.json() as { success?: boolean; credentials?: EspnCredentials };
-    
+
     if (!data.success || !data.credentials) {
       console.error('❌ [baseball] Invalid response from auth-worker:', JSON.stringify(data));
       throw new Error('Invalid credentials response from auth-worker');
     }
-    
+
     console.log('✅ [baseball] Successfully retrieved ESPN credentials');
     return data.credentials;
-    
+
   } catch (error) {
     console.error('❌ [baseball] Failed to fetch credentials from auth-worker:', error);
     throw error;
@@ -111,9 +111,9 @@ async function getUserLeagues(
   try {
     const authWorkerUrl = config.authWorkerUrl || config.defaultUrl;
     const url = `${authWorkerUrl}/leagues`;
-    
+
     console.log(`🏈 Fetching user leagues for ${clerkUserId} from ${url}`);
-    
+
     const response = await fetch(url, {
       method: 'GET',
       headers: {
@@ -122,30 +122,30 @@ async function getUserLeagues(
         ...(authHeader ? { 'Authorization': authHeader } : {})
       }
     });
-    
+
     console.log(`📡 Auth-worker leagues response: ${response.status} ${response.statusText}`);
-    
+
     if (response.status === 404) {
       console.log('ℹ️ No leagues found for user');
       return [];
     }
-    
+
     if (!response.ok) {
       console.error(`❌ Auth-worker leagues error: ${response.status} ${response.statusText}`);
       const errorData = await response.json().catch(() => ({})) as { error?: string };
       throw new Error(`Auth-worker error: ${errorData.error || response.statusText}`);
     }
-    
+
     const data = await response.json() as { success?: boolean; leagues?: Array<{ leagueId: string; sport: string; teamId?: string }> };
-    
+
     if (!data.success) {
       console.error('❌ Invalid leagues response from auth-worker:', data);
       return [];
     }
-    
+
     console.log(`✅ Successfully retrieved ${data.leagues?.length || 0} leagues`);
     return data.leagues || [];
-    
+
   } catch (error) {
     console.error('❌ Failed to fetch leagues from auth-worker:', error);
     throw error;
@@ -208,7 +208,7 @@ export default {
       // Health check endpoint with auth-worker connectivity test
       if (pathname === '/health') {
         const healthData: any = {
-          status: 'healthy', 
+          status: 'healthy',
           service: 'baseball-espn-mcp',
           version: '4.0.0',
           timestamp: new Date().toISOString()
@@ -243,12 +243,31 @@ export default {
         });
       }
 
+      // OAuth Protected Resource Metadata (RFC 9728)
+      // This tells Claude where to find the authorization server
+      if (pathname === '/.well-known/oauth-protected-resource') {
+        const metadata = {
+          resource: 'https://api.flaim.app/baseball/mcp',
+          authorization_servers: ['https://api.flaim.app'],
+          bearer_methods_supported: ['header'],
+          scopes_supported: ['mcp:read', 'mcp:write']
+        };
+        return new Response(JSON.stringify(metadata), {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'public, max-age=3600',
+            ...corsHeaders
+          }
+        });
+      }
+
       // Onboarding initialize endpoint
       if (pathname === '/onboarding/initialize' && request.method === 'POST') {
         try {
           const clerkUserId = request.headers.get('X-Clerk-User-ID');
           const authHeader = request.headers.get('Authorization');
-          
+
           // Debug: Log all relevant headers
           console.log(`🔍 [baseball] /onboarding/initialize - Headers received:`);
           console.log(`   X-Clerk-User-ID: ${clerkUserId || 'MISSING'}`);
@@ -304,7 +323,7 @@ export default {
           let targetLeagues = baseballLeagues;
           if (leagueId) {
             targetLeagues = baseballLeagues.filter((league: { leagueId: string; sport: string; teamId?: string }) => league.leagueId === leagueId);
-            
+
             if (targetLeagues.length === 0) {
               return new Response(JSON.stringify({
                 error: `Baseball league ${leagueId} not found for user.`,

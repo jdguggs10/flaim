@@ -198,7 +198,7 @@ export class McpAgent {
         status: 401,
         headers: {
           'Content-Type': 'application/json',
-          'WWW-Authenticate': 'Bearer resource_metadata="https://api.flaim.app/auth/.well-known/oauth-authorization-server"',
+          'WWW-Authenticate': 'Bearer resource_metadata="https://api.flaim.app/baseball/.well-known/oauth-protected-resource"',
           ...corsHeaders
         }
       });
