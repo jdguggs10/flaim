@@ -21,7 +21,6 @@ export const getTools = () => {
     webSearchConfig,
     mcpEnabled,
     mcpConfig,
-    selectedSport,
     selectedPlatform,
     isAuthenticated,
     clerkUserId,

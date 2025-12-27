@@ -61,9 +61,8 @@ export default function Assistant() {
   const isLoading = !isLoaded;
   
   // Onboarding integration
-  const { 
-    isComplete: onboardingComplete, 
-    selectedLeague, 
+  const {
+    isComplete: onboardingComplete,
     selectedPlatform,
     espnLeagues,
     activeLeagueKey,

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React, { Suspense, useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useAuth, SignIn } from '@clerk/nextjs';
 import ConsentScreen from '@/components/connectors/ConsentScreen';
@@ -12,7 +12,18 @@ interface LeagueData {
   teamId?: string;
 }
 
-export default function OAuthConsentPage() {
+function LoadingFallback() {
+  return (
+    <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="flex flex-col items-center gap-4">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <p className="text-muted-foreground">Loading...</p>
+      </div>
+    </div>
+  );
+}
+
+function OAuthConsentContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { isLoaded, isSignedIn } = useAuth();
@@ -180,5 +191,13 @@ export default function OAuthConsentPage() {
         hasLeaguesConfigured={hasLeaguesConfigured}
       />
     </div>
+  );
+}
+
+export default function OAuthConsentPage() {
+  return (
+    <Suspense fallback={<LoadingFallback />}>
+      <OAuthConsentContent />
+    </Suspense>
   );
 }

@@ -9,7 +9,7 @@ export const runtime = 'edge';
  * Check if the user has active OAuth connections.
  * Proxies to auth-worker GET /oauth/status with Clerk JWT.
  */
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   try {
     const { userId, getToken } = await auth();
 
