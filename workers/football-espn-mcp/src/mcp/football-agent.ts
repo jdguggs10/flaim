@@ -45,6 +45,51 @@ export interface McpResponse {
   isError?: boolean;
 }
 
+// User league data from auth-worker
+interface UserLeague {
+  leagueId: string;
+  sport: string;
+  teamId?: string;
+}
+
+/**
+ * Fetch user's configured leagues from auth-worker
+ */
+async function fetchUserLeagues(
+  env: Env,
+  clerkUserId: string,
+  authHeader?: string | null
+): Promise<UserLeague[]> {
+  try {
+    const authWorkerUrl = env.AUTH_WORKER_URL;
+    const url = `${authWorkerUrl}/leagues`;
+
+    console.log(`🏈 [agent] Fetching leagues for ${clerkUserId} from ${url}`);
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'X-Clerk-User-ID': clerkUserId,
+        'Content-Type': 'application/json',
+        ...(authHeader ? { 'Authorization': authHeader } : {})
+      }
+    });
+
+    if (!response.ok) {
+      console.error(`❌ [agent] Leagues fetch failed: ${response.status}`);
+      return [];
+    }
+
+    const data = await response.json() as { success?: boolean; leagues?: UserLeague[] };
+    const leagues = data.leagues || [];
+    console.log(`✅ [agent] Found ${leagues.length} leagues`);
+    return leagues;
+  } catch (error) {
+    console.error('❌ [agent] Failed to fetch leagues:', error);
+    return [];
+  }
+}
+
 // JSON-RPC 2.0 types for MCP protocol
 interface JsonRpcRequest {
   jsonrpc: "2.0";
@@ -517,18 +562,55 @@ export class FootballMcpAgent {
     authHeader?: string | null,
     logContext?: { resolvedUserId?: string }
   ): Promise<McpResponse> {
+    // Fetch user's configured leagues to validate/override leagueId
+    const userLeagues = await fetchUserLeagues(env, clerkUserId, authHeader);
+    const footballLeagues = userLeagues.filter(l => l.sport === 'football');
+
+    // If no football leagues configured, return error
+    if (footballLeagues.length === 0) {
+      return {
+        content: 'No football leagues configured. Please go to flaim.app/settings/espn to add your ESPN credentials and select a league.',
+        isError: true
+      };
+    }
+
+    // Use the first football league as default (or find one with teamId set)
+    const defaultLeague = footballLeagues.find(l => l.teamId) || footballLeagues[0];
+
+    // Normalize args: use user's configured league if not provided or invalid
+    const normalizedArgs = { ...args };
+
+    // Override leagueId if not provided or if it doesn't match user's leagues
+    const providedLeagueId = args.leagueId?.toString();
+    const userHasLeague = providedLeagueId && footballLeagues.some(l => l.leagueId === providedLeagueId);
+
+    if (!providedLeagueId || !userHasLeague) {
+      console.log(`📋 [agent] Using default league ${defaultLeague.leagueId} (provided: ${providedLeagueId || 'none'}, valid: ${userHasLeague})`);
+      normalizedArgs.leagueId = defaultLeague.leagueId;
+      if (defaultLeague.teamId) {
+        normalizedArgs.teamId = normalizedArgs.teamId || defaultLeague.teamId;
+      }
+    }
+
+    // Default seasonId to current year
+    if (!normalizedArgs.seasonId) {
+      normalizedArgs.seasonId = new Date().getFullYear().toString();
+    }
+
+    console.log(`🔧 [agent] Executing ${tool} with normalized args:`, JSON.stringify(normalizedArgs));
+
     switch (tool) {
       case 'get_espn_football_league_info':
-        return this.getEspnFootballLeagueInfo(args, clerkUserId, env, authHeader, logContext);
+        return this.getEspnFootballLeagueInfo(normalizedArgs, clerkUserId, env, authHeader, logContext);
 
       case 'get_espn_football_team':
-        return this.getEspnFootballTeam(args, clerkUserId, env, authHeader, logContext);
+        return this.getEspnFootballTeam(normalizedArgs, clerkUserId, env, authHeader, logContext);
 
       case 'get_espn_football_matchups':
-        return this.getEspnFootballMatchups(args, clerkUserId, env, authHeader, logContext);
+        return this.getEspnFootballMatchups(normalizedArgs, clerkUserId, env, authHeader, logContext);
 
       case 'get_espn_football_standings':
-        return this.getEspnFootballStandings(args, clerkUserId, env, authHeader, logContext);
+        return this.getEspnFootballStandings(normalizedArgs, clerkUserId, env, authHeader, logContext);
 
       default:
         throw new Error(`Unknown football tool: ${tool}`);
