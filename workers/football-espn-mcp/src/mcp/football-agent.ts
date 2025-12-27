@@ -193,6 +193,26 @@ export class FootballMcpAgent {
         return this.handleToolsList(rpcRequest, corsHeaders);
 
       case 'tools/call':
+        // Require authentication for tool calls - triggers OAuth if not authenticated
+        if (!authHeader) {
+          // Return 401 to trigger OAuth flow per MCP spec
+          // WWW-Authenticate header tells Claude where to find OAuth metadata
+          return new Response(JSON.stringify({
+            jsonrpc: '2.0',
+            error: {
+              code: -32001,
+              message: 'Authentication required. Please authorize via OAuth.'
+            },
+            id: rpcRequest.id ?? null
+          }), {
+            status: 401,
+            headers: {
+              'Content-Type': 'application/json',
+              'WWW-Authenticate': 'Bearer resource_metadata="https://api.flaim.app/.well-known/oauth-authorization-server"',
+              ...corsHeaders
+            }
+          });
+        }
         return this.handleToolsCall(rpcRequest, clerkUserId, env, authHeader, corsHeaders);
 
       case 'ping':

@@ -64,7 +64,7 @@ interface JsonRpcResponse {
 }
 
 export class McpAgent {
-  constructor() {}
+  constructor() { }
 
   async handleRequest(request: Request, env: Env): Promise<Response> {
     const corsHeaders = {
@@ -85,8 +85,8 @@ export class McpAgent {
       const clerkUserIdHeader = request.headers.get('X-Clerk-User-ID');
       const authHeader = request.headers.get('Authorization');
       let clerkUserId = clerkUserIdHeader ||
-                       new URL(request.url).searchParams.get('clerkUserId') ||
-                       'anonymous';
+        new URL(request.url).searchParams.get('clerkUserId') ||
+        'anonymous';
 
       // If we have an auth header but no user ID, this is likely an OAuth request
       // Use 'oauth-user' placeholder - auth-worker validates the token
@@ -192,6 +192,26 @@ export class McpAgent {
         return this.handleToolsList(rpcRequest, corsHeaders);
 
       case 'tools/call':
+        // Require authentication for tool calls - triggers OAuth if not authenticated
+        if (!authHeader) {
+          // Return 401 to trigger OAuth flow per MCP spec
+          // WWW-Authenticate header tells Claude where to find OAuth metadata
+          return new Response(JSON.stringify({
+            jsonrpc: '2.0',
+            error: {
+              code: -32001,
+              message: 'Authentication required. Please authorize via OAuth.'
+            },
+            id: rpcRequest.id ?? null
+          }), {
+            status: 401,
+            headers: {
+              'Content-Type': 'application/json',
+              'WWW-Authenticate': 'Bearer resource_metadata="https://api.flaim.app/.well-known/oauth-authorization-server"',
+              ...corsHeaders
+            }
+          });
+        }
         return this.handleToolsCall(rpcRequest, clerkUserId, env, authHeader, corsHeaders);
 
       case 'ping':
@@ -485,13 +505,13 @@ export class McpAgent {
     switch (tool) {
       case 'get_espn_league_info':
         return this.getEspnLeagueInfo(args, clerkUserId, env, authHeader, logContext);
-      
+
       case 'get_espn_team_roster':
         return this.getEspnTeamRoster(args, clerkUserId, env, authHeader, logContext);
-      
+
       case 'get_espn_matchups':
         return this.getEspnMatchups(args, clerkUserId, env, authHeader, logContext);
-      
+
       default:
         throw new Error(`Unknown tool: ${tool}`);
     }
@@ -507,10 +527,10 @@ export class McpAgent {
     try {
       const { EspnApiClient } = await import('../espn');
       const espnClient = new EspnApiClient(env, { authHeader, logContext });
-      
+
       const { leagueId, seasonId = new Date().getFullYear().toString() } = args;
       const league = await espnClient.fetchLeague(leagueId, parseInt(seasonId), 'mSettings', clerkUserId);
-      
+
       const { getLeagueMeta } = await import('../tools/getLeagueMeta');
       const metadata = await getLeagueMeta(
         { leagueId: league.id.toString(), year: league.seasonId },
@@ -543,7 +563,7 @@ export class McpAgent {
     try {
       const { EspnApiClient } = await import('../espn');
       const espnClient = new EspnApiClient(env, { authHeader, logContext });
-      
+
       const { leagueId, teamId, seasonId = new Date().getFullYear().toString() } = args;
       const roster = await espnClient.fetchRoster(leagueId, teamId, parseInt(seasonId), undefined, clerkUserId);
 
@@ -574,7 +594,7 @@ export class McpAgent {
     try {
       const { EspnApiClient } = await import('../espn');
       const espnClient = new EspnApiClient(env, { authHeader, logContext });
-      
+
       const { leagueId, week, seasonId = new Date().getFullYear().toString() } = args;
       const league = await espnClient.fetchLeague(leagueId, parseInt(seasonId), 'mMatchup', clerkUserId);
 
