@@ -65,7 +65,7 @@ interface JsonRpcResponse {
 }
 
 export class FootballMcpAgent {
-  constructor() {}
+  constructor() { }
 
   async handleRequest(request: Request, env: Env): Promise<Response> {
     const corsHeaders = {
@@ -86,8 +86,8 @@ export class FootballMcpAgent {
       const clerkUserIdHeader = request.headers.get('X-Clerk-User-ID');
       const authHeader = request.headers.get('Authorization');
       let clerkUserId = clerkUserIdHeader ||
-                       new URL(request.url).searchParams.get('clerkUserId') ||
-                       'anonymous';
+        new URL(request.url).searchParams.get('clerkUserId') ||
+        'anonymous';
 
       // If we have an auth header but no user ID, this is likely an OAuth request
       // Use 'oauth-user' placeholder - auth-worker validates the token
@@ -208,7 +208,7 @@ export class FootballMcpAgent {
             status: 401,
             headers: {
               'Content-Type': 'application/json',
-              'WWW-Authenticate': 'Bearer resource_metadata="https://api.flaim.app/.well-known/oauth-authorization-server"',
+              'WWW-Authenticate': 'Bearer resource_metadata="https://api.flaim.app/auth/.well-known/oauth-authorization-server"',
               ...corsHeaders
             }
           });

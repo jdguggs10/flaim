@@ -121,9 +121,10 @@ export function handleMetadataDiscovery(env: OAuthEnv, corsHeaders: Record<strin
 
   const metadata = {
     issuer: baseUrl,
-    authorization_endpoint: `${baseUrl}/authorize`,
-    token_endpoint: `${baseUrl}/token`,
-    revocation_endpoint: `${baseUrl}/revoke`,
+    // Use /auth prefix for all OAuth endpoints since direct routes may have routing issues
+    authorization_endpoint: `${baseUrl}/auth/authorize`,
+    token_endpoint: `${baseUrl}/auth/token`,
+    revocation_endpoint: `${baseUrl}/auth/revoke`,
     // Token introspection not implemented
     // introspection_endpoint: `${baseUrl}/introspect`,
 
