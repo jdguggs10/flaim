@@ -17,9 +17,11 @@ export interface Env {
 export class EspnFootballApiClient {
   private baseUrl = 'https://lm-api-reads.fantasy.espn.com/apis/v3';
   private authHeader?: string | null;
+  private logContext?: { resolvedUserId?: string };
 
-  constructor(private env: Env, opts?: { authHeader?: string | null }) {
+  constructor(private env: Env, opts?: { authHeader?: string | null; logContext?: { resolvedUserId?: string } }) {
     this.authHeader = opts?.authHeader;
+    this.logContext = opts?.logContext;
   }
 
   async fetchLeague(leagueId: string, year: number = 2024, view: string = 'mSettings', clerkUserId?: string): Promise<EspnFootballLeagueResponse> {
@@ -48,7 +50,7 @@ export class EspnFootballApiClient {
     if (!response.ok) {
       // Handle ESPN-specific error codes for football
       if (response.status === 401) {
-        throw new Error('ESPN_COOKIES_EXPIRED: Your ESPN cookies may have expired. Please update them in Settings > ESPN Authentication.');
+        throw new Error('ESPN_COOKIES_EXPIRED: Your ESPN cookies may have expired. Update them at /settings/espn');
       }
       if (response.status === 429) {
         throw new Error('ESPN_RATE_LIMIT: ESPN rate limit exceeded. Please wait a moment and try again.');
@@ -57,7 +59,7 @@ export class EspnFootballApiClient {
         throw new Error(`ESPN_NOT_FOUND: Football league ${leagueId} not found. Please check the league ID.`);
       }
       if (response.status === 403) {
-        throw new Error(`ESPN_ACCESS_DENIED: Access denied to football league ${leagueId}. This league may be private - make sure your ESPN credentials are set up in Settings.`);
+        throw new Error(`ESPN_ACCESS_DENIED: Access denied to football league ${leagueId}. This league may be private - set up your ESPN credentials at /settings/espn.`);
       }
 
       throw new Error(`ESPN_API_ERROR: ESPN returned error ${response.status}. Please try again.`);
@@ -89,7 +91,7 @@ export class EspnFootballApiClient {
 
     const credentials = await this.getEspnCredentialsForUser(clerkUserId);
     if (!credentials) {
-      throw new Error('ESPN_CREDENTIALS_NOT_FOUND: Please set up your ESPN credentials in Settings. Go to Settings > ESPN Authentication to add your espn_s2 and SWID cookies.');
+      throw new Error('ESPN_CREDENTIALS_NOT_FOUND: No ESPN credentials found. Add your espn_s2 and SWID cookies at /settings/espn');
     }
     headers['Cookie'] = `SWID=${credentials.swid}; espn_s2=${credentials.s2}`;
 
@@ -100,7 +102,7 @@ export class EspnFootballApiClient {
 
     if (!response.ok) {
       if (response.status === 401) {
-        throw new Error('ESPN_COOKIES_EXPIRED: Your ESPN cookies may have expired. Please update them in Settings > ESPN Authentication.');
+        throw new Error('ESPN_COOKIES_EXPIRED: Your ESPN cookies may have expired. Update them at /settings/espn');
       }
       if (response.status === 429) {
         throw new Error('ESPN_RATE_LIMIT: ESPN rate limit exceeded. Please wait a moment and try again.');
@@ -162,7 +164,7 @@ export class EspnFootballApiClient {
 
     if (!response.ok) {
       if (response.status === 401) {
-        throw new Error('ESPN_COOKIES_EXPIRED: Your ESPN cookies may have expired. Please update them in Settings > ESPN Authentication.');
+        throw new Error('ESPN_COOKIES_EXPIRED: Your ESPN cookies may have expired. Update them at /settings/espn');
       }
       if (response.status === 429) {
         throw new Error('ESPN_RATE_LIMIT: ESPN rate limit exceeded. Please wait a moment and try again.');
@@ -171,7 +173,7 @@ export class EspnFootballApiClient {
         throw new Error(`ESPN_NOT_FOUND: Football league ${leagueId} not found. Please check the league ID.`);
       }
       if (response.status === 403) {
-        throw new Error(`ESPN_ACCESS_DENIED: Access denied to football league ${leagueId} matchup data. Make sure your ESPN credentials are set up in Settings.`);
+        throw new Error(`ESPN_ACCESS_DENIED: Access denied to football league ${leagueId} matchup data. Set up your ESPN credentials at /settings/espn.`);
       }
 
       throw new Error(`ESPN_API_ERROR: ESPN returned error ${response.status}. Please try again.`);
@@ -205,7 +207,7 @@ export class EspnFootballApiClient {
 
     if (!response.ok) {
       if (response.status === 401) {
-        throw new Error('ESPN_COOKIES_EXPIRED: Your ESPN cookies may have expired. Please update them in Settings > ESPN Authentication.');
+        throw new Error('ESPN_COOKIES_EXPIRED: Your ESPN cookies may have expired. Update them at /settings/espn');
       }
       if (response.status === 429) {
         throw new Error('ESPN_RATE_LIMIT: ESPN rate limit exceeded. Please wait a moment and try again.');
@@ -214,7 +216,7 @@ export class EspnFootballApiClient {
         throw new Error(`ESPN_NOT_FOUND: Football league ${leagueId} not found. Please check the league ID.`);
       }
       if (response.status === 403) {
-        throw new Error(`ESPN_ACCESS_DENIED: Access denied to football league ${leagueId} standings. Make sure your ESPN credentials are set up in Settings.`);
+        throw new Error(`ESPN_ACCESS_DENIED: Access denied to football league ${leagueId} standings. Set up your ESPN credentials at /settings/espn.`);
       }
 
       throw new Error(`ESPN_API_ERROR: ESPN returned error ${response.status}. Please try again.`);
@@ -251,6 +253,10 @@ export class EspnFootballApiClient {
     });
 
     console.log(`📡 Auth-worker response: ${response.status} ${response.statusText}`);
+    const resolvedUserId = response.headers.get('X-User-Id');
+    if (resolvedUserId && this.logContext) {
+      this.logContext.resolvedUserId = resolvedUserId;
+    }
 
     // 404 = no credentials found - return null to allow public league access
     if (response.status === 404) {
@@ -263,6 +269,12 @@ export class EspnFootballApiClient {
       throw new Error('ESPN_AUTH_TOKEN_INVALID: Your session has expired. Please refresh the page and try again.');
     }
 
+    if (response.status === 429) {
+      const data = await response.json() as { message?: string; resetAt?: string };
+      console.error('⚠️ Rate limit exceeded');
+      throw new Error(`ESPN_RATE_LIMIT_EXCEEDED: ${data.message || 'Daily limit reached. Please try again later.'}`);
+    }
+
     if (!response.ok) {
       console.error(`❌ Auth-worker error: ${response.status} ${response.statusText}`);
       throw new Error(`ESPN_AUTH_WORKER_ERROR: Unable to retrieve credentials (${response.status}). Please try again.`);
@@ -272,7 +284,7 @@ export class EspnFootballApiClient {
 
     if (!data.success || !data.credentials) {
       console.error('❌ Invalid response from auth-worker:', data);
-      throw new Error('ESPN_CREDENTIALS_INVALID: Received invalid credentials from server. Please re-enter your ESPN credentials in Settings.');
+      throw new Error('ESPN_CREDENTIALS_INVALID: Invalid credentials. Re-enter your ESPN credentials at /settings/espn');
     }
 
     console.log('✅ Successfully retrieved ESPN credentials');

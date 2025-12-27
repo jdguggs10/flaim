@@ -51,6 +51,12 @@ export default function RootLayout({
                   </div>
                 </SignedOut>
                 <SignedIn>
+                  <a
+                    href="/connectors"
+                    className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    Connectors
+                  </a>
                   <UserButton />
                 </SignedIn>
               </div>

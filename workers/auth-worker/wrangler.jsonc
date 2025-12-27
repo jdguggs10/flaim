@@ -28,9 +28,26 @@
       "workers_dev": true,  // Enable .workers.dev URL for worker-to-worker calls
 
       // Custom domain routes for production (external clients)
+      // OAuth routes at root level for MCP spec compliance
       "routes": [
         {
           "pattern": "api.flaim.app/auth/*",
+          "zone_name": "flaim.app"
+        },
+        {
+          "pattern": "api.flaim.app/.well-known/*",
+          "zone_name": "flaim.app"
+        },
+        {
+          "pattern": "api.flaim.app/authorize",
+          "zone_name": "flaim.app"
+        },
+        {
+          "pattern": "api.flaim.app/token",
+          "zone_name": "flaim.app"
+        },
+        {
+          "pattern": "api.flaim.app/revoke",
           "zone_name": "flaim.app"
         }
       ],
@@ -47,8 +64,10 @@
     "preview": {
       "name": "auth-worker-preview",
       "workers_dev": true,  // Also keep workers.dev URL available
-      
+
       // Custom domain routes for preview (needed for worker-to-worker calls)
+      // Note: OAuth routes are shared with prod at base URL (api.flaim.app)
+      // Preview testers can use .workers.dev URLs for isolated testing
       "routes": [
         {
           "pattern": "api.flaim.app/auth-preview/*",

@@ -1,10 +1,10 @@
 /**
- * Auth Worker - Supabase-based Credential Storage
- * 
+ * Auth Worker - Supabase-based Credential Storage + OAuth for Claude Direct Access
+ *
  * Centralized Cloudflare Worker for handling ESPN credentials
- * with Supabase PostgreSQL storage.
- * 
- * Endpoints:
+ * with Supabase PostgreSQL storage, plus OAuth 2.1 for Claude MCP connectors.
+ *
+ * Credential Endpoints:
  * - GET /health - Health check with Supabase connectivity test
  * - POST /credentials/espn - Store ESPN credentials
  * - GET /credentials/espn - Get ESPN credential metadata
@@ -14,12 +14,34 @@
  * - GET /leagues - Get ESPN leagues
  * - DELETE /leagues - Remove specific league
  * - PATCH /leagues/:leagueId/team - Update team selection
- * 
- * @version 2.0.0 - Supabase implementation
+ *
+ * OAuth Endpoints (for Claude direct access):
+ * - GET /.well-known/oauth-authorization-server - OAuth metadata discovery
+ * - GET /authorize - Start OAuth flow (redirects to frontend)
+ * - POST /oauth/code - Create auth code (called by frontend after consent)
+ * - POST /token - Exchange code for access token
+ * - POST /revoke - Revoke access token
+ *
+ * @version 3.0.0 - Added OAuth for Claude direct access
  */
 
 import { EspnSupabaseStorage } from './supabase-storage';
 import { EspnCredentials, EspnLeague } from './espn-types';
+import {
+  handleMetadataDiscovery,
+  handleAuthorize,
+  handleCreateCode,
+  handleToken,
+  handleRevoke,
+  handleCheckStatus,
+  handleRevokeAll,
+  validateOAuthToken,
+  OAuthEnv,
+} from './oauth-handlers';
+import { OAuthStorage } from './oauth-storage';
+
+// Rate limit configuration
+const RATE_LIMIT_PER_DAY = 200;
 
 // ------------------------------------------------------------
 // Clerk JWT verification (JWKS-based)
@@ -134,20 +156,39 @@ async function verifyJwtAndGetUserId(authorization: string | null): Promise<stri
   return payload.sub || null;
 }
 
-async function getVerifiedUserId(request: Request, env: Env): Promise<{ userId: string | null; error?: string }> {
+async function getVerifiedUserId(request: Request, env: Env): Promise<{ userId: string | null; error?: string; authType?: 'clerk' | 'oauth' }> {
+  const authz = request.headers.get('Authorization');
+
+  // Try Clerk JWT first (in-app requests)
   try {
-    const authz = request.headers.get('Authorization');
     const verified = await verifyJwtAndGetUserId(authz);
-    if (verified) return { userId: verified };
+    if (verified) return { userId: verified, authType: 'clerk' };
   } catch (e) {
-    // fall through to dev fallback or return error below
+    // JWT verification failed, try OAuth token next
+  }
+
+  // Try OAuth token (Claude direct access)
+  if (authz && authz.toLowerCase().startsWith('bearer ')) {
+    const token = authz.slice(7).trim();
+    // Only try OAuth if it doesn't look like a JWT (no dots or not 3 parts)
+    const parts = token.split('.');
+    if (parts.length !== 3) {
+      try {
+        const oauthResult = await validateOAuthToken(token, env as OAuthEnv);
+        if (oauthResult) {
+          return { userId: oauthResult.userId, authType: 'oauth' };
+        }
+      } catch (e) {
+        console.log('[auth] OAuth token validation failed:', e);
+      }
+    }
   }
 
   // Dev fallback only: allow header for local testing
   const isDev = (env as any).ENVIRONMENT === 'dev' || env.NODE_ENV === 'development';
   if (isDev) {
     const clerkHeader = request.headers.get('X-Clerk-User-ID');
-    if (clerkHeader) return { userId: clerkHeader };
+    if (clerkHeader) return { userId: clerkHeader, authType: 'clerk' };
   }
 
   return { userId: null, error: 'Missing or invalid Authorization token' };
@@ -157,6 +198,7 @@ export interface Env {
   SUPABASE_URL: string;
   SUPABASE_SERVICE_KEY: string;
   NODE_ENV?: string;
+  ENVIRONMENT?: string; // 'dev' | 'preview' | 'prod'
 }
 
 // CORS helper - Allow sport workers and Next.js origins
@@ -264,7 +306,8 @@ export default {
           healthData.status = 'degraded';
         }
 
-        healthData.auth_method = 'X-Clerk-User-ID header';
+        healthData.auth_method = 'Clerk JWT + OAuth token';
+        healthData.oauth_enabled = true;
 
         const statusCode = healthData.status === 'healthy' ? 200 : 503;
 
@@ -272,6 +315,75 @@ export default {
           status: statusCode,
           headers: { 'Content-Type': 'application/json', ...corsHeaders }
         });
+      }
+
+      // ================================================================
+      // OAuth 2.1 Endpoints (for Claude direct access)
+      // ================================================================
+
+      // OAuth metadata discovery (RFC 8414)
+      if (pathname === '/.well-known/oauth-authorization-server') {
+        return handleMetadataDiscovery(env as OAuthEnv, corsHeaders);
+      }
+
+      // Authorization endpoint - redirects to frontend consent page
+      if (pathname === '/authorize' && request.method === 'GET') {
+        return handleAuthorize(request, env as OAuthEnv);
+      }
+
+      // Create authorization code (called by frontend after user consent)
+      if (pathname === '/oauth/code' && request.method === 'POST') {
+        const { userId, error: authError } = await getVerifiedUserId(request, env);
+        if (!userId) {
+          return new Response(JSON.stringify({
+            error: 'unauthorized',
+            error_description: authError || 'Authentication required',
+          }), {
+            status: 401,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders },
+          });
+        }
+        return handleCreateCode(request, env as OAuthEnv, userId, corsHeaders);
+      }
+
+      // Check connection status (called by frontend)
+      if (pathname === '/oauth/status' && request.method === 'GET') {
+        const { userId, error: authError } = await getVerifiedUserId(request, env);
+        if (!userId) {
+          return new Response(JSON.stringify({
+            error: 'unauthorized',
+            error_description: authError || 'Authentication required',
+          }), {
+            status: 401,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders },
+          });
+        }
+        return handleCheckStatus(env as OAuthEnv, userId, corsHeaders);
+      }
+
+      // Revoke all tokens for user (called by frontend)
+      if (pathname === '/oauth/revoke-all' && request.method === 'POST') {
+        const { userId, error: authError } = await getVerifiedUserId(request, env);
+        if (!userId) {
+          return new Response(JSON.stringify({
+            error: 'unauthorized',
+            error_description: authError || 'Authentication required',
+          }), {
+            status: 401,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders },
+          });
+        }
+        return handleRevokeAll(env as OAuthEnv, userId, corsHeaders);
+      }
+
+      // Token endpoint - exchange code for access token
+      if (pathname === '/token' && request.method === 'POST') {
+        return handleToken(request, env as OAuthEnv, corsHeaders);
+      }
+
+      // Revocation endpoint
+      if (pathname === '/revoke' && request.method === 'POST') {
+        return handleRevoke(request, env as OAuthEnv, corsHeaders);
       }
 
       // ESPN credential management endpoints
@@ -333,16 +445,52 @@ export default {
             // Return actual credentials for sport workers
             console.log(`🔍 [auth-worker] GET raw credentials for user: ${maskUserId(clerkUserId)}`);
             console.log(`🔍 [auth-worker] Authorization header present: ${!!request.headers.get('Authorization')}`);
+
+            // Check rate limit before returning credentials
+            const oauthStorage = OAuthStorage.fromEnvironment(env);
+            const rateLimit = await oauthStorage.checkRateLimit(clerkUserId, RATE_LIMIT_PER_DAY);
+
+            if (!rateLimit.allowed) {
+              console.log(`⚠️ [auth-worker] Rate limit exceeded for user: ${maskUserId(clerkUserId)}`);
+              return new Response(JSON.stringify({
+                error: 'Rate limit exceeded',
+                message: `Daily limit of ${rateLimit.limit} calls reached. Limit resets at ${rateLimit.resetAt.toISOString()}.`,
+                resetAt: rateLimit.resetAt.toISOString(),
+              }), {
+                status: 429,
+                headers: {
+                  'Content-Type': 'application/json',
+                  'X-User-Id': clerkUserId,
+                  'X-RateLimit-Limit': String(rateLimit.limit),
+                  'X-RateLimit-Remaining': '0',
+                  'X-RateLimit-Reset': String(Math.floor(rateLimit.resetAt.getTime() / 1000)),
+                  'Retry-After': String(Math.ceil((rateLimit.resetAt.getTime() - Date.now()) / 1000)),
+                  ...corsHeaders
+                }
+              });
+            }
+
+            // Increment rate limit counter immediately
+            const currentUsage = await oauthStorage.incrementRateLimit(clerkUserId);
+            const remaining = Math.max(0, RATE_LIMIT_PER_DAY - currentUsage);
+
             const credentials = await storage.getCredentials(clerkUserId);
 
             if (!credentials) {
               console.log(`❌ [auth-worker] No credentials found for user: ${maskUserId(clerkUserId)}`);
               return new Response(JSON.stringify({
                 error: 'Credentials not found',
-                message: 'No ESPN credentials found for user'
+                message: 'No ESPN credentials found for user. Add your ESPN credentials at /settings/espn'
               }), {
                 status: 404,
-                headers: { 'Content-Type': 'application/json', ...corsHeaders }
+                headers: { 
+                  'Content-Type': 'application/json',
+                  'X-User-Id': clerkUserId,
+                  'X-RateLimit-Limit': String(RATE_LIMIT_PER_DAY),
+                  'X-RateLimit-Remaining': String(remaining),
+                  'X-RateLimit-Reset': String(Math.floor(rateLimit.resetAt.getTime() / 1000)),
+                  ...corsHeaders 
+                }
               });
             }
 
@@ -351,7 +499,14 @@ export default {
               platform: 'espn',
               credentials
             }), {
-              headers: { 'Content-Type': 'application/json', ...corsHeaders }
+              headers: {
+                'Content-Type': 'application/json',
+                'X-User-Id': clerkUserId,
+                'X-RateLimit-Limit': String(RATE_LIMIT_PER_DAY),
+                'X-RateLimit-Remaining': String(remaining),
+                'X-RateLimit-Reset': String(Math.floor(rateLimit.resetAt.getTime() / 1000)),
+                ...corsHeaders
+              }
             });
           } else {
             // Get credential metadata (default behavior for frontend)
@@ -609,14 +764,24 @@ export default {
         error: 'Endpoint not found',
         message: 'Available endpoints',
         endpoints: {
+          // Health
           '/health': 'GET - Health check with Supabase connectivity test',
+          // Credentials
           '/credentials/espn': 'GET/POST/DELETE - ESPN credential management',
           '/credentials/espn?raw=true': 'GET - Retrieve actual credentials for sport workers',
+          // Leagues
           '/leagues': 'GET/POST/DELETE - League management (list, store, remove)',
-          '/leagues/:leagueId/team': 'PATCH - Update team selection for specific league'
+          '/leagues/:leagueId/team': 'PATCH - Update team selection for specific league',
+          // OAuth (Claude direct access)
+          '/.well-known/oauth-authorization-server': 'GET - OAuth 2.0 metadata discovery',
+          '/authorize': 'GET - Start OAuth authorization flow',
+          '/oauth/code': 'POST - Create authorization code (requires Clerk JWT)',
+          '/token': 'POST - Exchange code for access token',
+          '/revoke': 'POST - Revoke access token',
         },
         storage: 'supabase',
-        version: '2.0.0'
+        oauth: 'enabled',
+        version: '3.0.0'
       }), {
         status: 404,
         headers: { 'Content-Type': 'application/json', ...corsHeaders }

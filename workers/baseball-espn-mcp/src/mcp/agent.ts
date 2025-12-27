@@ -5,6 +5,35 @@ export interface Env {
   AUTH_WORKER_URL: string;
 }
 
+// =============================================================================
+// STRUCTURED LOGGING
+// =============================================================================
+
+interface ToolLog {
+  request_id: string;
+  user_id: string;
+  tool_name: string;
+  status: 'start' | 'success' | 'error';
+  error_code?: string;
+  duration_ms?: number;
+  timestamp: string;
+}
+
+function logTool(log: ToolLog): void {
+  console.log(JSON.stringify(log));
+}
+
+function maskUserId(userId: string | null): string {
+  if (!userId || userId.length <= 8) return 'anonymous';
+  return `${userId.substring(0, 8)}...`;
+}
+
+function extractErrorCode(message: string): string | undefined {
+  // Extract error code prefix like "ESPN_COOKIES_EXPIRED" from error messages
+  const match = message.match(/^([A-Z_]+):/);
+  return match ? match[1] : undefined;
+}
+
 export interface McpToolCall {
   tool: string;
   arguments: Record<string, any>;
@@ -50,11 +79,20 @@ export class McpAgent {
 
     try {
       // Extract Clerk user ID from headers (preferred) or fallback to anonymous
+      // For OAuth (Claude direct access), there's no X-Clerk-User-ID header,
+      // so we use 'oauth-user' as placeholder - auth-worker will validate the token
+      // and return the real user ID.
       const clerkUserIdHeader = request.headers.get('X-Clerk-User-ID');
       const authHeader = request.headers.get('Authorization');
-      const clerkUserId = clerkUserIdHeader ||
-                         new URL(request.url).searchParams.get('clerkUserId') ||
-                         'anonymous';
+      let clerkUserId = clerkUserIdHeader ||
+                       new URL(request.url).searchParams.get('clerkUserId') ||
+                       'anonymous';
+
+      // If we have an auth header but no user ID, this is likely an OAuth request
+      // Use 'oauth-user' placeholder - auth-worker validates the token
+      if (clerkUserId === 'anonymous' && authHeader) {
+        clerkUserId = 'oauth-user';
+      }
 
       // Debug logging for auth issues
       console.log(`[MCP Baseball Auth] User ID header: ${clerkUserIdHeader ? 'present' : 'MISSING'}, Auth header: ${authHeader ? 'present' : 'MISSING'}, Resolved userId: ${clerkUserId}`);
@@ -213,10 +251,35 @@ export class McpAgent {
       return this.jsonRpcError(-32602, 'Invalid params: "arguments" must be an object', rpcRequest.id ?? null, corsHeaders);
     }
 
-    console.log(`[MCP] Executing tool: ${toolName} with args:`, JSON.stringify(toolArgs));
+    // Structured logging setup
+    const requestId = crypto.randomUUID();
+    const startTime = Date.now();
+    const maskedUserId = maskUserId(clerkUserId);
+    const logContext: { resolvedUserId?: string } = {};
+
+    // Log tool execution start
+    logTool({
+      request_id: requestId,
+      user_id: maskedUserId,
+      tool_name: toolName,
+      status: 'start',
+      timestamp: new Date().toISOString(),
+    });
 
     try {
-      const result = await this.executeTool(toolName, toolArgs, clerkUserId, env, authHeader);
+      const result = await this.executeTool(toolName, toolArgs, clerkUserId, env, authHeader, logContext);
+      const resolvedUserId = logContext.resolvedUserId;
+      const logUserId = maskUserId(resolvedUserId ?? clerkUserId);
+
+      // Log tool execution success
+      logTool({
+        request_id: requestId,
+        user_id: logUserId,
+        tool_name: toolName,
+        status: 'success',
+        duration_ms: Date.now() - startTime,
+        timestamp: new Date().toISOString(),
+      });
 
       // MCP tools/call response format
       const callResult = {
@@ -231,8 +294,21 @@ export class McpAgent {
 
       return this.jsonRpcSuccess(callResult, rpcRequest.id ?? null, corsHeaders);
     } catch (error) {
-      console.error(`[MCP] Tool execution error for ${toolName}:`, error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorCode = extractErrorCode(errorMessage);
+      const resolvedUserId = logContext.resolvedUserId;
+      const logUserId = maskUserId(resolvedUserId ?? clerkUserId);
+
+      // Log tool execution error
+      logTool({
+        request_id: requestId,
+        user_id: logUserId,
+        tool_name: toolName,
+        status: 'error',
+        error_code: errorCode,
+        duration_ms: Date.now() - startTime,
+        timestamp: new Date().toISOString(),
+      });
 
       // Return error as tool result (not JSON-RPC error) so OpenAI can handle it gracefully
       const errorResult = {
@@ -398,26 +474,39 @@ export class McpAgent {
     }
   }
 
-  private async executeTool(tool: string, args: Record<string, any>, clerkUserId: string, env: Env, authHeader?: string | null): Promise<McpResponse> {
+  private async executeTool(
+    tool: string,
+    args: Record<string, any>,
+    clerkUserId: string,
+    env: Env,
+    authHeader?: string | null,
+    logContext?: { resolvedUserId?: string }
+  ): Promise<McpResponse> {
     switch (tool) {
       case 'get_espn_league_info':
-        return this.getEspnLeagueInfo(args, clerkUserId, env, authHeader);
+        return this.getEspnLeagueInfo(args, clerkUserId, env, authHeader, logContext);
       
       case 'get_espn_team_roster':
-        return this.getEspnTeamRoster(args, clerkUserId, env, authHeader);
+        return this.getEspnTeamRoster(args, clerkUserId, env, authHeader, logContext);
       
       case 'get_espn_matchups':
-        return this.getEspnMatchups(args, clerkUserId, env, authHeader);
+        return this.getEspnMatchups(args, clerkUserId, env, authHeader, logContext);
       
       default:
         throw new Error(`Unknown tool: ${tool}`);
     }
   }
 
-  private async getEspnLeagueInfo(args: Record<string, any>, clerkUserId: string, env: Env, authHeader?: string | null): Promise<McpResponse> {
+  private async getEspnLeagueInfo(
+    args: Record<string, any>,
+    clerkUserId: string,
+    env: Env,
+    authHeader?: string | null,
+    logContext?: { resolvedUserId?: string }
+  ): Promise<McpResponse> {
     try {
       const { EspnApiClient } = await import('../espn');
-      const espnClient = new EspnApiClient(env, { authHeader });
+      const espnClient = new EspnApiClient(env, { authHeader, logContext });
       
       const { leagueId, seasonId = new Date().getFullYear().toString() } = args;
       const league = await espnClient.fetchLeague(leagueId, parseInt(seasonId), 'mSettings', clerkUserId);
@@ -444,10 +533,16 @@ export class McpAgent {
     }
   }
 
-  private async getEspnTeamRoster(args: Record<string, any>, clerkUserId: string, env: Env, authHeader?: string | null): Promise<McpResponse> {
+  private async getEspnTeamRoster(
+    args: Record<string, any>,
+    clerkUserId: string,
+    env: Env,
+    authHeader?: string | null,
+    logContext?: { resolvedUserId?: string }
+  ): Promise<McpResponse> {
     try {
       const { EspnApiClient } = await import('../espn');
-      const espnClient = new EspnApiClient(env, { authHeader });
+      const espnClient = new EspnApiClient(env, { authHeader, logContext });
       
       const { leagueId, teamId, seasonId = new Date().getFullYear().toString() } = args;
       const roster = await espnClient.fetchRoster(leagueId, teamId, parseInt(seasonId), undefined, clerkUserId);
@@ -469,10 +564,16 @@ export class McpAgent {
     }
   }
 
-  private async getEspnMatchups(args: Record<string, any>, clerkUserId: string, env: Env, authHeader?: string | null): Promise<McpResponse> {
+  private async getEspnMatchups(
+    args: Record<string, any>,
+    clerkUserId: string,
+    env: Env,
+    authHeader?: string | null,
+    logContext?: { resolvedUserId?: string }
+  ): Promise<McpResponse> {
     try {
       const { EspnApiClient } = await import('../espn');
-      const espnClient = new EspnApiClient(env, { authHeader });
+      const espnClient = new EspnApiClient(env, { authHeader, logContext });
       
       const { leagueId, week, seasonId = new Date().getFullYear().toString() } = args;
       const league = await espnClient.fetchLeague(leagueId, parseInt(seasonId), 'mMatchup', clerkUserId);
