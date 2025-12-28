@@ -1,8 +1,10 @@
 # FLAIM - Fantasy League AI Manager
 
-AI-powered fantasy sports assistant with Clerk auth, Supabase storage, and sport-specific MCP workers for real-time ESPN data. Uses the OpenAI **Responses API** (not legacy chat completions).
+MCP servers for ESPN fantasy sports, enabling "Bring Your Own AI" (Claude, ChatGPT) to manage your fantasy teams. Includes a web UI for configuration and debugging.
 
-**For helpers:** Solo developer, production project. Keep solutions simple and stable.
+**Project Goal**: Provide robust MCP tools for fantasy sports data that developers and users can connect to their preferred AI clients (Claude Desktop, ChatGPT, etc.). The web interface serves as a management console and debugging tool.
+
+**For helpers**: Solo developer, production project. Keep solutions simple and stable.
 
 ## Quick Start
 
@@ -15,12 +17,11 @@ Full setup details: [Getting Started & Deployment Guide](docs/GETTING_STARTED.md
 
 ## Highlights
 
-- Guided onboarding from sign-in to chat
-- Live ESPN data via MCP workers (baseball, football)
-- Centralized auth-worker + Supabase for credentials/leagues
-- Automatic league discovery and sport detection
 - **Claude Direct Access**: Connect Claude.ai/Desktop directly via OAuth (BYO subscription)
-- GitOps: PR → preview, main → production
+- **Live ESPN Data**: MCP workers for Baseball and Football
+- **Management Console**: Web UI for configuring leagues, credentials, and testing connections
+- **Debugging Chat**: Built-in OpenAI-based chat interface for verifying worker functionality
+- **Centralized Auth**: Clerk + Supabase for secure credential management
 
 ## Documentation
 

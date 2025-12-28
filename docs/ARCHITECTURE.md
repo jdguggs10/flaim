@@ -1,9 +1,9 @@
 # FLAIM Architecture (Short)
 
-AI-powered fantasy sports assistant using Clerk auth, Supabase storage, and sport-specific MCP workers for ESPN data. OpenAI calls use the **Responses API** (not chat completions).
+MCP servers for ESPN fantasy sports data with a supporting management web app.
 
 ## Core Pieces
-- **Next.js frontend (`/openai`)**: chat UI, onboarding, usage tracking.
+- **Management & Debugging UI (`/openai`)**: Next.js app for onboarding, credential management, and verifying worker functionality via a test chat interface.
 - **Auth worker (`/auth`)**: Supabase credential + league storage, JWT verification, usage checks. Stateless; only verified JWTs in prod.
 - **Sport MCP workers (`/workers/baseball-espn-mcp`, `/workers/football-espn-mcp`)**: ESPN calls + MCP tools; fetch creds/leagues from auth-worker; no local storage.
 - **Supabase Postgres**: `espn_credentials`, `espn_leagues`.
@@ -16,11 +16,12 @@ AI-powered fantasy sports assistant using Clerk auth, Supabase storage, and spor
 - MCP transport: `POST /mcp` JSON-RPC 2.0 (Responses API). Methods: `initialize`, `tools/list`, `tools/call`, `ping`. `GET /mcp` returns metadata. Legacy REST under `/mcp/tools/*` kept only for manual curl testing.
 
 ## Data Flow (credentialed requests)
-1) Frontend gets JWT via Clerk → sends to auth-worker.
-2) Auth-worker verifies JWT, fetches creds/leagues from Supabase.
-3) Sport worker calls auth-worker (direct `.workers.dev`) to get creds → calls ESPN → returns to frontend/assistant.
+1) Client (Web UI or Claude) presents token (JWT or OAuth token).
+2) Worker verifies token via auth-worker.
+3) Auth-worker fetches creds/leagues from Supabase.
+4) Sport worker calls auth-worker (direct `.workers.dev`) to get creds → calls ESPN → returns to client.
 
-## LLM Context Injection
+## LLM Context Injection (Debugging UI)
 - **System prompt** (`lib/prompts/system-prompt.ts`): Static instructions defining assistant behavior and available tools.
 - **League context** (`lib/prompts/league-context.ts`): Dynamic context built from `useOnboardingStore.getActiveLeague()` — injects active league ID, sport, team name so LLM knows which league to query.
 - Both injected as `developer` role messages in `processMessages()` before conversation history.

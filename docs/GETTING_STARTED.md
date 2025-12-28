@@ -1,6 +1,6 @@
 # Getting Started & Deployment (Short)
 
-Single reference for setup across `dev`, `preview`, and `prod`. Uses the OpenAI **Responses API** (not legacy chat completions).
+Single reference for setup across `dev`, `preview`, and `prod`.
 
 ## Quick Start
 ```bash
@@ -12,7 +12,7 @@ npm run dev
 ```
 Prereqs: Node 22, npm, `npm i -g wrangler`.
 
-## Onboarding Flow (frontend)
+## Onboarding Flow (Configuration)
 1) Clerk sign-in → JWT session  
 2) Enter ESPN SWID + espn_s2 → `/api/auth/espn/credentials` → auth-worker stores in Supabase  
 3) Provide league IDs → `/api/auth/espn/leagues` → stored per user  
@@ -34,7 +34,7 @@ Prereqs: Node 22, npm, `npm i -g wrangler`.
 
 Frontend essentials (no wildcards, no trailing slash):
 ```
-OPENAI_API_KEY=...
+OPENAI_API_KEY=... (Required for debugging chat only)
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=...
 CLERK_SECRET_KEY=...
 NEXT_PUBLIC_AUTH_WORKER_URL=https://api.flaim.app/auth
@@ -75,8 +75,8 @@ Cloudflare DNS: `A`, name `api`, IPv4 `192.0.2.1`, proxied (orange). Verify: `cu
 - Local: `curl http://localhost:8786/health` (auth-worker), `localhost:3000` (frontend)
 - Remote: deployed worker URL + `/health`
 
-## Claude Direct Access (Optional)
-Users can connect Claude.ai or Claude Desktop directly to FLAIM's MCP servers:
+## Claude Direct Access (Primary Use Case)
+Users connect Claude.ai or Claude Desktop directly to FLAIM's MCP servers:
 1. Set up ESPN credentials at `flaim.app/settings/espn`
 2. In Claude, add MCP server: `https://api.flaim.app/football/mcp` (or `/baseball/mcp`)
 3. Complete OAuth consent flow
