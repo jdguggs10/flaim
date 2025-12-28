@@ -60,6 +60,9 @@ async function fetchUserLeagues(
   clerkUserId: string,
   authHeader?: string | null
 ): Promise<{ leagues: UserLeague[], error?: string, status?: number }> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 5000); // 5s timeout
+
   try {
     const authWorkerUrl = env.AUTH_WORKER_URL;
     const url = `${authWorkerUrl}/leagues`;
@@ -72,8 +75,11 @@ async function fetchUserLeagues(
         'X-Clerk-User-ID': clerkUserId,
         'Content-Type': 'application/json',
         ...(authHeader ? { 'Authorization': authHeader } : {})
-      }
+      },
+      signal: controller.signal
     });
+
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       console.error(`❌ [agent] Leagues fetch failed: ${response.status}`);
@@ -90,10 +96,13 @@ async function fetchUserLeagues(
     console.log(`✅ [agent] Found ${leagues.length} leagues`);
     return { leagues };
   } catch (error) {
+    clearTimeout(timeoutId);
     console.error('❌ [agent] Failed to fetch leagues:', error);
     return {
       leagues: [],
-      error: `Fetch failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+      error: (error as any).name === 'AbortError'
+        ? 'Fetch timed out after 5 seconds'
+        : `Fetch failed: ${error instanceof Error ? error.message : 'Unknown error'}`
     };
   }
 }
@@ -608,21 +617,26 @@ export class FootballMcpAgent {
           : 'No leagues configured. Please go to flaim.app/settings/espn to add your ESPN credentials.');
 
       return {
-        content: {
-          success: true,
-          currentDate: new Date().toISOString(),
-          currentSeason: new Date().getFullYear().toString(),
-          timezone: 'America/New_York',
-          totalLeaguesFound: userLeagues.length,
-          footballLeaguesFound: footballLeagues.length,
-          allLeagues: userLeagues,
-          instructions: sessionMessage,
-          debug: {
-            clerkUserId: clerkUserId === 'oauth-user' ? 'oauth-user' : `${clerkUserId.substring(0, 8)}...`,
-            hasAuthHeader: !!authHeader,
-            fetchStatus
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              success: true,
+              currentDate: new Date().toISOString(),
+              currentSeason: new Date().getFullYear().toString(),
+              timezone: 'America/New_York',
+              totalLeaguesFound: userLeagues.length,
+              footballLeaguesFound: footballLeagues.length,
+              allLeagues: userLeagues,
+              instructions: sessionMessage,
+              debug: {
+                clerkUserId: clerkUserId === 'oauth-user' ? 'oauth-user' : `${clerkUserId.substring(0, 8)}...`,
+                hasAuthHeader: !!authHeader,
+                fetchStatus
+              }
+            }, null, 2)
           }
-        }
+        ]
       };
     }
 
@@ -706,28 +720,38 @@ export class FootballMcpAgent {
       const league = await footballClient.fetchLeague(leagueId, parseInt(seasonId), 'mSettings', clerkUserId);
 
       return {
-        content: {
-          success: true,
-          data: {
-            id: league.id,
-            name: league.settings?.name || 'Unknown League',
-            size: league.settings?.size || 0,
-            sport: 'football',
-            scoringType: league.settings?.scoringSettings?.scoringType || 'Unknown',
-            currentWeek: league.status?.currentMatchupPeriod || 1,
-            season: seasonId,
-            playoffTeamCount: league.settings?.playoffTeamCount || 0,
-            regularSeasonMatchupPeriods: league.settings?.regularSeasonMatchupPeriods || 0,
-            rosterSettings: league.settings?.rosterSettings
-          },
-          leagueId,
-          year: parseInt(seasonId),
-          sport: 'football'
-        }
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              success: true,
+              data: {
+                id: league.id,
+                name: league.settings?.name || 'Unknown League',
+                size: league.settings?.size || 0,
+                sport: 'football',
+                scoringType: league.settings?.scoringSettings?.scoringType || 'Unknown',
+                currentWeek: league.status?.currentMatchupPeriod || 1,
+                season: seasonId,
+                playoffTeamCount: league.settings?.playoffTeamCount || 0,
+                regularSeasonMatchupPeriods: league.settings?.regularSeasonMatchupPeriods || 0,
+                rosterSettings: league.settings?.rosterSettings
+              },
+              leagueId,
+              year: parseInt(seasonId),
+              sport: 'football'
+            }, null, 2)
+          }
+        ]
       };
     } catch (error) {
       return {
-        content: `Failed to fetch football league info: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        content: [
+          {
+            type: 'text',
+            text: `Failed to fetch football league info: ${error instanceof Error ? error.message : 'Unknown error'}`
+          }
+        ],
         isError: true
       };
     }
@@ -747,18 +771,28 @@ export class FootballMcpAgent {
       const teamData = await footballClient.fetchTeam(leagueId, teamId, parseInt(seasonId), week, clerkUserId);
 
       return {
-        content: {
-          success: true,
-          data: teamData,
-          leagueId,
-          teamId,
-          year: parseInt(seasonId),
-          sport: 'football'
-        }
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              success: true,
+              data: teamData,
+              leagueId,
+              teamId,
+              year: parseInt(seasonId),
+              sport: 'football'
+            }, null, 2)
+          }
+        ]
       };
     } catch (error) {
       return {
-        content: `Failed to fetch football team: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        content: [
+          {
+            type: 'text',
+            text: `Failed to fetch football team: ${error instanceof Error ? error.message : 'Unknown error'}`
+          }
+        ],
         isError: true
       };
     }
@@ -778,18 +812,28 @@ export class FootballMcpAgent {
       const matchups = await footballClient.fetchMatchups(leagueId, week, parseInt(seasonId), clerkUserId);
 
       return {
-        content: {
-          success: true,
-          data: matchups,
-          leagueId,
-          week,
-          year: parseInt(seasonId),
-          sport: 'football'
-        }
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              success: true,
+              data: matchups,
+              leagueId,
+              week,
+              year: parseInt(seasonId),
+              sport: 'football'
+            }, null, 2)
+          }
+        ]
       };
     } catch (error) {
       return {
-        content: `Failed to fetch football matchups: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        content: [
+          {
+            type: 'text',
+            text: `Failed to fetch football matchups: ${error instanceof Error ? error.message : 'Unknown error'}`
+          }
+        ],
         isError: true
       };
     }
@@ -809,17 +853,27 @@ export class FootballMcpAgent {
       const standings = await footballClient.fetchStandings(leagueId, parseInt(seasonId), clerkUserId);
 
       return {
-        content: {
-          success: true,
-          data: standings,
-          leagueId,
-          year: parseInt(seasonId),
-          sport: 'football'
-        }
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              success: true,
+              data: standings,
+              leagueId,
+              year: parseInt(seasonId),
+              sport: 'football'
+            }, null, 2)
+          }
+        ]
       };
     } catch (error) {
       return {
-        content: `Failed to fetch football standings: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        content: [
+          {
+            type: 'text',
+            text: `Failed to fetch football standings: ${error instanceof Error ? error.message : 'Unknown error'}`
+          }
+        ],
         isError: true
       };
     }

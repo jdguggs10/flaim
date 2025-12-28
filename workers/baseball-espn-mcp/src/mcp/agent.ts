@@ -78,6 +78,9 @@ async function fetchUserLeagues(
   clerkUserId: string,
   authHeader?: string | null
 ): Promise<{ leagues: UserLeague[], error?: string, status?: number }> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 5000); // 5s timeout
+
   try {
     const authWorkerUrl = env.AUTH_WORKER_URL;
     const url = `${authWorkerUrl}/leagues`;
@@ -90,8 +93,11 @@ async function fetchUserLeagues(
         'X-Clerk-User-ID': clerkUserId,
         'Content-Type': 'application/json',
         ...(authHeader ? { 'Authorization': authHeader } : {})
-      }
+      },
+      signal: controller.signal
     });
+
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       console.error(`❌ [agent] Leagues fetch failed: ${response.status}`);
@@ -108,10 +114,13 @@ async function fetchUserLeagues(
     console.log(`✅ [agent] Found ${leagues.length} leagues`);
     return { leagues };
   } catch (error) {
+    clearTimeout(timeoutId);
     console.error('❌ [agent] Failed to fetch leagues:', error);
     return {
       leagues: [],
-      error: `Fetch failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+      error: (error as any).name === 'AbortError'
+        ? 'Fetch timed out after 5 seconds'
+        : `Fetch failed: ${error instanceof Error ? error.message : 'Unknown error'}`
     };
   }
 }
@@ -594,21 +603,26 @@ export class McpAgent {
           : 'No leagues configured. Please go to flaim.app/settings/espn to add your ESPN credentials.');
 
       return {
-        content: {
-          success: true,
-          currentDate: new Date().toISOString(),
-          currentSeason: new Date().getFullYear().toString(),
-          timezone: 'America/New_York',
-          totalLeaguesFound: userLeagues.length,
-          baseballLeaguesFound: baseballLeagues.length,
-          allLeagues: userLeagues,
-          instructions: sessionMessage,
-          debug: {
-            clerkUserId: clerkUserId === 'oauth-user' ? 'oauth-user' : `${clerkUserId.substring(0, 8)}...`,
-            hasAuthHeader: !!authHeader,
-            fetchStatus
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              success: true,
+              currentDate: new Date().toISOString(),
+              currentSeason: new Date().getFullYear().toString(),
+              timezone: 'America/New_York',
+              totalLeaguesFound: userLeagues.length,
+              baseballLeaguesFound: baseballLeagues.length,
+              allLeagues: userLeagues,
+              instructions: sessionMessage,
+              debug: {
+                clerkUserId: clerkUserId === 'oauth-user' ? 'oauth-user' : `${clerkUserId.substring(0, 8)}...`,
+                hasAuthHeader: !!authHeader,
+                fetchStatus
+              }
+            }, null, 2)
           }
-        }
+        ]
       };
     }
 
@@ -690,16 +704,26 @@ export class McpAgent {
       );
 
       return {
-        content: {
-          success: true,
-          data: metadata,
-          leagueId,
-          year: parseInt(seasonId)
-        }
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              success: true,
+              data: metadata,
+              leagueId,
+              year: parseInt(seasonId)
+            }, null, 2)
+          }
+        ]
       };
     } catch (error) {
       return {
-        content: `Failed to fetch league info: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        content: [
+          {
+            type: 'text',
+            text: `Failed to fetch league info: ${error instanceof Error ? error.message : 'Unknown error'}`
+          }
+        ],
         isError: true
       };
     }
@@ -720,17 +744,27 @@ export class McpAgent {
       const roster = await espnClient.fetchRoster(leagueId, teamId, parseInt(seasonId), undefined, clerkUserId);
 
       return {
-        content: {
-          success: true,
-          data: roster,
-          leagueId,
-          teamId,
-          year: parseInt(seasonId)
-        }
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              success: true,
+              data: roster,
+              leagueId,
+              teamId,
+              year: parseInt(seasonId)
+            }, null, 2)
+          }
+        ]
       };
     } catch (error) {
       return {
-        content: `Failed to fetch team roster: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        content: [
+          {
+            type: 'text',
+            text: `Failed to fetch team roster: ${error instanceof Error ? error.message : 'Unknown error'}`
+          }
+        ],
         isError: true
       };
     }
@@ -751,17 +785,27 @@ export class McpAgent {
       const league = await espnClient.fetchLeague(leagueId, parseInt(seasonId), 'mMatchup', clerkUserId);
 
       return {
-        content: {
-          success: true,
-          data: league,
-          leagueId,
-          week,
-          year: parseInt(seasonId)
-        }
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              success: true,
+              data: league,
+              leagueId,
+              week,
+              year: parseInt(seasonId)
+            }, null, 2)
+          }
+        ]
       };
     } catch (error) {
       return {
-        content: `Failed to fetch matchups: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        content: [
+          {
+            type: 'text',
+            text: `Failed to fetch matchups: ${error instanceof Error ? error.message : 'Unknown error'}`
+          }
+        ],
         isError: true
       };
     }
