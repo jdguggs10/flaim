@@ -75,10 +75,20 @@ Cloudflare DNS: `A`, name `api`, IPv4 `192.0.2.1`, proxied (orange). Verify: `cu
 - Local: `curl http://localhost:8786/health` (auth-worker), `localhost:3000` (frontend)
 - Remote: deployed worker URL + `/health`
 
+## Claude Direct Access (Optional)
+Users can connect Claude.ai or Claude Desktop directly to FLAIM's MCP servers:
+1. Set up ESPN credentials at `flaim.app/settings/espn`
+2. In Claude, add MCP server: `https://api.flaim.app/football/mcp` (or `/baseball/mcp`)
+3. Complete OAuth consent flow
+4. Use tools like `get_user_session`, `get_espn_football_league_info`, etc.
+
+See `docs/MCP_CONNECTOR_RESEARCH.md` for full testing guide.
+
 ## Troubleshooting (fast answers)
-- 500s in prod: missing Cloudflare secrets or wrong `NEXT_PUBLIC_*` URLs.  
-- 404s on custom routes: strip `/auth`, `/baseball`, `/football` prefixes in workers.  
-- 504 onboarding: MCP using custom domain → switch to `.workers.dev`, redeploy; ensure `"workers_dev": true`.  
+- 500s in prod: missing Cloudflare secrets or wrong `NEXT_PUBLIC_*` URLs.
+- 404s on custom routes: strip `/auth`, `/baseball`, `/football` prefixes in workers.
+- 522 timeouts (worker-to-worker): MCP workers calling auth-worker via custom domain. Fix: use `.workers.dev` URL for `AUTH_WORKER_URL`.
+- 504 onboarding: MCP using custom domain → switch to `.workers.dev`, redeploy; ensure `"workers_dev": true`.
 - 424 from Responses API: ensure `server_url` ends with `/mcp` and the worker responds to JSON-RPC 2.0 methods (`initialize`, `tools/list`, `tools/call`, `ping`) instead of legacy REST paths.
-- Double slashes: remove trailing slash in env URLs.  
+- Double slashes: remove trailing slash in env URLs.
 - ESPN host: use `https://lm-api-reads.fantasy.espn.com` with headers `Cookie: SWID=...; espn_s2=...`, `Accept: application/json`, `X-Fantasy-Source: kona`, `X-Fantasy-Platform: kona-web-2.0.0`.

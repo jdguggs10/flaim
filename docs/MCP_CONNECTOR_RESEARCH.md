@@ -1,12 +1,16 @@
 # MCP Connector Research: Direct Access + Cost-Aware Options
 
-> **Purpose**: This document summarizes how to connect FLAIM's MCP workers to AI platforms, with emphasis on Claude direct access to shift model costs to end users.
+> **Status**: ✅ **WORKING** — Claude direct access via MCP is fully operational as of December 28, 2025.
+>
+> **Next Phase**: OpenAI ChatGPT integration is ready for implementation (4-8 hours). See [Phase 6](#phase-6--openai-chatgpt-integration-proposed-next-phase).
+>
+> **Purpose**: This document summarizes how to connect FLAIM's MCP workers to AI platforms, with emphasis on direct access to shift model costs to end users.
 >
 > **Definitions**:
 > - **Developer**: You, the FLAIM maintainer operating the domain, workers, and OAuth flow.
 > - **End user**: The person using Claude and connecting your MCP server.
 >
-> **Last Updated**: December 27, 2025
+> **Last Updated**: December 28, 2025
 > **Research Context**: FLAIM uses Cloudflare Workers implementing MCP (Model Context Protocol) for ESPN fantasy sports data. Current architecture uses OpenAI Responses API with custom MCP workers.
 
 ---
@@ -17,7 +21,8 @@
 2. [Two Integration Paths](#two-integration-paths)
 3. [Current FLAIM Architecture](#current-flaim-architecture)
 4. [Direct Access (Claude) Implementation Notes](#direct-access-claude-implementation-notes)
-5. [Next Steps](#next-steps)
+5. [Implementation Phases](#next-steps-phased)
+   - [Phase 6: OpenAI ChatGPT Integration](#phase-6--openai-chatgpt-integration-proposed-next-phase)
 6. [References](#references)
 
 ---
@@ -42,14 +47,14 @@ Research identified **two distinct integration paths**. A strategic review again
     *   **Complexity**: Requires Clerk to act as a robust OAuth provider for external clients, introducing edge cases (token audience, scope validation) not present in the current internal-only JWT flow.
     *   **Guideline Violation**: This violates the "Solo Developer Guidelines" to favor "boring, stable solutions" and "avoid over-engineering."
 
-### Revised Recommendation
+### Revised Recommendation (Updated December 28, 2025)
 
-| Priority | Integration | Platform | Effort | Rationale |
-|----------|-------------|----------|--------|-----------|
-| **1st** | **API Integration** | **Anthropic/Gemini** | **2-4 hours** | Immediate backend redundancy; keeps user in your UI. |
-| **2nd** | **Direct Access (Option)** | **Anthropic Claude** | **2-4 days** | Add a BYO-tokens path to reduce costs while staying closest to current MCP/JWT structure. |
-| 3rd | Direct Access | Google Gemini | 2-4 days | Defer; similar effort with less alignment to current stack. |
-| 4th | Direct Access | OpenAI ChatGPT | 2-4 weeks | Avoid; prohibitive complexity (DCR). |
+| Priority | Integration | Platform | Effort | Status |
+|----------|-------------|----------|--------|--------|
+| **1st** | **Direct Access** | **Anthropic Claude** | **Done** | ✅ **WORKING** — Verified 2025-12-28 |
+| **2nd** | **Direct Access** | **OpenAI ChatGPT** | **4-8 hours** | Ready to implement. FLAIM already has DCR; add redirect URIs + `securitySchemes`. See [Phase 6](#phase-6--openai-chatgpt-integration-proposed-next-phase). |
+| 3rd | API Integration | Anthropic/Gemini | 2-4 hours | Backend redundancy; keeps user in your UI. |
+| 4th | Direct Access | Google Gemini | Blocked | Gemini CLI has [discovery bug](https://github.com/google-gemini/gemini-cli/issues/12628). Wait for fix. |
 
 ### Monetization Option: Split Access by Cost
 
@@ -121,13 +126,13 @@ Lightweight security checklist (reasonable for a fantasy sports app):
 - Minimal logging of token usage (user_id + timestamp).
 - Optional Claude IP allowlisting if you want to block non-Claude clients.
 
-### Compatibility Summary
+### Compatibility Summary (Updated December 28, 2025)
 
-| Platform | API-Level MCP | Direct Access Auth | FLAIM Compatible |
-|----------|---------------|-------------------|------------------|
-| Anthropic | `mcp_servers` param | OAuth (static client OK) | ✅ Yes |
-| Google | `tools` with `mcp_server` | OAuth | ✅ Yes |
-| OpenAI | None | OAuth 2.1 + DCR mandatory | ⚠️ Complex |
+| Platform | Direct Access Auth | FLAIM Status | Notes |
+|----------|-------------------|--------------|-------|
+| **Anthropic Claude** | OAuth 2.1 + DCR | ✅ **Working** | Verified 2025-12-28 |
+| **OpenAI ChatGPT** | OAuth 2.1 + DCR + `securitySchemes` | ⚠️ **Ready** | 4-8 hours to implement. See Phase 6. |
+| **Google Gemini CLI** | OAuth 2.1 + DCR | ❌ **Blocked** | Their CLI has [discovery bug #12628](https://github.com/google-gemini/gemini-cli/issues/12628) |
 
 ---
 
@@ -275,7 +280,7 @@ https://claude.com/api/mcp/auth_callback  (future)
 - Claude custom connectors allow you to add a remote MCP URL; OAuth client ID/secret are supported for authenticated servers.
 - OAuth is required to map a Claude request to a specific end user (for ESPN credentials).
 - Use public HTTPS MCP endpoints (e.g., `https://api.flaim.app/{sport}/mcp`) that speak JSON-RPC 2.0 (`POST /mcp`).
-- Keep worker-to-worker calls on custom domain (`api.flaim.app`) per existing architecture (Cloudflare blocks `.workers.dev` → `.workers.dev` with error 1042).
+- **Critical**: Worker-to-worker calls MUST use `.workers.dev` URLs (e.g., `auth-worker.gerrygugger.workers.dev`). Custom domain (`api.flaim.app`) causes 522 timeouts for intra-zone Cloudflare requests.
 - Auth-worker should support **two token types**: Clerk JWT (in-app) and OAuth access token (Claude).
 - Claude sends `Authorization: Bearer <token>` on MCP calls after OAuth.
 
@@ -413,13 +418,15 @@ Status: Complete.
 
 | Test | Status | Notes |
 |------|--------|-------|
-| OAuth flow completes | ☐ | |
-| Consent screen displays correctly | ☐ | |
-| Tool calls return data | ☐ | |
-| Rate limit enforced at 200/day | ☐ | |
-| Token refresh works | ☐ | |
-| Revocation stops access | ☐ | |
-| Reconnect after revoke works | ☐ | |
+| OAuth flow completes | ✅ | Verified 2025-12-28 |
+| Consent screen displays correctly | ✅ | |
+| Tool calls return data | ✅ | Fixed worker-to-worker routing |
+| Rate limit enforced at 200/day | ✅ | |
+| Token refresh works | ☐ | Low priority - test when convenient |
+| Revocation stops access | ☐ | Low priority - test when convenient |
+| Reconnect after revoke works | ☐ | Low priority - test when convenient |
+
+> **Note**: Remaining tests are validation of already-implemented functionality. Not blocking; complete when convenient.
 
 ---
 
@@ -511,6 +518,7 @@ ORDER BY duration_ms DESC;
 | 401 on tool calls | Token validation in auth-worker | Check `oauth_tokens` table, verify not revoked/expired |
 | 500 on ESPN calls | ESPN credentials in Supabase | Verify `espn_credentials` table has valid SWID/s2 |
 | CORS errors | `ALLOWED_ORIGINS` in workers | Add missing origin to allowlist |
+| **522 timeout / "No leagues"** | **MCP workers calling auth-worker via custom domain** | **Use `.workers.dev` URL for `AUTH_WORKER_URL` (critical fix!)** |
 | Worker-to-worker timeout | Using custom domain for internal calls | Use `.workers.dev` URL, ensure `workers_dev: true` |
 | Claude loopback redirect rejected | Loopback URI validation | Verify `isLoopbackRedirectUri` function in oauth-handlers.ts |
 
@@ -585,11 +593,166 @@ ORDER BY created_at DESC;
 - [x] Loopback redirect URIs: Support for Claude Desktop's `http://127.0.0.1:<PORT>/callback`.
 - [x] Authorization Server Metadata: Includes `registration_endpoint`.
 
-### Phase 5 — Testing ⏳
+### Phase 5 — Testing ✅ (Core Complete)
 
-- [ ] Manual: Claude Desktop → add custom connector → OAuth → tool call.
-- [ ] Token expiry: verify re-auth on expired token.
-- [ ] Revoke: verify tools fail after revoke and reconnect works.
+- [x] Manual: Claude.ai → add custom connector → OAuth → tool call. (Verified 2025-12-28)
+- [x] Worker-to-worker routing: Fixed 522 timeout by using `.workers.dev` URLs for auth-worker.
+- [ ] Token expiry: verify re-auth on expired token. *(Low priority - test when convenient)*
+- [ ] Revoke: verify tools fail after revoke and reconnect works. *(Low priority - test when convenient)*
+
+### Phase 6 — OpenAI ChatGPT Integration (Proposed Next Phase)
+
+> **Status**: Not started. Estimated effort: 4-8 hours.
+> **Research Date**: December 28, 2025.
+
+FLAIM's OAuth implementation is largely compatible with OpenAI's ChatGPT MCP connector requirements. This phase extends direct access to ChatGPT users.
+
+#### Gap Analysis: FLAIM vs. OpenAI Requirements
+
+| Requirement | FLAIM Status | OpenAI Requirement | Gap |
+|-------------|--------------|-------------------|-----|
+| Protected Resource Metadata (RFC 9728) | ✅ Implemented | ✅ Required | None |
+| Authorization Server Metadata (RFC 8414) | ✅ Implemented | ✅ Required | None |
+| Dynamic Client Registration (RFC 7591) | ✅ Implemented | ✅ Required | None |
+| PKCE with S256 | ✅ Implemented | ✅ Required (must advertise in metadata) | None |
+| `code_challenge_methods_supported` in metadata | ✅ `["S256", "plain"]` | ✅ Must include `S256` | None |
+| HTTP 401 + `WWW-Authenticate` header | ✅ Implemented | ✅ Required | None |
+| ChatGPT redirect URIs | ❌ Not allowlisted | ✅ Required | **Add URIs** |
+| `resource` parameter (RFC 8707) | ❌ Not implemented | ✅ Required (echo to token `aud`) | **Implement** |
+| `securitySchemes` on tools | ❌ Not implemented | ✅ OpenAI extension, required | **Add to tools/list** |
+| `_meta["mcp/www_authenticate"]` in errors | ❌ Not implemented | ✅ Required for linking UI | **Add to error responses** |
+
+#### Key Difference: How Auth UI Gets Triggered
+
+| Behavior | Claude | ChatGPT |
+|----------|--------|---------|
+| Auth trigger | HTTP 401 + `WWW-Authenticate` header | HTTP 401 + `WWW-Authenticate` **AND** `_meta["mcp/www_authenticate"]` in JSON-RPC error |
+| Redirect URIs | `claude.ai/...` + loopback (RFC 8252) | `chatgpt.com/...` only (no loopback) |
+| Per-tool auth | Not required | `securitySchemes` required on each tool |
+| DCR behavior | Supports manual client ID fallback | Creates new client per session |
+
+**Critical**: ChatGPT won't reliably show the OAuth linking UI unless **both** HTTP-level and MCP-level auth metadata are present.
+
+#### Required Changes
+
+**1. Add ChatGPT Redirect URIs** *(oauth-handlers.ts)*
+
+Add to `ALLOWED_REDIRECT_URIS`:
+```typescript
+// ChatGPT OAuth callbacks (no loopback needed - ChatGPT uses HTTPS only)
+'https://chatgpt.com/connector_platform_oauth_redirect',
+'https://platform.openai.com/apps-manage/oauth',  // For app review phase
+```
+
+**2. Handle `resource` Parameter (RFC 8707)** *(oauth-handlers.ts)*
+
+ChatGPT appends `resource=https://api.flaim.app/football/mcp` to authorization and token requests. Per [OpenAI docs](https://developers.openai.com/apps-sdk/build/auth/):
+- Parse `resource` parameter in `/authorize` and `/token` endpoints
+- Store with authorization code
+- Include as `aud` claim in access token (or validate on MCP worker)
+- MCP workers should verify token audience matches their canonical URL
+
+> **Note**: There's an [open bug report](https://community.openai.com/t/mcp-oauth-authentication-does-not-send-resource-indicator-from-rfc-8707/1361201) that ChatGPT may not actually send this parameter. Implement defensively: accept but don't require.
+
+**3. Add `securitySchemes` to Tool Definitions** *(football-agent.ts, agent.ts)*
+
+OpenAI extends MCP with per-tool security declarations. Update `tools/list` response to include:
+
+```typescript
+{
+  name: "get_espn_football_league_info",
+  description: "...",
+  inputSchema: { ... },
+  // OpenAI extension: declare auth requirements
+  securitySchemes: [
+    { type: "oauth2", scopes: ["mcp:read"] }
+  ]
+}
+```
+
+This tells ChatGPT which tools require OAuth and what scopes to request.
+
+**4. Add `_meta["mcp/www_authenticate"]` to Error Responses** *(football-agent.ts, agent.ts)* — **REQUIRED**
+
+This is **not optional** for ChatGPT. The linking UI only appears when runtime failures include this MCP-level metadata.
+
+**Current FLAIM response** (works for Claude, not sufficient for ChatGPT):
+```json
+{
+  "jsonrpc": "2.0",
+  "error": {
+    "code": -32001,
+    "message": "Authentication required. Please authorize via OAuth."
+  },
+  "id": null
+}
+```
+
+**Required for ChatGPT** — add `_meta["mcp/www_authenticate"]`:
+```json
+{
+  "jsonrpc": "2.0",
+  "error": {
+    "code": -32001,
+    "message": "Authentication required. Please authorize via OAuth.",
+    "_meta": {
+      "mcp/www_authenticate": {
+        "error": "unauthorized",
+        "error_description": "Authentication required to access FLAIM fantasy sports tools.",
+        "resource_metadata": "https://api.flaim.app/football/.well-known/oauth-protected-resource"
+      }
+    }
+  },
+  "id": null
+}
+```
+
+This must be returned on:
+- Initial unauthenticated `initialize` or `tools/call` requests
+- Any tool call with an invalid/expired token
+
+**5. (Optional) Add OpenAI UI Polish Fields**
+
+For better ChatGPT UX (not required for auth to work):
+- `_meta["openai/toolInvocation/invoking"]`: Status text during execution (≤64 chars)
+- `_meta["openai/toolInvocation/invoked"]`: Status text after completion
+
+Example: `"Fetching your fantasy league data..."` → `"Retrieved league info"`
+
+#### Implementation Checklist
+
+**Must-haves** (ChatGPT won't work without these):
+- [ ] Add ChatGPT redirect URIs to allowlist in `oauth-handlers.ts`
+- [ ] Add `securitySchemes` to all tools in `tools/list` response
+- [ ] Add `_meta["mcp/www_authenticate"]` to 401 error responses in MCP workers
+- [ ] Parse `resource` parameter in `/authorize` endpoint
+- [ ] Store `resource` with authorization code in `oauth_codes` table
+- [ ] Pass `resource` to `/token` and include in token response or storage
+
+**Recommended**:
+- [ ] Validate `resource`/audience in MCP workers
+
+**Optional polish**:
+- [ ] Add `_meta["openai/toolInvocation/*"]` fields for better ChatGPT UI
+
+**Testing**:
+- [ ] Test end-to-end: ChatGPT Developer Mode → add connector → OAuth → tool call
+
+#### Testing Notes
+
+**ChatGPT Developer Mode**: Use [Developer Mode](https://help.openai.com/en/articles/12584461-developer-mode-apps-and-full-mcp-connectors-in-chatgpt-beta) to test custom MCP servers before submitting to the app marketplace.
+
+**Known Issues to Watch**:
+- DCR generates many short-lived client IDs (one per session). OpenAI is developing [Client Metadata Documents (CMID)](https://developers.openai.com/apps-sdk/build/auth/) as a future alternative.
+- Some developers report token exchange failures in ChatGPT that work in MCP Inspector ([community thread](https://community.openai.com/t/mcp-oauth-token-exchange-fails-in-chatgpt-app-works-in-mcp-inspector/1369928)).
+
+#### References for OpenAI Integration
+
+- [OpenAI Apps SDK Authentication](https://developers.openai.com/apps-sdk/build/auth/)
+- [OpenAI MCP Server Concepts](https://developers.openai.com/apps-sdk/concepts/mcp-server/)
+- [OpenAI Apps SDK Reference](https://developers.openai.com/apps-sdk/reference/)
+- [ChatGPT Developer Mode](https://help.openai.com/en/articles/12584461-developer-mode-apps-and-full-mcp-connectors-in-chatgpt-beta)
+- [RFC 8707 - Resource Indicators for OAuth 2.0](https://datatracker.ietf.org/doc/html/rfc8707)
 
 ---
 
@@ -604,6 +767,13 @@ ORDER BY created_at DESC;
 ### Authentication References
 - [MCP Authorization Spec](https://modelcontextprotocol.io/specification/2025-03-26/basic/authorization)
 - [RFC 9728 - OAuth 2.0 Protected Resource Metadata](https://datatracker.ietf.org/doc/html/rfc9728)
+- [RFC 8707 - Resource Indicators for OAuth 2.0](https://datatracker.ietf.org/doc/html/rfc8707) *(Required for OpenAI)*
 - [RFC 7591 - OAuth 2.0 Dynamic Client Registration](https://datatracker.ietf.org/doc/html/rfc7591)
 - [RFC 8414 - OAuth 2.0 Authorization Server Metadata](https://datatracker.ietf.org/doc/html/rfc8414)
 - [RFC 8252 - OAuth 2.0 for Native Apps (Loopback URIs)](https://datatracker.ietf.org/doc/html/rfc8252)
+
+### OpenAI-Specific References
+- [OpenAI Apps SDK Authentication](https://developers.openai.com/apps-sdk/build/auth/)
+- [OpenAI MCP Server Concepts](https://developers.openai.com/apps-sdk/concepts/mcp-server/)
+- [OpenAI Apps SDK Reference](https://developers.openai.com/apps-sdk/reference/)
+- [ChatGPT Developer Mode](https://help.openai.com/en/articles/12584461-developer-mode-apps-and-full-mcp-connectors-in-chatgpt-beta)

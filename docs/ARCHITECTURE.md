@@ -27,17 +27,19 @@ AI-powered fantasy sports assistant using Clerk auth, Supabase storage, and spor
 - Edit templates in `lib/prompts/` to tweak LLM behavior without touching core logic.
 
 ## MCP Tools (live data)
-- Baseball: `get_espn_league_info`, `get_espn_team_roster`, `get_espn_matchups`.
-- Football: `get_espn_football_league_info`, `get_espn_football_team`, `get_espn_football_matchups`, `get_espn_football_standings`.
+- **Session**: `get_user_session` (both workers) — returns user's configured leagues, team IDs, current date/season. Call first.
+- **Baseball**: `get_espn_league_info`, `get_espn_team_roster`, `get_espn_matchups`.
+- **Football**: `get_espn_football_league_info`, `get_espn_football_team`, `get_espn_football_matchups`, `get_espn_football_standings`.
 
 ## Deployment Notes
 - Frontend on Vercel; workers on Cloudflare. GitOps: PR → preview, main → prod.  
 - Keep `"workers_dev": true` on auth-worker prod to expose the direct URL.  
 - Environment setup and troubleshooting live in `docs/GETTING_STARTED.md`.
 
-## Claude Direct Access (OAuth 2.1)
+## Claude Direct Access (OAuth 2.1) ✅ Working
 
-End users can connect Claude Desktop/Claude.ai directly to FLAIM's MCP servers:
+End users can connect Claude Desktop/Claude.ai directly to FLAIM's MCP servers, enabling "bring your own Claude subscription" usage:
+- **MCP URL**: `https://api.flaim.app/football/mcp` or `https://api.flaim.app/baseball/mcp`
 - **OAuth Flow**: Full OAuth 2.1 with PKCE, Dynamic Client Registration (RFC 7591), and Protected Resource Metadata (RFC 9728).
 - **Endpoints**: `/auth/register` (DCR), `/auth/authorize`, `/auth/token`, `/auth/revoke`.
 - **Metadata**: `/.well-known/oauth-authorization-server` (auth server), `/{sport}/.well-known/oauth-protected-resource` (MCP workers).
@@ -45,4 +47,6 @@ End users can connect Claude Desktop/Claude.ai directly to FLAIM's MCP servers:
 - **Rate limiting**: 200 calls/day per user via `rate_limits` table.
 - **Token storage**: `oauth_codes` and `oauth_tokens` tables in Supabase.
 
-See `docs/MCP_CONNECTOR_RESEARCH.md` for full implementation details.
+**Critical**: MCP workers must call auth-worker via `.workers.dev` URLs (not custom domain) to avoid intra-zone 522 timeouts.
+
+See `docs/MCP_CONNECTOR_RESEARCH.md` for full implementation details and testing guide.
