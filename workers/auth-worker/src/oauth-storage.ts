@@ -25,6 +25,7 @@ export interface OAuthCode {
   codeChallenge?: string;
   codeChallengeMethod?: 'S256' | 'plain';
   scope: string;
+  resource?: string; // RFC 8707 resource indicator
   expiresAt: Date;
   usedAt?: Date;
 }
@@ -33,6 +34,7 @@ export interface OAuthToken {
   accessToken: string;
   userId: string;
   scope: string;
+  resource?: string; // RFC 8707 resource indicator
   expiresAt: Date;
   revokedAt?: Date;
   refreshToken?: string;
@@ -45,12 +47,14 @@ export interface CreateCodeParams {
   codeChallenge?: string;
   codeChallengeMethod?: 'S256' | 'plain';
   scope?: string;
+  resource?: string; // RFC 8707 resource indicator
   expiresInSeconds?: number; // Default: 600 (10 minutes)
 }
 
 export interface CreateTokenParams {
   userId: string;
   scope?: string;
+  resource?: string; // RFC 8707 resource indicator
   expiresInSeconds?: number; // Default: 3600 (1 hour)
   includeRefreshToken?: boolean;
   refreshTokenExpiresInSeconds?: number; // Default: 604800 (7 days)
@@ -147,6 +151,7 @@ export class OAuthStorage {
       code_challenge: params.codeChallenge || null,
       code_challenge_method: params.codeChallengeMethod || null,
       scope: params.scope || 'mcp:read',
+      resource: params.resource || null, // RFC 8707
       expires_at: expiresAt.toISOString(),
     });
 
@@ -194,6 +199,7 @@ export class OAuthStorage {
       codeChallenge: data.code_challenge || undefined,
       codeChallengeMethod: data.code_challenge_method || undefined,
       scope: data.scope,
+      resource: data.resource || undefined, // RFC 8707
       expiresAt: new Date(data.expires_at),
       usedAt: data.used_at ? new Date(data.used_at) : undefined,
     };
@@ -259,6 +265,7 @@ export class OAuthStorage {
     const token = await this.createAccessToken({
       userId: authCode.userId,
       scope: authCode.scope,
+      resource: authCode.resource, // RFC 8707 - pass through resource
       includeRefreshToken: true,
     });
 
@@ -290,6 +297,7 @@ export class OAuthStorage {
       access_token: accessToken,
       user_id: params.userId,
       scope: params.scope || 'mcp:read',
+      resource: params.resource || null, // RFC 8707
       expires_at: expiresAt.toISOString(),
       refresh_token: refreshToken || null,
       refresh_token_expires_at: refreshTokenExpiresAt?.toISOString() || null,
@@ -306,6 +314,7 @@ export class OAuthStorage {
       accessToken,
       userId: params.userId,
       scope: params.scope || 'mcp:read',
+      resource: params.resource, // RFC 8707
       expiresAt,
       refreshToken,
       refreshTokenExpiresAt,
@@ -374,10 +383,11 @@ export class OAuthStorage {
     // Revoke the old token
     await this.revokeToken(data.access_token);
 
-    // Create new token with same scope
+    // Create new token with same scope and resource (RFC 8707)
     const newToken = await this.createAccessToken({
       userId: data.user_id,
       scope: data.scope,
+      resource: data.resource || undefined, // Preserve resource for audience validation
       includeRefreshToken: true,
     });
 

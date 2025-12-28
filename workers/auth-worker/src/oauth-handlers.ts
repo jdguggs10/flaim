@@ -35,6 +35,7 @@ interface AuthorizeParams {
   state?: string;
   code_challenge?: string;
   code_challenge_method?: string;
+  resource?: string; // RFC 8707 resource indicator (OpenAI ChatGPT)
 }
 
 interface TokenRequest {
@@ -62,6 +63,9 @@ const ALLOWED_REDIRECT_URIS = [
   // Claude.ai web
   'https://claude.ai/api/mcp/auth_callback',
   'https://claude.com/api/mcp/auth_callback',
+  // ChatGPT OAuth callbacks
+  'https://chatgpt.com/connector_platform_oauth_redirect',
+  'https://platform.openai.com/apps-manage/oauth',
   // For local development/testing
   'http://localhost:3000/oauth/callback',
   'http://localhost:6274/oauth/callback',
@@ -305,6 +309,7 @@ export function handleAuthorize(request: Request, env: OAuthEnv): Response {
     state: url.searchParams.get('state') || undefined,
     code_challenge: url.searchParams.get('code_challenge') || undefined,
     code_challenge_method: url.searchParams.get('code_challenge_method') || undefined,
+    resource: url.searchParams.get('resource') || undefined, // RFC 8707
   };
 
   // Validate required parameters
@@ -354,6 +359,7 @@ export function handleAuthorize(request: Request, env: OAuthEnv): Response {
   if (params.code_challenge) consentUrl.searchParams.set('code_challenge', params.code_challenge);
   if (params.code_challenge_method) consentUrl.searchParams.set('code_challenge_method', params.code_challenge_method);
   if (params.client_id) consentUrl.searchParams.set('client_id', params.client_id);
+  if (params.resource) consentUrl.searchParams.set('resource', params.resource); // RFC 8707
 
   console.log(`[oauth] Redirecting to consent page: ${consentUrl.toString()}`);
 
@@ -386,6 +392,7 @@ export async function handleCreateCode(
       state?: string;
       code_challenge?: string;
       code_challenge_method?: string;
+      resource?: string; // RFC 8707
     };
 
     if (!body.redirect_uri) {
@@ -410,6 +417,7 @@ export async function handleCreateCode(
       scope: body.scope || 'mcp:read',
       codeChallenge: body.code_challenge,
       codeChallengeMethod: (body.code_challenge_method as 'S256' | 'plain') || 'S256',
+      resource: body.resource, // RFC 8707
       expiresInSeconds: 600, // 10 minutes
     });
 

@@ -39,6 +39,7 @@ function OAuthConsentContent() {
     codeChallenge: searchParams.get('code_challenge') || undefined,
     codeChallengeMethod: searchParams.get('code_challenge_method') || 'S256',
     clientId: searchParams.get('client_id') || undefined,
+    resource: searchParams.get('resource') || undefined, // RFC 8707
   };
 
   // Validate required params
@@ -86,6 +87,7 @@ function OAuthConsentContent() {
           state: oauthParams.state,
           code_challenge: oauthParams.codeChallenge,
           code_challenge_method: oauthParams.codeChallengeMethod,
+          resource: oauthParams.resource, // RFC 8707
         }),
       });
 

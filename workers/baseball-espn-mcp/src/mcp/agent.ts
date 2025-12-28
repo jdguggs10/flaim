@@ -42,6 +42,7 @@ export interface McpToolCall {
 export interface McpResponse {
   content: any;
   isError?: boolean;
+  authError?: boolean; // Indicates token is invalid/expired, should trigger re-auth
 }
 
 // JSON-RPC 2.0 types for MCP protocol
@@ -253,7 +254,13 @@ export class McpAgent {
         jsonrpc: '2.0',
         error: {
           code: -32001,
-          message: 'Authentication required. Please authorize via OAuth.'
+          message: 'Authentication required. Please authorize via OAuth.',
+          // OpenAI ChatGPT requires _meta["mcp/www_authenticate"] to trigger OAuth UI
+          _meta: {
+            'mcp/www_authenticate': [
+              'Bearer resource_metadata="https://api.flaim.app/baseball/.well-known/oauth-protected-resource", error="unauthorized", error_description="Authentication required"'
+            ]
+          }
         },
         id: rpcRequest.id ?? null
       }), {
@@ -354,6 +361,40 @@ export class McpAgent {
       const resolvedUserId = logContext.resolvedUserId;
       const logUserId = maskUserId(resolvedUserId ?? clerkUserId);
 
+      // Check for auth error - return 401 to trigger re-auth in ChatGPT
+      if (result.authError) {
+        logTool({
+          request_id: requestId,
+          user_id: logUserId,
+          tool_name: toolName,
+          status: 'error',
+          error_code: 'AUTH_FAILED',
+          duration_ms: Date.now() - startTime,
+          timestamp: new Date().toISOString(),
+        });
+
+        return new Response(JSON.stringify({
+          jsonrpc: '2.0',
+          error: {
+            code: -32001,
+            message: 'Authentication failed. Please re-authorize via OAuth.',
+            _meta: {
+              'mcp/www_authenticate': [
+                'Bearer resource_metadata="https://api.flaim.app/baseball/.well-known/oauth-protected-resource", error="invalid_token", error_description="Token is invalid or expired"'
+              ]
+            }
+          },
+          id: rpcRequest.id ?? null
+        }), {
+          status: 401,
+          headers: {
+            'Content-Type': 'application/json',
+            'WWW-Authenticate': 'Bearer resource_metadata="https://api.flaim.app/baseball/.well-known/oauth-protected-resource", error="invalid_token"',
+            ...corsHeaders
+          }
+        });
+      }
+
       // Log tool execution success
       logTool({
         request_id: requestId,
@@ -444,6 +485,9 @@ export class McpAgent {
     const currentYear = new Date().getFullYear().toString();
     const currentDate = new Date().toISOString().split('T')[0];
 
+    // securitySchemes required by OpenAI ChatGPT for OAuth-protected tools
+    const securitySchemes = [{ type: 'oauth2', scopes: ['mcp:read'] }];
+
     return [
       {
         name: 'get_user_session',
@@ -452,7 +496,8 @@ export class McpAgent {
           type: 'object',
           properties: {},
           required: []
-        }
+        },
+        securitySchemes
       },
       {
         name: 'get_espn_league_info',
@@ -471,7 +516,8 @@ export class McpAgent {
             }
           },
           required: ['leagueId']
-        }
+        },
+        securitySchemes
       },
       {
         name: 'get_espn_team_roster',
@@ -484,7 +530,8 @@ export class McpAgent {
             seasonId: { type: 'string', description: `Season year (default: ${currentYear})`, default: currentYear }
           },
           required: ['leagueId', 'teamId']
-        }
+        },
+        securitySchemes
       },
       {
         name: 'get_espn_matchups',
@@ -497,7 +544,8 @@ export class McpAgent {
             seasonId: { type: 'string', description: `Season year (default: ${currentYear})`, default: currentYear }
           },
           required: ['leagueId']
-        }
+        },
+        securitySchemes
       }
     ];
   }
@@ -579,6 +627,16 @@ export class McpAgent {
   ): Promise<McpResponse> {
     // Fetch user's configured leagues to validate/override leagueId
     const { leagues: userLeagues, error: fetchError, status: fetchStatus } = await fetchUserLeagues(env, clerkUserId, authHeader);
+
+    // Check for auth errors (invalid/expired token) - trigger re-auth flow
+    if (fetchStatus === 401 || fetchStatus === 403) {
+      console.log(`🔒 [agent] Auth error from auth-worker: status=${fetchStatus}`);
+      return {
+        content: 'Authentication failed. Please re-authorize.',
+        isError: true,
+        authError: true // Signal to return 401 with _meta
+      };
+    }
 
     // Normalize sport filtering: case-insensitive
     const baseballLeagues = userLeagues.filter((l: any) =>
