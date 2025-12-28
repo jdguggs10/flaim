@@ -24,6 +24,7 @@ export async function POST(request: NextRequest) {
       state?: string;
       code_challenge?: string;
       code_challenge_method?: string;
+      resource?: string; // RFC 8707
     };
 
     // Validate required fields
@@ -53,7 +54,8 @@ export async function POST(request: NextRequest) {
         scope: body.scope,
         state: body.state,
         code_challenge: body.code_challenge,
-        code_challenge_method: body.code_challenge_method
+        code_challenge_method: body.code_challenge_method,
+        resource: body.resource // RFC 8707
       })
     });
 

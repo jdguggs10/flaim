@@ -1,16 +1,13 @@
 "use client";
 
-import React, { Suspense, useEffect, useState } from 'react';
+import React, { Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useAuth, SignIn } from '@clerk/nextjs';
 import ConsentScreen from '@/components/connectors/ConsentScreen';
 import { Loader2 } from 'lucide-react';
 
-interface LeagueData {
-  leagueId: string;
-  sport: string;
-  teamId?: string;
-}
+// League checking removed - OAuth consent should work regardless of fantasy setup
+// Tools handle missing configuration gracefully when called
 
 function LoadingFallback() {
   return (
@@ -28,8 +25,7 @@ function OAuthConsentContent() {
   const router = useRouter();
   const { isLoaded, isSignedIn } = useAuth();
 
-  const [isCheckingLeagues, setIsCheckingLeagues] = useState(true);
-  const [hasLeaguesConfigured, setHasLeaguesConfigured] = useState(false);
+  // Removed league checking - OAuth consent works regardless of fantasy setup
 
   // Extract OAuth params from URL
   const oauthParams = {
@@ -45,35 +41,7 @@ function OAuthConsentContent() {
   // Validate required params
   const isValidRequest = oauthParams.redirectUri && oauthParams.codeChallenge;
 
-  // Check if user has leagues configured
-  useEffect(() => {
-    if (!isLoaded || !isSignedIn) {
-      setIsCheckingLeagues(false);
-      return;
-    }
-
-    const checkLeagues = async () => {
-      try {
-        const response = await fetch('/api/onboarding/espn/leagues');
-        if (response.ok) {
-          const data = await response.json() as { leagues?: LeagueData[] };
-          const leagues = data.leagues || [];
-          // Check if at least one league has a teamId set
-          const hasConfigured = leagues.some((l: LeagueData) => l.teamId);
-          setHasLeaguesConfigured(hasConfigured);
-        } else {
-          setHasLeaguesConfigured(false);
-        }
-      } catch (err) {
-        console.error('Failed to check leagues:', err);
-        setHasLeaguesConfigured(false);
-      } finally {
-        setIsCheckingLeagues(false);
-      }
-    };
-
-    checkLeagues();
-  }, [isLoaded, isSignedIn]);
+  // League checking removed - tools handle missing configuration when called
 
   // Handle "Allow" - create auth code and redirect to Claude
   const handleAllow = async () => {
@@ -127,7 +95,7 @@ function OAuthConsentContent() {
   };
 
   // Loading state
-  if (!isLoaded || isCheckingLeagues) {
+  if (!isLoaded) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
@@ -190,7 +158,6 @@ function OAuthConsentContent() {
         oauthParams={oauthParams}
         onAllow={handleAllow}
         onDeny={handleDeny}
-        hasLeaguesConfigured={hasLeaguesConfigured}
       />
     </div>
   );

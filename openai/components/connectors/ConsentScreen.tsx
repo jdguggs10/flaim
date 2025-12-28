@@ -3,10 +3,9 @@
 import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Shield, CheckCircle, Loader2, AlertCircle } from 'lucide-react';
-import Link from 'next/link';
 
 interface OAuthParams {
   redirectUri: string;
@@ -21,14 +20,12 @@ interface ConsentScreenProps {
   oauthParams: OAuthParams;
   onAllow: () => Promise<void>;
   onDeny: () => void;
-  hasLeaguesConfigured: boolean;
 }
 
 export default function ConsentScreen({
   oauthParams,
   onAllow,
   onDeny,
-  hasLeaguesConfigured
 }: ConsentScreenProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -44,39 +41,8 @@ export default function ConsentScreen({
     }
   };
 
-  // Show warning if no leagues are configured
-  if (!hasLeaguesConfigured) {
-    return (
-      <Card className="w-full max-w-md mx-auto">
-        <CardHeader className="text-center">
-          <div className="mx-auto mb-4 w-12 h-12 rounded-full bg-yellow-100 dark:bg-yellow-900/20 flex items-center justify-center">
-            <AlertCircle className="h-6 w-6 text-yellow-600 dark:text-yellow-400" />
-          </div>
-          <CardTitle>Setup Required</CardTitle>
-          <CardDescription>
-            You need to configure at least one ESPN league before connecting Claude.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <Alert>
-            <AlertCircle className="h-4 w-4" />
-            <AlertTitle>No leagues configured</AlertTitle>
-            <AlertDescription>
-              Claude needs access to your fantasy league data. Please complete the ESPN setup first.
-            </AlertDescription>
-          </Alert>
-        </CardContent>
-        <CardFooter className="flex gap-3">
-          <Button variant="outline" className="flex-1" onClick={onDeny}>
-            Cancel
-          </Button>
-          <Button className="flex-1" asChild>
-            <Link href="/">Go to Setup</Link>
-          </Button>
-        </CardFooter>
-      </Card>
-    );
-  }
+  // Note: We no longer gate on league configuration.
+  // If user has no leagues/teams, tools will return helpful errors when called.
 
   return (
     <Card className="w-full max-w-md mx-auto">
