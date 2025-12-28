@@ -15,11 +15,11 @@
 - Cloudflare Workers: Auth worker (`/workers/auth-worker`), Sport MCP workers (`/workers/baseball-espn-mcp`, `/workers/football-espn-mcp`).
 - Supabase: Data: Supabase Postgres tables `espn_credentials`, `espn_leagues`.
 - LLM: OpenAI's new Responses API; NOT chat completions! DO NOT USE CHAT COMPLETIONS!
-- Rule: Worker-to-worker calls use custom domain (`api.flaim.app`); Cloudflare blocks `.workers.dev` to `.workers.dev` fetches with error 1042.
+- Rule: Worker-to-worker calls MUST use `.workers.dev` URLs (e.g., `auth-worker.gerrygugger.workers.dev`). Custom domain (`api.flaim.app`) causes 522 timeouts for intra-zone requests.
 
 ## MCP Tools
-- Baseball: `get_espn_league_info`, `get_espn_team_roster`, `get_espn_matchups`.
-- Football: `get_espn_football_league_info`, `get_espn_football_team`, `get_espn_football_matchups`, `get_espn_football_standings`.
+- Baseball: `get_user_session`, `get_espn_league_info`, `get_espn_team_roster`, `get_espn_matchups`.
+- Football: `get_user_session`, `get_espn_football_league_info`, `get_espn_football_team`, `get_espn_football_matchups`, `get_espn_football_standings`.
 
 ## Development Commands
 ```bash

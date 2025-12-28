@@ -32,12 +32,12 @@
         }
       ],
       // Environment variables for production
-      // Note: Using custom domain for auth-worker to avoid Cloudflare error 1042
-      // (worker-to-worker fetch blocked on .workers.dev URLs)
+      // Note: Worker-to-worker calls MUST use .workers.dev URLs.
+      // Custom domain (api.flaim.app) causes 522 timeouts for intra-zone requests.
       "vars": {
         "NODE_ENV": "production",
         "ENVIRONMENT": "prod",
-        "AUTH_WORKER_URL": "https://api.flaim.app/auth"
+        "AUTH_WORKER_URL": "https://auth-worker.gerrygugger.workers.dev"
       }
     },
     // Preview environment (remote dev/staging)
@@ -45,11 +45,11 @@
       "name": "baseball-espn-mcp-preview",
       "workers_dev": true, // Use workers.dev URL for preview
       // Environment variables for preview
-      // Note: Using custom domain for auth-worker to avoid Cloudflare error 1042
+      // Note: Worker-to-worker calls MUST use .workers.dev URLs.
       "vars": {
         "NODE_ENV": "production",
         "ENVIRONMENT": "preview",
-        "AUTH_WORKER_URL": "https://api.flaim.app/auth-preview"
+        "AUTH_WORKER_URL": "https://auth-worker-preview.gerrygugger.workers.dev"
       }
     },
     // Development environment (local)
