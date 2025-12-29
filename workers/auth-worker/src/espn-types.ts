@@ -19,11 +19,12 @@ export interface EspnLeague {
   leagueId: string;
   sport: 'football' | 'hockey' | 'baseball' | 'basketball';
   swid?: string;             // Optional for backward compatibility
-  s2?: string;               // Optional for backward compatibility  
+  s2?: string;               // Optional for backward compatibility
   teamId?: string;           // Set after user identifies their team
   teamName?: string;         // Optional: user's team name for display
   leagueName?: string;       // Filled after auto-pull
   seasonYear?: number;       // Filled after auto-pull
+  isDefault?: boolean;       // Whether this is the user's default league (one per user)
 }
 
 /**

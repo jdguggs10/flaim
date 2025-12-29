@@ -27,6 +27,7 @@ import {
   ExternalLink,
   Search,
   X,
+  Star,
 } from 'lucide-react';
 
 interface League {
@@ -36,6 +37,7 @@ interface League {
   teamId?: string;
   teamName?: string;
   seasonYear?: number;
+  isDefault?: boolean;
 }
 
 interface Team {
@@ -79,6 +81,7 @@ export default function LeaguesPage() {
   const [isLoadingLeagues, setIsLoadingLeagues] = useState(true);
   const [leagueError, setLeagueError] = useState<string | null>(null);
   const [deletingLeagueKey, setDeletingLeagueKey] = useState<string | null>(null);
+  const [settingDefaultKey, setSettingDefaultKey] = useState<string | null>(null);
 
   // Add league flow state
   const [newLeagueId, setNewLeagueId] = useState('');
@@ -330,6 +333,41 @@ export default function LeaguesPage() {
       setLeagueError(err instanceof Error ? err.message : 'Failed to remove league');
     } finally {
       setDeletingLeagueKey(null);
+    }
+  };
+
+  // Set default league
+  const handleSetDefault = async (leagueId: string, sport: string) => {
+    const leagueKey = `${leagueId}-${sport}`;
+    setSettingDefaultKey(leagueKey);
+    setLeagueError(null);
+
+    try {
+      const res = await fetch('/api/onboarding/espn/leagues/default', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ leagueId, sport }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json() as { error?: string };
+        throw new Error(data.error || 'Failed to set default league');
+      }
+
+      const data = await res.json() as { leagues?: League[] };
+      if (data.leagues) {
+        setLeagues(data.leagues);
+      } else {
+        // Fallback: update locally using functional update to avoid stale closure
+        setLeagues((prev) => prev.map((l) => ({
+          ...l,
+          isDefault: l.leagueId === leagueId && l.sport === sport,
+        })));
+      }
+    } catch (err) {
+      setLeagueError(err instanceof Error ? err.message : 'Failed to set default league');
+    } finally {
+      setSettingDefaultKey(null);
     }
   };
 
@@ -660,42 +698,83 @@ export default function LeaguesPage() {
               </div>
             ) : (
               <div className="space-y-2">
-                {leagues.map((league) => (
-                  <div
-                    key={`${league.leagueId}-${league.sport}`}
-                    className="flex items-center justify-between p-3 bg-muted rounded-lg"
-                  >
-                    <div className="flex items-center gap-3">
-                      <span className="text-xl">{getSportEmoji(league.sport)}</span>
-                      <div>
-                        <div className="font-medium">
-                          {league.leagueName || `League ${league.leagueId}`}
-                        </div>
-                        <div className="text-sm text-muted-foreground">
-                          {league.teamName ? (
-                            <span>{league.teamName}</span>
-                          ) : (
-                            <span className="capitalize">{league.sport}</span>
-                          )}
-                          {' | ID: '}{league.leagueId}
+                {leagues.map((league) => {
+                  const leagueKey = `${league.leagueId}-${league.sport}`;
+                  const isSettingDefault = settingDefaultKey === leagueKey;
+                  const isDeleting = deletingLeagueKey === leagueKey;
+
+                  return (
+                    <div
+                      key={leagueKey}
+                      className={`flex items-center justify-between p-3 rounded-lg ${
+                        league.isDefault ? 'bg-primary/10 border border-primary/30' : 'bg-muted'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-xl">{getSportEmoji(league.sport)}</span>
+                        <div>
+                          <div className="font-medium flex items-center gap-2">
+                            {league.leagueName || `League ${league.leagueId}`}
+                            {league.isDefault && (
+                              <span className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded-full">
+                                Default
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            {league.teamName ? (
+                              <span>{league.teamName}</span>
+                            ) : (
+                              <span className="capitalize">{league.sport}</span>
+                            )}
+                            {' | ID: '}{league.leagueId}
+                          </div>
                         </div>
                       </div>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className={`h-8 w-8 ${
+                            league.isDefault
+                              ? 'text-yellow-500 hover:text-yellow-600'
+                              : 'text-muted-foreground hover:text-yellow-500'
+                          }`}
+                          onClick={() => handleSetDefault(league.leagueId, league.sport)}
+                          disabled={isSettingDefault || league.isDefault || !league.teamId}
+                          title={
+                            !league.teamId
+                              ? 'Select a team first'
+                              : league.isDefault
+                              ? 'Already default'
+                              : 'Set as default'
+                          }
+                        >
+                          {isSettingDefault ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Star
+                              className={`h-4 w-4 ${league.isDefault ? 'fill-current' : ''}`}
+                            />
+                          )}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                          onClick={() => handleDeleteLeague(league.leagueId, league.sport)}
+                          disabled={isDeleting}
+                        >
+                          {isDeleting ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </div>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                      onClick={() => handleDeleteLeague(league.leagueId, league.sport)}
-                      disabled={deletingLeagueKey === `${league.leagueId}-${league.sport}`}
-                    >
-                      {deletingLeagueKey === `${league.leagueId}-${league.sport}` ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Trash2 className="h-4 w-4" />
-                      )}
-                    </Button>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
 

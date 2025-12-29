@@ -4,18 +4,19 @@ import { auth } from '@clerk/nextjs/server';
 export const runtime = 'edge';
 
 // Response shape returned to client
-interface EspnCredentialsStatus {
+interface EspnSetupStatus {
   hasCredentials: boolean;
+  hasLeagues: boolean;
+  hasDefaultTeam: boolean;
 }
 
 /**
  * GET /api/auth/espn/status
  * -----------------------------------------------------------
- * Lightweight endpoint the frontend can hit to find out whether
- * the current Clerk user already has ESPN credentials stored in
- * auth-worker.  We forward the request to auth-worker and return a
- * simple boolean so that UI code can decide whether to skip the
- * credential collection step.
+ * Returns the user's ESPN setup status for the chat app inline banner.
+ * - hasCredentials: whether ESPN cookies are stored
+ * - hasLeagues: whether at least one league is configured
+ * - hasDefaultTeam: whether a default league with team is set
  */
 export async function GET() {
   try {
@@ -25,7 +26,7 @@ export async function GET() {
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
     }
 
-    const authWorkerUrl = process.env.NEXT_PUBLIC_AUTH_WORKER_URL;;
+    const authWorkerUrl = process.env.NEXT_PUBLIC_AUTH_WORKER_URL;
     if (!authWorkerUrl) {
       return NextResponse.json({ error: 'NEXT_PUBLIC_AUTH_WORKER_URL is not configured' }, { status: 500 });
     }
@@ -38,30 +39,31 @@ export async function GET() {
       },
     });
 
-    // auth-worker returns 404 when the user has never stored creds
-    if (workerRes.status === 404) {
-      const response: EspnCredentialsStatus = { hasCredentials: false };
-      return NextResponse.json(response);
-    }
-
     if (!workerRes.ok) {
       const err = await workerRes.json().catch(() => ({ error: 'Unknown error' })) as { error?: string };
       return NextResponse.json(
-        { error: err.error || 'Failed to fetch credential status' },
+        { error: err.error || 'Failed to fetch setup status' },
         { status: workerRes.status }
       );
     }
 
-    const data = (await workerRes.json()) as { hasCredentials?: boolean; swid?: string; s2?: string };
-    const response: EspnCredentialsStatus = {
-      hasCredentials: data.hasCredentials ?? (!!data.swid && !!data.s2),
+    const data = await workerRes.json() as {
+      hasCredentials?: boolean;
+      hasLeagues?: boolean;
+      hasDefaultTeam?: boolean;
+    };
+
+    const response: EspnSetupStatus = {
+      hasCredentials: data.hasCredentials ?? false,
+      hasLeagues: data.hasLeagues ?? false,
+      hasDefaultTeam: data.hasDefaultTeam ?? false,
     };
 
     return NextResponse.json(response);
   } catch (error) {
-    console.error('ESPN credential status route error', error);
+    console.error('ESPN setup status route error', error);
     return NextResponse.json(
-      { error: 'Failed to retrieve credential status' },
+      { error: 'Failed to retrieve setup status' },
       { status: 500 }
     );
   }

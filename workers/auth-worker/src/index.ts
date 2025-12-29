@@ -542,24 +542,18 @@ export default {
               });
             }
 
-            // Get credential metadata (default behavior for frontend)
+            // Get full setup status (default behavior for frontend)
+            const setupStatus = await storage.getSetupStatus(clerkUserId);
             const metadata = await storage.getCredentialMetadata(clerkUserId);
 
-            if (!metadata?.hasCredentials) {
-              return new Response(JSON.stringify({
-                hasCredentials: false,
-                message: 'No ESPN credentials found'
-              }), {
-                status: 404,
-                headers: { 'Content-Type': 'application/json', ...corsHeaders }
-              });
-            }
-
+            // Return setup status even if credentials don't exist (for inline banner logic)
             return new Response(JSON.stringify({
-              hasCredentials: true,
+              hasCredentials: setupStatus.hasCredentials,
+              hasLeagues: setupStatus.hasLeagues,
+              hasDefaultTeam: setupStatus.hasDefaultTeam,
               platform: 'espn',
-              email: metadata.email,
-              lastUpdated: metadata.lastUpdated
+              email: metadata?.email,
+              lastUpdated: metadata?.lastUpdated
             }), {
               headers: { 'Content-Type': 'application/json', ...corsHeaders }
             });
@@ -712,6 +706,57 @@ export default {
         });
       }
 
+      // Set default league endpoint
+      if (pathname === '/leagues/default' && request.method === 'POST') {
+        const { userId: clerkUserId, error: authError } = await getVerifiedUserId(request, env);
+        if (!clerkUserId) {
+          return new Response(JSON.stringify({
+            error: 'Authentication required',
+            message: authError || 'Missing or invalid Authorization token'
+          }), {
+            status: 401,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          });
+        }
+
+        const body = await request.json() as { leagueId?: string; sport?: string };
+        const { leagueId, sport } = body;
+
+        if (!leagueId || !sport) {
+          return new Response(JSON.stringify({
+            error: 'leagueId and sport are required in request body'
+          }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          });
+        }
+
+        const storage = EspnSupabaseStorage.fromEnvironment(env);
+        const result = await storage.setDefaultLeague(clerkUserId, leagueId, sport);
+
+        if (!result.success) {
+          // Return appropriate status based on error type
+          const status = result.error === 'League not found' ? 404 : 400;
+          return new Response(JSON.stringify({
+            error: result.error || 'Failed to set default league'
+          }), {
+            status,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          });
+        }
+
+        // Get updated leagues list
+        const updatedLeagues = await storage.getLeagues(clerkUserId);
+
+        return new Response(JSON.stringify({
+          success: true,
+          message: 'Default league set successfully',
+          leagues: updatedLeagues
+        }), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      }
+
       // League team selection endpoint
       const leagueTeamMatch = pathname.match(/^\/leagues\/([^\/]+)\/team$/);
       if (leagueTeamMatch && request.method === 'PATCH') {
@@ -804,6 +849,7 @@ export default {
           '/credentials/espn?raw=true': 'GET - Retrieve actual credentials for sport workers',
           // Leagues
           '/leagues': 'GET/POST/DELETE - League management (list, store, remove)',
+          '/leagues/default': 'POST - Set default league for user',
           '/leagues/:leagueId/team': 'PATCH - Update team selection for specific league',
           // OAuth (Claude direct access)
           '/.well-known/oauth-authorization-server': 'GET - OAuth 2.0 metadata discovery',

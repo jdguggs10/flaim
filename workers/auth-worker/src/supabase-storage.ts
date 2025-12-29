@@ -316,7 +316,7 @@ export class EspnSupabaseStorage {
 
       const { data, error } = await this.supabase
         .from('espn_leagues')
-        .select('league_id, sport, team_id, team_name, league_name, season_year')
+        .select('league_id, sport, team_id, team_name, league_name, season_year, is_default')
         .eq('clerk_user_id', clerkUserId);
 
       if (error || !data) return [];
@@ -327,7 +327,8 @@ export class EspnSupabaseStorage {
         teamId: row.team_id || undefined,
         teamName: row.team_name || undefined,
         leagueName: row.league_name || undefined,
-        seasonYear: row.season_year || undefined
+        seasonYear: row.season_year || undefined,
+        isDefault: row.is_default || false
       }));
     } catch (error) {
       console.error('Failed to retrieve ESPN leagues:', error);
@@ -365,7 +366,8 @@ export class EspnSupabaseStorage {
           team_id: league.teamId || null,
           team_name: league.teamName || null,
           league_name: league.leagueName || null,
-          season_year: league.seasonYear || null
+          season_year: league.seasonYear || null,
+          is_default: league.isDefault || false
         });
 
       if (error) {
@@ -415,6 +417,7 @@ export class EspnSupabaseStorage {
       if (updates.teamName !== undefined) updateData.team_name = updates.teamName;
       if (updates.leagueName !== undefined) updateData.league_name = updates.leagueName;
       if (updates.seasonYear !== undefined) updateData.season_year = updates.seasonYear;
+      if (updates.isDefault !== undefined) updateData.is_default = updates.isDefault;
 
       const { error } = await this.supabase
         .from('espn_leagues')
@@ -431,6 +434,103 @@ export class EspnSupabaseStorage {
     } catch (error) {
       console.error('Failed to update ESPN league:', error);
       return false;
+    }
+  }
+
+  /**
+   * Set a league as the user's default (clears any existing default first)
+   * The database has a unique partial index that enforces only one default per user.
+   * Returns false if the league doesn't exist or doesn't have a team_id set.
+   */
+  async setDefaultLeague(clerkUserId: string, leagueId: string, sport: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      // First, verify the league exists and has a team_id
+      const { data: targetLeague, error: checkError } = await this.supabase
+        .from('espn_leagues')
+        .select('league_id, team_id')
+        .eq('clerk_user_id', clerkUserId)
+        .eq('league_id', leagueId)
+        .eq('sport', sport)
+        .single();
+
+      if (checkError || !targetLeague) {
+        console.error('League not found for default:', checkError);
+        return { success: false, error: 'League not found' };
+      }
+
+      if (!targetLeague.team_id) {
+        return { success: false, error: 'Cannot set default: no team selected for this league' };
+      }
+
+      // Clear any existing default for this user
+      const { error: clearError } = await this.supabase
+        .from('espn_leagues')
+        .update({ is_default: false })
+        .eq('clerk_user_id', clerkUserId)
+        .eq('is_default', true);
+
+      if (clearError) {
+        console.error('Supabase error clearing default league:', clearError);
+        return { success: false, error: 'Failed to clear existing default' };
+      }
+
+      // Set the new default
+      const { data: updated, error: setError } = await this.supabase
+        .from('espn_leagues')
+        .update({ is_default: true })
+        .eq('clerk_user_id', clerkUserId)
+        .eq('league_id', leagueId)
+        .eq('sport', sport)
+        .select('league_id');
+
+      if (setError) {
+        console.error('Supabase error setting default league:', setError);
+        return { success: false, error: 'Failed to set default' };
+      }
+
+      if (!updated || updated.length === 0) {
+        console.error('No rows updated when setting default');
+        return { success: false, error: 'League not found' };
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error('Failed to set default league:', error);
+      return { success: false, error: 'Internal error' };
+    }
+  }
+
+  /**
+   * Get setup status for the chat app inline banner
+   * Returns whether user has credentials, leagues, and a default team
+   */
+  async getSetupStatus(clerkUserId: string): Promise<{
+    hasCredentials: boolean;
+    hasLeagues: boolean;
+    hasDefaultTeam: boolean;
+  }> {
+    try {
+      // Get credential status
+      const credMetadata = await this.getCredentialMetadata(clerkUserId);
+      const hasCredentials = credMetadata?.hasCredentials || false;
+
+      // Get leagues and check for default with team
+      const leagues = await this.getLeagues(clerkUserId);
+      const hasLeagues = leagues.length > 0;
+      const hasDefaultTeam = leagues.some(l => l.isDefault && l.teamId);
+
+      return {
+        hasCredentials,
+        hasLeagues,
+        hasDefaultTeam
+      };
+    } catch (error) {
+      console.error('Failed to get setup status:', error);
+      return {
+        hasCredentials: false,
+        hasLeagues: false,
+        hasDefaultTeam: false
+      };
     }
   }
 
