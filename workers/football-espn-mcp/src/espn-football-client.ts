@@ -183,7 +183,7 @@ export class EspnFootballApiClient {
   }
 
   async fetchStandings(leagueId: string, year: number = 2024, clerkUserId?: string): Promise<any> {
-    const url = `${this.baseUrl}/games/ffl/seasons/${year}/segments/0/leagues/${leagueId}?view=mStandings`;
+    const url = `${this.baseUrl}/games/ffl/seasons/${year}/segments/0/leagues/${leagueId}?view=mStandings&view=mTeam`;
 
     const headers: Record<string, string> = {
       'User-Agent': 'football-espn-mcp/1.0',

@@ -209,13 +209,13 @@ openai/app/sign-in, sign-up, oauth/consent
 ## Execution Order
 
 1.  ✅ **Preparation**: Update `auth-worker` to support listing tokens.
-2.  🔲 **Page**: Build `app/leagues/page.tsx` with inline logic. Verify (Creds → Sync → Display).
-3.  🔲 **Page**: Enhance `app/connectors/page.tsx`. Add "Active Connections" list.
-4.  🔲 **Page**: Build `app/account/page.tsx` with Clerk UserProfile.
-5.  🔲 **Page**: Build `app/page.tsx` (Landing).
-6.  🔲 **Layout**: Update `app/layout.tsx` navigation.
-7.  🔲 **Move**: Move current chat to `app/chat/page.tsx` + add Server Component Gating.
-8.  🔲 **Test**: E2E verification of all new pages.
+2.  ✅ **Page**: Build `app/leagues/page.tsx` with inline logic. Verify (Creds → Sync → Display).
+3.  ✅ **Page**: Enhance `app/connectors/page.tsx`. Add "Active Connections" list.
+4.  ✅ **Page**: Build `app/account/page.tsx` with Clerk UserProfile.
+5.  ✅ **Page**: Build `app/page.tsx` (Landing).
+6.  ✅ **Layout**: Update `app/layout.tsx` navigation.
+7.  ✅ **Move**: Move current chat to `app/chat/page.tsx` + add Server Component Gating.
+8.  ✅ **Test**: E2E verification of all new pages.
 9.  🔲 **Cleanup**: Delete unused files (only after E2E passes).
 
 ---
@@ -248,4 +248,4 @@ When implementing pages, follow these guidelines:
 ---
 
 *Created: 2025-12-28*
-*Last updated: 2025-12-28*
+*Last updated: 2025-12-29*

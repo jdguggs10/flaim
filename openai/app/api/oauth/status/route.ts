@@ -47,11 +47,18 @@ export async function GET(_request: NextRequest) {
     const data = await workerRes.json() as {
       success?: boolean;
       hasConnection?: boolean;
+      connections?: Array<{
+        id: string;
+        expiresAt: string;
+        scope: string;
+        resource?: string;
+      }>;
     };
 
     return NextResponse.json({
       success: true,
-      hasConnection: data.hasConnection
+      hasConnection: data.hasConnection,
+      connections: data.connections || []
     });
   } catch (error) {
     console.error('OAuth status route error:', error);
