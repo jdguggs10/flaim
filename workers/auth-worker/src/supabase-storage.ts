@@ -59,13 +59,16 @@ export class EspnSupabaseStorage {
 
       const { error } = await this.supabase
         .from('espn_credentials')
-        .upsert({
-          clerk_user_id: clerkUserId,
-          swid,
-          s2,
-          email,
-          updated_at: new Date().toISOString()
-        });
+        .upsert(
+          {
+            clerk_user_id: clerkUserId,
+            swid,
+            s2,
+            email,
+            updated_at: new Date().toISOString()
+          },
+          { onConflict: 'clerk_user_id' }
+        );
 
       if (error) {
         console.error('Supabase error storing credentials:', error);

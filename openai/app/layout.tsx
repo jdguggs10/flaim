@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
+import Link from "next/link";
 import { ClerkProvider, SignedIn, SignedOut, SignInButton, SignUpButton, UserButton } from '@clerk/nextjs';
 import "./globals.css";
 
@@ -15,10 +16,10 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Responses starter app",
-  description: "Starter app for the OpenAI Responses API",
+  title: "FLAIM - Fantasy League AI Manager",
+  description: "Connect your AI assistant to ESPN fantasy sports",
   icons: {
-    icon: "/openai_logo.svg",
+    icon: "/favicon.ico",
   },
 };
 
@@ -32,9 +33,11 @@ export default function RootLayout({
       <html lang="en">
         <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
           <div className="flex h-screen bg-muted w-full flex-col text-foreground">
-            {/* Simple authentication header */}
+            {/* Site header */}
             <header className="flex justify-between items-center p-4 bg-white border-b">
-              <h1 className="text-xl font-bold">FLAIM - Fantasy League AI Assistant</h1>
+              <Link href="/" className="text-xl font-bold hover:opacity-80 transition-opacity">
+                FLAIM
+              </Link>
               <div className="flex items-center gap-4">
                 <SignedOut>
                   <div className="flex gap-2">
@@ -51,12 +54,24 @@ export default function RootLayout({
                   </div>
                 </SignedOut>
                 <SignedIn>
-                  <a
+                  <Link
+                    href="/leagues"
+                    className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    Leagues
+                  </Link>
+                  <Link
                     href="/connectors"
                     className="text-sm text-muted-foreground hover:text-foreground transition-colors"
                   >
                     Connectors
-                  </a>
+                  </Link>
+                  <Link
+                    href="/account"
+                    className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    Account
+                  </Link>
                   <UserButton />
                 </SignedIn>
               </div>

@@ -114,7 +114,7 @@ function OAuthConsentContent() {
           <h1 className="text-xl font-semibold">Invalid Authorization Request</h1>
           <p className="text-muted-foreground">
             This authorization request is missing required parameters.
-            Please try connecting from Claude again.
+            Please try connecting from Claude or ChatGPT again.
           </p>
           <button
             onClick={() => router.push('/')}
@@ -137,9 +137,9 @@ function OAuthConsentContent() {
         <div className="w-full max-w-md space-y-6">
           <div className="text-center space-y-2">
             <h1 className="text-2xl font-semibold">Sign in to continue</h1>
-            <p className="text-muted-foreground">
-              Sign in to your FLAIM account to authorize Claude.
-            </p>
+          <p className="text-muted-foreground">
+              Sign in to your FLAIM account to authorize the connector.
+          </p>
           </div>
           <SignIn
             routing="hash"

@@ -19,7 +19,7 @@ Full setup details: [Getting Started & Deployment Guide](docs/GETTING_STARTED.md
 - Live ESPN data via MCP workers (baseball, football)
 - Centralized auth-worker + Supabase for credentials/leagues
 - Automatic league discovery and sport detection
-- **Claude Direct Access**: Connect Claude.ai/Desktop directly via OAuth (BYO subscription)
+- **Claude + ChatGPT Direct Access**: Connect Claude.ai/Desktop or ChatGPT directly via OAuth (BYO subscription)
 - GitOps: PR → preview, main → production
 
 ## Documentation
@@ -30,7 +30,7 @@ Full setup details: [Getting Started & Deployment Guide](docs/GETTING_STARTED.md
 | [Getting Started](docs/GETTING_STARTED.md) | Setup and deployment |
 | [Architecture](docs/ARCHITECTURE.md) | System design and security |
 | [Onboarding Flow](docs/ONBOARDING.md) | User onboarding steps |
-| [MCP Connector Research](docs/MCP_CONNECTOR_RESEARCH.md) | Claude direct access implementation |
+| [MCP Connector Research](docs/MCP_CONNECTOR_RESEARCH.md) | Claude + ChatGPT direct access implementation |
 | [Changelog](docs/CHANGELOG.md) | Release history |
 
 - **`docs/dev`**: Planning documents for current/future work

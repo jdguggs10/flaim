@@ -75,10 +75,10 @@ Cloudflare DNS: `A`, name `api`, IPv4 `192.0.2.1`, proxied (orange). Verify: `cu
 - Local: `curl http://localhost:8786/health` (auth-worker), `localhost:3000` (frontend)
 - Remote: deployed worker URL + `/health`
 
-## Claude Direct Access (Optional)
-Users can connect Claude.ai or Claude Desktop directly to FLAIM's MCP servers:
+## Claude + ChatGPT Direct Access (Optional)
+Users can connect Claude.ai/Claude Desktop or ChatGPT directly to FLAIM's MCP servers:
 1. Set up ESPN credentials at `flaim.app/settings/espn`
-2. In Claude, add MCP server: `https://api.flaim.app/football/mcp` (or `/baseball/mcp`)
+2. Add MCP server: `https://api.flaim.app/football/mcp` (or `/baseball/mcp`)
 3. Complete OAuth consent flow
 4. Use tools like `get_user_session`, `get_espn_football_league_info`, etc.
 

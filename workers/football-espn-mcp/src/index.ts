@@ -319,38 +319,31 @@ export default {
             });
           }
 
-          // Get user's leagues from auth-worker
-          const leagues = await getUserLeagues(clerkUserId, authWorkerConfig, request.headers.get('Authorization'));
-          let targetLeagues = leagues.filter(league => league.sport === targetSport);
+          // If leagueId is provided, use discovery mode (don't require pre-saved league)
+          // This enables auto-pull for new leagues
+          let targetLeagues: Array<{ leagueId: string; sport: string; teamId?: string }> = [];
 
-          if (targetLeagues.length === 0) {
-            return new Response(JSON.stringify({
-              error: `No ${targetSport} leagues found. Please add ${targetSport} leagues first.`,
-              code: 'LEAGUES_MISSING'
-            }), {
-              status: 404,
-              headers: { 'Content-Type': 'application/json', ...corsHeaders }
-            });
-          }
-
-          // Filter to specific league if leagueId provided
           if (leagueId) {
-            const filteredLeagues = targetLeagues.filter(league => league.leagueId === leagueId);
+            // Discovery mode: fetch league info directly without requiring it to be saved
+            console.log(`🔍 [football] Discovery mode: fetching league ${leagueId} directly from ESPN`);
+            targetLeagues = [{ leagueId, sport: targetSport }];
+          } else {
+            // Get user's saved leagues from auth-worker
+            const leagues = await getUserLeagues(clerkUserId, authWorkerConfig, request.headers.get('Authorization'));
+            targetLeagues = leagues.filter(league => league.sport === targetSport);
 
-            if (filteredLeagues.length === 0) {
+            if (targetLeagues.length === 0) {
               return new Response(JSON.stringify({
-                error: `${targetSport} league ${leagueId} not found for user.`,
-                code: 'LEAGUE_NOT_FOUND'
+                error: `No ${targetSport} leagues found. Please add ${targetSport} leagues first.`,
+                code: 'LEAGUES_MISSING'
               }), {
                 status: 404,
                 headers: { 'Content-Type': 'application/json', ...corsHeaders }
               });
             }
-
-            targetLeagues = filteredLeagues;
           }
 
-          console.log(`🏈 Found ${targetLeagues.length} ${targetSport} leagues for user`);
+          console.log(`🏈 Processing ${targetLeagues.length} ${targetSport} league(s) for user`);
 
           // Fetch basic info for each league
           const leagueResults = [];

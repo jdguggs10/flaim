@@ -1,104 +1,122 @@
-"use client";
-import Assistant from "@/components/assistant";
-import ToolsPanel from "@/components/tools-panel";
-import { useState, useEffect } from "react";
-import useOnboardingStore from "@/stores/useOnboardingStore";
+import { SignedIn, SignedOut } from '@clerk/nextjs';
+import Link from 'next/link';
+import { Button } from '@/components/ui/button';
 
-// Import icons directly instead of using dynamic imports
-import { Menu as MenuIcon, X as XIcon } from "lucide-react";
-
-export default function Main() {
-  const [isToolsPanelOpen, setIsToolsPanelOpen] = useState(false);
-  
-  // Handle escape key to close mobile panel
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isToolsPanelOpen) {
-        setIsToolsPanelOpen(false);
-      }
-    };
-    
-    document.addEventListener('keydown', handleEscape);
-    return () => document.removeEventListener('keydown', handleEscape);
-  }, [isToolsPanelOpen]);
-  
-  // Prevent body scroll when mobile panel is open
-  useEffect(() => {
-    if (isToolsPanelOpen) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = 'unset';
-    }
-    
-    return () => {
-      document.body.style.overflow = 'unset';
-    };
-  }, [isToolsPanelOpen]);
-
-  // Automatically close the mobile tools panel when onboarding restarts
-  const { isComplete: onboardingComplete } = useOnboardingStore();
-
-  useEffect(() => {
-    // When the user clicks the settings button we reset onboarding (isComplete becomes false)
-    // If the mobile tools panel is open, close it so the onboarding flow is visible.
-    if (!onboardingComplete) {
-      setIsToolsPanelOpen(false);
-    }
-  }, [onboardingComplete]);
-
+export default function LandingPage() {
   return (
-    <div className="flex h-full relative">
-      {/* Main chat area */}
-      <div className="flex-1 lg:flex-none lg:w-[70%]">
-        <Assistant />
-      </div>
-      
-      {/* Desktop tools panel */}
-      <div className="hidden lg:block lg:w-[30%] border-l border-border">
-        <ToolsPanel />
-      </div>
-      
-      {/* Mobile hamburger menu button */}
-      <button 
-        onClick={() => setIsToolsPanelOpen(true)}
-        className="lg:hidden fixed bottom-4 right-4 z-40 bg-primary text-primary-foreground p-3 rounded-full shadow-lg hover:bg-primary/90 transition-colors"
-        aria-label="Open tools panel"
-      >
-        <MenuIcon size={20} />
-      </button>
-      
-      {/* Mobile overlay */}
-      {isToolsPanelOpen && (
-        <>
-          {/* Backdrop */}
-          <div 
-            className="fixed inset-0 z-50 bg-black/50 lg:hidden"
-            onClick={() => setIsToolsPanelOpen(false)}
-          />
-          
-          {/* Slide-out panel */}
-          <div className={`fixed top-0 right-0 z-50 h-full w-full max-w-sm bg-background border-l border-border transform transition-transform duration-300 ease-in-out lg:hidden ${
-            isToolsPanelOpen ? 'translate-x-0' : 'translate-x-full'
-          }`}>
-            {/* Panel header */}
-            <div className="flex items-center justify-between p-4 border-b border-border">
-              <h2 className="text-lg font-semibold text-foreground">Tools & Settings</h2>
-              <button 
-                onClick={() => setIsToolsPanelOpen(false)}
-                className="p-2 hover:bg-secondary rounded-md transition-colors"
-                aria-label="Close tools panel"
-              >
-                <XIcon size={20} />
-              </button>
+    <div className="min-h-screen bg-background">
+      {/* Hero */}
+      <section className="py-20 px-4 text-center">
+        <h1 className="text-4xl md:text-5xl font-bold mb-4">
+          Fantasy Sports Context for Your AI
+        </h1>
+        <p className="text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">
+          Connect Claude or ChatGPT to your ESPN fantasy leagues.
+          Bring your own AI subscription - we provide the data.
+        </p>
+        <SignedOut>
+          <Link href="/sign-up">
+            <Button size="lg">Get Started</Button>
+          </Link>
+        </SignedOut>
+        <SignedIn>
+          <Link href="/leagues">
+            <Button size="lg">Go to Dashboard</Button>
+          </Link>
+        </SignedIn>
+      </section>
+
+      {/* How it works */}
+      <section className="py-16 bg-muted">
+        <div className="container max-w-4xl mx-auto px-4">
+          <h2 className="text-2xl font-bold text-center mb-8">How It Works</h2>
+          <div className="grid md:grid-cols-3 gap-8">
+            <div className="text-center">
+              <div className="w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center mx-auto mb-3 font-bold">
+                1
+              </div>
+              <h3 className="font-semibold mb-1">Connect ESPN</h3>
+              <p className="text-sm text-muted-foreground">
+                Add your ESPN credentials to access your leagues
+              </p>
             </div>
-            
-            {/* Panel content */}
-            <div className="h-full overflow-y-auto">
-              <ToolsPanel />
+            <div className="text-center">
+              <div className="w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center mx-auto mb-3 font-bold">
+                2
+              </div>
+              <h3 className="font-semibold mb-1">Add Connector</h3>
+              <p className="text-sm text-muted-foreground">
+                Copy the MCP URL to Claude or ChatGPT
+              </p>
+            </div>
+            <div className="text-center">
+              <div className="w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center mx-auto mb-3 font-bold">
+                3
+              </div>
+              <h3 className="font-semibold mb-1">Ask Away</h3>
+              <p className="text-sm text-muted-foreground">
+                Get insights about your fantasy teams
+              </p>
             </div>
           </div>
-        </>
-      )}
+        </div>
+      </section>
+
+      {/* Supported Platforms */}
+      <section className="py-16 px-4">
+        <div className="container max-w-4xl mx-auto text-center">
+          <h2 className="text-2xl font-bold mb-6">Supported Platforms</h2>
+          <div className="flex justify-center gap-12 mb-4">
+            <div className="text-center">
+              <div className="text-3xl mb-2">{'\u{1F3C8}'}</div>
+              <div className="font-medium">Football</div>
+            </div>
+            <div className="text-center">
+              <div className="text-3xl mb-2">{'\u26BE'}</div>
+              <div className="font-medium">Baseball</div>
+            </div>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            ESPN Fantasy supported. Yahoo and Sleeper coming soon.
+          </p>
+        </div>
+      </section>
+
+      {/* AI Platforms */}
+      <section className="py-16 bg-muted px-4">
+        <div className="container max-w-4xl mx-auto text-center">
+          <h2 className="text-2xl font-bold mb-6">Works With</h2>
+          <div className="flex justify-center gap-8 mb-4">
+            <div className="px-6 py-3 bg-background rounded-lg border font-medium">
+              Claude
+            </div>
+            <div className="px-6 py-3 bg-background rounded-lg border font-medium">
+              ChatGPT
+            </div>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Use your existing AI subscription. FLAIM provides the fantasy data connection.
+          </p>
+        </div>
+      </section>
+
+      {/* Footer CTA */}
+      <section className="py-16 px-4 text-center">
+        <h2 className="text-2xl font-bold mb-4">Ready to get started?</h2>
+        <p className="text-muted-foreground mb-6">
+          Connect your fantasy leagues in minutes.
+        </p>
+        <SignedOut>
+          <Link href="/sign-up">
+            <Button size="lg">Create Account</Button>
+          </Link>
+        </SignedOut>
+        <SignedIn>
+          <Link href="/leagues">
+            <Button size="lg">Manage Leagues</Button>
+          </Link>
+        </SignedIn>
+      </section>
     </div>
   );
 }

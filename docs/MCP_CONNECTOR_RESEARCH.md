@@ -1,8 +1,8 @@
 # MCP Connector Research: Direct Access + Cost-Aware Options
 
-> **Status**: ✅ **WORKING** — Claude direct access via MCP is fully operational as of December 28, 2025.
+> **Status**: ✅ **WORKING** — Claude + ChatGPT direct access via MCP is fully operational as of December 28, 2025.
 >
-> **Next Phase**: OpenAI ChatGPT integration is ready for implementation (4-8 hours). See [Phase 6](#phase-6--openai-chatgpt-integration-proposed-next-phase).
+> **Next Phase**: Optional API integrations (Anthropic/Gemini) if needed.
 >
 > **Purpose**: This document summarizes how to connect FLAIM's MCP workers to AI platforms, with emphasis on direct access to shift model costs to end users.
 >
@@ -20,9 +20,9 @@
 1. [Executive Summary](#executive-summary)
 2. [Two Integration Paths](#two-integration-paths)
 3. [Current FLAIM Architecture](#current-flaim-architecture)
-4. [Direct Access (Claude) Implementation Notes](#direct-access-claude-implementation-notes)
+4. [Direct Access (Claude + ChatGPT) Implementation Notes](#direct-access-claude--chatgpt-implementation-notes)
 5. [Implementation Phases](#next-steps-phased)
-   - [Phase 6: OpenAI ChatGPT Integration](#phase-6--openai-chatgpt-integration-proposed-next-phase)
+   - [Phase 6: OpenAI ChatGPT Integration](#phase-6--openai-chatgpt-integration-implemented)
 6. [References](#references)
 
 ---
@@ -36,7 +36,7 @@ Research identified **two distinct integration paths**. A strategic review again
 | Path | Description | Verdict |
 |------|-------------|---------|
 | **Path A: API Integration** | Your backend calls AI APIs (Claude/Gemini) | **RECOMMENDED**. Aligns with current architecture. Low effort (2-4h). |
-| **Path B: Direct User Access** | Users connect from Claude.ai/Gemini apps | **OPTIONAL**. Cost-shifting benefits, but requires public OAuth support and higher support burden. Start with Claude only. |
+| **Path B: Direct User Access** | Users connect from Claude.ai/ChatGPT/Gemini apps | **OPTIONAL**. Cost-shifting benefits, but requires public OAuth support and higher support burden. Claude + ChatGPT are supported; Gemini is blocked. |
 
 ### Strategic Divergence & Analysis
 
@@ -52,7 +52,7 @@ Research identified **two distinct integration paths**. A strategic review again
 | Priority | Integration | Platform | Effort | Status |
 |----------|-------------|----------|--------|--------|
 | **1st** | **Direct Access** | **Anthropic Claude** | **Done** | ✅ **WORKING** — Verified 2025-12-28 |
-| **2nd** | **Direct Access** | **OpenAI ChatGPT** | **4-8 hours** | Ready to implement. FLAIM already has DCR; add redirect URIs + `securitySchemes`. See [Phase 6](#phase-6--openai-chatgpt-integration-proposed-next-phase). |
+| **2nd** | **Direct Access** | **OpenAI ChatGPT** | **Done** | ✅ **WORKING** — Verified 2025-12-28 |
 | 3rd | API Integration | Anthropic/Gemini | 2-4 hours | Backend redundancy; keeps user in your UI. |
 | 4th | Direct Access | Google Gemini | Blocked | Gemini CLI has [discovery bug](https://github.com/google-gemini/gemini-cli/issues/12628). Wait for fix. |
 
@@ -60,7 +60,7 @@ Research identified **two distinct integration paths**. A strategic review again
 
 To manage token costs, consider offering **two access tiers**:
 - **Paid tier**: End users use the full FLAIM app with your API keys (you pay tokens), including richer UI and support.
-- **Free tier**: End users use Claude direct access (BYO Claude subscription) to generate interest while shifting model cost to users.
+- **Free tier**: End users use Claude/ChatGPT direct access (BYO subscription) to generate interest while shifting model cost to users.
 This keeps a controlled, premium experience for paying users while providing a lower-cost acquisition path.
 
 ### Minimum FLAIM Domain UI for Direct Access
@@ -69,7 +69,7 @@ Even with Claude as the chat UI, you (the developer) still need a small web surf
 - **Sign in / account**: Clerk login so you can tie a Claude connection to a real user.
 - **ESPN credentials**: Form to enter SWID and espn_s2; stored in Supabase.
 - **League selection**: Choose league IDs and team to avoid ambiguous tool calls.
-- **Connectors page**: Button to start Claude OAuth, plus status (connected/disconnected).
+- **Connectors page**: Button to start Claude/ChatGPT OAuth, plus status (connected/disconnected).
 - **Consent screen**: "Allow Claude to access your FLAIM data" before redirecting back to Claude.
 - **Disconnect / revoke**: Allow users to revoke Claude access and rotate tokens.
 - **Plan messaging**: Explain free direct access vs paid in-app chat (cost rationale).
@@ -78,15 +78,15 @@ Even with Claude as the chat UI, you (the developer) still need a small web surf
 ### OAuth Flow Ownership (Developer vs End User)
 
 ```
-End User (Claude UI)         Your Domain (Developer UI)         Your Backend (Developer)
+End User (Claude/ChatGPT UI)  Your Domain (Developer UI)         Your Backend (Developer)
 ────────────────────         ─────────────────────────         ─────────────────────────
 1) Add connector URL   ───▶   2) Sign in with Clerk       ───▶   3) Create auth code
                              4) Consent screen                 5) Issue token
-6) Claude exchanges code ─▶                                    7) Validate token on MCP calls
+6) Client exchanges code ─▶                                    7) Validate token on MCP calls
 ```
 
 Notes:
-- End users initiate the connector from Claude.
+- End users initiate the connector from Claude or ChatGPT.
 - You (the developer) must host the login + consent flow and issue tokens.
 - Your MCP servers must validate the token and map to the correct user.
 
@@ -100,7 +100,7 @@ Suggested route layout (developer-owned):
 - `POST /auth/oauth/revoke-all`: Internal API to revoke all tokens for a user (UI disconnect).
 - `GET /settings/espn`: SWID/espn_s2 entry and league selection.
 
-Note: `/revoke` is the OAuth spec endpoint used by Claude. `/auth/oauth/revoke-all` is an internal admin endpoint for the FLAIM UI to disconnect all tokens.
+Note: `/revoke` is the OAuth spec endpoint used by Claude/ChatGPT. `/auth/oauth/revoke-all` is an internal admin endpoint for the FLAIM UI to disconnect all tokens.
 
 Minimal data model (developer-owned):
 - `oauth_codes`: one-time auth codes issued after consent.
@@ -131,7 +131,7 @@ Lightweight security checklist (reasonable for a fantasy sports app):
 | Platform | Direct Access Auth | FLAIM Status | Notes |
 |----------|-------------------|--------------|-------|
 | **Anthropic Claude** | OAuth 2.1 + DCR | ✅ **Working** | Verified 2025-12-28 |
-| **OpenAI ChatGPT** | OAuth 2.1 + DCR + `securitySchemes` | ⚠️ **Ready** | 4-8 hours to implement. See Phase 6. |
+| **OpenAI ChatGPT** | OAuth 2.1 + DCR + `securitySchemes` | ✅ **Working** | Verified 2025-12-28 |
 | **Google Gemini CLI** | OAuth 2.1 + DCR | ❌ **Blocked** | Their CLI has [discovery bug #12628](https://github.com/google-gemini/gemini-cli/issues/12628) |
 
 ---
@@ -202,7 +202,7 @@ Lightweight security checklist (reasonable for a fantasy sports app):
 
 ---
 
-## Direct Access (Claude) Implementation Notes
+## Direct Access (Claude + ChatGPT) Implementation Notes
 
 ### Phase 0 Verified Details (December 22, 2025)
 
@@ -551,7 +551,7 @@ ORDER BY created_at DESC;
 - Keep `/connectors` and `/settings/espn` self-serve with short, direct copy.
 - Add a short "How to connect Claude" step list with screenshots later (optional).
 - Include "common errors" and fixes: expired ESPN cookies, revoked connector, rate limit hit.
-- Remind end users that Claude direct access is BYO subscription and support is limited.
+- Remind end users that Claude/ChatGPT direct access is BYO subscription and support is limited.
 
 ---
 
@@ -600,95 +600,26 @@ ORDER BY created_at DESC;
 - [ ] Token expiry: verify re-auth on expired token. *(Low priority - test when convenient)*
 - [ ] Revoke: verify tools fail after revoke and reconnect works. *(Low priority - test when convenient)*
 
-### Phase 6 — OpenAI ChatGPT Integration (Proposed Next Phase)
+### Phase 6 — OpenAI ChatGPT Integration (Implemented)
 
-> **Status**: Not started. Estimated effort: 4-8 hours.
-> **Research Date**: December 28, 2025.
+> **Status**: ✅ Completed and verified (2025-12-28).
 
-FLAIM's OAuth implementation is largely compatible with OpenAI's ChatGPT MCP connector requirements. This phase extends direct access to ChatGPT users.
+FLAIM now supports ChatGPT direct access via MCP with OAuth 2.1. The implementation mirrors Claude’s flow with ChatGPT-specific requirements layered on top.
 
-#### Gap Analysis: FLAIM vs. OpenAI Requirements
+#### What’s Implemented
 
-| Requirement | FLAIM Status | OpenAI Requirement | Gap |
-|-------------|--------------|-------------------|-----|
-| Protected Resource Metadata (RFC 9728) | ✅ Implemented | ✅ Required | None |
-| Authorization Server Metadata (RFC 8414) | ✅ Implemented | ✅ Required | None |
-| Dynamic Client Registration (RFC 7591) | ✅ Implemented | ✅ Required | None |
-| PKCE with S256 | ✅ Implemented | ✅ Required (must advertise in metadata) | None |
-| `code_challenge_methods_supported` in metadata | ✅ `["S256", "plain"]` | ✅ Must include `S256` | None |
-| HTTP 401 + `WWW-Authenticate` header | ✅ Implemented | ✅ Required | None |
-| ChatGPT redirect URIs | ❌ Not allowlisted | ✅ Required | **Add URIs** |
-| `resource` parameter (RFC 8707) | ❌ Not implemented | ✅ Required (echo to token `aud`) | **Implement** |
-| `securitySchemes` on tools | ❌ Not implemented | ✅ OpenAI extension, required | **Add to tools/list** |
-| `_meta["mcp/www_authenticate"]` in errors | ❌ Not implemented | ✅ Required for linking UI | **Add to error responses** |
+- ChatGPT redirect URIs are allowlisted for OAuth callbacks.
+- RFC 8707 `resource` is captured in the OAuth flow and stored with codes/tokens.
+- All MCP tool definitions include `securitySchemes` (OpenAI extension).
+- MCP workers return 401 with `WWW-Authenticate` **and** `_meta["mcp/www_authenticate"]` on:
+  - initial unauthenticated connects
+  - invalid/expired tokens (auth-worker returns 401/403)
+- Refresh tokens preserve the `resource` value when issuing a new access token.
 
-#### Key Difference: How Auth UI Gets Triggered
+#### Auth UI Trigger (ChatGPT)
 
-| Behavior | Claude | ChatGPT |
-|----------|--------|---------|
-| Auth trigger | HTTP 401 + `WWW-Authenticate` header | HTTP 401 + `WWW-Authenticate` **AND** `_meta["mcp/www_authenticate"]` in JSON-RPC error |
-| Redirect URIs | `claude.ai/...` + loopback (RFC 8252) | `chatgpt.com/...` only (no loopback) |
-| Per-tool auth | Not required | `securitySchemes` required on each tool |
-| DCR behavior | Supports manual client ID fallback | Creates new client per session |
+ChatGPT requires both HTTP-level and MCP-level auth metadata. FLAIM returns an array of Bearer challenges on the error object:
 
-**Critical**: ChatGPT won't reliably show the OAuth linking UI unless **both** HTTP-level and MCP-level auth metadata are present.
-
-#### Required Changes
-
-**1. Add ChatGPT Redirect URIs** *(oauth-handlers.ts)*
-
-Add to `ALLOWED_REDIRECT_URIS`:
-```typescript
-// ChatGPT OAuth callbacks (no loopback needed - ChatGPT uses HTTPS only)
-'https://chatgpt.com/connector_platform_oauth_redirect',
-'https://platform.openai.com/apps-manage/oauth',  // For app review phase
-```
-
-**2. Handle `resource` Parameter (RFC 8707)** *(oauth-handlers.ts)*
-
-ChatGPT appends `resource=https://api.flaim.app/football/mcp` to authorization and token requests. Per [OpenAI docs](https://developers.openai.com/apps-sdk/build/auth/):
-- Parse `resource` parameter in `/authorize` and `/token` endpoints
-- Store with authorization code
-- Include as `aud` claim in access token (or validate on MCP worker)
-- MCP workers should verify token audience matches their canonical URL
-
-> **Note**: There's an [open bug report](https://community.openai.com/t/mcp-oauth-authentication-does-not-send-resource-indicator-from-rfc-8707/1361201) that ChatGPT may not actually send this parameter. Implement defensively: accept but don't require.
-
-**3. Add `securitySchemes` to Tool Definitions** *(football-agent.ts, agent.ts)*
-
-OpenAI extends MCP with per-tool security declarations. Update `tools/list` response to include:
-
-```typescript
-{
-  name: "get_espn_football_league_info",
-  description: "...",
-  inputSchema: { ... },
-  // OpenAI extension: declare auth requirements
-  securitySchemes: [
-    { type: "oauth2", scopes: ["mcp:read"] }
-  ]
-}
-```
-
-This tells ChatGPT which tools require OAuth and what scopes to request.
-
-**4. Add `_meta["mcp/www_authenticate"]` to Error Responses** *(football-agent.ts, agent.ts)* — **REQUIRED**
-
-This is **not optional** for ChatGPT. The linking UI only appears when runtime failures include this MCP-level metadata.
-
-**Current FLAIM response** (works for Claude, not sufficient for ChatGPT):
-```json
-{
-  "jsonrpc": "2.0",
-  "error": {
-    "code": -32001,
-    "message": "Authentication required. Please authorize via OAuth."
-  },
-  "id": null
-}
-```
-
-**Required for ChatGPT** — add `_meta["mcp/www_authenticate"]`:
 ```json
 {
   "jsonrpc": "2.0",
@@ -696,47 +627,28 @@ This is **not optional** for ChatGPT. The linking UI only appears when runtime f
     "code": -32001,
     "message": "Authentication required. Please authorize via OAuth.",
     "_meta": {
-      "mcp/www_authenticate": {
-        "error": "unauthorized",
-        "error_description": "Authentication required to access FLAIM fantasy sports tools.",
-        "resource_metadata": "https://api.flaim.app/football/.well-known/oauth-protected-resource"
-      }
+      "mcp/www_authenticate": [
+        "Bearer resource_metadata=\"https://api.flaim.app/football/.well-known/oauth-protected-resource\", error=\"unauthorized\", error_description=\"Authentication required\""
+      ]
     }
   },
   "id": null
 }
 ```
 
-This must be returned on:
-- Initial unauthenticated `initialize` or `tools/call` requests
-- Any tool call with an invalid/expired token
+#### Implementation Checklist (Done)
 
-**5. (Optional) Add OpenAI UI Polish Fields**
+- [x] Add ChatGPT redirect URIs to OAuth allowlist
+- [x] Propagate `resource` through OAuth code/token storage
+- [x] Add `securitySchemes` to all MCP tools
+- [x] Add `_meta["mcp/www_authenticate"]` to 401 error responses
+- [x] Return 401 + `_meta` on invalid/expired tokens
+- [x] Preserve `resource` on refresh tokens
 
-For better ChatGPT UX (not required for auth to work):
-- `_meta["openai/toolInvocation/invoking"]`: Status text during execution (≤64 chars)
-- `_meta["openai/toolInvocation/invoked"]`: Status text after completion
+#### Deferred
 
-Example: `"Fetching your fantasy league data..."` → `"Retrieved league info"`
-
-#### Implementation Checklist
-
-**Must-haves** (ChatGPT won't work without these):
-- [ ] Add ChatGPT redirect URIs to allowlist in `oauth-handlers.ts`
-- [ ] Add `securitySchemes` to all tools in `tools/list` response
-- [ ] Add `_meta["mcp/www_authenticate"]` to 401 error responses in MCP workers
-- [ ] Parse `resource` parameter in `/authorize` endpoint
-- [ ] Store `resource` with authorization code in `oauth_codes` table
-- [ ] Pass `resource` to `/token` and include in token response or storage
-
-**Recommended**:
-- [ ] Validate `resource`/audience in MCP workers
-
-**Optional polish**:
-- [ ] Add `_meta["openai/toolInvocation/*"]` fields for better ChatGPT UI
-
-**Testing**:
-- [ ] Test end-to-end: ChatGPT Developer Mode → add connector → OAuth → tool call
+- [ ] Validate `resource`/audience in MCP workers (optional hardening)
+- [ ] Add `_meta["openai/toolInvocation/*"]` fields (optional UX polish)
 
 #### Testing Notes
 

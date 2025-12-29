@@ -8,8 +8,11 @@ export const runtime = 'edge';
  * -----------------------------------------------------------
  * Check if user has stored ESPN credentials.
  * Proxies to auth-worker with proper JWT forwarding.
+ *
+ * Query params:
+ * - forEdit=true: Return actual credentials for editing
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const { userId, getToken } = await auth();
 
@@ -22,8 +25,12 @@ export async function GET() {
       return NextResponse.json({ error: 'NEXT_PUBLIC_AUTH_WORKER_URL is not configured' }, { status: 500 });
     }
 
+    // Check if this is a request for editing
+    const forEdit = request.nextUrl.searchParams.get('forEdit') === 'true';
+    const queryString = forEdit ? '?forEdit=true' : '';
+
     const bearer = (await getToken?.()) || undefined;
-    const workerRes = await fetch(`${authWorkerUrl}/credentials/espn`, {
+    const workerRes = await fetch(`${authWorkerUrl}/credentials/espn${queryString}`, {
       headers: {
         'X-Clerk-User-ID': userId,
         ...(bearer ? { 'Authorization': `Bearer ${bearer}` } : {})
@@ -45,6 +52,15 @@ export async function GET() {
 
     const data = await workerRes.json() as { hasCredentials?: boolean; swid?: string; s2?: string; email?: string; lastUpdated?: string };
     const hasCredentials = data.hasCredentials ?? (!!data.swid && !!data.s2);
+
+    // If editing, return actual credentials
+    if (forEdit && hasCredentials) {
+      return NextResponse.json({
+        hasCredentials,
+        swid: data.swid,
+        s2: data.s2
+      });
+    }
 
     return NextResponse.json({
       hasCredentials,

@@ -36,16 +36,17 @@ AI-powered fantasy sports assistant using Clerk auth, Supabase storage, and spor
 - Keep `"workers_dev": true` on auth-worker prod to expose the direct URL.  
 - Environment setup and troubleshooting live in `docs/GETTING_STARTED.md`.
 
-## Claude Direct Access (OAuth 2.1) ✅ Working
+## Claude + ChatGPT Direct Access (OAuth 2.1) ✅ Working
 
-End users can connect Claude Desktop/Claude.ai directly to FLAIM's MCP servers, enabling "bring your own Claude subscription" usage:
+End users can connect Claude Desktop/Claude.ai or ChatGPT directly to FLAIM's MCP servers, enabling "bring your own subscription" usage:
 - **MCP URL**: `https://api.flaim.app/football/mcp` or `https://api.flaim.app/baseball/mcp`
 - **OAuth Flow**: Full OAuth 2.1 with PKCE, Dynamic Client Registration (RFC 7591), and Protected Resource Metadata (RFC 9728).
 - **Endpoints**: `/auth/register` (DCR), `/auth/authorize`, `/auth/token`, `/auth/revoke`.
 - **Metadata**: `/.well-known/oauth-authorization-server` (auth server), `/{sport}/.well-known/oauth-protected-resource` (MCP workers).
-- **User flow**: Claude adds MCP URL → 401 triggers OAuth → user consents at `flaim.app/oauth/consent` → token exchange → Claude accesses tools.
+- **User flow**: Claude/ChatGPT adds MCP URL → 401 triggers OAuth → user consents at `flaim.app/oauth/consent` → token exchange → client accesses tools.
 - **Rate limiting**: 200 calls/day per user via `rate_limits` table.
 - **Token storage**: `oauth_codes` and `oauth_tokens` tables in Supabase.
+- **ChatGPT requirements**: `securitySchemes` on each tool plus `_meta["mcp/www_authenticate"]` on 401 errors.
 
 **Critical**: MCP workers must call auth-worker via `.workers.dev` URLs (not custom domain) to avoid intra-zone 522 timeouts.
 

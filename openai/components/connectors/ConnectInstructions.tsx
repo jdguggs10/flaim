@@ -21,25 +21,37 @@ export default function ConnectInstructions() {
 
   const steps = [
     {
-      title: 'Open Claude Settings',
-      description: 'Go to Claude.ai or open Claude Desktop, then navigate to Settings.',
+      title: 'Open Claude or ChatGPT Settings',
+      description: 'Go to Claude.ai/Claude Desktop or ChatGPT, then navigate to Settings.',
       action: (
-        <Button variant="outline" size="sm" asChild>
-          <a
-            href="https://claude.ai/settings"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <ExternalLink className="h-3 w-3 mr-1" />
-            Open Settings
-          </a>
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" asChild>
+            <a
+              href="https://claude.ai/settings"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <ExternalLink className="h-3 w-3 mr-1" />
+              Claude Settings
+            </a>
+          </Button>
+          <Button variant="outline" size="sm" asChild>
+            <a
+              href="https://chatgpt.com/"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <ExternalLink className="h-3 w-3 mr-1" />
+              ChatGPT
+            </a>
+          </Button>
+        </div>
       ),
     },
     {
       title: 'Find Custom Connectors',
       description:
-        'Look for "Integrations" or "MCP Servers" section in the settings menu.',
+        'Look for "Integrations", "Connectors", or "MCP Servers" in the settings menu.',
     },
     {
       title: 'Add New Connector',
@@ -50,12 +62,12 @@ export default function ConnectInstructions() {
     {
       title: 'Authenticate',
       description:
-        'Claude will redirect you to FLAIM to sign in and authorize access. Click "Allow" to grant permission.',
+        'Claude or ChatGPT will redirect you to FLAIM to sign in and authorize access. Click "Allow" to grant permission.',
     },
     {
       title: 'Start Using',
       description:
-        'Once connected, you can ask Claude about your fantasy leagues! Try: "What\'s my team\'s record?" or "Show me this week\'s matchup."',
+        'Once connected, you can ask Claude or ChatGPT about your fantasy leagues! Try: "What\'s my team\'s record?" or "Show me this week\'s matchup."',
     },
   ];
 
@@ -67,9 +79,9 @@ export default function ConnectInstructions() {
       >
         <div className="flex items-center justify-between">
           <div>
-            <CardTitle className="text-lg">How to Connect Claude</CardTitle>
+            <CardTitle className="text-lg">How to Connect Claude or ChatGPT</CardTitle>
             <CardDescription>
-              Step-by-step guide to connect your FLAIM account to Claude
+              Step-by-step guide to connect your FLAIM account to Claude or ChatGPT
             </CardDescription>
           </div>
           {isOpen ? (
@@ -128,11 +140,11 @@ export default function ConnectInstructions() {
               ))}
             </div>
 
-            {/* Note about Claude Pro */}
+            {/* Note about subscriptions */}
             <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
               <p className="text-sm text-blue-800 dark:text-blue-300">
-                <strong>Note:</strong> Claude direct access uses your Claude Pro subscription.
-                You pay for AI usage through Anthropic, while FLAIM provides the fantasy data.
+                <strong>Note:</strong> Direct access uses your Claude or ChatGPT subscription.
+                You pay for AI usage through the platform, while FLAIM provides the fantasy data.
               </p>
             </div>
           </CardContent>

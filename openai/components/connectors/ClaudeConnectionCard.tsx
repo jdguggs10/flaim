@@ -73,8 +73,8 @@ export default function ClaudeConnectionCard({
               C
             </div>
             <div>
-              <CardTitle className="text-lg">Claude</CardTitle>
-              <CardDescription>Anthropic AI Assistant</CardDescription>
+              <CardTitle className="text-lg">Claude + ChatGPT</CardTitle>
+              <CardDescription>AI Assistant Connector</CardDescription>
             </div>
           </div>
           <Badge variant={isConnected ? 'default' : 'secondary'}>
@@ -137,7 +137,7 @@ export default function ClaudeConnectionCard({
         )}
 
         {/* Actions */}
-        <div className="flex gap-3 pt-2">
+        <div className="flex flex-wrap gap-3 pt-2">
           <Button variant="outline" className="flex-1" asChild>
             <a
               href="https://support.claude.com/en/articles/11175166-getting-started-with-custom-connectors-using-remote-mcp"
@@ -145,7 +145,17 @@ export default function ClaudeConnectionCard({
               rel="noopener noreferrer"
             >
               <ExternalLink className="h-4 w-4 mr-2" />
-              Setup Guide
+              Claude Setup Guide
+            </a>
+          </Button>
+          <Button variant="outline" className="flex-1" asChild>
+            <a
+              href="https://help.openai.com/en/articles/12584461-developer-mode-apps-and-full-mcp-connectors-in-chatgpt-beta"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <ExternalLink className="h-4 w-4 mr-2" />
+              ChatGPT Setup Guide
             </a>
           </Button>
           {isConnected && onDisconnect && (

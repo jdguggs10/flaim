@@ -50,9 +50,9 @@ export default function ConsentScreen({
         <div className="mx-auto mb-4 w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
           <Shield className="h-6 w-6 text-primary" />
         </div>
-        <CardTitle>Authorize Claude</CardTitle>
+        <CardTitle>Authorize Connector</CardTitle>
         <CardDescription>
-          Claude is requesting access to your FLAIM account
+          An AI assistant is requesting access to your FLAIM account
         </CardDescription>
       </CardHeader>
 
@@ -64,15 +64,15 @@ export default function ConsentScreen({
               C
             </div>
             <div>
-              <div className="font-medium">Claude by Anthropic</div>
-              <div className="text-sm text-muted-foreground">AI Assistant</div>
+              <div className="font-medium">AI Assistant Connector</div>
+              <div className="text-sm text-muted-foreground">Claude or ChatGPT</div>
             </div>
           </div>
         </div>
 
         {/* Permissions */}
         <div className="space-y-2">
-          <div className="text-sm font-medium">Claude will be able to:</div>
+          <div className="text-sm font-medium">The assistant will be able to:</div>
           <div className="space-y-2">
             <div className="flex items-start gap-2 text-sm">
               <CheckCircle className="h-4 w-4 text-green-500 mt-0.5 shrink-0" />

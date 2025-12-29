@@ -515,6 +515,33 @@ export default {
               }
             });
           } else {
+            // Check if this is an edit request (return actual credentials for frontend editing)
+            const forEdit = url.searchParams.get('forEdit') === 'true';
+
+            if (forEdit) {
+              // Return actual credentials for editing (frontend use only, no rate limit)
+              const credentials = await storage.getCredentials(clerkUserId);
+
+              if (!credentials) {
+                return new Response(JSON.stringify({
+                  hasCredentials: false,
+                  message: 'No ESPN credentials found'
+                }), {
+                  status: 404,
+                  headers: { 'Content-Type': 'application/json', ...corsHeaders }
+                });
+              }
+
+              return new Response(JSON.stringify({
+                hasCredentials: true,
+                platform: 'espn',
+                swid: credentials.swid,
+                s2: credentials.s2
+              }), {
+                headers: { 'Content-Type': 'application/json', ...corsHeaders }
+              });
+            }
+
             // Get credential metadata (default behavior for frontend)
             const metadata = await storage.getCredentialMetadata(clerkUserId);
 

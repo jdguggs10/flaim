@@ -675,7 +675,7 @@ export async function validateOAuthToken(
 
 /**
  * Check active connection status
- * Used by frontend to see if user has connected Claude
+ * Used by frontend to see if user has connected Claude/ChatGPT
  */
 export async function handleCheckStatus(
   env: OAuthEnv,
@@ -684,11 +684,20 @@ export async function handleCheckStatus(
 ): Promise<Response> {
   try {
     const storage = OAuthStorage.fromEnvironment(env);
-    const hasConnection = await storage.hasActiveConnection(userId);
+    const tokens = await storage.getUserTokens(userId);
+
+    // Map to safe public format for display
+    const connections = tokens.map(t => ({
+      id: t.accessToken.substring(0, 8) + '...', // Masked ID
+      expiresAt: t.expiresAt.toISOString(),
+      scope: t.scope,
+      resource: t.resource || 'mcp-client' // Fallback for older tokens without resource
+    }));
 
     return new Response(JSON.stringify({
       success: true,
-      hasConnection,
+      hasConnection: tokens.length > 0,
+      connections
     }), {
       status: 200,
       headers: { 'Content-Type': 'application/json', ...corsHeaders },

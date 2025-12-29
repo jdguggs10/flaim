@@ -4,6 +4,18 @@ Follow Keep a Changelog; SemVer applies. Planning docs live in `docs/dev`.
 
 ## [Unreleased]
 
+## [7.1.0] - 2025-12-28
+
+### 🤖 ChatGPT Direct Access - Now Working!
+Users can connect FLAIM to ChatGPT as a custom MCP connector with OAuth 2.1, bringing their own subscription.
+
+### OpenAI ChatGPT OAuth Support
+- **Added**: ChatGPT redirect URIs to OAuth allowlist.
+- **Added**: RFC 8707 `resource` propagation through OAuth code/token storage.
+- **Added**: `securitySchemes` on all MCP tool definitions.
+- **Added**: `_meta["mcp/www_authenticate"]` on 401 responses (initial connect + invalid tokens).
+- **Fixed**: Refresh token flow preserves `resource` for audience-aware tokens.
+
 ## [7.0.0] - 2025-12-28
 
 ### 🎉 Claude Direct Access - Now Working!
