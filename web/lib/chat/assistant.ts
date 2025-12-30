@@ -26,6 +26,15 @@ export interface MessageItem {
   content: ContentItem[];
 }
 
+// Debug metadata for tool calls
+export interface ToolCallMetadata {
+  startedAt: number; // timestamp when tool call started
+  completedAt?: number; // timestamp when completed
+  durationMs?: number; // calculated duration
+  serverUrl?: string; // MCP server URL used
+  error?: string; // error message if failed
+}
+
 // Custom items to display in chat
 export interface ToolCallItem {
   type: "tool_call";
@@ -49,6 +58,7 @@ export interface ToolCallItem {
     container_id?: string;
     filename?: string;
   }[];
+  metadata?: ToolCallMetadata; // Debug timing and error info
 }
 
 export interface McpListToolsItem {
@@ -287,6 +297,7 @@ export const processMessages = async () => {
               arguments: item.arguments || "",
               parsedArguments: {},
               output: null,
+              metadata: { startedAt: Date.now() },
             });
             setChatMessages([...chatMessages]);
             break;
@@ -297,6 +308,7 @@ export const processMessages = async () => {
               tool_type: "web_search_call",
               status: item.status || "in_progress",
               id: item.id,
+              metadata: { startedAt: Date.now() },
             });
             setChatMessages([...chatMessages]);
             break;
@@ -307,6 +319,7 @@ export const processMessages = async () => {
               tool_type: "file_search_call",
               status: item.status || "in_progress",
               id: item.id,
+              metadata: { startedAt: Date.now() },
             });
             setChatMessages([...chatMessages]);
             break;
@@ -322,6 +335,7 @@ export const processMessages = async () => {
               arguments: item.arguments || "",
               parsedArguments: item.arguments ? parse(item.arguments) : {},
               output: null,
+              metadata: { startedAt: Date.now() },
             });
             setChatMessages([...chatMessages]);
             break;
@@ -334,6 +348,7 @@ export const processMessages = async () => {
               id: item.id,
               code: "",
               files: [],
+              metadata: { startedAt: Date.now() },
             });
             setChatMessages([...chatMessages]);
             break;
@@ -365,6 +380,13 @@ export const processMessages = async () => {
 
           // Record tool output
           toolCallMessage.output = JSON.stringify(toolResult);
+          // Add completion timing
+          if (toolCallMessage.metadata) {
+            const now = Date.now();
+            toolCallMessage.metadata.completedAt = now;
+            toolCallMessage.metadata.durationMs =
+              now - toolCallMessage.metadata.startedAt;
+          }
           setChatMessages([...chatMessages]);
           conversationItems.push({
             type: "function_call_output",
@@ -384,6 +406,13 @@ export const processMessages = async () => {
         ) {
           toolCallMessage.output = item.output;
           toolCallMessage.status = "completed";
+          // Add completion timing
+          if (toolCallMessage.metadata) {
+            const now = Date.now();
+            toolCallMessage.metadata.completedAt = now;
+            toolCallMessage.metadata.durationMs =
+              now - toolCallMessage.metadata.startedAt;
+          }
           setChatMessages([...chatMessages]);
         }
         break;
@@ -466,6 +495,13 @@ export const processMessages = async () => {
         if (toolCallMessage && toolCallMessage.type === "tool_call") {
           toolCallMessage.output = output;
           toolCallMessage.status = "completed";
+          // Add completion timing
+          if (toolCallMessage.metadata) {
+            const now = Date.now();
+            toolCallMessage.metadata.completedAt = now;
+            toolCallMessage.metadata.durationMs =
+              now - toolCallMessage.metadata.startedAt;
+          }
           setChatMessages([...chatMessages]);
         }
         break;
@@ -477,6 +513,13 @@ export const processMessages = async () => {
         if (toolCallMessage && toolCallMessage.type === "tool_call") {
           toolCallMessage.output = output;
           toolCallMessage.status = "completed";
+          // Add completion timing
+          if (toolCallMessage.metadata) {
+            const now = Date.now();
+            toolCallMessage.metadata.completedAt = now;
+            toolCallMessage.metadata.durationMs =
+              now - toolCallMessage.metadata.startedAt;
+          }
           setChatMessages([...chatMessages]);
         }
         break;
@@ -517,6 +560,13 @@ export const processMessages = async () => {
         if (toolCallMessage) {
           toolCallMessage.code = code;
           toolCallMessage.status = "completed";
+          // Add completion timing
+          if (toolCallMessage.metadata) {
+            const now = Date.now();
+            toolCallMessage.metadata.completedAt = now;
+            toolCallMessage.metadata.durationMs =
+              now - toolCallMessage.metadata.startedAt;
+          }
           setChatMessages([...chatMessages]);
         }
         break;
@@ -529,6 +579,13 @@ export const processMessages = async () => {
         ) as ToolCallItem | undefined;
         if (toolCallMessage) {
           toolCallMessage.status = "completed";
+          // Add completion timing (only if not already set)
+          if (toolCallMessage.metadata && !toolCallMessage.metadata.completedAt) {
+            const now = Date.now();
+            toolCallMessage.metadata.completedAt = now;
+            toolCallMessage.metadata.durationMs =
+              now - toolCallMessage.metadata.startedAt;
+          }
           setChatMessages([...chatMessages]);
         }
         break;

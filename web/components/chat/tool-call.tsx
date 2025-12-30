@@ -1,7 +1,9 @@
+"use client";
 import React from "react";
 
 import { ToolCallItem } from "@/lib/chat/assistant";
-import { BookOpenText, Clock, Globe, Zap, Code2, Download } from "lucide-react";
+import useToolsStore from "@/stores/chat/useToolsStore";
+import { BookOpenText, Clock, Globe, Zap, Code2, Download, Timer } from "lucide-react";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { coy } from "react-syntax-highlighter/dist/esm/styles/prism";
 
@@ -9,7 +11,28 @@ interface ToolCallProps {
   toolCall: ToolCallItem;
 }
 
+// Format duration for display
+function formatDuration(ms: number): string {
+  if (ms < 1000) {
+    return `${ms}ms`;
+  }
+  return `${(ms / 1000).toFixed(1)}s`;
+}
+
+// Timing badge component
+function TimingBadge({ durationMs }: { durationMs?: number }) {
+  if (!durationMs) return null;
+  return (
+    <span className="inline-flex items-center gap-1 text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full ml-2">
+      <Timer size={12} />
+      {formatDuration(durationMs)}
+    </span>
+  );
+}
+
 function ApiCallCell({ toolCall }: ToolCallProps) {
+  const { debugMode } = useToolsStore();
+
   return (
     <div className="flex flex-col w-[70%] relative mb-[-8px]">
       <div>
@@ -22,11 +45,19 @@ function ApiCallCell({ toolCall }: ToolCallProps) {
                   ? `Called ${toolCall.name}`
                   : `Calling ${toolCall.name}...`}
               </div>
+              {toolCall.status === "completed" && (
+                <TimingBadge durationMs={toolCall.metadata?.durationMs} />
+              )}
             </div>
           </div>
 
           <div className="bg-[#fafafa] rounded-xl py-2 ml-4 mt-2">
             <div className="max-h-96 overflow-y-scroll text-xs border-b mx-6 p-2">
+              {debugMode && (
+                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                  Request
+                </div>
+              )}
               <SyntaxHighlighter
                 customStyle={{
                   backgroundColor: "#fafafa",
@@ -42,6 +73,11 @@ function ApiCallCell({ toolCall }: ToolCallProps) {
               </SyntaxHighlighter>
             </div>
             <div className="max-h-96 overflow-y-scroll mx-6 p-2 text-xs">
+              {debugMode && (
+                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                  Response
+                </div>
+              )}
               {toolCall.output ? (
                 <SyntaxHighlighter
                   customStyle={{
@@ -77,6 +113,9 @@ function FileSearchCell({ toolCall }: ToolCallProps) {
           ? "Searched files"
           : "Searching files..."}
       </div>
+      {toolCall.status === "completed" && (
+        <TimingBadge durationMs={toolCall.metadata?.durationMs} />
+      )}
     </div>
   );
 }
@@ -90,11 +129,16 @@ function WebSearchCell({ toolCall }: ToolCallProps) {
           ? "Searched the web"
           : "Searching the web..."}
       </div>
+      {toolCall.status === "completed" && (
+        <TimingBadge durationMs={toolCall.metadata?.durationMs} />
+      )}
     </div>
   );
 }
 
 function McpCallCell({ toolCall }: ToolCallProps) {
+  const { debugMode } = useToolsStore();
+
   return (
     <div className="flex flex-col w-[70%] relative mb-[-8px]">
       <div>
@@ -107,11 +151,19 @@ function McpCallCell({ toolCall }: ToolCallProps) {
                   ? `Called ${toolCall.name} via MCP tool`
                   : `Calling ${toolCall.name} via MCP tool...`}
               </div>
+              {toolCall.status === "completed" && (
+                <TimingBadge durationMs={toolCall.metadata?.durationMs} />
+              )}
             </div>
           </div>
 
           <div className="bg-[#fafafa] rounded-xl py-2 ml-4 mt-2">
             <div className="max-h-96 overflow-y-scroll text-xs border-b mx-6 p-2">
+              {debugMode && (
+                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                  Request
+                </div>
+              )}
               <SyntaxHighlighter
                 customStyle={{
                   backgroundColor: "#fafafa",
@@ -127,6 +179,11 @@ function McpCallCell({ toolCall }: ToolCallProps) {
               </SyntaxHighlighter>
             </div>
             <div className="max-h-96 overflow-y-scroll mx-6 p-2 text-xs">
+              {debugMode && (
+                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                  Response
+                </div>
+              )}
               {toolCall.output ? (
                 <SyntaxHighlighter
                   customStyle={{
@@ -176,6 +233,9 @@ function CodeInterpreterCell({ toolCall }: ToolCallProps) {
                 ? "Code executed"
                 : "Running code interpreter..."}
             </div>
+            {toolCall.status === "completed" && (
+              <TimingBadge durationMs={toolCall.metadata?.durationMs} />
+            )}
           </div>
         </div>
         <div className="bg-[#fafafa] rounded-xl py-2 ml-4 mt-2">

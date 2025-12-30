@@ -66,6 +66,9 @@ interface StoreState {
   setEspnSWID: (swid: string) => void;
   isAuthenticated: boolean;
   setIsAuthenticated: (authenticated: boolean) => void;
+  // Debug mode
+  debugMode: boolean;
+  setDebugMode: (enabled: boolean) => void;
 }
 
 const useToolsStore = create<StoreState>()(
@@ -129,6 +132,9 @@ const useToolsStore = create<StoreState>()(
       setEspnS2: (s2) => set({ espnS2: s2 }),
       setEspnSWID: (swid) => set({ espnSWID: swid }),
       setIsAuthenticated: (authenticated) => set({ isAuthenticated: authenticated }),
+      // Debug mode
+      debugMode: false,
+      setDebugMode: (enabled) => set({ debugMode: enabled }),
     }),
     {
       name: "tools-store",

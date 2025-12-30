@@ -1,9 +1,9 @@
 # Solo Developer Guidelines (Short)
 
-Context: first production project, one part-time developer. Favor boring, stable, documented solutions. OpenAI usage is via the **Responses API** (not chat completions).
+Context: first production project, one part-time developer. Favor boring, stable, documented solutions. 
 
 ## Principles
-- Ship working, simple features; avoid refactors that touch many files.
+- Ship working, simple features; avoid complexity that would be difficult to maintain.
 - Choose mainstream tech: Next.js, Vercel, Clerk, Cloudflare Workers, TypeScript, Tailwind.
 - Prefer framework defaults, REST over GraphQL, env vars over config systems.
 - Copy from official docs/examples before inventing custom patterns.

@@ -7,7 +7,7 @@ import UsageDisplay from "./usage-display";
 import useToolsStore from "@/stores/chat/useToolsStore";
 import useLeaguesStore from "@/stores/chat/useLeaguesStore";
 import { getSportConfig } from "@/lib/chat/league-mapper";
-import { User, Zap, Trophy, Settings } from "lucide-react";
+import { User, Zap, Trophy, Settings, Bug } from "lucide-react";
 import useHasMounted from "@/hooks/useHasMounted";
 
 export default function ContextPanel() {
@@ -19,6 +19,8 @@ export default function ContextPanel() {
     setMcpEnabled,
     selectedPlatform,
     isAuthenticated,
+    debugMode,
+    setDebugMode,
   } = useToolsStore();
 
   const {
@@ -131,6 +133,21 @@ export default function ContextPanel() {
             icon={<Zap size={16} />}
           >
             <McpConfig />
+          </PanelConfig>
+        )}
+
+        {/* Debug Mode */}
+        {shouldShowMcp && (
+          <PanelConfig
+            title="Debug Mode"
+            tooltip="Show raw tool request/response JSON and timing information for debugging MCP tools"
+            enabled={debugMode}
+            setEnabled={setDebugMode}
+            icon={<Bug size={16} />}
+          >
+            <p className="text-xs text-muted-foreground">
+              When enabled, tool calls will display raw JSON requests/responses and execution timing.
+            </p>
           </PanelConfig>
         )}
       </div>
