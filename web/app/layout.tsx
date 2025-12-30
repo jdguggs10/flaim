@@ -76,7 +76,7 @@ export default function RootLayout({
                 </SignedIn>
               </div>
             </header>
-            <main className="flex-1 bg-background">{children}</main>
+            <main className="flex-1 bg-background overflow-hidden">{children}</main>
           </div>
         </body>
       </html>

@@ -49,7 +49,7 @@ const Chat: React.FC<ChatProps> = ({
   return (
     <div className="flex justify-center items-center size-full">
       <div className="flex grow flex-col h-full max-w-[750px] gap-2">
-        <div className="h-[90vh] overflow-y-scroll px-10 flex flex-col">
+        <div className="flex-1 min-h-0 overflow-y-auto px-10 flex flex-col">
           <div className="mt-auto space-y-5 pt-4">
             {items.map((item, index) => (
               <React.Fragment key={index}>

@@ -235,7 +235,7 @@ export default function Assistant() {
       )}
 
       {/* Chat interface */}
-      <div className="flex-1 p-4">
+      <div className="flex-1 min-h-0 p-4">
         <Chat
           items={chatMessages}
           onSendMessage={handleSendMessage}
