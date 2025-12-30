@@ -3,11 +3,10 @@ import React, { useEffect } from "react";
 import Link from "next/link";
 import McpConfig from "./mcp-config";
 import PanelConfig from "./panel-config";
-import UsageDisplay from "./usage-display";
 import useToolsStore from "@/stores/chat/useToolsStore";
 import useLeaguesStore from "@/stores/chat/useLeaguesStore";
 import { getSportConfig } from "@/lib/chat/league-mapper";
-import { User, Zap, Trophy, Settings, Bug } from "lucide-react";
+import { Zap, Trophy, Settings, Bug } from "lucide-react";
 import useHasMounted from "@/hooks/useHasMounted";
 
 export default function ContextPanel() {
@@ -51,18 +50,6 @@ export default function ContextPanel() {
   return (
     <div className="h-full p-4 lg:p-8 w-full bg-muted/50 lg:rounded-none">
       <div className="flex flex-col space-y-6 h-full overflow-y-auto">
-        {/* Account & Usage Section */}
-        <PanelConfig
-          title="Account & Usage"
-          tooltip="View your current plan and message usage"
-          enabled={true}
-          setEnabled={() => {}}
-          showToggle={false}
-          icon={<User size={16} />}
-        >
-          <UsageDisplay />
-        </PanelConfig>
-
         {/* Fantasy Teams Section */}
         <PanelConfig
           title="Fantasy Teams"

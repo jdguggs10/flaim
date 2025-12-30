@@ -4,98 +4,15 @@ import { auth } from '@clerk/nextjs/server';
 import type { TurnResponseRequest } from '@/types/api-responses';
 import OpenAI from "openai";
 
-// Simple usage tracking (shared with usage route)
-interface UserUsage {
-  userId: string;
-  messageCount: number;
-  resetDate: string;
-  plan: 'free' | 'paid';
-}
-
-const userUsageStore = new Map<string, UserUsage>();
-const FREE_TIER_LIMIT = 100; // 100 messages per month
-const RESET_INTERVAL_DAYS = 30;
-
-class SimpleUsageTracker {
-  private static getResetDate(): string {
-    const date = new Date();
-    date.setDate(date.getDate() + RESET_INTERVAL_DAYS);
-    return date.toISOString();
-  }
-
-  private static isResetNeeded(resetDate: string): boolean {
-    return new Date(resetDate) <= new Date();
-  }
-
-  static getUserUsage(userId: string): UserUsage {
-    let usage = userUsageStore.get(userId);
-    
-    if (!usage) {
-      usage = {
-        userId,
-        messageCount: 0,
-        resetDate: this.getResetDate(),
-        plan: 'free'
-      };
-      userUsageStore.set(userId, usage);
-    }
-
-    if (this.isResetNeeded(usage.resetDate)) {
-      usage.messageCount = 0;
-      usage.resetDate = this.getResetDate();
-      userUsageStore.set(userId, usage);
-    }
-
-    return usage;
-  }
-
-  static canSendMessage(userId: string): { allowed: boolean; remaining?: number } {
-    const usage = this.getUserUsage(userId);
-    
-    if (usage.plan === 'paid') {
-      return { allowed: true };
-    }
-
-    const allowed = usage.messageCount < FREE_TIER_LIMIT;
-    const remaining = Math.max(0, FREE_TIER_LIMIT - usage.messageCount);
-    
-    return { allowed, remaining };
-  }
-
-  static incrementUsage(userId: string): UserUsage {
-    const usage = this.getUserUsage(userId);
-    
-    if (usage.plan === 'free') {
-      usage.messageCount++;
-      userUsageStore.set(userId, usage);
-    }
-    
-    return usage;
-  }
-}
-
-// Auth and usage helper
-async function requireAuthWithUsage(): Promise<{ userId: string } | NextResponse> {
+// Simple auth helper
+async function requireAuth(): Promise<{ userId: string } | NextResponse> {
   try {
     const { userId } = await auth();
-    
+
     if (!userId) {
       return NextResponse.json(
         { error: "Authentication required" },
         { status: 401 }
-      );
-    }
-
-    // Check usage limits
-    const usageCheck = SimpleUsageTracker.canSendMessage(userId);
-    if (!usageCheck.allowed) {
-      return NextResponse.json(
-        { 
-          error: "Usage limit exceeded", 
-          remaining: usageCheck.remaining || 0,
-          limit: FREE_TIER_LIMIT 
-        },
-        { status: 429 }
       );
     }
 
@@ -113,8 +30,8 @@ export const runtime = 'edge';
 
 export async function POST(request: NextRequest) {
   try {
-    // Check auth and usage limits
-    const authResult = await requireAuthWithUsage();
+    // Check auth
+    const authResult = await requireAuth();
     if (authResult instanceof NextResponse) {
       return authResult;
     }
@@ -180,9 +97,6 @@ export async function POST(request: NextRequest) {
         { status: statusCode }
       );
     }
-
-    // Increment usage after successful API call setup
-    SimpleUsageTracker.incrementUsage(userId);
 
     // Create a ReadableStream that emits SSE data (edge runtime requires Uint8Array)
     const encoder = new TextEncoder();

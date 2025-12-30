@@ -4,6 +4,18 @@ Follow Keep a Changelog; SemVer applies. Planning docs live in `docs/dev`.
 
 ## [Unreleased]
 
+### Chat Debug Mode
+- **Added**: Debug mode toggle in chat tools panel for MCP debugging.
+- **Added**: Timing badges on all tool calls (shows execution duration in ms).
+- **Added**: REQUEST/RESPONSE labels when debug mode is enabled.
+- **Added**: `ToolCallMetadata` interface for tracking tool execution timing.
+
+### Chat Simplification
+- **Removed**: Usage tracking from built-in chat (message limits, free tier tracking).
+- **Removed**: `/api/chat/usage` endpoint and `UsageDisplay` component.
+- **Removed**: "Account & Usage" section from chat tools panel.
+- **Changed**: Chat now requires only Clerk auth, no usage limits enforced.
+
 ## [7.1.0] - 2025-12-28
 
 ### 🤖 ChatGPT Direct Access - Now Working!
@@ -59,13 +71,13 @@ Users can now connect Flaim to Claude.ai or Claude Desktop as a custom MCP conne
 - Added automatic ESPN league discovery.
 
 ## [4.1.0]
-- Extracted modular `flaim/auth`; added football MCP worker; raised free tier limit to 100 messages/month.
+- Extracted modular `flaim/auth`; added football MCP worker.
 
 ## [4.0.0]
 - Security fix: removed header spoofing by enforcing server-side Clerk verification.
 
 ## [3.0.0]
-- Integrated Clerk auth; added usage tracking and secure credential management.
+- Integrated Clerk auth; added secure credential management.
 
 ## [2.0.0]
 - Introduced Stripe-first microservices architecture with OpenAI chat (later simplified).

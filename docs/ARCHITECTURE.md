@@ -5,7 +5,7 @@ Flaim is a connector platform that lets users link their ESPN fantasy leagues to
 ## Core Pieces
 
 - **Next.js web app (`/web`)**: Site pages (landing, leagues, connectors), chat UI, OAuth consent screens.
-- **Auth worker (`/workers/auth-worker`)**: Supabase credential + league storage, JWT verification, OAuth token management, usage tracking.
+- **Auth worker (`/workers/auth-worker`)**: Supabase credential + league storage, JWT verification, OAuth token management, MCP rate limiting.
 - **Sport MCP workers (`/workers/baseball-espn-mcp`, `/workers/football-espn-mcp`)**: ESPN API calls + MCP tools. Fetch creds/leagues from auth-worker; no local storage.
 - **Supabase Postgres**: `espn_credentials`, `espn_leagues`, `oauth_tokens`, `oauth_codes`, `rate_limits`.
 
@@ -27,7 +27,7 @@ web/
 │       ├── auth/            # Platform auth APIs
 │       ├── espn/            # League management APIs
 │       ├── oauth/           # OAuth APIs (status, revoke)
-│       └── chat/            # Chat-only APIs (turn_response, usage, etc.)
+│       └── chat/            # Chat-only APIs (turn_response, etc.)
 │
 ├── components/
 │   ├── site/                # Site-only components (connectors/)
@@ -105,6 +105,8 @@ Without this metadata, `/chat` redirects to the home page.
 - **System prompt** (`lib/chat/prompts/system-prompt.ts`): Static instructions and tool descriptions.
 - **League context** (`lib/chat/prompts/league-context.ts`): Dynamic context from `useLeaguesStore` — injects active league ID, sport, team name.
 - Both injected as `developer` role messages before conversation history.
+
+**Debug mode**: Toggle in the tools panel to show raw JSON request/response and execution timing on tool calls. Useful for debugging MCP servers before testing in Claude/ChatGPT.
 
 ## Deployment
 

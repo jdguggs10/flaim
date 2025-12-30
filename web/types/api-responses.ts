@@ -45,10 +45,6 @@ export interface TurnResponseRequest {
   tools?: any[];
 }
 
-export interface UsageActionRequest {
-  action?: string;
-}
-
 export interface VectorStoreRequest {
   name?: string;
   vectorStoreId?: string;
