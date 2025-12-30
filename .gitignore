@@ -26,6 +26,8 @@ build/
 .idea/
 *.swp
 *.swo
+*.code-workspace
+.cursor/
 
 # AI Assistant Configurations (personal settings)
 .claude/
@@ -50,6 +52,9 @@ coverage/
 
 # Cloudflare Workers
 .wrangler/
+
+# Vercel
+.vercel/
 
 # TypeScript
 *.tsbuildinfo
