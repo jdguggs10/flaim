@@ -90,9 +90,18 @@ Tools available via the MCP servers:
 2. User connects Claude/ChatGPT → OAuth flow → token stored in Supabase.
 3. Claude/ChatGPT calls MCP tool → MCP worker fetches creds from auth-worker → calls ESPN → returns data.
 
-## LLM Context (Chat Only)
+## Built-in Chat (Secondary Feature)
 
-For the built-in chat:
+The `/chat` page is gated by Clerk metadata and intended for developers/beta testers:
+
+**Access control**: Users need `publicMetadata.chatAccess: true` in Clerk to access `/chat`. Set this in Clerk Dashboard → Users → [user] → Public metadata:
+```json
+{ "chatAccess": true }
+```
+
+Without this metadata, `/chat` redirects to the home page.
+
+**LLM context injection**:
 - **System prompt** (`lib/chat/prompts/system-prompt.ts`): Static instructions and tool descriptions.
 - **League context** (`lib/chat/prompts/league-context.ts`): Dynamic context from `useLeaguesStore` — injects active league ID, sport, team name.
 - Both injected as `developer` role messages before conversation history.

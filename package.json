@@ -17,6 +17,7 @@
     "dev:frontend": "cd web && npm run dev",
     "dev:workers": "concurrently \"cd workers/auth-worker && wrangler dev --env dev --port 8786 --inspector-port 9229\" \"cd workers/baseball-espn-mcp && wrangler dev --env dev --port 8787 --inspector-port 9230\" \"cd workers/football-espn-mcp && wrangler dev --env dev --port 8788 --inspector-port 9231\"",
     "build": "cd web && npm run build",
+    "lint": "cd web && npm run lint",
     "deploy:workers:preview": "concurrently \"cd workers/auth-worker && wrangler deploy --env preview\" \"cd workers/baseball-espn-mcp && wrangler deploy --env preview\" \"cd workers/football-espn-mcp && wrangler deploy --env preview\"",
     "deploy:workers:prod": "concurrently \"cd workers/auth-worker && wrangler deploy --env prod\" \"cd workers/baseball-espn-mcp && wrangler deploy --env prod\" \"cd workers/football-espn-mcp && wrangler deploy --env prod\""
   },
