@@ -249,10 +249,10 @@ export default function LeaguesPage() {
         leagueName: data.leagueInfo.leagueName,
         sport: newLeagueSport,
         seasonYear: data.leagueInfo.seasonYear,
-        teams: data.leagueInfo.teams.map((t) => ({
-          id: String(t.id),
-          name: t.name,
-          owner: t.owner,
+        teams: data.leagueInfo.teams.map((t: { teamId?: string; id?: string; teamName?: string; name?: string; ownerName?: string; owner?: string }) => ({
+          id: String(t.teamId || t.id || ''),
+          name: t.teamName || t.name || '',
+          owner: t.ownerName || t.owner,
         })),
       });
     } catch (err) {
@@ -607,14 +607,18 @@ export default function LeaguesPage() {
                       <SelectValue placeholder="Choose your team..." />
                     </SelectTrigger>
                     <SelectContent>
-                      {verifiedLeague.teams.map((team, index) => (
-                        <SelectItem key={team.id || `team-${index}`} value={team.id || String(index)}>
-                          {team.name}
-                          {team.owner && (
-                            <span className="text-muted-foreground ml-2">({team.owner})</span>
-                          )}
-                        </SelectItem>
-                      ))}
+                      {verifiedLeague.teams.map((team, index) => {
+                        // Use index as fallback to guarantee unique keys/values
+                        const uniqueId = team.id || String(index + 1);
+                        return (
+                          <SelectItem key={`team-${index}-${uniqueId}`} value={uniqueId}>
+                            {team.name}
+                            {team.owner && (
+                              <span className="text-muted-foreground ml-2">({team.owner})</span>
+                            )}
+                          </SelectItem>
+                        );
+                      })}
                     </SelectContent>
                   </Select>
                 </div>

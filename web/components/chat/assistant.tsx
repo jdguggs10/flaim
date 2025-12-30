@@ -198,11 +198,11 @@ export default function Assistant() {
             </p>
 
             <div className="bg-secondary border border-border rounded-lg p-4">
-              <h3 className="font-medium text-secondary-foreground mb-2">Free Tier Includes:</h3>
+              <h3 className="font-medium text-secondary-foreground mb-2">Features:</h3>
               <ul className="text-sm text-muted-foreground space-y-1">
-                <li>100 AI messages per month</li>
-                <li>Basic fantasy sports help</li>
-                <li>ESPN integration</li>
+                <li>MCP tool debugging</li>
+                <li>ESPN league integration</li>
+                <li>Request/response inspection</li>
               </ul>
             </div>
 

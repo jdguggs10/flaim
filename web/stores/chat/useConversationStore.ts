@@ -16,6 +16,7 @@ interface ConversationState {
   addChatMessage: (item: Item) => void;
   addConversationItem: (message: ChatCompletionMessageParam) => void;
   setAssistantLoading: (loading: boolean) => void;
+  clearConversation: () => void;
   rawSet: (state: any) => void;
 }
 
@@ -38,6 +39,18 @@ const useConversationStore = create<ConversationState>((set) => ({
       conversationItems: [...state.conversationItems, message],
     })),
   setAssistantLoading: (loading) => set({ isAssistantLoading: loading }),
+  clearConversation: () =>
+    set({
+      chatMessages: [
+        {
+          type: "message",
+          role: "assistant",
+          content: [{ type: "output_text", text: INITIAL_MESSAGE }],
+        },
+      ],
+      conversationItems: [],
+      isAssistantLoading: false,
+    }),
   rawSet: set,
 }));
 

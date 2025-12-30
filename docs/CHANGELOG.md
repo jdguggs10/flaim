@@ -10,6 +10,17 @@ Follow Keep a Changelog; SemVer applies. Planning docs live in `docs/dev`.
 - **Added**: REQUEST/RESPONSE labels when debug mode is enabled.
 - **Added**: `ToolCallMetadata` interface for tracking tool execution timing.
 
+### Chat Debug UI Improvements (Phase 2)
+- **Added**: Copy buttons on request/response JSON blocks.
+- **Added**: Clear conversation button (trash icon) to reset chat.
+- **Added**: Keyboard shortcut `Cmd+D` / `Ctrl+D` to toggle debug mode.
+- **Added**: Collapsible JSON blocks with chevron toggle.
+- **Added**: Error styling with red borders, error banners, and actionable suggestions.
+- **Added**: MCP server URL display in debug mode.
+- **Added**: Debug mode badge (amber "DEBUG" pill in chat header).
+- **Added**: Active league indicator badge (blue pill with league name).
+- **Fixed**: Page scrolling broken by `overflow-hidden` on main layout.
+
 ### Chat Simplification
 - **Removed**: Usage tracking from built-in chat (message limits, free tier tracking).
 - **Removed**: `/api/chat/usage` endpoint and `UsageDisplay` component.

@@ -9,6 +9,9 @@ import McpApproval from "./mcp-approval";
 import { Item, McpApprovalRequestItem } from "@/lib/chat/assistant";
 import LoadingMessage from "./loading-message";
 import useConversationStore from "@/stores/chat/useConversationStore";
+import useToolsStore from "@/stores/chat/useToolsStore";
+import useLeaguesStore from "@/stores/chat/useLeaguesStore";
+import { Trash2, Bug, Trophy } from "lucide-react";
 
 interface ChatProps {
   items: Item[];
@@ -25,7 +28,22 @@ const Chat: React.FC<ChatProps> = ({
   const [inputMessageText, setinputMessageText] = useState<string>("");
   // This state is used to provide better user experience for non-English IMEs such as Japanese
   const [isComposing, setIsComposing] = useState(false);
-  const { isAssistantLoading } = useConversationStore();
+  const { isAssistantLoading, clearConversation } = useConversationStore();
+  const { debugMode, setDebugMode } = useToolsStore();
+  const { getActiveLeague } = useLeaguesStore();
+  const activeLeague = getActiveLeague();
+
+  // Keyboard shortcut: Cmd+D / Ctrl+D to toggle debug mode
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "d") {
+        e.preventDefault();
+        setDebugMode(!debugMode);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [debugMode, setDebugMode]);
 
   const scrollToBottom = () => {
     itemsEndRef.current?.scrollIntoView({ behavior: "instant" });
@@ -49,6 +67,27 @@ const Chat: React.FC<ChatProps> = ({
   return (
     <div className="flex justify-center items-center size-full">
       <div className="flex grow flex-col h-full max-w-[750px] gap-2">
+        {/* Status bar with debug mode and active league indicators */}
+        {(debugMode || activeLeague) && (
+          <div className="flex items-center justify-center gap-3 px-10 pt-2">
+            {debugMode && (
+              <button
+                onClick={() => setDebugMode(false)}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-100 border border-amber-300 text-amber-800 text-xs font-medium rounded-full hover:bg-amber-200 transition-colors"
+                title="Click to disable debug mode (or press Cmd+D)"
+              >
+                <Bug size={12} />
+                DEBUG
+              </button>
+            )}
+            {activeLeague && (
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 border border-blue-200 text-blue-700 text-xs font-medium rounded-full">
+                <Trophy size={12} />
+                {activeLeague.leagueName || `League ${activeLeague.leagueId}`}
+              </div>
+            )}
+          </div>
+        )}
         <div className="flex-1 min-h-0 overflow-y-auto px-10 flex flex-col">
           <div className="mt-auto space-y-5 pt-4">
             {items.map((item, index) => (
@@ -101,10 +140,18 @@ const Chat: React.FC<ChatProps> = ({
                     />
                   </div>
                   <button
+                    onClick={clearConversation}
+                    className="flex size-8 items-end justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground hover:bg-muted focus-visible:outline-none"
+                    title="Clear conversation"
+                    type="button"
+                  >
+                    <Trash2 size={18} />
+                  </button>
+                  <button
                     disabled={!inputMessageText}
                     data-testid="send-button"
                     className="flex size-8 items-end justify-center rounded-full bg-black text-white transition-colors hover:opacity-70 focus-visible:outline-none focus-visible:outline-black disabled:bg-[#D7D7D7] disabled:text-[#f4f4f4] disabled:hover:opacity-100"
-                  onClick={() => {
+                    onClick={() => {
                       onSendMessage(inputMessageText);
                       setinputMessageText("");
                     }}
