@@ -27,6 +27,11 @@ build/
 *.swp
 *.swo
 
+# AI Assistant Configurations (personal settings)
+.claude/
+.gemini/
+.windsurf/
+
 # OS files
 .DS_Store
 Thumbs.db
