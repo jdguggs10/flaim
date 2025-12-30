@@ -148,56 +148,216 @@ Based on the response, show an **inline banner** (not modal):
 - `setDefaultLeague()` uses two sequential updates (clear then set) rather than atomic transaction
 - Migration assumes fresh column; if re-running after partial failure, may need manual NULL cleanup
 
-### Step 2: Create folder structure
+### Step 2: Create folder structure ✅ COMPLETE
 
-Create the new directories:
-- `components/site/`
-- `components/chat/`
-- `lib/chat/`
-- `stores/chat/`
-- `app/api/chat/`
+Created new directories:
 
-### Step 3: Move chat files
-
-See **Appendix A: Files to Move** for exact paths.
-
-### Step 4: Move chat APIs
-
-Move these endpoints under `/api/chat/`:
-- `turn_response/` → `chat/turn_response/`
-- `usage/` → `chat/usage/`
-- `vector_stores/` → `chat/vector_stores/`
-- `container_files/` → `chat/container_files/`
-
-Update imports in chat code accordingly.
-
-### Step 5: Remove wizard from chat
-
-- Delete `components/onboarding/*`
-- Delete `stores/useOnboardingStore.ts`
-- Delete `lib/onboarding/*`
-- Update `components/chat/assistant.tsx` to remove OnboardingFlow import
-- Add setup status check + inline banner to chat page
-
-### Step 6: Create route groups
-
-- Wrap site pages in `app/(site)/`
-- Wrap chat in `app/(chat)/chat/`
-- Keep `sign-in`, `sign-up`, `layout.tsx` at root
-
-### Step 7: Verify boundaries
-
-Run grep checks to confirm no cross-imports:
 ```bash
-# Should return no results
-rg "from.*components/site" openai/components/chat/
-rg "from.*components/chat" openai/components/site/
+mkdir -p openai/components/site/connectors
+mkdir -p openai/components/chat
+mkdir -p openai/lib/chat
+mkdir -p openai/stores/chat
+mkdir -p openai/app/api/chat
 ```
 
-### Step 8: Delete deprecated endpoints
+---
 
-- Remove `app/api/onboarding/leagues/route.ts`
-- Remove any other wizard-only endpoints
+### Step 3: Move chat files ✅ COMPLETE
+
+Moved all chat components, stores, and libraries to their new locations.
+
+**Chat components moved** (`components/` → `components/chat/`):
+- `assistant.tsx`, `chat.tsx`, `message.tsx`, `tool-call.tsx`, `annotations.tsx`
+- `mcp-approval.tsx`, `mcp-tools-list.tsx`, `mcp-config.tsx`, `loading-message.tsx`
+- `file-upload.tsx`, `file-search-setup.tsx`, `websearch-config.tsx`
+- `sport-platform-config.tsx`, `usage-display.tsx`, `tools-panel.tsx`
+- `panel-config.tsx`, `functions-view.tsx`, `platform-selector.tsx`
+- `sport-selector.tsx`, `country-selector.tsx`
+
+**Site components moved** (`components/connectors/` → `components/site/connectors/`):
+- `ClaudeConnectionCard.tsx`, `ConnectInstructions.tsx`, `ConsentScreen.tsx`
+
+**Stores moved** (`stores/` → `stores/chat/`):
+- `useConversationStore.ts`, `useToolsStore.ts`
+
+**Libraries moved** (`lib/` → `lib/chat/`):
+- `assistant.ts`
+- `prompts/*` (system-prompt.ts, league-context.ts, index.ts)
+- `tools/*` (tools.ts, tools-handling.ts)
+
+**Import updates applied to:**
+- `app/chat/_components/ChatInterface.tsx`
+- `app/connectors/page.tsx`
+- `app/oauth/consent/page.tsx`
+- All 20 moved chat components (internal imports)
+- All moved chat libs (e.g., `@/lib/assistant` → `@/lib/chat/assistant`)
+- All moved stores (e.g., `@/stores/useToolsStore` → `@/stores/chat/useToolsStore`)
+- Fixed relative imports in `lib/chat/tools/` (e.g., `../../config/functions` → `@/config/functions`)
+
+---
+
+### Step 4: Move chat APIs ✅ COMPLETE
+
+Moved API routes under `app/api/chat/`:
+
+| From | To |
+|------|-----|
+| `api/turn_response/` | `api/chat/turn_response/` |
+| `api/usage/` | `api/chat/usage/` |
+| `api/vector_stores/` | `api/chat/vector_stores/` |
+| `api/container_files/` | `api/chat/container_files/` |
+
+**Fetch call updates:**
+- `lib/chat/assistant.ts` — `/api/turn_response` → `/api/chat/turn_response`
+- `components/chat/usage-display.tsx` — `/api/usage` → `/api/chat/usage`
+- `components/chat/file-upload.tsx` — `/api/vector_stores/*` → `/api/chat/vector_stores/*`
+- `components/chat/file-search-setup.tsx` — `/api/vector_stores/*` → `/api/chat/vector_stores/*`
+- `components/chat/message.tsx` — `/api/container_files/*` → `/api/chat/container_files/*`
+- `components/chat/tool-call.tsx` — `/api/container_files/*` → `/api/chat/container_files/*`
+- `components/chat/annotations.tsx` — `/api/container_files/*` → `/api/chat/container_files/*`
+
+---
+
+### Step 5: Remove wizard from chat ✅ COMPLETE
+
+**New store created:**
+
+Created `stores/chat/useLeaguesStore.ts` — a simplified store for chat that:
+- Fetches setup status via `GET /api/auth/espn/status`
+- Fetches leagues via `GET /api/onboarding/espn/leagues`
+- Manages active league selection
+- No wizard/onboarding step logic
+
+**Files completely rewritten:**
+
+1. **`components/chat/assistant.tsx`** — Major rewrite:
+   - Removed `OnboardingFlow` import and all onboarding logic
+   - Added `SetupBanner` component for inline setup prompts
+   - Uses new `useLeaguesStore` instead of `useOnboardingStore`
+   - Fetches setup status on mount via API
+   - Shows inline banner when setup incomplete (not blocking modal)
+   - Chat always visible regardless of setup status
+
+2. **`components/chat/tools-panel.tsx`** — Simplified:
+   - Uses new `useLeaguesStore` instead of `useOnboardingStore`
+   - Removed edit/pencil button (users edit via /leagues page now)
+   - Settings button now links to `/leagues` page
+   - Shows "Set up your leagues" link when no leagues configured
+
+3. **`lib/chat/prompts/league-context.ts`** — Updated:
+   - Uses `useLeaguesStore` instead of `useOnboardingStore`
+
+4. **`app/chat/_components/ChatInterface.tsx`** — Simplified:
+   - Removed `useOnboardingStore` import and related logic
+
+**league-mapper moved:**
+- `lib/onboarding/league-mapper.ts` → `lib/chat/league-mapper.ts`
+- Updated imports in `tools-panel.tsx` and `assistant.tsx`
+
+**Files deleted:**
+- `components/onboarding/` — 10 files:
+  - `OnboardingFlow.tsx`, `PlatformSelection.tsx`, `EspnLeagueForm.tsx`
+  - `LeagueList.tsx`, `LeagueSelector.tsx`, `LeagueDiscovery.tsx`
+  - `AutoPullSummary.tsx`, `SetupComplete.tsx`, `SkipStepBanner.tsx`
+  - `auth/EspnAuth.tsx`
+- `stores/useOnboardingStore.ts`
+- `lib/onboarding/` (entire folder after moving league-mapper)
+
+**API routes deleted:**
+- `app/api/onboarding/leagues/route.ts` (deprecated)
+- `app/api/onboarding/status/route.ts`
+- `app/api/onboarding/platform-selection/route.ts`
+
+**API routes kept** (used by /leagues page):
+- `app/api/onboarding/espn/leagues/route.ts`
+- `app/api/onboarding/espn/leagues/default/route.ts`
+- `app/api/onboarding/espn/leagues/[leagueId]/team/route.ts`
+- `app/api/onboarding/espn/auto-pull/route.ts`
+
+> **TODO (Phase 2):** Consider renaming `/api/onboarding/espn/*` → `/api/espn/*` or `/api/leagues/*` since "onboarding" is a misnomer now that the wizard is gone. These are platform APIs for league management.
+
+**Inline banner behavior:**
+| Condition | Banner Message |
+|-----------|----------------|
+| `!hasCredentials` | "Connect your ESPN account to get started. [Set up on Leagues →]" |
+| `!hasLeagues` | "Add a fantasy league to continue. [Go to Leagues →]" |
+| `!hasDefaultTeam` | "Select your default team to get started. [Go to Leagues →]" |
+| All true | No banner, chat works normally |
+
+---
+
+### Step 6: Create route groups ✅ COMPLETE
+
+Reorganized `app/` into route groups:
+
+```
+app/
+├── (site)/
+│   ├── page.tsx              # Landing (/)
+│   ├── leagues/
+│   ├── connectors/
+│   ├── account/
+│   └── oauth/
+├── (chat)/
+│   └── chat/
+│       └── page.tsx          # Chat (/chat)
+├── api/                      # APIs stay at root
+├── sign-in/
+├── sign-up/
+└── layout.tsx
+```
+
+**Note:** Route groups `(site)` and `(chat)` don't affect URLs — they're organizational only.
+
+**Files moved:**
+- `page.tsx` → `(site)/page.tsx`
+- `leagues/` → `(site)/leagues/`
+- `connectors/` → `(site)/connectors/`
+- `account/` → `(site)/account/`
+- `oauth/` → `(site)/oauth/`
+- `chat/` → `(chat)/chat/`
+
+**Verification:** Build passed, all routes work at same URLs.
+
+---
+
+### Step 7: Verify boundaries ✅ COMPLETE
+
+Ran grep checks — all returned empty (no cross-imports):
+
+```bash
+# Chat should never import from site
+rg "from.*components/site" openai/components/chat/  # ✅ empty
+rg "from.*lib/site" openai/lib/chat/                # ✅ empty
+
+# Site should never import from chat
+rg "from.*components/chat" openai/components/site/  # ✅ empty
+rg "from.*lib/chat" openai/lib/site/                # ✅ N/A (lib/site doesn't exist yet)
+```
+
+**Verification:** No boundary violations found.
+
+---
+
+### Step 8: Final cleanup ✅ COMPLETE
+
+Reviewed and cleaned:
+- Removed unused `selectedSport` from `tools-panel.tsx`
+- No remaining deprecated files found
+- No dead imports
+
+**Verification:** `npm run lint` and `npm run build` pass.
+
+---
+
+## Phase 1 Complete 🎉
+
+All 8 steps completed. The codebase now has:
+- Hard boundaries between site and chat code
+- Route groups `(site)` and `(chat)` for organization
+- Chat-only APIs under `/api/chat/`
+- Inline setup banners instead of blocking wizard
+- No cross-imports between site and chat
 
 ## Phase 2 (Future): Subdomain Extraction
 
@@ -234,49 +394,71 @@ When ready to make chat fully independent:
 
 ## Appendix A: Files to Move
 
-### Components
+### Chat Components (`components/` → `components/chat/`)
 
-| From | To |
-|------|-----|
-| `components/assistant.tsx` | `components/chat/assistant.tsx` |
-| `components/chat.tsx` | `components/chat/chat.tsx` |
-| `components/tools-panel.tsx` | `components/chat/tools-panel.tsx` |
-| `components/message.tsx` | `components/chat/message.tsx` |
-| `components/tool-call.tsx` | `components/chat/tool-call.tsx` |
-| `components/annotations.tsx` | `components/chat/annotations.tsx` |
-| `components/mcp-approval.tsx` | `components/chat/mcp-approval.tsx` |
-| `components/mcp-tools-list.tsx` | `components/chat/mcp-tools-list.tsx` |
-| `components/mcp-config.tsx` | `components/chat/mcp-config.tsx` |
-| `components/file-upload.tsx` | `components/chat/file-upload.tsx` |
-| `components/file-search-setup.tsx` | `components/chat/file-search-setup.tsx` |
-| `components/websearch-config.tsx` | `components/chat/websearch-config.tsx` |
-| `components/sport-platform-config.tsx` | `components/chat/sport-platform-config.tsx` |
-| `components/usage-display.tsx` | `components/chat/usage-display.tsx` |
-| `components/connectors/*` | `components/site/connectors/*` |
+| File | Notes |
+|------|-------|
+| `assistant.tsx` | Main chat orchestrator |
+| `chat.tsx` | Chat message list |
+| `message.tsx` | Individual message |
+| `tool-call.tsx` | Tool execution display |
+| `annotations.tsx` | Message annotations |
+| `mcp-approval.tsx` | MCP tool approval |
+| `mcp-tools-list.tsx` | MCP tools listing |
+| `mcp-config.tsx` | MCP configuration |
+| `loading-message.tsx` | Loading states |
+| `file-upload.tsx` | File upload handler |
+| `file-search-setup.tsx` | Vector store config |
+| `websearch-config.tsx` | Web search settings |
+| `sport-platform-config.tsx` | Sport/platform config |
+| `usage-display.tsx` | Token usage display |
+| `tools-panel.tsx` | Tools sidebar |
+| `panel-config.tsx` | Panel configuration |
+| `functions-view.tsx` | Function execution view |
+| `platform-selector.tsx` | Platform selection |
+| `sport-selector.tsx` | Sport selection |
+| `country-selector.tsx` | Country selector |
 
-### Stores
+### Site Components (`components/connectors/` → `components/site/connectors/`)
 
-| From | To |
-|------|-----|
-| `stores/useConversationStore.ts` | `stores/chat/useConversationStore.ts` |
-| `stores/useToolsStore.ts` | `stores/chat/useToolsStore.ts` |
+| File | Notes |
+|------|-------|
+| `ClaudeConnectionCard.tsx` | Claude connection UI |
+| `ConnectInstructions.tsx` | MCP setup instructions |
+| `ConsentScreen.tsx` | OAuth consent screen |
 
-### Libraries
+### Stores (`stores/` → `stores/chat/`)
 
-| From | To |
-|------|-----|
-| `lib/assistant.ts` | `lib/chat/assistant.ts` |
-| `lib/prompts/*` | `lib/chat/prompts/*` |
-| `lib/tools/*` | `lib/chat/tools/*` |
+| File | Notes |
+|------|-------|
+| `useConversationStore.ts` | Chat conversation state |
+| `useToolsStore.ts` | Tools configuration state |
 
-### Files to Delete
+### Libraries (`lib/` → `lib/chat/`)
+
+| File | Notes |
+|------|-------|
+| `assistant.ts` | Chat assistant logic |
+| `prompts/*` | System prompts |
+| `tools/*` | Tool definitions |
+| `league-mapper.ts` | ✅ Moved from `lib/onboarding/` |
+
+### New Files Created
+
+| Path | Purpose |
+|------|---------|
+| `stores/chat/useLeaguesStore.ts` | Simplified store for chat league data (replaces onboarding store) |
+
+### Files Deleted ✅
 
 | Path | Reason |
 |------|--------|
-| `components/onboarding/*` | Wizard removed |
+| `components/onboarding/*` (10 files) | Wizard removed |
 | `stores/useOnboardingStore.ts` | Wizard removed |
-| `lib/onboarding/*` | Wizard removed |
+| `lib/onboarding/` (entire folder) | Wizard removed |
 | `app/api/onboarding/leagues/route.ts` | Deprecated |
+| `app/api/onboarding/status/route.ts` | Wizard removed |
+| `app/api/onboarding/platform-selection/route.ts` | Wizard removed |
 
 ---
 
@@ -367,4 +549,4 @@ Response:
 
 ---
 
-*Last updated: 2025-12-29 (Step 1 complete)*
+*Last updated: 2025-12-29 (Phase 1 complete — all 8 steps done)*
