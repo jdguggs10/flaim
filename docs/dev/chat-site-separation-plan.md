@@ -42,7 +42,7 @@ Note: Default team support is intentionally Step 1 to reduce downstream rework i
 ### Directory Layout
 
 ```
-openai/
+web/
 ├── app/
 │   ├── (site)/                    # Site route group
 │   │   ├── page.tsx               # Landing (/)
@@ -57,7 +57,7 @@ openai/
 │   │
 │   ├── api/
 │   │   ├── auth/                  # PLATFORM (site owns)
-│   │   ├── onboarding/            # PLATFORM (site owns)
+│   │   ├── espn/                  # PLATFORM (site owns) - league management
 │   │   ├── oauth/                 # PLATFORM (site owns)
 │   │   └── chat/                  # CHAT-ONLY APIs
 │   │       ├── turn_response/
@@ -132,7 +132,7 @@ Based on the response, show an **inline banner** (not modal):
 - ✅ Add `is_default` boolean column to `espn_leagues` table in Supabase (one default per user)
 - ✅ Update `/api/auth/espn/status` to return `{ hasCredentials, hasLeagues, hasDefaultTeam }`
 - ✅ Update `/leagues` page to allow setting a default league
-- ✅ Add `POST /api/onboarding/espn/leagues/default` endpoint
+- ✅ Add `POST /api/espn/leagues/default` endpoint
 
 **Files created/modified:**
 - `docs/migrations/004_default_league_column.sql` (run manually in Supabase)
@@ -141,7 +141,7 @@ Based on the response, show an **inline banner** (not modal):
 - `workers/auth-worker/src/index.ts` — added `/leagues/default` endpoint
 - `openai/lib/espn-types.ts` — added `isDefault` to frontend type
 - `openai/app/api/auth/espn/status/route.ts` — returns full setup status
-- `openai/app/api/onboarding/espn/leagues/default/route.ts` — new proxy route
+- `openai/app/api/espn/leagues/default/route.ts` — new proxy route
 - `openai/app/leagues/page.tsx` — star icon for default toggle
 
 **Known limitations (acceptable for V1):**
@@ -224,7 +224,7 @@ Moved API routes under `app/api/chat/`:
 
 Created `stores/chat/useLeaguesStore.ts` — a simplified store for chat that:
 - Fetches setup status via `GET /api/auth/espn/status`
-- Fetches leagues via `GET /api/onboarding/espn/leagues`
+- Fetches leagues via `GET /api/espn/leagues`
 - Manages active league selection
 - No wizard/onboarding step logic
 
@@ -269,12 +269,12 @@ Created `stores/chat/useLeaguesStore.ts` — a simplified store for chat that:
 - `app/api/onboarding/platform-selection/route.ts`
 
 **API routes kept** (used by /leagues page):
-- `app/api/onboarding/espn/leagues/route.ts`
-- `app/api/onboarding/espn/leagues/default/route.ts`
-- `app/api/onboarding/espn/leagues/[leagueId]/team/route.ts`
-- `app/api/onboarding/espn/auto-pull/route.ts`
+- `app/api/espn/leagues/route.ts`
+- `app/api/espn/leagues/default/route.ts`
+- `app/api/espn/leagues/[leagueId]/team/route.ts`
+- `app/api/espn/auto-pull/route.ts`
 
-> **TODO (Phase 2):** Consider renaming `/api/onboarding/espn/*` → `/api/espn/*` or `/api/leagues/*` since "onboarding" is a misnomer now that the wizard is gone. These are platform APIs for league management.
+> ✅ **DONE:** Renamed `/api/espn/*` → `/api/espn/*` since "onboarding" was a misnomer.
 
 **Inline banner behavior:**
 | Condition | Banner Message |
@@ -482,7 +482,7 @@ Response:
 ### Get Leagues
 
 ```
-GET /api/onboarding/espn/leagues
+GET /api/espn/leagues
 
 Response:
 {
@@ -502,7 +502,7 @@ Response:
 ### Set Default League
 
 ```
-POST /api/onboarding/espn/leagues/default
+POST /api/espn/leagues/default
 
 Request:
 {
@@ -550,3 +550,29 @@ Response:
 ---
 
 *Last updated: 2025-12-29 (Phase 1 complete — all 8 steps done)*
+
+---
+
+## Post-Phase 1 Cleanup
+
+### Renamed `/api/espn/*` → `/api/espn/*`
+
+The "onboarding" prefix was misleading after wizard removal. Updated:
+- `app/api/espn/leagues/route.ts`
+- `app/api/espn/leagues/default/route.ts`
+- `app/api/espn/leagues/[leagueId]/team/route.ts`
+- `app/api/espn/auto-pull/route.ts`
+
+Updated fetch calls in:
+- `app/(site)/leagues/page.tsx`
+- `stores/chat/useLeaguesStore.ts`
+
+### Renamed `openai/` → `web/`
+
+The "openai" folder name was a holdover from the starter template. Renamed to `web/` for clarity.
+
+Updated:
+- `package.json` (workspaces and scripts)
+- `vercel.json` (outputDirectory)
+- `tsconfig.json` (exclude)
+- `CLAUDE.md` (architecture section)

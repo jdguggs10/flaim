@@ -1,7 +1,7 @@
 {
   "name": "auth-worker",
   "version": "1.0.0",
-  "description": "Platform-agnostic credential storage worker for FLAIM",
+  "description": "Platform-agnostic credential storage worker for Flaim",
   "engines": {
     "node": "24.x"
   },

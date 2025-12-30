@@ -16,7 +16,7 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "FLAIM - Fantasy League AI Manager",
+  title: "Flaim - Fantasy League AI Connector",
   description: "Connect your AI assistant to ESPN fantasy sports",
   icons: {
     icon: "/favicon.ico",
@@ -36,7 +36,7 @@ export default function RootLayout({
             {/* Site header */}
             <header className="flex justify-between items-center p-4 bg-white border-b">
               <Link href="/" className="text-xl font-bold hover:opacity-80 transition-opacity">
-                FLAIM
+                Flaim
               </Link>
               <div className="flex items-center gap-4">
                 <SignedOut>

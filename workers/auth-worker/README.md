@@ -1,6 +1,6 @@
 # Auth Worker
 
-Supabase-based credential storage worker for FLAIM.
+Supabase-based credential storage worker for Flaim.
 
 ## Overview
 
@@ -45,7 +45,7 @@ wrangler secret put SUPABASE_SERVICE_KEY --env prod
 ```
 
 ### 3. Local Development
-Create `.env.local` in the `openai` directory:
+Create `.env.local` in the `web` directory:
 ```bash
 SUPABASE_URL=https://your-project-ref.supabase.co
 SUPABASE_SERVICE_KEY=your-service-role-key

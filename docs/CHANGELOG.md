@@ -7,7 +7,7 @@ Follow Keep a Changelog; SemVer applies. Planning docs live in `docs/dev`.
 ## [7.1.0] - 2025-12-28
 
 ### 🤖 ChatGPT Direct Access - Now Working!
-Users can connect FLAIM to ChatGPT as a custom MCP connector with OAuth 2.1, bringing their own subscription.
+Users can connect Flaim to ChatGPT as a custom MCP connector with OAuth 2.1, bringing their own subscription.
 
 ### OpenAI ChatGPT OAuth Support
 - **Added**: ChatGPT redirect URIs to OAuth allowlist.
@@ -19,7 +19,7 @@ Users can connect FLAIM to ChatGPT as a custom MCP connector with OAuth 2.1, bri
 ## [7.0.0] - 2025-12-28
 
 ### 🎉 Claude Direct Access - Now Working!
-Users can now connect FLAIM to Claude.ai or Claude Desktop as a custom MCP connector. This enables "bring your own Claude subscription" usage, shifting AI costs to users while providing full access to ESPN fantasy data.
+Users can now connect Flaim to Claude.ai or Claude Desktop as a custom MCP connector. This enables "bring your own Claude subscription" usage, shifting AI costs to users while providing full access to ESPN fantasy data.
 
 ### OAuth 2.1 for Claude Direct Access
 - **Added**: Full MCP OAuth 2.1 implementation for Claude Desktop/Claude.ai integration.

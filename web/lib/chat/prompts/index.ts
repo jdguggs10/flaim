@@ -1,5 +1,5 @@
 /**
- * FLAIM Prompts
+ * Flaim Prompts
  *
  * Central export for all LLM prompt-related content.
  *

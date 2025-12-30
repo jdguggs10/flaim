@@ -2,7 +2,7 @@
 
 ## Vision
 
-Shift FLAIM from a "chat app with AI assistant" to a "connector platform" where users bring their own Claude/ChatGPT subscription. The built-in chat becomes a hidden developer/beta feature.
+Shift Flaim from a "chat app with AI assistant" to a "connector platform" where users bring their own Claude/ChatGPT subscription. The built-in chat becomes a hidden developer/beta feature.
 
 ## Goals
 

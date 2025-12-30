@@ -55,14 +55,14 @@ export default function ConnectInstructions() {
     },
     {
       title: 'Add New Connector',
-      description: 'Click "Add Connector" or "Add MCP Server" and enter one of the FLAIM MCP URLs:',
+      description: 'Click "Add Connector" or "Add MCP Server" and enter one of the Flaim MCP URLs:',
       code: 'https://api.flaim.app/football/mcp',
       codeAlt: 'https://api.flaim.app/baseball/mcp',
     },
     {
       title: 'Authenticate',
       description:
-        'Claude or ChatGPT will redirect you to FLAIM to sign in and authorize access. Click "Allow" to grant permission.',
+        'Claude or ChatGPT will redirect you to Flaim to sign in and authorize access. Click "Allow" to grant permission.',
     },
     {
       title: 'Start Using',
@@ -81,7 +81,7 @@ export default function ConnectInstructions() {
           <div>
             <CardTitle className="text-lg">How to Connect Claude or ChatGPT</CardTitle>
             <CardDescription>
-              Step-by-step guide to connect your FLAIM account to Claude or ChatGPT
+              Step-by-step guide to connect your Flaim account to Claude or ChatGPT
             </CardDescription>
           </div>
           {isOpen ? (
@@ -144,7 +144,7 @@ export default function ConnectInstructions() {
             <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
               <p className="text-sm text-blue-800 dark:text-blue-300">
                 <strong>Note:</strong> Direct access uses your Claude or ChatGPT subscription.
-                You pay for AI usage through the platform, while FLAIM provides the fantasy data.
+                You pay for AI usage through the platform, while Flaim provides the fantasy data.
               </p>
             </div>
           </CardContent>

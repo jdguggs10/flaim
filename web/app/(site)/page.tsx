@@ -95,7 +95,7 @@ export default function LandingPage() {
             </div>
           </div>
           <p className="text-sm text-muted-foreground">
-            Use your existing AI subscription. FLAIM provides the fantasy data connection.
+            Use your existing AI subscription. Flaim provides the fantasy data connection.
           </p>
         </div>
       </section>

@@ -185,7 +185,7 @@ export default function Assistant() {
         <div className="max-w-md text-center space-y-6">
           <div className="space-y-2">
             <h2 className="text-2xl font-bold text-foreground">
-              Welcome to FLAIM
+              Welcome to Flaim
             </h2>
             <p className="text-muted-foreground">
               Your Fantasy League AI Assistant

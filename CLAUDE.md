@@ -11,7 +11,7 @@
 - One new concept at a time; aim for changes doable in 1–2 hours and easy to revert.
 
 ## Architecture (at a glance)
-- Vercel Frontend: Next.js app in `/openai` (chat UI, onboarding, usage tracking).
+- Vercel Frontend: Next.js app in `/web` (site pages, chat UI, usage tracking).
 - Cloudflare Workers: Auth worker (`/workers/auth-worker`), Sport MCP workers (`/workers/baseball-espn-mcp`, `/workers/football-espn-mcp`).
 - Supabase: Data: Supabase Postgres tables `espn_credentials`, `espn_leagues`.
 - LLM: OpenAI's new Responses API; NOT chat completions! DO NOT USE CHAT COMPLETIONS!

@@ -52,7 +52,7 @@ export default function ConsentScreen({
         </div>
         <CardTitle>Authorize Connector</CardTitle>
         <CardDescription>
-          An AI assistant is requesting access to your FLAIM account
+          An AI assistant is requesting access to your Flaim account
         </CardDescription>
       </CardHeader>
 

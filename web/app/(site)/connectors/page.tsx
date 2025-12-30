@@ -82,7 +82,7 @@ export default function ConnectorsPage() {
           <div className="text-center space-y-2">
             <h1 className="text-2xl font-semibold">Sign in to manage connectors</h1>
             <p className="text-muted-foreground">
-              Sign in to connect your FLAIM account to AI assistants like Claude or ChatGPT.
+              Sign in to connect your Flaim account to AI assistants like Claude or ChatGPT.
             </p>
           </div>
           <SignIn routing="hash" fallbackRedirectUrl="/connectors" />
@@ -121,7 +121,7 @@ export default function ConnectorsPage() {
             <h1 className="text-2xl font-semibold">Connectors</h1>
           </div>
           <p className="text-muted-foreground">
-            Connect your FLAIM account to AI assistants to access your fantasy sports data.
+            Connect your Flaim account to AI assistants to access your fantasy sports data.
           </p>
         </div>
 
@@ -192,12 +192,12 @@ export default function ConnectorsPage() {
         <div className="text-sm text-muted-foreground space-y-2 pt-4 border-t">
           <p>
             <strong>How it works:</strong> When you connect Claude or ChatGPT, the assistant can access your ESPN fantasy
-            league data through FLAIM. Your ESPN credentials are stored securely and never shared
+            league data through Flaim. Your ESPN credentials are stored securely and never shared
             with the assistant directly.
           </p>
           <p>
             <strong>Privacy:</strong> Assistants only see the fantasy data you authorize (league info,
-            rosters, matchups). Your ESPN login cookies remain encrypted in FLAIM.
+            rosters, matchups). Your ESPN login cookies remain encrypted in Flaim.
           </p>
         </div>
       </div>

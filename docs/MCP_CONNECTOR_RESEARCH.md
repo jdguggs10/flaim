@@ -4,14 +4,14 @@
 >
 > **Next Phase**: Optional API integrations (Anthropic/Gemini) if needed.
 >
-> **Purpose**: This document summarizes how to connect FLAIM's MCP workers to AI platforms, with emphasis on direct access to shift model costs to end users.
+> **Purpose**: This document summarizes how to connect Flaim's MCP workers to AI platforms, with emphasis on direct access to shift model costs to end users.
 >
 > **Definitions**:
-> - **Developer**: You, the FLAIM maintainer operating the domain, workers, and OAuth flow.
+> - **Developer**: You, the Flaim maintainer operating the domain, workers, and OAuth flow.
 > - **End user**: The person using Claude and connecting your MCP server.
 >
 > **Last Updated**: December 28, 2025
-> **Research Context**: FLAIM uses Cloudflare Workers implementing MCP (Model Context Protocol) for ESPN fantasy sports data. Current architecture uses OpenAI Responses API with custom MCP workers.
+> **Research Context**: Flaim uses Cloudflare Workers implementing MCP (Model Context Protocol) for ESPN fantasy sports data. Current architecture uses OpenAI Responses API with custom MCP workers.
 
 ---
 
@@ -19,7 +19,7 @@
 
 1. [Executive Summary](#executive-summary)
 2. [Two Integration Paths](#two-integration-paths)
-3. [Current FLAIM Architecture](#current-flaim-architecture)
+3. [Current Flaim Architecture](#current-flaim-architecture)
 4. [Direct Access (Claude + ChatGPT) Implementation Notes](#direct-access-claude--chatgpt-implementation-notes)
 5. [Implementation Phases](#next-steps-phased)
    - [Phase 6: OpenAI ChatGPT Integration](#phase-6--openai-chatgpt-integration-implemented)
@@ -42,7 +42,7 @@ Research identified **two distinct integration paths**. A strategic review again
 
 *   **Claude's Research Findings**: Correctly identified that Path B is *technically feasible* on Anthropic/Gemini without Dynamic Client Registration (DCR), making it simpler than OpenAI. The research argued for Path B primarily to shift AI costs to the user's subscription.
 *   **Cost Pressure**: At modest user counts, per-token costs can become a material monthly expense. This makes a "bring your own Claude account" option attractive despite added OAuth and support complexity.
-*   **Architectural Counter-Argument**: Path B fundamentally changes FLAIM from a "Web App" to a "Public API Provider."
+*   **Architectural Counter-Argument**: Path B fundamentally changes Flaim from a "Web App" to a "Public API Provider."
     *   **Risk**: You lose control over the UI/UX. Debugging user issues inside a 3rd-party chat interface (where you cannot see logs or errors easily) creates a high support burden.
     *   **Complexity**: Requires Clerk to act as a robust OAuth provider for external clients, introducing edge cases (token audience, scope validation) not present in the current internal-only JWT flow.
     *   **Guideline Violation**: This violates the "Solo Developer Guidelines" to favor "boring, stable solutions" and "avoid over-engineering."
@@ -59,18 +59,18 @@ Research identified **two distinct integration paths**. A strategic review again
 ### Monetization Option: Split Access by Cost
 
 To manage token costs, consider offering **two access tiers**:
-- **Paid tier**: End users use the full FLAIM app with your API keys (you pay tokens), including richer UI and support.
+- **Paid tier**: End users use the full Flaim app with your API keys (you pay tokens), including richer UI and support.
 - **Free tier**: End users use Claude/ChatGPT direct access (BYO subscription) to generate interest while shifting model cost to users.
 This keeps a controlled, premium experience for paying users while providing a lower-cost acquisition path.
 
-### Minimum FLAIM Domain UI for Direct Access
+### Minimum Flaim Domain UI for Direct Access
 
 Even with Claude as the chat UI, you (the developer) still need a small web surface for end users:
 - **Sign in / account**: Clerk login so you can tie a Claude connection to a real user.
 - **ESPN credentials**: Form to enter SWID and espn_s2; stored in Supabase.
 - **League selection**: Choose league IDs and team to avoid ambiguous tool calls.
 - **Connectors page**: Button to start Claude/ChatGPT OAuth, plus status (connected/disconnected).
-- **Consent screen**: "Allow Claude to access your FLAIM data" before redirecting back to Claude.
+- **Consent screen**: "Allow Claude to access your Flaim data" before redirecting back to Claude.
 - **Disconnect / revoke**: Allow users to revoke Claude access and rotate tokens.
 - **Plan messaging**: Explain free direct access vs paid in-app chat (cost rationale).
 - **Support / troubleshooting**: Basic guidance when Claude says "connector failed."
@@ -100,7 +100,7 @@ Suggested route layout (developer-owned):
 - `POST /auth/oauth/revoke-all`: Internal API to revoke all tokens for a user (UI disconnect).
 - `GET /settings/espn`: SWID/espn_s2 entry and league selection.
 
-Note: `/revoke` is the OAuth spec endpoint used by Claude/ChatGPT. `/auth/oauth/revoke-all` is an internal admin endpoint for the FLAIM UI to disconnect all tokens.
+Note: `/revoke` is the OAuth spec endpoint used by Claude/ChatGPT. `/auth/oauth/revoke-all` is an internal admin endpoint for the Flaim UI to disconnect all tokens.
 
 Minimal data model (developer-owned):
 - `oauth_codes`: one-time auth codes issued after consent.
@@ -128,7 +128,7 @@ Lightweight security checklist (reasonable for a fantasy sports app):
 
 ### Compatibility Summary (Updated December 28, 2025)
 
-| Platform | Direct Access Auth | FLAIM Status | Notes |
+| Platform | Direct Access Auth | Flaim Status | Notes |
 |----------|-------------------|--------------|-------|
 | **Anthropic Claude** | OAuth 2.1 + DCR | ✅ **Working** | Verified 2025-12-28 |
 | **OpenAI ChatGPT** | OAuth 2.1 + DCR + `securitySchemes` | ✅ **Working** | Verified 2025-12-28 |
@@ -157,7 +157,7 @@ Lightweight security checklist (reasonable for a fantasy sports app):
 
 ```
 ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│  Claude.ai  │────▶│  FLAIM      │────▶│  MCP Worker │
+│  Claude.ai  │────▶│  Flaim      │────▶│  MCP Worker │
 │  or Desktop │     │  OAuth      │     │             │
 └─────────────┘     └─────────────┘     └─────────────┘
 ```
@@ -166,11 +166,11 @@ Lightweight security checklist (reasonable for a fantasy sports app):
 - **OAuth required**: Must identify user to load their ESPN credentials
 - **Effort**: 2-4 days
 - **User experience**: End users interact through Claude/Gemini directly
-- **Still need FLAIM UI**: You (the developer) must host a small account/consent UI on your domain so end users can (a) connect Claude via OAuth, (b) manage connector status, and (c) enter SWID/espn_s2 to store in Supabase. Claude cannot capture these credentials directly.
+- **Still need Flaim UI**: You (the developer) must host a small account/consent UI on your domain so end users can (a) connect Claude via OAuth, (b) manage connector status, and (c) enter SWID/espn_s2 to store in Supabase. Claude cannot capture these credentials directly.
 
 ---
 
-## Current FLAIM Architecture
+## Current Flaim Architecture
 
 ### Existing Components
 
@@ -249,7 +249,7 @@ https://claude.com/api/mcp/auth_callback  (future)
 
 5. Claude starts OAuth Authorization Code flow with PKCE.
 
-**Required OAuth Endpoints** (FLAIM implementation):
+**Required OAuth Endpoints** (Flaim implementation):
 | Endpoint | Path | Purpose |
 |----------|------|---------|
 | Protected Resource Metadata | `/{sport}/.well-known/oauth-protected-resource` | Points to auth server |
@@ -261,7 +261,7 @@ https://claude.com/api/mcp/auth_callback  (future)
 
 **Note on Fallback URLs**: The MCP spec defines fallback paths if metadata discovery fails:
 - `/authorize`, `/token`, `/register` at the authorization base URL.
-- FLAIM supports both `/auth/*` prefixed and base paths.
+- Flaim supports both `/auth/*` prefixed and base paths.
 
 **Claude Outbound IPs** (for optional allowlisting) [Source: Claude Docs](https://docs.anthropic.com/en/docs/resources/ip-addresses):
 ```
@@ -345,8 +345,8 @@ Status: Complete.
 ## End-to-End Testing Guide
 
 ### Prerequisites
-1. FLAIM app deployed to production or preview environment
-2. ESPN credentials configured in FLAIM (`/settings/espn`)
+1. Flaim app deployed to production or preview environment
+2. ESPN credentials configured in Flaim (`/settings/espn`)
 3. At least one league with a team selected
 4. Claude Pro subscription (for Claude.ai) or Claude Desktop app
 
@@ -574,7 +574,7 @@ ORDER BY created_at DESC;
 
 - [x] `/connectors`: show Claude connection status; "Connect Claude" button; "Disconnect".
 - [x] `/settings/espn`: SWID + espn_s2 form; league selection + default team.
-- [x] Consent screen: "Claude will access your ESPN data via FLAIM."
+- [x] Consent screen: "Claude will access your ESPN data via Flaim."
 - [x] Plan messaging: Paid in-app chat vs free Claude connector (BYO tokens).
 - [x] Persist default league/team in Supabase so Claude requests always resolve without frontend state.
 
@@ -604,7 +604,7 @@ ORDER BY created_at DESC;
 
 > **Status**: ✅ Completed and verified (2025-12-28).
 
-FLAIM now supports ChatGPT direct access via MCP with OAuth 2.1. The implementation mirrors Claude’s flow with ChatGPT-specific requirements layered on top.
+Flaim now supports ChatGPT direct access via MCP with OAuth 2.1. The implementation mirrors Claude’s flow with ChatGPT-specific requirements layered on top.
 
 #### What’s Implemented
 
@@ -618,7 +618,7 @@ FLAIM now supports ChatGPT direct access via MCP with OAuth 2.1. The implementat
 
 #### Auth UI Trigger (ChatGPT)
 
-ChatGPT requires both HTTP-level and MCP-level auth metadata. FLAIM returns an array of Bearer challenges on the error object:
+ChatGPT requires both HTTP-level and MCP-level auth metadata. Flaim returns an array of Bearer challenges on the error object:
 
 ```json
 {
