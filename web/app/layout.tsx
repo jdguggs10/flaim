@@ -72,6 +72,12 @@ export default function RootLayout({
                   >
                     Account
                   </Link>
+                  <Link
+                    href="/extension"
+                    className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    Extension
+                  </Link>
                   <UserButton />
                 </SignedIn>
               </div>

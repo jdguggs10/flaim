@@ -40,6 +40,16 @@ import {
   OAuthEnv,
 } from './oauth-handlers';
 import { OAuthStorage } from './oauth-storage';
+import {
+  handleCreatePairingCode,
+  handlePairExtension,
+  handleSyncCredentials,
+  handleGetExtensionStatus,
+  handleGetConnection,
+  handleRevokeToken,
+  validateExtensionToken,
+  ExtensionEnv,
+} from './extension-handlers';
 
 // Rate limit configuration
 const RATE_LIMIT_PER_DAY = 200;
@@ -390,6 +400,90 @@ export default {
       // Revocation endpoint
       if (pathname === '/revoke' && request.method === 'POST') {
         return handleRevoke(request, env as OAuthEnv, corsHeaders);
+      }
+
+      // ================================================================
+      // Chrome Extension Endpoints
+      // ================================================================
+
+      // Generate pairing code (requires Clerk auth)
+      if (pathname === '/extension/code' && request.method === 'POST') {
+        const { userId, error: authError } = await getVerifiedUserId(request, env);
+        if (!userId) {
+          return new Response(JSON.stringify({
+            error: 'unauthorized',
+            error_description: authError || 'Authentication required',
+          }), {
+            status: 401,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders },
+          });
+        }
+        return handleCreatePairingCode(env as ExtensionEnv, userId, corsHeaders);
+      }
+
+      // Exchange pairing code for token (no auth - code IS auth)
+      if (pathname === '/extension/pair' && request.method === 'POST') {
+        return handlePairExtension(request, env as ExtensionEnv, corsHeaders);
+      }
+
+      // Sync ESPN credentials (requires extension token)
+      if (pathname === '/extension/sync' && request.method === 'POST') {
+        const tokenResult = await validateExtensionToken(request, env as ExtensionEnv);
+        if (!tokenResult.valid || !tokenResult.userId || !tokenResult.token) {
+          return new Response(JSON.stringify({
+            error: 'unauthorized',
+            error_description: tokenResult.error || 'Invalid token',
+          }), {
+            status: 401,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders },
+          });
+        }
+        return handleSyncCredentials(request, env as ExtensionEnv, tokenResult.userId, tokenResult.token, corsHeaders);
+      }
+
+      // Get extension status (requires extension token)
+      if (pathname === '/extension/status' && request.method === 'GET') {
+        const tokenResult = await validateExtensionToken(request, env as ExtensionEnv);
+        if (!tokenResult.valid || !tokenResult.userId || !tokenResult.token) {
+          return new Response(JSON.stringify({
+            error: 'unauthorized',
+            error_description: tokenResult.error || 'Invalid token',
+          }), {
+            status: 401,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders },
+          });
+        }
+        return handleGetExtensionStatus(env as ExtensionEnv, tokenResult.userId, tokenResult.token, corsHeaders);
+      }
+
+      // Get extension connection for web UI (requires Clerk auth)
+      if (pathname === '/extension/connection' && request.method === 'GET') {
+        const { userId, error: authError } = await getVerifiedUserId(request, env);
+        if (!userId) {
+          return new Response(JSON.stringify({
+            error: 'unauthorized',
+            error_description: authError || 'Authentication required',
+          }), {
+            status: 401,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders },
+          });
+        }
+        return handleGetConnection(env as ExtensionEnv, userId, corsHeaders);
+      }
+
+      // Revoke extension token (requires Clerk auth)
+      if (pathname === '/extension/token' && request.method === 'DELETE') {
+        const { userId, error: authError } = await getVerifiedUserId(request, env);
+        if (!userId) {
+          return new Response(JSON.stringify({
+            error: 'unauthorized',
+            error_description: authError || 'Authentication required',
+          }), {
+            status: 401,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders },
+          });
+        }
+        return handleRevokeToken(request, env as ExtensionEnv, userId, corsHeaders);
       }
 
       // ESPN credential management endpoints

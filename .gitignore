@@ -34,6 +34,14 @@ build/
 .gemini/
 .windsurf/
 
+# AI Agent documentation files (personal notes)
+*CLAUDE*.md
+*claude*.md
+*GEMINI*.md
+*gemini*.md
+*AGENTS*.md
+*agents*.md
+
 # OS files
 .DS_Store
 Thumbs.db

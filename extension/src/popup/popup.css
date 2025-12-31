@@ -1,0 +1,210 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #1f2937;
+  background: #ffffff;
+  width: 320px;
+  min-height: 200px;
+}
+
+.popup {
+  padding: 16px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.header h1 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.status-badge.connected {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.status-badge.disconnected {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.message {
+  padding: 12px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.message.info {
+  background: #eff6ff;
+  color: #1e40af;
+}
+
+.message.success {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.message.error {
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.message.warning {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.input-group label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #374151;
+}
+
+.input-group input {
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 16px;
+  font-family: monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  text-align: center;
+}
+
+.input-group input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.15s, opacity 0.15s;
+}
+
+.button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.button.primary {
+  background: #3b82f6;
+  color: white;
+}
+
+.button.primary:hover:not(:disabled) {
+  background: #2563eb;
+}
+
+.button.secondary {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.button.secondary:hover:not(:disabled) {
+  background: #e5e7eb;
+}
+
+.button.success {
+  background: #22c55e;
+  color: white;
+}
+
+.button.success:hover:not(:disabled) {
+  background: #16a34a;
+}
+
+.button.full-width {
+  width: 100%;
+}
+
+.link {
+  color: #3b82f6;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.link:hover {
+  text-decoration: underline;
+}
+
+.footer {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid #e5e7eb;
+  font-size: 12px;
+  color: #6b7280;
+  text-align: center;
+}
+
+.spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.75s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.icon {
+  width: 16px;
+  height: 16px;
+}
+
+.icon.large {
+  width: 24px;
+  height: 24px;
+}
