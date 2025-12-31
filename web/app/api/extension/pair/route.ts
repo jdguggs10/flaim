@@ -30,7 +30,6 @@ export async function POST(request: NextRequest) {
     // Vercel/Next.js edge provides x-forwarded-for, x-real-ip headers
     const clientIP = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
                      request.headers.get('x-real-ip') ||
-                     request.ip ||
                      '';
 
     const workerRes = await fetch(`${authWorkerUrl}/extension/pair`, {
