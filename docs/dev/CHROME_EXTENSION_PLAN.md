@@ -89,6 +89,48 @@ These edge cases can be tested if desired:
 - [ ] Privacy policy at `flaim.app/privacy`
 - [ ] Remove localhost from manifest (see below)
 - [ ] Screenshots (1280x800 or 640x400)
+- [ ] Prepare CWS data disclosure answers (see below)
+
+#### Policy Compliance Assessment
+
+**Verdict: Should be approved** - Similar extensions exist (Sync Your Cookie, SyncMyCookie, password managers like Bitwarden) that read cookies and sync to external servers.
+
+Our extension complies because:
+- ✅ **Prominent disclosure** - Entire purpose is syncing ESPN credentials
+- ✅ **User-initiated** - User clicks "Sync to Flaim", not automatic
+- ✅ **HTTPS transmission** - All API calls encrypted in transit
+- ✅ **Single purpose** - One clear function
+- ✅ **No third-party sale** - Data stays with Flaim
+- ✅ **Encryption at rest** - Supabase encrypts by default
+
+**Policy exception that applies**: Chrome allows cookie collection "to the extent required for a user-facing feature described prominently in the Product's Chrome Web Store page."
+
+#### Data the Extension Handles
+
+| Data | Source | Destination | Retention |
+|------|--------|-------------|-----------|
+| SWID cookie | espn.com | flaim.app → Supabase | Until user disconnects |
+| espn_s2 cookie | espn.com | flaim.app → Supabase | Until user disconnects |
+| Extension token | flaim.app | chrome.storage.local | Until user disconnects |
+
+#### CWS Data Use Certification Answers
+
+| Question | Answer |
+|----------|--------|
+| Personally identifiable info? | Yes - ESPN cookies identify user's account |
+| Authentication info? | Yes - ESPN session cookies |
+| Sell user data? | No |
+| Use for unrelated purposes? | No |
+| Transfer to third parties? | No (Flaim servers are first-party) |
+
+#### Permission Justifications
+
+| Permission | Justification Text |
+|------------|-------------------|
+| `cookies` | "Read ESPN authentication cookies (SWID, espn_s2) to sync fantasy league access to Flaim. This is the extension's core and only purpose." |
+| `storage` | "Store extension authentication token locally to maintain connection with Flaim." |
+| `host_permissions: espn.com` | "Access ESPN.com cookies for user authentication. Required for core functionality." |
+| `host_permissions: flaim.app` | "Communicate with Flaim API to sync credentials securely over HTTPS." |
 
 #### Remove localhost from manifest
 
@@ -109,16 +151,29 @@ Before Web Store submission, create production manifest without localhost:
 Update `vite.config.ts` to strip localhost in production builds.
 
 #### Privacy Policy Must Include
-- Extension reads ESPN cookies (SWID, espn_s2)
-- Data transmitted to flaim.app over HTTPS
-- Stored in Supabase with row-level security
-- User can disconnect anytime from /extension page
-- No data shared with third parties
+- What we collect: ESPN cookies (SWID, espn_s2) - session identifiers only
+- Why: To fetch user's fantasy league data on their behalf
+- How transmitted: HTTPS only, encrypted in transit
+- Where stored: Supabase (encrypted at rest, row-level security)
+- Retention: Until user disconnects from flaim.app/extension
+- User rights: Disconnect anytime, which revokes extension access
+- Third parties: No data sold or shared
+- Not affiliated with ESPN (use their data with user's explicit consent)
+- Contact info for privacy questions
 
 #### Store Listing
 - **Name**: Flaim - ESPN Fantasy Connector
 - **Category**: Productivity
 - **Description**: Automatically sync your ESPN fantasy credentials to Flaim without manual cookie extraction.
+- **Note**: Add "Not affiliated with ESPN" disclaimer
+
+#### Bug Fixes / Updates Process
+1. Bump `version` in manifest.json (e.g., "1.0.0" → "1.0.1")
+2. Run `npm run build` in extension/
+3. Zip `extension/dist/` folder
+4. Upload to CWS dashboard → Submit for review
+5. Updates typically reviewed faster (~hours to 1 day)
+6. Chrome auto-updates users within ~24 hours
 
 ---
 
