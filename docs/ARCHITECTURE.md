@@ -25,43 +25,11 @@ npm run dev
 ## Directory Structure
 
 ```
-extension/                  # Chrome extension (Manifest V3)
-├── dist/                   # Built output for Chrome
-├── src/
-│   ├── popup/              # React popup UI
-│   └── lib/                # API client, storage, ESPN cookie capture
-├── manifest.json           # Extension manifest
-└── vite.config.ts          # Build config (strips localhost in prod)
-
-web/
-├── app/
-│   ├── (site)/              # Site pages
-│   │   ├── page.tsx         # Landing (/)
-│   │   ├── leagues/         # League management (/leagues)
-│   │   ├── connectors/      # Connection status (/connectors)
-│   │   ├── extension/       # Extension setup + pairing (/extension)
-│   │   ├── privacy/         # Privacy policy (/privacy)
-│   │   ├── account/         # Account settings (/account)
-│   │   └── oauth/consent/   # OAuth consent screen
-│   │
-│   ├── (chat)/chat/         # Built-in chat UI (/chat) - secondary feature
-│   │
-│   └── api/
-│       ├── auth/            # Platform auth APIs
-│       ├── espn/            # League management APIs
-│       ├── extension/       # Extension pairing APIs (code, pair, sync, status, token)
-│       ├── oauth/           # OAuth APIs (status, revoke)
-│       └── chat/            # Chat-only APIs (turn_response, etc.)
-│
-├── components/
-│   ├── site/                # Site-only components
-│   ├── chat/                # Chat-only components
-│   └── ui/                  # Shared shadcn components
-│
-└── lib/chat/                # Chat libraries (secondary)
+web/                        # Next.js app (see web/README.md)
+workers/                    # Cloudflare Workers (see workers/README.md)
+extension/                  # Chrome extension (see extension/README.md)
+docs/                       # Documentation
 ```
-
-**Boundary rules:** Site and chat code are isolated. No cross-imports between `components/site/` and `components/chat/`. Both can use `components/ui/`.
 
 ## What Flaim Is
 
@@ -122,15 +90,11 @@ Users connect their own AI subscription to Flaim's MCP servers:
 
 **User flow**: Add MCP URL in Claude/ChatGPT → 401 triggers OAuth → user consents at `flaim.app/oauth/consent` → token exchange → tools available.
 
-See `docs/MCP_CONNECTOR_RESEARCH.md` for full implementation details.
+See `docs/archive/MCP_CONNECTOR_RESEARCH.md` for implementation history.
 
 ## MCP Tools
 
-Tools available via the MCP servers:
-
-- **Session**: `get_user_session` (both workers) — returns user's configured leagues, team IDs, current date/season.
-- **Baseball**: `get_espn_league_info`, `get_espn_team_roster`, `get_espn_matchups`.
-- **Football**: `get_espn_football_league_info`, `get_espn_football_team`, `get_espn_football_matchups`, `get_espn_football_standings`.
+Both MCP workers expose `get_user_session` plus sport-specific tools for league info, rosters, matchups, and standings. See `workers/README.md` for the full tool list and ESPN API reference.
 
 ## Security
 
@@ -142,7 +106,7 @@ Tools available via the MCP servers:
 - Extension tokens: 64-char hex, rotated on re-pair, revocable.
 - ESPN credentials: AES-256 encrypted at rest (Supabase default).
 
-**Critical**: Worker-to-worker calls must use `.workers.dev` URLs. Custom domain (`api.flaim.app`) causes 522 timeouts for intra-zone requests.
+See `workers/README.md` for worker-to-worker communication requirements.
 
 ## Data Flow
 
@@ -150,19 +114,6 @@ Tools available via the MCP servers:
 2. User adds leagues at `/leagues` → stored in Supabase.
 3. User connects Claude/ChatGPT → OAuth flow → token stored in Supabase.
 4. Claude/ChatGPT calls MCP tool → MCP worker fetches creds from auth-worker → calls ESPN → returns data.
-
-## Built-in Chat (Secondary Feature)
-
-The `/chat` page is gated by Clerk metadata and intended for testing:
-
-**Access control**: Users need `publicMetadata.chatAccess: true` in Clerk to access `/chat`. Set this in Clerk Dashboard → Users → [user] → Public metadata:
-```json
-{ "chatAccess": true }
-```
-
-Without this metadata, `/chat` redirects to the home page.
-
-**Debug mode**: Toggle in the tools panel to show raw JSON request/response and execution timing on tool calls. Useful for debugging MCP servers.
 
 ---
 
@@ -178,41 +129,8 @@ Without this metadata, `/chat` redirects to the home page.
 
 ### Secrets & Environment Variables
 
-**Local**: `web/.env.local` for frontend, worker vars via `wrangler dev`.
-
-**Preview/Prod**: Vercel for frontend; Cloudflare Dashboard → Worker → Settings → Variables & Secrets for workers.
-
-#### Frontend (`web/.env.local`)
-
-```
-OPENAI_API_KEY=...
-NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=...
-CLERK_SECRET_KEY=...
-NEXT_PUBLIC_AUTH_WORKER_URL=https://api.flaim.app/auth
-NEXT_PUBLIC_BASEBALL_ESPN_MCP_URL=https://api.flaim.app/baseball
-NEXT_PUBLIC_FOOTBALL_ESPN_MCP_URL=https://api.flaim.app/football
-```
-
-#### Auth Worker
-
-```
-SUPABASE_URL=...
-SUPABASE_SERVICE_KEY=sb_secret_...
-CLERK_SECRET_KEY=...
-ENVIRONMENT=prod|preview|dev
-NODE_ENV=production|development
-```
-
-#### MCP Workers (baseball/football)
-
-```
-AUTH_WORKER_URL=https://auth-worker.YOUR-ACCOUNT.workers.dev   # direct URL!
-CLERK_SECRET_KEY=... (optional)
-ENVIRONMENT=prod|preview|dev
-NODE_ENV=production|development
-```
-
-Ensure auth-worker `wrangler.jsonc` has `"workers_dev": true` in prod so the `.workers.dev` URL exists.
+- **Frontend**: `web/.env.local` (see `web/README.md`)
+- **Workers**: Via `wrangler dev` locally, Cloudflare Dashboard in prod (see `workers/README.md`)
 
 ### DNS for Custom Routes
 
@@ -245,22 +163,8 @@ Used by `.github/workflows/deploy-workers.yml`.
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
-| 500s in prod | Missing Cloudflare secrets | Add secrets in dashboard |
-| 404s on custom routes | Worker expects stripped path | Remove `/auth`, `/baseball`, `/football` prefixes |
-| 522 timeouts (worker-to-worker) | Using custom domain for internal calls | Use `.workers.dev` URL for `AUTH_WORKER_URL` |
-| 424 from Responses API | Wrong MCP endpoint | Ensure `server_url` ends with `/mcp` |
 | Double slashes in URLs | Trailing slash in env vars | Remove trailing slashes |
 | Extension "Failed to fetch" | Production build loaded locally | Rebuild with `NODE_ENV=development npm run build` |
 | Extension won't pair | Code expired or invalid | Generate new code at `/extension` |
 
-### ESPN API Reference
-
-Host: `https://lm-api-reads.fantasy.espn.com`
-
-Required headers:
-```
-Cookie: SWID=...; espn_s2=...
-Accept: application/json
-X-Fantasy-Source: kona
-X-Fantasy-Platform: kona-web-2.0.0
-```
+See `workers/README.md` for worker-specific troubleshooting (522s, 404s, 500s).

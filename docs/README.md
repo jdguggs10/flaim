@@ -58,6 +58,9 @@ Solo developer, hobby project. Priorities:
 |----------|-------------|
 | [Architecture](ARCHITECTURE.md) | System design, deployment, troubleshooting |
 | [Changelog](CHANGELOG.md) | Release history |
+| [Web App](../web/README.md) | Next.js routes, components, environment |
+| [Workers](../workers/README.md) | Cloudflare Workers, MCP tools, ESPN API |
+| [Extension](../extension/README.md) | Chrome extension build, pairing, CWS |
 
 - **`docs/archive/`**: Historical documents for completed features
 
