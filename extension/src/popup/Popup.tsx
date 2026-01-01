@@ -188,6 +188,7 @@ export default function Popup() {
       case 'paired_no_espn':
         return (
           <div className="content">
+            {error && <div className="message error">{error}</div>}
             <div className="message warning">
               Please log into ESPN.com first, then come back here to sync your credentials.
             </div>
@@ -203,6 +204,8 @@ export default function Popup() {
                 const espnCreds = await getEspnCredentials();
                 if (espnCreds && validateCredentials(espnCreds)) {
                   setState('ready');
+                } else {
+                  setError('ESPN cookies not found. Make sure you\'re logged into espn.com');
                 }
               }}
             >

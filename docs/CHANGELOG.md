@@ -4,6 +4,22 @@ Follow Keep a Changelog; SemVer applies. Planning docs live in `docs/dev`.
 
 ## [Unreleased]
 
+### Chrome Extension
+- **Added**: Chrome extension for automatic ESPN credential capture (Manifest V3, React popup).
+- **Added**: Extension pairing flow with 6-character codes (10-minute expiry).
+- **Added**: `/extension` page for pairing code generation and connection management.
+- **Added**: Extension API routes (`/api/extension/*`) proxying to auth-worker.
+- **Added**: `extension_pairing_codes` and `extension_tokens` tables in Supabase.
+- **Added**: Rate limiting for extension pairing (5 codes/hour per user, 10 attempts/10min per IP).
+- **Added**: Build-time localhost stripping in `vite.config.ts` for production builds.
+- **Added**: Dev/prod detection via `chrome.management.getSelf()` API.
+- **Submitted**: Chrome Web Store submission (Dec 31, 2025) - awaiting review.
+
+### Privacy & Compliance
+- **Added**: Privacy policy page at `/privacy` for Chrome Web Store compliance.
+- **Added**: ESPN non-affiliation disclaimer.
+- **Added**: Data retention and user rights documentation.
+
 ### Chat Debug Mode
 - **Added**: Debug mode toggle in chat tools panel for MCP debugging.
 - **Added**: Timing badges on all tool calls (shows execution duration in ms).
@@ -27,9 +43,16 @@ Follow Keep a Changelog; SemVer applies. Planning docs live in `docs/dev`.
 - **Removed**: "Account & Usage" section from chat tools panel.
 - **Changed**: Chat now requires only Clerk auth, no usage limits enforced.
 
+### Documentation
+- **Updated**: README.md reframed Flaim as MCP/auth service (not chatbot).
+- **Updated**: ARCHITECTURE.md added extension architecture, APIs, and deployment (merged from GETTING_STARTED.md).
+- **Moved**: Chrome extension docs to `extension/README.md`.
+- **Removed**: GETTING_STARTED.md (consolidated into ARCHITECTURE.md).
+- **Updated**: All docs de-emphasize chat as secondary feature.
+
 ## [7.1.0] - 2025-12-28
 
-### 🤖 ChatGPT Direct Access - Now Working!
+### ChatGPT Direct Access - Now Working!
 Users can connect Flaim to ChatGPT as a custom MCP connector with OAuth 2.1, bringing their own subscription.
 
 ### OpenAI ChatGPT OAuth Support
@@ -41,7 +64,7 @@ Users can connect Flaim to ChatGPT as a custom MCP connector with OAuth 2.1, bri
 
 ## [7.0.0] - 2025-12-28
 
-### 🎉 Claude Direct Access - Now Working!
+### Claude Direct Access - Now Working!
 Users can now connect Flaim to Claude.ai or Claude Desktop as a custom MCP connector. This enables "bring your own Claude subscription" usage, shifting AI costs to users while providing full access to ESPN fantasy data.
 
 ### OAuth 2.1 for Claude Direct Access
@@ -72,7 +95,7 @@ Users can now connect Flaim to Claude.ai or Claude Desktop as a custom MCP conne
 - Docs: Added onboarding explanation, DNS setup, and timeout/404 troubleshooting.
 
 ## [6.1.0] - 2025-07-08
-- Updated to React 19.1.0 / Next.js 15.3.4. 
+- Updated to React 19.1.0 / Next.js 15.3.4.
 - Migrated worker configs to `wrangler.jsonc`; fixed Next.js route handler builds.
 
 ## [6.0.0]

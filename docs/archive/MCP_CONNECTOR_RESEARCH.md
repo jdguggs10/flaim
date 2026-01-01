@@ -31,7 +31,7 @@
 
 ### Strategic Pivot: API vs. Direct Access
 
-Research identified **two distinct integration paths**. A strategic review against **Solo Developer Guidelines** initially favored **API Integration**, but ongoing token costs make **Direct User Access** a meaningful option to offload usage costs to users. The recommendation below reflects a cost-aware, staged approach.
+Research identified **two distinct integration paths**. A strategic review against project guidelines (see `CLAUDE.md`) initially favored **API Integration**, but ongoing token costs make **Direct User Access** a meaningful option to offload usage costs to users. The recommendation below reflects a cost-aware, staged approach.
 
 | Path | Description | Verdict |
 |------|-------------|---------|
@@ -45,7 +45,7 @@ Research identified **two distinct integration paths**. A strategic review again
 *   **Architectural Counter-Argument**: Path B fundamentally changes Flaim from a "Web App" to a "Public API Provider."
     *   **Risk**: You lose control over the UI/UX. Debugging user issues inside a 3rd-party chat interface (where you cannot see logs or errors easily) creates a high support burden.
     *   **Complexity**: Requires Clerk to act as a robust OAuth provider for external clients, introducing edge cases (token audience, scope validation) not present in the current internal-only JWT flow.
-    *   **Guideline Violation**: This violates the "Solo Developer Guidelines" to favor "boring, stable solutions" and "avoid over-engineering."
+    *   **Guideline Concern**: This challenges the project philosophy of "boring, stable solutions" and avoiding over-engineering.
 
 ### Revised Recommendation (Updated December 28, 2025)
 
