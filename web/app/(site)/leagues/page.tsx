@@ -28,6 +28,7 @@ import {
   Search,
   X,
   Star,
+  Shield,
 } from 'lucide-react';
 
 interface League {
@@ -531,6 +532,16 @@ export default function LeaguesPage() {
                 </div>
               </div>
             )}
+
+            {/* Security note */}
+            <div className="flex items-start gap-2 p-3 bg-muted/50 rounded-lg text-sm">
+              <Shield className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+              <p className="text-muted-foreground">
+                Your credentials are encrypted and stored securely. We only use them to fetch
+                your fantasy data — never shared with anyone.{' '}
+                <a href="/privacy" className="text-primary hover:underline">Privacy Policy</a>
+              </p>
+            </div>
 
             {/* How to find credentials */}
             <div className="border-t pt-4">

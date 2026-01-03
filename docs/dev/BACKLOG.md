@@ -2,6 +2,10 @@
 
 Ideas and tasks to consider. Not commitments, just a list.
 
+## Maintenance
+
+- **Dependencies**: Last checked Jan 2026. Removed unused `agents` package (fixed 2 vulns). Run `npm outdated` quarterly.
+
 ## High Priority
 
 All complete! See Completed section.
@@ -9,15 +13,13 @@ All complete! See Completed section.
 ## Medium Priority
 
 - [ ] Review privacy page for human element — plain English summary, who's behind it
-- [ ] Security/trust messaging on credentials entry — reassurance on leagues page
-- [ ] User-facing "What's New" section — simple way to communicate updates (optional)
-
+- [x] Security/trust messaging on credentials entry — reassurance on leagues page
 ## Low Priority / Ideas
 
+- [ ] User-facing "What's New" section — simple way to communicate updates
 - [ ] FAQ expansion on other pages
 - [ ] Test coverage for critical paths (OAuth, credential sync, MCP tools)
 - [ ] End-to-end manual test of full flow
-- [ ] Dependency audit (`npm outdated`)
 - [ ] Mobile responsiveness check
 - [ ] Loading states audit
 
@@ -36,3 +38,7 @@ All complete! See Completed section.
 - [x] Pairing code errors improved (expired vs invalid)
 - [x] Retry buttons added for status check failures (extension, connectors)
 - [x] Help hints added for credential errors
+- [x] Connectors page refactored (separate cards for Claude, ChatGPT, Gemini)
+- [x] Per-platform connection status (shows "Connected" only for actual platform)
+- [x] Per-connection revoke functionality (revoke individual connections)
+- [x] Connectors UI polish (visible revoke button, relative expiry times, auto-renewal note)
