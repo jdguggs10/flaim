@@ -26,10 +26,6 @@ npm install
 
 ### 2. Configure Environment
 ```bash
-# Required for Clerk authentication verification (optional for dev)
-wrangler secret put CLERK_SECRET_KEY --env preview
-wrangler secret put CLERK_SECRET_KEY --env prod
-
 # Set Supabase credentials as Cloudflare secrets
 wrangler secret put SUPABASE_URL --env preview
 wrangler secret put SUPABASE_SERVICE_KEY --env preview
@@ -71,7 +67,7 @@ Configure external AI assistants to use this server:
 ### Shared Authentication
 - Uses auth-worker service with Supabase PostgreSQL for credential storage
 - Stateless HTTP calls to auth-worker for credential retrieval
-- Server-side Clerk verification for production security
+- Auth-worker validates tokens; MCP workers forward Authorization
 - No client-side encryption complexity or eventual consistency issues
 
 ### Baseball-Specific Features

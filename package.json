@@ -22,7 +22,6 @@
     "deploy:workers:prod": "concurrently \"cd workers/auth-worker && wrangler deploy --env prod\" \"cd workers/baseball-espn-mcp && wrangler deploy --env prod\" \"cd workers/football-espn-mcp && wrangler deploy --env prod\""
   },
   "dependencies": {
-    "@clerk/backend": "^2.5.0",
     "@clerk/nextjs": "^6.25.4",
     "eslint": "^9.13.0",
     "lucide-react": "^0.525.0",

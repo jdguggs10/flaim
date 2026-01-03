@@ -24,7 +24,7 @@ The Auth Worker is a centralized Cloudflare Worker responsible for storing, retr
 
 ## Authentication
 
-All credential endpoints require the `X-Clerk-User-ID` header containing the Clerk user ID.
+Authorization JWT required (Clerk or OAuth). `X-Clerk-User-ID` header is supported only as a dev fallback.
 
 ## Setup
 
@@ -69,7 +69,6 @@ npm run deploy
 
 ## Environment Variables
 
-- `SUPABASE_URL` - Supabase project URL
 - `SUPABASE_URL` - Supabase project URL
 - `SUPABASE_SERVICE_KEY` - Supabase Secret Key (sb_secret_...) (set via wrangler secret)
 - `NODE_ENV` - Environment (development/production)

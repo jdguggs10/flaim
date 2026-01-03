@@ -42,7 +42,6 @@ Add focused tests for handler changes in `__tests__/` or `*.test.ts`.
 ```
 SUPABASE_URL=https://xxx.supabase.co
 SUPABASE_SERVICE_KEY=sb_secret_...
-CLERK_SECRET_KEY=sk_live_...
 ENVIRONMENT=prod|preview|dev
 NODE_ENV=production|development
 ```
@@ -51,7 +50,6 @@ NODE_ENV=production|development
 
 ```
 AUTH_WORKER_URL=https://auth-worker.YOUR-ACCOUNT.workers.dev
-CLERK_SECRET_KEY=sk_live_... (optional)
 ENVIRONMENT=prod|preview|dev
 NODE_ENV=production|development
 ```
