@@ -24,6 +24,21 @@ interface Connection {
   clientName?: string;
 }
 
+// Format relative time (e.g., "in 364 days")
+function formatRelativeExpiry(expiresAt: string): string {
+  const now = new Date();
+  const expiry = new Date(expiresAt);
+  const diffMs = expiry.getTime() - now.getTime();
+  const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffDays < 0) return 'Expired';
+  if (diffDays === 0) return 'Today';
+  if (diffDays === 1) return 'Tomorrow';
+  if (diffDays < 30) return `in ${diffDays} days`;
+  if (diffDays < 365) return `in ${Math.floor(diffDays / 30)} months`;
+  return `in ${Math.floor(diffDays / 365)} year${Math.floor(diffDays / 365) > 1 ? 's' : ''}`;
+}
+
 // Platform configurations
 const platforms = [
   {
@@ -281,7 +296,7 @@ export default function ConnectorsPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Platform</TableHead>
-                    <TableHead>Expires</TableHead>
+                    <TableHead>Renews</TableHead>
                     <TableHead className="w-[100px]"></TableHead>
                   </TableRow>
                 </TableHeader>
@@ -290,7 +305,7 @@ export default function ConnectorsPage() {
                     <TableRow key={conn.id}>
                       <TableCell className="font-medium">{conn.clientName || 'MCP Client'}</TableCell>
                       <TableCell className="text-muted-foreground">
-                        {conn.expiresAt ? new Date(conn.expiresAt).toLocaleDateString() : 'Unknown'}
+                        {conn.expiresAt ? formatRelativeExpiry(conn.expiresAt) : 'Unknown'}
                       </TableCell>
                       <TableCell>
                         <Button
@@ -298,7 +313,7 @@ export default function ConnectorsPage() {
                           size="sm"
                           onClick={() => handleRevokeConnection(conn.id, conn.clientName || 'MCP Client')}
                           disabled={revokingConnectionId === conn.id}
-                          className="h-8 px-2 text-muted-foreground hover:text-destructive"
+                          className="h-8 px-2 text-destructive/70 hover:text-destructive hover:bg-destructive/10"
                         >
                           {revokingConnectionId === conn.id ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
@@ -321,6 +336,7 @@ export default function ConnectorsPage() {
           <p>
             <strong>How it works:</strong> Copy an MCP URL above, then follow your AI platform&apos;s
             setup guide to add it as a connector. You&apos;ll be redirected to Flaim to authorize access.
+            Connections auto-renew so you stay connected.
           </p>
           <p>
             <strong>Privacy:</strong> Your ESPN credentials are stored securely in Flaim and never
