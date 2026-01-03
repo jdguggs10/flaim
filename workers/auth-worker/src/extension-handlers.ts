@@ -290,12 +290,22 @@ export async function handlePairExtension(
     const storage = ExtensionStorage.fromEnvironment(env);
     const result = await storage.exchangeCodeForToken(code);
 
-    if (!result) {
-      // Record failed attempt and return generic error to prevent code enumeration
+    if (!result.success) {
+      // Record failed attempt
       recordPairingAttempt(clientIP);
+
+      // Return specific error messages based on reason
+      const errorMessages: Record<string, string> = {
+        'expired': 'This code has expired. Please generate a new one.',
+        'not_found': 'Invalid code. Please check and try again.',
+        'already_used': 'This code has already been used. Please generate a new one.',
+        'race_condition': 'This code was just used. Please generate a new one.',
+        'storage_error': 'Failed to create token. Please try again.',
+      };
+
       return new Response(JSON.stringify({
-        error: 'invalid_code',
-        error_description: 'Invalid or expired pairing code',
+        error: result.reason === 'expired' ? 'code_expired' : 'invalid_code',
+        error_description: errorMessages[result.reason] || 'Invalid pairing code',
       }), {
         status: 400,
         headers: { 'Content-Type': 'application/json', ...corsHeaders },

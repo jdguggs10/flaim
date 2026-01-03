@@ -100,11 +100,19 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* About */}
+      <section className="py-12 px-4 text-center">
+        <p className="text-sm text-muted-foreground max-w-lg mx-auto">
+          Flaim is a solo indie project — built with care, maintained for the long term.
+          The focus is on reliability and doing one thing well.
+        </p>
+      </section>
+
       {/* Footer CTA */}
-      <section className="py-16 px-4 text-center">
-        <h2 className="text-2xl font-bold mb-4">Ready to get started?</h2>
+      <section className="py-16 bg-muted px-4 text-center">
+        <h2 className="text-2xl font-bold mb-4">Want to try it?</h2>
         <p className="text-muted-foreground mb-6">
-          Connect your fantasy leagues in minutes.
+          Connect your fantasy leagues in a few minutes.
         </p>
         <SignedOut>
           <Link href="/sign-up">

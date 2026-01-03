@@ -4,17 +4,27 @@ import { auth } from '@clerk/nextjs/server';
 export const runtime = 'edge';
 
 /**
- * GET /api/oauth/status
+ * POST /api/oauth/revoke-connection
  * -----------------------------------------------------------
- * Check if the user has active OAuth connections.
- * Proxies to auth-worker GET /oauth/status with Clerk JWT.
+ * Revoke a single OAuth connection by its ID.
+ * Used by the connectors page to disconnect a specific AI platform.
+ * Proxies to auth-worker POST /oauth/revoke.
  */
-export async function GET(_request: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
     const { userId, getToken } = await auth();
 
     if (!userId) {
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    }
+
+    const body = await request.json() as { tokenId?: string };
+
+    if (!body.tokenId) {
+      return NextResponse.json({
+        error: 'invalid_request',
+        error_description: 'tokenId is required'
+      }, { status: 400 });
     }
 
     const authWorkerUrl = process.env.NEXT_PUBLIC_AUTH_WORKER_URL;
@@ -24,13 +34,14 @@ export async function GET(_request: NextRequest) {
 
     const bearer = (await getToken?.()) || undefined;
 
-    const workerRes = await fetch(`${authWorkerUrl}/oauth/status`, {
-      method: 'GET',
+    const workerRes = await fetch(`${authWorkerUrl}/oauth/revoke`, {
+      method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'X-Clerk-User-ID': userId,
         ...(bearer ? { 'Authorization': `Bearer ${bearer}` } : {})
-      }
+      },
+      body: JSON.stringify({ tokenId: body.tokenId })
     });
 
     if (!workerRes.ok) {
@@ -39,31 +50,16 @@ export async function GET(_request: NextRequest) {
         error_description?: string
       };
       return NextResponse.json(
-        { error: err.error || 'Failed to check status', error_description: err.error_description },
+        { error: err.error || 'Failed to revoke connection', error_description: err.error_description },
         { status: workerRes.status }
       );
     }
 
-    const data = await workerRes.json() as {
-      success?: boolean;
-      hasConnection?: boolean;
-      connections?: Array<{
-        id: string;
-        expiresAt: string;
-        scope: string;
-        clientName?: string;
-      }>;
-    };
-
-    return NextResponse.json({
-      success: true,
-      hasConnection: data.hasConnection,
-      connections: data.connections || []
-    });
+    return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('OAuth status route error:', error);
+    console.error('OAuth revoke connection route error:', error);
     return NextResponse.json(
-      { error: 'server_error', error_description: 'Failed to check status' },
+      { error: 'server_error', error_description: 'Failed to revoke connection' },
       { status: 500 }
     );
   }

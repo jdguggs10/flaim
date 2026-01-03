@@ -31,10 +31,12 @@ export interface OAuthCode {
 }
 
 export interface OAuthToken {
+  id?: string; // Database UUID for revocation
   accessToken: string;
   userId: string;
   scope: string;
   resource?: string; // RFC 8707 resource indicator
+  clientName?: string; // AI platform name (Claude, ChatGPT, etc.)
   expiresAt: Date;
   revokedAt?: Date;
   refreshToken?: string;
@@ -55,6 +57,8 @@ export interface CreateTokenParams {
   userId: string;
   scope?: string;
   resource?: string; // RFC 8707 resource indicator
+  redirectUri?: string; // For deriving clientName
+  clientName?: string; // AI platform name (Claude, ChatGPT, etc.)
   expiresInSeconds?: number; // Default: 3600 (1 hour)
   includeRefreshToken?: boolean;
   refreshTokenExpiresInSeconds?: number; // Default: 604800 (7 days)
@@ -119,6 +123,19 @@ async function verifyPkceChallenge(
 function maskUserId(userId: string): string {
   if (!userId || userId.length <= 8) return '***';
   return `${userId.substring(0, 8)}...`;
+}
+
+/**
+ * Derive AI platform name from OAuth redirect URI
+ */
+function getClientNameFromRedirectUri(redirectUri: string): string {
+  if (!redirectUri) return 'MCP Client';
+  const uri = redirectUri.toLowerCase();
+  if (uri.includes('claude.ai') || uri.includes('claude.com')) return 'Claude';
+  if (uri.includes('chatgpt.com') || uri.includes('openai.com')) return 'ChatGPT';
+  if (uri.includes('gemini') || uri.includes('google.com')) return 'Gemini';
+  if (uri.includes('localhost') || uri.includes('127.0.0.1')) return 'Development';
+  return 'MCP Client';
 }
 
 // =============================================================================
@@ -266,6 +283,7 @@ export class OAuthStorage {
       userId: authCode.userId,
       scope: authCode.scope,
       resource: authCode.resource, // RFC 8707 - pass through resource
+      redirectUri: authCode.redirectUri, // For deriving clientName
       includeRefreshToken: true,
     });
 
@@ -284,6 +302,9 @@ export class OAuthStorage {
     const expiresInSeconds = params.expiresInSeconds ?? 3600; // 1 hour default
     const expiresAt = new Date(Date.now() + expiresInSeconds * 1000);
 
+    // Derive clientName from redirectUri if not explicitly provided
+    const clientName = params.clientName || (params.redirectUri ? getClientNameFromRedirectUri(params.redirectUri) : 'MCP Client');
+
     let refreshToken: string | undefined;
     let refreshTokenExpiresAt: Date | undefined;
 
@@ -293,28 +314,31 @@ export class OAuthStorage {
       refreshTokenExpiresAt = new Date(Date.now() + refreshExpiresIn * 1000);
     }
 
-    const { error } = await this.supabase.from('oauth_tokens').insert({
+    const { data, error } = await this.supabase.from('oauth_tokens').insert({
       access_token: accessToken,
       user_id: params.userId,
       scope: params.scope || 'mcp:read',
       resource: params.resource || null, // RFC 8707
+      client_name: clientName,
       expires_at: expiresAt.toISOString(),
       refresh_token: refreshToken || null,
       refresh_token_expires_at: refreshTokenExpiresAt?.toISOString() || null,
-    });
+    }).select('id').single();
 
     if (error) {
       console.error('[oauth-storage] Failed to create access token:', error);
       throw new Error('Failed to create access token');
     }
 
-    console.log(`[oauth-storage] Created access token for user ${maskUserId(params.userId)}, expires in ${expiresInSeconds}s`);
+    console.log(`[oauth-storage] Created access token for user ${maskUserId(params.userId)} (${clientName}), expires in ${expiresInSeconds}s`);
 
     return {
+      id: data?.id,
       accessToken,
       userId: params.userId,
       scope: params.scope || 'mcp:read',
       resource: params.resource, // RFC 8707
+      clientName,
       expiresAt,
       refreshToken,
       refreshTokenExpiresAt,
@@ -383,11 +407,12 @@ export class OAuthStorage {
     // Revoke the old token
     await this.revokeToken(data.access_token);
 
-    // Create new token with same scope and resource (RFC 8707)
+    // Create new token with same scope, resource, and clientName
     const newToken = await this.createAccessToken({
       userId: data.user_id,
       scope: data.scope,
       resource: data.resource || undefined, // Preserve resource for audience validation
+      clientName: data.client_name || undefined, // Preserve clientName
       includeRefreshToken: true,
     });
 
@@ -409,6 +434,29 @@ export class OAuthStorage {
     }
 
     console.log(`[oauth-storage] Revoked token: ${accessToken.substring(0, 8)}...`);
+    return true;
+  }
+
+  /**
+   * Revoke a token by its database ID (for single-connection revoke)
+   * Returns true if revoked, false if not found or already revoked
+   */
+  async revokeTokenById(tokenId: string, userId: string): Promise<boolean> {
+    const { data, error } = await this.supabase
+      .from('oauth_tokens')
+      .update({ revoked_at: new Date().toISOString() })
+      .eq('id', tokenId)
+      .eq('user_id', userId) // Ensure user owns this token
+      .is('revoked_at', null) // Only revoke if not already revoked
+      .select('id')
+      .single();
+
+    if (error || !data) {
+      console.log(`[oauth-storage] Token not found or already revoked: ${tokenId}`);
+      return false;
+    }
+
+    console.log(`[oauth-storage] Revoked token by ID: ${tokenId}`);
     return true;
   }
 
@@ -449,9 +497,12 @@ export class OAuthStorage {
     }
 
     return data.map((row) => ({
+      id: row.id,
       accessToken: row.access_token,
       userId: row.user_id,
       scope: row.scope,
+      resource: row.resource || undefined,
+      clientName: row.client_name || 'MCP Client',
       expiresAt: new Date(row.expires_at),
       refreshToken: row.refresh_token || undefined,
       refreshTokenExpiresAt: row.refresh_token_expires_at

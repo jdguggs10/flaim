@@ -2,19 +2,6 @@
 
 Flaim connects your ESPN fantasy leagues to AI assistants like Claude and ChatGPT. It's an MCP (Model Context Protocol) service that gives AI tools access to your live fantasy data.
 
-**For helpers:** Solo developer, production project. Keep solutions simple and stable.
-
-## Quick Start
-
-```bash
-git clone https://github.com/yourusername/flaim
-cd flaim && npm install
-cp web/.env.example web/.env.local  # add keys
-npm run dev
-```
-
-Full setup details: [Architecture](ARCHITECTURE.md).
-
 ## How It Works
 
 1. **Connect ESPN** — Use the [Chrome extension](https://chrome.google.com/webstore/detail/flaim) to sync your ESPN credentials automatically (or add them manually)
@@ -22,7 +9,7 @@ Full setup details: [Architecture](ARCHITECTURE.md).
 3. **Connect AI** at `/connectors` — Link Claude.ai, Claude Desktop, or ChatGPT via OAuth
 4. **Use MCP tools** — Ask about your roster, matchups, standings directly in your AI
 
-The MCP servers provide real-time ESPN data. Bring your own Claude or ChatGPT subscription.
+Bring your own Claude or ChatGPT subscription. Flaim provides the data bridge.
 
 ## What Flaim Is
 
@@ -40,29 +27,10 @@ Flaim is **not** a chatbot or AI product itself — it's the bridge that lets yo
 - **Claude + ChatGPT OAuth**: Direct access via MCP protocol (OAuth 2.1)
 - **Live ESPN Data**: Baseball and football MCP workers with real-time stats
 - **Multi-League Support**: Manage multiple leagues across sports
-- **Privacy Policy**: `/privacy` page for Chrome Web Store compliance
-- **GitOps Deployment**: PR → preview, main → production
 
-## Development Philosophy
+## About
 
-Solo developer, hobby project. Priorities:
-
-- **Simple over clever** — Boring, documented tech (Next.js, Vercel, Clerk, Cloudflare, Supabase)
-- **Small changes** — 1-2 hour tasks, one new concept at a time
-- **Ship working features** — Avoid over-engineering; easy to revert if needed
-- **Official docs first** — Copy from examples before inventing patterns
-
-## Documentation
-
-| Document | Description |
-|----------|-------------|
-| [Architecture](ARCHITECTURE.md) | System design, deployment, troubleshooting |
-| [Changelog](CHANGELOG.md) | Release history |
-| [Web App](../web/README.md) | Next.js routes, components, environment |
-| [Workers](../workers/README.md) | Cloudflare Workers, MCP tools, ESPN API |
-| [Extension](../extension/README.md) | Chrome extension build, pairing, CWS |
-
-- **`docs/archive/`**: Historical documents for completed features
+Flaim is a solo indie project — built with care, maintained for the long term. The focus is on reliability, security, and doing one thing well. No VC funding, no growth pressure, just a useful tool for fantasy sports fans who use AI.
 
 ## MCP Tools
 
@@ -77,7 +45,7 @@ Solo developer, hobby project. Priorities:
 | `get_espn_football_matchups` | Football | Current/upcoming matchups |
 | `get_espn_football_standings` | Football | League standings |
 
-## Architecture Overview
+## Architecture
 
 ```
 Chrome Extension → flaim.app → Auth Worker → Supabase
@@ -91,7 +59,40 @@ Claude/ChatGPT → MCP Workers → ESPN API
 - **MCP Workers (Cloudflare)**: Baseball and football data fetchers
 - **Supabase**: User data, OAuth tokens, ESPN credentials
 
+---
+
+## For Contributors
+
+Solo developer, hobby project. Keep it simple and stable.
+
+- **Small changes** — 1-2 hour tasks, one new concept at a time
+- **Boring tech** — Stick to the stack (Next.js, Vercel, Clerk, Cloudflare, Supabase)
+- **Official docs first** — Copy from examples before inventing patterns
+
+### Documentation
+
+| Document | Description |
+|----------|-------------|
+| [Architecture](ARCHITECTURE.md) | System design, deployment, troubleshooting |
+| [Changelog](CHANGELOG.md) | Release history |
+| [Web App](../web/README.md) | Next.js routes, components, environment |
+| [Workers](../workers/README.md) | Cloudflare Workers, MCP tools, ESPN API |
+| [Extension](../extension/README.md) | Chrome extension build, pairing, CWS |
+
+### Quick Start (Development)
+
+```bash
+git clone https://github.com/yourusername/flaim
+cd flaim && npm install
+cp web/.env.example web/.env.local  # add keys
+npm run dev
+```
+
+---
+
 ## Getting Help
+
+This is a solo indie project with best-effort support. I'll do my best to respond, but it may take time.
 
 - Issues: [GitHub Issues](https://github.com/yourusername/flaim/issues)
 - Discussions: [GitHub Discussions](https://github.com/yourusername/flaim/discussions)

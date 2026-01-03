@@ -183,30 +183,34 @@ export class ExtensionStorage {
    * Exchange a pairing code for an access token
    * Revokes any existing tokens for the user first (token rotation)
    */
-  async exchangeCodeForToken(code: string): Promise<{ token: string; userId: string } | null> {
+  async exchangeCodeForToken(code: string): Promise<{
+    success: true; token: string; userId: string
+  } | {
+    success: false; reason: 'not_found' | 'expired' | 'already_used' | 'race_condition' | 'storage_error'
+  }> {
     // Validate the code
     const pairingCode = await this.getPairingCode(code);
     if (!pairingCode) {
       console.log(`[extension-storage] Code not found: ${code}`);
-      return null;
+      return { success: false, reason: 'not_found' };
     }
 
     // Check if code is expired
     if (new Date() > pairingCode.expiresAt) {
       console.log(`[extension-storage] Code expired: ${code}`);
-      return null;
+      return { success: false, reason: 'expired' };
     }
 
     // Check if code is already used
     if (pairingCode.usedAt) {
       console.log(`[extension-storage] Code already used: ${code}`);
-      return null;
+      return { success: false, reason: 'already_used' };
     }
 
     // Mark code as used
     const marked = await this.markCodeAsUsed(code);
     if (!marked) {
-      return null;
+      return { success: false, reason: 'race_condition' };
     }
 
     // Revoke any existing active tokens for this user (token rotation)
@@ -225,11 +229,11 @@ export class ExtensionStorage {
 
     if (error) {
       console.error(`[extension-storage] Failed to create token for ${maskUserId(pairingCode.userId)}:`, error);
-      return null;
+      return { success: false, reason: 'storage_error' };
     }
 
     console.log(`[extension-storage] Token created for ${maskUserId(pairingCode.userId)}`);
-    return { token, userId: pairingCode.userId };
+    return { success: true, token, userId: pairingCode.userId };
   }
 
   /**

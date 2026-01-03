@@ -688,10 +688,10 @@ export async function handleCheckStatus(
 
     // Map to safe public format for display
     const connections = tokens.map(t => ({
-      id: t.accessToken.substring(0, 8) + '...', // Masked ID
+      id: t.id, // Real ID for revocation
       expiresAt: t.expiresAt.toISOString(),
       scope: t.scope,
-      resource: t.resource || 'mcp-client' // Fallback for older tokens without resource
+      clientName: t.clientName || 'MCP Client',
     }));
 
     return new Response(JSON.stringify({
@@ -713,7 +713,7 @@ export async function handleCheckStatus(
 
 /**
  * Revoke all tokens for a user
- * Used by frontend to "Disconnect" Claude
+ * Used by frontend to "Disconnect All"
  */
 export async function handleRevokeAll(
   env: OAuthEnv,
@@ -736,6 +736,51 @@ export async function handleRevokeAll(
     return new Response(JSON.stringify({
       error: 'server_error',
       error_description: 'Failed to revoke connections',
+    }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+  }
+}
+
+/**
+ * Revoke a single token by ID
+ * Used by frontend to disconnect a specific AI platform
+ */
+export async function handleRevokeSingle(
+  request: Request,
+  env: OAuthEnv,
+  userId: string,
+  corsHeaders: Record<string, string>
+): Promise<Response> {
+  try {
+    const body = await request.json() as { tokenId?: string };
+
+    if (!body.tokenId) {
+      return new Response(JSON.stringify({
+        error: 'invalid_request',
+        error_description: 'tokenId is required',
+      }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+    }
+
+    const storage = OAuthStorage.fromEnvironment(env);
+    const success = await storage.revokeTokenById(body.tokenId, userId);
+
+    if (!success) {
+      return new Response(JSON.stringify({
+        error: 'not_found',
+        error_description: 'Connection not found or already revoked',
+      }), { status: 404, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+    }
+
+    return new Response(JSON.stringify({
+      success: true,
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders },
+    });
+  } catch (error) {
+    console.error('[oauth] Revoke single error:', error);
+    return new Response(JSON.stringify({
+      error: 'server_error',
+      error_description: 'Failed to revoke connection',
     }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
   }
 }

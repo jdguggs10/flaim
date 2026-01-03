@@ -460,7 +460,14 @@ export default function LeaguesPage() {
                 {credsError && (
                   <Alert variant="destructive">
                     <AlertCircle className="h-4 w-4" />
-                    <AlertDescription>{credsError}</AlertDescription>
+                    <AlertDescription>
+                      {credsError}
+                      {credsError.toLowerCase().includes('failed') && (
+                        <span className="block mt-1 text-sm">
+                          Check that your credentials are current. See the help section below for how to find them.
+                        </span>
+                      )}
+                    </AlertDescription>
                   </Alert>
                 )}
 

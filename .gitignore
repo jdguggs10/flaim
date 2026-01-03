@@ -101,3 +101,4 @@ tests/config/.env.test
 # Ignore per-worker sensitive env files
 workers/auth-worker/.env
 .dev.vars
+CLAUDE.md

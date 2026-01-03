@@ -36,6 +36,7 @@ import {
   handleRevoke,
   handleCheckStatus,
   handleRevokeAll,
+  handleRevokeSingle,
   validateOAuthToken,
   OAuthEnv,
 } from './oauth-handlers';
@@ -390,6 +391,21 @@ export default {
           });
         }
         return handleRevokeAll(env as OAuthEnv, userId, corsHeaders);
+      }
+
+      // Revoke a single token by ID (called by frontend)
+      if (pathname === '/oauth/revoke' && request.method === 'POST') {
+        const { userId, error: authError } = await getVerifiedUserId(request, env);
+        if (!userId) {
+          return new Response(JSON.stringify({
+            error: 'unauthorized',
+            error_description: authError || 'Authentication required',
+          }), {
+            status: 401,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders },
+          });
+        }
+        return handleRevokeSingle(request, env as OAuthEnv, userId, corsHeaders);
       }
 
       // Token endpoint - exchange code for access token

@@ -29,11 +29,13 @@ export default function ExtensionPage() {
 
   // UI state
   const [error, setError] = useState<string | null>(null);
+  const [errorRetriable, setErrorRetriable] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
 
   // Check connection status
   const checkStatus = useCallback(async () => {
+    setIsCheckingStatus(true);
     try {
       const response = await fetch('/api/extension/connection');
       if (response.ok) {
@@ -44,12 +46,15 @@ export default function ExtensionPage() {
         setIsConnected(!!data.connected);
         setActiveToken(data.token || null);
         setError(null);
+        setErrorRetriable(false);
       } else {
         setError('Failed to check connection status.');
+        setErrorRetriable(true);
       }
     } catch (err) {
       console.error('Failed to check status:', err);
       setError('Failed to check connection status.');
+      setErrorRetriable(true);
     } finally {
       setIsCheckingStatus(false);
     }
@@ -213,7 +218,25 @@ export default function ExtensionPage() {
         {error && (
           <Alert variant="destructive">
             <XCircle className="h-4 w-4" />
-            <AlertDescription>{error}</AlertDescription>
+            <AlertDescription className="flex items-center justify-between">
+              <span>{error}</span>
+              {errorRetriable && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={checkStatus}
+                  disabled={isCheckingStatus}
+                  className="ml-4"
+                >
+                  {isCheckingStatus ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4" />
+                  )}
+                  <span className="ml-1">Retry</span>
+                </Button>
+              )}
+            </AlertDescription>
           </Alert>
         )}
 
