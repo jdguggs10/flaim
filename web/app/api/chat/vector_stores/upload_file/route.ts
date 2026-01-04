@@ -3,8 +3,6 @@ import { auth } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from 'next/server';
 import type { VectorStoreRequest } from '@/types/api-responses';
 
-export const runtime = 'edge';
-
 const openai = new OpenAI();
 
 export async function POST(_request: NextRequest) {

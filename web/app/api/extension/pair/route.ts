@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-export const runtime = 'edge';
-
 /**
  * POST /api/extension/pair
  * -----------------------------------------------------------
@@ -27,7 +25,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Forward client IP for rate limiting
-    // Vercel/Next.js edge provides x-forwarded-for, x-real-ip headers
+    // Vercel/Next.js provides x-forwarded-for, x-real-ip headers
     const clientIP = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
                      request.headers.get('x-real-ip') ||
                      '';

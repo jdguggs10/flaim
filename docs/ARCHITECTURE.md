@@ -22,6 +22,12 @@ npm run dev
 - **Sport MCP workers (`/workers/baseball-espn-mcp`, `/workers/football-espn-mcp`)**: ESPN API calls + MCP tools. Fetch creds/leagues from auth-worker; no local storage.
 - **Supabase Postgres**: `espn_credentials`, `espn_leagues`, `oauth_tokens`, `oauth_codes`, `extension_tokens`, `extension_pairing_codes`, `rate_limits`.
 
+## Runtime Choices (Next.js)
+
+- **API routes run on the Node.js runtime (default).** We removed Edge runtime flags because these routes are simple proxies/handlers and don't need Edge-specific features.
+- This avoids Edge limitations (no ISR, tighter API compatibility) and keeps behavior predictable for Node APIs like `Buffer`.
+
+
 ## Directory Structure
 
 ```

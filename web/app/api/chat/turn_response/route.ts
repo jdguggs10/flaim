@@ -26,8 +26,6 @@ async function requireAuth(): Promise<{ userId: string } | NextResponse> {
   }
 }
 
-export const runtime = 'edge';
-
 export async function POST(request: NextRequest) {
   try {
     // Check auth
@@ -98,7 +96,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create a ReadableStream that emits SSE data (edge runtime requires Uint8Array)
+    // Create a ReadableStream that emits SSE data (ReadableStream expects Uint8Array chunks)
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {

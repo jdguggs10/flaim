@@ -2,8 +2,6 @@ import OpenAI from "openai";
 import { auth } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from 'next/server';
 
-export const runtime = 'edge';
-
 const openai = new OpenAI();
 
 export async function GET(request: NextRequest) {

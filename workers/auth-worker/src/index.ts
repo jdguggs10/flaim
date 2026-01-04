@@ -170,13 +170,22 @@ async function verifyJwtAndGetUserId(authorization: string | null): Promise<stri
 
 async function getVerifiedUserId(request: Request, env: Env): Promise<{ userId: string | null; error?: string; authType?: 'clerk' | 'oauth' }> {
   const authz = request.headers.get('Authorization');
+  const requestUrl = new URL(request.url);
+  console.log(`🔐 [auth-worker] getVerifiedUserId called for ${requestUrl.pathname}`);
+  console.log(`🔐 [auth-worker] Authorization header present: ${!!authz}, length: ${authz?.length || 0}`);
 
   // Try Clerk JWT first (in-app requests)
   try {
+    console.log(`🔐 [auth-worker] Attempting Clerk JWT verification...`);
     const verified = await verifyJwtAndGetUserId(authz);
-    if (verified) return { userId: verified, authType: 'clerk' };
+    if (verified) {
+      console.log(`✅ [auth-worker] Clerk JWT verified, userId: ${maskUserId(verified)}`);
+      return { userId: verified, authType: 'clerk' };
+    }
+    console.log(`⚠️ [auth-worker] Clerk JWT verification returned null`);
   } catch (e) {
     // JWT verification failed, try OAuth token next
+    console.log(`⚠️ [auth-worker] Clerk JWT verification failed: ${e instanceof Error ? e.message : 'unknown error'}`);
   }
 
   // Try OAuth token (Claude direct access)
@@ -184,12 +193,16 @@ async function getVerifiedUserId(request: Request, env: Env): Promise<{ userId: 
     const token = authz.slice(7).trim();
     // Only try OAuth if it doesn't look like a JWT (no dots or not 3 parts)
     const parts = token.split('.');
+    console.log(`🔐 [auth-worker] Token has ${parts.length} parts (JWT has 3)`);
     if (parts.length !== 3) {
       try {
+        console.log(`🔐 [auth-worker] Attempting OAuth token validation...`);
         const oauthResult = await validateOAuthToken(token, env as OAuthEnv);
         if (oauthResult) {
+          console.log(`✅ [auth-worker] OAuth token validated, userId: ${maskUserId(oauthResult.userId)}`);
           return { userId: oauthResult.userId, authType: 'oauth' };
         }
+        console.log(`⚠️ [auth-worker] OAuth token validation returned null`);
       } catch (e) {
         console.log('[auth] OAuth token validation failed:', e);
       }
@@ -198,11 +211,16 @@ async function getVerifiedUserId(request: Request, env: Env): Promise<{ userId: 
 
   // Dev fallback only: allow header for local testing
   const isDev = (env as any).ENVIRONMENT === 'dev' || env.NODE_ENV === 'development';
+  console.log(`🔐 [auth-worker] Environment check - ENVIRONMENT: ${(env as any).ENVIRONMENT}, NODE_ENV: ${env.NODE_ENV}, isDev: ${isDev}`);
   if (isDev) {
     const clerkHeader = request.headers.get('X-Clerk-User-ID');
-    if (clerkHeader) return { userId: clerkHeader, authType: 'clerk' };
+    if (clerkHeader) {
+      console.log(`⚠️ [auth-worker] DEV MODE: Using X-Clerk-User-ID header fallback: ${maskUserId(clerkHeader)}`);
+      return { userId: clerkHeader, authType: 'clerk' };
+    }
   }
 
+  console.log(`❌ [auth-worker] All auth methods failed, returning null userId`);
   return { userId: null, error: 'Missing or invalid Authorization token' };
 }
 
@@ -505,8 +523,9 @@ export default {
       // ESPN credential management endpoints
       if (pathname === '/credentials/espn') {
         // Extract Clerk User ID from header
-        const { userId: clerkUserId, error: authError } = await getVerifiedUserId(request, env);
-        console.log(`🔐 [auth-worker] /credentials/espn - Verified user: ${clerkUserId ? maskUserId(clerkUserId) : 'null'}, authError: ${authError || 'none'}`);
+        const { userId: clerkUserId, error: authError, authType } = await getVerifiedUserId(request, env);
+        console.log(`🔐 [auth-worker] /credentials/espn - Verified user: ${clerkUserId ? maskUserId(clerkUserId) : 'null'}, authType: ${authType || 'none'}, authError: ${authError || 'none'}`);
+        console.log(`🔐 [auth-worker] /credentials/espn - Raw query: ${url.search}, raw param: ${url.searchParams.get('raw')}`);
 
         if (!clerkUserId) {
           return new Response(JSON.stringify({
@@ -590,10 +609,11 @@ export default {
             const currentUsage = await oauthStorage.incrementRateLimit(clerkUserId);
             const remaining = Math.max(0, RATE_LIMIT_PER_DAY - currentUsage);
 
+            console.log(`🔍 [auth-worker] Fetching raw credentials from Supabase for user: ${maskUserId(clerkUserId)}`);
             const credentials = await storage.getCredentials(clerkUserId);
 
             if (!credentials) {
-              console.log(`❌ [auth-worker] No credentials found for user: ${maskUserId(clerkUserId)}`);
+              console.log(`❌ [auth-worker] No credentials found in Supabase for user: ${maskUserId(clerkUserId)}`);
               return new Response(JSON.stringify({
                 error: 'Credentials not found',
                 message: 'No ESPN credentials found for user. Add your ESPN credentials at /settings/espn'

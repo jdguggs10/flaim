@@ -8,8 +8,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 
-export const runtime = 'edge';
-
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ leagueId: string }> }) {
   try {
     const { userId, getToken } = await auth();

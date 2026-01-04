@@ -127,6 +127,14 @@ Toggle in the chat tools panel to show:
 
 Keyboard shortcut: `Cmd+D` / `Ctrl+D`
 
+## Build Notes
+
+### Webpack cache warning (big strings)
+
+- During `npm run build`, webpack may warn: `Serializing big strings (181kiB) impacts deserialization performance`.
+- Likely cause: the client bundle includes `react-syntax-highlighter` (used in `web/components/chat/tool-call.tsx`), which pulls in large Prism language definitions and produces large module source strings for the cache.
+- This is a filesystem cache performance warning (not a runtime error). If it ever becomes a problem, consider lazy-loading the syntax highlighter or using a lighter alternative.
+
 ## Conventions
 
 - **TypeScript** everywhere

@@ -46,6 +46,20 @@ async function getCredentials(
 
     console.log(`🔑 [baseball] Fetching ESPN credentials for user ${clerkUserId} from ${url}`);
 
+    // Parse JWT to compare user ID
+    if (authHeader && authHeader.toLowerCase().startsWith('bearer ')) {
+      try {
+        const token = authHeader.slice(7);
+        const parts = token.split('.');
+        if (parts.length === 3) {
+          const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+          console.log(`🔍 [baseball] JWT payload.sub: ${payload.sub}, clerkUserId param: ${clerkUserId}, match: ${payload.sub === clerkUserId}`);
+        }
+      } catch (e) {
+        console.log(`⚠️ [baseball] Could not parse JWT for comparison`);
+      }
+    }
+
     const headers: Record<string, string> = {
       'X-Clerk-User-ID': clerkUserId,
       'Content-Type': 'application/json',
@@ -65,9 +79,15 @@ async function getCredentials(
 
     console.log(`📡 [baseball] Auth-worker response: ${response.status} ${response.statusText}`);
 
+    // Log response headers for debugging
+    const responseHeaders: Record<string, string> = {};
+    response.headers.forEach((value, key) => { responseHeaders[key] = value; });
+    console.log(`📋 [baseball] Auth-worker response headers: ${JSON.stringify(responseHeaders)}`);
+
     if (response.status === 404) {
       const errorBody = await response.text().catch(() => 'unknown');
       console.log(`ℹ️ [baseball] 404 response body: ${errorBody}`);
+      console.log(`❓ [baseball] 404 indicates auth-worker could not find credentials for this user`);
       return null;
     }
 

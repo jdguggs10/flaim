@@ -13,8 +13,6 @@ import type {
   SportName
 } from '@/lib/espn-types';
 
-export const runtime = 'edge';
-
 export async function POST(request: NextRequest) {
   try {
     const { userId, getToken } = await auth();
@@ -34,8 +32,19 @@ export async function POST(request: NextRequest) {
 
     const bearer = (await getToken?.()) || undefined;
 
-    // Debug: Log token availability (helps diagnose auth issues)
+    // Debug: Log token availability and details (helps diagnose auth issues)
     console.log(`[auto-pull] User: ${userId}, bearer token available: ${!!bearer}`);
+    if (bearer) {
+      // Log JWT structure without exposing full token
+      const parts = bearer.split('.');
+      console.log(`[auto-pull] JWT structure: ${parts.length} parts, length: ${bearer.length} chars`);
+      try {
+        const payload = JSON.parse(atob(parts[1]));
+        console.log(`[auto-pull] JWT payload - sub: ${payload.sub}, iss: ${payload.iss}, exp: ${new Date(payload.exp * 1000).toISOString()}`);
+      } catch (e) {
+        console.log(`[auto-pull] Could not parse JWT payload`);
+      }
+    }
 
     // If no bearer token, auth-worker and sport workers will reject the request
     if (!bearer) {
@@ -54,6 +63,9 @@ export async function POST(request: NextRequest) {
       }, { status: 500 });
     }
 
+    console.log(`[auto-pull] Auth worker URL: ${authWorkerUrl}`);
+    console.log(`[auto-pull] Credential pre-check URL: ${authWorkerUrl}/credentials/espn`);
+
     const credentialCheck = await fetch(`${authWorkerUrl}/credentials/espn`, {
       headers: {
         'X-Clerk-User-ID': userId,
@@ -61,6 +73,8 @@ export async function POST(request: NextRequest) {
       },
       cache: 'no-store'
     });
+
+    console.log(`[auto-pull] Credential pre-check response: ${credentialCheck.status}`);
 
     if (credentialCheck.status === 404) {
       console.error('[auto-pull] Credential check returned 404');
@@ -99,7 +113,12 @@ export async function POST(request: NextRequest) {
 
     try {
       // Call the sport worker's onboarding initialize endpoint
-      const workerResponse = await fetch(`${workerUrl}/onboarding/initialize`, {
+      const sportWorkerFullUrl = `${workerUrl}/onboarding/initialize`;
+      console.log(`[auto-pull] Calling sport worker: ${sportWorkerFullUrl}`);
+      console.log(`[auto-pull] Sport worker request - userId: ${userId}, sport: ${sport}, leagueId: ${leagueId}`);
+      console.log(`[auto-pull] Sport worker auth header: Bearer ${bearer ? `[${bearer.length} chars]` : 'MISSING'}`);
+
+      const workerResponse = await fetch(sportWorkerFullUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -111,6 +130,8 @@ export async function POST(request: NextRequest) {
           leagueId: leagueId
         })
       });
+
+      console.log(`[auto-pull] Sport worker response status: ${workerResponse.status}`);
 
       if (!workerResponse.ok) {
         const errorData = await workerResponse.json().catch(() => ({})) as { 
