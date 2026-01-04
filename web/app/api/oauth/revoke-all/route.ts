@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 
 export const runtime = 'edge';
@@ -9,7 +9,7 @@ export const runtime = 'edge';
  * Revoke all active OAuth connections for the user.
  * Proxies to auth-worker POST /oauth/revoke-all with Clerk JWT.
  */
-export async function POST(_request: NextRequest) {
+export async function POST() {
   try {
     const { userId, getToken } = await auth();
 

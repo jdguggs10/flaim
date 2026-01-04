@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 
 export const runtime = 'edge';
@@ -10,7 +10,7 @@ export const runtime = 'edge';
  * Called by the /extension page when user clicks "Generate Code".
  * Proxies to auth-worker POST /extension/code with Clerk JWT.
  */
-export async function POST(_request: NextRequest) {
+export async function POST() {
   try {
     const { userId, getToken } = await auth();
 

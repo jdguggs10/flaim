@@ -2,7 +2,6 @@ import { EspnFootballApiClient } from '../espn-football-client';
 
 export interface Env {
   NODE_ENV?: string;
-  CLERK_SECRET_KEY?: string;
   AUTH_WORKER_URL: string;
 }
 

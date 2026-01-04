@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 
 export const runtime = 'edge';
@@ -11,7 +11,7 @@ export const runtime = 'edge';
  * Requires Clerk authentication.
  * Proxies to auth-worker GET /extension/connection.
  */
-export async function GET(_request: NextRequest) {
+export async function GET() {
   try {
     const { userId, getToken } = await auth();
 

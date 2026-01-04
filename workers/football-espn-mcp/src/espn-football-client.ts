@@ -10,7 +10,6 @@ interface EspnCredentials {
 export interface Env {
   NODE_ENV?: string;
   ENVIRONMENT?: string;
-  CLERK_SECRET_KEY?: string;
   AUTH_WORKER_URL: string;
 }
 

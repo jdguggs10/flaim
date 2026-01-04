@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from 'react';
-import { useAuth, SignIn } from '@clerk/nextjs';
+import { useAuth, useUser, SignIn } from '@clerk/nextjs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -64,6 +64,7 @@ const SPORT_OPTIONS: { value: Sport; label: string; emoji: string }[] = [
 
 export default function LeaguesPage() {
   const { isLoaded, isSignedIn } = useAuth();
+  const { user } = useUser();
 
   // Credentials state
   const [hasCredentials, setHasCredentials] = useState(false);
@@ -168,7 +169,11 @@ export default function LeaguesPage() {
       const res = await fetch('/api/auth/espn/credentials', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ swid: swid.trim(), s2: espnS2.trim() }),
+        body: JSON.stringify({
+          swid: swid.trim(),
+          s2: espnS2.trim(),
+          email: user?.primaryEmailAddress?.emailAddress
+        }),
       });
 
       if (!res.ok) {

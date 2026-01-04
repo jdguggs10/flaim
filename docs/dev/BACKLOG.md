@@ -5,6 +5,7 @@ Ideas and tasks to consider. Not commitments, just a list.
 ## Maintenance
 
 - **Dependencies**: Last checked Jan 2026. Removed unused `agents` package (fixed 2 vulns). Run `npm outdated` quarterly.
+- [ ] **Local Node version** — Align local runtime with Node 24 (`.nvmrc` + `engines`). Decide on Homebrew permissions fix vs user-level manager (fnm/nvm/asdf) to avoid `EBADENGINE` warnings.
 
 ## High Priority
 
