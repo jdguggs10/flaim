@@ -2,12 +2,12 @@
 
 Date: 2026-01-04
 Priority: High (core onboarding flow blocked)
-Status: Open (diagnostic logging added; awaiting full log capture in prod)
+Status: Open (root cause identified; remediation decision pending)
 
 ## Summary
 In production, manual ESPN credentials are saved successfully for a new Clerk user, but the "Auto‑pull" flow fails with `CREDENTIALS_MISSING` when verifying a league (e.g., league ID `30201` for baseball). The UI can show a contradictory state: "Credentials saved" at the top and "ESPN credentials not found" under the league verification section. This blocks onboarding and league selection for manual‑entry users.
 
-**Key observation**: Auto‑pull’s credential pre‑check succeeds, but the sport worker’s raw credential fetch fails. This narrows the issue to either **(a)** a user ID mismatch across the two calls or **(b)** different auth‑worker environments/secrets being hit, even if URLs look consistent. Extension and Claude flows working indicates the system is *partially* healthy but does **not** rule out routing/secret mismatches because they use different auth mechanisms and paths.
+**Key observation**: Auto‑pull’s credential pre‑check succeeds, but the sport worker’s raw credential fetch fails. Cloudflare logs show the sport worker’s internal fetch to auth‑worker returns **error 1042** (same‑zone Worker fetch blocked unless a compatibility flag is enabled). This indicates a **platform‑level fetch restriction**, not a missing JWT or missing credentials.
 
 ## Impact
 - Manual onboarding users cannot verify or add leagues in prod.
@@ -27,6 +27,21 @@ In production, manual ESPN credentials are saved successfully for a new Clerk us
 Sport worker error: 404 { error: 'ESPN credentials not found. Please add your ESPN credentials first.', code: 'CREDENTIALS_MISSING' }
 [auto-pull] Sport worker returned CREDENTIALS_MISSING
 ```
+
+## Observed Logs (Cloudflare Workers)
+```
+✅ JWT payload.sub matches clerkUserId (no user ID mismatch)
+✅ Authorization header present
+❌ Auth-worker response: 404
+⚠️ 404 response body: Cloudflare error code 1042
+```
+
+## Root Cause (Most Likely)
+Cloudflare **error 1042** indicates a Worker attempted to `fetch()` another Worker on the same zone without the required compatibility flag. This means the baseball/football worker’s internal call to auth‑worker is blocked at the platform layer, and auth‑worker never receives the request. The sport worker then reports `CREDENTIALS_MISSING` because it sees a 404 body produced by Cloudflare, not by the application.
+
+Remediation options:
+1. **Enable `global_fetch_strictly_public`** in the MCP workers (baseball + football) so same‑zone Worker fetches are routed through the public “front door.”  
+2. **Switch to Service Bindings (HTTP)** for worker‑to‑worker calls, which is Cloudflare’s first‑class internal communication mechanism and avoids same‑zone fetch restrictions entirely.
 
 ## Key Code Paths
 - Manual credential save:
@@ -74,14 +89,16 @@ Sport worker error: 404 { error: 'ESPN credentials not found. Please add your ES
 **Both the web app and sport worker appear to use the same auth-worker URL**, but this does **not** confirm:\n\n- the Cloudflare route binding is pointing to the same auth‑worker environment\n- the auth‑worker secrets (Supabase URL/key) are identical across entrypoints\n- the request is actually reaching the same auth‑worker script\n\nTo truly rule this out, call **both** entrypoints with the **same JWT** and compare responses (see Next Steps).
 
 ## Current Hypotheses
-Likely causes remain in two buckets:
+Primary (most likely):
 
-1. **Auth‑worker environment/secret mismatch**  
-   The sport worker may be hitting an auth‑worker instance backed by a different Supabase project than the web app, even if the URLs look the same.
-2. **JWT verification or user ID mismatch**  
-   The JWT is forwarded, but auth‑worker may decode a different `sub` than the user ID used when credentials were saved (or JWT verification fails for the sport‑worker‑forwarded token).
-3. **JWT expiration/race** (less likely)  
-   Token expires or is invalid by the time the sport worker calls auth‑worker.
+1. **Cloudflare same‑zone Worker fetch restriction (error 1042)**  
+   The baseball/football worker’s internal fetch to auth‑worker is blocked by Cloudflare unless `global_fetch_strictly_public` is enabled, or service bindings are used.
+
+Secondary (still possible):
+2. **Auth‑worker environment/secret mismatch**  
+   If the 1042 error is resolved, but the fetch still returns 404, confirm both entrypoints hit the same auth‑worker env and Supabase project.
+3. **JWT verification or user ID mismatch** (less likely now)  
+   Logs show `sub` matches `clerkUserId`, so mismatch is unlikely.
 
 ## Work Performed by Opus (2026-01-04 morning session)
 - Traced full code paths for credential save and auto-pull flows
@@ -109,17 +126,20 @@ Likely causes remain in two buckets:
 - Supabase credential lookup details
 
 ## Next Steps
-1. **Compare auth-worker entrypoints with the same JWT**  
+1. **Choose remediation path (see below):**  
+   - Short term: add `global_fetch_strictly_public` compatibility flag to sport workers.  
+   - Long term: switch to Service Bindings (HTTP) for auth‑worker calls.
+2. **Compare auth-worker entrypoints with the same JWT**  
    - `https://api.flaim.app/auth/credentials/espn?raw=true`  
    - `https://auth-worker.gerrygugger.workers.dev/credentials/espn?raw=true`  
    If responses differ, routing/secret mismatch is confirmed.
-2. **Deploy the logging changes** to all three components
-3. **Reproduce the bug** in production with a new user
-4. **Capture logs** from:
+3. **Deploy the logging changes** to all three components
+4. **Reproduce the bug** in production with a new user
+5. **Capture logs** from:
    - Vercel (auto-pull route)
    - Cloudflare (baseball-espn-mcp worker)
    - Cloudflare (auth-worker)
-5. **Analyze the trace** to identify where JWT validation fails or user ID mismatches
+6. **Analyze the trace** to confirm 1042 is resolved and internal auth‑worker fetch succeeds
 
 ## Optional Safety Improvement
 - In `web/app/api/espn/auto-pull/route.ts`, parse the pre‑check response and fail if `hasCredentials === false` to prevent ambiguous UI state.
@@ -131,9 +151,12 @@ Likely causes remain in two buckets:
 
 ## Open Questions (Updated)
 - Are `api.flaim.app/auth/*` and `auth-worker.gerrygugger.workers.dev` bound to the **same worker deployment and secrets**?
-- Why does the credential pre-check succeed but the sport worker's credential fetch fail?
-- Is the JWT being forwarded correctly through the full chain: Next.js → Sport Worker → Auth Worker?
-- Does the auth-worker see the same user ID in both the pre-check and sport worker paths?
+- After fixing 1042, does the sport worker successfully fetch raw credentials?
 
 ## Key Insight
 The **same user** can pass the credential pre‑check (auth‑worker `GET /credentials/espn`) but fail the sport‑worker raw fetch (`GET /credentials/espn?raw=true`). That split strongly implies either **user ID mismatch** between calls or **different auth‑worker environments/credentials** being hit, not a generic ESPN credential problem.
+
+## References
+- https://developers.cloudflare.com/workers/observability/errors/ (error 1042 meaning)
+- https://developers.cloudflare.com/workers/configuration/compatibility-flags/ (global_fetch_strictly_public)
+- https://developers.cloudflare.com/workers/runtime-apis/bindings/service-bindings/ (service bindings overview)
