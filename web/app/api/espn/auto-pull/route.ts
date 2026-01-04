@@ -34,6 +34,18 @@ export async function POST(request: NextRequest) {
 
     const bearer = (await getToken?.()) || undefined;
 
+    // Debug: Log token availability (helps diagnose auth issues)
+    console.log(`[auto-pull] User: ${userId}, bearer token available: ${!!bearer}`);
+
+    // If no bearer token, auth-worker and sport workers will reject the request
+    if (!bearer) {
+      console.error('[auto-pull] getToken() returned undefined - cannot authenticate with workers');
+      return NextResponse.json({
+        error: 'Authentication token unavailable. Please try signing out and back in.',
+        code: 'TOKEN_UNAVAILABLE'
+      }, { status: 401 });
+    }
+
     // Fail fast if the user hasn't saved credentials in auth-worker yet.
     const authWorkerUrl = process.env.NEXT_PUBLIC_AUTH_WORKER_URL;
     if (!authWorkerUrl) {
@@ -51,9 +63,10 @@ export async function POST(request: NextRequest) {
     });
 
     if (credentialCheck.status === 404) {
+      console.error('[auto-pull] Credential check returned 404');
       return NextResponse.json({
-        error: 'ESPN credentials not found. Please add your ESPN credentials first.',
-        code: 'CREDENTIALS_MISSING'
+        error: 'ESPN credentials not found (credential check). Please add your ESPN credentials first.',
+        code: 'CREDENTIALS_MISSING_CHECK'
       }, { status: 404 });
     }
 
@@ -74,6 +87,8 @@ export async function POST(request: NextRequest) {
     };
 
     const workerUrl = sportWorkerUrls[sport as keyof typeof sportWorkerUrls];
+    console.log(`[auto-pull] Sport worker URL for ${sport}: ${workerUrl || 'NOT SET'}`);
+
     if (!workerUrl) {
       const supportedSports = Object.keys(sportWorkerUrls).join(', ');
       return NextResponse.json({
@@ -106,9 +121,10 @@ export async function POST(request: NextRequest) {
         
         if (workerResponse.status === 404) {
           if (errorData.code === 'CREDENTIALS_MISSING') {
-            return NextResponse.json({ 
-              error: 'ESPN credentials not found. Please add your ESPN credentials first.',
-              code: 'CREDENTIALS_MISSING'
+            console.error('[auto-pull] Sport worker returned CREDENTIALS_MISSING');
+            return NextResponse.json({
+              error: 'ESPN credentials not found (sport worker auth failed). Please add your ESPN credentials first.',
+              code: 'CREDENTIALS_MISSING_WORKER'
             }, { status: 404 });
           }
           
