@@ -31,7 +31,7 @@ import {
   Shield,
   History,
 } from 'lucide-react';
-import { getDefaultSeasonYear, getSeasonRolloverDescription, type SeasonSport } from '@/lib/season-utils';
+import { getDefaultSeasonYear, type SeasonSport } from '@/lib/season-utils';
 
 interface League {
   leagueId: string;
@@ -804,36 +804,34 @@ export default function LeaguesPage() {
               /* Add League Form */
               <div className="space-y-2">
                 {/* Quick season toggles */}
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      const sport = newLeagueSport as SeasonSport;
-                      if (sport === 'baseball' || sport === 'football') {
+                {(newLeagueSport === 'baseball' || newLeagueSport === 'football') && (
+                  <div className="flex gap-2">
+                    <Button
+                      variant={newLeagueSeason === getDefaultSeasonYear(newLeagueSport as SeasonSport) ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => {
+                        const sport = newLeagueSport as SeasonSport;
                         setNewLeagueSeason(getDefaultSeasonYear(sport));
                         setSeasonManuallySet(false);
-                      }
-                    }}
-                    disabled={isVerifying}
-                  >
-                    This season
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      const sport = newLeagueSport as SeasonSport;
-                      if (sport === 'baseball' || sport === 'football') {
+                      }}
+                      disabled={isVerifying}
+                    >
+                      This season
+                    </Button>
+                    <Button
+                      variant={newLeagueSeason === getDefaultSeasonYear(newLeagueSport as SeasonSport) - 1 ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => {
+                        const sport = newLeagueSport as SeasonSport;
                         setNewLeagueSeason(getDefaultSeasonYear(sport) - 1);
                         setSeasonManuallySet(true);
-                      }
-                    }}
-                    disabled={isVerifying}
-                  >
-                    Last season
-                  </Button>
-                </div>
+                      }}
+                      disabled={isVerifying}
+                    >
+                      Last season
+                    </Button>
+                  </div>
+                )}
                 <div className="flex gap-2">
                 <div className="flex-1">
                   <Input
@@ -900,13 +898,6 @@ export default function LeaguesPage() {
               </div>
             )}
 
-            {/* Season year helper text */}
-            {hasCredentials && !verifiedLeague && (newLeagueSport === 'baseball' || newLeagueSport === 'football') && (
-              <p className="text-xs text-muted-foreground">
-                {getSeasonRolloverDescription(newLeagueSport as SeasonSport)}. You can change the year if needed.
-              </p>
-            )}
-
             {!hasCredentials && !verifiedLeague && (
               <p className="text-sm text-muted-foreground">
                 Add your ESPN credentials above before adding leagues.
@@ -926,9 +917,6 @@ export default function LeaguesPage() {
               </div>
             ) : (
               <div className="space-y-4">
-                <p className="text-xs text-muted-foreground">
-                  Leagues may appear in multiple seasons. Seasons are grouped under each league.
-                </p>
                 {leagueGroups.map((group) => {
                   const baseKey = `${group.leagueId}-${group.sport}`;
                   const isDeleting = deletingLeagueKey === baseKey;
