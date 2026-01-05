@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import { useAuth, SignIn } from '@clerk/nextjs';
-import { Loader2, Puzzle, Copy, Check, CheckCircle2, XCircle, ExternalLink, RefreshCw } from 'lucide-react';
+import { Loader2, Puzzle, Copy, Check, CheckCircle2, XCircle, ExternalLink, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -32,6 +32,8 @@ export default function ExtensionPage() {
   const [errorRetriable, setErrorRetriable] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
+  const [showDevInstructions, setShowDevInstructions] = useState(false);
+  const [showFaq, setShowFaq] = useState(false);
 
   // Check connection status
   const checkStatus = useCallback(async () => {
@@ -316,14 +318,23 @@ export default function ExtensionPage() {
                 Chrome Web Store
               </a>
             </Button>
-            <div className="text-sm text-muted-foreground space-y-2">
-              <p><strong>For developers:</strong> Load the extension manually:</p>
-              <ol className="list-decimal list-inside space-y-1 pl-2">
-                <li>Go to <code className="bg-muted px-1 rounded">chrome://extensions</code></li>
-                <li>Enable &quot;Developer mode&quot; (top right)</li>
-                <li>Click &quot;Load unpacked&quot; and select the <code className="bg-muted px-1 rounded">extension/dist</code> folder</li>
-              </ol>
-            </div>
+            <button
+              type="button"
+              className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+              onClick={() => setShowDevInstructions(!showDevInstructions)}
+            >
+              {showDevInstructions ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              Developer instructions
+            </button>
+            {showDevInstructions && (
+              <div className="text-sm text-muted-foreground space-y-2 pl-5">
+                <ol className="list-decimal list-inside space-y-1">
+                  <li>Go to <code className="bg-muted px-1 rounded">chrome://extensions</code></li>
+                  <li>Enable &quot;Developer mode&quot; (top right)</li>
+                  <li>Click &quot;Load unpacked&quot; and select <code className="bg-muted px-1 rounded">extension/dist</code></li>
+                </ol>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -386,8 +397,8 @@ export default function ExtensionPage() {
                 )}
               </Button>
             )}
-            <p className="text-sm text-muted-foreground">
-              <strong>Note:</strong> Pairing a new extension will disconnect the previous one.
+            <p className="text-xs text-muted-foreground">
+              Pairing a new extension will disconnect the previous one.
             </p>
           </CardContent>
         </Card>
@@ -415,32 +426,37 @@ export default function ExtensionPage() {
 
         {/* FAQ */}
         <Card>
-          <CardHeader>
-            <CardTitle>Frequently Asked Questions</CardTitle>
+          <CardHeader className="cursor-pointer" onClick={() => setShowFaq(!showFaq)}>
+            <div className="flex items-center justify-between">
+              <CardTitle>Frequently Asked Questions</CardTitle>
+              {showFaq ? <ChevronUp className="h-5 w-5 text-muted-foreground" /> : <ChevronDown className="h-5 w-5 text-muted-foreground" />}
+            </div>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <p className="font-medium">Why do I need an extension?</p>
-              <p className="text-sm text-muted-foreground">
-                ESPN uses secure cookies for authentication. The extension can read these cookies
-                directly from your browser, avoiding the manual process of finding them in DevTools.
-              </p>
-            </div>
-            <div>
-              <p className="font-medium">Is this safe?</p>
-              <p className="text-sm text-muted-foreground">
-                Yes. The extension only reads ESPN cookies and sends them to Flaim over HTTPS.
-                Your credentials are stored securely and never shared with third parties.
-              </p>
-            </div>
-            <div>
-              <p className="font-medium">What if I use multiple browsers?</p>
-              <p className="text-sm text-muted-foreground">
-                You can install the extension on multiple browsers, but only one can be connected
-                at a time. Pairing a new extension will disconnect the previous one.
-              </p>
-            </div>
-          </CardContent>
+          {showFaq && (
+            <CardContent className="space-y-4">
+              <div>
+                <p className="font-medium">Why do I need an extension?</p>
+                <p className="text-sm text-muted-foreground">
+                  ESPN uses secure cookies for authentication. The extension can read these cookies
+                  directly from your browser, avoiding the manual process of finding them in DevTools.
+                </p>
+              </div>
+              <div>
+                <p className="font-medium">Is this safe?</p>
+                <p className="text-sm text-muted-foreground">
+                  Yes. The extension only reads ESPN cookies and sends them to Flaim over HTTPS.
+                  Your credentials are stored securely and never shared with third parties.
+                </p>
+              </div>
+              <div>
+                <p className="font-medium">What if I use multiple browsers?</p>
+                <p className="text-sm text-muted-foreground">
+                  You can install the extension on multiple browsers, but only one can be connected
+                  at a time. Pairing a new extension will disconnect the previous one.
+                </p>
+              </div>
+            </CardContent>
+          )}
         </Card>
       </div>
     </div>
