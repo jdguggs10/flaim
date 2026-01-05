@@ -564,7 +564,31 @@ export default {
                 });
 
                 if (addResponse.status === 409) {
-                  console.log(`📋 [discover] Season ${year} already exists (409), continuing`);
+                  console.log(`📋 [discover] Season ${year} already exists (409), attempting team backfill`);
+                  try {
+                    const patchResponse = await authWorkerFetch(env, `/leagues/${leagueId}/team`, {
+                      method: 'PATCH',
+                      headers: {
+                        'X-Clerk-User-ID': clerkUserId,
+                        ...(authHeader ? { 'Authorization': authHeader } : {}),
+                        'Content-Type': 'application/json'
+                      },
+                      body: JSON.stringify({
+                        teamId: baseTeamId,
+                        sport: 'baseball',
+                        teamName: seasonTeamName,
+                        leagueName: info.leagueName,
+                        seasonYear: year
+                      })
+                    });
+
+                    if (!patchResponse.ok) {
+                      const patchError = await patchResponse.json().catch(() => ({})) as { error?: string };
+                      console.warn(`⚠️ [discover] Failed to backfill team for season ${year}: ${patchResponse.status} ${patchError.error || ''}`);
+                    }
+                  } catch (patchError) {
+                    console.warn(`⚠️ [discover] Error backfilling team for season ${year}:`, patchError);
+                  }
                 } else if (addResponse.status === 400) {
                   // Check if limit exceeded
                   const addData = await addResponse.json().catch(() => ({})) as { code?: string };
@@ -647,7 +671,31 @@ export default {
                       teamName: seasonTeamName
                     })
                   });
-                  if (addResponse.status === 400) {
+                  if (addResponse.status === 409) {
+                    try {
+                      const patchResponse = await authWorkerFetch(env, `/leagues/${leagueId}/team`, {
+                        method: 'PATCH',
+                        headers: {
+                          'X-Clerk-User-ID': clerkUserId,
+                          ...(authHeader ? { 'Authorization': authHeader } : {}),
+                          'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                          teamId: baseTeamId,
+                          sport: 'baseball',
+                          teamName: seasonTeamName,
+                          leagueName: retry.leagueName,
+                          seasonYear: year
+                        })
+                      });
+                      if (!patchResponse.ok) {
+                        const patchError = await patchResponse.json().catch(() => ({})) as { error?: string };
+                        console.warn(`⚠️ [discover] Failed to backfill team for season ${year} on retry: ${patchResponse.status} ${patchError.error || ''}`);
+                      }
+                    } catch (patchError) {
+                      console.warn(`⚠️ [discover] Error backfilling team for season ${year} on retry:`, patchError);
+                    }
+                  } else if (addResponse.status === 400) {
                     const addData = await addResponse.json().catch(() => ({})) as { code?: string };
                     if (addData.code === 'LIMIT_EXCEEDED') {
                       limitExceeded = true;
