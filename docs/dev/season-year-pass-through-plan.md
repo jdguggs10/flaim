@@ -1,6 +1,6 @@
 # Season Year Pass-Through & Multi-Season Leagues Plan
 
-Date: 2026-01-04
+Date: 2026-01-05
 Status: **Complete (M0-M5 Done)**
 Owner: TBD
 
@@ -16,6 +16,9 @@ Owner: TBD
 | M3: Worker Pass-Through | **Complete** | Both workers accept/use seasonYear |
 | M4: Multi-Season Storage + MCP | **Complete** | Delete-all enforcement in auth-worker done |
 | M5: Auto-Discover Seasons | **Complete** | Implementation + audit fixes done |
+
+**Database migration required:** apply `docs/migrations/007_espn_leagues_unique_season_year.sql` to update the
+`espn_leagues` unique constraint so multi-season inserts do not fail.
 
 ### Decisions Made
 - **Delete behavior:** Delete removes ALL seasons of a league (no per-season deletion)
@@ -52,33 +55,18 @@ After Codex audit, the following issues were fixed:
 **Round 5 (delete-all enforcement):**
 17. **Delete-all enforcement** - Auth-worker DELETE now ignores seasonYear and always removes all seasons
 
-### M5 Audit Findings (2026-01-05)
-Auto-discover seasons is implemented, but the following fixes are required:
+### M5 Audit Findings (2026-01-05) - All Fixed
+Auto-discover seasons audit findings, all resolved:
 
-1) **/leagues/add error semantics broken**
-   - Problem: `addLeague()` swallows errors and returns `false`, so `/leagues/add` cannot reliably return `DUPLICATE` or `LIMIT_EXCEEDED`.
-   - Fix: Change `addLeague()` to throw on duplicate/limit (or return `{ success, code }`), and have `/leagues/add` map those errors correctly.
-   - Files: `workers/auth-worker/src/supabase-storage.ts`, `workers/auth-worker/src/index.ts`.
+1) ✅ **/leagues/add error semantics** - `addLeague()` now returns `{ success, code }` with proper HTTP status mapping.
 
-2) **Discovery accepts empty-team seasons**
-   - Problem: discovery treats any `info.success` as valid, even when `teams.length === 0`, which later fails auto-pull.
-   - Fix: treat `teams.length === 0` as a miss (increment `consecutiveMisses`) and do not auto-save that year.
-   - Files: `workers/baseball-espn-mcp/src/index.ts`, `workers/football-espn-mcp/src/index.ts`.
+2) ✅ **Empty-team seasons** - Discovery treats `teams.length === 0` as a miss.
 
-3) **League limit not enforced during discovery**
-   - Problem: if `/leagues/add` fails due to limit, discovery continues and still reports success.
-   - Fix: on `LIMIT_EXCEEDED`, stop discovery and return partial results + clear error.
-   - Files: `workers/baseball-espn-mcp/src/index.ts`, `workers/football-espn-mcp/src/index.ts`.
+3) ✅ **League limit enforcement** - Discovery stops on `LIMIT_EXCEEDED` and returns partial results.
 
-4) **Consecutive-miss counter resets on skip**
-   - Problem: skipping an already-stored season resets `consecutiveMisses`, which can break the “two consecutive misses” stop rule.
-   - Fix: do not reset the counter on skips (or explicitly document why skipping resets the count).
-   - Files: `workers/baseball-espn-mcp/src/index.ts`, `workers/football-espn-mcp/src/index.ts`.
+4) ✅ **Consecutive-miss counter** - Skip no longer resets the counter.
 
-5) **minYearReached flag can be incorrect**
-   - Problem: it only checks the last discovered season, not whether the loop actually hit year 2000.
-   - Fix: track a boolean when `year === MIN_YEAR` is evaluated, independent of discoveries.
-   - Files: `workers/baseball-espn-mcp/src/index.ts`, `workers/football-espn-mcp/src/index.ts`.
+5) ✅ **minYearReached flag** - Tracked independently when `year === MIN_YEAR` is evaluated.
 
 ### Design Decision: Default League Scope
 - **Current behavior:** One default per user across all sports/seasons (unchanged from pre-multi-season)
@@ -123,6 +111,20 @@ Non-goals (for this iteration)
 
 ---
 
+## Files Modified (M5)
+
+- `docs/migrations/007_espn_leagues_unique_season_year.sql` - Update unique constraint to include season_year
+- `workers/auth-worker/src/supabase-storage.ts` - `addLeague` now returns structured result with codes
+- `workers/auth-worker/src/index.ts` - Added `POST /leagues/add` (single-league add)
+- `workers/baseball-espn-mcp/src/mcp/basic-league-info.ts` - Adds `httpStatus` in error responses
+- `workers/football-espn-mcp/src/mcp/basic-league-info.ts` - Adds `httpStatus` in error responses
+- `workers/baseball-espn-mcp/src/index.ts` - Added `/onboarding/discover-seasons` endpoint
+- `workers/football-espn-mcp/src/index.ts` - Added `/onboarding/discover-seasons` endpoint
+- `web/app/api/espn/discover-seasons/route.ts` - Web API proxy to worker endpoint
+- `web/app/(site)/leagues/page.tsx` - Discover seasons button + handler
+
+---
+
 ## Default Season Rules (Implemented)
 
 Rules (using America/New_York timezone):
@@ -161,6 +163,7 @@ export function getDefaultSeasonYear(sport: SeasonSport, now = new Date()): numb
 - `addLeague()` duplicate check includes seasonYear
 - `removeLeague()` deletes ALL seasons for a league (no per-season deletion)
 - **UI delete button always deletes ALL seasons** (simplified UX, no per-season management)
+- **Web API delete route ignores seasonYear** (even if passed, deletes all)
 - UI displays seasonYear in league list for informational purposes
 
 ---
@@ -177,24 +180,32 @@ export function getDefaultSeasonYear(sport: SeasonSport, now = new Date()): numb
 
 ---
 
-## Milestone 5: Auto-Discover Seasons (Implemented, Fixes Pending)
+## Milestone 5: Auto-Discover Seasons (Complete)
 
 ### UX Concept
 - After a league is successfully verified/added, show a **"Discover seasons"** button next to it.
 - When clicked, the system probes historical seasons and **auto-adds any seasons that exist**.
 - Users can still remove seasons they don't want afterward.
 
-### Proposed Endpoint
+### Implemented Endpoints
+Worker:
 `POST /onboarding/discover-seasons`
 
-Request (JSON):
+Web API:
+`POST /api/espn/discover-seasons`
+
+Worker request (JSON):
+```json
+{
+  "leagueId": "30201"
+}
+```
+
+Web API request (JSON):
 ```json
 {
   "sport": "baseball" | "football",
-  "leagueId": "30201",
-  "startYear": 2026,
-  "minYear": 2000,
-  "maxConsecutiveMisses": 2
+  "leagueId": "30201"
 }
 ```
 
@@ -205,22 +216,26 @@ Response (JSON):
   "leagueId": "30201",
   "sport": "baseball",
   "startYear": 2026,
-  "tried": [2026, 2025, 2024, 2023],
-  "found": [2025, 2024, 2023],
-  "results": [
-    { "seasonYear": 2026, "success": false, "error": "League not found" },
-    { "seasonYear": 2025, "success": true, "leagueName": "...", "teams": [...] }
-  ]
+  "minYearReached": false,
+  "rateLimited": false,
+  "limitExceeded": false,
+  "skipped": 1,
+  "discovered": [
+    { "seasonYear": 2025, "leagueName": "...", "teamCount": 12 }
+  ],
+  "error": null
 }
 ```
 
 ### Discovery Algorithm
-1) Always try **current year** and **current-1**.
-2) Continue backwards year-by-year.
-3) Stop when **two consecutive years** return "league not found" or **minYear** cap reached.
-4) Do not treat 401/403 as "not found" - abort with auth error.
-5) For 429 or 5xx, retry once; if still failing, abort with clear error.
-6) Hard floor: **year 2000** (will not probe earlier than this).
+1) Always probe **current year** and **current-1**, regardless of prior misses.
+2) Continue backwards year-by-year to **year 2000**.
+3) Skip already-stored seasons (do not reset miss counter).
+4) Stop when **two consecutive years** return 404 (miss).
+5) Treat empty-team responses as misses (do not auto-save).
+6) On 401/403: abort with auth error.
+7) On 429: stop immediately and return partial results.
+8) On 5xx: retry once; if still failing, abort with clear error.
 
 ### Follow-up Fixes (Complete)
 - [x] Fix `/leagues/add` error semantics so duplicates/limit are surfaced correctly
@@ -238,52 +253,12 @@ Response (JSON):
 - ~~Changing uniqueness to include seasonYear could break existing delete/update flows.~~ **Mitigated** - application-level checks, no DB constraint change needed
 - ~~Different environments might not have the `season_year` column consistently.~~ **Verified** - column exists in storage code
 - ~~Default league assumptions may cause unexpected UI behavior if not updated.~~ **Addressed** - one default per user overall, unchanged
-- ESPN season rollover dates can shift slightly; defaults should be clear and user-overridable. **Implemented** - helper text shown in UI
-- Discover-seasons could hit rate limits if the lookback window is too large. **Mitigated** - year 2000 floor with 2-consecutive-miss early termination
+- ~~ESPN season rollover dates can shift slightly; defaults should be clear and user-overridable.~~ **Implemented** - helper text shown in UI
+- ~~Discover-seasons could hit rate limits if the lookback window is too large.~~ **Mitigated** - year 2000 floor with 2-consecutive-miss early termination
 
 ---
 
 ## Next Steps
 
-1. **Test M0-M4 changes** - Manual E2E test of season year flow
-2. **Deploy** - Deploy workers and web app with M0-M4 changes
-3. **M5** - Implement discover-seasons feature
-
----
-
-## M5 Pre-Implementation Risks / Open Issues (from review)
-
-These should be addressed in the discover-seasons implementation before release:
-
-1) **League limit (10) vs auto-discover**
-   - `addLeague()` enforces a max of 10 leagues per user.
-   - Auto-discover could exceed this and fail midway.
-   - Decide behavior: stop with “limit reached,” or raise the limit for multi-season.
-
-2) **Discovery success criteria**
-   - ESPN can return `success: true` but with zero teams.
-   - Treat `teams.length === 0` as a miss (or return `success: false` in basic-league-info).
-
-3) **`httpStatus` support**
-   - Plan depends on `httpStatus` in `basic-league-info` responses.
-   - Must add `httpStatus?: number` to both baseball + football helpers and error returns.
-
-4) **Miss counter should not reset on “skipped” years**
-   - Skipping already-stored seasons should not reset the consecutive miss counter.
-   - Only reset on a successful probe.
-
-5) **/leagues/add error handling**
-   - 409 duplicate should be non-fatal.
-   - Limit-exceeded (400) should stop discovery and return partial results with a flag.
-
-6) **UI discover button duplication**
-   - The list renders a row per season; button may appear multiple times for same leagueId.
-   - Optional: show only once per leagueId (e.g., most recent season row).
-
-7) **Toast import / feedback**
-   - Plan mentions `toast.success` but current UI may not import toast.
-   - Decide whether to add toast or use existing error state.
-
-8) **Refresh helper**
-   - Plan references `fetchLeagues()` but no shared helper exists yet.
-   - Add a reusable `loadLeagues()` function for refresh after discovery.
+1. **E2E Testing** - Manual testing of full season year flow including discover-seasons
+2. **Deploy** - Deploy workers and web app with all changes
