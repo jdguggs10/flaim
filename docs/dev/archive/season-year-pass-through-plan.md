@@ -77,7 +77,8 @@ Auto-discover seasons audit findings, all resolved:
      - 2022: **401 Unauthorized** → worker aborts and returns 401
    - Impact: discovery stops early and no older seasons are saved.
    - Hypotheses: ESPN credentials not valid for older seasons, ESPN rate/anti‑bot behavior, or cookie scope issue.
-   - Next steps: capture ESPN response body/headers for 401, verify cookie freshness, and decide whether to treat 401 as terminal vs. skip.
+   - Fix: treat 401/403 as a miss **after** at least one known season exists (discovered or stored); only abort if 401/403 occurs before any known season.
+   - Status: **Resolved (2026-01-05)** — verified in prod.
 
 ### Design Decision: Default League Scope
 - **Current behavior:** One default per user across all sports/seasons (unchanged from pre-multi-season)

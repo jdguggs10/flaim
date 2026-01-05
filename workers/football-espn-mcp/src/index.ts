@@ -446,11 +446,24 @@ export default {
               ...(authHeader ? { 'Authorization': authHeader } : {})
             }
           });
-          const leaguesData = await leaguesResponse.json() as { leagues?: Array<{ leagueId: string; sport: string; seasonYear?: number }> };
+          const leaguesData = await leaguesResponse.json() as { leagues?: Array<{ leagueId: string; sport: string; seasonYear?: number; teamId?: string }> };
+          const matchingLeagues = (leaguesData.leagues || []).filter(
+            (league) => league.leagueId === leagueId && league.sport === 'football'
+          );
+          const baseTeamId = matchingLeagues.find((league) => league.teamId)?.teamId;
+
+          if (!baseTeamId) {
+            return new Response(JSON.stringify({
+              error: 'Team selection required before discovering seasons',
+              code: 'TEAM_ID_MISSING'
+            }), {
+              status: 400,
+              headers: { 'Content-Type': 'application/json', ...corsHeaders }
+            });
+          }
+
           const existingSeasons = new Set(
-            (leaguesData.leagues || [])
-              .filter(l => l.leagueId === leagueId && l.sport === 'football')
-              .map(l => l.seasonYear)
+            matchingLeagues.map((league) => league.seasonYear)
           );
 
           // Discovery algorithm
@@ -463,6 +476,8 @@ export default {
             seasonYear: number;
             leagueName: string;
             teamCount: number;
+            teamId?: string;
+            teamName?: string;
           }
 
           const discovered: DiscoveredSeason[] = [];
@@ -514,10 +529,14 @@ export default {
             }
 
             if (info.success) {
+              const matchedTeam = info.teams?.find((team) => team.teamId === baseTeamId);
+              const seasonTeamName = matchedTeam?.teamName;
               discovered.push({
                 seasonYear: year,
                 leagueName: info.leagueName || `Football League ${leagueId}`,
-                teamCount: info.teams?.length || 0
+                teamCount: info.teams?.length || 0,
+                teamId: baseTeamId,
+                teamName: seasonTeamName
               });
               consecutiveMisses = 0;
 
@@ -534,7 +553,9 @@ export default {
                     leagueId,
                     sport: 'football',
                     seasonYear: year,
-                    leagueName: info.leagueName
+                    leagueName: info.leagueName,
+                    teamId: baseTeamId,
+                    teamName: seasonTeamName
                   })
                 });
 
@@ -594,10 +615,14 @@ export default {
               }
 
               if (retry.success) {
+                const matchedTeam = retry.teams?.find((team) => team.teamId === baseTeamId);
+                const seasonTeamName = matchedTeam?.teamName;
                 discovered.push({
                   seasonYear: year,
                   leagueName: retry.leagueName || `Football League ${leagueId}`,
-                  teamCount: retry.teams?.length || 0
+                  teamCount: retry.teams?.length || 0,
+                  teamId: baseTeamId,
+                  teamName: seasonTeamName
                 });
                 consecutiveMisses = 0;
                 // Auto-save on retry success
@@ -613,7 +638,9 @@ export default {
                       leagueId,
                       sport: 'football',
                       seasonYear: year,
-                      leagueName: retry.leagueName
+                      leagueName: retry.leagueName,
+                      teamId: baseTeamId,
+                      teamName: seasonTeamName
                     })
                   });
                   if (addResponse.status === 400) {

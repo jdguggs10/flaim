@@ -10,6 +10,7 @@ Ideas and tasks to consider. Not commitments, just a list.
 ## High Priority
 
 - [ ] **Dependency restructure** — Fix `@clerk/backend` version mismatch (root v2 vs workers v1), then audit all deps to ensure each lives in the right package with clear reasoning. Goal: shared deps in root, package-specific deps in each package.
+- [ ] **Historic season team mapping** — Ensure multi-season entries store the correct `teamId` and `teamName` for the specific season (not the current-season team).
 
 ## Medium Priority
 
