@@ -18,6 +18,7 @@ interface BasicLeagueInfoRequest {
     swid: string;
     s2: string;
   };
+  seasonYear?: number;
 }
 
 interface BasicLeagueInfoResponse {
@@ -40,57 +41,90 @@ interface BasicLeagueInfoResponse {
     ownerName?: string;
   }>;
   error?: string;
+  httpStatus?: number; // HTTP status code for error differentiation in discovery
 }
 
 export async function getBasicLeagueInfo(
   request: BasicLeagueInfoRequest
 ): Promise<BasicLeagueInfoResponse> {
   try {
-    const { leagueId, gameId, credentials, sport } = request;
-    
+    const { leagueId, gameId, credentials, sport, seasonYear: requestedSeasonYear } = request;
+
     if (!leagueId || !gameId || !credentials.swid || !credentials.s2) {
       return {
         success: false,
-        error: 'Missing required parameters: leagueId, gameId, swid, s2'
+        error: 'Missing required parameters: leagueId, gameId, swid, s2',
+        httpStatus: 400
       };
     }
 
-    const currentYear = new Date().getFullYear();
-    const apiUrl = `https://lm-api-reads.fantasy.espn.com/apis/v3/games/${gameId}/seasons/${currentYear}/segments/0/leagues/${leagueId}?view=mStandings&view=mTeam&view=mSettings`;
+    // Use provided seasonYear or fall back to current year
+    const seasonYear = requestedSeasonYear || new Date().getFullYear();
+    const apiUrl = `https://lm-api-reads.fantasy.espn.com/apis/v3/games/${gameId}/seasons/${seasonYear}/segments/0/leagues/${leagueId}?view=mStandings&view=mTeam&view=mSettings`;
 
     console.log(`🏈 Fetching basic ${sport} league info: ${apiUrl}`);
     console.log(`🍪 Using credentials: SWID=${credentials.swid.substring(0, 10)}... s2=${credentials.s2.substring(0, 20)}...`);
 
-    const response = await fetch(apiUrl, {
-      headers: {
-        'Cookie': `SWID=${credentials.swid}; espn_s2=${credentials.s2}`,
-        'User-Agent': 'flaim-onboarding-autopull/1.0',
-        'Accept': 'application/json',
-        'X-Fantasy-Source': 'kona',
-        'X-Fantasy-Platform': 'kona-web-2.0.0'
+    // Create AbortController for 7-second timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 7000);
+
+    let response;
+    try {
+      response = await fetch(apiUrl, {
+        headers: {
+          'Cookie': `SWID=${credentials.swid}; espn_s2=${credentials.s2}`,
+          'User-Agent': 'flaim-onboarding-autopull/1.0',
+          'Accept': 'application/json',
+          'X-Fantasy-Source': 'kona',
+          'X-Fantasy-Platform': 'kona-web-2.0.0'
+        },
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+      if (fetchError instanceof Error && fetchError.name === 'AbortError') {
+        return {
+          success: false,
+          error: 'ESPN API request timed out - try again',
+          httpStatus: 504 // Gateway Timeout
+        };
       }
-    });
+      throw fetchError;
+    }
 
     console.log(`📡 ESPN API Response: ${response.status} ${response.statusText}`);
 
     if (response.status === 401 || response.status === 403) {
       return {
         success: false,
-        error: 'ESPN authentication failed - please verify your cookies are current and valid'
+        error: 'ESPN authentication failed - please verify your cookies are current and valid',
+        httpStatus: response.status
       };
     }
 
     if (response.status === 404) {
       return {
         success: false,
-        error: 'League not found - please check your league ID and sport selection'
+        error: 'League not found - please check your league ID and sport selection',
+        httpStatus: 404
+      };
+    }
+
+    if (response.status === 429) {
+      return {
+        success: false,
+        error: 'ESPN API rate limited - try again later',
+        httpStatus: 429
       };
     }
 
     if (!response.ok) {
       return {
         success: false,
-        error: `ESPN API error: ${response.status} ${response.statusText}`
+        error: `ESPN API error: ${response.status} ${response.statusText}`,
+        httpStatus: response.status
       };
     }
 
@@ -105,18 +139,21 @@ export async function getBasicLeagueInfo(
       if (responseText.includes('<!DOCTYPE') || responseText.includes('<html')) {
         return {
           success: false,
-          error: 'ESPN returned HTML instead of JSON - likely authentication failure'
+          error: 'ESPN returned HTML instead of JSON - likely authentication failure',
+          httpStatus: 401
         };
       }
       return {
         success: false,
-        error: 'Invalid response format from ESPN API'
+        error: 'Invalid response format from ESPN API',
+        httpStatus: 500
       };
     }
 
     // Extract basic league information
     const leagueName = data.settings?.name || `${sport.charAt(0).toUpperCase() + sport.slice(1)} League ${leagueId}`;
-    const seasonYear = data.seasonId || currentYear;
+    // Use ESPN's returned seasonId if available, otherwise use the requested/default seasonYear
+    const returnedSeasonYear = data.seasonId || seasonYear;
 
     // Extract teams information
     const teams = (data.teams || []).map((team: any) => ({
@@ -164,7 +201,7 @@ export async function getBasicLeagueInfo(
     return {
       success: true,
       leagueName,
-      seasonYear,
+      seasonYear: returnedSeasonYear,
       standings,
       teams
     };
@@ -173,7 +210,8 @@ export async function getBasicLeagueInfo(
     console.error(`Basic ${request.sport || 'league'} info error:`, error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Unknown error occurred'
+      error: error instanceof Error ? error.message : 'Unknown error occurred',
+      httpStatus: 500
     };
   }
 }

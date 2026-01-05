@@ -7,11 +7,12 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
-import type { 
+import type {
   AutoPullResponse,
   EspnLeagueInfo,
   SportName
 } from '@/lib/espn-types';
+import { getDefaultSeasonYear, type SeasonSport } from '@/lib/season-utils';
 
 export async function POST(request: NextRequest) {
   try {
@@ -22,13 +23,25 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { sport, leagueId } = body as { sport?: string; leagueId?: string };
-    
+    const { sport, leagueId, seasonYear: requestedSeasonYear } = body as {
+      sport?: string;
+      leagueId?: string;
+      seasonYear?: number;
+    };
+
     if (!sport || !leagueId) {
-      return NextResponse.json({ 
-        error: 'Missing required fields: sport and leagueId' 
+      return NextResponse.json({
+        error: 'Missing required fields: sport and leagueId'
       }, { status: 400 });
     }
+
+    // Use provided seasonYear or compute default based on sport + date
+    const seasonYear = requestedSeasonYear ||
+      ((sport === 'baseball' || sport === 'football')
+        ? getDefaultSeasonYear(sport as SeasonSport)
+        : new Date().getFullYear());
+
+    console.log(`[auto-pull] Using season year: ${seasonYear} (requested: ${requestedSeasonYear || 'none'})`);
 
     const bearer = (await getToken?.()) || undefined;
 
@@ -115,7 +128,7 @@ export async function POST(request: NextRequest) {
       // Call the sport worker's onboarding initialize endpoint
       const sportWorkerFullUrl = `${workerUrl}/onboarding/initialize`;
       console.log(`[auto-pull] Calling sport worker: ${sportWorkerFullUrl}`);
-      console.log(`[auto-pull] Sport worker request - userId: ${userId}, sport: ${sport}, leagueId: ${leagueId}`);
+      console.log(`[auto-pull] Sport worker request - userId: ${userId}, sport: ${sport}, leagueId: ${leagueId}, seasonYear: ${seasonYear}`);
       console.log(`[auto-pull] Sport worker auth header: Bearer ${bearer ? `[${bearer.length} chars]` : 'MISSING'}`);
 
       const workerResponse = await fetch(sportWorkerFullUrl, {
@@ -127,7 +140,8 @@ export async function POST(request: NextRequest) {
         },
         body: JSON.stringify({
           sport: sport,
-          leagueId: leagueId
+          leagueId: leagueId,
+          seasonYear: seasonYear
         })
       });
 
@@ -178,12 +192,14 @@ export async function POST(request: NextRequest) {
           gameId?: string;
           standings?: any[];
           teams?: any[];
+          success?: boolean;
+          error?: string;
         }>;
       };
-      
+
       if (!workerData.success) {
-        return NextResponse.json({ 
-          error: workerData.error || 'Failed to retrieve league information' 
+        return NextResponse.json({
+          error: workerData.error || 'Failed to retrieve league information'
         }, { status: 400 });
       }
 
@@ -191,8 +207,15 @@ export async function POST(request: NextRequest) {
       // Sport worker now returns info for the specific requested league
       const targetLeague = workerData.leagues?.[0];
       if (!targetLeague) {
-        return NextResponse.json({ 
-          error: 'No league data returned from sport worker' 
+        return NextResponse.json({
+          error: 'No league data returned from sport worker'
+        }, { status: 404 });
+      }
+
+      // Check if the league itself has an error (e.g., ESPN returned 404 for this season)
+      if (targetLeague.success === false && targetLeague.error) {
+        return NextResponse.json({
+          error: targetLeague.error
         }, { status: 404 });
       }
 
@@ -208,8 +231,13 @@ export async function POST(request: NextRequest) {
 
       // Validate that we got meaningful data
       if (!leagueInfo.teams || leagueInfo.teams.length === 0) {
-        return NextResponse.json({ 
-          error: 'No teams found in this league - there may be an issue with the league data' 
+        // Provide helpful message about season-specific issues
+        const suggestedYear = leagueInfo.seasonYear === new Date().getFullYear()
+          ? leagueInfo.seasonYear - 1
+          : leagueInfo.seasonYear;
+        return NextResponse.json({
+          error: `No teams found for ${sport} league ${leagueId} in season ${leagueInfo.seasonYear}. ` +
+            `This league may not exist for this season. Try season ${suggestedYear} instead.`
         }, { status: 404 });
       }
 

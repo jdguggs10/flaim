@@ -1,7 +1,27 @@
 
 export interface Env {
   NODE_ENV?: string;
+  ENVIRONMENT?: string;
   AUTH_WORKER_URL: string;
+  AUTH_WORKER?: Fetcher;  // Service Binding for auth-worker
+}
+
+/**
+ * Fetch from auth-worker using service binding (preferred) or URL fallback.
+ */
+function authWorkerFetch(env: Env, path: string, init?: RequestInit): Promise<Response> {
+  const safePath = path.startsWith('/') ? path : `/${path}`;
+  if (env.AUTH_WORKER) {
+    const url = new URL(safePath, 'https://auth-worker.internal');
+    return env.AUTH_WORKER.fetch(new Request(url.toString(), init));
+  }
+  if (env.ENVIRONMENT === 'prod') {
+    console.warn('[agent/authWorkerFetch] AUTH_WORKER binding missing in prod; using URL fallback');
+  }
+  if (!env.AUTH_WORKER_URL) {
+    throw new Error('AUTH_WORKER_URL is not configured');
+  }
+  return fetch(`${env.AUTH_WORKER_URL}${safePath}`, init);
 }
 
 // =============================================================================
@@ -31,6 +51,24 @@ function extractErrorCode(message: string): string | undefined {
   // Extract error code prefix like "ESPN_COOKIES_EXPIRED" from error messages
   const match = message.match(/^([A-Z_]+):/);
   return match ? match[1] : undefined;
+}
+
+/**
+ * Get the default season year for baseball using America/New_York timezone.
+ * Defaults to previous year until Feb 1, then switches to current year.
+ */
+function getDefaultBaseballSeason(now = new Date()): number {
+  const ny = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    year: 'numeric',
+    month: '2-digit',
+  }).formatToParts(now);
+
+  const year = Number(ny.find((p) => p.type === 'year')?.value);
+  const month = Number(ny.find((p) => p.type === 'month')?.value);
+
+  // Rollover on Feb 1 (month 2)
+  return month < 2 ? year - 1 : year;
 }
 
 export interface McpToolCall {
@@ -68,6 +106,10 @@ interface UserLeague {
   leagueId: string;
   sport: string;
   teamId?: string;
+  seasonYear?: number;
+  leagueName?: string;
+  teamName?: string;
+  isDefault?: boolean;
 }
 
 /**
@@ -82,12 +124,9 @@ async function fetchUserLeagues(
   const timeoutId = setTimeout(() => controller.abort(), 5000); // 5s timeout
 
   try {
-    const authWorkerUrl = env.AUTH_WORKER_URL;
-    const url = `${authWorkerUrl}/leagues`;
+    console.log(`⚾️ [agent] Fetching leagues for ${clerkUserId}`);
 
-    console.log(`⚾️ [agent] Fetching leagues for ${clerkUserId} from ${url}`);
-
-    const response = await fetch(url, {
+    const response = await authWorkerFetch(env, '/leagues', {
       method: 'GET',
       headers: {
         'X-Clerk-User-ID': clerkUserId,
@@ -481,7 +520,7 @@ export class McpAgent {
    * Get tool definitions in MCP format
    */
   private getToolDefinitions() {
-    const currentYear = new Date().getFullYear().toString();
+    const currentYear = getDefaultBaseballSeason().toString();
     const currentDate = new Date().toISOString().split('T')[0];
 
     // securitySchemes required by OpenAI ChatGPT for OAuth-protected tools
@@ -651,13 +690,34 @@ export class McpAgent {
     // SPECIAL CASE: get_user_session should always work if authenticated
     if (tool === 'get_user_session') {
       const hasMultipleLeagues = baseballLeagues.length > 1;
-      const sessionMessage = hasBaseballLeagues
-        ? (hasMultipleLeagues
-          ? `User has ${baseballLeagues.length} baseball leagues configured. ASK the user which league they want to query before making other tool calls. List their leagues by leagueId and let them choose.`
-          : 'Use defaultLeague.leagueId and defaultLeague.teamId for all subsequent tool calls. Use currentSeason for seasonId parameter.')
-        : (hasAnyLeagues
+      // Check if any leagues have different seasons (multi-season scenario)
+      const uniqueSeasons = [...new Set((baseballLeagues as any[]).map(l => l.seasonYear).filter(Boolean))];
+      const hasMultipleSeasons = uniqueSeasons.length > 1;
+
+      let sessionMessage: string;
+      if (!hasBaseballLeagues) {
+        sessionMessage = hasAnyLeagues
           ? `No baseball leagues found, but found leagues for: ${userLeagues.map(l => l.sport).join(', ')}. Please add a baseball league in settings.`
-          : 'No leagues configured. Please go to flaim.app/settings/espn to add your ESPN credentials.');
+          : 'No leagues configured. Please go to flaim.app/settings/espn to add your ESPN credentials.';
+      } else if (hasMultipleLeagues) {
+        sessionMessage = hasMultipleSeasons
+          ? `User has ${baseballLeagues.length} baseball league entries across seasons ${uniqueSeasons.join(', ')}. ASK which league AND season they want. List by leagueName, leagueId, AND seasonYear. Use matching teamId and seasonYear together.`
+          : `User has ${baseballLeagues.length} baseball leagues configured. ASK which league they want. List by leagueName and leagueId.`;
+      } else {
+        // Single league - use it directly with its seasonYear
+        const league = baseballLeagues[0] as any;
+        sessionMessage = league.seasonYear
+          ? `Use leagueId=${league.leagueId}, teamId=${league.teamId || 'none'}, seasonId=${league.seasonYear} for all tool calls.`
+          : 'Use defaultLeague.leagueId and defaultLeague.teamId for all subsequent tool calls. Use currentSeason for seasonId parameter.';
+      }
+
+      // Build defaultLeague with seasonYear for LLM convenience
+      const currentSeason = getDefaultBaseballSeason();
+      const currentSeasonLeague = (baseballLeagues as any[]).find(
+        l => l.teamId && l.seasonYear === currentSeason
+      );
+      const anyLeagueWithTeam = (baseballLeagues as any[]).find(l => l.teamId);
+      const defaultLeagueData = currentSeasonLeague || anyLeagueWithTeam || baseballLeagues[0];
 
       return {
         content: [
@@ -666,10 +726,17 @@ export class McpAgent {
             text: JSON.stringify({
               success: true,
               currentDate: new Date().toISOString(),
-              currentSeason: new Date().getFullYear().toString(),
+              currentSeason: currentSeason.toString(),
               timezone: 'America/New_York',
               totalLeaguesFound: userLeagues.length,
               baseballLeaguesFound: baseballLeagues.length,
+              defaultLeague: defaultLeagueData ? {
+                leagueId: defaultLeagueData.leagueId,
+                teamId: defaultLeagueData.teamId,
+                seasonYear: defaultLeagueData.seasonYear,
+                leagueName: defaultLeagueData.leagueName,
+                teamName: defaultLeagueData.teamName
+              } : null,
               allLeagues: userLeagues,
               instructions: sessionMessage,
               debug: {
@@ -701,7 +768,13 @@ export class McpAgent {
     }
 
     // Use the first baseball league as default (or find one with teamId set)
-    const defaultLeague = (baseballLeagues as any).find((l: any) => l.teamId) || baseballLeagues[0];
+    // Prefer leagues matching the current season to avoid season/team mismatch
+    const currentSeason = getDefaultBaseballSeason();
+    const currentSeasonLeague = (baseballLeagues as any).find(
+      (l: any) => l.teamId && l.seasonYear === currentSeason
+    );
+    const anyLeagueWithTeam = (baseballLeagues as any).find((l: any) => l.teamId);
+    const defaultLeague = currentSeasonLeague || anyLeagueWithTeam || baseballLeagues[0];
 
     // Normalize args: use user's configured league if not provided or invalid
     const normalizedArgs = { ...args };
@@ -711,16 +784,27 @@ export class McpAgent {
     const userHasLeague = providedLeagueId && (baseballLeagues as any).some((l: any) => l.leagueId === providedLeagueId);
 
     if (!providedLeagueId || !userHasLeague) {
-      console.log(`📋 [agent] Using default league ${defaultLeague.leagueId} (provided: ${providedLeagueId || 'none'}, valid: ${userHasLeague})`);
+      console.log(`📋 [agent] Using default league ${defaultLeague.leagueId} season ${defaultLeague.seasonYear} (provided: ${providedLeagueId || 'none'}, valid: ${userHasLeague})`);
       normalizedArgs.leagueId = defaultLeague.leagueId;
       if (defaultLeague.teamId) {
         normalizedArgs.teamId = normalizedArgs.teamId || defaultLeague.teamId;
       }
+      // Use the league's seasonYear to keep team/season aligned
+      if (defaultLeague.seasonYear && !normalizedArgs.seasonId) {
+        normalizedArgs.seasonId = defaultLeague.seasonYear.toString();
+      }
+    } else if (!normalizedArgs.seasonId) {
+      // User provided valid leagueId but no seasonId - find the matching league's seasonYear
+      const matchingLeague = (baseballLeagues as any[]).find(l => l.leagueId === providedLeagueId);
+      if (matchingLeague?.seasonYear) {
+        console.log(`📋 [agent] Using stored seasonYear ${matchingLeague.seasonYear} for provided league ${providedLeagueId}`);
+        normalizedArgs.seasonId = matchingLeague.seasonYear.toString();
+      }
     }
 
-    // Default seasonId to current year
+    // Default seasonId to timezone-aware current season if still not set
     if (!normalizedArgs.seasonId) {
-      normalizedArgs.seasonId = new Date().getFullYear().toString();
+      normalizedArgs.seasonId = currentSeason.toString();
     }
 
     console.log(`🔧 [agent] Executing ${tool} with normalized args:`, JSON.stringify(normalizedArgs));
@@ -751,7 +835,7 @@ export class McpAgent {
       const { EspnApiClient } = await import('../espn');
       const espnClient = new EspnApiClient(env, { authHeader, logContext });
 
-      const { leagueId, seasonId = new Date().getFullYear().toString() } = args;
+      const { leagueId, seasonId = getDefaultBaseballSeason().toString() } = args;
       const league = await espnClient.fetchLeague(leagueId, parseInt(seasonId), 'mSettings', clerkUserId);
 
       const { getLeagueMeta } = await import('../tools/getLeagueMeta');
@@ -797,7 +881,7 @@ export class McpAgent {
       const { EspnApiClient } = await import('../espn');
       const espnClient = new EspnApiClient(env, { authHeader, logContext });
 
-      const { leagueId, teamId, seasonId = new Date().getFullYear().toString() } = args;
+      const { leagueId, teamId, seasonId = getDefaultBaseballSeason().toString() } = args;
       const roster = await espnClient.fetchRoster(leagueId, teamId, parseInt(seasonId), undefined, clerkUserId);
 
       return {
@@ -838,7 +922,7 @@ export class McpAgent {
       const { EspnApiClient } = await import('../espn');
       const espnClient = new EspnApiClient(env, { authHeader, logContext });
 
-      const { leagueId, week, seasonId = new Date().getFullYear().toString() } = args;
+      const { leagueId, week, seasonId = getDefaultBaseballSeason().toString() } = args;
       const league = await espnClient.fetchLeague(leagueId, parseInt(seasonId), 'mMatchup', clerkUserId);
 
       return {

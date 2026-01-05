@@ -31,9 +31,12 @@
           "zone_name": "flaim.app"
         }
       ],
+      // Service binding for auth-worker (avoids same-zone fetch error 1042)
+      "services": [
+        { "binding": "AUTH_WORKER", "service": "auth-worker" }
+      ],
       // Environment variables for production
-      // Note: Worker-to-worker calls MUST use .workers.dev URLs.
-      // Custom domain (api.flaim.app) causes 522 timeouts for intra-zone requests.
+      // Note: AUTH_WORKER_URL kept as fallback if service binding is unavailable.
       "vars": {
         "NODE_ENV": "production",
         "ENVIRONMENT": "prod",
@@ -44,8 +47,11 @@
     "preview": {
       "name": "baseball-espn-mcp-preview",
       "workers_dev": true, // Use workers.dev URL for preview
+      // Service binding for auth-worker
+      "services": [
+        { "binding": "AUTH_WORKER", "service": "auth-worker-preview" }
+      ],
       // Environment variables for preview
-      // Note: Worker-to-worker calls MUST use .workers.dev URLs.
       "vars": {
         "NODE_ENV": "production",
         "ENVIRONMENT": "preview",
@@ -56,6 +62,10 @@
     "dev": {
       "name": "baseball-espn-mcp-dev",
       "workers_dev": true, // Use workers.dev URL for development
+      // Service binding for auth-worker (uses URL fallback if binding unavailable locally)
+      "services": [
+        { "binding": "AUTH_WORKER", "service": "auth-worker-dev" }
+      ],
       // Environment variables for dev
       "vars": {
         "NODE_ENV": "development",

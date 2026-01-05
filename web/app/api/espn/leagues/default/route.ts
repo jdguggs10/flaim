@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
     }
 
-    const body: { leagueId?: string; sport?: string } = await request.json();
+    const body: { leagueId?: string; sport?: string; seasonYear?: number } = await request.json();
 
     if (!body.leagueId || !body.sport) {
       return NextResponse.json({
@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
         'X-Clerk-User-ID': userId,
         ...(bearer ? { 'Authorization': `Bearer ${bearer}` } : {})
       },
-      body: JSON.stringify({ leagueId: body.leagueId, sport: body.sport })
+      body: JSON.stringify({ leagueId: body.leagueId, sport: body.sport, seasonYear: body.seasonYear })
     });
 
     const workerData = await workerResponse.json() as any;

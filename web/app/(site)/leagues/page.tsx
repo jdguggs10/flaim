@@ -29,7 +29,9 @@ import {
   X,
   Star,
   Shield,
+  History,
 } from 'lucide-react';
+import { getDefaultSeasonYear, getSeasonRolloverDescription, type SeasonSport } from '@/lib/season-utils';
 
 interface League {
   leagueId: string;
@@ -84,10 +86,13 @@ export default function LeaguesPage() {
   const [leagueError, setLeagueError] = useState<string | null>(null);
   const [deletingLeagueKey, setDeletingLeagueKey] = useState<string | null>(null);
   const [settingDefaultKey, setSettingDefaultKey] = useState<string | null>(null);
+  const [discoveringLeagueKey, setDiscoveringLeagueKey] = useState<string | null>(null);
 
   // Add league flow state
   const [newLeagueId, setNewLeagueId] = useState('');
   const [newLeagueSport, setNewLeagueSport] = useState<Sport>('football');
+  const [newLeagueSeason, setNewLeagueSeason] = useState<number>(() => getDefaultSeasonYear('football'));
+  const [seasonManuallySet, setSeasonManuallySet] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
   const [verifiedLeague, setVerifiedLeague] = useState<VerifiedLeague | null>(null);
   const [selectedTeamId, setSelectedTeamId] = useState<string>('');
@@ -206,12 +211,12 @@ export default function LeaguesPage() {
       return;
     }
 
-    // Check for duplicates
+    // Check for duplicates (including season year for multi-season support)
     const exists = leagues.some(
-      (l) => l.leagueId === newLeagueId.trim() && l.sport === newLeagueSport
+      (l) => l.leagueId === newLeagueId.trim() && l.sport === newLeagueSport && l.seasonYear === newLeagueSeason
     );
     if (exists) {
-      setLeagueError('This league is already added');
+      setLeagueError('This league and season is already added');
       return;
     }
 
@@ -227,6 +232,7 @@ export default function LeaguesPage() {
         body: JSON.stringify({
           sport: newLeagueSport,
           leagueId: newLeagueId.trim(),
+          seasonYear: newLeagueSeason,
         }),
       });
 
@@ -318,22 +324,22 @@ export default function LeaguesPage() {
     setLeagueError(null);
   };
 
-  // Delete league
+  // Delete league - removes ALL seasons of this league
   const handleDeleteLeague = async (leagueId: string, sport: string) => {
     const leagueKey = `${leagueId}-${sport}`;
     setDeletingLeagueKey(leagueKey);
 
     try {
-      const res = await fetch(
-        `/api/espn/leagues?leagueId=${encodeURIComponent(leagueId)}&sport=${encodeURIComponent(sport)}`,
-        { method: 'DELETE' }
-      );
+      // Delete all seasons of this league (no seasonYear = delete all)
+      const deleteUrl = `/api/espn/leagues?leagueId=${encodeURIComponent(leagueId)}&sport=${encodeURIComponent(sport)}`;
+      const res = await fetch(deleteUrl, { method: 'DELETE' });
 
       if (!res.ok) {
         const data = await res.json() as { error?: string };
         throw new Error(data.error || 'Failed to remove league');
       }
 
+      // Remove all seasons of this league from local state
       setLeagues(leagues.filter((l) => !(l.leagueId === leagueId && l.sport === sport)));
     } catch (err) {
       setLeagueError(err instanceof Error ? err.message : 'Failed to remove league');
@@ -342,9 +348,9 @@ export default function LeaguesPage() {
     }
   };
 
-  // Set default league
-  const handleSetDefault = async (leagueId: string, sport: string) => {
-    const leagueKey = `${leagueId}-${sport}`;
+  // Set default league (requires seasonYear to target specific row)
+  const handleSetDefault = async (leagueId: string, sport: string, seasonYear?: number) => {
+    const leagueKey = `${leagueId}-${sport}-${seasonYear || 'all'}`;
     setSettingDefaultKey(leagueKey);
     setLeagueError(null);
 
@@ -352,7 +358,7 @@ export default function LeaguesPage() {
       const res = await fetch('/api/espn/leagues/default', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ leagueId, sport }),
+        body: JSON.stringify({ leagueId, sport, seasonYear }),
       });
 
       if (!res.ok) {
@@ -364,16 +370,71 @@ export default function LeaguesPage() {
       if (data.leagues) {
         setLeagues(data.leagues);
       } else {
-        // Fallback: update locally using functional update to avoid stale closure
+        // Fallback: update locally - only the specific season becomes default
         setLeagues((prev) => prev.map((l) => ({
           ...l,
-          isDefault: l.leagueId === leagueId && l.sport === sport,
+          isDefault: l.leagueId === leagueId && l.sport === sport && l.seasonYear === seasonYear,
         })));
       }
     } catch (err) {
       setLeagueError(err instanceof Error ? err.message : 'Failed to set default league');
     } finally {
       setSettingDefaultKey(null);
+    }
+  };
+
+  // Discover historical seasons for a league
+  const handleDiscoverSeasons = async (leagueId: string, sport: string) => {
+    // Only baseball and football are supported
+    if (sport !== 'baseball' && sport !== 'football') {
+      setLeagueError('Season discovery is only available for baseball and football leagues');
+      return;
+    }
+
+    const leagueKey = `${leagueId}-${sport}`;
+    setDiscoveringLeagueKey(leagueKey);
+    setLeagueError(null);
+
+    try {
+      const response = await fetch('/api/espn/discover-seasons', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ leagueId, sport })
+      });
+
+      const data = await response.json() as {
+        success?: boolean;
+        error?: string;
+        discovered?: Array<{ seasonYear: number; leagueName: string; teamCount: number }>;
+        skipped?: number;
+        rateLimited?: boolean;
+      };
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Discovery failed');
+      }
+
+      // Show success message
+      const count = data.discovered?.length || 0;
+      const skipped = data.skipped || 0;
+      const rateLimitedMsg = data.rateLimited ? ' (stopped early due to rate limiting)' : '';
+
+      // Refresh leagues list to show newly discovered seasons
+      const leaguesRes = await fetch('/api/espn/leagues');
+      if (leaguesRes.ok) {
+        const leaguesData = await leaguesRes.json() as { leagues?: League[] };
+        setLeagues(leaguesData.leagues || []);
+      }
+
+      // Show success as a temporary "error" (info) message - could improve with toast
+      setLeagueError(`Discovered ${count} new season${count !== 1 ? 's' : ''}, ${skipped} already stored${rateLimitedMsg}`);
+      // Clear the message after 5 seconds
+      setTimeout(() => setLeagueError(null), 5000);
+
+    } catch (err) {
+      setLeagueError(err instanceof Error ? err.message : 'Failed to discover seasons');
+    } finally {
+      setDiscoveringLeagueKey(null);
     }
   };
 
@@ -679,7 +740,14 @@ export default function LeaguesPage() {
                 </div>
                 <Select
                   value={newLeagueSport}
-                  onValueChange={(v) => setNewLeagueSport(v as Sport)}
+                  onValueChange={(v) => {
+                    const sport = v as Sport;
+                    setNewLeagueSport(sport);
+                    // Update season year when sport changes (unless manually overridden)
+                    if (!seasonManuallySet && (sport === 'baseball' || sport === 'football')) {
+                      setNewLeagueSeason(getDefaultSeasonYear(sport));
+                    }
+                  }}
                   disabled={isVerifying}
                 >
                   <SelectTrigger className="w-[140px]">
@@ -693,6 +761,18 @@ export default function LeaguesPage() {
                     ))}
                   </SelectContent>
                 </Select>
+                <Input
+                  type="number"
+                  className="w-[90px]"
+                  value={newLeagueSeason}
+                  onChange={(e) => {
+                    setNewLeagueSeason(Number(e.target.value));
+                    setSeasonManuallySet(true);
+                  }}
+                  disabled={isVerifying}
+                  min={2000}
+                  max={2100}
+                />
                 <Button
                   onClick={handleVerifyLeague}
                   disabled={isVerifying || !hasCredentials || !newLeagueId.trim()}
@@ -704,6 +784,13 @@ export default function LeaguesPage() {
                   )}
                 </Button>
               </div>
+            )}
+
+            {/* Season year helper text */}
+            {hasCredentials && !verifiedLeague && (newLeagueSport === 'baseball' || newLeagueSport === 'football') && (
+              <p className="text-xs text-muted-foreground">
+                {getSeasonRolloverDescription(newLeagueSport as SeasonSport)}. You can change the year if needed.
+              </p>
             )}
 
             {!hasCredentials && !verifiedLeague && (
@@ -726,9 +813,14 @@ export default function LeaguesPage() {
             ) : (
               <div className="space-y-2">
                 {leagues.map((league) => {
-                  const leagueKey = `${league.leagueId}-${league.sport}`;
+                  const leagueKey = `${league.leagueId}-${league.sport}-${league.seasonYear || 'all'}`;
+                  const baseKey = `${league.leagueId}-${league.sport}`;
                   const isSettingDefault = settingDefaultKey === leagueKey;
-                  const isDeleting = deletingLeagueKey === leagueKey;
+                  // Delete affects all seasons, so check against base key
+                  const isDeleting = deletingLeagueKey === baseKey;
+                  const isDiscovering = discoveringLeagueKey === baseKey;
+                  // Only show discover button for baseball and football
+                  const canDiscover = league.sport === 'baseball' || league.sport === 'football';
 
                   return (
                     <div
@@ -755,6 +847,7 @@ export default function LeaguesPage() {
                               <span className="capitalize">{league.sport}</span>
                             )}
                             {' | ID: '}{league.leagueId}
+                            {league.seasonYear && ` | ${league.seasonYear}`}
                           </div>
                         </div>
                       </div>
@@ -767,7 +860,7 @@ export default function LeaguesPage() {
                               ? 'text-yellow-500 hover:text-yellow-600'
                               : 'text-muted-foreground hover:text-yellow-500'
                           }`}
-                          onClick={() => handleSetDefault(league.leagueId, league.sport)}
+                          onClick={() => handleSetDefault(league.leagueId, league.sport, league.seasonYear)}
                           disabled={isSettingDefault || league.isDefault || !league.teamId}
                           title={
                             !league.teamId
@@ -785,6 +878,22 @@ export default function LeaguesPage() {
                             />
                           )}
                         </Button>
+                        {canDiscover && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-primary"
+                            onClick={() => handleDiscoverSeasons(league.leagueId, league.sport)}
+                            disabled={isDiscovering || !!discoveringLeagueKey}
+                            title="Discover historical seasons"
+                          >
+                            {isDiscovering ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <History className="h-4 w-4" />
+                            )}
+                          </Button>
+                        )}
                         <Button
                           variant="ghost"
                           size="icon"

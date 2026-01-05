@@ -10,7 +10,8 @@
  * - GET /credentials/espn - Get ESPN credential metadata
  * - DELETE /credentials/espn - Delete ESPN credentials
  * - GET /credentials/espn?raw=true - Get raw credentials for MCP workers
- * - POST /leagues - Store ESPN leagues
+ * - POST /leagues - Store ESPN leagues (replaces all)
+ * - POST /leagues/add - Add single league (does not replace existing)
  * - GET /leagues - Get ESPN leagues
  * - DELETE /leagues - Remove specific league
  * - PATCH /leagues/:leagueId/team - Update team selection
@@ -790,7 +791,7 @@ export default {
           });
 
         } else if (request.method === 'DELETE') {
-          // Remove a single league
+          // Remove a league - always deletes ALL seasons for that league
           const urlObj = new URL(request.url);
           const leagueId = urlObj.searchParams.get('leagueId');
           const sport = urlObj.searchParams.get('sport');
@@ -849,8 +850,8 @@ export default {
           });
         }
 
-        const body = await request.json() as { leagueId?: string; sport?: string };
-        const { leagueId, sport } = body;
+        const body = await request.json() as { leagueId?: string; sport?: string; seasonYear?: number };
+        const { leagueId, sport, seasonYear } = body;
 
         if (!leagueId || !sport) {
           return new Response(JSON.stringify({
@@ -862,7 +863,7 @@ export default {
         }
 
         const storage = EspnSupabaseStorage.fromEnvironment(env);
-        const result = await storage.setDefaultLeague(clerkUserId, leagueId, sport);
+        const result = await storage.setDefaultLeague(clerkUserId, leagueId, sport, seasonYear);
 
         if (!result.success) {
           // Return appropriate status based on error type
@@ -883,6 +884,55 @@ export default {
           message: 'Default league set successfully',
           leagues: updatedLeagues
         }), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      }
+
+      // Add single league endpoint (does not replace existing leagues)
+      if (pathname === '/leagues/add' && request.method === 'POST') {
+        const { userId: clerkUserId, error: authError } = await getVerifiedUserId(request, env);
+        if (!clerkUserId) {
+          return new Response(JSON.stringify({
+            error: 'Authentication required',
+            message: authError || 'Missing or invalid Authorization token'
+          }), {
+            status: 401,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          });
+        }
+
+        const body = await request.json() as EspnLeague;
+        if (!body.leagueId || !body.sport) {
+          return new Response(JSON.stringify({
+            error: 'leagueId and sport are required'
+          }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          });
+        }
+
+        const storage = EspnSupabaseStorage.fromEnvironment(env);
+        const result = await storage.addLeague(clerkUserId, body);
+
+        if (!result.success) {
+          // Map error codes to HTTP status codes
+          const statusMap: Record<string, number> = {
+            'DUPLICATE': 409,
+            'LIMIT_EXCEEDED': 400,
+            'DB_ERROR': 500
+          };
+          const status = result.code ? statusMap[result.code] || 500 : 500;
+
+          return new Response(JSON.stringify({
+            error: result.error || 'Failed to add league',
+            code: result.code
+          }), {
+            status,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          });
+        }
+
+        return new Response(JSON.stringify({ success: true }), {
           headers: { 'Content-Type': 'application/json', ...corsHeaders }
         });
       }
@@ -921,16 +971,17 @@ export default {
         // Get current leagues
         const currentLeagues = await storage.getLeagues(clerkUserId);
 
-        // Find the specific league
+        // Find the specific league (match by leagueId, sport, and optionally seasonYear)
         const league = currentLeagues.find(l =>
           l.leagueId === leagueId &&
-          (sport ? l.sport === sport : true)
+          (sport ? l.sport === sport : true) &&
+          (seasonYear !== undefined ? l.seasonYear === seasonYear : true)
         );
 
         if (!league) {
           return new Response(JSON.stringify({
             error: 'League not found',
-            message: `League ${leagueId}${sport ? ` for sport ${sport}` : ''} not found for user`
+            message: `League ${leagueId}${sport ? ` for sport ${sport}` : ''}${seasonYear ? ` season ${seasonYear}` : ''} not found for user`
           }), {
             status: 404,
             headers: { 'Content-Type': 'application/json', ...corsHeaders }
@@ -938,12 +989,15 @@ export default {
         }
 
         // Update league with new team information
+        // Use sport from body or found league, and seasonYear for targeting
+        const targetSport = sport || league.sport;
+        const targetSeasonYear = seasonYear ?? league.seasonYear;
+
         const updates: Partial<EspnLeague> = { teamId };
         if (teamName) updates.teamName = teamName;
         if (leagueName) updates.leagueName = leagueName;
-        if (seasonYear) updates.seasonYear = seasonYear;
 
-        const success = await storage.updateLeague(clerkUserId, leagueId, updates);
+        const success = await storage.updateLeague(clerkUserId, leagueId, targetSport, targetSeasonYear, updates);
 
         if (!success) {
           return new Response(JSON.stringify({

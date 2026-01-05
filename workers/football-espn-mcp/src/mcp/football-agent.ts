@@ -2,7 +2,27 @@ import { EspnFootballApiClient } from '../espn-football-client';
 
 export interface Env {
   NODE_ENV?: string;
+  ENVIRONMENT?: string;
   AUTH_WORKER_URL: string;
+  AUTH_WORKER?: Fetcher;  // Service Binding for auth-worker
+}
+
+/**
+ * Fetch from auth-worker using service binding (preferred) or URL fallback.
+ */
+function authWorkerFetch(env: Env, path: string, init?: RequestInit): Promise<Response> {
+  const safePath = path.startsWith('/') ? path : `/${path}`;
+  if (env.AUTH_WORKER) {
+    const url = new URL(safePath, 'https://auth-worker.internal');
+    return env.AUTH_WORKER.fetch(new Request(url.toString(), init));
+  }
+  if (env.ENVIRONMENT === 'prod') {
+    console.warn('[agent/authWorkerFetch] AUTH_WORKER binding missing in prod; using URL fallback');
+  }
+  if (!env.AUTH_WORKER_URL) {
+    throw new Error('AUTH_WORKER_URL is not configured');
+  }
+  return fetch(`${env.AUTH_WORKER_URL}${safePath}`, init);
 }
 
 // =============================================================================
@@ -34,6 +54,24 @@ function extractErrorCode(message: string): string | undefined {
   return match ? match[1] : undefined;
 }
 
+/**
+ * Get the default season year for football using America/New_York timezone.
+ * Defaults to previous year until Jun 1, then switches to current year.
+ */
+function getDefaultFootballSeason(now = new Date()): number {
+  const ny = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    year: 'numeric',
+    month: '2-digit',
+  }).formatToParts(now);
+
+  const year = Number(ny.find((p) => p.type === 'year')?.value);
+  const month = Number(ny.find((p) => p.type === 'month')?.value);
+
+  // Rollover on Jun 1 (month 6)
+  return month < 6 ? year - 1 : year;
+}
+
 export interface McpToolCall {
   tool: string;
   arguments: Record<string, any>;
@@ -50,6 +88,10 @@ interface UserLeague {
   leagueId: string;
   sport: string;
   teamId?: string;
+  seasonYear?: number;
+  leagueName?: string;
+  teamName?: string;
+  isDefault?: boolean;
 }
 
 /**
@@ -64,12 +106,9 @@ async function fetchUserLeagues(
   const timeoutId = setTimeout(() => controller.abort(), 5000); // 5s timeout
 
   try {
-    const authWorkerUrl = env.AUTH_WORKER_URL;
-    const url = `${authWorkerUrl}/leagues`;
+    console.log(`🏈 [agent] Fetching leagues for ${clerkUserId}`);
 
-    console.log(`🏈 [agent] Fetching leagues for ${clerkUserId} from ${url}`);
-
-    const response = await fetch(url, {
+    const response = await authWorkerFetch(env, '/leagues', {
       method: 'GET',
       headers: {
         'X-Clerk-User-ID': clerkUserId,
@@ -482,7 +521,7 @@ export class FootballMcpAgent {
    * Get tool definitions in MCP format
    */
   private getToolDefinitions() {
-    const currentYear = new Date().getFullYear().toString();
+    const currentYear = getDefaultFootballSeason().toString();
     const currentDate = new Date().toISOString().split('T')[0];
 
     // securitySchemes required by OpenAI ChatGPT for OAuth-protected tools
@@ -666,13 +705,34 @@ export class FootballMcpAgent {
     // SPECIAL CASE: get_user_session should always work if authenticated
     if (tool === 'get_user_session') {
       const hasMultipleLeagues = footballLeagues.length > 1;
-      const sessionMessage = hasFootballLeagues
-        ? (hasMultipleLeagues
-          ? `User has ${footballLeagues.length} football leagues configured. ASK the user which league they want to query before making other tool calls. List their leagues by leagueId and let them choose.`
-          : 'Use defaultLeague.leagueId and defaultLeague.teamId for all subsequent tool calls. Use currentSeason for seasonId parameter.')
-        : (hasAnyLeagues
+      // Check if any leagues have different seasons (multi-season scenario)
+      const uniqueSeasons = [...new Set((footballLeagues as any[]).map(l => l.seasonYear).filter(Boolean))];
+      const hasMultipleSeasons = uniqueSeasons.length > 1;
+
+      let sessionMessage: string;
+      if (!hasFootballLeagues) {
+        sessionMessage = hasAnyLeagues
           ? `No football leagues found, but found leagues for: ${userLeagues.map(l => l.sport).join(', ')}. Please add a football league in settings.`
-          : 'No leagues configured. Please go to flaim.app/settings/espn to add your ESPN credentials.');
+          : 'No leagues configured. Please go to flaim.app/settings/espn to add your ESPN credentials.';
+      } else if (hasMultipleLeagues) {
+        sessionMessage = hasMultipleSeasons
+          ? `User has ${footballLeagues.length} football league entries across seasons ${uniqueSeasons.join(', ')}. ASK which league AND season they want. List by leagueName, leagueId, AND seasonYear. Use matching teamId and seasonYear together.`
+          : `User has ${footballLeagues.length} football leagues configured. ASK which league they want. List by leagueName and leagueId.`;
+      } else {
+        // Single league - use it directly with its seasonYear
+        const league = footballLeagues[0] as any;
+        sessionMessage = league.seasonYear
+          ? `Use leagueId=${league.leagueId}, teamId=${league.teamId || 'none'}, seasonId=${league.seasonYear} for all tool calls.`
+          : 'Use defaultLeague.leagueId and defaultLeague.teamId for all subsequent tool calls. Use currentSeason for seasonId parameter.';
+      }
+
+      // Build defaultLeague with seasonYear for LLM convenience
+      const currentSeason = getDefaultFootballSeason();
+      const currentSeasonLeague = (footballLeagues as any[]).find(
+        l => l.teamId && l.seasonYear === currentSeason
+      );
+      const anyLeagueWithTeam = (footballLeagues as any[]).find(l => l.teamId);
+      const defaultLeagueData = currentSeasonLeague || anyLeagueWithTeam || footballLeagues[0];
 
       return {
         content: [
@@ -681,10 +741,17 @@ export class FootballMcpAgent {
             text: JSON.stringify({
               success: true,
               currentDate: new Date().toISOString(),
-              currentSeason: new Date().getFullYear().toString(),
+              currentSeason: currentSeason.toString(),
               timezone: 'America/New_York',
               totalLeaguesFound: userLeagues.length,
               footballLeaguesFound: footballLeagues.length,
+              defaultLeague: defaultLeagueData ? {
+                leagueId: defaultLeagueData.leagueId,
+                teamId: defaultLeagueData.teamId,
+                seasonYear: defaultLeagueData.seasonYear,
+                leagueName: defaultLeagueData.leagueName,
+                teamName: defaultLeagueData.teamName
+              } : null,
               allLeagues: userLeagues,
               instructions: sessionMessage,
               debug: {
@@ -716,7 +783,13 @@ export class FootballMcpAgent {
     }
 
     // Use the first football league as default (or find one with teamId set)
-    const defaultLeague = (footballLeagues as any).find((l: any) => l.teamId) || footballLeagues[0];
+    // Prefer leagues matching the current season to avoid season/team mismatch
+    const currentSeason = getDefaultFootballSeason();
+    const currentSeasonLeague = (footballLeagues as any).find(
+      (l: any) => l.teamId && l.seasonYear === currentSeason
+    );
+    const anyLeagueWithTeam = (footballLeagues as any).find((l: any) => l.teamId);
+    const defaultLeague = currentSeasonLeague || anyLeagueWithTeam || footballLeagues[0];
 
     // Normalize args: use user's configured league if not provided or invalid
     const normalizedArgs = { ...args };
@@ -726,16 +799,27 @@ export class FootballMcpAgent {
     const userHasLeague = providedLeagueId && (footballLeagues as any).some((l: any) => l.leagueId === providedLeagueId);
 
     if (!providedLeagueId || !userHasLeague) {
-      console.log(`📋 [agent] Using default league ${defaultLeague.leagueId} (provided: ${providedLeagueId || 'none'}, valid: ${userHasLeague})`);
+      console.log(`📋 [agent] Using default league ${defaultLeague.leagueId} season ${defaultLeague.seasonYear} (provided: ${providedLeagueId || 'none'}, valid: ${userHasLeague})`);
       normalizedArgs.leagueId = defaultLeague.leagueId;
       if (defaultLeague.teamId) {
         normalizedArgs.teamId = normalizedArgs.teamId || defaultLeague.teamId;
       }
+      // Use the league's seasonYear to keep team/season aligned
+      if (defaultLeague.seasonYear && !normalizedArgs.seasonId) {
+        normalizedArgs.seasonId = defaultLeague.seasonYear.toString();
+      }
+    } else if (!normalizedArgs.seasonId) {
+      // User provided valid leagueId but no seasonId - find the matching league's seasonYear
+      const matchingLeague = (footballLeagues as any[]).find(l => l.leagueId === providedLeagueId);
+      if (matchingLeague?.seasonYear) {
+        console.log(`📋 [agent] Using stored seasonYear ${matchingLeague.seasonYear} for provided league ${providedLeagueId}`);
+        normalizedArgs.seasonId = matchingLeague.seasonYear.toString();
+      }
     }
 
-    // Default seasonId to current year
+    // Default seasonId to timezone-aware current season if still not set
     if (!normalizedArgs.seasonId) {
-      normalizedArgs.seasonId = new Date().getFullYear().toString();
+      normalizedArgs.seasonId = currentSeason.toString();
     }
 
     console.log(`🔧 [agent] Executing ${tool} with normalized args:`, JSON.stringify(normalizedArgs));
@@ -774,7 +858,7 @@ export class FootballMcpAgent {
     try {
       const footballClient = new EspnFootballApiClient(env, { authHeader, logContext });
 
-      const { leagueId, seasonId = new Date().getFullYear().toString() } = args;
+      const { leagueId, seasonId = getDefaultFootballSeason().toString() } = args;
       const league = await footballClient.fetchLeague(leagueId, parseInt(seasonId), 'mSettings', clerkUserId);
 
       return {
@@ -825,7 +909,7 @@ export class FootballMcpAgent {
     try {
       const footballClient = new EspnFootballApiClient(env, { authHeader, logContext });
 
-      const { leagueId, teamId, seasonId = new Date().getFullYear().toString(), week } = args;
+      const { leagueId, teamId, seasonId = getDefaultFootballSeason().toString(), week } = args;
       const teamData = await footballClient.fetchTeam(leagueId, teamId, parseInt(seasonId), week, clerkUserId);
 
       return {
@@ -866,7 +950,7 @@ export class FootballMcpAgent {
     try {
       const footballClient = new EspnFootballApiClient(env, { authHeader, logContext });
 
-      const { leagueId, week, seasonId = new Date().getFullYear().toString() } = args;
+      const { leagueId, week, seasonId = getDefaultFootballSeason().toString() } = args;
       const matchups = await footballClient.fetchMatchups(leagueId, week, parseInt(seasonId), clerkUserId);
 
       return {
@@ -907,7 +991,7 @@ export class FootballMcpAgent {
     try {
       const footballClient = new EspnFootballApiClient(env, { authHeader, logContext });
 
-      const { leagueId, seasonId = new Date().getFullYear().toString() } = args;
+      const { leagueId, seasonId = getDefaultFootballSeason().toString() } = args;
       const standings = await footballClient.fetchStandings(leagueId, parseInt(seasonId), clerkUserId);
 
       return {

@@ -338,23 +338,34 @@ export class EspnSupabaseStorage {
 
   /**
    * Add a single league to user's collection
+   * Returns result object with success flag and optional error code
    */
-  async addLeague(clerkUserId: string, league: EspnLeague): Promise<boolean> {
+  async addLeague(clerkUserId: string, league: EspnLeague): Promise<{ success: boolean; code?: 'DUPLICATE' | 'LIMIT_EXCEEDED' | 'DB_ERROR'; error?: string }> {
     try {
       const existingLeagues = await this.getLeagues(clerkUserId);
 
-      // Check for duplicates
+      // Check for duplicates (including seasonYear for multi-season support)
       const isDuplicate = existingLeagues.some(
-        existing => existing.leagueId === league.leagueId && existing.sport === league.sport
+        existing => existing.leagueId === league.leagueId
+          && existing.sport === league.sport
+          && existing.seasonYear === league.seasonYear
       );
 
       if (isDuplicate) {
-        throw new Error(`League ${league.leagueId} for ${league.sport} already exists`);
+        return {
+          success: false,
+          code: 'DUPLICATE',
+          error: `League ${league.leagueId} for ${league.sport} season ${league.seasonYear} already exists`
+        };
       }
 
       // Check league limit
       if (existingLeagues.length >= 10) {
-        throw new Error('Maximum of 10 leagues allowed per user');
+        return {
+          success: false,
+          code: 'LIMIT_EXCEEDED',
+          error: 'Maximum of 10 leagues allowed per user'
+        };
       }
 
       const { error } = await this.supabase
@@ -372,27 +383,30 @@ export class EspnSupabaseStorage {
 
       if (error) {
         console.error('Supabase error adding league:', error);
-        return false;
+        return { success: false, code: 'DB_ERROR', error: 'Database error' };
       }
 
-      return true;
+      return { success: true };
     } catch (error) {
       console.error('Failed to add ESPN league:', error);
-      return false;
+      return { success: false, code: 'DB_ERROR', error: error instanceof Error ? error.message : 'Unknown error' };
     }
   }
 
   /**
-   * Remove a league from user's collection
+   * Remove a league from user's collection.
+   * Always deletes ALL seasons for the given leagueId + sport.
    */
   async removeLeague(clerkUserId: string, leagueId: string, sport: string): Promise<boolean> {
     try {
-      const { error } = await this.supabase
+      let query = this.supabase
         .from('espn_leagues')
         .delete()
         .eq('clerk_user_id', clerkUserId)
         .eq('league_id', leagueId)
         .eq('sport', sport);
+
+      const { error } = await query;
 
       if (error) {
         console.error('Supabase error removing league:', error);
@@ -408,22 +422,38 @@ export class EspnSupabaseStorage {
 
   /**
    * Update a specific league (e.g., add teamId after auto-pull)
+   * Requires sport and seasonYear to uniquely target a row in multi-season context.
    */
-  async updateLeague(clerkUserId: string, leagueId: string, updates: Partial<EspnLeague>): Promise<boolean> {
+  async updateLeague(
+    clerkUserId: string,
+    leagueId: string,
+    sport: string,
+    seasonYear: number | undefined,
+    updates: Partial<Omit<EspnLeague, 'leagueId' | 'sport' | 'seasonYear'>>
+  ): Promise<boolean> {
     try {
       const updateData: any = {};
 
       if (updates.teamId !== undefined) updateData.team_id = updates.teamId;
       if (updates.teamName !== undefined) updateData.team_name = updates.teamName;
       if (updates.leagueName !== undefined) updateData.league_name = updates.leagueName;
-      if (updates.seasonYear !== undefined) updateData.season_year = updates.seasonYear;
       if (updates.isDefault !== undefined) updateData.is_default = updates.isDefault;
 
-      const { error } = await this.supabase
+      let query = this.supabase
         .from('espn_leagues')
         .update(updateData)
         .eq('clerk_user_id', clerkUserId)
-        .eq('league_id', leagueId);
+        .eq('league_id', leagueId)
+        .eq('sport', sport);
+
+      // If seasonYear provided, target that specific season; otherwise target null season_year rows (legacy)
+      if (seasonYear !== undefined) {
+        query = query.eq('season_year', seasonYear);
+      } else {
+        query = query.is('season_year', null);
+      }
+
+      const { error } = await query;
 
       if (error) {
         console.error('Supabase error updating league:', error);
@@ -441,17 +471,31 @@ export class EspnSupabaseStorage {
    * Set a league as the user's default (clears any existing default first)
    * The database has a unique partial index that enforces only one default per user.
    * Returns false if the league doesn't exist or doesn't have a team_id set.
+   * With multi-season support, seasonYear is required to target a specific season.
    */
-  async setDefaultLeague(clerkUserId: string, leagueId: string, sport: string): Promise<{ success: boolean; error?: string }> {
+  async setDefaultLeague(
+    clerkUserId: string,
+    leagueId: string,
+    sport: string,
+    seasonYear?: number
+  ): Promise<{ success: boolean; error?: string }> {
     try {
-      // First, verify the league exists and has a team_id
-      const { data: targetLeague, error: checkError } = await this.supabase
+      // Build query to verify the league exists and has a team_id
+      let checkQuery = this.supabase
         .from('espn_leagues')
-        .select('league_id, team_id')
+        .select('league_id, team_id, season_year')
         .eq('clerk_user_id', clerkUserId)
         .eq('league_id', leagueId)
-        .eq('sport', sport)
-        .single();
+        .eq('sport', sport);
+
+      // If seasonYear provided, target that specific season; otherwise target null (legacy)
+      if (seasonYear !== undefined) {
+        checkQuery = checkQuery.eq('season_year', seasonYear);
+      } else {
+        checkQuery = checkQuery.is('season_year', null);
+      }
+
+      const { data: targetLeague, error: checkError } = await checkQuery.single();
 
       if (checkError || !targetLeague) {
         console.error('League not found for default:', checkError);
@@ -474,14 +518,21 @@ export class EspnSupabaseStorage {
         return { success: false, error: 'Failed to clear existing default' };
       }
 
-      // Set the new default
-      const { data: updated, error: setError } = await this.supabase
+      // Set the new default - target specific row
+      let setQuery = this.supabase
         .from('espn_leagues')
         .update({ is_default: true })
         .eq('clerk_user_id', clerkUserId)
         .eq('league_id', leagueId)
-        .eq('sport', sport)
-        .select('league_id');
+        .eq('sport', sport);
+
+      if (seasonYear !== undefined) {
+        setQuery = setQuery.eq('season_year', seasonYear);
+      } else {
+        setQuery = setQuery.is('season_year', null);
+      }
+
+      const { data: updated, error: setError } = await setQuery.select('league_id');
 
       if (setError) {
         console.error('Supabase error setting default league:', setError);

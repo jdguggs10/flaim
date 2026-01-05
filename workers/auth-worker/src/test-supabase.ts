@@ -115,7 +115,7 @@ async function testBasicOperations() {
     };
     
     const leagueAdded = await storage.addLeague(testUserId, newLeague);
-    console.log(`   League added: ${leagueAdded ? '✅' : '❌'}`);
+    console.log(`   League added: ${leagueAdded.success ? '✅' : '❌'}${leagueAdded.code ? ` (${leagueAdded.code})` : ''}`);
     
     const updatedLeagues = await storage.getLeagues(testUserId);
     console.log(`   Total leagues now: ${updatedLeagues.length} ${updatedLeagues.length === 3 ? '✅' : '❌'}`);

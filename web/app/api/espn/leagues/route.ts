@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
     }
 
-    const body: { leagues: Array<{ leagueId: string; sport: string }> } = await request.json();
+    const body: { leagues: Array<{ leagueId: string; sport: string; seasonYear?: number }> } = await request.json();
     
     if (!body.leagues || !Array.isArray(body.leagues)) {
       return NextResponse.json({ 
@@ -94,10 +94,11 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      // Check for duplicates
-      const leagueKey = `${league.leagueId}-${league.sport}`;
+      // Check for duplicates (include seasonYear to allow same league with different seasons)
+      const seasonPart = league.seasonYear ? `-${league.seasonYear}` : '';
+      const leagueKey = `${league.leagueId}-${league.sport}${seasonPart}`;
       if (seenLeagues.has(leagueKey)) {
-        validationErrors.push(`League ${index + 1}: Duplicate league ${league.leagueId} for ${league.sport}`);
+        validationErrors.push(`League ${index + 1}: Duplicate league ${league.leagueId} for ${league.sport}${league.seasonYear ? ` season ${league.seasonYear}` : ''}`);
       }
       seenLeagues.add(leagueKey);
 
@@ -166,6 +167,8 @@ export async function DELETE(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const leagueId = searchParams.get('leagueId');
     const sport = searchParams.get('sport');
+    // NOTE: seasonYear is intentionally ignored - delete always removes ALL seasons
+    // of a league per user preference (no per-season management in UI)
 
     if (!leagueId || !sport) {
       return NextResponse.json({
@@ -178,8 +181,11 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'NEXT_PUBLIC_AUTH_WORKER_URL is not configured' }, { status: 500 });
     }
 
+    // Never pass seasonYear - delete always removes ALL seasons for this league
+    const deleteUrl = `${authWorkerUrl}/leagues?leagueId=${encodeURIComponent(leagueId)}&sport=${encodeURIComponent(sport)}`;
+
     const bearer = (await getToken?.()) || undefined;
-    const workerResponse = await fetch(`${authWorkerUrl}/leagues?leagueId=${encodeURIComponent(leagueId)}&sport=${encodeURIComponent(sport)}`, {
+    const workerResponse = await fetch(deleteUrl, {
       method: 'DELETE',
       headers: {
         'Content-Type': 'application/json',
