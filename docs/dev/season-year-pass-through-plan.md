@@ -68,6 +68,17 @@ Auto-discover seasons audit findings, all resolved:
 
 5) ✅ **minYearReached flag** - Tracked independently when `year === MIN_YEAR` is evaluated.
 
+### Known Issues / Bugs (2026-01-05)
+1) **Discover-seasons aborts on ESPN 401 for older years (football)**
+   - Observed in production logs for `POST /onboarding/discover-seasons`:
+     - 2026: 404 (expected, league not rolled)
+     - 2025: already stored (skip)
+     - 2024/2023: 200 OK
+     - 2022: **401 Unauthorized** → worker aborts and returns 401
+   - Impact: discovery stops early and no older seasons are saved.
+   - Hypotheses: ESPN credentials not valid for older seasons, ESPN rate/anti‑bot behavior, or cookie scope issue.
+   - Next steps: capture ESPN response body/headers for 401, verify cookie freshness, and decide whether to treat 401 as terminal vs. skip.
+
 ### Design Decision: Default League Scope
 - **Current behavior:** One default per user across all sports/seasons (unchanged from pre-multi-season)
 - **Rationale:** Simpler UX; chat app uses single default regardless of sport

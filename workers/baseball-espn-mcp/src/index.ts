@@ -566,13 +566,19 @@ export default {
               rateLimited = true;
               break;
             } else if (info.httpStatus === 401 || info.httpStatus === 403) {
-              return new Response(JSON.stringify({
-                error: 'ESPN credentials expired or invalid',
-                code: 'AUTH_FAILED'
-              }), {
-                status: 401,
-                headers: { 'Content-Type': 'application/json', ...corsHeaders }
-              });
+              const hasKnownSeason = discovered.length > 0 || existingSeasons.size > 0;
+              if (hasKnownSeason) {
+                console.log(`📋 [discover] Year ${year} unauthorized (season access), treating as miss`);
+                consecutiveMisses++;
+              } else {
+                return new Response(JSON.stringify({
+                  error: 'ESPN credentials expired or invalid',
+                  code: 'AUTH_FAILED'
+                }), {
+                  status: 401,
+                  headers: { 'Content-Type': 'application/json', ...corsHeaders }
+                });
+              }
             } else {
               // Other error - retry once
               await new Promise(resolve => setTimeout(resolve, 1000));
@@ -624,6 +630,20 @@ export default {
                 } catch (e) { /* ignore save errors */ }
               } else if (retry.httpStatus === 404) {
                 consecutiveMisses++;
+              } else if (retry.httpStatus === 401 || retry.httpStatus === 403) {
+                const hasKnownSeason = discovered.length > 0 || existingSeasons.size > 0;
+                if (hasKnownSeason) {
+                  console.log(`📋 [discover] Year ${year} unauthorized on retry, treating as miss`);
+                  consecutiveMisses++;
+                } else {
+                  return new Response(JSON.stringify({
+                    error: 'ESPN credentials expired or invalid',
+                    code: 'AUTH_FAILED'
+                  }), {
+                    status: 401,
+                    headers: { 'Content-Type': 'application/json', ...corsHeaders }
+                  });
+                }
               } else {
                 return new Response(JSON.stringify({
                   error: `ESPN API error: ${retry.error}`,
