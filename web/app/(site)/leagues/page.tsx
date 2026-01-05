@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useAuth, useUser, SignIn } from '@clerk/nextjs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -59,10 +59,26 @@ interface VerifiedLeague {
 
 type Sport = 'football' | 'baseball' | 'basketball' | 'hockey';
 
+interface LeagueGroup {
+  key: string;
+  leagueId: string;
+  sport: string;
+  leagueName?: string;
+  seasons: League[];
+}
+
 const SPORT_OPTIONS: { value: Sport; label: string; emoji: string }[] = [
   { value: 'football', label: 'Football', emoji: '\u{1F3C8}' },
   { value: 'baseball', label: 'Baseball', emoji: '\u26BE' },
 ];
+
+// Generate season options (current year down to 2000)
+const MIN_YEAR = 2000;
+const currentYear = new Date().getFullYear();
+const SEASON_OPTIONS = Array.from(
+  { length: currentYear - MIN_YEAR + 1 },
+  (_, i) => currentYear - i
+);
 
 export default function LeaguesPage() {
   const { isLoaded, isSignedIn } = useAuth();
@@ -84,6 +100,7 @@ export default function LeaguesPage() {
   const [leagues, setLeagues] = useState<League[]>([]);
   const [isLoadingLeagues, setIsLoadingLeagues] = useState(true);
   const [leagueError, setLeagueError] = useState<string | null>(null);
+  const [leagueNotice, setLeagueNotice] = useState<string | null>(null);
   const [deletingLeagueKey, setDeletingLeagueKey] = useState<string | null>(null);
   const [settingDefaultKey, setSettingDefaultKey] = useState<string | null>(null);
   const [discoveringLeagueKey, setDiscoveringLeagueKey] = useState<string | null>(null);
@@ -100,6 +117,53 @@ export default function LeaguesPage() {
 
   // Initial loading
   const [isCheckingCreds, setIsCheckingCreds] = useState(true);
+
+  // Expand/collapse state for league groups
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+
+  // Group leagues by sport + leagueId
+  const leagueGroups = useMemo((): LeagueGroup[] => {
+    const grouped = new Map<string, LeagueGroup>();
+
+    for (const league of leagues) {
+      const key = `${league.sport}:${league.leagueId}`;
+      if (!grouped.has(key)) {
+        grouped.set(key, {
+          key,
+          leagueId: league.leagueId,
+          sport: league.sport,
+          leagueName: league.leagueName,
+          seasons: [],
+        });
+      }
+      grouped.get(key)!.seasons.push(league);
+    }
+
+    // Sort seasons desc within each group
+    for (const group of grouped.values()) {
+      group.seasons.sort((a, b) => (b.seasonYear || 0) - (a.seasonYear || 0));
+      group.leagueName = group.seasons.find((season) => season.leagueName)?.leagueName || group.leagueName;
+    }
+
+    // Sort groups by most recent season (desc)
+    return Array.from(grouped.values()).sort((a, b) => {
+      const aYear = a.seasons[0]?.seasonYear || 0;
+      const bYear = b.seasons[0]?.seasonYear || 0;
+      return bYear - aYear;
+    });
+  }, [leagues]);
+
+  const toggleGroup = (key: string) => {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
 
   // Load credentials on mount
   useEffect(() => {
@@ -222,6 +286,7 @@ export default function LeaguesPage() {
 
     setIsVerifying(true);
     setLeagueError(null);
+    setLeagueNotice(null);
     setVerifiedLeague(null);
     setSelectedTeamId('');
 
@@ -282,6 +347,7 @@ export default function LeaguesPage() {
 
     setIsAddingLeague(true);
     setLeagueError(null);
+    setLeagueNotice(null);
 
     try {
       const newLeague: League = {
@@ -328,6 +394,7 @@ export default function LeaguesPage() {
   const handleDeleteLeague = async (leagueId: string, sport: string) => {
     const leagueKey = `${leagueId}-${sport}`;
     setDeletingLeagueKey(leagueKey);
+    setLeagueNotice(null);
 
     try {
       // Delete all seasons of this league (no seasonYear = delete all)
@@ -353,6 +420,7 @@ export default function LeaguesPage() {
     const leagueKey = `${leagueId}-${sport}-${seasonYear || 'all'}`;
     setSettingDefaultKey(leagueKey);
     setLeagueError(null);
+    setLeagueNotice(null);
 
     try {
       const res = await fetch('/api/espn/leagues/default', {
@@ -394,6 +462,7 @@ export default function LeaguesPage() {
     const leagueKey = `${leagueId}-${sport}`;
     setDiscoveringLeagueKey(leagueKey);
     setLeagueError(null);
+    setLeagueNotice(null);
 
     try {
       const response = await fetch('/api/espn/discover-seasons', {
@@ -426,10 +495,8 @@ export default function LeaguesPage() {
         setLeagues(leaguesData.leagues || []);
       }
 
-      // Show success as a temporary "error" (info) message - could improve with toast
-      setLeagueError(`Discovered ${count} new season${count !== 1 ? 's' : ''}, ${skipped} already stored${rateLimitedMsg}`);
-      // Clear the message after 5 seconds
-      setTimeout(() => setLeagueError(null), 5000);
+      setLeagueNotice(`Discovered ${count} new season${count !== 1 ? 's' : ''}, ${skipped} already stored${rateLimitedMsg}`);
+      setTimeout(() => setLeagueNotice(null), 5000);
 
     } catch (err) {
       setLeagueError(err instanceof Error ? err.message : 'Failed to discover seasons');
@@ -659,6 +726,13 @@ export default function LeaguesPage() {
               </Alert>
             )}
 
+            {leagueNotice && (
+              <Alert className="bg-blue-50 border-blue-200 text-blue-900 dark:bg-blue-900/20 dark:border-blue-800 dark:text-blue-200">
+                <CheckCircle2 className="h-4 w-4" />
+                <AlertDescription>{leagueNotice}</AlertDescription>
+              </Alert>
+            )}
+
             {/* Verification result */}
             {verifiedLeague ? (
               <div className="p-4 border rounded-lg bg-muted/50 space-y-4">
@@ -728,7 +802,39 @@ export default function LeaguesPage() {
               </div>
             ) : (
               /* Add League Form */
-              <div className="flex gap-2">
+              <div className="space-y-2">
+                {/* Quick season toggles */}
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const sport = newLeagueSport as SeasonSport;
+                      if (sport === 'baseball' || sport === 'football') {
+                        setNewLeagueSeason(getDefaultSeasonYear(sport));
+                        setSeasonManuallySet(false);
+                      }
+                    }}
+                    disabled={isVerifying}
+                  >
+                    This season
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const sport = newLeagueSport as SeasonSport;
+                      if (sport === 'baseball' || sport === 'football') {
+                        setNewLeagueSeason(getDefaultSeasonYear(sport) - 1);
+                        setSeasonManuallySet(true);
+                      }
+                    }}
+                    disabled={isVerifying}
+                  >
+                    Last season
+                  </Button>
+                </div>
+                <div className="flex gap-2">
                 <div className="flex-1">
                   <Input
                     placeholder="League ID (e.g., 12345678)"
@@ -761,18 +867,25 @@ export default function LeaguesPage() {
                     ))}
                   </SelectContent>
                 </Select>
-                <Input
-                  type="number"
-                  className="w-[90px]"
-                  value={newLeagueSeason}
-                  onChange={(e) => {
-                    setNewLeagueSeason(Number(e.target.value));
+                <Select
+                  value={String(newLeagueSeason)}
+                  onValueChange={(v) => {
+                    setNewLeagueSeason(Number(v));
                     setSeasonManuallySet(true);
                   }}
                   disabled={isVerifying}
-                  min={2000}
-                  max={2100}
-                />
+                >
+                  <SelectTrigger className="w-[90px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SEASON_OPTIONS.map((year) => (
+                      <SelectItem key={year} value={String(year)}>
+                        {year}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <Button
                   onClick={handleVerifyLeague}
                   disabled={isVerifying || !hasCredentials || !newLeagueId.trim()}
@@ -783,6 +896,7 @@ export default function LeaguesPage() {
                     <Search className="h-4 w-4" />
                   )}
                 </Button>
+                </div>
               </div>
             )}
 
@@ -804,109 +918,148 @@ export default function LeaguesPage() {
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>
-            ) : leagues.length === 0 ? (
+            ) : leagueGroups.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 <Trophy className="h-12 w-12 mx-auto mb-2 opacity-50" />
                 <p>No leagues added yet</p>
                 <p className="text-sm">Enter a league ID above to get started</p>
               </div>
             ) : (
-              <div className="space-y-2">
-                {leagues.map((league) => {
-                  const leagueKey = `${league.leagueId}-${league.sport}-${league.seasonYear || 'all'}`;
-                  const baseKey = `${league.leagueId}-${league.sport}`;
-                  const isSettingDefault = settingDefaultKey === leagueKey;
-                  // Delete affects all seasons, so check against base key
+              <div className="space-y-4">
+                <p className="text-xs text-muted-foreground">
+                  Leagues may appear in multiple seasons. Seasons are grouped under each league.
+                </p>
+                {leagueGroups.map((group) => {
+                  const baseKey = `${group.leagueId}-${group.sport}`;
                   const isDeleting = deletingLeagueKey === baseKey;
                   const isDiscovering = discoveringLeagueKey === baseKey;
-                  // Only show discover button for baseball and football
-                  const canDiscover = league.sport === 'baseball' || league.sport === 'football';
+                  const canDiscover = group.sport === 'baseball' || group.sport === 'football';
+                  const isExpanded = expandedGroups.has(group.key);
+                  const visibleSeasons = isExpanded ? group.seasons : group.seasons.slice(0, 3);
+                  const hasMoreSeasons = group.seasons.length > 3;
+                  const hasTeamSelection = group.seasons.some((season) => !!season.teamId);
 
                   return (
-                    <div
-                      key={leagueKey}
-                      className={`flex items-center justify-between p-3 rounded-lg ${
-                        league.isDefault ? 'bg-primary/10 border border-primary/30' : 'bg-muted'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <span className="text-xl">{getSportEmoji(league.sport)}</span>
-                        <div>
-                          <div className="font-medium flex items-center gap-2">
-                            {league.leagueName || `League ${league.leagueId}`}
-                            {league.isDefault && (
-                              <span className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded-full">
-                                Default
-                              </span>
-                            )}
-                          </div>
-                          <div className="text-sm text-muted-foreground">
-                            {league.teamName ? (
-                              <span>{league.teamName}</span>
-                            ) : (
-                              <span className="capitalize">{league.sport}</span>
-                            )}
-                            {' | ID: '}{league.leagueId}
-                            {league.seasonYear && ` | ${league.seasonYear}`}
+                    <div key={group.key} className="rounded-lg border bg-card">
+                      {/* Group Header */}
+                      <div className="flex items-center justify-between p-3 border-b">
+                        <div className="flex items-center gap-3">
+                          <span className="text-xl">{getSportEmoji(group.sport)}</span>
+                          <div>
+                            <div className="font-medium">
+                              {group.leagueName || `League ${group.leagueId}`}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              ID: {group.leagueId} • {group.seasons.length} season{group.seasons.length !== 1 ? 's' : ''}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className={`h-8 w-8 ${
-                            league.isDefault
-                              ? 'text-yellow-500 hover:text-yellow-600'
-                              : 'text-muted-foreground hover:text-yellow-500'
-                          }`}
-                          onClick={() => handleSetDefault(league.leagueId, league.sport, league.seasonYear)}
-                          disabled={isSettingDefault || league.isDefault || !league.teamId}
-                          title={
-                            !league.teamId
-                              ? 'Select a team first'
-                              : league.isDefault
-                              ? 'Already default'
-                              : 'Set as default'
-                          }
-                        >
-                          {isSettingDefault ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <Star
-                              className={`h-4 w-4 ${league.isDefault ? 'fill-current' : ''}`}
-                            />
+                        <div className="flex items-center gap-1">
+                          {canDiscover && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-muted-foreground hover:text-primary"
+                              onClick={() => handleDiscoverSeasons(group.leagueId, group.sport)}
+                              disabled={isDiscovering || !!discoveringLeagueKey || !hasTeamSelection}
+                              title={
+                                !hasTeamSelection
+                                  ? 'Select a team first'
+                                  : 'Discover historical seasons'
+                              }
+                            >
+                              {isDiscovering ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <History className="h-4 w-4" />
+                              )}
+                            </Button>
                           )}
-                        </Button>
-                        {canDiscover && (
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-8 w-8 text-muted-foreground hover:text-primary"
-                            onClick={() => handleDiscoverSeasons(league.leagueId, league.sport)}
-                            disabled={isDiscovering || !!discoveringLeagueKey}
-                            title="Discover historical seasons"
+                            className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                            onClick={() => handleDeleteLeague(group.leagueId, group.sport)}
+                            disabled={isDeleting}
+                            title="Delete all seasons"
                           >
-                            {isDiscovering ? (
+                            {isDeleting ? (
                               <Loader2 className="h-4 w-4 animate-spin" />
                             ) : (
-                              <History className="h-4 w-4" />
+                              <Trash2 className="h-4 w-4" />
                             )}
                           </Button>
+                        </div>
+                      </div>
+
+                      {/* Season Chips */}
+                      <div className="p-3">
+                        <div className="flex flex-wrap gap-2">
+                          {visibleSeasons.map((season) => {
+                            const seasonKey = `${season.leagueId}-${season.sport}-${season.seasonYear || 'all'}`;
+                            const isSettingDefault = settingDefaultKey === seasonKey;
+
+                            return (
+                              <div
+                                key={seasonKey}
+                                className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm ${
+                                  season.isDefault
+                                    ? 'bg-primary/10 border border-primary/30'
+                                    : 'bg-muted'
+                                }`}
+                              >
+                                <div className="flex flex-col">
+                                  <div className="flex items-center gap-1">
+                                    <span className="font-medium">{season.seasonYear || 'Unknown'}</span>
+                                    {season.isDefault && (
+                                      <span className="text-[10px] bg-primary/20 text-primary px-1.5 py-0.5 rounded-full">
+                                        Default
+                                      </span>
+                                    )}
+                                  </div>
+                                  {season.teamName && (
+                                    <span className="text-xs text-muted-foreground">{season.teamName}</span>
+                                  )}
+                                </div>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className={`h-6 w-6 ${
+                                    season.isDefault
+                                      ? 'text-yellow-500'
+                                      : 'text-muted-foreground hover:text-yellow-500'
+                                  }`}
+                                  onClick={() => handleSetDefault(season.leagueId, season.sport, season.seasonYear)}
+                                  disabled={isSettingDefault || season.isDefault || !season.teamId}
+                                  title={
+                                    !season.teamId
+                                      ? 'Select a team first'
+                                      : season.isDefault
+                                      ? 'Already default'
+                                      : 'Set as default'
+                                  }
+                                >
+                                  {isSettingDefault ? (
+                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                  ) : (
+                                    <Star className={`h-3 w-3 ${season.isDefault ? 'fill-current' : ''}`} />
+                                  )}
+                                </Button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        {hasMoreSeasons && (
+                          <button
+                            type="button"
+                            className="mt-2 text-xs text-muted-foreground hover:text-foreground"
+                            onClick={() => toggleGroup(group.key)}
+                          >
+                            {isExpanded
+                              ? 'Show less'
+                              : `Show all (${group.seasons.length})`}
+                          </button>
                         )}
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                          onClick={() => handleDeleteLeague(league.leagueId, league.sport)}
-                          disabled={isDeleting}
-                        >
-                          {isDeleting ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <Trash2 className="h-4 w-4" />
-                          )}
-                        </Button>
                       </div>
                     </div>
                   );
