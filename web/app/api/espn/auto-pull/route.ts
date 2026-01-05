@@ -54,8 +54,8 @@ export async function POST(request: NextRequest) {
       try {
         const payload = JSON.parse(atob(parts[1]));
         console.log(`[auto-pull] JWT payload - sub: ${payload.sub}, iss: ${payload.iss}, exp: ${new Date(payload.exp * 1000).toISOString()}`);
-      } catch (e) {
-        console.log(`[auto-pull] Could not parse JWT payload`);
+      } catch (parseError) {
+        console.log('[auto-pull] Could not parse JWT payload', parseError);
       }
     }
 
