@@ -45,20 +45,20 @@ export default function McpUrlsCard() {
           {mcpUrls.map(({ sport, url, emoji }) => (
             <div
               key={sport}
-              className="flex items-center justify-between p-3 bg-muted rounded-lg"
+              className="flex items-start justify-between p-3 bg-muted rounded-lg gap-2"
             >
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-shrink-0">
                 <span>{emoji}</span>
                 <span className="text-sm font-medium">{sport}</span>
               </div>
-              <div className="flex items-center gap-2">
-                <code className="text-xs bg-background px-2 py-1 rounded border font-mono">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 flex-1 min-w-0">
+                <code className="text-xs bg-background px-2 py-1 rounded border font-mono break-all w-full sm:w-auto">
                   {url}
                 </code>
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8"
+                  className="h-8 w-8 flex-shrink-0"
                   onClick={() => handleCopy(url)}
                   title={`Copy ${sport} URL`}
                 >
