@@ -22,7 +22,6 @@ web/
 │   │   ├── connectors/      # Connection status (/connectors)
 │   │   ├── extension/       # Extension setup + pairing (/extension)
 │   │   ├── privacy/         # Privacy policy (/privacy)
-│   │   ├── account/         # Account settings (/account)
 │   │   └── oauth/consent/   # OAuth consent screen
 │   │
 │   ├── (chat)/chat/         # Built-in chat UI (/chat)
@@ -67,7 +66,6 @@ Both site and chat can use shared `components/ui/` (shadcn).
 | `/connectors` | View Claude/ChatGPT connections |
 | `/extension` | Chrome extension pairing |
 | `/privacy` | Privacy policy (CWS compliance) |
-| `/account` | Account settings |
 | `/oauth/consent` | OAuth authorization screen |
 
 ### API Routes (`/api/`)

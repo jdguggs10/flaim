@@ -5,6 +5,7 @@ Follow Keep a Changelog; SemVer applies. Planning docs live in `docs/dev`.
 ## [Unreleased]
 
 ### Maintenance
+- **Removed**: `/account` page — redundant with Clerk's `<UserButton>` modal which provides identical account management functionality.
 - **Changed**: Dependency restructure — removed frontend deps from root package.json, aligned versions (jest 30, typescript 5.6.2), deleted orphaned root jest.config.js, fixed auth-worker jest config.
 
 ## [7.2.0] - 2026-01-05

@@ -67,12 +67,6 @@ export default function RootLayout({
                     Connectors
                   </Link>
                   <Link
-                    href="/account"
-                    className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    Account
-                  </Link>
-                  <Link
                     href="/extension"
                     className="text-sm text-muted-foreground hover:text-foreground transition-colors"
                   >
