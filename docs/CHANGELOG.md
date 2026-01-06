@@ -4,6 +4,25 @@ Follow Keep a Changelog; SemVer applies. Planning docs live in `docs/dev`.
 
 ## [Unreleased]
 
+### Maintenance
+- **Changed**: Dependency restructure — removed frontend deps from root package.json, aligned versions (jest 30, typescript 5.6.2), deleted orphaned root jest.config.js, fixed auth-worker jest config.
+
+## [7.2.0] - 2026-01-05
+
+### Multi-Season League Support
+Users can now track historical seasons alongside current ones. Each league is stored per season year, enabling year-over-year analysis and historical data access.
+
+### Leagues & Seasons
+- **Added**: Season year pass-through across web, API, and MCP workers.
+- **Added**: Deterministic season default helper (baseball Feb 1, football Jun 1, America/New_York).
+- **Added**: Multi-season league storage (unique on user + sport + league + season year).
+- **Added**: Discover-seasons flow to auto-add historical league seasons.
+- **Changed**: League deletion removes all seasons for a league (no per-season delete).
+- **Changed**: `get_user_session` now returns seasonYear per league and the default league.
+- **Added**: Migration `007_espn_leagues_unique_season_year.sql` to update the unique constraint.
+
+## [7.1.1] - 2025-12-31
+
 ### Chrome Extension
 - **Added**: Chrome extension for automatic ESPN credential capture (Manifest V3, React popup).
 - **Added**: Extension pairing flow with 6-character codes (10-minute expiry).

@@ -7,11 +7,6 @@ Ideas and tasks to consider. Not commitments, just a list.
 - **Dependencies**: Last checked Jan 2026. Removed unused `agents` package (fixed 2 vulns). Run `npm outdated` quarterly.
 - [ ] **Local Node version** — Align local runtime with Node 24 (`.nvmrc` + `engines`). Decide on Homebrew permissions fix vs user-level manager (fnm/nvm/asdf) to avoid `EBADENGINE` warnings.
 
-## High Priority
-
-- [ ] **Dependency restructure** — Fix `@clerk/backend` version mismatch (root v2 vs workers v1), then audit all deps to ensure each lives in the right package with clear reasoning. Goal: shared deps in root, package-specific deps in each package.
-- [ ] **Historic season team mapping** — Ensure multi-season entries store the correct `teamId` and `teamName` for the specific season (not the current-season team).
-
 ## Medium Priority
 
 - [ ] Review privacy page for human element — plain English summary, who's behind it
@@ -27,6 +22,8 @@ Ideas and tasks to consider. Not commitments, just a list.
 
 ## Completed
 
+- [x] Dependency restructure — Removed frontend deps from root, aligned versions (jest 30, typescript 5.6.2), deleted orphaned jest.config.js, fixed auth-worker jest config
+- [x] Historic season team mapping — Multi-season entries now store correct teamId/teamName for specific season
 - [x] Landing page indie blurb added
 - [x] Footer CTA softened ("Want to try it?")
 - [x] Project Mission added to CLAUDE.md, AGENTS.md, GEMINI.md

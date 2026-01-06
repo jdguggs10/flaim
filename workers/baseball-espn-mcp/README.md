@@ -12,6 +12,7 @@ ESPN Fantasy Baseball MCP server with shared authentication via Supabase.
 
 ## Available MCP Tools
 
+- `get_user_session` - User leagues with season years and default league
 - `get_espn_league_info` - Get league settings and metadata
 - `get_espn_team_roster` - Get team roster and details
 - `get_espn_matchups` - Get weekly matchups and scores
@@ -75,6 +76,7 @@ Configure external AI assistants to use this server:
 - Baseball-specific data types and interfaces
 - Season/week based data retrieval
 - Team rosters and matchups
+- Season-year aware league retrieval (uses the stored season year when calling ESPN)
 
 ### Dependencies
 - **auth-worker**: Centralized credential management with Supabase
@@ -94,6 +96,8 @@ Configure external AI assistants to use this server:
 
 ### Management Endpoints
 - `GET /health` - Health check
+- `POST /onboarding/initialize` - Initialize a league (season-aware)
+- `POST /onboarding/discover-seasons` - Auto-discover historical seasons for a league
 
 ## Related Services
 

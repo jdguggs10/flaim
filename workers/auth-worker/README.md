@@ -14,8 +14,9 @@ The Auth Worker is a centralized Cloudflare Worker responsible for storing, retr
 - `DELETE /credentials/espn` - Delete ESPN credentials
 - `GET /credentials/espn?raw=true` - Get raw credentials for MCP workers
 - `POST /leagues` - Store ESPN leagues
+- `POST /leagues/add` - Store a single ESPN league (season-aware)
 - `GET /leagues` - Get ESPN leagues
-- `DELETE /leagues` - Remove specific league
+- `DELETE /leagues` - Remove all seasons for a league
 - `PATCH /leagues/:leagueId/team` - Update team selection
 
 ## Supported Platforms
@@ -81,3 +82,8 @@ This implementation uses Supabase PostgreSQL for reliable credential storage:
 - ✅ No client-side encryption complexity
 - ✅ Structured relational data with foreign keys
 - ✅ Built-in backup and monitoring capabilities
+
+## League Storage Notes
+
+- Leagues are stored per season year; `(user, sport, leagueId, seasonYear)` is unique.
+- Deleting a league removes all seasons for that league (no per-season delete).

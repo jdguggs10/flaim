@@ -20,7 +20,7 @@ npm run dev
 - **Next.js web app (`/web`)**: Site pages (landing, leagues, connectors, extension setup, privacy policy), OAuth consent screens, optional chat UI.
 - **Auth worker (`/workers/auth-worker`)**: Supabase credential + league storage, JWT verification, OAuth token management, extension pairing, rate limiting.
 - **Sport MCP workers (`/workers/baseball-espn-mcp`, `/workers/football-espn-mcp`)**: ESPN API calls + MCP tools. Fetch creds/leagues from auth-worker; no local storage.
-- **Supabase Postgres**: `espn_credentials`, `espn_leagues`, `oauth_tokens`, `oauth_codes`, `extension_tokens`, `extension_pairing_codes`, `rate_limits`.
+- **Supabase Postgres**: `espn_credentials`, `espn_leagues` (per-season rows), `oauth_tokens`, `oauth_codes`, `extension_tokens`, `extension_pairing_codes`, `rate_limits`.
 
 ## Runtime Choices (Next.js)
 
@@ -50,9 +50,17 @@ The built-in `/chat` is for testing and users without Claude/ChatGPT subscriptio
 ## Primary User Flow
 
 1. **Connect ESPN** — Install Chrome extension → sync credentials automatically (or add manually at `/leagues`)
-2. **Add leagues** at `/leagues` — Select fantasy teams to connect
-3. **Connect AI** at `/connectors` — Link Claude.ai, Claude Desktop, or ChatGPT
-4. **Use MCP tools** — Ask about roster, matchups, standings directly in AI
+2. **Add leagues** at `/leagues` — Select teams and confirm season year (auto-defaults based on sport)
+3. **Discover seasons (optional)** — Auto-add historical seasons for a league
+4. **Connect AI** at `/connectors` — Link Claude.ai, Claude Desktop, or ChatGPT
+5. **Use MCP tools** — Ask about roster, matchups, standings directly in AI
+
+## Season Year Defaults
+
+Season year defaults are deterministic and use America/New_York time:
+
+- **Baseball (flb)**: Defaults to the previous year until Feb 1, then switches to the current year
+- **Football (ffl)**: Defaults to the previous year until Jun 1, then switches to the current year
 
 ## Chrome Extension
 
@@ -100,7 +108,7 @@ See `docs/archive/MCP_CONNECTOR_RESEARCH.md` for implementation history.
 
 ## MCP Tools
 
-Both MCP workers expose `get_user_session` plus sport-specific tools for league info, rosters, matchups, and standings. See `workers/README.md` for the full tool list and ESPN API reference.
+Both MCP workers expose `get_user_session` plus sport-specific tools for league info, rosters, matchups, and standings. `get_user_session` includes season year per league and the current default league. See `workers/README.md` for the full tool list and ESPN API reference.
 
 ## Security
 
@@ -117,7 +125,7 @@ See `workers/README.md` for worker-to-worker communication requirements.
 ## Data Flow
 
 1. User syncs ESPN credentials via extension (or manual entry) → stored in Supabase via auth-worker.
-2. User adds leagues at `/leagues` → stored in Supabase.
+2. User adds leagues at `/leagues` (per-season rows) → stored in Supabase.
 3. User connects Claude/ChatGPT → OAuth flow → token stored in Supabase.
 4. Claude/ChatGPT calls MCP tool → MCP worker fetches creds from auth-worker → calls ESPN → returns data.
 

@@ -63,7 +63,7 @@ Both site and chat can use shared `components/ui/` (shadcn).
 | Path | Purpose |
 |------|---------|
 | `/` | Landing page |
-| `/leagues` | Manage ESPN leagues |
+| `/leagues` | Manage ESPN leagues and seasons |
 | `/connectors` | View Claude/ChatGPT connections |
 | `/extension` | Chrome extension pairing |
 | `/privacy` | Privacy policy (CWS compliance) |
@@ -75,12 +75,21 @@ Both site and chat can use shared `components/ui/` (shadcn).
 | Path | Purpose |
 |------|---------|
 | `/api/auth/*` | Platform auth (Clerk) |
-| `/api/espn/*` | League discovery, credentials |
+| `/api/espn/*` | League management, seasons, discovery, credentials |
 | `/api/extension/*` | Extension pairing flow |
 | `/api/oauth/*` | OAuth status, revoke |
 | `/api/chat/*` | Chat turn responses |
 
 Most API routes proxy to auth-worker. See `docs/ARCHITECTURE.md` for the full flow.
+
+## Season Years
+
+Leagues are stored per season year. The `/leagues` UI defaults the season year based on America/New_York time:
+
+- **Baseball (flb)**: Defaults to the previous year until Feb 1, then switches to the current year
+- **Football (ffl)**: Defaults to the previous year until Jun 1, then switches to the current year
+
+Deleting a league removes all seasons for that league.
 
 ## Environment Variables
 

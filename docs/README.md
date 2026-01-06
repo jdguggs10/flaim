@@ -5,9 +5,10 @@ Flaim connects your ESPN fantasy leagues to AI assistants like Claude and ChatGP
 ## How It Works
 
 1. **Connect ESPN** — Use the [Chrome extension](https://chrome.google.com/webstore/detail/flaim) to sync your ESPN credentials automatically (or add them manually)
-2. **Add leagues** at `/leagues` — Select which fantasy teams to connect
-3. **Connect AI** at `/connectors` — Link Claude.ai, Claude Desktop, or ChatGPT via OAuth
-4. **Use MCP tools** — Ask about your roster, matchups, standings directly in your AI
+2. **Add leagues** at `/leagues` — Select teams and confirm the season year (auto-defaults based on sport)
+3. **Discover seasons (optional)** — Auto-add historical seasons for a league with one click
+4. **Connect AI** at `/connectors` — Link Claude.ai, Claude Desktop, or ChatGPT via OAuth
+5. **Use MCP tools** — Ask about your roster, matchups, standings directly in your AI
 
 Bring your own Claude or ChatGPT subscription. Flaim provides the data bridge.
 
@@ -26,17 +27,24 @@ Flaim is **not** a chatbot or AI product itself — it's the bridge that lets yo
 - **Chrome Extension**: Auto-capture ESPN credentials without manual cookie extraction
 - **Claude + ChatGPT OAuth**: Direct access via MCP protocol (OAuth 2.1)
 - **Live ESPN Data**: Baseball and football MCP workers with real-time stats
-- **Multi-League Support**: Manage multiple leagues across sports
+- **Multi-League + Multi-Season Support**: Store multiple seasons per league and discover past seasons
 
 ## About
 
 Flaim is a solo indie project — built with care, maintained for the long term. The focus is on reliability, security, and doing one thing well. No VC funding, no growth pressure, just a useful tool for fantasy sports fans who use AI.
 
+## Season Years
+
+Season year defaults are deterministic and use America/New_York time:
+
+- **Baseball (flb)**: Defaults to the previous year until Feb 1, then switches to the current year
+- **Football (ffl)**: Defaults to the previous year until Jun 1, then switches to the current year
+
 ## MCP Tools
 
 | Tool | Sport | Description |
 |------|-------|-------------|
-| `get_user_session` | Both | User's leagues, teams, current season |
+| `get_user_session` | Both | User's leagues, teams, seasons, default league |
 | `get_espn_league_info` | Baseball | League settings and members |
 | `get_espn_team_roster` | Baseball | Team roster with stats |
 | `get_espn_matchups` | Baseball | Current/upcoming matchups |

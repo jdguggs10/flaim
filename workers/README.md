@@ -79,7 +79,7 @@ Ensure `wrangler.jsonc` has `"workers_dev": true` so the `.workers.dev` URL exis
 Tools exposed by the MCP workers:
 
 ### Both Workers
-- `get_user_session` — User's configured leagues, team IDs, current date/season
+- `get_user_session` — User's configured leagues, team IDs, season years, default league, current date/season
 
 ### Baseball (`baseball-espn-mcp`)
 - `get_espn_league_info` — League settings and members
@@ -105,6 +105,12 @@ X-Fantasy-Platform: kona-web-2.0.0
 ```
 
 Credentials are fetched from auth-worker per request; MCP workers don't store them locally.
+
+## League Seasons
+
+- Leagues are stored per season year in auth-worker; multiple seasons of the same league can coexist.
+- MCP workers use the league's season year when calling ESPN and surface it in `get_user_session`.
+- Season discovery is handled by worker endpoints (proxied by the web app) to auto-add historical seasons.
 
 ## Deployment
 

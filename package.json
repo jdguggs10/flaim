@@ -3,7 +3,6 @@
   "private": true,
   "workspaces": [
     "web",
-    "tests",
     "workers/auth-worker",
     "workers/baseball-espn-mcp",
     "workers/football-espn-mcp"
@@ -21,23 +20,10 @@
     "deploy:workers:preview": "concurrently \"cd workers/auth-worker && wrangler deploy --env preview\" \"cd workers/baseball-espn-mcp && wrangler deploy --env preview\" \"cd workers/football-espn-mcp && wrangler deploy --env preview\"",
     "deploy:workers:prod": "concurrently \"cd workers/auth-worker && wrangler deploy --env prod\" \"cd workers/baseball-espn-mcp && wrangler deploy --env prod\" \"cd workers/football-espn-mcp && wrangler deploy --env prod\""
   },
-  "dependencies": {
-    "@clerk/nextjs": "^6.25.4",
-    "eslint": "^9.13.0",
-    "lucide-react": "^0.525.0",
-    "next": "^15.5.7",
-    "react": "^19.1.0",
-    "react-dom": "^19.1.0",
-    "wrangler": "^4.53.0"
-  },
   "devDependencies": {
-    "@types/jest": "^30.0.0",
     "@types/node": "^24.0.3",
-    "@types/react-dom": "19.0.0",
     "concurrently": "^9.2.0",
-    "dotenv": "^16.5.0",
-    "jest": "^29.7.0",
-    "patch-package": "^8.0.0",
-    "ts-jest": "^29.4.0"
+    "eslint": "^9.13.0",
+    "patch-package": "^8.0.0"
   }
 }
