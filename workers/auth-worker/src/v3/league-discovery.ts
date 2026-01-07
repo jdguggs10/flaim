@@ -179,10 +179,31 @@ export interface CurrentSeasonLeague extends DiscoveredLeague {
 }
 
 /**
+ * Season counts for granular messaging
+ */
+export interface SeasonCounts {
+  found: number;
+  added: number;
+  alreadySaved: number;
+}
+
+/**
+ * Result from discoverHistoricalSeasons
+ */
+interface HistoricalResult {
+  found: number;        // Seasons where user was a member
+  added: number;        // Successfully added to DB
+  alreadySaved: number; // Already existed in DB
+}
+
+/**
  * Result from discoverAndSaveLeagues
  */
 export interface DiscoverAndSaveResult {
   discovered: DiscoveredLeague[];
+  currentSeason: SeasonCounts;
+  pastSeasons: SeasonCounts;
+  // Legacy fields (deprecated, kept for backwards compatibility)
   added: number;
   skipped: number;
   historical: number;
@@ -208,9 +229,8 @@ export async function discoverAndSaveLeagues(
   const leagues = await discoverLeaguesV3(swid, s2);
 
   const discovered: DiscoveredLeague[] = [];
-  let added = 0;
-  let skipped = 0;
-  let historical = 0;
+  const currentSeason: SeasonCounts = { found: 0, added: 0, alreadySaved: 0 };
+  const pastSeasons: SeasonCounts = { found: 0, added: 0, alreadySaved: 0 };
 
   // 2. Process each league with per-league try/catch
   for (const league of leagues) {
@@ -221,6 +241,9 @@ export async function discoverAndSaveLeagues(
         continue;
       }
 
+      // Count this league as found
+      currentSeason.found++;
+
       // Check if league already exists
       const exists = await storage.leagueExists(
         userId,
@@ -230,7 +253,7 @@ export async function discoverAndSaveLeagues(
       );
 
       if (exists) {
-        skipped++;
+        currentSeason.alreadySaved++;
       } else {
         // Add the league
         const result = await storage.addLeague(userId, {
@@ -243,7 +266,7 @@ export async function discoverAndSaveLeagues(
         });
 
         if (result.success) {
-          added++;
+          currentSeason.added++;
         } else {
           console.error(`Failed to add league ${league.leagueId}:`, result.error);
         }
@@ -260,14 +283,16 @@ export async function discoverAndSaveLeagues(
       });
 
       // 3. Discover historical seasons for this league (synchronously)
-      const historicalCount = await discoverHistoricalSeasons(
+      const histResult = await discoverHistoricalSeasons(
         userId,
         league,
         swid,
         s2,
         storage
       );
-      historical += historicalCount;
+      pastSeasons.found += histResult.found;
+      pastSeasons.added += histResult.added;
+      pastSeasons.alreadySaved += histResult.alreadySaved;
 
     } catch (error) {
       // Per-league error handling - continue with other leagues
@@ -276,20 +301,28 @@ export async function discoverAndSaveLeagues(
     }
   }
 
-  return { discovered, added, skipped, historical };
+  return {
+    discovered,
+    currentSeason,
+    pastSeasons,
+    // Legacy fields for backwards compatibility
+    added: currentSeason.added,
+    skipped: currentSeason.alreadySaved,
+    historical: pastSeasons.added,
+  };
 }
 
 /**
  * Discover and save historical seasons for a single league.
  * Uses the league's seasonYear as the base (not current calendar year).
- * Only adds seasons where the user's teamId exists (validated via ESPN API).
+ * Only counts/adds seasons where the user's teamId exists (validated via ESPN API).
  *
  * @param userId - Clerk user ID
  * @param league - The discovered league
  * @param swid - ESPN SWID cookie
  * @param s2 - ESPN espn_s2 cookie
  * @param storage - Supabase storage instance
- * @returns Number of historical seasons added
+ * @returns HistoricalResult with found/added/alreadySaved counts
  */
 async function discoverHistoricalSeasons(
   userId: string,
@@ -297,17 +330,17 @@ async function discoverHistoricalSeasons(
   swid: string,
   s2: string,
   storage: EspnSupabaseStorage
-): Promise<number> {
-  let historicalAdded = 0;
+): Promise<HistoricalResult> {
+  const result: HistoricalResult = { found: 0, added: 0, alreadySaved: 0 };
   const sport = gameIdToSport(league.gameId);
-  if (!sport) return 0;
+  if (!sport) return result;
 
   try {
     // Get league info using the LEAGUE'S season year and gameId (not current calendar year, not hardcoded ffl)
     const leagueInfo = await getLeagueInfo(swid, s2, league.leagueId, league.seasonId, league.gameId);
 
     if (!leagueInfo?.status?.previousSeasons) {
-      return 0;
+      return result;
     }
 
     const previousSeasons = leagueInfo.status.previousSeasons;
@@ -315,26 +348,30 @@ async function discoverHistoricalSeasons(
 
     for (const year of previousSeasons) {
       try {
-        // Skip if already exists
-        const exists = await storage.leagueExists(userId, sport, league.leagueId, year);
-        if (exists) {
+        // FIRST: Validate membership - only count if user was a member
+        const teams = await getLeagueTeams(swid, s2, league.leagueId, year, league.gameId);
+        const hasTeam = teams.some(t => t.teamId === String(league.teamId));
+
+        if (!hasTeam) {
+          // User wasn't in this season - don't count it at all
+          console.log(`Skipping season ${year} for league ${league.leagueId}: teamId ${league.teamId} not found`);
           continue;
         }
 
-        // Fetch teams for historical season to validate membership
-        const teams = await getLeagueTeams(swid, s2, league.leagueId, year, league.gameId);
+        // User was a member - count it as found
+        result.found++;
 
-        // Only add if user's teamId exists in this historical season
-        const hasTeam = teams.some(t => t.teamId === String(league.teamId));
-        if (!hasTeam) {
-          console.log(`Skipping season ${year} for league ${league.leagueId}: teamId ${league.teamId} not found`);
+        // Check if already saved
+        const exists = await storage.leagueExists(userId, sport, league.leagueId, year);
+        if (exists) {
+          result.alreadySaved++;
           continue;
         }
 
         // Get league info for historical season (for league name)
         const historicalInfo = await getLeagueInfo(swid, s2, league.leagueId, year, league.gameId);
 
-        const result = await storage.addLeague(userId, {
+        const addResult = await storage.addLeague(userId, {
           leagueId: league.leagueId,
           sport: sport as 'football' | 'baseball' | 'basketball' | 'hockey',
           leagueName: historicalInfo?.leagueName || league.leagueName,
@@ -343,10 +380,10 @@ async function discoverHistoricalSeasons(
           seasonYear: year,
         });
 
-        if (result.success) {
-          historicalAdded++;
-        } else if (result.code !== 'DUPLICATE') {
-          console.error(`Failed to add historical season ${year} for league ${league.leagueId}:`, result.error);
+        if (addResult.success) {
+          result.added++;
+        } else if (addResult.code !== 'DUPLICATE') {
+          console.error(`Failed to add historical season ${year} for league ${league.leagueId}:`, addResult.error);
         }
 
       } catch (seasonError) {
@@ -361,5 +398,5 @@ async function discoverHistoricalSeasons(
     console.error(`Failed to discover history for league ${league.leagueId}:`, error);
   }
 
-  return historicalAdded;
+  return result;
 }

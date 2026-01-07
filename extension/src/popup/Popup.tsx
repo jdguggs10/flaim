@@ -6,7 +6,8 @@ import {
   getSetupState,
   setSetupState,
   clearSetupState,
-  type LeagueOption
+  type LeagueOption,
+  type SeasonCounts
 } from '../lib/storage';
 import { getEspnCredentials, validateCredentials } from '../lib/espn';
 import {
@@ -43,6 +44,74 @@ const sportEmoji: Record<string, string> = {
   hockey: '🏒'
 };
 
+// Discovery counts for granular messaging
+interface DiscoveryCounts {
+  currentSeason: SeasonCounts;
+  pastSeasons: SeasonCounts;
+}
+
+// Helper function to generate discovery message
+function getDiscoveryMessage(counts: DiscoveryCounts): string {
+  const { currentSeason: cs, pastSeasons: ps } = counts;
+
+  // No leagues found at all
+  if (cs.found === 0) {
+    return 'No active leagues found for this season.';
+  }
+
+  const parts: string[] = [];
+
+  // Current season leagues
+  if (cs.added > 0 && cs.alreadySaved === 0) {
+    // All new
+    parts.push(`Found ${cs.found} league${cs.found !== 1 ? 's' : ''}`);
+  } else if (cs.added === 0 && cs.alreadySaved > 0) {
+    // All already saved
+    parts.push(`${cs.found} league${cs.found !== 1 ? 's' : ''} already saved`);
+  } else if (cs.added > 0 && cs.alreadySaved > 0) {
+    // Mixed
+    parts.push(`Found ${cs.found} league${cs.found !== 1 ? 's' : ''} (${cs.added} new, ${cs.alreadySaved} saved)`);
+  } else if (cs.found > 0) {
+    // Fallback: leagues found but all failed to save (DB error)
+    parts.push(`Found ${cs.found} league${cs.found !== 1 ? 's' : ''} (save failed)`);
+  }
+
+  // Past seasons (only show if any found)
+  if (ps.found > 0) {
+    if (ps.added > 0 && ps.alreadySaved === 0) {
+      // All new
+      parts.push(`${ps.found} past season${ps.found !== 1 ? 's' : ''}`);
+    } else if (ps.added === 0 && ps.alreadySaved > 0) {
+      // All already saved
+      parts.push(`${ps.found} past season${ps.found !== 1 ? 's' : ''} already saved`);
+    } else if (ps.added > 0) {
+      // Some new
+      parts.push(`${ps.found} past season${ps.found !== 1 ? 's' : ''} (${ps.added} new)`);
+    } else {
+      // Fallback: past seasons found but all failed to save
+      parts.push(`${ps.found} past season${ps.found !== 1 ? 's' : ''} (save failed)`);
+    }
+  }
+
+  return parts.join(' + ');
+}
+
+// Helper function to generate completion summary
+function getCompletionSummary(counts: DiscoveryCounts): string {
+  const { currentSeason: cs, pastSeasons: ps } = counts;
+  const newItems = cs.added + ps.added;
+
+  if (newItems === 0) {
+    return 'Everything already saved!';
+  }
+
+  const parts: string[] = [];
+  if (cs.added > 0) parts.push(`${cs.added} new league${cs.added !== 1 ? 's' : ''}`);
+  if (ps.added > 0) parts.push(`${ps.added} new past season${ps.added !== 1 ? 's' : ''}`);
+
+  return parts.join(' + ') + ' added';
+}
+
 export default function Popup() {
   const [state, setState] = useState<State>('loading');
   const [pairingCode, setPairingCode] = useState('');
@@ -53,7 +122,10 @@ export default function Popup() {
   const [discoveredLeagues, setDiscoveredLeagues] = useState<DiscoveredLeague[]>([]);
   const [currentSeasonLeagues, setCurrentSeasonLeagues] = useState<LeagueOption[]>([]);
   const [selectedDefault, setSelectedDefault] = useState<string>('');
-  const [setupCounts, setSetupCounts] = useState({ added: 0, skipped: 0, historical: 0 });
+  const [discoveryCounts, setDiscoveryCounts] = useState<DiscoveryCounts>({
+    currentSeason: { found: 0, added: 0, alreadySaved: 0 },
+    pastSeasons: { found: 0, added: 0, alreadySaved: 0 },
+  });
 
   // Check initial state
   useEffect(() => {
@@ -75,11 +147,28 @@ export default function Popup() {
             seasonYear: 0
           })) || []);
           setCurrentSeasonLeagues(savedSetup.currentSeasonLeagues);
-          setSetupCounts({
-            added: savedSetup.added || 0,
-            skipped: savedSetup.skipped || 0,
-            historical: savedSetup.historical || 0
-          });
+
+          // Restore counts - handle both new and legacy formats
+          if (savedSetup.currentSeason && savedSetup.pastSeasons) {
+            setDiscoveryCounts({
+              currentSeason: savedSetup.currentSeason,
+              pastSeasons: savedSetup.pastSeasons,
+            });
+          } else {
+            // Legacy migration from v1.1
+            setDiscoveryCounts({
+              currentSeason: {
+                found: (savedSetup.added || 0) + (savedSetup.skipped || 0),
+                added: savedSetup.added || 0,
+                alreadySaved: savedSetup.skipped || 0,
+              },
+              pastSeasons: {
+                found: savedSetup.historical || 0,
+                added: savedSetup.historical || 0,
+                alreadySaved: 0,
+              },
+            });
+          }
 
           // Preselect default: prefer existing default, else first league
           const leagues = savedSetup.currentSeasonLeagues;
@@ -196,10 +285,9 @@ export default function Popup() {
       // Store results
       setDiscoveredLeagues(result.discovered);
       setCurrentSeasonLeagues(result.currentSeasonLeagues);
-      setSetupCounts({
-        added: result.added,
-        skipped: result.skipped,
-        historical: result.historical
+      setDiscoveryCounts({
+        currentSeason: result.currentSeason,
+        pastSeasons: result.pastSeasons,
       });
 
       // If no current season leagues, go to "no leagues" state
@@ -209,10 +297,20 @@ export default function Popup() {
         return;
       }
 
+      // Check if user already has a default league
+      const existingDefault = result.currentSeasonLeagues.find(l => l.isDefault);
+
+      // If user has an existing default AND no new leagues were added, skip selection
+      if (existingDefault && result.currentSeason.added === 0) {
+        setSelectedDefault(`${existingDefault.sport}|${existingDefault.leagueId}|${existingDefault.seasonYear}`);
+        setState('setup_complete');
+        await clearSetupState();
+        return;
+      }
+
       // Pre-select the first league (or the one already marked as default)
-      const defaultLeague = result.currentSeasonLeagues.find(l => l.isDefault);
       const firstLeague = result.currentSeasonLeagues[0];
-      const preselected = defaultLeague || firstLeague;
+      const preselected = existingDefault || firstLeague;
       setSelectedDefault(`${preselected.sport}|${preselected.leagueId}|${preselected.seasonYear}`);
 
       // Step 3: Select default
@@ -225,9 +323,8 @@ export default function Popup() {
           teamName: d.teamName
         })),
         currentSeasonLeagues: result.currentSeasonLeagues,
-        added: result.added,
-        skipped: result.skipped,
-        historical: result.historical
+        currentSeason: result.currentSeason,
+        pastSeasons: result.pastSeasons,
       });
 
     } catch (err) {
@@ -502,11 +599,16 @@ export default function Popup() {
         return (
           <div className="content">
             {error && <div className="message error">{error}</div>}
+            {hasCredentials && (
+              <div className="message info" style={{ marginBottom: 8 }}>
+                ESPN credentials synced
+              </div>
+            )}
             <div className="message success">
-              Found {discoveredLeagues.length} league{discoveredLeagues.length !== 1 ? 's' : ''}!
-              {setupCounts.skipped > 0 && ` (${setupCounts.skipped} already saved)`}
+              {getDiscoveryMessage(discoveryCounts)}
             </div>
 
+            {/* Show discovered leagues (what ESPN returned this run) */}
             <div className="league-list">
               {discoveredLeagues.map((league, i) => (
                 <div key={i} className="league-item">
@@ -519,6 +621,7 @@ export default function Popup() {
               ))}
             </div>
 
+            {/* Dropdown uses currentSeasonLeagues (all saved, for default selection) */}
             <div className="input-group">
               <label htmlFor="default-league">Select your default league:</label>
               <select
@@ -543,7 +646,7 @@ export default function Popup() {
           </div>
         );
 
-      case 'setup_complete':
+      case 'setup_complete': {
         const selectedLeague = currentSeasonLeagues.find(l =>
           `${l.sport}|${l.leagueId}|${l.seasonYear}` === selectedDefault
         );
@@ -564,8 +667,7 @@ export default function Popup() {
             )}
 
             <div className="setup-summary">
-              {setupCounts.added + setupCounts.skipped} leagues saved
-              {setupCounts.historical > 0 && ` (+ ${setupCounts.historical} historical seasons)`}
+              {getCompletionSummary(discoveryCounts)}
             </div>
 
             <button
@@ -585,6 +687,7 @@ export default function Popup() {
             </button>
           </div>
         );
+      }
 
       case 'setup_error':
         return (

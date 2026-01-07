@@ -4,9 +4,9 @@ Flaim connects your ESPN fantasy leagues to AI assistants like Claude and ChatGP
 
 ## How It Works
 
-1. **Connect ESPN** — Use the [Chrome extension](https://chrome.google.com/webstore/detail/flaim) to sync your ESPN credentials automatically (or add them manually)
-2. **Add leagues** at `/leagues` — Select teams and confirm the season year (auto-defaults based on sport)
-3. **Discover seasons (optional)** — Auto-add historical seasons for a league with one click
+1. **Connect ESPN** — Use the [Chrome extension](https://chrome.google.com/webstore/detail/flaim) to sync your ESPN credentials automatically
+2. **Leagues auto-discovered** — Extension finds all your leagues + past seasons and saves them
+3. **Pick a default** — Select which league to use by default in AI conversations
 4. **Connect AI** at `/connectors` — Link Claude.ai, Claude Desktop, or ChatGPT via OAuth
 5. **Use MCP tools** — Ask about your roster, matchups, standings directly in your AI
 
@@ -25,7 +25,7 @@ Flaim is **not** a chatbot or AI product itself — it's the bridge that lets yo
 ## Features
 
 - **Chrome Extension**: Auto-capture ESPN credentials without manual cookie extraction
-- **Auto-Discovery (v1.1)**: Syncing now discovers and saves leagues + historical seasons, with default selection
+- **Auto-Discovery (v1.1.1)**: Syncing discovers and saves leagues + past seasons, with granular status messaging and default selection
 - **Claude + ChatGPT OAuth**: Direct access via MCP protocol (OAuth 2.1)
 - **Live ESPN Data**: Baseball and football MCP workers with real-time stats
 - **Multi-League + Multi-Season Support**: Store multiple seasons per league and discover past seasons

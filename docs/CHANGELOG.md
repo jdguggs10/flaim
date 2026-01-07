@@ -4,6 +4,20 @@ Follow Keep a Changelog; SemVer applies. Planning docs live in `docs/dev`.
 
 ## [Unreleased]
 
+### Chrome Extension v1.1.1 - Improved Discovery Messaging
+Fixes confusing messaging during league discovery and re-sync. Now shows granular counts for leagues and past seasons.
+
+- **Added**: `SeasonCounts` type with `found`/`added`/`alreadySaved` for granular messaging.
+- **Added**: `currentSeason` and `pastSeasons` objects in discovery API response.
+- **Added**: `getDiscoveryMessage()` helper for context-aware discovery status.
+- **Added**: `getCompletionSummary()` helper for setup completion summary.
+- **Added**: Legacy field migration for popup recovery from v1.1 state.
+- **Fixed**: "Found 0 leagues" shown incorrectly when re-syncing (now shows "N leagues already saved").
+- **Fixed**: Past seasons `found` count now only includes seasons where user was actually a member.
+- **Changed**: Discovery messages now distinguish new vs already-saved for both leagues and past seasons.
+- **Changed**: Renamed "historical" to "past seasons" for clarity.
+- **Changed**: Extension version bumped to 1.1.1.
+
 ### Chrome Extension v1.1 - Auto-Discovery
 After syncing ESPN credentials, the extension now automatically discovers all your leagues and lets you pick a default - no manual league entry required.
 

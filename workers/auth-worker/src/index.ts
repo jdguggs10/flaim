@@ -55,7 +55,8 @@ import {
 import {
   discoverAndSaveLeagues,
   type DiscoveredLeague,
-  type CurrentSeasonLeague
+  type CurrentSeasonLeague,
+  type SeasonCounts
 } from './v3/league-discovery';
 
 // Rate limit configuration
@@ -577,6 +578,9 @@ export default {
           return new Response(JSON.stringify({
             discovered: result.discovered,
             currentSeasonLeagues: currentSeasonWithDefault,
+            currentSeason: result.currentSeason,
+            pastSeasons: result.pastSeasons,
+            // Legacy fields for backwards compatibility
             added: result.added,
             skipped: result.skipped,
             historical: result.historical,
@@ -586,12 +590,13 @@ export default {
 
         } catch (error) {
           // "No leagues found" is a valid state, not an error
-          // Return successful empty response so popup shows friendly message
+          // Return successful response with counts based on saved leagues
           if (error instanceof AutomaticLeagueDiscoveryFailed) {
-            console.log('No leagues found for user - returning empty discovery result');
+            console.log('No new leagues found from ESPN - checking saved leagues');
 
-            // If user already has saved current-season leagues, return them
+            // Get user's saved current-season leagues
             const currentSeasonLeagues = await storage.getCurrentSeasonLeagues(tokenResult.userId);
+            const savedCount = currentSeasonLeagues.length;
             const currentSeasonWithDefault: CurrentSeasonLeague[] = currentSeasonLeagues.map(l => ({
               sport: l.sport,
               leagueId: l.leagueId,
@@ -602,11 +607,24 @@ export default {
               isDefault: l.isDefault || false,
             }));
 
+            // Populate discovered list from saved leagues so UI can display them
+            const discovered: DiscoveredLeague[] = currentSeasonWithDefault.map(l => ({
+              sport: l.sport,
+              leagueId: l.leagueId,
+              leagueName: l.leagueName,
+              teamId: l.teamId,
+              teamName: l.teamName,
+              seasonYear: l.seasonYear,
+            }));
+
             return new Response(JSON.stringify({
-              discovered: [],
+              discovered,
               currentSeasonLeagues: currentSeasonWithDefault,
+              currentSeason: { found: savedCount, added: 0, alreadySaved: savedCount },
+              pastSeasons: { found: 0, added: 0, alreadySaved: 0 },
+              // Legacy fields for backwards compatibility
               added: 0,
-              skipped: 0,
+              skipped: savedCount,
               historical: 0,
             }), {
               headers: { 'Content-Type': 'application/json', ...corsHeaders },

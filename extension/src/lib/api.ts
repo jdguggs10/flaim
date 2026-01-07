@@ -127,7 +127,7 @@ export async function checkStatus(token: string): Promise<StatusResponse> {
 }
 
 // =============================================================================
-// LEAGUE DISCOVERY API (v1.1)
+// LEAGUE DISCOVERY API (v1.1.1)
 // =============================================================================
 
 export interface DiscoveredLeague {
@@ -143,9 +143,21 @@ export interface CurrentSeasonLeague extends DiscoveredLeague {
   isDefault: boolean;
 }
 
+/**
+ * Season counts for granular messaging
+ */
+export interface SeasonCounts {
+  found: number;
+  added: number;
+  alreadySaved: number;
+}
+
 export interface DiscoverResponse {
   discovered: DiscoveredLeague[];
   currentSeasonLeagues: CurrentSeasonLeague[];
+  currentSeason: SeasonCounts;
+  pastSeasons: SeasonCounts;
+  // Legacy fields (deprecated, kept for backwards compatibility)
   added: number;
   skipped: number;
   historical: number;

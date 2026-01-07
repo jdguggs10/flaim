@@ -37,7 +37,7 @@ export async function isPaired(): Promise<boolean> {
 }
 
 // =============================================================================
-// SETUP STATE PERSISTENCE (v1.1)
+// SETUP STATE PERSISTENCE (v1.1.1)
 // =============================================================================
 
 const SETUP_STATE_KEY = 'flaim_setup_state';
@@ -60,6 +60,15 @@ export type SetupStep =
   | 'complete'
   | 'error';
 
+/**
+ * Season counts for granular messaging
+ */
+export interface SeasonCounts {
+  found: number;
+  added: number;
+  alreadySaved: number;
+}
+
 export interface SetupState {
   step: SetupStep;
   error?: string;
@@ -69,6 +78,10 @@ export interface SetupState {
     teamName: string;
   }>;
   currentSeasonLeagues?: LeagueOption[];
+  // New structured counts (v1.1.1)
+  currentSeason?: SeasonCounts;
+  pastSeasons?: SeasonCounts;
+  // Legacy fields (for migration from v1.1)
   added?: number;
   skipped?: number;
   historical?: number;

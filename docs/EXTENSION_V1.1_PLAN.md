@@ -4,6 +4,8 @@
 
 All phases implemented on 2026-01-06.
 
+> **Note:** See `EXTENSION_V1.1.1_PLAN.md` for improved discovery messaging (granular counts for leagues + past seasons).
+
 ### Files Modified
 
 **Backend (auth-worker):**
