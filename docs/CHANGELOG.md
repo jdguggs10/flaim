@@ -4,6 +4,22 @@ Follow Keep a Changelog; SemVer applies. Planning docs live in `docs/dev`.
 
 ## [Unreleased]
 
+### Chrome Extension v1.1 - Auto-Discovery
+After syncing ESPN credentials, the extension now automatically discovers all your leagues and lets you pick a default - no manual league entry required.
+
+- **Added**: Auto-discovery of all ESPN leagues after syncing credentials.
+- **Added**: Historical season discovery for each league (all previous seasons saved automatically).
+- **Added**: Default league selection in extension popup before completing setup.
+- **Added**: Progress UI showing sync/discovery/select steps with progress bar.
+- **Added**: Popup close recovery (setup state persisted in chrome.storage.local).
+- **Added**: `POST /extension/discover` endpoint for league discovery.
+- **Added**: `POST /extension/set-default` endpoint for setting default league.
+- **Added**: `leagueExists()` and `getCurrentSeasonLeagues()` storage helpers.
+- **Added**: `discoverAndSaveLeagues()` and `discoverHistoricalSeasons()` in league-discovery.ts.
+- **Added**: Historical season membership validation via ESPN team list fetch (prevents incorrect historical entries).
+- **Changed**: "Sync to Flaim" now runs full setup flow (sync + discover + select default).
+- **Changed**: Extension version bumped to 1.1.0.
+
 ### Maintenance
 - **Removed**: `/account` page — redundant with Clerk's `<UserButton>` modal which provides identical account management functionality.
 - **Changed**: Dependency restructure — removed frontend deps from root package.json, aligned versions (jest 30, typescript 5.6.2), deleted orphaned root jest.config.js, fixed auth-worker jest config.

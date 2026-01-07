@@ -14,6 +14,7 @@
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { EspnCredentials, EspnCredentialsWithMetadata, EspnLeague, EspnUserData } from './espn-types';
+import { isCurrentSeason, type SeasonSport } from './season-utils';
 
 /**
  * Mask user ID for logging to avoid PII exposure
@@ -332,6 +333,57 @@ export class EspnSupabaseStorage {
       }));
     } catch (error) {
       console.error('Failed to retrieve ESPN leagues:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Check if a specific league already exists for a user
+   * Used by extension discovery to avoid duplicates
+   */
+  async leagueExists(
+    clerkUserId: string,
+    sport: string,
+    leagueId: string,
+    seasonYear: number
+  ): Promise<boolean> {
+    try {
+      if (!clerkUserId) return false;
+
+      const { data, error } = await this.supabase
+        .from('espn_leagues')
+        .select('id')
+        .eq('clerk_user_id', clerkUserId)
+        .eq('sport', sport)
+        .eq('league_id', leagueId)
+        .eq('season_year', seasonYear)
+        .single();
+
+      return !error && !!data;
+    } catch (error) {
+      console.error('Failed to check if league exists:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Get current season leagues for a user (for default dropdown)
+   * Returns leagues where seasonYear matches the current season for their sport.
+   * Uses sport-specific rollover logic (America/New_York timezone).
+   */
+  async getCurrentSeasonLeagues(clerkUserId: string): Promise<EspnLeague[]> {
+    try {
+      if (!clerkUserId) return [];
+
+      const allLeagues = await this.getLeagues(clerkUserId);
+
+      // Filter to current season leagues only using sport-specific rollover rules
+      return allLeagues.filter(league => {
+        if (!league.seasonYear || !league.sport) return false;
+        return isCurrentSeason(league.sport as SeasonSport, league.seasonYear);
+      });
+    } catch (error) {
+      console.error('Failed to get current season leagues:', error);
       return [];
     }
   }

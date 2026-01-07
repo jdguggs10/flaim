@@ -84,6 +84,8 @@ ESPN Cookies → POST /api/extension/sync → Auth Worker → Supabase
 | `POST /extension/code` | Clerk | Generate pairing code |
 | `POST /extension/pair` | Code | Exchange code for token |
 | `POST /extension/sync` | Bearer | Sync ESPN credentials |
+| `POST /extension/discover` | Bearer | Discover leagues + historical seasons |
+| `POST /extension/set-default` | Bearer | Set user's default league |
 | `GET /extension/status` | Bearer | Check connection status |
 | `GET /extension/connection` | Clerk | Web UI status check |
 | `DELETE /extension/token` | Clerk | Revoke extension |

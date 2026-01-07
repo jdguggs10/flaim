@@ -1,7 +1,23 @@
 import { useEffect, useState } from 'react';
-import { getToken, setToken, clearToken } from '../lib/storage';
+import {
+  getToken,
+  setToken,
+  clearToken,
+  getSetupState,
+  setSetupState,
+  clearSetupState,
+  type LeagueOption
+} from '../lib/storage';
 import { getEspnCredentials, validateCredentials } from '../lib/espn';
-import { exchangePairingCode, syncCredentials, checkStatus, getSiteBase } from '../lib/api';
+import {
+  exchangePairingCode,
+  syncCredentials,
+  checkStatus,
+  getSiteBase,
+  discoverLeagues,
+  setDefaultLeague,
+  type DiscoveredLeague
+} from '../lib/api';
 
 type State =
   | 'loading'
@@ -11,7 +27,21 @@ type State =
   | 'ready'
   | 'syncing'
   | 'success'
-  | 'error';
+  | 'error'
+  // New setup flow states
+  | 'setup_syncing'
+  | 'setup_discovering'
+  | 'setup_selecting_default'
+  | 'setup_complete'
+  | 'setup_error';
+
+// Sport to emoji mapping
+const sportEmoji: Record<string, string> = {
+  football: '🏈',
+  baseball: '⚾',
+  basketball: '🏀',
+  hockey: '🏒'
+};
 
 export default function Popup() {
   const [state, setState] = useState<State>('loading');
@@ -19,9 +49,56 @@ export default function Popup() {
   const [error, setError] = useState<string | null>(null);
   const [hasCredentials, setHasCredentials] = useState(false);
 
+  // Setup flow state
+  const [discoveredLeagues, setDiscoveredLeagues] = useState<DiscoveredLeague[]>([]);
+  const [currentSeasonLeagues, setCurrentSeasonLeagues] = useState<LeagueOption[]>([]);
+  const [selectedDefault, setSelectedDefault] = useState<string>('');
+  const [setupCounts, setSetupCounts] = useState({ added: 0, skipped: 0, historical: 0 });
+
   // Check initial state
   useEffect(() => {
     const init = async () => {
+      // Check for saved setup state first (popup close recovery)
+      const savedSetup = await getSetupState();
+
+      if (savedSetup?.step === 'complete') {
+        // User finished setup - go to normal ready state
+        await clearSetupState();
+      } else if (savedSetup?.step === 'selecting_default') {
+        // User was selecting default - restore that state
+        const token = await getToken();
+        if (token && savedSetup.currentSeasonLeagues && savedSetup.currentSeasonLeagues.length > 0) {
+          setDiscoveredLeagues(savedSetup.discovered?.map(d => ({
+            ...d,
+            leagueId: '',
+            teamId: '',
+            seasonYear: 0
+          })) || []);
+          setCurrentSeasonLeagues(savedSetup.currentSeasonLeagues);
+          setSetupCounts({
+            added: savedSetup.added || 0,
+            skipped: savedSetup.skipped || 0,
+            historical: savedSetup.historical || 0
+          });
+
+          // Preselect default: prefer existing default, else first league
+          const leagues = savedSetup.currentSeasonLeagues;
+          const defaultLeague = leagues.find(l => l.isDefault);
+          const preselected = defaultLeague || leagues[0];
+          setSelectedDefault(`${preselected.sport}|${preselected.leagueId}|${preselected.seasonYear}`);
+
+          setState('setup_selecting_default');
+          return;
+        }
+      } else if (savedSetup?.step === 'error') {
+        setError(savedSetup.error || 'Setup failed');
+        setState('setup_error');
+        return;
+      } else if (savedSetup?.step === 'syncing' || savedSetup?.step === 'discovering') {
+        // Process was interrupted - clear and restart
+        await clearSetupState();
+      }
+
       const token = await getToken();
 
       if (!token) {
@@ -78,8 +155,8 @@ export default function Popup() {
     }
   };
 
-  // Handle sync
-  const handleSync = async () => {
+  // Handle full setup flow (sync + discover + select default)
+  const handleFullSetup = async () => {
     const token = await getToken();
     if (!token) {
       setState('not_paired');
@@ -93,15 +170,97 @@ export default function Popup() {
     }
 
     setError(null);
-    setState('syncing');
+
+    // Step 1: Sync credentials
+    setState('setup_syncing');
+    await setSetupState({ step: 'syncing' });
 
     try {
       await syncCredentials(token, espnCreds);
       setHasCredentials(true);
-      setState('success');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Sync failed');
-      setState('error');
+      const errorMsg = err instanceof Error ? err.message : 'Failed to sync credentials';
+      setError(errorMsg);
+      setState('setup_error');
+      await setSetupState({ step: 'error', error: errorMsg });
+      return;
+    }
+
+    // Step 2: Discover leagues
+    setState('setup_discovering');
+    await setSetupState({ step: 'discovering' });
+
+    try {
+      const result = await discoverLeagues(token);
+
+      // Store results
+      setDiscoveredLeagues(result.discovered);
+      setCurrentSeasonLeagues(result.currentSeasonLeagues);
+      setSetupCounts({
+        added: result.added,
+        skipped: result.skipped,
+        historical: result.historical
+      });
+
+      // If no current season leagues, go to "no leagues" state
+      if (result.currentSeasonLeagues.length === 0) {
+        setState('success');
+        await clearSetupState();
+        return;
+      }
+
+      // Pre-select the first league (or the one already marked as default)
+      const defaultLeague = result.currentSeasonLeagues.find(l => l.isDefault);
+      const firstLeague = result.currentSeasonLeagues[0];
+      const preselected = defaultLeague || firstLeague;
+      setSelectedDefault(`${preselected.sport}|${preselected.leagueId}|${preselected.seasonYear}`);
+
+      // Step 3: Select default
+      setState('setup_selecting_default');
+      await setSetupState({
+        step: 'selecting_default',
+        discovered: result.discovered.map(d => ({
+          sport: d.sport,
+          leagueName: d.leagueName,
+          teamName: d.teamName
+        })),
+        currentSeasonLeagues: result.currentSeasonLeagues,
+        added: result.added,
+        skipped: result.skipped,
+        historical: result.historical
+      });
+
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Discovery failed';
+      setError(errorMsg);
+      setState('setup_error');
+      await setSetupState({ step: 'error', error: errorMsg });
+    }
+  };
+
+  // Handle finishing setup (setting default)
+  const handleFinishSetup = async () => {
+    if (!selectedDefault) {
+      setError('Please select a default league');
+      return;
+    }
+
+    const token = await getToken();
+    if (!token) {
+      setState('not_paired');
+      return;
+    }
+
+    const [sport, leagueId, seasonYearStr] = selectedDefault.split('|');
+    const seasonYear = parseInt(seasonYearStr, 10);
+
+    try {
+      await setDefaultLeague(token, { sport, leagueId, seasonYear });
+      setState('setup_complete');
+      await setSetupState({ step: 'complete' });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to set default');
+      // Stay on selecting_default so user can retry
     }
   };
 
@@ -226,8 +385,8 @@ export default function Popup() {
                 Ready to sync your ESPN credentials to Flaim.
               </div>
             )}
-            <button className="button success full-width" onClick={handleSync}>
-              {hasCredentials ? 'Re-sync Credentials' : 'Sync to Flaim'}
+            <button className="button success full-width" onClick={handleFullSetup}>
+              {hasCredentials ? 'Re-sync & Discover Leagues' : 'Sync to Flaim'}
             </button>
             <button
               className="button secondary full-width"
@@ -248,17 +407,22 @@ export default function Popup() {
           </div>
         );
 
-      case 'success':
+      case 'success': {
+        const noLeaguesFound =
+          discoveredLeagues.length === 0 && currentSeasonLeagues.length === 0;
+
         return (
           <div className="content">
             <div className="message success">
-              Credentials synced successfully! You can now add your leagues.
+              {noLeaguesFound
+                ? 'No active leagues found for this season. You can add leagues manually.'
+                : 'Credentials synced successfully! You can now add your leagues.'}
             </div>
             <button
               className="button primary full-width"
               onClick={() => openFlaim('/leagues')}
             >
-              Go to Leagues
+              {noLeaguesFound ? 'Add Leagues' : 'Go to Leagues'}
             </button>
             <button
               className="button secondary full-width"
@@ -268,17 +432,173 @@ export default function Popup() {
             </button>
           </div>
         );
+      }
 
       case 'error':
         return (
           <div className="content">
             <div className="message error">{error || 'An error occurred'}</div>
-            <button className="button primary full-width" onClick={handleSync}>
+            <button className="button primary full-width" onClick={handleFullSetup}>
               Try Again
             </button>
             <button
               className="button secondary full-width"
               onClick={() => setState('ready')}
+            >
+              Back
+            </button>
+          </div>
+        );
+
+      // =========== SETUP FLOW STATES ===========
+
+      case 'setup_syncing':
+        return (
+          <div className="content">
+            <div className="setup-progress">
+              <div className="setup-step active">
+                <span className="step-icon spinner"></span>
+                <span>Syncing credentials...</span>
+              </div>
+              <div className="setup-step pending">
+                <span className="step-icon">○</span>
+                <span>Discovering leagues</span>
+              </div>
+              <div className="setup-step pending">
+                <span className="step-icon">○</span>
+                <span>Select default</span>
+              </div>
+            </div>
+            <div className="progress-bar">
+              <div className="progress-bar-fill" style={{ width: '20%' }}></div>
+            </div>
+          </div>
+        );
+
+      case 'setup_discovering':
+        return (
+          <div className="content">
+            <div className="setup-progress">
+              <div className="setup-step completed">
+                <span className="step-icon check">✓</span>
+                <span>Credentials synced</span>
+              </div>
+              <div className="setup-step active">
+                <span className="step-icon spinner"></span>
+                <span>Discovering leagues...</span>
+              </div>
+              <div className="setup-step pending">
+                <span className="step-icon">○</span>
+                <span>Select default</span>
+              </div>
+            </div>
+            <div className="progress-bar">
+              <div className="progress-bar-fill" style={{ width: '50%' }}></div>
+            </div>
+          </div>
+        );
+
+      case 'setup_selecting_default':
+        return (
+          <div className="content">
+            {error && <div className="message error">{error}</div>}
+            <div className="message success">
+              Found {discoveredLeagues.length} league{discoveredLeagues.length !== 1 ? 's' : ''}!
+              {setupCounts.skipped > 0 && ` (${setupCounts.skipped} already saved)`}
+            </div>
+
+            <div className="league-list">
+              {discoveredLeagues.map((league, i) => (
+                <div key={i} className="league-item">
+                  <span className="sport-emoji">{sportEmoji[league.sport] || '🏆'}</span>
+                  <div className="league-info">
+                    <span className="league-name">{league.leagueName}</span>
+                    <span className="team-name">Team: {league.teamName}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="input-group">
+              <label htmlFor="default-league">Select your default league:</label>
+              <select
+                id="default-league"
+                value={selectedDefault}
+                onChange={(e) => setSelectedDefault(e.target.value)}
+              >
+                {currentSeasonLeagues.map((league) => (
+                  <option
+                    key={`${league.sport}|${league.leagueId}|${league.seasonYear}`}
+                    value={`${league.sport}|${league.leagueId}|${league.seasonYear}`}
+                  >
+                    {sportEmoji[league.sport] || '🏆'} {league.leagueName} ({league.seasonYear})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <button className="button primary full-width" onClick={handleFinishSetup}>
+              Finish Setup
+            </button>
+          </div>
+        );
+
+      case 'setup_complete':
+        const selectedLeague = currentSeasonLeagues.find(l =>
+          `${l.sport}|${l.leagueId}|${l.seasonYear}` === selectedDefault
+        );
+        return (
+          <div className="content">
+            <div className="message success">
+              You're all set!
+            </div>
+
+            {selectedLeague && (
+              <div className="league-item default-league">
+                <span className="sport-emoji">{sportEmoji[selectedLeague.sport] || '🏆'}</span>
+                <div className="league-info">
+                  <span className="league-name">{selectedLeague.leagueName}</span>
+                  <span className="team-name">{selectedLeague.teamName} ({selectedLeague.seasonYear})</span>
+                </div>
+              </div>
+            )}
+
+            <div className="setup-summary">
+              {setupCounts.added + setupCounts.skipped} leagues saved
+              {setupCounts.historical > 0 && ` (+ ${setupCounts.historical} historical seasons)`}
+            </div>
+
+            <button
+              className="button primary full-width"
+              onClick={() => openFlaim('/leagues')}
+            >
+              View Leagues
+            </button>
+            <button
+              className="button secondary full-width"
+              onClick={async () => {
+                await clearSetupState();
+                setState('ready');
+              }}
+            >
+              Done
+            </button>
+          </div>
+        );
+
+      case 'setup_error':
+        return (
+          <div className="content">
+            <div className="message error">{error || 'Setup failed'}</div>
+            <button className="button primary full-width" onClick={handleFullSetup}>
+              Try Again
+            </button>
+            <button
+              className="button secondary full-width"
+              onClick={async () => {
+                await clearSetupState();
+                setState('ready');
+              }}
             >
               Back
             </button>
@@ -291,28 +611,29 @@ export default function Popup() {
   };
 
   const isPaired = !['loading', 'not_paired', 'entering_code'].includes(state);
+  const isInSetupFlow = state.startsWith('setup_');
 
   return (
     <div className="popup">
       <div className="header">
         <h1>Flaim</h1>
         <span className={`status-badge ${isPaired ? 'connected' : 'disconnected'}`}>
-          {isPaired ? 'Connected' : 'Not Connected'}
+          {isInSetupFlow ? 'Setting Up' : isPaired ? 'Connected' : 'Not Connected'}
         </span>
       </div>
 
       {renderContent()}
 
       <div className="footer">
-        {isPaired ? (
+        {isPaired && !isInSetupFlow ? (
           <span className="link" onClick={handleDisconnect}>
             Disconnect Extension
           </span>
-        ) : (
+        ) : !isInSetupFlow ? (
           <span className="link" onClick={() => openFlaim('/')}>
             Learn more about Flaim
           </span>
-        )}
+        ) : null}
       </div>
     </div>
   );

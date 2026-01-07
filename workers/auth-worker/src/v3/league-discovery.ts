@@ -8,15 +8,18 @@
  * This implementation uses the new getLeagueInfo function for more reliable
  * league discovery and information retrieval.
  */
-import { 
-  AutomaticLeagueDiscoveryFailed, 
-  EspnAuthenticationFailed, 
+import {
+  AutomaticLeagueDiscoveryFailed,
+  EspnAuthenticationFailed,
   EspnCredentialsRequired,
   GambitLeague,
   ESPN_GAME_IDS,
-  type SportName
+  type SportName,
+  gameIdToSport
 } from '../espn-types';
 import { getLeagueInfo } from './get-league-info';
+import { getLeagueTeams } from './get-league-teams';
+import { getDefaultSeasonYear, type SeasonSport } from '../season-utils';
 
 const V3_BASE = 'https://lm-api-reads.fantasy.espn.com/apis/v3/games';
 
@@ -31,14 +34,15 @@ export async function discoverLeaguesV3(swid: string, s2: string): Promise<Gambi
     throw new EspnCredentialsRequired('Both SWID and espn_s2 cookies are required');
   }
 
-  const season = new Date().getFullYear();
   const leagues: GambitLeague[] = [];
 
   // Try each supported sport
   for (const [gameId, sport] of Object.entries(ESPN_GAME_IDS) as [string, SportName][]) {
     try {
-      console.log(`🔍 Querying ${sport} leagues...`);
-      
+      // Use sport-specific season based on rollover rules (America/New_York timezone)
+      const season = getDefaultSeasonYear(sport as SeasonSport);
+      console.log(`🔍 Querying ${sport} leagues for season ${season}...`);
+
       // First, try to get the user's leagues for this sport
       const url = `${V3_BASE}/${gameId}/seasons/${season}?view=mUserLeagues`;
       const res = await fetch(url, {
@@ -90,7 +94,8 @@ export async function discoverLeaguesV3(swid: string, s2: string): Promise<Gambi
             swid,
             s2,
             String(league.id),
-            season
+            season,
+            gameId
           );
           
           if (!leagueInfo) continue;
@@ -146,4 +151,215 @@ export async function discoverLeaguesV3Safe(swid: string, s2: string) {
   } catch (e: any) {
     return { success: false, leagues: [], error: e?.message ?? 'Unknown error' };
   }
+}
+
+// =============================================================================
+// EXTENSION DISCOVERY FUNCTIONS
+// =============================================================================
+
+import { EspnSupabaseStorage } from '../supabase-storage';
+
+/**
+ * Result type for discovered league (current season, shown in UI)
+ */
+export interface DiscoveredLeague {
+  sport: 'football' | 'baseball' | 'basketball' | 'hockey';
+  leagueId: string;
+  leagueName: string;
+  teamId: string;
+  teamName: string;
+  seasonYear: number;
+}
+
+/**
+ * Result type for current season league (for default dropdown)
+ */
+export interface CurrentSeasonLeague extends DiscoveredLeague {
+  isDefault: boolean;
+}
+
+/**
+ * Result from discoverAndSaveLeagues
+ */
+export interface DiscoverAndSaveResult {
+  discovered: DiscoveredLeague[];
+  added: number;
+  skipped: number;
+  historical: number;
+}
+
+/**
+ * Discover all leagues for a user and save them to the database.
+ * Also discovers historical seasons synchronously.
+ *
+ * @param userId - Clerk user ID
+ * @param swid - ESPN SWID cookie
+ * @param s2 - ESPN espn_s2 cookie
+ * @param storage - Supabase storage instance
+ * @returns Discovery results with counts
+ */
+export async function discoverAndSaveLeagues(
+  userId: string,
+  swid: string,
+  s2: string,
+  storage: EspnSupabaseStorage
+): Promise<DiscoverAndSaveResult> {
+  // 1. Discover current season leagues
+  const leagues = await discoverLeaguesV3(swid, s2);
+
+  const discovered: DiscoveredLeague[] = [];
+  let added = 0;
+  let skipped = 0;
+  let historical = 0;
+
+  // 2. Process each league with per-league try/catch
+  for (const league of leagues) {
+    try {
+      const sport = gameIdToSport(league.gameId);
+      if (!sport) {
+        console.warn(`Unknown gameId: ${league.gameId}`);
+        continue;
+      }
+
+      // Check if league already exists
+      const exists = await storage.leagueExists(
+        userId,
+        sport,
+        league.leagueId,
+        league.seasonId
+      );
+
+      if (exists) {
+        skipped++;
+      } else {
+        // Add the league
+        const result = await storage.addLeague(userId, {
+          leagueId: league.leagueId,
+          sport: sport as 'football' | 'baseball' | 'basketball' | 'hockey',
+          leagueName: league.leagueName,
+          teamId: String(league.teamId),
+          teamName: league.teamName,
+          seasonYear: league.seasonId,
+        });
+
+        if (result.success) {
+          added++;
+        } else {
+          console.error(`Failed to add league ${league.leagueId}:`, result.error);
+        }
+      }
+
+      // Add to discovered list for UI (regardless of whether it was new or existing)
+      discovered.push({
+        sport: sport as 'football' | 'baseball' | 'basketball' | 'hockey',
+        leagueId: league.leagueId,
+        leagueName: league.leagueName,
+        teamId: String(league.teamId),
+        teamName: league.teamName,
+        seasonYear: league.seasonId,
+      });
+
+      // 3. Discover historical seasons for this league (synchronously)
+      const historicalCount = await discoverHistoricalSeasons(
+        userId,
+        league,
+        swid,
+        s2,
+        storage
+      );
+      historical += historicalCount;
+
+    } catch (error) {
+      // Per-league error handling - continue with other leagues
+      console.error(`Error processing league ${league.leagueId}:`, error);
+      continue;
+    }
+  }
+
+  return { discovered, added, skipped, historical };
+}
+
+/**
+ * Discover and save historical seasons for a single league.
+ * Uses the league's seasonYear as the base (not current calendar year).
+ * Only adds seasons where the user's teamId exists (validated via ESPN API).
+ *
+ * @param userId - Clerk user ID
+ * @param league - The discovered league
+ * @param swid - ESPN SWID cookie
+ * @param s2 - ESPN espn_s2 cookie
+ * @param storage - Supabase storage instance
+ * @returns Number of historical seasons added
+ */
+async function discoverHistoricalSeasons(
+  userId: string,
+  league: GambitLeague,
+  swid: string,
+  s2: string,
+  storage: EspnSupabaseStorage
+): Promise<number> {
+  let historicalAdded = 0;
+  const sport = gameIdToSport(league.gameId);
+  if (!sport) return 0;
+
+  try {
+    // Get league info using the LEAGUE'S season year and gameId (not current calendar year, not hardcoded ffl)
+    const leagueInfo = await getLeagueInfo(swid, s2, league.leagueId, league.seasonId, league.gameId);
+
+    if (!leagueInfo?.status?.previousSeasons) {
+      return 0;
+    }
+
+    const previousSeasons = leagueInfo.status.previousSeasons;
+    console.log(`Found ${previousSeasons.length} historical seasons for league ${league.leagueId}`);
+
+    for (const year of previousSeasons) {
+      try {
+        // Skip if already exists
+        const exists = await storage.leagueExists(userId, sport, league.leagueId, year);
+        if (exists) {
+          continue;
+        }
+
+        // Fetch teams for historical season to validate membership
+        const teams = await getLeagueTeams(swid, s2, league.leagueId, year, league.gameId);
+
+        // Only add if user's teamId exists in this historical season
+        const hasTeam = teams.some(t => t.teamId === String(league.teamId));
+        if (!hasTeam) {
+          console.log(`Skipping season ${year} for league ${league.leagueId}: teamId ${league.teamId} not found`);
+          continue;
+        }
+
+        // Get league info for historical season (for league name)
+        const historicalInfo = await getLeagueInfo(swid, s2, league.leagueId, year, league.gameId);
+
+        const result = await storage.addLeague(userId, {
+          leagueId: league.leagueId,
+          sport: sport as 'football' | 'baseball' | 'basketball' | 'hockey',
+          leagueName: historicalInfo?.leagueName || league.leagueName,
+          teamId: String(league.teamId),
+          teamName: league.teamName,
+          seasonYear: year,
+        });
+
+        if (result.success) {
+          historicalAdded++;
+        } else if (result.code !== 'DUPLICATE') {
+          console.error(`Failed to add historical season ${year} for league ${league.leagueId}:`, result.error);
+        }
+
+      } catch (seasonError) {
+        // Per-season error handling - continue with other seasons
+        console.error(`Error fetching season ${year} for league ${league.leagueId}:`, seasonError);
+        continue;
+      }
+    }
+
+  } catch (error) {
+    // If we can't get league info at all, just log and return
+    console.error(`Failed to discover history for league ${league.leagueId}:`, error);
+  }
+
+  return historicalAdded;
 }

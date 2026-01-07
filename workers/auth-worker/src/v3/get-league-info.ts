@@ -46,16 +46,18 @@ export type { EspnLeagueInfo };
  * @param s2 - ESPN espn_s2 cookie value
  * @param leagueId - ESPN league ID
  * @param season - Season year (defaults to current year)
+ * @param gameId - ESPN game ID (ffl, flb, fba, fhl) - defaults to 'ffl' for backwards compatibility
  * @returns Promise with league information
  * @throws {EspnAuthenticationFailed} If authentication fails
  * @throws {EspnLeagueNotFound} If league is not found
  * @throws {EspnApiError} For other API errors
  */
 export async function getLeagueInfo(
-  swid: string, 
+  swid: string,
   s2: string,
   leagueId: string,
-  season: number = new Date().getFullYear()
+  season: number = new Date().getFullYear(),
+  gameId: string = 'ffl'
 ): Promise<EspnLeagueInfo> {
   if (!swid || !s2) {
     throw new EspnCredentialsRequired('Both SWID and espn_s2 cookies are required');
@@ -65,7 +67,7 @@ export async function getLeagueInfo(
   }
 
   // First, try the simpler endpoint with just mSettings view
-  const url = `https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/${season}/segments/0/leagues/${leagueId}?view=mSettings`;
+  const url = `https://lm-api-reads.fantasy.espn.com/apis/v3/games/${gameId}/seasons/${season}/segments/0/leagues/${leagueId}?view=mSettings`;
   
   try {
     const response = await fetch(url, {
@@ -121,7 +123,7 @@ export async function getLeagueInfo(
     }
 
     // Map the API response to our EspnLeagueInfo interface
-    const sport = gameIdToSport(data.gameId.toString()) || 'football';
+    const sport = gameIdToSport(gameId) || gameIdToSport(data.gameId.toString()) || 'football';
     
     return {
       leagueId: data.id,
@@ -168,16 +170,18 @@ export async function getLeagueInfo(
  * @param s2 - ESPN espn_s2 cookie value
  * @param leagueId - ESPN league ID
  * @param season - Season year (defaults to current year)
+ * @param gameId - ESPN game ID (ffl, flb, fba, fhl) - defaults to 'ffl'
  * @returns League info or null if an error occurs
  */
 export async function getLeagueInfoSafe(
-  swid: string, 
+  swid: string,
   s2: string,
   leagueId: string,
-  season: number = new Date().getFullYear()
+  season: number = new Date().getFullYear(),
+  gameId: string = 'ffl'
 ): Promise<EspnLeagueInfo | null> {
   try {
-    return await getLeagueInfo(swid, s2, leagueId, season);
+    return await getLeagueInfo(swid, s2, leagueId, season, gameId);
   } catch (error) {
     console.error('Error in getLeagueInfoSafe:', error);
     return null;

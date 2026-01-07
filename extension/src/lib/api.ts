@@ -125,3 +125,78 @@ export async function checkStatus(token: string): Promise<StatusResponse> {
 
   return response.json() as Promise<StatusResponse>;
 }
+
+// =============================================================================
+// LEAGUE DISCOVERY API (v1.1)
+// =============================================================================
+
+export interface DiscoveredLeague {
+  sport: string;
+  leagueId: string;
+  leagueName: string;
+  teamId: string;
+  teamName: string;
+  seasonYear: number;
+}
+
+export interface CurrentSeasonLeague extends DiscoveredLeague {
+  isDefault: boolean;
+}
+
+export interface DiscoverResponse {
+  discovered: DiscoveredLeague[];
+  currentSeasonLeagues: CurrentSeasonLeague[];
+  added: number;
+  skipped: number;
+  historical: number;
+}
+
+/**
+ * Discover and save all ESPN leagues for the user
+ */
+export async function discoverLeagues(token: string): Promise<DiscoverResponse> {
+  const apiBase = await detectApiBase();
+  const response = await fetch(`${apiBase}/discover`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    const error = await response.json() as ApiError;
+    throw new Error(error.error_description || error.error || 'Discovery failed');
+  }
+
+  return response.json() as Promise<DiscoverResponse>;
+}
+
+export interface SetDefaultRequest {
+  leagueId: string;
+  sport: string;
+  seasonYear: number;
+}
+
+/**
+ * Set a league as the user's default
+ */
+export async function setDefaultLeague(
+  token: string,
+  league: SetDefaultRequest
+): Promise<void> {
+  const apiBase = await detectApiBase();
+  const response = await fetch(`${apiBase}/set-default`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify(league),
+  });
+
+  if (!response.ok) {
+    const error = await response.json() as ApiError;
+    throw new Error(error.error_description || error.error || 'Failed to set default');
+  }
+}

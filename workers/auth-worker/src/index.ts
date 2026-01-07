@@ -27,7 +27,7 @@
  */
 
 import { EspnSupabaseStorage } from './supabase-storage';
-import { EspnCredentials, EspnLeague } from './espn-types';
+import { EspnCredentials, EspnLeague, AutomaticLeagueDiscoveryFailed } from './espn-types';
 import {
   handleMetadataDiscovery,
   handleClientRegistration,
@@ -52,6 +52,11 @@ import {
   validateExtensionToken,
   ExtensionEnv,
 } from './extension-handlers';
+import {
+  discoverAndSaveLeagues,
+  type DiscoveredLeague,
+  type CurrentSeasonLeague
+} from './v3/league-discovery';
 
 // Rate limit configuration
 const RATE_LIMIT_PER_DAY = 200;
@@ -519,6 +524,155 @@ export default {
           });
         }
         return handleRevokeToken(request, env as ExtensionEnv, userId, corsHeaders);
+      }
+
+      // Discover and save leagues (requires extension token)
+      if (pathname === '/extension/discover' && request.method === 'POST') {
+        const tokenResult = await validateExtensionToken(request, env as ExtensionEnv);
+        if (!tokenResult.valid || !tokenResult.userId) {
+          return new Response(JSON.stringify({
+            error: 'unauthorized',
+            error_description: tokenResult.error || 'Invalid token',
+          }), {
+            status: 401,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders },
+          });
+        }
+
+        const storage = EspnSupabaseStorage.fromEnvironment(env);
+
+        // Get stored credentials
+        const credentials = await storage.getCredentials(tokenResult.userId);
+        if (!credentials) {
+          return new Response(JSON.stringify({
+            error: 'credentials_not_found',
+            error_description: 'ESPN credentials not found. Please sync credentials first.',
+          }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders },
+          });
+        }
+
+        try {
+          // Run discovery (includes historical seasons, fully synchronous)
+          const result = await discoverAndSaveLeagues(
+            tokenResult.userId,
+            credentials.swid,
+            credentials.s2,
+            storage
+          );
+
+          // Get current season leagues for default dropdown
+          const currentSeasonLeagues = await storage.getCurrentSeasonLeagues(tokenResult.userId);
+          const currentSeasonWithDefault: CurrentSeasonLeague[] = currentSeasonLeagues.map(l => ({
+            sport: l.sport,
+            leagueId: l.leagueId,
+            leagueName: l.leagueName || '',
+            teamId: l.teamId || '',
+            teamName: l.teamName || '',
+            seasonYear: l.seasonYear || 0,
+            isDefault: l.isDefault || false,
+          }));
+
+          return new Response(JSON.stringify({
+            discovered: result.discovered,
+            currentSeasonLeagues: currentSeasonWithDefault,
+            added: result.added,
+            skipped: result.skipped,
+            historical: result.historical,
+          }), {
+            headers: { 'Content-Type': 'application/json', ...corsHeaders },
+          });
+
+        } catch (error) {
+          // "No leagues found" is a valid state, not an error
+          // Return successful empty response so popup shows friendly message
+          if (error instanceof AutomaticLeagueDiscoveryFailed) {
+            console.log('No leagues found for user - returning empty discovery result');
+
+            // If user already has saved current-season leagues, return them
+            const currentSeasonLeagues = await storage.getCurrentSeasonLeagues(tokenResult.userId);
+            const currentSeasonWithDefault: CurrentSeasonLeague[] = currentSeasonLeagues.map(l => ({
+              sport: l.sport,
+              leagueId: l.leagueId,
+              leagueName: l.leagueName || '',
+              teamId: l.teamId || '',
+              teamName: l.teamName || '',
+              seasonYear: l.seasonYear || 0,
+              isDefault: l.isDefault || false,
+            }));
+
+            return new Response(JSON.stringify({
+              discovered: [],
+              currentSeasonLeagues: currentSeasonWithDefault,
+              added: 0,
+              skipped: 0,
+              historical: 0,
+            }), {
+              headers: { 'Content-Type': 'application/json', ...corsHeaders },
+            });
+          }
+
+          console.error('Discovery failed:', error);
+
+          // Check for specific error types
+          const errorMessage = error instanceof Error ? error.message : 'Discovery failed';
+          const isAuthError = errorMessage.includes('authentication') ||
+            errorMessage.includes('expired') ||
+            errorMessage.includes('invalid');
+
+          return new Response(JSON.stringify({
+            error: isAuthError ? 'espn_auth_failed' : 'discovery_failed',
+            error_description: errorMessage,
+          }), {
+            status: isAuthError ? 401 : 500,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders },
+          });
+        }
+      }
+
+      // Set default league (requires extension token)
+      if (pathname === '/extension/set-default' && request.method === 'POST') {
+        const tokenResult = await validateExtensionToken(request, env as ExtensionEnv);
+        if (!tokenResult.valid || !tokenResult.userId) {
+          return new Response(JSON.stringify({
+            error: 'unauthorized',
+            error_description: tokenResult.error || 'Invalid token',
+          }), {
+            status: 401,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders },
+          });
+        }
+
+        const body = await request.json() as { leagueId?: string; sport?: string; seasonYear?: number };
+        const { leagueId, sport, seasonYear } = body;
+
+        if (!leagueId || !sport || seasonYear === undefined) {
+          return new Response(JSON.stringify({
+            error: 'invalid_request',
+            error_description: 'leagueId, sport, and seasonYear are required',
+          }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders },
+          });
+        }
+
+        const storage = EspnSupabaseStorage.fromEnvironment(env);
+        const result = await storage.setDefaultLeague(tokenResult.userId, leagueId, sport, seasonYear);
+
+        if (!result.success) {
+          return new Response(JSON.stringify({
+            error: 'set_default_failed',
+            error_description: result.error || 'Failed to set default league',
+          }), {
+            status: result.error === 'League not found' ? 404 : 400,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders },
+          });
+        }
+
+        return new Response(JSON.stringify({}), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders },
+        });
       }
 
       // ESPN credential management endpoints

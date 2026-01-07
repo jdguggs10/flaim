@@ -2,14 +2,18 @@
 
 Chrome extension that auto-captures ESPN credentials (SWID, espn_s2 cookies) and syncs them to Flaim via a pairing code flow. Eliminates manual DevTools cookie extraction.
 
-## User Flow
+## User Flow (v1.1)
 
 1. Install extension from [Chrome Web Store](https://chrome.google.com/webstore/detail/flaim)
 2. Go to `flaim.app/extension` and generate a pairing code
 3. Enter the 6-character code in the extension popup
 4. Log into ESPN.com (if not already)
-5. Click "Sync to Flaim" in the extension
-6. Add leagues at `flaim.app/leagues`
+5. Click "Sync to Flaim" - the extension will:
+   - Sync your ESPN credentials
+   - Auto-discover all your leagues (including historical seasons)
+   - Show a list of discovered leagues
+   - Let you pick a default league
+6. View your leagues at `flaim.app/leagues`
 
 ## Development
 
@@ -35,7 +39,7 @@ NODE_ENV=development npm run build
 npm run build
 
 # Create zip for Chrome Web Store upload
-zip -r flaim-extension-v1.0.0.zip dist/
+zip -r flaim-extension-v1.1.0.zip dist/
 ```
 
 ### Load Unpacked Extension
@@ -78,6 +82,8 @@ All routes go through Next.js proxy (`/api/extension/*`) to auth-worker:
 | `POST /extension/code` | Clerk | 5/hour per user | Generate pairing code |
 | `POST /extension/pair` | Code | 10/10min per IP | Exchange code for token |
 | `POST /extension/sync` | Bearer | None | Sync ESPN credentials |
+| `POST /extension/discover` | Bearer | None | Discover and save leagues (v1.1) |
+| `POST /extension/set-default` | Bearer | None | Set default league (v1.1) |
 | `GET /extension/status` | Bearer | None | Check connection status |
 | `GET /extension/connection` | Clerk | None | Web UI status check |
 | `DELETE /extension/token` | Clerk | None | Revoke extension |
@@ -163,7 +169,6 @@ web/app/(site)/privacy/         # Privacy policy page
 
 ## Future Enhancements
 
-- **Auto-discovery**: Call ESPN v3 API to auto-discover user's leagues
 - **Multi-browser**: Publish to Edge Add-ons (same Manifest V3)
 - **Status badge**: Show icon badge when credentials need refresh
 - **Background sync**: Periodic credential refresh without user action

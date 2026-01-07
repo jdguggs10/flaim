@@ -35,3 +35,63 @@ export async function isPaired(): Promise<boolean> {
   const token = await getToken();
   return token !== null;
 }
+
+// =============================================================================
+// SETUP STATE PERSISTENCE (v1.1)
+// =============================================================================
+
+const SETUP_STATE_KEY = 'flaim_setup_state';
+
+export interface LeagueOption {
+  sport: string;
+  leagueId: string;
+  leagueName: string;
+  teamId: string;
+  teamName: string;
+  seasonYear: number;
+  isDefault: boolean;
+}
+
+export type SetupStep =
+  | 'idle'
+  | 'syncing'
+  | 'discovering'
+  | 'selecting_default'
+  | 'complete'
+  | 'error';
+
+export interface SetupState {
+  step: SetupStep;
+  error?: string;
+  discovered?: Array<{
+    sport: string;
+    leagueName: string;
+    teamName: string;
+  }>;
+  currentSeasonLeagues?: LeagueOption[];
+  added?: number;
+  skipped?: number;
+  historical?: number;
+}
+
+/**
+ * Get stored setup state
+ */
+export async function getSetupState(): Promise<SetupState | null> {
+  const result = await chrome.storage.local.get(SETUP_STATE_KEY);
+  return result[SETUP_STATE_KEY] || null;
+}
+
+/**
+ * Store setup state
+ */
+export async function setSetupState(state: SetupState): Promise<void> {
+  await chrome.storage.local.set({ [SETUP_STATE_KEY]: state });
+}
+
+/**
+ * Clear setup state
+ */
+export async function clearSetupState(): Promise<void> {
+  await chrome.storage.local.remove(SETUP_STATE_KEY);
+}
