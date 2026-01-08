@@ -448,26 +448,36 @@ export class EspnSupabaseStorage {
   /**
    * Remove a league from user's collection.
    * Always deletes ALL seasons for the given leagueId + sport.
+   * Returns true only if at least one row was actually deleted.
    */
   async removeLeague(clerkUserId: string, leagueId: string, sport: string): Promise<boolean> {
     try {
-      let query = this.supabase
+      console.log(`[removeLeague] Attempting delete: userId=${maskUserId(clerkUserId)}, leagueId=${leagueId}, sport=${sport}`);
+
+      const { data, error } = await this.supabase
         .from('espn_leagues')
         .delete()
         .eq('clerk_user_id', clerkUserId)
         .eq('league_id', leagueId)
-        .eq('sport', sport);
-
-      const { error } = await query;
+        .eq('sport', sport)
+        .select('id, league_id, sport, season_year');
 
       if (error) {
-        console.error('Supabase error removing league:', error);
+        console.error('[removeLeague] Supabase error:', error);
+        return false;
+      }
+
+      const deletedCount = data?.length ?? 0;
+      console.log(`[removeLeague] Deleted ${deletedCount} row(s) for leagueId=${leagueId}, sport=${sport}`);
+
+      if (deletedCount === 0) {
+        console.warn(`[removeLeague] No rows matched for userId=${maskUserId(clerkUserId)}, leagueId=${leagueId}, sport=${sport}`);
         return false;
       }
 
       return true;
     } catch (error) {
-      console.error('Failed to remove ESPN league:', error);
+      console.error('[removeLeague] Failed to remove ESPN league:', error);
       return false;
     }
   }

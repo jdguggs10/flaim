@@ -43,12 +43,15 @@ export async function discoverLeaguesV3(swid: string, s2: string): Promise<Gambi
       const season = getDefaultSeasonYear(sport as SeasonSport);
       console.log(`🔍 Querying ${sport} leagues for season ${season}...`);
 
+      // DEBUG: Log credentials being used (masked)
+      console.log(`🔑 Using SWID: ${swid.substring(0, 10)}... (len=${swid.length}), s2: ${s2.substring(0, 10)}... (len=${s2.length})`);
+
       // First, try to get the user's leagues for this sport
       const url = `${V3_BASE}/${gameId}/seasons/${season}?view=mUserLeagues`;
       const res = await fetch(url, {
         headers: {
           Cookie: `SWID=${swid}; espn_s2=${s2}`,
-          "User-Agent": "flaim-league-discovery/1.0",
+          "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
           Accept: "application/json",
           'X-Fantasy-Source': 'kona',
           'X-Fantasy-Platform': 'kona-web-2.0.0'
@@ -78,11 +81,23 @@ export async function discoverLeaguesV3(swid: string, s2: string): Promise<Gambi
           nickname?: string;
         }>;
       }> };
-      
+
+      // DEBUG: Log raw ESPN response structure
+      console.log(`📦 ESPN raw response for ${sport}:`, JSON.stringify(json, null, 2).substring(0, 500));
+
       if (!json?.leagues || !Array.isArray(json.leagues)) {
         console.log(`No leagues found for ${sport}`);
         continue;
       }
+
+      // DEBUG: Log all league IDs returned by ESPN
+      console.log(`🔍 ESPN returned ${json.leagues.length} ${sport} leagues:`, json.leagues.map(l => ({
+        id: l.id,
+        name: l.name,
+        seasonId: l.seasonId,
+        memberCount: l.members?.length || 0,
+        members: l.members?.map(m => ({ teamId: m.teamId, id: m.id }))
+      })));
 
       // Process each league
       for (const league of json.leagues) {
@@ -104,8 +119,11 @@ export async function discoverLeaguesV3(swid: string, s2: string): Promise<Gambi
           const member = Array.isArray(league.members) && league.members[0] ? league.members[0] : {};
           const teamId = member.teamId ?? member.id;
           const teamName = member.teamName ?? member.nickname;
-          
-          if (!teamId) continue;
+
+          if (!teamId) {
+            console.warn(`⚠️ Skipping league ${league.id} (${league.name}): no teamId found. members:`, league.members);
+            continue;
+          }
           
           leagues.push({
             gameId,
