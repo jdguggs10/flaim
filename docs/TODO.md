@@ -5,7 +5,7 @@
 
 ## Features
 - Automate connector additions via browser extension.
-- **Build out MCP functionality for football and baseball**: Worker tools are skeletal (auth + retrieval tests only); expand to full functionality.
+- **Deepen MCP functionality for football and baseball**: expand coverage (edge cases, richer data, pagination), and add tests for existing tools.
   - Current football tools (workers/football-espn-mcp): `get_user_session`, `get_espn_football_league_info`, `get_espn_football_team`, `get_espn_football_matchups`, `get_espn_football_standings`.
   - Current baseball tools (workers/baseball-espn-mcp): `get_user_session`, `get_espn_baseball_league_info`, `get_espn_baseball_team_roster`, `get_espn_baseball_matchups`, `get_espn_baseball_standings`.
 
@@ -20,7 +20,7 @@
 
 ## Infrastructure & UX Polish
 - **Automated Testing**: Implement unit and integration tests for core API logic (Fan API, auth handlers) to prevent regressions.
-- **Service Monitoring**: Add `health` check endpoints to all workers to monitor uptime and backend connectivity.
+- **Service Monitoring**: Add external uptime checks for existing `/health` endpoints.
 - **UX Polish**: Implement loading states (spinners or skeletons) across the web dashboard and extension to improve perceived performance during API fetches.
 
 ## Long-term Potential Implementations

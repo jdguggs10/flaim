@@ -2,7 +2,7 @@
 
 Chrome extension that auto-captures ESPN credentials (SWID, espn_s2 cookies) and syncs them to Flaim via a pairing code flow. Eliminates manual DevTools cookie extraction.
 
-## User Flow (v1.1.1)
+## User Flow (v1.2.0)
 
 1. Install extension from [Chrome Web Store](https://chrome.google.com/webstore/detail/flaim)
 2. Go to `flaim.app/extension` and generate a pairing code
@@ -10,7 +10,7 @@ Chrome extension that auto-captures ESPN credentials (SWID, espn_s2 cookies) and
 4. Log into ESPN.com (if not already)
 5. Click "Sync to Flaim" - the extension will:
    - Sync your ESPN credentials
-   - Auto-discover all your leagues (including past seasons)
+   - Auto-discover all your leagues (including past seasons) via ESPN Fan API
    - Show discovery results with granular counts (new vs already saved)
    - Let you pick a default league
 6. View your leagues at `flaim.app/leagues`
@@ -43,7 +43,7 @@ NODE_ENV=development npm run build
 npm run build
 
 # Create zip for Chrome Web Store upload
-zip -r flaim-extension-v1.1.1.zip dist/
+zip -r flaim-extension-v1.2.0.zip dist/
 ```
 
 ### Load Unpacked Extension
@@ -68,6 +68,9 @@ Extension Popup → POST /api/extension/pair → Auth Worker → Supabase
      ↓
 ESPN Cookies → POST /api/extension/sync → Auth Worker → Supabase
 ```
+
+**Discovery note**: League discovery uses ESPN's Fan API with a normalized
+`{SWID}` and ESPN-recommended headers; this reduces calls to a single request.
 
 ### Pairing Flow
 

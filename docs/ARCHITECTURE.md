@@ -5,7 +5,7 @@ Flaim is an MCP (Model Context Protocol) service that connects ESPN fantasy leag
 ## Quick Start
 
 ```bash
-git clone https://github.com/yourusername/flaim
+git clone https://github.com/jdguggs10/flaim
 cd flaim
 npm install
 cp web/.env.example web/.env.local   # add keys

@@ -16,7 +16,6 @@ ESPN deprecated the `mUserLeagues` endpoint, breaking auto-discovery. This relea
 - **Added**: Numeric-to-string game ID mapping (1→ffl, 2→flb, 3→fba, 4→fhl).
 - **Removed**: Sport iteration loop (no longer needed).
 - **Removed**: PII from logs (partial SWID, league names).
-- **Docs**: Full investigation and resolution documented in `docs/AUTO_LEAGUE_DISCOVERY_REFACTOR.md`.
 
 ### Chrome Extension v1.1.1 - Improved Discovery Messaging
 Fixes confusing messaging during league discovery and re-sync. Now shows granular counts for leagues and past seasons.

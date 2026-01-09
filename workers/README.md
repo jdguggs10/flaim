@@ -105,6 +105,9 @@ X-Fantasy-Source: kona
 X-Fantasy-Platform: kona-web-2.0.0
 ```
 
+Note: The Chrome extension's league discovery uses ESPN's Fan API; MCP workers
+still call `lm-api-reads.fantasy.espn.com` for league data.
+
 Credentials are fetched from auth-worker per request; MCP workers don't store them locally.
 
 ## League Seasons
