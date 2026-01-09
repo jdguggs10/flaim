@@ -12,6 +12,16 @@
     "https://flaim.app/api/extension/*",
     "http://localhost:3000/api/extension/*"
   ],
+  "background": {
+    "service_worker": "src/background.ts",
+    "type": "module"
+  },
+  "externally_connectable": {
+    "matches": [
+      "https://flaim.app/*",
+      "http://localhost:3000/*"
+    ]
+  },
   "action": {
     "default_popup": "src/popup/index.html",
     "default_icon": {

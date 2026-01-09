@@ -165,6 +165,28 @@ web/app/(site)/privacy/         # Privacy policy page
 5. Submit for review (updates typically reviewed in hours to 1 day)
 6. Chrome auto-updates users within ~24 hours
 
+## Local Dev: Website ↔ Extension Ping
+
+The website can ping the extension directly to verify it's installed and paired. This requires:
+
+1. **Extension side**: `externally_connectable` in manifest.json (already configured for `flaim.app` and `localhost:3000`)
+   - After changes, rebuild and reload the unpacked extension:
+     ```
+     NODE_ENV=development npm run build
+     ```
+     Then reload in `chrome://extensions` and confirm the **service worker** link appears.
+
+2. **Website side**: Extension ID(s) to ping. For local dev with an unpacked extension:
+   - Find your local extension ID in `chrome://extensions` (shown under the extension name in Developer mode)
+   - Set `NEXT_PUBLIC_EXTENSION_IDS` in `web/.env.local`:
+     ```
+     # Comma-separated: production ID first, then local dev ID
+     NEXT_PUBLIC_EXTENSION_IDS=ogkkejmgkoolfaidplldmcghbikpmonn,YOUR_LOCAL_EXTENSION_ID
+     ```
+   - The website will try each ID until one responds
+
+**Note**: Each time you reload an unpacked extension, the ID may change. If ping fails in local dev, check the ID.
+
 ## Troubleshooting
 
 | Issue | Cause | Fix |
@@ -173,6 +195,7 @@ web/app/(site)/privacy/         # Privacy policy page
 | Extension won't pair | Code expired (10 min) | Generate new code at `/extension` |
 | ESPN cookies not found | Not logged into ESPN | Log into espn.com, then retry |
 | 401 on sync | Token revoked (re-paired elsewhere) | Re-pair the extension |
+| Website shows "Not Connected" in Chrome | Extension ID mismatch | Check `NEXT_PUBLIC_EXTENSION_IDS` matches your local extension ID |
 
 ## Future Enhancements
 

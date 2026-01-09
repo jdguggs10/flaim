@@ -2,11 +2,28 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import { useAuth, SignIn } from '@clerk/nextjs';
-import { Loader2, Puzzle, Copy, Check, CheckCircle2, XCircle, ExternalLink, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react';
+import {
+  Loader2,
+  Puzzle,
+  Copy,
+  Check,
+  CheckCircle2,
+  XCircle,
+  ExternalLink,
+  RefreshCw,
+  ChevronDown,
+  ChevronUp,
+  AlertTriangle,
+  Monitor,
+} from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import {
+  pingExtension,
+  isChromeBrowser,
+} from '@/lib/extension-ping';
 
 interface ExtensionToken {
   id: string;
@@ -14,11 +31,19 @@ interface ExtensionToken {
   lastUsedAt: string | null;
 }
 
+type ConnectionStatus =
+  | 'loading'
+  | 'connected'           // Ping successful + paired
+  | 'installed_not_paired' // Ping successful but not paired
+  | 'not_installed'       // Ping failed, no server record
+  | 'needs_repair'        // Ping failed, but server has record (stale)
+  | 'server_only';        // Non-Chrome browser, showing server data
+
 export default function ExtensionPage() {
   const { isLoaded, isSignedIn } = useAuth();
 
-  const [isCheckingStatus, setIsCheckingStatus] = useState(true);
-  const [isConnected, setIsConnected] = useState(false);
+  // Connection state
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('loading');
   const [activeToken, setActiveToken] = useState<ExtensionToken | null>(null);
 
   // Pairing code state
@@ -29,15 +54,34 @@ export default function ExtensionPage() {
 
   // UI state
   const [error, setError] = useState<string | null>(null);
-  const [errorRetriable, setErrorRetriable] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
   const [showDevInstructions, setShowDevInstructions] = useState(false);
   const [showFaq, setShowFaq] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Check connection status
+  // Check connection status - ping extension first, then fall back to server
   const checkStatus = useCallback(async () => {
-    setIsCheckingStatus(true);
+    setIsRefreshing(true);
+    setError(null);
+
+    // Detect if we're in Chrome
+    const isChrome = isChromeBrowser();
+
+    // Try to ping the extension directly (only works in Chrome)
+    let ping: { reachable: boolean; paired: boolean } | null = null;
+    if (isChrome) {
+      try {
+        ping = await pingExtension(1500);
+      } catch {
+        ping = null;
+      }
+    }
+
+    // Fetch server-side status regardless (for fallback data)
+    let serverConnected = false;
+    let serverToken: ExtensionToken | null = null;
+
     try {
       const response = await fetch('/api/extension/connection');
       if (response.ok) {
@@ -45,26 +89,44 @@ export default function ExtensionPage() {
           connected?: boolean;
           token?: ExtensionToken | null;
         };
-        setIsConnected(!!data.connected);
-        setActiveToken(data.token || null);
-        setError(null);
-        setErrorRetriable(false);
-      } else {
-        setError('Failed to check connection status.');
-        setErrorRetriable(true);
+        serverConnected = !!data.connected;
+        serverToken = data.token || null;
+        setActiveToken(serverToken);
       }
     } catch (err) {
-      console.error('Failed to check status:', err);
-      setError('Failed to check connection status.');
-      setErrorRetriable(true);
-    } finally {
-      setIsCheckingStatus(false);
+      console.error('Failed to fetch server status:', err);
     }
+
+    // Determine connection status based on ping and server data
+    if (ping?.reachable) {
+      // Extension responded - use ping as source of truth
+      if (ping.paired) {
+        setConnectionStatus('connected');
+      } else {
+        setConnectionStatus('installed_not_paired');
+      }
+    } else if (!isChrome) {
+      // Non-Chrome browser - show server data with disclaimer
+      if (serverConnected) {
+        setConnectionStatus('server_only');
+      } else {
+        setConnectionStatus('not_installed');
+      }
+    } else {
+      // Chrome but couldn't reach extension
+      if (serverConnected) {
+        // Server thinks we're connected but extension isn't reachable
+        setConnectionStatus('needs_repair');
+      } else {
+        setConnectionStatus('not_installed');
+      }
+    }
+
+    setIsRefreshing(false);
   }, []);
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn) {
-      setIsCheckingStatus(false);
       return;
     }
     checkStatus();
@@ -112,7 +174,7 @@ export default function ExtensionPage() {
     }
   };
 
-  // Disconnect extension
+  // Disconnect extension (revoke server token)
   const handleDisconnect = async () => {
     if (!activeToken) return;
 
@@ -127,8 +189,8 @@ export default function ExtensionPage() {
       });
 
       if (response.ok) {
-        setIsConnected(false);
         setActiveToken(null);
+        setConnectionStatus('not_installed');
         setSuccessMessage('Extension disconnected successfully.');
         setTimeout(() => setSuccessMessage(null), 3000);
       } else {
@@ -156,7 +218,7 @@ export default function ExtensionPage() {
     });
   };
 
-  // Calculate time remaining
+  // Calculate time remaining for pairing code
   const getTimeRemaining = () => {
     if (!codeExpiresAt) return null;
     const now = new Date();
@@ -167,8 +229,24 @@ export default function ExtensionPage() {
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
 
+  // Get status badge variant and text
+  const getStatusBadge = () => {
+    switch (connectionStatus) {
+      case 'connected':
+        return { variant: 'default' as const, icon: CheckCircle2, text: 'Connected' };
+      case 'installed_not_paired':
+        return { variant: 'secondary' as const, icon: AlertTriangle, text: 'Not Paired' };
+      case 'needs_repair':
+        return { variant: 'destructive' as const, icon: AlertTriangle, text: 'Needs Re-pair' };
+      case 'server_only':
+        return { variant: 'secondary' as const, icon: Monitor, text: 'Server Record' };
+      default:
+        return { variant: 'secondary' as const, icon: XCircle, text: 'Not Connected' };
+    }
+  };
+
   // Loading state
-  if (!isLoaded || isCheckingStatus) {
+  if (!isLoaded) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -192,6 +270,18 @@ export default function ExtensionPage() {
       </div>
     );
   }
+
+  // Loading state (signed in, awaiting status)
+  if (connectionStatus === 'loading') {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  const statusBadge = getStatusBadge();
+  const StatusIcon = statusBadge.icon;
 
   return (
     <div className="min-h-screen bg-background">
@@ -220,25 +310,7 @@ export default function ExtensionPage() {
         {error && (
           <Alert variant="destructive">
             <XCircle className="h-4 w-4" />
-            <AlertDescription className="flex items-center justify-between">
-              <span>{error}</span>
-              {errorRetriable && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={checkStatus}
-                  disabled={isCheckingStatus}
-                  className="ml-4"
-                >
-                  {isCheckingStatus ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <RefreshCw className="h-4 w-4" />
-                  )}
-                  <span className="ml-1">Retry</span>
-                </Button>
-              )}
-            </AlertDescription>
+            <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
 
@@ -247,34 +319,43 @@ export default function ExtensionPage() {
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle>Connection Status</CardTitle>
-              <Badge variant={isConnected ? 'default' : 'secondary'}>
-                {isConnected ? (
-                  <>
-                    <CheckCircle2 className="h-3 w-3 mr-1" />
-                    Connected
-                  </>
-                ) : (
-                  <>
-                    <XCircle className="h-3 w-3 mr-1" />
-                    Not Connected
-                  </>
-                )}
-              </Badge>
+              <div className="flex items-center gap-2">
+                <Badge variant={statusBadge.variant}>
+                  <StatusIcon className="h-3 w-3 mr-1" />
+                  {statusBadge.text}
+                </Badge>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={checkStatus}
+                  disabled={isRefreshing}
+                  title="Refresh status"
+                >
+                  <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            {isConnected && activeToken ? (
+            {/* Connected - real-time verified */}
+            {connectionStatus === 'connected' && (
               <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <p className="text-muted-foreground">Connected since</p>
-                    <p className="font-medium">{formatDate(activeToken.createdAt)}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Last used</p>
-                    <p className="font-medium">{formatDate(activeToken.lastUsedAt)}</p>
-                  </div>
+                <div className="flex items-center gap-2 text-sm text-green-600">
+                  <CheckCircle2 className="h-4 w-4" />
+                  <span>Extension is connected and working</span>
                 </div>
+                {activeToken && (
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <p className="text-muted-foreground">Connected since</p>
+                      <p className="font-medium">{formatDate(activeToken.createdAt)}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Last activity</p>
+                      <p className="font-medium">{formatDate(activeToken.lastUsedAt)}</p>
+                    </div>
+                  </div>
+                )}
                 <Button
                   variant="destructive"
                   onClick={handleDisconnect}
@@ -291,9 +372,80 @@ export default function ExtensionPage() {
                   )}
                 </Button>
               </div>
-            ) : (
+            )}
+
+            {/* Installed but not paired */}
+            {connectionStatus === 'installed_not_paired' && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-sm text-amber-600">
+                  <AlertTriangle className="h-4 w-4" />
+                  <span>Extension is installed but not paired to your account</span>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Generate a pairing code below and enter it in the extension popup.
+                </p>
+              </div>
+            )}
+
+            {/* Needs re-pair - server has record but extension not reachable */}
+            {connectionStatus === 'needs_repair' && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-sm text-red-600">
+                  <AlertTriangle className="h-4 w-4" />
+                  <span>Extension may need to be re-paired</span>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  We couldn&apos;t reach your extension. If the extension popup shows &quot;Not Connected&quot;,
+                  generate a new pairing code below.
+                </p>
+                {activeToken && (
+                  <div className="text-sm text-muted-foreground bg-muted p-3 rounded-lg">
+                    <p>Last known activity: {formatDate(activeToken.lastUsedAt)}</p>
+                    <p>Originally paired: {formatDate(activeToken.createdAt)}</p>
+                  </div>
+                )}
+                <Button
+                  variant="outline"
+                  onClick={handleDisconnect}
+                  disabled={isDisconnecting}
+                  size="sm"
+                >
+                  Clear old connection
+                </Button>
+              </div>
+            )}
+
+            {/* Server only - non-Chrome browser */}
+            {connectionStatus === 'server_only' && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-sm text-blue-600">
+                  <Monitor className="h-4 w-4" />
+                  <span>Viewing from a non-Chrome browser</span>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  The extension is only available in Chrome. Here&apos;s what we know from the server:
+                </p>
+                {activeToken && (
+                  <div className="text-sm bg-muted p-3 rounded-lg space-y-1">
+                    <p><span className="text-muted-foreground">Connected since:</span> {formatDate(activeToken.createdAt)}</p>
+                    <p><span className="text-muted-foreground">Last activity:</span> {formatDate(activeToken.lastUsedAt)}</p>
+                  </div>
+                )}
+                <Button
+                  variant="outline"
+                  onClick={handleDisconnect}
+                  disabled={isDisconnecting}
+                  size="sm"
+                >
+                  Disconnect Extension
+                </Button>
+              </div>
+            )}
+
+            {/* Not installed */}
+            {connectionStatus === 'not_installed' && (
               <p className="text-muted-foreground">
-                No extension connected. Follow the steps below to pair your extension.
+                No extension connected. Follow the steps below to install and pair the extension.
               </p>
             )}
           </CardContent>
@@ -310,7 +462,7 @@ export default function ExtensionPage() {
           <CardContent className="space-y-4">
             <Button variant="outline" asChild className="w-full sm:w-auto">
               <a
-                href="https://chrome.google.com/webstore/detail/flaim"
+                href="https://chromewebstore.google.com/detail/flaim/ogkkejmgkoolfaidplldmcghbikpmonn"
                 target="_blank"
                 rel="noopener noreferrer"
               >
