@@ -4,6 +4,14 @@ Follow Keep a Changelog; SemVer applies.
 
 ## [Unreleased]
 
+### Chrome Extension v1.2.1 - Extension Status Ping
+Adds direct website-to-extension ping to show real-time connection status, with better non-Chrome fallbacks and local dev support.
+
+- **Added**: `externally_connectable` ping from `flaim.app` and `localhost` for real-time status checks.
+- **Added**: Extension background service worker responds to external ping requests.
+- **Added**: Local dev support via `NEXT_PUBLIC_EXTENSION_IDS` to ping unpacked extensions.
+- **Changed**: Extension status UI now prefers ping results over server records; non-Chrome browsers show server fallback.
+
 ### Chrome Extension v1.2.0 - Fan API Discovery Refactor
 ESPN deprecated the `mUserLeagues` endpoint, breaking auto-discovery. This release switches to the new Fan API endpoint, massively simplifying the code while fixing the issue.
 

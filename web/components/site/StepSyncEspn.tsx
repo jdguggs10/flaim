@@ -25,7 +25,11 @@ interface ServerToken {
   lastUsedAt: string | null;
 }
 
-export function StepSyncEspn() {
+interface StepSyncEspnProps {
+  className?: string;
+}
+
+export function StepSyncEspn({ className }: StepSyncEspnProps) {
   const { isLoaded, isSignedIn } = useAuth();
   const [status, setStatus] = useState<Status>('loading');
   const [serverToken, setServerToken] = useState<ServerToken | null>(null);
@@ -115,18 +119,15 @@ export function StepSyncEspn() {
 
   // Base card structure
   const renderCard = (content: React.ReactNode) => (
-    <div className="bg-background rounded-xl p-6 border flex flex-col">
+    <div className={`bg-background rounded-xl p-6 border flex flex-col ${className ?? ''}`}>
       <div className="flex items-center gap-3 mb-4">
         <div className="w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold">
           2
         </div>
-        <h3 className="font-semibold text-lg">Sync ESPN Data</h3>
+        <h3 className="font-semibold text-lg">Sync Credentials</h3>
       </div>
       <p className="text-sm text-muted-foreground mb-2 flex-1">
         The Chrome extension grabs your ESPN credentials automatically.
-      </p>
-      <p className="text-xs text-muted-foreground mb-4">
-        Or enter them manually if you prefer.
       </p>
       {content}
     </div>

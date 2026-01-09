@@ -19,6 +19,7 @@ import {
   setDefaultLeague,
   type DiscoveredLeague
 } from '../lib/api';
+import { getDeviceLabel } from '../lib/device';
 
 type State =
   | 'loading'
@@ -228,7 +229,8 @@ export default function Popup() {
     setState('loading');
 
     try {
-      const result = await exchangePairingCode(pairingCode);
+      const deviceName = await getDeviceLabel();
+      const result = await exchangePairingCode(pairingCode, deviceName);
       await setToken(result.token);
 
       // Check for ESPN credentials

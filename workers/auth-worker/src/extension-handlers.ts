@@ -261,7 +261,7 @@ export async function handlePairExtension(
   }
 
   try {
-    const body = await request.json() as { code?: string };
+    const body = await request.json() as { code?: string; deviceName?: string };
 
     if (!body.code) {
       recordPairingAttempt(clientIP);
@@ -288,7 +288,9 @@ export async function handlePairExtension(
     }
 
     const storage = ExtensionStorage.fromEnvironment(env);
-    const result = await storage.exchangeCodeForToken(code);
+    const name = body.deviceName?.trim();
+    const safeName = name ? name.slice(0, 64) : undefined;
+    const result = await storage.exchangeCodeForToken(code, safeName);
 
     if (!result.success) {
       // Record failed attempt
@@ -495,6 +497,7 @@ export async function handleGetConnection(
         id: activeToken.id,
         createdAt: activeToken.createdAt.toISOString(),
         lastUsedAt: activeToken.lastUsedAt?.toISOString() || null,
+        name: activeToken.name || null,
       },
     }), {
       status: 200,

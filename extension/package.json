@@ -1,6 +1,6 @@
 {
   "name": "flaim-extension",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Automatically sync your ESPN fantasy credentials to Flaim",
   "type": "module",
   "scripts": {

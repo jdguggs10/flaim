@@ -9,26 +9,26 @@ import {
   Check,
   CheckCircle2,
   XCircle,
-  ExternalLink,
   RefreshCw,
-  ChevronDown,
-  ChevronUp,
   AlertTriangle,
   Monitor,
 } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
   pingExtension,
   isChromeBrowser,
 } from '@/lib/extension-ping';
+import { EspnCredentialsCard } from '@/components/site/EspnCredentialsCard';
+import { useEspnCredentials } from '@/lib/use-espn-credentials';
 
 interface ExtensionToken {
   id: string;
   createdAt: string;
   lastUsedAt: string | null;
+  name?: string | null;
 }
 
 type ConnectionStatus =
@@ -41,6 +41,7 @@ type ConnectionStatus =
 
 export default function ExtensionPage() {
   const { isLoaded, isSignedIn } = useAuth();
+  const espnCredentials = useEspnCredentials();
 
   // Connection state
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('loading');
@@ -56,8 +57,6 @@ export default function ExtensionPage() {
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
-  const [showDevInstructions, setShowDevInstructions] = useState(false);
-  const [showFaq, setShowFaq] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Check connection status - ping extension first, then fall back to server
@@ -297,6 +296,17 @@ export default function ExtensionPage() {
             so you don&apos;t have to dig through browser settings.
           </p>
         </div>
+        <div>
+          <Button variant="outline" asChild className="w-full sm:w-auto">
+            <a
+              href="https://chromewebstore.google.com/detail/flaim/ogkkejmgkoolfaidplldmcghbikpmonn"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Chrome Web Store
+            </a>
+          </Button>
+        </div>
 
         {/* Success/Error Alerts */}
         {successMessage && (
@@ -354,6 +364,13 @@ export default function ExtensionPage() {
                       <p className="text-muted-foreground">Last activity</p>
                       <p className="font-medium">{formatDate(activeToken.lastUsedAt)}</p>
                     </div>
+                    {activeToken.name && (
+                      <div className="col-span-2">
+                        <p className="text-muted-foreground">Connected on</p>
+                        <p className="font-medium">{activeToken.name}</p>
+                        <p className="text-xs text-muted-foreground">Shown after pairing or re-pairing.</p>
+                      </div>
+                    )}
                   </div>
                 )}
                 <Button
@@ -402,6 +419,7 @@ export default function ExtensionPage() {
                   <div className="text-sm text-muted-foreground bg-muted p-3 rounded-lg">
                     <p>Last known activity: {formatDate(activeToken.lastUsedAt)}</p>
                     <p>Originally paired: {formatDate(activeToken.createdAt)}</p>
+                    {activeToken.name && <p>Connected on: {activeToken.name}</p>}
                   </div>
                 )}
                 <Button
@@ -429,6 +447,9 @@ export default function ExtensionPage() {
                   <div className="text-sm bg-muted p-3 rounded-lg space-y-1">
                     <p><span className="text-muted-foreground">Connected since:</span> {formatDate(activeToken.createdAt)}</p>
                     <p><span className="text-muted-foreground">Last activity:</span> {formatDate(activeToken.lastUsedAt)}</p>
+                    {activeToken.name && (
+                      <p><span className="text-muted-foreground">Connected on:</span> {activeToken.name}</p>
+                    )}
                   </div>
                 )}
                 <Button
@@ -444,172 +465,88 @@ export default function ExtensionPage() {
 
             {/* Not installed */}
             {connectionStatus === 'not_installed' && (
-              <p className="text-muted-foreground">
-                No extension connected. Follow the steps below to install and pair the extension.
-              </p>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Install Instructions */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Step 1: Install Extension</CardTitle>
-            <CardDescription>
-              Get the Flaim extension from the Chrome Web Store
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <Button variant="outline" asChild className="w-full sm:w-auto">
-              <a
-                href="https://chromewebstore.google.com/detail/flaim/ogkkejmgkoolfaidplldmcghbikpmonn"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <ExternalLink className="h-4 w-4 mr-2" />
-                Chrome Web Store
-              </a>
-            </Button>
-            <button
-              type="button"
-              className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
-              onClick={() => setShowDevInstructions(!showDevInstructions)}
-            >
-              {showDevInstructions ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-              Developer instructions
-            </button>
-            {showDevInstructions && (
-              <div className="text-sm text-muted-foreground space-y-2 pl-5">
-                <ol className="list-decimal list-inside space-y-1">
-                  <li>Go to <code className="bg-muted px-1 rounded">chrome://extensions</code></li>
-                  <li>Enable &quot;Developer mode&quot; (top right)</li>
-                  <li>Click &quot;Load unpacked&quot; and select <code className="bg-muted px-1 rounded">extension/dist</code></li>
-                </ol>
+              <div className="space-y-3">
+                <p className="text-muted-foreground">
+                  No extension connected. Install the extension and then generate a pairing code below.
+                </p>
+                <Button variant="outline" asChild className="w-full sm:w-auto">
+                  <a
+                    href="https://chromewebstore.google.com/detail/flaim/ogkkejmgkoolfaidplldmcghbikpmonn"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Chrome Web Store
+                  </a>
+                </Button>
               </div>
             )}
-          </CardContent>
-        </Card>
 
-        {/* Pairing Code */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Step 2: Pair Extension</CardTitle>
-            <CardDescription>
-              Generate a pairing code and enter it in the extension popup
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {pairingCode ? (
-              <div className="space-y-4">
-                <div className="flex items-center gap-4">
-                  <div className="flex-1 bg-muted rounded-lg p-4 text-center">
-                    <p className="text-4xl font-mono font-bold tracking-widest">{pairingCode}</p>
+            {/* Pairing Code */}
+            <div className="border-t pt-4 space-y-4">
+              <div className="space-y-1">
+                <p className="text-sm font-medium">Pairing Code</p>
+                <p className="text-sm text-muted-foreground">
+                  Generate a code and enter it in the extension popup.
+                </p>
+              </div>
+              {pairingCode ? (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-4">
+                    <div className="flex-1 bg-muted rounded-lg p-4 text-center">
+                      <p className="text-4xl font-mono font-bold tracking-widest">{pairingCode}</p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={handleCopyCode}
+                      title="Copy code"
+                    >
+                      {codeCopied ? (
+                        <Check className="h-4 w-4 text-green-600" />
+                      ) : (
+                        <Copy className="h-4 w-4" />
+                      )}
+                    </Button>
                   </div>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={handleCopyCode}
-                    title="Copy code"
-                  >
-                    {codeCopied ? (
-                      <Check className="h-4 w-4 text-green-600" />
-                    ) : (
-                      <Copy className="h-4 w-4" />
-                    )}
-                  </Button>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">
+                      Expires in: <span className="font-mono">{getTimeRemaining()}</span>
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleGenerateCode}
+                      disabled={isGeneratingCode}
+                    >
+                      <RefreshCw className={`h-4 w-4 mr-1 ${isGeneratingCode ? 'animate-spin' : ''}`} />
+                      New Code
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">
-                    Expires in: <span className="font-mono">{getTimeRemaining()}</span>
-                  </span>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleGenerateCode}
-                    disabled={isGeneratingCode}
-                  >
-                    <RefreshCw className={`h-4 w-4 mr-1 ${isGeneratingCode ? 'animate-spin' : ''}`} />
-                    New Code
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <Button
-                onClick={handleGenerateCode}
-                disabled={isGeneratingCode}
-                className="w-full sm:w-auto"
-              >
-                {isGeneratingCode ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Generating...
-                  </>
-                ) : (
-                  'Generate Pairing Code'
-                )}
-              </Button>
-            )}
-            <p className="text-xs text-muted-foreground">
-              Pairing a new extension will disconnect the previous one.
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Next Steps */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Step 3: Sync Credentials</CardTitle>
-            <CardDescription>
-              Once paired, the extension can capture your ESPN credentials
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <ol className="list-decimal list-inside space-y-2 text-sm">
-              <li>Make sure you&apos;re logged into <a href="https://www.espn.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">ESPN.com</a></li>
-              <li>Click the Flaim extension icon in your browser toolbar</li>
-              <li>Click &quot;Sync to Flaim&quot; in the extension popup</li>
-              <li>Your ESPN credentials will be saved automatically</li>
-            </ol>
-            <p className="text-sm text-muted-foreground">
-              After syncing, go to the <a href="/leagues" className="text-primary hover:underline">Leagues page</a> to add your fantasy leagues.
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* FAQ */}
-        <Card>
-          <CardHeader className="cursor-pointer" onClick={() => setShowFaq(!showFaq)}>
-            <div className="flex items-center justify-between">
-              <CardTitle>Frequently Asked Questions</CardTitle>
-              {showFaq ? <ChevronUp className="h-5 w-5 text-muted-foreground" /> : <ChevronDown className="h-5 w-5 text-muted-foreground" />}
+              ) : (
+                <Button
+                  onClick={handleGenerateCode}
+                  disabled={isGeneratingCode}
+                  className="w-full sm:w-auto"
+                >
+                  {isGeneratingCode ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Generating...
+                    </>
+                  ) : (
+                    'Generate Pairing Code'
+                  )}
+                </Button>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Pairing a new extension will disconnect the previous one.
+              </p>
             </div>
-          </CardHeader>
-          {showFaq && (
-            <CardContent className="space-y-4">
-              <div>
-                <p className="font-medium">Why do I need an extension?</p>
-                <p className="text-sm text-muted-foreground">
-                  ESPN uses secure cookies for authentication. The extension can read these cookies
-                  directly from your browser, avoiding the manual process of finding them in DevTools.
-                </p>
-              </div>
-              <div>
-                <p className="font-medium">Is this safe?</p>
-                <p className="text-sm text-muted-foreground">
-                  Yes. The extension only reads ESPN cookies and sends them to Flaim over HTTPS.
-                  Your credentials are stored securely and never shared with third parties.
-                </p>
-              </div>
-              <div>
-                <p className="font-medium">What if I use multiple browsers?</p>
-                <p className="text-sm text-muted-foreground">
-                  You can install the extension on multiple browsers, but only one can be connected
-                  at a time. Pairing a new extension will disconnect the previous one.
-                </p>
-              </div>
-            </CardContent>
-          )}
+          </CardContent>
         </Card>
+
+        <EspnCredentialsCard credentials={espnCredentials} />
       </div>
     </div>
   );

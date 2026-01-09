@@ -1,12 +1,12 @@
 "use client";
 
 import React, { useEffect, useState, useMemo } from 'react';
-import { useAuth, useUser, SignIn } from '@clerk/nextjs';
+import { useAuth, SignIn } from '@clerk/nextjs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   Select,
   SelectContent,
@@ -20,18 +20,13 @@ import {
   Trash2,
   CheckCircle2,
   AlertCircle,
-  Eye,
-  EyeOff,
-  ChevronDown,
-  ChevronUp,
-  ExternalLink,
   Search,
   X,
   Star,
-  Shield,
   History,
 } from 'lucide-react';
 import { getDefaultSeasonYear, type SeasonSport } from '@/lib/season-utils';
+import { useEspnCredentials } from '@/lib/use-espn-credentials';
 
 interface League {
   leagueId: string;
@@ -82,19 +77,8 @@ const SEASON_OPTIONS = Array.from(
 
 export default function LeaguesPage() {
   const { isLoaded, isSignedIn } = useAuth();
-  const { user } = useUser();
-
-  // Credentials state
-  const [hasCredentials, setHasCredentials] = useState(false);
-  const [isEditingCreds, setIsEditingCreds] = useState(false);
-  const [isLoadingCreds, setIsLoadingCreds] = useState(false);
-  const [swid, setSwid] = useState('');
-  const [espnS2, setEspnS2] = useState('');
-  const [showCredentials, setShowCredentials] = useState(false);
-  const [credsSaving, setCredsSaving] = useState(false);
-  const [credsError, setCredsError] = useState<string | null>(null);
-  const [credsSuccess, setCredsSuccess] = useState(false);
-  const [showCredsHelp, setShowCredsHelp] = useState(false);
+  const espnCredentials = useEspnCredentials();
+  const { hasCredentials, isCheckingCreds } = espnCredentials;
 
   // Leagues state
   const [leagues, setLeagues] = useState<League[]>([]);
@@ -114,9 +98,6 @@ export default function LeaguesPage() {
   const [verifiedLeague, setVerifiedLeague] = useState<VerifiedLeague | null>(null);
   const [selectedTeamId, setSelectedTeamId] = useState<string>('');
   const [isAddingLeague, setIsAddingLeague] = useState(false);
-
-  // Initial loading
-  const [isCheckingCreds, setIsCheckingCreds] = useState(true);
 
   // Expand/collapse state for league groups
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
@@ -165,28 +146,14 @@ export default function LeaguesPage() {
     });
   };
 
-  // Load credentials on mount
+  // Load leagues on mount
   useEffect(() => {
     if (!isLoaded || !isSignedIn) {
-      setIsCheckingCreds(false);
       setIsLoadingLeagues(false);
       return;
     }
 
     const loadData = async () => {
-      // Check credentials
-      try {
-        const credsRes = await fetch('/api/auth/espn/credentials');
-        if (credsRes.ok) {
-          const data = await credsRes.json() as { hasCredentials?: boolean };
-          setHasCredentials(!!data.hasCredentials);
-        }
-      } catch (err) {
-        console.error('Failed to check credentials:', err);
-      } finally {
-        setIsCheckingCreds(false);
-      }
-
       // Load leagues
       try {
         const leaguesRes = await fetch('/api/espn/leagues');
@@ -204,69 +171,10 @@ export default function LeaguesPage() {
     loadData();
   }, [isLoaded, isSignedIn]);
 
-  // Fetch credentials for editing
-  const handleEditCredentials = async () => {
-    setIsLoadingCreds(true);
-    setCredsError(null);
-
-    try {
-      const res = await fetch('/api/auth/espn/credentials?forEdit=true');
-      if (res.ok) {
-        const data = await res.json() as { hasCredentials?: boolean; swid?: string; s2?: string };
-        if (data.swid) setSwid(data.swid);
-        if (data.s2) setEspnS2(data.s2);
-      }
-    } catch (err) {
-      console.error('Failed to fetch credentials for editing:', err);
-    } finally {
-      setIsLoadingCreds(false);
-      setIsEditingCreds(true);
-    }
-  };
-
-  // Save credentials
-  const handleSaveCredentials = async () => {
-    if (!swid.trim() || !espnS2.trim()) {
-      setCredsError('Both SWID and ESPN_S2 are required');
-      return;
-    }
-
-    setCredsSaving(true);
-    setCredsError(null);
-
-    try {
-      const res = await fetch('/api/auth/espn/credentials', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          swid: swid.trim(),
-          s2: espnS2.trim(),
-          email: user?.primaryEmailAddress?.emailAddress
-        }),
-      });
-
-      if (!res.ok) {
-        const data = await res.json() as { error?: string };
-        throw new Error(data.error || 'Failed to save credentials');
-      }
-
-      setHasCredentials(true);
-      setIsEditingCreds(false);
-      setSwid('');
-      setEspnS2('');
-      setCredsSuccess(true);
-      setTimeout(() => setCredsSuccess(false), 3000);
-    } catch (err) {
-      setCredsError(err instanceof Error ? err.message : 'Failed to save credentials');
-    } finally {
-      setCredsSaving(false);
-    }
-  };
-
   // Verify league (call auto-pull to get league info)
   const handleVerifyLeague = async () => {
     if (!hasCredentials) {
-      setLeagueError('Add your ESPN credentials first');
+      setLeagueError('Add your ESPN credentials on the Connectors page first');
       return;
     }
 
@@ -550,166 +458,6 @@ export default function LeaguesPage() {
           </p>
         </div>
 
-        {/* Success Alert */}
-        {credsSuccess && (
-          <Alert className="bg-green-50 border-green-200 text-green-800 dark:bg-green-900/20 dark:border-green-800 dark:text-green-400">
-            <CheckCircle2 className="h-4 w-4" />
-            <AlertTitle>Success</AlertTitle>
-            <AlertDescription>ESPN credentials saved successfully.</AlertDescription>
-          </Alert>
-        )}
-
-        {/* Credentials Card */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">ESPN Credentials</CardTitle>
-            <CardDescription>
-              Your ESPN authentication cookies are required to access your leagues.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {hasCredentials && !isEditingCreds ? (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-5 w-5 text-green-600" />
-                    <span className="font-medium">Credentials saved</span>
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleEditCredentials}
-                    disabled={isLoadingCreds}
-                  >
-                    {isLoadingCreds ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      'Update'
-                    )}
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {credsError && (
-                  <Alert variant="destructive">
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertDescription>
-                      {credsError}
-                      {credsError.toLowerCase().includes('failed') && (
-                        <span className="block mt-1 text-sm">
-                          Check that your credentials are current. See the help section below for how to find them.
-                        </span>
-                      )}
-                    </AlertDescription>
-                  </Alert>
-                )}
-
-                <div className="space-y-2">
-                  <Label htmlFor="swid">SWID</Label>
-                  <div className="relative">
-                    <Input
-                      id="swid"
-                      type={showCredentials ? 'text' : 'password'}
-                      placeholder="Enter your SWID"
-                      value={swid}
-                      onChange={(e) => setSwid(e.target.value)}
-                    />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8"
-                      onClick={() => setShowCredentials(!showCredentials)}
-                    >
-                      {showCredentials ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="espn_s2">ESPN_S2</Label>
-                  <Input
-                    id="espn_s2"
-                    type={showCredentials ? 'text' : 'password'}
-                    placeholder="Enter your ESPN_S2"
-                    value={espnS2}
-                    onChange={(e) => setEspnS2(e.target.value)}
-                  />
-                </div>
-
-                <div className="flex gap-2">
-                  <Button onClick={handleSaveCredentials} disabled={credsSaving}>
-                    {credsSaving ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Saving...
-                      </>
-                    ) : (
-                      'Save Credentials'
-                    )}
-                  </Button>
-                  {isEditingCreds && (
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        setIsEditingCreds(false);
-                        setSwid('');
-                        setEspnS2('');
-                        setCredsError(null);
-                      }}
-                    >
-                      Cancel
-                    </Button>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Security note */}
-            <div className="flex items-start gap-2 p-3 bg-muted/50 rounded-lg text-sm">
-              <Shield className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
-              <p className="text-muted-foreground">
-                Your credentials are encrypted and stored securely. We only use them to fetch
-                your fantasy data — never shared with anyone.{' '}
-                <a href="/privacy" className="text-primary hover:underline">Privacy Policy</a>
-              </p>
-            </div>
-
-            {/* How to find credentials */}
-            <div className="border-t pt-4">
-              <button
-                type="button"
-                className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
-                onClick={() => setShowCredsHelp(!showCredsHelp)}
-              >
-                {showCredsHelp ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                How to find your ESPN credentials
-              </button>
-              {showCredsHelp && (
-                <div className="mt-3 p-4 bg-muted rounded-lg text-sm space-y-3">
-                  <ol className="list-decimal list-inside space-y-2">
-                    <li>Log in to <a href="https://espn.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">espn.com</a></li>
-                    <li>Open browser Developer Tools (F12 or right-click &gt; Inspect)</li>
-                    <li>Go to Application &gt; Cookies &gt; espn.com</li>
-                    <li>Find and copy the values for <code className="bg-background px-1 rounded">SWID</code> and <code className="bg-background px-1 rounded">espn_s2</code></li>
-                  </ol>
-                  <Button variant="outline" size="sm" asChild>
-                    <a
-                      href="https://support.espn.com/hc/en-us"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      <ExternalLink className="h-3 w-3 mr-1" />
-                      ESPN Help Center
-                    </a>
-                  </Button>
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
         {/* Leagues Card */}
         <Card>
           <CardHeader>
@@ -900,7 +648,9 @@ export default function LeaguesPage() {
 
             {!hasCredentials && !verifiedLeague && (
               <p className="text-sm text-muted-foreground">
-                Add your ESPN credentials above before adding leagues.
+                Add your ESPN credentials on the{' '}
+                <a href="/connectors" className="text-primary hover:underline">Connectors</a>{' '}
+                page before adding leagues.
               </p>
             )}
 

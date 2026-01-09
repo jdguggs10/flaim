@@ -1,4 +1,5 @@
 import { Metadata } from 'next';
+import { Lock, Shield, User } from 'lucide-react';
 
 export const metadata: Metadata = {
   title: 'Privacy Policy | Flaim',
@@ -13,6 +14,39 @@ export default function PrivacyPage() {
         <p className="text-muted-foreground mb-8">Last updated: December 31, 2025</p>
 
         <div className="prose prose-neutral dark:prose-invert max-w-none space-y-8">
+          <section id="your-data" className="not-prose">
+            <h2 className="text-2xl font-bold text-center mb-8">How It Handles Your Data</h2>
+            <div className="grid sm:grid-cols-3 gap-6">
+              <div className="text-center">
+                <div className="w-12 h-12 rounded-full bg-background border flex items-center justify-center mx-auto mb-3">
+                  <Lock className="h-5 w-5 text-primary" />
+                </div>
+                <h3 className="font-semibold mb-1">Credentials Stay Here</h3>
+                <p className="text-sm text-muted-foreground">
+                  ESPN cookies are stored securely and never sent to the AI.
+                </p>
+              </div>
+              <div className="text-center">
+                <div className="w-12 h-12 rounded-full bg-background border flex items-center justify-center mx-auto mb-3">
+                  <Shield className="h-5 w-5 text-primary" />
+                </div>
+                <h3 className="font-semibold mb-1">Your AI, Your Account</h3>
+                <p className="text-sm text-muted-foreground">
+                  You use your own Claude or ChatGPT subscription. Flaim just connects the data.
+                </p>
+              </div>
+              <div className="text-center">
+                <div className="w-12 h-12 rounded-full bg-background border flex items-center justify-center mx-auto mb-3">
+                  <User className="h-5 w-5 text-primary" />
+                </div>
+                <h3 className="font-semibold mb-1">Solo Project</h3>
+                <p className="text-sm text-muted-foreground">
+                  Built and maintained by one person. No investors, no growth pressure.
+                </p>
+              </div>
+            </div>
+          </section>
+
           <section>
             <h2 className="text-xl font-semibold mb-3">Overview</h2>
             <p className="text-muted-foreground">

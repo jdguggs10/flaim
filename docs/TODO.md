@@ -22,6 +22,9 @@
 - **Automated Testing**: Implement unit and integration tests for core API logic (Fan API, auth handlers) to prevent regressions.
 - **Service Monitoring**: Add external uptime checks for existing `/health` endpoints.
 - **UX Polish**: Implement loading states (spinners or skeletons) across the web dashboard and extension to improve perceived performance during API fetches.
+  - Header/nav: active-tab pills + icons for primary pages (Leagues / Connectors / Extension).
+  - Header/nav: mobile hamburger menu (Dialog) that consolidates nav + account.
+  - Header/account: richer “Account” menu via Popover (custom) vs Clerk `UserButton` (keep as-is).
 
 ## Long-term Potential Implementations
 - Create iOS app (Significant undertaking/Major platform expansion)

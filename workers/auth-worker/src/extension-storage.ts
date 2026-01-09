@@ -183,7 +183,7 @@ export class ExtensionStorage {
    * Exchange a pairing code for an access token
    * Revokes any existing tokens for the user first (token rotation)
    */
-  async exchangeCodeForToken(code: string): Promise<{
+  async exchangeCodeForToken(code: string, name?: string): Promise<{
     success: true; token: string; userId: string
   } | {
     success: false; reason: 'not_found' | 'expired' | 'already_used' | 'race_condition' | 'storage_error'
@@ -225,6 +225,7 @@ export class ExtensionStorage {
     const { error } = await this.supabase.from('extension_tokens').insert({
       clerk_user_id: pairingCode.userId,
       token,
+      name: name || null,
     });
 
     if (error) {

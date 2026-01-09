@@ -1,8 +1,9 @@
 import { SignedIn, SignedOut } from '@clerk/nextjs';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { MessageSquare, Shield, Lock, User, Check, Link as LinkIcon } from 'lucide-react';
+import { MessageSquare, Shield, Lock, User, Check, Link as LinkIcon, Info } from 'lucide-react';
 import { StepSyncEspn } from '@/components/site/StepSyncEspn';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 export default function LandingPage() {
   return (
@@ -10,11 +11,10 @@ export default function LandingPage() {
       {/* Hero */}
       <section className="py-16 px-4 text-center">
         <h1 className="text-4xl md:text-5xl font-bold mb-4">
-          Fantasy Sports Data for AI
+          AI Connectors for Fantasy Sports
         </h1>
         <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-          Connect ESPN fantasy leagues to Claude or ChatGPT.
-          Ask questions about your teams, rosters, and matchups.
+          Give AI access to your fantasy leagues. Ask questions about your teams, roster, and more.
         </p>
       </section>
 
@@ -62,7 +62,7 @@ export default function LandingPage() {
                 <h3 className="font-semibold text-lg">Connect Your AI</h3>
               </div>
               <p className="text-sm text-muted-foreground mb-4 flex-1">
-                Add the MCP connector to Claude or ChatGPT. Then ask questions about your leagues.
+                Add the MCP connector, then ask questions about your leagues.
               </p>
               <SignedOut>
                 <Button className="w-full" variant="outline" disabled>
@@ -80,6 +80,82 @@ export default function LandingPage() {
               </SignedIn>
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* Works With */}
+      <section className="py-16 px-4">
+        <div className="container max-w-4xl mx-auto text-center">
+          <h2 className="text-2xl font-bold mb-6">Works With</h2>
+          <div className="flex flex-col sm:flex-row justify-center gap-4 mb-4">
+            <div className="px-6 py-4 bg-background rounded-xl border-2 border-primary">
+              <div className="font-medium text-lg">Claude</div>
+              <div className="text-xs text-primary mt-1">Ready today</div>
+            </div>
+            <div className="px-6 py-4 bg-background rounded-xl border">
+              <div className="font-medium text-lg">ChatGPT</div>
+              <div className="text-xs text-muted-foreground mt-1 inline-flex items-center gap-1">
+                <span>Dev mode only</span>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className="inline-flex items-center"
+                      aria-label="Why is ChatGPT dev mode only?"
+                    >
+                      <Info className="h-3.5 w-3.5" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-64 text-xs">
+                    OpenAI has not released their connector functionality publically yet
+                  </PopoverContent>
+                </Popover>
+              </div>
+            </div>
+            <div className="px-6 py-4 bg-background rounded-xl border">
+              <div className="font-medium text-lg">Gemini</div>
+              <div className="text-xs text-muted-foreground mt-1 inline-flex items-center gap-1">
+                <span>Coming soon, maybe?</span>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className="inline-flex items-center"
+                      aria-label="What is the status of Gemini connectors?"
+                    >
+                      <Info className="h-3.5 w-3.5" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-64 text-xs">
+                    Google is reportedly working on their MCP connectors but nothing has been released yet
+                  </PopoverContent>
+                </Popover>
+              </div>
+            </div>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Bring your own AI subscription. Flaim just connects the fantasy data.
+          </p>
+        </div>
+      </section>
+
+      {/* Supported Sports */}
+      <section className="py-12 px-4 bg-muted">
+        <div className="container max-w-4xl mx-auto text-center">
+          <h2 className="text-xl font-bold mb-4">Currently Supported</h2>
+          <div className="flex justify-center gap-10 mb-3">
+            <div className="text-center">
+              <div className="text-3xl mb-1">{'\u{1F3C8}'}</div>
+              <div className="text-sm font-medium">Football</div>
+            </div>
+            <div className="text-center">
+              <div className="text-3xl mb-1">{'\u26BE'}</div>
+              <div className="text-sm font-medium">Baseball</div>
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            ESPN Fantasy only for now. More platforms eventually.
+          </p>
         </div>
       </section>
 
@@ -101,7 +177,7 @@ export default function LandingPage() {
             ].map((question) => (
               <div
                 key={question}
-                className="flex items-center gap-3 bg-muted rounded-lg p-4"
+                className="flex items-center gap-3 bg-background border rounded-lg p-4"
               >
                 <MessageSquare className="h-5 w-5 text-primary flex-shrink-0" />
                 <span className="text-sm">{question}</span>
@@ -109,115 +185,6 @@ export default function LandingPage() {
             ))}
           </div>
         </div>
-      </section>
-
-      {/* Works With */}
-      <section className="py-16 bg-muted px-4">
-        <div className="container max-w-4xl mx-auto text-center">
-          <h2 className="text-2xl font-bold mb-6">Works With</h2>
-          <div className="flex flex-col sm:flex-row justify-center gap-4 mb-4">
-            <div className="px-6 py-4 bg-background rounded-xl border-2 border-primary">
-              <div className="font-medium text-lg">Claude</div>
-              <div className="text-xs text-primary mt-1">Ready today</div>
-            </div>
-            <div className="px-6 py-4 bg-background rounded-xl border">
-              <div className="font-medium text-lg">ChatGPT</div>
-              <div className="text-xs text-muted-foreground mt-1">Dev mode only</div>
-            </div>
-            <div className="px-6 py-4 bg-background rounded-xl border">
-              <div className="font-medium text-lg">Gemini</div>
-              <div className="text-xs text-muted-foreground mt-1">Allegedly coming soon</div>
-            </div>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            Bring your own AI subscription. Flaim just connects the fantasy data.
-          </p>
-        </div>
-      </section>
-
-      {/* Supported Sports */}
-      <section className="py-12 px-4">
-        <div className="container max-w-4xl mx-auto text-center">
-          <h2 className="text-xl font-bold mb-4">Currently Supported</h2>
-          <div className="flex justify-center gap-10 mb-3">
-            <div className="text-center">
-              <div className="text-3xl mb-1">{'\u{1F3C8}'}</div>
-              <div className="text-sm font-medium">Football</div>
-            </div>
-            <div className="text-center">
-              <div className="text-3xl mb-1">{'\u26BE'}</div>
-              <div className="text-sm font-medium">Baseball</div>
-            </div>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            ESPN Fantasy only for now. More platforms eventually.
-          </p>
-        </div>
-      </section>
-
-      {/* Security & Trust */}
-      <section className="py-16 bg-muted px-4">
-        <div className="container max-w-4xl mx-auto">
-          <h2 className="text-2xl font-bold text-center mb-8">How It Handles Your Data</h2>
-          <div className="grid sm:grid-cols-3 gap-6">
-            <div className="text-center">
-              <div className="w-12 h-12 rounded-full bg-background border flex items-center justify-center mx-auto mb-3">
-                <Lock className="h-5 w-5 text-primary" />
-              </div>
-              <h3 className="font-semibold mb-1">Credentials Stay Here</h3>
-              <p className="text-sm text-muted-foreground">
-                ESPN cookies are stored securely and never sent to the AI.
-              </p>
-            </div>
-            <div className="text-center">
-              <div className="w-12 h-12 rounded-full bg-background border flex items-center justify-center mx-auto mb-3">
-                <Shield className="h-5 w-5 text-primary" />
-              </div>
-              <h3 className="font-semibold mb-1">Your AI, Your Account</h3>
-              <p className="text-sm text-muted-foreground">
-                You use your own Claude or ChatGPT subscription. Flaim just connects the data.
-              </p>
-            </div>
-            <div className="text-center">
-              <div className="w-12 h-12 rounded-full bg-background border flex items-center justify-center mx-auto mb-3">
-                <User className="h-5 w-5 text-primary" />
-              </div>
-              <h3 className="font-semibold mb-1">Solo Project</h3>
-              <p className="text-sm text-muted-foreground">
-                Built and maintained by one person. No investors, no growth pressure.
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* About */}
-      <section className="py-12 px-4 text-center">
-        <p className="text-sm text-muted-foreground max-w-lg mx-auto">
-          Flaim is a side project — built for reliability, maintained for the long term.
-          The goal is to do one thing well.{' '}
-          <Link href="/inspirations" className="underline hover:text-foreground">
-            Inspirations
-          </Link>
-        </p>
-      </section>
-
-      {/* Footer CTA */}
-      <section className="py-16 bg-muted px-4 text-center">
-        <h2 className="text-2xl font-bold mb-4">Want to try it?</h2>
-        <p className="text-muted-foreground mb-6">
-          Setup takes a few minutes.
-        </p>
-        <SignedOut>
-          <Link href="/sign-up">
-            <Button size="lg">Create Account</Button>
-          </Link>
-        </SignedOut>
-        <SignedIn>
-          <Link href="/extension">
-            <Button size="lg">Set Up Extension</Button>
-          </Link>
-        </SignedIn>
       </section>
     </div>
   );

@@ -64,12 +64,18 @@ export interface ApiError {
 /**
  * Exchange a pairing code for an access token
  */
-export async function exchangePairingCode(code: string): Promise<PairResponse> {
+export async function exchangePairingCode(
+  code: string,
+  deviceName?: string
+): Promise<PairResponse> {
   const apiBase = await detectApiBase();
   const response = await fetch(`${apiBase}/pair`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ code: code.toUpperCase().trim() }),
+    body: JSON.stringify({
+      code: code.toUpperCase().trim(),
+      deviceName: deviceName?.trim() || undefined,
+    }),
   });
 
   if (!response.ok) {
