@@ -82,9 +82,10 @@ Tools exposed by the MCP workers:
 - `get_user_session` — User's configured leagues, team IDs, season years, default league, current date/season
 
 ### Baseball (`baseball-espn-mcp`)
-- `get_espn_league_info` — League settings and members
-- `get_espn_team_roster` — Team roster with player stats
-- `get_espn_matchups` — Current and upcoming matchups
+- `get_espn_baseball_league_info` — League settings and members
+- `get_espn_baseball_team_roster` — Team roster with player stats
+- `get_espn_baseball_matchups` — Current and upcoming matchups
+- `get_espn_baseball_standings` — League standings
 
 ### Football (`football-espn-mcp`)
 - `get_espn_football_league_info` — League settings and members

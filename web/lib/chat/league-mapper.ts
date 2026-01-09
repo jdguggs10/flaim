@@ -29,7 +29,7 @@ export const SPORT_CONFIG: Record<Sport, {
     name: 'Baseball',
     emoji: '⚾',
     color: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
-    mcpTools: ['get_espn_league_info', 'get_espn_team_roster', 'get_espn_matchups']
+    mcpTools: ['get_espn_baseball_league_info', 'get_espn_baseball_team_roster', 'get_espn_baseball_matchups', 'get_espn_baseball_standings']
   },
   football: {
     name: 'Football',

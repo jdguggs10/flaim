@@ -49,11 +49,17 @@ The built-in `/chat` is for testing and users without Claude/ChatGPT subscriptio
 
 ## Primary User Flow
 
-1. **Connect ESPN** — Install Chrome extension → sync credentials automatically (or add manually at `/leagues`)
-2. **Add leagues** at `/leagues` — Select teams and confirm season year (auto-defaults based on sport)
-3. **Discover seasons (optional)** — Auto-add historical seasons for a league
-4. **Connect AI** at `/connectors` — Link Claude.ai, Claude Desktop, or ChatGPT
-5. **Use MCP tools** — Ask about roster, matchups, standings directly in AI
+**Extension path (automatic on sync):**
+1. **Connect ESPN** — Install extension → sync credentials
+2. **Auto-discover leagues + past seasons** — Runs during sync/re-sync
+3. **Pick a default** — Extension prompts for default league
+
+**Manual site path (independent):**
+1. **Add leagues** at `/leagues` — Enter league ID + season
+2. **Discover seasons (optional)** — Manual per-league action
+3. **Pick a default** — `/leagues` default toggle
+
+Both paths write to the same `espn_leagues` storage.
 
 ## Season Year Defaults
 

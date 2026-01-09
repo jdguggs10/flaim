@@ -13,9 +13,10 @@ ESPN Fantasy Baseball MCP server with shared authentication via Supabase.
 ## Available MCP Tools
 
 - `get_user_session` - User leagues with season years and default league
-- `get_espn_league_info` - Get league settings and metadata
-- `get_espn_team_roster` - Get team roster and details
-- `get_espn_matchups` - Get weekly matchups and scores
+- `get_espn_baseball_league_info` - Get league settings and metadata
+- `get_espn_baseball_team_roster` - Get team roster and details
+- `get_espn_baseball_matchups` - Get weekly matchups and scores
+- `get_espn_baseball_standings` - Get league standings
 
 ## Quick Start
 
@@ -55,9 +56,10 @@ Configure external AI assistants to use this server:
   "server_label": "fantasy-baseball",
   "server_url": "https://your-baseball-mcp-service.workers.dev/mcp",
   "allowed_tools": [
-    "get_espn_league_info",
-    "get_espn_team_roster",
-    "get_espn_matchups"
+    "get_espn_baseball_league_info",
+    "get_espn_baseball_team_roster",
+    "get_espn_baseball_matchups",
+    "get_espn_baseball_standings"
   ],
   "require_approval": "never"
 }

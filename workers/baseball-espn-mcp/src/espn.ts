@@ -130,6 +130,49 @@ export class EspnApiClient {
     throw new Error(`No teams found in league ${leagueId}`);
   }
 
+  async fetchStandings(leagueId: string, year: number = 2025, clerkUserId?: string): Promise<any> {
+    const url = `${this.baseUrl}/games/flb/seasons/${year}/segments/0/leagues/${leagueId}?view=mStandings&view=mTeam`;
+
+    const headers: Record<string, string> = {
+      'User-Agent': 'baseball-espn-mcp/1.0',
+      'Accept': 'application/json',
+      'X-Fantasy-Source': 'kona',
+      'X-Fantasy-Platform': 'kona-web-2.0.0'
+    };
+
+    // Get user credentials for standings data (optional - public leagues work without)
+    if (clerkUserId && clerkUserId !== 'anonymous' && this.authHeader) {
+      const credentials = await this.getEspnCredentialsForUser(clerkUserId);
+      if (credentials) {
+        headers['Cookie'] = `SWID=${credentials.swid}; espn_s2=${credentials.s2}`;
+      }
+    }
+
+    const response = await fetch(url, {
+      headers,
+      cf: { cacheEverything: false }
+    });
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('ESPN_COOKIES_EXPIRED: Your ESPN cookies may have expired. Update them at /settings/espn');
+      }
+      if (response.status === 429) {
+        throw new Error('ESPN_RATE_LIMIT: ESPN rate limit exceeded. Please wait a moment and try again.');
+      }
+      if (response.status === 404) {
+        throw new Error(`ESPN_NOT_FOUND: Baseball league ${leagueId} not found. Please check the league ID.`);
+      }
+      if (response.status === 403) {
+        throw new Error(`ESPN_ACCESS_DENIED: Access denied to baseball league ${leagueId} standings. Set up your ESPN credentials at /settings/espn.`);
+      }
+
+      throw new Error(`ESPN_API_ERROR: ESPN returned error ${response.status}. Please try again.`);
+    }
+
+    return await response.json();
+  }
+
   /**
    * Get ESPN credentials from auth-worker
    * Returns null if credentials not found (allows public league access)

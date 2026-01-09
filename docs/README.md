@@ -12,6 +12,11 @@ Flaim connects your ESPN fantasy leagues to AI assistants like Claude and ChatGP
 
 Bring your own Claude or ChatGPT subscription. Flaim provides the data bridge.
 
+## Automation vs Manual (Quick Clarification)
+
+- **Extension (automatic)**: Runs only when the user clicks **Sync / Re-sync**. It discovers leagues + past seasons and can set a default.
+- **Site (manual)**: `/leagues` is independent. Users can add leagues by ID and manually trigger season discovery.
+
 ## What Flaim Is
 
 Flaim is an **authentication and data service** for fantasy sports AI integrations:
@@ -46,9 +51,10 @@ Season year defaults are deterministic and use America/New_York time:
 | Tool | Sport | Description |
 |------|-------|-------------|
 | `get_user_session` | Both | User's leagues, teams, seasons, default league |
-| `get_espn_league_info` | Baseball | League settings and members |
-| `get_espn_team_roster` | Baseball | Team roster with stats |
-| `get_espn_matchups` | Baseball | Current/upcoming matchups |
+| `get_espn_baseball_league_info` | Baseball | League settings and members |
+| `get_espn_baseball_team_roster` | Baseball | Team roster with stats |
+| `get_espn_baseball_matchups` | Baseball | Current/upcoming matchups |
+| `get_espn_baseball_standings` | Baseball | League standings |
 | `get_espn_football_league_info` | Football | League settings and members |
 | `get_espn_football_team` | Football | Team roster with stats |
 | `get_espn_football_matchups` | Football | Current/upcoming matchups |

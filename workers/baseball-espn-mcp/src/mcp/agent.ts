@@ -538,7 +538,7 @@ export class McpAgent {
         securitySchemes
       },
       {
-        name: 'get_espn_league_info',
+        name: 'get_espn_baseball_league_info',
         description: `Get ESPN fantasy baseball league information. Use leagueId from get_user_session. Current season is ${currentYear}.`,
         inputSchema: {
           type: 'object',
@@ -558,7 +558,7 @@ export class McpAgent {
         securitySchemes
       },
       {
-        name: 'get_espn_team_roster',
+        name: 'get_espn_baseball_team_roster',
         description: `Get detailed team roster from ESPN fantasy baseball league. Use leagueId and teamId from get_user_session. Current season is ${currentYear}.`,
         inputSchema: {
           type: 'object',
@@ -572,13 +572,26 @@ export class McpAgent {
         securitySchemes
       },
       {
-        name: 'get_espn_matchups',
+        name: 'get_espn_baseball_matchups',
         description: `Get current week matchups from ESPN fantasy baseball league. Use leagueId from get_user_session. Current season is ${currentYear}, current date is ${currentDate}.`,
         inputSchema: {
           type: 'object',
           properties: {
             leagueId: { type: 'string', description: 'ESPN league ID (get from get_user_session)' },
             week: { type: 'number', description: 'Week number (optional, defaults to current week)' },
+            seasonId: { type: 'string', description: `Season year (default: ${currentYear})`, default: currentYear }
+          },
+          required: ['leagueId']
+        },
+        securitySchemes
+      },
+      {
+        name: 'get_espn_baseball_standings',
+        description: `Get league standings from ESPN fantasy baseball league. Use leagueId from get_user_session. Current season is ${currentYear}.`,
+        inputSchema: {
+          type: 'object',
+          properties: {
+            leagueId: { type: 'string', description: 'ESPN league ID (get from get_user_session)' },
             seasonId: { type: 'string', description: `Season year (default: ${currentYear})`, default: currentYear }
           },
           required: ['leagueId']
@@ -810,14 +823,17 @@ export class McpAgent {
     console.log(`🔧 [agent] Executing ${tool} with normalized args:`, JSON.stringify(normalizedArgs));
 
     switch (tool) {
-      case 'get_espn_league_info':
+      case 'get_espn_baseball_league_info':
         return this.getEspnLeagueInfo(normalizedArgs, clerkUserId, env, authHeader, logContext);
 
-      case 'get_espn_team_roster':
+      case 'get_espn_baseball_team_roster':
         return this.getEspnTeamRoster(normalizedArgs, clerkUserId, env, authHeader, logContext);
 
-      case 'get_espn_matchups':
+      case 'get_espn_baseball_matchups':
         return this.getEspnMatchups(normalizedArgs, clerkUserId, env, authHeader, logContext);
+
+      case 'get_espn_baseball_standings':
+        return this.getEspnBaseballStandings(normalizedArgs, clerkUserId, env, authHeader, logContext);
 
       default:
         throw new Error(`Unknown tool: ${tool}`);
@@ -952,5 +968,44 @@ export class McpAgent {
     }
   }
 
+  private async getEspnBaseballStandings(
+    args: Record<string, any>,
+    clerkUserId: string,
+    env: Env,
+    authHeader?: string | null,
+    logContext?: { resolvedUserId?: string }
+  ): Promise<McpResponse> {
+    try {
+      const { EspnApiClient } = await import('../espn');
+      const espnClient = new EspnApiClient(env, { authHeader, logContext });
+
+      const { leagueId, seasonId = getDefaultBaseballSeason().toString() } = args;
+      const standings = await espnClient.fetchStandings(leagueId, parseInt(seasonId), clerkUserId);
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              success: true,
+              data: standings,
+              leagueId,
+              year: parseInt(seasonId)
+            }, null, 2)
+          }
+        ]
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Failed to fetch baseball standings: ${error instanceof Error ? error.message : 'Unknown error'}`
+          }
+        ],
+        isError: true
+      };
+    }
+  }
 
 }
