@@ -1,30 +1,78 @@
 /**
- * ESPN Fantasy League Discovery (v3 API)
+ * ESPN Fantasy League Discovery (via Fan API)
  * ---------------------------------------------------------------------------
- * Given a user's SWID and espn_s2 cookies, query the v3 Fantasy API for each
- * supported sport (football, baseball, basketball, hockey) for the current
- * season and return the leagues the user is a member of.
+ * Given a user's SWID and espn_s2 cookies, query the ESPN Fan API to discover
+ * all fantasy leagues the user is a member of across all sports.
  *
- * This implementation uses the new getLeagueInfo function for more reliable
- * league discovery and information retrieval.
+ * This implementation uses fan.api.espn.com which returns all leagues in a
+ * single API call, replacing the broken mUserLeagues endpoint.
  */
 import {
   AutomaticLeagueDiscoveryFailed,
   EspnAuthenticationFailed,
   EspnCredentialsRequired,
   GambitLeague,
-  ESPN_GAME_IDS,
-  type SportName,
   gameIdToSport
 } from '../espn-types';
 import { getLeagueInfo } from './get-league-info';
 import { getLeagueTeams } from './get-league-teams';
-import { getDefaultSeasonYear, type SeasonSport } from '../season-utils';
 
-const V3_BASE = 'https://lm-api-reads.fantasy.espn.com/apis/v3/games';
+// =============================================================================
+// FAN API TYPES
+// =============================================================================
 
 /**
- * Discover all leagues for a user across all supported sports
+ * ESPN Fan API preference entry for fantasy leagues
+ */
+interface FanApiPreference {
+  id: string;
+  type: { code: string; name?: string };
+  metaData: {
+    entry: {
+      entryId: number;
+      gameId: number;
+      seasonId: number;
+      entryMetadata: {
+        teamName: string;
+        teamAbbrev?: string;
+      };
+      groups: Array<{
+        groupId: number;
+        groupName: string;
+        groupSize?: number;
+      }>;
+    };
+  };
+}
+
+/**
+ * ESPN Fan API response structure
+ */
+interface FanApiResponse {
+  id: string;
+  preferences?: FanApiPreference[];
+}
+
+// =============================================================================
+// CONSTANTS
+// =============================================================================
+
+const FAN_API_BASE = 'https://fan.api.espn.com/apis/v2/fans';
+
+/**
+ * Map numeric gameId from Fan API to string gameId used internally
+ */
+const NUMERIC_TO_GAME_ID: Record<number, string> = {
+  1: 'ffl',  // Football
+  2: 'flb',  // Baseball
+  3: 'fba',  // Basketball
+  4: 'fhl',  // Hockey
+};
+
+/**
+ * Discover all leagues for a user across all supported sports.
+ * Uses the ESPN Fan API which returns all leagues in a single call.
+ *
  * @param swid - ESPN SWID cookie value
  * @param s2 - ESPN espn_s2 cookie value
  * @returns Array of discovered leagues
@@ -34,140 +82,103 @@ export async function discoverLeaguesV3(swid: string, s2: string): Promise<Gambi
     throw new EspnCredentialsRequired('Both SWID and espn_s2 cookies are required');
   }
 
-  const leagues: GambitLeague[] = [];
+  // Normalize SWID to ensure brace format {UUID}
+  // Fan API requires braces; some callers may pass bare UUID or extra whitespace
+  const cleanedSwid = swid.trim().replace(/[{}]/g, '');
+  if (!cleanedSwid) {
+    throw new EspnCredentialsRequired('SWID is required');
+  }
+  const normalizedSwid = `{${cleanedSwid}}`;
 
-  // Try each supported sport
-  for (const [gameId, sport] of Object.entries(ESPN_GAME_IDS) as [string, SportName][]) {
-    try {
-      // Use sport-specific season based on rollover rules (America/New_York timezone)
-      const season = getDefaultSeasonYear(sport as SeasonSport);
-      console.log(`🔍 Querying ${sport} leagues for season ${season}...`);
+  // Build Fan API URL with normalized SWID
+  const url = `${FAN_API_BASE}/${encodeURIComponent(normalizedSwid)}?displayEvents=true`;
 
-      // DEBUG: Log credentials being used (masked)
-      console.log(`🔑 Using SWID: ${swid.substring(0, 10)}... (len=${swid.length}), s2: ${s2.substring(0, 10)}... (len=${s2.length})`);
+  console.log(`🔍 Discovering leagues via Fan API...`);
 
-      // First, try to get the user's leagues for this sport
-      const url = `${V3_BASE}/${gameId}/seasons/${season}?view=mUserLeagues`;
-      const res = await fetch(url, {
-        headers: {
-          Cookie: `SWID=${swid}; espn_s2=${s2}`,
-          "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-          Accept: "application/json",
-          'X-Fantasy-Source': 'kona',
-          'X-Fantasy-Platform': 'kona-web-2.0.0'
-        },
-        signal: AbortSignal.timeout(7000) // 7 second timeout
-      });
+  try {
+    const res = await fetch(url, {
+      headers: {
+        Cookie: `SWID=${normalizedSwid}; espn_s2=${s2}`,
+        // Headers recommended for parity with ESPN's live site
+        'x-p13n-swid': cleanedSwid,
+        'X-Personalization-Source': 'ESPN.com - FAM',
+        Accept: 'application/json',
+      },
+      signal: AbortSignal.timeout(10000), // 10 second timeout
+    });
 
-      console.log(`📡 ${sport} API Response: ${res.status} ${res.statusText}`);
+    console.log(`📡 Fan API Response: ${res.status} ${res.statusText}`);
 
-      if (res.status === 401 || res.status === 403) {
-        throw new EspnAuthenticationFailed('ESPN authentication failed – invalid or expired cookies');
-      }
+    if (res.status === 401 || res.status === 403) {
+      throw new EspnAuthenticationFailed('ESPN authentication failed – invalid or expired cookies');
+    }
 
-      if (!res.ok) {
-        console.warn(`v3 discovery: ${sport} responded ${res.status}`);
-        continue;
-      }
+    if (!res.ok) {
+      throw new AutomaticLeagueDiscoveryFailed(`Fan API returned ${res.status}: ${res.statusText}`);
+    }
 
-      const json = await res.json() as { leagues?: Array<{
-        id: string | number;
-        name?: string;
-        seasonId?: number;
-        members?: Array<{
-          teamId?: string | number;
-          id?: string | number;
-          teamName?: string;
-          nickname?: string;
-        }>;
-      }> };
+    const json: FanApiResponse = await res.json();
 
-      // DEBUG: Log raw ESPN response structure
-      console.log(`📦 ESPN raw response for ${sport}:`, JSON.stringify(json, null, 2).substring(0, 500));
+    // Filter for fantasy leagues only (type.code === 'fantasy')
+    const fantasyPrefs = json.preferences?.filter(
+      (p) => p.type?.code === 'fantasy' && p.metaData?.entry?.groups?.length > 0
+    ) ?? [];
 
-      if (!json?.leagues || !Array.isArray(json.leagues)) {
-        console.log(`No leagues found for ${sport}`);
-        continue;
-      }
+    console.log(`📦 Fan API returned ${fantasyPrefs.length} fantasy leagues`);
 
-      // DEBUG: Log all league IDs returned by ESPN
-      console.log(`🔍 ESPN returned ${json.leagues.length} ${sport} leagues:`, json.leagues.map(l => ({
-        id: l.id,
-        name: l.name,
-        seasonId: l.seasonId,
-        memberCount: l.members?.length || 0,
-        members: l.members?.map(m => ({ teamId: m.teamId, id: m.id }))
-      })));
+    if (fantasyPrefs.length === 0) {
+      throw new AutomaticLeagueDiscoveryFailed('No fantasy leagues found for the supplied credentials');
+    }
 
-      // Process each league
-      for (const league of json.leagues) {
-        if (!league?.id) continue;
-        
-        try {
-          // Get detailed league info using our new function
-          const leagueInfo = await getLeagueInfo(
-            swid,
-            s2,
-            String(league.id),
-            season,
-            gameId
-          );
-          
-          if (!leagueInfo) continue;
-          
-          // Find the user's team in this league
-          const member = Array.isArray(league.members) && league.members[0] ? league.members[0] : {};
-          const teamId = member.teamId ?? member.id;
-          const teamName = member.teamName ?? member.nickname;
+    // Map preferences to GambitLeague format
+    const leagues: GambitLeague[] = [];
 
-          if (!teamId) {
-            console.warn(`⚠️ Skipping league ${league.id} (${league.name}): no teamId found. members:`, league.members);
-            continue;
-          }
-          
-          leagues.push({
-            gameId,
-            leagueId: String(league.id),
-            leagueName: leagueInfo.leagueName || String(league.name || 'Unnamed League'),
-            seasonId: leagueInfo.seasonYear || Number(league.seasonId || season),
-            teamId: Number(teamId),
-            teamName: String(teamName || '')
-          });
-          
-        } catch (error) {
-          console.error(`Error fetching details for league ${league.id}:`, error instanceof Error ? error.message : 'Unknown error');
-          // Continue with next league even if one fails
+    for (const pref of fantasyPrefs) {
+      try {
+        const entry = pref.metaData.entry;
+        const group = entry.groups[0];
+
+        // Map numeric gameId to string format
+        const gameId = NUMERIC_TO_GAME_ID[entry.gameId];
+        if (!gameId) {
+          console.warn(`⚠️ Unknown gameId ${entry.gameId}, skipping league ${group.groupId}`);
           continue;
         }
-      }
-      
-    } catch (error) {
-      if (error instanceof Error && error.name === 'TimeoutError') {
-        console.warn(`⏱️  Request timed out for ${sport}`);
+
+        leagues.push({
+          gameId,
+          leagueId: String(group.groupId),
+          leagueName: group.groupName,
+          seasonId: entry.seasonId,
+          teamId: entry.entryId,
+          teamName: entry.entryMetadata?.teamName ?? '',
+        });
+      } catch (error) {
+        console.error(`Error processing preference ${pref.id}:`, error instanceof Error ? error.message : 'Unknown error');
         continue;
       }
-      
-      if (error instanceof EspnAuthenticationFailed) {
-        throw error; // Re-throw auth errors
-      }
-      
-      console.error(`⚠️  Error discovering ${sport} leagues:`, error);
     }
-  }
 
-  if (leagues.length === 0) {
-    throw new AutomaticLeagueDiscoveryFailed('No fantasy leagues found for the supplied credentials');
-  }
+    if (leagues.length === 0) {
+      throw new AutomaticLeagueDiscoveryFailed('No fantasy leagues found for the supplied credentials');
+    }
 
-  return leagues;
-}
+    console.log(`✅ Discovered ${leagues.length} leagues total`);
+    return leagues;
 
-export async function discoverLeaguesV3Safe(swid: string, s2: string) {
-  try {
-    const leagues = await discoverLeaguesV3(swid, s2);
-    return { success: true, leagues };
-  } catch (e: any) {
-    return { success: false, leagues: [], error: e?.message ?? 'Unknown error' };
+  } catch (error) {
+    if (error instanceof Error && error.name === 'TimeoutError') {
+      throw new AutomaticLeagueDiscoveryFailed('Fan API request timed out');
+    }
+
+    if (error instanceof EspnAuthenticationFailed || error instanceof AutomaticLeagueDiscoveryFailed) {
+      throw error;
+    }
+
+    console.error('⚠️ Error discovering leagues:', error);
+    throw new AutomaticLeagueDiscoveryFailed(
+      error instanceof Error ? error.message : 'Unknown error during league discovery'
+    );
   }
 }
 

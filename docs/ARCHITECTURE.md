@@ -12,7 +12,7 @@ cp web/.env.example web/.env.local   # add keys
 npm run dev
 ```
 
-**Prerequisites:** Node 22+, npm, `npm i -g wrangler`
+**Prerequisites:** Node 24+, npm, `npm i -g wrangler`
 
 ## Core Pieces
 
@@ -105,8 +105,6 @@ Users connect their own AI subscription to Flaim's MCP servers:
 - **Metadata**: `/.well-known/oauth-authorization-server`, `/{sport}/.well-known/oauth-protected-resource`
 
 **User flow**: Add MCP URL in Claude/ChatGPT → 401 triggers OAuth → user consents at `flaim.app/oauth/consent` → token exchange → tools available.
-
-See `docs/archive/MCP_CONNECTOR_RESEARCH.md` for implementation history.
 
 ## MCP Tools
 

@@ -19,7 +19,7 @@ Chrome extension that auto-captures ESPN credentials (SWID, espn_s2 cookies) and
 
 ### Prerequisites
 
-- Node.js 22+
+- Node.js 24+
 - npm
 
 ### Setup

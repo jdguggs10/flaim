@@ -112,28 +112,6 @@ export interface GambitLeague {
   teamName: string;
 }
 
-/**
- * @deprecated Gambit dashboard response - no longer used
- * Preserved for compatibility during migration
- */
-export interface GambitDashboardResponse {
-  fantasyDashboard?: {
-    leagues?: unknown[];
-    [key: string]: any;
-  };
-  configs?: unknown[];  // New 2025 format
-  [key: string]: any;
-}
-
-/**
- * Standard result wrapper for league discovery operations
- */
-export interface LeagueDiscoveryResult {
-  success: boolean;
-  leagues: GambitLeague[] | EspnLeagueInfo[];
-  error?: string;
-}
-
 // =============================================================================
 // SPORT AND GAME ID MAPPINGS
 // =============================================================================

@@ -91,7 +91,7 @@ Solo developer, hobby project. Keep it simple and stable.
 ### Quick Start (Development)
 
 ```bash
-git clone https://github.com/yourusername/flaim
+git clone https://github.com/jdguggs10/flaim.git
 cd flaim && npm install
 cp web/.env.example web/.env.local  # add keys
 npm run dev
@@ -103,8 +103,8 @@ npm run dev
 
 This is a solo indie project with best-effort support. I'll do my best to respond, but it may take time.
 
-- Issues: [GitHub Issues](https://github.com/yourusername/flaim/issues)
-- Discussions: [GitHub Discussions](https://github.com/yourusername/flaim/discussions)
+- Issues: [GitHub Issues](https://github.com/jdguggs10/flaim/issues)
+- Discussions: [GitHub Discussions](https://github.com/jdguggs10/flaim/discussions)
 
 ## License
 
