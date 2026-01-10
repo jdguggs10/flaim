@@ -12,7 +12,7 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@clerk/nextjs": "^6.29.2",
+    "@clerk/nextjs": "^6.36.7",
     "@npmcli/fs": "^4.0.0",
     "@radix-ui/react-dialog": "^1.1.14",
     "@radix-ui/react-dropdown-menu": "^2.1.15",
