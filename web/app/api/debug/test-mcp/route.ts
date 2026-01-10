@@ -44,26 +44,35 @@ function isAllowedUrl(urlString: string): boolean {
  * Only allows requests to known MCP server hosts (SSRF protection).
  */
 export async function POST(req: NextRequest) {
+  const startedAt = Date.now();
+  const respond = (body: Record<string, unknown>, status = 200) => (
+    NextResponse.json({
+      ...body,
+      elapsedMs: Date.now() - startedAt,
+      fetchedAt: new Date().toISOString(),
+    }, { status })
+  );
+
   try {
     const { userId, getToken } = await auth();
 
     if (!userId) {
-      return NextResponse.json({ connected: false, error: 'Not authenticated' }, { status: 401 });
+      return respond({ connected: false, error: 'Not authenticated' }, 401);
     }
 
     const body = await req.json() as { serverUrl?: string };
     const { serverUrl } = body;
 
     if (!serverUrl) {
-      return NextResponse.json({ connected: false, error: 'No server URL provided' });
+      return respond({ connected: false, error: 'No server URL provided' });
     }
 
     // SSRF protection: validate URL against allowlist
     if (!isAllowedUrl(serverUrl)) {
-      return NextResponse.json({
+      return respond({
         connected: false,
         error: 'URL not allowed. Only known MCP servers can be tested.'
-      }, { status: 403 });
+      }, 403);
     }
 
     const bearer = (await getToken?.()) || undefined;
@@ -84,16 +93,16 @@ export async function POST(req: NextRequest) {
     });
 
     if (!mcpRes.ok) {
-      return NextResponse.json({
+      return respond({
         connected: false,
         error: `Server returned ${mcpRes.status}`,
-      });
+      }, mcpRes.status);
     }
 
     const data = await mcpRes.json() as { result?: { tools?: unknown[] }; error?: { message?: string } };
 
     if (data.error) {
-      return NextResponse.json({
+      return respond({
         connected: false,
         error: data.error.message || 'MCP error',
       });
@@ -101,15 +110,16 @@ export async function POST(req: NextRequest) {
 
     const tools = data.result?.tools || [];
 
-    return NextResponse.json({
+    return respond({
       connected: true,
       toolCount: Array.isArray(tools) ? tools.length : 0,
+      tools: Array.isArray(tools) ? tools : [],
     });
   } catch (error) {
     console.error('MCP test route error', error);
-    return NextResponse.json({
+    return respond({
       connected: false,
       error: error instanceof Error ? error.message : 'Connection failed',
-    }, { status: 500 });
+    }, 500);
   }
 }

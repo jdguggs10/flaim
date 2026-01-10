@@ -96,12 +96,6 @@ export function EspnSection() {
         </div>
 
         {/* Info text based on status */}
-        {status === "valid" && (
-          <p className="text-xs text-muted-foreground">
-            ESPN cookies (SWID, espn_s2) are stored server-side.
-          </p>
-        )}
-
         {status === "missing" && (
           <div className="space-y-2">
             <p className="text-xs text-muted-foreground">

@@ -4,6 +4,7 @@ import { Bug, Download } from "lucide-react";
 import useToolsStore from "@/stores/chat/useToolsStore";
 import useLeaguesStore from "@/stores/chat/useLeaguesStore";
 import useConversationStore from "@/stores/chat/useConversationStore";
+import { ToolCallItem } from "@/lib/chat/assistant";
 import { CollapsibleSection } from "./collapsible-section";
 import { Switch } from "@/components/ui";
 import { Button } from "@/components/ui/button";
@@ -15,6 +16,12 @@ export function DebugSection() {
     mcpConfig,
     mcpEnabled,
     isAuthenticated,
+    // Legacy fields (deprecated)
+    disabledMcpTools,
+    mcpAvailableTools,
+    // Per-server fields (current)
+    mcpAvailableToolsByServer,
+    disabledMcpToolsByServer,
   } = useToolsStore();
 
   const { leagues, getActiveLeague } = useLeaguesStore();
@@ -27,8 +34,22 @@ export function DebugSection() {
     return null;
   }
 
+  const toolCalls = chatMessages.filter(
+    (item): item is ToolCallItem => item.type === "tool_call"
+  );
+  const recentToolCalls = toolCalls.slice(-5);
+
   const exportSession = () => {
     const activeLeague = getActiveLeague();
+    const toolLog = toolCalls.map((item) => ({
+      id: item.id,
+      tool_type: item.tool_type,
+      name: item.name || null,
+      status: item.status,
+      startedAt: item.metadata?.startedAt ?? null,
+      durationMs: item.metadata?.durationMs ?? null,
+      error: item.metadata?.error ?? null,
+    }));
     const sessionData = {
       exportedAt: new Date().toISOString(),
       config: {
@@ -39,12 +60,19 @@ export function DebugSection() {
           allowed_tools: mcpConfig.allowed_tools,
           skip_approval: mcpConfig.skip_approval,
         },
+        // Per-server tool management (current)
+        mcpAvailableToolsByServer,
+        disabledMcpToolsByServer,
+        // Legacy fields (deprecated, included for backward compat)
+        mcpAvailableTools,
+        disabledMcpTools,
         activeLeague: activeLeague ? {
           leagueId: activeLeague.leagueId,
           sport: activeLeague.sport,
           teamName: activeLeague.teamName,
         } : null,
       },
+      toolLog,
       conversation: {
         messageCount: chatMessages.length,
         messages: chatMessages,
@@ -103,6 +131,46 @@ export function DebugSection() {
           >
             Clear Conversation
           </Button>
+        </div>
+
+        {/* Tool call log */}
+        <div className="pt-2 border-t border-border space-y-2">
+          <div className="text-xs text-muted-foreground">Recent tool calls</div>
+          {recentToolCalls.length === 0 ? (
+            <div className="text-xs text-muted-foreground">No tool calls yet.</div>
+          ) : (
+            <div className="space-y-1">
+              {recentToolCalls.map((item) => {
+                const label = item.name
+                  ? `${item.tool_type.replace(/_/g, " ")} • ${item.name}`
+                  : item.tool_type.replace(/_/g, " ");
+                const duration = item.metadata?.durationMs
+                  ? `${item.metadata.durationMs}ms`
+                  : "—";
+                const statusClass = item.status === "completed"
+                  ? "text-green-600"
+                  : item.status === "failed"
+                    ? "text-red-600"
+                    : "text-muted-foreground";
+
+                return (
+                  <div key={item.id} className="space-y-0.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-mono truncate">{label}</span>
+                      <span className={statusClass}>
+                        {item.status} · {duration}
+                      </span>
+                    </div>
+                    {item.metadata?.error && (
+                      <div className="text-[10px] text-red-600 truncate">
+                        {item.metadata.error}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Session stats */}

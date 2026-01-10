@@ -4,6 +4,21 @@ Follow Keep a Changelog; SemVer applies.
 
 ## [Unreleased]
 
+### Developer Console Overhaul
+Replaced the chat sidebar with an enhanced Developer Console for MCP debugging. Includes dynamic tool fetching and UI optimizations.
+
+- **Added**: Developer Console with 3 collapsible sections (MCP, Tools, Debug).
+- **Added**: Compact header popovers for Account and ESPN status.
+- **Added**: Minimal chat header with league dropdown, season dropdown, and environment badge.
+- **Added**: Dynamic tool fetching from MCP server via `tools/list` (no static fallback).
+- **Added**: `/api/debug/test-mcp` endpoint for MCP connection testing (SSRF-protected), with latency + timestamps.
+- **Added**: LLM MCP payload preview (redacted), tool schema previews, and session-scoped tool call log.
+- **Added**: `mcpAvailableTools` and `disabledMcpTools` store fields for tool management.
+- **Changed**: Environment badge, league selector, season selector, Account/ESPN status moved from sidebar to header.
+- **Changed**: Tool toggles now use `disabledMcpTools` array instead of CSV `allowed_tools`.
+- **Fixed**: Developer Console sidebar now scrolls correctly when multiple sections are expanded.
+- **Removed**: `components/chat/tools-panel.tsx` and `components/chat/mcp-config.tsx` (replaced).
+
 ### Chrome Extension v1.2.1 - Extension Status Ping
 Adds direct website-to-extension ping to show real-time connection status, with better non-Chrome fallbacks and local dev support.
 

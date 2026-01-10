@@ -83,7 +83,7 @@ const Chat: React.FC<ChatProps> = ({
             {activeLeague && (
               <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 border border-blue-200 text-blue-700 text-xs font-medium rounded-full">
                 <Trophy size={12} />
-                {activeLeague.leagueName || `League ${activeLeague.leagueId}`}
+                {`${activeLeague.leagueName || `League ${activeLeague.leagueId}`} • ${activeLeague.seasonYear ?? "Unknown"} • ${activeLeague.teamName || "My Team"}`}
               </div>
             )}
           </div>

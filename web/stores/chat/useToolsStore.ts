@@ -49,6 +49,20 @@ interface StoreState {
   setMcpEnabled: (enabled: boolean) => void;
   mcpConfig: McpConfig;
   setMcpConfig: (config: McpConfig) => void;
+  // Legacy single-server fields (deprecated, kept for migration)
+  mcpAvailableTools: string[];
+  setMcpAvailableTools: (tools: string[]) => void;
+  disabledMcpTools: string[];
+  setDisabledMcpTools: (tools: string[]) => void;
+  // Per-server tool management (keyed by server_label)
+  mcpAvailableToolsByServer: Record<string, string[]>;
+  setMcpAvailableToolsByServer: (
+    mapOrFn: Record<string, string[]> | ((prev: Record<string, string[]>) => Record<string, string[]>)
+  ) => void;
+  disabledMcpToolsByServer: Record<string, string[]>;
+  setDisabledMcpToolsByServer: (
+    mapOrFn: Record<string, string[]> | ((prev: Record<string, string[]>) => Record<string, string[]>)
+  ) => void;
   selectedSport: string;
   setSelectedSport: (sport: string) => void;
   selectedPlatform: string;
@@ -89,6 +103,10 @@ const useToolsStore = create<StoreState>()(
         allowed_tools: "",
         skip_approval: true,
       },
+      mcpAvailableTools: [],
+      disabledMcpTools: [],
+      mcpAvailableToolsByServer: {},
+      disabledMcpToolsByServer: {},
       selectedSport: "none",
       selectedPlatform: "None",
       // ESPN Authentication
@@ -123,6 +141,22 @@ const useToolsStore = create<StoreState>()(
       setVectorStore: (store) => set({ vectorStore: store }),
       setWebSearchConfig: (config) => set({ webSearchConfig: config }),
       setMcpConfig: (config) => set({ mcpConfig: config }),
+      setMcpAvailableTools: (tools) => set({ mcpAvailableTools: tools }),
+      setDisabledMcpTools: (tools) => set({ disabledMcpTools: tools }),
+      setMcpAvailableToolsByServer: (mapOrFn) =>
+        set((state) => ({
+          mcpAvailableToolsByServer:
+            typeof mapOrFn === "function"
+              ? mapOrFn(state.mcpAvailableToolsByServer)
+              : mapOrFn,
+        })),
+      setDisabledMcpToolsByServer: (mapOrFn) =>
+        set((state) => ({
+          disabledMcpToolsByServer:
+            typeof mapOrFn === "function"
+              ? mapOrFn(state.disabledMcpToolsByServer)
+              : mapOrFn,
+        })),
       setSelectedSport: (sport) => set({ selectedSport: sport.toLowerCase() }),
       setSelectedPlatform: (platform) => set({ selectedPlatform: platform }),
       // ESPN Authentication actions

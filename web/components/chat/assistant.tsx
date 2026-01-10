@@ -158,15 +158,15 @@ export default function Assistant() {
 
       // Configure MCP tools
       const mcpConfig = generateMcpToolsConfig('ESPN', activeLeague.sport as any);
-      if (mcpConfig) {
-        setMcpConfig({
-          server_label: mcpConfig.server_label,
-          server_url: mcpConfig.server_url,
-          allowed_tools: mcpConfig.allowed_tools.join(','),
-          skip_approval: mcpConfig.require_approval === 'never'
-        });
-        setMcpEnabled(!mcpGloballyDisabled);
-      }
+        if (mcpConfig) {
+          setMcpConfig({
+            server_label: mcpConfig.server_label,
+            server_url: mcpConfig.server_url,
+            allowed_tools: "",
+            skip_approval: mcpConfig.require_approval === 'never'
+          });
+          setMcpEnabled(!mcpGloballyDisabled);
+        }
     }
   }, [leagues, activeLeagueKey, getActiveLeague, setMcpEnabled, setMcpConfig, setSelectedSport, setToolsPlatform, setToolsAuthenticated, mcpGloballyDisabled]);
 

@@ -35,7 +35,7 @@ export const SPORT_CONFIG: Record<Sport, {
     name: 'Football',
     emoji: '🏈',
     color: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400',
-    mcpTools: ['get_espn_football_league_info', 'get_espn_football_team', 'get_espn_football_matchups']
+    mcpTools: ['get_espn_football_league_info', 'get_espn_football_team', 'get_espn_football_matchups', 'get_espn_football_standings']
   },
   basketball: {
     name: 'Basketball',
@@ -137,7 +137,7 @@ export function getMcpConfig(platform: Platform, sport: Sport) {
 /**
  * Ensure MCP server URL points at the /mcp base (Responses API expects this path)
  */
-function normalizeMcpUrl(url: string): string {
+export function normalizeMcpUrl(url: string): string {
   if (!url) return "";
   // drop trailing slashes
   let normalized = url.replace(/\/+$/, "");
@@ -207,11 +207,11 @@ export function validateLeagueSelection(league: any, team: any): boolean {
  */
 export function generateMcpToolsConfig(platform: Platform, sport: Sport) {
   const mcpConfig = getMcpConfig(platform, sport);
-  
+
   if (!mcpConfig) {
     return null;
   }
-  
+
   return {
     type: "mcp",
     server_label: `fantasy-${sport}`,
@@ -219,4 +219,29 @@ export function generateMcpToolsConfig(platform: Platform, sport: Sport) {
     allowed_tools: mcpConfig.tools,
     require_approval: "never"
   };
+}
+
+/**
+ * MCP server info for multi-server mounting
+ */
+export interface McpServerInfo {
+  sport: Sport;
+  server_label: string;
+  server_url: string;
+  tools: string[];
+}
+
+/**
+ * Get all configured ESPN MCP servers (those with a URL set)
+ * Returns servers for all sports that have a configured URL
+ */
+export function getAllEspnMcpServers(): McpServerInfo[] {
+  return (Object.entries(MCP_SERVER_CONFIG.ESPN) as [Sport, { serverUrl: string; tools: string[] }][])
+    .map(([sport, cfg]) => ({
+      sport,
+      server_label: `fantasy-${sport}`,
+      server_url: normalizeMcpUrl(cfg.serverUrl),
+      tools: cfg.tools,
+    }))
+    .filter((s) => !!s.server_url);
 }

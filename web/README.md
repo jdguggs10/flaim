@@ -109,9 +109,9 @@ NEXT_PUBLIC_FOOTBALL_ESPN_MCP_URL=https://api.flaim.app/football
 
 For local development with workers, point to `http://localhost:8786` etc.
 
-## Built-in Chat
+## Built-in Chat (Dev Only)
 
-The `/chat` page is a secondary feature for testing MCP tools. It's gated by Clerk metadata.
+The `/chat` page is **not a product feature**. It exists solely for internal/dev use to test and debug MCP behavior. It's gated by Clerk metadata.
 
 ### Access Control
 
@@ -126,11 +126,10 @@ Without this metadata, `/chat` redirects to home.
 
 ### Debug Mode
 
-Toggle in the chat tools panel to show:
+Toggle in the Developer Console to show:
 - Raw JSON request/response for each tool call
 - Execution timing (ms)
-- MCP server URL
-- Copy buttons for JSON blocks
+- MCP payload + tools list visibility for debugging
 
 Keyboard shortcut: `Cmd+D` / `Ctrl+D`
 

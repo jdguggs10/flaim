@@ -1,8 +1,6 @@
 "use client";
 
 import useHasMounted from "@/hooks/useHasMounted";
-import { AccountSection } from "./account-section";
-import { EspnSection } from "./espn-section";
 import { McpSection } from "./mcp-section";
 import { ToolsSection } from "./tools-section";
 import { DebugSection } from "./debug-section";
@@ -19,14 +17,8 @@ export default function DevConsole() {
   }
 
   return (
-    <div className="h-full p-4 lg:p-6 w-full bg-muted/50 lg:rounded-none">
-      <div className="flex flex-col space-y-4 h-full overflow-y-auto">
-        {/* Account Section */}
-        <AccountSection />
-
-        {/* ESPN Connection */}
-        <EspnSection />
-
+    <div className="h-full p-4 lg:p-6 w-full bg-muted/50 lg:rounded-none flex flex-col">
+      <div className="flex flex-col space-y-4 flex-1 min-h-0 overflow-y-auto">
         {/* MCP Section */}
         <McpSection />
 

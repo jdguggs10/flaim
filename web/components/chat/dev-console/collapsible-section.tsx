@@ -21,7 +21,7 @@ export function CollapsibleSection({
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
 
   return (
-    <div className="bg-card border border-border rounded-lg overflow-hidden">
+    <div className="bg-card border border-border rounded-lg overflow-hidden shrink-0">
       {/* Header - split into clickable area and rightElement to avoid nested buttons */}
       <div className="flex items-center justify-between p-3 hover:bg-secondary/50 transition-colors">
         {/* Clickable area for expand/collapse */}

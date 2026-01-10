@@ -373,31 +373,56 @@ export const processMessages = async () => {
           toolCallMessage.tool_type === "function_call"
         ) {
           // Handle tool call (execute function)
-          const toolResult = await handleTool(
-            toolCallMessage.name as keyof typeof functionsMap,
-            toolCallMessage.parsedArguments
-          );
+          try {
+            const toolResult = await handleTool(
+              toolCallMessage.name as keyof typeof functionsMap,
+              toolCallMessage.parsedArguments
+            );
 
-          // Record tool output
-          toolCallMessage.output = JSON.stringify(toolResult);
-          // Add completion timing
-          if (toolCallMessage.metadata) {
-            const now = Date.now();
-            toolCallMessage.metadata.completedAt = now;
-            toolCallMessage.metadata.durationMs =
-              now - toolCallMessage.metadata.startedAt;
+            // Record tool output
+            toolCallMessage.output = JSON.stringify(toolResult);
+            toolCallMessage.status = "completed";
+            // Add completion timing
+            if (toolCallMessage.metadata) {
+              const now = Date.now();
+              toolCallMessage.metadata.completedAt = now;
+              toolCallMessage.metadata.durationMs =
+                now - toolCallMessage.metadata.startedAt;
+            }
+            setChatMessages([...chatMessages]);
+            conversationItems.push({
+              type: "function_call_output",
+              call_id: toolCallMessage.call_id,
+              status: "completed",
+              output: JSON.stringify(toolResult),
+            });
+            setConversationItems([...conversationItems]);
+
+            // Create another turn after tool output has been added
+            await processMessages();
+          } catch (error) {
+            const message = error instanceof Error ? error.message : "Tool failed";
+            toolCallMessage.output = JSON.stringify({ error: message });
+            toolCallMessage.status = "failed";
+            if (toolCallMessage.metadata) {
+              const now = Date.now();
+              toolCallMessage.metadata.completedAt = now;
+              toolCallMessage.metadata.durationMs =
+                now - toolCallMessage.metadata.startedAt;
+              toolCallMessage.metadata.error = message;
+            }
+            setChatMessages([...chatMessages]);
+            conversationItems.push({
+              type: "function_call_output",
+              call_id: toolCallMessage.call_id,
+              status: "failed",
+              output: JSON.stringify({ error: message }),
+            });
+            setConversationItems([...conversationItems]);
+
+            // Let the assistant respond to the tool failure
+            await processMessages();
           }
-          setChatMessages([...chatMessages]);
-          conversationItems.push({
-            type: "function_call_output",
-            call_id: toolCallMessage.call_id,
-            status: "completed",
-            output: JSON.stringify(toolResult),
-          });
-          setConversationItems([...conversationItems]);
-
-          // Create another turn after tool output has been added
-          await processMessages();
         }
         if (
           toolCallMessage &&
@@ -595,27 +620,26 @@ export const processMessages = async () => {
         console.log("response completed", data);
         const { response } = data;
 
-        // Handle MCP tools list
-        const mcpListToolsMessage = response.output.find(
+        // Handle all MCP tools list items (multiple servers can return these)
+        const mcpListToolsMessages = response.output.filter(
           (m: Item) => m.type === "mcp_list_tools"
         );
 
-        if (mcpListToolsMessage) {
+        for (const mcpListToolsMessage of mcpListToolsMessages) {
           chatMessages.push({
             type: "mcp_list_tools",
             id: mcpListToolsMessage.id,
             server_label: mcpListToolsMessage.server_label,
             tools: mcpListToolsMessage.tools || [],
           });
-          setChatMessages([...chatMessages]);
         }
 
-        // Handle MCP approval request
-        const mcpApprovalRequestMessage = response.output.find(
+        // Handle all MCP approval request items (multiple servers can return these)
+        const mcpApprovalRequestMessages = response.output.filter(
           (m: Item) => m.type === "mcp_approval_request"
         );
 
-        if (mcpApprovalRequestMessage) {
+        for (const mcpApprovalRequestMessage of mcpApprovalRequestMessages) {
           chatMessages.push({
             type: "mcp_approval_request",
             id: mcpApprovalRequestMessage.id,
@@ -623,6 +647,10 @@ export const processMessages = async () => {
             name: mcpApprovalRequestMessage.name,
             arguments: mcpApprovalRequestMessage.arguments,
           });
+        }
+
+        // Only update state if we added any MCP items
+        if (mcpListToolsMessages.length > 0 || mcpApprovalRequestMessages.length > 0) {
           setChatMessages([...chatMessages]);
         }
 

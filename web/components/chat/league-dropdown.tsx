@@ -1,21 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ChevronDown, Settings, Copy, Check } from "lucide-react";
 import { useUser } from "@clerk/nextjs";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
-import useLeaguesStore, { makeLeagueKey } from "@/stores/chat/useLeaguesStore";
+import useLeaguesStore from "@/stores/chat/useLeaguesStore";
 import { getSportConfig } from "@/lib/chat/league-mapper";
 
 /**
  * League dropdown for the chat header.
- * Shows current league with ability to switch and view details.
+ * Selects the league (season selection is separate).
  */
 export function LeagueDropdown() {
   const {
     leagues,
-    activeLeagueKey,
     setActiveLeague,
     getActiveLeague,
     fetchLeagues,
@@ -34,6 +33,25 @@ export function LeagueDropdown() {
   const activeLeague = getActiveLeague();
   const sportConfig = activeLeague ? getSportConfig(activeLeague.sport as any) : null;
 
+  const leagueGroups = useMemo(() => {
+    const map = new Map<string, typeof leagues>();
+    leagues.forEach((league) => {
+      const key = `${league.leagueId}-${league.sport}`;
+      const bucket = map.get(key);
+      if (bucket) {
+        bucket.push(league);
+      } else {
+        map.set(key, [league]);
+      }
+    });
+    return Array.from(map.entries()).map(([key, items]) => {
+      const sorted = [...items].sort(
+        (a, b) => (b.seasonYear ?? 0) - (a.seasonYear ?? 0)
+      );
+      return { key, leagues: sorted };
+    });
+  }, [leagues]);
+
   const copyLeagueId = () => {
     if (activeLeague) {
       navigator.clipboard.writeText(activeLeague.leagueId.toString());
@@ -42,8 +60,16 @@ export function LeagueDropdown() {
     }
   };
 
-  const handleLeagueSwitch = (league: typeof leagues[0]) => {
-    setActiveLeague(league);
+  const handleLeagueGroupSwitch = (groupKey: string) => {
+    const group = leagueGroups.find((item) => item.key === groupKey);
+    if (!group || group.leagues.length === 0) return;
+
+    const activeGroupKey = activeLeague ? `${activeLeague.leagueId}-${activeLeague.sport}` : null;
+    const nextLeague = activeGroupKey === groupKey && activeLeague
+      ? activeLeague
+      : group.leagues[0];
+
+    setActiveLeague(nextLeague);
     setOpen(false);
   };
 
@@ -58,7 +84,8 @@ export function LeagueDropdown() {
     );
   }
 
-  const otherLeagues = leagues.filter((league) => makeLeagueKey(league) !== activeLeagueKey);
+  const activeGroupKey = activeLeague ? `${activeLeague.leagueId}-${activeLeague.sport}` : null;
+  const otherGroups = leagueGroups.filter((group) => group.key !== activeGroupKey);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -107,19 +134,21 @@ export function LeagueDropdown() {
         </div>
 
         {/* Other leagues */}
-        {otherLeagues.length > 0 && (
+        {otherGroups.length > 0 && (
           <div className="p-2 border-b max-h-48 overflow-y-auto">
             <div className="text-xs text-muted-foreground font-medium px-2 mb-1">
               Switch league:
             </div>
-            {otherLeagues.map((league) => {
+            {otherGroups.map((group) => {
+              const league = group.leagues[0];
               const info = getSportConfig(league.sport as any);
-              const uniqueKey = makeLeagueKey(league);
+              const uniqueKey = group.key;
+              const seasonsCount = group.leagues.length;
               return (
                 <button
                   key={uniqueKey}
                   type="button"
-                  onClick={() => handleLeagueSwitch(league)}
+                  onClick={() => handleLeagueGroupSwitch(group.key)}
                   className="w-full text-left p-2 rounded hover:bg-secondary transition-colors"
                 >
                   <div className="flex items-center gap-2">
@@ -129,7 +158,7 @@ export function LeagueDropdown() {
                         {league.leagueName || `League ${league.leagueId}`}
                       </div>
                       <div className="text-xs text-muted-foreground">
-                        {info?.name} • {league.seasonYear}
+                        {info?.name} • {seasonsCount} season{seasonsCount === 1 ? "" : "s"}
                       </div>
                     </div>
                   </div>

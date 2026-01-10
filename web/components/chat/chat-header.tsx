@@ -4,6 +4,9 @@ import Link from "next/link";
 import { Flame } from "lucide-react";
 import { UserButton } from "@clerk/nextjs";
 import { LeagueDropdown } from "./league-dropdown";
+import { SeasonDropdown } from "./season-dropdown";
+import { AccountHeaderButton } from "./account-header-button";
+import { EspnHeaderButton } from "./espn-header-button";
 
 type Environment = "development" | "preview" | "production";
 
@@ -35,7 +38,7 @@ function detectEnvironment(): Environment {
 
 /**
  * Minimal header for the chat page.
- * Shows logo, league dropdown, environment badge, and user avatar.
+ * Shows logo, league dropdown, season dropdown, environment badge, and user avatar.
  */
 export function ChatHeader() {
   const env = detectEnvironment();
@@ -43,8 +46,8 @@ export function ChatHeader() {
 
   return (
     <header className="flex items-center justify-between px-4 py-2 border-b bg-background shrink-0">
-      {/* Left: Logo + League dropdown */}
-      <div className="flex items-center gap-4">
+      {/* Left: Logo + Account/ESPN + League + Season */}
+      <div className="flex items-center gap-2">
         <Link
           href="/"
           className="inline-flex items-center gap-2 text-lg font-bold hover:opacity-80 transition-opacity"
@@ -52,7 +55,10 @@ export function ChatHeader() {
           <Flame className="h-5 w-5" />
           <span className="hidden sm:inline">Flaim</span>
         </Link>
+        <AccountHeaderButton />
+        <EspnHeaderButton />
         <LeagueDropdown />
+        <SeasonDropdown />
       </div>
 
       {/* Right: Environment badge + User */}

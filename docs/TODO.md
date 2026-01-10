@@ -26,9 +26,13 @@
   - Header/nav: mobile hamburger menu (Dialog) that consolidates nav + account.
   - Header/account: richer “Account” menu via Popover (custom) vs Clerk `UserButton` (keep as-is).
 
+## Long-term Complexities to Simplify
+- **Adopt Official MCP SDK**: Replace manual JSON-RPC/MCP protocol handling in `workers/*/src/mcp/` with `@modelcontextprotocol/sdk` to reduce boilerplate (~100s of lines) and ensure spec compliance.
+- **Standardize Worker Routing**: Replace manual `if (pathname === ...)` routing in workers with a lightweight router like `hono` or `itty-router` to simplify middleware (CORS, Auth) and route handling.
+- **Harden OAuth Implementation**: The custom OAuth 2.1 provider in `auth-worker` is complex. While keeping it is strategic (hard to replace with off-the-shelf serverless libs), it requires comprehensive integration tests to prevent security regressions.
+
 ## Long-term Potential Implementations
 - Create iOS app (Significant undertaking/Major platform expansion)
-- Comprehensive Developer Chat UI Refresh (flaim.app/chat): Overhaul the developer-facing chat interface with improved debugging visualization, enhanced layout, and premium aesthetics.
-  - Advanced Token & Usage Analytics: Implement per-turn and per-session token usage tracking in the chat UI by capturing usage data from the Responses API stream. Include cost estimation and historical usage trends.
+- **Advanced Token & Usage Analytics**: Implement per-turn and per-session token usage tracking in the chat UI by capturing usage data from the Responses API stream. Include cost estimation and historical usage trends.
 - Add hockey and basketball functionality with new workers
 - Expand to additional fantasy platforms (Yahoo, Sleeper, etc.)

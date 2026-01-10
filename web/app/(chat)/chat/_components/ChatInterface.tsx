@@ -46,7 +46,7 @@ export default function ChatInterface() {
         </div>
 
         {/* Desktop tools panel */}
-        <div className="hidden lg:block lg:w-[30%] border-l border-border">
+        <div className="hidden lg:flex lg:w-[30%] border-l border-border min-h-0">
           <DevConsole />
         </div>
 
