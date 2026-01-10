@@ -1,10 +1,6 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
-import Link from "next/link";
-import { ClerkProvider, SignedIn, SignedOut, SignInButton, SignUpButton, UserButton } from '@clerk/nextjs';
-import { Button } from '@/components/ui/button';
-import { Flame } from 'lucide-react';
-import { AccountButton } from '@/components/site/AccountButton';
+import { ClerkProvider } from '@clerk/nextjs';
 import "./globals.css";
 
 const geistSans = localFont({
@@ -26,6 +22,11 @@ export const metadata: Metadata = {
   },
 };
 
+/**
+ * Root layout - minimal wrapper with ClerkProvider.
+ * Site header is rendered in (site) layout.
+ * Chat has its own header in (chat) layout.
+ */
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -35,52 +36,7 @@ export default function RootLayout({
     <ClerkProvider>
       <html lang="en">
         <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-          <div className="flex h-screen bg-muted w-full flex-col text-foreground">
-            {/* Site header */}
-            <header className="flex justify-between items-center p-4 bg-background border-b">
-              <Link
-                href="/"
-                className="inline-flex items-center gap-2 text-xl font-bold hover:opacity-80 transition-opacity"
-              >
-                <Flame className="h-5 w-5" />
-                <span>Flaim</span>
-              </Link>
-              <div className="flex items-center gap-4">
-                <SignedOut>
-                  <div className="flex gap-2">
-                    <SignInButton>
-                      <Button variant="outline">
-                        Sign In
-                      </Button>
-                    </SignInButton>
-                    <SignUpButton>
-                      <Button>
-                        Sign Up
-                      </Button>
-                    </SignUpButton>
-                  </div>
-                </SignedOut>
-                <SignedIn>
-                  <nav className="flex items-center gap-1">
-                    <Button asChild variant="ghost" className="text-sm">
-                      <Link href="/extension">Extension</Link>
-                    </Button>
-                    <Button asChild variant="ghost" className="text-sm">
-                      <Link href="/connectors">Connectors</Link>
-                    </Button>
-                    <Button asChild variant="ghost" className="text-sm">
-                      <Link href="/leagues">Leagues</Link>
-                    </Button>
-                    <AccountButton />
-                  </nav>
-                  <div className="flex items-center gap-2 pl-2 border-l">
-                    <UserButton />
-                  </div>
-                </SignedIn>
-              </div>
-            </header>
-            <main className="flex-1 bg-background overflow-auto">{children}</main>
-          </div>
+          {children}
         </body>
       </html>
     </ClerkProvider>

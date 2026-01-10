@@ -342,9 +342,10 @@ components/chat/dev-console/
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
-| `/api/debug/test-espn` | GET | Lightweight ESPN API test |
-| `/api/debug/test-mcp` | POST | MCP server health check |
+| `/api/debug/test-mcp` | POST | MCP server health check (SSRF-protected allowlist) |
 | `/api/espn/leagues/[id]/set-default` | POST | Update default league |
+
+Note: ESPN credential status is checked via the existing `/api/auth/espn/status` endpoint.
 
 ---
 

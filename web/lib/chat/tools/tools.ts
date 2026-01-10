@@ -134,12 +134,17 @@ export const getTools = () => {
     }
 
     // Set allowed tools to limit what gets exposed (following docs pattern)
+    // Sentinel "none" means disable all tools (different from empty which means "no restriction")
     const allowedTools = (mcpConfig.allowed_tools || "").trim();
-    if (allowedTools) {
+    if (allowedTools === "none") {
+      // Explicitly disable all tools by setting empty array
+      mcpTool.allowed_tools = [];
+    } else if (allowedTools) {
       mcpTool.allowed_tools = allowedTools.split(",")
         .map((t) => t.trim())
         .filter((t) => t);
     }
+    // If allowedTools is empty string, don't set allowed_tools (means no restriction)
 
     tools.push(mcpTool);
   }

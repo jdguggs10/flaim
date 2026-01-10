@@ -101,6 +101,7 @@ export default function Assistant() {
   // Leagues store
   const {
     leagues,
+    activeLeagueKey,
     setupStatus,
     fetchSetupStatus,
     fetchLeagues,
@@ -146,7 +147,7 @@ export default function Assistant() {
     }
   }, [isSignedIn, isLoading, fetchSetupStatus, fetchLeagues]);
 
-  // Configure MCP tools when leagues are loaded
+  // Configure MCP tools when leagues are loaded or active league changes
   useEffect(() => {
     const activeLeague = getActiveLeague();
     if (activeLeague && leagues.length > 0) {
@@ -167,7 +168,7 @@ export default function Assistant() {
         setMcpEnabled(!mcpGloballyDisabled);
       }
     }
-  }, [leagues, getActiveLeague, setMcpEnabled, setMcpConfig, setSelectedSport, setToolsPlatform, setToolsAuthenticated, mcpGloballyDisabled]);
+  }, [leagues, activeLeagueKey, getActiveLeague, setMcpEnabled, setMcpConfig, setSelectedSport, setToolsPlatform, setToolsAuthenticated, mcpGloballyDisabled]);
 
   // Avoid hydration mismatch: wait until auth status is known or until after mount
   if (!hasMounted) {

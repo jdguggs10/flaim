@@ -7,6 +7,9 @@
 import { create } from 'zustand';
 import type { EspnLeague } from '@/lib/espn-types';
 
+export const makeLeagueKey = (league: EspnLeague) =>
+  `${league.leagueId}-${league.sport}-${league.seasonYear ?? 'unknown'}`;
+
 interface SetupStatus {
   hasCredentials: boolean;
   hasLeagues: boolean;
@@ -73,9 +76,7 @@ export const useLeaguesStore = create<LeaguesState>()((set, get) => ({
         const leagues = data.leagues;
         // Set active league to default or first
         const defaultLeague = leagues.find(l => l.isDefault) || leagues[0];
-        const activeKey = defaultLeague
-          ? `${defaultLeague.leagueId}-${defaultLeague.sport}`
-          : null;
+        const activeKey = defaultLeague ? makeLeagueKey(defaultLeague) : null;
 
         set({ leagues, activeLeagueKey: activeKey, isLoading: false });
       } else {
@@ -87,13 +88,13 @@ export const useLeaguesStore = create<LeaguesState>()((set, get) => ({
   },
 
   setActiveLeague: (league) => {
-    set({ activeLeagueKey: `${league.leagueId}-${league.sport}` });
+    set({ activeLeagueKey: makeLeagueKey(league) });
   },
 
   getActiveLeague: () => {
     const state = get();
     return state.leagues.find(
-      l => `${l.leagueId}-${l.sport}` === state.activeLeagueKey
+      l => makeLeagueKey(l) === state.activeLeagueKey
     );
   },
 

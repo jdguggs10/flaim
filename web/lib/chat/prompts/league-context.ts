@@ -7,7 +7,7 @@
  * Token estimate: ~80-120 tokens depending on number of leagues
  */
 
-import useLeaguesStore from "@/stores/chat/useLeaguesStore";
+import useLeaguesStore, { makeLeagueKey } from "@/stores/chat/useLeaguesStore";
 import type { EspnLeague } from "@/lib/espn-types";
 
 // =============================================================================
@@ -97,9 +97,7 @@ export function buildLeagueContext(): string {
 
   // Find other leagues (excluding the active one)
   const otherLeagues = leagues.filter(
-    (l) =>
-      `${l.leagueId}-${l.sport}` !==
-      `${activeLeague.leagueId}-${activeLeague.sport}`
+    (league) => makeLeagueKey(league) !== makeLeagueKey(activeLeague)
   );
 
   // If user only has one league, just return active context
