@@ -1,8 +1,8 @@
 /**
- * Extension Ping Utility
+ * Extension Ping Utility - Clerk Auth Version
  * ---------------------------------------------------------------------------
  * Pings the Flaim Chrome extension directly using chrome.runtime.sendMessage
- * to verify it's installed and get its real-time status.
+ * to verify it's installed and check if user is signed in via Clerk.
  *
  * This uses the externally_connectable API - the extension must declare
  * the website's origin in its manifest.json.
@@ -33,7 +33,10 @@ declare global {
 function getExtensionIds(): string[] {
   const envIds = process.env.NEXT_PUBLIC_EXTENSION_IDS;
   if (envIds) {
-    return envIds.split(',').map(id => id.trim()).filter(Boolean);
+    return envIds
+      .split(',')
+      .map((id) => id.trim())
+      .filter(Boolean);
   }
   // Fallback to production ID only
   return ['ogkkejmgkoolfaidplldmcghbikpmonn'];
@@ -42,16 +45,25 @@ function getExtensionIds(): string[] {
 export interface ExtensionPingResult {
   /** Whether the ping was successful (extension responded) */
   reachable: boolean;
-  /** Whether the extension has a stored token (is paired) */
-  paired: boolean;
+  /** Whether the user is signed in (Clerk session active) */
+  signedIn: boolean;
+  /** Clerk user ID if signed in */
+  userId: string | null;
   /** Error message if ping failed */
   error?: string;
 }
 
+/**
+ * Response from extension background script ping.
+ * New Clerk-based format (v1.3.0+)
+ */
 export interface ExtensionPingResponse {
   installed: true;
-  paired: boolean;
-  hasToken: boolean;
+  signedIn: boolean;
+  userId: string | null;
+  // Legacy fields for backwards compatibility (v1.2.x)
+  paired?: boolean;
+  hasToken?: boolean;
 }
 
 /**
@@ -81,58 +93,58 @@ export function isChromeBrowser(): boolean {
 /**
  * Ping a single extension ID
  */
-function pingExtensionId(
-  extensionId: string,
-  timeoutMs: number
-): Promise<ExtensionPingResult> {
+function pingExtensionId(extensionId: string, timeoutMs: number): Promise<ExtensionPingResult> {
   return new Promise((resolve) => {
     const timeout = setTimeout(() => {
       resolve({
         reachable: false,
-        paired: false,
+        signedIn: false,
+        userId: null,
         error: 'Extension did not respond (timeout)',
       });
     }, timeoutMs);
 
     try {
-      window.chrome!.runtime!.sendMessage(
-        extensionId,
-        { type: 'ping' },
-        (response: unknown) => {
-          clearTimeout(timeout);
+      window.chrome!.runtime!.sendMessage(extensionId, { type: 'ping' }, (response: unknown) => {
+        clearTimeout(timeout);
 
-          // Check for Chrome runtime errors
-          const lastError = window.chrome?.runtime?.lastError;
-          if (lastError) {
-            resolve({
-              reachable: false,
-              paired: false,
-              error: lastError.message || 'Extension not reachable',
-            });
-            return;
-          }
-
-          // Validate response
-          const typedResponse = response as ExtensionPingResponse | undefined;
-          if (typedResponse && typedResponse.installed) {
-            resolve({
-              reachable: true,
-              paired: typedResponse.paired || typedResponse.hasToken,
-            });
-          } else {
-            resolve({
-              reachable: false,
-              paired: false,
-              error: 'Invalid response from extension',
-            });
-          }
+        // Check for Chrome runtime errors
+        const lastError = window.chrome?.runtime?.lastError;
+        if (lastError) {
+          resolve({
+            reachable: false,
+            signedIn: false,
+            userId: null,
+            error: lastError.message || 'Extension not reachable',
+          });
+          return;
         }
-      );
+
+        // Validate response
+        const typedResponse = response as ExtensionPingResponse | undefined;
+        if (typedResponse && typedResponse.installed) {
+          resolve({
+            reachable: true,
+            // New format: signedIn field
+            // Legacy fallback: paired or hasToken
+            signedIn: typedResponse.signedIn ?? typedResponse.paired ?? typedResponse.hasToken ?? false,
+            userId: typedResponse.userId ?? null,
+          });
+        } else {
+          resolve({
+            reachable: false,
+            signedIn: false,
+            userId: null,
+            error: 'Invalid response from extension',
+          });
+        }
+      });
     } catch (err) {
       clearTimeout(timeout);
       resolve({
         reachable: false,
-        paired: false,
+        signedIn: false,
+        userId: null,
         error: err instanceof Error ? err.message : 'Failed to ping extension',
       });
     }
@@ -140,7 +152,7 @@ function pingExtensionId(
 }
 
 /**
- * Ping the extension to check if it's installed and paired.
+ * Ping the extension to check if it's installed and user is signed in.
  * Tries multiple extension IDs (for dev/prod support) until one responds.
  *
  * @param timeoutMs - How long to wait for each ID (default 1500ms)
@@ -150,7 +162,8 @@ export async function pingExtension(timeoutMs = 1500): Promise<ExtensionPingResu
   if (!canPingExtension()) {
     return {
       reachable: false,
-      paired: false,
+      signedIn: false,
+      userId: null,
       error: 'Browser does not support extension messaging',
     };
   }
@@ -168,7 +181,8 @@ export async function pingExtension(timeoutMs = 1500): Promise<ExtensionPingResu
   // None of the IDs responded
   return {
     reachable: false,
-    paired: false,
+    signedIn: false,
+    userId: null,
     error: 'Extension not reachable',
   };
 }

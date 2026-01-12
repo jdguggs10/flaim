@@ -4,26 +4,17 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '@clerk/nextjs';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Chrome, Check, Loader2, AlertTriangle, Monitor } from 'lucide-react';
-import {
-  pingExtension,
-  isChromeBrowser,
-  type ExtensionPingResult,
-} from '@/lib/extension-ping';
+import { Chrome, Check, Loader2, Monitor, LogIn } from 'lucide-react';
+import { pingExtension, isChromeBrowser, type ExtensionPingResult } from '@/lib/extension-ping';
 
 type Status =
   | 'loading'
   | 'signed_out'
-  | 'connected'           // Ping successful + paired
-  | 'installed_not_paired' // Ping successful but not paired
-  | 'not_installed'       // Ping failed or not Chrome, no server record
-  | 'needs_attention'     // Chrome: ping failed but server has record
-  | 'server_only'         // Non-Chrome browser with server record
-  | 'non_chrome';         // Non-Chrome browser without server record
-
-interface ServerToken {
-  lastUsedAt: string | null;
-}
+  | 'connected' // Ping successful + signed in via Clerk
+  | 'installed_not_signed_in' // Ping successful but not signed in
+  | 'not_installed' // Ping failed or not Chrome, no credentials
+  | 'server_only' // Non-Chrome browser with credentials
+  | 'non_chrome'; // Non-Chrome browser without credentials
 
 interface StepSyncEspnProps {
   className?: string;
@@ -32,7 +23,6 @@ interface StepSyncEspnProps {
 export function StepSyncEspn({ className }: StepSyncEspnProps) {
   const { isLoaded, isSignedIn } = useAuth();
   const [status, setStatus] = useState<Status>('loading');
-  const [serverToken, setServerToken] = useState<ServerToken | null>(null);
 
   useEffect(() => {
     if (!isLoaded) {
@@ -57,21 +47,13 @@ export function StepSyncEspn({ className }: StepSyncEspnProps) {
         }
       }
 
-      // Check server status
-      let serverConnected = false;
-      let token: ServerToken | null = null;
+      // Check server status for credentials (non-Chrome fallback)
+      let serverHasCredentials = false;
       try {
         const response = await fetch('/api/extension/connection');
         if (response.ok) {
-          const data = await response.json() as {
-            connected?: boolean;
-            token?: { lastUsedAt: string | null } | null;
-          };
-          serverConnected = !!data.connected;
-          if (data.token) {
-            token = { lastUsedAt: data.token.lastUsedAt };
-            setServerToken(token);
-          }
+          const data = (await response.json()) as { connected?: boolean };
+          serverHasCredentials = !!data.connected;
         }
       } catch {
         // Silently fail
@@ -80,42 +62,26 @@ export function StepSyncEspn({ className }: StepSyncEspnProps) {
       // Determine status based on browser type and ping result
       if (ping?.reachable) {
         // Extension responded - use ping as source of truth
-        if (ping.paired) {
+        if (ping.signedIn) {
           setStatus('connected');
         } else {
-          setStatus('installed_not_paired');
+          setStatus('installed_not_signed_in');
         }
       } else if (!isChrome) {
         // Non-Chrome browser - show server data with disclaimer
-        if (serverConnected) {
+        if (serverHasCredentials) {
           setStatus('server_only');
         } else {
           setStatus('non_chrome');
         }
       } else {
         // Chrome but couldn't reach extension
-        if (serverConnected) {
-          setStatus('needs_attention');
-        } else {
-          setStatus('not_installed');
-        }
+        setStatus('not_installed');
       }
     };
 
     checkConnection();
   }, [isLoaded, isSignedIn]);
-
-  // Format date for display
-  const formatLastActivity = (dateStr: string | null) => {
-    if (!dateStr) return 'Unknown';
-    const date = new Date(dateStr);
-    return date.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-    });
-  };
 
   // Base card structure
   const renderCard = (content: React.ReactNode) => (
@@ -153,7 +119,7 @@ export function StepSyncEspn({ className }: StepSyncEspnProps) {
     );
   }
 
-  // Connected - verified via ping
+  // Connected - extension installed and signed in
   if (status === 'connected') {
     return renderCard(
       <div className="flex items-center gap-2 text-sm text-green-600 font-medium">
@@ -163,58 +129,37 @@ export function StepSyncEspn({ className }: StepSyncEspnProps) {
     );
   }
 
-  // Installed but not paired
-  if (status === 'installed_not_paired') {
+  // Installed but not signed in via Clerk
+  if (status === 'installed_not_signed_in') {
     return renderCard(
       <div className="space-y-2">
         <div className="flex items-center gap-2 text-sm text-amber-600">
-          <AlertTriangle className="h-4 w-4" />
-          <span>Not paired</span>
-        </div>
-        <Link href="/extension">
-          <Button className="w-full" variant="outline">
-            <Chrome className="h-4 w-4 mr-2" />
-            Pair Extension
-          </Button>
-        </Link>
-      </div>
-    );
-  }
-
-  // Needs attention - Chrome but ping failed, server has record
-  if (status === 'needs_attention') {
-    return renderCard(
-      <div className="space-y-2">
-        <div className="flex items-center gap-2 text-sm text-amber-600">
-          <AlertTriangle className="h-4 w-4" />
-          <span>May need re-pair</span>
-        </div>
-        <Link href="/extension">
-          <Button className="w-full" variant="outline">
-            <Chrome className="h-4 w-4 mr-2" />
-            Check Status
-          </Button>
-        </Link>
-      </div>
-    );
-  }
-
-  // Server only - non-Chrome browser with server record
-  if (status === 'server_only') {
-    return renderCard(
-      <div className="space-y-2">
-        <div className="flex items-center gap-2 text-sm text-blue-600">
-          <Monitor className="h-4 w-4" />
-          <span>Chrome extension active</span>
+          <LogIn className="h-4 w-4" />
+          <span>Sign in required</span>
         </div>
         <p className="text-xs text-muted-foreground">
-          Last activity: {formatLastActivity(serverToken?.lastUsedAt ?? null)}
+          Session will sync automatically. Try reopening the extension.
         </p>
       </div>
     );
   }
 
-  // Non-Chrome browser without a server record
+  // Server only - non-Chrome browser with credentials synced
+  if (status === 'server_only') {
+    return renderCard(
+      <div className="space-y-2">
+        <div className="flex items-center gap-2 text-sm text-green-600">
+          <Check className="h-4 w-4" />
+          <span>ESPN credentials synced</span>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Viewing from non-Chrome browser. Extension available in Chrome.
+        </p>
+      </div>
+    );
+  }
+
+  // Non-Chrome browser without credentials
   if (status === 'non_chrome') {
     return renderCard(
       <div className="space-y-2">
@@ -223,7 +168,7 @@ export function StepSyncEspn({ className }: StepSyncEspnProps) {
           <span>Chrome required</span>
         </div>
         <p className="text-xs text-muted-foreground">
-          The extension only works in Chrome on desktop. Open this page in Chrome to install and pair it.
+          Open this page in Chrome to install the extension.
         </p>
       </div>
     );

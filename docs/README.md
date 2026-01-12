@@ -92,7 +92,7 @@ Solo developer, hobby project. Keep it simple and stable.
 | [Changelog](CHANGELOG.md) | Release history |
 | [Web App](../web/README.md) | Next.js routes, components, environment |
 | [Workers](../workers/README.md) | Cloudflare Workers, MCP tools, ESPN API |
-| [Extension](../extension/README.md) | Chrome extension build, pairing, CWS |
+| [Extension](../extension/README.md) | Chrome extension build, Sync Host, CWS |
 
 ### Quick Start (Development)
 

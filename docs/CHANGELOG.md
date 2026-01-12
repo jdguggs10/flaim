@@ -19,6 +19,24 @@ Replaced the chat sidebar with an enhanced Developer Console for MCP debugging. 
 - **Fixed**: Developer Console sidebar now scrolls correctly when multiple sections are expanded.
 - **Removed**: `components/chat/tools-panel.tsx` and `components/chat/mcp-config.tsx` (replaced).
 
+### Chrome Extension v1.3.0 - Clerk Direct Auth
+Replaces custom pairing-code token exchange with direct Clerk authentication via Sync Host. Users signed into flaim.app automatically authenticate in the extension.
+
+- **Added**: `@clerk/chrome-extension` SDK integration with Sync Host.
+- **Added**: `ClerkProvider.tsx` wrapper component for extension popup.
+- **Added**: Clerk session sync from flaim.app to extension (no pairing codes needed).
+- **Added**: `createClerkClient` in background service worker for ping responses.
+- **Added**: `signedIn` and `userId` fields in extension ping response.
+- **Changed**: Extension popup uses Clerk `useAuth()` hook instead of custom token storage.
+- **Changed**: All extension API endpoints now accept Clerk JWTs (not custom extension tokens).
+- **Changed**: Web `/extension` page simplified (removed pairing code UI, disconnect button).
+- **Changed**: `extension-ping.ts` updated for new `signedIn`/`userId` response format.
+- **Removed**: Pairing code generation (`/api/extension/code`).
+- **Removed**: Code exchange (`/api/extension/pair`).
+- **Removed**: Token revocation (`/api/extension/token`).
+- **Removed**: `extension-storage.ts` (extension token CRUD).
+- **Removed**: Custom extension token validation in auth-worker.
+
 ### Chrome Extension v1.2.1 - Extension Status Ping
 Adds direct website-to-extension ping to show real-time connection status, with better non-Chrome fallbacks and local dev support.
 

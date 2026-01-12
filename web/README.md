@@ -20,7 +20,7 @@ web/
 │   │   ├── page.tsx         # Landing (/)
 │   │   ├── leagues/         # League management (/leagues)
 │   │   ├── connectors/      # Connection status (/connectors)
-│   │   ├── extension/       # Extension setup + pairing (/extension)
+│   │   ├── extension/       # Extension setup (/extension)
 │   │   ├── privacy/         # Privacy policy (/privacy)
 │   │   └── oauth/consent/   # OAuth consent screen
 │   │
@@ -29,7 +29,7 @@ web/
 │   └── api/
 │       ├── auth/            # Platform auth APIs
 │       ├── espn/            # League management APIs
-│       ├── extension/       # Extension pairing APIs
+│       ├── extension/       # Extension APIs
 │       ├── oauth/           # OAuth APIs (status, revoke)
 │       └── chat/            # Chat-only APIs
 │
@@ -64,7 +64,7 @@ Both site and chat can use shared `components/ui/` (shadcn).
 | `/` | Landing page |
 | `/leagues` | Manage ESPN leagues and seasons |
 | `/connectors` | View Claude/ChatGPT connections |
-| `/extension` | Chrome extension pairing |
+| `/extension` | Chrome extension setup |
 | `/privacy` | Privacy policy (CWS compliance) |
 | `/oauth/consent` | OAuth authorization screen |
 
@@ -74,7 +74,7 @@ Both site and chat can use shared `components/ui/` (shadcn).
 |------|---------|
 | `/api/auth/*` | Platform auth (Clerk) |
 | `/api/espn/*` | League management, seasons, discovery, credentials |
-| `/api/extension/*` | Extension pairing flow |
+| `/api/extension/*` | Extension APIs (Clerk JWT) |
 | `/api/oauth/*` | OAuth status, revoke |
 | `/api/chat/*` | Chat turn responses |
 

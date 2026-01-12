@@ -8,6 +8,10 @@ dist/
 .env.local
 .env*.local
 
+# Environment files with secrets (keep .env.example as template)
+.env.development
+.env.production
+
 # IDE
 .vscode/
 .idea/

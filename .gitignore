@@ -16,6 +16,9 @@ yarn-error.log*
 # Wrangler development variables (contains secrets)
 .dev.vars
 
+# Extension keys
+extension/.keys/
+
 # Build outputs
 dist/
 build/
@@ -100,5 +103,3 @@ tests/config/.env.test
 
 # Ignore per-worker sensitive env files
 workers/auth-worker/.env
-.dev.vars
-CLAUDE.md

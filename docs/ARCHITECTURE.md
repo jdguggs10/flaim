@@ -16,11 +16,11 @@ npm run dev
 
 ## Core Pieces
 
-- **Chrome Extension (`/extension`)**: Captures ESPN cookies (SWID, espn_s2) and syncs them to Flaim via pairing code flow.
+- **Chrome Extension (`/extension`)**: Captures ESPN cookies (SWID, espn_s2) and syncs them to Flaim using Clerk Sync Host (no pairing codes).
 - **Next.js web app (`/web`)**: Site pages (landing, leagues, connectors, extension setup, privacy policy), OAuth consent screens, optional chat UI.
-- **Auth worker (`/workers/auth-worker`)**: Supabase credential + league storage, JWT verification, OAuth token management, extension pairing, rate limiting.
+- **Auth worker (`/workers/auth-worker`)**: Supabase credential + league storage, JWT verification, OAuth token management, extension APIs.
 - **Sport MCP workers (`/workers/baseball-espn-mcp`, `/workers/football-espn-mcp`)**: ESPN API calls + MCP tools. Fetch creds/leagues from auth-worker; no local storage.
-- **Supabase Postgres**: `espn_credentials`, `espn_leagues` (per-season rows), `oauth_tokens`, `oauth_codes`, `extension_tokens`, `extension_pairing_codes`, `rate_limits`.
+- **Supabase Postgres**: `espn_credentials`, `espn_leagues` (per-season rows), `oauth_tokens`, `oauth_codes`, `rate_limits`, plus legacy `extension_tokens`/`extension_pairing_codes` (deprecated).
 
 ## Runtime Choices (Next.js)
 
@@ -73,33 +73,28 @@ Season year defaults are deterministic and use America/New_York time:
 The extension simplifies ESPN credential capture. See `extension/README.md` for full documentation.
 
 ```
-Extension Popup → POST /api/extension/pair → Auth Worker → Supabase
+Extension Popup → Clerk Sync Host → POST /api/extension/sync → Auth Worker → Supabase
      ↓
 ESPN Cookies → POST /api/extension/sync → Auth Worker → Supabase
 ```
 
-**Pairing flow:**
-1. User generates 6-character code at `/extension` (valid 10 minutes)
-2. User enters code in extension popup
-3. Extension receives token, stores locally
-4. Extension reads ESPN cookies and syncs to Flaim
+**Sync Host flow:**
+1. User signs in at `flaim.app` (Clerk session)
+2. Extension popup detects the session via Sync Host
+3. Extension reads ESPN cookies and syncs to Flaim with Clerk JWT
 
 **Extension APIs** (via Next.js proxy → auth-worker):
 | Endpoint | Auth | Purpose |
 |----------|------|---------|
-| `POST /extension/code` | Clerk | Generate pairing code |
-| `POST /extension/pair` | Code | Exchange code for token |
-| `POST /extension/sync` | Bearer | Sync ESPN credentials |
-| `POST /extension/discover` | Bearer | Discover leagues + historical seasons |
-| `POST /extension/set-default` | Bearer | Set user's default league |
-| `GET /extension/status` | Bearer | Check connection status |
+| `POST /extension/sync` | Clerk JWT | Sync ESPN credentials |
+| `POST /extension/discover` | Clerk JWT | Discover leagues + historical seasons |
+| `POST /extension/set-default` | Clerk JWT | Set user's default league |
+| `GET /extension/status` | Clerk JWT | Check connection status |
 | `GET /extension/connection` | Clerk | Web UI status check |
-| `DELETE /extension/token` | Clerk | Revoke extension |
 
 **Security:**
-- Rate limiting: 5 codes/hour per user, 10 pair attempts/10min per IP
-- Atomic pairing prevents race conditions
-- Token rotation on re-pair (old extension gets 401)
+- Clerk JWT verification in auth-worker
+- Extension never stores long-lived custom tokens
 
 ## Claude + ChatGPT OAuth 2.1
 
@@ -123,7 +118,6 @@ Both MCP workers expose `get_user_session` plus sport-specific tools for league 
 - Per-user isolation via verified `sub`; credentials never sent back to client after setup.
 - Rate limiting: 200 MCP calls/day per user via `rate_limits` table.
 - OAuth tokens stored in Supabase with expiration tracking.
-- Extension tokens: 64-char hex, rotated on re-pair, revocable.
 - ESPN credentials: AES-256 encrypted at rest (Supabase default).
 
 See `workers/README.md` for worker-to-worker communication requirements.
@@ -185,6 +179,6 @@ Used by `.github/workflows/deploy-workers.yml`.
 |---------|-------|-----|
 | Double slashes in URLs | Trailing slash in env vars | Remove trailing slashes |
 | Extension "Failed to fetch" | Production build loaded locally | Rebuild with `NODE_ENV=development npm run build` |
-| Extension won't pair | Code expired or invalid | Generate new code at `/extension` |
+| Extension not signed in | Clerk session not syncing | Close/reopen extension popup, confirm flaim.app sign-in |
 
 See `workers/README.md` for worker-specific troubleshooting (522s, 404s, 500s).

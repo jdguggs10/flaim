@@ -1,19 +1,18 @@
 # Flaim Chrome Extension
 
-Chrome extension that auto-captures ESPN credentials (SWID, espn_s2 cookies) and syncs them to Flaim via a pairing code flow. Eliminates manual DevTools cookie extraction.
+Chrome extension that auto-captures ESPN credentials (SWID, espn_s2 cookies) and syncs them to Flaim via Clerk Sync Host (no pairing codes). Eliminates manual DevTools cookie extraction.
 
-## User Flow (v1.2.1)
+## User Flow (v1.3.0)
 
 1. Install extension from [Chrome Web Store](https://chrome.google.com/webstore/detail/flaim)
-2. Go to `flaim.app/extension` and generate a pairing code
-3. Enter the 6-character code in the extension popup
-4. Log into ESPN.com (if not already)
-5. Click "Sync to Flaim" - the extension will:
+2. Sign in to `flaim.app` (session syncs to the extension)
+3. Log into ESPN.com (if not already)
+4. Click "Sync to Flaim" - the extension will:
    - Sync your ESPN credentials
    - Auto-discover all your leagues (including past seasons) via ESPN Fan API
    - Show discovery results with granular counts (new vs already saved)
    - Let you pick a default league
-6. View your leagues at `flaim.app/leagues`
+5. View your leagues at `flaim.app/leagues`
 
 **Automation boundaries**
 - The extension only runs discovery when you click **Sync / Re-sync**.
@@ -37,13 +36,13 @@ npm install
 
 ```bash
 # Development build (includes localhost for local testing)
-NODE_ENV=development npm run build
+npm run build:dev
 
 # Production build (strips localhost, ready for CWS)
 npm run build
 
 # Create zip for Chrome Web Store upload
-zip -r flaim-extension-v1.2.1.zip dist/
+zip -r flaim-extension-v1.3.0.zip dist/
 ```
 
 ### Load Unpacked Extension
@@ -64,7 +63,7 @@ This is handled in `src/lib/api.ts`. The `vite.config.ts` also strips localhost 
 ## Architecture
 
 ```
-Extension Popup → POST /api/extension/pair → Auth Worker → Supabase
+Extension Popup → Clerk Sync Host → POST /api/extension/sync → Auth Worker → Supabase
      ↓
 ESPN Cookies → POST /api/extension/sync → Auth Worker → Supabase
 ```
@@ -72,13 +71,11 @@ ESPN Cookies → POST /api/extension/sync → Auth Worker → Supabase
 **Discovery note**: League discovery uses ESPN's Fan API with a normalized
 `{SWID}` and ESPN-recommended headers; this reduces calls to a single request.
 
-### Pairing Flow
+### Sync Host Flow
 
-1. User generates 6-character code at `/extension` (valid 10 minutes)
-2. User enters code in extension popup
-3. Extension exchanges code for bearer token
-4. Token stored in `chrome.storage.local`
-5. Extension reads ESPN cookies and syncs to Flaim
+1. User signs in at `flaim.app`
+2. Extension popup detects session via Clerk Sync Host
+3. Extension reads ESPN cookies and syncs to Flaim using Clerk JWTs
 
 ### API Endpoints
 
@@ -86,14 +83,11 @@ All routes go through Next.js proxy (`/api/extension/*`) to auth-worker:
 
 | Endpoint | Auth | Rate Limit | Purpose |
 |----------|------|------------|---------|
-| `POST /extension/code` | Clerk | 5/hour per user | Generate pairing code |
-| `POST /extension/pair` | Code | 10/10min per IP | Exchange code for token |
-| `POST /extension/sync` | Bearer | None | Sync ESPN credentials |
-| `POST /extension/discover` | Bearer | None | Discover and save leagues (v1.1) |
-| `POST /extension/set-default` | Bearer | None | Set default league (v1.1) |
-| `GET /extension/status` | Bearer | None | Check connection status |
+| `POST /extension/sync` | Clerk JWT | None | Sync ESPN credentials |
+| `POST /extension/discover` | Clerk JWT | None | Discover and save leagues (v1.1) |
+| `POST /extension/set-default` | Clerk JWT | None | Set default league (v1.1) |
+| `GET /extension/status` | Clerk JWT | None | Check connection status |
 | `GET /extension/connection` | Clerk | None | Web UI status check |
-| `DELETE /extension/token` | Clerk | None | Revoke extension |
 
 ## File Structure
 
@@ -121,8 +115,7 @@ extension/
 
 ```
 workers/auth-worker/src/
-├── extension-storage.ts        # DB operations
-├── extension-handlers.ts       # Request handlers + rate limiting
+├── extension-handlers.ts       # Extension API handlers (Clerk JWT)
 └── index.ts                    # Routes
 
 web/app/api/extension/          # Next.js proxy routes
@@ -132,9 +125,7 @@ web/app/(site)/privacy/         # Privacy policy page
 
 ## Security
 
-- **Rate limiting**: 5 codes/hour per user, 10 pair attempts/10min per IP
-- **Atomic pairing**: Race condition prevented via row-count verification
-- **Token rotation**: Re-pairing revokes previous extension's token
+- **Clerk JWT auth**: Extension uses Clerk session, no custom tokens stored
 - **HTTPS only**: All API calls encrypted in transit
 - **No credentials in extension**: ESPN cookies synced once, not stored locally
 
@@ -152,7 +143,7 @@ web/app/(site)/privacy/         # Privacy policy page
 | Permission | Justification |
 |------------|---------------|
 | `cookies` | Read ESPN authentication cookies (SWID, espn_s2) to sync fantasy league access to Flaim. This is the extension's core and only purpose. |
-| `storage` | Store extension authentication token locally to maintain connection with Flaim. |
+| `storage` | Store setup state locally (popup recovery). |
 | `host_permissions: espn.com` | Access ESPN.com cookies for user authentication. Required for core functionality. |
 | `host_permissions: flaim.app` | Communicate with Flaim API to sync credentials securely over HTTPS. |
 
@@ -167,12 +158,12 @@ web/app/(site)/privacy/         # Privacy policy page
 
 ## Local Dev: Website ↔ Extension Ping
 
-The website can ping the extension directly to verify it's installed and paired. This requires:
+The website can ping the extension directly to verify it's installed and signed in. This requires:
 
 1. **Extension side**: `externally_connectable` in manifest.json (already configured for `flaim.app` and `localhost:3000`)
    - After changes, rebuild and reload the unpacked extension:
      ```
-     NODE_ENV=development npm run build
+     npm run build:dev
      ```
      Then reload in `chrome://extensions` and confirm the **service worker** link appears.
 
@@ -185,16 +176,15 @@ The website can ping the extension directly to verify it's installed and paired.
      ```
    - The website will try each ID until one responds
 
-**Note**: Each time you reload an unpacked extension, the ID may change. If ping fails in local dev, check the ID.
+**Note**: Each time you reload an unpacked extension, the ID may change unless you set a stable dev key. If ping fails in local dev, check the ID.
 
 ## Troubleshooting
 
 | Issue | Cause | Fix |
 |-------|-------|-----|
-| "Failed to fetch" | Production build loaded locally | Rebuild with `NODE_ENV=development npm run build` |
-| Extension won't pair | Code expired (10 min) | Generate new code at `/extension` |
+| "Failed to fetch" | Production build loaded locally | Rebuild with `npm run build:dev` |
+| Extension shows "Not Signed In" | Clerk session not synced | Close/reopen the extension popup |
 | ESPN cookies not found | Not logged into ESPN | Log into espn.com, then retry |
-| 401 on sync | Token revoked (re-paired elsewhere) | Re-pair the extension |
 | Website shows "Not Connected" in Chrome | Extension ID mismatch | Check `NEXT_PUBLIC_EXTENSION_IDS` matches your local extension ID |
 
 ## Future Enhancements

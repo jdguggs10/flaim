@@ -1,36 +1,34 @@
+/**
+ * Extension Popup - Clerk Auth Version
+ * ---------------------------------------------------------------------------
+ * Main popup component using Clerk Sync Host for authentication.
+ * Session syncs automatically from flaim.app when user is signed in there.
+ */
+
 import { useEffect, useState } from 'react';
+import { useAuth, useClerk, SignedIn, SignedOut } from '@clerk/chrome-extension';
 import {
-  getToken,
-  setToken,
-  clearToken,
   getSetupState,
   setSetupState,
   clearSetupState,
   type LeagueOption,
-  type SeasonCounts
+  type SeasonCounts,
 } from '../lib/storage';
 import { getEspnCredentials, validateCredentials } from '../lib/espn';
 import {
-  exchangePairingCode,
   syncCredentials,
   checkStatus,
   getSiteBase,
   discoverLeagues,
   setDefaultLeague,
-  type DiscoveredLeague
+  type DiscoveredLeague,
 } from '../lib/api';
-import { getDeviceLabel } from '../lib/device';
 
+// Simplified state machine (removed pairing states)
 type State =
   | 'loading'
-  | 'not_paired'
-  | 'entering_code'
-  | 'paired_no_espn'
+  | 'no_espn'
   | 'ready'
-  | 'syncing'
-  | 'success'
-  | 'error'
-  // New setup flow states
   | 'setup_syncing'
   | 'setup_discovering'
   | 'setup_selecting_default'
@@ -42,7 +40,7 @@ const sportEmoji: Record<string, string> = {
   football: '🏈',
   baseball: '⚾',
   basketball: '🏀',
-  hockey: '🏒'
+  hockey: '🏒',
 };
 
 // Discovery counts for granular messaging
@@ -55,41 +53,32 @@ interface DiscoveryCounts {
 function getDiscoveryMessage(counts: DiscoveryCounts): string {
   const { currentSeason: cs, pastSeasons: ps } = counts;
 
-  // No leagues found at all
   if (cs.found === 0) {
     return 'No active leagues found for this season.';
   }
 
   const parts: string[] = [];
 
-  // Current season leagues
   if (cs.added > 0 && cs.alreadySaved === 0) {
-    // All new
     parts.push(`Found ${cs.found} league${cs.found !== 1 ? 's' : ''}`);
   } else if (cs.added === 0 && cs.alreadySaved > 0) {
-    // All already saved
     parts.push(`${cs.found} league${cs.found !== 1 ? 's' : ''} already saved`);
   } else if (cs.added > 0 && cs.alreadySaved > 0) {
-    // Mixed
-    parts.push(`Found ${cs.found} league${cs.found !== 1 ? 's' : ''} (${cs.added} new, ${cs.alreadySaved} saved)`);
+    parts.push(
+      `Found ${cs.found} league${cs.found !== 1 ? 's' : ''} (${cs.added} new, ${cs.alreadySaved} saved)`
+    );
   } else if (cs.found > 0) {
-    // Fallback: leagues found but all failed to save (DB error)
     parts.push(`Found ${cs.found} league${cs.found !== 1 ? 's' : ''} (save failed)`);
   }
 
-  // Past seasons (only show if any found)
   if (ps.found > 0) {
     if (ps.added > 0 && ps.alreadySaved === 0) {
-      // All new
       parts.push(`${ps.found} past season${ps.found !== 1 ? 's' : ''}`);
     } else if (ps.added === 0 && ps.alreadySaved > 0) {
-      // All already saved
       parts.push(`${ps.found} past season${ps.found !== 1 ? 's' : ''} already saved`);
     } else if (ps.added > 0) {
-      // Some new
       parts.push(`${ps.found} past season${ps.found !== 1 ? 's' : ''} (${ps.added} new)`);
     } else {
-      // Fallback: past seasons found but all failed to save
       parts.push(`${ps.found} past season${ps.found !== 1 ? 's' : ''} (save failed)`);
     }
   }
@@ -114,8 +103,12 @@ function getCompletionSummary(counts: DiscoveryCounts): string {
 }
 
 export default function Popup() {
+  // Clerk auth hooks
+  const { isLoaded, isSignedIn, getToken } = useAuth();
+  const clerk = useClerk();
+
+  // Local state
   const [state, setState] = useState<State>('loading');
-  const [pairingCode, setPairingCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [hasCredentials, setHasCredentials] = useState(false);
 
@@ -128,54 +121,42 @@ export default function Popup() {
     pastSeasons: { found: 0, added: 0, alreadySaved: 0 },
   });
 
-  // Check initial state
+  // Initialize on Clerk load
   useEffect(() => {
+    if (!isLoaded) return;
+
     const init = async () => {
-      // Check for saved setup state first (popup close recovery)
+      // Check for saved setup state (popup close recovery)
       const savedSetup = await getSetupState();
 
       if (savedSetup?.step === 'complete') {
-        // User finished setup - go to normal ready state
         await clearSetupState();
       } else if (savedSetup?.step === 'selecting_default') {
-        // User was selecting default - restore that state
-        const token = await getToken();
-        if (token && savedSetup.currentSeasonLeagues && savedSetup.currentSeasonLeagues.length > 0) {
-          setDiscoveredLeagues(savedSetup.discovered?.map(d => ({
-            ...d,
-            leagueId: '',
-            teamId: '',
-            seasonYear: 0
-          })) || []);
+        // Restore selecting_default state
+        if (savedSetup.currentSeasonLeagues && savedSetup.currentSeasonLeagues.length > 0) {
+          setDiscoveredLeagues(
+            savedSetup.discovered?.map((d) => ({
+              ...d,
+              leagueId: '',
+              teamId: '',
+              seasonYear: 0,
+            })) || []
+          );
           setCurrentSeasonLeagues(savedSetup.currentSeasonLeagues);
 
-          // Restore counts - handle both new and legacy formats
           if (savedSetup.currentSeason && savedSetup.pastSeasons) {
             setDiscoveryCounts({
               currentSeason: savedSetup.currentSeason,
               pastSeasons: savedSetup.pastSeasons,
             });
-          } else {
-            // Legacy migration from v1.1
-            setDiscoveryCounts({
-              currentSeason: {
-                found: (savedSetup.added || 0) + (savedSetup.skipped || 0),
-                added: savedSetup.added || 0,
-                alreadySaved: savedSetup.skipped || 0,
-              },
-              pastSeasons: {
-                found: savedSetup.historical || 0,
-                added: savedSetup.historical || 0,
-                alreadySaved: 0,
-              },
-            });
           }
 
-          // Preselect default: prefer existing default, else first league
           const leagues = savedSetup.currentSeasonLeagues;
-          const defaultLeague = leagues.find(l => l.isDefault);
+          const defaultLeague = leagues.find((l) => l.isDefault);
           const preselected = defaultLeague || leagues[0];
-          setSelectedDefault(`${preselected.sport}|${preselected.leagueId}|${preselected.seasonYear}`);
+          setSelectedDefault(
+            `${preselected.sport}|${preselected.leagueId}|${preselected.seasonYear}`
+          );
 
           setState('setup_selecting_default');
           return;
@@ -185,78 +166,51 @@ export default function Popup() {
         setState('setup_error');
         return;
       } else if (savedSetup?.step === 'syncing' || savedSetup?.step === 'discovering') {
-        // Process was interrupted - clear and restart
         await clearSetupState();
       }
 
-      const token = await getToken();
-
-      if (!token) {
-        setState('not_paired');
+      // If not signed in, we'll show the signed-out UI via SignedOut component
+      if (!isSignedIn) {
+        setError(null);
+        setState('ready'); // Will be overridden by SignedOut component
         return;
       }
 
-      // Check if ESPN cookies are available
+      // Check ESPN cookies
       const espnCreds = await getEspnCredentials();
       if (!espnCreds || !validateCredentials(espnCreds)) {
-        setState('paired_no_espn');
+        setState('no_espn');
         return;
       }
 
-      // Check status with server
+      // Check status with server using Clerk token
       try {
-        const status = await checkStatus(token);
-        setHasCredentials(status.hasCredentials);
+        const token = await getToken();
+        if (token) {
+          const status = await checkStatus(token);
+          setHasCredentials(status.hasCredentials);
+        }
         setState('ready');
       } catch {
-        // Token might be invalid/revoked
-        await clearToken();
-        setState('not_paired');
+        // Token might be invalid - still show ready state
+        setState('ready');
       }
     };
 
     init();
-  }, []);
-
-  // Handle pairing
-  const handlePair = async () => {
-    if (pairingCode.length !== 6) {
-      setError('Please enter a 6-character code');
-      return;
-    }
-
-    setError(null);
-    setState('loading');
-
-    try {
-      const deviceName = await getDeviceLabel();
-      const result = await exchangePairingCode(pairingCode, deviceName);
-      await setToken(result.token);
-
-      // Check for ESPN credentials
-      const espnCreds = await getEspnCredentials();
-      if (!espnCreds || !validateCredentials(espnCreds)) {
-        setState('paired_no_espn');
-      } else {
-        setState('ready');
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to pair');
-      setState('entering_code');
-    }
-  };
+  }, [isLoaded, isSignedIn, getToken]);
 
   // Handle full setup flow (sync + discover + select default)
   const handleFullSetup = async () => {
     const token = await getToken();
     if (!token) {
-      setState('not_paired');
+      setError('Not signed in. Please sign in at flaim.app first.');
       return;
     }
 
     const espnCreds = await getEspnCredentials();
     if (!espnCreds || !validateCredentials(espnCreds)) {
-      setState('paired_no_espn');
+      setState('no_espn');
       return;
     }
 
@@ -284,7 +238,6 @@ export default function Popup() {
     try {
       const result = await discoverLeagues(token);
 
-      // Store results
       setDiscoveredLeagues(result.discovered);
       setCurrentSeasonLeagues(result.currentSeasonLeagues);
       setDiscoveryCounts({
@@ -292,25 +245,27 @@ export default function Popup() {
         pastSeasons: result.pastSeasons,
       });
 
-      // If no current season leagues, go to "no leagues" state
+      // If no current season leagues, complete setup
       if (result.currentSeasonLeagues.length === 0) {
-        setState('success');
-        await clearSetupState();
-        return;
-      }
-
-      // Check if user already has a default league
-      const existingDefault = result.currentSeasonLeagues.find(l => l.isDefault);
-
-      // If user has an existing default AND no new leagues were added, skip selection
-      if (existingDefault && result.currentSeason.added === 0) {
-        setSelectedDefault(`${existingDefault.sport}|${existingDefault.leagueId}|${existingDefault.seasonYear}`);
         setState('setup_complete');
         await clearSetupState();
         return;
       }
 
-      // Pre-select the first league (or the one already marked as default)
+      // Check if user already has a default league
+      const existingDefault = result.currentSeasonLeagues.find((l) => l.isDefault);
+
+      // If user has existing default AND no new leagues, skip selection
+      if (existingDefault && result.currentSeason.added === 0) {
+        setSelectedDefault(
+          `${existingDefault.sport}|${existingDefault.leagueId}|${existingDefault.seasonYear}`
+        );
+        setState('setup_complete');
+        await clearSetupState();
+        return;
+      }
+
+      // Pre-select first league or existing default
       const firstLeague = result.currentSeasonLeagues[0];
       const preselected = existingDefault || firstLeague;
       setSelectedDefault(`${preselected.sport}|${preselected.leagueId}|${preselected.seasonYear}`);
@@ -319,16 +274,15 @@ export default function Popup() {
       setState('setup_selecting_default');
       await setSetupState({
         step: 'selecting_default',
-        discovered: result.discovered.map(d => ({
+        discovered: result.discovered.map((d) => ({
           sport: d.sport,
           leagueName: d.leagueName,
-          teamName: d.teamName
+          teamName: d.teamName,
         })),
         currentSeasonLeagues: result.currentSeasonLeagues,
         currentSeason: result.currentSeason,
         pastSeasons: result.pastSeasons,
       });
-
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Discovery failed';
       setError(errorMsg);
@@ -346,7 +300,7 @@ export default function Popup() {
 
     const token = await getToken();
     if (!token) {
-      setState('not_paired');
+      setError('Not signed in');
       return;
     }
 
@@ -359,92 +313,79 @@ export default function Popup() {
       await setSetupState({ step: 'complete' });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to set default');
-      // Stay on selecting_default so user can retry
     }
   };
 
-  // Handle disconnect
-  const handleDisconnect = async () => {
-    await clearToken();
-    setState('not_paired');
-    setPairingCode('');
-    setError(null);
-  };
-
   // Open Flaim website
-  const openFlaim = async (path: string = '/extension') => {
+  const openFlaim = async (path: string = '/') => {
     const baseUrl = await getSiteBase();
     chrome.tabs.create({ url: `${baseUrl}${path}` });
   };
 
-  // Render based on state
-  const renderContent = () => {
-    switch (state) {
-      case 'loading':
-        return (
+  // Loading state while Clerk initializes
+  if (!isLoaded) {
+    return (
+      <div className="popup">
+        <div className="header">
+          <h1>Flaim</h1>
+          <span className="status-badge disconnected">Loading</span>
+        </div>
+        <div className="content">
+          <div className="message info" style={{ textAlign: 'center' }}>
+            <span className="spinner"></span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const isInSetupFlow = state.startsWith('setup_');
+
+  return (
+    <div className="popup">
+      <div className="header">
+        <h1>Flaim</h1>
+        <SignedIn>
+          <span className="status-badge connected">
+            {isInSetupFlow ? 'Setting Up' : 'Connected'}
+          </span>
+        </SignedIn>
+        <SignedOut>
+          <span className="status-badge disconnected">Not Signed In</span>
+        </SignedOut>
+      </div>
+
+      {/* Signed Out: Prompt to sign in at flaim.app */}
+      <SignedOut>
+        <div className="content">
+          <div className="message info">
+            Sign in to Flaim to sync your ESPN credentials.
+          </div>
+          <button className="button primary full-width" onClick={() => openFlaim('/sign-in')}>
+            Sign in at flaim.app
+          </button>
+          <button className="button secondary full-width" onClick={() => openFlaim('/')}>
+            Learn More
+          </button>
+        </div>
+        <div className="footer">
+          <span className="link" onClick={() => openFlaim('/')}>
+            Learn more about Flaim
+          </span>
+        </div>
+      </SignedOut>
+
+      {/* Signed In: Show state-based content */}
+      <SignedIn>
+        {state === 'loading' && (
           <div className="content">
             <div className="message info" style={{ textAlign: 'center' }}>
               <span className="spinner"></span>
-              <span style={{ marginLeft: 8 }}>Loading...</span>
             </div>
           </div>
-        );
+        )}
 
-      case 'not_paired':
-        return (
-          <div className="content">
-            <div className="message info">
-              Connect this extension to your Flaim account to automatically sync your ESPN credentials.
-            </div>
-            <button
-              className="button primary full-width"
-              onClick={() => setState('entering_code')}
-            >
-              Enter Pairing Code
-            </button>
-            <button
-              className="button secondary full-width"
-              onClick={() => openFlaim('/extension')}
-            >
-              Get Pairing Code
-            </button>
-          </div>
-        );
-
-      case 'entering_code':
-        return (
-          <div className="content">
-            {error && <div className="message error">{error}</div>}
-            <div className="input-group">
-              <label htmlFor="code">Pairing Code</label>
-              <input
-                id="code"
-                type="text"
-                maxLength={6}
-                placeholder="A3F8K2"
-                value={pairingCode}
-                onChange={(e) => setPairingCode(e.target.value.toUpperCase())}
-                autoFocus
-              />
-            </div>
-            <button
-              className="button primary full-width"
-              onClick={handlePair}
-              disabled={pairingCode.length !== 6}
-            >
-              Connect
-            </button>
-            <button
-              className="button secondary full-width"
-              onClick={() => openFlaim('/extension')}
-            >
-              Get New Code
-            </button>
-          </div>
-        );
-
-      case 'paired_no_espn':
-        return (
+        {state === 'no_espn' && (
           <div className="content">
             {error && <div className="message error">{error}</div>}
             <div className="message warning">
@@ -463,96 +404,34 @@ export default function Popup() {
                 if (espnCreds && validateCredentials(espnCreds)) {
                   setState('ready');
                 } else {
-                  setError('ESPN cookies not found. Make sure you\'re logged into espn.com');
+                  setError("ESPN cookies not found. Make sure you're logged into espn.com");
                 }
               }}
             >
               I'm Logged In - Refresh
             </button>
           </div>
-        );
+        )}
 
-      case 'ready':
-        return (
+        {state === 'ready' && (
           <div className="content">
+            {error && <div className="message error">{error}</div>}
             {hasCredentials ? (
-              <div className="message success">
-                Your ESPN credentials are synced!
-              </div>
+              <div className="message success">Your ESPN credentials are synced!</div>
             ) : (
-              <div className="message info">
-                Ready to sync your ESPN credentials to Flaim.
-              </div>
+              <div className="message info">Ready to sync your ESPN credentials to Flaim.</div>
             )}
             <button className="button success full-width" onClick={handleFullSetup}>
               {hasCredentials ? 'Re-sync & Discover Leagues' : 'Sync to Flaim'}
             </button>
-            <button
-              className="button secondary full-width"
-              onClick={() => openFlaim('/leagues')}
-            >
+            <button className="button secondary full-width" onClick={() => openFlaim('/leagues')}>
               Go to Leagues
             </button>
           </div>
-        );
+        )}
 
-      case 'syncing':
-        return (
-          <div className="content">
-            <div className="message info" style={{ textAlign: 'center' }}>
-              <span className="spinner"></span>
-              <span style={{ marginLeft: 8 }}>Syncing credentials...</span>
-            </div>
-          </div>
-        );
-
-      case 'success': {
-        const noLeaguesFound =
-          discoveredLeagues.length === 0 && currentSeasonLeagues.length === 0;
-
-        return (
-          <div className="content">
-            <div className="message success">
-              {noLeaguesFound
-                ? 'No active leagues found for this season. You can add leagues manually.'
-                : 'Credentials synced successfully! You can now add your leagues.'}
-            </div>
-            <button
-              className="button primary full-width"
-              onClick={() => openFlaim('/leagues')}
-            >
-              {noLeaguesFound ? 'Add Leagues' : 'Go to Leagues'}
-            </button>
-            <button
-              className="button secondary full-width"
-              onClick={() => setState('ready')}
-            >
-              Done
-            </button>
-          </div>
-        );
-      }
-
-      case 'error':
-        return (
-          <div className="content">
-            <div className="message error">{error || 'An error occurred'}</div>
-            <button className="button primary full-width" onClick={handleFullSetup}>
-              Try Again
-            </button>
-            <button
-              className="button secondary full-width"
-              onClick={() => setState('ready')}
-            >
-              Back
-            </button>
-          </div>
-        );
-
-      // =========== SETUP FLOW STATES ===========
-
-      case 'setup_syncing':
-        return (
+        {/* Setup Flow States */}
+        {state === 'setup_syncing' && (
           <div className="content">
             <div className="setup-progress">
               <div className="setup-step active">
@@ -572,10 +451,9 @@ export default function Popup() {
               <div className="progress-bar-fill" style={{ width: '20%' }}></div>
             </div>
           </div>
-        );
+        )}
 
-      case 'setup_discovering':
-        return (
+        {state === 'setup_discovering' && (
           <div className="content">
             <div className="setup-progress">
               <div className="setup-step completed">
@@ -595,10 +473,9 @@ export default function Popup() {
               <div className="progress-bar-fill" style={{ width: '50%' }}></div>
             </div>
           </div>
-        );
+        )}
 
-      case 'setup_selecting_default':
-        return (
+        {state === 'setup_selecting_default' && (
           <div className="content">
             {error && <div className="message error">{error}</div>}
             {hasCredentials && (
@@ -606,11 +483,8 @@ export default function Popup() {
                 ESPN credentials synced
               </div>
             )}
-            <div className="message success">
-              {getDiscoveryMessage(discoveryCounts)}
-            </div>
+            <div className="message success">{getDiscoveryMessage(discoveryCounts)}</div>
 
-            {/* Show discovered leagues (what ESPN returned this run) */}
             <div className="league-list">
               {discoveredLeagues.map((league, i) => (
                 <div key={i} className="league-item">
@@ -623,7 +497,6 @@ export default function Popup() {
               ))}
             </div>
 
-            {/* Dropdown uses currentSeasonLeagues (all saved, for default selection) */}
             <div className="input-group">
               <label htmlFor="default-league">Select your default league:</label>
               <select
@@ -646,36 +519,38 @@ export default function Popup() {
               Finish Setup
             </button>
           </div>
-        );
+        )}
 
-      case 'setup_complete': {
-        const selectedLeague = currentSeasonLeagues.find(l =>
-          `${l.sport}|${l.leagueId}|${l.seasonYear}` === selectedDefault
-        );
-        return (
+        {state === 'setup_complete' && (
           <div className="content">
-            <div className="message success">
-              You're all set!
-            </div>
+            <div className="message success">You're all set!</div>
 
-            {selectedLeague && (
-              <div className="league-item default-league">
-                <span className="sport-emoji">{sportEmoji[selectedLeague.sport] || '🏆'}</span>
-                <div className="league-info">
-                  <span className="league-name">{selectedLeague.leagueName}</span>
-                  <span className="team-name">{selectedLeague.teamName} ({selectedLeague.seasonYear})</span>
-                </div>
-              </div>
+            {selectedDefault && currentSeasonLeagues.length > 0 && (
+              <>
+                {(() => {
+                  const selectedLeague = currentSeasonLeagues.find(
+                    (l) => `${l.sport}|${l.leagueId}|${l.seasonYear}` === selectedDefault
+                  );
+                  return selectedLeague ? (
+                    <div className="league-item default-league">
+                      <span className="sport-emoji">
+                        {sportEmoji[selectedLeague.sport] || '🏆'}
+                      </span>
+                      <div className="league-info">
+                        <span className="league-name">{selectedLeague.leagueName}</span>
+                        <span className="team-name">
+                          {selectedLeague.teamName} ({selectedLeague.seasonYear})
+                        </span>
+                      </div>
+                    </div>
+                  ) : null;
+                })()}
+              </>
             )}
 
-            <div className="setup-summary">
-              {getCompletionSummary(discoveryCounts)}
-            </div>
+            <div className="setup-summary">{getCompletionSummary(discoveryCounts)}</div>
 
-            <button
-              className="button primary full-width"
-              onClick={() => openFlaim('/leagues')}
-            >
+            <button className="button primary full-width" onClick={() => openFlaim('/leagues')}>
               View Leagues
             </button>
             <button
@@ -688,11 +563,9 @@ export default function Popup() {
               Done
             </button>
           </div>
-        );
-      }
+        )}
 
-      case 'setup_error':
-        return (
+        {state === 'setup_error' && (
           <div className="content">
             <div className="message error">{error || 'Setup failed'}</div>
             <button className="button primary full-width" onClick={handleFullSetup}>
@@ -708,38 +581,23 @@ export default function Popup() {
               Back
             </button>
           </div>
-        );
+        )}
 
-      default:
-        return null;
-    }
-  };
-
-  const isPaired = !['loading', 'not_paired', 'entering_code'].includes(state);
-  const isInSetupFlow = state.startsWith('setup_');
-
-  return (
-    <div className="popup">
-      <div className="header">
-        <h1>Flaim</h1>
-        <span className={`status-badge ${isPaired ? 'connected' : 'disconnected'}`}>
-          {isInSetupFlow ? 'Setting Up' : isPaired ? 'Connected' : 'Not Connected'}
-        </span>
-      </div>
-
-      {renderContent()}
-
-      <div className="footer">
-        {isPaired && !isInSetupFlow ? (
-          <span className="link" onClick={handleDisconnect}>
-            Disconnect Extension
-          </span>
-        ) : !isInSetupFlow ? (
-          <span className="link" onClick={() => openFlaim('/')}>
-            Learn more about Flaim
-          </span>
-        ) : null}
-      </div>
+        {/* Footer for signed-in users */}
+        {!isInSetupFlow && (
+          <div className="footer">
+            <span
+              className="link"
+              onClick={() => {
+                setError(null);
+                void clerk.signOut();
+              }}
+            >
+              Sign Out
+            </span>
+          </div>
+        )}
+      </SignedIn>
     </div>
   );
 }

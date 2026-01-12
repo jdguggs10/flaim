@@ -43,13 +43,9 @@ import {
 } from './oauth-handlers';
 import { OAuthStorage } from './oauth-storage';
 import {
-  handleCreatePairingCode,
-  handlePairExtension,
   handleSyncCredentials,
   handleGetExtensionStatus,
   handleGetConnection,
-  handleRevokeToken,
-  validateExtensionToken,
   ExtensionEnv,
 } from './extension-handlers';
 import {
@@ -447,8 +443,8 @@ export default {
       // Chrome Extension Endpoints
       // ================================================================
 
-      // Generate pairing code (requires Clerk auth)
-      if (pathname === '/extension/code' && request.method === 'POST') {
+      // Sync ESPN credentials (requires Clerk JWT)
+      if (pathname === '/extension/sync' && request.method === 'POST') {
         const { userId, error: authError } = await getVerifiedUserId(request, env);
         if (!userId) {
           return new Response(JSON.stringify({
@@ -459,42 +455,22 @@ export default {
             headers: { 'Content-Type': 'application/json', ...corsHeaders },
           });
         }
-        return handleCreatePairingCode(env as ExtensionEnv, userId, corsHeaders);
+        return handleSyncCredentials(request, env as ExtensionEnv, userId, corsHeaders);
       }
 
-      // Exchange pairing code for token (no auth - code IS auth)
-      if (pathname === '/extension/pair' && request.method === 'POST') {
-        return handlePairExtension(request, env as ExtensionEnv, corsHeaders);
-      }
-
-      // Sync ESPN credentials (requires extension token)
-      if (pathname === '/extension/sync' && request.method === 'POST') {
-        const tokenResult = await validateExtensionToken(request, env as ExtensionEnv);
-        if (!tokenResult.valid || !tokenResult.userId || !tokenResult.token) {
-          return new Response(JSON.stringify({
-            error: 'unauthorized',
-            error_description: tokenResult.error || 'Invalid token',
-          }), {
-            status: 401,
-            headers: { 'Content-Type': 'application/json', ...corsHeaders },
-          });
-        }
-        return handleSyncCredentials(request, env as ExtensionEnv, tokenResult.userId, tokenResult.token, corsHeaders);
-      }
-
-      // Get extension status (requires extension token)
+      // Get extension status (requires Clerk JWT)
       if (pathname === '/extension/status' && request.method === 'GET') {
-        const tokenResult = await validateExtensionToken(request, env as ExtensionEnv);
-        if (!tokenResult.valid || !tokenResult.userId || !tokenResult.token) {
+        const { userId, error: authError } = await getVerifiedUserId(request, env);
+        if (!userId) {
           return new Response(JSON.stringify({
             error: 'unauthorized',
-            error_description: tokenResult.error || 'Invalid token',
+            error_description: authError || 'Authentication required',
           }), {
             status: 401,
             headers: { 'Content-Type': 'application/json', ...corsHeaders },
           });
         }
-        return handleGetExtensionStatus(env as ExtensionEnv, tokenResult.userId, tokenResult.token, corsHeaders);
+        return handleGetExtensionStatus(env as ExtensionEnv, userId, corsHeaders);
       }
 
       // Get extension connection for web UI (requires Clerk auth)
@@ -512,8 +488,8 @@ export default {
         return handleGetConnection(env as ExtensionEnv, userId, corsHeaders);
       }
 
-      // Revoke extension token (requires Clerk auth)
-      if (pathname === '/extension/token' && request.method === 'DELETE') {
+      // Discover and save leagues (requires Clerk JWT)
+      if (pathname === '/extension/discover' && request.method === 'POST') {
         const { userId, error: authError } = await getVerifiedUserId(request, env);
         if (!userId) {
           return new Response(JSON.stringify({
@@ -524,26 +500,11 @@ export default {
             headers: { 'Content-Type': 'application/json', ...corsHeaders },
           });
         }
-        return handleRevokeToken(request, env as ExtensionEnv, userId, corsHeaders);
-      }
-
-      // Discover and save leagues (requires extension token)
-      if (pathname === '/extension/discover' && request.method === 'POST') {
-        const tokenResult = await validateExtensionToken(request, env as ExtensionEnv);
-        if (!tokenResult.valid || !tokenResult.userId) {
-          return new Response(JSON.stringify({
-            error: 'unauthorized',
-            error_description: tokenResult.error || 'Invalid token',
-          }), {
-            status: 401,
-            headers: { 'Content-Type': 'application/json', ...corsHeaders },
-          });
-        }
 
         const storage = EspnSupabaseStorage.fromEnvironment(env);
 
         // Get stored credentials
-        const credentials = await storage.getCredentials(tokenResult.userId);
+        const credentials = await storage.getCredentials(userId);
         if (!credentials) {
           return new Response(JSON.stringify({
             error: 'credentials_not_found',
@@ -557,14 +518,14 @@ export default {
         try {
           // Run discovery (includes historical seasons, fully synchronous)
           const result = await discoverAndSaveLeagues(
-            tokenResult.userId,
+            userId,
             credentials.swid,
             credentials.s2,
             storage
           );
 
           // Get current season leagues for default dropdown
-          const currentSeasonLeagues = await storage.getCurrentSeasonLeagues(tokenResult.userId);
+          const currentSeasonLeagues = await storage.getCurrentSeasonLeagues(userId);
           const currentSeasonWithDefault: CurrentSeasonLeague[] = currentSeasonLeagues.map(l => ({
             sport: l.sport,
             leagueId: l.leagueId,
@@ -595,7 +556,7 @@ export default {
             console.log('No new leagues found from ESPN - checking saved leagues');
 
             // Get user's saved current-season leagues
-            const currentSeasonLeagues = await storage.getCurrentSeasonLeagues(tokenResult.userId);
+            const currentSeasonLeagues = await storage.getCurrentSeasonLeagues(userId);
             const savedCount = currentSeasonLeagues.length;
             const currentSeasonWithDefault: CurrentSeasonLeague[] = currentSeasonLeagues.map(l => ({
               sport: l.sport,
@@ -649,13 +610,13 @@ export default {
         }
       }
 
-      // Set default league (requires extension token)
+      // Set default league (requires Clerk JWT)
       if (pathname === '/extension/set-default' && request.method === 'POST') {
-        const tokenResult = await validateExtensionToken(request, env as ExtensionEnv);
-        if (!tokenResult.valid || !tokenResult.userId) {
+        const { userId, error: authError } = await getVerifiedUserId(request, env);
+        if (!userId) {
           return new Response(JSON.stringify({
             error: 'unauthorized',
-            error_description: tokenResult.error || 'Invalid token',
+            error_description: authError || 'Authentication required',
           }), {
             status: 401,
             headers: { 'Content-Type': 'application/json', ...corsHeaders },
@@ -676,7 +637,7 @@ export default {
         }
 
         const storage = EspnSupabaseStorage.fromEnvironment(env);
-        const result = await storage.setDefaultLeague(tokenResult.userId, leagueId, sport, seasonYear);
+        const result = await storage.setDefaultLeague(userId, leagueId, sport, seasonYear);
 
         if (!result.success) {
           return new Response(JSON.stringify({

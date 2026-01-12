@@ -21,6 +21,7 @@
     "deploy:workers:prod": "concurrently \"cd workers/auth-worker && wrangler deploy --env prod\" \"cd workers/baseball-espn-mcp && wrangler deploy --env prod\" \"cd workers/football-espn-mcp && wrangler deploy --env prod\""
   },
   "devDependencies": {
+    "@playwright/test": "^1.57.0",
     "@types/node": "^24.0.3",
     "concurrently": "^9.2.0",
     "eslint": "^9.13.0",

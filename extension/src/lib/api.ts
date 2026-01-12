@@ -1,7 +1,8 @@
 /**
- * Flaim API Client
+ * Flaim API Client - Clerk Auth Version
  * ---------------------------------------------------------------------------
  * API client for communicating with Flaim's extension endpoints.
+ * All authenticated endpoints accept Clerk JWTs via Authorization header.
  */
 
 // Cache the API base URL after first detection
@@ -38,11 +39,9 @@ export async function getSiteBase(): Promise<string> {
   return apiBase.replace('/api/extension', '');
 }
 
-export interface PairResponse {
-  success: boolean;
-  token: string;
-  userId: string;
-}
+// =============================================================================
+// ACTIVE API (uses Clerk JWT tokens)
+// =============================================================================
 
 export interface SyncResponse {
   success: boolean;
@@ -62,32 +61,8 @@ export interface ApiError {
 }
 
 /**
- * Exchange a pairing code for an access token
- */
-export async function exchangePairingCode(
-  code: string,
-  deviceName?: string
-): Promise<PairResponse> {
-  const apiBase = await detectApiBase();
-  const response = await fetch(`${apiBase}/pair`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      code: code.toUpperCase().trim(),
-      deviceName: deviceName?.trim() || undefined,
-    }),
-  });
-
-  if (!response.ok) {
-    const error = await response.json() as ApiError;
-    throw new Error(error.error_description || error.error || 'Invalid pairing code');
-  }
-
-  return response.json() as Promise<PairResponse>;
-}
-
-/**
  * Sync ESPN credentials to Flaim
+ * @param token - Clerk JWT from useAuth().getToken()
  */
 export async function syncCredentials(
   token: string,
@@ -98,13 +73,13 @@ export async function syncCredentials(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
+      Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify(credentials),
   });
 
   if (!response.ok) {
-    const error = await response.json() as ApiError;
+    const error = (await response.json()) as ApiError;
     throw new Error(error.error_description || error.error || 'Sync failed');
   }
 
@@ -113,19 +88,20 @@ export async function syncCredentials(
 
 /**
  * Check connection status
+ * @param token - Clerk JWT from useAuth().getToken()
  */
 export async function checkStatus(token: string): Promise<StatusResponse> {
   const apiBase = await detectApiBase();
   const response = await fetch(`${apiBase}/status`, {
     method: 'GET',
     headers: {
-      'Accept': 'application/json',
-      'Authorization': `Bearer ${token}`,
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`,
     },
   });
 
   if (!response.ok) {
-    const error = await response.json() as ApiError;
+    const error = (await response.json()) as ApiError;
     throw new Error(error.error_description || error.error || 'Status check failed');
   }
 
@@ -133,7 +109,7 @@ export async function checkStatus(token: string): Promise<StatusResponse> {
 }
 
 // =============================================================================
-// LEAGUE DISCOVERY API (v1.1.1)
+// LEAGUE DISCOVERY API
 // =============================================================================
 
 export interface DiscoveredLeague {
@@ -171,6 +147,7 @@ export interface DiscoverResponse {
 
 /**
  * Discover and save all ESPN leagues for the user
+ * @param token - Clerk JWT from useAuth().getToken()
  */
 export async function discoverLeagues(token: string): Promise<DiscoverResponse> {
   const apiBase = await detectApiBase();
@@ -178,12 +155,12 @@ export async function discoverLeagues(token: string): Promise<DiscoverResponse> 
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
+      Authorization: `Bearer ${token}`,
     },
   });
 
   if (!response.ok) {
-    const error = await response.json() as ApiError;
+    const error = (await response.json()) as ApiError;
     throw new Error(error.error_description || error.error || 'Discovery failed');
   }
 
@@ -198,23 +175,21 @@ export interface SetDefaultRequest {
 
 /**
  * Set a league as the user's default
+ * @param token - Clerk JWT from useAuth().getToken()
  */
-export async function setDefaultLeague(
-  token: string,
-  league: SetDefaultRequest
-): Promise<void> {
+export async function setDefaultLeague(token: string, league: SetDefaultRequest): Promise<void> {
   const apiBase = await detectApiBase();
   const response = await fetch(`${apiBase}/set-default`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
+      Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify(league),
   });
 
   if (!response.ok) {
-    const error = await response.json() as ApiError;
+    const error = (await response.json()) as ApiError;
     throw new Error(error.error_description || error.error || 'Failed to set default');
   }
 }

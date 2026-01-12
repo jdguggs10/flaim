@@ -1,11 +1,36 @@
 /**
- * Background Service Worker
+ * Background Service Worker - Clerk Auth Version
  * ---------------------------------------------------------------------------
  * Handles external messages from the Flaim website to verify extension status.
- * Uses chrome.runtime.onMessageExternal for web page → extension communication.
+ * Uses Clerk session instead of custom tokens.
  */
 
-import { getToken } from './lib/storage';
+import { createClerkClient } from '@clerk/chrome-extension/background';
+
+const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string;
+const SYNC_HOST = import.meta.env.VITE_CLERK_SYNC_HOST as string;
+
+// Initialize Clerk client for background script (returns a promise per Clerk docs)
+const clerkClientPromise = createClerkClient({
+  publishableKey: PUBLISHABLE_KEY,
+  syncHost: SYNC_HOST,
+});
+
+/**
+ * Get current Clerk auth state
+ */
+const getClerkState = async (): Promise<{ signedIn: boolean; userId: string | null }> => {
+  try {
+    const clerk = await clerkClientPromise;
+    const token = clerk.session ? await clerk.session.getToken() : null;
+    return {
+      signedIn: !!token,
+      userId: clerk.user?.id || null,
+    };
+  } catch {
+    return { signedIn: false, userId: null };
+  }
+};
 
 // Message types
 interface PingMessage {
@@ -14,8 +39,11 @@ interface PingMessage {
 
 interface PingResponse {
   installed: true;
-  paired: boolean;
-  hasToken: boolean;
+  signedIn: boolean;
+  userId: string | null;
+  // Legacy fields for backwards compatibility during transition
+  paired?: boolean;
+  hasToken?: boolean;
 }
 
 type ExternalMessage = PingMessage;
@@ -31,33 +59,34 @@ chrome.runtime.onMessageExternal.addListener(
     sendResponse: (response: PingResponse) => void
   ) => {
     if (message?.type === 'ping') {
-      // Check if we have a stored token
-      getToken()
-        .then((token) => {
-          const response: PingResponse = {
-            installed: true,
-            paired: !!token,
-            hasToken: !!token,
-          };
-          sendResponse(response);
-        })
-        .catch(() => {
-          // If getToken() fails, respond with paired: false to avoid timeout
+      // Check Clerk session state
+      getClerkState()
+        .then(({ signedIn, userId }) => {
           sendResponse({
             installed: true,
+            signedIn,
+            userId,
+            // Legacy fields for backwards compat
+            paired: signedIn,
+            hasToken: signedIn,
+          });
+        })
+        .catch(() => {
+          sendResponse({
+            installed: true,
+            signedIn: false,
+            userId: null,
             paired: false,
             hasToken: false,
           });
         });
 
-      // Return true to indicate we'll call sendResponse asynchronously
+      // Return true to indicate async response
       return true;
     }
 
-    // Unknown message type
     return false;
   }
 );
 
-// Log when service worker starts (helpful for debugging)
-console.log('[Flaim] Background service worker started');
+console.log('[Flaim] Background service worker started (Clerk auth)');
