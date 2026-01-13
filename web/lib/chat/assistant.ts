@@ -264,6 +264,7 @@ export const processMessages = async () => {
             chatMessages.push({
               type: "message",
               role: "assistant",
+              id: item.id,
               content: [
                 {
                   type: "output_text",
@@ -272,18 +273,9 @@ export const processMessages = async () => {
                 },
               ],
             });
-            conversationItems.push({
-              role: "assistant",
-              content: [
-                {
-                  type: "output_text",
-                  text,
-                  ...(annotations.length > 0 ? { annotations } : {}),
-                },
-              ],
-            });
+            // NOTE: Don't push to conversationItems here - the content is incomplete.
+            // We'll push the complete message in response.output_item.done
             setChatMessages([...chatMessages]);
-            setConversationItems([...conversationItems]);
             break;
           }
           case "function_call": {
@@ -358,15 +350,41 @@ export const processMessages = async () => {
       }
 
       case "response.output_item.done": {
-        // After output item is done, adding tool call ID
+        // After output item is done, adding tool call ID and pushing to conversation
         const { item } = data || {};
         const toolCallMessage = chatMessages.find((m) => m.id === item.id);
         if (toolCallMessage && toolCallMessage.type === "tool_call") {
           toolCallMessage.call_id = item.call_id;
           setChatMessages([...chatMessages]);
         }
-        conversationItems.push(item);
-        setConversationItems([...conversationItems]);
+
+        // Push completed items to conversationItems in the format expected by Responses API
+        // Different item types need different handling:
+        if (item.type === "message") {
+          // For messages, extract the complete content and push in proper format
+          const messageContent = item.content || [];
+          conversationItems.push({
+            role: item.role || "assistant",
+            content: messageContent,
+          });
+          setConversationItems([...conversationItems]);
+        } else if (item.type === "mcp_call") {
+          // For MCP calls, push the call item (which includes output from server-side execution)
+          // The Responses API needs this to maintain context of what tools were called and their results
+          conversationItems.push(item);
+          setConversationItems([...conversationItems]);
+        } else if (item.type === "function_call") {
+          // For function calls, push the call specification
+          // The output will be pushed separately after local execution
+          conversationItems.push(item);
+          setConversationItems([...conversationItems]);
+        } else if (item.type === "web_search_call" || item.type === "file_search_call" || item.type === "code_interpreter_call") {
+          // For built-in tools, push the complete item
+          conversationItems.push(item);
+          setConversationItems([...conversationItems]);
+        }
+        // Note: Other item types (like mcp_list_tools) don't need to be in conversation history
+
         if (
           toolCallMessage &&
           toolCallMessage.type === "tool_call" &&
