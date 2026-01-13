@@ -5,12 +5,14 @@
  * Session syncs automatically from flaim.app when user is signed in there.
  */
 
-import { useEffect, useState } from 'react';
-import { useAuth, useClerk, SignedIn, SignedOut } from '@clerk/chrome-extension';
+import { useEffect, useMemo, useState } from 'react';
+import { useAuth, useClerk, useUser, SignedIn, SignedOut } from '@clerk/chrome-extension';
 import {
   getSetupState,
   setSetupState,
   clearSetupState,
+  getSavedDefaultLeague,
+  setSavedDefaultLeague,
   type LeagueOption,
   type SeasonCounts,
 } from '../lib/storage';
@@ -102,15 +104,61 @@ function getCompletionSummary(counts: DiscoveryCounts): string {
   return parts.join(' + ') + ' added';
 }
 
+function formatLastSync(value: string | null): string {
+  if (!value) return 'Never';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+function checkmark(value: boolean | null): string {
+  if (value === null) return '…';
+  return value ? '✓' : '–';
+}
+
 export default function Popup() {
   // Clerk auth hooks
   const { isLoaded, isSignedIn, getToken } = useAuth();
   const clerk = useClerk();
+  const { user } = useUser();
+
+  const primaryEmail =
+    user?.primaryEmailAddress?.emailAddress ?? user?.emailAddresses?.[0]?.emailAddress ?? null;
+  const displayName = user?.fullName ?? user?.username ?? null;
+  const avatarInitial = (primaryEmail || displayName || '?').charAt(0).toUpperCase();
 
   // Local state
   const [state, setState] = useState<State>('loading');
   const [error, setError] = useState<string | null>(null);
   const [hasCredentials, setHasCredentials] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [lastSync, setLastSync] = useState<string | null>(null);
+  const [savedDefaultLeague, setSavedDefaultLeagueState] =
+    useState<LeagueOption | null>(null);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
+  const [supportCopied, setSupportCopied] = useState(false);
+  const [hasEspnCookies, setHasEspnCookies] = useState<boolean | null>(null);
+  const [extensionVersion, setExtensionVersion] = useState<string | null>(null);
+
+  const userId = user?.id ?? null;
+
+  const supportInfo = useMemo(() => {
+    const parts = [
+      `userId=${userId ?? 'unknown'}`,
+      `email=${primaryEmail ?? 'unknown'}`,
+      `version=${extensionVersion ?? 'unknown'}`,
+      `lastSync=${lastSync ?? 'unknown'}`,
+      `defaultLeague=${savedDefaultLeague ? `${savedDefaultLeague.leagueName} (${savedDefaultLeague.seasonYear})` : 'none'}`,
+      `siteBase=auto`,
+    ];
+    return parts.join(' | ');
+  }, [userId, primaryEmail, extensionVersion, lastSync, savedDefaultLeague]);
 
   // Setup flow state
   const [discoveredLeagues, setDiscoveredLeagues] = useState<DiscoveredLeague[]>([]);
@@ -128,6 +176,21 @@ export default function Popup() {
     const init = async () => {
       // Check for saved setup state (popup close recovery)
       const savedSetup = await getSetupState();
+      const storedDefault = await getSavedDefaultLeague();
+      if (storedDefault) {
+        setSavedDefaultLeagueState({
+          ...storedDefault,
+          teamId: '',
+          isDefault: true,
+        });
+      }
+
+      try {
+        const info = await chrome.management.getSelf();
+        setExtensionVersion(info.version);
+      } catch {
+        setExtensionVersion(null);
+      }
 
       if (savedSetup?.step === 'complete') {
         await clearSetupState();
@@ -157,6 +220,9 @@ export default function Popup() {
           setSelectedDefault(
             `${preselected.sport}|${preselected.leagueId}|${preselected.seasonYear}`
           );
+          if (defaultLeague) {
+            setSavedDefaultLeagueState(defaultLeague);
+          }
 
           setState('setup_selecting_default');
           return;
@@ -179,9 +245,11 @@ export default function Popup() {
       // Check ESPN cookies
       const espnCreds = await getEspnCredentials();
       if (!espnCreds || !validateCredentials(espnCreds)) {
+        setHasEspnCookies(false);
         setState('no_espn');
         return;
       }
+      setHasEspnCookies(true);
 
       // Check status with server using Clerk token
       try {
@@ -189,6 +257,7 @@ export default function Popup() {
         if (token) {
           const status = await checkStatus(token);
           setHasCredentials(status.hasCredentials);
+          setLastSync(status.lastSync ?? null);
         }
         setState('ready');
       } catch {
@@ -223,6 +292,7 @@ export default function Popup() {
     try {
       await syncCredentials(token, espnCreds);
       setHasCredentials(true);
+      setLastSync(new Date().toISOString());
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to sync credentials';
       setError(errorMsg);
@@ -260,6 +330,14 @@ export default function Popup() {
         setSelectedDefault(
           `${existingDefault.sport}|${existingDefault.leagueId}|${existingDefault.seasonYear}`
         );
+        setSavedDefaultLeagueState(existingDefault);
+        await setSavedDefaultLeague({
+          sport: existingDefault.sport,
+          leagueId: existingDefault.leagueId,
+          leagueName: existingDefault.leagueName,
+          teamName: existingDefault.teamName,
+          seasonYear: existingDefault.seasonYear,
+        });
         setState('setup_complete');
         await clearSetupState();
         return;
@@ -291,6 +369,41 @@ export default function Popup() {
     }
   };
 
+  const refreshStatus = async () => {
+    setIsRefreshing(true);
+    setError(null);
+
+    if (!isSignedIn) {
+      setState('ready');
+      setIsRefreshing(false);
+      return;
+    }
+
+    const espnCreds = await getEspnCredentials();
+    if (!espnCreds || !validateCredentials(espnCreds)) {
+      setHasEspnCookies(false);
+      setState('no_espn');
+      setIsRefreshing(false);
+      return;
+    }
+    setHasEspnCookies(true);
+
+    try {
+      const token = await getToken();
+      if (token) {
+        const status = await checkStatus(token);
+        setHasCredentials(status.hasCredentials);
+        setLastSync(status.lastSync ?? null);
+      }
+      setState('ready');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to refresh status');
+      setState('ready');
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
   // Handle finishing setup (setting default)
   const handleFinishSetup = async () => {
     if (!selectedDefault) {
@@ -309,6 +422,19 @@ export default function Popup() {
 
     try {
       await setDefaultLeague(token, { sport, leagueId, seasonYear });
+      const selectedLeague = currentSeasonLeagues.find(
+        (l) => `${l.sport}|${l.leagueId}|${l.seasonYear}` === selectedDefault
+      );
+      if (selectedLeague) {
+        setSavedDefaultLeagueState(selectedLeague);
+        await setSavedDefaultLeague({
+          sport: selectedLeague.sport,
+          leagueId: selectedLeague.leagueId,
+          leagueName: selectedLeague.leagueName,
+          teamName: selectedLeague.teamName,
+          seasonYear: selectedLeague.seasonYear,
+        });
+      }
       setState('setup_complete');
       await setSetupState({ step: 'complete' });
     } catch (err) {
@@ -353,7 +479,88 @@ export default function Popup() {
         <SignedOut>
           <span className="status-badge disconnected">Not Signed In</span>
         </SignedOut>
+        <button
+          className="icon-button"
+          onClick={() => setShowDiagnostics((prev) => !prev)}
+          aria-label={showDiagnostics ? 'Hide info' : 'Show info'}
+          title={showDiagnostics ? 'Hide info' : 'Show info'}
+          type="button"
+        >
+          ⓘ
+        </button>
       </div>
+
+      <SignedIn>
+        <div className="user-row">
+          {user?.imageUrl ? (
+            <img className="user-avatar" src={user.imageUrl} alt={displayName || 'User'} />
+          ) : (
+            <div className="user-avatar" aria-hidden="true">
+              {avatarInitial}
+            </div>
+          )}
+          <div className="user-details">
+            <div className="user-name">{displayName || 'Signed in'}</div>
+            {primaryEmail && <div className="user-email">{primaryEmail}</div>}
+          </div>
+        </div>
+        {showDiagnostics && (
+          <div className="diagnostics">
+            <div className="diag-row">
+              <span className="diag-label">Signed in</span>
+              <span className="diag-value">{checkmark(isSignedIn)}</span>
+            </div>
+            <div className="diag-row">
+              <span className="diag-label">ESPN cookies</span>
+              <span className="diag-value">{checkmark(hasEspnCookies)}</span>
+            </div>
+            <div className="diag-row">
+              <span className="diag-label">Credentials</span>
+              <span className="diag-value">{checkmark(hasCredentials)}</span>
+            </div>
+            <div className="diag-row">
+              <span className="diag-label">Last sync</span>
+              <span className="diag-value">{formatLastSync(lastSync)}</span>
+            </div>
+            <div className="diag-row">
+              <span className="diag-label">Default league</span>
+              <span className="diag-value">
+                {savedDefaultLeague
+                  ? `${savedDefaultLeague.leagueName} (${savedDefaultLeague.seasonYear})`
+                  : 'None'}
+              </span>
+            </div>
+            <div className="diag-row">
+              <span className="diag-label">Version</span>
+              <span className="diag-value">{extensionVersion ?? 'Unknown'}</span>
+            </div>
+            <div className="diag-row">
+              <span className="diag-label">User ID</span>
+              <span className="diag-value mono">{userId ?? 'Unknown'}</span>
+            </div>
+            <button
+              className="button secondary full-width"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(supportInfo);
+                  setSupportCopied(true);
+                  setTimeout(() => setSupportCopied(false), 1500);
+                } catch {
+                  setError('Failed to copy support info');
+                }
+              }}
+            >
+              {supportCopied ? 'Copied' : 'Copy support info'}
+            </button>
+            <button
+              className="button secondary full-width"
+              onClick={() => openFlaim('/account')}
+            >
+              View account
+            </button>
+          </div>
+        )}
+      </SignedIn>
 
       {/* Signed Out: Prompt to sign in at flaim.app */}
       <SignedOut>
@@ -363,9 +570,6 @@ export default function Popup() {
           </div>
           <button className="button primary full-width" onClick={() => openFlaim('/sign-in')}>
             Sign in at flaim.app
-          </button>
-          <button className="button secondary full-width" onClick={() => openFlaim('/')}>
-            Learn More
           </button>
         </div>
         <div className="footer">
@@ -385,6 +589,23 @@ export default function Popup() {
           </div>
         )}
 
+        {!isInSetupFlow && state !== 'loading' && (
+          <div className="checklist">
+            <div className="checklist-item">
+              <span className="checklist-label">Signed in</span>
+              <span className="checklist-value">{checkmark(isSignedIn)}</span>
+            </div>
+            <div className="checklist-item">
+              <span className="checklist-label">ESPN cookies</span>
+              <span className="checklist-value">{checkmark(hasEspnCookies)}</span>
+            </div>
+            <div className="checklist-item">
+              <span className="checklist-label">Default league</span>
+              <span className="checklist-value">{checkmark(!!savedDefaultLeague)}</span>
+            </div>
+          </div>
+        )}
+
         {state === 'no_espn' && (
           <div className="content">
             {error && <div className="message error">{error}</div>}
@@ -399,16 +620,10 @@ export default function Popup() {
             </button>
             <button
               className="button secondary full-width"
-              onClick={async () => {
-                const espnCreds = await getEspnCredentials();
-                if (espnCreds && validateCredentials(espnCreds)) {
-                  setState('ready');
-                } else {
-                  setError("ESPN cookies not found. Make sure you're logged into espn.com");
-                }
-              }}
+              onClick={refreshStatus}
+              disabled={isRefreshing}
             >
-              I'm Logged In - Refresh
+              {isRefreshing ? 'Refreshing...' : "I'm Logged In - Refresh"}
             </button>
           </div>
         )}
@@ -421,6 +636,13 @@ export default function Popup() {
             ) : (
               <div className="message info">Ready to sync your ESPN credentials to Flaim.</div>
             )}
+            {savedDefaultLeague && (
+              <div className="meta">
+                Default league: {sportEmoji[savedDefaultLeague.sport] || '🏆'}{' '}
+                {savedDefaultLeague.leagueName} ({savedDefaultLeague.seasonYear})
+              </div>
+            )}
+            <div className="meta">Last sync: {formatLastSync(lastSync)}</div>
             <button className="button success full-width" onClick={handleFullSetup}>
               {hasCredentials ? 'Re-sync & Discover Leagues' : 'Sync to Flaim'}
             </button>
