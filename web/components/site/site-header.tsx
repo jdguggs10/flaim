@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { SignedIn, SignedOut, SignInButton, SignUpButton, UserButton } from '@clerk/nextjs';
 import { Button } from '@/components/ui/button';
@@ -17,9 +18,11 @@ const NAV_LINKS = [
  * Used on all pages except /chat which has its own minimal header.
  */
 export function SiteHeader() {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
   return (
     <header className="border-b bg-background">
-      <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex min-h-[4rem] flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
         <Link
           href="/"
           className="inline-flex items-center gap-2 text-xl font-bold transition-opacity hover:opacity-80"
@@ -44,7 +47,7 @@ export function SiteHeader() {
           </SignedOut>
           <SignedIn>
             <div className="flex items-center justify-between gap-3 sm:justify-start">
-              <Popover>
+              <Popover open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
                 <PopoverTrigger asChild>
                   <Button
                     variant="ghost"
@@ -58,7 +61,13 @@ export function SiteHeader() {
                 <PopoverContent align="end" className="w-48 p-2">
                   <nav className="flex flex-col gap-1">
                     {NAV_LINKS.map((link) => (
-                      <Button key={link.href} asChild variant="ghost" className="justify-start text-sm">
+                      <Button
+                        key={link.href}
+                        asChild
+                        variant="ghost"
+                        className="justify-start text-sm"
+                        onClick={() => setMobileMenuOpen(false)}
+                      >
                         <Link href={link.href}>{link.label}</Link>
                       </Button>
                     ))}
