@@ -9,13 +9,23 @@
 let cachedApiBase: string | null = null;
 
 /**
- * Detect if running in development mode using the official Chrome API.
- * Uses chrome.management.getSelf() which returns installType: "development"
- * for unpacked extensions. No permissions required.
+ * Detect API base URL.
+ * Priority:
+ * 1. VITE_SITE_BASE env var (for preview builds)
+ * 2. Chrome extension dev mode detection (unpacked = localhost)
+ * 3. Production fallback (flaim.app)
  */
 async function detectApiBase(): Promise<string> {
   if (cachedApiBase) return cachedApiBase;
 
+  // 1. Environment variable takes precedence (for preview builds)
+  const envBase = import.meta.env.VITE_SITE_BASE as string | undefined;
+  if (envBase) {
+    cachedApiBase = `${envBase}/api/extension`;
+    return cachedApiBase;
+  }
+
+  // 2. Fall back to dev mode detection
   try {
     const info = await chrome.management.getSelf();
     const isDevMode = info.installType === 'development';

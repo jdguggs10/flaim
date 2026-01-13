@@ -4,9 +4,10 @@ import react from '@vitejs/plugin-react';
 import baseManifest from './manifest.json';
 
 export default defineConfig(({ mode }) => {
-  // Load environment variables based on mode (development/production)
+  // Load environment variables based on mode (development/production/preview)
   const env = loadEnv(mode, process.cwd(), '');
   const isDev = mode === 'development';
+  const isPreview = mode === 'preview';
 
   const getOrigin = (value: string | undefined, name: string) => {
     if (!value) return null;
@@ -30,6 +31,11 @@ export default defineConfig(({ mode }) => {
     isDev ? 'http://localhost:3000/*' : 'https://flaim.app/*',
   ];
 
+  // For preview mode, allow all Vercel preview domains
+  if (isPreview) {
+    hostPermissions.push('https://*.vercel.app/*');
+  }
+
   // Add Clerk sync host to host_permissions if defined
   const syncHostOrigin = getOrigin(env.VITE_CLERK_SYNC_HOST, 'VITE_CLERK_SYNC_HOST');
   if (syncHostOrigin) hostPermissions.push(`${syncHostOrigin}/*`);
@@ -52,16 +58,18 @@ export default defineConfig(({ mode }) => {
     ),
     externally_connectable: {
       ...baseManifest.externally_connectable,
-      matches: baseManifest.externally_connectable.matches.filter(
-        (pattern: string) => isDev || !pattern.includes('localhost')
-      ),
+      matches: isPreview
+        ? ['https://*.vercel.app/*'] // Preview: only Vercel domains
+        : baseManifest.externally_connectable.matches.filter(
+            (pattern: string) => isDev || !pattern.includes('localhost')
+          ),
     },
   };
 
   return {
     plugins: [react(), crx({ manifest })],
     define: {
-      // Expose Clerk environment variables to the extension
+      // Expose environment variables to the extension
       'import.meta.env.VITE_CLERK_PUBLISHABLE_KEY': JSON.stringify(
         env.VITE_CLERK_PUBLISHABLE_KEY || ''
       ),
@@ -71,6 +79,7 @@ export default defineConfig(({ mode }) => {
       'import.meta.env.VITE_CLERK_FRONTEND_API': JSON.stringify(
         env.VITE_CLERK_FRONTEND_API || ''
       ),
+      'import.meta.env.VITE_SITE_BASE': JSON.stringify(env.VITE_SITE_BASE || ''),
     },
     build: {
       outDir: 'dist',
