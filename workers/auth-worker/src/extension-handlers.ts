@@ -141,12 +141,23 @@ export async function handleGetExtensionStatus(
     const credStorage = EspnSupabaseStorage.fromEnvironment(env);
     const hasCredentials = await credStorage.hasCredentials(userId);
     const metadata = await credStorage.getCredentialMetadata(userId);
+    const defaultLeague = await credStorage.getDefaultLeague(userId);
 
     return new Response(JSON.stringify({
       success: true,
       connected: true,
       hasCredentials,
       lastSync: metadata?.lastUpdated || null,
+      defaultLeague: defaultLeague
+        ? {
+            sport: defaultLeague.sport,
+            leagueId: defaultLeague.leagueId,
+            leagueName: defaultLeague.leagueName || null,
+            teamName: defaultLeague.teamName || null,
+            teamId: defaultLeague.teamId || null,
+            seasonYear: defaultLeague.seasonYear || null,
+          }
+        : null,
     }), {
       status: 200,
       headers: { 'Content-Type': 'application/json', ...corsHeaders },

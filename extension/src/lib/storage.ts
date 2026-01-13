@@ -61,6 +61,7 @@ export interface SavedDefaultLeague {
   leagueId: string;
   leagueName: string;
   teamName: string;
+  teamId?: string | null;
   seasonYear: number;
 }
 

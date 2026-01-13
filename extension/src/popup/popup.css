@@ -33,26 +33,6 @@ body {
   color: #111827;
 }
 
-.status-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 8px;
-  border-radius: 9999px;
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.status-badge.connected {
-  background: #dcfce7;
-  color: #166534;
-}
-
-.status-badge.disconnected {
-  background: #f3f4f6;
-  color: #6b7280;
-}
-
 .icon-button {
   margin-left: auto;
   border: none;
@@ -182,35 +162,6 @@ body {
   font-size: 12px;
   color: #6b7280;
   padding: 0 2px;
-}
-
-.checklist {
-  display: flex;
-  gap: 8px;
-  padding: 8px 10px;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  background: #ffffff;
-  margin-bottom: 12px;
-  font-size: 12px;
-}
-
-.checklist-item {
-  display: flex;
-  flex: 1;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-  color: #374151;
-}
-
-.checklist-label {
-  color: #6b7280;
-}
-
-.checklist-value {
-  font-weight: 600;
-  color: #111827;
 }
 
 .input-group {

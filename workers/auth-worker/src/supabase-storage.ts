@@ -338,6 +338,38 @@ export class EspnSupabaseStorage {
   }
 
   /**
+   * Retrieve the user's default league (if set)
+   */
+  async getDefaultLeague(clerkUserId: string): Promise<EspnLeague | null> {
+    try {
+      if (!clerkUserId) return null;
+
+      const { data, error } = await this.supabase
+        .from('espn_leagues')
+        .select('league_id, sport, team_id, team_name, league_name, season_year, is_default')
+        .eq('clerk_user_id', clerkUserId)
+        .eq('is_default', true)
+        .limit(1)
+        .single();
+
+      if (error || !data) return null;
+
+      return {
+        leagueId: data.league_id,
+        sport: data.sport as 'football' | 'hockey' | 'baseball' | 'basketball',
+        teamId: data.team_id || undefined,
+        teamName: data.team_name || undefined,
+        leagueName: data.league_name || undefined,
+        seasonYear: data.season_year || undefined,
+        isDefault: data.is_default || false,
+      };
+    } catch (error) {
+      console.error('Failed to retrieve default league:', error);
+      return null;
+    }
+  }
+
+  /**
    * Check if a specific league already exists for a user
    * Used by extension discovery to avoid duplicates
    */

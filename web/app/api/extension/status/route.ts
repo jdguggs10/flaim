@@ -47,6 +47,14 @@ export async function GET(request: NextRequest) {
       connected?: boolean;
       hasCredentials?: boolean;
       lastSync?: string;
+      defaultLeague?: {
+        sport: string;
+        leagueId: string;
+        leagueName: string | null;
+        teamName: string | null;
+        teamId: string | null;
+        seasonYear: number | null;
+      } | null;
     };
 
     return NextResponse.json({
@@ -54,6 +62,7 @@ export async function GET(request: NextRequest) {
       connected: data.connected,
       hasCredentials: data.hasCredentials,
       lastSync: data.lastSync,
+      defaultLeague: data.defaultLeague ?? null,
     });
   } catch (error) {
     console.error('Extension status route error:', error);

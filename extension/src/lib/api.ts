@@ -53,6 +53,14 @@ export interface StatusResponse {
   connected: boolean;
   hasCredentials: boolean;
   lastSync: string | null;
+  defaultLeague?: {
+    sport: string;
+    leagueId: string;
+    leagueName: string | null;
+    teamName: string | null;
+    teamId: string | null;
+    seasonYear: number | null;
+  } | null;
 }
 
 export interface ApiError {

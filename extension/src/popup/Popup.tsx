@@ -154,7 +154,8 @@ export default function Popup() {
       `email=${primaryEmail ?? 'unknown'}`,
       `version=${extensionVersion ?? 'unknown'}`,
       `lastSync=${lastSync ?? 'unknown'}`,
-      `defaultLeague=${savedDefaultLeague ? `${savedDefaultLeague.leagueName} (${savedDefaultLeague.seasonYear})` : 'none'}`,
+      `defaultLeagueId=${savedDefaultLeague?.leagueId ?? 'none'}`,
+      `defaultTeamId=${savedDefaultLeague?.teamId ?? 'none'}`,
       `siteBase=auto`,
     ];
     return parts.join(' | ');
@@ -180,7 +181,7 @@ export default function Popup() {
       if (storedDefault) {
         setSavedDefaultLeagueState({
           ...storedDefault,
-          teamId: '',
+          teamId: storedDefault.teamId ?? '',
           isDefault: true,
         });
       }
@@ -258,6 +259,26 @@ export default function Popup() {
           const status = await checkStatus(token);
           setHasCredentials(status.hasCredentials);
           setLastSync(status.lastSync ?? null);
+          if (status.defaultLeague) {
+            const league = {
+              sport: status.defaultLeague.sport,
+              leagueId: status.defaultLeague.leagueId,
+              leagueName: status.defaultLeague.leagueName ?? '',
+              teamName: status.defaultLeague.teamName ?? '',
+              teamId: status.defaultLeague.teamId ?? '',
+              seasonYear: status.defaultLeague.seasonYear ?? 0,
+              isDefault: true,
+            };
+            setSavedDefaultLeagueState(league);
+            await setSavedDefaultLeague({
+              sport: league.sport,
+              leagueId: league.leagueId,
+              leagueName: league.leagueName,
+              teamName: league.teamName,
+              teamId: league.teamId,
+              seasonYear: league.seasonYear,
+            });
+          }
         }
         setState('ready');
       } catch {
@@ -336,6 +357,7 @@ export default function Popup() {
           leagueId: existingDefault.leagueId,
           leagueName: existingDefault.leagueName,
           teamName: existingDefault.teamName,
+          teamId: existingDefault.teamId,
           seasonYear: existingDefault.seasonYear,
         });
         setState('setup_complete');
@@ -394,6 +416,26 @@ export default function Popup() {
         const status = await checkStatus(token);
         setHasCredentials(status.hasCredentials);
         setLastSync(status.lastSync ?? null);
+        if (status.defaultLeague) {
+          const league = {
+            sport: status.defaultLeague.sport,
+            leagueId: status.defaultLeague.leagueId,
+            leagueName: status.defaultLeague.leagueName ?? '',
+            teamName: status.defaultLeague.teamName ?? '',
+            teamId: status.defaultLeague.teamId ?? '',
+            seasonYear: status.defaultLeague.seasonYear ?? 0,
+            isDefault: true,
+          };
+          setSavedDefaultLeagueState(league);
+          await setSavedDefaultLeague({
+            sport: league.sport,
+            leagueId: league.leagueId,
+            leagueName: league.leagueName,
+            teamName: league.teamName,
+            teamId: league.teamId,
+            seasonYear: league.seasonYear,
+          });
+        }
       }
       setState('ready');
     } catch (err) {
@@ -432,6 +474,7 @@ export default function Popup() {
           leagueId: selectedLeague.leagueId,
           leagueName: selectedLeague.leagueName,
           teamName: selectedLeague.teamName,
+          teamId: selectedLeague.teamId,
           seasonYear: selectedLeague.seasonYear,
         });
       }
@@ -454,7 +497,6 @@ export default function Popup() {
       <div className="popup">
         <div className="header">
           <h1>Flaim</h1>
-          <span className="status-badge disconnected">Loading</span>
         </div>
         <div className="content">
           <div className="message info" style={{ textAlign: 'center' }}>
@@ -472,22 +514,16 @@ export default function Popup() {
       <div className="header">
         <h1>Flaim</h1>
         <SignedIn>
-          <span className="status-badge connected">
-            {isInSetupFlow ? 'Setting Up' : 'Connected'}
-          </span>
+          <button
+            className="icon-button"
+            onClick={() => setShowDiagnostics((prev) => !prev)}
+            aria-label={showDiagnostics ? 'Hide info' : 'Show info'}
+            title={showDiagnostics ? 'Hide info' : 'Show info'}
+            type="button"
+          >
+            ⓘ
+          </button>
         </SignedIn>
-        <SignedOut>
-          <span className="status-badge disconnected">Not Signed In</span>
-        </SignedOut>
-        <button
-          className="icon-button"
-          onClick={() => setShowDiagnostics((prev) => !prev)}
-          aria-label={showDiagnostics ? 'Hide info' : 'Show info'}
-          title={showDiagnostics ? 'Hide info' : 'Show info'}
-          type="button"
-        >
-          ⓘ
-        </button>
       </div>
 
       <SignedIn>
@@ -507,10 +543,6 @@ export default function Popup() {
         {showDiagnostics && (
           <div className="diagnostics">
             <div className="diag-row">
-              <span className="diag-label">Signed in</span>
-              <span className="diag-value">{checkmark(isSignedIn)}</span>
-            </div>
-            <div className="diag-row">
               <span className="diag-label">ESPN cookies</span>
               <span className="diag-value">{checkmark(hasEspnCookies)}</span>
             </div>
@@ -522,14 +554,25 @@ export default function Popup() {
               <span className="diag-label">Last sync</span>
               <span className="diag-value">{formatLastSync(lastSync)}</span>
             </div>
-            <div className="diag-row">
-              <span className="diag-label">Default league</span>
-              <span className="diag-value">
-                {savedDefaultLeague
-                  ? `${savedDefaultLeague.leagueName} (${savedDefaultLeague.seasonYear})`
-                  : 'None'}
-              </span>
-            </div>
+            {savedDefaultLeague ? (
+              <>
+                <div className="diag-row">
+                  <span className="diag-label">Default league ID</span>
+                  <span className="diag-value mono">{savedDefaultLeague.leagueId}</span>
+                </div>
+                <div className="diag-row">
+                  <span className="diag-label">Default team ID</span>
+                  <span className="diag-value mono">
+                    {savedDefaultLeague.teamId || 'Unknown'}
+                  </span>
+                </div>
+              </>
+            ) : (
+              <div className="diag-row">
+                <span className="diag-label">Default league</span>
+                <span className="diag-value">None</span>
+              </div>
+            )}
             <div className="diag-row">
               <span className="diag-label">Version</span>
               <span className="diag-value">{extensionVersion ?? 'Unknown'}</span>
@@ -589,23 +632,6 @@ export default function Popup() {
           </div>
         )}
 
-        {!isInSetupFlow && state !== 'loading' && (
-          <div className="checklist">
-            <div className="checklist-item">
-              <span className="checklist-label">Signed in</span>
-              <span className="checklist-value">{checkmark(isSignedIn)}</span>
-            </div>
-            <div className="checklist-item">
-              <span className="checklist-label">ESPN cookies</span>
-              <span className="checklist-value">{checkmark(hasEspnCookies)}</span>
-            </div>
-            <div className="checklist-item">
-              <span className="checklist-label">Default league</span>
-              <span className="checklist-value">{checkmark(!!savedDefaultLeague)}</span>
-            </div>
-          </div>
-        )}
-
         {state === 'no_espn' && (
           <div className="content">
             {error && <div className="message error">{error}</div>}
@@ -642,9 +668,11 @@ export default function Popup() {
                 {savedDefaultLeague.leagueName} ({savedDefaultLeague.seasonYear})
               </div>
             )}
-            <div className="meta">Last sync: {formatLastSync(lastSync)}</div>
+            {hasCredentials && !savedDefaultLeague && (
+              <div className="meta">Default league not set yet. Re-sync to choose one.</div>
+            )}
             <button className="button success full-width" onClick={handleFullSetup}>
-              {hasCredentials ? 'Re-sync & Discover Leagues' : 'Sync to Flaim'}
+              {hasCredentials ? 'Re-sync & Discover New Leagues/Seasons' : 'Sync to Flaim'}
             </button>
             <button className="button secondary full-width" onClick={() => openFlaim('/leagues')}>
               Go to Leagues
