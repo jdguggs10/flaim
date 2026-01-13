@@ -371,7 +371,10 @@ export const processMessages = async () => {
         } else if (item.type === "mcp_call") {
           // For MCP calls, push the call item (which includes output from server-side execution)
           // The Responses API needs this to maintain context of what tools were called and their results
-          conversationItems.push(item);
+          // IMPORTANT: Must strip 'status' field - the API returns it but rejects it on input
+          // See: https://github.com/openai/openai-python/issues/2670
+          const { status, ...mcpCallWithoutStatus } = item;
+          conversationItems.push(mcpCallWithoutStatus);
           setConversationItems([...conversationItems]);
         } else if (item.type === "function_call") {
           // For function calls, push the call specification
