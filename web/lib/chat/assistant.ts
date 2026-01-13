@@ -377,13 +377,15 @@ export const processMessages = async () => {
           conversationItems.push(mcpCallWithoutStatus);
           setConversationItems([...conversationItems]);
         } else if (item.type === "function_call") {
-          // For function calls, push the call specification
+          // For function calls, push the call specification (strip status to be safe)
           // The output will be pushed separately after local execution
-          conversationItems.push(item);
+          const { status, ...functionCallWithoutStatus } = item;
+          conversationItems.push(functionCallWithoutStatus);
           setConversationItems([...conversationItems]);
         } else if (item.type === "web_search_call" || item.type === "file_search_call" || item.type === "code_interpreter_call") {
-          // For built-in tools, push the complete item
-          conversationItems.push(item);
+          // For built-in tools, push the complete item (strip status to be safe)
+          const { status, ...builtInToolWithoutStatus } = item;
+          conversationItems.push(builtInToolWithoutStatus);
           setConversationItems([...conversationItems]);
         }
         // Note: Other item types (like mcp_list_tools) don't need to be in conversation history
@@ -411,10 +413,10 @@ export const processMessages = async () => {
                 now - toolCallMessage.metadata.startedAt;
             }
             setChatMessages([...chatMessages]);
+            // Note: Don't include 'status' field - API returns it but may reject it on input
             conversationItems.push({
               type: "function_call_output",
               call_id: toolCallMessage.call_id,
-              status: "completed",
               output: JSON.stringify(toolResult),
             });
             setConversationItems([...conversationItems]);
@@ -433,10 +435,10 @@ export const processMessages = async () => {
               toolCallMessage.metadata.error = message;
             }
             setChatMessages([...chatMessages]);
+            // Note: Don't include 'status' field - API returns it but may reject it on input
             conversationItems.push({
               type: "function_call_output",
               call_id: toolCallMessage.call_id,
-              status: "failed",
               output: JSON.stringify({ error: message }),
             });
             setConversationItems([...conversationItems]);
