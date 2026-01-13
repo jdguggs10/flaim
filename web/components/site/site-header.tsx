@@ -22,7 +22,7 @@ export function SiteHeader() {
 
   return (
     <header className="border-b bg-background">
-      <div className="flex min-h-[4rem] flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex min-h-[4rem] flex-row items-center justify-between gap-3 p-4">
         <Link
           href="/"
           className="inline-flex items-center gap-2 text-xl font-bold transition-opacity hover:opacity-80"
@@ -30,9 +30,9 @@ export function SiteHeader() {
           <Flame className="h-5 w-5" />
           <span>Flaim</span>
         </Link>
-        <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center sm:gap-4">
+        <div className="flex items-center gap-2 sm:gap-4">
           <SignedOut>
-            <div className="flex flex-col gap-2 sm:flex-row">
+            <div className="flex flex-row gap-2">
               <SignInButton>
                 <Button variant="outline">
                   Sign In
@@ -46,7 +46,7 @@ export function SiteHeader() {
             </div>
           </SignedOut>
           <SignedIn>
-            <div className="flex items-center justify-between gap-3 sm:justify-start">
+            <div className="flex items-center gap-2 sm:gap-3">
               <Popover open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
                 <PopoverTrigger asChild>
                   <Button
