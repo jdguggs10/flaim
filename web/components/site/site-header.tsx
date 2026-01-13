@@ -6,6 +6,12 @@ import { Button } from '@/components/ui/button';
 import { Flame, Menu } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
+const NAV_LINKS = [
+  { href: '/extension', label: 'Extension' },
+  { href: '/connectors', label: 'Connectors' },
+  { href: '/leagues', label: 'Leagues' },
+] as const;
+
 /**
  * Site header with full navigation.
  * Used on all pages except /chat which has its own minimal header.
@@ -51,28 +57,20 @@ export function SiteHeader() {
                 </PopoverTrigger>
                 <PopoverContent align="end" className="w-48 p-2">
                   <nav className="flex flex-col gap-1">
-                    <Button asChild variant="ghost" className="justify-start text-sm">
-                      <Link href="/extension">Extension</Link>
-                    </Button>
-                    <Button asChild variant="ghost" className="justify-start text-sm">
-                      <Link href="/connectors">Connectors</Link>
-                    </Button>
-                    <Button asChild variant="ghost" className="justify-start text-sm">
-                      <Link href="/leagues">Leagues</Link>
-                    </Button>
+                    {NAV_LINKS.map((link) => (
+                      <Button key={link.href} asChild variant="ghost" className="justify-start text-sm">
+                        <Link href={link.href}>{link.label}</Link>
+                      </Button>
+                    ))}
                   </nav>
                 </PopoverContent>
               </Popover>
               <nav className="hidden items-center gap-1 sm:flex">
-                <Button asChild variant="ghost" className="text-sm">
-                  <Link href="/extension">Extension</Link>
-                </Button>
-                <Button asChild variant="ghost" className="text-sm">
-                  <Link href="/connectors">Connectors</Link>
-                </Button>
-                <Button asChild variant="ghost" className="text-sm">
-                  <Link href="/leagues">Leagues</Link>
-                </Button>
+                {NAV_LINKS.map((link) => (
+                  <Button key={link.href} asChild variant="ghost" className="text-sm">
+                    <Link href={link.href}>{link.label}</Link>
+                  </Button>
+                ))}
               </nav>
               <div className="flex items-center gap-2 sm:border-l sm:pl-2">
                 <UserButton />
