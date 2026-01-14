@@ -1,14 +1,14 @@
 # Hono Migration Plan (Workers)
 
-> **Status: NOT RECOMMENDED** — See architectural assessment below. This document is preserved as reference material.
+> **Status: GOOD FIT, LOW URGENCY** — Hono would genuinely improve the codebase. Consider adopting when next touching workers for other reasons.
 
 ## Architectural Assessment (January 2025)
 
 ### What Is Hono?
 
-[Hono](https://hono.dev/) is a lightweight (~14kB) web framework built on Web Standards, optimized for edge runtimes. It's the [fastest router for Cloudflare Workers](https://hono.dev/docs/concepts/benchmarks) (402k ops/sec) and is used internally by Cloudflare for D1, KV, and Queues. It's legitimate, well-maintained, and has 25k+ GitHub stars.
+[Hono](https://hono.dev/) is a lightweight (~14kB) web framework built on Web Standards, optimized for edge runtimes. It's the [fastest router for Cloudflare Workers](https://hono.dev/docs/concepts/benchmarks) (402k ops/sec) and is used internally by Cloudflare for D1, KV, and Queues. It's become the de facto standard for Workers development—legitimate, well-maintained, with 25k+ GitHub stars.
 
-### Current State Analysis
+### Current State
 
 | Worker | Lines | Routes | Pattern |
 |--------|-------|--------|---------|
@@ -16,56 +16,89 @@
 | baseball-mcp | 794 | 5 | `if (pathname === ...)` |
 | football-mcp | 791 | 5 | `if (pathname === ...)` |
 
-**Total: 29 routes across 3 workers.**
+**Total: 29 routes across 3 workers.** CORS and prefix-stripping duplicated ~35 lines per worker.
 
-The CORS and prefix-stripping code is duplicated (~35 lines per worker), but it's identical, stable, and rarely changes.
+### Benefits of Migration
 
-### Why This Migration Is Not Recommended
+**1. Code clarity (not just aesthetic)**
 
-1. **The routing isn't complex.** Simple if/else on 29 routes doesn't warrant a framework. The current code is readable and a new developer could understand it in minutes.
+Current pattern requires reading 1200 lines to understand available endpoints:
+```typescript
+if (pathname === '/health') { ... }
+if (pathname === '/leagues' && request.method === 'POST') { ... }
+if (pathname === '/leagues' && request.method === 'GET') { ... }
+if (pathname === '/leagues' && request.method === 'DELETE') { ... }
+```
 
-2. **The duplication is trivial.** ~100 lines of copy-pasted CORS code across 3 files isn't a maintenance burden when it rarely changes.
+With Hono, routes are scannable at a glance:
+```typescript
+app.get('/health', healthHandler)
+app.post('/leagues', createLeague)
+app.get('/leagues', getLeagues)
+app.delete('/leagues', deleteLeague)
+```
 
-3. **Hono has documented downsides:**
-   - [TypeScript build times can reach 8+ minutes](https://github.com/honojs/hono/issues/3869) due to type inference
-   - Smaller ecosystem than Express — more DIY problem-solving
-   - Another dependency to maintain and update
+**2. Middleware composition**
 
-4. **Project principles (from CLAUDE.md):**
-   - "Minimize complexity; every added feature has a maintenance cost"
-   - "Avoid big refactors, new infrastructure"
-   - "Solo, part-time developer... keep changes easy to revert"
+Adding cross-cutting concerns (logging, rate limiting, new auth patterns) currently means touching every route. With Hono:
+```typescript
+app.use('/leagues/*', authMiddleware)
+app.use('*', loggingMiddleware)
+```
 
-5. **Risk vs reward:**
-   - Risk: Breaking working auth flows, learning curve, build complexity
-   - Reward: Cleaner route syntax, middleware composition
-   - **The reward is aesthetic; the risk is functional.**
+**3. Industry standard**
 
-### Simpler Alternative
+Cloudflare uses Hono internally and recommends it in their docs. Learning it has value beyond this project. The [developer experience is consistently praised](https://blog.cloudflare.com/the-story-of-web-framework-hono-from-the-creator-of-hono/).
 
-If duplication genuinely bothers you, extract shared code without adding a framework:
+**4. Type safety**
 
+First-class TypeScript support with typed route params, context, and RPC mode for type-safe client-server communication.
+
+**5. Future-proofing**
+
+Adding new routes, middleware, or features becomes significantly easier with a proper routing framework in place.
+
+### Considerations
+
+| Factor | Assessment |
+|--------|------------|
+| Real DX improvement | ✅ Yes |
+| Reduced cognitive load | ✅ Yes |
+| Easier to add features | ✅ Yes |
+| Industry standard | ✅ Yes |
+| Current code broken | ❌ No |
+| Urgent need | ❌ No |
+| Risk-free | ❌ No |
+
+**Migration carries risk.** Auth flows, CORS, and prefix-stripping all need careful testing. The current code works.
+
+**TypeScript build times** can become an issue at scale ([documented for large apps](https://github.com/honojs/hono/issues/3869)), but 29 routes won't hit this.
+
+### Recommendation
+
+**Adopt opportunistically.** When you're already touching a worker for other reasons (new features, bug fixes), migrate that worker to Hono. Don't do a standalone refactor just for the sake of it.
+
+**Suggested order:**
+1. Baseball MCP (smallest, 5 routes) — low risk first migration
+2. Football MCP (similar structure, validates pattern)
+3. Auth-worker (largest, most critical — do last)
+
+### Minimal Alternative
+
+If you want to reduce duplication without Hono, extract shared code:
 ```
 workers/
   shared/
     cors.ts        # ~40 lines
     types.ts
 ```
-
-Import in each worker. No framework, no migration, no risk. 15 minutes of work.
-
-### When Hono Would Make Sense
-
-- Starting a new worker from scratch
-- 50+ routes with complex middleware chains
-- A team needing enforced patterns
-- Performance problems (not applicable here)
+This addresses duplication but not the routing clarity or middleware benefits.
 
 ---
 
-## Original Migration Plan (Reference Only)
+## Migration Plan (Detailed)
 
-The following sections document the proposed migration approach. Preserved for future reference if circumstances change.
+The following sections document the implementation approach.
 
 ---
 
