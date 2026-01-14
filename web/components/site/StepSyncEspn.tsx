@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { useAuth } from '@clerk/nextjs';
-import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Chrome, Check, Loader2, Monitor, LogIn } from 'lucide-react';
 import { pingExtension, isChromeBrowser, type ExtensionPingResult } from '@/lib/extension-ping';

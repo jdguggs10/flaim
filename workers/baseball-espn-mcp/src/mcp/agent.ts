@@ -529,6 +529,7 @@ export class McpAgent {
     return [
       {
         name: 'get_user_session',
+        title: 'User Session',
         description: 'IMPORTANT: Call this tool FIRST before any other tool. Returns the user\'s configured ESPN leagues, team IDs, current date/time, and current season. Use the returned leagueId and teamId values for all subsequent tool calls.',
         inputSchema: {
           type: 'object',
@@ -539,6 +540,7 @@ export class McpAgent {
       },
       {
         name: 'get_espn_baseball_league_info',
+        title: 'Baseball League Info',
         description: `Get ESPN fantasy baseball league information. Use leagueId from get_user_session. Current season is ${currentYear}.`,
         inputSchema: {
           type: 'object',
@@ -559,6 +561,7 @@ export class McpAgent {
       },
       {
         name: 'get_espn_baseball_team_roster',
+        title: 'Baseball Team Roster',
         description: `Get detailed team roster from ESPN fantasy baseball league. Use leagueId and teamId from get_user_session. Current season is ${currentYear}.`,
         inputSchema: {
           type: 'object',
@@ -573,6 +576,7 @@ export class McpAgent {
       },
       {
         name: 'get_espn_baseball_matchups',
+        title: 'Baseball Matchups',
         description: `Get current week matchups from ESPN fantasy baseball league. Use leagueId from get_user_session. Current season is ${currentYear}, current date is ${currentDate}.`,
         inputSchema: {
           type: 'object',
@@ -587,12 +591,64 @@ export class McpAgent {
       },
       {
         name: 'get_espn_baseball_standings',
+        title: 'Baseball Standings',
         description: `Get league standings from ESPN fantasy baseball league. Use leagueId from get_user_session. Current season is ${currentYear}.`,
         inputSchema: {
           type: 'object',
           properties: {
             leagueId: { type: 'string', description: 'ESPN league ID (get from get_user_session)' },
             seasonId: { type: 'string', description: `Season year (default: ${currentYear})`, default: currentYear }
+          },
+          required: ['leagueId']
+        },
+        securitySchemes
+      },
+      {
+        name: 'get_espn_baseball_free_agents',
+        title: 'Baseball Free Agents',
+        description: `Get available free agents from ESPN fantasy baseball league. Filter by position. Sorted by ownership percentage. Use leagueId from get_user_session. Current season is ${currentYear}.`,
+        inputSchema: {
+          type: 'object',
+          properties: {
+            leagueId: { type: 'string', description: 'ESPN league ID (get from get_user_session)' },
+            seasonId: { type: 'string', description: `Season year (default: ${currentYear})`, default: currentYear },
+            position: {
+              type: 'string',
+              enum: ['C', '1B', '2B', '3B', 'SS', 'OF', 'SP', 'RP', 'P', 'DH', 'UTIL', 'ALL'],
+              description: 'Filter by position (default: ALL)'
+            },
+            limit: { type: 'number', description: 'Maximum number of players to return (default: 25, max: 100)' }
+          },
+          required: ['leagueId']
+        },
+        securitySchemes
+      },
+      {
+        name: 'get_espn_baseball_box_scores',
+        title: 'Baseball Box Scores',
+        description: `Get detailed box scores with player-by-player statistics for matchups. Use leagueId from get_user_session. Current season is ${currentYear}, current date is ${currentDate}.`,
+        inputSchema: {
+          type: 'object',
+          properties: {
+            leagueId: { type: 'string', description: 'ESPN league ID (get from get_user_session)' },
+            seasonId: { type: 'string', description: `Season year (default: ${currentYear})`, default: currentYear },
+            matchupPeriod: { type: 'number', description: 'Matchup period/week number (optional)' },
+            scoringPeriod: { type: 'number', description: 'Specific scoring day for daily stats (optional)' }
+          },
+          required: ['leagueId']
+        },
+        securitySchemes
+      },
+      {
+        name: 'get_espn_baseball_recent_activity',
+        title: 'Baseball Recent Activity',
+        description: `Get recent league activity including trades, free agent pickups, drops, and waiver claims. Use leagueId from get_user_session. Current season is ${currentYear}.`,
+        inputSchema: {
+          type: 'object',
+          properties: {
+            leagueId: { type: 'string', description: 'ESPN league ID (get from get_user_session)' },
+            seasonId: { type: 'string', description: `Season year (default: ${currentYear})`, default: currentYear },
+            limit: { type: 'number', description: 'Number of activities to return (default: 25)' }
           },
           required: ['leagueId']
         },
@@ -835,6 +891,15 @@ export class McpAgent {
       case 'get_espn_baseball_standings':
         return this.getEspnBaseballStandings(normalizedArgs, clerkUserId, env, authHeader, logContext);
 
+      case 'get_espn_baseball_free_agents':
+        return this.getEspnFreeAgents(normalizedArgs, clerkUserId, env, authHeader, logContext);
+
+      case 'get_espn_baseball_box_scores':
+        return this.getEspnBoxScores(normalizedArgs, clerkUserId, env, authHeader, logContext);
+
+      case 'get_espn_baseball_recent_activity':
+        return this.getEspnRecentActivity(normalizedArgs, clerkUserId, env, authHeader, logContext);
+
       default:
         throw new Error(`Unknown tool: ${tool}`);
     }
@@ -1001,6 +1066,146 @@ export class McpAgent {
           {
             type: 'text',
             text: `Failed to fetch baseball standings: ${error instanceof Error ? error.message : 'Unknown error'}`
+          }
+        ],
+        isError: true
+      };
+    }
+  }
+
+  private async getEspnFreeAgents(
+    args: Record<string, any>,
+    clerkUserId: string,
+    env: Env,
+    authHeader?: string | null,
+    logContext?: { resolvedUserId?: string }
+  ): Promise<McpResponse> {
+    try {
+      const { EspnApiClient } = await import('../espn');
+      const espnClient = new EspnApiClient(env, { authHeader, logContext });
+
+      const { leagueId, seasonId = getDefaultBaseballSeason().toString(), position, limit } = args;
+      const freeAgents = await espnClient.fetchFreeAgents(
+        leagueId,
+        parseInt(seasonId),
+        { position, limit },
+        clerkUserId
+      );
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              success: true,
+              data: freeAgents,
+              leagueId,
+              year: parseInt(seasonId),
+              position: position || 'ALL',
+              limit: limit || 25
+            }, null, 2)
+          }
+        ]
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Failed to fetch free agents: ${error instanceof Error ? error.message : 'Unknown error'}`
+          }
+        ],
+        isError: true
+      };
+    }
+  }
+
+  private async getEspnBoxScores(
+    args: Record<string, any>,
+    clerkUserId: string,
+    env: Env,
+    authHeader?: string | null,
+    logContext?: { resolvedUserId?: string }
+  ): Promise<McpResponse> {
+    try {
+      const { EspnApiClient } = await import('../espn');
+      const espnClient = new EspnApiClient(env, { authHeader, logContext });
+
+      const { leagueId, seasonId = getDefaultBaseballSeason().toString(), matchupPeriod, scoringPeriod } = args;
+      const boxScores = await espnClient.fetchBoxScores(
+        leagueId,
+        parseInt(seasonId),
+        { matchupPeriod, scoringPeriod },
+        clerkUserId
+      );
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              success: true,
+              data: boxScores,
+              leagueId,
+              year: parseInt(seasonId),
+              matchupPeriod,
+              scoringPeriod
+            }, null, 2)
+          }
+        ]
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Failed to fetch box scores: ${error instanceof Error ? error.message : 'Unknown error'}`
+          }
+        ],
+        isError: true
+      };
+    }
+  }
+
+  private async getEspnRecentActivity(
+    args: Record<string, any>,
+    clerkUserId: string,
+    env: Env,
+    authHeader?: string | null,
+    logContext?: { resolvedUserId?: string }
+  ): Promise<McpResponse> {
+    try {
+      const { EspnApiClient } = await import('../espn');
+      const espnClient = new EspnApiClient(env, { authHeader, logContext });
+
+      const { leagueId, seasonId = getDefaultBaseballSeason().toString(), limit } = args;
+      const activity = await espnClient.fetchRecentActivity(
+        leagueId,
+        parseInt(seasonId),
+        { limit },
+        clerkUserId
+      );
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              success: true,
+              data: activity,
+              leagueId,
+              year: parseInt(seasonId),
+              limit: limit || 25
+            }, null, 2)
+          }
+        ]
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Failed to fetch recent activity: ${error instanceof Error ? error.message : 'Unknown error'}`
           }
         ],
         isError: true

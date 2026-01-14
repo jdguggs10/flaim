@@ -103,3 +103,4 @@ tests/config/.env.test
 
 # Ignore per-worker sensitive env files
 workers/auth-worker/.env
+extension/*.zip

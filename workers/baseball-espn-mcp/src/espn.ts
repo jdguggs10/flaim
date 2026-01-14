@@ -130,6 +130,213 @@ export class EspnApiClient {
     throw new Error(`No teams found in league ${leagueId}`);
   }
 
+  /**
+   * Position slot IDs for filtering free agents by position
+   */
+  private static readonly POSITION_SLOTS: Record<string, number[]> = {
+    'C': [0],
+    '1B': [1],
+    '2B': [2],
+    '3B': [3],
+    'SS': [4],
+    'LF': [5],
+    'CF': [6],
+    'RF': [7],
+    'OF': [5, 6, 7],      // All outfield positions
+    'DH': [8],
+    'UTIL': [9],
+    'SP': [11],
+    'RP': [12],
+    'P': [10, 11, 12],    // All pitcher positions
+    'ALL': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+  };
+
+  async fetchFreeAgents(
+    leagueId: string,
+    year: number = 2025,
+    options: {
+      position?: string;  // C, 1B, 2B, 3B, SS, OF, SP, RP, P, ALL
+      limit?: number;     // default 25, max 100
+    } = {},
+    clerkUserId?: string
+  ): Promise<any> {
+    const { position = 'ALL', limit = 25 } = options;
+    const effectiveLimit = Math.min(Math.max(1, limit), 100);
+
+    // Get position slot IDs for filtering
+    const slotIds = EspnApiClient.POSITION_SLOTS[position.toUpperCase()] || EspnApiClient.POSITION_SLOTS['ALL'];
+
+    const url = `${this.baseUrl}/games/flb/seasons/${year}/segments/0/leagues/${leagueId}?view=kona_player_info`;
+
+    // Build the X-Fantasy-Filter header for free agents
+    const filter = {
+      players: {
+        filterStatus: { value: ['FREEAGENT', 'WAIVERS'] },
+        filterSlotIds: { value: slotIds },
+        sortPercOwned: { sortPriority: 1, sortAsc: false },
+        sortDraftRanks: { sortPriority: 100, sortAsc: true, value: 'STANDARD' },
+        limit: effectiveLimit
+      }
+    };
+
+    const headers: Record<string, string> = {
+      'User-Agent': 'baseball-espn-mcp/1.0',
+      'Accept': 'application/json',
+      'X-Fantasy-Source': 'kona',
+      'X-Fantasy-Platform': 'kona-web-2.0.0',
+      'X-Fantasy-Filter': JSON.stringify(filter)
+    };
+
+    // Authentication required for free agent data
+    if (!clerkUserId || clerkUserId === 'anonymous') {
+      throw new Error('ESPN_AUTH_REQUIRED: User authentication required for free agent data. Please sign in and try again.');
+    }
+    if (!this.authHeader) {
+      throw new Error('ESPN_AUTH_REQUIRED: Authorization header missing. Please refresh the page and try again.');
+    }
+
+    const credentials = await this.getEspnCredentialsForUser(clerkUserId);
+    if (!credentials) {
+      throw new Error('ESPN_CREDENTIALS_NOT_FOUND: No ESPN credentials found. Add your espn_s2 and SWID cookies at /settings/espn');
+    }
+    headers['Cookie'] = `SWID=${credentials.swid}; espn_s2=${credentials.s2}`;
+
+    const response = await fetch(url, {
+      headers,
+      cf: { cacheEverything: false }
+    });
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('ESPN_COOKIES_EXPIRED: Your ESPN cookies may have expired. Update them at /settings/espn');
+      }
+      if (response.status === 429) {
+        throw new Error('ESPN_RATE_LIMIT: ESPN rate limit exceeded. Please wait a moment and try again.');
+      }
+      if (response.status === 404) {
+        throw new Error(`ESPN_NOT_FOUND: Baseball league ${leagueId} not found. Please check the league ID.`);
+      }
+      if (response.status === 403) {
+        throw new Error(`ESPN_ACCESS_DENIED: Access denied to baseball league ${leagueId}. Make sure you're a member of this league.`);
+      }
+
+      throw new Error(`ESPN_API_ERROR: ESPN returned error ${response.status}. Please try again.`);
+    }
+
+    return await response.json();
+  }
+
+  async fetchBoxScores(
+    leagueId: string,
+    year: number = 2025,
+    options: {
+      matchupPeriod?: number;
+      scoringPeriod?: number;
+    } = {},
+    clerkUserId?: string
+  ): Promise<any> {
+    let url = `${this.baseUrl}/games/flb/seasons/${year}/segments/0/leagues/${leagueId}?view=mMatchupScore&view=mScoreboard`;
+
+    if (options.scoringPeriod) {
+      url += `&scoringPeriodId=${options.scoringPeriod}`;
+    }
+    if (options.matchupPeriod) {
+      url += `&matchupPeriodId=${options.matchupPeriod}`;
+    }
+
+    const headers: Record<string, string> = {
+      'User-Agent': 'baseball-espn-mcp/1.0',
+      'Accept': 'application/json',
+      'X-Fantasy-Source': 'kona',
+      'X-Fantasy-Platform': 'kona-web-2.0.0'
+    };
+
+    // Get user credentials (optional - some box score data may be public)
+    if (clerkUserId && clerkUserId !== 'anonymous' && this.authHeader) {
+      const credentials = await this.getEspnCredentialsForUser(clerkUserId);
+      if (credentials) {
+        headers['Cookie'] = `SWID=${credentials.swid}; espn_s2=${credentials.s2}`;
+      }
+    }
+
+    const response = await fetch(url, {
+      headers,
+      cf: { cacheEverything: false }
+    });
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('ESPN_COOKIES_EXPIRED: Your ESPN cookies may have expired. Update them at /settings/espn');
+      }
+      if (response.status === 429) {
+        throw new Error('ESPN_RATE_LIMIT: ESPN rate limit exceeded. Please wait a moment and try again.');
+      }
+      if (response.status === 404) {
+        throw new Error(`ESPN_NOT_FOUND: Baseball league ${leagueId} not found. Please check the league ID.`);
+      }
+      if (response.status === 403) {
+        throw new Error(`ESPN_ACCESS_DENIED: Access denied to baseball league ${leagueId}. Set up your ESPN credentials at /settings/espn.`);
+      }
+
+      throw new Error(`ESPN_API_ERROR: ESPN returned error ${response.status}. Please try again.`);
+    }
+
+    return await response.json();
+  }
+
+  async fetchRecentActivity(
+    leagueId: string,
+    year: number = 2025,
+    _options: {
+      limit?: number;
+      type?: 'ALL' | 'WAIVER' | 'TRADE' | 'FA';
+    } = {},
+    clerkUserId?: string
+  ): Promise<any> {
+    // Note: ESPN's kona_league_communication view doesn't support limit/type filtering
+    // via query params. Filtering would need to be done client-side on the response.
+    const url = `${this.baseUrl}/games/flb/seasons/${year}/segments/0/leagues/${leagueId}?view=kona_league_communication`;
+
+    const headers: Record<string, string> = {
+      'User-Agent': 'baseball-espn-mcp/1.0',
+      'Accept': 'application/json',
+      'X-Fantasy-Source': 'kona',
+      'X-Fantasy-Platform': 'kona-web-2.0.0'
+    };
+
+    // Get user credentials (required for activity data)
+    if (clerkUserId && clerkUserId !== 'anonymous' && this.authHeader) {
+      const credentials = await this.getEspnCredentialsForUser(clerkUserId);
+      if (credentials) {
+        headers['Cookie'] = `SWID=${credentials.swid}; espn_s2=${credentials.s2}`;
+      }
+    }
+
+    const response = await fetch(url, {
+      headers,
+      cf: { cacheEverything: false }
+    });
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('ESPN_COOKIES_EXPIRED: Your ESPN cookies may have expired. Update them at /settings/espn');
+      }
+      if (response.status === 429) {
+        throw new Error('ESPN_RATE_LIMIT: ESPN rate limit exceeded. Please wait a moment and try again.');
+      }
+      if (response.status === 404) {
+        throw new Error(`ESPN_NOT_FOUND: Baseball league ${leagueId} not found. Please check the league ID.`);
+      }
+      if (response.status === 403) {
+        throw new Error(`ESPN_ACCESS_DENIED: Access denied to baseball league ${leagueId}. Set up your ESPN credentials at /settings/espn.`);
+      }
+
+      throw new Error(`ESPN_API_ERROR: ESPN returned error ${response.status}. Please try again.`);
+    }
+
+    return await response.json();
+  }
+
   async fetchStandings(leagueId: string, year: number = 2025, clerkUserId?: string): Promise<any> {
     const url = `${this.baseUrl}/games/flb/seasons/${year}/segments/0/leagues/${leagueId}?view=mStandings&view=mTeam`;
 
@@ -179,26 +386,36 @@ export class EspnApiClient {
    * Throws specific errors for auth failures and other issues
    */
   private async getEspnCredentialsForUser(clerkUserId: string): Promise<EspnCredentials | null> {
-    // Validate AUTH_WORKER_URL in production
-    const isProd = this.env.ENVIRONMENT === 'production' || this.env.NODE_ENV === 'production';
-    if (!this.env.AUTH_WORKER_URL && isProd) {
-      throw new Error('ESPN_CONFIG_ERROR: AUTH_WORKER_URL not configured. Please contact support.');
-    }
-
-    const authWorkerUrl = this.env.AUTH_WORKER_URL || 'http://localhost:8786';
-    const url = `${authWorkerUrl}/credentials/espn?raw=true`;
-
-    console.log(`🔑 Fetching ESPN credentials for user ${clerkUserId}`);
-    console.log(`🔑 Auth header present: ${!!this.authHeader}`);
-
-    const response = await fetch(url, {
+    const path = '/credentials/espn?raw=true';
+    const requestInit: RequestInit = {
       method: 'GET',
       headers: {
         'X-Clerk-User-ID': clerkUserId,
         'Content-Type': 'application/json',
         ...(this.authHeader ? { 'Authorization': this.authHeader } : {})
       }
-    });
+    };
+
+    console.log(`🔑 Fetching ESPN credentials for user ${clerkUserId}`);
+    console.log(`🔑 Auth header present: ${!!this.authHeader}`);
+    console.log(`🔑 AUTH_WORKER binding present: ${!!this.env.AUTH_WORKER}`);
+
+    let response: Response;
+
+    // Use service binding if available (preferred), otherwise fall back to URL
+    if (this.env.AUTH_WORKER) {
+      const url = new URL(path, 'https://auth-worker.internal');
+      response = await this.env.AUTH_WORKER.fetch(new Request(url.toString(), requestInit));
+    } else {
+      // Fallback to AUTH_WORKER_URL for local development
+      const isProd = this.env.ENVIRONMENT === 'production' || this.env.NODE_ENV === 'production';
+      if (isProd) {
+        console.warn('[espn] AUTH_WORKER binding missing in prod; using URL fallback');
+      }
+      const authWorkerUrl = this.env.AUTH_WORKER_URL || 'http://localhost:8786';
+      const safePath = path.startsWith('/') ? path : `/${path}`;
+      response = await fetch(`${authWorkerUrl}${safePath}`, requestInit);
+    }
 
     console.log(`📡 Auth-worker response: ${response.status} ${response.statusText}`);
     const resolvedUserId = response.headers.get('X-User-Id');

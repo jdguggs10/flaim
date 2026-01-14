@@ -180,5 +180,7 @@ Used by `.github/workflows/deploy-workers.yml`.
 | Double slashes in URLs | Trailing slash in env vars | Remove trailing slashes |
 | Extension "Failed to fetch" | Production build loaded locally | Rebuild with `NODE_ENV=development npm run build` |
 | Extension not signed in | Clerk session not syncing | Close/reopen extension popup, confirm flaim.app sign-in |
+| Chat MCP error 424 "Failed Dependency" | OpenAI can't reach localhost MCP URLs | Deploy workers to preview, update `.env.local` with preview URLs |
+| Node.js v25 localStorage warning | Known Node v25 regression | Harmless; suppressed via `--no-webstorage` in dev script |
 
 See `workers/README.md` for worker-specific troubleshooting (522s, 404s, 500s).
