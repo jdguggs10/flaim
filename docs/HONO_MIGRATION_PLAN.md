@@ -1,8 +1,77 @@
 # Hono Migration Plan (Workers)
 
+> **Status: NOT RECOMMENDED** — See architectural assessment below. This document is preserved as reference material.
+
+## Architectural Assessment (January 2025)
+
+### What Is Hono?
+
+[Hono](https://hono.dev/) is a lightweight (~14kB) web framework built on Web Standards, optimized for edge runtimes. It's the [fastest router for Cloudflare Workers](https://hono.dev/docs/concepts/benchmarks) (402k ops/sec) and is used internally by Cloudflare for D1, KV, and Queues. It's legitimate, well-maintained, and has 25k+ GitHub stars.
+
+### Current State Analysis
+
+| Worker | Lines | Routes | Pattern |
+|--------|-------|--------|---------|
+| auth-worker | 1197 | 19 | `if (pathname === ...)` |
+| baseball-mcp | 794 | 5 | `if (pathname === ...)` |
+| football-mcp | 791 | 5 | `if (pathname === ...)` |
+
+**Total: 29 routes across 3 workers.**
+
+The CORS and prefix-stripping code is duplicated (~35 lines per worker), but it's identical, stable, and rarely changes.
+
+### Why This Migration Is Not Recommended
+
+1. **The routing isn't complex.** Simple if/else on 29 routes doesn't warrant a framework. The current code is readable and a new developer could understand it in minutes.
+
+2. **The duplication is trivial.** ~100 lines of copy-pasted CORS code across 3 files isn't a maintenance burden when it rarely changes.
+
+3. **Hono has documented downsides:**
+   - [TypeScript build times can reach 8+ minutes](https://github.com/honojs/hono/issues/3869) due to type inference
+   - Smaller ecosystem than Express — more DIY problem-solving
+   - Another dependency to maintain and update
+
+4. **Project principles (from CLAUDE.md):**
+   - "Minimize complexity; every added feature has a maintenance cost"
+   - "Avoid big refactors, new infrastructure"
+   - "Solo, part-time developer... keep changes easy to revert"
+
+5. **Risk vs reward:**
+   - Risk: Breaking working auth flows, learning curve, build complexity
+   - Reward: Cleaner route syntax, middleware composition
+   - **The reward is aesthetic; the risk is functional.**
+
+### Simpler Alternative
+
+If duplication genuinely bothers you, extract shared code without adding a framework:
+
+```
+workers/
+  shared/
+    cors.ts        # ~40 lines
+    types.ts
+```
+
+Import in each worker. No framework, no migration, no risk. 15 minutes of work.
+
+### When Hono Would Make Sense
+
+- Starting a new worker from scratch
+- 50+ routes with complex middleware chains
+- A team needing enforced patterns
+- Performance problems (not applicable here)
+
+---
+
+## Original Migration Plan (Reference Only)
+
+The following sections document the proposed migration approach. Preserved for future reference if circumstances change.
+
+---
+
 ## Goal
 
-Standardize Cloudflare Worker routing and middleware with Hono to replace manual `pathname` branching and scattered CORS/auth logic. This targets the auth-worker and the two MCP workers, which currently implement their own routing and shared behaviors independently. The aim is to improve consistency, reduce duplication, and make it easier to add endpoints and middleware (CORS, auth, logging, rate limits) across workers.【F:docs/TODO.md†L18-L23】
+Standardize Cloudflare Worker routing and middleware with Hono to replace manual `pathname` branching and scattered CORS/auth logic. This targets the auth-worker and the two MCP workers, which currently implement their own routing and shared behaviors independently. The aim is to improve consistency, reduce duplication, and make it easier to add endpoints and middleware (CORS, auth, logging, rate limits) across workers.
 
 ## Current Worker Routing (Baseline)
 
