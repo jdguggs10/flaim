@@ -6,7 +6,7 @@
     "node": ">=24"
   },
   "scripts": {
-    "dev": "next dev",
+    "dev": "NODE_OPTIONS='--no-webstorage' next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint"
