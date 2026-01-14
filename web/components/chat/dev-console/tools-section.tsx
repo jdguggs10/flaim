@@ -435,6 +435,7 @@ export function ToolsSection() {
       // Clear legacy config once sentinel is applied
       setMcpConfig({ ...mcpConfig, allowed_tools: "" });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [servers.length, toolsStateByServer, mcpAvailableTools, disabledMcpTools, mcpConfig, setMcpConfig, setMcpAvailableToolsByServer, setDisabledMcpToolsByServer]);
 
   // If a server was marked "disable all" before tools loaded, expand to full list once available.

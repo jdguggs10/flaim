@@ -1,7 +1,7 @@
 import { SignedIn, SignedOut } from '@clerk/nextjs';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { MessageSquare, Shield, Lock, User, Check, Link as LinkIcon, Info } from 'lucide-react';
+import { MessageSquare, User, Check, Link as LinkIcon, Info } from 'lucide-react';
 import { StepSyncEspn } from '@/components/site/StepSyncEspn';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 

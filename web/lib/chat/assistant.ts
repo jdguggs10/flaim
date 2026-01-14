@@ -373,17 +373,20 @@ export const processMessages = async () => {
           // The Responses API needs this to maintain context of what tools were called and their results
           // IMPORTANT: Must strip 'status' field - the API returns it but rejects it on input
           // See: https://github.com/openai/openai-python/issues/2670
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
           const { status, ...mcpCallWithoutStatus } = item;
           conversationItems.push(mcpCallWithoutStatus);
           setConversationItems([...conversationItems]);
         } else if (item.type === "function_call") {
           // For function calls, push the call specification (strip status to be safe)
           // The output will be pushed separately after local execution
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
           const { status, ...functionCallWithoutStatus } = item;
           conversationItems.push(functionCallWithoutStatus);
           setConversationItems([...conversationItems]);
         } else if (item.type === "web_search_call" || item.type === "file_search_call" || item.type === "code_interpreter_call") {
           // For built-in tools, push the complete item (strip status to be safe)
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
           const { status, ...builtInToolWithoutStatus } = item;
           conversationItems.push(builtInToolWithoutStatus);
           setConversationItems([...conversationItems]);

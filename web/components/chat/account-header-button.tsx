@@ -26,6 +26,7 @@ export function AccountHeaderButton() {
   useEffect(() => {
     if (!isLoaded) return;
     checkToken();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [getToken, isLoaded]);
 
   const handleRefresh = async () => {
