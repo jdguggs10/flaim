@@ -179,26 +179,36 @@ export class EspnApiClient {
    * Throws specific errors for auth failures and other issues
    */
   private async getEspnCredentialsForUser(clerkUserId: string): Promise<EspnCredentials | null> {
-    // Validate AUTH_WORKER_URL in production
-    const isProd = this.env.ENVIRONMENT === 'production' || this.env.NODE_ENV === 'production';
-    if (!this.env.AUTH_WORKER_URL && isProd) {
-      throw new Error('ESPN_CONFIG_ERROR: AUTH_WORKER_URL not configured. Please contact support.');
-    }
-
-    const authWorkerUrl = this.env.AUTH_WORKER_URL || 'http://localhost:8786';
-    const url = `${authWorkerUrl}/credentials/espn?raw=true`;
-
-    console.log(`🔑 Fetching ESPN credentials for user ${clerkUserId}`);
-    console.log(`🔑 Auth header present: ${!!this.authHeader}`);
-
-    const response = await fetch(url, {
+    const path = '/credentials/espn?raw=true';
+    const requestInit: RequestInit = {
       method: 'GET',
       headers: {
         'X-Clerk-User-ID': clerkUserId,
         'Content-Type': 'application/json',
         ...(this.authHeader ? { 'Authorization': this.authHeader } : {})
       }
-    });
+    };
+
+    console.log(`🔑 Fetching ESPN credentials for user ${clerkUserId}`);
+    console.log(`🔑 Auth header present: ${!!this.authHeader}`);
+    console.log(`🔑 AUTH_WORKER binding present: ${!!this.env.AUTH_WORKER}`);
+
+    let response: Response;
+
+    // Use service binding if available (preferred), otherwise fall back to URL
+    if (this.env.AUTH_WORKER) {
+      const url = new URL(path, 'https://auth-worker.internal');
+      response = await this.env.AUTH_WORKER.fetch(new Request(url.toString(), requestInit));
+    } else {
+      // Fallback to AUTH_WORKER_URL for local development
+      const isProd = this.env.ENVIRONMENT === 'production' || this.env.NODE_ENV === 'production';
+      if (isProd) {
+        console.warn('[espn] AUTH_WORKER binding missing in prod; using URL fallback');
+      }
+      const authWorkerUrl = this.env.AUTH_WORKER_URL || 'http://localhost:8786';
+      const safePath = path.startsWith('/') ? path : `/${path}`;
+      response = await fetch(`${authWorkerUrl}${safePath}`, requestInit);
+    }
 
     console.log(`📡 Auth-worker response: ${response.status} ${response.statusText}`);
     const resolvedUserId = response.headers.get('X-User-Id');
