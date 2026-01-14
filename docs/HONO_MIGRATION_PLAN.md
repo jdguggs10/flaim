@@ -74,14 +74,62 @@ Adding new routes, middleware, or features becomes significantly easier with a p
 
 **TypeScript build times** can become an issue at scale ([documented for large apps](https://github.com/honojs/hono/issues/3869)), but 29 routes won't hit this.
 
+### Roadmap Alignment
+
+Analysis of TODO.md items shows Hono has strong synergy with planned work:
+
+| Planned Work | Hono Impact | Notes |
+|--------------|-------------|-------|
+| **Adopt Official MCP SDK** | 🟢 Strong synergy | Proven [mcp-hono-stateless](https://github.com/mhart/mcp-hono-stateless) pattern exists |
+| **Automated Testing** | 🟢 Enables | Hono's `app.request()` makes testing trivial |
+| **Add hockey/basketball** | 🟢 Strong benefit | Copy clean Hono template, not 800 lines |
+| **Expand to Yahoo/Sleeper** | 🟢 Strong benefit | Consistent patterns across platforms |
+| **Harden OAuth** | 🟢 Helps | Middleware isolates auth logic, enables testing |
+| **Standardize Worker Routing** | 🟢 This IS Hono | Directly addresses this TODO item |
+
+**Key insight:** The roadmap includes 4+ new workers (hockey, basketball, Yahoo, Sleeper). Each without Hono means replicating manual routing, CORS, and prefix-stripping. Each with Hono means extending a proven pattern.
+
+#### MCP SDK + Hono Integration
+
+A proven pattern exists: [mcp-hono-stateless](https://github.com/mhart/mcp-hono-stateless) demonstrates MCP SDK running on Hono + Cloudflare Workers. The integration uses `fetch-to-node` to bridge Hono's fetch API with MCP SDK's Node-style streams:
+
+```typescript
+app.post('/mcp', async (c) => {
+  const { req, res } = toReqRes(c.req.raw)
+  const body = await c.req.json()
+  req.body = body
+  await transport.handleRequest(req, res, body)
+  return toFetchResponse(res)
+})
+```
+
+#### Testing Benefits
+
+Current workers require complex request mocking. With Hono:
+
+```typescript
+// Clean testing with app.request()
+const res = await app.request('/leagues', {
+  method: 'POST',
+  body: JSON.stringify({ leagueId: '123' })
+}, mockEnv)
+
+expect(res.status).toBe(200)
+```
+
+See [Hono Testing Guide](https://hono.dev/docs/guides/testing) and [Cloudflare Vitest Integration](https://hono.dev/examples/cloudflare-vitest).
+
 ### Recommendation
 
-**Adopt opportunistically.** When you're already touching a worker for other reasons (new features, bug fixes), migrate that worker to Hono. Don't do a standalone refactor just for the sake of it.
+**Adopt Hono as foundational work** before MCP SDK migration, testing, or new workers. The investment compounds across all planned items.
 
-**Suggested order:**
-1. Baseball MCP (smallest, 5 routes) — low risk first migration
-2. Football MCP (similar structure, validates pattern)
-3. Auth-worker (largest, most critical — do last)
+**Suggested sequence:**
+1. Migrate baseball-mcp to Hono (smallest, proves pattern)
+2. Add tests for baseball-mcp using `app.request()`
+3. Adopt MCP SDK in baseball-mcp (using proven Hono pattern)
+4. Replicate pattern to football-mcp
+5. Use pattern as template for hockey/basketball workers
+6. Migrate auth-worker last (most complex, benefits from lessons learned)
 
 ### Minimal Alternative
 
@@ -92,7 +140,7 @@ workers/
     cors.ts        # ~40 lines
     types.ts
 ```
-This addresses duplication but not the routing clarity or middleware benefits.
+This addresses duplication but not routing clarity, middleware composition, testing, or MCP SDK integration benefits.
 
 ---
 
