@@ -646,20 +646,6 @@ export const processMessages = async () => {
         console.log("response completed", data);
         const { response } = data;
 
-        // Handle all MCP tools list items (multiple servers can return these)
-        const mcpListToolsMessages = response.output.filter(
-          (m: Item) => m.type === "mcp_list_tools"
-        );
-
-        for (const mcpListToolsMessage of mcpListToolsMessages) {
-          chatMessages.push({
-            type: "mcp_list_tools",
-            id: mcpListToolsMessage.id,
-            server_label: mcpListToolsMessage.server_label,
-            tools: mcpListToolsMessage.tools || [],
-          });
-        }
-
         // Handle all MCP approval request items (multiple servers can return these)
         const mcpApprovalRequestMessages = response.output.filter(
           (m: Item) => m.type === "mcp_approval_request"
@@ -675,8 +661,8 @@ export const processMessages = async () => {
           });
         }
 
-        // Only update state if we added any MCP items
-        if (mcpListToolsMessages.length > 0 || mcpApprovalRequestMessages.length > 0) {
+        // Only update state if we added any MCP approval items
+        if (mcpApprovalRequestMessages.length > 0) {
           setChatMessages([...chatMessages]);
         }
 

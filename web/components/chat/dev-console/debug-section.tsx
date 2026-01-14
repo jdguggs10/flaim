@@ -155,14 +155,16 @@ export function DebugSection() {
 
                 return (
                   <div key={item.id} className="space-y-0.5">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-mono truncate">{label}</span>
-                      <span className={statusClass}>
+                    <div className="flex items-start justify-between gap-2 text-xs">
+                      <span className="font-mono break-words min-w-0 flex-1">
+                        {label}
+                      </span>
+                      <span className={`${statusClass} shrink-0 whitespace-nowrap`}>
                         {item.status} · {duration}
                       </span>
                     </div>
                     {item.metadata?.error && (
-                      <div className="text-[10px] text-red-600 truncate">
+                      <div className="text-[10px] text-red-600 break-words">
                         {item.metadata.error}
                       </div>
                     )}
