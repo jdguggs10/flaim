@@ -15,7 +15,9 @@
     "tail:dev": "wrangler tail --env dev"
   },
   "dependencies": {
-    "@cloudflare/workers-types": "^4.0.0"
+    "@cloudflare/workers-types": "^4.0.0",
+    "@flaim/worker-shared": "*",
+    "hono": "^4.7.0"
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",
