@@ -1,12 +1,19 @@
 # Architectural Analysis: Adopting @modelcontextprotocol/sdk
 
 **Date**: 2026-01-15
+**Updated**: 2026-01-15 (Extended Research)
 **Status**: Investigation Complete
 **Author**: Claude (Architecture Analysis)
 
 ## Executive Summary
 
-Adopting the official MCP SDK would **replace approximately 600-800 lines of protocol boilerplate per worker** while gaining automatic spec compliance, better type safety, and official transport implementations. However, there are **significant complexity considerations** for your Cloudflare Workers environment with OAuth integration.
+Adopting the official MCP SDK would **replace approximately 600-800 lines of protocol boilerplate per worker** while gaining automatic spec compliance, better type safety, and official transport implementations. The SDK is now at **version 1.25.x** with mature authentication context support.
+
+**Key Finding**: There are now **two viable paths** for Cloudflare Workers:
+1. **Native Cloudflare approach** using `createMcpHandler` + `WorkerTransport` (recommended)
+2. **Standard SDK** with `fetch-to-node` shim for `StreamableHTTPServerTransport`
+
+Your custom OAuth flow (`_meta["mcp/www_authenticate"]`) is **compliant with MCP spec** (RFC 9728) and can be preserved.
 
 ---
 
@@ -77,7 +84,14 @@ npm install @modelcontextprotocol/sdk zod
 - `@modelcontextprotocol/sdk/server/auth/router.js` → `mcpAuthRouter`
 - `@modelcontextprotocol/sdk/server/auth/providers/proxyProvider.js` → `ProxyOAuthServerProvider`
 
-### Tool Registration with SDK
+### Tool Registration APIs
+
+**Important**: The SDK has two APIs - use `registerTool()` (recommended), not the deprecated `tool()`:
+
+| Method | Status | Schema Support |
+|--------|--------|----------------|
+| `registerTool()` | **Current/Recommended** | Full Zod support including `z.union()`, `z.intersection()` |
+| `tool()` | Deprecated | Limited to `ZodRawShape` only |
 
 ```typescript
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -99,32 +113,80 @@ server.registerTool(
       seasonId: z.string().optional().describe("Season year")
     }
   },
-  async ({ leagueId, seasonId }) => {
+  async ({ leagueId, seasonId }, extra) => {
+    // Access auth context via extra.authInfo (added in PR #399)
+    const token = extra.authInfo?.token;
     const result = await getEspnLeagueInfo(...);
     return { content: [{ type: "text", text: JSON.stringify(result) }] };
   }
 );
 ```
 
+### Authentication Context in Tool Handlers
+
+**Good news**: The SDK now natively supports passing auth context to tool handlers (resolved via [PR #166](https://github.com/modelcontextprotocol/typescript-sdk/issues/171) and [PR #399](https://github.com/modelcontextprotocol/typescript-sdk/issues/397)):
+
+```typescript
+server.registerTool("my_tool", {...}, async (args, extra) => {
+  // Access authentication info directly
+  const token = extra.authInfo?.token;        // The bearer token
+  const clientId = extra.authInfo?.clientId;  // OAuth client ID
+
+  // Use token for downstream API calls (e.g., ESPN API)
+  return { content: [...] };
+});
+```
+
+This eliminates the need for workarounds like manually injecting context into message params.
+
 ---
 
 ## 3. Cloudflare Workers Compatibility
 
-### Official Support Exists
+### Two Approaches for Workers
 
-Cloudflare has **first-class MCP support** as of 2025:
+Cloudflare has **first-class MCP support** as of 2025 with two main patterns:
 
-- Cloudflare Agents SDK provides `McpAgent` class
-- Streamable HTTP transport works in serverless mode
-- `mcp-hono-stateless` demonstrates stateless Workers deployment
-
-### Challenge: The SDK Wasn't Built for Serverless
-
-The official SDK uses Node.js-style streams, requiring adaptations:
+#### Approach 1: Native Cloudflare (`createMcpHandler` + `WorkerTransport`) - RECOMMENDED
 
 ```typescript
-// Required adapter for Workers: fetch-to-node
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { createMcpHandler, getMcpAuthContext } from "@cloudflare/agents";
+import { z } from "zod";
+
+const server = new McpServer({ name: "fantasy-baseball-mcp", version: "4.0.0" });
+
+server.registerTool("get_league_info", {
+  title: "League Info",
+  description: "Get ESPN fantasy league information",
+  inputSchema: { leagueId: z.string() }
+}, async ({ leagueId }) => {
+  // Access auth context via Cloudflare's helper
+  const authContext = getMcpAuthContext();
+  const token = authContext?.token;
+  // ... your logic
+  return { content: [{ type: "text", text: JSON.stringify(result) }] };
+});
+
+export default {
+  fetch: createMcpHandler(server)
+};
+```
+
+**Benefits**:
+- `WorkerTransport` is built on web standards, native to Workers
+- No `fetch-to-node` shim needed
+- `getMcpAuthContext()` provides auth info to tools
+- Handles CORS, SSE streaming, session management automatically
+
+#### Approach 2: Standard SDK with `fetch-to-node` Shim
+
+```typescript
+import { Hono } from 'hono';
 import { toFetchResponse, toReqRes } from 'fetch-to-node';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+
+const app = new Hono();
 
 app.post('/mcp', async (c) => {
   const { req, res } = toReqRes(c.req.raw);
@@ -135,15 +197,50 @@ app.post('/mcp', async (c) => {
 });
 ```
 
-### Your Specific Challenges
+**When to use**: If you need features not yet in Cloudflare's wrapper.
 
-| Your Feature | SDK Support | Complexity |
-|--------------|-------------|------------|
-| Custom OAuth via `_meta["mcp/www_authenticate"]` | Partial | High - SDK expects standard OAuth flow |
-| Service bindings to auth-worker | Not built-in | Medium - pass through context |
-| Legacy REST endpoints (`/mcp/tools/list`) | You maintain | Low |
-| Onboarding/discovery endpoints | Separate concern | Low |
-| Sport-specific tool normalization | In tool handlers | Low |
+### Node.js Compatibility in Workers (Improved)
+
+Cloudflare Workers now have [extensive Node.js compatibility](https://blog.cloudflare.com/nodejs-workers-2025/):
+
+- Enable `nodejs_compat` flag in `wrangler.toml`
+- Full Node.js streams implementation available
+- `node:http` supported via compatibility flags
+
+```toml
+# wrangler.toml
+compatibility_flags = ["nodejs_compat"]
+compatibility_date = "2024-09-23"
+```
+
+### Your Specific Challenges (Reassessed)
+
+| Your Feature | SDK Support | Complexity | Notes |
+|--------------|-------------|------------|-------|
+| Custom OAuth via `_meta["mcp/www_authenticate"]` | **✅ Compliant** | Low | RFC 9728 standard |
+| Service bindings to auth-worker | Via context | Medium | Pass through `getMcpAuthContext()` |
+| Legacy REST endpoints (`/mcp/tools/list`) | You maintain | Low | Deprecate over time |
+| Onboarding/discovery endpoints | Separate concern | Low | Keep outside MCP handler |
+| Sport-specific tool normalization | In tool handlers | Low | Unchanged |
+
+### OAuth 401 Response (Your Implementation is Correct)
+
+Your current 401 response pattern follows [MCP Authorization Spec (RFC 9728)](https://modelcontextprotocol.io/specification/draft/basic/authorization):
+
+```typescript
+// Your current pattern - THIS IS CORRECT
+return new Response(JSON.stringify({
+  error: { code: -32001, message: "Unauthorized" },
+  _meta: { "mcp/www_authenticate": { ... } }
+}), {
+  status: 401,
+  headers: {
+    'WWW-Authenticate': 'Bearer resource_metadata="https://api.flaim.app/.well-known/oauth-protected-resource"'
+  }
+});
+```
+
+The MCP spec states: "MCP servers MUST use the HTTP header WWW-Authenticate when returning a 401 Unauthorized to indicate the location of the resource server metadata URL."
 
 ---
 
@@ -245,6 +342,68 @@ export class BaseballMcpAgent extends McpAgent<Env, State> {
 - Requires Durable Objects (different billing model)
 - Some timeout issues reported (GitHub Issue #640)
 - Tighter Cloudflare lock-in
+
+---
+
+### Option D: Native Cloudflare with `createMcpHandler` (NEW RECOMMENDED)
+
+Use `createMcpHandler` for stateless Workers without Durable Objects:
+
+```typescript
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { createMcpHandler, getMcpAuthContext, WorkerTransport } from "@cloudflare/agents";
+import { z } from "zod";
+
+// Create MCP server with all tools
+const server = new McpServer({ name: "fantasy-baseball-mcp", version: "4.0.0" });
+
+// Register tools
+server.registerTool("get_user_session", {
+  title: "User Session",
+  description: "Get user session and league data",
+  inputSchema: {}
+}, async (args, extra) => {
+  const authContext = getMcpAuthContext();
+  // Access your auth-worker via service binding passed in env
+  // ...
+  return { content: [{ type: "text", text: JSON.stringify(result) }] };
+});
+
+// Custom handler with your auth middleware
+export default {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    const url = new URL(request.url);
+
+    // Keep your existing non-MCP routes
+    if (url.pathname === '/health') { /* ... */ }
+    if (url.pathname === '/onboarding/initialize') { /* ... */ }
+
+    // Custom auth check BEFORE MCP handler
+    if (url.pathname === '/mcp') {
+      const authHeader = request.headers.get('Authorization');
+      if (!authHeader) {
+        return yourCustom401Response(); // Keep your _meta handling
+      }
+    }
+
+    // Delegate to MCP handler
+    return createMcpHandler(server, {
+      path: '/mcp',
+      // Pass env to tools via context
+    })(request, env);
+  }
+};
+```
+
+**Benefits**:
+- No Durable Objects required (regular Worker billing)
+- Native `WorkerTransport` - no `fetch-to-node` needed
+- Keep your custom auth middleware
+- Stateless by default (each request = new session)
+
+**Considerations**:
+- Newer API, less community examples
+- Need to verify `getMcpAuthContext()` works with your custom auth
 
 ---
 
@@ -367,27 +526,63 @@ export function createMcpServer(sport: 'baseball' | 'football', env: Env) {
 
 ## 9. Code Reduction Summary
 
-| Approach | Lines Removed | New Lines | Net Change | Complexity |
-|----------|---------------|-----------|------------|------------|
-| Option A (Minimal) | ~400 | ~150 | **-250** | Low |
-| Option B (Full Hono) | ~700 | ~200 | **-500** | Medium |
-| Option C (CF Agents) | ~800 | ~300 | **-500** | High |
+| Approach | Lines Removed | New Lines | Net Change | Complexity | Recommended? |
+|----------|---------------|-----------|------------|------------|--------------|
+| Option A (Minimal) | ~400 | ~150 | **-250** | Low | Good start |
+| Option B (Full Hono) | ~700 | ~200 | **-500** | Medium | If portable |
+| Option C (CF Agents McpAgent) | ~800 | ~300 | **-500** | High | Not now |
+| **Option D (createMcpHandler)** | ~700 | ~150 | **-550** | **Low-Medium** | **✅ BEST** |
 
-**Recommendation**: Start with **Option A** on the baseball worker. The minimal adoption gives you:
+**Revised Recommendation**: Start with **Option D** (`createMcpHandler`) on the baseball worker:
+- Native Cloudflare transport (no shims)
+- No Durable Objects overhead
+- Keep your custom 401 auth flow
 - Zod-based type safety
-- Automatic protocol compliance
-- A path to full adoption later
-- Minimal disruption to your working OAuth flow
+- Clean migration path
 
 ---
 
 ## 10. Key Resources
 
-- [TypeScript SDK Repository](https://github.com/modelcontextprotocol/typescript-sdk)
+### Official SDK Documentation
+- [TypeScript SDK Repository](https://github.com/modelcontextprotocol/typescript-sdk) - Version 1.25.x
 - [npm Package](https://www.npmjs.com/package/@modelcontextprotocol/sdk)
 - [Server Documentation](https://github.com/modelcontextprotocol/typescript-sdk/blob/main/docs/server.md)
-- [Example Remote Server](https://github.com/modelcontextprotocol/example-remote-server)
-- [mcp-hono-stateless](https://github.com/mhart/mcp-hono-stateless) - Stateless Workers pattern
+- [SDK Releases & Changelog](https://github.com/modelcontextprotocol/typescript-sdk/releases)
+- [MCP Spec Changelog (2025-11-25)](https://modelcontextprotocol.io/specification/2025-11-25/changelog)
+
+### Cloudflare Workers Integration
 - [Cloudflare MCP Docs](https://developers.cloudflare.com/agents/model-context-protocol/)
-- [Cloudflare Agents Issue #640](https://github.com/cloudflare/agents/issues/640) - McpAgent timeout issues
-- [MCP Authorization Tutorial](https://modelcontextprotocol.io/docs/tutorials/security/authorization)
+- [createMcpHandler API Reference](https://developers.cloudflare.com/agents/model-context-protocol/mcp-handler-api/)
+- [WorkerTransport Documentation](https://developers.cloudflare.com/agents/model-context-protocol/transport/)
+- [MCP Tools Registration](https://developers.cloudflare.com/agents/model-context-protocol/tools/)
+- [Build Remote MCP Server Guide](https://developers.cloudflare.com/agents/guides/remote-mcp-server/)
+- [Cloudflare Blog: Remote MCP Servers](https://blog.cloudflare.com/remote-model-context-protocol-servers-mcp/)
+- [Node.js Compatibility in Workers (2025)](https://blog.cloudflare.com/nodejs-workers-2025/)
+
+### Authentication & OAuth
+- [MCP Authorization Spec](https://modelcontextprotocol.io/specification/draft/basic/authorization) - RFC 9728
+- [Auth Context in Tool Handlers (Issue #171)](https://github.com/modelcontextprotocol/typescript-sdk/issues/171) - RESOLVED
+- [AuthInfo in RequestHandlerExtra (Issue #397)](https://github.com/modelcontextprotocol/typescript-sdk/issues/397) - RESOLVED
+- [MCP Auth Implementation Guide](https://stytch.com/blog/MCP-authentication-and-authorization-guide/)
+
+### Examples & Patterns
+- [Example Remote Server](https://github.com/modelcontextprotocol/example-remote-server)
+- [mcp-hono-stateless](https://github.com/mhart/mcp-hono-stateless) - Stateless Workers with Hono
+- [Learn MCP Tutorial](https://learnmcp.examples.workers.dev/)
+
+### Known Issues
+- [McpAgent Timeout Issues](https://github.com/cloudflare/agents/issues/640)
+- [Zod v4 Compatibility](https://github.com/modelcontextprotocol/modelcontextprotocol/issues/1429)
+
+---
+
+## 11. Appendix: SDK Version Compatibility
+
+| SDK Version | Protocol Version | Key Features |
+|-------------|------------------|--------------|
+| 1.25.x | 2025-11-25 | Latest spec, authInfo in handlers |
+| 1.24.x | 2025-11-25 | Framework-agnostic refactor |
+| 1.23.x | 2025-06-18 | SSE priming behavior changes |
+
+**Zod Compatibility**: SDK uses `zod/v4` internally but works with `zod@3.25+`. Avoid `zod@3.23.x` due to type mismatches.
