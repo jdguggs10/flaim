@@ -36,74 +36,96 @@ echo "   Target: $BASE_URL"
 echo "   Time:   $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 echo ""
 
+# Helpers
+get_status() {
+  echo "$1" | awk 'NR==1 {print $2}'
+}
+
 # Test individual endpoints
 test_health() {
   echo -n "  Health endpoint: "
-  local status
-  status=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/baseball/health")
-  if [ "$status" = "200" ]; then
+  local headers body status
+  headers=$(curl -s -D - -o /dev/null "$BASE_URL/baseball/health" | tr -d '\r')
+  body=$(curl -s "$BASE_URL/baseball/health")
+  status=$(get_status "$headers")
+  if [ "$status" = "200" ] && echo "$body" | grep -q 'baseball-espn-mcp'; then
     echo "✅ $status"
     PASSED=$((PASSED + 1))
   else
-    echo "❌ Expected 200, got $status"
+    echo "❌ Expected 200 + service field, got $status"
     FAILED=$((FAILED + 1))
   fi
 }
 
 test_oauth_metadata() {
   echo -n "  OAuth metadata: "
-  local status
-  status=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/baseball/.well-known/oauth-protected-resource")
-  if [ "$status" = "200" ]; then
+  local headers body status
+  headers=$(curl -s -D - -o /dev/null "$BASE_URL/baseball/.well-known/oauth-protected-resource" | tr -d '\r')
+  body=$(curl -s "$BASE_URL/baseball/.well-known/oauth-protected-resource")
+  status=$(get_status "$headers")
+  if [ "$status" = "200" ] && echo "$body" | grep -q 'api.flaim.app/baseball/mcp'; then
     echo "✅ $status"
     PASSED=$((PASSED + 1))
   else
-    echo "❌ Expected 200, got $status"
+    echo "❌ Expected 200 + resource field, got $status"
     FAILED=$((FAILED + 1))
   fi
 }
 
 test_cors_preflight() {
   echo -n "  CORS preflight: "
-  local status
-  status=$(curl -s -o /dev/null -w "%{http_code}" -X OPTIONS "$BASE_URL/baseball/mcp" \
+  local headers status
+  headers=$(curl -s -D - -o /dev/null -X OPTIONS "$BASE_URL/baseball/mcp" \
     -H "Origin: https://flaim.app" \
-    -H "Access-Control-Request-Method: POST")
-  if [ "$status" = "200" ]; then
+    -H "Access-Control-Request-Method: POST" | tr -d '\r')
+  status=$(get_status "$headers")
+  if [ "$status" = "200" ] \
+    && echo "$headers" | grep -qi '^access-control-allow-origin: https://flaim.app$' \
+    && echo "$headers" | grep -qi '^access-control-allow-headers: .*authorization.*x-clerk-user-id'; then
     echo "✅ $status"
     PASSED=$((PASSED + 1))
   else
-    echo "❌ Expected 200, got $status"
+    echo "❌ Expected 200 + CORS headers, got $status"
     FAILED=$((FAILED + 1))
   fi
 }
 
 test_mcp_unauthorized() {
   echo -n "  MCP unauthorized: "
-  local status
-  status=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE_URL/baseball/mcp" \
+  local headers body status
+  headers=$(curl -s -D - -o /dev/null -X POST "$BASE_URL/baseball/mcp" \
+    -H "Content-Type: application/json" \
+    -d '{"jsonrpc":"2.0","method":"initialize","id":1}' | tr -d '\r')
+  body=$(curl -s -X POST "$BASE_URL/baseball/mcp" \
     -H "Content-Type: application/json" \
     -d '{"jsonrpc":"2.0","method":"initialize","id":1}')
-  if [ "$status" = "401" ]; then
+  status=$(get_status "$headers")
+  if [ "$status" = "401" ] \
+    && echo "$headers" | grep -qi '^www-authenticate: Bearer' \
+    && echo "$body" | grep -q '"mcp/www_authenticate"'; then
     echo "✅ $status"
     PASSED=$((PASSED + 1))
   else
-    echo "❌ Expected 401, got $status"
+    echo "❌ Expected 401 + OAuth headers/body, got $status"
     FAILED=$((FAILED + 1))
   fi
 }
 
 test_onboarding_unauthorized() {
   echo -n "  Onboarding unauthorized: "
-  local status
-  status=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE_URL/baseball/onboarding/initialize" \
+  local headers body status
+  headers=$(curl -s -D - -o /dev/null -X POST "$BASE_URL/baseball/onboarding/initialize" \
+    -H "Content-Type: application/json" \
+    -d '{}' | tr -d '\r')
+  body=$(curl -s -X POST "$BASE_URL/baseball/onboarding/initialize" \
     -H "Content-Type: application/json" \
     -d '{}')
-  if [ "$status" = "401" ]; then
+  status=$(get_status "$headers")
+  if [ "$status" = "401" ] && echo "$body" | grep -q 'Authentication required - X-Clerk-User-ID'; then
     echo "✅ $status"
     PASSED=$((PASSED + 1))
   else
-    echo "❌ Expected 401, got $status"
+    echo "❌ Expected 401 + auth error, got $status"
     FAILED=$((FAILED + 1))
   fi
 }

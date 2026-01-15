@@ -7,16 +7,25 @@
 import type { CorsOptions } from './types.js';
 
 /**
- * Default allowed origins for all Flaim workers
+ * Default allowed origins for MCP workers (matches current behavior).
  */
-const DEFAULT_ALLOWED_ORIGINS = [
+const MCP_ALLOWED_ORIGINS = [
   'https://*.vercel.app',       // All Vercel preview deployments
   'https://flaim.app',          // Production
-  'https://www.flaim.app',      // Production with www subdomain
   'http://localhost:8787',      // Wrangler dev server (HTTP)
   'https://localhost:8787',     // Wrangler dev server (HTTPS)
   'http://localhost:3000',      // Next.js dev server
 ];
+
+/**
+ * Auth-worker specific additions (kept explicit to avoid behavior drift).
+ */
+const AUTH_WORKER_ADDITIONAL_ORIGINS = [
+  'https://www.flaim.app',      // Production with www subdomain
+];
+
+const AUTH_WORKER_ADDITIONAL_METHODS = ['PATCH'];
+const AUTH_WORKER_MAX_AGE = 86400;
 
 /**
  * Default allowed HTTP methods
@@ -35,12 +44,24 @@ function isOriginAllowed(origin: string, allowedOrigins: string[]): boolean {
   return allowedOrigins.some(allowedOrigin => {
     if (allowedOrigin.includes('*')) {
       // Handle wildcard patterns (e.g., https://*.vercel.app)
-      const pattern = allowedOrigin.replace(/\*/g, '.*');
-      const regex = new RegExp(`^${pattern}$`);
+      const regex = wildcardToRegex(allowedOrigin);
       return regex.test(origin);
     }
     return allowedOrigin === origin;
   });
+}
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function wildcardToRegex(pattern: string): RegExp {
+  const escaped = pattern.split('*').map(escapeRegex).join('.*');
+  return new RegExp(`^${escaped}$`);
+}
+
+function mergeUnique(values: string[]): string[] {
+  return Array.from(new Set(values));
 }
 
 /**
@@ -51,7 +72,7 @@ export function createCorsHeaders(request: Request, options: CorsOptions = {}): 
 
   // Build allowlist
   const allowedOrigins = [
-    ...DEFAULT_ALLOWED_ORIGINS,
+    ...MCP_ALLOWED_ORIGINS,
     ...(options.additionalOrigins || []),
   ];
 
@@ -92,6 +113,44 @@ export function handleCorsPreflightResponse(request: Request, options: CorsOptio
   return new Response(null, {
     status: 200,
     headers: createCorsHeaders(request, options),
+  });
+}
+
+/**
+ * Convenience helpers to preserve existing per-worker behavior.
+ */
+export function createMcpCorsHeaders(request: Request, options: CorsOptions = {}): Record<string, string> {
+  return createCorsHeaders(request, options);
+}
+
+export function handleMcpCorsPreflightResponse(request: Request, options: CorsOptions = {}): Response {
+  return new Response(null, {
+    status: 200,
+    headers: createMcpCorsHeaders(request, options),
+  });
+}
+
+export function createAuthWorkerCorsHeaders(request: Request, options: CorsOptions = {}): Record<string, string> {
+  const mergedOptions: CorsOptions = {
+    ...options,
+    additionalOrigins: mergeUnique([
+      ...AUTH_WORKER_ADDITIONAL_ORIGINS,
+      ...(options.additionalOrigins || []),
+    ]),
+    additionalMethods: mergeUnique([
+      ...AUTH_WORKER_ADDITIONAL_METHODS,
+      ...(options.additionalMethods || []),
+    ]),
+    maxAge: options.maxAge ?? AUTH_WORKER_MAX_AGE,
+  };
+
+  return createCorsHeaders(request, mergedOptions);
+}
+
+export function handleAuthWorkerCorsPreflightResponse(request: Request, options: CorsOptions = {}): Response {
+  return new Response(null, {
+    status: 200,
+    headers: createAuthWorkerCorsHeaders(request, options),
   });
 }
 

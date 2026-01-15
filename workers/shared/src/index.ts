@@ -17,6 +17,10 @@ export {
   createCorsHeaders,
   handleCorsPreflightResponse,
   isCorsPreflightRequest,
+  createMcpCorsHeaders,
+  handleMcpCorsPreflightResponse,
+  createAuthWorkerCorsHeaders,
+  handleAuthWorkerCorsPreflightResponse,
 } from './cors.js';
 
 // URL utilities
