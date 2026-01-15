@@ -612,19 +612,29 @@ const userId = auth.sessionClaims?.sub;
 
 > **Philosophy:** Each phase ends with a deployable, working state. Production is never broken. Each checkpoint has clear go/no-go criteria. Rollback is always one `git revert` away.
 
-### Phase 0: Pre-Migration Setup
+### Phase 0: Pre-Migration Setup ✅
 
 **Goal:** Establish baseline and testing infrastructure.
 
+**Status:** Complete (2026-01-15)
+
 **Tasks:**
-- [ ] Create feature branch: `git checkout -b feat/hono-mcp-sdk-migration`
-- [ ] Document current behavior baseline (capture actual responses from each endpoint)
-- [ ] Set up local test script for manual verification
-- [ ] Ensure preview environment is working: `wrangler deploy --env preview`
+- [x] Create feature branch: `git checkout -b feat/hono-mcp-sdk-migration`
+- [x] Document current behavior baseline → `workers/baseball-espn-mcp/scripts/BASELINE.md`
+- [x] Set up local test script → `workers/baseball-espn-mcp/scripts/verify-baseline.sh`
+- [x] Verify preview environment working (all 5 tests pass)
 
-**Checkpoint 0:** Baseline documented, preview deploys working.
+**Checkpoint 0:** ✅ Baseline documented, preview deploys working.
 
-**Go/No-Go:** Can deploy to preview without errors? Baseline captured? → Proceed.
+**Artifacts created:**
+- `workers/baseball-espn-mcp/scripts/BASELINE.md` — Expected responses for all endpoints
+- `workers/baseball-espn-mcp/scripts/verify-baseline.sh` — Automated verification script
+
+**Verification results:**
+```
+Production (workers.dev): 5/5 tests pass
+Preview (workers.dev):    5/5 tests pass
+```
 
 ---
 
@@ -909,19 +919,19 @@ describe('baseball-mcp', () => {
 
 ## Checkpoint Summary
 
-| Phase | Checkpoint | Go/No-Go Criteria | Rollback |
-|-------|------------|-------------------|----------|
-| 0 | Baseline | Preview deploys, baseline captured | N/A |
-| 1 | Shared module | Compiles, exports typed | Delete directory |
-| 2A | Baseball Hono (local) | All endpoints match baseline | Use original index.ts |
-| 2B | Baseball Hono (preview) | Preview works, CORS works | Revert wrangler.toml |
-| 2C | Baseball Hono (prod) | 24-48h stable, no errors | git revert, redeploy |
-| 3A | Baseball SDK (local) | MCP protocol works, tools list | Revert to Hono-only |
-| 3B | Baseball SDK (clients) | Claude/ChatGPT connect | Revert to Hono-only |
-| 3C | Baseball SDK (prod) | 24-48h stable | Revert SDK changes |
-| 4 | Football SDK | Same as baseball | Same as baseball |
-| 5 | Auth-worker (optional) | All auth flows work | Revert to original |
-| 6 | Tests | Suite passing | N/A |
+| Phase | Checkpoint | Go/No-Go Criteria | Status |
+|-------|------------|-------------------|--------|
+| 0 | Baseline | Preview deploys, baseline captured | ✅ Complete |
+| 1 | Shared module | Compiles, exports typed | ⏳ Pending |
+| 2A | Baseball Hono (local) | All endpoints match baseline | ⏳ Pending |
+| 2B | Baseball Hono (preview) | Preview works, CORS works | ⏳ Pending |
+| 2C | Baseball Hono (prod) | 24-48h stable, no errors | ⏳ Pending |
+| 3A | Baseball SDK (local) | MCP protocol works, tools list | ⏳ Pending |
+| 3B | Baseball SDK (clients) | Claude/ChatGPT connect | ⏳ Pending |
+| 3C | Baseball SDK (prod) | 24-48h stable | ⏳ Pending |
+| 4 | Football SDK | Same as baseball | ⏳ Pending |
+| 5 | Auth-worker (optional) | All auth flows work | ⏳ Pending |
+| 6 | Tests | Suite passing | ⏳ Pending |
 
 ---
 
