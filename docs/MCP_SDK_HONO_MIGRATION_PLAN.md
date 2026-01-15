@@ -664,37 +664,41 @@ Preview (workers.dev):    5/5 tests pass
 
 ---
 
-### Phase 2A: Baseball MCP → Hono (Local Only)
+### Phase 2A: Baseball MCP → Hono (Local Only) ✅
 
 **Goal:** Migrate baseball-mcp routing to Hono, verify locally.
 
-**Tasks:**
-- [ ] Add `hono` dependency to `workers/baseball-espn-mcp`
-- [ ] Create new `src/index-hono.ts` (keep original `index.ts` intact)
-- [ ] Implement Hono app with all existing routes
-- [ ] Import and use shared CORS/prefix middleware
-- [ ] Wire existing handlers to Hono routes
-- [ ] Keep existing MCP agent code unchanged (delegate `/mcp` to it)
+**Status:** Complete (2026-01-15)
 
-**Checkpoint 2A:** Local parity verified.
+**Tasks:**
+- [x] Add `hono` dependency to `workers/baseball-espn-mcp`
+- [x] Create new `src/index-hono.ts` (keep original `index.ts` intact)
+- [x] Implement Hono app with all existing routes
+- [x] Import and use shared CORS/prefix middleware
+- [x] Wire existing handlers to Hono routes
+- [x] Keep existing MCP agent code unchanged (delegate `/mcp` to it)
+
+**Checkpoint 2A:** ✅ Local parity verified.
 
 **Verification (local):**
 ```bash
-# Terminal 1: Run the worker locally
-cd workers/baseball-espn-mcp && wrangler dev --env dev --port 8787
+# Terminal 1: Run the worker locally with Hono config
+cd workers/baseball-espn-mcp && wrangler dev --config wrangler-hono.jsonc --env dev --port 8787
 
-# Terminal 2: Test endpoints
-curl http://localhost:8787/baseball/health
-curl -X OPTIONS http://localhost:8787/baseball/mcp -H "Origin: https://flaim.app"
-curl http://localhost:8787/baseball/.well-known/oauth-protected-resource
+# Terminal 2: Run verification script
+./scripts/verify-baseline.sh local
 ```
 
 **Go/No-Go Checklist:**
-- [ ] `/health` returns 200 with expected JSON
-- [ ] CORS preflight returns correct headers
-- [ ] `/.well-known/oauth-protected-resource` returns metadata
-- [ ] `/mcp` without auth returns 401 with `_meta["mcp/www_authenticate"]`
-- [ ] All responses match baseline from Phase 0
+- [x] `/health` returns expected JSON (503 when auth-worker not running locally - matches original)
+- [x] CORS preflight returns correct headers
+- [x] `/.well-known/oauth-protected-resource` returns metadata
+- [x] `/mcp` without auth returns 401 with `_meta["mcp/www_authenticate"]`
+- [x] All responses match baseline from Phase 0 (4/5 tests pass locally, same as original)
+
+**Artifacts created:**
+- `workers/baseball-espn-mcp/src/index-hono.ts` — Hono-based routing
+- `workers/baseball-espn-mcp/wrangler-hono.jsonc` — Test config for Hono version
 
 **Rollback:** Revert to original `index.ts` (it's still there).
 
@@ -924,7 +928,7 @@ describe('baseball-mcp', () => {
 |-------|------------|-------------------|--------|
 | 0 | Baseline | Preview deploys, baseline captured | ✅ Complete |
 | 1 | Shared module | Compiles, exports typed | ✅ Complete |
-| 2A | Baseball Hono (local) | All endpoints match baseline | ⏳ Pending |
+| 2A | Baseball Hono (local) | All endpoints match baseline | ✅ Complete |
 | 2B | Baseball Hono (preview) | Preview works, CORS works | ⏳ Pending |
 | 2C | Baseball Hono (prod) | 24-48h stable, no errors | ⏳ Pending |
 | 3A | Baseball SDK (local) | MCP protocol works, tools list | ⏳ Pending |
