@@ -638,28 +638,29 @@ Preview (workers.dev):    5/5 tests pass
 
 ---
 
-### Phase 1: Shared Infrastructure
+### Phase 1: Shared Infrastructure ✅
 
 **Goal:** Extract duplicated code without changing behavior.
 
+**Status:** Complete (2026-01-15)
+
 **Tasks:**
-- [ ] Create `workers/shared/` directory structure
-- [ ] Extract CORS middleware factory → `workers/shared/cors.ts`
-- [ ] Extract prefix-stripping middleware → `workers/shared/prefix-strip.ts`
-- [ ] Extract `authWorkerFetch()` helper → `workers/shared/auth-fetch.ts`
-- [ ] Add shared TypeScript interfaces → `workers/shared/types.ts`
-- [ ] **Do NOT change any worker yet** — just create the shared module
+- [x] Create `workers/shared/` directory structure
+- [x] Extract CORS middleware factory → `workers/shared/src/cors.ts`
+- [x] Extract prefix-stripping utility → `workers/shared/src/prefix-strip.ts`
+- [x] Extract `authWorkerFetch()` helper → `workers/shared/src/auth-fetch.ts`
+- [x] Add shared TypeScript interfaces → `workers/shared/src/types.ts`
+- [x] Create unified exports → `workers/shared/src/index.ts`
 
-**Checkpoint 1:** Shared module exists, compiles, exports work.
+**Checkpoint 1:** ✅ Shared module compiles with `npm run typecheck`
 
-**Verification:**
-```bash
-cd workers/shared && npm run build  # or tsc --noEmit
-```
+**Exports created:**
+- Types: `BaseEnvWithAuth`, `EspnCredentials`, `LeagueConfig`, `CorsOptions`
+- CORS: `createCorsHeaders`, `handleCorsPreflightResponse`, `isCorsPreflightRequest`
+- URL: `stripPrefix`, `getPathname`
+- Auth: `authWorkerFetch`
 
-**Go/No-Go:** Shared module compiles? All exports typed correctly? → Proceed.
-
-**Rollback:** Delete `workers/shared/` directory.
+**Note:** No workers modified yet — shared module ready for Phase 2.
 
 ---
 
@@ -922,7 +923,7 @@ describe('baseball-mcp', () => {
 | Phase | Checkpoint | Go/No-Go Criteria | Status |
 |-------|------------|-------------------|--------|
 | 0 | Baseline | Preview deploys, baseline captured | ✅ Complete |
-| 1 | Shared module | Compiles, exports typed | ⏳ Pending |
+| 1 | Shared module | Compiles, exports typed | ✅ Complete |
 | 2A | Baseball Hono (local) | All endpoints match baseline | ⏳ Pending |
 | 2B | Baseball Hono (preview) | Preview works, CORS works | ⏳ Pending |
 | 2C | Baseball Hono (prod) | 24-48h stable, no errors | ⏳ Pending |
