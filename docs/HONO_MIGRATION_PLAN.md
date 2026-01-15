@@ -119,6 +119,96 @@ expect(res.status).toBe(200)
 
 See [Hono Testing Guide](https://hono.dev/docs/guides/testing) and [Cloudflare Vitest Integration](https://hono.dev/examples/cloudflare-vitest).
 
+---
+
+## MCP SDK Migration Analysis
+
+The TODO.md mentions "Adopt Official MCP SDK" to replace manual JSON-RPC handling. This section analyzes the current implementation vs the SDK.
+
+### Current Manual Implementation
+
+Each MCP agent (`agent.ts`, `football-agent.ts`) is ~1000-1200 lines:
+
+| Component | Lines | Purpose |
+|-----------|-------|---------|
+| JSON-RPC 2.0 parsing | ~100 | Validate `jsonrpc: "2.0"`, route methods |
+| Tool definitions | ~130 | Plain objects with `inputSchema` |
+| Response formatting | ~50 | `jsonRpcSuccess()`, `jsonRpcError()` |
+| OAuth/401 handling | ~80 | WWW-Authenticate headers, `_meta` for ChatGPT |
+| CORS handling | ~30 | Duplicated in each agent |
+| Logging | ~50 | Structured tool execution logs |
+| Actual tool logic | ~500 | ESPN API calls, league resolution |
+
+**~400-500 lines per agent is protocol boilerplate** that the SDK eliminates.
+
+### What the MCP SDK Provides
+
+The [@modelcontextprotocol/sdk](https://github.com/modelcontextprotocol/typescript-sdk) uses Zod for declarative tool definitions:
+
+```typescript
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { z } from "zod";
+
+const server = new McpServer({
+  name: "fantasy-baseball-mcp",
+  version: "4.0.0"
+});
+
+server.tool(
+  "get_espn_baseball_league_info",
+  "Get ESPN fantasy baseball league information",
+  {
+    leagueId: z.string().describe("ESPN league ID"),
+    seasonId: z.string().optional().describe("Season year")
+  },
+  async ({ leagueId, seasonId }) => {
+    // Actual ESPN API call logic stays the same
+    const data = await espnClient.fetchLeague(leagueId, seasonId);
+    return { content: [{ type: "text", text: JSON.stringify(data) }] };
+  }
+);
+```
+
+### Comparison
+
+| Aspect | Current | With MCP SDK |
+|--------|---------|--------------|
+| Tool definition | 30-line object with `inputSchema` | 10-line `server.tool()` with Zod |
+| Input validation | Manual type checking | Automatic via Zod |
+| JSON-RPC handling | ~100 lines manual | Built into SDK |
+| Error responses | Manual `jsonRpcError()` | SDK handles |
+| Protocol compliance | Manual implementation | SDK ensures spec compliance |
+| Lines per agent | ~1200 | ~400-500 (just tool logic) |
+
+### Migration Complexity
+
+| Task | Complexity | Notes |
+|------|------------|-------|
+| Add `@modelcontextprotocol/sdk` + `zod` | Low | Package install |
+| Convert tool definitions to Zod | Low | Mechanical transformation |
+| Integrate with Hono | Medium | Proven [mcp-hono-stateless](https://github.com/mhart/mcp-hono-stateless) pattern |
+| Preserve OAuth flow | Medium-High | Verify SDK OAuth helpers work with auth-worker |
+| Preserve structured logging | Low | Wrap tool handlers |
+| Test everything | High | Auth is critical path |
+
+### What Would Be Kept vs Replaced
+
+| Keep | Replace |
+|------|---------|
+| ESPN API clients (`espn.ts`, `espn-football-client.ts`) | JSON-RPC parsing (~100 lines) |
+| Tool logic (league resolution, arg normalization) | `inputSchema` objects → Zod schemas |
+| Auth-worker integration | Manual response formatting (~50 lines) |
+| Structured logging pattern | Protocol boilerplate (~200 lines) |
+
+### Why Hono First, Then MCP SDK
+
+1. **Hono is lower risk** — routing changes, not protocol changes
+2. **Hono + MCP SDK has proven pattern** — [mcp-hono-stateless](https://github.com/mhart/mcp-hono-stateless) demonstrates the integration
+3. **Testing Hono validates migration approach** — proves you can safely refactor infrastructure
+4. **MCP SDK adapter code is cleaner with Hono** — the `fetch-to-node` bridge works naturally
+
+---
+
 ### Recommendation
 
 **Adopt Hono as foundational work** before MCP SDK migration, testing, or new workers. The investment compounds across all planned items.
