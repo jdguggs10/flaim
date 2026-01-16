@@ -7,7 +7,7 @@
  * Migrated to Hono framework for cleaner routing and middleware.
  */
 
-import { Hono } from 'hono';
+import { Hono, Context } from 'hono';
 import { EspnSupabaseStorage } from './supabase-storage';
 import { EspnCredentials, EspnLeague, AutomaticLeagueDiscoveryFailed } from './espn-types';
 import {
@@ -177,6 +177,17 @@ async function verifyJwtAndGetUserId(authorization: string | null): Promise<stri
 }
 
 // =============================================================================
+// DEBUG LOGGING HELPER
+// =============================================================================
+
+// Only log debug messages in non-production environments to reduce log noise
+function debugLog(env: Env, message: string): void {
+  if (env.ENVIRONMENT !== 'prod' || env.NODE_ENV !== 'production') {
+    console.log(message);
+  }
+}
+
+// =============================================================================
 // AUTH HELPERS
 // =============================================================================
 
@@ -189,50 +200,50 @@ interface AuthResult {
 async function getVerifiedUserId(request: Request, env: Env): Promise<AuthResult> {
   const authz = request.headers.get('Authorization');
   const requestUrl = new URL(request.url);
-  console.log(`🔐 [auth-worker] getVerifiedUserId called for ${requestUrl.pathname}`);
-  console.log(`🔐 [auth-worker] Authorization header present: ${!!authz}, length: ${authz?.length || 0}`);
+  debugLog(env, `🔐 [auth-worker] getVerifiedUserId called for ${requestUrl.pathname}`);
+  debugLog(env, `🔐 [auth-worker] Authorization header present: ${!!authz}, length: ${authz?.length || 0}`);
 
   // Try Clerk JWT first (in-app requests)
   try {
-    console.log(`🔐 [auth-worker] Attempting Clerk JWT verification...`);
+    debugLog(env, `🔐 [auth-worker] Attempting Clerk JWT verification...`);
     const verified = await verifyJwtAndGetUserId(authz);
     if (verified) {
-      console.log(`✅ [auth-worker] Clerk JWT verified, userId: ${maskUserId(verified)}`);
+      debugLog(env, `✅ [auth-worker] Clerk JWT verified, userId: ${maskUserId(verified)}`);
       return { userId: verified, authType: 'clerk' };
     }
-    console.log(`⚠️ [auth-worker] Clerk JWT verification returned null`);
+    debugLog(env, `⚠️ [auth-worker] Clerk JWT verification returned null`);
   } catch (e) {
-    console.log(`⚠️ [auth-worker] Clerk JWT verification failed: ${e instanceof Error ? e.message : 'unknown error'}`);
+    debugLog(env, `⚠️ [auth-worker] Clerk JWT verification failed: ${e instanceof Error ? e.message : 'unknown error'}`);
   }
 
   // Try OAuth token (Claude direct access)
   if (authz && authz.toLowerCase().startsWith('bearer ')) {
     const token = authz.slice(7).trim();
     try {
-      console.log(`🔐 [auth-worker] Attempting OAuth token validation...`);
+      debugLog(env, `🔐 [auth-worker] Attempting OAuth token validation...`);
       const oauthResult = await validateOAuthToken(token, env as OAuthEnv);
       if (oauthResult) {
-        console.log(`✅ [auth-worker] OAuth token validated, userId: ${maskUserId(oauthResult.userId)}`);
+        debugLog(env, `✅ [auth-worker] OAuth token validated, userId: ${maskUserId(oauthResult.userId)}`);
         return { userId: oauthResult.userId, authType: 'oauth' };
       }
-      console.log(`⚠️ [auth-worker] OAuth token validation returned null`);
+      debugLog(env, `⚠️ [auth-worker] OAuth token validation returned null`);
     } catch (e) {
-      console.log('[auth] OAuth token validation failed:', e);
+      debugLog(env, `[auth] OAuth token validation failed: ${e}`);
     }
   }
 
   // Dev fallback only: allow header for local testing
   const isDev = env.ENVIRONMENT === 'dev' || env.NODE_ENV === 'development';
-  console.log(`🔐 [auth-worker] Environment check - ENVIRONMENT: ${env.ENVIRONMENT}, NODE_ENV: ${env.NODE_ENV}, isDev: ${isDev}`);
+  debugLog(env, `🔐 [auth-worker] Environment check - ENVIRONMENT: ${env.ENVIRONMENT}, NODE_ENV: ${env.NODE_ENV}, isDev: ${isDev}`);
   if (isDev) {
     const clerkHeader = request.headers.get('X-Clerk-User-ID');
     if (clerkHeader) {
-      console.log(`⚠️ [auth-worker] DEV MODE: Using X-Clerk-User-ID header fallback: ${maskUserId(clerkHeader)}`);
+      debugLog(env, `⚠️ [auth-worker] DEV MODE: Using X-Clerk-User-ID header fallback: ${maskUserId(clerkHeader)}`);
       return { userId: clerkHeader, authType: 'clerk' };
     }
   }
 
-  console.log(`❌ [auth-worker] All auth methods failed, returning null userId`);
+  debugLog(env, `❌ [auth-worker] All auth methods failed, returning null userId`);
   return { userId: null, error: 'Missing or invalid Authorization token' };
 }
 
@@ -629,13 +640,13 @@ api.delete('/credentials/espn', async (c) => {
   return handleCredentialsEspn(c, 'DELETE');
 });
 
-async function handleCredentialsEspn(c: any, method: string): Promise<Response> {
+async function handleCredentialsEspn(c: Context<{ Bindings: Env }>, method: string): Promise<Response> {
   const env = c.env;
   const url = new URL(c.req.url);
   const corsHeaders = getCorsHeaders(c.req.raw);
 
   const { userId: clerkUserId, error: authError, authType } = await getVerifiedUserId(c.req.raw, env);
-  console.log(`🔐 [auth-worker] /credentials/espn - Verified user: ${clerkUserId ? maskUserId(clerkUserId) : 'null'}, authType: ${authType || 'none'}, authError: ${authError || 'none'}`);
+  debugLog(env, `🔐 [auth-worker] /credentials/espn - Verified user: ${clerkUserId ? maskUserId(clerkUserId) : 'null'}, authType: ${authType || 'none'}, authError: ${authError || 'none'}`);
 
   if (!clerkUserId) {
     return c.json({
@@ -807,7 +818,7 @@ api.delete('/leagues', async (c) => {
   return handleLeagues(c, 'DELETE');
 });
 
-async function handleLeagues(c: any, method: string): Promise<Response> {
+async function handleLeagues(c: Context<{ Bindings: Env }>, method: string): Promise<Response> {
   const env = c.env;
   const url = new URL(c.req.url);
   const corsHeaders = getCorsHeaders(c.req.raw);
