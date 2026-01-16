@@ -711,8 +711,8 @@ cd workers/baseball-espn-mcp && wrangler dev --config wrangler-hono.jsonc --env 
 **Status:** Complete (2026-01-16)
 
 **Tasks:**
-- [x] Update `wrangler.jsonc` to use new Hono entrypoint
-- [x] Deploy to preview: `wrangler deploy --env preview`
+- [x] Create `wrangler.preview.jsonc` with Hono entrypoint (keeps prod config safe)
+- [x] Deploy to preview: `wrangler deploy -c wrangler.preview.jsonc --env preview`
 - [x] Run verification against preview URL
 
 **Checkpoint 2B:** ✅ Preview deployment works, parity verified.
@@ -728,7 +728,16 @@ cd workers/baseball-espn-mcp && wrangler dev --config wrangler-hono.jsonc --env 
 - [ ] CORS works from browser (test in DevTools) — manual test pending
 - [ ] No errors in Cloudflare dashboard logs — manual check pending
 
-**Rollback:** `git revert` the wrangler.jsonc change, redeploy.
+**Deploy commands:**
+```bash
+# Preview (Hono)
+wrangler deploy -c wrangler.preview.jsonc --env preview
+
+# Prod (original - still safe)
+wrangler deploy --env prod
+```
+
+**Rollback:** Delete `wrangler.preview.jsonc`, redeploy preview with original config.
 
 ---
 
@@ -737,7 +746,8 @@ cd workers/baseball-espn-mcp && wrangler dev --config wrangler-hono.jsonc --env 
 **Goal:** Ship Hono routing to production.
 
 **Tasks:**
-- [ ] Deploy to production: `wrangler deploy --env production`
+- [ ] Update `wrangler.jsonc` main to `src/index-hono.ts`
+- [ ] Deploy to production: `wrangler deploy --env prod`
 - [ ] Monitor Cloudflare dashboard for errors (15 min)
 - [ ] Test with real clients (extension, ChatGPT if possible)
 
@@ -745,8 +755,7 @@ cd workers/baseball-espn-mcp && wrangler dev --config wrangler-hono.jsonc --env 
 
 **Verification (production):**
 ```bash
-PROD_URL="https://api.flaim.app"
-curl $PROD_URL/baseball/health
+./scripts/verify-baseline.sh prod
 # Test actual OAuth flow with ChatGPT or extension
 ```
 
@@ -756,7 +765,7 @@ curl $PROD_URL/baseball/health
 - [ ] No elevated error rate in dashboard (compare to baseline)
 - [ ] **Wait 24-48 hours** before proceeding to Phase 3
 
-**Rollback:** `git revert`, redeploy original `index.ts`.
+**Rollback:** Revert `wrangler.jsonc` to `src/index.ts`, redeploy.
 
 ---
 
