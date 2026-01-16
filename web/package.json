@@ -9,7 +9,7 @@
     "dev": "NODE_OPTIONS='--no-webstorage' next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "eslint ."
   },
   "dependencies": {
     "@clerk/nextjs": "^6.36.7",

@@ -56,7 +56,7 @@ export const useLeaguesStore = create<LeaguesState>()((set, get) => ({
       const data = await res.json() as SetupStatus;
       set({ setupStatus: data, isLoading: false });
       return data;
-    } catch (err) {
+    } catch {
       set({ error: 'Failed to check setup status', isLoading: false });
       return { hasCredentials: false, hasLeagues: false, hasDefaultTeam: false };
     }
@@ -82,7 +82,7 @@ export const useLeaguesStore = create<LeaguesState>()((set, get) => ({
       } else {
         set({ leagues: [], isLoading: false });
       }
-    } catch (err) {
+    } catch {
       set({ error: 'Failed to fetch leagues', isLoading: false });
     }
   },
