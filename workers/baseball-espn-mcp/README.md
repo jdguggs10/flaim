@@ -94,7 +94,7 @@ Configure external AI assistants to use this server:
   - `tools/list` - Tool definitions
   - `tools/call` - Execute tools (params: `name`, `arguments`)
   - `ping` - Health check
-  - Legacy REST (`/mcp/tools/list`, `/mcp/tools/call`) is still present only for manual curl testing; OpenAI must use `POST /mcp` JSON-RPC.
+- Legacy REST (`/mcp/tools/list`, `/mcp/tools/call`) remains for manual curl testing only and is translated into JSON-RPC internally; OpenAI must use `POST /mcp` JSON-RPC.
 
 ### Management Endpoints
 - `GET /health` - Health check

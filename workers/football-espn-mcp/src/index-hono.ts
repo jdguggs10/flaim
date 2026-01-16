@@ -1,4 +1,4 @@
-// Baseball ESPN MCP Server v4.0 - Hono + MCP SDK Migration
+// Football ESPN MCP Server v2.0 - Hono + MCP SDK Migration
 // Routing via Hono framework, MCP protocol via official SDK
 
 import { Hono } from 'hono';
@@ -9,13 +9,13 @@ import {
   type BaseEnvWithAuth,
   type EspnCredentials,
 } from '@flaim/worker-shared';
-import { createBaseballMcpServer } from './mcp/sdk-agent.js';
+import { createFootballMcpServer } from './mcp/sdk-agent.js';
 import { createMcpHandler } from './mcp/create-mcp-handler.js';
 import { getBasicLeagueInfo } from './mcp/basic-league-info.js';
 
 // Extend BaseEnvWithAuth for this worker
 export interface Env extends BaseEnvWithAuth {
-  // Any baseball-specific env vars would go here
+  // Any football-specific env vars would go here
 }
 
 // Create root app + routed API app
@@ -47,8 +47,20 @@ api.use('*', async (c, next) => {
 });
 
 // =============================================================================
-// HELPER FUNCTIONS (from original index.ts)
+// HELPER FUNCTIONS
 // =============================================================================
+
+// ESPN sport to game ID mapping
+function getEspnGameId(sport: string): string {
+  const sportMap: Record<string, string> = {
+    'football': 'ffl',  // Fantasy Football League
+    'basketball': 'fba', // Fantasy Basketball
+    'hockey': 'fhl',     // Fantasy Hockey League
+    'baseball': 'flb',   // Fantasy Baseball
+    'soccer': 'fs'       // Fantasy Soccer
+  };
+  return sportMap[sport.toLowerCase()] || 'ffl';
+}
 
 /**
  * Fetch ESPN credentials from auth-worker for a given Clerk user ID
@@ -59,22 +71,8 @@ async function getCredentials(
   authHeader?: string | null
 ): Promise<EspnCredentials | null> {
   try {
-    console.log(`🔧 [baseball] getCredentials: hasBinding=${!!env.AUTH_WORKER}, hasAuthHeader=${!!authHeader}, authHeaderLength=${authHeader?.length || 0}`);
-    console.log(`🔑 [baseball] Fetching ESPN credentials for user ${clerkUserId}`);
-
-    // Parse JWT to compare user ID (debug)
-    if (authHeader && authHeader.toLowerCase().startsWith('bearer ')) {
-      try {
-        const token = authHeader.slice(7);
-        const parts = token.split('.');
-        if (parts.length === 3) {
-          const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
-          console.log(`🔍 [baseball] JWT payload.sub: ${payload.sub}, clerkUserId param: ${clerkUserId}, match: ${payload.sub === clerkUserId}`);
-        }
-      } catch {
-        console.log(`⚠️ [baseball] Could not parse JWT for comparison`);
-      }
-    }
+    console.log(`🔧 [football] getCredentials: hasBinding=${!!env.AUTH_WORKER}, hasAuthHeader=${!!authHeader}, authHeaderLength=${authHeader?.length || 0}`);
+    console.log(`🔑 [football] Fetching ESPN credentials for user ${clerkUserId}`);
 
     const headers: Record<string, string> = {
       'X-Clerk-User-ID': clerkUserId,
@@ -83,9 +81,9 @@ async function getCredentials(
 
     if (authHeader) {
       headers['Authorization'] = authHeader;
-      console.log(`🔐 [baseball] Authorization header present, starts with: ${authHeader.substring(0, 15)}...`);
+      console.log(`🔐 [football] Authorization header present, starts with: ${authHeader.substring(0, 15)}...`);
     } else {
-      console.warn(`⚠️ [baseball] No Authorization header provided - auth-worker may reject this request`);
+      console.warn(`⚠️ [football] No Authorization header provided - auth-worker may reject this request`);
     }
 
     const response = await authWorkerFetch(env, '/credentials/espn?raw=true', {
@@ -93,27 +91,22 @@ async function getCredentials(
       headers
     });
 
-    console.log(`📡 [baseball] Auth-worker response: ${response.status} ${response.statusText}`);
-
-    const responseHeaders: Record<string, string> = {};
-    response.headers.forEach((value, key) => { responseHeaders[key] = value; });
-    console.log(`📋 [baseball] Auth-worker response headers: ${JSON.stringify(responseHeaders)}`);
+    console.log(`📡 [football] Auth-worker response: ${response.status} ${response.statusText}`);
 
     if (response.status === 404) {
       const errorBody = await response.text().catch(() => 'unknown');
-      console.log(`ℹ️ [baseball] 404 response body: ${errorBody}`);
-      console.log(`❓ [baseball] 404 indicates auth-worker could not find credentials for this user`);
+      console.log(`ℹ️ [football] 404 response body: ${errorBody}`);
       return null;
     }
 
     if (response.status === 401) {
       const errorBody = await response.text().catch(() => 'unknown');
-      console.error(`❌ [baseball] Auth failed (401): ${errorBody}`);
+      console.error(`❌ [football] Auth failed (401): ${errorBody}`);
       throw new Error(`Auth-worker authentication failed: ${errorBody}`);
     }
 
     if (!response.ok) {
-      console.error(`❌ [baseball] Auth-worker error: ${response.status} ${response.statusText}`);
+      console.error(`❌ [football] Auth-worker error: ${response.status} ${response.statusText}`);
       const errorData = await response.json().catch(() => ({})) as { error?: string };
       throw new Error(`Auth-worker error: ${errorData.error || response.statusText}`);
     }
@@ -121,15 +114,15 @@ async function getCredentials(
     const data = await response.json() as { success?: boolean; credentials?: EspnCredentials };
 
     if (!data.success || !data.credentials) {
-      console.error('❌ [baseball] Invalid response from auth-worker:', JSON.stringify(data));
+      console.error('❌ [football] Invalid response from auth-worker:', JSON.stringify(data));
       throw new Error('Invalid credentials response from auth-worker');
     }
 
-    console.log('✅ [baseball] Successfully retrieved ESPN credentials');
+    console.log('✅ [football] Successfully retrieved ESPN credentials');
     return data.credentials;
 
   } catch (error) {
-    console.error('❌ [baseball] Failed to fetch credentials from auth-worker:', error);
+    console.error('❌ [football] Failed to fetch credentials from auth-worker:', error);
     throw error;
   }
 }
@@ -192,8 +185,8 @@ api.get('/health', async (c) => {
   const env = c.env;
   const healthData: Record<string, unknown> = {
     status: 'healthy',
-    service: 'baseball-espn-mcp',
-    version: '4.0.0',
+    service: 'football-espn-mcp',
+    version: '2.0.0',
     timestamp: new Date().toISOString()
   };
 
@@ -220,7 +213,7 @@ api.get('/health', async (c) => {
 // OAuth Protected Resource Metadata (RFC 9728)
 api.get('/.well-known/oauth-protected-resource', (c) => {
   const metadata = {
-    resource: 'https://api.flaim.app/baseball/mcp',
+    resource: 'https://api.flaim.app/football/mcp',
     authorization_servers: ['https://api.flaim.app'],
     bearer_methods_supported: ['header'],
     scopes_supported: ['mcp:read', 'mcp:write']
@@ -241,7 +234,7 @@ async function handleOnboardingInitialize(c: any) {
     const clerkUserId = c.req.header('X-Clerk-User-ID');
     const authHeader = c.req.header('Authorization');
 
-    console.log(`🔍 [baseball] /onboarding/initialize - Headers received:`);
+    console.log(`🔍 [football] /onboarding/initialize - Headers received:`);
     console.log(`   X-Clerk-User-ID: ${clerkUserId || 'MISSING'}`);
     console.log(`   Authorization: ${authHeader ? `present (${authHeader.length} chars, starts with: ${authHeader.substring(0, 15)}...)` : 'MISSING'}`);
     console.log(`   AUTH_WORKER_URL env: ${env.AUTH_WORKER_URL || 'NOT SET'}`);
@@ -255,7 +248,8 @@ async function handleOnboardingInitialize(c: any) {
     const body = await c.req.json() as { sport?: string; leagueId?: string; seasonYear?: number };
     const { sport, leagueId, seasonYear } = body;
 
-    console.log(`🚀 [baseball] Initialize onboarding for user: ${clerkUserId}, sport: ${sport}, leagueId: ${leagueId}, seasonYear: ${seasonYear || 'default'}`);
+    const targetSport = sport || 'football';
+    console.log(`🚀 [football] Initialize onboarding for user: ${clerkUserId}, sport: ${targetSport}, leagueId: ${leagueId}, seasonYear: ${seasonYear || 'default'}`);
 
     // Get credentials from auth-worker
     const credentials = await getCredentials(env, clerkUserId, authHeader);
@@ -270,31 +264,31 @@ async function handleOnboardingInitialize(c: any) {
     let targetLeagues: Array<{ leagueId: string; sport: string; teamId?: string; seasonYear?: number }> = [];
 
     if (leagueId) {
-      console.log(`🔍 [baseball] Discovery mode: fetching league ${leagueId} directly from ESPN`);
-      targetLeagues = [{ leagueId, sport: 'baseball', seasonYear }];
+      console.log(`🔍 [football] Discovery mode: fetching league ${leagueId} directly from ESPN`);
+      targetLeagues = [{ leagueId, sport: targetSport, seasonYear }];
     } else {
       const leagues = await getUserLeagues(env, clerkUserId, authHeader);
-      const baseballLeagues = leagues.filter(league => league.sport === 'baseball');
+      targetLeagues = leagues.filter(league => league.sport === targetSport);
 
-      if (baseballLeagues.length === 0) {
+      if (targetLeagues.length === 0) {
         return c.json({
-          error: 'No baseball leagues found. Please add baseball leagues first.',
+          error: `No ${targetSport} leagues found. Please add ${targetSport} leagues first.`,
           code: 'LEAGUES_MISSING'
         }, 404);
       }
-      targetLeagues = baseballLeagues;
     }
 
-    console.log(`⚾ Processing ${targetLeagues.length} baseball league(s) for user`);
+    console.log(`🏈 Processing ${targetLeagues.length} ${targetSport} league(s) for user`);
 
     const leagueResults = [];
     for (const league of targetLeagues) {
       try {
         const leagueSeasonYear = league.seasonYear ?? seasonYear;
+        const gameId = getEspnGameId(league.sport);
         const basicInfo = await getBasicLeagueInfo({
           leagueId: league.leagueId,
           sport: league.sport,
-          gameId: 'flb',
+          gameId,
           credentials,
           seasonYear: leagueSeasonYear
         });
@@ -304,6 +298,7 @@ async function handleOnboardingInitialize(c: any) {
           sport: league.sport,
           teamId: league.teamId,
           seasonYear: leagueSeasonYear,
+          gameId,
           ...basicInfo
         });
       } catch (error) {
@@ -312,6 +307,7 @@ async function handleOnboardingInitialize(c: any) {
           leagueId: league.leagueId,
           sport: league.sport,
           teamId: league.teamId,
+          gameId: getEspnGameId(league.sport),
           success: false,
           error: error instanceof Error ? error.message : 'Unknown error'
         });
@@ -321,7 +317,7 @@ async function handleOnboardingInitialize(c: any) {
     return c.json({
       success: true,
       message: 'Onboarding initialized successfully',
-      sport: 'baseball',
+      sport: targetSport,
       totalLeagues: targetLeagues.length,
       leagues: leagueResults
     });
@@ -346,7 +342,7 @@ async function handleDiscoverSeasons(c: any) {
     const clerkUserId = c.req.header('X-Clerk-User-ID');
     const authHeader = c.req.header('Authorization');
 
-    console.log(`🔍 [baseball] /onboarding/discover-seasons - userId: ${clerkUserId || 'MISSING'}`);
+    console.log(`🔍 [football] /onboarding/discover-seasons - userId: ${clerkUserId || 'MISSING'}`);
 
     if (!clerkUserId) {
       return c.json({
@@ -383,7 +379,7 @@ async function handleDiscoverSeasons(c: any) {
     });
     const leaguesData = await leaguesResponse.json() as { leagues?: Array<{ leagueId: string; sport: string; seasonYear?: number; teamId?: string }> };
     const matchingLeagues = (leaguesData.leagues || []).filter(
-      (league) => league.leagueId === leagueId && league.sport === 'baseball'
+      (league) => league.leagueId === leagueId && league.sport === 'football'
     );
     const baseTeamId = matchingLeagues.find((league) => league.teamId)?.teamId;
 
@@ -443,8 +439,8 @@ async function handleDiscoverSeasons(c: any) {
 
       const info = await getBasicLeagueInfo({
         leagueId,
-        sport: 'baseball',
-        gameId: 'flb',
+        sport: 'football',
+        gameId: 'ffl',
         credentials,
         seasonYear: year
       });
@@ -460,7 +456,7 @@ async function handleDiscoverSeasons(c: any) {
         const seasonTeamName = matchedTeam?.teamName;
         discovered.push({
           seasonYear: year,
-          leagueName: info.leagueName || `Baseball League ${leagueId}`,
+          leagueName: info.leagueName || `Football League ${leagueId}`,
           teamCount: info.teams?.length || 0,
           teamId: baseTeamId,
           teamName: seasonTeamName
@@ -478,7 +474,7 @@ async function handleDiscoverSeasons(c: any) {
             },
             body: JSON.stringify({
               leagueId,
-              sport: 'baseball',
+              sport: 'football',
               seasonYear: year,
               leagueName: info.leagueName,
               teamId: baseTeamId,
@@ -498,7 +494,7 @@ async function handleDiscoverSeasons(c: any) {
                 },
                 body: JSON.stringify({
                   teamId: baseTeamId,
-                  sport: 'baseball',
+                  sport: 'football',
                   teamName: seasonTeamName,
                   leagueName: info.leagueName,
                   seasonYear: year
@@ -544,109 +540,15 @@ async function handleDiscoverSeasons(c: any) {
           }, 401);
         }
       } else {
-        // Other error - retry once
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        const retry = await getBasicLeagueInfo({
-          leagueId,
-          sport: 'baseball',
-          gameId: 'flb',
-          credentials,
-          seasonYear: year
-        });
-
-        if (retry.success && (!retry.teams || retry.teams.length === 0)) {
-          console.log(`📋 [discover] Year ${year} has no teams on retry, treating as miss`);
-          consecutiveMisses++;
-          continue;
-        }
-
-        if (retry.success) {
-          const matchedTeam = retry.teams?.find((team) => team.teamId === baseTeamId);
-          const seasonTeamName = matchedTeam?.teamName;
-          discovered.push({
-            seasonYear: year,
-            leagueName: retry.leagueName || `Baseball League ${leagueId}`,
-            teamCount: retry.teams?.length || 0,
-            teamId: baseTeamId,
-            teamName: seasonTeamName
-          });
-          consecutiveMisses = 0;
-          // Auto-save on retry success
-          try {
-            const addResponse = await authWorkerFetch(env, '/leagues/add', {
-              method: 'POST',
-              headers: {
-                'X-Clerk-User-ID': clerkUserId,
-                ...(authHeader ? { 'Authorization': authHeader } : {}),
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify({
-                leagueId,
-                sport: 'baseball',
-                seasonYear: year,
-                leagueName: retry.leagueName,
-                teamId: baseTeamId,
-                teamName: seasonTeamName
-              })
-            });
-            if (addResponse.status === 409) {
-              try {
-                const patchResponse = await authWorkerFetch(env, `/leagues/${leagueId}/team`, {
-                  method: 'PATCH',
-                  headers: {
-                    'X-Clerk-User-ID': clerkUserId,
-                    ...(authHeader ? { 'Authorization': authHeader } : {}),
-                    'Content-Type': 'application/json'
-                  },
-                  body: JSON.stringify({
-                    teamId: baseTeamId,
-                    sport: 'baseball',
-                    teamName: seasonTeamName,
-                    leagueName: retry.leagueName,
-                    seasonYear: year
-                  })
-                });
-                if (!patchResponse.ok) {
-                  const patchError = await patchResponse.json().catch(() => ({})) as { error?: string };
-                  console.warn(`⚠️ [discover] Failed to backfill team for season ${year} on retry: ${patchResponse.status} ${patchError.error || ''}`);
-                }
-              } catch (patchError) {
-                console.warn(`⚠️ [discover] Error backfilling team for season ${year} on retry:`, patchError);
-              }
-            } else if (addResponse.status === 400) {
-              const addData = await addResponse.json().catch(() => ({})) as { code?: string };
-              if (addData.code === 'LIMIT_EXCEEDED') {
-                limitExceeded = true;
-                break;
-              }
-            }
-          } catch { /* ignore save errors */ }
-        } else if (retry.httpStatus === 404) {
-          consecutiveMisses++;
-        } else if (retry.httpStatus === 401 || retry.httpStatus === 403) {
-          const hasKnownSeason = discovered.length > 0 || existingSeasons.size > 0;
-          if (hasKnownSeason) {
-            console.log(`📋 [discover] Year ${year} unauthorized on retry, treating as miss`);
-            consecutiveMisses++;
-          } else {
-            return c.json({
-              error: 'ESPN credentials expired or invalid',
-              code: 'AUTH_FAILED'
-            }, 401);
-          }
-        } else {
-          return c.json({
-            error: `ESPN API error: ${retry.error}`,
-            code: 'ESPN_ERROR'
-          }, 502);
-        }
+        // Other error - continue with next year
+        consecutiveMisses++;
       }
     }
 
     return c.json({
       success: true,
       leagueId,
-      sport: 'baseball',
+      sport: 'football',
       startYear: currentYear,
       minYearReached,
       rateLimited,
@@ -669,7 +571,7 @@ async function handleDiscoverSeasons(c: any) {
 // MCP ENDPOINTS - SDK-based with custom OAuth 401
 // =============================================================================
 
-const OAUTH_RESOURCE_METADATA = 'https://api.flaim.app/baseball/.well-known/oauth-protected-resource';
+const OAUTH_RESOURCE_METADATA = 'https://api.flaim.app/football/.well-known/oauth-protected-resource';
 
 function buildMcpAuthErrorResponse(request: Request, message: string, errorType: 'unauthorized' | 'invalid_token'): Response {
   return new Response(JSON.stringify({
@@ -679,7 +581,7 @@ function buildMcpAuthErrorResponse(request: Request, message: string, errorType:
       message,
       _meta: {
         'mcp/www_authenticate': [
-          `Bearer resource_metadata=\"${OAUTH_RESOURCE_METADATA}\", error=\"${errorType}\", error_description=\"${message}\"`
+          `Bearer resource_metadata="${OAUTH_RESOURCE_METADATA}", error="${errorType}", error_description="${message}"`
         ]
       }
     },
@@ -688,7 +590,7 @@ function buildMcpAuthErrorResponse(request: Request, message: string, errorType:
     status: 401,
     headers: {
       'Content-Type': 'application/json',
-      'WWW-Authenticate': `Bearer resource_metadata=\"${OAUTH_RESOURCE_METADATA}\"${errorType === 'invalid_token' ? ', error=\"invalid_token\"' : ''}`,
+      'WWW-Authenticate': `Bearer resource_metadata="${OAUTH_RESOURCE_METADATA}"${errorType === 'invalid_token' ? ', error="invalid_token"' : ''}`,
       ...createMcpCorsHeaders(request)
     }
   });
@@ -724,7 +626,7 @@ async function executeMcpRequest(c: any, requestOverride?: Request): Promise<Res
   }
 
   // Create MCP server with context (env, authHeader, clerkUserId captured via closure)
-  const server = createBaseballMcpServer({
+  const server = createFootballMcpServer({
     env: c.env,
     authHeader,
     clerkUserId
@@ -826,7 +728,7 @@ async function handleLegacyToolsCall(c: any): Promise<Response> {
   }
 
   if (typeof body !== 'object' || body === null || typeof (body as any).tool !== 'string') {
-    return c.json({ content: 'Invalid request body: missing or invalid \"tool\" field', isError: true }, 400);
+    return c.json({ content: 'Invalid request body: missing or invalid "tool" field', isError: true }, 400);
   }
 
   const { tool, arguments: args } = body as { tool: string; arguments?: Record<string, unknown> };
@@ -885,7 +787,7 @@ api.notFound((c) => {
       '/onboarding/discover-seasons': 'POST - Discover and save historical seasons for a league (requires X-Clerk-User-ID header)',
       '/mcp': 'POST - MCP protocol endpoints for Claude integration'
     },
-    version: '4.0.0'
+    version: '2.0.0'
   }, 404);
 });
 
@@ -905,8 +807,8 @@ api.onError((err, c) => {
   return response;
 });
 
-// Mount API on both root and /baseball to match legacy routing behavior
+// Mount API on both root and /football to match legacy routing behavior
 app.route('/', api);
-app.route('/baseball', api);
+app.route('/football', api);
 
 export default app;
