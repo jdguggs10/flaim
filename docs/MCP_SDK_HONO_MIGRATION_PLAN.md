@@ -682,8 +682,8 @@ Preview (workers.dev):    5/5 tests pass
 
 **Verification (local):**
 ```bash
-# Terminal 1: Run the worker locally with Hono config
-cd workers/baseball-espn-mcp && wrangler dev --config wrangler-hono.jsonc --env dev --port 8787
+# Terminal 1: Run the worker locally
+cd workers/baseball-espn-mcp && wrangler dev --env dev --port 8787
 
 # Terminal 2: Run verification script
 ./scripts/verify-baseline.sh local
@@ -697,8 +697,7 @@ cd workers/baseball-espn-mcp && wrangler dev --config wrangler-hono.jsonc --env 
 - [x] All responses match baseline from Phase 0 (4/5 tests pass locally, same as original)
 
 **Artifacts created:**
-- `workers/baseball-espn-mcp/src/index-hono.ts` — Hono-based routing
-- `workers/baseball-espn-mcp/wrangler-hono.jsonc` — Test config for Hono version
+- `workers/baseball-espn-mcp/src/index-hono.ts` — Hono-based routing (now main entrypoint)
 
 **Rollback:** Revert to original `index.ts` (it's still there).
 
@@ -711,8 +710,7 @@ cd workers/baseball-espn-mcp && wrangler dev --config wrangler-hono.jsonc --env 
 **Status:** Complete (2026-01-16)
 
 **Tasks:**
-- [x] Create `wrangler.preview.jsonc` with Hono entrypoint (keeps prod config safe)
-- [x] Deploy to preview: `wrangler deploy -c wrangler.preview.jsonc --env preview`
+- [x] Deploy Hono to preview (initially via scoped config, now via main wrangler.jsonc)
 - [x] Run verification against preview URL
 
 **Checkpoint 2B:** ✅ Preview deployment works, parity verified.
@@ -730,14 +728,12 @@ cd workers/baseball-espn-mcp && wrangler dev --config wrangler-hono.jsonc --env 
 
 **Deploy commands:**
 ```bash
-# Preview (Hono)
-wrangler deploy -c wrangler.preview.jsonc --env preview
-
-# Prod (original - still safe)
+# All environments now use Hono via wrangler.jsonc
+wrangler deploy --env preview
 wrangler deploy --env prod
 ```
 
-**Rollback:** Delete `wrangler.preview.jsonc`, redeploy preview with original config.
+**Rollback:** Revert `wrangler.jsonc` main to `src/index.ts`, redeploy.
 
 ---
 
