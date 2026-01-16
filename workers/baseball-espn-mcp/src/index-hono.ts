@@ -17,15 +17,16 @@ export interface Env extends BaseEnvWithAuth {
   // Any baseball-specific env vars would go here
 }
 
-// Create Hono app with proper types
+// Create root app + routed API app
 const app = new Hono<{ Bindings: Env }>();
+const api = new Hono<{ Bindings: Env }>();
 
 // =============================================================================
 // MIDDLEWARE
 // =============================================================================
 
 // CORS middleware - runs on all routes
-app.use('*', async (c, next) => {
+api.use('*', async (c, next) => {
   // Handle preflight
   if (isCorsPreflightRequest(c.req.raw)) {
     return new Response(null, {
@@ -37,7 +38,9 @@ app.use('*', async (c, next) => {
   // Add CORS headers to all responses
   const corsHeaders = createMcpCorsHeaders(c.req.raw);
   Object.entries(corsHeaders).forEach(([key, value]) => {
-    c.res.headers.set(key, value);
+    if (!c.res.headers.has(key)) {
+      c.res.headers.set(key, value);
+    }
   });
   return undefined;
 });
@@ -184,7 +187,7 @@ async function getUserLeagues(
 // =============================================================================
 
 // Health check endpoint
-app.get('/health', async (c) => {
+api.get('/health', async (c) => {
   const env = c.env;
   const healthData: Record<string, unknown> = {
     status: 'healthy',
@@ -213,49 +216,8 @@ app.get('/health', async (c) => {
   return c.json(healthData, statusCode);
 });
 
-// Also handle /baseball/health (prefix not stripped for direct matches)
-app.get('/baseball/health', async (c) => {
-  const env = c.env;
-  const healthData: Record<string, unknown> = {
-    status: 'healthy',
-    service: 'baseball-espn-mcp',
-    version: '4.0.0',
-    timestamp: new Date().toISOString()
-  };
-
-  try {
-    const authResponse = await authWorkerFetch(env, '/health');
-    healthData.auth_worker_status = authResponse.ok ? 'connected' : 'error';
-    healthData.auth_worker_binding = !!env.AUTH_WORKER;
-    if (!authResponse.ok) {
-      healthData.status = 'degraded';
-    }
-  } catch (error) {
-    healthData.auth_worker_status = 'error';
-    healthData.auth_worker_error = error instanceof Error ? error.message : 'Unknown auth-worker error';
-    healthData.status = 'degraded';
-  }
-
-  healthData.credential_storage = 'supabase_via_auth_worker';
-
-  const statusCode = healthData.status === 'healthy' ? 200 : 503;
-  return c.json(healthData, statusCode);
-});
-
 // OAuth Protected Resource Metadata (RFC 9728)
-app.get('/.well-known/oauth-protected-resource', (c) => {
-  const metadata = {
-    resource: 'https://api.flaim.app/baseball/mcp',
-    authorization_servers: ['https://api.flaim.app'],
-    bearer_methods_supported: ['header'],
-    scopes_supported: ['mcp:read', 'mcp:write']
-  };
-  return c.json(metadata, 200, {
-    'Cache-Control': 'public, max-age=3600'
-  });
-});
-
-app.get('/baseball/.well-known/oauth-protected-resource', (c) => {
+api.get('/.well-known/oauth-protected-resource', (c) => {
   const metadata = {
     resource: 'https://api.flaim.app/baseball/mcp',
     authorization_servers: ['https://api.flaim.app'],
@@ -268,11 +230,7 @@ app.get('/baseball/.well-known/oauth-protected-resource', (c) => {
 });
 
 // Onboarding initialize endpoint
-app.post('/onboarding/initialize', async (c) => {
-  return handleOnboardingInitialize(c);
-});
-
-app.post('/baseball/onboarding/initialize', async (c) => {
+api.post('/onboarding/initialize', async (c) => {
   return handleOnboardingInitialize(c);
 });
 
@@ -377,11 +335,7 @@ async function handleOnboardingInitialize(c: any) {
 }
 
 // Discover seasons endpoint
-app.post('/onboarding/discover-seasons', async (c) => {
-  return handleDiscoverSeasons(c);
-});
-
-app.post('/baseball/onboarding/discover-seasons', async (c) => {
+api.post('/onboarding/discover-seasons', async (c) => {
   return handleDiscoverSeasons(c);
 });
 
@@ -711,28 +665,18 @@ async function handleDiscoverSeasons(c: any) {
 }
 
 // MCP endpoints - delegate to existing agent
-app.all('/mcp', async (c) => {
+api.all('/mcp', async (c) => {
   const agent = new McpAgent();
   return await agent.handleRequest(c.req.raw, c.env);
 });
 
-app.all('/mcp/*', async (c) => {
-  const agent = new McpAgent();
-  return await agent.handleRequest(c.req.raw, c.env);
-});
-
-app.all('/baseball/mcp', async (c) => {
-  const agent = new McpAgent();
-  return await agent.handleRequest(c.req.raw, c.env);
-});
-
-app.all('/baseball/mcp/*', async (c) => {
+api.all('/mcp/*', async (c) => {
   const agent = new McpAgent();
   return await agent.handleRequest(c.req.raw, c.env);
 });
 
 // 404 handler
-app.notFound((c) => {
+api.notFound((c) => {
   return c.json({
     error: 'Endpoint not found',
     message: 'Available endpoints',
@@ -747,12 +691,23 @@ app.notFound((c) => {
 });
 
 // Global error handler
-app.onError((err, c) => {
+api.onError((err, c) => {
   console.error('Worker error:', err);
-  return c.json({
+  const response = c.json({
     error: 'Internal server error',
     details: err instanceof Error ? err.message : 'Unknown error'
   }, 500);
+  const corsHeaders = createMcpCorsHeaders(c.req.raw);
+  Object.entries(corsHeaders).forEach(([key, value]) => {
+    if (!response.headers.has(key)) {
+      response.headers.set(key, value);
+    }
+  });
+  return response;
 });
+
+// Mount API on both root and /baseball to match legacy routing behavior
+app.route('/', api);
+app.route('/baseball', api);
 
 export default app;
