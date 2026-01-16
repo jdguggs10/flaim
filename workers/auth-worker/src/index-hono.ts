@@ -315,11 +315,17 @@ api.use('*', async (c, next) => {
 
   await next();
 
-  // Add CORS headers to response
+  // Add CORS headers to response (clone to avoid immutable header errors on redirects)
+  const headers = new Headers(c.res.headers);
   Object.entries(corsHeaders).forEach(([key, value]) => {
-    if (!c.res.headers.has(key)) {
-      c.res.headers.set(key, value);
+    if (!headers.has(key)) {
+      headers.set(key, value);
     }
+  });
+  return new Response(c.res.body, {
+    status: c.res.status,
+    statusText: c.res.statusText,
+    headers,
   });
 });
 
