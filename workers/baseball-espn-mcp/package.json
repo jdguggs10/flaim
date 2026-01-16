@@ -15,7 +15,12 @@
     "tail:dev": "wrangler tail --env dev"
   },
   "dependencies": {
-    "@cloudflare/workers-types": "^4.0.0"
+    "@cloudflare/workers-types": "^4.0.0",
+    "@flaim/worker-shared": "*",
+    "@modelcontextprotocol/sdk": "^1.25.2",
+    "agents": "^0.0.93",
+    "hono": "^4.7.0",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",
