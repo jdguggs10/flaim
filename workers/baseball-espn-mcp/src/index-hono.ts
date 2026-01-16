@@ -1,5 +1,5 @@
-// Baseball ESPN MCP Server v4.0 - Hono Migration
-// Routing via Hono framework, business logic unchanged
+// Baseball ESPN MCP Server v4.0 - Hono + MCP SDK Migration
+// Routing via Hono framework, MCP protocol via official SDK
 
 import { Hono } from 'hono';
 import {
@@ -9,7 +9,8 @@ import {
   type BaseEnvWithAuth,
   type EspnCredentials,
 } from '@flaim/worker-shared';
-import { McpAgent } from './mcp/agent.js';
+import { createBaseballMcpServer } from './mcp/sdk-agent.js';
+import { createMcpHandler } from './mcp/create-mcp-handler.js';
 import { getBasicLeagueInfo } from './mcp/basic-league-info.js';
 
 // Extend BaseEnvWithAuth for this worker
@@ -664,16 +665,69 @@ async function handleDiscoverSeasons(c: any) {
   }
 }
 
-// MCP endpoints - delegate to existing agent
-api.all('/mcp', async (c) => {
-  const agent = new McpAgent();
-  return await agent.handleRequest(c.req.raw, c.env);
-});
+// =============================================================================
+// MCP ENDPOINTS - SDK-based with custom OAuth 401
+// =============================================================================
 
-api.all('/mcp/*', async (c) => {
-  const agent = new McpAgent();
-  return await agent.handleRequest(c.req.raw, c.env);
-});
+/**
+ * Handle MCP requests using the official SDK.
+ * Custom auth runs BEFORE SDK to return proper 401 with _meta for ChatGPT OAuth.
+ */
+async function handleMcpRequest(c: any): Promise<Response> {
+  const authHeader = c.req.header('Authorization');
+  const clerkUserIdHeader = c.req.header('X-Clerk-User-ID');
+
+  // Determine user ID for context
+  let clerkUserId = clerkUserIdHeader || 'anonymous';
+  if (clerkUserId === 'anonymous' && authHeader) {
+    clerkUserId = 'oauth-user';
+  }
+
+  console.log(`[MCP SDK] User ID header: ${clerkUserIdHeader ? 'present' : 'MISSING'}, Auth header: ${authHeader ? 'present' : 'MISSING'}, Resolved userId: ${clerkUserId}`);
+
+  // Custom auth check - return 401 with _meta BEFORE SDK processes request
+  // This preserves ChatGPT OAuth compatibility
+  if (!authHeader) {
+    return new Response(JSON.stringify({
+      jsonrpc: '2.0',
+      error: {
+        code: -32001,
+        message: 'Authentication required. Please authorize via OAuth.',
+        _meta: {
+          'mcp/www_authenticate': [
+            'Bearer resource_metadata="https://api.flaim.app/baseball/.well-known/oauth-protected-resource", error="unauthorized", error_description="Authentication required"'
+          ]
+        }
+      },
+      id: null
+    }), {
+      status: 401,
+      headers: {
+        'Content-Type': 'application/json',
+        'WWW-Authenticate': 'Bearer resource_metadata="https://api.flaim.app/baseball/.well-known/oauth-protected-resource"',
+        ...createMcpCorsHeaders(c.req.raw)
+      }
+    });
+  }
+
+  // Create MCP server with context (env, authHeader, clerkUserId captured via closure)
+  const server = createBaseballMcpServer({
+    env: c.env,
+    authHeader,
+    clerkUserId
+  });
+
+  const handler = createMcpHandler(server, {
+    route: '/mcp',
+    enableJsonResponse: true,
+    sessionIdGenerator: undefined,
+  });
+
+  return handler(c.req.raw, c.env, c.executionCtx);
+}
+
+api.all('/mcp', handleMcpRequest);
+api.all('/mcp/*', handleMcpRequest);
 
 // 404 handler
 api.notFound((c) => {
