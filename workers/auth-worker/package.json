@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Platform-agnostic credential storage worker for Flaim",
   "engines": {
-    "node": ">=24"
+    "node": "24.x"
   },
   "main": "./src/index.ts",
   "scripts": {

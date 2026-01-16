@@ -24,11 +24,11 @@ This plan combines two infrastructure improvements into a single migration path:
 
 ## Remaining Work (as of 2026-01-16)
 
-### Immediate (Before Merging)
+### Immediate (Post-merge)
 
 | Task | Priority | Status |
 |------|----------|--------|
-| Verify Codex's baseball feature parity changes | High | ✅ Complete |
+| Verify Codex's baseball feature parity changes | High | ✅ Complete (preview + prod) |
 | Deploy auth-worker to production | High | ✅ Complete |
 | Manual smoke test (extension, OAuth, ChatGPT) | High | ⏳ Pending |
 

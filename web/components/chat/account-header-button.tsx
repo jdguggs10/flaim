@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { User, Check, X, Loader2, RefreshCw } from "lucide-react";
 import { useUser, useAuth } from "@clerk/nextjs";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -14,20 +14,19 @@ export function AccountHeaderButton() {
   const [tokenStatus, setTokenStatus] = useState<TokenStatus>("checking");
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const checkToken = async () => {
+  const checkToken = useCallback(async () => {
     try {
       const token = await getToken({ template: "cf-worker" });
       setTokenStatus(token ? "valid" : "expired");
     } catch {
       setTokenStatus("expired");
     }
-  };
+  }, [getToken]);
 
   useEffect(() => {
     if (!isLoaded) return;
     checkToken();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [getToken, isLoaded]);
+  }, [checkToken, isLoaded]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);

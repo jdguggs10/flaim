@@ -347,7 +347,7 @@ export function ToolsSection() {
     servers.forEach((server) => {
       fetchToolsForServer(server);
     });
-  }, [shouldShow, servers.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [fetchToolsForServer, servers, shouldShow]);
 
   // Migration: Move legacy single-server tools to first configured server
   // Only migrates when tools have been fetched for the target server
