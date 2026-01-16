@@ -109,7 +109,7 @@ After evaluating multiple options, the **Hono + `createMcpHandler` + Streamable 
 
 | Factor | Assessment |
 |--------|------------|
-| **Workers‑native** | Cloudflare’s official path for Streamable HTTP MCP servers |
+| **Workers-native** | Cloudflare’s official path for Streamable HTTP MCP servers |
 | **Full request lifecycle control** | Your custom 401 with `_meta["mcp/www_authenticate"]` works naturally |
 | **No Node shims** | Avoids `fetch-to-node` and `nodejs_compat` flags |
 | **No Durable Objects needed** | Standard Worker billing, no state management complexity |
@@ -280,7 +280,7 @@ app.all('/mcp', async (c) => {
 3. Extract tool business logic into handler functions
 4. Wire up `createMcpHandler` on a route that accepts GET/POST (and DELETE if you support session termination)
 5. Add tool annotations (`readOnlyHint`, `destructiveHint`, `openWorldHint`, `title`)
-6. Add thin `search` and `fetch` tools (read‑only wrappers) for OpenAI deep‑research compatibility
+6. Add thin `search` and `fetch` tools (read-only wrappers) for OpenAI deep-research compatibility
 7. Test with Claude Desktop or MCP Inspector
 8. Test ChatGPT OAuth flow specifically
 
@@ -443,12 +443,12 @@ This ensures each request has access to its own `env` and `authHeader` without g
 
 ### Risk 4: OpenAI Tooling Requirements Divergence
 
-**Risk:** OpenAI’s documentation is inconsistent: developer‑mode connectors do not require `search`/`fetch`, but deep‑research connectors still do, and troubleshooting guidance treats missing required tools as a failure.
+**Risk:** OpenAI’s documentation is inconsistent: developer-mode connectors do not require `search`/`fetch`, but deep-research connectors still do, and troubleshooting guidance treats missing required tools as a failure.
 
 **Mitigation:**
-- Add thin, read‑only `search` and `fetch` tools that map to existing ESPN data
+- Add thin, read-only `search` and `fetch` tools that map to existing ESPN data
 - Keep tool names and schemas stable to avoid resubmission churn
-- Verify behavior in both developer‑mode connectors and deep‑research flows
+- Verify behavior in both developer-mode connectors and deep-research flows
 
 ### Risk 5: Zod Version Compatibility
 
@@ -482,8 +482,8 @@ This ensures each request has access to its own `env` and `authHeader` without g
 - **Streamable HTTP must be supported**; SSE is optional for legacy clients.  
 - **Tool annotations are mandatory**: `readOnlyHint` or `destructiveHint` on every tool, plus `title`.  
 - **Tool name rules**: `^[a-zA-Z0-9_-]{1,64}$` (max 64 chars, no spaces/dots).  
-- **Auth requirement**: If you require auth, use OAuth 2.0 with user consent; pure client‑credentials is not supported.  
-- **Operational requirements**: GA (not beta), reliable, CORS configured for browser clients, token‑efficient responses (max 25k tokens per tool result), and 5‑minute timeout constraints for Claude.ai/Desktop.  
+- **Auth requirement**: If you require auth, use OAuth 2.0 with user consent; pure client-credentials is not supported.  
+- **Operational requirements**: GA (not beta), reliable, CORS configured for browser clients, token-efficient responses (max 25k tokens per tool result), and 5-minute timeout constraints for Claude.ai/Desktop.  
 - **Submission requirements**: privacy policy link, contact/support info, test account with sample data, and example prompts/use cases.
 - **Policy highlights**: tool descriptions must be narrow and accurate; tools must not coerce Claude to call other tools/servers; collect only necessary user data and follow usage policies.
 
@@ -493,14 +493,14 @@ This ensures each request has access to its own `env` and `authHeader` without g
 - **Tooling requirements differ by surface**:
   - **Developer mode**: `search`/`fetch` are **not required**; all tools can be used.  
   - **Deep research (via API)**: Requires `search` + `fetch`; MCP servers must be configured with `require_approval: "never"`.  
-  - **Recommendation**: Implement `search` and `fetch` wrappers now (read‑only, thin), so you can support both developer‑mode connectors and deep‑research flows.
+  - **Recommendation**: Implement `search` and `fetch` wrappers now (read-only, thin), so you can support both developer-mode connectors and deep-research flows.
 - **Deep research**: Only read/fetch actions are used; write actions may be ignored.  
 - **Company knowledge**: Only connectors with `search`/`fetch` are included.  
-- **Apps directory submission**: MCP server must be publicly accessible (not local/testing), and app submission requires a CSP that allows the exact domains you fetch from. Tool definitions are snapshotted at approval; updates require admin review and re‑enablement of changed actions.
+- **Apps directory submission**: MCP server must be publicly accessible (not local/testing), and app submission requires a CSP that allows the exact domains you fetch from. Tool definitions are snapshotted at approval; updates require admin review and re-enablement of changed actions.
 
 ### OpenAI `search`/`fetch` Wrapper Schema (Recommended)
 
-Implement **thin, read‑only wrappers** that map to existing ESPN data. The OpenAI MCP docs use the following schemas and require returning JSON‑encoded strings in a single `content` item:
+Implement **thin, read-only wrappers** that map to existing ESPN data. The OpenAI MCP docs use the following schemas and require returning JSON-encoded strings in a single `content` item:
 
 ```ts
 // search
@@ -514,7 +514,7 @@ output: { id: string; title: string; text: string; url: string; metadata?: Recor
 
 Return the output as a single MCP `content` item of type `"text"` containing JSON (stringified).
 
-### Appendix: `search`/`fetch` Example Outputs (Non‑Binding)
+### Appendix: `search`/`fetch` Example Outputs (Non-Binding)
 
 **Example `search` response (top N results, short titles):**
 ```json
@@ -540,7 +540,7 @@ Return the output as a single MCP `content` item of type `"text"` containing JSO
 }
 ```
 
-**Token budget guideline:** cap `search` results to a small N (e.g., 5–10) and truncate `fetch.text` to stay well under Claude’s 25k‑token ceiling.
+**Token budget guideline:** cap `search` results to a small N (e.g., 5–10) and truncate `fetch.text` to stay well under Claude’s 25k-token ceiling.
 
 ---
 
@@ -549,30 +549,30 @@ Return the output as a single MCP `content` item of type `"text"` containing JSO
 ### Claude Directory
 - All tools include **readOnlyHint / destructiveHint** and **title** annotations.
 - Tool names <= 64 chars; clear, unambiguous descriptions.
-- OAuth 2.0 authorization code flow (no pure client‑credentials), valid TLS certs, allowlist Claude callback URLs.
+- OAuth 2.0 authorization code flow (no pure client-credentials), valid TLS certs, allowlist Claude callback URLs.
 - CORS allowlist includes all Claude client origins.
-- Token‑efficient responses (<= 25k tokens) and 5‑minute max tool time.
+- Token-efficient responses (<= 25k tokens) and 5-minute max tool time.
 - Documentation includes privacy policy, support channel, test account with sample data, and 3+ usage examples.
 
 ### OpenAI Apps Directory
 - Public MCP server URL (no local/testing endpoints).
 - Streamable HTTP endpoint supports GET + POST and validates `Origin`.
 - CSP defined for exact fetch domains used by tools.
-- Tool metadata is stable; changes require admin review and re‑enablement after approval.
+- Tool metadata is stable; changes require admin review and re-enablement after approval.
 - Tool annotations are complete: readOnlyHint / destructiveHint / openWorldHint.
 - Provide a demo account with sample data for review if auth is required.
-- Implement `search`/`fetch` for deep‑research and company knowledge compatibility.
+- Implement `search`/`fetch` for deep-research and company knowledge compatibility.
 
 ## Platform Compatibility Notes (Clerk / Supabase / Vercel)
 
 - **Clerk**: Session token JWT v2 is now the default; v1 is deprecated. Standardize on Clerk’s SDK verification helpers everywhere (avoid manual JWT parsing).
-- **Supabase**: Legacy `anon` / `service_role` keys still work, but new projects now use `sb_publishable_` and `sb_secret_` keys. Plan a low‑risk migration once key rotation support is fully GA.
+- **Supabase**: Legacy `anon` / `service_role` keys still work, but new projects now use `sb_publishable_` and `sb_secret_` keys. Plan a low-risk migration once key rotation support is fully GA.
 - **Vercel**: Node.js 18 is deprecated for builds/functions; ensure the root `package.json` `engines` field targets Node 20+ to avoid deployment failures on new builds.
 
 ### Clerk JWT v2 Readiness Checklist
 
 - Validate JWTs using Clerk’s SDK (`authenticateRequest`) everywhere.
-- Avoid relying on undocumented claims; prefer `sub`, `iss`, `aud`, `exp`, and Clerk‑documented fields only.
+- Avoid relying on undocumented claims; prefer `sub`, `iss`, `aud`, `exp`, and Clerk-documented fields only.
 
 ### Clerk SDK Usage Pattern (Auth Worker)
 
@@ -959,7 +959,7 @@ npx @anthropics/mcp-inspector --url https://baseball-espn-mcp.preview.workers.de
 - Faster than baseball phases since pattern was proven
 - Reused same Zod v3.25.0 workaround for type compatibility
 - Version bumped to 2.0.0
-- Restored legacy `/mcp/tools/*` compatibility and OAuth invalid-token 401 behavior after initial SDK cutover
+- Restored legacy `/mcp/tools/*` compatibility and OAuth `invalid_token` 401 behavior after initial SDK cutover
 - Applied the same auth 401 post-processing + legacy shim to baseball MCP for parity
 
 ---

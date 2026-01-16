@@ -10,6 +10,9 @@ import { z } from 'zod';
 import type { Env } from '../index-hono';
 import { EspnFootballApiClient } from '../espn-football-client';
 
+// TODO: Revisit this workaround. Casting to 'any' is used due to type compatibility issues
+// between Zod v3/v4 and @modelcontextprotocol/sdk's registerTool().
+// See: https://github.com/modelcontextprotocol/typescript-sdk/issues/906
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type ZodShape = Record<string, any>;
 
@@ -663,7 +666,13 @@ async function normalizeToolArgs(
   clerkUserId: string,
   authHeader: string | null
 ): Promise<NormalizedArgs> {
-  const { leagues: userLeagues } = await fetchUserLeagues(env, clerkUserId, authHeader);
+  const { leagues: userLeagues, status: fetchStatus } = await fetchUserLeagues(env, clerkUserId, authHeader);
+
+  // Check for auth failures first - propagate as AUTH_FAILED so the MCP handler
+  // can return a proper 401 with mcp/www_authenticate header
+  if (fetchStatus === 401 || fetchStatus === 403) {
+    throw new Error('AUTH_FAILED: Authentication failed');
+  }
 
   // Filter for football leagues (case-insensitive, include 'nfl' as alias)
   const footballLeagues = userLeagues.filter(
