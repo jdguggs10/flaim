@@ -1,6 +1,6 @@
 {
   "name": "baseball-espn-mcp",
-  "main": "src/index.ts",
+  "main": "src/index-hono.ts",
   "compatibility_date": "2024-12-01",
   // Enable Cloudflare Workers Logs/Observability
   "observability": {
