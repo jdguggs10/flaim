@@ -31,6 +31,7 @@ build/
 *.swo
 *.code-workspace
 .cursor/
+.zed/
 
 # AI Assistant Configurations (personal settings)
 .claude/
