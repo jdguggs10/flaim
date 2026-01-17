@@ -40,6 +40,7 @@ CREATE INDEX IF NOT EXISTS idx_rate_limits_window_date ON rate_limits(window_dat
 
 CREATE OR REPLACE FUNCTION increment_rate_limit(p_user_id TEXT)
 RETURNS TABLE(request_count INTEGER, window_date DATE) AS $$
+#variable_conflict use_column
 BEGIN
   RETURN QUERY
   INSERT INTO rate_limits (user_id, window_date, request_count, updated_at)

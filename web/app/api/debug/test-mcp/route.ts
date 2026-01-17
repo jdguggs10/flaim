@@ -82,6 +82,8 @@ export async function POST(req: NextRequest) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        // MCP SDK rejects requests without an explicit Accept header (406)
+        'Accept': 'application/json, text/event-stream',
         'X-Clerk-User-ID': userId,
         ...(bearer ? { 'Authorization': `Bearer ${bearer}` } : {})
       },
