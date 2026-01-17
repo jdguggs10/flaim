@@ -138,18 +138,55 @@ See `workers/README.md` for worker-to-worker communication requirements.
 
 ## Deployment
 
+### Quick Reference
+
+| I want to... | Do this | What happens |
+|--------------|---------|--------------|
+| Deploy to prod | Push/merge to `main` | Workers + Frontend auto-deploy (~1-2 min) |
+| Test in preview | Open a PR | Workers + Frontend deploy to preview URLs |
+| Test locally | `npm run dev` | Nothing deploys, runs on localhost |
+| Check deploy status | `gh run list --limit 5` | Shows recent GitHub Actions runs |
+| Fix broken prod | Revert commit, push to `main` | Auto-redeploys with fix |
+| Update extension | Manual CWS upload | See `extension/README.md` |
+
+### Automatic Deployment (CI/CD)
+
+**Everything deploys automatically on merge to `main`:**
+
+| Component | Platform | Trigger | Environment |
+|-----------|----------|---------|-------------|
+| Workers (auth, baseball, football) | Cloudflare | Push to `main` | `--env prod` |
+| Workers (auth, baseball, football) | Cloudflare | PR opened/updated | `--env preview` |
+| Frontend (`/web`) | Vercel | Push to `main` | Production |
+| Frontend (`/web`) | Vercel | PR opened/updated | Preview |
+| Extension | Chrome Web Store | Manual | N/A |
+
+**GitHub Actions workflows** (`.github/workflows/`):
+- `deploy-workers.yml` — Deploys all 3 workers on push/PR via wrangler
+- `claude.yml` — Claude Code bot responds to `@claude` mentions in issues/PRs
+- `claude-code-review.yml` — Auto-reviews PRs with Claude
+
 ### Environments
 
 | Env | ENVIRONMENT | NODE_ENV | Notes |
 |-----|-------------|----------|-------|
 | dev | dev | development | Local `npm run dev` |
-| preview | preview | production | PR deploys |
-| prod | prod | production | main branch |
+| preview | preview | production | PR deploys (auto) |
+| prod | prod | production | main branch (auto) |
+
+### Manual Deploy Commands
+
+Usually not needed since CI/CD handles it, but available for debugging:
+
+- **Workers**: `npm run deploy:workers:preview` or `npm run deploy:workers:prod`
+- **Frontend**: Push to `main` or PR (Vercel auto-deploys)
+- **Extension**: See `extension/README.md` for Chrome Web Store update process
 
 ### Secrets & Environment Variables
 
 - **Frontend**: `web/.env.local` (see `web/README.md`)
 - **Workers**: Via `wrangler dev` locally, Cloudflare Dashboard in prod (see `workers/README.md`)
+- **GitHub Actions**: `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN` in repo secrets
 
 ### DNS for Custom Routes
 
@@ -157,24 +194,11 @@ Cloudflare DNS: `A` record, name `api`, IPv4 `192.0.2.1`, proxied (orange).
 
 Verify: `curl https://api.flaim.app/auth/health`
 
-### Deploy Commands
-
-- **Workers**: `npm run deploy:workers:preview` or `npm run deploy:workers:prod`
-- **Frontend**: Automatic via Vercel (PR → preview, main → prod)
-- **Extension**: See `extension/README.md` for CWS update process
-
-### CI/CD
-
-Add to GitHub Actions secrets:
-- `CLOUDFLARE_ACCOUNT_ID`
-- `CLOUDFLARE_API_TOKEN`
-
-Used by `.github/workflows/deploy-workers.yml`.
-
 ### Verification
 
 - **Local**: `curl http://localhost:8786/health` (auth-worker), `localhost:3000` (frontend)
 - **Remote**: Deployed worker URL + `/health`
+- **Check deploy status**: `gh run list --limit 5`
 
 ---
 
