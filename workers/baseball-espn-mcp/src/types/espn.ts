@@ -85,7 +85,34 @@ export interface EspnTeam {
   location: string;
   nickname: string;
   roster?: {
-    entries: any[];
+    entries: RosterEntry[];
+  };
+}
+
+export interface RosterEntry {
+  lineupSlotId?: number;
+  lineupSlot?: string;
+  player?: {
+    id?: number;
+    fullName?: string;
+    name?: string;
+    proTeamId?: number;
+    proTeamAbbreviation?: string;
+    defaultPositionId?: number;
+    injuryStatus?: string;
+    status?: string;
+  };
+  playerPoolEntry?: {
+    player?: {
+      id?: number;
+      fullName?: string;
+      name?: string;
+      proTeamId?: number;
+      proTeamAbbreviation?: string;
+      defaultPositionId?: number;
+      injuryStatus?: string;
+      status?: string;
+    };
   };
 }
 

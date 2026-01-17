@@ -417,11 +417,28 @@ export function createBaseballMcpServer(ctx: McpContext): McpServer {
 
         const roster = await espnClient.fetchRoster(
           normalizedArgs.leagueId,
-          normalizedArgs.teamId!,
-          parseInt(normalizedArgs.seasonId),
+          normalizedArgs.teamId,
+          parseInt(normalizedArgs.seasonId, 10),
           undefined,
           clerkUserId
         );
+
+        const rosterEntries = roster?.roster?.entries ?? [];
+        const rosterPlayers = rosterEntries.map((entry) => {
+          const player = entry?.playerPoolEntry?.player ?? entry?.player;
+          return {
+            playerId: player?.id,
+            name: player?.fullName ?? player?.name,
+            proTeamId: player?.proTeamId,
+            proTeamAbbrev: player?.proTeamAbbreviation,
+            primaryPositionId: player?.defaultPositionId,
+            lineupSlotId: entry?.lineupSlotId,
+            lineupSlot: entry?.lineupSlot,
+            injuryStatus: player?.injuryStatus,
+            status: player?.status,
+          };
+        });
+        const resolvedTeamId = normalizedArgs.teamId ?? roster?.id?.toString();
 
         logTool({
           request_id: requestId,
@@ -440,9 +457,10 @@ export function createBaseballMcpServer(ctx: McpContext): McpServer {
                 {
                   success: true,
                   data: roster,
+                  roster: rosterPlayers,
                   leagueId: normalizedArgs.leagueId,
-                  teamId: normalizedArgs.teamId,
-                  year: parseInt(normalizedArgs.seasonId),
+                  teamId: resolvedTeamId,
+                  year: parseInt(normalizedArgs.seasonId, 10),
                 },
                 null,
                 2
