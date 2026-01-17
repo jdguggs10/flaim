@@ -62,7 +62,7 @@ export class EspnApiClient {
     return await response.json();
   }
 
-  async fetchRoster(leagueId: string, teamId: string, year: number = 2025, week?: number, clerkUserId?: string): Promise<EspnTeam> {
+  async fetchRoster(leagueId: string, teamId: string | undefined, year: number = 2025, week?: number, clerkUserId?: string): Promise<EspnTeam> {
     let url = `${this.baseUrl}/games/flb/seasons/${year}/segments/0/leagues/${leagueId}?view=mRoster`;
     if (week) {
       url += `&scoringPeriodId=${week}`;
@@ -102,7 +102,7 @@ export class EspnApiClient {
         throw new Error('ESPN_RATE_LIMIT: ESPN rate limit exceeded. Please wait a moment and try again.');
       }
       if (response.status === 404) {
-        throw new Error(`ESPN_NOT_FOUND: Baseball league ${leagueId} or team ${teamId} not found.`);
+        throw new Error(`ESPN_NOT_FOUND: Baseball league ${leagueId} or team ${teamId ?? 'unknown'} not found.`);
       }
       if (response.status === 403) {
         throw new Error(`ESPN_ACCESS_DENIED: Access denied to baseball league ${leagueId}. Make sure you're a member of this league.`);
