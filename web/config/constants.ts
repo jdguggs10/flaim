@@ -1,4 +1,4 @@
-export const MODEL = "gpt-4.1";
+export const MODEL = "gpt-5-mini-2025-08-07";
 
 // NOTE: System prompt has been moved to lib/prompts/system-prompt.ts
 // for easier editing and maintenance.
