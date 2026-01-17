@@ -89,30 +89,23 @@ export interface EspnTeam {
   };
 }
 
+export interface EspnPlayer {
+  id?: number;
+  fullName?: string;
+  name?: string;
+  proTeamId?: number;
+  proTeamAbbreviation?: string;
+  defaultPositionId?: number;
+  injuryStatus?: string;
+  status?: string;
+}
+
 export interface RosterEntry {
   lineupSlotId?: number;
   lineupSlot?: string;
-  player?: {
-    id?: number;
-    fullName?: string;
-    name?: string;
-    proTeamId?: number;
-    proTeamAbbreviation?: string;
-    defaultPositionId?: number;
-    injuryStatus?: string;
-    status?: string;
-  };
+  player?: EspnPlayer;
   playerPoolEntry?: {
-    player?: {
-      id?: number;
-      fullName?: string;
-      name?: string;
-      proTeamId?: number;
-      proTeamAbbreviation?: string;
-      defaultPositionId?: number;
-      injuryStatus?: string;
-      status?: string;
-    };
+    player?: EspnPlayer;
   };
 }
 

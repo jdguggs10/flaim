@@ -439,6 +439,14 @@ export function createBaseballMcpServer(ctx: McpContext): McpServer {
           };
         });
         const resolvedTeamId = normalizedArgs.teamId ?? roster?.id?.toString();
+        const rosterSummary = roster
+          ? {
+              id: roster.id,
+              abbrev: roster.abbrev,
+              location: roster.location,
+              nickname: roster.nickname,
+            }
+          : null;
 
         logTool({
           request_id: requestId,
@@ -456,7 +464,7 @@ export function createBaseballMcpServer(ctx: McpContext): McpServer {
               text: JSON.stringify(
                 {
                   success: true,
-                  data: roster,
+                  data: rosterSummary,
                   roster: rosterPlayers,
                   leagueId: normalizedArgs.leagueId,
                   teamId: resolvedTeamId,
