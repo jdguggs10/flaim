@@ -424,20 +424,25 @@ export function createBaseballMcpServer(ctx: McpContext): McpServer {
         );
 
         const rosterEntries = roster?.roster?.entries ?? [];
-        const rosterPlayers = rosterEntries.map((entry) => {
-          const player = entry?.playerPoolEntry?.player ?? entry?.player;
-          return {
-            playerId: player?.id,
-            name: player?.fullName ?? player?.name,
-            proTeamId: player?.proTeamId,
-            proTeamAbbrev: player?.proTeamAbbreviation,
-            primaryPositionId: player?.defaultPositionId,
-            lineupSlotId: entry?.lineupSlotId,
-            lineupSlot: entry?.lineupSlot,
-            injuryStatus: player?.injuryStatus,
-            status: player?.status,
-          };
-        });
+        const rosterPlayers = rosterEntries
+          .map((entry) => {
+            const player = entry?.playerPoolEntry?.player ?? entry?.player;
+            if (!player || (!player.id && !player.fullName && !player.name)) {
+              return null;
+            }
+            return {
+              playerId: player.id,
+              name: player.fullName ?? player.name,
+              proTeamId: player.proTeamId,
+              proTeamAbbrev: player.proTeamAbbreviation,
+              primaryPositionId: player.defaultPositionId,
+              lineupSlotId: entry?.lineupSlotId,
+              lineupSlot: entry?.lineupSlot,
+              injuryStatus: player.injuryStatus,
+              status: player.status,
+            };
+          })
+          .filter((player): player is NonNullable<typeof player> => player !== null);
         const resolvedTeamId = normalizedArgs.teamId ?? roster?.id?.toString();
         const rosterSummary = roster
           ? {
