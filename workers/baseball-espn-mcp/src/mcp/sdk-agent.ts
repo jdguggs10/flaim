@@ -412,16 +412,24 @@ export function createBaseballMcpServer(ctx: McpContext): McpServer {
         const { leagueId, teamId, seasonId = currentYear } = args;
         const normalizedArgs = await normalizeToolArgs({ leagueId, teamId, seasonId }, env, clerkUserId, authHeader);
 
+        if (!normalizedArgs.teamId) {
+          throw new Error(
+            'TEAM_ID_REQUIRED: No teamId found for this league. Select a team in flaim.app/leagues and try again.'
+          );
+        }
+
         const { EspnApiClient } = await import('../espn');
         const espnClient = new EspnApiClient(env, { authHeader });
 
         const roster = await espnClient.fetchRoster(
           normalizedArgs.leagueId,
-          normalizedArgs.teamId!,
+          normalizedArgs.teamId,
           parseInt(normalizedArgs.seasonId),
           undefined,
           clerkUserId
         );
+
+        const rosterEntries = roster?.roster?.entries ?? [];
 
         logTool({
           request_id: requestId,
@@ -440,6 +448,7 @@ export function createBaseballMcpServer(ctx: McpContext): McpServer {
                 {
                   success: true,
                   data: roster,
+                  rosterEntries,
                   leagueId: normalizedArgs.leagueId,
                   teamId: normalizedArgs.teamId,
                   year: parseInt(normalizedArgs.seasonId),
