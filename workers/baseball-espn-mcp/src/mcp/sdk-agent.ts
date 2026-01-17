@@ -436,7 +436,7 @@ export function createBaseballMcpServer(ctx: McpContext): McpServer {
             }
             return {
               playerId: player.id,
-              name: player.fullName ?? player.name,
+              name: player.fullName ?? player.name ?? 'Unknown Player',
               proTeamId: player.proTeamId,
               proTeamAbbrev: player.proTeamAbbreviation,
               primaryPositionId: player.defaultPositionId,
@@ -448,17 +448,17 @@ export function createBaseballMcpServer(ctx: McpContext): McpServer {
           })
           .filter((player): player is NonNullable<typeof player> => player !== null);
 
+        const resolvedTeamId = normalizedArgs.teamId ?? roster?.id?.toString();
         if (filteredCount > 0) {
           logTool({
             request_id: requestId,
             user_id: maskedUser,
             tool_name: 'get_espn_baseball_team_roster',
             status: 'warning',
-            message: `Filtered ${filteredCount} roster entries with missing player data`,
+            message: `Filtered ${filteredCount} roster entries with missing player data (league: ${normalizedArgs.leagueId}, team: ${resolvedTeamId ?? 'unknown'})`,
             timestamp: new Date().toISOString(),
           });
         }
-        const resolvedTeamId = normalizedArgs.teamId ?? roster?.id?.toString();
         const rosterSummary = roster
           ? {
               id: roster.id,
@@ -486,6 +486,10 @@ export function createBaseballMcpServer(ctx: McpContext): McpServer {
                   success: true,
                   data: rosterSummary,
                   roster: rosterPlayers,
+                  metadata: {
+                    totalEntries: rosterEntries.length,
+                    filteredEntries: filteredCount,
+                  },
                   leagueId: normalizedArgs.leagueId,
                   teamId: resolvedTeamId,
                   year: parseInt(normalizedArgs.seasonId, 10),
