@@ -23,8 +23,9 @@ interface ToolLog {
   request_id: string;
   user_id: string;
   tool_name: string;
-  status: 'start' | 'success' | 'error';
+  status: 'start' | 'success' | 'error' | 'warning';
   error_code?: string;
+  message?: string;
   duration_ms?: number;
   timestamp: string;
 }
@@ -424,20 +425,39 @@ export function createBaseballMcpServer(ctx: McpContext): McpServer {
         );
 
         const rosterEntries = roster?.roster?.entries ?? [];
-        const rosterPlayers = rosterEntries.map((entry) => {
-          const player = entry?.playerPoolEntry?.player ?? entry?.player;
-          return {
-            playerId: player?.id,
-            name: player?.fullName ?? player?.name,
-            proTeamId: player?.proTeamId,
-            proTeamAbbrev: player?.proTeamAbbreviation,
-            primaryPositionId: player?.defaultPositionId,
-            lineupSlotId: entry?.lineupSlotId,
-            lineupSlot: entry?.lineupSlot,
-            injuryStatus: player?.injuryStatus,
-            status: player?.status,
-          };
-        });
+        let filteredCount = 0;
+        const rosterPlayers = rosterEntries
+          .map((entry) => {
+            const player = entry?.playerPoolEntry?.player ?? entry?.player;
+            // Require player.id as it's the primary identifier
+            if (!player?.id) {
+              filteredCount++;
+              return null;
+            }
+            return {
+              playerId: player.id,
+              name: player.fullName ?? player.name,
+              proTeamId: player.proTeamId,
+              proTeamAbbrev: player.proTeamAbbreviation,
+              primaryPositionId: player.defaultPositionId,
+              lineupSlotId: entry?.lineupSlotId,
+              lineupSlot: entry?.lineupSlot,
+              injuryStatus: player.injuryStatus,
+              status: player.status,
+            };
+          })
+          .filter((player): player is NonNullable<typeof player> => player !== null);
+
+        if (filteredCount > 0) {
+          logTool({
+            request_id: requestId,
+            user_id: maskedUser,
+            tool_name: 'get_espn_baseball_team_roster',
+            status: 'warning',
+            message: `Filtered ${filteredCount} roster entries with missing player data`,
+            timestamp: new Date().toISOString(),
+          });
+        }
         const resolvedTeamId = normalizedArgs.teamId ?? roster?.id?.toString();
         const rosterSummary = roster
           ? {
