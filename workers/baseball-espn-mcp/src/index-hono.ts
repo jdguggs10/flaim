@@ -59,23 +59,6 @@ async function getCredentials(
   authHeader?: string | null
 ): Promise<EspnCredentials | null> {
   try {
-    console.log(`🔧 [baseball] getCredentials: hasBinding=${!!env.AUTH_WORKER}, hasAuthHeader=${!!authHeader}, authHeaderLength=${authHeader?.length || 0}`);
-    console.log(`🔑 [baseball] Fetching ESPN credentials for user ${clerkUserId}`);
-
-    // Parse JWT to compare user ID (debug)
-    if (authHeader && authHeader.toLowerCase().startsWith('bearer ')) {
-      try {
-        const token = authHeader.slice(7);
-        const parts = token.split('.');
-        if (parts.length === 3) {
-          const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
-          console.log(`🔍 [baseball] JWT payload.sub: ${payload.sub}, clerkUserId param: ${clerkUserId}, match: ${payload.sub === clerkUserId}`);
-        }
-      } catch {
-        console.log(`⚠️ [baseball] Could not parse JWT for comparison`);
-      }
-    }
-
     const headers: Record<string, string> = {
       'X-Clerk-User-ID': clerkUserId,
       'Content-Type': 'application/json',
@@ -83,9 +66,6 @@ async function getCredentials(
 
     if (authHeader) {
       headers['Authorization'] = authHeader;
-      console.log(`🔐 [baseball] Authorization header present, starts with: ${authHeader.substring(0, 15)}...`);
-    } else {
-      console.warn(`⚠️ [baseball] No Authorization header provided - auth-worker may reject this request`);
     }
 
     const response = await authWorkerFetch(env, '/credentials/espn?raw=true', {
@@ -93,16 +73,7 @@ async function getCredentials(
       headers
     });
 
-    console.log(`📡 [baseball] Auth-worker response: ${response.status} ${response.statusText}`);
-
-    const responseHeaders: Record<string, string> = {};
-    response.headers.forEach((value, key) => { responseHeaders[key] = value; });
-    console.log(`📋 [baseball] Auth-worker response headers: ${JSON.stringify(responseHeaders)}`);
-
     if (response.status === 404) {
-      const errorBody = await response.text().catch(() => 'unknown');
-      console.log(`ℹ️ [baseball] 404 response body: ${errorBody}`);
-      console.log(`❓ [baseball] 404 indicates auth-worker could not find credentials for this user`);
       return null;
     }
 
@@ -125,7 +96,6 @@ async function getCredentials(
       throw new Error('Invalid credentials response from auth-worker');
     }
 
-    console.log('✅ [baseball] Successfully retrieved ESPN credentials');
     return data.credentials;
 
   } catch (error) {
@@ -143,8 +113,6 @@ async function getUserLeagues(
   authHeader?: string | null
 ): Promise<Array<{ leagueId: string; sport: string; teamId?: string; seasonYear?: number }>> {
   try {
-    console.log(`🏈 Fetching user leagues for ${clerkUserId}`);
-
     const response = await authWorkerFetch(env, '/leagues', {
       method: 'GET',
       headers: {
@@ -154,10 +122,7 @@ async function getUserLeagues(
       }
     });
 
-    console.log(`📡 Auth-worker leagues response: ${response.status} ${response.statusText}`);
-
     if (response.status === 404) {
-      console.log('ℹ️ No leagues found for user');
       return [];
     }
 
@@ -174,7 +139,6 @@ async function getUserLeagues(
       return [];
     }
 
-    console.log(`✅ Successfully retrieved ${data.leagues?.length || 0} leagues`);
     return data.leagues || [];
 
   } catch (error) {
@@ -241,11 +205,6 @@ async function handleOnboardingInitialize(c: any) {
     const clerkUserId = c.req.header('X-Clerk-User-ID');
     const authHeader = c.req.header('Authorization');
 
-    console.log(`🔍 [baseball] /onboarding/initialize - Headers received:`);
-    console.log(`   X-Clerk-User-ID: ${clerkUserId || 'MISSING'}`);
-    console.log(`   Authorization: ${authHeader ? `present (${authHeader.length} chars, starts with: ${authHeader.substring(0, 15)}...)` : 'MISSING'}`);
-    console.log(`   AUTH_WORKER_URL env: ${env.AUTH_WORKER_URL || 'NOT SET'}`);
-
     if (!clerkUserId) {
       return c.json({
         error: 'Authentication required - X-Clerk-User-ID header missing'
@@ -253,9 +212,7 @@ async function handleOnboardingInitialize(c: any) {
     }
 
     const body = await c.req.json() as { sport?: string; leagueId?: string; seasonYear?: number };
-    const { sport, leagueId, seasonYear } = body;
-
-    console.log(`🚀 [baseball] Initialize onboarding for user: ${clerkUserId}, sport: ${sport}, leagueId: ${leagueId}, seasonYear: ${seasonYear || 'default'}`);
+    const { leagueId, seasonYear } = body;
 
     // Get credentials from auth-worker
     const credentials = await getCredentials(env, clerkUserId, authHeader);
@@ -270,7 +227,6 @@ async function handleOnboardingInitialize(c: any) {
     let targetLeagues: Array<{ leagueId: string; sport: string; teamId?: string; seasonYear?: number }> = [];
 
     if (leagueId) {
-      console.log(`🔍 [baseball] Discovery mode: fetching league ${leagueId} directly from ESPN`);
       targetLeagues = [{ leagueId, sport: 'baseball', seasonYear }];
     } else {
       const leagues = await getUserLeagues(env, clerkUserId, authHeader);
@@ -284,8 +240,6 @@ async function handleOnboardingInitialize(c: any) {
       }
       targetLeagues = baseballLeagues;
     }
-
-    console.log(`⚾ Processing ${targetLeagues.length} baseball league(s) for user`);
 
     const leagueResults = [];
     for (const league of targetLeagues) {

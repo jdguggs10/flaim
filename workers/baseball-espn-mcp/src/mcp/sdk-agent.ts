@@ -7,7 +7,7 @@
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import type { Env } from './agent';
+import type { Env } from '../index-hono';
 
 // TODO: Revisit this workaround. Casting to 'any' is used due to type compatibility issues
 // between Zod v3/v4 and @modelcontextprotocol/sdk's registerTool().

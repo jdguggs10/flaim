@@ -1,5 +1,5 @@
 import { EspnApiClient } from '../espn';
-import { Env } from '../index';
+import type { Env } from '../index-hono';
 
 export async function getLeagueMeta(
   args: { leagueId: string; year?: number },

@@ -1,8 +1,8 @@
 # Worker Infrastructure Migration Plan
 
-> **Status: PHASE 5 COMPLETE** — All 3 workers (baseball-mcp, football-mcp, auth-worker) running Hono in production. MCP workers also using SDK. Phase 6 (tests & cleanup) pending.
+> **Status: PHASE 6 CLEANUP COMPLETE** — All 3 workers running Hono + SDK in production. Old files deleted. Tests pending.
 
-**Date**: 2026-01-16 (Phase 5 complete)
+**Date**: 2026-01-17 (Phase 6 cleanup complete)
 **Scope**: Hono routing framework + MCP SDK adoption for all workers (using Cloudflare `createMcpHandler`)
 
 ---
@@ -32,20 +32,23 @@ This plan combines two infrastructure improvements into a single migration path:
 | Deploy auth-worker to production | High | ✅ Complete |
 | Manual smoke test (extension, OAuth, ChatGPT) | High | ⏳ Pending |
 
-### Soon After (24-48h Post-Deploy)
+### Cleanup (Phase 6) — Complete
 
 | Task | Priority | Status |
 |------|----------|--------|
-| Monitor all 3 workers for stability | High | ⏳ Pending |
-| Remove old `index.ts` files (3 workers) | Medium | ⏳ Pending |
-| Remove old `mcp/agent.ts` files (2 workers) | Medium | ⏳ Pending |
+| Fix Env imports (sdk-agent.ts, espn.ts, tool files) | High | ✅ Complete |
+| Remove debug logging (token fragments) | High | ✅ Complete |
+| Restore retry logic in football discover-seasons | Medium | ✅ Complete |
+| Remove old `index.ts` files (3 workers) | Medium | ✅ Complete |
+| Remove old MCP agent files (agent.ts, football-agent.ts) | Medium | ✅ Complete |
 
-### Nice to Have (Phase 6)
+### Nice to Have (Phase 6 Remaining)
 
 | Task | Priority | Status |
 |------|----------|--------|
 | Add automated tests using `app.request()` | Medium | ⏳ Pending |
 | Test with MCP Inspector | Low | ⏳ Pending |
+| Add missing football tools (free_agents, box_scores, recent_activity) | Low | Separate ticket |
 
 ---
 
@@ -1040,14 +1043,23 @@ curl https://auth-worker.gerrygugger.workers.dev/credentials/espn
 
 **Goal:** Lock behavior with automated tests, clean up old code.
 
-**Cleanup Tasks (after 24-48h stability):**
-- [ ] Remove old entry points:
-  - `workers/baseball-espn-mcp/src/index.ts` (replaced by `index-hono.ts`)
-  - `workers/football-espn-mcp/src/index.ts` (replaced by `index-hono.ts`)
-  - `workers/auth-worker/src/index.ts` (replaced by `index-hono.ts`)
-- [ ] Remove old MCP handlers:
-  - `workers/baseball-espn-mcp/src/mcp/agent.ts` (replaced by `sdk-agent.ts`)
-  - `workers/football-espn-mcp/src/mcp/agent.ts` (replaced by `sdk-agent.ts`)
+**Status:** Cleanup complete (2026-01-16). Tests pending.
+
+**Cleanup Tasks (complete):**
+- [x] Fix blocking Env imports:
+  - `workers/baseball-espn-mcp/src/mcp/sdk-agent.ts` — `import type { Env } from '../index-hono'`
+  - `workers/baseball-espn-mcp/src/espn.ts` — `import type { Env } from './index-hono'`
+  - `workers/baseball-espn-mcp/src/tools/discoverLeagues.ts` — `import type { Env } from '../index-hono.js'`
+  - `workers/baseball-espn-mcp/src/tools/getLeagueMeta.ts` — `import type { Env } from '../index-hono'`
+- [x] Remove debug logging (auth header prefixes, JWT parsing, response header dumps)
+- [x] Restore retry logic in football `handleDiscoverSeasons()` (~85 lines)
+- [x] Remove old entry points:
+  - `workers/baseball-espn-mcp/src/index.ts`
+  - `workers/football-espn-mcp/src/index.ts`
+  - `workers/auth-worker/src/index.ts`
+- [x] Remove old MCP handlers:
+  - `workers/baseball-espn-mcp/src/mcp/agent.ts`
+  - `workers/football-espn-mcp/src/mcp/football-agent.ts`
 
 **Test Tasks:**
 - [ ] Add unit tests using Hono's `app.request()`
@@ -1090,7 +1102,8 @@ describe('auth-worker', () => {
 | 3C | Baseball SDK (prod) | Production deployed, monitoring | ✅ Complete |
 | 4 | Football SDK | Same as baseball | ✅ Complete |
 | 5 | Auth-worker Hono | Production deployed, monitoring | ✅ Complete |
-| 6 | Tests & Cleanup | Suite passing, old code removed | ⏳ Pending |
+| 6 | Cleanup | Old files removed, imports fixed | ✅ Complete |
+| 6 | Tests | Suite passing | ⏳ Pending |
 
 ---
 

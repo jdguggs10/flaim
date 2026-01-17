@@ -1,4 +1,4 @@
-import { Env } from './index';
+import type { Env } from './index-hono';
 import { EspnLeagueResponse, EspnRosterResponse, EspnTeam } from './types/espn';
 
 // ESPN Credentials interface - local definition for HTTP calls
@@ -396,10 +396,6 @@ export class EspnApiClient {
       }
     };
 
-    console.log(`🔑 Fetching ESPN credentials for user ${clerkUserId}`);
-    console.log(`🔑 Auth header present: ${!!this.authHeader}`);
-    console.log(`🔑 AUTH_WORKER binding present: ${!!this.env.AUTH_WORKER}`);
-
     let response: Response;
 
     // Use service binding if available (preferred), otherwise fall back to URL
@@ -417,7 +413,6 @@ export class EspnApiClient {
       response = await fetch(`${authWorkerUrl}${safePath}`, requestInit);
     }
 
-    console.log(`📡 Auth-worker response: ${response.status} ${response.statusText}`);
     const resolvedUserId = response.headers.get('X-User-Id');
     if (resolvedUserId && this.logContext) {
       this.logContext.resolvedUserId = resolvedUserId;
@@ -425,7 +420,6 @@ export class EspnApiClient {
 
     // 404 = no credentials found - return null to allow public league access
     if (response.status === 404) {
-      console.log('ℹ️ No ESPN credentials found for user - proceeding without auth');
       return null;
     }
 

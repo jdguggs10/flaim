@@ -5,7 +5,7 @@
  * ESPN credentials and league data are now stored via the onboarding API.
  */
 
-import { Env } from '../index.js';
+import type { Env } from '../index-hono.js';
 
 export async function discoverUserLeagues(
   _args: { clerkUserId?: string },
