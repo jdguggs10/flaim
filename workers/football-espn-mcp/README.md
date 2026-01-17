@@ -27,15 +27,10 @@ npm install
 ```
 
 ### 2. Configure Environment
-```bash
-# Set Supabase credentials as Cloudflare secrets
-wrangler secret put SUPABASE_URL --env preview
-wrangler secret put SUPABASE_SERVICE_KEY --env preview
-wrangler secret put SUPABASE_URL --env prod  
-wrangler secret put SUPABASE_SERVICE_KEY --env prod
-```
 
-**Note**: This worker depends on the auth-worker service for credential storage. The `AUTH_WORKER_URL` is configured in `wrangler.jsonc` for each environment. For local development, ensure the auth-worker is running on localhost:8786.
+This worker fetches credentials from auth-worker and does not require Supabase secrets directly.
+
+The `AUTH_WORKER_URL` is configured in `wrangler.jsonc` for each environment. For local development, ensure auth-worker is running on localhost:8786.
 
 ### 3. Deploy
 ```bash
@@ -98,7 +93,6 @@ Configure external AI assistants to use this server:
 
 ### Management Endpoints
 - `GET /health` - Health check
-- `POST /credential/espn` - Store ESPN credentials (auth required)
 - `POST /onboarding/initialize` - Initialize a league (season-aware)
 - `POST /onboarding/discover-seasons` - Auto-discover historical seasons for a league
 

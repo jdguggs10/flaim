@@ -32,8 +32,7 @@ Authorization required (Clerk JWT or OAuth access token). `X-Clerk-User-ID` head
 ### 1. Create Supabase Project
 - Go to https://supabase.com/dashboard
 - Create new project and note the project URL
-- Create new project and note the project URL
-- Run the database schema from `docs/SUPABASE_SETUP.md`
+- Run the migrations from `docs/migrations/` in order (001 through 007)
 
 ### 2. Configure Cloudflare Secrets
 ```bash
@@ -46,11 +45,12 @@ wrangler secret put SUPABASE_SERVICE_KEY --env prod
 ```
 
 ### 3. Local Development
-Create `.env.local` in the `web` directory:
+Create `.dev.vars` in the `workers/auth-worker` directory:
 ```bash
 SUPABASE_URL=https://your-project-ref.supabase.co
 SUPABASE_SERVICE_KEY=your-service-role-key
 ```
+Note: Wrangler reads `.dev.vars` automatically during `wrangler dev`.
 
 ## Development
 

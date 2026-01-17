@@ -6,7 +6,7 @@ Three Cloudflare Workers handling authentication and MCP data fetching.
 
 | Worker | Port | Purpose |
 |--------|------|---------|
-| `auth-worker` | 8786 | Supabase storage, JWT verification, OAuth, extension pairing, rate limiting |
+| `auth-worker` | 8786 | Supabase storage, JWT verification, OAuth, extension APIs, rate limiting |
 | `baseball-espn-mcp` | 8787 | Baseball MCP server with ESPN API tools |
 | `football-espn-mcp` | 8788 | Football MCP server with ESPN API tools |
 
@@ -86,6 +86,9 @@ Tools exposed by the MCP workers:
 - `get_espn_baseball_team_roster` — Team roster with player stats
 - `get_espn_baseball_matchups` — Current and upcoming matchups
 - `get_espn_baseball_standings` — League standings
+- `get_espn_baseball_free_agents` — Available free agents
+- `get_espn_baseball_box_scores` — Box scores for games
+- `get_espn_baseball_recent_activity` — Recent league activity (trades, adds, drops)
 
 ### Football (`football-espn-mcp`)
 - `get_espn_football_league_info` — League settings and members

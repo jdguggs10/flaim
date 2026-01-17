@@ -55,6 +55,9 @@ Season year defaults are deterministic and use America/New_York time:
 | `get_espn_baseball_team_roster` | Baseball | Team roster with stats |
 | `get_espn_baseball_matchups` | Baseball | Current/upcoming matchups |
 | `get_espn_baseball_standings` | Baseball | League standings |
+| `get_espn_baseball_free_agents` | Baseball | Available free agents |
+| `get_espn_baseball_box_scores` | Baseball | Box scores for games |
+| `get_espn_baseball_recent_activity` | Baseball | Recent league activity (trades, adds, drops) |
 | `get_espn_football_league_info` | Football | League settings and members |
 | `get_espn_football_team` | Football | Team roster with stats |
 | `get_espn_football_matchups` | Football | Current/upcoming matchups |

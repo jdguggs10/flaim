@@ -17,6 +17,9 @@ ESPN Fantasy Baseball MCP server with shared authentication via Supabase.
 - `get_espn_baseball_team_roster` - Get team roster and details
 - `get_espn_baseball_matchups` - Get weekly matchups and scores
 - `get_espn_baseball_standings` - Get league standings
+- `get_espn_baseball_free_agents` - Get available free agents
+- `get_espn_baseball_box_scores` - Get box scores for games
+- `get_espn_baseball_recent_activity` - Get recent league activity (trades, adds, drops)
 
 ## Quick Start
 
@@ -27,15 +30,10 @@ npm install
 ```
 
 ### 2. Configure Environment
-```bash
-# Set Supabase credentials as Cloudflare secrets
-wrangler secret put SUPABASE_URL --env preview
-wrangler secret put SUPABASE_SERVICE_KEY --env preview
-wrangler secret put SUPABASE_URL --env prod  
-wrangler secret put SUPABASE_SERVICE_KEY --env prod
-```
 
-**Note**: This worker depends on the auth-worker service for credential storage. The `AUTH_WORKER_URL` is configured in `wrangler.jsonc` for each environment. For local development, ensure the auth-worker is running on localhost:8786.
+This worker fetches credentials from auth-worker and does not require Supabase secrets directly.
+
+The `AUTH_WORKER_URL` is configured in `wrangler.jsonc` for each environment. For local development, ensure auth-worker is running on localhost:8786.
 
 ### 3. Deploy
 ```bash
