@@ -18,8 +18,9 @@ npm run dev
 
 - **Chrome Extension (`/extension`)**: Captures ESPN cookies (SWID, espn_s2) and syncs them to Flaim using Clerk Sync Host (no pairing codes).
 - **Next.js web app (`/web`)**: Site pages (landing, leagues, connectors, extension setup, privacy policy), OAuth consent screens, optional chat UI.
-- **Auth worker (`/workers/auth-worker`)**: Supabase credential + league storage, JWT verification, OAuth token management, extension APIs.
-- **Sport MCP workers (`/workers/baseball-espn-mcp`, `/workers/football-espn-mcp`)**: ESPN API calls + MCP tools. Fetch creds/leagues from auth-worker; no local storage.
+- **Auth worker (`/workers/auth-worker`)**: Supabase credential + league storage, JWT verification, OAuth token management, extension APIs. Uses Hono for routing.
+- **Sport MCP workers (`/workers/baseball-espn-mcp`, `/workers/football-espn-mcp`)**: ESPN API calls + MCP tools. Uses Hono for routing and official MCP SDK for protocol handling. Fetch creds/leagues from auth-worker; no local storage.
+- **Shared package (`/workers/shared`)**: Common utilities (CORS middleware, auth-fetch helper, types) used by all workers.
 - **Supabase Postgres**: `espn_credentials`, `espn_leagues` (per-season rows), `oauth_tokens`, `oauth_codes`, `rate_limits`, plus legacy `extension_tokens`/`extension_pairing_codes` (deprecated).
 
 ## Runtime Choices (Next.js)
@@ -33,6 +34,10 @@ npm run dev
 ```
 web/                        # Next.js app (see web/README.md)
 workers/                    # Cloudflare Workers (see workers/README.md)
+  auth-worker/              # Auth, OAuth, credentials, leagues
+  baseball-espn-mcp/        # Baseball MCP server
+  football-espn-mcp/        # Football MCP server
+  shared/                   # @flaim/worker-shared package
 extension/                  # Chrome extension (see extension/README.md)
 docs/                       # Documentation
 ```

@@ -25,7 +25,6 @@
 - **UX Polish**: Implement loading states (spinners or skeletons) across the web dashboard and extension to improve perceived performance during API fetches.
 
 ## Long-term Complexities to Simplify
-- **Worker Infrastructure Migration (Hono + MCP SDK)**: Adopt Hono for routing and the official MCP SDK for protocol handling. See [MCP_SDK_HONO_MIGRATION_PLAN.md](./MCP_SDK_HONO_MIGRATION_PLAN.md) for the unified plan. Status: Good fit, low urgency.
 - **Harden OAuth Implementation**: The custom OAuth 2.1 provider in `auth-worker` is complex. While keeping it is strategic (hard to replace with off-the-shelf serverless libs), it requires comprehensive integration tests to prevent security regressions.
 
 ## Long-term Potential Implementations

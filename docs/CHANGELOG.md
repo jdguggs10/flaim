@@ -4,6 +4,20 @@ Follow Keep a Changelog; SemVer applies.
 
 ## [Unreleased]
 
+### Worker Infrastructure: Hono + MCP SDK
+Migrated all 3 Cloudflare Workers to Hono routing framework and official MCP SDK. Cleaner code, better testing support, ~400 lines removed.
+
+- **Added**: Hono routing framework to all workers (auth-worker, baseball-mcp, football-mcp).
+- **Added**: Official MCP SDK (`@modelcontextprotocol/sdk`) for protocol handling in MCP workers.
+- **Added**: `@flaim/worker-shared` package with CORS middleware, auth-fetch helper, and shared types.
+- **Added**: Zod schemas for all MCP tool inputs with runtime validation.
+- **Added**: Tool annotations (`readOnlyHint`, `title`) for Claude/ChatGPT directory compatibility.
+- **Changed**: MCP workers now use `WebStandardStreamableHTTPServerTransport` (no Node shims).
+- **Changed**: Manual `if (pathname === ...)` routing replaced with Hono routes.
+- **Changed**: Manual JSON-RPC parsing replaced with SDK handlers.
+- **Removed**: Old `index.ts` entry points (3 workers).
+- **Removed**: Old MCP agent files (`agent.ts`, `football-agent.ts`).
+
 ### Developer Console Overhaul
 Replaced the chat sidebar with an enhanced Developer Console for MCP debugging. Includes dynamic tool fetching and UI optimizations.
 
