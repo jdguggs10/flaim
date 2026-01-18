@@ -47,6 +47,9 @@ export const LINEUP_SLOT_MAP: Record<number, string> = {
   16: 'OF',
 };
 
+const UNKNOWN_POSITION_IDS = new Set<number>();
+const UNKNOWN_LINEUP_SLOT_IDS = new Set<number>();
+
 // Batting stat IDs to stat names (IDs 0-31 in ESPN's system)
 export const BATTING_STATS_MAP: Record<number, string> = {
   0: 'AB',    // At Bats
@@ -193,7 +196,13 @@ export const INJURY_STATUS_MAP: Record<string, string> = {
  * Get position name from ESPN position ID
  */
 export function getPositionName(positionId: number): string {
-  return POSITION_MAP[positionId] || `POS_${positionId}`;
+  const name = POSITION_MAP[positionId];
+  if (name) return name;
+  if (!UNKNOWN_POSITION_IDS.has(positionId)) {
+    UNKNOWN_POSITION_IDS.add(positionId);
+    console.warn(`[baseball-transforms] Unknown position ID: ${positionId}`);
+  }
+  return `POS_${positionId}`;
 }
 
 /**
@@ -211,6 +220,19 @@ export function getStatName(statId: number): string {
  */
 export function getProTeamAbbrev(teamId: number): string {
   return PRO_TEAM_MAP[teamId] || 'FA'; // FA = Free Agent (no team)
+}
+
+/**
+ * Get lineup slot name from ESPN lineup slot ID
+ */
+export function getLineupSlotName(slotId: number): string {
+  const name = LINEUP_SLOT_MAP[slotId];
+  if (name) return name;
+  if (!UNKNOWN_LINEUP_SLOT_IDS.has(slotId)) {
+    UNKNOWN_LINEUP_SLOT_IDS.add(slotId);
+    console.warn(`[baseball-transforms] Unknown lineup slot ID: ${slotId}`);
+  }
+  return `SLOT_${slotId}`;
 }
 
 /**

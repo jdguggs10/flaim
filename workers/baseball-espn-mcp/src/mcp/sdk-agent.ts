@@ -12,7 +12,7 @@ import {
   getPositionName,
   getProTeamAbbrev,
   transformEligiblePositions,
-  LINEUP_SLOT_MAP,
+  getLineupSlotName,
 } from '../transforms/baseball';
 
 // TODO: Revisit this workaround. Casting to 'any' is used due to type compatibility issues
@@ -452,7 +452,7 @@ export function createBaseballMcpServer(ctx: McpContext): McpServer {
               lineupSlotId: entry?.lineupSlotId,
               lineupSlot: entry?.lineupSlot,
               lineupSlotName: entry?.lineupSlotId !== undefined
-                ? LINEUP_SLOT_MAP[entry.lineupSlotId] || `SLOT_${entry.lineupSlotId}`
+                ? getLineupSlotName(entry.lineupSlotId)
                 : undefined,
               injuryStatus: player.injuryStatus,
               status: player.status,
