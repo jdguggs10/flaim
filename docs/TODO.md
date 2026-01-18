@@ -26,6 +26,7 @@
 
 ## Long-term Complexities to Simplify
 - **Harden OAuth Implementation**: The custom OAuth 2.1 provider in `auth-worker` is complex. While keeping it is strategic (hard to replace with off-the-shelf serverless libs), it requires comprehensive integration tests to prevent security regressions.
+- **Address Supabase security advisor warnings**: Review and resolve lint warnings from the Supabase dashboard security advisor.
 
 ## Long-term Potential Implementations
 - Create iOS app (Significant undertaking/Major platform expansion)

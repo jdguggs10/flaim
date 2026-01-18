@@ -85,16 +85,20 @@ export type Item =
 export const handleTurn = async (
   messages: any[],
   tools: any[],
-  onMessage: (data: any) => void
+  onMessage: (data: any) => void,
+  previousResponseId?: string | null
 ) => {
   try {
     // Get response from the API (defined in app/api/chat/turn_response/route.ts)
+    // Uses stored-responses flow: when previousResponseId is provided, the API
+    // reconstructs context from the stored response instead of us rebuilding it
     const response = await fetch("/api/chat/turn_response", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         messages: messages,
         tools: tools,
+        ...(previousResponseId ? { previous_response_id: previousResponseId } : {}),
       }),
     });
 
@@ -168,6 +172,8 @@ export const processMessages = async () => {
     setChatMessages,
     setConversationItems,
     setAssistantLoading,
+    previousResponseId,
+    setPreviousResponseId,
   } = useConversationStore.getState();
 
   const tools = getTools();
@@ -175,31 +181,47 @@ export const processMessages = async () => {
   // Build dynamic league context based on user's active league
   const leagueContext = buildLeagueContext();
 
-  const allConversationItems = [
-    // Static system instructions (defines assistant behavior)
-    {
-      role: "developer",
-      content: SYSTEM_PROMPT,
-    },
-    // Dynamic league context (only injected if user has leagues configured)
-    ...(leagueContext
-      ? [
-          {
-            role: "developer",
-            content: leagueContext,
-          },
-        ]
-      : []),
-    // Conversation history
-    ...conversationItems,
-  ];
+  // With stored-responses flow:
+  // - First turn (no previousResponseId): Send full context (system prompt + league context + user message)
+  // - Subsequent turns: Send only NEW items since last response + previous_response_id
+  //   The API reconstructs full context from the stored response
+  let inputItems: any[];
+  if (previousResponseId) {
+    // We have a stored response - send only new items (user messages, function outputs)
+    // conversationItems now contains only items added since last response
+    inputItems = conversationItems;
+  } else {
+    // First turn - send full context
+    inputItems = [
+      // Static system instructions (defines assistant behavior)
+      {
+        role: "developer",
+        content: SYSTEM_PROMPT,
+      },
+      // Dynamic league context (only injected if user has leagues configured)
+      ...(leagueContext
+        ? [
+            {
+              role: "developer",
+              content: leagueContext,
+            },
+          ]
+        : []),
+      // Conversation history (for first turn, this is just the user message)
+      ...conversationItems,
+    ];
+  }
+
+  // Track pending function calls - we defer execution until after response.completed
+  // so we have the response ID for the next turn
+  const pendingFunctionCalls: { toolCallMessage: ToolCallItem }[] = [];
 
   let assistantMessageContent = "";
   let functionArguments = "";
   // For streaming MCP tool call arguments
   let mcpArguments = "";
 
-  await handleTurn(allConversationItems, tools, async ({ event, data }) => {
+  await handleTurn(inputItems, tools, async ({ event, data }) => {
     switch (event) {
       case "response.output_text.delta":
       case "response.output_text.annotation.added": {
@@ -358,97 +380,19 @@ export const processMessages = async () => {
           setChatMessages([...chatMessages]);
         }
 
-        // Push completed items to conversationItems in the format expected by Responses API
-        // Different item types need different handling:
-        if (item.type === "message") {
-          // For messages, extract the complete content and push in proper format
-          const messageContent = item.content || [];
-          conversationItems.push({
-            role: item.role || "assistant",
-            content: messageContent,
-          });
-          setConversationItems([...conversationItems]);
-        } else if (item.type === "mcp_call") {
-          // For MCP calls, push the call item (which includes output from server-side execution)
-          // The Responses API needs this to maintain context of what tools were called and their results
-          // IMPORTANT: Must strip 'status' field - the API returns it but rejects it on input
-          // See: https://github.com/openai/openai-python/issues/2670
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          const { status, ...mcpCallWithoutStatus } = item;
-          conversationItems.push(mcpCallWithoutStatus);
-          setConversationItems([...conversationItems]);
-        } else if (item.type === "function_call") {
-          // For function calls, push the call specification (strip status to be safe)
-          // The output will be pushed separately after local execution
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          const { status, ...functionCallWithoutStatus } = item;
-          conversationItems.push(functionCallWithoutStatus);
-          setConversationItems([...conversationItems]);
-        } else if (item.type === "web_search_call" || item.type === "file_search_call" || item.type === "code_interpreter_call") {
-          // For built-in tools, push the complete item (strip status to be safe)
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          const { status, ...builtInToolWithoutStatus } = item;
-          conversationItems.push(builtInToolWithoutStatus);
-          setConversationItems([...conversationItems]);
-        }
-        // Note: Other item types (like mcp_list_tools) don't need to be in conversation history
+        // With stored-responses flow, we do NOT push assistant output/tool call items
+        // into conversationItems. The API reconstructs full context from
+        // previous_response_id, and we only need to keep NEW user inputs or local
+        // tool outputs between turns.
 
         if (
           toolCallMessage &&
           toolCallMessage.type === "tool_call" &&
           toolCallMessage.tool_type === "function_call"
         ) {
-          // Handle tool call (execute function)
-          try {
-            const toolResult = await handleTool(
-              toolCallMessage.name as keyof typeof functionsMap,
-              toolCallMessage.parsedArguments
-            );
-
-            // Record tool output
-            toolCallMessage.output = JSON.stringify(toolResult);
-            toolCallMessage.status = "completed";
-            // Add completion timing
-            if (toolCallMessage.metadata) {
-              const now = Date.now();
-              toolCallMessage.metadata.completedAt = now;
-              toolCallMessage.metadata.durationMs =
-                now - toolCallMessage.metadata.startedAt;
-            }
-            setChatMessages([...chatMessages]);
-            // Note: Don't include 'status' field - API returns it but may reject it on input
-            conversationItems.push({
-              type: "function_call_output",
-              call_id: toolCallMessage.call_id,
-              output: JSON.stringify(toolResult),
-            });
-            setConversationItems([...conversationItems]);
-
-            // Create another turn after tool output has been added
-            await processMessages();
-          } catch (error) {
-            const message = error instanceof Error ? error.message : "Tool failed";
-            toolCallMessage.output = JSON.stringify({ error: message });
-            toolCallMessage.status = "failed";
-            if (toolCallMessage.metadata) {
-              const now = Date.now();
-              toolCallMessage.metadata.completedAt = now;
-              toolCallMessage.metadata.durationMs =
-                now - toolCallMessage.metadata.startedAt;
-              toolCallMessage.metadata.error = message;
-            }
-            setChatMessages([...chatMessages]);
-            // Note: Don't include 'status' field - API returns it but may reject it on input
-            conversationItems.push({
-              type: "function_call_output",
-              call_id: toolCallMessage.call_id,
-              output: JSON.stringify({ error: message }),
-            });
-            setConversationItems([...conversationItems]);
-
-            // Let the assistant respond to the tool failure
-            await processMessages();
-          }
+          // Defer function execution until after response.completed
+          // This ensures we have the response ID for the stored-responses flow
+          pendingFunctionCalls.push({ toolCallMessage });
         }
         if (
           toolCallMessage &&
@@ -646,6 +590,15 @@ export const processMessages = async () => {
         console.log("response completed", data);
         const { response } = data;
 
+        // Store the response ID for the stored-responses flow
+        // This allows subsequent turns to reference this response instead of rebuilding history
+        if (response.id) {
+          setPreviousResponseId(response.id);
+          // Clear conversationItems - with stored-responses, we only need NEW items for next turn
+          // The API reconstructs full context from the stored response
+          setConversationItems([]);
+        }
+
         // Handle all MCP approval request items (multiple servers can return these)
         const mcpApprovalRequestMessages = response.output.filter(
           (m: Item) => m.type === "mcp_approval_request"
@@ -692,5 +645,58 @@ export const processMessages = async () => {
 
       // Handle other events as needed
     }
-  });
+  }, previousResponseId);
+
+  // After handleTurn completes, process any pending function calls
+  // We deferred these until we have the response ID for proper stored-responses linking
+  for (const { toolCallMessage } of pendingFunctionCalls) {
+    try {
+      const toolResult = await handleTool(
+        toolCallMessage.name as keyof typeof functionsMap,
+        toolCallMessage.parsedArguments
+      );
+
+      // Record tool output in display
+      toolCallMessage.output = JSON.stringify(toolResult);
+      toolCallMessage.status = "completed";
+      if (toolCallMessage.metadata) {
+        const now = Date.now();
+        toolCallMessage.metadata.completedAt = now;
+        toolCallMessage.metadata.durationMs = now - toolCallMessage.metadata.startedAt;
+      }
+      setChatMessages([...chatMessages]);
+
+      // Clear conversationItems and add only the function output for next turn
+      // (with stored-responses, the API reconstructs context from previousResponseId)
+      setConversationItems([{
+        type: "function_call_output",
+        call_id: toolCallMessage.call_id,
+        output: JSON.stringify(toolResult),
+      }]);
+
+      // Make next turn to get assistant response to tool output
+      await processMessages();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Tool failed";
+      toolCallMessage.output = JSON.stringify({ error: message });
+      toolCallMessage.status = "failed";
+      if (toolCallMessage.metadata) {
+        const now = Date.now();
+        toolCallMessage.metadata.completedAt = now;
+        toolCallMessage.metadata.durationMs = now - toolCallMessage.metadata.startedAt;
+        toolCallMessage.metadata.error = message;
+      }
+      setChatMessages([...chatMessages]);
+
+      // Clear conversationItems and add error output for next turn
+      setConversationItems([{
+        type: "function_call_output",
+        call_id: toolCallMessage.call_id,
+        output: JSON.stringify({ error: message }),
+      }]);
+
+      // Let the assistant respond to the tool failure
+      await processMessages();
+    }
+  }
 };

@@ -43,6 +43,7 @@ export interface OnboardingStatusRequest {
 export interface TurnResponseRequest {
   messages?: any[];
   tools?: any[];
+  previous_response_id?: string;
 }
 
 export interface VectorStoreRequest {

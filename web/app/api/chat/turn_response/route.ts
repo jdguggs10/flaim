@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
     }
 
     const { userId } = authResult;
-    const { messages, tools } = await request.json() as TurnResponseRequest;
+    const { messages, tools, previous_response_id } = await request.json() as TurnResponseRequest;
 
     if (!messages) {
       return NextResponse.json(
@@ -67,12 +67,17 @@ export async function POST(request: NextRequest) {
 
     let events;
     try {
+      // Use stored-responses flow: store: true enables response storage,
+      // previous_response_id links to prior turn (avoids rebuilding conversation history
+      // and the "missing reasoning item" error when tool calls are involved)
       events = await openai.responses.create({
         model: MODEL,
         input: messages,
         tools: tools || [],
         stream: true,
+        store: true,
         parallel_tool_calls: false,
+        ...(previous_response_id ? { previous_response_id } : {}),
       });
     } catch (error: any) {
       const statusCode =

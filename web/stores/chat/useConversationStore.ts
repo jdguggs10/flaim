@@ -6,16 +6,19 @@ import { INITIAL_MESSAGE } from "@/config/constants";
 interface ConversationState {
   // Items displayed in the chat
   chatMessages: Item[];
-  // Items sent to the Responses API
+  // Items sent to the Responses API (only used for first turn before we have a response ID)
   conversationItems: any[];
   // Whether we are waiting for the assistant response
   isAssistantLoading: boolean;
+  // Previous response ID for stored-responses flow (avoids rebuilding conversation history)
+  previousResponseId: string | null;
 
   setChatMessages: (items: Item[]) => void;
   setConversationItems: (messages: any[]) => void;
   addChatMessage: (item: Item) => void;
   addConversationItem: (message: ChatCompletionMessageParam) => void;
   setAssistantLoading: (loading: boolean) => void;
+  setPreviousResponseId: (id: string | null) => void;
   clearConversation: () => void;
   rawSet: (state: any) => void;
 }
@@ -30,6 +33,7 @@ const useConversationStore = create<ConversationState>((set) => ({
   ],
   conversationItems: [],
   isAssistantLoading: false,
+  previousResponseId: null,
   setChatMessages: (items) => set({ chatMessages: items }),
   setConversationItems: (messages) => set({ conversationItems: messages }),
   addChatMessage: (item) =>
@@ -39,6 +43,7 @@ const useConversationStore = create<ConversationState>((set) => ({
       conversationItems: [...state.conversationItems, message],
     })),
   setAssistantLoading: (loading) => set({ isAssistantLoading: loading }),
+  setPreviousResponseId: (id) => set({ previousResponseId: id }),
   clearConversation: () =>
     set({
       chatMessages: [
@@ -50,6 +55,7 @@ const useConversationStore = create<ConversationState>((set) => ({
       ],
       conversationItems: [],
       isAssistantLoading: false,
+      previousResponseId: null,
     }),
   rawSet: set,
 }));
