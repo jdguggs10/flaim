@@ -8,6 +8,12 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { Env } from '../index-hono';
+import {
+  getPositionName,
+  getProTeamAbbrev,
+  transformEligiblePositions,
+  LINEUP_SLOT_MAP,
+} from '../transforms/baseball';
 
 // TODO: Revisit this workaround. Casting to 'any' is used due to type compatibility issues
 // between Zod v3/v4 and @modelcontextprotocol/sdk's registerTool().
@@ -439,9 +445,15 @@ export function createBaseballMcpServer(ctx: McpContext): McpServer {
               name: player.fullName ?? player.name ?? 'Unknown Player',
               proTeamId: player.proTeamId,
               proTeamAbbrev: player.proTeamAbbreviation,
+              proTeam: getProTeamAbbrev(player.proTeamId || 0),
               primaryPositionId: player.defaultPositionId,
+              position: getPositionName(player.defaultPositionId || 0),
+              eligiblePositions: transformEligiblePositions(player.eligibleSlots || []),
               lineupSlotId: entry?.lineupSlotId,
               lineupSlot: entry?.lineupSlot,
+              lineupSlotName: entry?.lineupSlotId !== undefined
+                ? LINEUP_SLOT_MAP[entry.lineupSlotId] || `SLOT_${entry.lineupSlotId}`
+                : undefined,
               injuryStatus: player.injuryStatus,
               status: player.status,
             };
