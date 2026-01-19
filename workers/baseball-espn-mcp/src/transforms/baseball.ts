@@ -4,47 +4,37 @@
  */
 
 // Position slot IDs to position names
+// Position slot IDs to position names (based on ESPN lineup slots observed in 2025 leagues)
 export const POSITION_MAP: Record<number, string> = {
-  0: 'C',     // Catcher
-  1: '1B',    // First Base
-  2: '2B',    // Second Base
-  3: '3B',    // Third Base
-  4: 'SS',    // Shortstop
-  5: 'LF',    // Left Field
-  6: 'CF',    // Center Field
-  7: 'RF',    // Right Field
-  8: 'DH',    // Designated Hitter
-  9: 'UTIL',  // Utility
-  10: 'P',    // Pitcher (general)
-  11: 'SP',   // Starting Pitcher
-  12: 'RP',   // Relief Pitcher
-  13: 'BE',   // Bench
-  14: 'IL',   // Injured List
-  15: 'IF',   // Infield (combined eligibility)
-  16: 'OF',   // Outfield (combined eligibility)
-  17: '2B/SS', // Second Base / Shortstop
-  18: '1B/3B', // First Base / Third Base
+  0: 'C',      // Catcher
+  1: '1B',     // First Base
+  2: '2B',     // Second Base
+  3: '3B',     // Third Base
+  4: 'SS',     // Shortstop
+  5: 'OF',     // Outfield
+  12: 'UTIL',  // Utility
+  13: 'P',     // Pitcher (general)
+  14: 'SP',    // Starting Pitcher
+  15: 'RP',    // Relief Pitcher
+  16: 'BE',    // Bench
+  17: 'IL',    // Injured List
 };
 
 // Lineup slot IDs to slot names (slightly different from position)
+// Lineup slot IDs to slot names (matching ESPN UI)
 export const LINEUP_SLOT_MAP: Record<number, string> = {
   0: 'C',
   1: '1B',
   2: '2B',
   3: '3B',
   4: 'SS',
-  5: 'LF',
-  6: 'CF',
-  7: 'RF',
-  8: 'DH',
-  9: 'UTIL',
-  10: 'P',
-  11: 'SP',
-  12: 'RP',
-  13: 'BE',   // Bench
-  14: 'IL',   // Injured List
-  15: 'IF',
-  16: 'OF',
+  5: 'OF',
+  12: 'UTIL',
+  13: 'P',
+  14: 'SP',
+  15: 'RP',
+  16: 'Bench',
+  17: 'IL',
 };
 
 const UNKNOWN_POSITION_IDS = new Set<number>();
