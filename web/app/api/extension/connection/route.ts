@@ -24,14 +24,25 @@ export async function GET() {
 
     const bearer = (await getToken?.()) || undefined;
 
-    const workerRes = await fetch(`${authWorkerUrl}/extension/connection`, {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-        'X-Clerk-User-ID': userId,
-        ...(bearer ? { 'Authorization': `Bearer ${bearer}` } : {})
-      },
-    });
+    let workerRes: Response;
+    try {
+      workerRes = await fetch(`${authWorkerUrl}/extension/connection`, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'X-Clerk-User-ID': userId,
+          ...(bearer ? { 'Authorization': `Bearer ${bearer}` } : {})
+        },
+      });
+    } catch {
+      // Worker unreachable (e.g., frontend-only dev mode)
+      return NextResponse.json({
+        success: true,
+        connected: false,
+        token: null,
+        _workerUnavailable: true,
+      });
+    }
 
     if (!workerRes.ok) {
       const err = await workerRes.json().catch(() => ({ error: 'Unknown error' })) as {

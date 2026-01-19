@@ -8,8 +8,6 @@ import { Flame, Menu } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 const NAV_LINKS = [
-  { href: '/extension', label: 'Extension' },
-  { href: '/connectors', label: 'Connectors' },
   { href: '/leagues', label: 'Leagues' },
 ] as const;
 

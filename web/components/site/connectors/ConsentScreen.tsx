@@ -107,11 +107,7 @@ export default function ConsentScreen({
 
         {/* Security note */}
         <p className="text-xs text-muted-foreground text-center">
-          You can revoke this access anytime from your{' '}
-          <a href="/connectors" className="underline hover:text-foreground">
-            Connectors settings
-          </a>
-          .
+          You can revoke this access anytime from your AI app&apos;s connector settings.
         </p>
       </CardContent>
 

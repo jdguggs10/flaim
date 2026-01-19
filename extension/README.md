@@ -4,7 +4,7 @@ Chrome extension that auto-captures ESPN credentials (SWID, espn_s2 cookies) and
 
 ## User Flow (v1.3.0)
 
-1. Install extension from [Chrome Web Store](https://chrome.google.com/webstore/detail/flaim)
+1. Install extension from [Chrome Web Store](https://chromewebstore.google.com/detail/flaim-espn-fantasy-connec/mbnokejgglkfgkeeenolgdpcnfakpbkn)
 2. Sign in to `flaim.app` (session syncs to the extension)
 3. Log into ESPN.com (if not already)
 4. Click "Sync to Flaim" - the extension will:

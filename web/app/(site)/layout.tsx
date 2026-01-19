@@ -19,8 +19,8 @@ export default function SiteLayout({
             <div className="text-sm text-muted-foreground flex items-center justify-center gap-2">
               <span>Built by Gerry for fun</span>
               <span aria-hidden="true">·</span>
-              <a href="/privacy#your-data" className="underline hover:text-foreground">
-                Your Data
+              <a href="/privacy" className="underline hover:text-foreground">
+                Privacy
               </a>
               <span aria-hidden="true">·</span>
               <a href="/inspirations" className="underline hover:text-foreground">

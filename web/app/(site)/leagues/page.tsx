@@ -648,9 +648,7 @@ export default function LeaguesPage() {
 
             {!hasCredentials && !verifiedLeague && (
               <p className="text-sm text-muted-foreground">
-                Add your ESPN credentials on the{' '}
-                <a href="/connectors" className="text-primary hover:underline">Connectors</a>{' '}
-                page before adding leagues.
+                Sync your ESPN credentials using the Chrome extension before adding leagues.
               </p>
             )}
 
@@ -814,26 +812,6 @@ export default function LeaguesPage() {
           </CardContent>
         </Card>
 
-        {/* Next steps */}
-        {hasCredentials && leagues.length > 0 && (
-          <Card className="border-primary/50">
-            <CardContent className="pt-6">
-              <div className="flex items-start gap-3">
-                <CheckCircle2 className="h-5 w-5 text-primary mt-0.5" />
-                <div>
-                  <h3 className="font-medium">Ready to connect!</h3>
-                  <p className="text-sm text-muted-foreground">
-                    Your leagues are set up. Head to{' '}
-                    <a href="/connectors" className="text-primary hover:underline">
-                      Connectors
-                    </a>{' '}
-                    to connect Claude or ChatGPT.
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
       </div>
     </div>
   );

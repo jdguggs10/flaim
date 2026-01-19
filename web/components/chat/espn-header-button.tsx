@@ -115,9 +115,9 @@ export function EspnHeaderButton() {
                 className="w-full text-xs"
                 asChild
               >
-                <a href="/extension" target="_blank" rel="noopener noreferrer">
-                  Set up ESPN connection
-                </a>
+              <a href="/" target="_blank" rel="noopener noreferrer">
+                Open ESPN setup
+              </a>
               </Button>
             </div>
           )}

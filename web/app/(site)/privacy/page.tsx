@@ -126,9 +126,9 @@ export default function PrivacyPage() {
             </p>
             <ul className="list-disc list-inside text-muted-foreground mt-2 space-y-1">
               <li>
-                <strong>Disconnect extension:</strong> Visit{' '}
-                <a href="/extension" className="text-primary hover:underline">flaim.app/extension</a>
-                {' '}and click &quot;Disconnect Extension&quot; to revoke access and delete stored credentials.
+                <strong>Remove credentials:</strong> Visit{' '}
+                <a href="/leagues" className="text-primary hover:underline">flaim.app/leagues</a>
+                {' '}to manage or remove your ESPN credentials.
               </li>
               <li>
                 <strong>Delete account:</strong> Contact us to request complete account deletion.
