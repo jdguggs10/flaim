@@ -21,7 +21,7 @@
       "workers_dev": true,
       // Service binding for auth-worker (avoids same-zone fetch error 1042)
       "services": [
-        { "binding": "AUTH_WORKER", "service": "auth-worker" }
+        { "binding": "AUTH", "service": "auth-worker" }
       ],
       // Environment variables for production
       "vars": {
@@ -36,7 +36,7 @@
       "workers_dev": true,
       // Service binding for auth-worker
       "services": [
-        { "binding": "AUTH_WORKER", "service": "auth-worker-preview" }
+        { "binding": "AUTH", "service": "auth-worker-preview" }
       ],
       // Environment variables for preview
       "vars": {
@@ -51,7 +51,7 @@
       "workers_dev": true,
       // Service binding for auth-worker
       "services": [
-        { "binding": "AUTH_WORKER", "service": "auth-worker-dev" }
+        { "binding": "AUTH", "service": "auth-worker-dev" }
       ],
       // Environment variables for dev
       "vars": {

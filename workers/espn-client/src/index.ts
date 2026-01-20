@@ -1,8 +1,11 @@
 // workers/espn-client/src/index.ts
 import { Hono } from 'hono';
+import { cors } from 'hono/cors';
 import type { Env, ExecuteRequest, ExecuteResponse, Sport } from './types';
 
 const app = new Hono<{ Bindings: Env }>();
+
+app.use('*', cors());
 
 // Health check
 app.get('/health', (c) => {
