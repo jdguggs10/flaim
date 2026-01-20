@@ -5,6 +5,7 @@
     "web",
     "workers/auth-worker",
     "workers/baseball-espn-mcp",
+    "workers/espn-client",
     "workers/football-espn-mcp",
     "workers/shared"
   ],
