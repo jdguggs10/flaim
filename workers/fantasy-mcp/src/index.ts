@@ -37,7 +37,7 @@ app.get('/health', async (c) => {
     timestamp: new Date().toISOString(),
     bindings: {
       espn: !!c.env.ESPN,
-      auth: !!c.env.AUTH,
+      auth: !!c.env.AUTH_WORKER,
     }
   };
 
@@ -62,15 +62,20 @@ app.get('/health', async (c) => {
 });
 
 // OAuth Protected Resource Metadata (RFC 9728)
+// Available at both paths for direct and routed access
+const oauthMetadata = {
+  resource: 'https://api.flaim.app/fantasy/mcp',
+  authorization_servers: ['https://api.flaim.app'],
+  bearer_methods_supported: ['header'],
+  scopes_supported: ['mcp:read', 'mcp:write']
+};
+
 app.get('/.well-known/oauth-protected-resource', (c) => {
-  return c.json({
-    resource: 'https://api.flaim.app/fantasy/mcp',
-    authorization_servers: ['https://api.flaim.app'],
-    bearer_methods_supported: ['header'],
-    scopes_supported: ['mcp:read', 'mcp:write']
-  }, 200, {
-    'Cache-Control': 'public, max-age=3600'
-  });
+  return c.json(oauthMetadata, 200, { 'Cache-Control': 'public, max-age=3600' });
+});
+
+app.get('/fantasy/.well-known/oauth-protected-resource', (c) => {
+  return c.json(oauthMetadata, 200, { 'Cache-Control': 'public, max-age=3600' });
 });
 
 /**
@@ -98,7 +103,7 @@ function buildMcpAuthErrorResponse(request: Request): Response {
   );
 }
 
-// MCP endpoints
+// MCP endpoints - handle both /mcp (direct) and /fantasy/mcp (via route pattern)
 app.all('/mcp', async (c) => {
   // Check for Authorization header
   const authHeader = c.req.header('Authorization');
@@ -132,6 +137,65 @@ app.all('/mcp/*', async (c) => {
   const handler = createMcpHandler(server);
 
   // Handle the request
+  return handler(c.req.raw, c.env, c.executionCtx);
+});
+
+// Routes via api.flaim.app/fantasy/* (Cloudflare route passes full path)
+app.get('/fantasy/health', async (c) => {
+  // Reuse health check logic
+  const healthData: Record<string, unknown> = {
+    status: 'healthy',
+    service: 'fantasy-mcp',
+    version: '1.0.0',
+    timestamp: new Date().toISOString(),
+    bindings: {
+      espn: !!c.env.ESPN,
+      auth: !!c.env.AUTH_WORKER,
+    }
+  };
+
+  if (c.env.ESPN) {
+    try {
+      const espnHealth = await c.env.ESPN.fetch(new Request('https://internal/health'));
+      healthData.espn_status = espnHealth.ok ? 'connected' : 'error';
+    } catch {
+      healthData.espn_status = 'unreachable';
+      healthData.status = 'degraded';
+    }
+  } else {
+    healthData.espn_status = 'no_binding';
+    healthData.status = 'degraded';
+  }
+
+  const statusCode = healthData.status === 'healthy' ? 200 : 503;
+  return c.json(healthData, statusCode);
+});
+
+app.all('/fantasy/mcp', async (c) => {
+  const authHeader = c.req.header('Authorization');
+  if (!authHeader) {
+    return buildMcpAuthErrorResponse(c.req.raw);
+  }
+
+  const server = createFantasyMcpServer({
+    env: c.env,
+    authHeader,
+  });
+  const handler = createMcpHandler(server);
+  return handler(c.req.raw, c.env, c.executionCtx);
+});
+
+app.all('/fantasy/mcp/*', async (c) => {
+  const authHeader = c.req.header('Authorization');
+  if (!authHeader) {
+    return buildMcpAuthErrorResponse(c.req.raw);
+  }
+
+  const server = createFantasyMcpServer({
+    env: c.env,
+    authHeader,
+  });
+  const handler = createMcpHandler(server);
   return handler(c.req.raw, c.env, c.executionCtx);
 });
 

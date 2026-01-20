@@ -28,7 +28,7 @@
       // Service bindings for platform workers
       "services": [
         { "binding": "ESPN", "service": "espn-client" },
-        { "binding": "AUTH", "service": "auth-worker" }
+        { "binding": "AUTH_WORKER", "service": "auth-worker" }
       ],
       // Environment variables for production
       "vars": {
@@ -44,7 +44,7 @@
       // Service bindings for platform workers
       "services": [
         { "binding": "ESPN", "service": "espn-client-preview" },
-        { "binding": "AUTH", "service": "auth-worker-preview" }
+        { "binding": "AUTH_WORKER", "service": "auth-worker-preview" }
       ],
       // Environment variables for preview
       "vars": {
@@ -60,7 +60,7 @@
       // Service bindings for platform workers
       "services": [
         { "binding": "ESPN", "service": "espn-client-dev" },
-        { "binding": "AUTH", "service": "auth-worker-dev" }
+        { "binding": "AUTH_WORKER", "service": "auth-worker-dev" }
       ],
       // Environment variables for dev
       "vars": {
