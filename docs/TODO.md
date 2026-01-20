@@ -6,8 +6,8 @@
 
 ## Features
 - **Deepen MCP functionality for football and baseball**: expand coverage (edge cases, richer data, pagination), and add tests for existing tools.
-  - Current football tools (workers/football-espn-mcp): `get_user_session`, `get_espn_football_league_info`, `get_espn_football_team`, `get_espn_football_matchups`, `get_espn_football_standings`.
-  - Current baseball tools (workers/baseball-espn-mcp): `get_user_session`, `get_espn_baseball_league_info`, `get_espn_baseball_team_roster`, `get_espn_baseball_matchups`, `get_espn_baseball_standings`, `get_espn_baseball_free_agents`, `get_espn_baseball_box_scores`, `get_espn_baseball_recent_activity`.
+  - Unified gateway tools (`workers/fantasy-mcp`): `get_user_session`, `get_league_info`, `get_standings`, `get_matchups`, `get_roster`, `get_free_agents`
+  - Legacy workers still available as fallback: `baseball-espn-mcp`, `football-espn-mcp`
 
 ## Marketing
 - **Visual Proof**: Add interaction mockups/chat screenshots and use real platform logos.
@@ -15,6 +15,7 @@
 - **Trust & Identity**: Add personal "indie developer" note and explicit security highlights.
 
 ## Maintenance & Refactoring
+- **ESPN API Type Safety**: Replace `as any` type assertions in `espn-client` handlers with proper TypeScript interfaces. Create interfaces for the ESPN API response fields we actually use. See TODO in `workers/espn-client/src/types.ts`.
 - **Codebase Audit & Streamlining**: Conduct a thorough review for legacy code, unused utilities, or redundant components. Identify parts of the system that are no longer in use (specifically around older auth patterns or defunct chat features) and remove them cautiously to reduce technical debt while ensuring no regressions.
 - **Devconsole chat clarity**: Reduce excess tool verbosity when using the devconsole chat to keep responses concise.
 - **Advanced Token & Usage Analytics**: Implement per-turn and per-session token usage tracking in the chat UI by capturing usage data from the Responses API stream. Include cost estimation and historical usage trends.

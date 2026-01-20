@@ -1,0 +1,98 @@
+# Fantasy MCP Gateway
+
+Unified MCP (Model Context Protocol) gateway for all fantasy sports platforms. Single endpoint for Claude, ChatGPT, and other AI assistants.
+
+## Purpose
+
+Provides a platform-agnostic MCP interface that:
+- Exposes unified tools with explicit parameters (`platform`, `sport`, `league_id`, `season_year`)
+- Routes requests to platform-specific workers via service bindings
+- Handles OAuth authentication via auth-worker
+
+## Architecture
+
+```
+Claude/ChatGPT
+     |
+     v (OAuth token)
+fantasy-mcp (this worker)
+     |
+     +---> espn-client (service binding) ---> ESPN API
+     +---> auth-worker (service binding) ---> Supabase
+     +---> (future) yahoo-client
+```
+
+## Endpoints
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/health` | GET | Health check with binding status |
+| `/fantasy/health` | GET | Same (for routed access) |
+| `/.well-known/oauth-protected-resource` | GET | OAuth metadata (RFC 9728) |
+| `/mcp` | POST | MCP protocol endpoint |
+| `/fantasy/mcp` | POST | Same (for routed access via `api.flaim.app/fantasy/*`) |
+
+## MCP Tools
+
+All tools take explicit parameters. Call `get_user_session` first to get league IDs.
+
+| Tool | Description |
+|------|-------------|
+| `get_user_session` | User's leagues across all platforms (call first) |
+| `get_league_info` | League settings, scoring, roster config |
+| `get_standings` | League standings with records |
+| `get_matchups` | Weekly matchups/scoreboard |
+| `get_roster` | Team roster with player stats |
+| `get_free_agents` | Available free agents |
+
+### Tool Parameters
+
+```typescript
+{
+  platform: 'espn' | 'yahoo';    // Required
+  sport: 'football' | 'baseball' | 'basketball' | 'hockey';
+  league_id: string;             // From get_user_session
+  season_year: number;           // e.g., 2024
+  team_id?: string;              // For roster queries
+  week?: number;                 // For matchups
+  position?: string;             // For free agents filter
+  count?: number;                // For free agents limit
+}
+```
+
+## Authentication
+
+Requires Bearer token in Authorization header. Tokens are:
+- Clerk JWTs (from web app)
+- OAuth tokens (from Claude/ChatGPT)
+
+Auth is validated by auth-worker via service binding.
+
+## Development
+
+```bash
+# Run locally
+npm run dev:fantasy-mcp  # Port 8790
+
+# Or directly
+cd workers/fantasy-mcp
+wrangler dev --env dev --port 8790
+```
+
+## Production URLs
+
+- **Custom route**: `https://api.flaim.app/fantasy/mcp`
+- **Workers.dev**: `https://fantasy-mcp.gerrygugger.workers.dev/mcp`
+
+## Service Bindings
+
+| Binding | Worker | Purpose |
+|---------|--------|---------|
+| `ESPN` | espn-client | ESPN API calls |
+| `AUTH_WORKER` | auth-worker | Credentials and auth |
+
+## Related
+
+- [`espn-client`](../espn-client/) - ESPN platform worker
+- [`auth-worker`](../auth-worker/) - Authentication and credentials
+- [Architecture docs](../../docs/ARCHITECTURE.md) - Full system design

@@ -1,5 +1,7 @@
 # Football ESPN MCP Server
 
+> **Legacy Worker**: This worker is being superseded by the unified gateway (`fantasy-mcp` + `espn-client`). It remains deployed as a fallback but new development should target the unified architecture. See [`fantasy-mcp`](../fantasy-mcp/) for the recommended approach.
+
 ESPN Fantasy Football MCP server with shared authentication via Supabase.
 
 ## Features

@@ -4,6 +4,22 @@ Follow Keep a Changelog; SemVer applies.
 
 ## [Unreleased]
 
+### Unified Gateway Architecture (Phase 0)
+Major architectural restructure implementing a unified gateway pattern for multi-platform fantasy sports support.
+
+- **Added**: `fantasy-mcp` worker - unified MCP gateway with platform-agnostic tools
+- **Added**: `espn-client` worker - internal ESPN API client for all sports
+- **Added**: Service bindings between gateway and platform workers
+- **Added**: Unified MCP tools: `get_user_session`, `get_league_info`, `get_standings`, `get_matchups`, `get_roster`, `get_free_agents`
+- **Added**: `/fantasy/*` routes on `api.flaim.app` for gateway access
+- **Added**: `platform` field to auth-worker league responses
+- **Changed**: ESPN handlers consolidated from per-sport workers into `espn-client`
+- **Changed**: Auth binding renamed from `AUTH` to `AUTH_WORKER` for consistency
+- **Fixed**: Football season rollover date (March 1 → June 1) to match documentation
+- **Deprecated**: Legacy workers (`baseball-espn-mcp`, `football-espn-mcp`) - still functional as fallback
+
+See `docs/plans/2025-01-19-phase0-unified-gateway.md` for implementation details.
+
 ### Worker Infrastructure: Hono + MCP SDK
 Migrated all 3 Cloudflare Workers to Hono routing framework and official MCP SDK. Cleaner code, better testing support, ~400 lines removed.
 
