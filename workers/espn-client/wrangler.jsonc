@@ -1,0 +1,64 @@
+{
+  "name": "espn-client",
+  "main": "src/index.ts",
+  "compatibility_date": "2024-12-01",
+  // Enable Cloudflare Workers Logs/Observability
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "persist": true,
+      "invocation_logs": true
+    }
+  },
+  // Environment configurations
+  "env": {
+    // Production environment
+    "prod": {
+      "name": "espn-client",
+      "workers_dev": true,
+      // Service binding for auth-worker (avoids same-zone fetch error 1042)
+      "services": [
+        { "binding": "AUTH_WORKER", "service": "auth-worker" }
+      ],
+      // Environment variables for production
+      "vars": {
+        "NODE_ENV": "production",
+        "ENVIRONMENT": "prod",
+        "AUTH_WORKER_URL": "https://auth-worker.gerrygugger.workers.dev"
+      }
+    },
+    // Preview environment (remote dev/staging)
+    "preview": {
+      "name": "espn-client-preview",
+      "workers_dev": true,
+      // Service binding for auth-worker
+      "services": [
+        { "binding": "AUTH_WORKER", "service": "auth-worker-preview" }
+      ],
+      // Environment variables for preview
+      "vars": {
+        "NODE_ENV": "production",
+        "ENVIRONMENT": "preview",
+        "AUTH_WORKER_URL": "https://auth-worker-preview.gerrygugger.workers.dev"
+      }
+    },
+    // Development environment (local)
+    "dev": {
+      "name": "espn-client-dev",
+      "workers_dev": true,
+      // Service binding for auth-worker
+      "services": [
+        { "binding": "AUTH_WORKER", "service": "auth-worker-dev" }
+      ],
+      // Environment variables for dev
+      "vars": {
+        "NODE_ENV": "development",
+        "ENVIRONMENT": "dev",
+        "AUTH_WORKER_URL": "https://auth-worker-dev.gerrygugger.workers.dev"
+      }
+    }
+  }
+}

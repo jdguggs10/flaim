@@ -1,0 +1,23 @@
+{
+  "name": "fantasy-mcp",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --env dev --port 8790",
+    "deploy:dev": "wrangler deploy --env dev",
+    "deploy:preview": "wrangler deploy --env preview",
+    "deploy:prod": "wrangler deploy --env prod"
+  },
+  "dependencies": {
+    "@flaim/worker-shared": "*",
+    "@modelcontextprotocol/sdk": "^1.25.2",
+    "hono": "^4.7.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.0.0",
+    "typescript": "^5.7.0",
+    "wrangler": "^4.53.0"
+  }
+}
