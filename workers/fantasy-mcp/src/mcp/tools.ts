@@ -57,7 +57,7 @@ async function fetchUserLeagues(
   try {
     console.log(`[fantasy-mcp] Fetching leagues from auth-worker`);
 
-    const response = await env.AUTH.fetch(
+    const response = await env.AUTH_WORKER.fetch(
       new Request('https://internal/leagues', {
         method: 'GET',
         headers: {
@@ -148,8 +148,8 @@ function getCurrentSeason(sport: Sport): number {
       // Rollover on Feb 1 (month 2)
       return month < 2 ? year - 1 : year;
     case 'football':
-      // Rollover on March 1 (month 3) - NFL season spans calendar years
-      return month < 3 ? year - 1 : year;
+      // Rollover on Jun 1 (month 6) - NFL season spans calendar years
+      return month < 6 ? year - 1 : year;
     case 'basketball':
       // Rollover on October 1 (month 10)
       return month < 10 ? year - 1 : year;
