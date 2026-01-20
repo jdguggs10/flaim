@@ -17,7 +17,7 @@ export default function SiteLayout({
           <div className="flex-1">{children}</div>
           <footer className="py-6 px-4 text-center border-t bg-background">
             <div className="text-sm text-muted-foreground flex items-center justify-center gap-2">
-              <span>Built by Gerry for fun</span>
+              <span>Built by <a href="https://www.threads.com/@jdguggs10" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">Gerry</a> for fun</span>
               <span aria-hidden="true">·</span>
               <a href="/privacy" className="underline hover:text-foreground">
                 Privacy

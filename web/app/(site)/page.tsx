@@ -68,32 +68,42 @@ export default function LandingPage() {
         <div className="container max-w-2xl mx-auto">
           <h2 className="text-2xl font-bold text-center mb-5">FAQs</h2>
           <div className="space-y-3">
-            {/* How the Extension Works */}
+            {/* What does Flaim do */}
             <details className="group border rounded-lg bg-background">
               <summary className="flex cursor-pointer items-center justify-between p-4 font-medium">
-                How does the Chrome extension work?
+                What does Flaim do?
                 <span className="ml-2 transition-transform group-open:rotate-180">
                   ▼
                 </span>
               </summary>
               <div className="px-4 pb-4 text-sm text-muted-foreground space-y-2">
-                <p><strong>1.</strong> Install the extension from the Chrome Web Store.</p>
-                <p><strong>2.</strong> Sign in to flaim.app - your session automatically syncs to the extension.</p>
-                <p><strong>3.</strong> Log into ESPN (espn.com/fantasy) in any tab.</p>
-                <p><strong>4.</strong> Click the extension and tap &quot;Sync to Flaim&quot; to capture your ESPN credentials.</p>
+                <p>Flaim provides MCP servers and user auth so you can connect your fantasy leagues to your preferred AI. That&apos;s it. I don&apos;t supply the AI, you do. I just connect the dots.</p>
               </div>
             </details>
 
-            {/* How Connectors Work */}
+            {/* How does the extension work */}
             <details className="group border rounded-lg bg-background">
               <summary className="flex cursor-pointer items-center justify-between p-4 font-medium">
-                How do I connect to Claude or ChatGPT?
+                How does the extension work?
                 <span className="ml-2 transition-transform group-open:rotate-180">
                   ▼
                 </span>
               </summary>
               <div className="px-4 pb-4 text-sm text-muted-foreground space-y-2">
-                <p>Copy an MCP URL above on this page, then follow your AI platform&apos;s setup guide to add it as a connector. You&apos;ll be redirected to Flaim to authorize access. Connections auto-renew so you stay connected.</p>
+                <p>It makes grabbing your credentials easy and matches them to your account. The MCPs will then auth the AI&apos;s data request with those credentials.</p>
+              </div>
+            </details>
+
+            {/* Why custom connectors */}
+            <details className="group border rounded-lg bg-background">
+              <summary className="flex cursor-pointer items-center justify-between p-4 font-medium">
+                Why do you use custom connectors with only some AIs?
+                <span className="ml-2 transition-transform group-open:rotate-180">
+                  ▼
+                </span>
+              </summary>
+              <div className="px-4 pb-4 text-sm text-muted-foreground space-y-2">
+                <p>Because how AIs connect with external data is brand new technology, the MCP protocol was just created in late 2024, and standard implementations are still forming. Trust me, I&apos;ll add ChatGPT and Gemini as soon as I can.</p>
               </div>
             </details>
 
@@ -110,18 +120,6 @@ export default function LandingPage() {
               </div>
             </details>
 
-            {/* How does this work */}
-            <details className="group border rounded-lg bg-background">
-              <summary className="flex cursor-pointer items-center justify-between p-4 font-medium">
-                How does this work?
-                <span className="ml-2 transition-transform group-open:rotate-180">
-                  ▼
-                </span>
-              </summary>
-              <div className="px-4 pb-4 text-sm text-muted-foreground space-y-2">
-                <p>Flaim is a middleware service that provides MCP servers and manages unique user auth, allowing your personal AI to directly retrieve data from your fantasy leagues. See <Link href="/privacy" className="text-primary hover:underline">Privacy Policy</Link> for more.</p>
-              </div>
-            </details>
           </div>
         </div>
       </section>

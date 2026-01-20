@@ -6,25 +6,25 @@ const inspirations = [
     name: 'Plain Text Sports',
     url: 'https://plaintextsports.com',
     description:
-      'Sports scores and schedules, stripped down to pure information. No clutter, no noise — just what you need to know. A reminder that simple can be better.',
+      'The greatest sports score application of all time, period.',
   },
   {
     name: 'CrazyNinjaOdds',
     url: 'https://crazyninjaodds.com',
     description:
-      'A toolkit for sports betting built by one person (CrazyNinjaMike). Calculators, odds comparison, arbitrage detection — all with a casual, self-aware tone. Proof that solo projects can be genuinely useful.',
+      'Crazy Ninja Mike is the 🐐.',
   },
   {
     name: 'Pikkit',
     url: 'https://pikkit.com',
     description:
-      'Bet tracking done right. Syncs with sportsbooks automatically so you don\'t have to manually log everything. Clean execution of a focused idea.',
+      'Bet tracking done right. The real ones know.',
   },
   {
     name: 'espn-api',
     url: 'https://github.com/cwendt94/espn-api',
     description:
-      'A Python library for ESPN Fantasy data by cwendt94. Open source, well-maintained, and a direct inspiration for how Flaim connects to ESPN. Standing on the shoulders of good work.',
+      'Props to cwendt94 for making all this possible.',
   },
 ];
 
