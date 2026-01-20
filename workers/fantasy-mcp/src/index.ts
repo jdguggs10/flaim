@@ -5,6 +5,8 @@ import {
   isCorsPreflightRequest,
 } from '@flaim/worker-shared';
 import type { Env } from './types';
+import { createFantasyMcpServer } from './mcp/server';
+import { createMcpHandler } from './mcp/create-mcp-handler';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -71,18 +73,66 @@ app.get('/.well-known/oauth-protected-resource', (c) => {
   });
 });
 
-// MCP endpoints - placeholder until MCP SDK integration
+/**
+ * Build MCP-compliant 401 response with WWW-Authenticate header
+ */
+function buildMcpAuthErrorResponse(request: Request): Response {
+  const corsHeaders = createMcpCorsHeaders(request);
+  return new Response(
+    JSON.stringify({
+      jsonrpc: '2.0',
+      error: {
+        code: -32001,
+        message: 'Authentication required. Please provide a valid Bearer token.',
+      },
+      id: null,
+    }),
+    {
+      status: 401,
+      headers: {
+        'Content-Type': 'application/json',
+        'WWW-Authenticate': 'Bearer realm="fantasy-mcp", resource="https://api.flaim.app/fantasy/mcp"',
+        ...corsHeaders,
+      },
+    }
+  );
+}
+
+// MCP endpoints
 app.all('/mcp', async (c) => {
-  return c.json({
-    error: 'MCP endpoint not yet implemented',
-    message: 'This gateway will expose unified MCP tools'
-  }, 501);
+  // Check for Authorization header
+  const authHeader = c.req.header('Authorization');
+  if (!authHeader) {
+    return buildMcpAuthErrorResponse(c.req.raw);
+  }
+
+  // Create MCP server and handler
+  const server = createFantasyMcpServer({
+    env: c.env,
+    authHeader,
+  });
+  const handler = createMcpHandler(server);
+
+  // Handle the request
+  return handler(c.req.raw, c.env, c.executionCtx);
 });
 
 app.all('/mcp/*', async (c) => {
-  return c.json({
-    error: 'MCP endpoint not yet implemented'
-  }, 501);
+  // Check for Authorization header
+  const authHeader = c.req.header('Authorization');
+  if (!authHeader) {
+    return buildMcpAuthErrorResponse(c.req.raw);
+  }
+
+  // Create MCP server and handler
+  const server = createFantasyMcpServer({
+    env: c.env,
+    authHeader,
+  });
+  const handler = createMcpHandler(server);
+
+  // Handle the request
+  return handler(c.req.raw, c.env, c.executionCtx);
 });
 
 // 404 handler
@@ -92,7 +142,7 @@ app.notFound((c) => {
     endpoints: {
       '/health': 'GET - Health check with binding status',
       '/.well-known/oauth-protected-resource': 'GET - OAuth metadata',
-      '/mcp': 'POST - MCP protocol (not yet implemented)'
+      '/mcp': 'POST - MCP protocol endpoint'
     }
   }, 404);
 });
