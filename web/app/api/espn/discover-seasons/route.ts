@@ -56,7 +56,6 @@ export async function POST(request: NextRequest) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Clerk-User-ID': userId,
           'Authorization': `Bearer ${bearer}`
         },
         body: JSON.stringify({ leagueId })

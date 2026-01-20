@@ -42,7 +42,6 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',
-        'X-Clerk-User-ID': userId,
         ...(bearer ? { 'Authorization': `Bearer ${bearer}` } : {})
       },
       body: JSON.stringify({
@@ -104,7 +103,6 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-        'X-Clerk-User-ID': userId,
         ...(bearer ? { 'Authorization': `Bearer ${bearer}` } : {})
       }
     });

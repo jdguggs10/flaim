@@ -22,7 +22,6 @@ interface ServerConnectionState {
 function ServerCard({ server }: { server: McpServerInfo }) {
   const {
     mcpConfig,
-    clerkUserId,
     clerkToken,
     mcpAvailableToolsByServer,
     disabledMcpToolsByServer,
@@ -53,7 +52,6 @@ function ServerCard({ server }: { server: McpServerInfo }) {
 
     const headers = {
       "Content-Type": "application/json",
-      ...(clerkUserId ? { "X-Clerk-User-ID": clerkUserId } : {}),
       ...(clerkToken ? { Authorization: `Bearer ${clerkToken}` } : {}),
     };
 
@@ -74,7 +72,7 @@ function ServerCard({ server }: { server: McpServerInfo }) {
     }
 
     return payload;
-  }, [server, mcpConfig.skip_approval, clerkUserId, clerkToken, mcpAvailableToolsByServer, disabledMcpToolsByServer]);
+  }, [server, mcpConfig.skip_approval, clerkToken, mcpAvailableToolsByServer, disabledMcpToolsByServer]);
 
   // Redact sensitive headers for display
   const redactedPayload = useMemo(() => {

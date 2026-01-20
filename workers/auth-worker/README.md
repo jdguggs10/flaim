@@ -25,7 +25,7 @@ The Auth Worker is a centralized Cloudflare Worker responsible for storing, retr
 
 ## Authentication
 
-Authorization required (Clerk JWT or OAuth access token). `X-Clerk-User-ID` header is supported only as a dev fallback.
+Authorization required (Clerk JWT or OAuth access token).
 
 ## Setup
 

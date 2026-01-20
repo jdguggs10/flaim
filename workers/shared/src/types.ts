@@ -40,7 +40,7 @@ export interface CorsOptions {
   additionalOrigins?: string[];
   /** Additional HTTP methods to allow (beyond GET, POST, PUT, DELETE, OPTIONS) */
   additionalMethods?: string[];
-  /** Additional headers to allow (beyond Content-Type, Authorization, X-Clerk-User-ID) */
+  /** Additional headers to allow (beyond Content-Type, Authorization) */
   additionalHeaders?: string[];
   /** Cache preflight response duration in seconds (default: none) */
   maxAge?: number;

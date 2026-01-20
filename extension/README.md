@@ -119,7 +119,7 @@ workers/auth-worker/src/
 └── index.ts                    # Routes
 
 web/app/api/extension/          # Next.js proxy routes
-web/app/(site)/extension/       # Setup page UI
+web/app/(site)/page.tsx         # Landing page setup flow
 web/app/(site)/privacy/         # Privacy policy page
 ```
 

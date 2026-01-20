@@ -30,7 +30,6 @@ export async function GET() {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
-          'X-Clerk-User-ID': userId,
           ...(bearer ? { 'Authorization': `Bearer ${bearer}` } : {})
         },
       });

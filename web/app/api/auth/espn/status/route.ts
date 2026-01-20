@@ -32,7 +32,6 @@ export async function GET() {
     const bearer = (await getToken?.()) || undefined;
     const workerRes = await fetch(`${authWorkerUrl}/credentials/espn`, {
       headers: {
-        'X-Clerk-User-ID': userId,
         ...(bearer ? { 'Authorization': `Bearer ${bearer}` } : {})
       },
     });

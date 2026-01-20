@@ -67,7 +67,6 @@ export const buildMcpToolFromState = (state: McpState) => {
     server_url: state.mcpConfig.server_url,
     headers: {
       "Content-Type": "application/json",
-      ...(state.clerkUserId ? { "X-Clerk-User-ID": state.clerkUserId } : {}),
       ...(state.clerkToken ? { Authorization: `Bearer ${state.clerkToken}` } : {}),
     },
   };
@@ -135,7 +134,6 @@ export const buildMcpToolsFromState = (state: MultiMcpState): any[] => {
 
   const headers = {
     "Content-Type": "application/json",
-    ...(state.clerkUserId ? { "X-Clerk-User-ID": state.clerkUserId } : {}),
     ...(state.clerkToken ? { Authorization: `Bearer ${state.clerkToken}` } : {}),
   };
 

@@ -19,8 +19,6 @@ web/
 │   ├── (site)/              # Site pages (main layout)
 │   │   ├── page.tsx         # Landing (/)
 │   │   ├── leagues/         # League management (/leagues)
-│   │   ├── connectors/      # Connection status (/connectors)
-│   │   ├── extension/       # Extension setup (/extension)
 │   │   ├── privacy/         # Privacy policy (/privacy)
 │   │   └── oauth/consent/   # OAuth consent screen
 │   │
@@ -61,10 +59,8 @@ Both site and chat can use shared `components/ui/` (shadcn).
 
 | Path | Purpose |
 |------|---------|
-| `/` | Landing page |
+| `/` | Landing page + onboarding flow (sign-in, sync credentials, MCP URLs) |
 | `/leagues` | Manage ESPN leagues and seasons |
-| `/connectors` | View Claude/ChatGPT connections |
-| `/extension` | Chrome extension setup |
 | `/privacy` | Privacy policy (CWS compliance) |
 | `/oauth/consent` | OAuth authorization screen |
 

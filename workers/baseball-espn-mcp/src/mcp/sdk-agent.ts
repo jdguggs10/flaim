@@ -112,7 +112,6 @@ async function fetchUserLeagues(
     const response = await authWorkerFetch(env, '/leagues', {
       method: 'GET',
       headers: {
-        'X-Clerk-User-ID': clerkUserId,
         'Content-Type': 'application/json',
         ...(authHeader ? { Authorization: authHeader } : {}),
       },

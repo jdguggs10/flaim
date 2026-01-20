@@ -26,7 +26,6 @@ export async function GET() {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-        'X-Clerk-User-ID': userId,
         ...(bearer ? { 'Authorization': `Bearer ${bearer}` } : {})
       }
     });

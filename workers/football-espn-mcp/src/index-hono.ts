@@ -63,16 +63,14 @@ function getEspnGameId(sport: string): string {
 }
 
 /**
- * Fetch ESPN credentials from auth-worker for a given Clerk user ID
+ * Fetch ESPN credentials from auth-worker
  */
 async function getCredentials(
   env: Env,
-  clerkUserId: string,
   authHeader?: string | null
 ): Promise<EspnCredentials | null> {
   try {
     const headers: Record<string, string> = {
-      'X-Clerk-User-ID': clerkUserId,
       'Content-Type': 'application/json',
     };
 
@@ -121,14 +119,12 @@ async function getCredentials(
  */
 async function getUserLeagues(
   env: Env,
-  clerkUserId: string,
   authHeader?: string | null
 ): Promise<Array<{ leagueId: string; sport: string; teamId?: string; seasonYear?: number }>> {
   try {
     const response = await authWorkerFetch(env, '/leagues', {
       method: 'GET',
       headers: {
-        'X-Clerk-User-ID': clerkUserId,
         'Content-Type': 'application/json',
         ...(authHeader ? { 'Authorization': authHeader } : {})
       }
@@ -214,12 +210,11 @@ api.post('/onboarding/initialize', async (c) => {
 async function handleOnboardingInitialize(c: any) {
   const env = c.env;
   try {
-    const clerkUserId = c.req.header('X-Clerk-User-ID');
     const authHeader = c.req.header('Authorization');
 
-    if (!clerkUserId) {
+    if (!authHeader) {
       return c.json({
-        error: 'Authentication required - X-Clerk-User-ID header missing'
+        error: 'Authentication required'
       }, 401);
     }
 
@@ -229,7 +224,7 @@ async function handleOnboardingInitialize(c: any) {
     const targetSport = sport || 'football';
 
     // Get credentials from auth-worker
-    const credentials = await getCredentials(env, clerkUserId, authHeader);
+    const credentials = await getCredentials(env, authHeader);
     if (!credentials) {
       return c.json({
         error: 'ESPN credentials not found. Please add your ESPN credentials first.',
@@ -243,7 +238,7 @@ async function handleOnboardingInitialize(c: any) {
     if (leagueId) {
       targetLeagues = [{ leagueId, sport: targetSport, seasonYear }];
     } else {
-      const leagues = await getUserLeagues(env, clerkUserId, authHeader);
+      const leagues = await getUserLeagues(env, authHeader);
       targetLeagues = leagues.filter(league => league.sport === targetSport);
 
       if (targetLeagues.length === 0) {
@@ -313,12 +308,11 @@ api.post('/onboarding/discover-seasons', async (c) => {
 async function handleDiscoverSeasons(c: any) {
   const env = c.env;
   try {
-    const clerkUserId = c.req.header('X-Clerk-User-ID');
     const authHeader = c.req.header('Authorization');
 
-    console.log(`🔍 [football] /onboarding/discover-seasons - userId: ${clerkUserId || 'MISSING'}`);
+    console.log(`🔍 [football] /onboarding/discover-seasons - auth header: ${authHeader ? 'present' : 'missing'}`);
 
-    if (!clerkUserId) {
+    if (!authHeader) {
       return c.json({
         error: 'Authentication required',
         code: 'AUTH_MISSING'
@@ -335,7 +329,7 @@ async function handleDiscoverSeasons(c: any) {
     }
 
     // Get credentials
-    const credentials = await getCredentials(env, clerkUserId, authHeader || undefined);
+    const credentials = await getCredentials(env, authHeader);
     if (!credentials) {
       return c.json({
         error: 'ESPN credentials not found',
@@ -347,7 +341,6 @@ async function handleDiscoverSeasons(c: any) {
     const leaguesResponse = await authWorkerFetch(env, '/leagues', {
       method: 'GET',
       headers: {
-        'X-Clerk-User-ID': clerkUserId,
         ...(authHeader ? { 'Authorization': authHeader } : {})
       }
     });
@@ -442,7 +435,6 @@ async function handleDiscoverSeasons(c: any) {
           const addResponse = await authWorkerFetch(env, '/leagues/add', {
             method: 'POST',
             headers: {
-              'X-Clerk-User-ID': clerkUserId,
               ...(authHeader ? { 'Authorization': authHeader } : {}),
               'Content-Type': 'application/json'
             },
@@ -462,7 +454,6 @@ async function handleDiscoverSeasons(c: any) {
               const patchResponse = await authWorkerFetch(env, `/leagues/${leagueId}/team`, {
                 method: 'PATCH',
                 headers: {
-                  'X-Clerk-User-ID': clerkUserId,
                   ...(authHeader ? { 'Authorization': authHeader } : {}),
                   'Content-Type': 'application/json'
                 },
@@ -545,12 +536,11 @@ async function handleDiscoverSeasons(c: any) {
           // Auto-save on retry success
           try {
             const addResponse = await authWorkerFetch(env, '/leagues/add', {
-              method: 'POST',
-              headers: {
-                'X-Clerk-User-ID': clerkUserId,
-                ...(authHeader ? { 'Authorization': authHeader } : {}),
-                'Content-Type': 'application/json'
-              },
+            method: 'POST',
+            headers: {
+              ...(authHeader ? { 'Authorization': authHeader } : {}),
+              'Content-Type': 'application/json'
+            },
               body: JSON.stringify({
                 leagueId,
                 sport: 'football',
@@ -563,12 +553,11 @@ async function handleDiscoverSeasons(c: any) {
             if (addResponse.status === 409) {
               try {
                 const patchResponse = await authWorkerFetch(env, `/leagues/${leagueId}/team`, {
-                  method: 'PATCH',
-                  headers: {
-                    'X-Clerk-User-ID': clerkUserId,
-                    ...(authHeader ? { 'Authorization': authHeader } : {}),
-                    'Content-Type': 'application/json'
-                  },
+                method: 'PATCH',
+                headers: {
+                  ...(authHeader ? { 'Authorization': authHeader } : {}),
+                  'Content-Type': 'application/json'
+                },
                   body: JSON.stringify({
                     teamId: baseTeamId,
                     sport: 'football',
@@ -678,15 +667,10 @@ function responseHasInvalidAuth(payload: unknown): boolean {
 
 async function executeMcpRequest(c: any, requestOverride?: Request): Promise<Response> {
   const authHeader = c.req.header('Authorization');
-  const clerkUserIdHeader = c.req.header('X-Clerk-User-ID');
 
   // Determine user ID for context
-  let clerkUserId = clerkUserIdHeader || 'anonymous';
-  if (clerkUserId === 'anonymous' && authHeader) {
-    clerkUserId = 'oauth-user';
-  }
-
-  console.log(`[MCP SDK] User ID header: ${clerkUserIdHeader ? 'present' : 'MISSING'}, Auth header: ${authHeader ? 'present' : 'MISSING'}, Resolved userId: ${clerkUserId}`);
+  const clerkUserId = authHeader ? 'oauth-user' : 'anonymous';
+  console.log(`[MCP SDK] Auth header: ${authHeader ? 'present' : 'MISSING'}, Resolved userId: ${clerkUserId}`);
 
   // Custom auth check - return 401 with _meta BEFORE SDK processes request
   // This preserves ChatGPT OAuth compatibility
@@ -733,13 +717,11 @@ async function handleMcpRequest(c: any): Promise<Response> {
 
 async function handleLegacyToolsList(c: any): Promise<Response> {
   const authHeader = c.req.header('Authorization');
-  const clerkUserIdHeader = c.req.header('X-Clerk-User-ID');
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     'Accept': 'application/json, text/event-stream',
   };
   if (authHeader) headers['Authorization'] = authHeader;
-  if (clerkUserIdHeader) headers['X-Clerk-User-ID'] = clerkUserIdHeader;
 
   const rpcRequest = {
     jsonrpc: '2.0',
@@ -781,13 +763,11 @@ async function handleLegacyToolsList(c: any): Promise<Response> {
 
 async function handleLegacyToolsCall(c: any): Promise<Response> {
   const authHeader = c.req.header('Authorization');
-  const clerkUserIdHeader = c.req.header('X-Clerk-User-ID');
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     'Accept': 'application/json, text/event-stream',
   };
   if (authHeader) headers['Authorization'] = authHeader;
-  if (clerkUserIdHeader) headers['X-Clerk-User-ID'] = clerkUserIdHeader;
 
   let body: unknown;
   try {
@@ -852,8 +832,8 @@ api.notFound((c) => {
     message: 'Available endpoints',
     endpoints: {
       '/health': 'GET - Health check with auth-worker connectivity test',
-      '/onboarding/initialize': 'POST - Initialize onboarding with league data fetching (requires X-Clerk-User-ID header)',
-      '/onboarding/discover-seasons': 'POST - Discover and save historical seasons for a league (requires X-Clerk-User-ID header)',
+      '/onboarding/initialize': 'POST - Initialize onboarding with league data fetching (requires Authorization header)',
+      '/onboarding/discover-seasons': 'POST - Discover and save historical seasons for a league (requires Authorization header)',
       '/mcp': 'POST - MCP protocol endpoints for Claude integration'
     },
     version: '2.0.0'

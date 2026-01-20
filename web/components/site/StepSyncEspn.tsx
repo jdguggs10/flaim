@@ -13,7 +13,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import { Chrome, Check, Loader2, Monitor, LogIn, CheckCircle2, Shield, RefreshCw, Eye, EyeOff, Info } from 'lucide-react';
+import { Chrome, Check, Loader2, Monitor, LogIn, Shield, RefreshCw, Eye, EyeOff, Info } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { pingExtension, isChromeBrowser, type ExtensionPingResult } from '@/lib/extension-ping';
 

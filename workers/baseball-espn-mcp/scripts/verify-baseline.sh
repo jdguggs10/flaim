@@ -121,7 +121,7 @@ test_onboarding_unauthorized() {
     -H "Content-Type: application/json" \
     -d '{}')
   status=$(get_status "$headers")
-  if [ "$status" = "401" ] && echo "$body" | grep -q 'Authentication required - X-Clerk-User-ID'; then
+  if [ "$status" = "401" ] && echo "$body" | grep -q 'Authentication required'; then
     echo "✅ $status"
     PASSED=$((PASSED + 1))
   else

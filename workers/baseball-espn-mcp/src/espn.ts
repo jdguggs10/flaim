@@ -30,7 +30,7 @@ export class EspnApiClient {
 
     // Get ESPN credentials from auth-worker (optional - public leagues work without)
     if (clerkUserId && clerkUserId !== 'anonymous' && this.authHeader) {
-      const credentials = await this.getEspnCredentialsForUser(clerkUserId);
+      const credentials = await this.getEspnCredentialsForUser();
       if (credentials) {
         headers['Cookie'] = `SWID=${credentials.swid}; espn_s2=${credentials.s2}`;
       }
@@ -83,7 +83,7 @@ export class EspnApiClient {
       throw new Error('ESPN_AUTH_REQUIRED: Authorization header missing. Please refresh the page and try again.');
     }
 
-    const credentials = await this.getEspnCredentialsForUser(clerkUserId);
+    const credentials = await this.getEspnCredentialsForUser();
     if (!credentials) {
       throw new Error('ESPN_CREDENTIALS_NOT_FOUND: No ESPN credentials found. Add your espn_s2 and SWID cookies at /settings/espn');
     }
@@ -195,7 +195,7 @@ export class EspnApiClient {
       throw new Error('ESPN_AUTH_REQUIRED: Authorization header missing. Please refresh the page and try again.');
     }
 
-    const credentials = await this.getEspnCredentialsForUser(clerkUserId);
+    const credentials = await this.getEspnCredentialsForUser();
     if (!credentials) {
       throw new Error('ESPN_CREDENTIALS_NOT_FOUND: No ESPN credentials found. Add your espn_s2 and SWID cookies at /settings/espn');
     }
@@ -253,7 +253,7 @@ export class EspnApiClient {
 
     // Get user credentials (optional - some box score data may be public)
     if (clerkUserId && clerkUserId !== 'anonymous' && this.authHeader) {
-      const credentials = await this.getEspnCredentialsForUser(clerkUserId);
+      const credentials = await this.getEspnCredentialsForUser();
       if (credentials) {
         headers['Cookie'] = `SWID=${credentials.swid}; espn_s2=${credentials.s2}`;
       }
@@ -306,7 +306,7 @@ export class EspnApiClient {
 
     // Get user credentials (required for activity data)
     if (clerkUserId && clerkUserId !== 'anonymous' && this.authHeader) {
-      const credentials = await this.getEspnCredentialsForUser(clerkUserId);
+      const credentials = await this.getEspnCredentialsForUser();
       if (credentials) {
         headers['Cookie'] = `SWID=${credentials.swid}; espn_s2=${credentials.s2}`;
       }
@@ -349,7 +349,7 @@ export class EspnApiClient {
 
     // Get user credentials for standings data (optional - public leagues work without)
     if (clerkUserId && clerkUserId !== 'anonymous' && this.authHeader) {
-      const credentials = await this.getEspnCredentialsForUser(clerkUserId);
+      const credentials = await this.getEspnCredentialsForUser();
       if (credentials) {
         headers['Cookie'] = `SWID=${credentials.swid}; espn_s2=${credentials.s2}`;
       }
@@ -385,12 +385,11 @@ export class EspnApiClient {
    * Returns null if credentials not found (allows public league access)
    * Throws specific errors for auth failures and other issues
    */
-  private async getEspnCredentialsForUser(clerkUserId: string): Promise<EspnCredentials | null> {
+  private async getEspnCredentialsForUser(): Promise<EspnCredentials | null> {
     const path = '/credentials/espn?raw=true';
     const requestInit: RequestInit = {
       method: 'GET',
       headers: {
-        'X-Clerk-User-ID': clerkUserId,
         'Content-Type': 'application/json',
         ...(this.authHeader ? { 'Authorization': this.authHeader } : {})
       }

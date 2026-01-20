@@ -81,7 +81,6 @@ export async function POST(request: NextRequest) {
 
     const credentialCheck = await fetch(`${authWorkerUrl}/credentials/espn`, {
       headers: {
-        'X-Clerk-User-ID': userId,
         ...(bearer ? { 'Authorization': `Bearer ${bearer}` } : {})
       },
       cache: 'no-store'
@@ -135,7 +134,6 @@ export async function POST(request: NextRequest) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Clerk-User-ID': userId,
           ...(bearer ? { 'Authorization': `Bearer ${bearer}` } : {})
         },
         body: JSON.stringify({

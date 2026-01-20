@@ -30,7 +30,6 @@ export async function GET(request: NextRequest) {
     const bearer = (await getToken?.()) || undefined;
     const workerRes = await fetch(`${authWorkerUrl}/credentials/espn${queryString}`, {
       headers: {
-        'X-Clerk-User-ID': userId,
         ...(bearer ? { 'Authorization': `Bearer ${bearer}` } : {})
       },
     });
@@ -107,7 +106,6 @@ export async function POST(request: NextRequest) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Clerk-User-ID': userId,
         ...(bearer ? { 'Authorization': `Bearer ${bearer}` } : {})
       },
       body: JSON.stringify({

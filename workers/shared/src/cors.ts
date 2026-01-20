@@ -35,7 +35,7 @@ const DEFAULT_METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'];
 /**
  * Default allowed headers
  */
-const DEFAULT_HEADERS = ['Content-Type', 'Authorization', 'X-Clerk-User-ID'];
+const DEFAULT_HEADERS = ['Content-Type', 'Authorization'];
 
 /**
  * Check if an origin matches the allowlist (supports wildcards)

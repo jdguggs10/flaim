@@ -96,7 +96,21 @@ function decodeSection<T = unknown>(b64url: string): T {
   return JSON.parse(json) as T;
 }
 
-async function fetchJwks(issuer: string): Promise<Map<string, Jwk>> {
+type JwksFetchOptions = {
+  timeoutMs: number;
+  retries: number;
+  allowStaleMs: number;
+};
+
+function getJwksOptions(env: Env): JwksFetchOptions {
+  const isProd = env.ENVIRONMENT === 'prod' && env.NODE_ENV === 'production';
+  if (isProd) {
+    return { timeoutMs: 5000, retries: 0, allowStaleMs: 0 };
+  }
+  return { timeoutMs: 10000, retries: 1, allowStaleMs: 60 * 60 * 1000 };
+}
+
+async function fetchJwks(issuer: string, options: JwksFetchOptions): Promise<Map<string, Jwk>> {
   const now = Date.now();
   const cached = jwksCache.get(issuer);
   if (cached && now - cached.fetchedAt < JWKS_TTL_MS) {
@@ -104,31 +118,46 @@ async function fetchJwks(issuer: string): Promise<Map<string, Jwk>> {
   }
 
   const wellKnown = issuer.replace(/\/$/, '') + '/.well-known/jwks.json';
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-  try {
-    const res = await fetch(wellKnown, {
-      signal: controller.signal,
-      cf: { cacheTtl: 300, cacheEverything: true }
-    });
-    clearTimeout(timeoutId);
+  for (let attempt = 0; attempt <= options.retries; attempt += 1) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), options.timeoutMs);
 
-    if (!res.ok) throw new Error(`Failed to fetch JWKS from ${wellKnown}: ${res.status}`);
-    const data = await res.json() as { keys: Jwk[] };
-    const map = new Map<string, Jwk>();
-    for (const k of data.keys || []) {
-      if (k.kid) map.set(k.kid, k);
+    try {
+      const res = await fetch(wellKnown, {
+        signal: controller.signal,
+        cf: { cacheTtl: 300, cacheEverything: true }
+      });
+      clearTimeout(timeoutId);
+
+      if (!res.ok) throw new Error(`Failed to fetch JWKS from ${wellKnown}: ${res.status}`);
+      const data = await res.json() as { keys: Jwk[] };
+      const map = new Map<string, Jwk>();
+      for (const k of data.keys || []) {
+        if (k.kid) map.set(k.kid, k);
+      }
+      jwksCache.set(issuer, { keysByKid: map, fetchedAt: now });
+      return map;
+    } catch (error) {
+      clearTimeout(timeoutId);
+      const isAbort = error instanceof Error && error.name === 'AbortError';
+      if (attempt >= options.retries) {
+        if (cached && options.allowStaleMs > 0 && now - cached.fetchedAt < options.allowStaleMs) {
+          return cached.keysByKid;
+        }
+        if (isAbort) {
+          throw new Error(`JWKS fetch timeout for ${wellKnown}`);
+        }
+        throw error;
+      }
+
+      if (isAbort) {
+        await new Promise(resolve => setTimeout(resolve, 250));
+      }
     }
-    jwksCache.set(issuer, { keysByKid: map, fetchedAt: now });
-    return map;
-  } catch (error) {
-    clearTimeout(timeoutId);
-    if (error instanceof Error && error.name === 'AbortError') {
-      throw new Error(`JWKS fetch timeout for ${wellKnown}`);
-    }
-    throw error;
   }
+
+  throw new Error('JWKS fetch failed after retries');
 }
 
 async function importRsaPublicKey(jwk: Jwk): Promise<CryptoKey> {
@@ -148,7 +177,7 @@ async function importRsaPublicKey(jwk: Jwk): Promise<CryptoKey> {
   );
 }
 
-async function verifyJwtAndGetUserId(authorization: string | null): Promise<string | null> {
+async function verifyJwtAndGetUserId(authorization: string | null, env: Env): Promise<string | null> {
   if (!authorization || !authorization.toLowerCase().startsWith('bearer ')) return null;
   const token = authorization.slice(7).trim();
   const parts = token.split('.');
@@ -164,7 +193,7 @@ async function verifyJwtAndGetUserId(authorization: string | null): Promise<stri
   if (!header.kid) throw new Error('JWT missing kid');
   if (payload.exp && Date.now() / 1000 > payload.exp) throw new Error('JWT expired');
 
-  const keys = await fetchJwks(payload.iss);
+  const keys = await fetchJwks(payload.iss, getJwksOptions(env));
   const jwk = keys.get(header.kid);
   if (!jwk) throw new Error('JWKS key not found');
 
@@ -206,7 +235,7 @@ async function getVerifiedUserId(request: Request, env: Env): Promise<AuthResult
   // Try Clerk JWT first (in-app requests)
   try {
     debugLog(env, `🔐 [auth-worker] Attempting Clerk JWT verification...`);
-    const verified = await verifyJwtAndGetUserId(authz);
+    const verified = await verifyJwtAndGetUserId(authz, env);
     if (verified) {
       debugLog(env, `✅ [auth-worker] Clerk JWT verified, userId: ${maskUserId(verified)}`);
       return { userId: verified, authType: 'clerk' };
@@ -229,17 +258,6 @@ async function getVerifiedUserId(request: Request, env: Env): Promise<AuthResult
       debugLog(env, `⚠️ [auth-worker] OAuth token validation returned null`);
     } catch (e) {
       debugLog(env, `[auth] OAuth token validation failed: ${e}`);
-    }
-  }
-
-  // Dev fallback only: allow header for local testing
-  const isDev = env.ENVIRONMENT === 'dev' || env.NODE_ENV === 'development';
-  debugLog(env, `🔐 [auth-worker] Environment check - ENVIRONMENT: ${env.ENVIRONMENT}, NODE_ENV: ${env.NODE_ENV}, isDev: ${isDev}`);
-  if (isDev) {
-    const clerkHeader = request.headers.get('X-Clerk-User-ID');
-    if (clerkHeader) {
-      debugLog(env, `⚠️ [auth-worker] DEV MODE: Using X-Clerk-User-ID header fallback: ${maskUserId(clerkHeader)}`);
-      return { userId: clerkHeader, authType: 'clerk' };
     }
   }
 
@@ -271,7 +289,7 @@ function getCorsHeaders(request: Request): Record<string, string> {
   const origin = request.headers.get('Origin');
   const headers: Record<string, string> = {
     'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Clerk-User-ID',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Max-Age': '86400',
   };
 

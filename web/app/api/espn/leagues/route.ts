@@ -31,7 +31,6 @@ export async function GET() {
       headers: {
         'Content-Type': 'application/json',
         // Pass Clerk user in header (Auth-Worker uses this instead of JWT)
-        'X-Clerk-User-ID': userId,
         ...(bearer ? { 'Authorization': `Bearer ${bearer}` } : {})
       }
     });
@@ -131,7 +130,6 @@ export async function POST(request: NextRequest) {
       headers: {
         'Content-Type': 'application/json',
         // Pass Clerk user in header (Auth-Worker uses this instead of JWT)
-        'X-Clerk-User-ID': userId,
         ...(bearer ? { 'Authorization': `Bearer ${bearer}` } : {})
       },
       body: JSON.stringify({ leagues: body.leagues })
@@ -189,7 +187,6 @@ export async function DELETE(request: NextRequest) {
       method: 'DELETE',
       headers: {
         'Content-Type': 'application/json',
-        'X-Clerk-User-ID': userId,
         ...(bearer ? { 'Authorization': `Bearer ${bearer}` } : {})
       }
     });

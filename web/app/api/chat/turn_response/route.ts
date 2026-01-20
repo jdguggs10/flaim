@@ -53,7 +53,6 @@ export async function POST(request: NextRequest) {
             server_label: tool.server_label,
             server_url: tool.server_url,
             has_auth: !!tool.headers?.Authorization,
-            has_user_id: !!tool.headers?.['X-Clerk-User-ID'],
             allowed_tools: tool.allowed_tools,
             require_approval: tool.require_approval
           };

@@ -17,7 +17,7 @@ npm run dev
 ## Core Pieces
 
 - **Chrome Extension (`/extension`)**: Captures ESPN cookies (SWID, espn_s2) and syncs them to Flaim using Clerk Sync Host (no pairing codes).
-- **Next.js web app (`/web`)**: Site pages (landing, leagues, connectors, extension setup, privacy policy), OAuth consent screens, optional chat UI.
+- **Next.js web app (`/web`)**: Site pages (landing with setup flow, leagues, privacy policy), OAuth consent screens, optional chat UI.
 - **Auth worker (`/workers/auth-worker`)**: Supabase credential + league storage, JWT verification, OAuth token management, extension APIs. Uses Hono for routing.
 - **Sport MCP workers (`/workers/baseball-espn-mcp`, `/workers/football-espn-mcp`)**: ESPN API calls + MCP tools. Uses Hono for routing and official MCP SDK for protocol handling. Fetch creds/leagues from auth-worker; no local storage.
 - **Shared package (`/workers/shared`)**: Common utilities (CORS middleware, auth-fetch helper, types) used by all workers.
@@ -55,16 +55,22 @@ The built-in `/chat` is for testing and users without Claude/ChatGPT subscriptio
 ## Primary User Flow
 
 **Extension path (automatic on sync):**
-1. **Connect ESPN** — Install extension → sync credentials
-2. **Auto-discover leagues + past seasons** — Runs during sync/re-sync
-3. **Pick a default** — Extension prompts for default league
+1. **Sign in** — Create an account at `flaim.app`
+2. **Connect ESPN** — Install extension → sync credentials
+3. **Auto-discover leagues + past seasons** — Runs during sync/re-sync
+4. **Pick a default** — Extension prompts for default league
 
 **Manual site path (independent):**
-1. **Add leagues** at `/leagues` — Enter league ID + season
-2. **Discover seasons (optional)** — Manual per-league action
-3. **Pick a default** — `/leagues` default toggle
+1. **Sign in** — Create an account at `flaim.app`
+2. **Add credentials manually** — Use the manual credentials dialog on the landing page
+3. **Add leagues** at `/leagues` — Enter league ID + season
+4. **Discover seasons (optional)** — Manual per-league action
+5. **Pick a default** — `/leagues` default toggle
 
 Both paths write to the same `espn_leagues` storage.
+
+**Connect AI (both paths):**
+- Copy the MCP URLs from the landing page and add them as custom connectors in Claude/ChatGPT.
 
 ## Season Year Defaults
 

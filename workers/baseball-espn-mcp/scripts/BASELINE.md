@@ -65,7 +65,7 @@ Access-Control-Request-Method: POST
 **Expected Response:** HTTP 200 with headers:
 ```
 access-control-allow-origin: https://flaim.app
-access-control-allow-headers: Content-Type, Authorization, X-Clerk-User-ID
+access-control-allow-headers: Content-Type, Authorization
 access-control-allow-methods: GET, POST, PUT, DELETE, OPTIONS
 ```
 
@@ -114,12 +114,12 @@ access-control-allow-methods: GET, POST, PUT, DELETE, OPTIONS
 ```json
 {}
 ```
-(No X-Clerk-User-ID header)
+(No Authorization header)
 
 **Expected Response:** HTTP 401
 ```json
 {
-  "error": "Authentication required - X-Clerk-User-ID header missing"
+  "error": "Authentication required"
 }
 ```
 
