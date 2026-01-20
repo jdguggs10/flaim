@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        worker: [auth-worker, baseball-espn-mcp, football-espn-mcp]
+        worker: [auth-worker, baseball-espn-mcp, football-espn-mcp, espn-client, fantasy-mcp]
     name: Deploy ${{ matrix.worker }}
     steps:
       - uses: actions/checkout@v4
