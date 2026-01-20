@@ -18,10 +18,16 @@
     "dev": "concurrently \"npm:dev:frontend\" \"npm:dev:workers\"",
     "dev:frontend": "cd web && npm run dev",
     "dev:workers": "concurrently \"cd workers/auth-worker && wrangler dev --env dev --port 8786 --inspector-port 9229\" \"cd workers/baseball-espn-mcp && wrangler dev --env dev --port 8787 --inspector-port 9230\" \"cd workers/football-espn-mcp && wrangler dev --env dev --port 8788 --inspector-port 9231\"",
+    "dev:espn-client": "cd workers/espn-client && npm run dev",
+    "dev:fantasy-mcp": "cd workers/fantasy-mcp && npm run dev",
     "build": "cd web && npm run build",
     "lint": "cd web && npm run lint",
     "deploy:workers:preview": "concurrently \"cd workers/auth-worker && wrangler deploy --env preview\" \"cd workers/baseball-espn-mcp && wrangler deploy --env preview\" \"cd workers/football-espn-mcp && wrangler deploy --env preview\"",
-    "deploy:workers:prod": "concurrently \"cd workers/auth-worker && wrangler deploy --env prod\" \"cd workers/baseball-espn-mcp && wrangler deploy --env prod\" \"cd workers/football-espn-mcp && wrangler deploy --env prod\""
+    "deploy:workers:prod": "concurrently \"cd workers/auth-worker && wrangler deploy --env prod\" \"cd workers/baseball-espn-mcp && wrangler deploy --env prod\" \"cd workers/football-espn-mcp && wrangler deploy --env prod\"",
+    "deploy:espn-client:preview": "cd workers/espn-client && npm run deploy:preview",
+    "deploy:espn-client:prod": "cd workers/espn-client && npm run deploy:prod",
+    "deploy:fantasy-mcp:preview": "cd workers/fantasy-mcp && npm run deploy:preview",
+    "deploy:fantasy-mcp:prod": "cd workers/fantasy-mcp && npm run deploy:prod"
   },
   "devDependencies": {
     "@playwright/test": "^1.57.0",
