@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import type { Env, ExecuteRequest, ExecuteResponse, Sport, ToolParams } from './types';
 import { baseballHandlers } from './sports/baseball/handlers';
+import { footballHandlers } from './sports/football/handlers';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -46,9 +47,17 @@ async function routeToSport(
   authHeader?: string
 ): Promise<ExecuteResponse> {
   switch (sport) {
-    case 'football':
-      // TODO: Import and call football handlers
-      return { success: false, error: 'Football handlers not yet implemented', code: 'NOT_IMPLEMENTED' };
+    case 'football': {
+      const handler = footballHandlers[tool];
+      if (!handler) {
+        return {
+          success: false,
+          error: `Unknown football tool: ${tool}`,
+          code: 'UNKNOWN_TOOL'
+        };
+      }
+      return handler(env, params, authHeader);
+    }
 
     case 'baseball': {
       const handler = baseballHandlers[tool];
