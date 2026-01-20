@@ -16,6 +16,9 @@
     "noImplicitReturns": true,
     "forceConsistentCasingInFileNames": true,
     "baseUrl": "../../",
+    "paths": {
+      "@flaim/worker-shared": ["workers/shared/src"]
+    },
     "types": [
       "@cloudflare/workers-types"
     ]
