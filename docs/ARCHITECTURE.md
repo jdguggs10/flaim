@@ -19,7 +19,9 @@ npm run dev
 - **Chrome Extension (`/extension`)**: Captures ESPN cookies (SWID, espn_s2) and syncs them to Flaim using Clerk Sync Host (no pairing codes).
 - **Next.js web app (`/web`)**: Site pages (landing with setup flow, leagues, privacy policy), OAuth consent screens, optional chat UI.
 - **Auth worker (`/workers/auth-worker`)**: Supabase credential + league storage, JWT verification, OAuth token management, extension APIs. Uses Hono for routing.
-- **Sport MCP workers (`/workers/baseball-espn-mcp`, `/workers/football-espn-mcp`)**: ESPN API calls + MCP tools. Uses Hono for routing and official MCP SDK for protocol handling. Fetch creds/leagues from auth-worker; no local storage.
+- **Unified Gateway (`/workers/fantasy-mcp`)**: Single MCP endpoint exposing unified tools for all platforms and sports. Routes to platform-specific workers via service bindings.
+- **ESPN Client (`/workers/espn-client`)**: Internal worker handling all ESPN API calls for all sports (football, baseball). Called by fantasy-mcp gateway.
+- **Legacy Sport MCP workers (`/workers/baseball-espn-mcp`, `/workers/football-espn-mcp`)**: Direct ESPN API calls + MCP tools. Still functional, will be deprecated after unified gateway is validated.
 - **Shared package (`/workers/shared`)**: Common utilities (CORS middleware, auth-fetch helper, types) used by all workers.
 - **Supabase Postgres**: `espn_credentials`, `espn_leagues` (per-season rows), `oauth_tokens`, `oauth_codes`, `rate_limits`, plus legacy `extension_tokens`/`extension_pairing_codes` (deprecated).
 
@@ -35,8 +37,10 @@ npm run dev
 web/                        # Next.js app (see web/README.md)
 workers/                    # Cloudflare Workers (see workers/README.md)
   auth-worker/              # Auth, OAuth, credentials, leagues
-  baseball-espn-mcp/        # Baseball MCP server
-  football-espn-mcp/        # Football MCP server
+  fantasy-mcp/              # Unified MCP gateway (routes to platform workers)
+  espn-client/              # ESPN API client (called by fantasy-mcp)
+  baseball-espn-mcp/        # Legacy: Baseball MCP server (direct)
+  football-espn-mcp/        # Legacy: Football MCP server (direct)
   shared/                   # @flaim/worker-shared package
 extension/                  # Chrome extension (see extension/README.md)
 docs/                       # Documentation
@@ -121,6 +125,35 @@ Users connect their own AI subscription to Flaim's MCP servers:
 ## MCP Tools
 
 Both MCP workers expose `get_user_session` plus sport-specific tools for league info, rosters, matchups, and standings. `get_user_session` includes season year per league and the current default league. See `workers/README.md` for the full tool list and ESPN API reference.
+
+## Unified Gateway Architecture
+
+The unified gateway (`fantasy-mcp`) provides a single MCP endpoint for all platforms and sports, replacing the per-sport workers.
+
+```
+Claude/ChatGPT → fantasy-mcp (gateway) → espn-client → ESPN API
+                                       → auth-worker → Supabase
+                 (future)             → yahoo-client → Yahoo API
+```
+
+**Key benefits:**
+- Single MCP URL for all sports: `https://api.flaim.app/fantasy/mcp`
+- Explicit tool parameters: `platform`, `sport`, `league_id`, `season_year`
+- Easier multi-platform support (ESPN + Yahoo)
+- Service bindings for worker-to-worker communication (no 522 timeouts)
+
+**Unified tools:**
+- `get_user_session` — All configured leagues across platforms with IDs
+- `get_league_info` — League settings (requires platform, sport, league_id, season_year)
+- `get_standings` — League standings
+- `get_matchups` — Current/specified week matchups
+- `get_roster` — Team roster with player details
+- `get_free_agents` — Available free agents (baseball only)
+
+**Migration path:**
+1. Legacy workers (`baseball-espn-mcp`, `football-espn-mcp`) remain functional
+2. New users can use `fantasy-mcp` for unified access
+3. Gradual migration; legacy workers deprecated after validation
 
 ## Security
 

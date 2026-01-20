@@ -1,23 +1,40 @@
 # Flaim Workers
 
-Three Cloudflare Workers handling authentication and MCP data fetching.
+Cloudflare Workers handling authentication and MCP data fetching.
 
 ## Workers
 
 | Worker | Port | Purpose |
 |--------|------|---------|
 | `auth-worker` | 8786 | Supabase storage, JWT verification, OAuth, extension APIs, rate limiting |
-| `baseball-espn-mcp` | 8787 | Baseball MCP server with ESPN API tools |
-| `football-espn-mcp` | 8788 | Football MCP server with ESPN API tools |
+| `fantasy-mcp` | 8790 | **Unified MCP gateway** - routes to platform workers via service bindings |
+| `espn-client` | 8789 | **ESPN API client** - handles all ESPN sports (called by fantasy-mcp) |
+| `baseball-espn-mcp` | 8787 | Legacy: Direct baseball MCP server |
+| `football-espn-mcp` | 8788 | Legacy: Direct football MCP server |
+
+### New Architecture (Unified Gateway)
+
+```
+Claude/ChatGPT → fantasy-mcp → espn-client → ESPN API
+                            → auth-worker → Supabase
+```
+
+The unified gateway (`fantasy-mcp`) uses explicit tool parameters (`platform`, `sport`, `league_id`, `season_year`) and routes to platform-specific workers (`espn-client`) via Cloudflare service bindings.
 
 ## Development
 
 ```bash
-# Run all workers
+# Run legacy workers (auth + baseball + football)
 npm run dev:workers
+
+# Run unified gateway workers
+npm run dev:fantasy-mcp    # Port 8790
+npm run dev:espn-client    # Port 8789
 
 # Run individually
 cd workers/auth-worker && npm run dev
+cd workers/fantasy-mcp && npm run dev
+cd workers/espn-client && npm run dev
 cd workers/baseball-espn-mcp && npm run dev
 cd workers/football-espn-mcp && npm run dev
 
@@ -76,12 +93,23 @@ Ensure `wrangler.jsonc` has `"workers_dev": true` so the `.workers.dev` URL exis
 
 ## MCP Tools
 
-Tools exposed by the MCP workers:
+### Unified Gateway (`fantasy-mcp`)
 
-### Both Workers
+All tools take explicit parameters: `platform`, `sport`, `league_id`, `season_year`
+
+- `get_user_session` — All leagues across platforms with IDs (call first to get params)
+- `get_league_info` — League settings and members
+- `get_standings` — League standings
+- `get_matchups` — Current/specified week matchups
+- `get_roster` — Team roster with player details
+- `get_free_agents` — Available free agents (baseball only)
+
+### Legacy Workers
+
+#### Both Workers
 - `get_user_session` — User's configured leagues, team IDs, season years, default league, current date/season
 
-### Baseball (`baseball-espn-mcp`)
+#### Baseball (`baseball-espn-mcp`)
 - `get_espn_baseball_league_info` — League settings and members
 - `get_espn_baseball_team_roster` — Team roster with player stats
 - `get_espn_baseball_matchups` — Current and upcoming matchups
@@ -128,8 +156,11 @@ npm run deploy:workers:prod     # Deploy to production
 
 Workers use custom routes via `api.flaim.app`:
 - `/auth/*` → auth-worker
-- `/baseball/*` → baseball-espn-mcp
-- `/football/*` → football-espn-mcp
+- `/fantasy/*` → fantasy-mcp (unified gateway)
+- `/baseball/*` → baseball-espn-mcp (legacy)
+- `/football/*` → football-espn-mcp (legacy)
+
+Note: `espn-client` has no custom route; it's called internally via service binding.
 
 ## Troubleshooting
 
@@ -142,12 +173,24 @@ Workers use custom routes via `api.flaim.app`:
 
 ## Architecture
 
+### Unified Gateway (New)
+```
+Claude/ChatGPT
+     ↓ (OAuth token)
+fantasy-mcp (gateway)
+     ↓ (service binding)
+espn-client → ESPN API
+     ↓
+auth-worker ← Supabase
+```
+
+### Legacy Workers
 ```
 Claude/ChatGPT
      ↓ (OAuth token)
 MCP Worker (baseball/football)
      ↓ (internal fetch)
-Auth Worker ← Supabase (credentials, leagues)
+auth-worker ← Supabase
      ↓
 ESPN API
 ```
