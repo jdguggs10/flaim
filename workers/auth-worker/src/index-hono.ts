@@ -889,9 +889,15 @@ async function handleLeagues(c: Context<{ Bindings: Env }>, method: string): Pro
   } else if (method === 'GET') {
     const leagues = await storage.getLeagues(clerkUserId);
 
+    // Add platform field to all leagues (currently all are ESPN)
+    const leaguesWithPlatform = leagues.map(league => ({
+      ...league,
+      platform: 'espn' as const
+    }));
+
     return c.json({
       success: true,
-      leagues,
+      leagues: leaguesWithPlatform,
       totalLeagues: leagues.length
     });
 
