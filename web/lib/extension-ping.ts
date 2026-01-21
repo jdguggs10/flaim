@@ -38,8 +38,8 @@ function getExtensionIds(): string[] {
       .map((id) => id.trim())
       .filter(Boolean);
   }
-  // Fallback to production ID only
-  return ['ogkkejmgkoolfaidplldmcghbikpmonn'];
+  // Fallback to production CWS ID
+  return ['mbnokejgglkfgkeeenolgdpcnfakpbkn'];
 }
 
 export interface ExtensionPingResult {

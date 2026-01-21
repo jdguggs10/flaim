@@ -33,7 +33,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <ClerkProvider>
+    <ClerkProvider
+      allowedRedirectOrigins={[
+        'chrome-extension://mbnokejgglkfgkeeenolgdpcnfakpbkn', // CWS production
+      ]}
+    >
       <html lang="en">
         <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
           {children}
