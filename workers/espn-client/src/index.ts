@@ -23,14 +23,21 @@ app.get('/health', (c) => {
 app.post('/execute', async (c) => {
   const body = await c.req.json<ExecuteRequest>();
   const { tool, params, authHeader } = body;
-  const { sport } = params;
+  const { sport, league_id, season_year } = params;
+
+  const startTime = Date.now();
+  console.log(`[espn-client] ${tool} ${sport} league=${league_id} season=${season_year}`);
 
   // Route to sport-specific handler
   try {
     const result = await routeToSport(c.env, sport, tool, params, authHeader);
+    const duration = Date.now() - startTime;
+    console.log(`[espn-client] ${tool} ${sport} completed in ${duration}ms success=${result.success}`);
     return c.json(result);
   } catch (error) {
+    const duration = Date.now() - startTime;
     const message = error instanceof Error ? error.message : 'Unknown error';
+    console.error(`[espn-client] ${tool} ${sport} failed in ${duration}ms: ${message}`);
     return c.json({
       success: false,
       error: message,
