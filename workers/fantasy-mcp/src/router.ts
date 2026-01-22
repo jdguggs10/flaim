@@ -31,12 +31,17 @@ export async function routeToClient(
 
   // Forward request to platform worker
   try {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    if (authHeader) {
+      headers['Authorization'] = authHeader;
+    }
+
     const response = await client.fetch(
       new Request('https://internal/execute', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify({
           tool,
           params,

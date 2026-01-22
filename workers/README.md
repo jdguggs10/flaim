@@ -46,8 +46,8 @@ cd workers/auth-worker && wrangler dev --env dev --port 8786
 
 ```bash
 cd workers/<worker-name>
-npm test           # Run Jest tests
-npm run type-check # TypeScript check
+npm test           # Run Vitest tests (auth-worker, espn-client, fantasy-mcp)
+npm run type-check # TypeScript check (auth-worker, espn-client, fantasy-mcp)
 ```
 
 Add focused tests for handler changes in `__tests__/` or `*.test.ts`.

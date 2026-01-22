@@ -29,6 +29,10 @@ jobs:
         run: npm test
         working-directory: workers/${{ matrix.worker }}
 
+      - name: Type-check ${{ matrix.worker }}
+        run: npm run type-check
+        working-directory: workers/${{ matrix.worker }}
+
   deploy:
     name: Deploy ${{ matrix.worker }}
     needs: test
