@@ -1,0 +1,5 @@
+{
+  "name": "auth-worker",
+  "main": "./src/index-hono.ts",
+  "compatibility_date": "2024-12-01"
+}
