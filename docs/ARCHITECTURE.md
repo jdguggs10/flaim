@@ -115,16 +115,17 @@ ESPN Cookies → POST /api/extension/sync → Auth Worker → Supabase
 
 Users connect their own AI subscription to Flaim's MCP servers:
 
-- **MCP URLs**: `https://api.flaim.app/football/mcp`, `https://api.flaim.app/baseball/mcp`
+- **MCP URL**: `https://api.flaim.app/fantasy/mcp` (unified gateway - handles all sports)
+- **Legacy URLs**: `https://api.flaim.app/football/mcp`, `https://api.flaim.app/baseball/mcp` (still functional)
 - **OAuth Flow**: Full OAuth 2.1 with PKCE, Dynamic Client Registration (RFC 7591), Protected Resource Metadata (RFC 9728)
 - **Endpoints**: `/auth/register` (DCR), `/auth/authorize`, `/auth/token`, `/auth/revoke`
-- **Metadata**: `/.well-known/oauth-authorization-server`, `/{sport}/.well-known/oauth-protected-resource`
+- **Metadata**: `/.well-known/oauth-authorization-server`, `/fantasy/.well-known/oauth-protected-resource`
 
 **User flow**: Add MCP URL in Claude/ChatGPT → 401 triggers OAuth → user consents at `flaim.app/oauth/consent` → token exchange → tools available.
 
 ## MCP Tools
 
-Both MCP workers expose `get_user_session` plus sport-specific tools for league info, rosters, matchups, and standings. `get_user_session` includes season year per league and the current default league. See `workers/README.md` for the full tool list and ESPN API reference.
+The unified gateway exposes tools with explicit parameters (`platform`, `sport`, `league_id`, `season_year`). See the Unified Gateway Architecture section below for the full tool list. Legacy per-sport workers are still functional but deprecated.
 
 ## Unified Gateway Architecture
 
@@ -150,10 +151,10 @@ Claude/ChatGPT → fantasy-mcp (gateway) → espn-client → ESPN API
 - `get_roster` — Team roster with player details
 - `get_free_agents` — Available free agents (baseball only)
 
-**Migration path:**
-1. Legacy workers (`baseball-espn-mcp`, `football-espn-mcp`) remain functional
-2. New users can use `fantasy-mcp` for unified access
-3. Gradual migration; legacy workers deprecated after validation
+**Status:**
+- Unified gateway validated and promoted as primary (Jan 2026)
+- Legacy workers (`baseball-espn-mcp`, `football-espn-mcp`) still functional for existing users
+- New users should use the unified gateway
 
 ## Security
 

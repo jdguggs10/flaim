@@ -49,33 +49,32 @@ Season year defaults are deterministic and use America/New_York time:
 
 ## MCP Tools
 
-| Tool | Sport | Description |
-|------|-------|-------------|
-| `get_user_session` | Both | User's leagues, teams, seasons, default league |
-| `get_espn_baseball_league_info` | Baseball | League settings and members |
-| `get_espn_baseball_team_roster` | Baseball | Team roster with stats |
-| `get_espn_baseball_matchups` | Baseball | Current/upcoming matchups |
-| `get_espn_baseball_standings` | Baseball | League standings |
-| `get_espn_baseball_free_agents` | Baseball | Available free agents |
-| `get_espn_baseball_box_scores` | Baseball | Box scores for games |
-| `get_espn_baseball_recent_activity` | Baseball | Recent league activity (trades, adds, drops) |
-| `get_espn_football_league_info` | Football | League settings and members |
-| `get_espn_football_team` | Football | Team roster with stats |
-| `get_espn_football_matchups` | Football | Current/upcoming matchups |
-| `get_espn_football_standings` | Football | League standings |
+The unified gateway (`https://api.flaim.app/fantasy/mcp`) exposes these tools:
+
+| Tool | Description |
+|------|-------------|
+| `get_user_session` | User's leagues across all platforms with IDs |
+| `get_league_info` | League settings and members |
+| `get_roster` | Team roster with player stats |
+| `get_matchups` | Current/upcoming matchups |
+| `get_standings` | League standings |
+| `get_free_agents` | Available free agents (baseball only) |
+
+All tools take explicit parameters: `platform`, `sport`, `league_id`, `season_year`.
 
 ## Architecture
 
 ```
 Chrome Extension → flaim.app → Auth Worker → Supabase
                       ↓
-Claude/ChatGPT → MCP Workers → ESPN API
+Claude/ChatGPT → Fantasy MCP Gateway → ESPN Client → ESPN API
 ```
 
 - **Chrome Extension**: Captures ESPN cookies, syncs to Flaim
 - **Web App (Next.js)**: User dashboard, OAuth endpoints, league management
 - **Auth Worker (Cloudflare)**: Token validation, rate limiting, credential storage
-- **MCP Workers (Cloudflare)**: Baseball and football data fetchers
+- **Fantasy MCP Gateway (Cloudflare)**: Unified MCP endpoint for all sports
+- **ESPN Client (Cloudflare)**: ESPN API calls (internal, called by gateway)
 - **Supabase**: User data, OAuth tokens, ESPN credentials
 
 ---

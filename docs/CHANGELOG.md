@@ -4,8 +4,8 @@ Follow Keep a Changelog; SemVer applies.
 
 ## [Unreleased]
 
-### Unified Gateway Architecture (Phase 0)
-Major architectural restructure implementing a unified gateway pattern for multi-platform fantasy sports support.
+### Unified Gateway Architecture (Phase 0) - Complete
+Major architectural restructure implementing a unified gateway pattern for multi-platform fantasy sports support. **Validated and promoted as primary endpoint (Jan 2026).**
 
 - **Added**: `fantasy-mcp` worker - unified MCP gateway with platform-agnostic tools
 - **Added**: `espn-client` worker - internal ESPN API client for all sports
@@ -13,8 +13,10 @@ Major architectural restructure implementing a unified gateway pattern for multi
 - **Added**: Unified MCP tools: `get_user_session`, `get_league_info`, `get_standings`, `get_matchups`, `get_roster`, `get_free_agents`
 - **Added**: `/fantasy/*` routes on `api.flaim.app` for gateway access
 - **Added**: `platform` field to auth-worker league responses
+- **Added**: Request logging in `espn-client` for observability (tool, sport, league, timing)
 - **Changed**: ESPN handlers consolidated from per-sport workers into `espn-client`
 - **Changed**: Auth binding renamed from `AUTH` to `AUTH_WORKER` for consistency
+- **Changed**: Frontend updated to show unified gateway URL as primary connector
 - **Fixed**: Football season rollover date (March 1 → June 1) to match documentation
 - **Deprecated**: Legacy workers (`baseball-espn-mcp`, `football-espn-mcp`) - still functional as fallback
 
