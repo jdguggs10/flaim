@@ -8,12 +8,9 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 
 const mcpConnectors = [
   {
-    name: 'Flaim Football MCP',
-    url: 'https://api.flaim.app/football/mcp',
-  },
-  {
-    name: 'Flaim Baseball MCP',
-    url: 'https://api.flaim.app/baseball/mcp',
+    name: 'Flaim Fantasy MCP',
+    url: 'https://api.flaim.app/fantasy/mcp',
+    description: 'All sports in one connector',
   },
 ];
 
@@ -43,7 +40,7 @@ export function StepConnectAI() {
       </div>
 
       <p className="text-sm text-muted-foreground mb-4">
-        Click on one of the below, then copy the name and URL.
+        Copy the name and URL below to add Flaim as a connector.
       </p>
 
       {/* Platform badges */}
