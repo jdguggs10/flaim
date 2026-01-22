@@ -7,7 +7,8 @@
     "dev": "wrangler dev --env dev --port 8789",
     "deploy:dev": "wrangler deploy --env dev",
     "deploy:preview": "wrangler deploy --env preview",
-    "deploy:prod": "wrangler deploy --env prod"
+    "deploy:prod": "wrangler deploy --env prod",
+    "test": "vitest run"
   },
   "dependencies": {
     "@flaim/worker-shared": "*",
@@ -15,8 +16,10 @@
     "zod": "^3.24.0"
   },
   "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.7.0",
     "@cloudflare/workers-types": "^4.0.0",
     "typescript": "^5.7.0",
+    "vitest": "~3.0.0",
     "wrangler": "^4.53.0"
   }
 }
