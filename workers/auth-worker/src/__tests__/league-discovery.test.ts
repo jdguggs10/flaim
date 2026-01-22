@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi, type MockedFunction } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, type MockedFunction } from 'vitest';
 import {
   discoverLeaguesV3,
 } from '../v3/league-discovery';
@@ -7,10 +7,16 @@ import { EspnCredentialsRequired, AutomaticLeagueDiscoveryFailed } from '../espn
 // Mock global fetch
 const mockFetch = vi.fn() as MockedFunction<typeof fetch>;
 global.fetch = mockFetch;
+let logSpy: ReturnType<typeof vi.spyOn>;
 
 describe('discoverLeaguesV3', () => {
   beforeEach(() => {
+    logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
     mockFetch.mockReset();
+  });
+
+  afterEach(() => {
+    logSpy.mockRestore();
   });
 
   it('throws EspnCredentialsRequired when cookies are missing', async () => {
