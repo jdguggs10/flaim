@@ -1,11 +1,11 @@
-import { describe, expect, it, beforeEach, jest } from '@jest/globals';
+import { beforeEach, describe, expect, it, vi, type MockedFunction } from 'vitest';
 import {
   discoverLeaguesV3,
 } from '../v3/league-discovery';
 import { EspnCredentialsRequired, AutomaticLeagueDiscoveryFailed } from '../espn-types';
 
 // Mock global fetch
-const mockFetch = jest.fn() as jest.MockedFunction<typeof fetch>;
+const mockFetch = vi.fn() as MockedFunction<typeof fetch>;
 global.fetch = mockFetch;
 
 describe('discoverLeaguesV3', () => {
