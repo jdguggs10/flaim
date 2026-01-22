@@ -1,9 +1,9 @@
-import { describe, expect, it, beforeEach, jest } from '@jest/globals';
+import { beforeEach, describe, expect, it, vi, type MockedFunction } from 'vitest';
 import { getLeagueTeams } from '../v3/get-league-teams';
 import { EspnAuthenticationFailed, EspnApiError, EspnCredentialsRequired } from '../espn-types';
 
 // Mock global fetch
-const mockFetch = jest.fn() as jest.MockedFunction<typeof fetch>;
+const mockFetch = vi.fn() as MockedFunction<typeof fetch>;
 global.fetch = mockFetch;
 
 describe('getLeagueTeams', () => {
@@ -182,4 +182,3 @@ describe('historical membership validation integration', () => {
     expect(hasTeam).toBe(true);
   });
 });
-

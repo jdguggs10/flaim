@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "wrangler dev --port 8786",
     "deploy": "wrangler deploy",
-    "test": "jest",
+    "test": "vitest run",
     "type-check": "tsc --noEmit"
   },
   "keywords": [
@@ -22,12 +22,10 @@
   "license": "MIT",
   "type": "module",
   "devDependencies": {
-    "@jest/globals": "^30.0.0",
-    "@types/jest": "^30.0.0",
+    "@cloudflare/vitest-pool-workers": "^0.7.0",
     "@types/node": "^24.0.3",
-    "jest": "^30.0.0",
-    "ts-jest": "^29.4.0",
     "typescript": "^5.6.2",
+    "vitest": "~3.0.0",
     "wrangler": "^4.53.0"
   },
   "dependencies": {
