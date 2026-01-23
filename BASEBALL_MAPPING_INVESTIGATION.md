@@ -255,11 +255,33 @@ The cwendt94/espn-api library shows different stat ID mappings:
 
 ---
 
-## Key Insight: ESPN's ID Pattern
+## Key Insight: ESPN Uses Different IDs Per Sport
 
-ESPN uses a consistent pattern for baseball team IDs where:
-- IDs 1-14 are American League teams
-- IDs 15-30 are National League teams (with some gaps/variations)
-- ID 0 represents Free Agent (no team)
+**CRITICAL**: ESPN uses **completely different team ID systems** for each sport:
 
-This differs from our current mapping which appears to be alphabetical by team name.
+| ID | NFL (Football) | MLB (Baseball) |
+|----|----------------|----------------|
+| 1 | Atlanta Falcons | Baltimore Orioles |
+| 2 | Buffalo Bills | Boston Red Sox |
+| 15 | Miami Dolphins | Atlanta Braves |
+| 33 | Baltimore Ravens | (not used) |
+
+Our baseball PRO_TEAM_MAP appears to have been incorrectly created - possibly by someone assuming MLB would follow NFL patterns, or through some other error.
+
+### MLB Team ID Pattern (verified from Fantasy API v3)
+- IDs 1-14: American League teams
+- IDs 15-30: National League teams
+- ID 0: Free Agent
+
+### Verification Method
+I confirmed these mappings by querying the **actual Fantasy API v3**:
+```
+https://lm-api-reads.fantasy.espn.com/apis/v3/games/flb/seasons/2025/players?view=players_wl
+```
+
+Player data confirmed:
+- Ronald Acuña Jr. (ATL) → proTeamId: **15** ✓
+- Keegan Akin (BAL) → proTeamId: **1** ✓
+- Wilyer Abreu (BOS) → proTeamId: **2** ✓
+
+This matches the **cwendt94/espn-api** library exactly, confirming it as the authoritative source for Fantasy API v3 mappings.
