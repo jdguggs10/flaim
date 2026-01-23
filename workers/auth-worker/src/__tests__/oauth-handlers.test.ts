@@ -48,7 +48,7 @@ describe('oauth-handlers', () => {
     const req = new Request(
       'https://api.flaim.app/authorize?response_type=code&client_id=test&redirect_uri=https://claude.ai/api/mcp/auth_callback'
     );
-    const res = handleAuthorize(req, env);
+    const res = await handleAuthorize(req, env);
 
     expect(res.status).toBe(302);
     const location = res.headers.get('Location');
@@ -61,7 +61,7 @@ describe('oauth-handlers', () => {
 
   it('rejects missing redirect_uri for /authorize', async () => {
     const req = new Request('https://api.flaim.app/authorize?response_type=code');
-    const res = handleAuthorize(req, env);
+    const res = await handleAuthorize(req, env);
 
     expect(res.status).toBe(400);
     const body = await res.json() as { error?: string; error_description?: string };

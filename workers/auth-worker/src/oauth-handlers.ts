@@ -287,7 +287,7 @@ export async function handleClientRegistration(
  * This endpoint doesn't authenticate the user directly - it redirects to
  * the frontend where Clerk handles authentication and shows the consent UI.
  */
-export function handleAuthorize(request: Request, env: OAuthEnv): Response {
+export async function handleAuthorize(request: Request, env: OAuthEnv): Promise<Response> {
   const url = new URL(request.url);
   const params: AuthorizeParams = {
     response_type: url.searchParams.get('response_type') || '',
