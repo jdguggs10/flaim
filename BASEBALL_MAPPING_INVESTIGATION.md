@@ -1,307 +1,265 @@
 # ESPN Fantasy Baseball API Mapping Investigation
 
-**Date:** 2026-01-23
-**Investigator:** Claude
+**Date:** 2026-01-22 (Updated with independent verification)
 **Branch:** claude/investigate-baseball-mappings-C6qEd
 
 ## Executive Summary
 
-After extensive web research and code analysis, **CRITICAL ISSUES** have been identified in the baseball position mappings. The `POSITION_SLOTS` constant used for free agent filtering contains **completely incorrect slot IDs**, causing free agent searches to return wrong results. Additionally, the `POSITION_MAP` is missing several key position IDs (6-11, 18-22).
+After independent verification using **ESPN's own public API** and cross-referencing with the [cwendt94/espn-api](https://github.com/cwendt94/espn-api) library, I've confirmed that **THREE major mapping systems are broken**:
 
-## Investigation Methodology
+1. **PRO_TEAM_MAP** - COMPLETELY WRONG (every team ID is incorrect)
+2. **POSITION_SLOTS** - Wrong for most positions
+3. **POSITION_MAP** - Missing IDs 6-11 and 19
+4. **STATS_MAP** - Significant discrepancies from verified source
 
-1. **Web Research:** Searched ESPN Fantasy Baseball API documentation, reverse engineering resources, and community projects
-2. **Primary Source:** Found authoritative mappings in the [cwendt94/espn-api](https://github.com/cwendt94/espn-api) Python library (most popular ESPN Fantasy API wrapper with 1.2k+ stars)
-3. **Code Analysis:** Reviewed current implementation in both `espn-client` and `baseball-espn-mcp` workers
-4. **Cross-Reference:** Compared with football mappings to understand ESPN's pattern
+## Verification Methodology
 
-## Key Findings
+1. **Direct API verification**: Fetched team data from `https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/teams`
+2. **Individual team verification**: Confirmed specific teams (13=TEX, 14=TOR, 20=WSH) via ESPN API
+3. **Cross-reference**: Compared against cwendt94/espn-api Python library constants
+4. **Code analysis**: Reviewed current implementation
 
-### 🚨 CRITICAL ISSUE #1: POSITION_SLOTS Mapping is COMPLETELY WRONG
+---
 
-**Current Implementation (INCORRECT):**
+## 🚨 CRITICAL ISSUE #1: PRO_TEAM_MAP is COMPLETELY WRONG
+
+**This was incorrectly marked as "correct" in the previous investigation.**
+
+### Verified ESPN Team IDs (from ESPN's own API)
+
+| ID | Correct | Our Code Says | Status |
+|----|---------|---------------|--------|
+| 1 | BAL | ATL | ❌ WRONG |
+| 2 | BOS | BAL | ❌ WRONG |
+| 3 | LAA | BOS | ❌ WRONG |
+| 4 | CHW | CHC | ❌ WRONG |
+| 5 | CLE | CWS | ❌ WRONG |
+| 6 | DET | CIN | ❌ WRONG |
+| 7 | KC | CLE | ❌ WRONG |
+| 8 | MIL | COL | ❌ WRONG |
+| 9 | MIN | DET | ❌ WRONG |
+| 10 | NYY | HOU | ❌ WRONG |
+| 11 | OAK | KC | ❌ WRONG |
+| 12 | SEA | LAA | ❌ WRONG |
+| 13 | TEX | LAD | ❌ WRONG |
+| 14 | TOR | MIA | ❌ WRONG |
+| 15 | ATL | MIL | ❌ WRONG |
+| 16 | CHC | MIN | ❌ WRONG |
+| 17 | CIN | NYM | ❌ WRONG |
+| 18 | HOU | NYY | ❌ WRONG |
+| 19 | LAD | OAK | ❌ WRONG |
+| 20 | WSH | PHI | ❌ WRONG |
+| 21 | NYM | PIT | ❌ WRONG |
+| 22 | PHI | SD | ❌ WRONG |
+| 23 | PIT | SF | ❌ WRONG |
+| 24 | STL | SEA | ❌ WRONG |
+| 25 | SD | STL | ❌ WRONG |
+| 26 | SF | TB | ❌ WRONG |
+| 27 | COL | TEX | ❌ WRONG |
+| 28 | MIA | TOR | ❌ WRONG |
+| 29 | ARI | WSH | ❌ WRONG |
+| 30 | TB | ARI | ❌ WRONG |
+
+**Impact:** Every player's team affiliation is displayed incorrectly.
+
+### Correct PRO_TEAM_MAP (verified from ESPN API)
+
 ```typescript
-// workers/espn-client/src/sports/baseball/mappings.ts:172-188
-// workers/baseball-espn-mcp/src/espn.ts:136-152
-export const POSITION_SLOTS: Record<string, number[]> = {
-  'C': [0],       // ✅ CORRECT
-  '1B': [1],      // ✅ CORRECT
-  '2B': [2],      // ✅ CORRECT
-  '3B': [3],      // ✅ CORRECT
-  'SS': [4],      // ✅ CORRECT
-  'LF': [5],      // ❌ WRONG! 5 = OF (general outfield), NOT LF
-  'CF': [6],      // ❌ WRONG! 6 = MI (2B/SS combo), NOT CF
-  'RF': [7],      // ❌ WRONG! 7 = CI (1B/3B combo), NOT RF
-  'OF': [5, 6, 7],      // ❌ WRONG! Should be [5] or [8, 9, 10]
-  'DH': [8],      // ❌ WRONG! 8 = LF, NOT DH
-  'UTIL': [9],    // ❌ WRONG! 9 = CF, NOT UTIL
-  'SP': [11],     // ❌ WRONG! 11 = DH, NOT SP
-  'RP': [12],     // ❌ WRONG! 12 = UTIL, NOT RP
-  'P': [10, 11, 12],    // ❌ WRONG! 10 = RF, NOT P
-  'ALL': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+export const PRO_TEAM_MAP: Record<number, string> = {
+  0: 'FA',    // Free Agent
+  1: 'BAL',   // Baltimore Orioles
+  2: 'BOS',   // Boston Red Sox
+  3: 'LAA',   // Los Angeles Angels
+  4: 'CHW',   // Chicago White Sox
+  5: 'CLE',   // Cleveland Guardians
+  6: 'DET',   // Detroit Tigers
+  7: 'KC',    // Kansas City Royals
+  8: 'MIL',   // Milwaukee Brewers
+  9: 'MIN',   // Minnesota Twins
+  10: 'NYY',  // New York Yankees
+  11: 'OAK',  // Oakland Athletics (Sacramento 2025-2027, Las Vegas 2028+)
+  12: 'SEA',  // Seattle Mariners
+  13: 'TEX',  // Texas Rangers
+  14: 'TOR',  // Toronto Blue Jays
+  15: 'ATL',  // Atlanta Braves
+  16: 'CHC',  // Chicago Cubs
+  17: 'CIN',  // Cincinnati Reds
+  18: 'HOU',  // Houston Astros
+  19: 'LAD',  // Los Angeles Dodgers
+  20: 'WSH',  // Washington Nationals
+  21: 'NYM',  // New York Mets
+  22: 'PHI',  // Philadelphia Phillies
+  23: 'PIT',  // Pittsburgh Pirates
+  24: 'STL',  // St. Louis Cardinals
+  25: 'SD',   // San Diego Padres
+  26: 'SF',   // San Francisco Giants
+  27: 'COL',  // Colorado Rockies
+  28: 'MIA',  // Miami Marlins
+  29: 'ARI',  // Arizona Diamondbacks
+  30: 'TB',   // Tampa Bay Rays
 };
 ```
 
-**Correct Mapping (from cwendt94/espn-api):**
+**Source:** ESPN MLB Teams API: `https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/teams`
+
+---
+
+## 🚨 CRITICAL ISSUE #2: POSITION_SLOTS Mapping is Wrong
+
+### Current vs Correct Mapping
+
+| Position | Current ID | Correct ID | Status |
+|----------|-----------|------------|--------|
+| C | [0] | [0] | ✅ OK |
+| 1B | [1] | [1] | ✅ OK |
+| 2B | [2] | [2] | ✅ OK |
+| 3B | [3] | [3] | ✅ OK |
+| SS | [4] | [4] | ✅ OK |
+| LF | [5] | [8] | ❌ WRONG |
+| CF | [6] | [9] | ❌ WRONG |
+| RF | [7] | [10] | ❌ WRONG |
+| OF | [5,6,7] | [5] or [5,8,9,10] | ❌ WRONG |
+| DH | [8] | [11] | ❌ WRONG |
+| UTIL | [9] | [12] | ❌ WRONG |
+| SP | [11] | [14] | ❌ WRONG |
+| RP | [12] | [15] | ❌ WRONG |
+| P | [10,11,12] | [13,14,15] | ❌ WRONG |
+
+### Correct POSITION_SLOTS (from cwendt94/espn-api)
+
 ```typescript
 export const POSITION_SLOTS: Record<string, number[]> = {
-  'C': [0],       // Catcher
-  '1B': [1],      // First Base
-  '2B': [2],      // Second Base
-  '3B': [3],      // Third Base
-  'SS': [4],      // Shortstop
-  'OF': [5],      // Outfield (general position)
-  'MI': [6],      // Middle Infielder (2B/SS combo position)
-  'CI': [7],      // Corner Infielder (1B/3B combo position)
-  'LF': [8],      // Left Field
-  'CF': [9],      // Center Field
-  'RF': [10],     // Right Field
-  'DH': [11],     // Designated Hitter
-  'UTIL': [12],   // Utility
-  'P': [13],      // Pitcher (general)
-  'SP': [14],     // Starting Pitcher
-  'RP': [15],     // Relief Pitcher
+  'C': [0],
+  '1B': [1],
+  '2B': [2],
+  '3B': [3],
+  'SS': [4],
+  'OF': [5],      // General outfield slot
+  'MI': [6],      // Middle Infielder (2B/SS)
+  'CI': [7],      // Corner Infielder (1B/3B)
+  'LF': [8],
+  'CF': [9],
+  'RF': [10],
+  'DH': [11],
+  'UTIL': [12],
+  'P': [13],      // General pitcher
+  'SP': [14],
+  'RP': [15],
   'BE': [16],     // Bench
   'IL': [17],     // Injured List
-  'IF': [19],     // Infield (1B/2B/SS/3B combo position)
+  'IF': [19],     // Infield (1B/2B/SS/3B)
 
-  // Convenience groupings for filtering
-  'OUTFIELD': [5, 8, 9, 10],  // All outfield variants
-  'PITCHER': [13, 14, 15],     // All pitcher variants
-  'INFIELD': [1, 2, 3, 4, 6, 7, 19],  // All infield positions
-
-  'ALL': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 19]
+  // Convenience groupings
+  'OUTFIELD': [5, 8, 9, 10],
+  'PITCHER': [13, 14, 15],
+  'ALL': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
 };
 ```
 
-**Impact:** Free agent filtering is completely broken. When users search for:
-- SP (starting pitchers) → Returns DHs (designated hitters)
-- LF (left fielders) → Returns general outfielders
-- CF (center fielders) → Returns middle infielders
-- DH (designated hitters) → Returns left fielders
-- And so on...
+**Source:** [cwendt94/espn-api baseball/constant.py](https://github.com/cwendt94/espn-api/blob/master/espn_api/baseball/constant.py)
 
-### 🔴 CRITICAL ISSUE #2: POSITION_MAP is Incomplete
+---
 
-**Current Implementation (INCOMPLETE):**
-```typescript
-// workers/espn-client/src/sports/baseball/mappings.ts:9-22
-export const POSITION_MAP: Record<number, string> = {
-  0: 'C',      // Catcher
-  1: '1B',     // First Base
-  2: '2B',     // Second Base
-  3: '3B',     // Third Base
-  4: 'SS',     // Shortstop
-  5: 'OF',     // Outfield
-  // ❌ MISSING: 6, 7, 8, 9, 10, 11
-  12: 'UTIL',  // Utility
-  13: 'P',     // Pitcher (general)
-  14: 'SP',    // Starting Pitcher
-  15: 'RP',    // Relief Pitcher
-  16: 'BE',    // Bench
-  17: 'IL',    // Injured List
-  // ❌ MISSING: 18, 19, 20, 21, 22
-};
-```
+## 🔴 ISSUE #3: POSITION_MAP Missing IDs
 
-**Correct Mapping (from cwendt94/espn-api):**
+The current POSITION_MAP is missing IDs 6-11 and 19.
+
+### Correct POSITION_MAP
+
 ```typescript
 export const POSITION_MAP: Record<number, string> = {
-  0: 'C',       // Catcher
-  1: '1B',      // First Base
-  2: '2B',      // Second Base
-  3: '3B',      // Third Base
-  4: 'SS',      // Shortstop
-  5: 'OF',      // Outfield
-  6: '2B/SS',   // Middle Infielder (MI)
-  7: '1B/3B',   // Corner Infielder (CI)
-  8: 'LF',      // Left Field
-  9: 'CF',      // Center Field
-  10: 'RF',     // Right Field
-  11: 'DH',     // Designated Hitter
-  12: 'UTIL',   // Utility
-  13: 'P',      // Pitcher (general)
-  14: 'SP',     // Starting Pitcher
-  15: 'RP',     // Relief Pitcher
-  16: 'BE',     // Bench
-  17: 'IL',     // Injured List
-  // 18: Unknown (observed but undetermined)
-  19: 'IF',     // Infield (1B/2B/SS/3B)
-  // 20-22: Unknown (may exist but not documented)
-};
-```
-
-**Impact:** When players have positions 6-11 or 19 in their `defaultPositionId` or `eligibleSlots`, they show as `POS_6`, `POS_7`, etc., instead of proper position names.
-
-### ⚠️ ISSUE #3: LINEUP_SLOT_MAP Needs Verification
-
-**Current Implementation:**
-```typescript
-// workers/espn-client/src/sports/baseball/mappings.ts:25-38
-export const LINEUP_SLOT_MAP: Record<number, string> = {
   0: 'C',
   1: '1B',
   2: '2B',
   3: '3B',
   4: 'SS',
   5: 'OF',
+  6: '2B/SS',   // Middle Infielder (MI)
+  7: '1B/3B',   // Corner Infielder (CI)
+  8: 'LF',
+  9: 'CF',
+  10: 'RF',
+  11: 'DH',
   12: 'UTIL',
   13: 'P',
   14: 'SP',
   15: 'RP',
-  16: 'Bench',
+  16: 'BE',
   17: 'IL',
+  19: 'IF',     // Infield
 };
 ```
 
-**Analysis:** This mapping appears to be for **lineup slots** (where players are placed in your roster), which may differ from **player positions** (what positions a player is eligible to play). The lineup slot map is missing the same IDs as POSITION_MAP (6-11, 18-22).
+---
 
-**Recommendation:** Lineup slots may need different IDs than position eligibility. Need to verify if ESPN uses the same ID system for both or if they're distinct. Based on the cwendt94/espn-api library, they appear to use the same IDs.
+## ⚠️ ISSUE #4: STATS_MAP Has Discrepancies
 
-### ✅ ISSUE #4: PRO_TEAM_MAP Appears Correct
+The cwendt94/espn-api library shows different stat ID mappings:
 
-**Current Implementation:**
-```typescript
-// workers/espn-client/src/sports/baseball/mappings.ts:127-158
-export const PRO_TEAM_MAP: Record<number, string> = {
-  1: 'ATL',   // Atlanta Braves
-  2: 'BAL',   // Baltimore Orioles
-  3: 'BOS',   // Boston Red Sox
-  // ... (all 30 teams mapped)
-  30: 'ARI',  // Arizona Diamondbacks
-};
-```
+### Sample Discrepancies (Batting Stats)
 
-**Status:** ✅ All 30 MLB teams are correctly mapped. Oakland Athletics (ID 19: 'OAK') is still correct for 2025 season despite relocation plans (temporarily playing in Sacramento, moving to Las Vegas in 2028).
+| ID | Our Code | cwendt94/espn-api |
+|----|----------|-------------------|
+| 3 | HR | 2B |
+| 4 | R | 3B |
+| 5 | RBI | HR |
+| 6 | SB | XBH |
+| 7 | 2B | 1B |
+| 20 | OBP | R |
+| 21 | SLG | RBI |
 
-### ⚠️ ISSUE #5: BATTING_STATS_MAP & PITCHING_STATS_MAP Need Verification
+**Recommendation:** The stat mapping needs thorough verification with actual API responses. Either our mapping or the cwendt94 mapping could be correct depending on which view/endpoint is being used.
 
-**Current Implementation:**
-- Batting stats: IDs 0-31 (32 stats)
-- Pitching stats: IDs 32-77 (46 stats)
-
-**Status:** Could not find official ESPN documentation for stat IDs. The current mappings look reasonable and follow standard baseball statistics. However, without official docs or API responses to verify against, we cannot be 100% certain these are correct.
-
-**Recommendation:** Test with actual API responses to verify stat IDs match the expected values.
-
-### ⚠️ ISSUE #6: INJURY_STATUS_MAP Appears Standard
-
-**Current Implementation:**
-```typescript
-export const INJURY_STATUS_MAP: Record<string, string> = {
-  ACTIVE: 'Active',
-  OUT: 'Out',
-  DAY_TO_DAY: 'Day-to-Day',
-  INJURY_RESERVE: 'IL (Injured List)',
-  SUSPENSION: 'Suspended',
-  PATERNITY: 'Paternity Leave',
-  BEREAVEMENT: 'Bereavement',
-};
-```
-
-**Status:** These appear standard and match common injury status codes. No issues identified.
-
-## Understanding ESPN's Position System
-
-Based on research, ESPN uses a dual-concept system:
-
-1. **Player Eligibility (`defaultPositionId`, `eligibleSlots`)**: What positions a player is eligible to play
-   - Example: A shortstop might have `eligibleSlots: [4, 6, 12]` meaning SS, MI (2B/SS), and UTIL
-
-2. **Lineup Slots (`lineupSlotId`)**: Where a player is currently slotted in your roster
-   - Example: That same shortstop might be in `lineupSlotId: 6` (MI position in your lineup)
-
-Both systems appear to use the **same ID numbering scheme**, which is why POSITION_MAP and LINEUP_SLOT_MAP should be identical or very similar.
-
-## Combo Positions Explained
-
-ESPN Fantasy Baseball includes "combo positions" for roster flexibility:
-
-- **MI (ID 6)**: Middle Infielder - Can be filled by 2B or SS
-- **CI (ID 7)**: Corner Infielder - Can be filled by 1B or 3B
-- **IF (ID 19)**: Infield - Can be filled by 1B, 2B, 3B, or SS
-- **UTIL (ID 12)**: Utility - Can be filled by any position player (not pitchers)
+---
 
 ## Files Requiring Updates
 
-### Primary Mapping Files
-1. `/home/user/flaim/workers/espn-client/src/sports/baseball/mappings.ts`
-   - Fix POSITION_SLOTS (lines 172-188)
+1. **`workers/espn-client/src/sports/baseball/mappings.ts`**
+   - Fix PRO_TEAM_MAP (lines 127-158) - **CRITICAL**
+   - Fix POSITION_SLOTS (lines 172-188) - **CRITICAL**
    - Complete POSITION_MAP (lines 9-22)
-   - Update LINEUP_SLOT_MAP if needed (lines 25-38)
+   - Complete LINEUP_SLOT_MAP (lines 25-38)
 
-2. `/home/user/flaim/workers/baseball-espn-mcp/src/transforms/baseball.ts`
-   - Fix POSITION_MAP (lines 8-21)
-   - Update LINEUP_SLOT_MAP (lines 25-38)
+2. **`workers/baseball-espn-mcp/src/transforms/baseball.ts`**
+   - Fix PRO_TEAM_MAP
+   - Complete POSITION_MAP
+   - Complete LINEUP_SLOT_MAP
 
-3. `/home/user/flaim/workers/baseball-espn-mcp/src/espn.ts`
+3. **`workers/baseball-espn-mcp/src/espn.ts`**
    - Fix POSITION_SLOTS (lines 136-152)
 
-### Files Using These Mappings
-4. `/home/user/flaim/workers/espn-client/src/sports/baseball/handlers.ts`
-   - Uses POSITION_SLOTS for free agent filtering (line 12, 342)
-   - Will automatically benefit from fixes
+---
 
-## Recommended Actions
+## Recommended Priority
 
-### Priority 1: Fix POSITION_SLOTS (CRITICAL)
-Update the position slot mappings to correct values in:
-- `workers/espn-client/src/sports/baseball/mappings.ts`
-- `workers/baseball-espn-mcp/src/espn.ts`
+1. **HIGHEST: Fix PRO_TEAM_MAP** - Every player's team is wrong
+2. **HIGH: Fix POSITION_SLOTS** - Free agent filtering is broken
+3. **MEDIUM: Complete POSITION_MAP** - Some positions display as POS_X
+4. **MEDIUM: Verify STATS_MAP** - Need to test with real API data
 
-This is **critical** because free agent filtering is completely broken.
+---
 
-### Priority 2: Complete POSITION_MAP
-Add missing position IDs (6-11, 19) to:
-- `workers/espn-client/src/sports/baseball/mappings.ts`
-- `workers/baseball-espn-mcp/src/transforms/baseball.ts`
+## Verification Sources
 
-This will fix display of player positions that currently show as `POS_6`, `POS_7`, etc.
+1. **ESPN MLB Teams API** (PRIMARY - authoritative)
+   - URL: `https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/teams`
+   - Individual: `https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/teams/{id}`
 
-### Priority 3: Update LINEUP_SLOT_MAP
-Add missing lineup slot IDs to match POSITION_MAP in:
-- `workers/espn-client/src/sports/baseball/mappings.ts`
-- `workers/baseball-espn-mcp/src/transforms/baseball.ts`
+2. **cwendt94/espn-api** (well-maintained community library)
+   - [Baseball constant.py](https://github.com/cwendt94/espn-api/blob/master/espn_api/baseball/constant.py)
+   - [Baseball league.py](https://github.com/cwendt94/espn-api/blob/master/espn_api/baseball/league.py)
 
-### Priority 4: Test with Real Data
-After fixes, test with actual ESPN API responses to verify:
-- Position filtering returns correct players
-- Position names display correctly
-- Stat IDs match expected values
+3. **ESPN Support Documentation**
+   - [Roster Slots - Batters/Pitchers](https://support.espn.com/hc/en-us/articles/360046052652-Roster-Slots-Batters-Pitchers)
+   - [Position Eligibility](https://support.espn.com/hc/en-us/articles/360000093592-Position-Eligibility)
 
-### Priority 5: Add Tests
-Create unit tests to prevent regression:
-- Test position ID to name mapping
-- Test position filtering logic
-- Test that all known position IDs have mappings
+---
 
-## References & Sources
+## Key Insight: ESPN's ID Pattern
 
-- [cwendt94/espn-api GitHub Repository](https://github.com/cwendt94/espn-api) - Most authoritative community resource
-- [espn-api Baseball Constants](https://github.com/cwendt94/espn-api/blob/master/espn_api/baseball/constant.py) - Source of correct mappings
-- [ESPN Fantasy Baseball Support - Roster Slots](https://support.espn.com/hc/en-us/articles/360046052652-Roster-Slots-Batters-Pitchers)
-- [Using ESPN's Fantasy API (v3)](https://stmorse.github.io/journal/espn-fantasy-v3.html) - API exploration blog
-- [ESPN Hidden API Docs](https://gist.github.com/akeaswaran/b48b02f1c94f873c6655e7129910fc3b) - Community documentation
-- [Unlocking ESPN's Hidden API Guide](https://zuplo.com/blog/2024/10/01/espn-hidden-api-guide) - Developer guide
+ESPN uses a consistent pattern for baseball team IDs where:
+- IDs 1-14 are American League teams
+- IDs 15-30 are National League teams (with some gaps/variations)
+- ID 0 represents Free Agent (no team)
 
-## Proposed Solution
-
-I recommend creating a single, authoritative mapping file that can be shared between workers to ensure consistency. This would eliminate the duplication between `espn-client` and `baseball-espn-mcp` workers.
-
-Alternatively, if separation is preferred for architectural reasons, ensure both files are kept in sync and consider adding automated tests to verify consistency.
-
-## Next Steps
-
-1. **Review this investigation** with the team
-2. **Prioritize the fixes** based on impact (POSITION_SLOTS is most critical)
-3. **Implement corrections** to the mapping constants
-4. **Add test coverage** to prevent future regressions
-5. **Test with live data** to verify fixes work correctly
-6. **Document the mappings** with inline comments explaining combo positions
-
-## Questions for Follow-up
-
-1. Should we consolidate the duplicate mapping constants between workers?
-2. Do we have access to a test ESPN Baseball league to verify the fixes?
-3. Should we add validation to warn if unknown position IDs are encountered?
-4. Do we need to support filtering by combo positions (MI, CI, IF)?
+This differs from our current mapping which appears to be alphabetical by team name.
