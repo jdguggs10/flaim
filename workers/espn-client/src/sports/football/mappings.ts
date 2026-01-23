@@ -77,6 +77,21 @@ export const INJURY_STATUS_MAP: Record<string, string> = {
   DAY_TO_DAY: 'Day-to-Day',
 };
 
+// POSITION_SLOTS: Maps position filter names to lineup slot IDs
+// Used for filterSlotIds in ESPN free agent queries
+// These are LINEUP_SLOT_MAP IDs (verified via espn-api library)
+export const POSITION_SLOTS: Record<string, number[]> = {
+  'QB': [0],        // Quarterback slot
+  'RB': [2],        // Running back slot
+  'WR': [4],        // Wide receiver slot
+  'TE': [6],        // Tight end slot
+  'K': [17],        // Kicker slot
+  'D/ST': [16],     // Defense/Special Teams slot
+  'DST': [16],      // Alternate spelling for D/ST
+  'FLEX': [23],     // RB/WR/TE flex slot
+  'ALL': [0, 2, 4, 6, 16, 17, 23]  // All active position slots
+};
+
 // Track unknown IDs for logging
 const UNKNOWN_POSITION_IDS = new Set<number>();
 const UNKNOWN_LINEUP_SLOT_IDS = new Set<number>();
