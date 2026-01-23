@@ -35,3 +35,6 @@
 - Automate connector additions via browser extension (might be too complex for now)
 - Add hockey and basketball functionality with new workers
 - Expand to additional fantasy platforms (Yahoo, Sleeper, etc.)
+
+## Parked / Blocked
+- **Claude Connector Directory listing**: Flaim is technically compliant with Anthropic's MCP directory requirements (OAuth 2.1, tool annotations, Streamable HTTP, etc.), but unlikely to be approved because Flaim doesn't control the endpoint domain—it proxies to ESPN's APIs. Anthropic's directory appears to favor connectors where the submitter owns/controls the data source. Revisit if policy changes or if ESPN ever offers an official partnership/API program. (Analysis: Jan 2026)
