@@ -10,7 +10,8 @@ import type { CorsOptions } from './types.js';
  * Default allowed origins for MCP workers (matches current behavior).
  */
 const MCP_ALLOWED_ORIGINS = [
-  'https://*.vercel.app',       // All Vercel preview deployments
+  'https://flaim-*.vercel.app', // Flaim preview deployments
+  'https://flaim.vercel.app',   // Vercel production domain (fallback)
   'https://flaim.app',          // Production
   'http://localhost:8787',      // Wrangler dev server (HTTP)
   'https://localhost:8787',     // Wrangler dev server (HTTPS)

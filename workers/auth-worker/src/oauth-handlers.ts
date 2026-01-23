@@ -250,10 +250,8 @@ export async function handleClientRegistration(
     }
   }
 
-  // Generate a deterministic client_id based on software_id or first redirect_uri
-  // This ensures the same client gets the same ID on repeat registrations
-  const identifier = body.software_id || redirectUris[0] || 'anonymous';
-  const clientId = `mcp_${await hashString(identifier)}`;
+  // Generate an unpredictable client_id (RFC 7591)
+  const clientId = `mcp_${crypto.randomUUID()}`;
 
   // For public MCP clients, we don't issue a client_secret
   // Per RFC 7591, this is allowed for public clients
@@ -276,16 +274,6 @@ export async function handleClientRegistration(
       ...corsHeaders
     }
   });
-}
-
-// Simple hash function for generating deterministic client IDs
-async function hashString(str: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(str);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-  return hashHex.substring(0, 16); // First 16 chars for shorter client_id
 }
 
 // =============================================================================
@@ -348,6 +336,25 @@ export function handleAuthorize(request: Request, env: OAuthEnv): Response {
     );
   }
 
+  // Store state for server-side validation (if provided)
+  if (params.state) {
+    try {
+      const storage = OAuthStorage.fromEnvironment(env);
+      await storage.createOAuthState({
+        state: params.state,
+        redirectUri: params.redirect_uri,
+        clientId: params.client_id || undefined,
+        expiresInSeconds: 600,
+      });
+    } catch (error) {
+      console.error('[oauth] Failed to store state:', error);
+      return Response.redirect(
+        buildErrorRedirect(params.redirect_uri, 'server_error', 'Failed to initialize authorization state', params.state),
+        302
+      );
+    }
+  }
+
   // Build frontend consent URL
   const frontendUrl = getFrontendUrl(env);
   const consentUrl = new URL(`${frontendUrl}/oauth/consent`);
@@ -390,6 +397,7 @@ export async function handleCreateCode(
       redirect_uri: string;
       scope?: string;
       state?: string;
+      client_id?: string;
       code_challenge?: string;
       code_challenge_method?: string;
       resource?: string; // RFC 8707
@@ -410,6 +418,20 @@ export async function handleCreateCode(
     }
 
     const storage = OAuthStorage.fromEnvironment(env);
+
+    if (body.state) {
+      const validState = await storage.consumeOAuthState(
+        body.state,
+        body.redirect_uri,
+        body.client_id
+      );
+      if (!validState) {
+        return new Response(JSON.stringify({
+          error: 'invalid_request',
+          error_description: 'Invalid or expired state',
+        }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
 
     const code = await storage.createAuthorizationCode({
       userId,

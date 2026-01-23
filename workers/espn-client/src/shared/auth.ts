@@ -4,7 +4,8 @@ import { authWorkerFetch, type EspnCredentials } from '@flaim/worker-shared';
 
 export async function getCredentials(
   env: Env,
-  authHeader?: string
+  authHeader?: string,
+  correlationId?: string
 ): Promise<EspnCredentials | null> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -12,6 +13,9 @@ export async function getCredentials(
 
   if (authHeader) {
     headers['Authorization'] = authHeader;
+  }
+  if (correlationId) {
+    headers['X-Correlation-ID'] = correlationId;
   }
 
   const response = await authWorkerFetch(env, '/credentials/espn?raw=true', {

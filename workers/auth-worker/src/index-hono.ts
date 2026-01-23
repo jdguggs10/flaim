@@ -66,7 +66,8 @@ type JwtPayload = { sub?: string; iss?: string; exp?: number; [k: string]: unkno
 const RATE_LIMIT_PER_DAY = 200;
 
 const ALLOWED_ORIGINS = [
-  'https://*.vercel.app',
+  'https://flaim-*.vercel.app',
+  'https://flaim.vercel.app',
   'https://flaim.app',
   'https://www.flaim.app',
   'http://localhost:8787',
@@ -723,7 +724,6 @@ async function handleCredentialsEspn(c: Context<{ Bindings: Env }>, method: stri
           status: 429,
           headers: {
             'Content-Type': 'application/json',
-            'X-User-Id': clerkUserId,
             'X-RateLimit-Limit': String(rateLimit.limit),
             'X-RateLimit-Remaining': '0',
             'X-RateLimit-Reset': String(Math.floor(rateLimit.resetAt.getTime() / 1000)),
@@ -747,7 +747,6 @@ async function handleCredentialsEspn(c: Context<{ Bindings: Env }>, method: stri
           status: 404,
           headers: {
             'Content-Type': 'application/json',
-            'X-User-Id': clerkUserId,
             'X-RateLimit-Limit': String(RATE_LIMIT_PER_DAY),
             'X-RateLimit-Remaining': String(remaining),
             'X-RateLimit-Reset': String(Math.floor(rateLimit.resetAt.getTime() / 1000)),
@@ -763,7 +762,6 @@ async function handleCredentialsEspn(c: Context<{ Bindings: Env }>, method: stri
       }), {
         headers: {
           'Content-Type': 'application/json',
-          'X-User-Id': clerkUserId,
           'X-RateLimit-Limit': String(RATE_LIMIT_PER_DAY),
           'X-RateLimit-Remaining': String(remaining),
           'X-RateLimit-Reset': String(Math.floor(rateLimit.resetAt.getTime() / 1000)),

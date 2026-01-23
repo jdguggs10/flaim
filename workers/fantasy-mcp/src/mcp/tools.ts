@@ -2,6 +2,7 @@
 import { z } from 'zod';
 import type { Env, Platform, Sport, ToolParams } from '../types';
 import { routeToClient, type RouteResult } from '../router';
+import { withCorrelationId } from '@flaim/worker-shared';
 
 // TODO: Revisit this workaround. Casting to 'any' is used due to type compatibility issues
 // between Zod v3/v4 and @modelcontextprotocol/sdk's registerTool().
@@ -28,7 +29,8 @@ export interface UnifiedTool {
   handler: (
     args: Record<string, unknown>,
     env: Env,
-    authHeader?: string
+    authHeader?: string,
+    correlationId?: string
   ) => Promise<McpToolResponse>;
 }
 
@@ -49,7 +51,8 @@ interface UserLeague {
 
 async function fetchUserLeagues(
   env: Env,
-  authHeader?: string
+  authHeader?: string,
+  correlationId?: string
 ): Promise<{ leagues: UserLeague[]; error?: string; status?: number }> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 5000);
@@ -57,13 +60,16 @@ async function fetchUserLeagues(
   try {
     console.log(`[fantasy-mcp] Fetching leagues from auth-worker`);
 
+    const baseHeaders: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...(authHeader ? { Authorization: authHeader } : {}),
+    };
+    const headers = correlationId ? withCorrelationId(baseHeaders, correlationId) : baseHeaders;
+
     const response = await env.AUTH_WORKER.fetch(
       new Request('https://internal/leagues', {
         method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(authHeader ? { Authorization: authHeader } : {}),
-        },
+        headers,
         signal: controller.signal,
       })
     );
@@ -178,9 +184,9 @@ export function getUnifiedTools(): UnifiedTool[] {
       description:
         "IMPORTANT: Call this tool FIRST before any other tool. Returns the user's configured fantasy leagues across all platforms (ESPN, Yahoo), along with current date/time and season info. Use the returned leagueId, teamId, platform, and sport values for all subsequent tool calls.",
       inputSchema: {},
-      handler: async (_args, env, authHeader) => {
+      handler: async (_args, env, authHeader, correlationId) => {
         try {
-          const { leagues, status: fetchStatus } = await fetchUserLeagues(env, authHeader);
+          const { leagues, status: fetchStatus } = await fetchUserLeagues(env, authHeader, correlationId);
 
           if (fetchStatus === 401 || fetchStatus === 403) {
             throw new Error('AUTH_FAILED: Authentication failed');
@@ -265,7 +271,7 @@ export function getUnifiedTools(): UnifiedTool[] {
         league_id: z.string().describe('League ID (get from get_user_session)'),
         season_year: z.number().describe('Season year (e.g., 2024)'),
       } as ZodShape,
-      handler: async (args, env, authHeader) => {
+      handler: async (args, env, authHeader, correlationId) => {
         const params: ToolParams = {
           platform: args.platform as Platform,
           sport: args.sport as Sport,
@@ -273,7 +279,7 @@ export function getUnifiedTools(): UnifiedTool[] {
           season_year: args.season_year as number,
         };
 
-        const result = await routeToClient(env, 'get_league_info', params, authHeader);
+        const result = await routeToClient(env, 'get_league_info', params, authHeader, correlationId);
         return routeResultToMcp(result);
       },
     },
@@ -295,7 +301,7 @@ export function getUnifiedTools(): UnifiedTool[] {
         league_id: z.string().describe('League ID (get from get_user_session)'),
         season_year: z.number().describe('Season year (e.g., 2024)'),
       } as ZodShape,
-      handler: async (args, env, authHeader) => {
+      handler: async (args, env, authHeader, correlationId) => {
         const params: ToolParams = {
           platform: args.platform as Platform,
           sport: args.sport as Sport,
@@ -303,7 +309,7 @@ export function getUnifiedTools(): UnifiedTool[] {
           season_year: args.season_year as number,
         };
 
-        const result = await routeToClient(env, 'get_standings', params, authHeader);
+        const result = await routeToClient(env, 'get_standings', params, authHeader, correlationId);
         return routeResultToMcp(result);
       },
     },
@@ -326,7 +332,7 @@ export function getUnifiedTools(): UnifiedTool[] {
         season_year: z.number().describe('Season year (e.g., 2024)'),
         week: z.number().optional().describe('Week number (optional, defaults to current week)'),
       } as ZodShape,
-      handler: async (args, env, authHeader) => {
+      handler: async (args, env, authHeader, correlationId) => {
         const params: ToolParams = {
           platform: args.platform as Platform,
           sport: args.sport as Sport,
@@ -335,7 +341,7 @@ export function getUnifiedTools(): UnifiedTool[] {
           week: args.week as number | undefined,
         };
 
-        const result = await routeToClient(env, 'get_matchups', params, authHeader);
+        const result = await routeToClient(env, 'get_matchups', params, authHeader, correlationId);
         return routeResultToMcp(result);
       },
     },
@@ -359,7 +365,7 @@ export function getUnifiedTools(): UnifiedTool[] {
         team_id: z.string().optional().describe('Team ID (optional, defaults to user\'s team)'),
         week: z.number().optional().describe('Week number (optional, defaults to current week)'),
       } as ZodShape,
-      handler: async (args, env, authHeader) => {
+      handler: async (args, env, authHeader, correlationId) => {
         const params: ToolParams = {
           platform: args.platform as Platform,
           sport: args.sport as Sport,
@@ -369,7 +375,7 @@ export function getUnifiedTools(): UnifiedTool[] {
           week: args.week as number | undefined,
         };
 
-        const result = await routeToClient(env, 'get_roster', params, authHeader);
+        const result = await routeToClient(env, 'get_roster', params, authHeader, correlationId);
         return routeResultToMcp(result);
       },
     },
@@ -399,7 +405,7 @@ export function getUnifiedTools(): UnifiedTool[] {
           .optional()
           .describe('Maximum number of players to return (default: 25, max: 100)'),
       } as ZodShape,
-      handler: async (args, env, authHeader) => {
+      handler: async (args, env, authHeader, correlationId) => {
         const params: ToolParams = {
           platform: args.platform as Platform,
           sport: args.sport as Sport,
@@ -409,7 +415,7 @@ export function getUnifiedTools(): UnifiedTool[] {
           count: args.count as number | undefined,
         };
 
-        const result = await routeToClient(env, 'get_free_agents', params, authHeader);
+        const result = await routeToClient(env, 'get_free_agents', params, authHeader, correlationId);
         return routeResultToMcp(result);
       },
     },

@@ -15,7 +15,8 @@ export async function routeToClient(
   env: Env,
   tool: string,
   params: ToolParams,
-  authHeader?: string
+  authHeader?: string,
+  correlationId?: string
 ): Promise<RouteResult> {
   const { platform } = params;
 
@@ -36,6 +37,9 @@ export async function routeToClient(
     };
     if (authHeader) {
       headers['Authorization'] = authHeader;
+    }
+    if (correlationId) {
+      headers['X-Correlation-ID'] = correlationId;
     }
 
     const response = await client.fetch(

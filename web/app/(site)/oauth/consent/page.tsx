@@ -53,6 +53,7 @@ function OAuthConsentContent() {
           redirect_uri: oauthParams.redirectUri,
           scope: oauthParams.scope,
           state: oauthParams.state,
+          client_id: oauthParams.clientId,
           code_challenge: oauthParams.codeChallenge,
           code_challenge_method: oauthParams.codeChallengeMethod,
           resource: oauthParams.resource, // RFC 8707
