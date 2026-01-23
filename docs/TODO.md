@@ -19,7 +19,7 @@
 - **Codebase Audit & Streamlining**: Conduct a thorough review for legacy code, unused utilities, or redundant components. Identify parts of the system that are no longer in use (specifically around older auth patterns or defunct chat features) and remove them cautiously to reduce technical debt while ensuring no regressions.
 - **Devconsole chat clarity**: Reduce excess tool verbosity when using the devconsole chat to keep responses concise.
 - **Advanced Token & Usage Analytics**: Implement per-turn and per-session token usage tracking in the chat UI by capturing usage data from the Responses API stream. Include cost estimation and historical usage trends.
-- **Verify ESPN baseball ID mappings**: Validate `POSITION_MAP`/`LINEUP_SLOT_MAP` against ESPN data and update missing slot IDs. Review new worker logs for unknown IDs and fill in correct mappings.
+- **Reconcile remaining ESPN baseball mapping unknowns**: Validate slot IDs `18`/`22` and align `BASEBALL_MAPPING_INVESTIGATION.md` with current evidence.
 
 ## Infrastructure & UX Polish
 - **Automated Testing**: Implement unit and integration tests for core API logic (Fan API, auth handlers) to prevent regressions.

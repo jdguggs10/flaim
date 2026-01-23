@@ -83,3 +83,4 @@ wrangler dev --env dev --port 8789
 
 - [`fantasy-mcp`](../fantasy-mcp/) - Unified MCP gateway that calls this worker
 - [`auth-worker`](../auth-worker/) - Provides ESPN credentials
+- [`BASEBALL_MAPPINGS`](./BASEBALL_MAPPINGS.md) - ESPN Fantasy Baseball mapping notes (IDs, verification, rationale)
