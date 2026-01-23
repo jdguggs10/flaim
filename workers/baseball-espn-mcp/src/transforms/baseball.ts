@@ -3,127 +3,159 @@
  * Maps ESPN's numeric IDs to human-readable names
  */
 
-// Position slot IDs to position names
-// Position slot IDs to position names (based on ESPN lineup slots observed in 2025 leagues)
-export const POSITION_MAP: Record<number, string> = {
-  0: 'C',      // Catcher
-  1: '1B',     // First Base
-  2: '2B',     // Second Base
-  3: '3B',     // Third Base
-  4: 'SS',     // Shortstop
-  5: 'OF',     // Outfield
-  12: 'UTIL',  // Utility
-  13: 'P',     // Pitcher (general)
-  14: 'SP',    // Starting Pitcher
-  15: 'RP',    // Relief Pitcher
-  16: 'BE',    // Bench
-  17: 'IL',    // Injured List
+// =============================================================================
+// TWO DIFFERENT ID SPACES - DO NOT CONFUSE THESE
+// =============================================================================
+// ESPN uses different IDs for:
+// 1. defaultPositionId - A player's natural position (e.g., 6 = SS for shortstop)
+// 2. lineupSlotId/eligibleSlots - Roster slots where a player can be placed (e.g., 6 = MI)
+// See BASEBALL_MAPPING_INVESTIGATION.md for full documentation.
+// =============================================================================
+
+// DEFAULT_POSITION_MAP: Maps defaultPositionId field (player's natural position)
+// Verified via league 30201 player data (2026-01-23)
+export const DEFAULT_POSITION_MAP: Record<number, string> = {
+  1: 'SP',   // Starting Pitcher
+  2: 'C',    // Catcher
+  3: '1B',   // First Base
+  4: '2B',   // Second Base
+  5: '3B',   // Third Base
+  6: 'SS',   // Shortstop
+  7: 'LF',   // Left Field
+  8: 'CF',   // Center Field
+  9: 'RF',   // Right Field
+  10: 'DH',  // Designated Hitter
+  11: 'RP',  // Relief Pitcher
 };
 
-// Lineup slot IDs to slot names (slightly different from position)
-// Lineup slot IDs to slot names (matching ESPN UI)
+// LINEUP_SLOT_MAP: Maps lineupSlotId and eligibleSlots fields (roster slots)
+// Verified via league 30201 roster data (2026-01-23)
 export const LINEUP_SLOT_MAP: Record<number, string> = {
-  0: 'C',
-  1: '1B',
-  2: '2B',
-  3: '3B',
-  4: 'SS',
-  5: 'OF',
-  12: 'UTIL',
-  13: 'P',
-  14: 'SP',
-  15: 'RP',
-  16: 'Bench',
-  17: 'IL',
+  0: 'C',     // Catcher slot
+  1: '1B',    // First base slot
+  2: '2B',    // Second base slot
+  3: '3B',    // Third base slot
+  4: 'SS',    // Shortstop slot
+  5: 'OF',    // Outfield slot (general)
+  6: 'MI',    // Middle Infielder (2B/SS eligible)
+  7: 'CI',    // Corner Infielder (1B/3B eligible)
+  8: 'LF',    // Left field slot
+  9: 'CF',    // Center field slot
+  10: 'RF',   // Right field slot
+  11: 'DH',   // Designated hitter slot
+  12: 'UTIL', // Utility slot (any position player)
+  13: 'P',    // Pitcher slot (general)
+  14: 'SP',   // Starting pitcher slot
+  15: 'RP',   // Relief pitcher slot
+  16: 'Bench', // Bench
+  17: 'IL',   // Injured List
+  19: 'IF',   // Infield slot (1B/2B/SS/3B eligible)
+  // 18: unknown - appears in lineupSlotCounts only, never observed on players
+  // 22: possibly NA/Minors - only seen on minor league pitchers
 };
 
-const UNKNOWN_POSITION_IDS = new Set<number>();
+// DEPRECATED: Use DEFAULT_POSITION_MAP or LINEUP_SLOT_MAP instead
+// Kept for backwards compatibility - maps to LINEUP_SLOT_MAP
+export const POSITION_MAP: Record<number, string> = LINEUP_SLOT_MAP;
+
+const UNKNOWN_DEFAULT_POSITION_IDS = new Set<number>();
 const UNKNOWN_LINEUP_SLOT_IDS = new Set<number>();
 
-// Batting stat IDs to stat names (IDs 0-31 in ESPN's system)
+// Batting stat IDs to stat names
+// Verified against cwendt94/espn-api constant.py (2026-01-23)
+// Note: B_ prefix indicates batter version of stats that exist for both batters and pitchers
 export const BATTING_STATS_MAP: Record<number, string> = {
-  0: 'AB',    // At Bats
-  1: 'H',     // Hits
-  2: 'AVG',   // Batting Average
-  3: 'HR',    // Home Runs
-  4: 'R',     // Runs
-  5: 'RBI',   // Runs Batted In
-  6: 'SB',    // Stolen Bases
-  7: '2B',    // Doubles
-  8: '3B',    // Triples
-  9: 'BB',    // Walks
-  10: 'SO',   // Strikeouts (batting)
-  11: 'CS',   // Caught Stealing
-  12: 'HBP',  // Hit By Pitch
-  13: 'SF',   // Sacrifice Flies
-  14: 'IBB',  // Intentional Walks
-  15: 'GDP',  // Ground Into Double Play
-  16: 'PA',   // Plate Appearances
-  17: 'TB',   // Total Bases
-  18: 'XBH',  // Extra Base Hits
-  19: '1B',   // Singles
-  20: 'OBP',  // On-Base Percentage
-  21: 'SLG',  // Slugging Percentage
-  22: 'OPS',  // On-Base + Slugging
-  23: 'RC',   // Runs Created
-  24: 'SB%',  // Stolen Base Percentage
-  25: 'AB/HR', // At Bats per Home Run
-  26: 'BB/K', // Walk to Strikeout Ratio
-  27: 'G',    // Games (batting)
-  28: 'GS',   // Games Started (batting)
-  29: 'GIDP', // Grounded Into Double Play
-  30: 'E',    // Errors
-  31: 'A',    // Assists
+  0: 'AB',      // At Bats
+  1: 'H',       // Hits
+  2: 'AVG',     // Batting Average
+  3: '2B',      // Doubles
+  4: '3B',      // Triples
+  5: 'HR',      // Home Runs
+  6: 'XBH',     // Extra Base Hits (2B + 3B + HR)
+  7: '1B',      // Singles
+  8: 'TB',      // Total Bases
+  9: 'SLG',     // Slugging Percentage
+  10: 'BB',     // Walks (batter)
+  11: 'IBB',    // Intentional Walks (batter)
+  12: 'HBP',    // Hit By Pitch
+  13: 'SF',     // Sacrifice Flies
+  14: 'SH',     // Sacrifice Hits (bunts)
+  15: 'SAC',    // Total Sacrifices (SF + SH)
+  16: 'PA',     // Plate Appearances
+  17: 'OBP',    // On-Base Percentage
+  18: 'OPS',    // On-Base + Slugging
+  19: 'RC',     // Runs Created
+  20: 'R',      // Runs
+  21: 'RBI',    // Runs Batted In
+  // 22: unknown
+  23: 'SB',     // Stolen Bases
+  24: 'CS',     // Caught Stealing
+  25: 'SB-CS',  // Net Stolen Bases
+  26: 'GDP',    // Grounded Into Double Play
+  27: 'SO',     // Strikeouts (batter)
+  28: 'PS',     // Pitches Seen
+  29: 'PPA',    // Pitches Per Plate Appearance
+  // 30: unknown
+  31: 'CYC',    // Cycles
 };
 
-// Pitching stat IDs to stat names (IDs 32-77 in ESPN's system)
+// Pitching and fielding stat IDs to stat names
+// Verified against cwendt94/espn-api constant.py (2026-01-23)
+// Note: P_ prefix indicates pitcher version of stats that exist for both batters and pitchers
 export const PITCHING_STATS_MAP: Record<number, string> = {
-  32: 'IP',   // Innings Pitched
-  33: 'W',    // Wins
-  34: 'L',    // Losses
-  35: 'SV',   // Saves
-  36: 'K',    // Strikeouts (pitching)
-  37: 'ERA',  // Earned Run Average
-  38: 'WHIP', // Walks + Hits per IP
-  39: 'H',    // Hits Allowed
-  40: 'BB',   // Walks Allowed
-  41: 'QS',   // Quality Starts
-  42: 'ER',   // Earned Runs
-  43: 'R',    // Runs Allowed
-  44: 'HR',   // Home Runs Allowed
-  45: 'HLD',  // Holds
-  46: 'BS',   // Blown Saves
-  47: 'K/9',  // Strikeouts per 9 Innings
-  48: 'BB/9', // Walks per 9 Innings
-  49: 'K/BB', // Strikeout to Walk Ratio
-  50: 'SV%',  // Save Percentage
-  51: 'GS',   // Games Started (pitching)
-  52: 'G',    // Games (pitching)
-  53: 'CG',   // Complete Games
-  54: 'SHO',  // Shutouts
-  55: 'WP',   // Wild Pitches
-  56: 'BK',   // Balks
-  57: 'HBP',  // Hit Batters
-  58: 'IBB',  // Intentional Walks Allowed
-  59: 'GF',   // Games Finished
-  60: 'SVO',  // Save Opportunities
-  61: 'BF',   // Batters Faced
-  62: 'W%',   // Win Percentage
-  63: 'H/9',  // Hits per 9 Innings
-  64: 'HR/9', // Home Runs per 9 Innings
-  65: 'OBA',  // Opponent Batting Average
-  66: 'GO/AO', // Ground Outs to Air Outs
-  67: 'OBPA', // Opponent On-Base Percentage
-  68: 'SLGA', // Opponent Slugging
-  69: 'OPSA', // Opponent OPS
-  70: 'GS-W', // Games Started that resulted in Win
-  71: 'GS-L', // Games Started that resulted in Loss
-  72: 'APP',  // Appearances
-  73: 'NSV',  // Net Saves
-  74: 'NSB',  // Net Stolen Bases Against
-  75: 'PCT',  // Percentage
-  76: 'TBF',  // Total Batters Faced
-  77: 'PO',   // Pickoffs
+  32: 'GP',     // Games Pitched
+  33: 'GS',     // Games Started
+  34: 'OUTS',   // Outs recorded (divide by 3 for IP)
+  35: 'TBF',    // Total Batters Faced
+  36: 'P',      // Pitches thrown
+  37: 'H',      // Hits Allowed
+  38: 'OBA',    // Opponent Batting Average
+  39: 'BB',     // Walks Allowed
+  40: 'IBB',    // Intentional Walks Allowed
+  41: 'WHIP',   // Walks + Hits per IP
+  42: 'HBP',    // Hit Batters
+  43: 'OOBP',   // Opponent On-Base Percentage
+  44: 'R',      // Runs Allowed
+  45: 'ER',     // Earned Runs
+  46: 'HR',     // Home Runs Allowed
+  47: 'ERA',    // Earned Run Average
+  48: 'K',      // Strikeouts
+  49: 'K/9',    // Strikeouts per 9 Innings
+  50: 'WP',     // Wild Pitches
+  51: 'BLK',    // Balks
+  52: 'PK',     // Pickoffs
+  53: 'W',      // Wins
+  54: 'L',      // Losses
+  55: 'WPCT',   // Win Percentage
+  56: 'SVO',    // Save Opportunities
+  57: 'SV',     // Saves
+  58: 'BLSV',   // Blown Saves
+  59: 'SV%',    // Save Percentage
+  60: 'HLD',    // Holds
+  // 61: unknown
+  62: 'CG',     // Complete Games
+  63: 'QS',     // Quality Starts
+  // 64: unknown
+  65: 'NH',     // No-Hitters
+  66: 'PG',     // Perfect Games
+  // Fielding stats
+  67: 'TC',     // Total Chances (PO + A + E)
+  68: 'PO',     // Put Outs
+  69: 'A',      // Assists
+  70: 'OFA',    // Outfield Assists
+  71: 'FPCT',   // Fielding Percentage
+  72: 'E',      // Errors
+  73: 'DP',     // Double Plays turned
+  // Game results by team outcome
+  74: 'B_G_W',  // Batter games where team won
+  75: 'B_G_L',  // Batter games where team lost
+  76: 'P_G_W',  // Pitcher games where team won
+  77: 'P_G_L',  // Pitcher games where team lost
+  // Additional stats
+  81: 'G',      // Games Played
+  82: 'K/BB',   // Strikeout to Walk Ratio
+  83: 'SVHD',   // Saves + Holds
+  99: 'STARTER', // Starting lineup indicator
 };
 
 // Activity message type codes
@@ -138,37 +170,40 @@ export const ACTIVITY_TYPE_MAP: Record<number, string> = {
 };
 
 // Pro team IDs to team abbreviations
+// Verified via ESPN Fantasy API v3 proTeamSchedules endpoint (2026-01-23)
+// See BASEBALL_MAPPING_INVESTIGATION.md for verification details
 export const PRO_TEAM_MAP: Record<number, string> = {
-  1: 'ATL',   // Atlanta Braves
-  2: 'BAL',   // Baltimore Orioles
-  3: 'BOS',   // Boston Red Sox
-  4: 'CHC',   // Chicago Cubs
-  5: 'CWS',   // Chicago White Sox
-  6: 'CIN',   // Cincinnati Reds
-  7: 'CLE',   // Cleveland Guardians
-  8: 'COL',   // Colorado Rockies
-  9: 'DET',   // Detroit Tigers
-  10: 'HOU',  // Houston Astros
-  11: 'KC',   // Kansas City Royals
-  12: 'LAA',  // Los Angeles Angels
-  13: 'LAD',  // Los Angeles Dodgers
-  14: 'MIA',  // Miami Marlins
-  15: 'MIL',  // Milwaukee Brewers
-  16: 'MIN',  // Minnesota Twins
-  17: 'NYM',  // New York Mets
-  18: 'NYY',  // New York Yankees
-  19: 'OAK',  // Oakland Athletics
-  20: 'PHI',  // Philadelphia Phillies
-  21: 'PIT',  // Pittsburgh Pirates
-  22: 'SD',   // San Diego Padres
-  23: 'SF',   // San Francisco Giants
-  24: 'SEA',  // Seattle Mariners
-  25: 'STL',  // St. Louis Cardinals
-  26: 'TB',   // Tampa Bay Rays
-  27: 'TEX',  // Texas Rangers
-  28: 'TOR',  // Toronto Blue Jays
-  29: 'WSH',  // Washington Nationals
-  30: 'ARI',  // Arizona Diamondbacks
+  0: 'FA',   // Free Agent
+  1: 'BAL',  // Baltimore Orioles
+  2: 'BOS',  // Boston Red Sox
+  3: 'LAA',  // Los Angeles Angels
+  4: 'CHW',  // Chicago White Sox
+  5: 'CLE',  // Cleveland Guardians
+  6: 'DET',  // Detroit Tigers
+  7: 'KC',   // Kansas City Royals
+  8: 'MIL',  // Milwaukee Brewers
+  9: 'MIN',  // Minnesota Twins
+  10: 'NYY', // New York Yankees
+  11: 'OAK', // Oakland Athletics
+  12: 'SEA', // Seattle Mariners
+  13: 'TEX', // Texas Rangers
+  14: 'TOR', // Toronto Blue Jays
+  15: 'ATL', // Atlanta Braves
+  16: 'CHC', // Chicago Cubs
+  17: 'CIN', // Cincinnati Reds
+  18: 'HOU', // Houston Astros
+  19: 'LAD', // Los Angeles Dodgers
+  20: 'WSH', // Washington Nationals
+  21: 'NYM', // New York Mets
+  22: 'PHI', // Philadelphia Phillies
+  23: 'PIT', // Pittsburgh Pirates
+  24: 'STL', // St. Louis Cardinals
+  25: 'SD',  // San Diego Padres
+  26: 'SF',  // San Francisco Giants
+  27: 'COL', // Colorado Rockies
+  28: 'MIA', // Miami Marlins
+  29: 'ARI', // Arizona Diamondbacks
+  30: 'TB',  // Tampa Bay Rays
 };
 
 // Injury status codes
@@ -183,20 +218,35 @@ export const INJURY_STATUS_MAP: Record<string, string> = {
 };
 
 /**
- * Get position name from ESPN position ID
+ * Get position name from ESPN defaultPositionId field
+ * Use this for the player's NATURAL position (what position they play)
  */
-export function getPositionName(positionId: number): string {
-  const name = POSITION_MAP[positionId];
+export function getDefaultPositionName(positionId: number): string {
+  const name = DEFAULT_POSITION_MAP[positionId];
   if (name) return name;
-  if (!UNKNOWN_POSITION_IDS.has(positionId)) {
-    UNKNOWN_POSITION_IDS.add(positionId);
-    console.warn(`[baseball-transforms] Unknown position ID: ${positionId}`);
+  if (!UNKNOWN_DEFAULT_POSITION_IDS.has(positionId)) {
+    UNKNOWN_DEFAULT_POSITION_IDS.add(positionId);
+    console.warn(`[baseball-transforms] Unknown defaultPositionId: ${positionId}`);
   }
   return `POS_${positionId}`;
 }
 
 /**
+ * @deprecated Use getDefaultPositionName() for defaultPositionId field
+ *             or getLineupSlotName() for lineupSlotId/eligibleSlots
+ */
+export function getPositionName(positionId: number): string {
+  // For backwards compat, try DEFAULT_POSITION_MAP first (most common use case)
+  // then fall back to LINEUP_SLOT_MAP
+  const defaultName = DEFAULT_POSITION_MAP[positionId];
+  if (defaultName) return defaultName;
+  return getLineupSlotName(positionId);
+}
+
+/**
  * Get stat name from ESPN stat ID
+ * IDs 0-31: Batting stats (BATTING_STATS_MAP)
+ * IDs 32+: Pitching/fielding stats (PITCHING_STATS_MAP)
  */
 export function getStatName(statId: number): string {
   if (statId < 32) {
@@ -239,10 +289,11 @@ export function transformStats(stats: Record<string, number>): Record<string, nu
 }
 
 /**
- * Transform ESPN player eligible positions array to readable names
+ * Transform ESPN player eligibleSlots array to readable slot names
+ * Note: eligibleSlots uses LINEUP_SLOT_MAP IDs, not defaultPositionId IDs
  */
-export function transformEligiblePositions(positionIds: number[]): string[] {
-  return positionIds.map(id => getPositionName(id));
+export function transformEligiblePositions(slotIds: number[]): string[] {
+  return slotIds.map(id => getLineupSlotName(id));
 }
 
 /**
@@ -266,7 +317,9 @@ export function transformPlayer(player: any): TransformedPlayer {
   return {
     id: player.id,
     name: player.fullName || player.player?.fullName || 'Unknown',
-    position: getPositionName(player.defaultPositionId || 0),
+    // Use DEFAULT_POSITION_MAP for defaultPositionId (player's natural position)
+    position: getDefaultPositionName(player.defaultPositionId || 0),
+    // Use LINEUP_SLOT_MAP for eligibleSlots (roster slots where player can be placed)
     eligiblePositions: transformEligiblePositions(player.eligibleSlots || []),
     proTeam: getProTeamAbbrev(player.proTeamId || 0),
     injuryStatus: player.injuryStatus ? INJURY_STATUS_MAP[player.injuryStatus] || player.injuryStatus : undefined,
