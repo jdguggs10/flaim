@@ -131,24 +131,33 @@ export class EspnApiClient {
   }
 
   /**
-   * Position slot IDs for filtering free agents by position
+   * POSITION_SLOTS: Maps position filter names to lineup slot IDs
+   * Used for filterSlotIds in ESPN free agent queries
+   * These are LINEUP_SLOT_MAP IDs, verified 2026-01-23
    */
   private static readonly POSITION_SLOTS: Record<string, number[]> = {
-    'C': [0],
-    '1B': [1],
-    '2B': [2],
-    '3B': [3],
-    'SS': [4],
-    'LF': [5],
-    'CF': [6],
-    'RF': [7],
-    'OF': [5, 6, 7],      // All outfield positions
-    'DH': [8],
-    'UTIL': [9],
-    'SP': [11],
-    'RP': [12],
-    'P': [10, 11, 12],    // All pitcher positions
-    'ALL': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    'C': [0],           // Catcher slot
+    '1B': [1],          // First base slot
+    '2B': [2],          // Second base slot
+    '3B': [3],          // Third base slot
+    'SS': [4],          // Shortstop slot
+    'OF': [5],          // General outfield slot
+    'MI': [6],          // Middle Infielder (2B/SS)
+    'CI': [7],          // Corner Infielder (1B/3B)
+    'LF': [8],          // Left field slot
+    'CF': [9],          // Center field slot
+    'RF': [10],         // Right field slot
+    'DH': [11],         // Designated hitter slot
+    'UTIL': [12],       // Utility slot
+    'P': [13],          // General pitcher slot
+    'SP': [14],         // Starting pitcher slot
+    'RP': [15],         // Relief pitcher slot
+    'IF': [19],         // Infield slot (1B/2B/SS/3B)
+    // Compound filters for convenience
+    'OUTFIELD': [5, 8, 9, 10],    // All outfield slots (OF, LF, CF, RF)
+    'INFIELD': [1, 2, 3, 4, 19],  // All infield slots (1B, 2B, 3B, SS, IF)
+    'PITCHER': [13, 14, 15],      // All pitcher slots (P, SP, RP)
+    'ALL': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 19]
   };
 
   async fetchFreeAgents(
