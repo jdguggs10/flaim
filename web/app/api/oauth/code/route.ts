@@ -20,6 +20,7 @@ export async function POST(request: NextRequest) {
       redirect_uri: string;
       scope?: string;
       state?: string;
+      client_id?: string;
       code_challenge?: string;
       code_challenge_method?: string;
       resource?: string; // RFC 8707
@@ -50,6 +51,7 @@ export async function POST(request: NextRequest) {
         redirect_uri: body.redirect_uri,
         scope: body.scope,
         state: body.state,
+        client_id: body.client_id,
         code_challenge: body.code_challenge,
         code_challenge_method: body.code_challenge_method,
         resource: body.resource // RFC 8707

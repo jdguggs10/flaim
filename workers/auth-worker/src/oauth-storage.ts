@@ -43,6 +43,13 @@ export interface OAuthToken {
   refreshTokenExpiresAt?: Date;
 }
 
+export interface OAuthState {
+  state: string;
+  redirectUri: string;
+  clientId?: string;
+  expiresAt: Date;
+}
+
 export interface CreateCodeParams {
   userId: string;
   redirectUri: string;
@@ -62,6 +69,13 @@ export interface CreateTokenParams {
   expiresInSeconds?: number; // Default: 3600 (1 hour)
   includeRefreshToken?: boolean;
   refreshTokenExpiresInSeconds?: number; // Default: 604800 (7 days)
+}
+
+export interface CreateStateParams {
+  state: string;
+  redirectUri: string;
+  clientId?: string;
+  expiresInSeconds?: number; // Default: 600 (10 minutes)
 }
 
 export interface TokenValidationResult {
@@ -179,6 +193,66 @@ export class OAuthStorage {
 
     console.log(`[oauth-storage] Created auth code for user ${maskUserId(params.userId)}, expires in ${expiresInSeconds}s`);
     return code;
+  }
+
+  // ---------------------------------------------------------------------------
+  // OAUTH STATE (CSRF PROTECTION)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Store OAuth state for server-side validation
+   */
+  async createOAuthState(params: CreateStateParams): Promise<void> {
+    const expiresInSeconds = params.expiresInSeconds ?? 600; // 10 minutes default
+    const expiresAt = new Date(Date.now() + expiresInSeconds * 1000);
+
+    const { error } = await this.supabase.from('oauth_states').insert({
+      state: params.state,
+      redirect_uri: params.redirectUri,
+      client_id: params.clientId || null,
+      expires_at: expiresAt.toISOString(),
+    });
+
+    if (error) {
+      console.error('[oauth-storage] Failed to store OAuth state:', error);
+      throw new Error('Failed to store OAuth state');
+    }
+  }
+
+  /**
+   * Validate and consume OAuth state (single-use)
+   */
+  async consumeOAuthState(
+    state: string,
+    redirectUri: string,
+    clientId?: string
+  ): Promise<boolean> {
+    const { data, error } = await this.supabase
+      .from('oauth_states')
+      .select('state, redirect_uri, client_id, expires_at')
+      .eq('state', state)
+      .single();
+
+    if (error || !data) {
+      return false;
+    }
+
+    const expiresAt = new Date(data.expires_at);
+    if (Number.isNaN(expiresAt.getTime()) || expiresAt.getTime() < Date.now()) {
+      await this.supabase.from('oauth_states').delete().eq('state', state);
+      return false;
+    }
+
+    if (data.redirect_uri !== redirectUri) {
+      return false;
+    }
+
+    if (clientId && data.client_id && data.client_id !== clientId) {
+      return false;
+    }
+
+    await this.supabase.from('oauth_states').delete().eq('state', state);
+    return true;
   }
 
   /**

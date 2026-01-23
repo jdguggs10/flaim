@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { auth } from '@clerk/nextjs/server';
 
 export async function GET(request: NextRequest) {
+  const { userId } = await auth();
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   const { searchParams } = new URL(request.url);
   const fileId = searchParams.get("file_id");
   const containerId = searchParams.get("container_id");
@@ -9,9 +14,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Missing file_id" }, { status: 400 });
   }
   try {
-    const url = containerId
-      ? `https://api.openai.com/v1/containers/${containerId}/files/${fileId}/content`
-      : `https://api.openai.com/v1/container-files/${fileId}/content`;
+    const safeFileId = encodeURIComponent(fileId);
+    const safeContainerId = containerId ? encodeURIComponent(containerId) : null;
+    const safeFilename = (filename ?? fileId).replace(/[\r\n]/g, "").replace(/[\\/]/g, "_");
+    const url = safeContainerId
+      ? `https://api.openai.com/v1/containers/${safeContainerId}/files/${safeFileId}/content`
+      : `https://api.openai.com/v1/container-files/${safeFileId}/content`;
     const res = await fetch(url, {
       headers: {
         Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
@@ -22,7 +30,7 @@ export async function GET(request: NextRequest) {
     return new Response(blob, {
       headers: {
         "Content-Type": res.headers.get("Content-Type") || "application/octet-stream",
-        "Content-Disposition": `attachment; filename=${filename ?? fileId}`,
+        "Content-Disposition": `attachment; filename=\"${safeFilename}\"`,
       },
     });
   } catch (err) {

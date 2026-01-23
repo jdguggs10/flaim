@@ -8,14 +8,14 @@ Flaim connects your ESPN fantasy leagues to AI assistants like Claude and ChatGP
 2. **Sync ESPN credentials** — Install the [Chrome extension](https://chromewebstore.google.com/detail/flaim-espn-fantasy-connec/mbnokejgglkfgkeeenolgdpcnfakpbkn) to sync automatically, or enter them manually
 3. **Leagues auto-discovered** — Extension finds all your leagues + past seasons and saves them
 4. **Pick a default** — Select which league to use by default in AI conversations
-5. **Connect your AI** — Add Flaim as a custom MCP connector in Claude/ChatGPT using the MCP URLs
-6. **Use MCP tools** — Ask about your roster, matchups, standings directly in your AI
+5. **Connect your AI** — Add Flaim as a custom MCP connector in Claude (or ChatGPT in dev) using the MCP URL
+6. **Use MCP tools** — Ask about your roster, matchups, standings, etc. directly in your AI
 
-Bring your own Claude or ChatGPT subscription. Flaim provides the data bridge.
+Bring your own LLM subscription. Flaim provides the data bridge.
 
 ## Automation vs Manual (Quick Clarification)
 
-- **Extension (automatic)**: Runs only when the user clicks **Sync / Re-sync**. It discovers leagues + past seasons and can set a default.
+- **Extension (automatic)**: Auto-pulls ESPN s2/swid and saves to supabase. Runs only when the user clicks **Sync / Re-sync**. It discovers leagues + past seasons and can set a default.
 - **Site (manual)**: `/leagues` is independent. Users can add leagues by ID and manually trigger season discovery.
 
 ## What Flaim Is
@@ -33,7 +33,7 @@ Flaim is **not** a chatbot or AI product itself — it's the bridge that lets yo
 - **Chrome Extension**: Auto-capture ESPN credentials without manual cookie extraction
 - **Auto-Discovery (v1.2.1)**: Fan API-based discovery of leagues + past seasons, with granular status messaging and default selection
 - **Claude + ChatGPT OAuth**: Direct access via MCP protocol (OAuth 2.1)
-- **Live ESPN Data**: Baseball and football MCP workers with real-time stats
+- **Live ESPN Data**: espn-client worker with real-time stats
 - **Multi-League + Multi-Season Support**: Store multiple seasons per league and discover past seasons
 
 ## About
@@ -91,11 +91,11 @@ Solo developer, hobby project. Keep it simple and stable.
 
 | Document | Description |
 |----------|-------------|
-| [Architecture](ARCHITECTURE.md) | System design, deployment, troubleshooting |
-| [Changelog](CHANGELOG.md) | Release history |
-| [Web App](../web/README.md) | Next.js routes, components, environment |
-| [Workers](../workers/README.md) | Cloudflare Workers, MCP tools, ESPN API |
-| [Extension](../extension/README.md) | Chrome extension build, Sync Host, CWS |
+| [Architecture](docs/ARCHITECTURE.md) | System design, deployment, troubleshooting |
+| [Changelog](docs/CHANGELOG.md) | Release history |
+| [Web App](web/README.md) | Next.js routes, components, environment |
+| [Workers](workers/README.md) | Cloudflare Workers, MCP tools, ESPN API |
+| [Extension](extension/README.md) | Chrome extension build, Sync Host, CWS |
 
 ### Quick Start (Development)
 
@@ -117,4 +117,4 @@ This is a solo indie project with best-effort support. I'll do my best to respon
 
 ## License
 
-MIT License - see [LICENSE](../LICENSE).
+MIT License - see [LICENSE](LICENSE).

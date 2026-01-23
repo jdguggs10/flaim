@@ -28,6 +28,7 @@ describe('fantasy-mcp router', () => {
   describe('routeToClient', () => {
     it('forwards requests to the ESPN binding', async () => {
       const authHeader = 'Bearer token123';
+      const correlationId = 'corr-123';
       const params: ToolParams = {
         platform: 'espn',
         sport: 'football',
@@ -45,6 +46,7 @@ describe('fantasy-mcp router', () => {
             expect(request.url).toBe('https://internal/execute');
             expect(request.headers.get('Content-Type')).toBe('application/json');
             expect(request.headers.get('Authorization')).toBe(authHeader);
+            expect(request.headers.get('X-Correlation-ID')).toBe(correlationId);
             expect(await request.json()).toEqual({
               tool: 'get_standings',
               params,
@@ -58,7 +60,7 @@ describe('fantasy-mcp router', () => {
         },
       } as unknown as Env;
 
-      const result = await routeToClient(env, 'get_standings', params, authHeader);
+      const result = await routeToClient(env, 'get_standings', params, authHeader, correlationId);
 
       expect(result).toEqual(responseBody);
     });

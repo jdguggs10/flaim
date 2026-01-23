@@ -17,7 +17,8 @@ const GAME_ID = 'flb'; // ESPN's game ID for fantasy baseball
 type HandlerFn = (
   env: Env,
   params: ToolParams,
-  authHeader?: string
+  authHeader?: string,
+  correlationId?: string
 ) => Promise<ExecuteResponse>;
 
 export const baseballHandlers: Record<string, HandlerFn> = {
@@ -34,12 +35,13 @@ export const baseballHandlers: Record<string, HandlerFn> = {
 async function handleGetLeagueInfo(
   env: Env,
   params: ToolParams,
-  authHeader?: string
+  authHeader?: string,
+  correlationId?: string
 ): Promise<ExecuteResponse> {
   const { league_id, season_year } = params;
 
   try {
-    const credentials = await getCredentials(env, authHeader);
+    const credentials = await getCredentials(env, authHeader, correlationId);
 
     const path = `/seasons/${season_year}/segments/0/leagues/${league_id}?view=mSettings`;
     const response = await espnFetch(path, GAME_ID, { credentials, timeout: 7000 });
@@ -100,12 +102,13 @@ async function handleGetLeagueInfo(
 async function handleGetStandings(
   env: Env,
   params: ToolParams,
-  authHeader?: string
+  authHeader?: string,
+  correlationId?: string
 ): Promise<ExecuteResponse> {
   const { league_id, season_year } = params;
 
   try {
-    const credentials = await getCredentials(env, authHeader);
+    const credentials = await getCredentials(env, authHeader, correlationId);
 
     const path = `/seasons/${season_year}/segments/0/leagues/${league_id}?view=mStandings&view=mTeam`;
     const response = await espnFetch(path, GAME_ID, { credentials, timeout: 7000 });
@@ -176,12 +179,13 @@ async function handleGetStandings(
 async function handleGetMatchups(
   env: Env,
   params: ToolParams,
-  authHeader?: string
+  authHeader?: string,
+  correlationId?: string
 ): Promise<ExecuteResponse> {
   const { league_id, season_year, week } = params;
 
   try {
-    const credentials = await getCredentials(env, authHeader);
+    const credentials = await getCredentials(env, authHeader, correlationId);
 
     let path = `/seasons/${season_year}/segments/0/leagues/${league_id}?view=mMatchupScore&view=mScoreboard`;
     if (week) {
@@ -241,12 +245,13 @@ async function handleGetMatchups(
 async function handleGetRoster(
   env: Env,
   params: ToolParams,
-  authHeader?: string
+  authHeader?: string,
+  correlationId?: string
 ): Promise<ExecuteResponse> {
   const { league_id, season_year, team_id, week } = params;
 
   try {
-    const credentials = await getCredentials(env, authHeader);
+    const credentials = await getCredentials(env, authHeader, correlationId);
     requireCredentials(credentials, 'roster data');
 
     let path = `/seasons/${season_year}/segments/0/leagues/${league_id}?view=mRoster`;
@@ -330,12 +335,13 @@ async function handleGetRoster(
 async function handleGetFreeAgents(
   env: Env,
   params: ToolParams,
-  authHeader?: string
+  authHeader?: string,
+  correlationId?: string
 ): Promise<ExecuteResponse> {
   const { league_id, season_year, position, count } = params;
 
   try {
-    const credentials = await getCredentials(env, authHeader);
+    const credentials = await getCredentials(env, authHeader, correlationId);
     requireCredentials(credentials, 'free agent data');
 
     const positionKey = (position || 'ALL').toUpperCase();

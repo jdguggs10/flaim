@@ -6,6 +6,7 @@ import { getUnifiedTools } from './tools';
 export interface McpContext {
   env: Env;
   authHeader: string | null;
+  correlationId?: string;
 }
 
 /**
@@ -13,7 +14,7 @@ export interface McpContext {
  * Uses closure capture to make env/authHeader available to tool handlers.
  */
 export function createFantasyMcpServer(ctx: McpContext): McpServer {
-  const { env, authHeader } = ctx;
+  const { env, authHeader, correlationId } = ctx;
 
   const server = new McpServer({
     name: 'fantasy-mcp',
@@ -30,7 +31,7 @@ export function createFantasyMcpServer(ctx: McpContext): McpServer {
         inputSchema: tool.inputSchema,
         annotations: { readOnlyHint: true },
       },
-      async (args) => tool.handler(args, env, authHeader || undefined)
+      async (args) => tool.handler(args, env, authHeader || undefined, correlationId)
     );
   }
 

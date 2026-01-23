@@ -15,6 +15,14 @@ This document presents a comprehensive architectural review of the Flaim codebas
 - **High:** Significant code duplication across workers (~80% identical handler code)
 - **Medium:** Inconsistent error handling patterns across 4+ different response formats
 
+### Completed in Jan 2026 (Summary)
+
+- Secured container file proxy (auth + input hardening), removed `X-User-Id` header leakage, randomized DCR client IDs.
+- Tightened CORS allowlist; added CSRF origin checks for state‑changing `/api/*` requests.
+- Added lightweight OAuth + MCP tool tests; marked testing as sufficient for current phase.
+- Enabled traces + correlation IDs across the unified worker path; deferred structured logging/error tracking/alerting.
+- Added `docs/DATABASE.md` and `docs/TESTING.md`; added basic security headers; added OAuth state validation and vector store upload size limit.
+
 ---
 
 ## Table of Contents
@@ -37,15 +45,21 @@ This document presents a comprehensive architectural review of the Flaim codebas
 
 **Location:** `/web/app/api/chat/container_files/content/route.ts`
 
-**Issue:** This endpoint accepts a URL parameter and fetches file content without any authentication check. An attacker could potentially access files by providing arbitrary URLs.
+**Issue:** This endpoint proxies OpenAI container file content using the server API key without any authentication check. Any external actor could fetch arbitrary container files if they can guess IDs.
 
-**Current Code:**
+**Current Code (pre-fix):**
 ```typescript
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const url = searchParams.get("url");
+  const fileId = searchParams.get("file_id");
+  const containerId = searchParams.get("container_id");
   // No authentication check
-  const response = await fetch(url, { headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` }});
+  const url = containerId
+    ? `https://api.openai.com/v1/containers/${containerId}/files/${fileId}/content`
+    : `https://api.openai.com/v1/container-files/${fileId}/content`;
+  const response = await fetch(url, {
+    headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` }
+  });
 }
 ```
 
@@ -63,6 +77,8 @@ export async function GET(request: Request) {
 ```
 
 **Defense:** Authentication is a fundamental security control. Without it, any external actor can invoke this endpoint. The June 2025 MCP specification updates explicitly require that "authorization MUST be included in every HTTP request" ([MCP Authorization Spec](https://modelcontextprotocol.io/specification/2025-03-26/basic/authorization)).
+
+**Status (2026-01-23):** Fixed — added Clerk auth check, encoded IDs, and sanitized/quoted filename in `Content-Disposition`.
 
 ---
 
@@ -91,6 +107,8 @@ Remove the `X-User-Id` header entirely, or if needed for debugging, mask it:
 
 **Defense:** User IDs, even opaque ones, should not be exposed in response headers. They can be correlated with other data leaks to build user profiles. The principle of least privilege applies to information disclosure.
 
+**Status (2026-01-23):** Fixed — removed `X-User-Id` from auth-worker responses.
+
 ---
 
 ### 1.3 High: Deterministic OAuth Client ID Generation
@@ -114,6 +132,8 @@ const clientId = `mcp-${crypto.randomUUID()}`;
 
 **Defense:** RFC 7591 (Dynamic Client Registration) recommends that client identifiers be unique and unpredictable. Deterministic generation creates a collision risk and allows client impersonation ([RFC 7591 Section 3.2.1](https://datatracker.ietf.org/doc/html/rfc7591#section-3.2.1)).
 
+**Status (2026-01-23):** Fixed — generate `client_id` with `crypto.randomUUID()` instead of hashing `software_id`/`redirect_uri`.
+
 ---
 
 ### 1.4 Medium: Broad CORS Wildcard Configuration
@@ -132,16 +152,19 @@ const ALLOWED_ORIGINS = [
 ```
 
 **Proposed Fix:**
-Restrict to specific Vercel deployment patterns:
+Restrict to Flaim preview/production Vercel domains:
 ```typescript
 const ALLOWED_ORIGINS = [
-  /^https:\/\/flaim-[a-z0-9]+-[a-z0-9]+\.vercel\.app$/,  // Preview deployments
+  'https://flaim-*.vercel.app',  // Preview deployments
+  'https://flaim.vercel.app',    // Vercel production domain
   'https://flaim.app',
   'https://www.flaim.app',
 ];
 ```
 
 **Defense:** CORS wildcards are a common attack vector. An attacker can deploy a malicious site on Vercel and make cross-origin requests to Flaim APIs. The fix restricts to only legitimate preview deployments matching the Flaim naming pattern.
+
+**Status (2026-01-23):** Fixed — replaced `https://*.vercel.app` with `https://flaim-*.vercel.app` and added `https://flaim.vercel.app`.
 
 ---
 
@@ -167,6 +190,8 @@ export async function POST(request: Request) {
 
 **Defense:** Defense-in-depth requires multiple layers of CSRF protection. SameSite cookies help but are not sufficient alone, especially for older browsers or when cookies need cross-site access.
 
+**Status (2026-01-23):** Mitigated — added origin/referer allowlist checks for state‑changing `/api/*` requests in `web/middleware.ts` (skips extension bearer‑token routes).
+
 ---
 
 ### 1.6 Additional Security Recommendations
@@ -177,6 +202,8 @@ export async function POST(request: Request) {
 | Missing security headers | Medium | Add `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY` |
 | File upload without size limits | Low | Add `maxFileSize` validation in upload endpoints |
 | State parameter not server-validated | Medium | Store and verify OAuth state server-side |
+
+**Status (2026-01-23):** Partially addressed — added `X-Content-Type-Options: nosniff` and `X-Frame-Options: DENY` via `web/next.config.mjs`; added OAuth state storage/validation; added file upload size limit for vector store uploads. CSP still deferred.
 
 ---
 
@@ -248,6 +275,8 @@ describe('OAuth 2.1 Flow', () => {
 
 **Defense:** The June 2025 MCP specification mandates OAuth 2.1 with PKCE for all client types ([MCP Auth Spec](https://modelcontextprotocol.io/specification/2025-03-26/basic/authorization)). Without tests, PKCE verification bugs could allow token theft via code interception attacks.
 
+**Status (2026-01-23):** Sufficient for current phase — added unit tests for DCR client_id uniqueness, /authorize PKCE/redirect_uri validation, and /token exchange success + invalid_grant (auth-worker). Defer full integration flow until real users/traffic.
+
 ---
 
 ### 2.3 Critical: Zero Tests for MCP Tools
@@ -296,6 +325,8 @@ describe('MCP Tools', () => {
 ```
 
 **Defense:** MCP tools are the primary interface for AI agents. Untested tools could return incorrect data that AI models would propagate to users, causing incorrect fantasy sports decisions.
+
+**Status (2026-01-23):** Sufficient for current phase — added minimal tests for unified tool set, get_user_session auth/empty behavior, and get_league_info routing success (fantasy-mcp). Expand only if tool logic changes.
 
 ---
 
@@ -439,6 +470,8 @@ const response = await fetch(url, {
 
 **Defense:** Cloudflare's [observability documentation](https://developers.cloudflare.com/workers/observability/) emphasizes that distributed tracing is essential for debugging production issues in multi-worker architectures. Without it, correlating logs across services requires manual timestamp matching.
 
+**Status (2026-01-23):** Partially addressed — enabled traces (100% sampling for now) in all workers and added correlation ID propagation between fantasy-mcp → espn-client → auth-worker, with `X-Correlation-ID` returned to callers.
+
 ---
 
 ### 3.3 High: No Structured Logging
@@ -499,6 +532,8 @@ logger.info('Fetching credentials', { userId: maskUserId(userId) });
 
 **Defense:** Cloudflare's Workers Logs [automatically extracts JSON fields](https://developers.cloudflare.com/workers/observability/logs/workers-logs/) for filtering in the dashboard. Structured logs enable queries like "show all errors for service=auth-worker in the last hour."
 
+**Status (2026-01-23):** Deferred — current traffic is near zero; revisit when usage grows or debugging becomes painful.
+
 ---
 
 ### 3.4 High: No Error Tracking Service
@@ -537,6 +572,8 @@ api.onError((err, c) => {
 
 **Defense:** Error tracking services provide deduplication, stack trace grouping, and alerting. This is essential for catching regressions before users report them.
 
+**Status (2026-01-23):** Deferred — not needed until real user traffic or repeated error triage.
+
 ---
 
 ### 3.5 Medium: No Alerting Configuration
@@ -564,6 +601,8 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 ```
+
+**Status (2026-01-23):** Deferred — no active user traffic; add basic uptime checks when usage grows.
 
 ---
 
@@ -967,6 +1006,8 @@ Stores ESPN authentication cookies (encrypted at rest).
 | email | TEXT | ESPN account email (optional) |
 ```
 
+**Status (2026-01-23):** Addressed — added `docs/DATABASE.md` with current Supabase tables and notes.
+
 ---
 
 ### 6.3 High: Missing Testing Guide
@@ -977,6 +1018,8 @@ Stores ESPN authentication cookies (encrypted at rest).
 - Writing tests for different components
 - Mocking strategies
 - Coverage requirements
+
+**Status (2026-01-23):** Addressed — added `docs/TESTING.md` (lightweight, worker‑focused).
 
 ---
 

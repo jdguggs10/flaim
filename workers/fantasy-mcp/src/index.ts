@@ -3,6 +3,8 @@ import { Hono } from 'hono';
 import {
   createMcpCorsHeaders,
   isCorsPreflightRequest,
+  CORRELATION_ID_HEADER,
+  getCorrelationId,
 } from '@flaim/worker-shared';
 import type { Env } from './types';
 import { createFantasyMcpServer } from './mcp/server';
@@ -105,6 +107,7 @@ function buildMcpAuthErrorResponse(request: Request): Response {
 
 // MCP endpoints - handle both /mcp (direct) and /fantasy/mcp (via route pattern)
 app.all('/mcp', async (c) => {
+  const correlationId = getCorrelationId(c.req.raw);
   // Check for Authorization header
   const authHeader = c.req.header('Authorization');
   if (!authHeader) {
@@ -115,14 +118,18 @@ app.all('/mcp', async (c) => {
   const server = createFantasyMcpServer({
     env: c.env,
     authHeader,
+    correlationId,
   });
   const handler = createMcpHandler(server);
 
   // Handle the request
-  return handler(c.req.raw, c.env, c.executionCtx);
+  const response = await handler(c.req.raw, c.env, c.executionCtx);
+  response.headers.set(CORRELATION_ID_HEADER, correlationId);
+  return response;
 });
 
 app.all('/mcp/*', async (c) => {
+  const correlationId = getCorrelationId(c.req.raw);
   // Check for Authorization header
   const authHeader = c.req.header('Authorization');
   if (!authHeader) {
@@ -133,11 +140,14 @@ app.all('/mcp/*', async (c) => {
   const server = createFantasyMcpServer({
     env: c.env,
     authHeader,
+    correlationId,
   });
   const handler = createMcpHandler(server);
 
   // Handle the request
-  return handler(c.req.raw, c.env, c.executionCtx);
+  const response = await handler(c.req.raw, c.env, c.executionCtx);
+  response.headers.set(CORRELATION_ID_HEADER, correlationId);
+  return response;
 });
 
 // Routes via api.flaim.app/fantasy/* (Cloudflare route passes full path)
@@ -172,6 +182,7 @@ app.get('/fantasy/health', async (c) => {
 });
 
 app.all('/fantasy/mcp', async (c) => {
+  const correlationId = getCorrelationId(c.req.raw);
   const authHeader = c.req.header('Authorization');
   if (!authHeader) {
     return buildMcpAuthErrorResponse(c.req.raw);
@@ -180,12 +191,16 @@ app.all('/fantasy/mcp', async (c) => {
   const server = createFantasyMcpServer({
     env: c.env,
     authHeader,
+    correlationId,
   });
   const handler = createMcpHandler(server);
-  return handler(c.req.raw, c.env, c.executionCtx);
+  const response = await handler(c.req.raw, c.env, c.executionCtx);
+  response.headers.set(CORRELATION_ID_HEADER, correlationId);
+  return response;
 });
 
 app.all('/fantasy/mcp/*', async (c) => {
+  const correlationId = getCorrelationId(c.req.raw);
   const authHeader = c.req.header('Authorization');
   if (!authHeader) {
     return buildMcpAuthErrorResponse(c.req.raw);
@@ -194,9 +209,12 @@ app.all('/fantasy/mcp/*', async (c) => {
   const server = createFantasyMcpServer({
     env: c.env,
     authHeader,
+    correlationId,
   });
   const handler = createMcpHandler(server);
-  return handler(c.req.raw, c.env, c.executionCtx);
+  const response = await handler(c.req.raw, c.env, c.executionCtx);
+  response.headers.set(CORRELATION_ID_HEADER, correlationId);
+  return response;
 });
 
 // 404 handler
