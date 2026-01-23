@@ -8,6 +8,7 @@ import {
   getProTeamAbbrev,
   getInjuryStatus,
   transformEligiblePositions,
+  POSITION_SLOTS,
 } from './mappings';
 
 const GAME_ID = 'ffl'; // ESPN's game ID for fantasy football
@@ -24,6 +25,7 @@ export const footballHandlers: Record<string, HandlerFn> = {
   get_standings: handleGetStandings,
   get_matchups: handleGetMatchups,
   get_roster: handleGetRoster,
+  get_free_agents: handleGetFreeAgents,
 };
 
 /**
@@ -310,6 +312,90 @@ async function handleGetRoster(
           ? `${team.location} ${team.nickname}`
           : team.name || `Team ${team.id}`,
         roster
+      }
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error occurred',
+      code: extractErrorCode(error)
+    };
+  }
+}
+
+/**
+ * Get available free agents
+ */
+async function handleGetFreeAgents(
+  env: Env,
+  params: ToolParams,
+  authHeader?: string,
+  correlationId?: string
+): Promise<ExecuteResponse> {
+  const { league_id, season_year, position, count } = params;
+
+  try {
+    const credentials = await getCredentials(env, authHeader, correlationId);
+    requireCredentials(credentials, 'free agent data');
+
+    const positionKey = (position || 'ALL').toUpperCase();
+    const slotIds = POSITION_SLOTS[positionKey] || POSITION_SLOTS['ALL'];
+    const limit = Math.min(Math.max(1, count || 25), 100);
+
+    const path = `/seasons/${season_year}/segments/0/leagues/${league_id}?view=kona_player_info`;
+
+    // Build the X-Fantasy-Filter header for free agents
+    const filter = {
+      players: {
+        filterStatus: { value: ['FREEAGENT', 'WAIVERS'] },
+        filterSlotIds: { value: slotIds },
+        sortPercOwned: { sortPriority: 1, sortAsc: false },
+        sortDraftRanks: { sortPriority: 100, sortAsc: true, value: 'STANDARD' },
+        limit: limit
+      }
+    };
+
+    const response = await espnFetch(path, GAME_ID, {
+      credentials,
+      timeout: 7000,
+      headers: {
+        'X-Fantasy-Filter': JSON.stringify(filter)
+      }
+    });
+
+    if (!response.ok) {
+      handleEspnError(response);
+    }
+
+    const data = await response.json() as any;
+    const players = data.players || [];
+
+    // Transform player data (no stats field for football, matching roster handler)
+    const freeAgents = players.map((entry: any) => {
+      const player = entry.player || {};
+
+      return {
+        playerId: player.id,
+        name: player.fullName || 'Unknown',
+        position: getPositionName(player.defaultPositionId || 0),
+        eligiblePositions: transformEligiblePositions(player.eligibleSlots || []),
+        proTeam: getProTeamAbbrev(player.proTeamId || 0),
+        injuryStatus: player.injuryStatus ? getInjuryStatus(player.injuryStatus) : undefined,
+        percentOwned: player.ownership?.percentOwned,
+        percentStarted: player.ownership?.percentStarted,
+        status: entry.status, // FREEAGENT or WAIVERS
+        waiverPosition: entry.waiverProcessDate
+      };
+    });
+
+    return {
+      success: true,
+      data: {
+        leagueId: league_id,
+        seasonYear: season_year,
+        position: positionKey,
+        count: freeAgents.length,
+        freeAgents
       }
     };
   } catch (error) {
