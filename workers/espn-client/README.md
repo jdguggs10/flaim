@@ -64,6 +64,50 @@ interface ExecuteRequest {
 - `get_roster` - Team roster with player stats
 - `get_free_agents` - Available free agents
 
+## Mappings Architecture
+
+Each sport has a dedicated `mappings.ts` file that transforms ESPN's internal numeric IDs into human-readable names. This is a **deliberate design choice for consistency** across all sports.
+
+### Why mappings exist
+
+ESPN Fantasy APIs use internal numeric IDs for positions, teams, roster slots, and stats. These IDs:
+- Don't match public ESPN API IDs
+- Don't match league-specific IDs (NFL, MLB, etc.)
+- Use different ID spaces for player positions vs roster slots
+
+### Per-sport mapping files
+
+| Sport | File | Documentation |
+|-------|------|---------------|
+| Football | `src/sports/football/mappings.ts` | [FOOTBALL_MAPPINGS.md](./FOOTBALL_MAPPINGS.md) |
+| Baseball | `src/sports/baseball/mappings.ts` | [BASEBALL_MAPPINGS.md](./BASEBALL_MAPPINGS.md) |
+
+### Standard mapping structure
+
+Each sport's mappings.ts exports:
+
+| Export | Purpose |
+|--------|---------|
+| `POSITION_MAP` | Player's natural position (`defaultPositionId` → name) |
+| `LINEUP_SLOT_MAP` | Roster slot positions (`lineupSlotId` → name) |
+| `PRO_TEAM_MAP` | Pro team abbreviations (`proTeamId` → abbrev) |
+| `INJURY_STATUS_MAP` | Injury status display names |
+| `POSITION_SLOTS` | Free agent filter groups (position → slot IDs) |
+| `getPositionName()` | Transform position ID with fallback |
+| `getLineupSlotName()` | Transform slot ID with fallback |
+| `getProTeamAbbrev()` | Transform team ID with fallback |
+| `getInjuryStatus()` | Transform injury code |
+| `transformEligiblePositions()` | Transform eligibleSlots array |
+
+Baseball additionally exports stat mappings (`BATTING_STATS_MAP`, `PITCHING_STATS_MAP`, `transformStats()`).
+
+### Adding a new sport
+
+When adding basketball or hockey:
+1. Create `src/sports/{sport}/mappings.ts` following the standard structure
+2. Create `{SPORT}_MAPPINGS.md` documenting the ID mappings and verification sources
+3. Add handlers in `src/sports/{sport}/handlers.ts`
+
 ## Development
 
 ```bash
@@ -84,4 +128,8 @@ wrangler dev --env dev --port 8789
 
 - [`fantasy-mcp`](../fantasy-mcp/) - Unified MCP gateway that calls this worker
 - [`auth-worker`](../auth-worker/) - Provides ESPN credentials
-- [`BASEBALL_MAPPINGS`](./BASEBALL_MAPPINGS.md) - ESPN Fantasy Baseball mapping notes (IDs, verification, rationale)
+
+### Mapping Documentation
+
+- [`FOOTBALL_MAPPINGS.md`](./FOOTBALL_MAPPINGS.md) - ESPN Fantasy Football mapping notes
+- [`BASEBALL_MAPPINGS.md`](./BASEBALL_MAPPINGS.md) - ESPN Fantasy Baseball mapping notes
