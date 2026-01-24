@@ -384,7 +384,7 @@ async function handleGetFreeAgents(
         percentOwned: player.ownership?.percentOwned,
         percentStarted: player.ownership?.percentStarted,
         status: entry.status, // FREEAGENT or WAIVERS
-        waiverPosition: entry.waiverProcessDate
+        waiverProcessDate: entry.waiverProcessDate
       };
     });
 
