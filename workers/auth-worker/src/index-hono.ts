@@ -35,6 +35,14 @@ import {
   type DiscoveredLeague,
   type CurrentSeasonLeague,
 } from './v3/league-discovery';
+import {
+  handleYahooAuthorize,
+  handleYahooCallback,
+  handleYahooCredentials,
+  handleYahooDisconnect,
+  handleYahooStatus,
+  YahooConnectEnv,
+} from './yahoo-connect-handlers';
 
 // =============================================================================
 // TYPES
@@ -45,6 +53,9 @@ export interface Env {
   SUPABASE_SERVICE_KEY: string;
   NODE_ENV?: string;
   ENVIRONMENT?: string; // 'dev' | 'preview' | 'prod'
+  // Yahoo OAuth
+  YAHOO_CLIENT_ID?: string;
+  YAHOO_CLIENT_SECRET?: string;
 }
 
 type Jwk = {
@@ -646,6 +657,63 @@ api.post('/extension/set-default', async (c) => {
 });
 
 // =============================================================================
+// YAHOO CONNECT ENDPOINTS (Platform OAuth - Flaim as CLIENT)
+// =============================================================================
+
+// Redirect to Yahoo OAuth (requires Clerk JWT)
+api.get('/connect/yahoo/authorize', async (c) => {
+  const { userId, error: authError } = await getVerifiedUserId(c.req.raw, c.env);
+  if (!userId) {
+    return c.json({
+      error: 'unauthorized',
+      error_description: authError || 'Authentication required',
+    }, 401);
+  }
+  return handleYahooAuthorize(c.env as YahooConnectEnv, userId, getCorsHeaders(c.req.raw));
+});
+
+// Yahoo OAuth callback (public - Yahoo redirects here)
+api.get('/connect/yahoo/callback', async (c) => {
+  return handleYahooCallback(c.req.raw, c.env as YahooConnectEnv, getCorsHeaders(c.req.raw));
+});
+
+// Get Yahoo credentials (internal use - requires auth)
+api.get('/connect/yahoo/credentials', async (c) => {
+  const { userId, error: authError } = await getVerifiedUserId(c.req.raw, c.env);
+  if (!userId) {
+    return c.json({
+      error: 'unauthorized',
+      error_description: authError || 'Authentication required',
+    }, 401);
+  }
+  return handleYahooCredentials(c.env as YahooConnectEnv, userId, getCorsHeaders(c.req.raw));
+});
+
+// Check Yahoo connection status (requires Clerk JWT)
+api.get('/connect/yahoo/status', async (c) => {
+  const { userId, error: authError } = await getVerifiedUserId(c.req.raw, c.env);
+  if (!userId) {
+    return c.json({
+      error: 'unauthorized',
+      error_description: authError || 'Authentication required',
+    }, 401);
+  }
+  return handleYahooStatus(c.env as YahooConnectEnv, userId, getCorsHeaders(c.req.raw));
+});
+
+// Disconnect Yahoo (requires Clerk JWT)
+api.delete('/connect/yahoo/disconnect', async (c) => {
+  const { userId, error: authError } = await getVerifiedUserId(c.req.raw, c.env);
+  if (!userId) {
+    return c.json({
+      error: 'unauthorized',
+      error_description: authError || 'Authentication required',
+    }, 401);
+  }
+  return handleYahooDisconnect(c.env as YahooConnectEnv, userId, getCorsHeaders(c.req.raw));
+});
+
+// =============================================================================
 // CREDENTIALS ENDPOINTS
 // =============================================================================
 
@@ -1103,6 +1171,11 @@ api.notFound((c) => {
       '/extension/connection': 'GET - Extension connection info',
       '/extension/discover': 'POST - Discover and save leagues',
       '/extension/set-default': 'POST - Set default league',
+      '/connect/yahoo/authorize': 'GET - Start Yahoo OAuth flow',
+      '/connect/yahoo/callback': 'GET - Yahoo OAuth callback (public)',
+      '/connect/yahoo/credentials': 'GET - Get Yahoo access token',
+      '/connect/yahoo/status': 'GET - Check Yahoo connection status',
+      '/connect/yahoo/disconnect': 'DELETE - Disconnect Yahoo account',
     },
     storage: 'supabase',
     oauth: 'enabled',

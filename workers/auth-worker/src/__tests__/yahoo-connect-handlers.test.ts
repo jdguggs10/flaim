@@ -257,7 +257,7 @@ describe('yahoo-connect-handlers', () => {
       const response = await handleYahooCredentials(env, 'user_123', corsHeaders);
 
       expect(response.status).toBe(200);
-      const body = await response.json();
+      const body = (await response.json()) as Record<string, unknown>;
       expect(body.access_token).toBe('fresh-access-token');
     });
 
@@ -285,7 +285,7 @@ describe('yahoo-connect-handlers', () => {
       const response = await handleYahooCredentials(env, 'user_123', corsHeaders);
 
       expect(response.status).toBe(200);
-      const body = await response.json();
+      const body = (await response.json()) as Record<string, unknown>;
       expect(body.access_token).toBe('new-access-token');
 
       // Verify credentials were updated
@@ -304,7 +304,7 @@ describe('yahoo-connect-handlers', () => {
       const response = await handleYahooCredentials(env, 'user_123', corsHeaders);
 
       expect(response.status).toBe(404);
-      const body = await response.json();
+      const body = (await response.json()) as Record<string, unknown>;
       expect(body.error).toBe('not_connected');
     });
 
@@ -331,7 +331,7 @@ describe('yahoo-connect-handlers', () => {
       const response = await handleYahooCredentials(env, 'user_123', corsHeaders);
 
       expect(response.status).toBe(401);
-      const body = await response.json();
+      const body = (await response.json()) as Record<string, unknown>;
       expect(body.error).toBe('refresh_failed');
     });
   });
@@ -345,7 +345,7 @@ describe('yahoo-connect-handlers', () => {
       const response = await handleYahooDisconnect(env, 'user_123', corsHeaders);
 
       expect(response.status).toBe(200);
-      const body = await response.json();
+      const body = (await response.json()) as Record<string, unknown>;
       expect(body.success).toBe(true);
 
       expect(mockStorage.deleteYahooCredentials).toHaveBeenCalledWith('user_123');
@@ -359,7 +359,7 @@ describe('yahoo-connect-handlers', () => {
       const response = await handleYahooDisconnect(env, 'nonexistent_user', corsHeaders);
 
       expect(response.status).toBe(200);
-      const body = await response.json();
+      const body = (await response.json()) as Record<string, unknown>;
       expect(body.success).toBe(true);
     });
   });
@@ -379,7 +379,7 @@ describe('yahoo-connect-handlers', () => {
       const response = await handleYahooStatus(env, 'user_123', corsHeaders);
 
       expect(response.status).toBe(200);
-      const body = await response.json();
+      const body = (await response.json()) as Record<string, unknown>;
       expect(body.connected).toBe(true);
       expect(body.leagueCount).toBe(2);
     });
@@ -391,7 +391,7 @@ describe('yahoo-connect-handlers', () => {
       const response = await handleYahooStatus(env, 'user_123', corsHeaders);
 
       expect(response.status).toBe(200);
-      const body = await response.json();
+      const body = (await response.json()) as Record<string, unknown>;
       expect(body.connected).toBe(false);
       expect(body.leagueCount).toBe(0);
     });
