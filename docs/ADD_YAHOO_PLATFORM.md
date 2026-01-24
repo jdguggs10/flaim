@@ -72,9 +72,9 @@ Users connect **1 MCP server** and get access to all platforms and sports.
 
 | Worker | Purpose | Service bindings |
 |--------|---------|------------------|
-| `fantasy-mcp` | Gateway. Exposes unified MCP tools. Routes by platform. | ESPN, YAHOO, AUTH |
-| `espn-client` | Internal. ESPN API calls for all sports. | AUTH |
-| `yahoo-client` | Internal. Yahoo API calls for all sports. | AUTH |
+| `fantasy-mcp` | Gateway. Exposes unified MCP tools. Routes by platform. | ESPN, YAHOO, AUTH_WORKER |
+| `espn-client` | Internal. ESPN API calls for all sports. | AUTH_WORKER |
+| `yahoo-client` | Internal. Yahoo API calls for all sports. | AUTH_WORKER |
 | `auth-worker` | Credentials, leagues, OAuth tokens. | None |
 
 **Total: 4 workers** (scales to 5, 6, etc. as platforms are added)
@@ -158,7 +158,7 @@ get_free_agents(platform, sport, league_id, season_year, position?, count?)
   "services": [
     { "binding": "ESPN",  "service": "espn-client"  },
     { "binding": "YAHOO", "service": "yahoo-client" },
-    { "binding": "AUTH",  "service": "auth-worker"  }
+    { "binding": "AUTH_WORKER",  "service": "auth-worker"  }
   ]
 }
 ```

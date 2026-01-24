@@ -6,10 +6,13 @@ import { Button } from '@/components/ui/button';
 import { Copy, Check, Info } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
+const fantasyMcpUrl =
+  process.env.NEXT_PUBLIC_FANTASY_MCP_URL || 'https://api.flaim.app/fantasy/mcp';
+
 const mcpConnectors = [
   {
     name: 'Flaim Fantasy MCP',
-    url: 'https://api.flaim.app/fantasy/mcp',
+    url: fantasyMcpUrl,
     description: 'All sports in one connector',
   },
 ];

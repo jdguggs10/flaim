@@ -326,7 +326,7 @@ Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>"
       ],
       "services": [
         { "binding": "ESPN", "service": "espn-client" },
-        { "binding": "AUTH", "service": "auth-worker" }
+        { "binding": "AUTH_WORKER", "service": "auth-worker" }
       ],
       "vars": {
         "NODE_ENV": "production",
@@ -339,7 +339,7 @@ Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>"
       "workers_dev": true,
       "services": [
         { "binding": "ESPN", "service": "espn-client-preview" },
-        { "binding": "AUTH", "service": "auth-worker-preview" }
+        { "binding": "AUTH_WORKER", "service": "auth-worker-preview" }
       ],
       "vars": {
         "NODE_ENV": "production",
@@ -352,7 +352,7 @@ Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>"
       "workers_dev": true,
       "services": [
         { "binding": "ESPN", "service": "espn-client-dev" },
-        { "binding": "AUTH", "service": "auth-worker-dev" }
+        { "binding": "AUTH_WORKER", "service": "auth-worker-dev" }
       ],
       "vars": {
         "NODE_ENV": "development",
@@ -425,7 +425,7 @@ import type { BaseEnvWithAuth } from '@flaim/worker-shared';
 
 export interface Env extends BaseEnvWithAuth {
   ESPN: Fetcher;      // Service binding to espn-client
-  AUTH: Fetcher;      // Service binding to auth-worker
+  AUTH_WORKER: Fetcher;      // Service binding to auth-worker
   // YAHOO: Fetcher;  // Future: Yahoo client binding
 }
 
@@ -567,7 +567,7 @@ app.get('/health', async (c) => {
     timestamp: new Date().toISOString(),
     bindings: {
       espn: !!c.env.ESPN,
-      auth: !!c.env.AUTH,
+      auth: !!c.env.AUTH_WORKER,
     }
   };
 
@@ -653,7 +653,7 @@ Expected: JSON with `status: "healthy"` or `"degraded"`, `service: "fantasy-mcp"
 git add workers/fantasy-mcp/
 git commit -m "feat: scaffold fantasy-mcp gateway worker
 
-- Add wrangler.jsonc with ESPN and AUTH service bindings
+- Add wrangler.jsonc with ESPN and AUTH_WORKER service bindings
 - Add router.ts for platform routing via service bindings
 - Add basic Hono app with /health and MCP endpoint stubs
 - Add types for Platform, Sport, ToolParams
@@ -1795,7 +1795,7 @@ app.get('/health', async (c) => {
     timestamp: new Date().toISOString(),
     bindings: {
       espn: !!c.env.ESPN,
-      auth: !!c.env.AUTH,
+      auth: !!c.env.AUTH_WORKER,
     }
   };
 
@@ -2095,16 +2095,16 @@ Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>"
 
 ## Completion Checklist
 
-- [ ] Task 1: espn-client scaffold created and tested
-- [ ] Task 2: fantasy-mcp scaffold created and tested
-- [ ] Task 3: Root package.json scripts updated
-- [ ] Task 4: Baseball handlers migrated to espn-client
-- [ ] Task 5: Football handlers migrated to espn-client
-- [ ] Task 6: Unified MCP tools added to fantasy-mcp
-- [ ] Task 7: auth-worker returns platform field
-- [ ] Task 8: Preview environment tested end-to-end
-- [ ] Task 9: GitHub Actions updated
-- [ ] Task 10: Documentation updated
+- [x] Task 1: espn-client scaffold created and tested
+- [x] Task 2: fantasy-mcp scaffold created and tested
+- [x] Task 3: Root package.json scripts updated
+- [x] Task 4: Baseball handlers migrated to espn-client
+- [x] Task 5: Football handlers migrated to espn-client
+- [x] Task 6: Unified MCP tools added to fantasy-mcp
+- [x] Task 7: auth-worker returns platform field
+- [x] Task 8: Preview environment tested end-to-end
+- [x] Task 9: GitHub Actions updated
+- [x] Task 10: Documentation updated
 
 ---
 
