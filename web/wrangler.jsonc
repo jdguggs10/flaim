@@ -3,8 +3,7 @@
     "preview": {
       "vars": {
         "NEXT_PUBLIC_AUTH_WORKER_URL": "https://auth-worker-preview.gerrygugger.workers.dev",
-        "NEXT_PUBLIC_BASEBALL_ESPN_MCP_URL": "https://baseball-espn-mcp-preview.gerrygugger.workers.dev",
-        "NEXT_PUBLIC_FOOTBALL_ESPN_MCP_URL": "https://football-espn-mcp-preview.gerrygugger.workers.dev"
+        "NEXT_PUBLIC_ESPN_CLIENT_URL": "https://espn-client-preview.gerrygugger.workers.dev"
       }
     },
     "production": {

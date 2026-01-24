@@ -38,14 +38,11 @@ export async function POST(request: NextRequest) {
       }, { status: 401 });
     }
 
-    // Use correct env var names
-    const workerUrl = sport === 'baseball'
-      ? process.env.NEXT_PUBLIC_BASEBALL_ESPN_MCP_URL
-      : process.env.NEXT_PUBLIC_FOOTBALL_ESPN_MCP_URL;
+    const workerUrl = process.env.NEXT_PUBLIC_ESPN_CLIENT_URL;
 
     if (!workerUrl) {
       return NextResponse.json({
-        error: `Worker URL not configured for ${sport}`
+        error: 'NEXT_PUBLIC_ESPN_CLIENT_URL is not configured'
       }, { status: 500 });
     }
 
@@ -58,7 +55,7 @@ export async function POST(request: NextRequest) {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${bearer}`
         },
-        body: JSON.stringify({ leagueId })
+        body: JSON.stringify({ leagueId, sport })
       });
 
       const data = await response.json();

@@ -160,7 +160,7 @@ Workers use custom routes via `api.flaim.app`:
 - `/baseball/*` → baseball-espn-mcp (legacy)
 - `/football/*` → football-espn-mcp (legacy)
 
-Note: `espn-client` has no custom route; it's called internally via service binding.
+Note: `espn-client` is called internally via service binding for MCP traffic, but the web app uses its `/onboarding/*` endpoints via the public workers.dev URL.
 
 ## Troubleshooting
 
@@ -170,6 +170,8 @@ Note: `espn-client` has no custom route; it's called internally via service bind
 | 500s in prod | Missing Cloudflare secrets | Add secrets in dashboard |
 | 404s on custom routes | Worker expects stripped path | Cloudflare routes strip `/auth`, `/baseball`, `/football` prefixes |
 | 424 from Responses API | Wrong MCP endpoint | Ensure `server_url` ends with `/mcp` |
+| `EMFILE: too many open files, watch` | File descriptor limit too low for dev watchers | Run `ulimit -n 8192` (or higher) and restart `wrangler dev` |
+| `EPERM` writing Wrangler logs/registry | Global Wrangler directory not writable | Use `WRANGLER_LOG_PATH` + `WRANGLER_REGISTRY_PATH` env vars |
 
 ## Architecture
 

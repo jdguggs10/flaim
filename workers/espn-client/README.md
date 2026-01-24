@@ -2,7 +2,7 @@
 
 Internal ESPN API client used by the unified gateway (`fantasy-mcp`). Handles all ESPN Fantasy sports data fetching.
 
-> **Note**: This worker is called via service binding from `fantasy-mcp`. It has no public custom route.
+> **Note**: Primarily called via service binding from `fantasy-mcp`. It also exposes onboarding endpoints used by the web app (manual ESPN setup).
 
 ## Purpose
 
@@ -29,6 +29,8 @@ espn-client
 |----------|--------|---------|
 | `/health` | GET | Health check |
 | `/execute` | POST | Execute tool (internal only) |
+| `/onboarding/initialize` | POST | Initialize onboarding with league data (requires Authorization header) |
+| `/onboarding/discover-seasons` | POST | Discover and save historical seasons (requires Authorization header) |
 
 ### `/execute` Request Format
 

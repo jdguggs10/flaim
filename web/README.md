@@ -100,9 +100,8 @@ CLERK_SECRET_KEY=sk_...
 # Worker URLs (unified gateway is primary)
 NEXT_PUBLIC_AUTH_WORKER_URL=https://api.flaim.app/auth
 NEXT_PUBLIC_FANTASY_MCP_URL=https://api.flaim.app/fantasy/mcp
-# Legacy fallback MCP URLs (optional)
-NEXT_PUBLIC_BASEBALL_ESPN_MCP_URL=https://api.flaim.app/baseball
-NEXT_PUBLIC_FOOTBALL_ESPN_MCP_URL=https://api.flaim.app/football
+# ESPN onboarding (auto-pull + discover seasons)
+NEXT_PUBLIC_ESPN_CLIENT_URL=https://espn-client.gerrygugger.workers.dev
 ```
 
 For local development with workers, point to `http://localhost:8786` etc.

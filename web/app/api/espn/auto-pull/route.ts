@@ -103,28 +103,19 @@ export async function POST(request: NextRequest) {
       }, { status: credentialCheck.status });
     }
 
-    // Determine which sport worker to call based on sport
-    const sportWorkerUrls = {
-      'baseball': process.env.NEXT_PUBLIC_BASEBALL_ESPN_MCP_URL,
-      'football': process.env.NEXT_PUBLIC_FOOTBALL_ESPN_MCP_URL,
-      // Basketball and hockey workers are not yet implemented
-      // 'basketball': process.env.NEXT_PUBLIC_BASKETBALL_ESPN_MCP_URL,
-      // 'hockey': process.env.NEXT_PUBLIC_HOCKEY_ESPN_MCP_URL
-    };
-
-    const workerUrl = sportWorkerUrls[sport as keyof typeof sportWorkerUrls];
+    const espnClientUrl = process.env.NEXT_PUBLIC_ESPN_CLIENT_URL;
+    const workerUrl = espnClientUrl;
+    console.log(`[auto-pull] ESPN client URL: ${espnClientUrl || 'NOT SET'}`);
     console.log(`[auto-pull] Sport worker URL for ${sport}: ${workerUrl || 'NOT SET'}`);
 
     if (!workerUrl) {
-      const supportedSports = Object.keys(sportWorkerUrls).join(', ');
       return NextResponse.json({
-        error: `Sport "${sport}" is not yet supported. Currently supported sports: ${supportedSports}`,
-        code: 'SPORT_NOT_SUPPORTED'
-      }, { status: 503 });
+        error: 'NEXT_PUBLIC_ESPN_CLIENT_URL is not configured'
+      }, { status: 500 });
     }
 
     try {
-      // Call the sport worker's onboarding initialize endpoint
+      // Call the ESPN onboarding initialize endpoint
       const sportWorkerFullUrl = `${workerUrl}/onboarding/initialize`;
       console.log(`[auto-pull] Calling sport worker: ${sportWorkerFullUrl}`);
       console.log(`[auto-pull] Sport worker request - userId: ${userId}, sport: ${sport}, leagueId: ${leagueId}, seasonYear: ${seasonYear}`);
