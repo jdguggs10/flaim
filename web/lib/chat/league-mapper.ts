@@ -29,25 +29,25 @@ export const SPORT_CONFIG: Record<Sport, {
     name: 'Baseball',
     emoji: '⚾',
     color: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
-    mcpTools: ['get_espn_baseball_league_info', 'get_espn_baseball_team_roster', 'get_espn_baseball_matchups', 'get_espn_baseball_standings']
+    mcpTools: ['get_user_session', 'get_league_info', 'get_standings', 'get_matchups', 'get_roster', 'get_free_agents']
   },
   football: {
     name: 'Football',
     emoji: '🏈',
     color: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400',
-    mcpTools: ['get_espn_football_league_info', 'get_espn_football_team', 'get_espn_football_matchups', 'get_espn_football_standings']
+    mcpTools: ['get_user_session', 'get_league_info', 'get_standings', 'get_matchups', 'get_roster', 'get_free_agents']
   },
   basketball: {
     name: 'Basketball',
     emoji: '🏀',
     color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
-    mcpTools: ['get_espn_basketball_league_info', 'get_espn_basketball_team', 'get_espn_basketball_matchups']
+    mcpTools: ['get_user_session', 'get_league_info', 'get_standings', 'get_matchups', 'get_roster', 'get_free_agents']
   },
   hockey: {
     name: 'Hockey',
     emoji: '🏒',
     color: 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400',
-    mcpTools: ['get_espn_hockey_league_info', 'get_espn_hockey_team', 'get_espn_hockey_matchups']
+    mcpTools: ['get_user_session', 'get_league_info', 'get_standings', 'get_matchups', 'get_roster', 'get_free_agents']
   }
 };
 
@@ -60,19 +60,19 @@ export const MCP_SERVER_CONFIG: Record<Platform, Record<Sport, {
 }>> = {
   ESPN: {
     baseball: {
-      serverUrl: process.env.NEXT_PUBLIC_BASEBALL_ESPN_MCP_URL || process.env.BASEBALL_ESPN_MCP_URL || '',
+      serverUrl: process.env.NEXT_PUBLIC_FANTASY_MCP_URL || '',
       tools: SPORT_CONFIG.baseball.mcpTools
     },
     football: {
-      serverUrl: process.env.NEXT_PUBLIC_FOOTBALL_ESPN_MCP_URL || process.env.FOOTBALL_ESPN_MCP_URL || '',
+      serverUrl: process.env.NEXT_PUBLIC_FANTASY_MCP_URL || '',
       tools: SPORT_CONFIG.football.mcpTools
     },
     basketball: {
-      serverUrl: process.env.NEXT_PUBLIC_BASKETBALL_ESPN_MCP_URL || process.env.BASKETBALL_ESPN_MCP_URL || '',
+      serverUrl: process.env.NEXT_PUBLIC_FANTASY_MCP_URL || '',
       tools: SPORT_CONFIG.basketball.mcpTools
     },
     hockey: {
-      serverUrl: process.env.NEXT_PUBLIC_HOCKEY_ESPN_MCP_URL || process.env.HOCKEY_ESPN_MCP_URL || '',
+      serverUrl: process.env.NEXT_PUBLIC_FANTASY_MCP_URL || '',
       tools: SPORT_CONFIG.hockey.mcpTools
     }
   },
