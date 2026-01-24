@@ -4,6 +4,25 @@ This document describes the implementation plan for adding **Yahoo Fantasy Sport
 
 **Goal:** Add **Yahoo Fantasy Sports** support (start with **Football + Baseball**, later **Basketball + Hockey**) with a **unified MCP gateway** that supports multiple platforms.
 
+**Last updated:** 2026-01-24
+
+---
+
+## Important: Two Different OAuth Flows
+
+Flaim uses OAuth in **two distinct ways**. Understanding this distinction is critical:
+
+| Aspect | MCP OAuth | Platform OAuth |
+|--------|-----------|----------------|
+| **Flaim's role** | PROVIDER | CLIENT |
+| **Who authenticates** | Claude/ChatGPT → Flaim | Flaim → Yahoo/Sleeper |
+| **Purpose** | AI clients access Flaim MCP tools | Flaim accesses fantasy platform APIs |
+| **Route prefix** | `/oauth/*` | `/connect/*` |
+| **Existing code** | `oauth-handlers.ts` | NEW for Yahoo |
+| **Token storage** | `oauth_tokens` table | `yahoo_credentials` table |
+
+**Never mix these up.** The `/oauth/*` routes are for AI clients connecting to Flaim. The `/connect/*` routes are for Flaim connecting to external platforms.
+
 ---
 
 ## Executive summary
@@ -112,7 +131,7 @@ get_user_session()
         is_default: false
       }
     ],
-    current_date: "2025-01-19"
+    current_date: "2026-01-24"
   }
 ```
 
@@ -299,30 +318,103 @@ Yahoo uses a hierarchical resource model with identifiers called **keys**:
 
 ## Authentication: Yahoo OAuth 2.0
 
+> **Important distinction:** This is **Platform OAuth** (Flaim as CLIENT requesting access to Yahoo).
+> This is separate from **MCP OAuth** (Flaim as PROVIDER for Claude/ChatGPT).
+> See [auth-worker organization](#auth-worker-route-organization) for how these are separated.
+
 ### Setup requirements
 
-1. Create a Yahoo Developer application
-2. Request Fantasy Sports scope: `fspt-r` (read-only) or `fspt-w` (read/write)
-3. Configure redirect URL: `https://flaim.app/api/oauth/yahoo/callback`
+1. Create a Yahoo Developer application at https://developer.yahoo.com/apps/
+2. Request Fantasy Sports scope: `fspt-r` (read-only)
+3. Configure redirect URL: `https://api.flaim.app/auth/connect/yahoo/callback`
 
-### Flow
+### OAuth flow diagram
 
-1. User clicks **Connect Yahoo** in Flaim
-2. Redirect to Yahoo auth endpoint
-3. Yahoo redirects back with `code`
-4. auth-worker exchanges code for tokens
-5. Store `access_token`, `refresh_token`, `expires_at` in Supabase
-6. Platform workers request tokens via service binding to auth-worker
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           YAHOO OAUTH FLOW                                   │
+│                     (Flaim as CLIENT → Yahoo as PROVIDER)                    │
+└─────────────────────────────────────────────────────────────────────────────┘
 
-### Token refresh
+1. AUTHORIZE
+   User clicks "Connect Yahoo"
+   └─→ Frontend redirects to:
+       https://api.login.yahoo.com/oauth2/request_auth
+         ?client_id={YAHOO_CLIENT_ID}
+         &redirect_uri=https://api.flaim.app/auth/connect/yahoo/callback
+         &response_type=code
+         &scope=fspt-r
+         &state={clerk_user_id}:{nonce}
 
-Centralized in auth-worker:
+2. CALLBACK
+   Yahoo redirects to auth-worker:
+   └─→ GET /connect/yahoo/callback?code={code}&state={state}
+       │
+       ├─→ Verify state (extract clerk_user_id, validate nonce)
+       ├─→ Exchange code for tokens (POST to Yahoo token endpoint)
+       ├─→ Store in Supabase: yahoo_credentials
+       └─→ Redirect to: https://flaim.app/leagues?yahoo=connected
+
+3. LEAGUE DISCOVERY (triggered after redirect)
+   Frontend calls:
+   └─→ POST /api/connect/yahoo/discover
+       │
+       └─→ auth-worker:
+           ├─→ Fetch access_token (refresh if needed)
+           ├─→ Call Yahoo: GET /users;use_login=1/games/leagues
+           ├─→ Normalize response → standard league DTOs
+           ├─→ Upsert to Supabase: yahoo_leagues
+           └─→ Return discovered leagues
+
+4. MCP TOOL USAGE (later)
+   Claude/ChatGPT calls get_roster:
+   └─→ fantasy-mcp → yahoo-client → auth-worker (get token) → Yahoo API
+```
+
+### State parameter structure
+
+The `state` parameter prevents CSRF and carries the user identity:
+
+```
+{clerk_user_id}:{nonce}
+
+Example: user_2abc123def:a1b2c3d4e5f6
+```
+
+- `clerk_user_id`: Identifies which user initiated the flow
+- `nonce`: Random string stored in short-lived cache, validated on callback
+
+### Token refresh (on-demand)
+
+Yahoo access tokens expire after ~1 hour. We use **on-demand refresh**:
 
 ```typescript
-// auth-worker: GET /credentials/yahoo?raw=true
-// - Check expiry
-// - Refresh if necessary
-// - Return valid access_token
+// auth-worker: GET /connect/yahoo/credentials
+async function getYahooCredentials(clerkUserId: string): Promise<YahooCredentials> {
+  const creds = await supabase.from('yahoo_credentials').select('*').eq('clerk_user_id', clerkUserId).single();
+
+  if (!creds) throw new Error('Yahoo not connected');
+
+  // Check if token expires within 5 minutes
+  const expiresAt = new Date(creds.expires_at);
+  const now = new Date();
+  const bufferMs = 5 * 60 * 1000; // 5 minute buffer
+
+  if (expiresAt.getTime() - now.getTime() < bufferMs) {
+    // Refresh the token
+    const newTokens = await refreshYahooToken(creds.refresh_token);
+    await supabase.from('yahoo_credentials').update({
+      access_token: newTokens.access_token,
+      refresh_token: newTokens.refresh_token, // Yahoo may rotate
+      expires_at: new Date(Date.now() + newTokens.expires_in * 1000),
+      updated_at: new Date()
+    }).eq('clerk_user_id', clerkUserId);
+
+    return { access_token: newTokens.access_token };
+  }
+
+  return { access_token: creds.access_token };
+}
 ```
 
 ---
@@ -361,69 +453,174 @@ Centralized in auth-worker:
 
 ## auth-worker changes
 
+### auth-worker route organization
+
+The auth-worker handles **two distinct OAuth flows** plus credential/league management. Clear route prefixes prevent confusion:
+
+```
+auth-worker routes:
+
+/oauth/*          → MCP OAuth (Flaim as PROVIDER for Claude/ChatGPT)
+                    - /oauth/authorize
+                    - /oauth/token
+                    - /oauth/revoke
+                    - /oauth/userinfo
+
+/connect/*        → Platform OAuth (Flaim as CLIENT to Yahoo/Sleeper/etc)
+                    - /connect/yahoo/authorize    (redirect to Yahoo)
+                    - /connect/yahoo/callback     (receive code, exchange tokens)
+                    - /connect/yahoo/credentials  (get token, refresh if needed)
+                    - /connect/yahoo/disconnect   (revoke and delete)
+                    - /connect/yahoo/discover     (fetch leagues after connect)
+                    - (future: /connect/sleeper/*, /connect/cbs/*)
+
+/credentials/*    → Non-OAuth credentials (ESPN cookies via extension)
+                    - /credentials/espn
+                    - /credentials/espn/status
+
+/leagues/*        → League management (all platforms)
+                    - /leagues                    (list all)
+                    - /leagues/espn/*
+                    - /leagues/yahoo/*
+
+/extension/*      → Chrome extension sync
+                    - /extension/pair
+                    - /extension/sync
+```
+
 ### New Yahoo endpoints
 
-**Credentials:**
-- `POST /oauth/yahoo/exchange` — Exchange code for tokens
-- `GET /credentials/yahoo` — Status check
-- `GET /credentials/yahoo?raw=true` — Internal use by platform workers
-- `DELETE /credentials/yahoo` — Disconnect
+**Platform Connect (OAuth as client):**
+- `GET /connect/yahoo/authorize` — Redirect to Yahoo OAuth
+- `GET /connect/yahoo/callback` — Handle Yahoo redirect, exchange code for tokens
+- `GET /connect/yahoo/credentials` — Get access token (refresh if needed) - internal use
+- `DELETE /connect/yahoo/disconnect` — Revoke tokens, delete credentials
+- `POST /connect/yahoo/discover` — Fetch and upsert user leagues
 
-**Leagues:**
-- `POST /leagues/yahoo/discover` — Fetch and upsert user leagues
-- `GET /leagues/yahoo` — List leagues
+**League Management:**
+- `GET /leagues/yahoo` — List user's Yahoo leagues
 - `PATCH /leagues/yahoo/{league_key}/default` — Set default
-- `DELETE /leagues/yahoo/{league_key}` — Remove
+- `DELETE /leagues/yahoo/{league_key}` — Remove league
 
 ### Updated get_user_session
 
-Returns leagues from both `espn_leagues` and `yahoo_leagues` with `platform` field.
+Returns leagues from both `espn_leagues` and `yahoo_leagues` with `platform` field:
+
+```typescript
+{
+  leagues: [
+    { platform: "espn", sport: "football", league_id: "12345", ... },
+    { platform: "yahoo", sport: "baseball", league_key: "mlb.l.54321", ... }
+  ],
+  current_date: "2026-01-24"
+}
+```
 
 ---
 
 ## UX and frontend changes
 
+### Connect Yahoo button placement
+
+Add **Connect Yahoo** button alongside ESPN in Homepage Box 2:
+
+```
+┌─────────────────────────────────────────┐
+│  Box 2: Connect Your Leagues            │
+│                                         │
+│  [ESPN logo] Connect ESPN               │
+│              (Install Extension)        │
+│                                         │
+│  [Yahoo logo] Connect Yahoo             │
+│               (Sign in with Yahoo)      │
+└─────────────────────────────────────────┘
+```
+
 ### Connect Yahoo flow
 
-1. Add **Connect Yahoo** button on landing page / settings
-2. Implement callback route: `GET /api/oauth/yahoo/callback`
-3. After exchange: trigger league discovery, route to leagues page
+1. User clicks **Connect Yahoo** button
+2. Frontend redirects to: `https://api.flaim.app/auth/connect/yahoo/authorize`
+3. auth-worker builds Yahoo OAuth URL and redirects user
+4. User authorizes on Yahoo
+5. Yahoo redirects to: `https://api.flaim.app/auth/connect/yahoo/callback`
+6. auth-worker exchanges code, stores tokens, redirects to: `https://flaim.app/leagues?yahoo=connected`
+7. Leagues page detects `?yahoo=connected`, triggers league discovery
+8. POST `/api/connect/yahoo/discover` → fetches and displays leagues
 
 ### Leagues page updates
 
 - Show ESPN and Yahoo leagues together (grouped by platform or sport)
-- Platform badge on each league
+- Platform badge on each league (ESPN blue, Yahoo purple)
 - Default selection works across platforms
+- Refresh button to re-run discovery
 
 ### Disconnect
 
-- Add **Disconnect Yahoo** button
-- Calls `DELETE /credentials/yahoo`
-- Optionally removes Yahoo leagues
+- Add **Disconnect Yahoo** in settings or leagues page
+- Calls `DELETE /connect/yahoo/disconnect`
+- Removes `yahoo_credentials` row
+- Optionally removes `yahoo_leagues` rows (or keeps for history)
 
 ---
 
 ## Phased implementation plan
 
-### Phase 0: Gateway scaffolding
+### Phase 0: Gateway scaffolding ✅ COMPLETE
 
 **Create the unified gateway architecture (no Yahoo yet):**
 
-1. Create `fantasy-mcp` gateway worker with unified tool schemas
-2. Create `espn-client` worker (migrate existing ESPN code)
-3. Set up service bindings between gateway and espn-client
-4. Update `get_user_session` to include `platform: "espn"` field
-5. Test that existing ESPN functionality works through new gateway
-6. Deprecate old `baseball-espn-mcp` and `football-espn-mcp` workers
+1. ✅ Create `fantasy-mcp` gateway worker with unified tool schemas
+2. ✅ Create `espn-client` worker (migrate existing ESPN code)
+3. ✅ Set up service bindings between gateway and espn-client
+4. ✅ Update `get_user_session` to include `platform: "espn"` field
+5. ✅ Test that existing ESPN functionality works through new gateway
+6. ✅ Full feature parity: both football and baseball have all tools (get_league_info, get_standings, get_matchups, get_roster, get_free_agents)
+7. Legacy workers (`baseball-espn-mcp`, `football-espn-mcp`) still available as fallback
 
-### Phase 1: Yahoo OAuth + league discovery
+### Phase 1: Yahoo OAuth + league discovery 🔄 IN PROGRESS
 
-1. Add Yahoo Developer app credentials
-2. Add Supabase migration: `yahoo_credentials`, `yahoo_leagues`
-3. Implement Yahoo OAuth flow in auth-worker
-4. Implement `POST /leagues/yahoo/discover`
-5. Update `get_user_session` to return Yahoo leagues
-6. Add Connect Yahoo UI
+**Backend: ✅ COMPLETE** | **Frontend: 🔴 NOT STARTED**
+
+1. ✅ **Yahoo Developer setup**
+   - ✅ Created Yahoo Developer app "Flaim"
+   - ✅ Configured redirect URIs:
+     - Production: `https://api.flaim.app/auth/connect/yahoo/callback`
+     - Preview: `https://api.flaim.app/auth-preview/connect/yahoo/callback`
+   - ✅ Requested `fspt-r` scope (Confidential Client)
+   - ✅ Stored `YAHOO_CLIENT_ID` and `YAHOO_CLIENT_SECRET` in Cloudflare secrets (default + preview)
+
+2. ✅ **Supabase migration** (`docs/migrations/009_yahoo_platform.sql`)
+   - ✅ Created `yahoo_credentials` table
+   - ✅ Created `yahoo_leagues` table
+   - ✅ Created `platform_oauth_states` table for CSRF protection
+
+3. ✅ **auth-worker: Platform OAuth routes** (`src/yahoo-connect-handlers.ts`)
+   - ✅ `GET /connect/yahoo/authorize` - Build OAuth URL, redirect to Yahoo
+   - ✅ `GET /connect/yahoo/callback` - Exchange code, store tokens, redirect to app
+   - ✅ `GET /connect/yahoo/credentials` - Get token (refresh if needed)
+   - ✅ `DELETE /connect/yahoo/disconnect` - Revoke and delete
+   - ✅ `GET /connect/yahoo/status` - Check connection status (bonus endpoint)
+
+4. ✅ **auth-worker: League discovery**
+   - ✅ `POST /connect/yahoo/discover` - Call Yahoo API, normalize, upsert leagues
+   - ✅ `GET /leagues/yahoo` - List user's Yahoo leagues
+
+5. ✅ **Update `get_user_session`**
+   - ✅ Query both `espn_leagues` and `yahoo_leagues`
+   - ✅ Return unified list with `platform` field
+
+6. 🔴 **Frontend: Connect Yahoo UI** (NOT STARTED)
+   - 🔴 Make "Connect Yahoo" button functional (currently shows "coming soon")
+   - 🔴 Button should redirect to `/api/connect/yahoo/authorize` (needs Clerk auth)
+   - 🔴 Handle `?yahoo=connected` query param on leagues page
+   - 🔴 Trigger discovery on connect
+   - 🔴 Show Yahoo leagues on leagues page alongside ESPN leagues
+
+**Status as of 2026-01-24:**
+- All backend code is implemented and tested (95 tests passing)
+- Preview deployed at `auth-worker-preview.gerrygugger.workers.dev`
+- OAuth endpoints require Clerk JWT authentication (401 without auth)
+- Cannot test full OAuth flow until frontend UI redirects authenticated user to authorize endpoint
 
 ### Phase 2: yahoo-client worker (Football)
 
@@ -447,6 +644,13 @@ Returns leagues from both `espn_leagues` and `yahoo_leagues` with `platform` fie
 1. CBS Sports → create `cbs-client` worker
 2. Sleeper → create `sleeper-client` worker
 3. Each new platform = 1 new worker + service binding
+
+**Pattern for adding a new platform:**
+1. Add `/connect/{platform}/*` routes to auth-worker
+2. Create `{platform}_credentials` and `{platform}_leagues` tables
+3. Create `{platform}-client` worker with sport handlers
+4. Add service binding to `fantasy-mcp`
+5. Update `get_user_session` to include new platform's leagues
 
 ---
 
@@ -478,11 +682,14 @@ Normalize outputs to match DTOs:
 
 | Risk | Mitigation |
 |------|------------|
-| OAuth token expiry | Centralize refresh in auth-worker |
-| Yahoo JSON parsing complexity | Build normalizers early, test thoroughly |
+| **Confusing MCP OAuth with Platform OAuth** | Clear route prefixes (`/oauth/*` vs `/connect/*`), prominent documentation |
+| OAuth token expiry | On-demand refresh with 5-minute buffer in auth-worker |
+| Yahoo JSON parsing complexity | Build normalizers early, test thoroughly with real responses |
 | Week/period semantics differ by sport | Default to "current scoring period" |
-| League discovery edge cases | Validate with multiple real leagues |
+| League discovery edge cases | Validate with multiple real leagues, handle empty gracefully |
 | Service binding configuration errors | Test bindings in preview env first |
+| State parameter CSRF attacks | Validate nonce from short-lived cache, reject mismatches |
+| Yahoo rate limiting | Add retry with backoff, consider caching league data |
 
 ---
 
@@ -493,21 +700,30 @@ Normalize outputs to match DTOs:
 - [ ] Unknown platform returns error
 - [ ] Service bindings work in dev/preview/prod
 
-### Yahoo OAuth
-- [ ] Connect flow end-to-end
-- [ ] Token refresh works (simulate expiry)
-- [ ] Disconnect clears credentials
+### Yahoo OAuth (Phase 1) — Unit Tests: ✅ PASSING
 
-### Yahoo league discovery
-- [ ] Discovers football + baseball leagues
-- [ ] Stores correct: league_key, league_name, sport, season, team_id
-- [ ] Handles users with no Yahoo leagues
+- [x] `/connect/yahoo/authorize` redirects to Yahoo with correct params (unit tested)
+- [x] `/connect/yahoo/callback` exchanges code and stores tokens (unit tested)
+- [x] State parameter validated (rejects invalid/missing state) (unit tested)
+- [x] Token refresh works (simulate expiry with `needsRefresh`) (unit tested)
+- [x] `/connect/yahoo/disconnect` clears credentials and returns success (unit tested)
+- [x] Error handling: invalid code, network failure (unit tested)
+- [ ] **E2E test**: Full OAuth flow with real Yahoo account (blocked on frontend UI)
 
-### Yahoo tools (per sport)
+### Yahoo league discovery (Phase 1) — Unit Tests: ✅ PASSING
+
+- [x] `/connect/yahoo/discover` calls Yahoo API with valid token (unit tested)
+- [x] Discovers leagues and upserts to storage (unit tested)
+- [x] Handles users with no Yahoo leagues (empty array, not error) (unit tested)
+- [x] `get_user_session` returns both ESPN and Yahoo leagues with platform field (unit tested)
+- [ ] **E2E test**: Real league discovery with real Yahoo account (blocked on frontend UI)
+
+### Yahoo tools (Phase 2+)
 - [ ] get_league_info returns correct data
 - [ ] get_standings matches Yahoo web UI
 - [ ] get_matchups returns correct week
 - [ ] get_roster returns players
+- [ ] get_free_agents returns available players
 
 ---
 
@@ -527,3 +743,15 @@ Normalize outputs to match DTOs:
 | `sport` | `football`, `baseball`, `basketball`, `hockey` | Lowercase |
 | `league_id` | ESPN: numeric string, Yahoo: full league_key | Platform-specific format |
 | `team_id` | ESPN: numeric string, Yahoo: numeric or key | Platform-specific format |
+
+## Appendix: auth-worker route prefixes
+
+| Prefix | Purpose | Example Routes |
+|--------|---------|----------------|
+| `/oauth/*` | MCP OAuth (Flaim as provider) | `/oauth/authorize`, `/oauth/token` |
+| `/connect/*` | Platform OAuth (Flaim as client) | `/connect/yahoo/callback`, `/connect/sleeper/authorize` |
+| `/credentials/*` | Non-OAuth credentials | `/credentials/espn` (cookies via extension) |
+| `/leagues/*` | League management | `/leagues/yahoo`, `/leagues/espn/{id}/default` |
+| `/extension/*` | Chrome extension | `/extension/pair`, `/extension/sync` |
+
+This separation ensures MCP OAuth and Platform OAuth never get confused.
