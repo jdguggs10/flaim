@@ -209,11 +209,13 @@ async function handleGetMatchups(
         home: matchup.home ? {
           teamId: matchup.home.teamId,
           totalPoints: matchup.home.totalPoints || 0,
+          totalProjectedPoints: matchup.home.totalProjectedPointsLive || matchup.home.totalProjectedPoints,
           pointsByScoringPeriod: matchup.home.pointsByScoringPeriod
         } : null,
         away: matchup.away ? {
           teamId: matchup.away.teamId,
           totalPoints: matchup.away.totalPoints || 0,
+          totalProjectedPoints: matchup.away.totalProjectedPointsLive || matchup.away.totalProjectedPoints,
           pointsByScoringPeriod: matchup.away.pointsByScoringPeriod
         } : null,
         winner: matchup.winner,
