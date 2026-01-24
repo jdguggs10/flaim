@@ -521,3 +521,283 @@ async function refreshAccessToken(
 
   return data;
 }
+
+// =============================================================================
+// LEAGUE DISCOVERY
+// =============================================================================
+
+const YAHOO_FANTASY_API_URL = 'https://fantasysports.yahooapis.com/fantasy/v2';
+
+/**
+ * Map Yahoo sport codes to our internal sport names
+ */
+const SPORT_CODE_MAP: Record<string, 'football' | 'baseball' | 'basketball' | 'hockey'> = {
+  nfl: 'football',
+  mlb: 'baseball',
+  nba: 'basketball',
+  nhl: 'hockey',
+};
+
+interface DiscoveredYahooLeague {
+  sport: 'football' | 'baseball' | 'basketball' | 'hockey';
+  seasonYear: number;
+  leagueKey: string;
+  leagueName: string;
+  teamId: string;
+}
+
+/**
+ * POST /connect/yahoo/discover
+ *
+ * Discovers all Yahoo Fantasy leagues for the authenticated user.
+ * Fetches from Yahoo API, parses the nested response, and saves to storage.
+ */
+export async function handleYahooDiscover(
+  env: YahooConnectEnv,
+  userId: string,
+  corsHeaders: Record<string, string>
+): Promise<Response> {
+  try {
+    const storage = YahooStorage.fromEnvironment(env);
+
+    // Get current credentials
+    const credentials = await storage.getYahooCredentials(userId);
+
+    if (!credentials) {
+      return new Response(
+        JSON.stringify({
+          error: 'not_connected',
+          error_description: 'User is not connected to Yahoo',
+        }),
+        {
+          status: 404,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders },
+        }
+      );
+    }
+
+    // Refresh token if needed
+    let accessToken = credentials.accessToken;
+    if (credentials.needsRefresh) {
+      console.log(`[yahoo-connect] Refreshing token before discovery for user ${maskUserId(userId)}`);
+      const refreshResult = await refreshAccessToken(credentials.refreshToken, env);
+
+      if (refreshResult.error) {
+        console.error(`[yahoo-connect] Token refresh failed: ${refreshResult.error}`);
+        return new Response(
+          JSON.stringify({
+            error: 'refresh_failed',
+            error_description: refreshResult.error_description || 'Failed to refresh access token',
+          }),
+          {
+            status: 401,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders },
+          }
+        );
+      }
+
+      // Update stored credentials
+      const expiresAt = new Date(Date.now() + refreshResult.expires_in * 1000);
+      await storage.updateYahooCredentials(userId, {
+        accessToken: refreshResult.access_token,
+        refreshToken: refreshResult.refresh_token,
+        expiresAt,
+      });
+
+      accessToken = refreshResult.access_token;
+    }
+
+    // Call Yahoo API to discover leagues
+    const apiUrl = `${YAHOO_FANTASY_API_URL}/users;use_login=1/games/leagues?format=json`;
+    const apiResponse = await fetch(apiUrl, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+
+    if (!apiResponse.ok) {
+      const errorText = await apiResponse.text();
+      console.error(`[yahoo-connect] Yahoo API error: ${apiResponse.status} - ${errorText}`);
+      return new Response(
+        JSON.stringify({
+          error: 'yahoo_api_error',
+          error_description: `Yahoo API returned ${apiResponse.status}`,
+        }),
+        {
+          status: apiResponse.status === 401 ? 401 : 502,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders },
+        }
+      );
+    }
+
+    const rawData = await apiResponse.json();
+    const leagues = parseYahooLeaguesResponse(rawData);
+
+    console.log(`[yahoo-connect] Discovered ${leagues.length} leagues for user ${maskUserId(userId)}`);
+
+    // Save leagues to storage
+    for (const league of leagues) {
+      await storage.upsertYahooLeague({
+        clerkUserId: userId,
+        sport: league.sport,
+        seasonYear: league.seasonYear,
+        leagueKey: league.leagueKey,
+        leagueName: league.leagueName,
+        teamId: league.teamId,
+      });
+    }
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        count: leagues.length,
+        leagues,
+      }),
+      {
+        status: 200,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders },
+      }
+    );
+  } catch (error) {
+    console.error('[yahoo-connect] Discovery error:', error);
+    return new Response(
+      JSON.stringify({
+        error: 'server_error',
+        error_description: 'Failed to discover Yahoo leagues',
+      }),
+      {
+        status: 500,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders },
+      }
+    );
+  }
+}
+
+/**
+ * Parse Yahoo's deeply nested JSON response into our league format
+ *
+ * Yahoo's response structure is:
+ * {
+ *   fantasy_content: {
+ *     users: {
+ *       0: {
+ *         user: [
+ *           { guid: "..." },
+ *           {
+ *             games: {
+ *               0: { game: [{ game_key: "nfl", season: "2024", ... }, { leagues: { 0: { league: [...] }, count: 1 } }] },
+ *               count: 1
+ *             }
+ *           }
+ *         ]
+ *       },
+ *       count: 1
+ *     }
+ *   }
+ * }
+ */
+function parseYahooLeaguesResponse(data: unknown): DiscoveredYahooLeague[] {
+  const leagues: DiscoveredYahooLeague[] = [];
+
+  try {
+    // Navigate through Yahoo's nested structure
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const fantasyContent = (data as any)?.fantasy_content;
+    if (!fantasyContent) return leagues;
+
+    const users = fantasyContent.users;
+    if (!users) return leagues;
+
+    // Users is an object with numeric keys and a count
+    const userCount = users.count || 0;
+    for (let userIdx = 0; userIdx < userCount; userIdx++) {
+      const userWrapper = users[userIdx];
+      if (!userWrapper?.user) continue;
+
+      // user is an array where [0] is user info, [1] has games
+      const userArray = userWrapper.user;
+      if (!Array.isArray(userArray) || userArray.length < 2) continue;
+
+      const gamesWrapper = userArray[1]?.games;
+      if (!gamesWrapper) continue;
+
+      const gameCount = gamesWrapper.count || 0;
+      for (let gameIdx = 0; gameIdx < gameCount; gameIdx++) {
+        const gameWrapper = gamesWrapper[gameIdx];
+        if (!gameWrapper?.game) continue;
+
+        // game is an array where [0] is game info, [1] has leagues
+        const gameArray = gameWrapper.game;
+        if (!Array.isArray(gameArray) || gameArray.length < 2) continue;
+
+        const gameInfo = gameArray[0];
+        const leaguesWrapper = gameArray[1]?.leagues;
+        if (!leaguesWrapper) continue;
+
+        // Extract game info
+        const gameCode = gameInfo?.code?.toLowerCase();
+        const season = parseInt(gameInfo?.season, 10);
+        const sport = SPORT_CODE_MAP[gameCode];
+
+        if (!sport || isNaN(season)) continue;
+
+        // Parse leagues for this game
+        const leagueCount = leaguesWrapper.count || 0;
+        for (let leagueIdx = 0; leagueIdx < leagueCount; leagueIdx++) {
+          const leagueWrapper = leaguesWrapper[leagueIdx];
+          if (!leagueWrapper?.league) continue;
+
+          // league is an array where [0] is league info
+          const leagueArray = leagueWrapper.league;
+          if (!Array.isArray(leagueArray) || leagueArray.length < 1) continue;
+
+          const leagueInfo = leagueArray[0];
+          const leagueKey = leagueInfo?.league_key;
+          const leagueName = leagueInfo?.name;
+
+          if (!leagueKey || !leagueName) continue;
+
+          // Extract team ID from league key (format: "nfl.l.12345")
+          // We need to get the user's team - check if there's team info
+          // For now, we'll use a placeholder; the full team discovery
+          // would require another API call to /league/{key}/teams
+          let teamId = '';
+
+          // Check if there's team info in the league data (some responses include it)
+          if (leagueArray.length > 1 && leagueArray[1]?.teams) {
+            const teamsWrapper = leagueArray[1].teams;
+            const teamCount = teamsWrapper.count || 0;
+            for (let teamIdx = 0; teamIdx < teamCount; teamIdx++) {
+              const teamWrapper = teamsWrapper[teamIdx];
+              if (teamWrapper?.team) {
+                const teamArray = teamWrapper.team;
+                if (Array.isArray(teamArray) && teamArray.length > 0) {
+                  // team[0] contains multiple objects, find the one with team_id
+                  for (const item of teamArray[0]) {
+                    if (item?.team_id) {
+                      teamId = String(item.team_id);
+                      break;
+                    }
+                  }
+                }
+              }
+              if (teamId) break; // Found user's team
+            }
+          }
+
+          leagues.push({
+            sport,
+            seasonYear: season,
+            leagueKey,
+            leagueName,
+            teamId,
+          });
+        }
+      }
+    }
+  } catch (parseError) {
+    console.error('[yahoo-connect] Error parsing Yahoo response:', parseError);
+  }
+
+  return leagues;
+}

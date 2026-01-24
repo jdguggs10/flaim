@@ -40,6 +40,7 @@ import {
   handleYahooCallback,
   handleYahooCredentials,
   handleYahooDisconnect,
+  handleYahooDiscover,
   handleYahooStatus,
   YahooConnectEnv,
 } from './yahoo-connect-handlers';
@@ -711,6 +712,18 @@ api.delete('/connect/yahoo/disconnect', async (c) => {
     }, 401);
   }
   return handleYahooDisconnect(c.env as YahooConnectEnv, userId, getCorsHeaders(c.req.raw));
+});
+
+// Discover Yahoo leagues (requires Clerk JWT)
+api.post('/connect/yahoo/discover', async (c) => {
+  const { userId, error: authError } = await getVerifiedUserId(c.req.raw, c.env);
+  if (!userId) {
+    return c.json({
+      error: 'unauthorized',
+      error_description: authError || 'Authentication required',
+    }, 401);
+  }
+  return handleYahooDiscover(c.env as YahooConnectEnv, userId, getCorsHeaders(c.req.raw));
 });
 
 // =============================================================================
