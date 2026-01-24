@@ -32,6 +32,7 @@ build/
 *.code-workspace
 .cursor/
 .zed/
+.playwright-mcp/
 
 # AI Assistant Configurations (personal settings)
 .claude/
