@@ -58,7 +58,7 @@ The unified gateway (`https://api.flaim.app/fantasy/mcp`) exposes these tools:
 | `get_roster` | Team roster with player stats |
 | `get_matchups` | Current/upcoming matchups |
 | `get_standings` | League standings |
-| `get_free_agents` | Available free agents (baseball only) |
+| `get_free_agents` | Available free agents |
 
 All tools take explicit parameters: `platform`, `sport`, `league_id`, `season_year`.
 
