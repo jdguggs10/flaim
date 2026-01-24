@@ -44,6 +44,7 @@ import {
   handleYahooStatus,
   YahooConnectEnv,
 } from './yahoo-connect-handlers';
+import { YahooStorage } from './yahoo-storage';
 
 // =============================================================================
 // TYPES
@@ -724,6 +725,22 @@ api.post('/connect/yahoo/discover', async (c) => {
     }, 401);
   }
   return handleYahooDiscover(c.env as YahooConnectEnv, userId, getCorsHeaders(c.req.raw));
+});
+
+// List Yahoo leagues (requires auth)
+api.get('/leagues/yahoo', async (c) => {
+  const { userId, error: authError } = await getVerifiedUserId(c.req.raw, c.env);
+  if (!userId) {
+    return c.json({
+      error: 'unauthorized',
+      error_description: authError || 'Authentication required',
+    }, 401);
+  }
+
+  const storage = YahooStorage.fromEnvironment(c.env);
+  const leagues = await storage.getYahooLeagues(userId);
+
+  return c.json({ leagues }, 200);
 });
 
 // =============================================================================

@@ -186,11 +186,59 @@ export function getUnifiedTools(): UnifiedTool[] {
       inputSchema: {},
       handler: async (_args, env, authHeader, correlationId) => {
         try {
-          const { leagues, status: fetchStatus } = await fetchUserLeagues(env, authHeader, correlationId);
+          // Fetch ESPN leagues
+          const { leagues: espnLeagues, status: fetchStatus } = await fetchUserLeagues(env, authHeader, correlationId);
 
           if (fetchStatus === 401 || fetchStatus === 403) {
             throw new Error('AUTH_FAILED: Authentication failed');
           }
+
+          // Fetch Yahoo leagues
+          const yahooLeagues: UserLeague[] = [];
+          try {
+            const baseHeaders: Record<string, string> = {
+              'Content-Type': 'application/json',
+              ...(authHeader ? { Authorization: authHeader } : {}),
+            };
+            const headers = correlationId ? withCorrelationId(baseHeaders, correlationId) : baseHeaders;
+
+            const yahooResponse = await env.AUTH_WORKER.fetch(
+              new Request('https://internal/leagues/yahoo', {
+                headers,
+              })
+            );
+            if (yahooResponse.ok) {
+              const yahooData = (await yahooResponse.json()) as {
+                leagues?: Array<{
+                  sport: string;
+                  leagueKey: string;
+                  leagueName: string;
+                  teamId?: string;
+                  seasonYear: number;
+                  isDefault?: boolean;
+                }>;
+              };
+              if (yahooData.leagues) {
+                for (const league of yahooData.leagues) {
+                  yahooLeagues.push({
+                    platform: 'yahoo',
+                    sport: league.sport,
+                    leagueId: league.leagueKey,
+                    leagueName: league.leagueName,
+                    teamId: league.teamId || '',
+                    seasonYear: league.seasonYear,
+                    isDefault: league.isDefault,
+                  });
+                }
+              }
+            }
+          } catch (error) {
+            console.error('[get_user_session] Failed to fetch Yahoo leagues:', error);
+            // Don't fail - just return ESPN leagues
+          }
+
+          // Combine all leagues
+          const leagues = [...espnLeagues, ...yahooLeagues];
 
           const hasLeagues = leagues.length > 0;
           const sportCounts = leagues.reduce(
