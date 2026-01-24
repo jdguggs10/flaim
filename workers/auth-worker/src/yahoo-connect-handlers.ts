@@ -53,6 +53,9 @@ function getCallbackUrl(env: YahooConnectEnv): string {
   if (env.ENVIRONMENT === 'dev' || env.NODE_ENV === 'development') {
     return 'http://localhost:8786/connect/yahoo/callback';
   }
+  if (env.ENVIRONMENT === 'preview') {
+    return 'https://api.flaim.app/auth-preview/connect/yahoo/callback';
+  }
   return 'https://api.flaim.app/auth/connect/yahoo/callback';
 }
 
