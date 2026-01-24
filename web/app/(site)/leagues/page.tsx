@@ -21,6 +21,7 @@ import {
   CheckCircle2,
   AlertCircle,
   Search,
+  ChevronDown,
   X,
   Star,
   History,
@@ -101,6 +102,8 @@ export default function LeaguesPage() {
   const [deletingLeagueKey, setDeletingLeagueKey] = useState<string | null>(null);
   const [settingDefaultKey, setSettingDefaultKey] = useState<string | null>(null);
   const [discoveringLeagueKey, setDiscoveringLeagueKey] = useState<string | null>(null);
+  const [isEspnSetupOpen, setIsEspnSetupOpen] = useState(false);
+  const [isYahooSetupOpen, setIsYahooSetupOpen] = useState(false);
 
   // Add league flow state
   const [manualDialogOpen, setManualDialogOpen] = useState(false);
@@ -179,28 +182,30 @@ export default function LeaguesPage() {
   };
 
   // Load leagues on mount
+  const loadLeagues = async (options?: { showSpinner?: boolean }) => {
+    const showSpinner = options?.showSpinner ?? true;
+    if (showSpinner) setIsLoadingLeagues(true);
+
+    try {
+      const leaguesRes = await fetch('/api/espn/leagues');
+      if (leaguesRes.ok) {
+        const data = await leaguesRes.json() as { leagues?: League[] };
+        setLeagues(data.leagues || []);
+      }
+    } catch (err) {
+      console.error('Failed to load leagues:', err);
+    } finally {
+      if (showSpinner) setIsLoadingLeagues(false);
+    }
+  };
+
   useEffect(() => {
     if (!isLoaded || !isSignedIn) {
       setIsLoadingLeagues(false);
       return;
     }
 
-    const loadData = async () => {
-      // Load leagues
-      try {
-        const leaguesRes = await fetch('/api/espn/leagues');
-        if (leaguesRes.ok) {
-          const data = await leaguesRes.json() as { leagues?: League[] };
-          setLeagues(data.leagues || []);
-        }
-      } catch (err) {
-        console.error('Failed to load leagues:', err);
-      } finally {
-        setIsLoadingLeagues(false);
-      }
-    };
-
-    loadData();
+    loadLeagues({ showSpinner: true });
   }, [isLoaded, isSignedIn]);
 
   // Verify league (call auto-pull to get league info)
@@ -509,284 +514,12 @@ export default function LeaguesPage() {
           </Alert>
         )}
 
-        {/* Connect Leagues Card */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Add New Leagues or Seasons</CardTitle>
-            <CardDescription>
-              Use the extension to auto-discover your leagues, or add them manually.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {/* No credentials state */}
-            {!hasCredentials && !verifiedLeague && (
-              <div className="p-4 border rounded-lg bg-muted/50 space-y-3">
-                <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-bold">
-                    2
-                  </div>
-                  <span className="font-medium">Sync ESPN credentials first</span>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  Install the Chrome extension to automatically sync your ESPN credentials, then come back here to add leagues.
-                </p>
-                <a
-                  href={CHROME_EXTENSION_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <Button variant="outline" className="w-full">
-                    <Chrome className="h-4 w-4 mr-2" />
-                    Install Extension
-                  </Button>
-                </a>
-              </div>
-            )}
-
-            {/* Has credentials - show options */}
-            {hasCredentials && !verifiedLeague && (
-              <div className="space-y-3">
-                {/* Primary: Extension auto-discover */}
-                <a
-                  href={CHROME_EXTENSION_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <Button className="w-full">
-                    <Chrome className="h-4 w-4 mr-2" />
-                    Auto-discover with Extension
-                  </Button>
-                </a>
-
-                {/* Secondary: Manual add dialog */}
-                <Dialog open={manualDialogOpen} onOpenChange={setManualDialogOpen}>
-                  <DialogTrigger asChild>
-                    <Button variant="outline" className="w-full">
-                      Add league manually
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader>
-                      <div className="flex items-center gap-2">
-                        <DialogTitle>Add League Manually</DialogTitle>
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <button
-                              type="button"
-                              className="text-muted-foreground hover:text-foreground transition-colors"
-                              aria-label="How to find your league ID"
-                            >
-                              <Info className="h-4 w-4" />
-                            </button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-80 text-sm">
-                            <p className="font-medium mb-2">Finding your league ID</p>
-                            <p className="text-muted-foreground">
-                              Your league ID is in the ESPN URL when viewing your league:
-                            </p>
-                            <code className="block mt-2 p-2 bg-muted rounded text-xs break-all">
-                              espn.com/fantasy/football/league?leagueId=<strong>12345678</strong>
-                            </code>
-                          </PopoverContent>
-                        </Popover>
-                      </div>
-                      <DialogDescription>
-                        Enter your ESPN league ID to add a specific league or season.
-                      </DialogDescription>
-                    </DialogHeader>
-                    <div className="space-y-4 pt-2">
-                      {/* Quick season toggles */}
-                      {(newLeagueSport === 'baseball' || newLeagueSport === 'football') && (
-                        <div className="flex gap-2">
-                          <Button
-                            variant={newLeagueSeason === getDefaultSeasonYear(newLeagueSport as SeasonSport) ? 'default' : 'outline'}
-                            size="sm"
-                            onClick={() => {
-                              const sport = newLeagueSport as SeasonSport;
-                              setNewLeagueSeason(getDefaultSeasonYear(sport));
-                              setSeasonManuallySet(false);
-                            }}
-                            disabled={isVerifying}
-                          >
-                            This season
-                          </Button>
-                          <Button
-                            variant={newLeagueSeason === getDefaultSeasonYear(newLeagueSport as SeasonSport) - 1 ? 'default' : 'outline'}
-                            size="sm"
-                            onClick={() => {
-                              const sport = newLeagueSport as SeasonSport;
-                              setNewLeagueSeason(getDefaultSeasonYear(sport) - 1);
-                              setSeasonManuallySet(true);
-                            }}
-                            disabled={isVerifying}
-                          >
-                            Last season
-                          </Button>
-                        </div>
-                      )}
-                      <div className="space-y-2">
-                        <Label htmlFor="leagueId">League ID</Label>
-                        <Input
-                          id="leagueId"
-                          placeholder="e.g., 12345678"
-                          value={newLeagueId}
-                          onChange={(e) => setNewLeagueId(e.target.value)}
-                          onKeyDown={(e) => e.key === 'Enter' && handleVerifyLeague()}
-                          disabled={isVerifying}
-                        />
-                      </div>
-                      <div className="flex gap-2">
-                        <div className="flex-1 space-y-2">
-                          <Label>Sport</Label>
-                          <Select
-                            value={newLeagueSport}
-                            onValueChange={(v) => {
-                              const sport = v as Sport;
-                              setNewLeagueSport(sport);
-                              if (!seasonManuallySet && (sport === 'baseball' || sport === 'football')) {
-                                setNewLeagueSeason(getDefaultSeasonYear(sport));
-                              }
-                            }}
-                            disabled={isVerifying}
-                          >
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {SPORT_OPTIONS.map((sport) => (
-                                <SelectItem key={sport.value} value={sport.value}>
-                                  {sport.emoji} {sport.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="w-24 space-y-2">
-                          <Label>Season</Label>
-                          <Select
-                            value={String(newLeagueSeason)}
-                            onValueChange={(v) => {
-                              setNewLeagueSeason(Number(v));
-                              setSeasonManuallySet(true);
-                            }}
-                            disabled={isVerifying}
-                          >
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {SEASON_OPTIONS.map((year) => (
-                                <SelectItem key={year} value={String(year)}>
-                                  {year}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-                      <div className="flex gap-2 pt-2">
-                        <Button
-                          onClick={handleVerifyLeague}
-                          disabled={isVerifying || !newLeagueId.trim()}
-                        >
-                          {isVerifying ? (
-                            <>
-                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                              Verifying...
-                            </>
-                          ) : (
-                            <>
-                              <Search className="h-4 w-4 mr-2" />
-                              Verify League
-                            </>
-                          )}
-                        </Button>
-                        <Button variant="outline" onClick={() => setManualDialogOpen(false)}>
-                          Cancel
-                        </Button>
-                      </div>
-                    </div>
-                  </DialogContent>
-                </Dialog>
-              </div>
-            )}
-
-            {/* Verification result - shows after successful verify */}
-            {verifiedLeague && (
-              <div className="p-4 border rounded-lg bg-muted/50 space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-5 w-5 text-green-600" />
-                    <span className="font-medium">League verified</span>
-                  </div>
-                  <Button variant="ghost" size="icon" onClick={handleCancelVerification}>
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xl">{getSportEmoji(verifiedLeague.sport)}</span>
-                    <div>
-                      <div className="font-medium">{verifiedLeague.leagueName}</div>
-                      <div className="text-sm text-muted-foreground">
-                        {verifiedLeague.seasonYear} Season
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Select Your Team</Label>
-                  <Select value={selectedTeamId} onValueChange={setSelectedTeamId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Choose your team..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {verifiedLeague.teams.map((team, index) => {
-                        const uniqueId = team.id || String(index + 1);
-                        return (
-                          <SelectItem key={`team-${index}-${uniqueId}`} value={uniqueId}>
-                            {team.name}
-                            {team.owner && (
-                              <span className="text-muted-foreground ml-2">({team.owner})</span>
-                            )}
-                          </SelectItem>
-                        );
-                      })}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="flex gap-2">
-                  <Button
-                    onClick={handleAddVerifiedLeague}
-                    disabled={isAddingLeague || !selectedTeamId}
-                  >
-                    {isAddingLeague ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Adding...
-                      </>
-                    ) : (
-                      'Add League'
-                    )}
-                  </Button>
-                  <Button variant="outline" onClick={handleCancelVerification}>
-                    Cancel
-                  </Button>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
         {/* Your Leagues Card */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Your Leagues</CardTitle>
+            <CardTitle className="text-lg">Active Leagues</CardTitle>
             <CardDescription>
-              Manage added teams and seasons below.
+              These are your teams and seasons that are already linked.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -952,6 +685,330 @@ export default function LeaguesPage() {
           </CardContent>
         </Card>
 
+        {/* League Maintenance */}
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <h2 className="text-2xl font-semibold">League Maintenance</h2>
+            <p className="text-muted-foreground">
+              Manage ESPN credentials, discover new leagues, or add them manually.
+            </p>
+          </div>
+
+          {/* Platform cards */}
+          <div className="grid gap-4">
+            <Card>
+              <button
+                type="button"
+                onClick={() => setIsEspnSetupOpen((prev) => !prev)}
+                aria-expanded={isEspnSetupOpen}
+                aria-controls="espn-setup-content"
+                className="w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              >
+                <CardHeader className="flex flex-row items-start justify-between gap-4">
+                  <div className="space-y-1">
+                    <CardTitle className="text-lg">ESPN</CardTitle>
+                    <CardDescription>
+                      Use the extension to update credentials and discover leagues, or add one manually.
+                    </CardDescription>
+                  </div>
+                  <ChevronDown
+                    className={`h-5 w-5 text-muted-foreground transition-transform ${
+                      isEspnSetupOpen ? 'rotate-180' : ''
+                    }`}
+                  />
+                </CardHeader>
+              </button>
+              {isEspnSetupOpen && (
+                <CardContent id="espn-setup-content" className="space-y-4">
+                  {!verifiedLeague && (
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <a
+                          href={CHROME_EXTENSION_URL}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block"
+                        >
+                          <Button
+                            variant={hasCredentials ? 'outline' : 'default'}
+                            className="w-full justify-center"
+                          >
+                            <span className="inline-flex items-center gap-2">
+                              <span>Automatically</span>
+                              <Chrome className="h-4 w-4" />
+                              <span>Use Chrome Extension</span>
+                            </span>
+                          </Button>
+                        </a>
+                      </div>
+
+                      <Dialog open={manualDialogOpen} onOpenChange={setManualDialogOpen}>
+                        <DialogTrigger asChild>
+                          <Button variant="outline" className="w-full">
+                            Add league manually
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent>
+                          <DialogHeader>
+                            <div className="flex items-center gap-2">
+                              <DialogTitle>Add League Manually</DialogTitle>
+                              <Popover>
+                                <PopoverTrigger asChild>
+                                  <button
+                                    type="button"
+                                    className="text-muted-foreground hover:text-foreground transition-colors"
+                                    aria-label="How to find your league ID"
+                                  >
+                                    <Info className="h-4 w-4" />
+                                  </button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-80 text-sm">
+                                  <p className="font-medium mb-2">Finding your league ID</p>
+                                  <p className="text-muted-foreground">
+                                    Your league ID is in the ESPN URL when viewing your league:
+                                  </p>
+                                  <code className="block mt-2 p-2 bg-muted rounded text-xs break-all">
+                                    espn.com/fantasy/football/league?leagueId=<strong>12345678</strong>
+                                  </code>
+                                </PopoverContent>
+                              </Popover>
+                            </div>
+                            <DialogDescription>
+                              Enter your ESPN league ID to add a specific league or season.
+                            </DialogDescription>
+                          </DialogHeader>
+                          <div className="space-y-4 pt-2">
+                            {/* Quick season toggles */}
+                            {(newLeagueSport === 'baseball' || newLeagueSport === 'football') && (
+                              <div className="flex gap-2">
+                                <Button
+                                  variant={newLeagueSeason === getDefaultSeasonYear(newLeagueSport as SeasonSport) ? 'default' : 'outline'}
+                                  size="sm"
+                                  onClick={() => {
+                                    const sport = newLeagueSport as SeasonSport;
+                                    setNewLeagueSeason(getDefaultSeasonYear(sport));
+                                    setSeasonManuallySet(false);
+                                  }}
+                                  disabled={isVerifying}
+                                >
+                                  This season
+                                </Button>
+                                <Button
+                                  variant={newLeagueSeason === getDefaultSeasonYear(newLeagueSport as SeasonSport) - 1 ? 'default' : 'outline'}
+                                  size="sm"
+                                  onClick={() => {
+                                    const sport = newLeagueSport as SeasonSport;
+                                    setNewLeagueSeason(getDefaultSeasonYear(sport) - 1);
+                                    setSeasonManuallySet(true);
+                                  }}
+                                  disabled={isVerifying}
+                                >
+                                  Last season
+                                </Button>
+                              </div>
+                            )}
+                            <div className="space-y-2">
+                              <Label htmlFor="leagueId">League ID</Label>
+                              <Input
+                                id="leagueId"
+                                placeholder="e.g., 12345678"
+                                value={newLeagueId}
+                                onChange={(e) => setNewLeagueId(e.target.value)}
+                                onKeyDown={(e) => e.key === 'Enter' && handleVerifyLeague()}
+                                disabled={isVerifying}
+                              />
+                            </div>
+                            <div className="flex gap-2">
+                              <div className="flex-1 space-y-2">
+                                <Label>Sport</Label>
+                                <Select
+                                  value={newLeagueSport}
+                                  onValueChange={(v) => {
+                                    const sport = v as Sport;
+                                    setNewLeagueSport(sport);
+                                    if (!seasonManuallySet && (sport === 'baseball' || sport === 'football')) {
+                                      setNewLeagueSeason(getDefaultSeasonYear(sport));
+                                    }
+                                  }}
+                                  disabled={isVerifying}
+                                >
+                                  <SelectTrigger>
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {SPORT_OPTIONS.map((sport) => (
+                                      <SelectItem key={sport.value} value={sport.value}>
+                                        {sport.emoji} {sport.label}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div className="w-24 space-y-2">
+                                <Label>Season</Label>
+                                <Select
+                                  value={String(newLeagueSeason)}
+                                  onValueChange={(v) => {
+                                    setNewLeagueSeason(Number(v));
+                                    setSeasonManuallySet(true);
+                                  }}
+                                  disabled={isVerifying}
+                                >
+                                  <SelectTrigger>
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {SEASON_OPTIONS.map((year) => (
+                                      <SelectItem key={year} value={String(year)}>
+                                        {year}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            </div>
+                            <div className="flex gap-2 pt-2">
+                              <Button
+                                onClick={handleVerifyLeague}
+                                disabled={isVerifying || !newLeagueId.trim()}
+                              >
+                                {isVerifying ? (
+                                  <>
+                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                    Verifying...
+                                  </>
+                                ) : (
+                                  <>
+                                    <Search className="h-4 w-4 mr-2" />
+                                    Verify League
+                                  </>
+                                )}
+                              </Button>
+                              <Button variant="outline" onClick={() => setManualDialogOpen(false)}>
+                                Cancel
+                              </Button>
+                            </div>
+                          </div>
+                        </DialogContent>
+                      </Dialog>
+                    </div>
+                  )}
+
+                {/* Verification result - shows after successful verify */}
+                {verifiedLeague && (
+                  <div className="p-4 border rounded-lg bg-muted/50 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="h-5 w-5 text-green-600" />
+                        <span className="font-medium">League verified</span>
+                      </div>
+                      <Button variant="ghost" size="icon" onClick={handleCancelVerification}>
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xl">{getSportEmoji(verifiedLeague.sport)}</span>
+                        <div>
+                          <div className="font-medium">{verifiedLeague.leagueName}</div>
+                          <div className="text-sm text-muted-foreground">
+                            {verifiedLeague.seasonYear} Season
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Select Your Team</Label>
+                      <Select value={selectedTeamId} onValueChange={setSelectedTeamId}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Choose your team..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {verifiedLeague.teams.map((team, index) => {
+                            const uniqueId = team.id || String(index + 1);
+                            return (
+                              <SelectItem key={`team-${index}-${uniqueId}`} value={uniqueId}>
+                                {team.name}
+                                {team.owner && (
+                                  <span className="text-muted-foreground ml-2">({team.owner})</span>
+                                )}
+                              </SelectItem>
+                            );
+                          })}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="flex gap-2">
+                      <Button
+                        onClick={handleAddVerifiedLeague}
+                        disabled={isAddingLeague || !selectedTeamId}
+                      >
+                        {isAddingLeague ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Adding...
+                          </>
+                        ) : (
+                          'Add League'
+                        )}
+                      </Button>
+                      <Button variant="outline" onClick={handleCancelVerification}>
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                )}
+                </CardContent>
+              )}
+            </Card>
+
+            <Card>
+              <button
+                type="button"
+                onClick={() => setIsYahooSetupOpen((prev) => !prev)}
+                aria-expanded={isYahooSetupOpen}
+                aria-controls="yahoo-setup-content"
+                className="w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              >
+                <CardHeader className="flex flex-row items-start justify-between gap-4">
+                  <div className="space-y-1">
+                    <CardTitle className="text-lg">Yahoo</CardTitle>
+                    <CardDescription>
+                      Connect your Yahoo account when you are ready to add leagues.
+                    </CardDescription>
+                  </div>
+                  <ChevronDown
+                    className={`h-5 w-5 text-muted-foreground transition-transform ${
+                      isYahooSetupOpen ? 'rotate-180' : ''
+                    }`}
+                  />
+                </CardHeader>
+              </button>
+              {isYahooSetupOpen && (
+                <CardContent id="yahoo-setup-content" className="space-y-3">
+                  <div className="p-4 border rounded-lg bg-muted/40 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Info className="h-4 w-4" />
+                      <span className="font-medium">Yahoo connection</span>
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+                        Coming soon
+                      </span>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Yahoo will use OAuth instead of the browser extension.
+                    </p>
+                    <Button variant="outline" className="w-full" disabled>
+                      Connect Yahoo (coming soon)
+                    </Button>
+                  </div>
+                </CardContent>
+              )}
+            </Card>
+          </div>
+        </div>
       </div>
     </div>
   );
