@@ -102,7 +102,7 @@ All tools take explicit parameters: `platform`, `sport`, `league_id`, `season_ye
 - `get_standings` — League standings
 - `get_matchups` — Current/specified week matchups
 - `get_roster` — Team roster with player details
-- `get_free_agents` — Available free agents (baseball only)
+- `get_free_agents` — Available free agents
 
 ### Legacy Workers
 

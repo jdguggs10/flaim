@@ -55,6 +55,7 @@ interface ExecuteRequest {
 - `get_standings` - League standings
 - `get_matchups` - Weekly matchups
 - `get_roster` - Team roster with player stats
+- `get_free_agents` - Available free agents
 
 ### Baseball
 - `get_league_info` - League settings and members
