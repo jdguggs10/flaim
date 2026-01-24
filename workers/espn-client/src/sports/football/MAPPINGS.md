@@ -113,6 +113,22 @@ Named filters map to roster slot IDs for `filterSlotIds` in ESPN free agent quer
 | FLEX | [23] |
 | ALL | [0, 2, 4, 6, 16, 17, 23] |
 
+### 6) Player Stats (STATS_MAP)
+
+Football stats are organized by category. Unlike baseball (which splits batting/pitching), football uses a single `STATS_MAP` since players can accumulate stats across multiple categories (e.g., a QB with rushing yards).
+
+| ID Range | Category | Key Stats |
+|----------|----------|-----------|
+| 0-22 | Passing | passAtt, passCmp, passYds, passTD, passINT |
+| 23-40 | Rushing | rushAtt, rushYds, rushTD, rushYPA |
+| 41-61 | Receiving | rec, recYds, recTD, recTgt, recYAC |
+| 62-73 | Misc Offense | fum, fumLost, TO, sacked |
+| 74-88 | Kicking | FGM, FGA, XPM, XPA (by distance) |
+| 89-136 | Defense/ST | defSack, defINT, defTD, defPtsAllow |
+| 155+ | Head Coach | hcWin, hcLoss, margin-of-victory bonuses |
+
+See `mappings.ts` for complete stat ID list with inline comments.
+
 ---
 
 ## How the mappings were derived
@@ -154,10 +170,10 @@ Do **not** use the public ESPN sports API for verification; it uses a different 
 |--------|----------|----------|
 | Position complexity | Simple (6 positions) | Complex (11 positions) |
 | Roster slots | Fewer (9 slots) | Many (19+ slots) |
-| Stats mapping | Not implemented | Full batting/pitching stats |
+| Stats mapping | Single STATS_MAP | Split BATTING/PITCHING maps |
 | ID alignment | Position/slot IDs similar | Position/slot IDs very different |
 
-Football doesn't currently transform stats because the ESPN response structure differs and stats aren't yet needed by MCP tools.
+Football uses a single `STATS_MAP` because players can accumulate stats across categories (QB with rushing yards). Baseball splits into `BATTING_STATS_MAP` and `PITCHING_STATS_MAP` because players are typically one or the other.
 
 ---
 
@@ -168,5 +184,6 @@ The unified MCP tools (`get_roster`, `get_free_agents`, `get_standings`) rely on
 - Render correct player positions
 - Filter free agents by slots accurately
 - Show proper team abbreviations and injury statuses
+- Transform stats to readable names (passYds, rushTD, etc.)
 
 Keeping the mappings accurate prevents user-facing errors and avoids subtle AI misinterpretations.

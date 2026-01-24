@@ -79,8 +79,8 @@ ESPN Fantasy APIs use internal numeric IDs for positions, teams, roster slots, a
 
 | Sport | File | Documentation |
 |-------|------|---------------|
-| Football | `src/sports/football/mappings.ts` | [FOOTBALL_MAPPINGS.md](./FOOTBALL_MAPPINGS.md) |
-| Baseball | `src/sports/baseball/mappings.ts` | [BASEBALL_MAPPINGS.md](./BASEBALL_MAPPINGS.md) |
+| Football | `src/sports/football/mappings.ts` | [MAPPINGS.md](./src/sports/football/MAPPINGS.md) |
+| Baseball | `src/sports/baseball/mappings.ts` | [MAPPINGS.md](./src/sports/baseball/MAPPINGS.md) |
 
 ### Standard mapping structure
 
@@ -93,19 +93,23 @@ Each sport's mappings.ts exports:
 | `PRO_TEAM_MAP` | Pro team abbreviations (`proTeamId` → abbrev) |
 | `INJURY_STATUS_MAP` | Injury status display names |
 | `POSITION_SLOTS` | Free agent filter groups (position → slot IDs) |
+| `STATS_MAP` | Stat IDs to readable names (or split maps for baseball) |
 | `getPositionName()` | Transform position ID with fallback |
 | `getLineupSlotName()` | Transform slot ID with fallback |
 | `getProTeamAbbrev()` | Transform team ID with fallback |
 | `getInjuryStatus()` | Transform injury code |
 | `transformEligiblePositions()` | Transform eligibleSlots array |
+| `transformStats()` | Transform stats object keys to readable names |
 
-Baseball additionally exports stat mappings (`BATTING_STATS_MAP`, `PITCHING_STATS_MAP`, `transformStats()`).
+**Stats organization differs by sport:**
+- Football: Single `STATS_MAP` (players can have passing + rushing + receiving)
+- Baseball: Split `BATTING_STATS_MAP` and `PITCHING_STATS_MAP` (players are typically one or the other)
 
 ### Adding a new sport
 
 When adding basketball or hockey:
 1. Create `src/sports/{sport}/mappings.ts` following the standard structure
-2. Create `{SPORT}_MAPPINGS.md` documenting the ID mappings and verification sources
+2. Create `src/sports/{sport}/MAPPINGS.md` documenting the ID mappings and verification sources
 3. Add handlers in `src/sports/{sport}/handlers.ts`
 
 ## Development
@@ -131,5 +135,5 @@ wrangler dev --env dev --port 8789
 
 ### Mapping Documentation
 
-- [`FOOTBALL_MAPPINGS.md`](./FOOTBALL_MAPPINGS.md) - ESPN Fantasy Football mapping notes
-- [`BASEBALL_MAPPINGS.md`](./BASEBALL_MAPPINGS.md) - ESPN Fantasy Baseball mapping notes
+- [Football MAPPINGS.md](./src/sports/football/MAPPINGS.md) - ESPN Fantasy Football mapping notes
+- [Baseball MAPPINGS.md](./src/sports/baseball/MAPPINGS.md) - ESPN Fantasy Baseball mapping notes

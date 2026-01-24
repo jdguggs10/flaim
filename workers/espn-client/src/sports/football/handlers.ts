@@ -8,6 +8,7 @@ import {
   getProTeamAbbrev,
   getInjuryStatus,
   transformEligiblePositions,
+  transformStats,
   POSITION_SLOTS,
 } from './mappings';
 
@@ -287,6 +288,12 @@ async function handleGetRoster(
     // Transform roster entries
     const roster = (team.roster?.entries || []).map((entry: any) => {
       const player = entry.playerPoolEntry?.player || {};
+      const stats = player.stats || [];
+
+      // Get current season stats if available
+      const currentStats = stats.find((s: any) =>
+        s.seasonId === season_year && s.statSourceId === 0
+      );
 
       return {
         playerId: player.id,
@@ -298,6 +305,7 @@ async function handleGetRoster(
         injuryStatus: player.injuryStatus ? getInjuryStatus(player.injuryStatus) : undefined,
         percentOwned: player.ownership?.percentOwned,
         percentStarted: player.ownership?.percentStarted,
+        stats: currentStats?.stats ? transformStats(currentStats.stats) : undefined,
         acquisitionType: entry.acquisitionType,
         acquisitionDate: entry.acquisitionDate
       };
@@ -370,9 +378,15 @@ async function handleGetFreeAgents(
     const data = await response.json() as any;
     const players = data.players || [];
 
-    // Transform player data (no stats field for football, matching roster handler)
+    // Transform player data
     const freeAgents = players.map((entry: any) => {
       const player = entry.player || {};
+      const stats = player.stats || [];
+
+      // Get current season stats if available
+      const currentStats = stats.find((s: any) =>
+        s.seasonId === season_year && s.statSourceId === 0
+      );
 
       return {
         playerId: player.id,
@@ -384,7 +398,8 @@ async function handleGetFreeAgents(
         percentOwned: player.ownership?.percentOwned,
         percentStarted: player.ownership?.percentStarted,
         status: entry.status, // FREEAGENT or WAIVERS
-        waiverProcessDate: entry.waiverProcessDate
+        waiverProcessDate: entry.waiverProcessDate,
+        stats: currentStats?.stats ? transformStats(currentStats.stats) : undefined
       };
     });
 
