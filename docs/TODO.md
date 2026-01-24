@@ -5,8 +5,9 @@
 - **Node.js v25 localStorage warning (ignore)**: Running `npm run dev:frontend` on Node v25+ shows `Warning: --localstorage-file was provided without a valid path`. This is a [known Node.js v25 regression](https://github.com/nodejs/node/issues/60704) and is harmless. Suppressed via `NODE_OPTIONS='--no-webstorage'` in the dev script.
 
 ## Features
-- **Deepen MCP functionality for football and baseball**: expand coverage (edge cases, richer data, pagination), and add tests for existing tools.
+- **Deepen MCP functionality for football and baseball**: expand coverage (edge cases, richer data, pagination), and add more tests for existing tools.
   - Unified gateway tools (`workers/fantasy-mcp`): `get_user_session`, `get_league_info`, `get_standings`, `get_matchups`, `get_roster`, `get_free_agents`
+  - Full feature parity between football and baseball (stats, projected points, free agents)
   - Legacy workers still available as fallback: `baseball-espn-mcp`, `football-espn-mcp`
 
 ## Marketing
@@ -19,10 +20,10 @@
 - **Codebase Audit & Streamlining**: Conduct a thorough review for legacy code, unused utilities, or redundant components. Identify parts of the system that are no longer in use (specifically around older auth patterns or defunct chat features) and remove them cautiously to reduce technical debt while ensuring no regressions.
 - **Devconsole chat clarity**: Reduce excess tool verbosity when using the devconsole chat to keep responses concise.
 - **Advanced Token & Usage Analytics**: Implement per-turn and per-session token usage tracking in the chat UI by capturing usage data from the Responses API stream. Include cost estimation and historical usage trends.
-- **Reconcile remaining ESPN baseball mapping unknowns**: Validate slot IDs `18`/`22` and align `BASEBALL_MAPPING_INVESTIGATION.md` with current evidence.
+- **Reconcile remaining ESPN baseball mapping unknowns**: Validate slot IDs `18`/`22` per `workers/espn-client/src/sports/baseball/MAPPINGS.md`.
 
 ## Infrastructure & UX Polish
-- **Automated Testing**: Implement unit and integration tests for core API logic (Fan API, auth handlers) to prevent regressions.
+- **Automated Testing**: Core OAuth/tool routing tests added; consider deeper integration tests when usage grows.
 - **Service Monitoring**: Add external uptime checks for existing `/health` endpoints.
 - **UX Polish**: Implement loading states (spinners or skeletons) across the web dashboard and extension to improve perceived performance during API fetches.
 
