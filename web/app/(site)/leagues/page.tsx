@@ -81,14 +81,6 @@ interface VerifiedLeague {
 
 type Sport = 'football' | 'baseball' | 'basketball' | 'hockey';
 
-interface LeagueGroup {
-  key: string;
-  leagueId: string;
-  sport: string;
-  leagueName?: string;
-  seasons: League[];
-}
-
 // Unified league for display - combines ESPN and Yahoo into common format
 interface UnifiedLeague {
   platform: 'espn' | 'yahoo';
@@ -554,6 +546,59 @@ function LeaguesPageContent() {
     }
   };
 
+  // Set default Yahoo league
+  const handleSetYahooDefault = async (yahooId: string) => {
+    setSettingDefaultKey(`yahoo:${yahooId}`);
+    setLeagueError(null);
+    setLeagueNotice(null);
+
+    try {
+      const res = await fetch(`/api/connect/yahoo/leagues/${yahooId}/default`, {
+        method: 'POST',
+      });
+
+      if (!res.ok) {
+        const data = await res.json() as { error?: string };
+        throw new Error(data.error || 'Failed to set default league');
+      }
+
+      const data = await res.json() as { leagues?: YahooLeague[] };
+      if (data.leagues) {
+        setYahooLeagues(data.leagues);
+      }
+    } catch (err) {
+      setLeagueError(err instanceof Error ? err.message : 'Failed to set default league');
+    } finally {
+      setSettingDefaultKey(null);
+    }
+  };
+
+  // Delete Yahoo league
+  const handleDeleteYahooLeague = async (yahooId: string) => {
+    setDeletingLeagueKey(`yahoo:${yahooId}`);
+    setLeagueNotice(null);
+
+    try {
+      const res = await fetch(`/api/connect/yahoo/leagues/${yahooId}`, {
+        method: 'DELETE',
+      });
+
+      if (!res.ok) {
+        const data = await res.json() as { error?: string };
+        throw new Error(data.error || 'Failed to delete league');
+      }
+
+      const data = await res.json() as { leagues?: YahooLeague[] };
+      if (data.leagues) {
+        setYahooLeagues(data.leagues);
+      }
+    } catch (err) {
+      setLeagueError(err instanceof Error ? err.message : 'Failed to delete league');
+    } finally {
+      setDeletingLeagueKey(null);
+    }
+  };
+
   // Discover historical seasons for a league
   const handleDiscoverSeasons = async (leagueId: string, sport: string) => {
     // Only baseball and football are supported
@@ -720,12 +765,12 @@ function LeaguesPageContent() {
                                   {group.leagueName || `League ${group.leagueId}`}
                                 </div>
                                 <div className="text-xs text-muted-foreground break-words">
-                                  ESPN • League ID: {group.leagueId}
+                                  {group.platform === 'espn' ? 'ESPN' : 'Yahoo'} • {group.platform === 'espn' ? `League ID: ${group.leagueId}` : group.leagueId}
                                   {primaryTeamId && ` • Team ID: ${primaryTeamId}`}
                                 </div>
                               </div>
                               <div className="flex items-center gap-1 shrink-0">
-                                {canDiscover && (
+                                {group.platform === 'espn' && canDiscover && (
                                   <Button
                                     variant="ghost"
                                     size="icon"
@@ -749,11 +794,21 @@ function LeaguesPageContent() {
                                   variant="ghost"
                                   size="icon"
                                   className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                                  onClick={() => handleDeleteLeague(group.leagueId, group.sport)}
-                                  disabled={isDeleting}
+                                  onClick={() => {
+                                    if (group.platform === 'espn') {
+                                      handleDeleteLeague(group.leagueId, group.sport);
+                                    } else {
+                                      // For Yahoo, delete all seasons (get yahooId from first season)
+                                      const yahooId = group.seasons[0]?.yahooId;
+                                      if (yahooId) handleDeleteYahooLeague(yahooId);
+                                    }
+                                  }}
+                                  disabled={group.platform === 'espn'
+                                    ? deletingLeagueKey === baseKey
+                                    : deletingLeagueKey === `yahoo:${group.seasons[0]?.yahooId}`}
                                   title="Delete all seasons"
                                 >
-                                  {isDeleting ? (
+                                  {(group.platform === 'espn' ? isDeleting : deletingLeagueKey === `yahoo:${group.seasons[0]?.yahooId}`) ? (
                                     <Loader2 className="h-4 w-4 animate-spin" />
                                   ) : (
                                     <Trash2 className="h-4 w-4" />
@@ -767,7 +822,9 @@ function LeaguesPageContent() {
                               <div className="flex flex-wrap gap-2">
                                 {visibleSeasons.map((season) => {
                                   const seasonKey = `${season.leagueId}-${season.sport}-${season.seasonYear || 'all'}`;
-                                  const isSettingDefault = settingDefaultKey === seasonKey;
+                                  const isSettingDefault = season.platform === 'espn'
+                                    ? settingDefaultKey === seasonKey
+                                    : settingDefaultKey === `yahoo:${season.yahooId}`;
 
                                   return (
                                     <div
@@ -799,7 +856,13 @@ function LeaguesPageContent() {
                                             ? 'text-yellow-500'
                                             : 'text-muted-foreground hover:text-yellow-500'
                                         }`}
-                                        onClick={() => handleSetDefault(season.leagueId, season.sport, season.seasonYear)}
+                                        onClick={() => {
+                                          if (season.platform === 'espn') {
+                                            handleSetDefault(season.leagueId, season.sport, season.seasonYear);
+                                          } else {
+                                            if (season.yahooId) handleSetYahooDefault(season.yahooId);
+                                          }
+                                        }}
                                         disabled={isSettingDefault || season.isDefault || !season.teamId}
                                         title={
                                           !season.teamId
@@ -841,42 +904,6 @@ function LeaguesPageContent() {
             )}
           </CardContent>
         </Card>
-
-        {/* Yahoo Leagues */}
-        {yahooLeagues.length > 0 && (
-          <div className="space-y-4">
-            <h3 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <span className="text-xs px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">
-                Yahoo
-              </span>
-              Leagues
-            </h3>
-            <div className="space-y-2">
-              {yahooLeagues.map((league) => (
-                <div
-                  key={league.id}
-                  className="flex items-center justify-between gap-3 p-3 border rounded-lg"
-                >
-                  <div className="space-y-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-sm break-words">{league.leagueName}</span>
-                      <span className="text-xs text-muted-foreground capitalize">
-                        {league.sport}
-                      </span>
-                    </div>
-                    <div className="text-xs text-muted-foreground break-words">
-                      {league.seasonYear} season
-                      {league.teamName && ` \u00B7 ${league.teamName}`}
-                    </div>
-                  </div>
-                  {league.isDefault && (
-                    <Star className="h-4 w-4 text-yellow-500 fill-yellow-500 shrink-0" />
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
 
         {/* League Maintenance */}
         <div className="space-y-4">
