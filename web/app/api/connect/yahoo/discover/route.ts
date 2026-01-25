@@ -26,7 +26,7 @@ export async function POST() {
       },
     });
 
-    const data = await workerRes.json() as Record<string, unknown>;
+    const data = await workerRes.json().catch(() => ({ error: 'Unknown error' })) as Record<string, unknown>;
     return NextResponse.json(data, { status: workerRes.status });
   } catch (error) {
     console.error('Yahoo discover route error:', error);

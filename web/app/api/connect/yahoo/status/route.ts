@@ -24,7 +24,7 @@ export async function GET() {
       },
     });
 
-    const data = await workerRes.json() as Record<string, unknown>;
+    const data = await workerRes.json().catch(() => ({ error: 'Unknown error' })) as Record<string, unknown>;
     return NextResponse.json(data, { status: workerRes.status });
   } catch (error) {
     console.error('Yahoo status route error:', error);
