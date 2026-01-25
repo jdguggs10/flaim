@@ -286,14 +286,18 @@ function LeaguesPageContent() {
   useEffect(() => {
     if (!isSignedIn) return;
 
-    checkYahooStatus().then(() => loadYahooLeagues());
-
     const yahooParam = searchParams.get('yahoo');
     if (yahooParam === 'connected') {
+      // Just came from OAuth — trust the param, skip status check
       setIsYahooConnected(true);
+      setIsCheckingYahoo(false);
       discoverYahooLeagues();
       router.replace('/leagues', { scroll: false });
+    } else {
+      // Normal page load — check status from backend
+      checkYahooStatus().then(() => loadYahooLeagues());
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSignedIn]);
 
   // Verify league (call auto-pull to get league info)
