@@ -89,6 +89,32 @@ interface LeagueGroup {
   seasons: League[];
 }
 
+// Unified league for display - combines ESPN and Yahoo into common format
+interface UnifiedLeague {
+  platform: 'espn' | 'yahoo';
+  // Common fields
+  sport: string;
+  seasonYear: number;
+  leagueName: string;
+  teamName?: string;
+  isDefault: boolean;
+  // Platform-specific identifiers
+  leagueId: string;      // ESPN: numeric ID, Yahoo: league_key
+  teamId?: string;
+  // Yahoo-specific
+  yahooId?: string;      // UUID for Yahoo league (for API calls)
+}
+
+interface UnifiedLeagueGroup {
+  key: string;           // e.g., "espn:football:12345" or "yahoo:football:nfl.l.54321"
+  platform: 'espn' | 'yahoo';
+  sport: string;
+  leagueId: string;
+  leagueName: string;
+  teamId?: string;
+  seasons: UnifiedLeague[];
+}
+
 const SPORT_OPTIONS: { value: Sport; label: string; emoji: string }[] = [
   { value: 'football', label: 'Football', emoji: '\u{1F3C8}' },
   { value: 'baseball', label: 'Baseball', emoji: '\u26BE' },
