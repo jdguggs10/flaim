@@ -38,6 +38,10 @@ build/
 .claude/
 .gemini/
 .windsurf/
+.agent/
+.agents/
+.codex/
+.github/skills/
 
 # AI Agent documentation files (personal notes)
 *CLAUDE*.md
