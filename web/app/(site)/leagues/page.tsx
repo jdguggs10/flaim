@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { Suspense, useEffect, useState, useMemo } from 'react';
 import { useAuth, SignIn } from '@clerk/nextjs';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -52,6 +53,18 @@ interface League {
   isDefault?: boolean;
 }
 
+interface YahooLeague {
+  id: string;
+  sport: string;
+  seasonYear: number;
+  leagueKey: string;
+  leagueName: string;
+  teamId?: string;
+  teamKey?: string;
+  teamName?: string;
+  isDefault?: boolean;
+}
+
 interface Team {
   id: string;
   name: string;
@@ -89,10 +102,12 @@ const SEASON_OPTIONS = Array.from(
   (_, i) => currentYear - i
 );
 
-export default function LeaguesPage() {
+function LeaguesPageContent() {
   const { isLoaded, isSignedIn } = useAuth();
   const espnCredentials = useEspnCredentials();
   const { hasCredentials, isCheckingCreds } = espnCredentials;
+  const searchParams = useSearchParams();
+  const router = useRouter();
 
   // Leagues state
   const [leagues, setLeagues] = useState<League[]>([]);
@@ -104,6 +119,11 @@ export default function LeaguesPage() {
   const [discoveringLeagueKey, setDiscoveringLeagueKey] = useState<string | null>(null);
   const [isEspnSetupOpen, setIsEspnSetupOpen] = useState(false);
   const [isYahooSetupOpen, setIsYahooSetupOpen] = useState(false);
+  const [isYahooConnected, setIsYahooConnected] = useState(false);
+  const [isCheckingYahoo, setIsCheckingYahoo] = useState(true);
+  const [isYahooDisconnecting, setIsYahooDisconnecting] = useState(false);
+  const [yahooLeagues, setYahooLeagues] = useState<YahooLeague[]>([]);
+  const [isDiscoveringYahoo, setIsDiscoveringYahoo] = useState(false);
 
   // Add league flow state
   const [manualDialogOpen, setManualDialogOpen] = useState(false);
@@ -199,6 +219,61 @@ export default function LeaguesPage() {
     }
   };
 
+  const checkYahooStatus = async () => {
+    try {
+      const res = await fetch('/api/connect/yahoo/status');
+      if (res.ok) {
+        const data = await res.json() as { connected?: boolean };
+        setIsYahooConnected(data.connected ?? false);
+      }
+    } catch (err) {
+      console.error('Failed to check Yahoo status:', err);
+    } finally {
+      setIsCheckingYahoo(false);
+    }
+  };
+
+  const loadYahooLeagues = async () => {
+    try {
+      const res = await fetch('/api/connect/yahoo/leagues');
+      if (res.ok) {
+        const data = await res.json() as { leagues?: YahooLeague[] };
+        setYahooLeagues(data.leagues || []);
+      }
+    } catch (err) {
+      console.error('Failed to load Yahoo leagues:', err);
+    }
+  };
+
+  const discoverYahooLeagues = async () => {
+    setIsDiscoveringYahoo(true);
+    try {
+      const res = await fetch('/api/connect/yahoo/discover', { method: 'POST' });
+      if (res.ok) {
+        await loadYahooLeagues();
+      }
+    } catch (err) {
+      console.error('Failed to discover Yahoo leagues:', err);
+    } finally {
+      setIsDiscoveringYahoo(false);
+    }
+  };
+
+  const disconnectYahoo = async () => {
+    setIsYahooDisconnecting(true);
+    try {
+      const res = await fetch('/api/connect/yahoo/disconnect', { method: 'DELETE' });
+      if (res.ok) {
+        setIsYahooConnected(false);
+        setYahooLeagues([]);
+      }
+    } catch (err) {
+      console.error('Failed to disconnect Yahoo:', err);
+    } finally {
+      setIsYahooDisconnecting(false);
+    }
+  };
+
   useEffect(() => {
     if (!isLoaded || !isSignedIn) {
       setIsLoadingLeagues(false);
@@ -207,6 +282,19 @@ export default function LeaguesPage() {
 
     loadLeagues({ showSpinner: true });
   }, [isLoaded, isSignedIn]);
+
+  useEffect(() => {
+    if (!isSignedIn) return;
+
+    checkYahooStatus().then(() => loadYahooLeagues());
+
+    const yahooParam = searchParams.get('yahoo');
+    if (yahooParam === 'connected') {
+      setIsYahooConnected(true);
+      discoverYahooLeagues();
+      router.replace('/leagues', { scroll: false });
+    }
+  }, [isSignedIn]);
 
   // Verify league (call auto-pull to get league info)
   const handleVerifyLeague = async () => {
@@ -685,6 +773,42 @@ export default function LeaguesPage() {
           </CardContent>
         </Card>
 
+        {/* Yahoo Leagues */}
+        {yahooLeagues.length > 0 && (
+          <div className="space-y-4">
+            <h3 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <span className="text-xs px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">
+                Yahoo
+              </span>
+              Leagues
+            </h3>
+            <div className="space-y-2">
+              {yahooLeagues.map((league) => (
+                <div
+                  key={league.id}
+                  className="flex items-center justify-between p-3 border rounded-lg"
+                >
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-sm">{league.leagueName}</span>
+                      <span className="text-xs text-muted-foreground capitalize">
+                        {league.sport}
+                      </span>
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {league.seasonYear} season
+                      {league.teamName && ` \u00B7 ${league.teamName}`}
+                    </div>
+                  </div>
+                  {league.isDefault && (
+                    <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* League Maintenance */}
         <div className="space-y-4">
           <div className="space-y-2">
@@ -975,9 +1099,18 @@ export default function LeaguesPage() {
               >
                 <CardHeader className="flex flex-row items-start justify-between gap-4">
                   <div className="space-y-1">
-                    <CardTitle className="text-lg">Yahoo</CardTitle>
+                    <div className="flex items-center gap-2">
+                      <CardTitle className="text-lg">Yahoo</CardTitle>
+                      {isYahooConnected && (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                          Connected
+                        </span>
+                      )}
+                    </div>
                     <CardDescription>
-                      Connect your Yahoo account when you are ready to add leagues.
+                      {isYahooConnected
+                        ? `${yahooLeagues.length} league${yahooLeagues.length !== 1 ? 's' : ''} discovered`
+                        : 'Connect your Yahoo account to add leagues.'}
                     </CardDescription>
                   </div>
                   <ChevronDown
@@ -989,21 +1122,62 @@ export default function LeaguesPage() {
               </button>
               {isYahooSetupOpen && (
                 <CardContent id="yahoo-setup-content" className="space-y-3">
-                  <div className="p-4 border rounded-lg bg-muted/40 space-y-2">
-                    <div className="flex items-center gap-2">
-                      <Info className="h-4 w-4" />
-                      <span className="font-medium">Yahoo connection</span>
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
-                        Coming soon
-                      </span>
+                  {isCheckingYahoo ? (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Checking Yahoo connection...
                     </div>
-                    <p className="text-sm text-muted-foreground">
-                      Yahoo will use OAuth instead of the browser extension.
-                    </p>
-                    <Button variant="outline" className="w-full" disabled>
-                      Connect Yahoo (coming soon)
-                    </Button>
-                  </div>
+                  ) : isYahooConnected ? (
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
+                        <CheckCircle2 className="h-4 w-4" />
+                        Yahoo account connected
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={discoverYahooLeagues}
+                          disabled={isDiscoveringYahoo}
+                        >
+                          {isDiscoveringYahoo ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Discovering...
+                            </>
+                          ) : (
+                            'Refresh Leagues'
+                          )}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={disconnectYahoo}
+                          disabled={isYahooDisconnecting}
+                          className="text-destructive hover:text-destructive"
+                        >
+                          {isYahooDisconnecting ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            'Disconnect'
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-4 border rounded-lg bg-muted/40 space-y-2">
+                      <p className="text-sm text-muted-foreground">
+                        Sign in with Yahoo to connect your fantasy leagues. Uses OAuth — no passwords stored.
+                      </p>
+                      <Button
+                        variant="outline"
+                        className="w-full"
+                        onClick={() => { window.location.href = '/api/connect/yahoo/authorize'; }}
+                      >
+                        Connect Yahoo
+                      </Button>
+                    </div>
+                  )}
                 </CardContent>
               )}
             </Card>
@@ -1011,5 +1185,13 @@ export default function LeaguesPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function LeaguesPage() {
+  return (
+    <Suspense fallback={<div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin" /></div>}>
+      <LeaguesPageContent />
+    </Suspense>
   );
 }
