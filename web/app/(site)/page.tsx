@@ -2,7 +2,7 @@ import { SignedIn, SignedOut } from '@clerk/nextjs';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { User, Check } from 'lucide-react';
-import { StepSyncEspn } from '@/components/site/StepSyncEspn';
+import { StepConnectPlatforms } from '@/components/site/StepConnectPlatforms';
 import { StepConnectAI } from '@/components/site/StepConnectAI';
 
 export default function LandingPage() {
@@ -49,8 +49,8 @@ export default function LandingPage() {
               </SignedIn>
             </div>
 
-            {/* Step 2: Sync ESPN */}
-            <StepSyncEspn />
+            {/* Step 2: Connect Platforms */}
+            <StepConnectPlatforms />
 
             {/* Step 3: Connect AI */}
             <StepConnectAI />
