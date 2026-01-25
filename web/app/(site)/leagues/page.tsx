@@ -649,17 +649,17 @@ function LeaguesPageContent() {
                         return (
                           <div key={group.key} className="rounded-lg border bg-card">
                             {/* Group Header */}
-                            <div className="flex items-center justify-between p-3 border-b">
-                              <div>
-                                <div className="font-medium">
+                            <div className="flex items-center justify-between gap-3 p-3 border-b">
+                              <div className="min-w-0">
+                                <div className="font-medium break-words">
                                   {group.leagueName || `League ${group.leagueId}`}
                                 </div>
-                                <div className="text-xs text-muted-foreground">
+                                <div className="text-xs text-muted-foreground break-words">
                                   ESPN • League ID: {group.leagueId}
                                   {primaryTeamId && ` • Team ID: ${primaryTeamId}`}
                                 </div>
                               </div>
-                              <div className="flex items-center gap-1">
+                              <div className="flex items-center gap-1 shrink-0">
                                 {canDiscover && (
                                   <Button
                                     variant="ghost"
@@ -790,22 +790,22 @@ function LeaguesPageContent() {
               {yahooLeagues.map((league) => (
                 <div
                   key={league.id}
-                  className="flex items-center justify-between p-3 border rounded-lg"
+                  className="flex items-center justify-between gap-3 p-3 border rounded-lg"
                 >
-                  <div className="space-y-1">
+                  <div className="space-y-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="font-medium text-sm">{league.leagueName}</span>
+                      <span className="font-medium text-sm break-words">{league.leagueName}</span>
                       <span className="text-xs text-muted-foreground capitalize">
                         {league.sport}
                       </span>
                     </div>
-                    <div className="text-xs text-muted-foreground">
+                    <div className="text-xs text-muted-foreground break-words">
                       {league.seasonYear} season
                       {league.teamName && ` \u00B7 ${league.teamName}`}
                     </div>
                   </div>
                   {league.isDefault && (
-                    <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />
+                    <Star className="h-4 w-4 text-yellow-500 fill-yellow-500 shrink-0" />
                   )}
                 </div>
               ))}
@@ -832,15 +832,15 @@ function LeaguesPageContent() {
                 aria-controls="espn-setup-content"
                 className="w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               >
-                <CardHeader className="flex flex-row items-start justify-between gap-4">
-                  <div className="space-y-1">
+                <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-4">
+                  <div className="space-y-1 min-w-0">
                     <CardTitle className="text-lg">ESPN</CardTitle>
                     <CardDescription>
                       Use the extension to update credentials and discover leagues, or add one manually.
                     </CardDescription>
                   </div>
                   <ChevronDown
-                    className={`h-5 w-5 text-muted-foreground transition-transform ${
+                    className={`h-5 w-5 text-muted-foreground transition-transform shrink-0 ${
                       isEspnSetupOpen ? 'rotate-180' : ''
                     }`}
                   />
@@ -1101,8 +1101,8 @@ function LeaguesPageContent() {
                 aria-controls="yahoo-setup-content"
                 className="w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               >
-                <CardHeader className="flex flex-row items-start justify-between gap-4">
-                  <div className="space-y-1">
+                <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-4">
+                  <div className="space-y-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <CardTitle className="text-lg">Yahoo</CardTitle>
                       {isYahooConnected && (
@@ -1118,7 +1118,7 @@ function LeaguesPageContent() {
                     </CardDescription>
                   </div>
                   <ChevronDown
-                    className={`h-5 w-5 text-muted-foreground transition-transform ${
+                    className={`h-5 w-5 text-muted-foreground transition-transform shrink-0 ${
                       isYahooSetupOpen ? 'rotate-180' : ''
                     }`}
                   />

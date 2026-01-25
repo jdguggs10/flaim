@@ -19,8 +19,8 @@ export function SiteHeader() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
-    <header className="border-b bg-background">
-      <div className="flex min-h-[4rem] flex-row items-center justify-between gap-3 p-4">
+    <header className="w-full border-b bg-background">
+      <div className="flex min-h-[4rem] w-full flex-row flex-wrap items-center justify-between gap-3 p-4 sm:flex-nowrap">
         <Link
           href="/"
           className="inline-flex items-center gap-2 text-xl font-bold transition-opacity hover:opacity-80"

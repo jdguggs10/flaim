@@ -10,12 +10,12 @@ export default function SiteLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex h-screen bg-muted w-full flex-col text-foreground">
+    <div className="flex min-h-screen bg-muted w-full flex-col items-stretch text-foreground">
       <SiteHeader />
-      <main className="flex-1 bg-background overflow-auto">
-        <div className="flex flex-col min-h-full">
+      <main className="flex-1 bg-background overflow-auto w-full">
+        <div className="flex w-full flex-col min-h-full">
           <div className="flex-1">{children}</div>
-          <footer className="py-6 px-4 text-center border-t bg-background">
+          <footer className="w-full py-6 px-4 text-center border-t bg-background">
             <div className="text-sm text-muted-foreground flex items-center justify-center gap-2">
               <span>Built by <a href="https://www.threads.com/@jdguggs10" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">Gerry</a> for fun</span>
               <span aria-hidden="true">·</span>
