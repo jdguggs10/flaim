@@ -743,6 +743,50 @@ api.get('/leagues/yahoo', async (c) => {
   return c.json({ leagues }, 200);
 });
 
+// Set Yahoo league as default (requires auth)
+api.post('/leagues/yahoo/:id/default', async (c) => {
+  const { userId, error: authError } = await getVerifiedUserId(c.req.raw, c.env);
+  if (!userId) {
+    return c.json({
+      error: 'unauthorized',
+      error_description: authError || 'Authentication required',
+    }, 401);
+  }
+
+  const leagueId = c.req.param('id');
+  if (!leagueId) {
+    return c.json({ error: 'League ID required' }, 400);
+  }
+
+  const storage = YahooStorage.fromEnvironment(c.env);
+  await storage.setDefaultYahooLeague(userId, leagueId);
+  const leagues = await storage.getYahooLeagues(userId);
+
+  return c.json({ success: true, leagues }, 200);
+});
+
+// Delete Yahoo league (requires auth)
+api.delete('/leagues/yahoo/:id', async (c) => {
+  const { userId, error: authError } = await getVerifiedUserId(c.req.raw, c.env);
+  if (!userId) {
+    return c.json({
+      error: 'unauthorized',
+      error_description: authError || 'Authentication required',
+    }, 401);
+  }
+
+  const leagueId = c.req.param('id');
+  if (!leagueId) {
+    return c.json({ error: 'League ID required' }, 400);
+  }
+
+  const storage = YahooStorage.fromEnvironment(c.env);
+  await storage.deleteYahooLeague(userId, leagueId);
+  const leagues = await storage.getYahooLeagues(userId);
+
+  return c.json({ success: true, leagues }, 200);
+});
+
 // =============================================================================
 // CREDENTIALS ENDPOINTS
 // =============================================================================
