@@ -128,6 +128,35 @@ const SEASON_OPTIONS = Array.from(
   (_, i) => currentYear - i
 );
 
+// Convert ESPN leagues to unified format
+function espnToUnified(leagues: League[]): UnifiedLeague[] {
+  return leagues.map((l) => ({
+    platform: 'espn' as const,
+    sport: l.sport,
+    seasonYear: l.seasonYear || new Date().getFullYear(),
+    leagueName: l.leagueName || `League ${l.leagueId}`,
+    teamName: l.teamName,
+    isDefault: l.isDefault || false,
+    leagueId: l.leagueId,
+    teamId: l.teamId,
+  }));
+}
+
+// Convert Yahoo leagues to unified format
+function yahooToUnified(leagues: YahooLeague[]): UnifiedLeague[] {
+  return leagues.map((l) => ({
+    platform: 'yahoo' as const,
+    sport: l.sport,
+    seasonYear: l.seasonYear,
+    leagueName: l.leagueName,
+    teamName: l.teamName,
+    isDefault: l.isDefault || false,
+    leagueId: l.leagueKey,
+    teamId: l.teamId,
+    yahooId: l.id,
+  }));
+}
+
 function LeaguesPageContent() {
   const { isLoaded, isSignedIn } = useAuth();
   const espnCredentials = useEspnCredentials();
@@ -165,19 +194,27 @@ function LeaguesPageContent() {
   // Expand/collapse state for league groups
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
-  // Group leagues by sport, then by leagueId within each sport
+  // Group all leagues by sport, then by platform+leagueId
   const leaguesBySport = useMemo(() => {
-    // First, group by sport + leagueId
-    const grouped = new Map<string, LeagueGroup>();
+    // Convert both platforms to unified format
+    const allLeagues = [
+      ...espnToUnified(leagues),
+      ...yahooToUnified(yahooLeagues),
+    ];
 
-    for (const league of leagues) {
-      const key = `${league.sport}:${league.leagueId}`;
+    // Group by platform + leagueId
+    const grouped = new Map<string, UnifiedLeagueGroup>();
+
+    for (const league of allLeagues) {
+      const key = `${league.platform}:${league.sport}:${league.leagueId}`;
       if (!grouped.has(key)) {
         grouped.set(key, {
           key,
-          leagueId: league.leagueId,
+          platform: league.platform,
           sport: league.sport,
+          leagueId: league.leagueId,
           leagueName: league.leagueName,
+          teamId: league.teamId,
           seasons: [],
         });
       }
@@ -186,12 +223,14 @@ function LeaguesPageContent() {
 
     // Sort seasons desc within each group
     for (const group of grouped.values()) {
-      group.seasons.sort((a, b) => (b.seasonYear || 0) - (a.seasonYear || 0));
-      group.leagueName = group.seasons.find((season) => season.leagueName)?.leagueName || group.leagueName;
+      group.seasons.sort((a, b) => b.seasonYear - a.seasonYear);
+      // Use most recent season's league name
+      group.leagueName = group.seasons[0]?.leagueName || group.leagueName;
+      group.teamId = group.seasons.find((s) => s.teamId)?.teamId;
     }
 
-    // Now group by sport
-    const bySport = new Map<string, LeagueGroup[]>();
+    // Group by sport
+    const bySport = new Map<string, UnifiedLeagueGroup[]>();
     for (const group of grouped.values()) {
       if (!bySport.has(group.sport)) {
         bySport.set(group.sport, []);
@@ -208,12 +247,12 @@ function LeaguesPageContent() {
       });
     }
 
-    // Return as array of [sport, leagues[]] sorted by sport name
+    // Return sorted by sport order
     const sportOrder = ['football', 'baseball', 'basketball', 'hockey'];
     return Array.from(bySport.entries()).sort((a, b) => {
       return sportOrder.indexOf(a[0]) - sportOrder.indexOf(b[0]);
     });
-  }, [leagues]);
+  }, [leagues, yahooLeagues]);
 
   const toggleGroup = (key: string) => {
     setExpandedGroups((prev) => {
