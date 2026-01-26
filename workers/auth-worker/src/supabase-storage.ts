@@ -654,46 +654,73 @@ export class EspnSupabaseStorage {
    * Get user preferences
    */
   async getUserPreferences(clerkUserId: string): Promise<UserPreferences> {
-    const { data, error } = await this.supabase
-      .from('user_preferences')
-      .select('clerk_user_id, default_sport')
-      .eq('clerk_user_id', clerkUserId)
-      .single();
-
-    if (error || !data) {
-      return { clerkUserId, defaultSport: null };
+    if (!clerkUserId) {
+      console.log('[supabase-storage] getUserPreferences: no clerkUserId provided');
+      return { clerkUserId: '', defaultSport: null };
     }
 
-    return {
-      clerkUserId: data.clerk_user_id,
-      defaultSport: data.default_sport,
-    };
+    try {
+      console.log(`[supabase-storage] getUserPreferences: fetching for user ${maskUserId(clerkUserId)}`);
+
+      const { data, error } = await this.supabase
+        .from('user_preferences')
+        .select('clerk_user_id, default_sport')
+        .eq('clerk_user_id', clerkUserId)
+        .single();
+
+      if (error || !data) {
+        console.log(`[supabase-storage] getUserPreferences: no preferences found, returning defaults`);
+        return { clerkUserId, defaultSport: null };
+      }
+
+      console.log(`[supabase-storage] getUserPreferences: found defaultSport=${data.default_sport}`);
+
+      return {
+        clerkUserId: data.clerk_user_id,
+        defaultSport: data.default_sport,
+      };
+    } catch (error) {
+      console.error('[supabase-storage] getUserPreferences error:', error);
+      return { clerkUserId, defaultSport: null };
+    }
   }
 
   /**
    * Set user's default sport
+   * Returns success/error object to match setDefaultLeague pattern
    */
   async setDefaultSport(
     clerkUserId: string,
     sport: 'football' | 'baseball' | 'basketball' | 'hockey' | null
-  ): Promise<void> {
-    const { error } = await this.supabase
-      .from('user_preferences')
-      .upsert(
-        {
-          clerk_user_id: clerkUserId,
-          default_sport: sport,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'clerk_user_id' }
-      );
-
-    if (error) {
-      console.error('[storage] Failed to set default sport:', error);
-      throw new Error('Failed to set default sport');
+  ): Promise<{ success: boolean; error?: string }> {
+    if (!clerkUserId) {
+      console.log('[supabase-storage] setDefaultSport: no clerkUserId provided');
+      return { success: false, error: 'Missing clerkUserId' };
     }
 
-    console.log(`[storage] Set default sport to ${sport} for user ${clerkUserId.substring(0, 8)}...`);
+    try {
+      const { error } = await this.supabase
+        .from('user_preferences')
+        .upsert(
+          {
+            clerk_user_id: clerkUserId,
+            default_sport: sport,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'clerk_user_id' }
+        );
+
+      if (error) {
+        console.error('[supabase-storage] setDefaultSport error:', error);
+        return { success: false, error: 'Failed to set default sport' };
+      }
+
+      console.log(`[supabase-storage] setDefaultSport: set to ${sport} for user ${maskUserId(clerkUserId)}`);
+      return { success: true };
+    } catch (error) {
+      console.error('[supabase-storage] setDefaultSport error:', error);
+      return { success: false, error: 'Internal error' };
+    }
   }
 
   /**
