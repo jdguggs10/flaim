@@ -822,10 +822,28 @@ function LeaguesPageContent() {
               <div className="space-y-6">
                 {leaguesBySport.map(([sport, sportLeagues]) => (
                   <div key={sport} className="space-y-3">
-                    {/* Sport Header */}
+                    {/* Sport Header with Default Star */}
                     <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
                       <span className="text-base">{getSportEmoji(sport)}</span>
                       <span className="capitalize">{sport}</span>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className={`h-6 w-6 ${
+                          defaultSport === sport
+                            ? 'text-yellow-500'
+                            : 'text-muted-foreground hover:text-yellow-500'
+                        }`}
+                        onClick={() => handleSetDefaultSport(sport)}
+                        disabled={settingSportDefault === sport}
+                        title={defaultSport === sport ? 'Default sport' : 'Set as default sport'}
+                      >
+                        {settingSportDefault === sport ? (
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                        ) : (
+                          <Star className={`h-3 w-3 ${defaultSport === sport ? 'fill-current' : ''}`} />
+                        )}
+                      </Button>
                     </div>
 
                     {/* Leagues in this sport */}
