@@ -562,7 +562,6 @@ api.post('/extension/discover', async (c) => {
       teamId: l.teamId || '',
       teamName: l.teamName || '',
       seasonYear: l.seasonYear || 0,
-      isDefault: l.isDefault || false,
     }));
 
     return c.json({
@@ -588,7 +587,6 @@ api.post('/extension/discover', async (c) => {
         teamId: l.teamId || '',
         teamName: l.teamName || '',
         seasonYear: l.seasonYear || 0,
-        isDefault: l.isDefault || false,
       }));
 
       const discovered: DiscoveredLeague[] = currentSeasonWithDefault.map(l => ({
@@ -635,8 +633,13 @@ api.post('/extension/set-default', async (c) => {
     }, 401);
   }
 
-  const body = await c.req.json() as { leagueId?: string; sport?: string; seasonYear?: number };
-  const { leagueId, sport, seasonYear } = body;
+  const body = await c.req.json() as {
+    platform?: 'espn' | 'yahoo';
+    leagueId?: string;
+    sport?: string;
+    seasonYear?: number;
+  };
+  const { platform = 'espn', leagueId, sport, seasonYear } = body;
 
   if (!leagueId || !sport || seasonYear === undefined) {
     return c.json({
@@ -645,8 +648,19 @@ api.post('/extension/set-default', async (c) => {
     }, 400);
   }
 
+  const validSports = ['football', 'baseball', 'basketball', 'hockey'];
+  if (!validSports.includes(sport)) {
+    return c.json({ error: 'invalid_sport' }, 400);
+  }
+
   const storage = EspnSupabaseStorage.fromEnvironment(c.env);
-  const result = await storage.setDefaultLeague(userId, leagueId, sport, seasonYear);
+  const result = await storage.setDefaultLeague(
+    userId,
+    platform,
+    sport as 'football' | 'baseball' | 'basketball' | 'hockey',
+    leagueId,
+    seasonYear
+  );
 
   if (!result.success) {
     return c.json({
@@ -743,28 +757,6 @@ api.get('/leagues/yahoo', async (c) => {
   return c.json({ leagues }, 200);
 });
 
-// Set Yahoo league as default (requires auth)
-api.post('/leagues/yahoo/:id/default', async (c) => {
-  const { userId, error: authError } = await getVerifiedUserId(c.req.raw, c.env);
-  if (!userId) {
-    return c.json({
-      error: 'unauthorized',
-      error_description: authError || 'Authentication required',
-    }, 401);
-  }
-
-  const leagueId = c.req.param('id');
-  if (!leagueId) {
-    return c.json({ error: 'League ID required' }, 400);
-  }
-
-  const storage = YahooStorage.fromEnvironment(c.env);
-  await storage.setDefaultYahooLeague(userId, leagueId);
-  const leagues = await storage.getYahooLeagues(userId);
-
-  return c.json({ success: true, leagues }, 200);
-});
-
 // Delete Yahoo league (requires auth)
 api.delete('/leagues/yahoo/:id', async (c) => {
   const { userId, error: authError } = await getVerifiedUserId(c.req.raw, c.env);
@@ -800,7 +792,14 @@ api.get('/user/preferences', async (c) => {
 
   const storage = EspnSupabaseStorage.fromEnvironment(c.env);
   const preferences = await storage.getUserPreferences(userId);
-  return c.json(preferences);
+
+  return c.json({
+    defaultSport: preferences.defaultSport,
+    defaultFootball: preferences.defaultFootball,
+    defaultBaseball: preferences.defaultBaseball,
+    defaultBasketball: preferences.defaultBasketball,
+    defaultHockey: preferences.defaultHockey,
+  });
 });
 
 // Set default sport
@@ -1117,17 +1116,33 @@ api.post('/leagues/default', async (c) => {
     }, 401);
   }
 
-  const body = await c.req.json() as { leagueId?: string; sport?: string; seasonYear?: number };
-  const { leagueId, sport, seasonYear } = body;
+  const body = await c.req.json() as {
+    platform?: 'espn' | 'yahoo';
+    leagueId?: string;
+    sport?: string;
+    seasonYear?: number;
+  };
+  const { platform, leagueId, sport, seasonYear } = body;
 
-  if (!leagueId || !sport) {
+  if (!platform || !leagueId || !sport || seasonYear === undefined) {
     return c.json({
-      error: 'leagueId and sport are required in request body'
+      error: 'platform, leagueId, sport, and seasonYear are required in request body'
     }, 400);
   }
 
+  const validSports = ['football', 'baseball', 'basketball', 'hockey'];
+  if (!validSports.includes(sport)) {
+    return c.json({ error: 'Invalid sport' }, 400);
+  }
+
   const storage = EspnSupabaseStorage.fromEnvironment(c.env);
-  const result = await storage.setDefaultLeague(clerkUserId, leagueId, sport, seasonYear);
+  const result = await storage.setDefaultLeague(
+    clerkUserId,
+    platform,
+    sport as 'football' | 'baseball' | 'basketball' | 'hockey',
+    leagueId,
+    seasonYear
+  );
 
   if (!result.success) {
     const status = result.error === 'League not found' ? 404 : 400;
@@ -1136,12 +1151,59 @@ api.post('/leagues/default', async (c) => {
     }, status);
   }
 
-  const updatedLeagues = await storage.getLeagues(clerkUserId);
+  // Return updated preferences
+  const preferences = await storage.getUserPreferences(clerkUserId);
 
   return c.json({
     success: true,
     message: 'Default league set successfully',
-    leagues: updatedLeagues
+    preferences: {
+      defaultSport: preferences.defaultSport,
+      defaultFootball: preferences.defaultFootball,
+      defaultBaseball: preferences.defaultBaseball,
+      defaultBasketball: preferences.defaultBasketball,
+      defaultHockey: preferences.defaultHockey,
+    }
+  });
+});
+
+// Clear default league for a sport
+api.delete('/leagues/default/:sport', async (c) => {
+  const { userId: clerkUserId, error: authError } = await getVerifiedUserId(c.req.raw, c.env);
+  if (!clerkUserId) {
+    return c.json({
+      error: 'Authentication required',
+      message: authError || 'Missing or invalid Authorization token'
+    }, 401);
+  }
+
+  const sport = c.req.param('sport');
+  const validSports = ['football', 'baseball', 'basketball', 'hockey'];
+  if (!validSports.includes(sport)) {
+    return c.json({ error: 'Invalid sport' }, 400);
+  }
+
+  const storage = EspnSupabaseStorage.fromEnvironment(c.env);
+  const result = await storage.clearDefaultLeague(
+    clerkUserId,
+    sport as 'football' | 'baseball' | 'basketball' | 'hockey'
+  );
+
+  if (!result.success) {
+    return c.json({ error: result.error || 'Failed to clear default' }, 400);
+  }
+
+  const preferences = await storage.getUserPreferences(clerkUserId);
+
+  return c.json({
+    success: true,
+    preferences: {
+      defaultSport: preferences.defaultSport,
+      defaultFootball: preferences.defaultFootball,
+      defaultBaseball: preferences.defaultBaseball,
+      defaultBasketball: preferences.defaultBasketball,
+      defaultHockey: preferences.defaultHockey,
+    }
   });
 });
 
@@ -1265,7 +1327,8 @@ api.notFound((c) => {
       '/credentials/espn': 'GET/POST/DELETE - ESPN credential management',
       '/credentials/espn?raw=true': 'GET - Retrieve actual credentials for sport workers',
       '/leagues': 'GET/POST/DELETE - League management (list, store, remove)',
-      '/leagues/default': 'POST - Set default league for user',
+      '/leagues/default': 'POST - Set default league (requires platform, leagueId, sport, seasonYear)',
+      '/leagues/default/:sport': 'DELETE - Clear default league for a sport',
       '/leagues/add': 'POST - Add single league',
       '/leagues/:leagueId/team': 'PATCH - Update team selection for specific league',
       '/.well-known/oauth-authorization-server': 'GET - OAuth 2.0 metadata discovery',
@@ -1287,7 +1350,7 @@ api.notFound((c) => {
       '/connect/yahoo/credentials': 'GET - Get Yahoo access token',
       '/connect/yahoo/status': 'GET - Check Yahoo connection status',
       '/connect/yahoo/disconnect': 'DELETE - Disconnect Yahoo account',
-      '/user/preferences': 'GET - Get user preferences (default sport)',
+      '/user/preferences': 'GET - Get user preferences (default sport and per-sport defaults)',
       '/user/preferences/default-sport': 'POST - Set user default sport',
     },
     storage: 'supabase',

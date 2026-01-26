@@ -202,10 +202,9 @@ export interface DiscoveredLeague {
 
 /**
  * Result type for current season league (for default dropdown)
+ * Note: isDefault has been removed - defaults are now stored in user_preferences table per-sport
  */
-export interface CurrentSeasonLeague extends DiscoveredLeague {
-  isDefault: boolean;
-}
+export type CurrentSeasonLeague = DiscoveredLeague;
 
 /**
  * Season counts for granular messaging
