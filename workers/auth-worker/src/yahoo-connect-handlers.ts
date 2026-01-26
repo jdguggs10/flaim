@@ -612,7 +612,8 @@ export async function handleYahooDiscover(
     }
 
     // Call Yahoo API to discover leagues
-    const apiUrl = `${YAHOO_FANTASY_API_URL}/users;use_login=1/games/leagues?format=json`;
+    // Request leagues with teams subresource to get user's team info
+    const apiUrl = `${YAHOO_FANTASY_API_URL}/users;use_login=1/games/leagues;out=teams?format=json`;
     const apiResponse = await fetch(apiUrl, {
       headers: {
         Authorization: `Bearer ${accessToken}`,
