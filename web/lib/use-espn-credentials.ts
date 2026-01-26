@@ -3,6 +3,7 @@ import { useAuth, useUser } from '@clerk/nextjs';
 
 export interface EspnCredentialsState {
   hasCredentials: boolean;
+  lastUpdated: string | null;
   isCheckingCreds: boolean;
   isEditingCreds: boolean;
   isLoadingCreds: boolean;
@@ -27,6 +28,7 @@ export function useEspnCredentials(): EspnCredentialsState {
   const { user } = useUser();
 
   const [hasCredentials, setHasCredentials] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [isCheckingCreds, setIsCheckingCreds] = useState(true);
   const [isEditingCreds, setIsEditingCreds] = useState(false);
   const [isLoadingCreds, setIsLoadingCreds] = useState(false);
@@ -63,8 +65,9 @@ export function useEspnCredentials(): EspnCredentialsState {
         const credsRes = await fetch('/api/auth/espn/credentials');
         if (!isActive) return;
         if (credsRes.ok) {
-          const data = await credsRes.json() as { hasCredentials?: boolean };
+          const data = await credsRes.json() as { hasCredentials?: boolean; lastUpdated?: string };
           setHasCredentials(!!data.hasCredentials);
+          setLastUpdated(data.lastUpdated || null);
         }
       } catch (err) {
         console.error('Failed to check credentials:', err);
@@ -152,6 +155,7 @@ export function useEspnCredentials(): EspnCredentialsState {
 
   return {
     hasCredentials,
+    lastUpdated,
     isCheckingCreds,
     isEditingCreds,
     isLoadingCreds,

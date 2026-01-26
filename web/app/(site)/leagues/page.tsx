@@ -152,7 +152,7 @@ function yahooToUnified(leagues: YahooLeague[]): UnifiedLeague[] {
 function LeaguesPageContent() {
   const { isLoaded, isSignedIn } = useAuth();
   const espnCredentials = useEspnCredentials();
-  const { hasCredentials, isCheckingCreds } = espnCredentials;
+  const { hasCredentials, lastUpdated: espnLastUpdated, isCheckingCreds } = espnCredentials;
   const searchParams = useSearchParams();
   const router = useRouter();
 
@@ -167,6 +167,7 @@ function LeaguesPageContent() {
   const [isEspnSetupOpen, setIsEspnSetupOpen] = useState(false);
   const [isYahooSetupOpen, setIsYahooSetupOpen] = useState(false);
   const [isYahooConnected, setIsYahooConnected] = useState(false);
+  const [yahooLastUpdated, setYahooLastUpdated] = useState<string | null>(null);
   const [isCheckingYahoo, setIsCheckingYahoo] = useState(true);
   const [isYahooDisconnecting, setIsYahooDisconnecting] = useState(false);
   const [yahooLeagues, setYahooLeagues] = useState<YahooLeague[]>([]);
@@ -286,8 +287,9 @@ function LeaguesPageContent() {
     try {
       const res = await fetch('/api/connect/yahoo/status');
       if (res.ok) {
-        const data = await res.json() as { connected?: boolean };
+        const data = await res.json() as { connected?: boolean; lastUpdated?: string };
         setIsYahooConnected(data.connected ?? false);
+        setYahooLastUpdated(data.lastUpdated || null);
       }
     } catch (err) {
       console.error('Failed to check Yahoo status:', err);
@@ -989,6 +991,11 @@ function LeaguesPageContent() {
               </button>
               {isEspnSetupOpen && (
                 <CardContent id="espn-setup-content" className="space-y-4">
+                  {espnLastUpdated && (
+                    <p className="text-xs text-muted-foreground">
+                      Last synced: {new Date(espnLastUpdated).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                    </p>
+                  )}
                   {!verifiedLeague && (
                     <div className="space-y-4">
                       <div className="space-y-2">
@@ -1274,10 +1281,11 @@ function LeaguesPageContent() {
                     </div>
                   ) : isYahooConnected ? (
                     <div className="space-y-3">
-                      <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
-                        <CheckCircle2 className="h-4 w-4" />
-                        Yahoo account connected
-                      </div>
+                      {yahooLastUpdated && (
+                        <p className="text-xs text-muted-foreground">
+                          Last synced: {new Date(yahooLastUpdated).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                        </p>
+                      )}
                       <div className="flex gap-2">
                         <Button
                           variant="outline"

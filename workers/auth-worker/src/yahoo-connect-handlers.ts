@@ -417,16 +417,17 @@ export async function handleYahooStatus(
   try {
     const storage = YahooStorage.fromEnvironment(env);
 
-    // Check credentials and get leagues in parallel
-    const [hasCredentials, leagues] = await Promise.all([
-      storage.hasYahooCredentials(userId),
+    // Get credentials (includes updatedAt) and leagues in parallel
+    const [credentials, leagues] = await Promise.all([
+      storage.getYahooCredentials(userId),
       storage.getYahooLeagues(userId),
     ]);
 
     return new Response(
       JSON.stringify({
-        connected: hasCredentials,
+        connected: !!credentials,
         leagueCount: leagues.length,
+        lastUpdated: credentials?.updatedAt?.toISOString(),
       }),
       {
         status: 200,

@@ -43,6 +43,7 @@ export interface YahooCredentials {
   expiresAt: Date;
   yahooGuid?: string;
   needsRefresh: boolean;
+  updatedAt?: Date;
 }
 
 export interface SaveCredentialsParams {
@@ -209,7 +210,7 @@ export class YahooStorage {
   async getYahooCredentials(clerkUserId: string): Promise<YahooCredentials | null> {
     const { data, error } = await this.supabase
       .from('yahoo_credentials')
-      .select('clerk_user_id, access_token, refresh_token, expires_at, yahoo_guid')
+      .select('clerk_user_id, access_token, refresh_token, expires_at, yahoo_guid, updated_at')
       .eq('clerk_user_id', clerkUserId)
       .single();
 
@@ -227,6 +228,7 @@ export class YahooStorage {
       expiresAt,
       yahooGuid: data.yahoo_guid || undefined,
       needsRefresh,
+      updatedAt: data.updated_at ? new Date(data.updated_at) : undefined,
     };
   }
 
