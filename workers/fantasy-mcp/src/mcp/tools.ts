@@ -263,8 +263,18 @@ export function getUnifiedTools(): UnifiedTool[] {
               .join(', ')}. ASK which league they want to work with. List by leagueName, platform, sport, and leagueId.`;
           }
 
-          // Find a sensible default league
-          const defaultLeague = leagues.find((l) => l.isDefault) || leagues[0];
+          // Build per-sport default leagues map
+          const defaultLeagues: Record<string, (typeof leagues)[0]> = {};
+          for (const league of leagues) {
+            if (league.isDefault) {
+              defaultLeagues[league.sport] = league;
+            }
+          }
+
+          // Get user's default sport preference
+          // Note: This would need an additional API call to get preferences
+          // For now, infer from time of year or use first default found
+          const defaultLeague = Object.values(defaultLeagues)[0] || leagues[0];
 
           return mcpSuccess({
             success: true,
@@ -289,6 +299,19 @@ export function getUnifiedTools(): UnifiedTool[] {
                   teamName: defaultLeague.teamName,
                 }
               : null,
+            defaultLeagues: Object.fromEntries(
+              Object.entries(defaultLeagues).map(([sport, league]) => [
+                sport,
+                {
+                  leagueId: league.leagueId,
+                  leagueName: league.leagueName,
+                  sport: league.sport,
+                  seasonYear: league.seasonYear,
+                  teamId: league.teamId,
+                  teamName: league.teamName,
+                },
+              ])
+            ),
             allLeagues: leagues,
             instructions: sessionMessage,
           });
