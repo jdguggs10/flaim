@@ -250,7 +250,36 @@ export function getUnifiedTools(): UnifiedTool[] {
           }
 
           // Combine all leagues
-          const leagues = [...espnLeagues, ...yahooLeagues];
+          const allLeagues = [...espnLeagues, ...yahooLeagues];
+
+          // Filter to active leagues (have a season within 2 years) and limit to 2 most recent seasons
+          const thresholdYear = getActiveThresholdYear();
+
+          // Group leagues by unique league identifier
+          const leagueGroups = new Map<string, typeof allLeagues>();
+          for (const league of allLeagues) {
+            const key = league.platform === 'yahoo'
+              ? `${league.platform}:${league.leagueName}`
+              : `${league.platform}:${league.leagueId}`;
+            if (!leagueGroups.has(key)) {
+              leagueGroups.set(key, []);
+            }
+            leagueGroups.get(key)!.push(league);
+          }
+
+          // Filter to active leagues and limit seasons
+          const leagues: typeof allLeagues = [];
+          for (const [, groupSeasons] of leagueGroups) {
+            // Sort by seasonYear descending
+            groupSeasons.sort((a, b) => (b.seasonYear || 0) - (a.seasonYear || 0));
+            const mostRecentYear = groupSeasons[0]?.seasonYear || 0;
+
+            // Only include if most recent season is within threshold
+            if (mostRecentYear >= thresholdYear) {
+              // Take only the 2 most recent seasons
+              leagues.push(...groupSeasons.slice(0, 2));
+            }
+          }
 
           const hasLeagues = leagues.length > 0;
           const sportCounts = leagues.reduce(
@@ -270,9 +299,9 @@ export function getUnifiedTools(): UnifiedTool[] {
             const league = leagues[0];
             sessionMessage = `Use platform="${league.platform}", sport="${league.sport}", leagueId="${league.leagueId}", teamId="${league.teamId || 'none'}", seasonYear=${league.seasonYear} for all tool calls.`;
           } else {
-            sessionMessage = `User has ${leagues.length} leagues configured across: ${Object.entries(sportCounts)
+            sessionMessage = `User has ${leagues.length} league-seasons configured across: ${Object.entries(sportCounts)
               .map(([sport, count]) => `${count} ${sport}`)
-              .join(', ')}. ASK which league they want to work with. List by leagueName, platform, sport, and leagueId.`;
+              .join(', ')}. For historical leagues/seasons (2+ years old), use get_ancient_history. ASK which league they want to work with if unclear.`;
           }
 
           // Build per-sport default leagues map
