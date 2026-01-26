@@ -174,6 +174,7 @@ function LeaguesPageContent() {
   const [isDiscoveringYahoo, setIsDiscoveringYahoo] = useState(false);
   const [defaultSport, setDefaultSport] = useState<string | null>(null);
   const [settingSportDefault, setSettingSportDefault] = useState<string | null>(null);
+  const [showOldLeagues, setShowOldLeagues] = useState(false);
 
   // Add league flow state
   const [manualDialogOpen, setManualDialogOpen] = useState(false);
@@ -185,6 +186,13 @@ function LeaguesPageContent() {
   const [verifiedLeague, setVerifiedLeague] = useState<VerifiedLeague | null>(null);
   const [selectedTeamId, setSelectedTeamId] = useState<string>('');
   const [isAddingLeague, setIsAddingLeague] = useState(false);
+
+  // Helper to determine if a league is "old" (no seasons in last 2 years)
+  const isOldLeague = (seasons: { seasonYear: number }[]): boolean => {
+    const thresholdYear = new Date().getFullYear() - 2;
+    const mostRecentYear = Math.max(...seasons.map(s => s.seasonYear), 0);
+    return mostRecentYear < thresholdYear;
+  };
 
   // Group all leagues by sport, then by platform+leagueId
   const leaguesBySport = useMemo(() => {
@@ -227,17 +235,29 @@ function LeaguesPageContent() {
       group.teamId = group.seasons.find((s) => s.teamId)?.teamId;
     }
 
-    // Group by sport
-    const bySport = new Map<string, UnifiedLeagueGroup[]>();
+    // Separate active vs old leagues
+    const activeLeagues: UnifiedLeagueGroup[] = [];
+    const oldLeagueGroups: UnifiedLeagueGroup[] = [];
+
     for (const group of grouped.values()) {
-      if (!bySport.has(group.sport)) {
-        bySport.set(group.sport, []);
+      if (isOldLeague(group.seasons)) {
+        oldLeagueGroups.push(group);
+      } else {
+        activeLeagues.push(group);
       }
-      bySport.get(group.sport)!.push(group);
+    }
+
+    // Group active leagues by sport
+    const bySportActive = new Map<string, UnifiedLeagueGroup[]>();
+    for (const group of activeLeagues) {
+      if (!bySportActive.has(group.sport)) {
+        bySportActive.set(group.sport, []);
+      }
+      bySportActive.get(group.sport)!.push(group);
     }
 
     // Sort leagues within each sport by most recent season
-    for (const sportGroups of bySport.values()) {
+    for (const sportGroups of bySportActive.values()) {
       sportGroups.sort((a, b) => {
         const aYear = a.seasons[0]?.seasonYear || 0;
         const bYear = b.seasons[0]?.seasonYear || 0;
@@ -247,9 +267,11 @@ function LeaguesPageContent() {
 
     // Return sorted by sport order
     const sportOrder = ['football', 'baseball', 'basketball', 'hockey'];
-    return Array.from(bySport.entries()).sort((a, b) => {
+    const sortedActive = Array.from(bySportActive.entries()).sort((a, b) => {
       return sportOrder.indexOf(a[0]) - sportOrder.indexOf(b[0]);
     });
+
+    return { active: sortedActive, old: oldLeagueGroups };
   }, [leagues, yahooLeagues]);
 
   // Load leagues on mount
@@ -840,13 +862,13 @@ function LeaguesPageContent() {
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>
-            ) : leaguesBySport.length === 0 ? (
+            ) : leaguesBySport.active.length === 0 && leaguesBySport.old.length === 0 ? (
               <div className="text-center py-6 text-muted-foreground">
                 <p className="text-sm">No leagues added yet.</p>
               </div>
             ) : (
               <div className="space-y-6">
-                {leaguesBySport.map(([sport, sportLeagues]) => (
+                {leaguesBySport.active.map(([sport, sportLeagues]) => (
                   <div key={sport} className="space-y-3">
                     {/* Sport Header with Default Star */}
                     <div className="flex items-center gap-2 font-medium text-muted-foreground">
