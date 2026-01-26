@@ -861,7 +861,7 @@ function LeaguesPageContent() {
 
                             {/* Season Chips */}
                             <div className="p-3">
-                              <div className="flex flex-wrap gap-2">
+                              <div className="flex gap-2 overflow-x-auto pb-1">
                                 {visibleSeasons.map((season) => {
                                   const seasonKey = `${season.leagueId}-${season.sport}-${season.seasonYear || 'all'}`;
                                   const isSettingDefault = season.platform === 'espn'
@@ -871,7 +871,7 @@ function LeaguesPageContent() {
                                   return (
                                     <div
                                       key={seasonKey}
-                                      className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm ${
+                                      className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm shrink-0 ${
                                         season.isDefault
                                           ? 'bg-primary/10 border border-primary/30'
                                           : 'bg-muted'
