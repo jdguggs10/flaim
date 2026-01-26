@@ -24,7 +24,6 @@ export interface EspnLeague {
   teamName?: string;         // Optional: user's team name for display
   leagueName?: string;       // Filled after auto-pull
   seasonYear?: number;       // Filled after auto-pull
-  isDefault?: boolean;       // Whether this is the user's default league (one per user)
 }
 
 /**

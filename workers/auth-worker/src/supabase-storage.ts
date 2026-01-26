@@ -38,9 +38,19 @@ export interface SupabaseEnvironment {
   SUPABASE_SERVICE_KEY: string;
 }
 
+export interface LeagueDefault {
+  platform: 'espn' | 'yahoo';
+  leagueId: string;
+  seasonYear: number;
+}
+
 export interface UserPreferences {
   clerkUserId: string;
   defaultSport: 'football' | 'baseball' | 'basketball' | 'hockey' | null;
+  defaultFootball: LeagueDefault | null;
+  defaultBaseball: LeagueDefault | null;
+  defaultBasketball: LeagueDefault | null;
+  defaultHockey: LeagueDefault | null;
 }
 
 export class EspnSupabaseStorage {

@@ -70,7 +70,6 @@ export interface YahooLeague {
   teamId?: string;
   teamKey?: string;
   teamName?: string;
-  isDefault: boolean;
 }
 
 export interface SaveLeagueParams {
@@ -82,7 +81,6 @@ export interface SaveLeagueParams {
   teamId?: string;
   teamKey?: string;
   teamName?: string;
-  isDefault?: boolean;
 }
 
 // =============================================================================
