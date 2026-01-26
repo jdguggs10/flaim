@@ -194,14 +194,20 @@ function LeaguesPageContent() {
       ...yahooToUnified(yahooLeagues),
     ];
 
-    // Group by platform + leagueId
+    // Group by platform + leagueId (ESPN) or leagueName (Yahoo)
+    // Yahoo uses unique leagueKey per season, so we group by name instead
     const grouped = new Map<string, UnifiedLeagueGroup>();
 
     for (const league of allLeagues) {
-      const key = `${league.platform}:${league.sport}:${league.leagueId}`;
-      if (!grouped.has(key)) {
-        grouped.set(key, {
-          key,
+      // Yahoo: group by league name since leagueKey differs per season
+      // ESPN: group by leagueId which stays consistent across seasons
+      const groupKey = league.platform === 'yahoo'
+        ? `${league.platform}:${league.sport}:${league.leagueName}`
+        : `${league.platform}:${league.sport}:${league.leagueId}`;
+
+      if (!grouped.has(groupKey)) {
+        grouped.set(groupKey, {
+          key: groupKey,
           platform: league.platform,
           sport: league.sport,
           leagueId: league.leagueId,
@@ -210,7 +216,7 @@ function LeaguesPageContent() {
           seasons: [],
         });
       }
-      grouped.get(key)!.seasons.push(league);
+      grouped.get(groupKey)!.seasons.push(league);
     }
 
     // Sort seasons desc within each group
@@ -573,7 +579,7 @@ function LeaguesPageContent() {
     }
   };
 
-  // Delete Yahoo league
+  // Delete Yahoo league (single season)
   const handleDeleteYahooLeague = async (yahooId: string) => {
     setDeletingLeagueKey(`yahoo:${yahooId}`);
     setLeagueNotice(null);
@@ -591,6 +597,42 @@ function LeaguesPageContent() {
       const data = await res.json() as { leagues?: YahooLeague[] };
       if (data.leagues) {
         setYahooLeagues(data.leagues);
+      }
+    } catch (err) {
+      setLeagueError(err instanceof Error ? err.message : 'Failed to delete league');
+    } finally {
+      setDeletingLeagueKey(null);
+    }
+  };
+
+  // Delete all seasons of a Yahoo league group
+  const handleDeleteYahooLeagueGroup = async (seasons: UnifiedLeague[]) => {
+    const yahooIds = seasons.map(s => s.yahooId).filter((id): id is string => !!id);
+    if (yahooIds.length === 0) return;
+
+    setDeletingLeagueKey(`yahoo:${yahooIds[0]}`);
+    setLeagueNotice(null);
+
+    try {
+      // Delete each season sequentially
+      for (const yahooId of yahooIds) {
+        const res = await fetch(`/api/connect/yahoo/leagues/${yahooId}`, {
+          method: 'DELETE',
+        });
+
+        if (!res.ok) {
+          const data = await res.json() as { error?: string };
+          throw new Error(data.error || 'Failed to delete league');
+        }
+      }
+
+      // Refresh leagues after all deletions
+      const refreshRes = await fetch('/api/connect/yahoo/leagues');
+      if (refreshRes.ok) {
+        const data = await refreshRes.json() as { leagues?: YahooLeague[] };
+        if (data.leagues) {
+          setYahooLeagues(data.leagues);
+        }
       }
     } catch (err) {
       setLeagueError(err instanceof Error ? err.message : 'Failed to delete league');
@@ -765,7 +807,8 @@ function LeaguesPageContent() {
                                   {group.leagueName || `League ${group.leagueId}`}
                                 </div>
                                 <div className="text-xs text-muted-foreground break-words">
-                                  {group.platform === 'espn' ? 'ESPN' : 'Yahoo'} • {group.platform === 'espn' ? `League ID: ${group.leagueId}` : group.leagueId}
+                                  {group.platform === 'espn' ? 'ESPN' : 'Yahoo'}
+                                  {group.platform === 'espn' && ` • League ID: ${group.leagueId}`}
                                   {primaryTeamId && ` • Team ID: ${primaryTeamId}`}
                                 </div>
                               </div>
@@ -798,9 +841,8 @@ function LeaguesPageContent() {
                                     if (group.platform === 'espn') {
                                       handleDeleteLeague(group.leagueId, group.sport);
                                     } else {
-                                      // For Yahoo, delete all seasons (get yahooId from first season)
-                                      const yahooId = group.seasons[0]?.yahooId;
-                                      if (yahooId) handleDeleteYahooLeague(yahooId);
+                                      // For Yahoo, delete all seasons in the group
+                                      handleDeleteYahooLeagueGroup(group.seasons);
                                     }
                                   }}
                                   disabled={group.platform === 'espn'
