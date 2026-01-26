@@ -547,6 +547,7 @@ interface DiscoveredYahooLeague {
   leagueKey: string;
   leagueName: string;
   teamId: string;
+  teamName: string;
 }
 
 /**
@@ -647,6 +648,7 @@ export async function handleYahooDiscover(
         leagueKey: league.leagueKey,
         leagueName: league.leagueName,
         teamId: league.teamId,
+        teamName: league.teamName,
       });
     }
 
@@ -760,11 +762,10 @@ function parseYahooLeaguesResponse(data: unknown): DiscoveredYahooLeague[] {
 
           if (!leagueKey || !leagueName) continue;
 
-          // Extract team ID from league key (format: "nfl.l.12345")
-          // We need to get the user's team - check if there's team info
-          // For now, we'll use a placeholder; the full team discovery
-          // would require another API call to /league/{key}/teams
+          // Extract team ID and team name from the league data
+          // Yahoo API includes the user's team in the league response
           let teamId = '';
+          let teamName = '';
 
           // Check if there's team info in the league data (some responses include it)
           if (leagueArray.length > 1 && leagueArray[1]?.teams) {
@@ -775,11 +776,13 @@ function parseYahooLeaguesResponse(data: unknown): DiscoveredYahooLeague[] {
               if (teamWrapper?.team) {
                 const teamArray = teamWrapper.team;
                 if (Array.isArray(teamArray) && teamArray.length > 0) {
-                  // team[0] contains multiple objects, find the one with team_id
+                  // team[0] contains multiple objects with team_id, name, etc.
                   for (const item of teamArray[0]) {
                     if (item?.team_id) {
                       teamId = String(item.team_id);
-                      break;
+                    }
+                    if (item?.name) {
+                      teamName = String(item.name);
                     }
                   }
                 }
@@ -794,6 +797,7 @@ function parseYahooLeaguesResponse(data: unknown): DiscoveredYahooLeague[] {
             leagueKey,
             leagueName,
             teamId,
+            teamName,
           });
         }
       }

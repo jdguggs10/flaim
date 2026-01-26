@@ -68,6 +68,7 @@ export interface YahooLeague {
   leagueName: string;
   teamId?: string;
   teamKey?: string;
+  teamName?: string;
   isDefault: boolean;
 }
 
@@ -79,6 +80,7 @@ export interface SaveLeagueParams {
   leagueName: string;
   teamId?: string;
   teamKey?: string;
+  teamName?: string;
   isDefault?: boolean;
 }
 
@@ -308,6 +310,7 @@ export class YahooStorage {
           league_name: params.leagueName,
           team_id: params.teamId || null,
           team_key: params.teamKey || null,
+          team_name: params.teamName || null,
           is_default: params.isDefault ?? false,
           updated_at: new Date().toISOString(),
         },
@@ -346,6 +349,7 @@ export class YahooStorage {
       leagueName: row.league_name,
       teamId: row.team_id || undefined,
       teamKey: row.team_key || undefined,
+      teamName: row.team_name || undefined,
       isDefault: row.is_default,
     }));
   }
