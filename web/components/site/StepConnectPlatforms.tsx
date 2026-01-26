@@ -13,7 +13,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import { Chrome, Check, Loader2, Shield, Eye, EyeOff } from 'lucide-react';
+import { Chrome, Check, Loader2, Shield, Eye, EyeOff, Wrench } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { pingExtension, isChromeBrowser, type ExtensionPingResult } from '@/lib/extension-ping';
 
@@ -252,61 +252,63 @@ export function StepConnectPlatforms({ className }: StepConnectPlatformsProps) {
             </div>
           ) : (
             <div className="space-y-2">
-              <a href={CHROME_EXTENSION_URL} target="_blank" rel="noopener noreferrer">
-                <Button variant="outline" size="sm" className="w-full">
-                  <Chrome className="h-4 w-4 mr-2" />
-                  Install Extension
-                </Button>
-              </a>
+              <div className="flex gap-2">
+                <a href={CHROME_EXTENSION_URL} target="_blank" rel="noopener noreferrer" className="flex-1">
+                  <Button variant="outline" size="sm" className="w-full">
+                    <Chrome className="h-4 w-4 mr-2" />
+                    Install Extension
+                  </Button>
+                </a>
+                <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button variant="outline" size="icon" className="h-8 w-8 shrink-0" onClick={handleOpenDialog} title="Add manually">
+                      <Wrench className="h-4 w-4" />
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>ESPN Credentials</DialogTitle>
+                      <DialogDescription>Enter your ESPN authentication cookies.</DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 pt-2">
+                      {isLoadingCreds ? (
+                        <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin" /></div>
+                      ) : (
+                        <>
+                          {espnError && <div className="p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">{espnError}</div>}
+                          <div className="space-y-2">
+                            <Label htmlFor="swid">SWID</Label>
+                            <Input id="swid" type={showCredentials ? 'text' : 'password'} value={swid} onChange={(e) => setSwid(e.target.value)} />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="espn_s2">ESPN_S2</Label>
+                            <Input id="espn_s2" type={showCredentials ? 'text' : 'password'} value={espnS2} onChange={(e) => setEspnS2(e.target.value)} />
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Button variant="ghost" size="sm" onClick={() => setShowCredentials(!showCredentials)}>
+                              {showCredentials ? <EyeOff className="h-4 w-4 mr-1" /> : <Eye className="h-4 w-4 mr-1" />}
+                              {showCredentials ? 'Hide' : 'Show'}
+                            </Button>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button onClick={handleSaveCredentials} disabled={isSaving}>
+                              {isSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                              Save
+                            </Button>
+                            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              </div>
               {hasCredentials && (
                 <div className="flex items-center gap-2 text-sm text-green-600">
                   <Check className="h-4 w-4" />
                   Credentials saved
                 </div>
               )}
-              <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button variant="ghost" size="sm" className="w-full text-muted-foreground" onClick={handleOpenDialog}>
-                    Add manually
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>ESPN Credentials</DialogTitle>
-                    <DialogDescription>Enter your ESPN authentication cookies.</DialogDescription>
-                  </DialogHeader>
-                  <div className="space-y-4 pt-2">
-                    {isLoadingCreds ? (
-                      <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin" /></div>
-                    ) : (
-                      <>
-                        {espnError && <div className="p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">{espnError}</div>}
-                        <div className="space-y-2">
-                          <Label htmlFor="swid">SWID</Label>
-                          <Input id="swid" type={showCredentials ? 'text' : 'password'} value={swid} onChange={(e) => setSwid(e.target.value)} />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="espn_s2">ESPN_S2</Label>
-                          <Input id="espn_s2" type={showCredentials ? 'text' : 'password'} value={espnS2} onChange={(e) => setEspnS2(e.target.value)} />
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Button variant="ghost" size="sm" onClick={() => setShowCredentials(!showCredentials)}>
-                            {showCredentials ? <EyeOff className="h-4 w-4 mr-1" /> : <Eye className="h-4 w-4 mr-1" />}
-                            {showCredentials ? 'Hide' : 'Show'}
-                          </Button>
-                        </div>
-                        <div className="flex gap-2">
-                          <Button onClick={handleSaveCredentials} disabled={isSaving}>
-                            {isSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-                            Save
-                          </Button>
-                          <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </DialogContent>
-              </Dialog>
             </div>
           )}
         </div>
