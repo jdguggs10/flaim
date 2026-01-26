@@ -367,6 +367,128 @@ export function getUnifiedTools(): UnifiedTool[] {
     },
 
     // -------------------------------------------------------------------------
+    // GET ANCIENT HISTORY - Retrieve old leagues and seasons
+    // -------------------------------------------------------------------------
+    {
+      name: 'get_ancient_history',
+      title: 'Ancient History',
+      description:
+        'Retrieve archived leagues and old seasons beyond the 2-year window. Use when user asks about inactive leagues, past seasons, or historical performance.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          platform: {
+            type: 'string',
+            enum: ['espn', 'yahoo'],
+            description: 'Optional: filter to specific platform',
+          },
+        },
+      },
+      handler: async (args, env, authHeader, correlationId) => {
+        const { platform } = args as { platform?: 'espn' | 'yahoo' };
+
+        try {
+          // Fetch all leagues (same logic as get_user_session)
+          const allLeagues: UserLeague[] = [];
+
+          // Fetch ESPN leagues
+          if (!platform || platform === 'espn') {
+            const { leagues: espnLeagues } = await fetchUserLeagues(env, authHeader, correlationId);
+            allLeagues.push(...espnLeagues);
+          }
+
+          // Fetch Yahoo leagues
+          if (!platform || platform === 'yahoo') {
+            try {
+              const baseHeaders: Record<string, string> = {
+                'Content-Type': 'application/json',
+                ...(authHeader ? { Authorization: authHeader } : {}),
+              };
+              const headers = correlationId ? withCorrelationId(baseHeaders, correlationId) : baseHeaders;
+
+              const yahooResponse = await env.AUTH_WORKER.fetch(
+                new Request('https://internal/leagues/yahoo', { headers })
+              );
+              if (yahooResponse.ok) {
+                const yahooData = (await yahooResponse.json()) as {
+                  leagues?: Array<{
+                    sport: string;
+                    leagueKey: string;
+                    leagueName: string;
+                    teamId?: string;
+                    seasonYear: number;
+                    isDefault?: boolean;
+                  }>;
+                };
+                if (yahooData.leagues) {
+                  for (const league of yahooData.leagues) {
+                    allLeagues.push({
+                      platform: 'yahoo',
+                      sport: league.sport,
+                      leagueId: league.leagueKey,
+                      leagueName: league.leagueName,
+                      teamId: league.teamId || '',
+                      seasonYear: league.seasonYear,
+                      isDefault: league.isDefault,
+                    });
+                  }
+                }
+              }
+            } catch (error) {
+              console.error('[get_ancient_history] Failed to fetch Yahoo leagues:', error);
+            }
+          }
+
+          const thresholdYear = getActiveThresholdYear();
+
+          // Group by league
+          const leagueGroups = new Map<string, typeof allLeagues>();
+          for (const league of allLeagues) {
+            const key = league.platform === 'yahoo'
+              ? `${league.platform}:${league.leagueName}`
+              : `${league.platform}:${league.leagueId}`;
+            if (!leagueGroups.has(key)) {
+              leagueGroups.set(key, []);
+            }
+            leagueGroups.get(key)!.push(league);
+          }
+
+          // Separate old leagues vs old seasons of active leagues
+          const oldLeagues: typeof allLeagues = [];
+          const oldSeasons: Record<string, typeof allLeagues> = {};
+
+          for (const [key, groupSeasons] of leagueGroups) {
+            groupSeasons.sort((a, b) => (b.seasonYear || 0) - (a.seasonYear || 0));
+            const mostRecentYear = groupSeasons[0]?.seasonYear || 0;
+
+            if (mostRecentYear < thresholdYear) {
+              // Entire league is old - include all seasons
+              oldLeagues.push(...groupSeasons);
+            } else {
+              // Active league - only include seasons beyond the 2-season window
+              const ancientSeasons = groupSeasons.slice(2);
+              if (ancientSeasons.length > 0) {
+                oldSeasons[key] = ancientSeasons;
+              }
+            }
+          }
+
+          return mcpSuccess({
+            success: true,
+            thresholdYear,
+            oldLeagues,
+            oldSeasonsFromActiveLeagues: oldSeasons,
+            totalOldLeagues: oldLeagues.length,
+            totalOldSeasons: Object.values(oldSeasons).flat().length,
+          });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Unknown error';
+          return mcpError(`Failed to fetch ancient history: ${message}`);
+        }
+      },
+    },
+
+    // -------------------------------------------------------------------------
     // Tool 2: get_league_info
     // -------------------------------------------------------------------------
     {
