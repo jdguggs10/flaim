@@ -872,62 +872,60 @@ function LeaguesPageContent() {
                           <div key={group.key} className="rounded-lg border bg-card">
                             {/* Group Header */}
                             <div className="flex items-center justify-between gap-3 p-3 border-b">
-                              <div className="min-w-0 flex items-center gap-2">
-                                <div>
-                                  <div className="font-medium break-words">
-                                    {group.leagueName || `League ${group.leagueId}`}
-                                  </div>
-                                  <div className="text-xs text-muted-foreground break-words">
+                              <div className="min-w-0">
+                                <div className="font-medium break-words">
+                                  {group.leagueName || `League ${group.leagueId}`}
+                                </div>
+                                <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                                  {(() => {
+                                    const mostRecentSeason = group.seasons[0];
+                                    const isLeagueDefault = mostRecentSeason?.isDefault;
+                                    const leagueKey = group.platform === 'espn'
+                                      ? `${mostRecentSeason?.leagueId}-${mostRecentSeason?.sport}-${mostRecentSeason?.seasonYear || 'all'}`
+                                      : `yahoo:${mostRecentSeason?.yahooId}`;
+                                    const isSettingThis = settingDefaultKey === leagueKey;
+
+                                    return (
+                                      <button
+                                        className={`shrink-0 p-0.5 rounded hover:bg-muted ${
+                                          isLeagueDefault
+                                            ? 'text-yellow-500'
+                                            : 'text-muted-foreground hover:text-yellow-500'
+                                        }`}
+                                        onClick={() => {
+                                          if (group.platform === 'espn') {
+                                            handleSetDefault(
+                                              mostRecentSeason.leagueId,
+                                              mostRecentSeason.sport,
+                                              mostRecentSeason.seasonYear
+                                            );
+                                          } else if (mostRecentSeason?.yahooId) {
+                                            handleSetYahooDefault(mostRecentSeason.yahooId, mostRecentSeason.sport);
+                                          }
+                                        }}
+                                        disabled={isSettingThis || isLeagueDefault || !mostRecentSeason?.teamId}
+                                        title={
+                                          !mostRecentSeason?.teamId
+                                            ? 'No team selected'
+                                            : isLeagueDefault
+                                            ? 'Default league for this sport'
+                                            : 'Set as default for this sport'
+                                        }
+                                      >
+                                        {isSettingThis ? (
+                                          <Loader2 className="h-3 w-3 animate-spin" />
+                                        ) : (
+                                          <Star className={`h-3 w-3 ${isLeagueDefault ? 'fill-current' : ''}`} />
+                                        )}
+                                      </button>
+                                    );
+                                  })()}
+                                  <span className="break-words">
                                     {group.platform === 'espn' ? 'ESPN' : 'Yahoo'}
                                     {` • League ID: ${group.leagueId}`}
                                     {primaryTeamId && ` • Team ID: ${primaryTeamId}`}
-                                  </div>
+                                  </span>
                                 </div>
-                                {(() => {
-                                  const mostRecentSeason = group.seasons[0];
-                                  const isLeagueDefault = mostRecentSeason?.isDefault;
-                                  const leagueKey = group.platform === 'espn'
-                                    ? `${mostRecentSeason?.leagueId}-${mostRecentSeason?.sport}-${mostRecentSeason?.seasonYear || 'all'}`
-                                    : `yahoo:${mostRecentSeason?.yahooId}`;
-                                  const isSettingThis = settingDefaultKey === leagueKey;
-
-                                  return (
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className={`h-7 w-7 shrink-0 ${
-                                        isLeagueDefault
-                                          ? 'text-yellow-500'
-                                          : 'text-muted-foreground hover:text-yellow-500'
-                                      }`}
-                                      onClick={() => {
-                                        if (group.platform === 'espn') {
-                                          handleSetDefault(
-                                            mostRecentSeason.leagueId,
-                                            mostRecentSeason.sport,
-                                            mostRecentSeason.seasonYear
-                                          );
-                                        } else if (mostRecentSeason?.yahooId) {
-                                          handleSetYahooDefault(mostRecentSeason.yahooId, mostRecentSeason.sport);
-                                        }
-                                      }}
-                                      disabled={isSettingThis || isLeagueDefault || !mostRecentSeason?.teamId}
-                                      title={
-                                        !mostRecentSeason?.teamId
-                                          ? 'No team selected'
-                                          : isLeagueDefault
-                                          ? 'Default league for this sport'
-                                          : 'Set as default for this sport'
-                                      }
-                                    >
-                                      {isSettingThis ? (
-                                        <Loader2 className="h-4 w-4 animate-spin" />
-                                      ) : (
-                                        <Star className={`h-4 w-4 ${isLeagueDefault ? 'fill-current' : ''}`} />
-                                      )}
-                                    </Button>
-                                  );
-                                })()}
                               </div>
                               <div className="flex items-center gap-1 shrink-0">
                                 {group.platform === 'espn' && canDiscover && (
