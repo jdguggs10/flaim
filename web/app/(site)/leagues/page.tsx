@@ -172,6 +172,8 @@ function LeaguesPageContent() {
   const [isYahooDisconnecting, setIsYahooDisconnecting] = useState(false);
   const [yahooLeagues, setYahooLeagues] = useState<YahooLeague[]>([]);
   const [isDiscoveringYahoo, setIsDiscoveringYahoo] = useState(false);
+  const [defaultSport, setDefaultSport] = useState<string | null>(null);
+  const [settingSportDefault, setSettingSportDefault] = useState<string | null>(null);
 
   // Add league flow state
   const [manualDialogOpen, setManualDialogOpen] = useState(false);
@@ -335,6 +337,20 @@ function LeaguesPageContent() {
 
   useEffect(() => {
     if (!isSignedIn) return;
+
+    // Fetch user preferences
+    const loadPreferences = async () => {
+      try {
+        const res = await fetch('/api/user/preferences');
+        if (res.ok) {
+          const data = await res.json() as { defaultSport?: string | null };
+          setDefaultSport(data.defaultSport || null);
+        }
+      } catch (err) {
+        console.error('Failed to load preferences:', err);
+      }
+    };
+    loadPreferences();
 
     const yahooParam = searchParams.get('yahoo');
     if (yahooParam === 'connected') {
@@ -532,6 +548,16 @@ function LeaguesPageContent() {
           isDefault: l.leagueId === leagueId && l.sport === sport && l.seasonYear === seasonYear,
         })));
       }
+
+      // Auto-set sport as default if no sport default exists
+      if (!defaultSport) {
+        await fetch('/api/user/preferences', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ defaultSport: sport }),
+        });
+        setDefaultSport(sport);
+      }
     } catch (err) {
       setLeagueError(err instanceof Error ? err.message : 'Failed to set default league');
     } finally {
@@ -540,7 +566,7 @@ function LeaguesPageContent() {
   };
 
   // Set default Yahoo league
-  const handleSetYahooDefault = async (yahooId: string) => {
+  const handleSetYahooDefault = async (yahooId: string, sport: string) => {
     setSettingDefaultKey(`yahoo:${yahooId}`);
     setLeagueError(null);
     setLeagueNotice(null);
@@ -559,10 +585,40 @@ function LeaguesPageContent() {
       if (data.leagues) {
         setYahooLeagues(data.leagues);
       }
+
+      // Auto-set sport as default if no sport default exists
+      if (!defaultSport) {
+        await fetch('/api/user/preferences', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ defaultSport: sport }),
+        });
+        setDefaultSport(sport);
+      }
     } catch (err) {
       setLeagueError(err instanceof Error ? err.message : 'Failed to set default league');
     } finally {
       setSettingDefaultKey(null);
+    }
+  };
+
+  // Set default sport
+  const handleSetDefaultSport = async (sport: string) => {
+    setSettingSportDefault(sport);
+    try {
+      const newDefault = defaultSport === sport ? null : sport; // Toggle off if already default
+      const res = await fetch('/api/user/preferences', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ defaultSport: newDefault }),
+      });
+      if (res.ok) {
+        setDefaultSport(newDefault);
+      }
+    } catch (err) {
+      console.error('Failed to set default sport:', err);
+    } finally {
+      setSettingSportDefault(null);
     }
   };
 
@@ -886,7 +942,7 @@ function LeaguesPageContent() {
                                           if (season.platform === 'espn') {
                                             handleSetDefault(season.leagueId, season.sport, season.seasonYear);
                                           } else {
-                                            if (season.yahooId) handleSetYahooDefault(season.yahooId);
+                                            if (season.yahooId) handleSetYahooDefault(season.yahooId, season.sport);
                                           }
                                         }}
                                         disabled={isSettingDefault || season.isDefault || !season.teamId}
