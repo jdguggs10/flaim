@@ -826,7 +826,7 @@ function LeaguesPageContent() {
                 </PopoverTrigger>
                 <PopoverContent className="w-72 text-sm">
                   <p className="text-muted-foreground">
-                    <strong className="text-foreground">Stars mark your defaults.</strong> Set one default league per sport so the AI knows which team you mean. The filled star on a sport header marks your primary sport.
+                    <strong className="text-foreground">Stars mark your defaults.</strong> Set a default sport, and also set a default team per sport. This is optional, but it can be helpful with many leagues.
                   </p>
                 </PopoverContent>
               </Popover>
