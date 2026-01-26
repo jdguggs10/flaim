@@ -462,18 +462,43 @@ describe('YahooStorage', () => {
   });
 
   describe('setDefaultYahooLeague', () => {
-    it('clears existing defaults and sets new default', async () => {
-      // First call clears existing defaults
-      mockEq.mockReturnValueOnce({
-        eq: vi.fn().mockReturnValue({ error: null }),
+    it('fetches league sport, clears defaults for that sport, and sets new default', async () => {
+      // The flow is:
+      // 1. from().select('sport').eq('id', leagueId).single() - fetch league sport
+      // 2. from().update({is_default: false}).eq('clerk_user_id', ...).eq('sport', ...) - clear defaults
+      // 3. from().update({is_default: true}).eq('id', leagueId) - set new default
+
+      // Mock the select->eq->single chain for fetching league sport
+      mockSingle.mockResolvedValueOnce({
+        data: { sport: 'football' },
+        error: null,
       });
-      // Second call sets new default
-      mockEq.mockReturnValueOnce({ error: null });
+
+      // Mock the update->eq->eq chain for clearing defaults (returns { error: null })
+      // mockEq will be called multiple times, set up the chain properly
+      const clearEqMock = vi.fn().mockReturnValue({ error: null });
+      mockEq
+        .mockReturnValueOnce({ single: mockSingle }) // select().eq() -> returns { single }
+        .mockReturnValueOnce({ eq: clearEqMock }) // update().eq('clerk_user_id') -> returns { eq }
+        .mockReturnValueOnce({ error: null }); // update().eq('id') -> returns { error: null }
 
       await storage.setDefaultYahooLeague('user_123', 'league-uuid');
 
-      // Should call update twice
+      // Should call select to get the league's sport
+      expect(mockSelect).toHaveBeenCalledWith('sport');
+      // Should call update twice (clear + set)
       expect(mockUpdate).toHaveBeenCalledTimes(2);
+    });
+
+    it('throws if league not found', async () => {
+      mockSingle.mockResolvedValueOnce({
+        data: null,
+        error: { code: 'PGRST116', message: 'No rows' },
+      });
+
+      await expect(
+        storage.setDefaultYahooLeague('user_123', 'nonexistent-league')
+      ).rejects.toThrow('League not found');
     });
   });
 

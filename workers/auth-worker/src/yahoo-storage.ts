@@ -358,14 +358,27 @@ export class YahooStorage {
 
   /**
    * Set a league as the default for a user
-   * Clears any existing default first
+   * Clears any existing default FOR THE SAME SPORT first
    */
   async setDefaultYahooLeague(clerkUserId: string, leagueId: string): Promise<void> {
-    // Clear existing defaults for this user
+    // First, get the league to find its sport
+    const { data: league, error: fetchError } = await this.supabase
+      .from('yahoo_leagues')
+      .select('sport')
+      .eq('id', leagueId)
+      .single();
+
+    if (fetchError || !league) {
+      console.error('[yahoo-storage] Failed to find Yahoo league:', fetchError);
+      throw new Error('League not found');
+    }
+
+    // Clear existing defaults for this user IN THIS SPORT ONLY
     const { error: clearError } = await this.supabase
       .from('yahoo_leagues')
       .update({ is_default: false })
-      .eq('clerk_user_id', clerkUserId);
+      .eq('clerk_user_id', clerkUserId)
+      .eq('sport', league.sport);
 
     if (clearError) {
       console.error('[yahoo-storage] Failed to clear default Yahoo league:', clearError);
@@ -383,7 +396,7 @@ export class YahooStorage {
       throw new Error('Failed to set default Yahoo league');
     }
 
-    console.log(`[yahoo-storage] Set default Yahoo league ${leagueId} for user ${maskUserId(clerkUserId)}`);
+    console.log(`[yahoo-storage] Set default Yahoo league ${leagueId} for user ${clerkUserId.substring(0, 8)}...`);
   }
 
   /**
