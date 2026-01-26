@@ -3,6 +3,8 @@
 ## Bugs
 - **Dev console chat localhost limitation**: MCP tools fail locally (424 error) because OpenAI can't reach localhost. Use preview URLs or Claude/ChatGPT desktop apps.
 - **Node.js v25 localStorage warning (ignore)**: Running `npm run dev:frontend` on Node v25+ shows `Warning: --localstorage-file was provided without a valid path`. This is a [known Node.js v25 regression](https://github.com/nodejs/node/issues/60704) and is harmless. Suppressed via `NODE_OPTIONS='--no-webstorage'` in the dev script.
+- **Leagues page horizontal resize**: Page doesn't resize correctly on narrow viewports.
+- ~~**Homepage multi-platform clarity**: Box 2 ("Install Extension") needs to show both platforms~~ - Done: StepConnectPlatforms component (Jan 2025)
 
 ## Features
 - **Deepen MCP functionality for football and baseball**: expand coverage (edge cases, richer data, pagination), and add more tests for existing tools.
@@ -23,6 +25,7 @@
 - **Reconcile remaining ESPN baseball mapping unknowns**: Validate slot IDs `18`/`22` per `workers/espn-client/src/sports/baseball/MAPPINGS.md`.
 
 ## Infrastructure & UX Polish
+- **Dynamic preview URLs for OAuth**: Yahoo OAuth callback redirects to hardcoded `flaim-preview.vercel.app`. Should support dynamic Vercel preview URLs (e.g., pass preview URL in OAuth state, or use Vercel preview domain aliases). Currently can't test Yahoo OAuth on preview deployments.
 - **Automated Testing**: Core OAuth/tool routing tests added; consider deeper integration tests when usage grows.
 - **Service Monitoring**: Add external uptime checks for existing `/health` endpoints.
 - **UX Polish**: Implement loading states (spinners or skeletons) across the web dashboard and extension to improve perceived performance during API fetches.
