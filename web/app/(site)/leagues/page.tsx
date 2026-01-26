@@ -1049,6 +1049,69 @@ function LeaguesPageContent() {
                     </div>
                   </div>
                 ))}
+
+                    {/* Old Leagues Section */}
+                    {leaguesBySport.old.length > 0 && (
+                      <div className="space-y-3 pt-3 border-t">
+                        <button
+                          type="button"
+                          className="flex items-center gap-2 font-medium text-muted-foreground hover:text-foreground transition-colors w-full"
+                          onClick={() => setShowOldLeagues(!showOldLeagues)}
+                        >
+                          <span className="text-lg">🗄️</span>
+                          <span className="text-base">Old Leagues ({leaguesBySport.old.length})</span>
+                          <ChevronDown className={`h-4 w-4 ml-auto transition-transform ${showOldLeagues ? 'rotate-180' : ''}`} />
+                        </button>
+
+                        {showOldLeagues && (
+                          <div className="space-y-3">
+                            {leaguesBySport.old.map((group) => {
+                              const baseKey = `${group.leagueId}-${group.sport}`;
+                              const isDeleting = deletingLeagueKey === baseKey;
+                              const mostRecentYear = group.seasons[0]?.seasonYear;
+
+                              return (
+                                <div key={group.key} className="rounded-lg border bg-muted/30">
+                                  {/* Old League Header */}
+                                  <div className="flex items-center justify-between gap-3 p-3">
+                                    <div className="min-w-0">
+                                      <div className="font-medium break-words text-muted-foreground">
+                                        {group.leagueName || `League ${group.leagueId}`}
+                                      </div>
+                                      <div className="text-xs text-muted-foreground/70 break-words">
+                                        {group.platform === 'espn' ? 'ESPN' : 'Yahoo'}
+                                        {` • Last active: ${mostRecentYear}`}
+                                      </div>
+                                    </div>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-8 w-8 text-muted-foreground hover:text-destructive shrink-0"
+                                      onClick={() => {
+                                        if (group.platform === 'espn') {
+                                          handleDeleteLeague(group.leagueId, group.sport);
+                                        } else {
+                                          const yahooId = group.seasons[0]?.yahooId;
+                                          if (yahooId) handleDeleteYahooLeague(yahooId);
+                                        }
+                                      }}
+                                      disabled={isDeleting}
+                                      title="Delete league"
+                                    >
+                                      {isDeleting ? (
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                      ) : (
+                                        <Trash2 className="h-4 w-4" />
+                                      )}
+                                    </Button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
               </div>
             )}
           </CardContent>
