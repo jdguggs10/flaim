@@ -38,6 +38,11 @@ export interface SupabaseEnvironment {
   SUPABASE_SERVICE_KEY: string;
 }
 
+export interface UserPreferences {
+  clerkUserId: string;
+  defaultSport: 'football' | 'baseball' | 'basketball' | 'hockey' | null;
+}
+
 export class EspnSupabaseStorage {
   private supabase: SupabaseClient;
 
@@ -643,6 +648,52 @@ export class EspnSupabaseStorage {
       console.error('Failed to set default league:', error);
       return { success: false, error: 'Internal error' };
     }
+  }
+
+  /**
+   * Get user preferences
+   */
+  async getUserPreferences(clerkUserId: string): Promise<UserPreferences> {
+    const { data, error } = await this.supabase
+      .from('user_preferences')
+      .select('clerk_user_id, default_sport')
+      .eq('clerk_user_id', clerkUserId)
+      .single();
+
+    if (error || !data) {
+      return { clerkUserId, defaultSport: null };
+    }
+
+    return {
+      clerkUserId: data.clerk_user_id,
+      defaultSport: data.default_sport,
+    };
+  }
+
+  /**
+   * Set user's default sport
+   */
+  async setDefaultSport(
+    clerkUserId: string,
+    sport: 'football' | 'baseball' | 'basketball' | 'hockey' | null
+  ): Promise<void> {
+    const { error } = await this.supabase
+      .from('user_preferences')
+      .upsert(
+        {
+          clerk_user_id: clerkUserId,
+          default_sport: sport,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'clerk_user_id' }
+      );
+
+    if (error) {
+      console.error('[storage] Failed to set default sport:', error);
+      throw new Error('Failed to set default sport');
+    }
+
+    console.log(`[storage] Set default sport to ${sport} for user ${clerkUserId.substring(0, 8)}...`);
   }
 
   /**
