@@ -968,7 +968,14 @@ function LeaguesPageContent() {
               >
                 <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-4">
                   <div className="space-y-1 min-w-0">
-                    <CardTitle className="text-lg">ESPN</CardTitle>
+                    <div className="flex items-center gap-2">
+                      <CardTitle className="text-lg">ESPN</CardTitle>
+                      {hasCredentials && (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                          Credentials Saved
+                        </span>
+                      )}
+                    </div>
                     <CardDescription>
                       Use the extension to update credentials and discover leagues, or add one manually.
                     </CardDescription>
