@@ -816,7 +816,21 @@ function LeaguesPageContent() {
         {/* Your Leagues Card */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Active Leagues</CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-lg">Active Leagues</CardTitle>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button type="button" className="text-muted-foreground hover:text-yellow-500 transition-colors" aria-label="Star defaults info">
+                    <Star className="h-4 w-4" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-72 text-sm">
+                  <p className="text-muted-foreground">
+                    <strong className="text-foreground">Stars mark your defaults.</strong> Set one default league per sport so the AI knows which team you mean. The filled star on a sport header marks your primary sport.
+                  </p>
+                </PopoverContent>
+              </Popover>
+            </div>
             <CardDescription>
               These are your teams and seasons that are already linked.
             </CardDescription>
