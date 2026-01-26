@@ -311,7 +311,6 @@ export class YahooStorage {
           team_id: params.teamId || null,
           team_key: params.teamKey || null,
           team_name: params.teamName || null,
-          is_default: params.isDefault ?? false,
           updated_at: new Date().toISOString(),
         },
         { onConflict: 'clerk_user_id,league_key,season_year' }
@@ -333,14 +332,15 @@ export class YahooStorage {
   async getYahooLeagues(clerkUserId: string): Promise<YahooLeague[]> {
     const { data, error } = await this.supabase
       .from('yahoo_leagues')
-      .select('*')
+      .select('id, clerk_user_id, sport, season_year, league_key, league_name, team_id, team_key, team_name')
       .eq('clerk_user_id', clerkUserId);
 
-    if (error || !data) {
-      return [];
+    if (error) {
+      console.error('[yahoo-storage] Failed to get Yahoo leagues:', error);
+      throw new Error('Failed to get Yahoo leagues');
     }
 
-    return data.map((row) => ({
+    return (data || []).map((row) => ({
       id: row.id,
       clerkUserId: row.clerk_user_id,
       sport: row.sport as Sport,
@@ -350,53 +350,7 @@ export class YahooStorage {
       teamId: row.team_id || undefined,
       teamKey: row.team_key || undefined,
       teamName: row.team_name || undefined,
-      isDefault: row.is_default,
     }));
-  }
-
-  /**
-   * Set a league as the default for a user
-   * Clears any existing default FOR THE SAME SPORT first
-   */
-  async setDefaultYahooLeague(clerkUserId: string, leagueId: string): Promise<void> {
-    // First, get the league to find its sport
-    const { data: league, error: fetchError } = await this.supabase
-      .from('yahoo_leagues')
-      .select('sport')
-      .eq('id', leagueId)
-      .eq('clerk_user_id', clerkUserId)
-      .single();
-
-    if (fetchError || !league) {
-      console.error('[yahoo-storage] Failed to find Yahoo league:', fetchError);
-      throw new Error('League not found');
-    }
-
-    // Clear existing defaults for this user IN THIS SPORT ONLY
-    const { error: clearError } = await this.supabase
-      .from('yahoo_leagues')
-      .update({ is_default: false })
-      .eq('clerk_user_id', clerkUserId)
-      .eq('sport', league.sport);
-
-    if (clearError) {
-      console.error('[yahoo-storage] Failed to clear default Yahoo league:', clearError);
-      throw new Error('Failed to clear default Yahoo league');
-    }
-
-    // Set new default
-    const { error: setError } = await this.supabase
-      .from('yahoo_leagues')
-      .update({ is_default: true })
-      .eq('id', leagueId)
-      .eq('clerk_user_id', clerkUserId);
-
-    if (setError) {
-      console.error('[yahoo-storage] Failed to set default Yahoo league:', setError);
-      throw new Error('Failed to set default Yahoo league');
-    }
-
-    console.log(`[yahoo-storage] Set default Yahoo league ${leagueId} for user ${maskUserId(clerkUserId)}`);
   }
 
   /**
