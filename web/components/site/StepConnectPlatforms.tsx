@@ -324,16 +324,9 @@ export function StepConnectPlatforms({ className }: StepConnectPlatformsProps) {
               Checking...
             </div>
           ) : yahooStatus === 'connected' ? (
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 text-sm text-green-600 font-medium">
-                <Check className="h-4 w-4" />
-                Connected
-              </div>
-              {yahooLeagueCount > 0 && (
-                <div className="text-xs text-muted-foreground">
-                  {yahooLeagueCount} league{yahooLeagueCount !== 1 ? 's' : ''} discovered
-                </div>
-              )}
+            <div className="flex items-center gap-2 text-sm text-green-600 font-medium">
+              <Check className="h-4 w-4" />
+              Connected
             </div>
           ) : (
             <Button variant="outline" size="sm" className="w-full" onClick={handleConnectYahoo}>
