@@ -798,7 +798,7 @@ api.get('/user/preferences', async (c) => {
     return c.json({ error: 'unauthorized', error_description: authError || 'Authentication required' }, 401);
   }
 
-  const storage = new EspnSupabaseStorage(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_KEY);
+  const storage = EspnSupabaseStorage.fromEnvironment(c.env);
   const preferences = await storage.getUserPreferences(userId);
   return c.json(preferences);
 });
@@ -817,7 +817,7 @@ api.post('/user/preferences/default-sport', async (c) => {
     return c.json({ error: 'invalid_sport', error_description: 'Sport must be football, baseball, basketball, hockey, or null' }, 400);
   }
 
-  const storage = new EspnSupabaseStorage(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_KEY);
+  const storage = EspnSupabaseStorage.fromEnvironment(c.env);
   await storage.setDefaultSport(userId, body.sport as 'football' | 'baseball' | 'basketball' | 'hockey' | null);
 
   const preferences = await storage.getUserPreferences(userId);
