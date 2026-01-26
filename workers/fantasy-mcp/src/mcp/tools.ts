@@ -35,6 +35,18 @@ export interface UnifiedTool {
 }
 
 // =============================================================================
+// HELPER: Active league threshold
+// =============================================================================
+
+/**
+ * Get the threshold year for "active" leagues.
+ * A league is active if it has a season >= this year.
+ */
+function getActiveThresholdYear(): number {
+  return new Date().getFullYear() - 2;
+}
+
+// =============================================================================
 // HELPER: Fetch user leagues from auth-worker
 // =============================================================================
 
