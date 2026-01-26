@@ -788,6 +788,43 @@ api.delete('/leagues/yahoo/:id', async (c) => {
 });
 
 // =============================================================================
+// USER PREFERENCES ROUTES
+// =============================================================================
+
+// Get user preferences
+api.get('/user/preferences', async (c) => {
+  const { userId, error: authError } = await getVerifiedUserId(c.req.raw, c.env);
+  if (!userId) {
+    return c.json({ error: 'unauthorized', error_description: authError || 'Authentication required' }, 401);
+  }
+
+  const storage = new EspnSupabaseStorage(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_KEY);
+  const preferences = await storage.getUserPreferences(userId);
+  return c.json(preferences);
+});
+
+// Set default sport
+api.post('/user/preferences/default-sport', async (c) => {
+  const { userId, error: authError } = await getVerifiedUserId(c.req.raw, c.env);
+  if (!userId) {
+    return c.json({ error: 'unauthorized', error_description: authError || 'Authentication required' }, 401);
+  }
+
+  const body = await c.req.json() as { sport: string | null };
+  const validSports = ['football', 'baseball', 'basketball', 'hockey', null];
+
+  if (!validSports.includes(body.sport)) {
+    return c.json({ error: 'invalid_sport', error_description: 'Sport must be football, baseball, basketball, hockey, or null' }, 400);
+  }
+
+  const storage = new EspnSupabaseStorage(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_KEY);
+  await storage.setDefaultSport(userId, body.sport as 'football' | 'baseball' | 'basketball' | 'hockey' | null);
+
+  const preferences = await storage.getUserPreferences(userId);
+  return c.json(preferences);
+});
+
+// =============================================================================
 // CREDENTIALS ENDPOINTS
 // =============================================================================
 
@@ -1250,6 +1287,8 @@ api.notFound((c) => {
       '/connect/yahoo/credentials': 'GET - Get Yahoo access token',
       '/connect/yahoo/status': 'GET - Check Yahoo connection status',
       '/connect/yahoo/disconnect': 'DELETE - Disconnect Yahoo account',
+      '/user/preferences': 'GET - Get user preferences (default sport)',
+      '/user/preferences/default-sport': 'POST - Set user default sport',
     },
     storage: 'supabase',
     oauth: 'enabled',
