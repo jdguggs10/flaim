@@ -13,6 +13,7 @@ describe('fantasy-mcp tools', () => {
     const names = tools.map((tool) => tool.name).sort();
 
     expect(names).toEqual([
+      'get_ancient_history',
       'get_free_agents',
       'get_league_info',
       'get_matchups',
