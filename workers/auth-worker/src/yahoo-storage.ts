@@ -366,6 +366,7 @@ export class YahooStorage {
       .from('yahoo_leagues')
       .select('sport')
       .eq('id', leagueId)
+      .eq('clerk_user_id', clerkUserId)
       .single();
 
     if (fetchError || !league) {
@@ -389,14 +390,15 @@ export class YahooStorage {
     const { error: setError } = await this.supabase
       .from('yahoo_leagues')
       .update({ is_default: true })
-      .eq('id', leagueId);
+      .eq('id', leagueId)
+      .eq('clerk_user_id', clerkUserId);
 
     if (setError) {
       console.error('[yahoo-storage] Failed to set default Yahoo league:', setError);
       throw new Error('Failed to set default Yahoo league');
     }
 
-    console.log(`[yahoo-storage] Set default Yahoo league ${leagueId} for user ${clerkUserId.substring(0, 8)}...`);
+    console.log(`[yahoo-storage] Set default Yahoo league ${leagueId} for user ${maskUserId(clerkUserId)}`);
   }
 
   /**

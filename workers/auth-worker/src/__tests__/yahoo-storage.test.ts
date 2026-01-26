@@ -464,23 +464,26 @@ describe('YahooStorage', () => {
   describe('setDefaultYahooLeague', () => {
     it('fetches league sport, clears defaults for that sport, and sets new default', async () => {
       // The flow is:
-      // 1. from().select('sport').eq('id', leagueId).single() - fetch league sport
+      // 1. from().select('sport').eq('id', leagueId).eq('clerk_user_id', userId).single() - fetch league sport with user verification
       // 2. from().update({is_default: false}).eq('clerk_user_id', ...).eq('sport', ...) - clear defaults
-      // 3. from().update({is_default: true}).eq('id', leagueId) - set new default
+      // 3. from().update({is_default: true}).eq('id', leagueId).eq('clerk_user_id', userId) - set new default with user verification
 
-      // Mock the select->eq->single chain for fetching league sport
+      // Mock the select->eq->eq->single chain for fetching league sport (now has user verification)
       mockSingle.mockResolvedValueOnce({
         data: { sport: 'football' },
         error: null,
       });
 
-      // Mock the update->eq->eq chain for clearing defaults (returns { error: null })
-      // mockEq will be called multiple times, set up the chain properly
+      // Mock the chained eq calls properly:
+      // - select().eq('id', leagueId).eq('clerk_user_id', userId).single() for fetch
+      // - update().eq('clerk_user_id', ...).eq('sport', ...) for clear
+      // - update().eq('id', leagueId).eq('clerk_user_id', userId) for set
       const clearEqMock = vi.fn().mockReturnValue({ error: null });
+      const setEqMock = vi.fn().mockReturnValue({ error: null });
       mockEq
-        .mockReturnValueOnce({ single: mockSingle }) // select().eq() -> returns { single }
-        .mockReturnValueOnce({ eq: clearEqMock }) // update().eq('clerk_user_id') -> returns { eq }
-        .mockReturnValueOnce({ error: null }); // update().eq('id') -> returns { error: null }
+        .mockReturnValueOnce({ eq: vi.fn().mockReturnValue({ single: mockSingle }) }) // select().eq('id') -> returns { eq } for clerk_user_id
+        .mockReturnValueOnce({ eq: clearEqMock }) // update().eq('clerk_user_id') -> returns { eq } for sport
+        .mockReturnValueOnce({ eq: setEqMock }); // update().eq('id') -> returns { eq } for clerk_user_id
 
       await storage.setDefaultYahooLeague('user_123', 'league-uuid');
 
