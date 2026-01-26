@@ -184,9 +184,6 @@ function LeaguesPageContent() {
   const [selectedTeamId, setSelectedTeamId] = useState<string>('');
   const [isAddingLeague, setIsAddingLeague] = useState(false);
 
-  // Expand/collapse state for league groups
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
-
   // Group all leagues by sport, then by platform+leagueId
   const leaguesBySport = useMemo(() => {
     // Convert both platforms to unified format
@@ -252,18 +249,6 @@ function LeaguesPageContent() {
       return sportOrder.indexOf(a[0]) - sportOrder.indexOf(b[0]);
     });
   }, [leagues, yahooLeagues]);
-
-  const toggleGroup = (key: string) => {
-    setExpandedGroups((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) {
-        next.delete(key);
-      } else {
-        next.add(key);
-      }
-      return next;
-    });
-  };
 
   // Load leagues on mount
   const loadLeagues = async (options?: { showSpinner?: boolean }) => {
@@ -794,9 +779,6 @@ function LeaguesPageContent() {
                         const isDeleting = deletingLeagueKey === baseKey;
                         const isDiscovering = discoveringLeagueKey === baseKey;
                         const canDiscover = group.sport === 'baseball' || group.sport === 'football';
-                        const isExpanded = expandedGroups.has(group.key);
-                        const visibleSeasons = isExpanded ? group.seasons : group.seasons.slice(0, 3);
-                        const hasMoreSeasons = group.seasons.length > 3;
                         const hasTeamSelection = group.seasons.some((season) => !!season.teamId);
                         const primaryTeamId = group.seasons.find((s) => s.teamId)?.teamId;
 
@@ -864,7 +846,7 @@ function LeaguesPageContent() {
                             {/* Season Chips */}
                             <div className="p-3">
                               <div className="flex gap-2 overflow-x-auto pb-1">
-                                {visibleSeasons.map((season) => {
+                                {group.seasons.map((season) => {
                                   const seasonKey = `${season.leagueId}-${season.sport}-${season.seasonYear || 'all'}`;
                                   const isSettingDefault = season.platform === 'espn'
                                     ? settingDefaultKey === seasonKey
@@ -926,17 +908,6 @@ function LeaguesPageContent() {
                                   );
                                 })}
                               </div>
-                              {hasMoreSeasons && (
-                                <button
-                                  type="button"
-                                  className="mt-2 text-xs text-muted-foreground hover:text-foreground"
-                                  onClick={() => toggleGroup(group.key)}
-                                >
-                                  {isExpanded
-                                    ? 'Show less'
-                                    : `Show all (${group.seasons.length})`}
-                                </button>
-                              )}
                             </div>
                           </div>
                         );
