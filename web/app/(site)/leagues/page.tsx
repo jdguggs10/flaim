@@ -549,6 +549,12 @@ function LeaguesPageContent() {
         })));
       }
 
+      // Clear Yahoo defaults for this sport (one default per sport across platforms)
+      setYahooLeagues((prev) => prev.map((l) => ({
+        ...l,
+        isDefault: l.sport === sport ? false : l.isDefault,
+      })));
+
       // Auto-set sport as default if no sport default exists
       if (!defaultSport) {
         await fetch('/api/user/preferences', {
@@ -585,6 +591,12 @@ function LeaguesPageContent() {
       if (data.leagues) {
         setYahooLeagues(data.leagues);
       }
+
+      // Clear ESPN defaults for this sport (one default per sport across platforms)
+      setLeagues((prev) => prev.map((l) => ({
+        ...l,
+        isDefault: l.sport === sport ? false : l.isDefault,
+      })));
 
       // Auto-set sport as default if no sport default exists
       if (!defaultSport) {
@@ -823,9 +835,9 @@ function LeaguesPageContent() {
                 {leaguesBySport.map(([sport, sportLeagues]) => (
                   <div key={sport} className="space-y-3">
                     {/* Sport Header with Default Star */}
-                    <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                      <span className="text-base">{getSportEmoji(sport)}</span>
-                      <span className="capitalize">{sport}</span>
+                    <div className="flex items-center gap-2 font-medium text-muted-foreground">
+                      <span className="text-lg">{getSportEmoji(sport)}</span>
+                      <span className="capitalize text-base">{sport}</span>
                       <Button
                         variant="ghost"
                         size="icon"
