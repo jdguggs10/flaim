@@ -605,11 +605,12 @@ export class EspnSupabaseStorage {
         return { success: false, error: 'Cannot set default: no team selected for this league' };
       }
 
-      // Clear any existing default for this user
+      // Clear any existing default for this user IN THIS SPORT ONLY
       const { error: clearError } = await this.supabase
         .from('espn_leagues')
         .update({ is_default: false })
         .eq('clerk_user_id', clerkUserId)
+        .eq('sport', sport)
         .eq('is_default', true);
 
       if (clearError) {
