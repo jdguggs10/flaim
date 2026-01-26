@@ -808,7 +808,7 @@ function LeaguesPageContent() {
                                 </div>
                                 <div className="text-xs text-muted-foreground break-words">
                                   {group.platform === 'espn' ? 'ESPN' : 'Yahoo'}
-                                  {group.platform === 'espn' && ` • League ID: ${group.leagueId}`}
+                                  {` • League ID: ${group.leagueId}`}
                                   {primaryTeamId && ` • Team ID: ${primaryTeamId}`}
                                 </div>
                               </div>
