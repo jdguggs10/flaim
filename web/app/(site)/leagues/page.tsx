@@ -1261,7 +1261,7 @@ function LeaguesPageContent() {
                     </div>
                     <CardDescription>
                       {isYahooConnected
-                        ? `${yahooLeagues.length} league${yahooLeagues.length !== 1 ? 's' : ''} discovered`
+                        ? 'Use the Refresh Leagues button to trigger a fresh pull of your leagues, teams, and seasons from Yahoo.'
                         : 'Connect your Yahoo account to add leagues.'}
                     </CardDescription>
                   </div>
