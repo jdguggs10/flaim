@@ -369,8 +369,16 @@ describe('yahoo-connect-handlers', () => {
   // ===========================================================================
 
   describe('handleYahooStatus', () => {
-    it('returns connected=true with league count when credentials exist', async () => {
-      mockStorage.hasYahooCredentials.mockResolvedValue(true);
+    it('returns connected=true with league count and lastUpdated when credentials exist', async () => {
+      const mockUpdatedAt = new Date('2026-01-25T12:00:00Z');
+      mockStorage.getYahooCredentials.mockResolvedValue({
+        clerkUserId: 'user_123',
+        accessToken: 'access',
+        refreshToken: 'refresh',
+        expiresAt: new Date(),
+        needsRefresh: false,
+        updatedAt: mockUpdatedAt,
+      });
       mockStorage.getYahooLeagues.mockResolvedValue([
         { id: 'league-1', leagueName: 'League One' },
         { id: 'league-2', leagueName: 'League Two' },
@@ -382,10 +390,11 @@ describe('yahoo-connect-handlers', () => {
       const body = (await response.json()) as Record<string, unknown>;
       expect(body.connected).toBe(true);
       expect(body.leagueCount).toBe(2);
+      expect(body.lastUpdated).toBe(mockUpdatedAt.toISOString());
     });
 
     it('returns connected=false when no credentials exist', async () => {
-      mockStorage.hasYahooCredentials.mockResolvedValue(false);
+      mockStorage.getYahooCredentials.mockResolvedValue(null);
       mockStorage.getYahooLeagues.mockResolvedValue([]);
 
       const response = await handleYahooStatus(env, 'user_123', corsHeaders);
@@ -394,6 +403,7 @@ describe('yahoo-connect-handlers', () => {
       const body = (await response.json()) as Record<string, unknown>;
       expect(body.connected).toBe(false);
       expect(body.leagueCount).toBe(0);
+      expect(body.lastUpdated).toBeUndefined();
     });
   });
 });
