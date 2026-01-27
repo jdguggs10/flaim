@@ -424,7 +424,6 @@ describe('YahooStorage', () => {
             league_name: 'League One',
             team_id: '3',
             team_key: 'nfl.l.12345.t.3',
-            is_default: true,
           },
           {
             id: 'uuid-2',
@@ -435,7 +434,6 @@ describe('YahooStorage', () => {
             league_name: 'League Two',
             team_id: '5',
             team_key: 'mlb.l.67890.t.5',
-            is_default: false,
           },
         ],
         error: null,
@@ -445,7 +443,6 @@ describe('YahooStorage', () => {
 
       expect(result).toHaveLength(2);
       expect(result[0].leagueName).toBe('League One');
-      expect(result[0].isDefault).toBe(true);
       expect(result[1].leagueName).toBe('League Two');
     });
 
@@ -458,50 +455,6 @@ describe('YahooStorage', () => {
       const result = await storage.getYahooLeagues('user_no_leagues');
 
       expect(result).toEqual([]);
-    });
-  });
-
-  describe('setDefaultYahooLeague', () => {
-    it('fetches league sport, clears defaults for that sport, and sets new default', async () => {
-      // The flow is:
-      // 1. from().select('sport').eq('id', leagueId).eq('clerk_user_id', userId).single() - fetch league sport with user verification
-      // 2. from().update({is_default: false}).eq('clerk_user_id', ...).eq('sport', ...) - clear defaults
-      // 3. from().update({is_default: true}).eq('id', leagueId).eq('clerk_user_id', userId) - set new default with user verification
-
-      // Mock the select->eq->eq->single chain for fetching league sport (now has user verification)
-      mockSingle.mockResolvedValueOnce({
-        data: { sport: 'football' },
-        error: null,
-      });
-
-      // Mock the chained eq calls properly:
-      // - select().eq('id', leagueId).eq('clerk_user_id', userId).single() for fetch
-      // - update().eq('clerk_user_id', ...).eq('sport', ...) for clear
-      // - update().eq('id', leagueId).eq('clerk_user_id', userId) for set
-      const clearEqMock = vi.fn().mockReturnValue({ error: null });
-      const setEqMock = vi.fn().mockReturnValue({ error: null });
-      mockEq
-        .mockReturnValueOnce({ eq: vi.fn().mockReturnValue({ single: mockSingle }) }) // select().eq('id') -> returns { eq } for clerk_user_id
-        .mockReturnValueOnce({ eq: clearEqMock }) // update().eq('clerk_user_id') -> returns { eq } for sport
-        .mockReturnValueOnce({ eq: setEqMock }); // update().eq('id') -> returns { eq } for clerk_user_id
-
-      await storage.setDefaultYahooLeague('user_123', 'league-uuid');
-
-      // Should call select to get the league's sport
-      expect(mockSelect).toHaveBeenCalledWith('sport');
-      // Should call update twice (clear + set)
-      expect(mockUpdate).toHaveBeenCalledTimes(2);
-    });
-
-    it('throws if league not found', async () => {
-      mockSingle.mockResolvedValueOnce({
-        data: null,
-        error: { code: 'PGRST116', message: 'No rows' },
-      });
-
-      await expect(
-        storage.setDefaultYahooLeague('user_123', 'nonexistent-league')
-      ).rejects.toThrow('League not found');
     });
   });
 
