@@ -50,7 +50,6 @@ interface League {
   teamId?: string;
   teamName?: string;
   seasonYear?: number;
-  isDefault?: boolean;
 }
 
 interface YahooLeague {
@@ -62,7 +61,20 @@ interface YahooLeague {
   teamId?: string;
   teamKey?: string;
   teamName?: string;
-  isDefault?: boolean;
+}
+
+interface LeagueDefault {
+  platform: 'espn' | 'yahoo';
+  leagueId: string;
+  seasonYear: number;
+}
+
+interface UserPreferencesState {
+  defaultSport: string | null;
+  defaultFootball: LeagueDefault | null;
+  defaultBaseball: LeagueDefault | null;
+  defaultBasketball: LeagueDefault | null;
+  defaultHockey: LeagueDefault | null;
 }
 
 interface Team {
@@ -120,33 +132,51 @@ const SEASON_OPTIONS = Array.from(
   (_, i) => currentYear - i
 );
 
-// Convert ESPN leagues to unified format
-function espnToUnified(leagues: League[]): UnifiedLeague[] {
-  return leagues.map((l) => ({
-    platform: 'espn' as const,
-    sport: l.sport,
-    seasonYear: l.seasonYear || new Date().getFullYear(),
-    leagueName: l.leagueName || `League ${l.leagueId}`,
-    teamName: l.teamName,
-    isDefault: l.isDefault || false,
-    leagueId: l.leagueId,
-    teamId: l.teamId,
-  }));
+function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-// Convert Yahoo leagues to unified format
-function yahooToUnified(leagues: YahooLeague[]): UnifiedLeague[] {
-  return leagues.map((l) => ({
-    platform: 'yahoo' as const,
-    sport: l.sport,
-    seasonYear: l.seasonYear,
-    leagueName: l.leagueName,
-    teamName: l.teamName,
-    isDefault: l.isDefault || false,
-    leagueId: l.leagueKey,
-    teamId: l.teamId,
-    yahooId: l.id,
-  }));
+// Convert ESPN leagues to unified format (isDefault computed from preferences)
+function espnToUnified(leagues: League[], preferences: UserPreferencesState): UnifiedLeague[] {
+  return leagues.map((l) => {
+    const sportKey = `default${capitalize(l.sport)}` as keyof UserPreferencesState;
+    const sportDefault = preferences[sportKey] as LeagueDefault | null;
+    const isDefault = sportDefault?.platform === 'espn' &&
+                      sportDefault?.leagueId === l.leagueId &&
+                      sportDefault?.seasonYear === l.seasonYear;
+    return {
+      platform: 'espn' as const,
+      sport: l.sport,
+      seasonYear: l.seasonYear || new Date().getFullYear(),
+      leagueName: l.leagueName || `League ${l.leagueId}`,
+      teamName: l.teamName,
+      isDefault,
+      leagueId: l.leagueId,
+      teamId: l.teamId,
+    };
+  });
+}
+
+// Convert Yahoo leagues to unified format (isDefault computed from preferences)
+function yahooToUnified(leagues: YahooLeague[], preferences: UserPreferencesState): UnifiedLeague[] {
+  return leagues.map((l) => {
+    const sportKey = `default${capitalize(l.sport)}` as keyof UserPreferencesState;
+    const sportDefault = preferences[sportKey] as LeagueDefault | null;
+    const isDefault = sportDefault?.platform === 'yahoo' &&
+                      sportDefault?.leagueId === l.leagueKey &&
+                      sportDefault?.seasonYear === l.seasonYear;
+    return {
+      platform: 'yahoo' as const,
+      sport: l.sport,
+      seasonYear: l.seasonYear,
+      leagueName: l.leagueName,
+      teamName: l.teamName,
+      isDefault,
+      leagueId: l.leagueKey,
+      teamId: l.teamId,
+      yahooId: l.id,
+    };
+  });
 }
 
 function LeaguesPageContent() {
@@ -172,8 +202,17 @@ function LeaguesPageContent() {
   const [isYahooDisconnecting, setIsYahooDisconnecting] = useState(false);
   const [yahooLeagues, setYahooLeagues] = useState<YahooLeague[]>([]);
   const [isDiscoveringYahoo, setIsDiscoveringYahoo] = useState(false);
-  const [defaultSport, setDefaultSport] = useState<string | null>(null);
+  const [preferences, setPreferences] = useState<UserPreferencesState>({
+    defaultSport: null,
+    defaultFootball: null,
+    defaultBaseball: null,
+    defaultBasketball: null,
+    defaultHockey: null,
+  });
   const [settingSportDefault, setSettingSportDefault] = useState<string | null>(null);
+
+  // Convenience accessor
+  const defaultSport = preferences.defaultSport;
   const [showOldLeagues, setShowOldLeagues] = useState(false);
 
   // Add league flow state
@@ -198,8 +237,8 @@ function LeaguesPageContent() {
   const leaguesBySport = useMemo(() => {
     // Convert both platforms to unified format
     const allLeagues = [
-      ...espnToUnified(leagues),
-      ...yahooToUnified(yahooLeagues),
+      ...espnToUnified(leagues, preferences),
+      ...yahooToUnified(yahooLeagues, preferences),
     ];
 
     // Group by platform + leagueId (ESPN) or leagueName (Yahoo)
@@ -272,7 +311,7 @@ function LeaguesPageContent() {
     });
 
     return { active: sortedActive, old: oldLeagueGroups };
-  }, [leagues, yahooLeagues]);
+  }, [leagues, yahooLeagues, preferences]);
 
   // Load leagues on mount
   const loadLeagues = async (options?: { showSpinner?: boolean }) => {
@@ -365,8 +404,14 @@ function LeaguesPageContent() {
       try {
         const res = await fetch('/api/user/preferences');
         if (res.ok) {
-          const data = await res.json() as { defaultSport?: string | null };
-          setDefaultSport(data.defaultSport || null);
+          const data = await res.json() as UserPreferencesState;
+          setPreferences({
+            defaultSport: data.defaultSport || null,
+            defaultFootball: data.defaultFootball || null,
+            defaultBaseball: data.defaultBaseball || null,
+            defaultBasketball: data.defaultBasketball || null,
+            defaultHockey: data.defaultHockey || null,
+          });
         }
       } catch (err) {
         console.error('Failed to load preferences:', err);
@@ -541,9 +586,17 @@ function LeaguesPageContent() {
     }
   };
 
-  // Set default league (requires seasonYear to target specific row)
-  const handleSetDefault = async (leagueId: string, sport: string, seasonYear?: number) => {
-    const leagueKey = `${leagueId}-${sport}-${seasonYear || 'all'}`;
+  // Set default league (unified for ESPN and Yahoo)
+  const handleSetDefault = async (
+    platform: 'espn' | 'yahoo',
+    leagueId: string,
+    sport: string,
+    seasonYear: number,
+    yahooId?: string
+  ) => {
+    const leagueKey = platform === 'yahoo'
+      ? `yahoo:${yahooId}`
+      : `${leagueId}-${sport}-${seasonYear}`;
     setSettingDefaultKey(leagueKey);
     setLeagueError(null);
     setLeagueNotice(null);
@@ -552,7 +605,7 @@ function LeaguesPageContent() {
       const res = await fetch('/api/espn/leagues/default', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ leagueId, sport, seasonYear }),
+        body: JSON.stringify({ platform, leagueId, sport, seasonYear }),
       });
 
       if (!res.ok) {
@@ -560,74 +613,19 @@ function LeaguesPageContent() {
         throw new Error(data.error || 'Failed to set default league');
       }
 
-      const data = await res.json() as { leagues?: League[] };
-      if (data.leagues) {
-        setLeagues(data.leagues);
-      } else {
-        // Fallback: update locally - only the specific season becomes default
-        setLeagues((prev) => prev.map((l) => ({
-          ...l,
-          isDefault: l.leagueId === leagueId && l.sport === sport && l.seasonYear === seasonYear,
-        })));
+      const data = await res.json() as { preferences?: UserPreferencesState };
+      if (data.preferences) {
+        setPreferences(data.preferences);
       }
 
-      // Clear Yahoo defaults for this sport (one default per sport across platforms)
-      setYahooLeagues((prev) => prev.map((l) => ({
-        ...l,
-        isDefault: l.sport === sport ? false : l.isDefault,
-      })));
-
       // Auto-set sport as default if no sport default exists
-      if (!defaultSport) {
+      if (!preferences.defaultSport) {
         await fetch('/api/user/preferences', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ defaultSport: sport }),
         });
-        setDefaultSport(sport);
-      }
-    } catch (err) {
-      setLeagueError(err instanceof Error ? err.message : 'Failed to set default league');
-    } finally {
-      setSettingDefaultKey(null);
-    }
-  };
-
-  // Set default Yahoo league
-  const handleSetYahooDefault = async (yahooId: string, sport: string) => {
-    setSettingDefaultKey(`yahoo:${yahooId}`);
-    setLeagueError(null);
-    setLeagueNotice(null);
-
-    try {
-      const res = await fetch(`/api/connect/yahoo/leagues/${yahooId}/default`, {
-        method: 'POST',
-      });
-
-      if (!res.ok) {
-        const data = await res.json() as { error?: string };
-        throw new Error(data.error || 'Failed to set default league');
-      }
-
-      const data = await res.json() as { leagues?: YahooLeague[] };
-      if (data.leagues) {
-        setYahooLeagues(data.leagues);
-      }
-
-      // Clear ESPN defaults for this sport (one default per sport across platforms)
-      setLeagues((prev) => prev.map((l) => ({
-        ...l,
-        isDefault: l.sport === sport ? false : l.isDefault,
-      })));
-
-      // Auto-set sport as default if no sport default exists
-      if (!defaultSport) {
-        await fetch('/api/user/preferences', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ defaultSport: sport }),
-        });
-        setDefaultSport(sport);
+        setPreferences(prev => ({ ...prev, defaultSport: sport }));
       }
     } catch (err) {
       setLeagueError(err instanceof Error ? err.message : 'Failed to set default league');
@@ -640,14 +638,14 @@ function LeaguesPageContent() {
   const handleSetDefaultSport = async (sport: string) => {
     setSettingSportDefault(sport);
     try {
-      const newDefault = defaultSport === sport ? null : sport; // Toggle off if already default
+      const newDefault = preferences.defaultSport === sport ? null : sport;
       const res = await fetch('/api/user/preferences', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ defaultSport: newDefault }),
       });
       if (res.ok) {
-        setDefaultSport(newDefault);
+        setPreferences(prev => ({ ...prev, defaultSport: newDefault }));
       }
     } catch (err) {
       console.error('Failed to set default sport:', err);
@@ -928,17 +926,13 @@ function LeaguesPageContent() {
                                             ? 'text-yellow-500'
                                             : 'text-muted-foreground hover:text-yellow-500'
                                         }`}
-                                        onClick={() => {
-                                          if (group.platform === 'espn') {
-                                            handleSetDefault(
-                                              mostRecentSeason.leagueId,
-                                              mostRecentSeason.sport,
-                                              mostRecentSeason.seasonYear
-                                            );
-                                          } else if (mostRecentSeason?.yahooId) {
-                                            handleSetYahooDefault(mostRecentSeason.yahooId, mostRecentSeason.sport);
-                                          }
-                                        }}
+                                        onClick={() => handleSetDefault(
+                                          group.platform,
+                                          mostRecentSeason.leagueId,
+                                          mostRecentSeason.sport,
+                                          mostRecentSeason.seasonYear,
+                                          mostRecentSeason.yahooId
+                                        )}
                                         disabled={isSettingThis || isLeagueDefault || !mostRecentSeason?.teamId}
                                         title={
                                           !mostRecentSeason?.teamId
