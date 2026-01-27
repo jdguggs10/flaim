@@ -11,9 +11,6 @@ import {
   getSetupState,
   setSetupState,
   clearSetupState,
-  getSavedDefaultLeague,
-  setSavedDefaultLeague,
-  type LeagueOption,
   type SeasonCounts,
 } from '../lib/storage';
 import { getEspnCredentials, validateCredentials } from '../lib/espn';
@@ -22,18 +19,16 @@ import {
   checkStatus,
   getSiteBase,
   discoverLeagues,
-  setDefaultLeague,
   type DiscoveredLeague,
 } from '../lib/api';
 
-// Simplified state machine (removed pairing states)
+// Simplified state machine
 type State =
   | 'loading'
   | 'no_espn'
   | 'ready'
   | 'setup_syncing'
   | 'setup_discovering'
-  | 'setup_selecting_default'
   | 'setup_complete'
   | 'setup_error';
 
@@ -139,8 +134,6 @@ export default function Popup() {
   const [hasCredentials, setHasCredentials] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastSync, setLastSync] = useState<string | null>(null);
-  const [savedDefaultLeague, setSavedDefaultLeagueState] =
-    useState<LeagueOption | null>(null);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [supportCopied, setSupportCopied] = useState(false);
   const [hasEspnCookies, setHasEspnCookies] = useState<boolean | null>(null);
@@ -154,17 +147,13 @@ export default function Popup() {
       `email=${primaryEmail ?? 'unknown'}`,
       `version=${extensionVersion ?? 'unknown'}`,
       `lastSync=${lastSync ?? 'unknown'}`,
-      `defaultLeagueId=${savedDefaultLeague?.leagueId ?? 'none'}`,
-      `defaultTeamId=${savedDefaultLeague?.teamId ?? 'none'}`,
       `siteBase=auto`,
     ];
     return parts.join(' | ');
-  }, [userId, primaryEmail, extensionVersion, lastSync, savedDefaultLeague]);
+  }, [userId, primaryEmail, extensionVersion, lastSync]);
 
   // Setup flow state
   const [discoveredLeagues, setDiscoveredLeagues] = useState<DiscoveredLeague[]>([]);
-  const [currentSeasonLeagues, setCurrentSeasonLeagues] = useState<LeagueOption[]>([]);
-  const [selectedDefault, setSelectedDefault] = useState<string>('');
   const [discoveryCounts, setDiscoveryCounts] = useState<DiscoveryCounts>({
     currentSeason: { found: 0, added: 0, alreadySaved: 0 },
     pastSeasons: { found: 0, added: 0, alreadySaved: 0 },
@@ -177,14 +166,6 @@ export default function Popup() {
     const init = async () => {
       // Check for saved setup state (popup close recovery)
       const savedSetup = await getSetupState();
-      const storedDefault = await getSavedDefaultLeague();
-      if (storedDefault) {
-        setSavedDefaultLeagueState({
-          ...storedDefault,
-          teamId: storedDefault.teamId ?? '',
-          isDefault: true,
-        });
-      }
 
       try {
         const info = await chrome.management.getSelf();
@@ -195,39 +176,6 @@ export default function Popup() {
 
       if (savedSetup?.step === 'complete') {
         await clearSetupState();
-      } else if (savedSetup?.step === 'selecting_default') {
-        // Restore selecting_default state
-        if (savedSetup.currentSeasonLeagues && savedSetup.currentSeasonLeagues.length > 0) {
-          setDiscoveredLeagues(
-            savedSetup.discovered?.map((d) => ({
-              ...d,
-              leagueId: '',
-              teamId: '',
-              seasonYear: 0,
-            })) || []
-          );
-          setCurrentSeasonLeagues(savedSetup.currentSeasonLeagues);
-
-          if (savedSetup.currentSeason && savedSetup.pastSeasons) {
-            setDiscoveryCounts({
-              currentSeason: savedSetup.currentSeason,
-              pastSeasons: savedSetup.pastSeasons,
-            });
-          }
-
-          const leagues = savedSetup.currentSeasonLeagues;
-          const defaultLeague = leagues.find((l) => l.isDefault);
-          const preselected = defaultLeague || leagues[0];
-          setSelectedDefault(
-            `${preselected.sport}|${preselected.leagueId}|${preselected.seasonYear}`
-          );
-          if (defaultLeague) {
-            setSavedDefaultLeagueState(defaultLeague);
-          }
-
-          setState('setup_selecting_default');
-          return;
-        }
       } else if (savedSetup?.step === 'error') {
         setError(savedSetup.error || 'Setup failed');
         setState('setup_error');
@@ -259,26 +207,6 @@ export default function Popup() {
           const status = await checkStatus(token);
           setHasCredentials(status.hasCredentials);
           setLastSync(status.lastSync ?? null);
-          if (status.defaultLeague) {
-            const league = {
-              sport: status.defaultLeague.sport,
-              leagueId: status.defaultLeague.leagueId,
-              leagueName: status.defaultLeague.leagueName ?? '',
-              teamName: status.defaultLeague.teamName ?? '',
-              teamId: status.defaultLeague.teamId ?? '',
-              seasonYear: status.defaultLeague.seasonYear ?? 0,
-              isDefault: true,
-            };
-            setSavedDefaultLeagueState(league);
-            await setSavedDefaultLeague({
-              sport: league.sport,
-              leagueId: league.leagueId,
-              leagueName: league.leagueName,
-              teamName: league.teamName,
-              teamId: league.teamId,
-              seasonYear: league.seasonYear,
-            });
-          }
         }
         setState('ready');
       } catch {
@@ -290,7 +218,7 @@ export default function Popup() {
     init();
   }, [isLoaded, isSignedIn, getToken]);
 
-  // Handle full setup flow (sync + discover + select default)
+  // Handle full setup flow (sync + discover)
   const handleFullSetup = async () => {
     const token = await getToken();
     if (!token) {
@@ -330,59 +258,14 @@ export default function Popup() {
       const result = await discoverLeagues(token);
 
       setDiscoveredLeagues(result.discovered);
-      setCurrentSeasonLeagues(result.currentSeasonLeagues);
       setDiscoveryCounts({
         currentSeason: result.currentSeason,
         pastSeasons: result.pastSeasons,
       });
 
-      // If no current season leagues, complete setup
-      if (result.currentSeasonLeagues.length === 0) {
-        setState('setup_complete');
-        await clearSetupState();
-        return;
-      }
-
-      // Check if user already has a default league
-      const existingDefault = result.currentSeasonLeagues.find((l) => l.isDefault);
-
-      // If user has existing default AND no new leagues, skip selection
-      if (existingDefault && result.currentSeason.added === 0) {
-        setSelectedDefault(
-          `${existingDefault.sport}|${existingDefault.leagueId}|${existingDefault.seasonYear}`
-        );
-        setSavedDefaultLeagueState(existingDefault);
-        await setSavedDefaultLeague({
-          sport: existingDefault.sport,
-          leagueId: existingDefault.leagueId,
-          leagueName: existingDefault.leagueName,
-          teamName: existingDefault.teamName,
-          teamId: existingDefault.teamId,
-          seasonYear: existingDefault.seasonYear,
-        });
-        setState('setup_complete');
-        await clearSetupState();
-        return;
-      }
-
-      // Pre-select first league or existing default
-      const firstLeague = result.currentSeasonLeagues[0];
-      const preselected = existingDefault || firstLeague;
-      setSelectedDefault(`${preselected.sport}|${preselected.leagueId}|${preselected.seasonYear}`);
-
-      // Step 3: Select default
-      setState('setup_selecting_default');
-      await setSetupState({
-        step: 'selecting_default',
-        discovered: result.discovered.map((d) => ({
-          sport: d.sport,
-          leagueName: d.leagueName,
-          teamName: d.teamName,
-        })),
-        currentSeasonLeagues: result.currentSeasonLeagues,
-        currentSeason: result.currentSeason,
-        pastSeasons: result.pastSeasons,
-      });
+      // Complete setup
+      setState('setup_complete');
+      await clearSetupState();
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Discovery failed';
       setError(errorMsg);
@@ -416,26 +299,6 @@ export default function Popup() {
         const status = await checkStatus(token);
         setHasCredentials(status.hasCredentials);
         setLastSync(status.lastSync ?? null);
-        if (status.defaultLeague) {
-          const league = {
-            sport: status.defaultLeague.sport,
-            leagueId: status.defaultLeague.leagueId,
-            leagueName: status.defaultLeague.leagueName ?? '',
-            teamName: status.defaultLeague.teamName ?? '',
-            teamId: status.defaultLeague.teamId ?? '',
-            seasonYear: status.defaultLeague.seasonYear ?? 0,
-            isDefault: true,
-          };
-          setSavedDefaultLeagueState(league);
-          await setSavedDefaultLeague({
-            sport: league.sport,
-            leagueId: league.leagueId,
-            leagueName: league.leagueName,
-            teamName: league.teamName,
-            teamId: league.teamId,
-            seasonYear: league.seasonYear,
-          });
-        }
       }
       setState('ready');
     } catch (err) {
@@ -443,45 +306,6 @@ export default function Popup() {
       setState('ready');
     } finally {
       setIsRefreshing(false);
-    }
-  };
-
-  // Handle finishing setup (setting default)
-  const handleFinishSetup = async () => {
-    if (!selectedDefault) {
-      setError('Please select a default league');
-      return;
-    }
-
-    const token = await getToken();
-    if (!token) {
-      setError('Not signed in');
-      return;
-    }
-
-    const [sport, leagueId, seasonYearStr] = selectedDefault.split('|');
-    const seasonYear = parseInt(seasonYearStr, 10);
-
-    try {
-      await setDefaultLeague(token, { sport, leagueId, seasonYear });
-      const selectedLeague = currentSeasonLeagues.find(
-        (l) => `${l.sport}|${l.leagueId}|${l.seasonYear}` === selectedDefault
-      );
-      if (selectedLeague) {
-        setSavedDefaultLeagueState(selectedLeague);
-        await setSavedDefaultLeague({
-          sport: selectedLeague.sport,
-          leagueId: selectedLeague.leagueId,
-          leagueName: selectedLeague.leagueName,
-          teamName: selectedLeague.teamName,
-          teamId: selectedLeague.teamId,
-          seasonYear: selectedLeague.seasonYear,
-        });
-      }
-      setState('setup_complete');
-      await setSetupState({ step: 'complete' });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to set default');
     }
   };
 
@@ -554,25 +378,6 @@ export default function Popup() {
               <span className="diag-label">Last sync</span>
               <span className="diag-value">{formatLastSync(lastSync)}</span>
             </div>
-            {savedDefaultLeague ? (
-              <>
-                <div className="diag-row">
-                  <span className="diag-label">Default league ID</span>
-                  <span className="diag-value mono">{savedDefaultLeague.leagueId}</span>
-                </div>
-                <div className="diag-row">
-                  <span className="diag-label">Default team ID</span>
-                  <span className="diag-value mono">
-                    {savedDefaultLeague.teamId || 'Unknown'}
-                  </span>
-                </div>
-              </>
-            ) : (
-              <div className="diag-row">
-                <span className="diag-label">Default league</span>
-                <span className="diag-value">None</span>
-              </div>
-            )}
             <div className="diag-row">
               <span className="diag-label">Version</span>
               <span className="diag-value">{extensionVersion ?? 'Unknown'}</span>
@@ -662,20 +467,11 @@ export default function Popup() {
             ) : (
               <div className="message info">Ready to sync your ESPN credentials to Flaim.</div>
             )}
-            {savedDefaultLeague && (
-              <div className="meta">
-                Default league: {sportEmoji[savedDefaultLeague.sport] || '🏆'}{' '}
-                {savedDefaultLeague.leagueName} ({savedDefaultLeague.seasonYear})
-              </div>
-            )}
-            {hasCredentials && !savedDefaultLeague && (
-              <div className="meta">Default league not set yet. Re-sync to choose one.</div>
-            )}
             <button className="button success full-width" onClick={handleFullSetup}>
               {hasCredentials ? 'Re-sync & Discover New Leagues/Seasons' : 'Sync to Flaim'}
             </button>
             <button className="button secondary full-width" onClick={() => openFlaim('/leagues')}>
-              Go to Leagues
+              Manage Leagues
             </button>
           </div>
         )}
@@ -692,13 +488,9 @@ export default function Popup() {
                 <span className="step-icon">○</span>
                 <span>Discovering leagues</span>
               </div>
-              <div className="setup-step pending">
-                <span className="step-icon">○</span>
-                <span>Select default</span>
-              </div>
             </div>
             <div className="progress-bar">
-              <div className="progress-bar-fill" style={{ width: '20%' }}></div>
+              <div className="progress-bar-fill" style={{ width: '30%' }}></div>
             </div>
           </div>
         )}
@@ -714,60 +506,10 @@ export default function Popup() {
                 <span className="step-icon spinner"></span>
                 <span>Discovering leagues...</span>
               </div>
-              <div className="setup-step pending">
-                <span className="step-icon">○</span>
-                <span>Select default</span>
-              </div>
             </div>
             <div className="progress-bar">
-              <div className="progress-bar-fill" style={{ width: '50%' }}></div>
+              <div className="progress-bar-fill" style={{ width: '60%' }}></div>
             </div>
-          </div>
-        )}
-
-        {state === 'setup_selecting_default' && (
-          <div className="content">
-            {error && <div className="message error">{error}</div>}
-            {hasCredentials && (
-              <div className="message info" style={{ marginBottom: 8 }}>
-                ESPN credentials synced
-              </div>
-            )}
-            <div className="message success">{getDiscoveryMessage(discoveryCounts)}</div>
-
-            <div className="league-list">
-              {discoveredLeagues.map((league, i) => (
-                <div key={i} className="league-item">
-                  <span className="sport-emoji">{sportEmoji[league.sport] || '🏆'}</span>
-                  <div className="league-info">
-                    <span className="league-name">{league.leagueName}</span>
-                    <span className="team-name">Team: {league.teamName}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="input-group">
-              <label htmlFor="default-league">Select your default league:</label>
-              <select
-                id="default-league"
-                value={selectedDefault}
-                onChange={(e) => setSelectedDefault(e.target.value)}
-              >
-                {currentSeasonLeagues.map((league) => (
-                  <option
-                    key={`${league.sport}|${league.leagueId}|${league.seasonYear}`}
-                    value={`${league.sport}|${league.leagueId}|${league.seasonYear}`}
-                  >
-                    {sportEmoji[league.sport] || '🏆'} {league.leagueName} ({league.seasonYear})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <button className="button primary full-width" onClick={handleFinishSetup}>
-              Finish Setup
-            </button>
           </div>
         )}
 
@@ -775,33 +517,29 @@ export default function Popup() {
           <div className="content">
             <div className="message success">You're all set!</div>
 
-            {selectedDefault && currentSeasonLeagues.length > 0 && (
+            {discoveredLeagues.length > 0 && (
               <>
-                {(() => {
-                  const selectedLeague = currentSeasonLeagues.find(
-                    (l) => `${l.sport}|${l.leagueId}|${l.seasonYear}` === selectedDefault
-                  );
-                  return selectedLeague ? (
-                    <div className="league-item default-league">
-                      <span className="sport-emoji">
-                        {sportEmoji[selectedLeague.sport] || '🏆'}
-                      </span>
+                <div className="message info" style={{ marginBottom: 8 }}>
+                  {getDiscoveryMessage(discoveryCounts)}
+                </div>
+                <div className="league-list">
+                  {discoveredLeagues.map((league, i) => (
+                    <div key={i} className="league-item">
+                      <span className="sport-emoji">{sportEmoji[league.sport] || '🏆'}</span>
                       <div className="league-info">
-                        <span className="league-name">{selectedLeague.leagueName}</span>
-                        <span className="team-name">
-                          {selectedLeague.teamName} ({selectedLeague.seasonYear})
-                        </span>
+                        <span className="league-name">{league.leagueName}</span>
+                        <span className="team-name">Team: {league.teamName}</span>
                       </div>
                     </div>
-                  ) : null;
-                })()}
+                  ))}
+                </div>
               </>
             )}
 
             <div className="setup-summary">{getCompletionSummary(discoveryCounts)}</div>
 
             <button className="button primary full-width" onClick={() => openFlaim('/leagues')}>
-              View Leagues
+              Manage Leagues
             </button>
             <button
               className="button secondary full-width"

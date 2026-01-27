@@ -63,14 +63,6 @@ export interface StatusResponse {
   connected: boolean;
   hasCredentials: boolean;
   lastSync: string | null;
-  defaultLeague?: {
-    sport: string;
-    leagueId: string;
-    leagueName: string | null;
-    teamName: string | null;
-    teamId: string | null;
-    seasonYear: number | null;
-  } | null;
 }
 
 export interface ApiError {
@@ -139,10 +131,6 @@ export interface DiscoveredLeague {
   seasonYear: number;
 }
 
-export interface CurrentSeasonLeague extends DiscoveredLeague {
-  isDefault: boolean;
-}
-
 /**
  * Season counts for granular messaging
  */
@@ -154,13 +142,8 @@ export interface SeasonCounts {
 
 export interface DiscoverResponse {
   discovered: DiscoveredLeague[];
-  currentSeasonLeagues: CurrentSeasonLeague[];
   currentSeason: SeasonCounts;
   pastSeasons: SeasonCounts;
-  // Legacy fields (deprecated, kept for backwards compatibility)
-  added: number;
-  skipped: number;
-  historical: number;
 }
 
 /**
@@ -183,31 +166,4 @@ export async function discoverLeagues(token: string): Promise<DiscoverResponse> 
   }
 
   return response.json() as Promise<DiscoverResponse>;
-}
-
-export interface SetDefaultRequest {
-  leagueId: string;
-  sport: string;
-  seasonYear: number;
-}
-
-/**
- * Set a league as the user's default
- * @param token - Clerk JWT from useAuth().getToken()
- */
-export async function setDefaultLeague(token: string, league: SetDefaultRequest): Promise<void> {
-  const apiBase = await detectApiBase();
-  const response = await fetch(`${apiBase}/set-default`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify(league),
-  });
-
-  if (!response.ok) {
-    const error = (await response.json()) as ApiError;
-    throw new Error(error.error_description || error.error || 'Failed to set default');
-  }
 }

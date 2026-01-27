@@ -5,27 +5,15 @@
  */
 
 // =============================================================================
-// SETUP STATE PERSISTENCE (v1.1.1)
+// SETUP STATE PERSISTENCE
 // =============================================================================
 
 const SETUP_STATE_KEY = 'flaim_setup_state';
-const DEFAULT_LEAGUE_KEY = 'flaim_default_league';
-
-export interface LeagueOption {
-  sport: string;
-  leagueId: string;
-  leagueName: string;
-  teamId: string;
-  teamName: string;
-  seasonYear: number;
-  isDefault: boolean;
-}
 
 export type SetupStep =
   | 'idle'
   | 'syncing'
   | 'discovering'
-  | 'selecting_default'
   | 'complete'
   | 'error';
 
@@ -46,23 +34,9 @@ export interface SetupState {
     leagueName: string;
     teamName: string;
   }>;
-  currentSeasonLeagues?: LeagueOption[];
-  // New structured counts (v1.1.1)
+  // Structured counts
   currentSeason?: SeasonCounts;
   pastSeasons?: SeasonCounts;
-  // Legacy fields (for migration from v1.1)
-  added?: number;
-  skipped?: number;
-  historical?: number;
-}
-
-export interface SavedDefaultLeague {
-  sport: string;
-  leagueId: string;
-  leagueName: string;
-  teamName: string;
-  teamId?: string | null;
-  seasonYear: number;
 }
 
 /**
@@ -85,15 +59,4 @@ export async function setSetupState(state: SetupState): Promise<void> {
  */
 export async function clearSetupState(): Promise<void> {
   await chrome.storage.local.remove(SETUP_STATE_KEY);
-}
-
-export async function getSavedDefaultLeague(): Promise<SavedDefaultLeague | null> {
-  const result = await chrome.storage.local.get(DEFAULT_LEAGUE_KEY);
-  return result[DEFAULT_LEAGUE_KEY] || null;
-}
-
-export async function setSavedDefaultLeague(
-  league: SavedDefaultLeague
-): Promise<void> {
-  await chrome.storage.local.set({ [DEFAULT_LEAGUE_KEY]: league });
 }
