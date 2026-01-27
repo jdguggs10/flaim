@@ -62,7 +62,7 @@ The built-in `/chat` is for testing and users without Claude/ChatGPT subscriptio
 1. **Sign in** — Create an account at `flaim.app`
 2. **Connect ESPN** — Install extension → sync credentials
 3. **Auto-discover leagues + past seasons** — Runs during sync/re-sync
-4. **Pick a default** — Extension prompts for default league
+4. **Set defaults** — Manage at `/leagues` (extension v1.4.0 no longer handles defaults)
 
 **Manual site path (independent):**
 1. **Sign in** — Create an account at `flaim.app`

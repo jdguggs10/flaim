@@ -4,7 +4,7 @@ This document describes the implementation plan for adding **Yahoo Fantasy Sport
 
 **Goal:** Add **Yahoo Fantasy Sports** support (start with **Football + Baseball**, later **Basketball + Hockey**) with a **unified MCP gateway** that supports multiple platforms.
 
-**Last updated:** 2026-01-24
+**Last updated:** 2026-01-27
 
 ---
 
@@ -483,9 +483,10 @@ auth-worker routes:
                     - /leagues/espn/*
                     - /leagues/yahoo/*
 
-/extension/*      → Chrome extension sync
-                    - /extension/pair
+/extension/*      → Chrome extension sync (v1.4.0: sync → discover → complete)
                     - /extension/sync
+                    - /extension/discover
+                    - /extension/status
 ```
 
 ### New Yahoo endpoints
@@ -752,6 +753,6 @@ Normalize outputs to match DTOs:
 | `/connect/*` | Platform OAuth (Flaim as client) | `/connect/yahoo/callback`, `/connect/sleeper/authorize` |
 | `/credentials/*` | Non-OAuth credentials | `/credentials/espn` (cookies via extension) |
 | `/leagues/*` | League management | `/leagues/yahoo`, `/leagues/espn/{id}/default` |
-| `/extension/*` | Chrome extension | `/extension/pair`, `/extension/sync` |
+| `/extension/*` | Chrome extension | `/extension/sync`, `/extension/discover`, `/extension/status` |
 
 This separation ensures MCP OAuth and Platform OAuth never get confused.
