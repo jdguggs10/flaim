@@ -20,19 +20,41 @@ app.get('/health', (c) => {
 // Main execute endpoint - called by fantasy-mcp gateway
 app.post('/execute', async (c) => {
   const correlationId = getCorrelationId(c.req.raw);
-  const body = await c.req.json<ExecuteRequest>();
-  const { tool, params } = body;
+  const startTime = Date.now();
 
-  console.log(`[yahoo-client] ${correlationId} ${tool} ${params.sport} league=${params.league_id}`);
+  try {
+    const body = await c.req.json<ExecuteRequest>();
+    const { tool, params, authHeader: _authHeader } = body;
+    const { sport, league_id, season_year } = params;
 
-  // Placeholder - will be implemented in Task 3
-  const response = c.json({
-    success: false,
-    error: 'Yahoo client not yet implemented',
-    code: 'NOT_IMPLEMENTED'
-  } satisfies ExecuteResponse);
-  response.headers.set(CORRELATION_ID_HEADER, correlationId);
-  return response;
+    console.log(`[yahoo-client] ${correlationId} ${tool} ${sport} league=${league_id} season=${season_year}`);
+
+    // Placeholder - will be implemented in Task 3
+    const result: ExecuteResponse = {
+      success: false,
+      error: 'Yahoo client not yet implemented',
+      code: 'NOT_IMPLEMENTED'
+    };
+
+    const duration = Date.now() - startTime;
+    console.log(`[yahoo-client] ${correlationId} ${tool} ${sport} completed in ${duration}ms success=${result.success}`);
+
+    const response = c.json(result);
+    response.headers.set(CORRELATION_ID_HEADER, correlationId);
+    return response;
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    console.error(`[yahoo-client] ${correlationId} error in ${duration}ms: ${message}`);
+
+    const response = c.json({
+      success: false,
+      error: message,
+      code: 'INTERNAL_ERROR'
+    } satisfies ExecuteResponse, 500);
+    response.headers.set(CORRELATION_ID_HEADER, correlationId);
+    return response;
+  }
 });
 
 // 404 handler

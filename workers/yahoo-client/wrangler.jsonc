@@ -21,7 +21,8 @@
       ],
       "vars": {
         "NODE_ENV": "production",
-        "ENVIRONMENT": "prod"
+        "ENVIRONMENT": "prod",
+        "AUTH_WORKER_URL": "https://auth-worker.gerrygugger.workers.dev"
       }
     },
     "preview": {
@@ -32,7 +33,8 @@
       ],
       "vars": {
         "NODE_ENV": "production",
-        "ENVIRONMENT": "preview"
+        "ENVIRONMENT": "preview",
+        "AUTH_WORKER_URL": "https://auth-worker-preview.gerrygugger.workers.dev"
       }
     },
     "dev": {
@@ -43,7 +45,8 @@
       ],
       "vars": {
         "NODE_ENV": "development",
-        "ENVIRONMENT": "dev"
+        "ENVIRONMENT": "dev",
+        "AUTH_WORKER_URL": "http://localhost:8786"
       }
     }
   }
