@@ -58,7 +58,6 @@ interface UserLeague {
   seasonYear?: number;
   leagueName?: string;
   teamName?: string;
-  isDefault?: boolean;
 }
 
 async function fetchUserLeagues(
@@ -227,7 +226,6 @@ export function getUnifiedTools(): UnifiedTool[] {
                   leagueName: string;
                   teamId?: string;
                   seasonYear: number;
-                  isDefault?: boolean;
                 }>;
               };
               if (yahooData.leagues) {
@@ -239,7 +237,6 @@ export function getUnifiedTools(): UnifiedTool[] {
                     leagueName: league.leagueName,
                     teamId: league.teamId || '',
                     seasonYear: league.seasonYear,
-                    isDefault: league.isDefault,
                   });
                 }
               }
@@ -304,18 +301,65 @@ export function getUnifiedTools(): UnifiedTool[] {
               .join(', ')}. For historical leagues/seasons (2+ years old), use get_ancient_history. ASK which league they want to work with if unclear.`;
           }
 
-          // Build per-sport default leagues map
+          // Fetch user preferences for defaults
+          interface LeagueDefault {
+            platform: 'espn' | 'yahoo';
+            leagueId: string;
+            seasonYear: number;
+          }
+          interface Preferences {
+            defaultSport?: string | null;
+            defaultFootball?: LeagueDefault | null;
+            defaultBaseball?: LeagueDefault | null;
+            defaultBasketball?: LeagueDefault | null;
+            defaultHockey?: LeagueDefault | null;
+          }
+          let preferences: Preferences = {};
+          try {
+            const baseHeaders: Record<string, string> = {
+              'Content-Type': 'application/json',
+              ...(authHeader ? { Authorization: authHeader } : {}),
+            };
+            const headers = correlationId ? withCorrelationId(baseHeaders, correlationId) : baseHeaders;
+            const prefsResponse = await env.AUTH_WORKER.fetch(
+              new Request('https://internal/user/preferences', { headers })
+            );
+            if (prefsResponse.ok) {
+              preferences = await prefsResponse.json();
+            }
+          } catch (error) {
+            console.error('[get_user_session] Failed to fetch preferences:', error);
+          }
+
+          // Build per-sport default leagues map from preferences
           const defaultLeagues: Record<string, (typeof leagues)[0]> = {};
-          for (const league of leagues) {
-            if (league.isDefault) {
-              defaultLeagues[league.sport] = league;
+          const sportDefaultMap: Record<string, LeagueDefault | null | undefined> = {
+            football: preferences.defaultFootball,
+            baseball: preferences.defaultBaseball,
+            basketball: preferences.defaultBasketball,
+            hockey: preferences.defaultHockey,
+          };
+
+          for (const [sport, defaultInfo] of Object.entries(sportDefaultMap)) {
+            if (defaultInfo) {
+              const matchingLeague = leagues.find(
+                (l) =>
+                  l.platform === defaultInfo.platform &&
+                  l.leagueId === defaultInfo.leagueId &&
+                  l.seasonYear === defaultInfo.seasonYear
+              );
+              if (matchingLeague) {
+                defaultLeagues[sport] = matchingLeague;
+              }
             }
           }
 
-          // Get user's default sport preference
-          // Note: This would need an additional API call to get preferences
-          // For now, infer from time of year or use first default found
-          const defaultLeague = Object.values(defaultLeagues)[0] || leagues[0];
+          // Compute primary default from preferences
+          const primarySport = preferences.defaultSport as string | undefined;
+          const defaultLeague =
+            (primarySport && defaultLeagues[primarySport]) ||
+            Object.values(defaultLeagues)[0] ||
+            leagues[0];
 
           return mcpSuccess({
             success: true,
@@ -329,6 +373,7 @@ export function getUnifiedTools(): UnifiedTool[] {
             timezone: 'America/New_York',
             totalLeaguesFound: leagues.length,
             leaguesBySport: sportCounts,
+            defaultSport: preferences.defaultSport || null,
             defaultLeague: defaultLeague
               ? {
                   platform: defaultLeague.platform,
@@ -344,6 +389,7 @@ export function getUnifiedTools(): UnifiedTool[] {
               Object.entries(defaultLeagues).map(([sport, league]) => [
                 sport,
                 {
+                  platform: league.platform,
                   leagueId: league.leagueId,
                   leagueName: league.leagueName,
                   sport: league.sport,
@@ -417,7 +463,6 @@ export function getUnifiedTools(): UnifiedTool[] {
                     leagueName: string;
                     teamId?: string;
                     seasonYear: number;
-                    isDefault?: boolean;
                   }>;
                 };
                 if (yahooData.leagues) {
@@ -429,7 +474,6 @@ export function getUnifiedTools(): UnifiedTool[] {
                       leagueName: league.leagueName,
                       teamId: league.teamId || '',
                       seasonYear: league.seasonYear,
-                      isDefault: league.isDefault,
                     });
                   }
                 }
