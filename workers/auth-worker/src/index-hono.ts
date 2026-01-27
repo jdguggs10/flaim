@@ -623,55 +623,6 @@ api.post('/extension/discover', async (c) => {
   }
 });
 
-// Set default league (requires Clerk JWT)
-api.post('/extension/set-default', async (c) => {
-  const { userId, error: authError } = await getVerifiedUserId(c.req.raw, c.env);
-  if (!userId) {
-    return c.json({
-      error: 'unauthorized',
-      error_description: authError || 'Authentication required',
-    }, 401);
-  }
-
-  const body = await c.req.json() as {
-    platform?: 'espn' | 'yahoo';
-    leagueId?: string;
-    sport?: string;
-    seasonYear?: number;
-  };
-  const { platform = 'espn', leagueId, sport, seasonYear } = body;
-
-  if (!leagueId || !sport || seasonYear === undefined) {
-    return c.json({
-      error: 'invalid_request',
-      error_description: 'leagueId, sport, and seasonYear are required',
-    }, 400);
-  }
-
-  const validSports = ['football', 'baseball', 'basketball', 'hockey'];
-  if (!validSports.includes(sport)) {
-    return c.json({ error: 'invalid_sport' }, 400);
-  }
-
-  const storage = EspnSupabaseStorage.fromEnvironment(c.env);
-  const result = await storage.setDefaultLeague(
-    userId,
-    platform,
-    sport as 'football' | 'baseball' | 'basketball' | 'hockey',
-    leagueId,
-    seasonYear
-  );
-
-  if (!result.success) {
-    return c.json({
-      error: 'set_default_failed',
-      error_description: result.error || 'Failed to set default league',
-    }, result.error === 'League not found' ? 404 : 400);
-  }
-
-  return c.json({});
-});
-
 // =============================================================================
 // YAHOO CONNECT ENDPOINTS (Platform OAuth - Flaim as CLIENT)
 // =============================================================================
@@ -1344,7 +1295,6 @@ api.notFound((c) => {
       '/extension/status': 'GET - Extension status',
       '/extension/connection': 'GET - Extension connection info',
       '/extension/discover': 'POST - Discover and save leagues',
-      '/extension/set-default': 'POST - Set default league',
       '/connect/yahoo/authorize': 'GET - Start Yahoo OAuth flow',
       '/connect/yahoo/callback': 'GET - Yahoo OAuth callback (public)',
       '/connect/yahoo/credentials': 'GET - Get Yahoo access token',

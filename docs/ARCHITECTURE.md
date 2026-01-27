@@ -115,7 +115,6 @@ ESPN Cookies → POST /api/extension/sync → Auth Worker → Supabase
 |----------|------|---------|
 | `POST /extension/sync` | Clerk JWT | Sync ESPN credentials |
 | `POST /extension/discover` | Clerk JWT | Discover leagues + historical seasons |
-| `POST /extension/set-default` | Clerk JWT | Set user's default league |
 | `GET /extension/status` | Clerk JWT | Check connection status |
 | `GET /extension/connection` | Clerk | Web UI status check |
 
