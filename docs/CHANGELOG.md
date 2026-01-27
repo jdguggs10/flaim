@@ -4,6 +4,14 @@ Follow Keep a Changelog; SemVer applies.
 
 ## [Unreleased]
 
+### Chrome Extension Simplification
+Default league selection removed from extension - defaults are now managed exclusively via the web UI at `/leagues`.
+
+- **Removed**: Default league selection step from extension setup flow.
+- **Removed**: `POST /extension/set-default` endpoint (both Next.js proxy and auth-worker handler).
+- **Changed**: Extension flow simplified to: sync → discover → complete.
+- **Changed**: Extension version bumped to 1.4.0.
+
 ### Unified Gateway Architecture (Phase 0) - Complete
 Major architectural restructure implementing a unified gateway pattern for multi-platform fantasy sports support. **Validated and promoted as primary endpoint (Jan 2026).**
 

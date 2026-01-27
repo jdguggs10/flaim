@@ -2,7 +2,7 @@
 
 Chrome extension that auto-captures ESPN credentials (SWID, espn_s2 cookies) and syncs them to Flaim via Clerk Sync Host (no pairing codes). Eliminates manual DevTools cookie extraction.
 
-## User Flow (v1.3.2)
+## User Flow (v1.4.0)
 
 1. Install extension from [Chrome Web Store](https://chromewebstore.google.com/detail/flaim-espn-fantasy-connec/mbnokejgglkfgkeeenolgdpcnfakpbkn)
 2. Sign in to `flaim.app` (session syncs to the extension)
@@ -11,8 +11,7 @@ Chrome extension that auto-captures ESPN credentials (SWID, espn_s2 cookies) and
    - Sync your ESPN credentials
    - Auto-discover all your leagues (including past seasons) via ESPN Fan API
    - Show discovery results with granular counts (new vs already saved)
-   - Let you pick a default league
-5. View your leagues at `flaim.app/leagues`
+5. Manage leagues and set defaults at `flaim.app/leagues`
 
 **Automation boundaries**
 - The extension only runs discovery when you click **Sync / Re-sync**.
@@ -42,7 +41,7 @@ npm run build:dev
 npm run build
 
 # Create zip for Chrome Web Store upload
-zip -r flaim-extension-v1.3.2.zip dist/
+zip -r flaim-extension-v1.4.0.zip dist/
 ```
 
 ### Load Unpacked Extension
@@ -85,7 +84,6 @@ All routes go through Next.js proxy (`/api/extension/*`) to auth-worker:
 |----------|------|------------|---------|
 | `POST /extension/sync` | Clerk JWT | None | Sync ESPN credentials |
 | `POST /extension/discover` | Clerk JWT | None | Discover and save leagues (v1.1) |
-| `POST /extension/set-default` | Clerk JWT | None | Set default league (v1.1) |
 | `GET /extension/status` | Clerk JWT | None | Check connection status |
 | `GET /extension/connection` | Clerk | None | Web UI status check |
 
