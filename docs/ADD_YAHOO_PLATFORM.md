@@ -578,9 +578,9 @@ Add **Connect Yahoo** button alongside ESPN in Homepage Box 2:
 6. ✅ Full feature parity: both football and baseball have all tools (get_league_info, get_standings, get_matchups, get_roster, get_free_agents)
 7. Legacy workers (`baseball-espn-mcp`, `football-espn-mcp`) still available as fallback
 
-### Phase 1: Yahoo OAuth + league discovery 🔄 IN PROGRESS
+### Phase 1: Yahoo OAuth + league discovery ✅ COMPLETE
 
-**Backend: ✅ COMPLETE** | **Frontend: 🔴 NOT STARTED**
+**Backend: ✅ COMPLETE** | **Frontend: ✅ COMPLETE** | **E2E Tested: ✅ 2026-01-27**
 
 1. ✅ **Yahoo Developer setup**
    - ✅ Created Yahoo Developer app "Flaim"
@@ -610,18 +610,17 @@ Add **Connect Yahoo** button alongside ESPN in Homepage Box 2:
    - ✅ Query both `espn_leagues` and `yahoo_leagues`
    - ✅ Return unified list with `platform` field
 
-6. 🔴 **Frontend: Connect Yahoo UI** (NOT STARTED)
-   - 🔴 Make "Connect Yahoo" button functional (currently shows "coming soon")
-   - 🔴 Button should redirect to `/api/connect/yahoo/authorize` (needs Clerk auth)
-   - 🔴 Handle `?yahoo=connected` query param on leagues page
-   - 🔴 Trigger discovery on connect
-   - 🔴 Show Yahoo leagues on leagues page alongside ESPN leagues
+6. ✅ **Frontend: Connect Yahoo UI**
+   - ✅ "Connect Yahoo" button on `/leagues` page redirects to `/api/connect/yahoo/authorize`
+   - ✅ Handle `?yahoo=connected` query param on leagues page
+   - ✅ Trigger discovery on connect (`discoverYahooLeagues()`)
+   - ✅ Show Yahoo leagues on leagues page alongside ESPN leagues
+   - ✅ Disconnect flow (`disconnectYahoo()`)
 
-**Status as of 2026-01-24:**
-- All backend code is implemented and tested (95 tests passing)
-- Preview deployed at `auth-worker-preview.gerrygugger.workers.dev`
-- OAuth endpoints require Clerk JWT authentication (401 without auth)
-- Cannot test full OAuth flow until frontend UI redirects authenticated user to authorize endpoint
+**Status as of 2026-01-27:**
+- Full OAuth flow tested end-to-end: user can auth into Yahoo and add leagues successfully
+- Yahoo leagues display alongside ESPN leagues on `/leagues` page
+- UI cleanup remaining (minor polish work)
 
 ### Phase 2: yahoo-client worker (Football)
 
