@@ -27,15 +27,46 @@ One row per user + league + sport + season.
 | clerk_user_id | text | User owner |
 | league_id | text | ESPN league ID |
 | sport | text | football/baseball/basketball/hockey |
-| team_id | text | User’s team ID in league (optional) |
-| team_name | text | User’s team name (optional) |
+| team_id | text | User's team ID in league (optional) |
+| team_name | text | User's team name (optional) |
 | league_name | text | League name (optional) |
 | season_year | int | Season year (optional for legacy rows) |
-| is_default | boolean | One default per user across sports |
 
 Constraints/Indexes:
-- Unique default per user: `idx_espn_leagues_one_default_per_user` (partial index on `is_default = true`).
-- Unique per season: `idx_espn_leagues_user_league_sport_season_unique` (migration `007_espn_leagues_unique_season_year.sql`, status pending in docs).
+- Unique per season: `idx_espn_leagues_user_league_sport_season_unique`.
+
+### yahoo_leagues
+One row per user + league + sport + season (same structure as espn_leagues).
+
+| Column | Type | Notes |
+|---|---|---|
+| id | uuid | Primary key |
+| clerk_user_id | text | User owner |
+| league_key | text | Yahoo league key |
+| sport | text | football/baseball/basketball/hockey |
+| season_year | int | Season year |
+| league_name | text | League name |
+| team_id | text | User's team ID |
+| team_key | text | Yahoo team key |
+| team_name | text | User's team name |
+
+### user_preferences
+Per-user preferences including default leagues (one per sport).
+
+| Column | Type | Notes |
+|---|---|---|
+| clerk_user_id | text | Primary key |
+| default_sport | text | Preferred sport (football/baseball/etc.) |
+| default_football | jsonb | `{ platform, leagueId, seasonYear }` or null |
+| default_baseball | jsonb | `{ platform, leagueId, seasonYear }` or null |
+| default_basketball | jsonb | `{ platform, leagueId, seasonYear }` or null |
+| default_hockey | jsonb | `{ platform, leagueId, seasonYear }` or null |
+| created_at | timestamptz | Created timestamp |
+| updated_at | timestamptz | Updated timestamp |
+
+Notes:
+- Per-sport defaults are JSONB with `{ platform: "espn"|"yahoo", leagueId: string, seasonYear: number }`.
+- Cross-platform exclusivity is automatic (one column per sport = one default).
 
 ### oauth_codes
 Short-lived authorization codes for OAuth 2.1.

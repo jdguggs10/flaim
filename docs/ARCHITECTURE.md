@@ -23,7 +23,7 @@ npm run dev
 - **ESPN Client (`/workers/espn-client`)**: Internal worker handling all ESPN API calls for all sports (football, baseball). Called by fantasy-mcp gateway.
 - **Legacy Sport MCP workers (`/workers/baseball-espn-mcp`, `/workers/football-espn-mcp`)**: Direct ESPN API calls + MCP tools. Still functional, will be deprecated after unified gateway is validated.
 - **Shared package (`/workers/shared`)**: Common utilities (CORS middleware, auth-fetch helper, types) used by all workers.
-- **Supabase Postgres**: `espn_credentials`, `espn_leagues` (per-season rows), `oauth_tokens`, `oauth_codes`, `rate_limits`, plus legacy `extension_tokens`/`extension_pairing_codes` (deprecated).
+- **Supabase Postgres**: `espn_credentials`, `espn_leagues`, `yahoo_leagues`, `user_preferences` (defaults), `oauth_tokens`, `oauth_codes`, `rate_limits`, plus legacy `extension_tokens`/`extension_pairing_codes` (deprecated).
 
 ## Runtime Choices (Next.js)
 
