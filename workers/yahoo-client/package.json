@@ -1,0 +1,25 @@
+{
+  "name": "yahoo-client",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "WRANGLER_LOG_PATH=../../.wrangler/logs WRANGLER_REGISTRY_PATH=../../.wrangler/registry wrangler dev --env dev --port 8790",
+    "deploy:dev": "wrangler deploy --env dev",
+    "deploy:preview": "wrangler deploy --env preview",
+    "deploy:prod": "wrangler deploy --env prod",
+    "test": "vitest run",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@flaim/worker-shared": "*",
+    "hono": "^4.7.0"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.7.0",
+    "@cloudflare/workers-types": "^4.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "~3.0.0",
+    "wrangler": "^4.53.0"
+  }
+}

@@ -8,7 +8,8 @@
     "workers/espn-client",
     "workers/fantasy-mcp",
     "workers/football-espn-mcp",
-    "workers/shared"
+    "workers/shared",
+    "workers/yahoo-client"
   ],
   "engines": {
     "node": "24.x"

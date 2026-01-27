@@ -1,0 +1,50 @@
+{
+  "name": "yahoo-client",
+  "main": "src/index.ts",
+  "compatibility_date": "2024-12-01",
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "persist": true,
+      "invocation_logs": true
+    }
+  },
+  "env": {
+    "prod": {
+      "name": "yahoo-client",
+      "workers_dev": true,
+      "services": [
+        { "binding": "AUTH_WORKER", "service": "auth-worker" }
+      ],
+      "vars": {
+        "NODE_ENV": "production",
+        "ENVIRONMENT": "prod"
+      }
+    },
+    "preview": {
+      "name": "yahoo-client-preview",
+      "workers_dev": true,
+      "services": [
+        { "binding": "AUTH_WORKER", "service": "auth-worker-preview" }
+      ],
+      "vars": {
+        "NODE_ENV": "production",
+        "ENVIRONMENT": "preview"
+      }
+    },
+    "dev": {
+      "name": "yahoo-client-dev",
+      "workers_dev": true,
+      "services": [
+        { "binding": "AUTH_WORKER", "service": "auth-worker-dev" }
+      ],
+      "vars": {
+        "NODE_ENV": "development",
+        "ENVIRONMENT": "dev"
+      }
+    }
+  }
+}
