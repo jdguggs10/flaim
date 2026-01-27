@@ -83,6 +83,18 @@ Season year defaults are deterministic and use America/New_York time:
 - **Baseball (flb)**: Defaults to the previous year until Feb 1, then switches to the current year
 - **Football (ffl)**: Defaults to the previous year until Jun 1, then switches to the current year
 
+## User Defaults
+
+Defaults are stored centrally in `user_preferences`:
+
+- `default_sport` - User's preferred sport (football, baseball, etc.)
+- `default_football` - Default football league: `{ platform, leagueId, seasonYear }`
+- `default_baseball` - Default baseball league
+- `default_basketball` - Default basketball league
+- `default_hockey` - Default hockey league
+
+Each per-sport column is nullable JSONB. Cross-platform exclusivity is automatic (one column per sport = one value).
+
 ## Chrome Extension
 
 The extension simplifies ESPN credential capture. See `extension/README.md` for full documentation.
