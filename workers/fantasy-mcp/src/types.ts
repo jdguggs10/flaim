@@ -2,9 +2,9 @@
 import type { BaseEnvWithAuth } from '@flaim/worker-shared';
 
 export interface Env extends BaseEnvWithAuth {
-  ESPN: Fetcher;      // Service binding to espn-client
-  AUTH_WORKER: Fetcher;  // Service binding to auth-worker
-  // YAHOO: Fetcher;  // Future: Yahoo client binding
+  ESPN: Fetcher;        // Service binding to espn-client
+  YAHOO: Fetcher;       // Service binding to yahoo-client
+  AUTH_WORKER: Fetcher; // Service binding to auth-worker
 }
 
 export type Platform = 'espn' | 'yahoo';

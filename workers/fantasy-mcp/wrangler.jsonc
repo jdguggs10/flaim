@@ -33,6 +33,7 @@
       // Service bindings for platform workers
       "services": [
         { "binding": "ESPN", "service": "espn-client" },
+        { "binding": "YAHOO", "service": "yahoo-client" },
         { "binding": "AUTH_WORKER", "service": "auth-worker" }
       ],
       // Environment variables for production
@@ -49,6 +50,7 @@
       // Service bindings for platform workers
       "services": [
         { "binding": "ESPN", "service": "espn-client-preview" },
+        { "binding": "YAHOO", "service": "yahoo-client-preview" },
         { "binding": "AUTH_WORKER", "service": "auth-worker-preview" }
       ],
       // Environment variables for preview
@@ -65,6 +67,7 @@
       // Service bindings for platform workers
       "services": [
         { "binding": "ESPN", "service": "espn-client-dev" },
+        { "binding": "YAHOO", "service": "yahoo-client-dev" },
         { "binding": "AUTH_WORKER", "service": "auth-worker-dev" }
       ],
       // Environment variables for dev
