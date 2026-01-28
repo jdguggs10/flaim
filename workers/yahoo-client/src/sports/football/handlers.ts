@@ -2,6 +2,7 @@ import type { Env, ToolParams, ExecuteResponse } from '../../types';
 import { getYahooCredentials } from '../../shared/auth';
 import { yahooFetch, handleYahooError, requireCredentials } from '../../shared/yahoo-api';
 import { asArray, getPath, unwrapLeague, unwrapTeam, logStructure } from '../../shared/normalizers';
+import { getPositionFilter } from './mappings';
 
 type HandlerFn = (
   env: Env,
@@ -15,6 +16,7 @@ export const footballHandlers: Record<string, HandlerFn> = {
   get_standings: handleGetStandings,
   get_roster: handleGetRoster,
   get_matchups: handleGetMatchups,
+  get_free_agents: handleGetFreeAgents,
 };
 
 function extractErrorCode(error: unknown): string {
@@ -324,6 +326,97 @@ async function handleGetMatchups(
         currentWeek,
         matchupWeek: week || currentWeek,
         matchups
+      }
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+      code: extractErrorCode(error)
+    };
+  }
+}
+
+/**
+ * Get available free agents
+ */
+async function handleGetFreeAgents(
+  env: Env,
+  params: ToolParams,
+  authHeader?: string,
+  correlationId?: string
+): Promise<ExecuteResponse> {
+  const { league_id, position, count } = params;
+
+  try {
+    const credentials = await getYahooCredentials(env, authHeader, correlationId);
+    requireCredentials(credentials, 'get_free_agents');
+
+    // Build Yahoo query params
+    // ;status=FA for free agents, ;count=N for limit, ;position=POS for filter
+    const limit = Math.min(Math.max(1, count || 25), 100);
+    let queryParams = `;status=FA;count=${limit}`;
+
+    const posFilter = getPositionFilter(position);
+    if (posFilter) {
+      queryParams += `;position=${posFilter}`;
+    }
+
+    const response = await yahooFetch(`/league/${league_id}/players${queryParams}`, { credentials });
+
+    if (!response.ok) {
+      handleYahooError(response);
+    }
+
+    const raw = await response.json();
+    logStructure('get_free_agents raw', raw);
+
+    // Navigate: fantasy_content.league[0]=meta, [1]=players
+    const leagueArray = getPath(raw, ['fantasy_content', 'league']);
+    const league = unwrapLeague(leagueArray);
+
+    // players is numeric-keyed object
+    const playersObj = league.players as Record<string, unknown> | undefined;
+    const playersArray = asArray(playersObj);
+
+    const freeAgents = playersArray.map((playerWrapper: unknown) => {
+      // Each player is wrapped: {player: [[metadata], ...]}
+      const playerData = getPath(playerWrapper, ['player']) as unknown[];
+
+      // Player metadata is in first array
+      const metaArray = playerData?.[0] as unknown[];
+      let playerMeta: Record<string, unknown> = {};
+      if (Array.isArray(metaArray)) {
+        for (const item of metaArray) {
+          if (typeof item === 'object' && item !== null) {
+            playerMeta = { ...playerMeta, ...item };
+          }
+        }
+      }
+
+      // Ownership data may be in second element
+      const ownershipData = playerData?.[1] as Record<string, unknown> | undefined;
+      const ownership = ownershipData?.ownership as Record<string, unknown> | undefined;
+
+      return {
+        playerKey: playerMeta.player_key as string,
+        playerId: playerMeta.player_id as string,
+        name: (playerMeta.name as Record<string, unknown>)?.full as string,
+        team: playerMeta.editorial_team_abbr as string,
+        position: playerMeta.display_position as string,
+        percentOwned: ownership?.percent_owned ? parseFloat(String(ownership.percent_owned)) : undefined,
+        status: playerMeta.status as string | undefined,
+      };
+    });
+
+    return {
+      success: true,
+      data: {
+        leagueKey: league.league_key,
+        leagueName: league.name,
+        position: position?.toUpperCase() || 'ALL',
+        count: freeAgents.length,
+        freeAgents
       }
     };
   } catch (error) {
