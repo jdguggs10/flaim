@@ -14,6 +14,7 @@ export const footballHandlers: Record<string, HandlerFn> = {
   get_league_info: handleGetLeagueInfo,
   get_standings: handleGetStandings,
   get_roster: handleGetRoster,
+  get_matchups: handleGetMatchups,
 };
 
 function extractErrorCode(error: unknown): string {
@@ -209,6 +210,120 @@ async function handleGetRoster(
         teamName: team.name,
         week: week || 'current',
         players
+      }
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+      code: extractErrorCode(error)
+    };
+  }
+}
+
+/**
+ * Get league matchups/scoreboard for a week
+ */
+async function handleGetMatchups(
+  env: Env,
+  params: ToolParams,
+  authHeader?: string,
+  correlationId?: string
+): Promise<ExecuteResponse> {
+  const { league_id, week } = params;
+
+  try {
+    const credentials = await getYahooCredentials(env, authHeader, correlationId);
+    requireCredentials(credentials, 'get_matchups');
+
+    // Yahoo uses semicolon params: /league/{key}/scoreboard;week=N
+    const weekParam = week ? `;week=${week}` : '';
+    const response = await yahooFetch(`/league/${league_id}/scoreboard${weekParam}`, { credentials });
+
+    if (!response.ok) {
+      handleYahooError(response);
+    }
+
+    const raw = await response.json();
+    logStructure('get_matchups raw', raw);
+
+    // Navigate: fantasy_content.league[0]=meta, [1]=scoreboard
+    const leagueArray = getPath(raw, ['fantasy_content', 'league']);
+    const league = unwrapLeague(leagueArray);
+
+    // Get current week from league metadata
+    const currentWeek = league.current_week as number | undefined;
+
+    // scoreboard.matchups is numeric-keyed object
+    const scoreboardData = league.scoreboard as Record<string, unknown> | undefined;
+    const matchupsObj = getPath(scoreboardData, ['0', 'matchups']) as Record<string, unknown> | undefined;
+    const matchupsArray = asArray(matchupsObj);
+
+    const matchups = matchupsArray.map((matchupWrapper: unknown, index: number) => {
+      // Each matchup is wrapped: {matchup: [[metadata], {teams: ...}]}
+      const matchupData = getPath(matchupWrapper, ['matchup']) as unknown[];
+
+      // First element is array with metadata
+      const metaArray = matchupData?.[0] as unknown[];
+      let matchupMeta: Record<string, unknown> = {};
+      if (Array.isArray(metaArray)) {
+        for (const item of metaArray) {
+          if (typeof item === 'object' && item !== null) {
+            matchupMeta = { ...matchupMeta, ...item };
+          }
+        }
+      }
+
+      // Second element has teams
+      const teamsContainer = matchupData?.[1] as Record<string, unknown> | undefined;
+      const teamsObj = teamsContainer?.teams as Record<string, unknown> | undefined;
+      const teamsArray = asArray(teamsObj);
+
+      // Parse the two teams (home = index 0, away = index 1)
+      const parseTeam = (teamWrapper: unknown) => {
+        const teamData = getPath(teamWrapper, ['team']) as unknown[];
+        const team = unwrapTeam(teamData);
+        const teamPoints = team.team_points as Record<string, unknown> | undefined;
+        const teamProjectedPoints = team.team_projected_points as Record<string, unknown> | undefined;
+
+        return {
+          teamKey: team.team_key as string,
+          teamId: team.team_id as string,
+          teamName: team.name as string,
+          points: teamPoints?.total ? parseFloat(String(teamPoints.total)) : 0,
+          projectedPoints: teamProjectedPoints?.total ? parseFloat(String(teamProjectedPoints.total)) : undefined,
+        };
+      };
+
+      const home = teamsArray[0] ? parseTeam(teamsArray[0]) : null;
+      const away = teamsArray[1] ? parseTeam(teamsArray[1]) : null;
+
+      // Determine winner if matchup is complete
+      let winner: string | undefined;
+      if (matchupMeta.status === 'postevent' && home && away) {
+        if (home.points > away.points) winner = 'home';
+        else if (away.points > home.points) winner = 'away';
+        else winner = 'tie';
+      }
+
+      return {
+        matchupId: index + 1,
+        week: matchupMeta.week as number || week || currentWeek,
+        status: matchupMeta.status as string,
+        home,
+        away,
+        winner,
+      };
+    });
+
+    return {
+      success: true,
+      data: {
+        leagueKey: league.league_key,
+        leagueName: league.name,
+        currentWeek,
+        matchupWeek: week || currentWeek,
+        matchups
       }
     };
   } catch (error) {
