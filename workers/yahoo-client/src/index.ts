@@ -1,13 +1,13 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import type { Env, ExecuteRequest, ExecuteResponse } from './types';
+import type { Env, ExecuteRequest, ExecuteResponse, Sport } from './types';
+import { footballHandlers } from './sports/football/handlers';
 import { CORRELATION_ID_HEADER, getCorrelationId } from '@flaim/worker-shared';
 
 const app = new Hono<{ Bindings: Env }>();
 
 app.use('*', cors());
 
-// Health check
 app.get('/health', (c) => {
   return c.json({
     status: 'healthy',
@@ -17,24 +17,18 @@ app.get('/health', (c) => {
   });
 });
 
-// Main execute endpoint - called by fantasy-mcp gateway
 app.post('/execute', async (c) => {
   const correlationId = getCorrelationId(c.req.raw);
   const startTime = Date.now();
 
   try {
     const body = await c.req.json<ExecuteRequest>();
-    const { tool, params, authHeader: _authHeader } = body;
+    const { tool, params, authHeader } = body;
     const { sport, league_id, season_year } = params;
 
     console.log(`[yahoo-client] ${correlationId} ${tool} ${sport} league=${league_id} season=${season_year}`);
 
-    // Placeholder - will be implemented in Task 3
-    const result: ExecuteResponse = {
-      success: false,
-      error: 'Yahoo client not yet implemented',
-      code: 'NOT_IMPLEMENTED'
-    };
+    const result = await routeToSport(c.env, sport, tool, params, authHeader, correlationId);
 
     const duration = Date.now() - startTime;
     console.log(`[yahoo-client] ${correlationId} ${tool} ${sport} completed in ${duration}ms success=${result.success}`);
@@ -57,7 +51,41 @@ app.post('/execute', async (c) => {
   }
 });
 
-// 404 handler
+async function routeToSport(
+  env: Env,
+  sport: Sport,
+  tool: string,
+  params: ExecuteRequest['params'],
+  authHeader?: string,
+  correlationId?: string
+): Promise<ExecuteResponse> {
+  switch (sport) {
+    case 'football': {
+      const handler = footballHandlers[tool];
+      if (!handler) {
+        return {
+          success: false,
+          error: `Unknown football tool: ${tool}`,
+          code: 'UNKNOWN_TOOL'
+        };
+      }
+      return handler(env, params, authHeader, correlationId);
+    }
+
+    case 'baseball':
+      return { success: false, error: 'Yahoo baseball not yet supported', code: 'NOT_SUPPORTED' };
+
+    case 'basketball':
+      return { success: false, error: 'Yahoo basketball not yet supported', code: 'NOT_SUPPORTED' };
+
+    case 'hockey':
+      return { success: false, error: 'Yahoo hockey not yet supported', code: 'NOT_SUPPORTED' };
+
+    default:
+      return { success: false, error: `Unknown sport: ${sport}`, code: 'INVALID_SPORT' };
+  }
+}
+
 app.notFound((c) => {
   return c.json({
     error: 'Endpoint not found',
