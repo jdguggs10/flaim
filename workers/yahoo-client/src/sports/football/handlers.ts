@@ -262,23 +262,15 @@ async function handleGetMatchups(
     const matchupsArray = asArray(matchupsObj);
 
     const matchups = matchupsArray.map((matchupWrapper: unknown, index: number) => {
-      // Each matchup is wrapped: {matchup: [[metadata], {teams: ...}]}
-      const matchupData = getPath(matchupWrapper, ['matchup']) as unknown[];
+      // Yahoo structure: {matchup: {"0": {teams: {...}}}}
+      // matchup is a numeric-keyed object, not an array
+      const matchupObj = getPath(matchupWrapper, ['matchup']) as Record<string, unknown> | undefined;
 
-      // First element is array with metadata
-      const metaArray = matchupData?.[0] as unknown[];
-      let matchupMeta: Record<string, unknown> = {};
-      if (Array.isArray(metaArray)) {
-        for (const item of metaArray) {
-          if (typeof item === 'object' && item !== null) {
-            matchupMeta = { ...matchupMeta, ...item };
-          }
-        }
-      }
+      // Get the first (and usually only) matchup content via numeric key "0"
+      const matchupContent = matchupObj?.['0'] as Record<string, unknown> | undefined;
 
-      // Second element has teams
-      const teamsContainer = matchupData?.[1] as Record<string, unknown> | undefined;
-      const teamsObj = teamsContainer?.teams as Record<string, unknown> | undefined;
+      // Teams are inside matchupContent
+      const teamsObj = matchupContent?.teams as Record<string, unknown> | undefined;
       const teamsArray = asArray(teamsObj);
 
       // Parse the two teams (home = index 0, away = index 1)
@@ -300,9 +292,9 @@ async function handleGetMatchups(
       const home = teamsArray[0] ? parseTeam(teamsArray[0]) : null;
       const away = teamsArray[1] ? parseTeam(teamsArray[1]) : null;
 
-      // Determine winner if matchup is complete
+      // Determine winner based on points (if both teams have scores)
       let winner: string | undefined;
-      if (matchupMeta.status === 'postevent' && home && away) {
+      if (home && away && (home.points > 0 || away.points > 0)) {
         if (home.points > away.points) winner = 'home';
         else if (away.points > home.points) winner = 'away';
         else winner = 'tie';
@@ -310,8 +302,7 @@ async function handleGetMatchups(
 
       return {
         matchupId: index + 1,
-        week: matchupMeta.week as number || week || currentWeek,
-        status: matchupMeta.status as string,
+        week: week || currentWeek,
         home,
         away,
         winner,
