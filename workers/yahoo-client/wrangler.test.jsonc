@@ -1,0 +1,5 @@
+{
+  "name": "yahoo-client",
+  "main": "./src/index.ts",
+  "compatibility_date": "2024-12-01"
+}
