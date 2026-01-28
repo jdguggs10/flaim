@@ -14,9 +14,9 @@ The unified gateway (`fantasy-mcp`) exposes all tools. Platform workers implemen
 | `get_ancient_history` | ✅ | ✅ | ✅ | ✅ |
 | `get_league_info` | ✅ | ✅ | ✅ | ❌ |
 | `get_standings` | ✅ | ✅ | ✅ | ❌ |
-| `get_matchups` | ✅ | ✅ | ❌ | ❌ |
+| `get_matchups` | ✅ | ✅ | ✅ | ❌ |
 | `get_roster` | ✅ | ✅ | ✅ | ❌ |
-| `get_free_agents` | ✅ | ✅ | ❌ | ❌ |
+| `get_free_agents` | ✅ | ✅ | ✅ | ❌ |
 
 **Legend:** ✅ Implemented | ❌ Not implemented | — Not applicable
 
@@ -25,7 +25,7 @@ The unified gateway (`fantasy-mcp`) exposes all tools. Platform workers implemen
 ### Complete
 - **Phase 0**: Gateway scaffolding (ESPN migration)
 - **Phase 1**: Yahoo OAuth + league discovery
-- **Phase 2**: Yahoo Football (3/5 tools)
+- **Phase 2**: Yahoo Football (5/5 tools) ✅
 
 ### In Progress
 - **Phase 3**: Yahoo Baseball - Add all 5 handlers
@@ -36,12 +36,12 @@ The unified gateway (`fantasy-mcp`) exposes all tools. Platform workers implemen
 
 ## Implementation Checklist
 
-### Yahoo Football (Phase 2) — 3/5 Complete
+### Yahoo Football (Phase 2) — 5/5 Complete ✅
 - [x] `get_league_info`
 - [x] `get_standings`
-- [ ] `get_matchups` — Need scoreboard endpoint
+- [x] `get_matchups`
 - [x] `get_roster`
-- [ ] `get_free_agents` — Need player search endpoint
+- [x] `get_free_agents`
 
 ### Yahoo Baseball (Phase 3) — 0/5 Complete
 - [ ] `get_league_info`
