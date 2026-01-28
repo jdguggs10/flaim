@@ -36,10 +36,11 @@ export async function getYahooCredentials(
     throw new Error(`Auth-worker error: ${errorData.error || response.statusText}`);
   }
 
-  const data = await response.json() as { accessToken?: string };
-  if (!data.accessToken) {
+  // auth-worker returns snake_case, we normalize to camelCase
+  const data = await response.json() as { access_token?: string };
+  if (!data.access_token) {
     throw new Error('Invalid credentials response from auth-worker');
   }
 
-  return { accessToken: data.accessToken };
+  return { accessToken: data.access_token };
 }
