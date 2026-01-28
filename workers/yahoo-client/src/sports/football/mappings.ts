@@ -17,3 +17,22 @@ export const POSITION_MAP: Record<string, string> = {
 export function getPositionName(posAbbrev: string): string {
   return POSITION_MAP[posAbbrev] || posAbbrev;
 }
+
+// Position abbreviations for Yahoo free agent filter
+// Yahoo accepts these directly in the ;position= parameter
+export const FA_POSITION_FILTER: Record<string, string> = {
+  'ALL': '',           // No filter
+  'QB': 'QB',
+  'WR': 'WR',
+  'RB': 'RB',
+  'TE': 'TE',
+  'K': 'K',
+  'DEF': 'DEF',
+  'FLEX': 'W/R/T',     // Maps to Yahoo's flex designation
+};
+
+export function getPositionFilter(position?: string): string {
+  if (!position) return '';
+  const key = position.toUpperCase();
+  return FA_POSITION_FILTER[key] ?? '';
+}
