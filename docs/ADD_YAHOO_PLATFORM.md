@@ -622,12 +622,16 @@ Add **Connect Yahoo** button alongside ESPN in Homepage Box 2:
 - Yahoo leagues display alongside ESPN leagues on `/leagues` page
 - UI cleanup remaining (minor polish work)
 
-### Phase 2: yahoo-client worker (Football)
+### Phase 2: yahoo-client worker (Football) ✅ COMPLETE
 
-1. Create `yahoo-client` worker with service binding
-2. Add football handlers with Yahoo API calls
-3. Build Yahoo JSON normalizers
-4. Test football tools end-to-end
+**Completed: 2026-01-27**
+
+1. ✅ Created `yahoo-client` worker with service binding to `fantasy-mcp`
+2. ✅ Added football handlers: `get_league_info`, `get_standings`, `get_roster`
+3. ✅ Built Yahoo JSON normalizers (`asArray`, `getPath`, `unwrapLeague`, `unwrapTeam`)
+4. ✅ Added 27 unit tests for normalizers
+5. ✅ Tested football tools end-to-end via chat app
+6. ✅ Fixed snake_case/camelCase mismatch bug between auth-worker and yahoo-client
 
 ### Phase 3: yahoo-client worker (Baseball)
 
@@ -695,12 +699,12 @@ Normalize outputs to match DTOs:
 
 ## Testing checklist
 
-### Gateway routing
-- [ ] Tool calls route to correct platform worker
-- [ ] Unknown platform returns error
-- [ ] Service bindings work in dev/preview/prod
+### Gateway routing ✅ VERIFIED
+- [x] Tool calls route to correct platform worker
+- [x] Unknown platform returns error
+- [x] Service bindings work in dev/preview/prod
 
-### Yahoo OAuth (Phase 1) — Unit Tests: ✅ PASSING
+### Yahoo OAuth (Phase 1) — ✅ E2E VERIFIED
 
 - [x] `/connect/yahoo/authorize` redirects to Yahoo with correct params (unit tested)
 - [x] `/connect/yahoo/callback` exchanges code and stores tokens (unit tested)
@@ -708,22 +712,22 @@ Normalize outputs to match DTOs:
 - [x] Token refresh works (simulate expiry with `needsRefresh`) (unit tested)
 - [x] `/connect/yahoo/disconnect` clears credentials and returns success (unit tested)
 - [x] Error handling: invalid code, network failure (unit tested)
-- [ ] **E2E test**: Full OAuth flow with real Yahoo account (blocked on frontend UI)
+- [x] **E2E test**: Full OAuth flow with real Yahoo account ✅
 
-### Yahoo league discovery (Phase 1) — Unit Tests: ✅ PASSING
+### Yahoo league discovery (Phase 1) — ✅ E2E VERIFIED
 
 - [x] `/connect/yahoo/discover` calls Yahoo API with valid token (unit tested)
 - [x] Discovers leagues and upserts to storage (unit tested)
 - [x] Handles users with no Yahoo leagues (empty array, not error) (unit tested)
 - [x] `get_user_session` returns both ESPN and Yahoo leagues with platform field (unit tested)
-- [ ] **E2E test**: Real league discovery with real Yahoo account (blocked on frontend UI)
+- [x] **E2E test**: Real league discovery with real Yahoo account ✅
 
-### Yahoo tools (Phase 2+)
-- [ ] get_league_info returns correct data
-- [ ] get_standings matches Yahoo web UI
-- [ ] get_matchups returns correct week
-- [ ] get_roster returns players
-- [ ] get_free_agents returns available players
+### Yahoo tools (Phase 2) — Football ✅ E2E VERIFIED
+- [x] get_league_info returns correct data
+- [x] get_standings matches Yahoo web UI (17 teams in "Get Chopped")
+- [ ] get_matchups returns correct week (not yet implemented)
+- [x] get_roster returns players
+- [ ] get_free_agents returns available players (not yet implemented)
 
 ---
 
