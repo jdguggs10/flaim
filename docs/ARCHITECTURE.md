@@ -39,6 +39,7 @@ workers/                    # Cloudflare Workers (see workers/README.md)
   auth-worker/              # Auth, OAuth, credentials, leagues
   fantasy-mcp/              # Unified MCP gateway (routes to platform workers)
   espn-client/              # ESPN API client (called by fantasy-mcp)
+  yahoo-client/             # Yahoo API client (called by fantasy-mcp)
   baseball-espn-mcp/        # Legacy: Baseball MCP server (direct)
   football-espn-mcp/        # Legacy: Football MCP server (direct)
   shared/                   # @flaim/worker-shared package
@@ -144,8 +145,8 @@ The unified gateway (`fantasy-mcp`) provides a single MCP endpoint for all platf
 
 ```
 Claude/ChatGPT → fantasy-mcp (gateway) → espn-client → ESPN API
+                                       → yahoo-client → Yahoo API
                                        → auth-worker → Supabase
-                 (future)             → yahoo-client → Yahoo API
 ```
 
 **Key benefits:**

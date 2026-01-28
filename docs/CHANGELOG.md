@@ -4,6 +4,17 @@ Follow Keep a Changelog; SemVer applies.
 
 ## [Unreleased]
 
+### Yahoo Fantasy Platform Support
+Yahoo Fantasy Football now works through the unified gateway alongside ESPN.
+
+- **Added**: `yahoo-client` worker - Yahoo Fantasy API client for all sports
+- **Added**: Yahoo OAuth token refresh flow via auth-worker
+- **Added**: Yahoo-specific JSON normalizers for quirky API format (numeric-keyed objects, nested arrays)
+- **Added**: Yahoo football handlers: `get_league_info`, `get_standings`, `get_roster`
+- **Added**: `YAHOO` service binding in fantasy-mcp gateway
+- **Added**: Unit tests for Yahoo normalizers (27 tests)
+- **Fixed**: Snake_case/camelCase mismatch between auth-worker and yahoo-client credentials
+
 ### Chrome Extension Simplification
 Default league selection removed from extension - defaults are now managed exclusively via the web UI at `/leagues`.
 
