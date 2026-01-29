@@ -1429,7 +1429,7 @@ function LeaguesPageContent() {
                       <CardTitle className="text-lg">Yahoo</CardTitle>
                       {isYahooConnected && (
                         <span className="text-xs px-2 py-0.5 rounded-full bg-success/20 text-success">
-                          Connected
+                          Auth Connected
                         </span>
                       )}
                     </div>
