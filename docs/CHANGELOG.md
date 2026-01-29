@@ -4,6 +4,16 @@ Follow Keep a Changelog; SemVer applies.
 
 ## [Unreleased]
 
+### UI Consistency
+All frontend components now use semantic design tokens instead of hard-coded Tailwind palette classes, ensuring consistent light/dark theme support.
+
+- **Added**: Semantic CSS tokens (`success`, `warning`, `info`) in `globals.css` and `tailwind.config.ts`.
+- **Added**: `success`, `warning`, `info` variants for Alert and Badge components.
+- **Added**: `npm run ui:check` script to detect hard-coded color violations.
+- **Added**: `docs/dev/ui-consistency.md` developer guide.
+- **Changed**: All chat, landing, leagues, and config components migrated to design tokens.
+- **Removed**: Dead components (`panel.tsx`, `StepSyncEspn.tsx`, `EspnCredentialsCard.tsx`).
+
 ### Yahoo Fantasy Platform Support
 Yahoo Fantasy now works through the unified gateway alongside ESPN. **Full feature parity achieved for both football and baseball (5/5 tools each).**
 
