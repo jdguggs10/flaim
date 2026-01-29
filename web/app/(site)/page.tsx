@@ -32,7 +32,7 @@ export default function LandingPage() {
                 <h3 className="font-semibold text-lg">Create Account</h3>
               </div>
               <p className="text-sm text-muted-foreground mb-4">
-                Sign up to get started. This is where your ESPN credentials and league info will be stored.
+                Sign up to get started. This is where your platform credentials and league info will be stored.
               </p>
               <SignedOut>
                 <Link href="/sign-up">
