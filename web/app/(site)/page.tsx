@@ -78,7 +78,7 @@ export default function LandingPage() {
                 </span>
               </summary>
               <div className="px-4 pb-4 text-sm text-muted-foreground space-y-2">
-                <p>Flaim provides MCP servers and user auth so you can connect your fantasy leagues to your preferred AI. That&apos;s it. I don&apos;t supply the AI, you do. I just connect the dots.</p>
+                <p>Flaim provides MCP servers and user auth so you can connect your fantasy leagues to your preferred AI. That&apos;s it. I don&apos;t supply the AI, you do. Flaim just connects the dots.</p>
               </div>
             </details>
 
