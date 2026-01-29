@@ -91,7 +91,7 @@ export default function LandingPage() {
                 </span>
               </summary>
               <div className="px-4 pb-4 text-sm text-muted-foreground space-y-2">
-                <p>It makes grabbing your credentials easy and matches them to your account. The MCPs will then auth the AI&apos;s data request with those credentials.</p>
+                <p>It makes grabbing your ESPN credentials easy and matches them to your Flaim account. The connector needs to know what ESPN leagues are yours somehow.</p>
               </div>
             </details>
 
