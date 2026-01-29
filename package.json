@@ -27,7 +27,8 @@
     "deploy:espn-client:preview": "cd workers/espn-client && npm run deploy:preview",
     "deploy:espn-client:prod": "cd workers/espn-client && npm run deploy:prod",
     "deploy:fantasy-mcp:preview": "cd workers/fantasy-mcp && npm run deploy:preview",
-    "deploy:fantasy-mcp:prod": "cd workers/fantasy-mcp && npm run deploy:prod"
+    "deploy:fantasy-mcp:prod": "cd workers/fantasy-mcp && npm run deploy:prod",
+    "ui:check": "bash scripts/ui-consistency-check.sh"
   },
   "devDependencies": {
     "@playwright/test": "^1.57.0",
