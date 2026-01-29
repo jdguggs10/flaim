@@ -890,6 +890,12 @@ function LeaguesPageContent() {
                           <Star className={`h-3 w-3 ${defaultSport === sport ? 'fill-current' : ''}`} />
                         )}
                       </Button>
+                      {defaultSport === sport && (
+                        <span className="text-sm text-warning flex items-center gap-1">
+                          <Star className="h-3 w-3 fill-current" />
+                          default
+                        </span>
+                      )}
                     </div>
 
                     {/* Leagues in this sport */}
