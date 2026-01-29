@@ -44,7 +44,7 @@ export function StepConnectAI() {
       </div>
 
       <p className="text-sm text-muted-foreground mb-4">
-        Copy the name and URL below to add Flaim as a connector.
+        Click on your preferred AI, then copy the name and url to add Flaim as a custom connector.
       </p>
 
       {/* Platform badges */}
