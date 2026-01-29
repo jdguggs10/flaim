@@ -90,19 +90,19 @@ function ErrorBanner({ error, output }: { error?: string; output?: string | null
   const suggestion = getErrorSuggestion(errorMessage);
 
   return (
-    <div className="mx-6 mb-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+    <div className="mx-6 mb-2 p-3 bg-destructive/10 border border-destructive/30 rounded-lg">
       <div className="flex items-start gap-2">
-        <AlertTriangle size={16} className="text-red-600 flex-shrink-0 mt-0.5" />
+        <AlertTriangle size={16} className="text-destructive flex-shrink-0 mt-0.5" />
         <div className="flex-1 min-w-0">
-          <p className="text-sm text-red-800 font-medium">Error</p>
-          <p className="text-xs text-red-700 mt-1 break-words">{errorMessage}</p>
+          <p className="text-sm text-destructive font-medium">Error</p>
+          <p className="text-xs text-destructive mt-1 break-words">{errorMessage}</p>
           {suggestion && (
             <div className="mt-2 flex items-center gap-2">
-              <span className="text-xs text-red-600">{suggestion.message}</span>
+              <span className="text-xs text-destructive">{suggestion.message}</span>
               {suggestion.link && (
                 <Link
                   href={suggestion.link}
-                  className="inline-flex items-center gap-1 text-xs text-red-700 hover:text-red-900 underline"
+                  className="inline-flex items-center gap-1 text-xs text-destructive hover:text-destructive underline"
                 >
                   {suggestion.linkText}
                   <ExternalLink size={10} />
@@ -121,7 +121,7 @@ function ServerUrlBadge({ serverUrl }: { serverUrl?: string }) {
   if (!serverUrl) return null;
 
   return (
-    <div className="mx-6 mb-2 px-2 py-1 bg-slate-100 border border-slate-200 rounded text-xs text-slate-600 font-mono truncate">
+    <div className="mx-6 mb-2 px-2 py-1 bg-muted border border-border rounded text-xs text-muted-foreground font-mono truncate">
       → {serverUrl}
     </div>
   );
@@ -146,8 +146,8 @@ function ApiCallCell({ toolCall }: ToolCallProps) {
     <div className="flex flex-col w-[70%] relative mb-[-8px]">
       <div>
         <div className="flex flex-col text-sm rounded-[16px]">
-          <div className="font-semibold p-3 pl-0 text-gray-700 rounded-b-none flex gap-2">
-            <div className="flex gap-2 items-center text-blue-500 ml-[-8px]">
+          <div className="font-semibold p-3 pl-0 text-muted-foreground rounded-b-none flex gap-2">
+            <div className="flex gap-2 items-center text-info ml-[-8px]">
               <button
                 onClick={() => setExpanded(!expanded)}
                 className="p-0.5 rounded hover:bg-muted transition-colors"
@@ -168,7 +168,7 @@ function ApiCallCell({ toolCall }: ToolCallProps) {
           </div>
 
           {expanded && (
-            <div className="bg-[#fafafa] rounded-xl py-2 ml-4 mt-2">
+            <div className="bg-muted rounded-xl py-2 ml-4 mt-2">
               <div className="max-h-96 overflow-y-scroll text-xs border-b mx-6 p-2">
                 {debugMode && (
                   <div className="flex items-center justify-between mb-2">
@@ -180,7 +180,7 @@ function ApiCallCell({ toolCall }: ToolCallProps) {
                 )}
                 <SyntaxHighlighter
                   customStyle={{
-                    backgroundColor: "#fafafa",
+                    backgroundColor: "transparent",
                     padding: "8px",
                     paddingLeft: "0px",
                     marginTop: 0,
@@ -204,7 +204,7 @@ function ApiCallCell({ toolCall }: ToolCallProps) {
                 {responseJson ? (
                   <SyntaxHighlighter
                     customStyle={{
-                      backgroundColor: "#fafafa",
+                      backgroundColor: "transparent",
                       padding: "8px",
                       paddingLeft: "0px",
                       marginTop: 0,
@@ -215,7 +215,7 @@ function ApiCallCell({ toolCall }: ToolCallProps) {
                     {responseJson}
                   </SyntaxHighlighter>
                 ) : (
-                  <div className="text-zinc-500 flex items-center gap-2 py-2">
+                  <div className="text-muted-foreground flex items-center gap-2 py-2">
                     <Clock size={16} /> Waiting for result...
                   </div>
                 )}
@@ -230,7 +230,7 @@ function ApiCallCell({ toolCall }: ToolCallProps) {
 
 function FileSearchCell({ toolCall }: ToolCallProps) {
   return (
-    <div className="flex gap-2 items-center text-blue-500 mb-[-16px] ml-[-8px]">
+    <div className="flex gap-2 items-center text-info mb-[-16px] ml-[-8px]">
       <BookOpenText size={16} />
       <div className="text-sm font-medium mb-0.5">
         {toolCall.status === "completed"
@@ -246,7 +246,7 @@ function FileSearchCell({ toolCall }: ToolCallProps) {
 
 function WebSearchCell({ toolCall }: ToolCallProps) {
   return (
-    <div className="flex gap-2 items-center text-blue-500 mb-[-16px] ml-[-8px]">
+    <div className="flex gap-2 items-center text-info mb-[-16px] ml-[-8px]">
       <Globe size={16} />
       <div className="text-sm font-medium">
         {toolCall.status === "completed"
@@ -282,8 +282,8 @@ function McpCallCell({ toolCall }: ToolCallProps) {
     <div className="flex flex-col w-[70%] relative mb-[-8px]">
       <div>
         <div className="flex flex-col text-sm rounded-[16px]">
-          <div className="font-semibold p-3 pl-0 text-gray-700 rounded-b-none flex gap-2">
-            <div className={`flex gap-2 items-center ml-[-8px] ${hasError ? 'text-red-500' : 'text-blue-500'}`}>
+          <div className="font-semibold p-3 pl-0 text-muted-foreground rounded-b-none flex gap-2">
+            <div className={`flex gap-2 items-center ml-[-8px] ${hasError ? 'text-destructive' : 'text-info'}`}>
               <button
                 onClick={() => setExpanded(!expanded)}
                 className="p-0.5 rounded hover:bg-muted transition-colors"
@@ -306,7 +306,7 @@ function McpCallCell({ toolCall }: ToolCallProps) {
           </div>
 
           {expanded && (
-            <div className={`rounded-xl py-2 ml-4 mt-2 ${hasError ? 'bg-red-50 border border-red-200' : 'bg-[#fafafa]'}`}>
+            <div className={`rounded-xl py-2 ml-4 mt-2 ${hasError ? 'bg-destructive/10 border border-destructive/30' : 'bg-muted'}`}>
               {/* Server URL in debug mode */}
               {debugMode && mcpConfig?.server_url && (
                 <ServerUrlBadge serverUrl={mcpConfig.server_url} />
@@ -326,7 +326,7 @@ function McpCallCell({ toolCall }: ToolCallProps) {
                 )}
                 <SyntaxHighlighter
                   customStyle={{
-                    backgroundColor: "#fafafa",
+                    backgroundColor: "transparent",
                     padding: "8px",
                     paddingLeft: "0px",
                     marginTop: 0,
@@ -350,7 +350,7 @@ function McpCallCell({ toolCall }: ToolCallProps) {
                 {responseJson ? (
                   <SyntaxHighlighter
                     customStyle={{
-                      backgroundColor: "#fafafa",
+                      backgroundColor: "transparent",
                       padding: "8px",
                       paddingLeft: "0px",
                       marginTop: 0,
@@ -361,7 +361,7 @@ function McpCallCell({ toolCall }: ToolCallProps) {
                     {responseJson}
                   </SyntaxHighlighter>
                 ) : (
-                  <div className="text-zinc-500 flex items-center gap-2 py-2">
+                  <div className="text-muted-foreground flex items-center gap-2 py-2">
                     <Clock size={16} /> Waiting for result...
                   </div>
                 )}
@@ -379,9 +379,9 @@ function CodeInterpreterCell({ toolCall }: ToolCallProps) {
   return (
     <div className="flex flex-col w-[70%] relative mb-[-8px]">
       <div className="flex flex-col text-sm rounded-[16px]">
-        <div className="font-semibold p-3 pl-0 text-gray-700 rounded-b-none flex gap-2">
+        <div className="font-semibold p-3 pl-0 text-muted-foreground rounded-b-none flex gap-2">
           <div
-            className="flex gap-2 items-center text-blue-500 ml-[-8px] cursor-pointer"
+            className="flex gap-2 items-center text-info ml-[-8px] cursor-pointer"
             onClick={() => setOpen(!open)}
           >
             <Code2 size={16} />
@@ -395,11 +395,11 @@ function CodeInterpreterCell({ toolCall }: ToolCallProps) {
             )}
           </div>
         </div>
-        <div className="bg-[#fafafa] rounded-xl py-2 ml-4 mt-2">
+        <div className="bg-muted rounded-xl py-2 ml-4 mt-2">
           <div className="mx-6 p-2 text-xs">
             <SyntaxHighlighter
               customStyle={{
-                backgroundColor: "#fafafa",
+                backgroundColor: "transparent",
                 padding: "8px",
                 paddingLeft: "0px",
                 marginTop: 0,
@@ -418,7 +418,7 @@ function CodeInterpreterCell({ toolCall }: ToolCallProps) {
                 key={f.file_id}
                 href={`/api/chat/container_files/content?file_id=${f.file_id}${f.container_id ? `&container_id=${f.container_id}` : ""}${f.filename ? `&filename=${encodeURIComponent(f.filename)}` : ""}`}
                 download
-                className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-[#ededed] text-xs text-zinc-500"
+                className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-secondary text-xs text-muted-foreground"
               >
                 {f.filename || f.file_id}
                 <Download size={12} />
