@@ -13,6 +13,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import { Card } from '@/components/ui/card';
 import { Chrome, Check, Loader2, Shield, Eye, EyeOff, Wrench } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { pingExtension, isChromeBrowser, type ExtensionPingResult } from '@/lib/extension-ping';
@@ -181,7 +182,7 @@ export function StepConnectPlatforms({ className }: StepConnectPlatformsProps) {
 
   if (!isLoaded) {
     return (
-      <div className={`bg-background rounded-xl p-5 border ${className ?? ''}`}>
+      <Card className={`p-5 ${className ?? ''}`}>
         <div className="flex items-center gap-3 mb-4">
           <div className="w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold">2</div>
           <h3 className="font-semibold text-lg">Connect Your Leagues</h3>
@@ -189,24 +190,24 @@ export function StepConnectPlatforms({ className }: StepConnectPlatformsProps) {
         <div className="flex items-center justify-center py-4">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
         </div>
-      </div>
+      </Card>
     );
   }
 
   if (!isSignedIn) {
     return (
-      <div className={`bg-background rounded-xl p-5 border ${className ?? ''}`}>
+      <Card className={`p-5 ${className ?? ''}`}>
         <div className="flex items-center gap-3 mb-4">
           <div className="w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold">2</div>
           <h3 className="font-semibold text-lg">Connect Your Leagues</h3>
         </div>
         <p className="text-sm text-muted-foreground">Sign in first to connect your fantasy platforms.</p>
-      </div>
+      </Card>
     );
   }
 
   return (
-    <div className={`bg-background rounded-xl p-5 border ${className ?? ''}`}>
+    <Card className={`p-5 ${className ?? ''}`}>
       <div className="flex items-center gap-3 mb-4">
         <div className="w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold">2</div>
         <h3 className="font-semibold text-lg">Connect Your Leagues</h3>
@@ -239,12 +240,12 @@ export function StepConnectPlatforms({ className }: StepConnectPlatformsProps) {
             </div>
           ) : espnStatus === 'connected' ? (
             <div className="space-y-2">
-              <div className="flex items-center gap-2 text-sm text-green-600 font-medium">
+              <div className="flex items-center gap-2 text-sm text-success font-medium">
                 <Check className="h-4 w-4" />
                 Extension connected
               </div>
               {hasCredentials && (
-                <div className="flex items-center gap-2 text-sm text-green-600">
+                <div className="flex items-center gap-2 text-sm text-success">
                   <Check className="h-4 w-4" />
                   Credentials saved
                 </div>
@@ -275,7 +276,7 @@ export function StepConnectPlatforms({ className }: StepConnectPlatformsProps) {
                         <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin" /></div>
                       ) : (
                         <>
-                          {espnError && <div className="p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">{espnError}</div>}
+                          {espnError && <div className="p-3 bg-destructive/10 border border-destructive/30 rounded text-sm text-destructive">{espnError}</div>}
                           <div className="space-y-2">
                             <Label htmlFor="swid">SWID</Label>
                             <Input id="swid" type={showCredentials ? 'text' : 'password'} value={swid} onChange={(e) => setSwid(e.target.value)} />
@@ -304,7 +305,7 @@ export function StepConnectPlatforms({ className }: StepConnectPlatformsProps) {
                 </Dialog>
               </div>
               {hasCredentials && (
-                <div className="flex items-center gap-2 text-sm text-green-600">
+                <div className="flex items-center gap-2 text-sm text-success">
                   <Check className="h-4 w-4" />
                   Credentials saved
                 </div>
@@ -324,7 +325,7 @@ export function StepConnectPlatforms({ className }: StepConnectPlatformsProps) {
               Checking...
             </div>
           ) : yahooStatus === 'connected' ? (
-            <div className="flex items-center gap-2 text-sm text-green-600 font-medium">
+            <div className="flex items-center gap-2 text-sm text-success font-medium">
               <Check className="h-4 w-4" />
               Connected
             </div>
@@ -335,6 +336,6 @@ export function StepConnectPlatforms({ className }: StepConnectPlatformsProps) {
           )}
         </div>
       </div>
-    </div>
+    </Card>
   );
 }

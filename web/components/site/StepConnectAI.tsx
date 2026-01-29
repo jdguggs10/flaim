@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useAuth } from '@clerk/nextjs';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { Copy, Check, Info } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
@@ -34,7 +35,7 @@ export function StepConnectAI() {
   const canShowConnectors = isLoaded && isSignedIn;
 
   return (
-    <div className="bg-background rounded-xl p-5 border flex flex-col">
+    <Card className="p-5 flex flex-col">
       <div className="flex items-center gap-3 mb-4">
         <div className="w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold">
           3
@@ -130,7 +131,7 @@ export function StepConnectAI() {
                     title="Copy name"
                   >
                     {copiedValue === name ? (
-                      <Check className="h-3.5 w-3.5 text-green-500" />
+                      <Check className="h-3.5 w-3.5 text-success" />
                     ) : (
                       <Copy className="h-3.5 w-3.5" />
                     )}
@@ -152,7 +153,7 @@ export function StepConnectAI() {
                     title="Copy URL"
                   >
                     {copiedValue === url ? (
-                      <Check className="h-3.5 w-3.5 text-green-500" />
+                      <Check className="h-3.5 w-3.5 text-success" />
                     ) : (
                       <Copy className="h-3.5 w-3.5" />
                     )}
@@ -163,6 +164,6 @@ export function StepConnectAI() {
           ))}
         </div>
       )}
-    </div>
+    </Card>
   );
 }

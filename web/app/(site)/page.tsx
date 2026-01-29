@@ -1,6 +1,7 @@
 import { SignedIn, SignedOut } from '@clerk/nextjs';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { User, Check } from 'lucide-react';
 import { StepConnectPlatforms } from '@/components/site/StepConnectPlatforms';
 import { StepConnectAI } from '@/components/site/StepConnectAI';
@@ -23,7 +24,7 @@ export default function LandingPage() {
         <div className="container max-w-xl mx-auto px-4">
           <div className="flex flex-col gap-4">
             {/* Step 1: Create Account */}
-            <div className="bg-background rounded-xl p-5 border flex flex-col">
+            <Card className="p-5 flex flex-col">
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold">
                   1
@@ -42,12 +43,12 @@ export default function LandingPage() {
                 </Link>
               </SignedOut>
               <SignedIn>
-                <div className="flex items-center gap-2 text-sm text-green-600 font-medium">
+                <div className="flex items-center gap-2 text-sm text-success font-medium">
                   <Check className="h-4 w-4" />
                   Signed in
                 </div>
               </SignedIn>
-            </div>
+            </Card>
 
             {/* Step 2: Connect Platforms */}
             <StepConnectPlatforms />
