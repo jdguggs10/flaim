@@ -39,11 +39,11 @@ export function EspnHeaderButton() {
   }, []);
 
   const statusColor = status === "valid"
-    ? "bg-green-500"
+    ? "bg-success"
     : status === "missing"
-      ? "bg-red-500"
+      ? "bg-destructive"
       : status === "error"
-        ? "bg-amber-500"
+        ? "bg-warning"
         : "bg-muted-foreground";
 
   const statusLabel = status === "valid"
@@ -78,17 +78,17 @@ export function EspnHeaderButton() {
                   Checking
                 </span>
               ) : status === "valid" ? (
-                <span className="flex items-center gap-1 text-green-600">
+                <span className="flex items-center gap-1 text-success">
                   <Check className="h-3 w-3" />
                   Stored
                 </span>
               ) : status === "missing" ? (
-                <span className="flex items-center gap-1 text-red-600">
+                <span className="flex items-center gap-1 text-destructive">
                   <X className="h-3 w-3" />
                   Not configured
                 </span>
               ) : (
-                <span className="flex items-center gap-1 text-amber-600">
+                <span className="flex items-center gap-1 text-warning">
                   <X className="h-3 w-3" />
                   Check failed
                 </span>
@@ -123,7 +123,7 @@ export function EspnHeaderButton() {
           )}
 
           {status === "error" && (
-            <p className="text-xs text-amber-600">
+            <p className="text-xs text-warning">
               Could not verify credential status. Try refreshing.
             </p>
           )}

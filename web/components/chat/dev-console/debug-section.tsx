@@ -127,7 +127,7 @@ export function DebugSection() {
             variant="outline"
             size="sm"
             onClick={clearConversation}
-            className="w-full text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+            className="w-full text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
           >
             Clear Conversation
           </Button>
@@ -148,9 +148,9 @@ export function DebugSection() {
                   ? `${item.metadata.durationMs}ms`
                   : "—";
                 const statusClass = item.status === "completed"
-                  ? "text-green-600"
+                  ? "text-success"
                   : item.status === "failed"
-                    ? "text-red-600"
+                    ? "text-destructive"
                     : "text-muted-foreground";
 
                 return (
@@ -164,7 +164,7 @@ export function DebugSection() {
                       </span>
                     </div>
                     {item.metadata?.error && (
-                      <div className="text-[10px] text-red-600 break-words">
+                      <div className="text-[10px] text-destructive break-words">
                         {item.metadata.error}
                       </div>
                     )}

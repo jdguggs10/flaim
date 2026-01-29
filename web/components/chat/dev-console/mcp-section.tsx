@@ -135,14 +135,14 @@ function ServerCard({ server }: { server: McpServerInfo }) {
     switch (connectionState.status) {
       case "connected":
         return (
-          <span className="flex items-center gap-1 text-xs text-green-600">
+          <span className="flex items-center gap-1 text-xs text-success">
             <Check className="h-3 w-3" />
             Connected
           </span>
         );
       case "error":
         return (
-          <span className="flex items-center gap-1 text-xs text-red-600">
+          <span className="flex items-center gap-1 text-xs text-destructive">
             <X className="h-3 w-3" />
             Error
           </span>
@@ -212,7 +212,7 @@ function ServerCard({ server }: { server: McpServerInfo }) {
 
       {/* Error message */}
       {connectionState.error && (
-        <div className="text-xs text-red-600 bg-red-50 dark:bg-red-900/20 px-2 py-1 rounded">
+        <div className="text-xs text-destructive bg-destructive/10 px-2 py-1 rounded">
           {connectionState.error}
         </div>
       )}

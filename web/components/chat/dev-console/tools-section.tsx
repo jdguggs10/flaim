@@ -91,9 +91,9 @@ function ServerToolsGroup({
           {toolsState.status === "loading" ? (
             <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
           ) : toolsState.status === "connected" ? (
-            <Check className="h-3 w-3 text-green-600" />
+            <Check className="h-3 w-3 text-success" />
           ) : toolsState.status === "error" ? (
-            <X className="h-3 w-3 text-red-600" />
+            <X className="h-3 w-3 text-destructive" />
           ) : null}
 
           {/* Refresh button */}
@@ -126,7 +126,7 @@ function ServerToolsGroup({
 
           {/* Error message */}
           {toolsState.error && (
-            <div className="text-xs text-amber-600 bg-amber-50 dark:bg-amber-900/20 px-2 py-1 rounded">
+            <div className="text-xs text-warning bg-warning/10 px-2 py-1 rounded">
               {toolsState.error}
             </div>
           )}

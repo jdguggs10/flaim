@@ -72,7 +72,7 @@ export default function WebSearchSettings() {
             id="region"
             type="text"
             placeholder="Region"
-            className="bg-white border text-sm flex-1 text-zinc-900 placeholder:text-zinc-400"
+            className="bg-card border text-sm flex-1 text-foreground placeholder:text-muted-foreground"
             value={webSearchConfig.user_location?.region ?? ""}
             onChange={(e) => handleLocationChange("region", e.target.value)}
           />
@@ -86,7 +86,7 @@ export default function WebSearchSettings() {
             id="city"
             type="text"
             placeholder="City"
-            className="bg-white border text-sm flex-1 text-zinc-900 placeholder:text-zinc-400"
+            className="bg-card border text-sm flex-1 text-foreground placeholder:text-muted-foreground"
             value={webSearchConfig.user_location?.city ?? ""}
             onChange={(e) => handleLocationChange("city", e.target.value)}
           />

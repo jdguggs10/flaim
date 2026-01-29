@@ -36,9 +36,9 @@ export function AccountHeaderButton() {
   };
 
   const statusColor = tokenStatus === "valid"
-    ? "bg-green-500"
+    ? "bg-success"
     : tokenStatus === "expired"
-      ? "bg-red-500"
+      ? "bg-destructive"
       : "bg-muted-foreground";
 
   const statusLabel = tokenStatus === "valid"
@@ -87,12 +87,12 @@ export function AccountHeaderButton() {
                     checking
                   </span>
                 ) : tokenStatus === "valid" ? (
-                  <span className="flex items-center gap-1 text-green-600">
+                  <span className="flex items-center gap-1 text-success">
                     <Check className="h-3 w-3" />
                     valid
                   </span>
                 ) : (
-                  <span className="flex items-center gap-1 text-red-600">
+                  <span className="flex items-center gap-1 text-destructive">
                     <X className="h-3 w-3" />
                     expired
                   </span>

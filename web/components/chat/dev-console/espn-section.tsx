@@ -50,21 +50,21 @@ export function EspnSection() {
         );
       case "valid":
         return (
-          <span className="flex items-center gap-1 text-xs text-green-600">
+          <span className="flex items-center gap-1 text-xs text-success">
             <Check className="h-3 w-3" />
             Stored
           </span>
         );
       case "missing":
         return (
-          <span className="flex items-center gap-1 text-xs text-red-600">
+          <span className="flex items-center gap-1 text-xs text-destructive">
             <X className="h-3 w-3" />
             Not configured
           </span>
         );
       case "error":
         return (
-          <span className="flex items-center gap-1 text-xs text-amber-600">
+          <span className="flex items-center gap-1 text-xs text-warning">
             <X className="h-3 w-3" />
             Check failed
           </span>
@@ -115,7 +115,7 @@ export function EspnSection() {
         )}
 
         {status === "error" && (
-          <p className="text-xs text-amber-600">
+          <p className="text-xs text-warning">
             Could not verify credential status. Try refreshing.
           </p>
         )}

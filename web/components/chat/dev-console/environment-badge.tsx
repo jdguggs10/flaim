@@ -5,18 +5,18 @@ type Environment = "development" | "preview" | "production";
 const ENV_CONFIG: Record<Environment, { label: string; color: string; textColor: string }> = {
   development: {
     label: "DEV",
-    color: "bg-green-500",
-    textColor: "text-white",
+    color: "bg-success",
+    textColor: "text-success-foreground",
   },
   preview: {
     label: "PREVIEW",
-    color: "bg-yellow-500",
-    textColor: "text-black",
+    color: "bg-warning",
+    textColor: "text-warning-foreground",
   },
   production: {
     label: "PROD",
-    color: "bg-red-500",
-    textColor: "text-white",
+    color: "bg-destructive",
+    textColor: "text-destructive-foreground",
   },
 };
 

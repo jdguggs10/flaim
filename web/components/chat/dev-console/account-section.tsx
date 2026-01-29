@@ -82,12 +82,12 @@ export function AccountSection() {
             {tokenStatus === "checking" ? (
               <span className="text-muted-foreground">checking...</span>
             ) : tokenStatus === "valid" ? (
-              <span className="flex items-center gap-1 text-green-600">
+              <span className="flex items-center gap-1 text-success">
                 <Check className="h-3 w-3" />
                 valid
               </span>
             ) : (
-              <span className="flex items-center gap-1 text-red-600">
+              <span className="flex items-center gap-1 text-destructive">
                 <X className="h-3 w-3" />
                 expired
               </span>

@@ -31,14 +31,14 @@ function SetupBanner({ status }: { status: { hasCredentials: boolean; hasLeagues
   if (!message) return null;
 
   return (
-    <div className="mx-4 mb-4 p-4 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-3">
-      <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0" />
+    <div className="mx-4 mb-4 p-4 bg-warning/10 border border-warning/30 rounded-lg flex items-center gap-3">
+      <AlertCircle className="h-5 w-5 text-warning flex-shrink-0" />
       <div className="flex-1">
-        <p className="text-sm text-amber-800">{message}</p>
+        <p className="text-sm text-warning">{message}</p>
       </div>
       <Link
         href="/leagues"
-        className="flex items-center gap-1 text-sm font-medium text-amber-700 hover:text-amber-900 transition-colors"
+        className="flex items-center gap-1 text-sm font-medium text-warning hover:text-warning transition-colors"
       >
         {linkText}
         <ArrowRight className="h-4 w-4" />

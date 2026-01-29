@@ -84,22 +84,22 @@ export default function SportPlatformConfig() {
 
       {/* Status Messages */}
       {shouldShowMcp && (
-        <div className="p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
-          <div className="flex items-center gap-2 text-green-800 dark:text-green-300 text-sm font-medium">
+        <div className="p-3 bg-success/10 border border-success/30 rounded-lg">
+          <div className="flex items-center gap-2 text-success text-sm font-medium">
             ⚾ ESPN Fantasy Baseball Ready
           </div>
-          <div className="text-green-700 dark:text-green-400 text-xs mt-1">
+          <div className="text-success text-xs mt-1">
             Configuration complete. Enter credentials below to access your leagues.
           </div>
         </div>
       )}
       
       {!shouldShowMcp && (selectedSport !== "none" || selectedPlatform !== "None") && (
-        <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
-          <div className="text-yellow-800 dark:text-yellow-300 text-sm font-medium">
+        <div className="p-3 bg-warning/10 border border-warning/30 rounded-lg">
+          <div className="text-warning text-sm font-medium">
             Select both Baseball + ESPN
           </div>
-          <div className="text-yellow-700 dark:text-yellow-400 text-xs mt-1">
+          <div className="text-warning text-xs mt-1">
             Current selection: {selectedSport} + {selectedPlatform}
           </div>
         </div>
