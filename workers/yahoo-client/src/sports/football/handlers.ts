@@ -146,7 +146,7 @@ async function handleGetRoster(
   authHeader?: string,
   correlationId?: string
 ): Promise<ExecuteResponse> {
-  const { team_id, week } = params;
+  const { team_id, league_id, week } = params;
 
   if (!team_id) {
     return {
@@ -156,12 +156,15 @@ async function handleGetRoster(
     };
   }
 
+  // Yahoo API requires full team key (e.g., "461.l.12345.t.10"), not just "10"
+  const teamKey = team_id.includes('.') ? team_id : `${league_id}.t.${team_id}`;
+
   try {
     const credentials = await getYahooCredentials(env, authHeader, correlationId);
     requireCredentials(credentials, 'get_roster');
 
     const weekParam = week ? `;week=${week}` : '';
-    const response = await yahooFetch(`/team/${team_id}/roster${weekParam}`, { credentials });
+    const response = await yahooFetch(`/team/${teamKey}/roster${weekParam}`, { credentials });
 
     if (!response.ok) {
       handleYahooError(response);
