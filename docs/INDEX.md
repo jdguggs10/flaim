@@ -34,7 +34,6 @@ This file is the canonical map for Flaim docs. Always read this first and use it
 ### Dev docs (temporal / work-in-progress)
 - `docs/dev/`: Active plans, in-progress feature notes, and short-lived checklists. These are expected to change frequently.
 - `docs/dev/TODO.md`: Active backlog items. When an item becomes permanent knowledge, move it to a permanent doc.
-- `docs/dev/ADD_YAHOO_PLATFORM.md`: In-progress Yahoo platform design and rollout notes.
 - `docs/dev/ui-consistency.md`: Design token rules and automated check for frontend color consistency.
 
 ### Component READMEs

@@ -6,7 +6,7 @@ echo "Checking for hard-coded palette classes..."
 # Allow-list: bg-black/50 and bg-black/80 are used for overlays (dialog.tsx)
 VIOLATIONS=$(
   grep -rn --include='*.tsx' --include='*.ts' \
-    -E 'bg-(white|gray|red|green|blue|amber|yellow|slate|stone|zinc)|text-(black|white|gray|red|green|blue|amber|yellow|slate|stone|zinc)|bg-\[#' \
+    -E 'bg-(white|gray|red|green|blue|amber|yellow|slate|stone|zinc)|text-(black|white|gray|red|green|blue|amber|yellow|slate|stone|zinc)|outline-(black|white|gray|red|green|blue|amber|yellow|slate|stone|zinc)|ring-(black|white|gray|red|green|blue|amber|yellow|slate|stone|zinc)|border-(black|white|gray|red|green|blue|amber|yellow|slate|stone|zinc)|bg-\[#' \
     web/components web/app \
     | grep -v 'node_modules' \
     | grep -v 'bg-black/[0-9]' \

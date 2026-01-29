@@ -38,7 +38,7 @@ function SetupBanner({ status }: { status: { hasCredentials: boolean; hasLeagues
       </div>
       <Link
         href="/leagues"
-        className="flex items-center gap-1 text-sm font-medium text-warning hover:text-warning transition-colors"
+        className="flex items-center gap-1 text-sm font-medium text-warning transition-colors"
       >
         {linkText}
         <ArrowRight className="h-4 w-4" />
