@@ -75,15 +75,15 @@ export default function ConsentScreen({
           <div className="text-sm font-medium">The assistant will be able to:</div>
           <div className="space-y-2">
             <div className="flex items-start gap-2 text-sm">
-              <CheckCircle className="h-4 w-4 text-green-500 mt-0.5 shrink-0" />
+              <CheckCircle className="h-4 w-4 text-success mt-0.5 shrink-0" />
               <span>View your ESPN fantasy league information</span>
             </div>
             <div className="flex items-start gap-2 text-sm">
-              <CheckCircle className="h-4 w-4 text-green-500 mt-0.5 shrink-0" />
+              <CheckCircle className="h-4 w-4 text-success mt-0.5 shrink-0" />
               <span>Access your team rosters and matchups</span>
             </div>
             <div className="flex items-start gap-2 text-sm">
-              <CheckCircle className="h-4 w-4 text-green-500 mt-0.5 shrink-0" />
+              <CheckCircle className="h-4 w-4 text-success mt-0.5 shrink-0" />
               <span>View league standings and statistics</span>
             </div>
           </div>

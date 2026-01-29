@@ -827,7 +827,7 @@ function LeaguesPageContent() {
         )}
 
         {leagueNotice && (
-          <Alert className="bg-blue-50 border-blue-200 text-blue-900 dark:bg-blue-900/20 dark:border-blue-800 dark:text-blue-200">
+          <Alert className="bg-info/10 border-info/30 text-info">
             <CheckCircle2 className="h-4 w-4" />
             <AlertDescription>{leagueNotice}</AlertDescription>
           </Alert>
@@ -840,7 +840,7 @@ function LeaguesPageContent() {
               <CardTitle className="text-lg">Active Leagues</CardTitle>
               <Popover>
                 <PopoverTrigger asChild>
-                  <button type="button" className="text-muted-foreground hover:text-yellow-500 transition-colors" aria-label="Star defaults info">
+                  <button type="button" className="text-muted-foreground hover:text-warning transition-colors" aria-label="Star defaults info">
                     <Star className="h-4 w-4" />
                   </button>
                 </PopoverTrigger>
@@ -877,8 +877,8 @@ function LeaguesPageContent() {
                         size="icon"
                         className={`h-6 w-6 ${
                           defaultSport === sport
-                            ? 'text-yellow-500'
-                            : 'text-muted-foreground hover:text-yellow-500'
+                            ? 'text-warning'
+                            : 'text-muted-foreground hover:text-warning'
                         }`}
                         onClick={() => handleSetDefaultSport(sport)}
                         disabled={settingSportDefault === sport}
@@ -923,8 +923,8 @@ function LeaguesPageContent() {
                                       <button
                                         className={`shrink-0 p-0.5 rounded hover:bg-muted ${
                                           isLeagueDefault
-                                            ? 'text-yellow-500'
-                                            : 'text-muted-foreground hover:text-yellow-500'
+                                            ? 'text-warning'
+                                            : 'text-muted-foreground hover:text-warning'
                                         }`}
                                         onClick={() => handleSetDefault(
                                           group.platform,
@@ -1135,7 +1135,7 @@ function LeaguesPageContent() {
                     <div className="flex items-center gap-2">
                       <CardTitle className="text-lg">ESPN</CardTitle>
                       {hasCredentials && (
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-success/20 text-success">
                           Credentials Saved
                         </span>
                       )}
@@ -1337,7 +1337,7 @@ function LeaguesPageContent() {
                   <div className="p-4 border rounded-lg bg-muted/50 space-y-4">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <CheckCircle2 className="h-5 w-5 text-green-600" />
+                        <CheckCircle2 className="h-5 w-5 text-success" />
                         <span className="font-medium">League verified</span>
                       </div>
                       <Button variant="ghost" size="icon" onClick={handleCancelVerification}>
@@ -1416,7 +1416,7 @@ function LeaguesPageContent() {
                     <div className="flex items-center gap-2">
                       <CardTitle className="text-lg">Yahoo</CardTitle>
                       {isYahooConnected && (
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-success/20 text-success">
                           Connected
                         </span>
                       )}
