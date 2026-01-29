@@ -185,7 +185,7 @@ export function StepConnectPlatforms({ className }: StepConnectPlatformsProps) {
       <Card className={`p-5 ${className ?? ''}`}>
         <div className="flex items-center gap-3 mb-4">
           <div className="w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold">2</div>
-          <h3 className="font-semibold text-lg">Connect Your Leagues</h3>
+          <h3 className="font-semibold text-lg">Connect your Platforms</h3>
         </div>
         <div className="flex items-center justify-center py-4">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -199,7 +199,7 @@ export function StepConnectPlatforms({ className }: StepConnectPlatformsProps) {
       <Card className={`p-5 ${className ?? ''}`}>
         <div className="flex items-center gap-3 mb-4">
           <div className="w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold">2</div>
-          <h3 className="font-semibold text-lg">Connect Your Leagues</h3>
+          <h3 className="font-semibold text-lg">Connect your Platforms</h3>
         </div>
         <p className="text-sm text-muted-foreground">Sign in first to connect your fantasy platforms.</p>
       </Card>
@@ -210,7 +210,7 @@ export function StepConnectPlatforms({ className }: StepConnectPlatformsProps) {
     <Card className={`p-5 ${className ?? ''}`}>
       <div className="flex items-center gap-3 mb-4">
         <div className="w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold">2</div>
-        <h3 className="font-semibold text-lg">Connect Your Leagues</h3>
+        <h3 className="font-semibold text-lg">Connect your Platforms</h3>
         <Popover>
           <PopoverTrigger asChild>
             <button type="button" className="ml-auto text-muted-foreground hover:text-foreground transition-colors" aria-label="Security information">
@@ -245,7 +245,7 @@ export function StepConnectPlatforms({ className }: StepConnectPlatformsProps) {
                 Extension connected
               </div>
               {hasCredentials && (
-                <div className="flex items-center gap-2 text-sm text-success">
+                <div className="flex items-center gap-2 text-sm text-success font-medium">
                   <Check className="h-4 w-4" />
                   Credentials saved
                 </div>
@@ -305,7 +305,7 @@ export function StepConnectPlatforms({ className }: StepConnectPlatformsProps) {
                 </Dialog>
               </div>
               {hasCredentials && (
-                <div className="flex items-center gap-2 text-sm text-success">
+                <div className="flex items-center gap-2 text-sm text-success font-medium">
                   <Check className="h-4 w-4" />
                   Credentials saved
                 </div>
@@ -325,13 +325,18 @@ export function StepConnectPlatforms({ className }: StepConnectPlatformsProps) {
               Checking...
             </div>
           ) : yahooStatus === 'connected' ? (
-            <div className="flex items-center gap-2 text-sm text-success font-medium">
-              <Check className="h-4 w-4" />
-              Connected
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-sm text-success font-medium">
+                <Check className="h-4 w-4" />
+                Connected
+              </div>
+              <Button variant="outline" size="sm" className="w-full" onClick={handleConnectYahoo}>
+                Refresh Yahoo Auth
+              </Button>
             </div>
           ) : (
             <Button variant="outline" size="sm" className="w-full" onClick={handleConnectYahoo}>
-              Connect Yahoo
+              Authenticate Yahoo
             </Button>
           )}
         </div>
