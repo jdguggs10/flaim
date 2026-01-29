@@ -1134,37 +1134,33 @@ function LeaguesPageContent() {
 
           {/* Platform cards */}
           <div className="grid gap-4">
-            <Card>
+            <div className="border rounded-lg bg-background">
               <button
                 type="button"
                 onClick={() => setIsEspnSetupOpen((prev) => !prev)}
                 aria-expanded={isEspnSetupOpen}
                 aria-controls="espn-setup-content"
-                className="w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                className="w-full flex cursor-pointer items-center justify-between p-4 font-medium text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               >
-                <CardHeader className="flex items-start gap-4">
-                  <div className="flex-1 min-w-0 space-y-1">
-                    <div className="flex items-center gap-2">
-                      <CardTitle className="text-lg">ESPN</CardTitle>
-                      {hasCredentials && (
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-success/20 text-success">
-                          Credentials Saved
-                        </span>
-                      )}
-                    </div>
-                    <CardDescription>
-                      Use the extension to update credentials and discover leagues, or add one manually.
-                    </CardDescription>
-                  </div>
-                  <ChevronDown
-                    className={`h-5 w-5 text-muted-foreground transition-transform shrink-0 self-start ${
-                      isEspnSetupOpen ? 'rotate-180' : ''
-                    }`}
-                  />
-                </CardHeader>
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">ESPN</span>
+                  {hasCredentials && (
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-success/20 text-success">
+                      Credentials Saved
+                    </span>
+                  )}
+                </div>
+                <ChevronDown
+                  className={`h-5 w-5 text-muted-foreground transition-transform ${
+                    isEspnSetupOpen ? 'rotate-180' : ''
+                  }`}
+                />
               </button>
               {isEspnSetupOpen && (
-                <CardContent id="espn-setup-content" className="space-y-4">
+                <div id="espn-setup-content" className="px-4 pb-4 space-y-4">
+                  <p className="text-sm text-muted-foreground">
+                    Use the extension to update credentials and discover leagues, or add one manually.
+                  </p>
                   {espnLastUpdated && (
                     <p className="text-xs text-muted-foreground">
                       Last synced: {new Date(espnLastUpdated).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
@@ -1411,43 +1407,39 @@ function LeaguesPageContent() {
                     </div>
                   </div>
                 )}
-                </CardContent>
+                </div>
               )}
-            </Card>
+            </div>
 
-            <Card>
+            <div className="border rounded-lg bg-background">
               <button
                 type="button"
                 onClick={() => setIsYahooSetupOpen((prev) => !prev)}
                 aria-expanded={isYahooSetupOpen}
                 aria-controls="yahoo-setup-content"
-                className="w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                className="w-full flex cursor-pointer items-center justify-between p-4 font-medium text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               >
-                <CardHeader className="flex items-start gap-4">
-                  <div className="flex-1 min-w-0 space-y-1">
-                    <div className="flex items-center gap-2">
-                      <CardTitle className="text-lg">Yahoo</CardTitle>
-                      {isYahooConnected && (
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-success/20 text-success">
-                          Auth Connected
-                        </span>
-                      )}
-                    </div>
-                    <CardDescription>
-                      {isYahooConnected
-                        ? 'Use the Refresh Leagues button to trigger a fresh pull of your leagues, teams, and seasons from Yahoo.'
-                        : 'Connect your Yahoo account to add leagues.'}
-                    </CardDescription>
-                  </div>
-                  <ChevronDown
-                    className={`h-5 w-5 text-muted-foreground transition-transform shrink-0 self-start ${
-                      isYahooSetupOpen ? 'rotate-180' : ''
-                    }`}
-                  />
-                </CardHeader>
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">Yahoo</span>
+                  {isYahooConnected && (
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-success/20 text-success">
+                      Auth Connected
+                    </span>
+                  )}
+                </div>
+                <ChevronDown
+                  className={`h-5 w-5 text-muted-foreground transition-transform ${
+                    isYahooSetupOpen ? 'rotate-180' : ''
+                  }`}
+                />
               </button>
               {isYahooSetupOpen && (
-                <CardContent id="yahoo-setup-content" className="space-y-3">
+                <div id="yahoo-setup-content" className="px-4 pb-4 space-y-3">
+                  <p className="text-sm text-muted-foreground">
+                    {isYahooConnected
+                      ? 'Use the Refresh Leagues button to trigger a fresh pull of your leagues, teams, and seasons from Yahoo.'
+                      : 'Connect your Yahoo account to add leagues.'}
+                  </p>
                   {isCheckingYahoo ? (
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <Loader2 className="h-4 w-4 animate-spin" />
@@ -1505,9 +1497,9 @@ function LeaguesPageContent() {
                       </Button>
                     </div>
                   )}
-                </CardContent>
+                </div>
               )}
-            </Card>
+            </div>
           </div>
         </div>
       </div>
