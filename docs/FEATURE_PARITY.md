@@ -2,7 +2,7 @@
 
 This document tracks implementation status of MCP tools across platforms and sports.
 
-**Last updated:** 2026-01-27
+**Last updated:** 2026-01-29
 
 ## Tool Implementation Status
 
@@ -12,11 +12,11 @@ The unified gateway (`fantasy-mcp`) exposes all tools. Platform workers implemen
 |------|:-------------:|:-------------:|:--------------:|:--------------:|
 | `get_user_session` | ✅ | ✅ | ✅ | ✅ |
 | `get_ancient_history` | ✅ | ✅ | ✅ | ✅ |
-| `get_league_info` | ✅ | ✅ | ✅ | ❌ |
-| `get_standings` | ✅ | ✅ | ✅ | ❌ |
-| `get_matchups` | ✅ | ✅ | ✅ | ❌ |
-| `get_roster` | ✅ | ✅ | ✅ | ❌ |
-| `get_free_agents` | ✅ | ✅ | ✅ | ❌ |
+| `get_league_info` | ✅ | ✅ | ✅ | ✅ |
+| `get_standings` | ✅ | ✅ | ✅ | ✅ |
+| `get_matchups` | ✅ | ✅ | ✅ | ✅ |
+| `get_roster` | ✅ | ✅ | ✅ | ✅ |
+| `get_free_agents` | ✅ | ✅ | ✅ | ✅ |
 
 **Legend:** ✅ Implemented | ❌ Not implemented | — Not applicable
 
@@ -26,9 +26,7 @@ The unified gateway (`fantasy-mcp`) exposes all tools. Platform workers implemen
 - **Phase 0**: Gateway scaffolding (ESPN migration)
 - **Phase 1**: Yahoo OAuth + league discovery
 - **Phase 2**: Yahoo Football (5/5 tools) ✅
-
-### In Progress
-- **Phase 3**: Yahoo Baseball - Add all 5 handlers
+- **Phase 3**: Yahoo Baseball (5/5 tools) ✅
 
 ### Planned
 - **Phase 4**: Additional sports (Basketball, Hockey)
@@ -43,12 +41,12 @@ The unified gateway (`fantasy-mcp`) exposes all tools. Platform workers implemen
 - [x] `get_roster`
 - [x] `get_free_agents`
 
-### Yahoo Baseball (Phase 3) — 0/5 Complete
-- [ ] `get_league_info`
-- [ ] `get_standings`
-- [ ] `get_matchups`
-- [ ] `get_roster`
-- [ ] `get_free_agents`
+### Yahoo Baseball (Phase 3) — 5/5 Complete ✅
+- [x] `get_league_info`
+- [x] `get_standings`
+- [x] `get_matchups`
+- [x] `get_roster`
+- [x] `get_free_agents`
 
 ## Architecture
 
@@ -65,8 +63,8 @@ fantasy-mcp (gateway)
 Platform clients:
 ├── espn-client/sports/football/handlers.ts  (5/5 tools)
 ├── espn-client/sports/baseball/handlers.ts  (5/5 tools)
-├── yahoo-client/sports/football/handlers.ts (3/5 tools)
-└── yahoo-client/sports/baseball/handlers.ts (0/5 tools) — Phase 3
+├── yahoo-client/sports/football/handlers.ts (5/5 tools)
+└── yahoo-client/sports/baseball/handlers.ts (5/5 tools)
 ```
 
 ## Adding a New Tool
