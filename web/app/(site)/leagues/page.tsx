@@ -872,28 +872,35 @@ function LeaguesPageContent() {
                     <div className="flex items-center gap-2 font-medium text-muted-foreground">
                       <span className="text-lg">{getSportEmoji(sport)}</span>
                       <span className="capitalize text-base">{sport}</span>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className={`h-6 w-6 ${
-                          defaultSport === sport
-                            ? 'text-warning'
-                            : 'text-muted-foreground hover:text-warning'
-                        }`}
-                        onClick={() => handleSetDefaultSport(sport)}
-                        disabled={settingSportDefault === sport}
-                        title={defaultSport === sport ? 'Default sport' : 'Set as default sport'}
-                      >
-                        {settingSportDefault === sport ? (
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                        ) : (
-                          <Star className={`h-3 w-3 ${defaultSport === sport ? 'fill-current' : ''}`} />
-                        )}
-                      </Button>
-                      {defaultSport === sport && (
-                        <span className="text-sm text-warning">
-                          default
-                        </span>
+                      {defaultSport === sport ? (
+                        <button
+                          onClick={() => handleSetDefaultSport(sport)}
+                          disabled={settingSportDefault === sport}
+                          className="flex items-center gap-1 px-2 py-1 rounded-full bg-warning/20 text-warning text-xs hover:bg-warning/30 transition-colors"
+                          title="Default sport (click to unset)"
+                        >
+                          {settingSportDefault === sport ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <Star className="h-3 w-3 fill-current" />
+                          )}
+                          <span>default</span>
+                        </button>
+                      ) : (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 text-muted-foreground hover:text-warning"
+                          onClick={() => handleSetDefaultSport(sport)}
+                          disabled={settingSportDefault === sport}
+                          title="Set as default sport"
+                        >
+                          {settingSportDefault === sport ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <Star className="h-3 w-3" />
+                          )}
+                        </Button>
                       )}
                     </div>
 
