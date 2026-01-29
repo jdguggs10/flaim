@@ -104,7 +104,7 @@ export default function LandingPage() {
                 </span>
               </summary>
               <div className="px-4 pb-4 text-sm text-muted-foreground space-y-2">
-                <p>Because how AIs connect with external data is brand new technology, the MCP protocol was just created in late 2024, and standard implementations are still forming. Trust me, I&apos;ll add ChatGPT and Gemini as soon as I can.</p>
+                <p>The MCP protocol was just created in late 2024, and standard implementations are still forming. Trust me, I&apos;ll add ChatGPT and Gemini as soon as I can.</p>
               </div>
             </details>
 
