@@ -40,7 +40,7 @@ export function StepConnectAI() {
         <div className="w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold">
           3
         </div>
-        <h3 className="font-semibold text-lg">Connect Your AI</h3>
+        <h3 className="font-semibold text-lg">Connect your AI</h3>
       </div>
 
       <p className="text-sm text-muted-foreground mb-4">
