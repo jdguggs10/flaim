@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { Shield, CheckCircle, Loader2, AlertCircle } from 'lucide-react';
+import { Shield, CheckCircle, Loader2, AlertCircle, Flame } from 'lucide-react';
 
 interface OAuthParams {
   redirectUri: string;
@@ -60,12 +60,12 @@ export default function ConsentScreen({
         {/* App info */}
         <div className="p-4 bg-muted rounded-lg">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-background border flex items-center justify-center text-lg font-bold">
-              C
+            <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+              <Flame className="h-6 w-6 text-primary" />
             </div>
             <div>
-              <div className="font-medium">AI Assistant Connector</div>
-              <div className="text-sm text-muted-foreground">Claude or ChatGPT</div>
+              <div className="font-medium">Flaim Fantasy Connector</div>
+              <div className="text-sm text-muted-foreground">for Claude or ChatGPT</div>
             </div>
           </div>
         </div>
@@ -76,15 +76,15 @@ export default function ConsentScreen({
           <div className="space-y-2">
             <div className="flex items-start gap-2 text-sm">
               <CheckCircle className="h-4 w-4 text-success mt-0.5 shrink-0" />
-              <span>View your ESPN fantasy league information</span>
+              <span>View your fantasy league data (ESPN, Yahoo)</span>
             </div>
             <div className="flex items-start gap-2 text-sm">
               <CheckCircle className="h-4 w-4 text-success mt-0.5 shrink-0" />
-              <span>Access your team rosters and matchups</span>
+              <span>Access team rosters, matchups, and standings</span>
             </div>
             <div className="flex items-start gap-2 text-sm">
               <CheckCircle className="h-4 w-4 text-success mt-0.5 shrink-0" />
-              <span>View league standings and statistics</span>
+              <span>Read-only access - cannot modify your teams</span>
             </div>
           </div>
         </div>
