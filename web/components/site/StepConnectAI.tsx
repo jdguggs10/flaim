@@ -56,7 +56,9 @@ export function StepConnectAI() {
           className="px-3 py-1.5 bg-primary/10 rounded-lg border border-primary/30 hover:bg-primary/20 transition-colors"
         >
           <div className="text-sm font-medium">Claude</div>
-          <div className="text-xs text-primary">Ready today</div>
+          <div className="text-xs text-primary inline-flex items-center gap-1">
+            <span>Ready today</span>
+          </div>
         </a>
         <div className="px-3 py-1.5 bg-muted rounded-lg border">
           <div className="text-sm font-medium">ChatGPT</div>
