@@ -14,7 +14,7 @@ export default function McpToolsList({ item }: Props) {
       <div className="flex items-start mt-1 gap-2">
         <div
           className={
-            `text-zinc-500 text-xs whitespace-pre-wrap transition-all duration-200 ` +
+            `text-muted-foreground text-xs whitespace-pre-wrap transition-all duration-200 ` +
             (expanded ? "line-clamp-none" : "line-clamp-1 overflow-hidden")
           }
           style={{ maxWidth: 400 }}
@@ -22,7 +22,7 @@ export default function McpToolsList({ item }: Props) {
           {description}
         </div>
         <div
-          className="flex items-center text-xs text-gray-500 focus:outline-none select-none cursor-pointer"
+          className="flex items-center text-xs text-muted-foreground focus:outline-none select-none cursor-pointer"
           onClick={() => setExpanded((prev) => !prev)}
         >
           <ChevronRight
@@ -39,8 +39,8 @@ export default function McpToolsList({ item }: Props) {
   return (
     <div className="flex flex-col">
       <div className="flex">
-        <div className="mr-4 rounded-[16px] px-4 py-2 md:mr-24 text-black bg-white font-light">
-          <div className="text-sm mb-2 text-blue-500">
+        <div className="mr-4 rounded-[16px] px-4 py-2 md:mr-24 text-foreground bg-card font-light">
+          <div className="text-sm mb-2 text-info">
             Server <span className="font-semibold">{item.server_label}</span>{" "}
             tools list
           </div>
@@ -48,7 +48,7 @@ export default function McpToolsList({ item }: Props) {
             {item.tools.map((tool) => (
               <div key={tool.name}>
                 <div className="flex gap-2 items-center text-xs">
-                  <div className="bg-blue-100 text-blue-500 rounded-md p-1">
+                  <div className="bg-info/10 text-info rounded-md p-1">
                     <Code size={12} />
                   </div>
                   <div className="font-mono">{tool.name}</div>

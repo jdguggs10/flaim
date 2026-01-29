@@ -54,7 +54,7 @@ export default function FileSearchSetup() {
 
   return (
     <div>
-      <div className="text-sm text-zinc-500">
+      <div className="text-sm text-muted-foreground">
         Upload a file to create a new vector store, or use an existing one.
       </div>
       <div className="flex items-center gap-2 mt-2 h-10">
@@ -65,7 +65,7 @@ export default function FileSearchSetup() {
           {vectorStore?.id ? (
             <div className="flex items-center justify-between flex-1 min-w-0">
               <div className="flex items-center gap-2 min-w-0">
-                <div className="text-zinc-400  text-xs font-mono flex-1 text-ellipsis truncate">
+                <div className="text-muted-foreground  text-xs font-mono flex-1 text-ellipsis truncate">
                   {vectorStore.id}
                 </div>
                 <TooltipProvider delayDuration={200}>
@@ -74,7 +74,7 @@ export default function FileSearchSetup() {
                       <CircleX
                         onClick={() => unlinkStore()}
                         size={16}
-                        className="cursor-pointer text-zinc-400 mb-0.5 shrink-0 mt-0.5 hover:text-zinc-700 transition-all"
+                        className="cursor-pointer text-muted-foreground mb-0.5 shrink-0 mt-0.5 hover:text-foreground transition-all"
                       />
                     </TooltipTrigger>
                     <TooltipContent className="mr-2">
@@ -91,7 +91,7 @@ export default function FileSearchSetup() {
                 placeholder="ID (vs_XXXX...)"
                 value={newStoreId}
                 onChange={(e) => setNewStoreId(e.target.value)}
-                className="border border-zinc-300 rounded text-sm bg-white"
+                className="border border-border rounded text-sm bg-card"
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     handleAddStore(newStoreId);
@@ -99,7 +99,7 @@ export default function FileSearchSetup() {
                 }}
               />
               <div
-                className="text-zinc-400 text-sm px-1 transition-colors hover:text-zinc-600 cursor-pointer"
+                className="text-muted-foreground text-sm px-1 transition-colors hover:text-foreground cursor-pointer"
                 onClick={() => handleAddStore(newStoreId)}
               >
                 Add

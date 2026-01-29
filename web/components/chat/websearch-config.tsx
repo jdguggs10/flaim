@@ -45,15 +45,15 @@ export default function WebSearchSettings() {
   return (
     <div>
       <div className="flex items-center justify-between">
-        <div className="text-zinc-600 text-sm">User&apos;s location</div>
+        <div className="text-muted-foreground text-sm">User&apos;s location</div>
         <div
-          className="text-zinc-400 text-sm px-1 transition-colors hover:text-zinc-600 cursor-pointer"
+          className="text-muted-foreground text-sm px-1 transition-colors hover:text-foreground cursor-pointer"
           onClick={handleClear}
         >
           Clear
         </div>
       </div>
-      <div className="mt-3 space-y-3 text-zinc-400">
+      <div className="mt-3 space-y-3 text-muted-foreground">
         <div className="flex items-center gap-2">
           <label htmlFor="country" className="text-sm w-20">
             Country

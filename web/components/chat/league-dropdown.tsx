@@ -125,7 +125,7 @@ export function LeagueDropdown() {
               title="Copy league ID"
             >
               {copied ? (
-                <Check className="h-3 w-3 text-green-500" />
+                <Check className="h-3 w-3 text-success" />
               ) : (
                 <Copy className="h-3 w-3" />
               )}

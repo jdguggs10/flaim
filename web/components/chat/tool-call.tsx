@@ -51,7 +51,7 @@ function CopyButton({ text }: { text: string }) {
       className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
       title={copied ? "Copied!" : "Copy to clipboard"}
     >
-      {copied ? <Check size={14} className="text-green-600" /> : <Copy size={14} />}
+      {copied ? <Check size={14} className="text-success" /> : <Copy size={14} />}
     </button>
   );
 }
