@@ -58,7 +58,7 @@ export default function LandingPage() {
 
             {/* Completion message */}
             <p className="text-center text-sm text-muted-foreground pt-2">
-              Boom, you&apos;re done. Use your AI as normal and it will pull data from your fantasy league via Flaim. Enjoy.
+              Boom, you&apos;re done. Use your AI as normal. Football and Baseball are supported today, maybe Hockey and Basketball if people care. Enjoy.
             </p>
           </div>
         </div>
