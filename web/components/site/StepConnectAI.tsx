@@ -144,7 +144,7 @@ export function StepConnectAI() {
               <div className="flex items-center justify-between gap-2">
                 <span className="text-xs text-muted-foreground">URL</span>
                 <div className="flex items-center gap-2 min-w-0">
-                  <code className="text-xs bg-background px-2 py-1 rounded border font-mono truncate">
+                  <code className="text-sm bg-background px-2 py-1 rounded border font-mono truncate">
                     {url}
                   </code>
                   <Button
