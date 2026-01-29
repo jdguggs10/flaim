@@ -891,8 +891,7 @@ function LeaguesPageContent() {
                         )}
                       </Button>
                       {defaultSport === sport && (
-                        <span className="text-sm text-warning flex items-center gap-1">
-                          <Star className="h-3 w-3 fill-current" />
+                        <span className="text-sm text-warning">
                           default
                         </span>
                       )}
