@@ -53,6 +53,13 @@
     --chart-5: 27 87% 67%;
 
     --radius: 0.5rem;
+
+    --success: 142 71% 45%;
+    --success-foreground: 144 70% 96%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 48 100% 96%;
+    --info: 210 90% 45%;
+    --info-foreground: 210 100% 96%;
   }
   .dark {
     --background: 224 71.4% 4.1%;
@@ -102,6 +109,13 @@
     --chart-4: 280 65% 60%;
 
     --chart-5: 340 75% 55%;
+
+    --success: 142 71% 35%;
+    --success-foreground: 144 70% 96%;
+    --warning: 38 80% 40%;
+    --warning-foreground: 48 100% 96%;
+    --info: 210 80% 55%;
+    --info-foreground: 210 100% 96%;
   }
 }
 
