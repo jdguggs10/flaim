@@ -1128,7 +1128,7 @@ function LeaguesPageContent() {
           <div className="space-y-2">
             <h2 className="text-2xl font-semibold">League Maintenance</h2>
             <p className="text-muted-foreground">
-              Manage ESPN credentials, discover new leagues, or add them manually.
+              Manage platform connections or credentials here.
             </p>
           </div>
 
