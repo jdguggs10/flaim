@@ -1130,8 +1130,8 @@ function LeaguesPageContent() {
                 aria-controls="espn-setup-content"
                 className="w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               >
-                <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-4">
-                  <div className="space-y-1 min-w-0">
+                <CardHeader className="flex items-start gap-4">
+                  <div className="flex-1 min-w-0 space-y-1">
                     <div className="flex items-center gap-2">
                       <CardTitle className="text-lg">ESPN</CardTitle>
                       {hasCredentials && (
@@ -1145,7 +1145,7 @@ function LeaguesPageContent() {
                     </CardDescription>
                   </div>
                   <ChevronDown
-                    className={`h-5 w-5 text-muted-foreground transition-transform shrink-0 ${
+                    className={`h-5 w-5 text-muted-foreground transition-transform shrink-0 self-start ${
                       isEspnSetupOpen ? 'rotate-180' : ''
                     }`}
                   />
@@ -1411,8 +1411,8 @@ function LeaguesPageContent() {
                 aria-controls="yahoo-setup-content"
                 className="w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               >
-                <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-4">
-                  <div className="space-y-1 min-w-0">
+                <CardHeader className="flex items-start gap-4">
+                  <div className="flex-1 min-w-0 space-y-1">
                     <div className="flex items-center gap-2">
                       <CardTitle className="text-lg">Yahoo</CardTitle>
                       {isYahooConnected && (
@@ -1428,7 +1428,7 @@ function LeaguesPageContent() {
                     </CardDescription>
                   </div>
                   <ChevronDown
-                    className={`h-5 w-5 text-muted-foreground transition-transform shrink-0 ${
+                    className={`h-5 w-5 text-muted-foreground transition-transform shrink-0 self-start ${
                       isYahooSetupOpen ? 'rotate-180' : ''
                     }`}
                   />
