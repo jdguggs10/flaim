@@ -136,4 +136,4 @@ function unwrapTeam(data: unknown): YahooTeamRaw
 
 - [Yahoo Fantasy Sports API Guide](https://developer.yahoo.com/fantasysports/guide/)
 - [espn-client implementation](/workers/espn-client/src/)
-- [ADD_YAHOO_PLATFORM.md](/docs/ADD_YAHOO_PLATFORM.md)
+- [ADD_YAHOO_PLATFORM.md](/docs/dev/ADD_YAHOO_PLATFORM.md)

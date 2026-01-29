@@ -606,11 +606,11 @@ git commit -m "fix(yahoo-client): adjust baseball handlers based on actual Yahoo
 ## Task 5: Update documentation
 
 **Files:**
-- Modify: `docs/FEATURE_PARITY.md`
+- Modify: `docs/STATUS.md`
 - Modify: `docs/CHANGELOG.md`
-- Modify: `docs/ADD_YAHOO_PLATFORM.md`
+- Modify: `docs/dev/ADD_YAHOO_PLATFORM.md`
 
-**Step 1: Update FEATURE_PARITY.md**
+**Step 1: Update STATUS.md**
 
 Update the Yahoo Baseball column from all ❌ to all ✅:
 

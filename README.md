@@ -1,5 +1,7 @@
 # Flaim - Fantasy League AI Connector
 
+Doc routing: see `docs/INDEX.md`.
+
 Flaim connects your ESPN fantasy leagues to AI assistants like Claude and ChatGPT. It's an MCP (Model Context Protocol) service that gives AI tools access to your live fantasy data.
 
 ## How It Works
@@ -30,7 +32,7 @@ Flaim is **not** a chatbot or AI product itself — it's the bridge that lets yo
 
 ## Features
 
-- **Chrome Extension (v1.3.2)**: Auto-capture ESPN credentials without manual cookie extraction
+- **Chrome Extension (v1.4.0)**: Auto-capture ESPN credentials without manual cookie extraction
 - **Auto-Discovery (v1.2.1+)**: Fan API-based discovery of leagues + past seasons, with granular status messaging and default selection
 - **Claude + ChatGPT OAuth**: Direct access via MCP protocol (OAuth 2.1)
 - **Live ESPN Data**: espn-client worker with real-time stats
@@ -54,6 +56,7 @@ The unified gateway (`https://api.flaim.app/fantasy/mcp`) exposes these tools:
 | Tool | Description |
 |------|-------------|
 | `get_user_session` | User's leagues across all platforms with IDs |
+| `get_ancient_history` | Historical leagues and seasons (2+ years old) |
 | `get_league_info` | League settings and members |
 | `get_roster` | Team roster with player stats |
 | `get_matchups` | Current/upcoming matchups |

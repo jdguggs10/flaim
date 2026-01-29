@@ -390,10 +390,10 @@ git commit -m "fix(yahoo-client): adjust handlers based on actual Yahoo API resp
 ## Task 5: Update documentation
 
 **Files:**
-- Modify: `docs/FEATURE_PARITY.md`
+- Modify: `docs/STATUS.md`
 - Modify: `docs/CHANGELOG.md`
 
-**Step 1: Update FEATURE_PARITY.md**
+**Step 1: Update STATUS.md**
 
 Update the Yahoo Football row to show 5/5:
 
@@ -427,7 +427,7 @@ Add under `[Unreleased]`:
 **Step 3: Commit**
 
 ```bash
-git add docs/FEATURE_PARITY.md docs/CHANGELOG.md
+git add docs/STATUS.md docs/CHANGELOG.md
 git commit -m "docs: Yahoo Football at full feature parity (5/5 tools)"
 ```
 

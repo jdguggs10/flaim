@@ -1156,7 +1156,7 @@ git commit -m "feat: yahoo-client Phase 2 complete - football tools working"
 ## Task 7: Update documentation
 
 **Files:**
-- Modify: `docs/ADD_YAHOO_PLATFORM.md`
+- Modify: `docs/dev/ADD_YAHOO_PLATFORM.md`
 - Modify: `docs/CHANGELOG.md`
 
 **Step 1: Update ADD_YAHOO_PLATFORM.md Phase 2 status**

@@ -9,7 +9,7 @@
 **Tech Stack:** Next.js (App Router), React, Clerk (auth), TypeScript
 
 **Reference docs:**
-- `docs/ADD_YAHOO_PLATFORM.md` — Full design document (Phase 1, section 6)
+- `docs/dev/ADD_YAHOO_PLATFORM.md` — Full design document (Phase 1, section 6)
 - `web/app/api/auth/espn/credentials/route.ts` — Pattern for proxying to auth-worker with Clerk auth
 - `web/app/(site)/leagues/page.tsx` — Current leagues page with placeholder Yahoo card
 - `workers/auth-worker/src/yahoo-connect-handlers.ts` — Backend handlers (already complete)

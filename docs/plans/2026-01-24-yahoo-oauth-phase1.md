@@ -9,7 +9,7 @@
 **Tech Stack:** Cloudflare Workers (Hono), Supabase, TypeScript, Vitest
 
 **Reference docs:**
-- `docs/ADD_YAHOO_PLATFORM.md` - Full design document
+- `docs/dev/ADD_YAHOO_PLATFORM.md` - Full design document
 - `workers/auth-worker/src/oauth-handlers.ts` - MCP OAuth patterns to follow
 - `workers/auth-worker/src/oauth-storage.ts` - Storage class patterns
 

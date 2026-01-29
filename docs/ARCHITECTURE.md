@@ -1,5 +1,7 @@
 # Flaim Architecture
 
+Doc routing: see `docs/INDEX.md`.
+
 Flaim is an MCP (Model Context Protocol) service that connects ESPN fantasy leagues to AI assistants like Claude and ChatGPT. It handles authentication, credential management, and real-time data fetching — the built-in chat is a secondary feature for testing.
 
 ## Quick Start
@@ -157,11 +159,12 @@ Claude/ChatGPT → fantasy-mcp (gateway) → espn-client → ESPN API
 
 **Unified tools:**
 - `get_user_session` — All configured leagues across platforms with IDs
+- `get_ancient_history` — Historical leagues and seasons (2+ years old)
 - `get_league_info` — League settings (requires platform, sport, league_id, season_year)
 - `get_standings` — League standings
 - `get_matchups` — Current/specified week matchups
 - `get_roster` — Team roster with player details
-- `get_free_agents` — Available free agents (baseball only)
+- `get_free_agents` — Available free agents (platform/sport dependent)
 
 **Status:**
 - Unified gateway validated and promoted as primary (Jan 2026)
@@ -207,8 +210,8 @@ See `workers/README.md` for worker-to-worker communication requirements.
 
 | Component | Platform | Trigger | Environment |
 |-----------|----------|---------|-------------|
-| Workers (auth, baseball, football) | Cloudflare | Push to `main` | `--env prod` |
-| Workers (auth, baseball, football) | Cloudflare | PR opened/updated | `--env preview` |
+| Workers (auth, baseball, football, espn-client, fantasy-mcp) | Cloudflare | Push to `main` | `--env prod` |
+| Workers (auth, baseball, football, espn-client, fantasy-mcp) | Cloudflare | PR opened/updated | `--env preview` |
 | Frontend (`/web`) | Vercel | Push to `main` | Production |
 | Frontend (`/web`) | Vercel | PR opened/updated | Preview |
 | Extension | Chrome Web Store | Manual | N/A |
