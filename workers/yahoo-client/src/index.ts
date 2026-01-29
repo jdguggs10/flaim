@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import type { Env, ExecuteRequest, ExecuteResponse, Sport } from './types';
 import { footballHandlers } from './sports/football/handlers';
+import { baseballHandlers } from './sports/baseball/handlers';
 import { CORRELATION_ID_HEADER, getCorrelationId } from '@flaim/worker-shared';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -72,8 +73,17 @@ async function routeToSport(
       return handler(env, params, authHeader, correlationId);
     }
 
-    case 'baseball':
-      return { success: false, error: 'Yahoo baseball not yet supported', code: 'NOT_SUPPORTED' };
+    case 'baseball': {
+      const handler = baseballHandlers[tool];
+      if (!handler) {
+        return {
+          success: false,
+          error: `Unknown baseball tool: ${tool}`,
+          code: 'UNKNOWN_TOOL'
+        };
+      }
+      return handler(env, params, authHeader, correlationId);
+    }
 
     case 'basketball':
       return { success: false, error: 'Yahoo basketball not yet supported', code: 'NOT_SUPPORTED' };
