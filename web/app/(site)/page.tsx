@@ -2,7 +2,7 @@ import { SignedIn, SignedOut } from '@clerk/nextjs';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { User, Check } from 'lucide-react';
+import { User, Check, ChevronDown } from 'lucide-react';
 import { StepConnectPlatforms } from '@/components/site/StepConnectPlatforms';
 import { StepConnectAI } from '@/components/site/StepConnectAI';
 
@@ -73,9 +73,7 @@ export default function LandingPage() {
             <details className="group border rounded-lg bg-background">
               <summary className="flex cursor-pointer items-center justify-between p-4 font-medium">
                 What does Flaim do?
-                <span className="ml-2 transition-transform group-open:rotate-180">
-                  ▼
-                </span>
+                <ChevronDown className="ml-2 h-5 w-5 transition-transform group-open:rotate-180" />
               </summary>
               <div className="px-4 pb-4 text-sm text-muted-foreground space-y-2">
                 <p>Flaim provides MCP servers and user auth so you can connect your fantasy leagues to your preferred AI. That&apos;s it. I don&apos;t supply the AI, you do. Flaim just connects the dots.</p>
@@ -86,9 +84,7 @@ export default function LandingPage() {
             <details className="group border rounded-lg bg-background">
               <summary className="flex cursor-pointer items-center justify-between p-4 font-medium">
                 How does the extension work?
-                <span className="ml-2 transition-transform group-open:rotate-180">
-                  ▼
-                </span>
+                <ChevronDown className="ml-2 h-5 w-5 transition-transform group-open:rotate-180" />
               </summary>
               <div className="px-4 pb-4 text-sm text-muted-foreground space-y-2">
                 <p>It makes grabbing your ESPN credentials easy and matches them to your Flaim account. The connector needs to know what ESPN leagues are yours somehow.</p>
@@ -99,9 +95,7 @@ export default function LandingPage() {
             <details className="group border rounded-lg bg-background">
               <summary className="flex cursor-pointer items-center justify-between p-4 font-medium">
                 Why do you use custom connectors with only some AIs?
-                <span className="ml-2 transition-transform group-open:rotate-180">
-                  ▼
-                </span>
+                <ChevronDown className="ml-2 h-5 w-5 transition-transform group-open:rotate-180" />
               </summary>
               <div className="px-4 pb-4 text-sm text-muted-foreground space-y-2">
                 <p>The MCP protocol was just created in late 2024, and standard implementations are still forming. Trust me, I&apos;ll add ChatGPT and Gemini as soon as I can.</p>
@@ -112,9 +106,7 @@ export default function LandingPage() {
             <details className="group border rounded-lg bg-background">
               <summary className="flex cursor-pointer items-center justify-between p-4 font-medium">
                 Any other tips or tricks?
-                <span className="ml-2 transition-transform group-open:rotate-180">
-                  ▼
-                </span>
+                <ChevronDown className="ml-2 h-5 w-5 transition-transform group-open:rotate-180" />
               </summary>
               <div className="px-4 pb-4 text-sm text-muted-foreground space-y-2">
                 <p>You can &quot;force&quot; your AI to activate the connector by saying &quot;Use Flaim.&quot; at the end of your message.</p>
