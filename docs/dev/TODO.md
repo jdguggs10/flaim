@@ -9,7 +9,7 @@
 ## Features
 - **Deepen MCP functionality for football and baseball**: expand coverage (edge cases, richer data, pagination), and add more tests for existing tools.
   - Unified gateway tools (`workers/fantasy-mcp`): `get_user_session`, `get_league_info`, `get_standings`, `get_matchups`, `get_roster`, `get_free_agents`
-  - Full feature parity between football and baseball (stats, projected points, free agents)
+  - ~~Full feature parity between football and baseball (stats, projected points, free agents)~~ ✅ **Complete** (Jan 2026): All 4 platform/sport combos have 5/5 core tools (ESPN Football, ESPN Baseball, Yahoo Football, Yahoo Baseball)
   - Legacy workers still available as fallback: `baseball-espn-mcp`, `football-espn-mcp`
 
 ## Marketing
@@ -37,8 +37,8 @@
 ## Long-term Potential Implementations
 - Create iOS app (Significant undertaking/Major platform expansion)
 - Automate connector additions via browser extension (might be too complex for now)
-- Add hockey and basketball functionality with new workers
-- Expand to additional fantasy platforms (Yahoo, Sleeper, etc.)
+- **Add basketball and hockey support** (Phase 4): Implement handlers for basketball and hockey in both `espn-client` and `yahoo-client` workers (5 tools each: get_league_info, get_standings, get_roster, get_matchups, get_free_agents)
+- **Expand to additional fantasy platforms** (Phase 5): Add Sleeper, CBS Sports, or other platforms (each platform = new `{platform}-client` worker + service binding + OAuth routes)
 
 ## Parked / Blocked
 - **Claude Connector Directory listing**: Flaim is technically compliant with Anthropic's MCP directory requirements (OAuth 2.1, tool annotations, Streamable HTTP, etc.), but unlikely to be approved because Flaim doesn't control the endpoint domain—it proxies to ESPN's APIs. Anthropic's directory appears to favor connectors where the submitter owns/controls the data source. Revisit if policy changes or if ESPN ever offers an official partnership/API program. (Analysis: Jan 2026)

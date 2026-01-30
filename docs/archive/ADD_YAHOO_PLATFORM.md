@@ -633,10 +633,14 @@ Add **Connect Yahoo** button alongside ESPN in Homepage Box 2:
 5. ✅ Tested football tools end-to-end via chat app
 6. ✅ Fixed snake_case/camelCase mismatch bug between auth-worker and yahoo-client
 
-### Phase 3: yahoo-client worker (Baseball)
+### Phase 3: yahoo-client worker (Baseball) ✅ COMPLETE
 
-1. Add baseball handlers to yahoo-client
-2. Add free agent / player search if needed
+**Completed: 2026-01-29**
+
+1. ✅ Added baseball handlers to yahoo-client: `get_league_info`, `get_standings`, `get_roster`, `get_matchups`, `get_free_agents`
+2. ✅ Baseball position mappings (C, 1B, 2B, 3B, SS, OF, SP, RP, P, Util)
+3. ✅ Position filter mapping for free agent searches
+4. ✅ Full feature parity with football (5/5 tools)
 
 ### Phase 4: Additional sports
 

@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "WRANGLER_LOG_PATH=../../.wrangler/logs WRANGLER_REGISTRY_PATH=../../.wrangler/registry wrangler dev --env dev --port 8790",
+    "dev": "WRANGLER_LOG_PATH=../../.wrangler/logs WRANGLER_REGISTRY_PATH=../../.wrangler/registry wrangler dev --env dev --port 8791",
     "deploy:dev": "wrangler deploy --env dev",
     "deploy:preview": "wrangler deploy --env preview",
     "deploy:prod": "wrangler deploy --env prod",

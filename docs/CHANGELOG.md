@@ -6,7 +6,9 @@ Follow Keep a Changelog; SemVer applies.
 
 ### Documentation
 - **Added**: `docs/STYLE-GUIDE.md` — Comprehensive frontend style guide covering design tokens, typography, spacing, component guidelines, accessibility standards, and code conventions.
+- **Added**: `workers/yahoo-client/README.md` — Yahoo client worker documentation covering OAuth, JSON normalizers, and sports handlers.
 - **Changed**: Promoted UI consistency rules from `docs/dev/ui-consistency.md` to permanent documentation with expanded scope.
+- **Changed**: Archived `docs/dev/ADD_YAHOO_PLATFORM.md` to `docs/archive/` (Phase 3 complete).
 
 ### UI Consistency
 All frontend components now use semantic design tokens instead of hard-coded Tailwind palette classes, ensuring consistent light/dark theme support.
@@ -25,10 +27,11 @@ Yahoo Fantasy now works through the unified gateway alongside ESPN. **Full featu
 - **Added**: Yahoo OAuth token refresh flow via auth-worker
 - **Added**: Yahoo-specific JSON normalizers for quirky API format (numeric-keyed objects, nested arrays)
 - **Added**: Yahoo football handlers: `get_league_info`, `get_standings`, `get_roster`, `get_matchups`, `get_free_agents`
-- **Added**: Yahoo baseball handlers: `get_league_info`, `get_standings`, `get_roster`, `get_matchups`, `get_free_agents`
+- **Added**: Yahoo baseball handlers: `get_league_info`, `get_standings`, `get_roster`, `get_matchups`, `get_free_agents` (Phase 3 complete)
 - **Added**: Baseball position mappings (C, 1B, 2B, 3B, SS, OF, SP, RP, P, Util)
 - **Added**: Position filter mapping for Yahoo free agent searches (football + baseball)
 - **Added**: `YAHOO` service binding in fantasy-mcp gateway
+- **Added**: `yahoo-client` to CI/CD pipeline (test + deploy) and `docs/STATUS.md`
 - **Added**: Unit tests for Yahoo normalizers (27 tests)
 - **Fixed**: Snake_case/camelCase mismatch between auth-worker and yahoo-client credentials
 - **Fixed**: Yahoo matchup parsing for numeric-keyed object structure

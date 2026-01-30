@@ -48,6 +48,7 @@ All tools take explicit parameters: `platform`, `sport`, `league_id`, `season_ye
 - `baseball-espn-mcp`
 - `football-espn-mcp`
 - `espn-client`
+- `yahoo-client`
 - `fantasy-mcp`
 
 ## Extension Version

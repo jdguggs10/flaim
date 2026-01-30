@@ -47,7 +47,7 @@ This file is the canonical map for Flaim docs. Always read this first and use it
 - `workers/espn-client/README.md`: ESPN platform client details.
 - `workers/baseball-espn-mcp/README.md`: Legacy baseball MCP worker.
 - `workers/football-espn-mcp/README.md`: Legacy football MCP worker.
-- `workers/yahoo-client/README.md`: Yahoo platform client details (create if missing).
+- `workers/yahoo-client/README.md`: Yahoo platform client details.
 
 ### Internal/reference markdown
 - `workers/espn-client/src/sports/baseball/MAPPINGS.md`: ESPN baseball slot/position mapping notes.

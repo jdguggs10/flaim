@@ -9,6 +9,7 @@ Cloudflare Workers handling authentication and MCP data fetching.
 | `auth-worker` | 8786 | Supabase storage, JWT verification, OAuth, extension APIs, rate limiting |
 | `fantasy-mcp` | 8790 | **Unified MCP gateway** - routes to platform workers via service bindings |
 | `espn-client` | 8789 | **ESPN API client** - handles all ESPN sports (called by fantasy-mcp) |
+| `yahoo-client` | 8791 | **Yahoo API client** - handles all Yahoo sports (called by fantasy-mcp) |
 | `baseball-espn-mcp` | 8787 | Legacy: Direct baseball MCP server |
 | `football-espn-mcp` | 8788 | Legacy: Direct football MCP server |
 
@@ -24,12 +25,17 @@ The unified gateway (`fantasy-mcp`) uses explicit tool parameters (`platform`, `
 ## Development
 
 ```bash
-# Run legacy workers (auth + baseball + football)
+# Run all workers (auth + legacy + unified + platform clients)
 npm run dev:workers
 
 # Run unified gateway workers
 npm run dev:fantasy-mcp    # Port 8790
 npm run dev:espn-client    # Port 8789
+npm run dev:yahoo-client   # Port 8791
+
+**Local service bindings note:** `fantasy-mcp` relies on Wrangler's local registry to resolve
+`ESPN` and `YAHOO` service bindings. Use `WRANGLER_LOG_PATH` + `WRANGLER_REGISTRY_PATH`
+(already wired into `npm run dev:workers`) to avoid binding resolution issues.
 
 # Run individually
 cd workers/auth-worker && npm run dev

@@ -7,7 +7,7 @@
   },
   "main": "./src/index.ts",
   "scripts": {
-    "dev": "wrangler dev --port 8786",
+    "dev": "WRANGLER_LOG_PATH=../../.wrangler/logs WRANGLER_REGISTRY_PATH=../../.wrangler/registry wrangler dev --port 8786",
     "deploy": "wrangler deploy",
     "test": "vitest run",
     "type-check": "tsc --noEmit"

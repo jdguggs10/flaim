@@ -102,6 +102,8 @@ NEXT_PUBLIC_AUTH_WORKER_URL=https://api.flaim.app/auth
 NEXT_PUBLIC_FANTASY_MCP_URL=https://api.flaim.app/fantasy/mcp
 # ESPN onboarding (auto-pull + discover seasons)
 NEXT_PUBLIC_ESPN_CLIENT_URL=https://espn-client.gerrygugger.workers.dev
+# Yahoo MCP client (not called by web directly; useful for local debugging)
+NEXT_PUBLIC_YAHOO_CLIENT_URL=https://yahoo-client.gerrygugger.workers.dev
 ```
 
 For local development with workers, point to `http://localhost:8786` etc.
