@@ -76,6 +76,7 @@ export async function POST(request: NextRequest) {
         stream: true,
         store: true,
         parallel_tool_calls: false,
+        reasoning: { summary: "auto" },
         ...(previous_response_id ? { previous_response_id } : {}),
       });
     } catch (error: any) {
