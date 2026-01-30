@@ -4,6 +4,10 @@ Follow Keep a Changelog; SemVer applies.
 
 ## [Unreleased]
 
+### Documentation
+- **Added**: `docs/STYLE-GUIDE.md` — Comprehensive frontend style guide covering design tokens, typography, spacing, component guidelines, accessibility standards, and code conventions.
+- **Changed**: Promoted UI consistency rules from `docs/dev/ui-consistency.md` to permanent documentation with expanded scope.
+
 ### UI Consistency
 All frontend components now use semantic design tokens instead of hard-coded Tailwind palette classes, ensuring consistent light/dark theme support.
 
@@ -29,6 +33,12 @@ Yahoo Fantasy now works through the unified gateway alongside ESPN. **Full featu
 - **Fixed**: Snake_case/camelCase mismatch between auth-worker and yahoo-client credentials
 - **Fixed**: Yahoo matchup parsing for numeric-keyed object structure
 - **Fixed**: Team key construction for roster endpoint (Yahoo requires full key, not just numeric ID)
+
+### Chrome Extension v1.4.1 - Clerk Sync Host Fix
+Critical fix for extension authentication - users can now sign in successfully via Clerk Sync Host.
+
+- **Fixed**: Clerk Sync Host now correctly points to `https://clerk.flaim.app` instead of `https://flaim.app`, resolving authentication failures where extension couldn't detect signed-in status from flaim.app.
+- **Changed**: Extension version bumped to 1.4.1.
 
 ### Chrome Extension Simplification
 Default league selection removed from extension - defaults are now managed exclusively via the web UI at `/leagues`.

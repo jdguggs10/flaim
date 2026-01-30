@@ -29,12 +29,12 @@ This file is the canonical map for Flaim docs. Always read this first and use it
 - `docs/STATUS.md`: Canonical tools list, parity matrix, deploy targets.
 - `docs/DATABASE.md`: Schema summary; refer to `docs/migrations/` for truth.
 - `docs/TESTING.md`: Testing guidance and commands.
+- `docs/STYLE-GUIDE.md`: Design tokens, component guidelines, accessibility standards, and frontend code conventions.
 - `docs/CHANGELOG.md`: Release history (keep it concise).
 
 ### Dev docs (temporal / work-in-progress)
 - `docs/dev/`: Active plans, in-progress feature notes, and short-lived checklists. These are expected to change frequently.
 - `docs/dev/TODO.md`: Active backlog items. When an item becomes permanent knowledge, move it to a permanent doc.
-- `docs/dev/ui-consistency.md`: Design token rules and automated check for frontend color consistency.
 
 ### Component READMEs
 - `web/README.md`: Web app routes, env vars, local dev.
@@ -63,6 +63,7 @@ This file is the canonical map for Flaim docs. Always read this first and use it
 5. Did you change user-facing behavior? Update `README.md`.
 6. Did you change system design or flows? Update `docs/ARCHITECTURE.md`.
 7. Did you add/remove a worker or major component? Update `workers/README.md` and the relevant per-worker README.
+8. Did you change frontend components or design tokens? Verify compliance with `docs/STYLE-GUIDE.md` and run `npm run ui:check`.
 
 ## Rule: no duplication
 
