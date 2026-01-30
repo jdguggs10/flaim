@@ -4,11 +4,22 @@ Follow Keep a Changelog; SemVer applies.
 
 ## [Unreleased]
 
+### Infrastructure
+- **Removed**: Legacy sport MCP workers (`baseball-espn-mcp`, `football-espn-mcp`) archived and removed from repository. Unified gateway (`fantasy-mcp`) is now the sole MCP endpoint.
+- **Changed**: Removed legacy workers from CI/CD pipeline, local dev scripts, and documentation.
+- **Preserved**: Legacy worker code preserved in git tag `legacy-sport-mcp-workers` for reference. Access via `git checkout legacy-sport-mcp-workers` or browse on GitHub.
+
 ### Documentation
 - **Added**: `docs/STYLE-GUIDE.md` — Comprehensive frontend style guide covering design tokens, typography, spacing, component guidelines, accessibility standards, and code conventions.
 - **Added**: `workers/yahoo-client/README.md` — Yahoo client worker documentation covering OAuth, JSON normalizers, and sports handlers.
 - **Changed**: Promoted UI consistency rules from `docs/dev/ui-consistency.md` to permanent documentation with expanded scope.
 - **Changed**: Archived `docs/dev/ADD_YAHOO_PLATFORM.md` to `docs/archive/` (Phase 3 complete).
+
+### Chat UX
+- **Fixed**: Chat loading indicator no longer disappears 5+ seconds before content appears. Loading state stays visible until actual text or tool call UI renders.
+- **Added**: Collapsible "Thinking..." pill replaces the tiny 12px pulsing dot. Shows a spinner with status text. When using reasoning models, the pill can be expanded to show live reasoning summary text.
+- **Added**: Handles new SSE events (`response.created`, `response.in_progress`, `response.reasoning_summary_text.delta`) for richer loading feedback.
+- **Added**: `reasoning: { summary: "auto" }` to OpenAI API call to enable reasoning summary streaming.
 
 ### UI Consistency
 All frontend components now use semantic design tokens instead of hard-coded Tailwind palette classes, ensuring consistent light/dark theme support.

@@ -3,14 +3,13 @@
 ## Bugs
 - **Dev console chat localhost limitation**: MCP tools fail locally (424 error) because OpenAI can't reach localhost. Use preview URLs or Claude/ChatGPT desktop apps.
 - **Node.js v25 localStorage warning (ignore)**: Running `npm run dev:frontend` on Node v25+ shows `Warning: --localstorage-file was provided without a valid path`. This is a [known Node.js v25 regression](https://github.com/nodejs/node/issues/60704) and is harmless. Suppressed via `NODE_OPTIONS='--no-webstorage'` in the dev script.
-- **Leagues page horizontal resize**: Page doesn't resize correctly on narrow viewports.
+- ~~**Leagues page horizontal resize**: Page doesn't resize correctly on narrow viewports~~ - Fixed (Jan 2025)
 - ~~**Homepage multi-platform clarity**: Box 2 ("Install Extension") needs to show both platforms~~ - Done: StepConnectPlatforms component (Jan 2025)
 
 ## Features
 - **Deepen MCP functionality for football and baseball**: expand coverage (edge cases, richer data, pagination), and add more tests for existing tools.
   - Unified gateway tools (`workers/fantasy-mcp`): `get_user_session`, `get_league_info`, `get_standings`, `get_matchups`, `get_roster`, `get_free_agents`
   - ~~Full feature parity between football and baseball (stats, projected points, free agents)~~ ✅ **Complete** (Jan 2026): All 4 platform/sport combos have 5/5 core tools (ESPN Football, ESPN Baseball, Yahoo Football, Yahoo Baseball)
-  - Legacy workers still available as fallback: `baseball-espn-mcp`, `football-espn-mcp`
 
 ## Marketing
 - **Visual Proof**: Add interaction mockups/chat screenshots and use real platform logos.
@@ -21,6 +20,7 @@
 - **ESPN API Type Safety**: Replace `as any` type assertions in `espn-client` handlers with proper TypeScript interfaces. Create interfaces for the ESPN API response fields we actually use. See TODO in `workers/espn-client/src/types.ts`.
 - **Codebase Audit & Streamlining**: Conduct a thorough review for legacy code, unused utilities, or redundant components. Identify parts of the system that are no longer in use (specifically around older auth patterns or defunct chat features) and remove them cautiously to reduce technical debt while ensuring no regressions.
 - **Devconsole chat clarity**: Reduce excess tool verbosity when using the devconsole chat to keep responses concise.
+- ~~**Chat loading states UX**~~: Implemented (2026-01-30). See `docs/dev/chat-loading-states-investigation.md`.
 - **Advanced Token & Usage Analytics**: Implement per-turn and per-session token usage tracking in the chat UI by capturing usage data from the Responses API stream. Include cost estimation and historical usage trends.
 - **Reconcile remaining ESPN baseball mapping unknowns**: Validate slot IDs `18`/`22` per `workers/espn-client/src/sports/baseball/MAPPINGS.md`.
 
