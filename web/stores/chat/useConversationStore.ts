@@ -3,13 +3,20 @@ import { Item } from "@/lib/chat/assistant";
 import { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import { INITIAL_MESSAGE } from "@/config/constants";
 
+export type LoadingStatus = "idle" | "connecting" | "thinking" | "responding";
+
+export interface LoadingState {
+  status: LoadingStatus;
+  thinkingText: string;
+}
+
 interface ConversationState {
   // Items displayed in the chat
   chatMessages: Item[];
   // Items sent to the Responses API (only used for first turn before we have a response ID)
   conversationItems: any[];
-  // Whether we are waiting for the assistant response
-  isAssistantLoading: boolean;
+  // Loading state for assistant response
+  loadingState: LoadingState;
   // Previous response ID for stored-responses flow (avoids rebuilding conversation history)
   previousResponseId: string | null;
 
@@ -17,7 +24,7 @@ interface ConversationState {
   setConversationItems: (messages: any[]) => void;
   addChatMessage: (item: Item) => void;
   addConversationItem: (message: ChatCompletionMessageParam) => void;
-  setAssistantLoading: (loading: boolean) => void;
+  setLoadingState: (state: LoadingState) => void;
   setPreviousResponseId: (id: string | null) => void;
   clearConversation: () => void;
   rawSet: (state: any) => void;
@@ -32,7 +39,7 @@ const useConversationStore = create<ConversationState>((set) => ({
     },
   ],
   conversationItems: [],
-  isAssistantLoading: false,
+  loadingState: { status: "idle", thinkingText: "" },
   previousResponseId: null,
   setChatMessages: (items) => set({ chatMessages: items }),
   setConversationItems: (messages) => set({ conversationItems: messages }),
@@ -42,7 +49,7 @@ const useConversationStore = create<ConversationState>((set) => ({
     set((state) => ({
       conversationItems: [...state.conversationItems, message],
     })),
-  setAssistantLoading: (loading) => set({ isAssistantLoading: loading }),
+  setLoadingState: (loadingState) => set({ loadingState }),
   setPreviousResponseId: (id) => set({ previousResponseId: id }),
   clearConversation: () =>
     set({
@@ -54,7 +61,7 @@ const useConversationStore = create<ConversationState>((set) => ({
         },
       ],
       conversationItems: [],
-      isAssistantLoading: false,
+      loadingState: { status: "idle", thinkingText: "" },
       previousResponseId: null,
     }),
   rawSet: set,
