@@ -133,6 +133,7 @@ export default function Popup() {
   const [error, setError] = useState<string | null>(null);
   const [hasCredentials, setHasCredentials] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isSetupInProgress, setIsSetupInProgress] = useState(false);
   const [lastSync, setLastSync] = useState<string | null>(null);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [supportCopied, setSupportCopied] = useState(false);
@@ -220,6 +221,8 @@ export default function Popup() {
 
   // Handle full setup flow (sync + discover)
   const handleFullSetup = async () => {
+    if (isSetupInProgress) return;
+
     const token = await getToken();
     if (!token) {
       setError('Not signed in. Please sign in at flaim.app first.');
@@ -233,6 +236,7 @@ export default function Popup() {
     }
 
     setError(null);
+    setIsSetupInProgress(true);
 
     // Step 1: Sync credentials
     setState('setup_syncing');
@@ -247,6 +251,7 @@ export default function Popup() {
       setError(errorMsg);
       setState('setup_error');
       await setSetupState({ step: 'error', error: errorMsg });
+      setIsSetupInProgress(false);
       return;
     }
 
@@ -266,11 +271,13 @@ export default function Popup() {
       // Complete setup
       setState('setup_complete');
       await clearSetupState();
+      setIsSetupInProgress(false);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Discovery failed';
       setError(errorMsg);
       setState('setup_error');
       await setSetupState({ step: 'error', error: errorMsg });
+      setIsSetupInProgress(false);
     }
   };
 
@@ -467,7 +474,11 @@ export default function Popup() {
             ) : (
               <div className="message info">Ready to sync your ESPN credentials to Flaim.</div>
             )}
-            <button className="button success full-width" onClick={handleFullSetup}>
+            <button
+              className="button success full-width"
+              onClick={handleFullSetup}
+              disabled={isSetupInProgress}
+            >
               {hasCredentials ? 'Re-sync & Discover New Leagues/Seasons' : 'Sync to Flaim'}
             </button>
             <button className="button secondary full-width" onClick={() => openFlaim('/leagues')}>
@@ -490,7 +501,7 @@ export default function Popup() {
               </div>
             </div>
             <div className="progress-bar">
-              <div className="progress-bar-fill" style={{ width: '30%' }}></div>
+              <div className="progress-bar-fill" style={{ width: '50%' }}></div>
             </div>
           </div>
         )}
@@ -508,7 +519,7 @@ export default function Popup() {
               </div>
             </div>
             <div className="progress-bar">
-              <div className="progress-bar-fill" style={{ width: '60%' }}></div>
+              <div className="progress-bar-fill" style={{ width: '100%' }}></div>
             </div>
           </div>
         )}
