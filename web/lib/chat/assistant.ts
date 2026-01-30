@@ -171,7 +171,7 @@ export const processMessages = async () => {
     conversationItems,
     setChatMessages,
     setConversationItems,
-    setAssistantLoading,
+    setLoadingState,
     previousResponseId,
     setPreviousResponseId,
   } = useConversationStore.getState();
@@ -222,7 +222,26 @@ export const processMessages = async () => {
   let mcpArguments = "";
 
   await handleTurn(inputItems, tools, async ({ event, data }) => {
+    // DEBUG: Log all events for analysis
+    console.log(`[SSE EVENT] ${event}`, data);
+
     switch (event) {
+      case "response.created":
+      case "response.in_progress": {
+        setLoadingState({ status: "thinking", thinkingText: "" });
+        break;
+      }
+
+      case "response.reasoning_summary_text.delta": {
+        const { delta } = data;
+        const current = useConversationStore.getState().loadingState;
+        setLoadingState({
+          status: "thinking",
+          thinkingText: current.thinkingText + (delta || ""),
+        });
+        break;
+      }
+
       case "response.output_text.delta":
       case "response.output_text.annotation.added": {
         const { delta, item_id, annotation } = data;
@@ -266,17 +285,21 @@ export const processMessages = async () => {
         }
 
         setChatMessages([...chatMessages]);
-        setAssistantLoading(false);
+        setLoadingState({ status: "responding", thinkingText: "" });
         break;
       }
 
       case "response.output_item.added": {
         const { item } = data || {};
-        // New item coming in
         if (!item || !item.type) {
           break;
         }
-        setAssistantLoading(false);
+        // Only transition to "responding" for message items.
+        // Tool calls keep the thinking/connecting state active
+        // until actual text content arrives.
+        if (item.type === "message") {
+          setLoadingState({ status: "responding", thinkingText: "" });
+        }
         // Handle differently depending on the item type
         switch (item.type) {
           case "message": {
@@ -588,6 +611,7 @@ export const processMessages = async () => {
 
       case "response.completed": {
         console.log("response completed", data);
+        setLoadingState({ status: "idle", thinkingText: "" });
         const { response } = data;
 
         // Store the response ID for the stored-responses flow
@@ -639,7 +663,7 @@ export const processMessages = async () => {
           ],
         });
         setChatMessages([...chatMessages]);
-        setAssistantLoading(false);
+        setLoadingState({ status: "idle", thinkingText: "" });
         break;
       }
 

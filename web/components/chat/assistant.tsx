@@ -52,7 +52,7 @@ export default function Assistant() {
   const hasMounted = useHasMounted();
   const [setupChecked, setSetupChecked] = useState(false);
 
-  const { chatMessages, addConversationItem, addChatMessage, setAssistantLoading } =
+  const { chatMessages, addConversationItem, addChatMessage, setLoadingState } =
     useConversationStore();
 
   const handleSendMessage = async (message: string) => {
@@ -69,12 +69,13 @@ export default function Assistant() {
     };
 
     try {
-      setAssistantLoading(true);
+      setLoadingState({ status: "connecting", thinkingText: "" });
       addConversationItem(userMessage);
       addChatMessage(userItem);
       await processMessages();
     } catch (error) {
       console.error("Error processing message:", error);
+      setLoadingState({ status: "idle", thinkingText: "" });
     }
   };
 

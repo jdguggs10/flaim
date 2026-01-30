@@ -27,7 +27,7 @@ const Chat: React.FC<ChatProps> = ({
   const [inputMessageText, setinputMessageText] = useState<string>("");
   // This state is used to provide better user experience for non-English IMEs such as Japanese
   const [isComposing, setIsComposing] = useState(false);
-  const { isAssistantLoading, clearConversation } = useConversationStore();
+  const { loadingState, clearConversation } = useConversationStore();
   const { debugMode, setDebugMode } = useToolsStore();
   const { getActiveLeague } = useLeaguesStore();
   const activeLeague = getActiveLeague();
@@ -112,7 +112,7 @@ const Chat: React.FC<ChatProps> = ({
                 ) : null}
               </React.Fragment>
             ))}
-            {isAssistantLoading && <LoadingMessage />}
+            {loadingState.status !== "idle" && <LoadingMessage />}
             <div ref={itemsEndRef} />
           </div>
         </div>
