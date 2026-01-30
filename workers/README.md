@@ -10,8 +10,6 @@ Cloudflare Workers handling authentication and MCP data fetching.
 | `fantasy-mcp` | 8790 | **Unified MCP gateway** - routes to platform workers via service bindings |
 | `espn-client` | 8789 | **ESPN API client** - handles all ESPN sports (called by fantasy-mcp) |
 | `yahoo-client` | 8791 | **Yahoo API client** - handles all Yahoo sports (called by fantasy-mcp) |
-| `baseball-espn-mcp` | 8787 | Legacy: Direct baseball MCP server |
-| `football-espn-mcp` | 8788 | Legacy: Direct football MCP server |
 
 ### New Architecture (Unified Gateway)
 

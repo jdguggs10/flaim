@@ -45,14 +45,11 @@ This file is the canonical map for Flaim docs. Always read this first and use it
 - `workers/auth-worker/README.md`: Auth/OAuth, credentials, extension APIs.
 - `workers/fantasy-mcp/README.md`: Unified MCP gateway, tools, routing.
 - `workers/espn-client/README.md`: ESPN platform client details.
-- `workers/baseball-espn-mcp/README.md`: Legacy baseball MCP worker.
-- `workers/football-espn-mcp/README.md`: Legacy football MCP worker.
 - `workers/yahoo-client/README.md`: Yahoo platform client details.
 
 ### Internal/reference markdown
 - `workers/espn-client/src/sports/baseball/MAPPINGS.md`: ESPN baseball slot/position mapping notes.
 - `workers/espn-client/src/sports/football/MAPPINGS.md`: ESPN football slot/position mapping notes.
-- `workers/baseball-espn-mcp/scripts/BASELINE.md`: Baseline verification notes for legacy worker.
 
 ## After feature work checklist (LLM + human)
 

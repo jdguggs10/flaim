@@ -23,7 +23,7 @@ npm run dev
 - **Auth worker (`/workers/auth-worker`)**: Supabase credential + league storage, JWT verification, OAuth token management, extension APIs. Uses Hono for routing.
 - **Unified Gateway (`/workers/fantasy-mcp`)**: Single MCP endpoint exposing unified tools for all platforms and sports. Routes to platform-specific workers via service bindings.
 - **ESPN Client (`/workers/espn-client`)**: Internal worker handling all ESPN API calls for all sports (football, baseball). Called by fantasy-mcp gateway.
-- **Legacy Sport MCP workers (`/workers/baseball-espn-mcp`, `/workers/football-espn-mcp`)**: Direct ESPN API calls + MCP tools. Still functional, will be deprecated after unified gateway is validated.
+- **Yahoo Client (`/workers/yahoo-client`)**: Internal worker handling all Yahoo Fantasy API calls for all sports (football, baseball). Called by fantasy-mcp gateway.
 - **Shared package (`/workers/shared`)**: Common utilities (CORS middleware, auth-fetch helper, types) used by all workers.
 - **Supabase Postgres**: `espn_credentials`, `espn_leagues`, `yahoo_leagues`, `user_preferences` (defaults), `oauth_tokens`, `oauth_codes`, `rate_limits`, plus legacy `extension_tokens`/`extension_pairing_codes` (deprecated).
 
@@ -42,8 +42,6 @@ workers/                    # Cloudflare Workers (see workers/README.md)
   fantasy-mcp/              # Unified MCP gateway (routes to platform workers)
   espn-client/              # ESPN API client (called by fantasy-mcp)
   yahoo-client/             # Yahoo API client (called by fantasy-mcp)
-  baseball-espn-mcp/        # Legacy: Baseball MCP server (direct)
-  football-espn-mcp/        # Legacy: Football MCP server (direct)
   shared/                   # @flaim/worker-shared package
 extension/                  # Chrome extension (see extension/README.md)
 docs/                       # Documentation
@@ -130,7 +128,6 @@ ESPN Cookies → POST /api/extension/sync → Auth Worker → Supabase
 Users connect their own AI subscription to Flaim's MCP servers:
 
 - **MCP URL**: `https://api.flaim.app/fantasy/mcp` (unified gateway - handles all sports)
-- **Legacy URLs**: `https://api.flaim.app/football/mcp`, `https://api.flaim.app/baseball/mcp` (still functional)
 - **OAuth Flow**: Full OAuth 2.1 with PKCE, Dynamic Client Registration (RFC 7591), Protected Resource Metadata (RFC 9728)
 - **Endpoints**: `/auth/register` (DCR), `/auth/authorize`, `/auth/token`, `/auth/revoke`
 - **Metadata**: `/.well-known/oauth-authorization-server`, `/fantasy/.well-known/oauth-protected-resource`
@@ -167,9 +164,7 @@ Claude/ChatGPT → fantasy-mcp (gateway) → espn-client → ESPN API
 - `get_free_agents` — Available free agents (platform/sport dependent)
 
 **Status:**
-- Unified gateway validated and promoted as primary (Jan 2026)
-- Legacy workers (`baseball-espn-mcp`, `football-espn-mcp`) still functional for existing users
-- New users should use the unified gateway
+- Unified gateway is the sole MCP endpoint (Jan 2026)
 
 ## Security
 
