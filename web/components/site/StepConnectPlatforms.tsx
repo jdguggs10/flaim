@@ -228,33 +228,6 @@ export function StepConnectPlatforms({ className }: StepConnectPlatformsProps) {
 
       {/* Two-column layout */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {/* Yahoo Column */}
-        <div className="p-4 border rounded-lg space-y-3">
-          <div className="font-medium text-sm">Yahoo</div>
-          <p className="text-xs text-muted-foreground">Sign in with Yahoo to auto-discover leagues.</p>
-
-          {yahooStatus === 'loading' ? (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Checking...
-            </div>
-          ) : yahooStatus === 'connected' ? (
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 text-sm text-success font-medium">
-                <Check className="h-4 w-4" />
-                Connected
-              </div>
-              <Button variant="outline" size="sm" className="w-full" onClick={handleConnectYahoo}>
-                Refresh Yahoo Auth
-              </Button>
-            </div>
-          ) : (
-            <Button variant="outline" size="sm" className="w-full" onClick={handleConnectYahoo}>
-              Authenticate Yahoo
-            </Button>
-          )}
-        </div>
-
         {/* ESPN Column */}
         <div className="p-4 border rounded-lg space-y-3">
           <div className="font-medium text-sm">ESPN</div>
@@ -338,6 +311,33 @@ export function StepConnectPlatforms({ className }: StepConnectPlatformsProps) {
                 </div>
               )}
             </div>
+          )}
+        </div>
+
+        {/* Yahoo Column */}
+        <div className="p-4 border rounded-lg space-y-3">
+          <div className="font-medium text-sm">Yahoo</div>
+          <p className="text-xs text-muted-foreground">Sign in with Yahoo to auto-discover leagues.</p>
+
+          {yahooStatus === 'loading' ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Checking...
+            </div>
+          ) : yahooStatus === 'connected' ? (
+            <div className="space-y-2">
+              <Button variant="outline" size="sm" className="w-full" onClick={handleConnectYahoo}>
+                Refresh Yahoo Auth
+              </Button>
+              <div className="flex items-center gap-2 text-sm text-success font-medium">
+                <Check className="h-4 w-4" />
+                Connected
+              </div>
+            </div>
+          ) : (
+            <Button variant="outline" size="sm" className="w-full" onClick={handleConnectYahoo}>
+              Authenticate Yahoo
+            </Button>
           )}
         </div>
       </div>
