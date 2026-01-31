@@ -325,8 +325,8 @@ import { cn } from '@/lib/utils'
 
 The Flaim logo is a flaming baseball. Two source marks exist (both 1024x1024 B&W PNGs):
 
-1. **Icon mark** (`flaim-mark-icon-bw.png`) — Simplified: no interior halftone, thick stitches, bold flame tongues. Used for all small-size assets where legibility matters.
-2. **Hero mark** (`flaim-mark-hero-bw.png`) — Full detail: stipple texture, fine flame detail. Used at display sizes in the site header and marketing.
+1. **Icon mark** (`docs/branding/flaim-mark-icon-bw.png`) — Simplified: no interior halftone, thick stitches, bold flame tongues. Used for all small-size assets where legibility matters.
+2. **Hero mark** (`docs/branding/flaim-mark-hero-bw.png`) — Full detail: stipple texture, fine flame detail. Used at display sizes in the site header and marketing.
 
 **Rule of thumb:** If it needs to read as "flaming ball" at 24px, use the icon mark. Otherwise use the hero mark.
 
@@ -366,7 +366,7 @@ The Flaim logo is a flaming baseball. Two source marks exist (both 1024x1024 B&W
 **Icon mark** → favicon, apple icon, extension icons (anti-aliased resize, no threshold):
 
 ```bash
-SRC=flaim-mark-icon-bw.png
+SRC=docs/branding/flaim-mark-icon-bw.png
 
 # Favicon (16 + 32 + 48px ICO — 48px for Retina tabs)
 magick $SRC -resize 16x16 /tmp/16.png
@@ -387,7 +387,7 @@ magick $SRC -resize 128x128 extension/assets/icons/icon-128.png
 **Hero mark** → site header logo (resize, make white transparent, no threshold):
 
 ```bash
-magick flaim-mark-hero-bw.png -fuzz 10% -transparent white -resize 512x512 web/public/flaim-mark-hero.png
+magick docs/branding/flaim-mark-hero-bw.png -fuzz 10% -transparent white -resize 512x512 web/public/flaim-mark-hero.png
 ```
 
 ## Resources
