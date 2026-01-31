@@ -15,6 +15,10 @@ Follow Keep a Changelog; SemVer applies.
 - **Changed**: Promoted UI consistency rules from `docs/dev/ui-consistency.md` to permanent documentation with expanded scope.
 - **Changed**: Archived `docs/dev/ADD_YAHOO_PLATFORM.md` to `docs/archive/` (Phase 3 complete).
 
+### Branding
+- **Changed**: New flaming baseball logo for site favicon, apple-touch-icon, and Chrome extension icons.
+- **Changed**: Extension version bumped to 1.4.2.
+
 ### Site Loading States
 - **Fixed**: Leagues page no longer shows full-page spinner while checking ESPN credentials. Page structure renders immediately after Clerk auth loads.
 - **Added**: "Loading your leagues..." label on league list spinner for clearer feedback.

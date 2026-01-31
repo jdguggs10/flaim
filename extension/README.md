@@ -41,7 +41,7 @@ npm run build:dev
 npm run build
 
 # Create zip for Chrome Web Store upload
-zip -r flaim-extension-v1.4.1.zip dist/
+zip -r flaim-extension-v1.4.2.zip dist/
 ```
 
 ### Load Unpacked Extension
