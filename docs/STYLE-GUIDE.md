@@ -363,25 +363,25 @@ The Flaim logo is a flaming baseball. Two source marks exist (both 1024x1024 B&W
 
 ### Regenerating Icons
 
-**Icon mark** → favicon, apple icon, extension icons (anti-aliased resize, no threshold):
+**Icon mark** → favicon, apple icon, extension icons (anti-aliased resize, transparent background):
 
 ```bash
 SRC=docs/branding/flaim-mark-icon-bw.png
 
 # Favicon (16 + 32 + 48px ICO — 48px for Retina tabs)
-magick $SRC -resize 16x16 /tmp/16.png
-magick $SRC -resize 32x32 /tmp/32.png
-magick $SRC -resize 48x48 /tmp/48.png
+magick $SRC -resize 16x16 -fuzz 10% -transparent white /tmp/16.png
+magick $SRC -resize 32x32 -fuzz 10% -transparent white /tmp/32.png
+magick $SRC -resize 48x48 -fuzz 10% -transparent white /tmp/48.png
 magick /tmp/16.png /tmp/32.png /tmp/48.png web/app/favicon.ico
 
 # Apple icon + general icon
-magick $SRC -resize 180x180 web/app/apple-icon.png
-magick $SRC -resize 512x512 web/app/icon.png
+magick $SRC -resize 180x180 -fuzz 10% -transparent white web/app/apple-icon.png
+magick $SRC -resize 512x512 -fuzz 10% -transparent white web/app/icon.png
 
 # Extension icons
-magick $SRC -resize 16x16 extension/assets/icons/icon-16.png
-magick $SRC -resize 48x48 extension/assets/icons/icon-48.png
-magick $SRC -resize 128x128 extension/assets/icons/icon-128.png
+magick $SRC -resize 16x16 -fuzz 10% -transparent white extension/assets/icons/icon-16.png
+magick $SRC -resize 48x48 -fuzz 10% -transparent white extension/assets/icons/icon-48.png
+magick $SRC -resize 128x128 -fuzz 10% -transparent white extension/assets/icons/icon-128.png
 ```
 
 **Hero mark** → site header logo (resize, make white transparent, no threshold):
