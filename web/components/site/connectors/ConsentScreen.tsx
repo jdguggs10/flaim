@@ -5,7 +5,8 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { Shield, CheckCircle, Loader2, AlertCircle, Flame } from 'lucide-react';
+import Image from 'next/image';
+import { Shield, CheckCircle, Loader2, AlertCircle } from 'lucide-react';
 
 interface OAuthParams {
   redirectUri: string;
@@ -61,7 +62,7 @@ export default function ConsentScreen({
         <div className="p-4 bg-muted rounded-lg">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-              <Flame className="h-6 w-6 text-primary" />
+              <Image src="/flaim-mark-hero.png" alt="Flaim" width={24} height={24} className="dark:invert" />
             </div>
             <div>
               <div className="font-medium">Flaim Fantasy Connector</div>
