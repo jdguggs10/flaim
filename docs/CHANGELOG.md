@@ -20,6 +20,7 @@ Follow Keep a Changelog; SemVer applies.
 - **Added**: "Loading your leagues..." label on league list spinner for clearer feedback.
 - **Added**: Inline "Checking..." badge in ESPN maintenance section while credential status loads.
 - **Fixed**: Homepage ESPN and Yahoo platform columns no longer shift height when status checks complete (added `min-h`).
+- **Changed**: ESPN maintenance buttons restyled to match Yahoo — side-by-side `sm` buttons instead of stacked full-width.
 
 ### Chat UX
 - **Fixed**: Chat loading indicator no longer disappears 5+ seconds before content appears. Loading state stays visible until actual text or tool call UI renders.
