@@ -1163,7 +1163,7 @@ function LeaguesPageContent() {
                 />
               </button>
               {isEspnSetupOpen && (
-                <div id="espn-setup-content" className="px-4 pb-4 space-y-4">
+                <div id="espn-setup-content" className="px-4 pb-4 space-y-3">
                   <p className="text-sm text-muted-foreground">
                     Use the extension to update credentials and discover leagues, or add one manually.
                   </p>
@@ -1173,34 +1173,26 @@ function LeaguesPageContent() {
                     </p>
                   )}
                   {!verifiedLeague && (
-                    <div className="space-y-4">
-                      <div className="space-y-2">
+                    <div className="space-y-3">
+                      <div className="flex gap-2">
                         <a
                           href={CHROME_EXTENSION_URL}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="block"
                         >
-                          <Button
-                            variant={hasCredentials ? 'outline' : 'default'}
-                            className="w-full justify-center"
-                          >
-                            <span className="inline-flex items-center gap-2">
-                              <span>Automatically</span>
-                              <Chrome className="h-4 w-4" />
-                              <span>Use Chrome Extension</span>
-                            </span>
+                          <Button variant="outline" size="sm">
+                            <Chrome className="h-4 w-4 mr-2" />
+                            Chrome Extension
                           </Button>
                         </a>
-                      </div>
 
-                      <Dialog open={manualDialogOpen} onOpenChange={setManualDialogOpen}>
-                        <DialogTrigger asChild>
-                          <Button variant="outline" className="w-full">
-                            Add league manually
-                          </Button>
-                        </DialogTrigger>
-                        <DialogContent>
+                        <Dialog open={manualDialogOpen} onOpenChange={setManualDialogOpen}>
+                          <DialogTrigger asChild>
+                            <Button variant="outline" size="sm">
+                              Add Manually
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent>
                           <DialogHeader>
                             <div className="flex items-center gap-2">
                               <DialogTitle>Add League Manually</DialogTitle>
@@ -1341,8 +1333,9 @@ function LeaguesPageContent() {
                               </Button>
                             </div>
                           </div>
-                        </DialogContent>
-                      </Dialog>
+                          </DialogContent>
+                        </Dialog>
+                      </div>
                     </div>
                   )}
 
