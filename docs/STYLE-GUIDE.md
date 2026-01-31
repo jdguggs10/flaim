@@ -319,6 +319,76 @@ import { cn } from '@/lib/utils'
 4. Update this guide with usage examples
 5. Run `npm run ui:check` to verify no violations
 
+## Branding & Assets
+
+### Logo — 2-Tier System
+
+The Flaim logo is a flaming baseball. Two source marks exist (both 1024x1024 B&W PNGs):
+
+1. **Icon mark** (`flaim-mark-icon-bw.png`) — Simplified: no interior halftone, thick stitches, bold flame tongues. Used for all small-size assets where legibility matters.
+2. **Hero mark** (`flaim-mark-hero-bw.png`) — Full detail: stipple texture, fine flame detail. Used at display sizes in the site header and marketing.
+
+**Rule of thumb:** If it needs to read as "flaming ball" at 24px, use the icon mark. Otherwise use the hero mark.
+
+### Asset Inventory
+
+**From icon mark** (white background, threshold pipeline):
+
+| File | Size | Purpose |
+|------|------|---------|
+| `web/app/favicon.ico` | 16/32px | Browser tab icon |
+| `web/app/apple-icon.png` | 180px | iOS home screen icon |
+| `web/app/icon.png` | 512px | General web app icon / PWA |
+| `extension/assets/icons/icon-16.png` | 16px | Chrome extension UI |
+| `extension/assets/icons/icon-48.png` | 48px | Chrome extension UI |
+| `extension/assets/icons/icon-128.png` | 128px | Chrome Web Store listing |
+
+**From hero mark** (transparent background):
+
+| File | Size | Purpose |
+|------|------|---------|
+| `web/public/flaim-mark-hero.png` | 256px | Site header logo, uses `dark:invert` for dark mode |
+
+**Metadata references:**
+- `web/app/layout.tsx` — Next.js `metadata.icons` (favicon + apple icon)
+- `extension/manifest.json` — `icons` and `default_icon` fields
+- `web/components/site/site-header.tsx` — Hero mark in site header
+- `web/components/chat/chat-header.tsx` — Hero mark in chat header
+
+### Other Images
+
+| File | Purpose |
+|------|---------|
+| `web/public/openai_logo.svg` | OpenAI branding on AI setup step |
+
+### Regenerating Icons
+
+**Icon mark** → favicon, apple icon, extension icons (resize + threshold for crisp B&W):
+
+```bash
+SRC=flaim-mark-icon-bw.png
+
+# Favicon (16 + 32px ICO)
+magick $SRC -resize 16x16 -threshold 50% /tmp/16.png
+magick $SRC -resize 32x32 -threshold 50% /tmp/32.png
+magick /tmp/16.png /tmp/32.png web/app/favicon.ico
+
+# Apple icon + general icon
+magick $SRC -resize 180x180 -threshold 50% web/app/apple-icon.png
+magick $SRC -resize 512x512 -threshold 50% web/app/icon.png
+
+# Extension icons
+magick $SRC -resize 16x16 -threshold 50% extension/assets/icons/icon-16.png
+magick $SRC -resize 48x48 -threshold 50% extension/assets/icons/icon-48.png
+magick $SRC -resize 128x128 -threshold 50% extension/assets/icons/icon-128.png
+```
+
+**Hero mark** → site header logo (resize, make white transparent, no threshold):
+
+```bash
+magick flaim-mark-hero-bw.png -fuzz 10% -transparent white -resize 256x256 web/public/flaim-mark-hero.png
+```
+
 ## Resources
 
 - [shadcn/ui docs](https://ui.shadcn.com/) — Component library

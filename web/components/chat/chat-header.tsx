@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Flame } from "lucide-react";
+import Image from "next/image";
 import { UserButton } from "@clerk/nextjs";
 import { LeagueDropdown } from "./league-dropdown";
 import { SeasonDropdown } from "./season-dropdown";
@@ -52,7 +52,7 @@ export function ChatHeader() {
           href="/"
           className="inline-flex items-center gap-2 text-lg font-bold hover:opacity-80 transition-opacity"
         >
-          <Flame className="h-5 w-5" />
+          <Image src="/flaim-mark-hero.png" alt="Flaim" width={20} height={20} className="dark:invert" />
           <span className="hidden sm:inline">Flaim</span>
         </Link>
         <AccountHeaderButton />
