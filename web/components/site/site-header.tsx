@@ -26,7 +26,7 @@ export function SiteHeader() {
           href="/"
           className="inline-flex items-center gap-2 text-xl font-bold transition-opacity hover:opacity-80"
         >
-          <Image src="/flaim-mark-hero.png" alt="Flaim" width={20} height={20} className="dark:invert" />
+          <Image src="/flaim-mark-hero.png" alt="Flaim" width={32} height={32} className="dark:invert" />
           <span>Flaim</span>
         </Link>
         <div className="flex items-center gap-2 sm:gap-4">
