@@ -1145,11 +1145,16 @@ function LeaguesPageContent() {
               >
                 <div className="flex items-center gap-2">
                   <span className="text-lg">ESPN</span>
-                  {hasCredentials && (
+                  {isCheckingCreds ? (
+                    <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      Checking...
+                    </span>
+                  ) : hasCredentials ? (
                     <span className="text-xs px-2 py-0.5 rounded-full bg-success/20 text-success">
                       Credentials Saved
                     </span>
-                  )}
+                  ) : null}
                 </div>
                 <ChevronDown
                   className={`h-5 w-5 text-muted-foreground transition-transform ${
