@@ -347,7 +347,7 @@ The Flaim logo is a flaming baseball. Two source marks exist (both 1024x1024 B&W
 
 | File | Size | Purpose |
 |------|------|---------|
-| `web/public/flaim-mark-hero.png` | 256px | Site header logo, uses `dark:invert` for dark mode |
+| `web/public/flaim-mark-hero.png` | 512px | Site header logo, uses `dark:invert` for dark mode |
 
 **Metadata references:**
 - `web/app/layout.tsx` — Next.js `metadata.icons` (favicon + apple icon)
@@ -363,24 +363,25 @@ The Flaim logo is a flaming baseball. Two source marks exist (both 1024x1024 B&W
 
 ### Regenerating Icons
 
-**Icon mark** → favicon, apple icon, extension icons (resize + threshold for crisp B&W):
+**Icon mark** → favicon, apple icon, extension icons (anti-aliased resize, no threshold):
 
 ```bash
 SRC=flaim-mark-icon-bw.png
 
-# Favicon (16 + 32px ICO)
-magick $SRC -resize 16x16 -threshold 50% /tmp/16.png
-magick $SRC -resize 32x32 -threshold 50% /tmp/32.png
-magick /tmp/16.png /tmp/32.png web/app/favicon.ico
+# Favicon (16 + 32 + 48px ICO — 48px for Retina tabs)
+magick $SRC -resize 16x16 /tmp/16.png
+magick $SRC -resize 32x32 /tmp/32.png
+magick $SRC -resize 48x48 /tmp/48.png
+magick /tmp/16.png /tmp/32.png /tmp/48.png web/app/favicon.ico
 
 # Apple icon + general icon
-magick $SRC -resize 180x180 -threshold 50% web/app/apple-icon.png
-magick $SRC -resize 512x512 -threshold 50% web/app/icon.png
+magick $SRC -resize 180x180 web/app/apple-icon.png
+magick $SRC -resize 512x512 web/app/icon.png
 
 # Extension icons
-magick $SRC -resize 16x16 -threshold 50% extension/assets/icons/icon-16.png
-magick $SRC -resize 48x48 -threshold 50% extension/assets/icons/icon-48.png
-magick $SRC -resize 128x128 -threshold 50% extension/assets/icons/icon-128.png
+magick $SRC -resize 16x16 extension/assets/icons/icon-16.png
+magick $SRC -resize 48x48 extension/assets/icons/icon-48.png
+magick $SRC -resize 128x128 extension/assets/icons/icon-128.png
 ```
 
 **Hero mark** → site header logo (resize, make white transparent, no threshold):
