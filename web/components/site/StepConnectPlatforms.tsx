@@ -229,7 +229,7 @@ export function StepConnectPlatforms({ className }: StepConnectPlatformsProps) {
       {/* Two-column layout */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {/* ESPN Column */}
-        <div className="p-4 border rounded-lg space-y-3">
+        <div className="p-4 border rounded-lg space-y-3 min-h-[88px]">
           <div className="font-medium text-sm">ESPN</div>
           <p className="text-xs text-muted-foreground">Chrome extension grabs credentials automatically.</p>
 
@@ -315,7 +315,7 @@ export function StepConnectPlatforms({ className }: StepConnectPlatformsProps) {
         </div>
 
         {/* Yahoo Column */}
-        <div className="p-4 border rounded-lg space-y-3">
+        <div className="p-4 border rounded-lg space-y-3 min-h-[88px]">
           <div className="font-medium text-sm">Yahoo</div>
           <p className="text-xs text-muted-foreground">Sign in with Yahoo to auto-discover leagues.</p>
 
