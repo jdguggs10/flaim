@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Flaim - ESPN Fantasy Connector",
-  "version": "1.4.1",
+  "version": "1.4.2",
   "description": "Automatically sync your ESPN fantasy credentials to Flaim",
   "permissions": [
     "cookies",
