@@ -15,6 +15,12 @@ Follow Keep a Changelog; SemVer applies.
 - **Changed**: Promoted UI consistency rules from `docs/dev/ui-consistency.md` to permanent documentation with expanded scope.
 - **Changed**: Archived `docs/dev/ADD_YAHOO_PLATFORM.md` to `docs/archive/` (Phase 3 complete).
 
+### Site Loading States
+- **Fixed**: Leagues page no longer shows full-page spinner while checking ESPN credentials. Page structure renders immediately after Clerk auth loads.
+- **Added**: "Loading your leagues..." label on league list spinner for clearer feedback.
+- **Added**: Inline "Checking..." badge in ESPN maintenance section while credential status loads.
+- **Fixed**: Homepage ESPN and Yahoo platform columns no longer shift height when status checks complete (added `min-h`).
+
 ### Chat UX
 - **Fixed**: Chat loading indicator no longer disappears 5+ seconds before content appears. Loading state stays visible until actual text or tool call UI renders.
 - **Added**: Collapsible "Thinking..." pill replaces the tiny 12px pulsing dot. Shows a spinner with status text. When using reasoning models, the pill can be expanded to show live reasoning summary text.
