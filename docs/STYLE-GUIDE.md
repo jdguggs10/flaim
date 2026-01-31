@@ -386,7 +386,7 @@ magick $SRC -resize 128x128 -threshold 50% extension/assets/icons/icon-128.png
 **Hero mark** → site header logo (resize, make white transparent, no threshold):
 
 ```bash
-magick flaim-mark-hero-bw.png -fuzz 10% -transparent white -resize 256x256 web/public/flaim-mark-hero.png
+magick flaim-mark-hero-bw.png -fuzz 10% -transparent white -resize 512x512 web/public/flaim-mark-hero.png
 ```
 
 ## Resources
