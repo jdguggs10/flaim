@@ -19,6 +19,7 @@ export const metadata: Metadata = {
   description: "Connect your AI assistant to ESPN fantasy sports",
   icons: {
     icon: "/favicon.ico",
+    apple: "/apple-icon.png",
   },
 };
 
