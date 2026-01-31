@@ -229,116 +229,120 @@ export function StepConnectPlatforms({ className }: StepConnectPlatformsProps) {
       {/* Two-column layout */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {/* ESPN Column */}
-        <div className="p-4 border rounded-lg space-y-3 min-h-[88px]">
+        <div className="p-4 border rounded-lg space-y-3">
           <div className="font-medium text-sm">ESPN</div>
           <p className="text-xs text-muted-foreground">Chrome extension grabs credentials automatically.</p>
 
-          {espnStatus === 'loading' ? (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Checking...
-            </div>
-          ) : espnStatus === 'connected' ? (
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 text-sm text-success font-medium">
-                <Check className="h-4 w-4" />
-                Extension connected
+          <div className="min-h-[60px]">
+            {espnStatus === 'loading' ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Checking...
               </div>
-              {hasCredentials && (
+            ) : espnStatus === 'connected' ? (
+              <div className="space-y-2">
                 <div className="flex items-center gap-2 text-sm text-success font-medium">
                   <Check className="h-4 w-4" />
-                  Credentials saved
+                  Extension connected
                 </div>
-              )}
-            </div>
-          ) : (
-            <div className="space-y-2">
-              <div className="flex gap-2">
-                <a href={CHROME_EXTENSION_URL} target="_blank" rel="noopener noreferrer" className="flex-1">
-                  <Button variant="outline" size="sm" className="w-full">
-                    <Chrome className="h-4 w-4 mr-2" />
-                    Install Extension
-                  </Button>
-                </a>
-                <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-                  <DialogTrigger asChild>
-                    <Button variant="outline" size="icon" className="h-8 w-8 shrink-0" onClick={handleOpenDialog} title="Add manually">
-                      <Wrench className="h-4 w-4" />
+                {hasCredentials && (
+                  <div className="flex items-center gap-2 text-sm text-success font-medium">
+                    <Check className="h-4 w-4" />
+                    Credentials saved
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  <a href={CHROME_EXTENSION_URL} target="_blank" rel="noopener noreferrer" className="flex-1">
+                    <Button variant="outline" size="sm" className="w-full">
+                      <Chrome className="h-4 w-4 mr-2" />
+                      Install Extension
                     </Button>
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>ESPN Credentials</DialogTitle>
-                      <DialogDescription>Enter your ESPN authentication cookies.</DialogDescription>
-                    </DialogHeader>
-                    <div className="space-y-4 pt-2">
-                      {isLoadingCreds ? (
-                        <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin" /></div>
-                      ) : (
-                        <>
-                          {espnError && <div className="p-3 bg-destructive/10 border border-destructive/30 rounded text-sm text-destructive">{espnError}</div>}
-                          <div className="space-y-2">
-                            <Label htmlFor="swid">SWID</Label>
-                            <Input id="swid" type={showCredentials ? 'text' : 'password'} value={swid} onChange={(e) => setSwid(e.target.value)} />
-                          </div>
-                          <div className="space-y-2">
-                            <Label htmlFor="espn_s2">ESPN_S2</Label>
-                            <Input id="espn_s2" type={showCredentials ? 'text' : 'password'} value={espnS2} onChange={(e) => setEspnS2(e.target.value)} />
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Button variant="ghost" size="sm" onClick={() => setShowCredentials(!showCredentials)}>
-                              {showCredentials ? <EyeOff className="h-4 w-4 mr-1" /> : <Eye className="h-4 w-4 mr-1" />}
-                              {showCredentials ? 'Hide' : 'Show'}
-                            </Button>
-                          </div>
-                          <div className="flex gap-2">
-                            <Button onClick={handleSaveCredentials} disabled={isSaving}>
-                              {isSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-                              Save
-                            </Button>
-                            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  </DialogContent>
-                </Dialog>
-              </div>
-              {hasCredentials && (
-                <div className="flex items-center gap-2 text-sm text-success font-medium">
-                  <Check className="h-4 w-4" />
-                  Credentials saved
+                  </a>
+                  <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+                    <DialogTrigger asChild>
+                      <Button variant="outline" size="icon" className="h-8 w-8 shrink-0" onClick={handleOpenDialog} title="Add manually">
+                        <Wrench className="h-4 w-4" />
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>ESPN Credentials</DialogTitle>
+                        <DialogDescription>Enter your ESPN authentication cookies.</DialogDescription>
+                      </DialogHeader>
+                      <div className="space-y-4 pt-2">
+                        {isLoadingCreds ? (
+                          <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin" /></div>
+                        ) : (
+                          <>
+                            {espnError && <div className="p-3 bg-destructive/10 border border-destructive/30 rounded text-sm text-destructive">{espnError}</div>}
+                            <div className="space-y-2">
+                              <Label htmlFor="swid">SWID</Label>
+                              <Input id="swid" type={showCredentials ? 'text' : 'password'} value={swid} onChange={(e) => setSwid(e.target.value)} />
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="espn_s2">ESPN_S2</Label>
+                              <Input id="espn_s2" type={showCredentials ? 'text' : 'password'} value={espnS2} onChange={(e) => setEspnS2(e.target.value)} />
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Button variant="ghost" size="sm" onClick={() => setShowCredentials(!showCredentials)}>
+                                {showCredentials ? <EyeOff className="h-4 w-4 mr-1" /> : <Eye className="h-4 w-4 mr-1" />}
+                                {showCredentials ? 'Hide' : 'Show'}
+                              </Button>
+                            </div>
+                            <div className="flex gap-2">
+                              <Button onClick={handleSaveCredentials} disabled={isSaving}>
+                                {isSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                                Save
+                              </Button>
+                              <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </DialogContent>
+                  </Dialog>
                 </div>
-              )}
-            </div>
-          )}
+                {hasCredentials && (
+                  <div className="flex items-center gap-2 text-sm text-success font-medium">
+                    <Check className="h-4 w-4" />
+                    Credentials saved
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Yahoo Column */}
-        <div className="p-4 border rounded-lg space-y-3 min-h-[88px]">
+        <div className="p-4 border rounded-lg space-y-3">
           <div className="font-medium text-sm">Yahoo</div>
           <p className="text-xs text-muted-foreground">Sign in with Yahoo to auto-discover leagues.</p>
 
-          {yahooStatus === 'loading' ? (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Checking...
-            </div>
-          ) : yahooStatus === 'connected' ? (
-            <div className="space-y-2">
-              <Button variant="outline" size="sm" className="w-full" onClick={handleConnectYahoo}>
-                Refresh Yahoo Auth
-              </Button>
-              <div className="flex items-center gap-2 text-sm text-success font-medium">
-                <Check className="h-4 w-4" />
-                Connected
+          <div className="min-h-[60px]">
+            {yahooStatus === 'loading' ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Checking...
               </div>
-            </div>
-          ) : (
-            <Button variant="outline" size="sm" className="w-full" onClick={handleConnectYahoo}>
-              Authenticate Yahoo
-            </Button>
-          )}
+            ) : yahooStatus === 'connected' ? (
+              <div className="space-y-2">
+                <Button variant="outline" size="sm" className="w-full" onClick={handleConnectYahoo}>
+                  Refresh Yahoo Auth
+                </Button>
+                <div className="flex items-center gap-2 text-sm text-success font-medium">
+                  <Check className="h-4 w-4" />
+                  Connected
+                </div>
+              </div>
+            ) : (
+              <Button variant="outline" size="sm" className="w-full" onClick={handleConnectYahoo}>
+                Authenticate Yahoo
+              </Button>
+            )}
+          </div>
         </div>
       </div>
     </Card>
