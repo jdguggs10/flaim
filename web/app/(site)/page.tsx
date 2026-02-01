@@ -12,7 +12,7 @@ export default function LandingPage() {
       {/* Hero */}
       <section className="py-8 px-4 text-center">
         <h1 className="text-4xl md:text-5xl font-bold mb-2">
-          MCP Connectors for Fantasy Sports
+          MCP Connector for Fantasy Sports
         </h1>
         <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
           Give AI access to your fantasy leagues. Ask questions about your teams, roster, free agents, and more.
