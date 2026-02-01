@@ -26,10 +26,10 @@ import {
   X,
   Star,
   History,
-  Settings,
   Wrench,
   Eye,
   EyeOff,
+  Briefcase,
   Chrome,
   Info,
 } from 'lucide-react';
@@ -1245,84 +1245,88 @@ function LeaguesPageContent() {
                             Chrome Extension
                           </Button>
                         </a>
-                        <Dialog
-                          open={espnCredsDialogOpen}
-                          onOpenChange={(open) => {
-                            setEspnCredsDialogOpen(open);
-                            if (open) {
-                              handleCancelEdit();
-                              handleEditCredentials();
-                            } else {
-                              handleCancelEdit();
-                            }
-                          }}
-                        >
+                        <Dialog open={discoverDialogOpen} onOpenChange={setDiscoverDialogOpen}>
                           <DialogTrigger asChild>
                             <Button
                               variant="outline"
                               size="icon"
-                              className="h-8 w-8 shrink-0"
-                              title="Add manually"
-                              aria-label="Add ESPN credentials manually"
+                              className="h-8 w-8"
+                              disabled={discoverableEspnLeagues.length === 0}
+                              aria-label="Discover historical seasons"
+                              title={
+                                discoverableEspnLeagues.length === 0
+                                  ? 'Add an ESPN football or baseball league first'
+                                  : 'Discover historical seasons'
+                              }
                             >
-                              <Wrench className="h-4 w-4" />
+                              <History className="h-4 w-4" />
                             </Button>
                           </DialogTrigger>
                           <DialogContent>
                             <DialogHeader>
-                              <DialogTitle>ESPN Credentials</DialogTitle>
-                              <DialogDescription>Enter your ESPN authentication cookies.</DialogDescription>
+                              <DialogTitle>Discover historical seasons</DialogTitle>
+                              <DialogDescription>
+                                Pull past seasons for an ESPN football or baseball league.
+                              </DialogDescription>
                             </DialogHeader>
                             <div className="space-y-4 pt-2">
-                              {isLoadingCreds ? (
-                                <div className="flex justify-center py-8">
-                                  <Loader2 className="h-6 w-6 animate-spin" />
-                                </div>
+                              {discoverableEspnLeagues.length === 0 ? (
+                                <p className="text-sm text-muted-foreground">
+                                  Add an ESPN football or baseball league with a team selected to use this tool.
+                                </p>
                               ) : (
                                 <>
-                                  {credsError && (
-                                    <div className="p-3 bg-destructive/10 border border-destructive/30 rounded text-sm text-destructive">
-                                      {credsError}
-                                    </div>
+                                  <div className="space-y-2">
+                                    <Label>League</Label>
+                                    <Select value={discoverLeagueKey} onValueChange={setDiscoverLeagueKey}>
+                                      <SelectTrigger>
+                                        <SelectValue placeholder="Select a league" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {discoverableEspnLeagues.map((league) => (
+                                          <SelectItem key={league.key} value={league.key}>
+                                            {(league.leagueName || `League ${league.leagueId}`)}
+                                            {` • ${getSportLabel(league.sport)}`}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                  {!selectedDiscoverLeague?.hasTeamSelection && (
+                                    <p className="text-xs text-muted-foreground">
+                                      Select a team in this league first.
+                                    </p>
                                   )}
-                                  <div className="space-y-2">
-                                    <Label htmlFor="swid">SWID</Label>
-                                    <Input
-                                      id="swid"
-                                      type={showCredentials ? 'text' : 'password'}
-                                      value={swid}
-                                      onChange={(e) => setSwid(e.target.value)}
-                                    />
-                                  </div>
-                                  <div className="space-y-2">
-                                    <Label htmlFor="espn_s2">ESPN_S2</Label>
-                                    <Input
-                                      id="espn_s2"
-                                      type={showCredentials ? 'text' : 'password'}
-                                      value={espnS2}
-                                      onChange={(e) => setEspnS2(e.target.value)}
-                                    />
-                                  </div>
-                                  <div className="flex items-center gap-2">
+                                  <div className="flex gap-2 pt-2">
                                     <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={() => setShowCredentials(!showCredentials)}
+                                      onClick={() => {
+                                        if (selectedDiscoverLeague) {
+                                          handleDiscoverSeasons(
+                                            selectedDiscoverLeague.leagueId,
+                                            selectedDiscoverLeague.sport
+                                          );
+                                        }
+                                      }}
+                                      disabled={
+                                        !selectedDiscoverLeague
+                                        || !selectedDiscoverLeague.hasTeamSelection
+                                        || isDiscoveringSelected
+                                        || !!discoveringLeagueKey
+                                      }
                                     >
-                                      {showCredentials ? (
-                                        <EyeOff className="h-4 w-4 mr-1" />
+                                      {isDiscoveringSelected ? (
+                                        <>
+                                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                          Discovering...
+                                        </>
                                       ) : (
-                                        <Eye className="h-4 w-4 mr-1" />
+                                        'Discover Seasons'
                                       )}
-                                      {showCredentials ? 'Hide' : 'Show'}
                                     </Button>
-                                  </div>
-                                  <div className="flex gap-2">
-                                    <Button onClick={handleSaveCredentials} disabled={credsSaving}>
-                                      {credsSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-                                      Save
-                                    </Button>
-                                    <Button variant="outline" onClick={() => setEspnCredsDialogOpen(false)}>
+                                    <Button
+                                      variant="outline"
+                                      onClick={() => setDiscoverDialogOpen(false)}
+                                    >
                                       Cancel
                                     </Button>
                                   </div>
@@ -1331,7 +1335,6 @@ function LeaguesPageContent() {
                             </div>
                           </DialogContent>
                         </Dialog>
-
                         <Dialog open={manualDialogOpen} onOpenChange={setManualDialogOpen}>
                           <DialogTrigger asChild>
                             <Button
@@ -1341,7 +1344,7 @@ function LeaguesPageContent() {
                               aria-label="Add league manually"
                               title="Add Manually"
                             >
-                              <Settings className="h-4 w-4" />
+                              <Briefcase className="h-4 w-4" />
                             </Button>
                           </DialogTrigger>
                           <DialogContent>
@@ -1487,88 +1490,84 @@ function LeaguesPageContent() {
                           </div>
                           </DialogContent>
                         </Dialog>
-                        <Dialog open={discoverDialogOpen} onOpenChange={setDiscoverDialogOpen}>
+                        <Dialog
+                          open={espnCredsDialogOpen}
+                          onOpenChange={(open) => {
+                            setEspnCredsDialogOpen(open);
+                            if (open) {
+                              handleCancelEdit();
+                              handleEditCredentials();
+                            } else {
+                              handleCancelEdit();
+                            }
+                          }}
+                        >
                           <DialogTrigger asChild>
                             <Button
                               variant="outline"
                               size="icon"
-                              className="h-8 w-8"
-                              disabled={discoverableEspnLeagues.length === 0}
-                              aria-label="Discover historical seasons"
-                              title={
-                                discoverableEspnLeagues.length === 0
-                                  ? 'Add an ESPN football or baseball league first'
-                                  : 'Discover historical seasons'
-                              }
+                              className="h-8 w-8 shrink-0"
+                              title="Add manually"
+                              aria-label="Add ESPN credentials manually"
                             >
-                              <History className="h-4 w-4" />
+                              <Wrench className="h-4 w-4" />
                             </Button>
                           </DialogTrigger>
                           <DialogContent>
                             <DialogHeader>
-                              <DialogTitle>Discover historical seasons</DialogTitle>
-                              <DialogDescription>
-                                Pull past seasons for an ESPN football or baseball league.
-                              </DialogDescription>
+                              <DialogTitle>ESPN Credentials</DialogTitle>
+                              <DialogDescription>Enter your ESPN authentication cookies.</DialogDescription>
                             </DialogHeader>
                             <div className="space-y-4 pt-2">
-                              {discoverableEspnLeagues.length === 0 ? (
-                                <p className="text-sm text-muted-foreground">
-                                  Add an ESPN football or baseball league with a team selected to use this tool.
-                                </p>
+                              {isLoadingCreds ? (
+                                <div className="flex justify-center py-8">
+                                  <Loader2 className="h-6 w-6 animate-spin" />
+                                </div>
                               ) : (
                                 <>
-                                  <div className="space-y-2">
-                                    <Label>League</Label>
-                                    <Select value={discoverLeagueKey} onValueChange={setDiscoverLeagueKey}>
-                                      <SelectTrigger>
-                                        <SelectValue placeholder="Select a league" />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        {discoverableEspnLeagues.map((league) => (
-                                          <SelectItem key={league.key} value={league.key}>
-                                            {(league.leagueName || `League ${league.leagueId}`)}
-                                            {` • ${getSportLabel(league.sport)}`}
-                                          </SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
-                                  </div>
-                                  {!selectedDiscoverLeague?.hasTeamSelection && (
-                                    <p className="text-xs text-muted-foreground">
-                                      Select a team in this league first.
-                                    </p>
+                                  {credsError && (
+                                    <div className="p-3 bg-destructive/10 border border-destructive/30 rounded text-sm text-destructive">
+                                      {credsError}
+                                    </div>
                                   )}
-                                  <div className="flex gap-2 pt-2">
+                                  <div className="space-y-2">
+                                    <Label htmlFor="swid">SWID</Label>
+                                    <Input
+                                      id="swid"
+                                      type={showCredentials ? 'text' : 'password'}
+                                      value={swid}
+                                      onChange={(e) => setSwid(e.target.value)}
+                                    />
+                                  </div>
+                                  <div className="space-y-2">
+                                    <Label htmlFor="espn_s2">ESPN_S2</Label>
+                                    <Input
+                                      id="espn_s2"
+                                      type={showCredentials ? 'text' : 'password'}
+                                      value={espnS2}
+                                      onChange={(e) => setEspnS2(e.target.value)}
+                                    />
+                                  </div>
+                                  <div className="flex items-center gap-2">
                                     <Button
-                                      onClick={() => {
-                                        if (selectedDiscoverLeague) {
-                                          handleDiscoverSeasons(
-                                            selectedDiscoverLeague.leagueId,
-                                            selectedDiscoverLeague.sport
-                                          );
-                                        }
-                                      }}
-                                      disabled={
-                                        !selectedDiscoverLeague
-                                        || !selectedDiscoverLeague.hasTeamSelection
-                                        || isDiscoveringSelected
-                                        || !!discoveringLeagueKey
-                                      }
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => setShowCredentials(!showCredentials)}
                                     >
-                                      {isDiscoveringSelected ? (
-                                        <>
-                                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                          Discovering...
-                                        </>
+                                      {showCredentials ? (
+                                        <EyeOff className="h-4 w-4 mr-1" />
                                       ) : (
-                                        'Discover Seasons'
+                                        <Eye className="h-4 w-4 mr-1" />
                                       )}
+                                      {showCredentials ? 'Hide' : 'Show'}
                                     </Button>
-                                    <Button
-                                      variant="outline"
-                                      onClick={() => setDiscoverDialogOpen(false)}
-                                    >
+                                  </div>
+                                  <div className="flex gap-2">
+                                    <Button onClick={handleSaveCredentials} disabled={credsSaving}>
+                                      {credsSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                                      Save
+                                    </Button>
+                                    <Button variant="outline" onClick={() => setEspnCredsDialogOpen(false)}>
                                       Cancel
                                     </Button>
                                   </div>
