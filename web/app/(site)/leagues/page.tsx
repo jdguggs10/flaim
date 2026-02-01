@@ -217,6 +217,7 @@ function LeaguesPageContent() {
 
   // Add league flow state
   const [manualDialogOpen, setManualDialogOpen] = useState(false);
+  const [discoverDialogOpen, setDiscoverDialogOpen] = useState(false);
   const [newLeagueId, setNewLeagueId] = useState('');
   const [newLeagueSport, setNewLeagueSport] = useState<Sport>('football');
   const [newLeagueSeason, setNewLeagueSeason] = useState<number>(() => getDefaultSeasonYear('football'));
@@ -225,6 +226,7 @@ function LeaguesPageContent() {
   const [verifiedLeague, setVerifiedLeague] = useState<VerifiedLeague | null>(null);
   const [selectedTeamId, setSelectedTeamId] = useState<string>('');
   const [isAddingLeague, setIsAddingLeague] = useState(false);
+  const [discoverLeagueKey, setDiscoverLeagueKey] = useState<string>('');
 
   // Helper to determine if a league is "old" (no seasons in last 2 years)
   const isOldLeague = (seasons: { seasonYear: number }[]): boolean => {
@@ -312,6 +314,44 @@ function LeaguesPageContent() {
 
     return { active: sortedActive, old: oldLeagueGroups };
   }, [leagues, yahooLeagues, preferences]);
+
+  const discoverableEspnLeagues = useMemo(() => {
+    const groups: Array<{
+      key: string;
+      leagueId: string;
+      sport: string;
+      leagueName?: string;
+      hasTeamSelection: boolean;
+    }> = [];
+
+    for (const [, sportLeagues] of leaguesBySport.active) {
+      for (const group of sportLeagues) {
+        if (group.platform !== 'espn') continue;
+        if (group.sport !== 'baseball' && group.sport !== 'football') continue;
+        const hasTeamSelection = group.seasons.some((season) => !!season.teamId);
+        groups.push({
+          key: `${group.leagueId}-${group.sport}`,
+          leagueId: group.leagueId,
+          sport: group.sport,
+          leagueName: group.leagueName,
+          hasTeamSelection,
+        });
+      }
+    }
+
+    return groups;
+  }, [leaguesBySport]);
+
+  useEffect(() => {
+    if (discoverableEspnLeagues.length === 0) {
+      if (discoverLeagueKey) setDiscoverLeagueKey('');
+      return;
+    }
+
+    if (!discoverableEspnLeagues.some((league) => league.key === discoverLeagueKey)) {
+      setDiscoverLeagueKey(discoverableEspnLeagues[0].key);
+    }
+  }, [discoverLeagueKey, discoverableEspnLeagues]);
 
   // Load leagues on mount
   const loadLeagues = async (options?: { showSpinner?: boolean }) => {
@@ -775,6 +815,18 @@ function LeaguesPageContent() {
     return option?.emoji || '\u{1F3C6}';
   };
 
+  const getSportLabel = (sport: string) => {
+    const option = SPORT_OPTIONS.find((s) => s.value === sport);
+    return option?.label || sport;
+  };
+
+  const selectedDiscoverLeague = discoverableEspnLeagues.find(
+    (league) => league.key === discoverLeagueKey
+  );
+  const isDiscoveringSelected = selectedDiscoverLeague
+    ? discoveringLeagueKey === selectedDiscoverLeague.key
+    : false;
+
   // Loading state
   if (!isLoaded) {
     return (
@@ -814,7 +866,7 @@ function LeaguesPageContent() {
             <h1 className="text-2xl font-semibold">Your Leagues</h1>
           </div>
           <p className="text-muted-foreground">
-            Manage your connected leagues, seasons, and default team here.
+            Manage your connected leagues and seasons, and set your sport and team defaults here.
           </p>
         </div>
 
@@ -840,7 +892,11 @@ function LeaguesPageContent() {
               <CardTitle className="text-lg">Active Leagues</CardTitle>
               <Popover>
                 <PopoverTrigger asChild>
-                  <button type="button" className="text-muted-foreground hover:text-warning transition-colors" aria-label="Star defaults info">
+                  <button
+                    type="button"
+                    className="rounded-md border border-muted bg-muted/60 p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-warning"
+                    aria-label="Star defaults info"
+                  >
                     <Star className="h-4 w-4" />
                   </button>
                 </PopoverTrigger>
@@ -910,9 +966,6 @@ function LeaguesPageContent() {
                       {sportLeagues.map((group) => {
                         const baseKey = `${group.leagueId}-${group.sport}`;
                         const isDeleting = deletingLeagueKey === baseKey;
-                        const isDiscovering = discoveringLeagueKey === baseKey;
-                        const canDiscover = group.sport === 'baseball' || group.sport === 'football';
-                        const hasTeamSelection = group.seasons.some((season) => !!season.teamId);
                         const primaryTeamId = group.seasons.find((s) => s.teamId)?.teamId;
 
                         return (
@@ -964,33 +1017,13 @@ function LeaguesPageContent() {
                                     );
                                   })()}
                                   <span className="break-words">
-                                    {group.platform === 'espn' ? 'ESPN' : 'Yahoo'}
-                                    {` • League ID: ${group.leagueId}`}
-                                    {primaryTeamId && ` • Team ID: ${primaryTeamId}`}
+                                    {`★ ${group.platform === 'espn' ? 'ESPN' : 'Yahoo'}`}
+                                    {` • League: ${group.leagueId}`}
+                                    {primaryTeamId && ` • Team: ${primaryTeamId}`}
                                   </span>
                                 </div>
                               </div>
                               <div className="flex items-center gap-1 shrink-0">
-                                {group.platform === 'espn' && canDiscover && (
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-8 w-8 text-muted-foreground hover:text-primary"
-                                    onClick={() => handleDiscoverSeasons(group.leagueId, group.sport)}
-                                    disabled={isDiscovering || !!discoveringLeagueKey || !hasTeamSelection}
-                                    title={
-                                      !hasTeamSelection
-                                        ? 'Select a team first'
-                                        : 'Discover historical seasons'
-                                    }
-                                  >
-                                    {isDiscovering ? (
-                                      <Loader2 className="h-4 w-4 animate-spin" />
-                                    ) : (
-                                      <History className="h-4 w-4" />
-                                    )}
-                                  </Button>
-                                )}
                                 <Button
                                   variant="ghost"
                                   size="icon"
@@ -1333,6 +1366,95 @@ function LeaguesPageContent() {
                               </Button>
                             </div>
                           </div>
+                          </DialogContent>
+                        </Dialog>
+                        <Dialog open={discoverDialogOpen} onOpenChange={setDiscoverDialogOpen}>
+                          <DialogTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled={discoverableEspnLeagues.length === 0}
+                              title={
+                                discoverableEspnLeagues.length === 0
+                                  ? 'Add an ESPN football or baseball league first'
+                                  : 'Discover historical seasons'
+                              }
+                            >
+                              <History className="h-4 w-4 mr-2" />
+                              Discover Seasons
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent>
+                            <DialogHeader>
+                              <DialogTitle>Discover historical seasons</DialogTitle>
+                              <DialogDescription>
+                                Pull past seasons for an ESPN football or baseball league.
+                              </DialogDescription>
+                            </DialogHeader>
+                            <div className="space-y-4 pt-2">
+                              {discoverableEspnLeagues.length === 0 ? (
+                                <p className="text-sm text-muted-foreground">
+                                  Add an ESPN football or baseball league with a team selected to use this tool.
+                                </p>
+                              ) : (
+                                <>
+                                  <div className="space-y-2">
+                                    <Label>League</Label>
+                                    <Select value={discoverLeagueKey} onValueChange={setDiscoverLeagueKey}>
+                                      <SelectTrigger>
+                                        <SelectValue placeholder="Select a league" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {discoverableEspnLeagues.map((league) => (
+                                          <SelectItem key={league.key} value={league.key}>
+                                            {(league.leagueName || `League ${league.leagueId}`)}
+                                            {` • ${getSportLabel(league.sport)}`}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                  {!selectedDiscoverLeague?.hasTeamSelection && (
+                                    <p className="text-xs text-muted-foreground">
+                                      Select a team in this league first.
+                                    </p>
+                                  )}
+                                  <div className="flex gap-2 pt-2">
+                                    <Button
+                                      onClick={() => {
+                                        if (selectedDiscoverLeague) {
+                                          handleDiscoverSeasons(
+                                            selectedDiscoverLeague.leagueId,
+                                            selectedDiscoverLeague.sport
+                                          );
+                                        }
+                                      }}
+                                      disabled={
+                                        !selectedDiscoverLeague
+                                        || !selectedDiscoverLeague.hasTeamSelection
+                                        || isDiscoveringSelected
+                                        || !!discoveringLeagueKey
+                                      }
+                                    >
+                                      {isDiscoveringSelected ? (
+                                        <>
+                                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                          Discovering...
+                                        </>
+                                      ) : (
+                                        'Discover Seasons'
+                                      )}
+                                    </Button>
+                                    <Button
+                                      variant="outline"
+                                      onClick={() => setDiscoverDialogOpen(false)}
+                                    >
+                                      Cancel
+                                    </Button>
+                                  </div>
+                                </>
+                              )}
+                            </div>
                           </DialogContent>
                         </Dialog>
                       </div>
