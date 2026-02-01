@@ -26,6 +26,10 @@ import {
   X,
   Star,
   History,
+  Settings,
+  Wrench,
+  Eye,
+  EyeOff,
   Chrome,
   Info,
 } from 'lucide-react';
@@ -181,8 +185,24 @@ function yahooToUnified(leagues: YahooLeague[], preferences: UserPreferencesStat
 
 function LeaguesPageContent() {
   const { isLoaded, isSignedIn } = useAuth();
-  const espnCredentials = useEspnCredentials();
-  const { hasCredentials, lastUpdated: espnLastUpdated, isCheckingCreds } = espnCredentials;
+  const {
+    hasCredentials,
+    lastUpdated: espnLastUpdated,
+    isCheckingCreds,
+    isLoadingCreds,
+    swid,
+    espnS2,
+    showCredentials,
+    credsSaving,
+    credsError,
+    credsSuccess,
+    setSwid,
+    setEspnS2,
+    setShowCredentials,
+    handleEditCredentials,
+    handleSaveCredentials,
+    handleCancelEdit,
+  } = useEspnCredentials();
   const searchParams = useSearchParams();
   const router = useRouter();
 
@@ -202,6 +222,7 @@ function LeaguesPageContent() {
   const [isYahooDisconnecting, setIsYahooDisconnecting] = useState(false);
   const [yahooLeagues, setYahooLeagues] = useState<YahooLeague[]>([]);
   const [isDiscoveringYahoo, setIsDiscoveringYahoo] = useState(false);
+  const [espnCredsDialogOpen, setEspnCredsDialogOpen] = useState(false);
   const [preferences, setPreferences] = useState<UserPreferencesState>({
     defaultSport: null,
     defaultFootball: null,
@@ -352,6 +373,12 @@ function LeaguesPageContent() {
       setDiscoverLeagueKey(discoverableEspnLeagues[0].key);
     }
   }, [discoverLeagueKey, discoverableEspnLeagues]);
+
+  useEffect(() => {
+    if (credsSuccess && espnCredsDialogOpen) {
+      setEspnCredsDialogOpen(false);
+    }
+  }, [credsSuccess, espnCredsDialogOpen]);
 
   // Load leagues on mount
   const loadLeagues = async (options?: { showSpinner?: boolean }) => {
@@ -1017,7 +1044,7 @@ function LeaguesPageContent() {
                                     );
                                   })()}
                                   <span className="break-words">
-                                    {`★ ${group.platform === 'espn' ? 'ESPN' : 'Yahoo'}`}
+                                    {group.platform === 'espn' ? 'ESPN' : 'Yahoo'}
                                     {` • League: ${group.leagueId}`}
                                     {primaryTeamId && ` • Team: ${primaryTeamId}`}
                                   </span>
@@ -1218,11 +1245,103 @@ function LeaguesPageContent() {
                             Chrome Extension
                           </Button>
                         </a>
+                        <Dialog
+                          open={espnCredsDialogOpen}
+                          onOpenChange={(open) => {
+                            setEspnCredsDialogOpen(open);
+                            if (open) {
+                              handleCancelEdit();
+                              handleEditCredentials();
+                            } else {
+                              handleCancelEdit();
+                            }
+                          }}
+                        >
+                          <DialogTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              className="h-8 w-8 shrink-0"
+                              title="Add manually"
+                              aria-label="Add ESPN credentials manually"
+                            >
+                              <Wrench className="h-4 w-4" />
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent>
+                            <DialogHeader>
+                              <DialogTitle>ESPN Credentials</DialogTitle>
+                              <DialogDescription>Enter your ESPN authentication cookies.</DialogDescription>
+                            </DialogHeader>
+                            <div className="space-y-4 pt-2">
+                              {isLoadingCreds ? (
+                                <div className="flex justify-center py-8">
+                                  <Loader2 className="h-6 w-6 animate-spin" />
+                                </div>
+                              ) : (
+                                <>
+                                  {credsError && (
+                                    <div className="p-3 bg-destructive/10 border border-destructive/30 rounded text-sm text-destructive">
+                                      {credsError}
+                                    </div>
+                                  )}
+                                  <div className="space-y-2">
+                                    <Label htmlFor="swid">SWID</Label>
+                                    <Input
+                                      id="swid"
+                                      type={showCredentials ? 'text' : 'password'}
+                                      value={swid}
+                                      onChange={(e) => setSwid(e.target.value)}
+                                    />
+                                  </div>
+                                  <div className="space-y-2">
+                                    <Label htmlFor="espn_s2">ESPN_S2</Label>
+                                    <Input
+                                      id="espn_s2"
+                                      type={showCredentials ? 'text' : 'password'}
+                                      value={espnS2}
+                                      onChange={(e) => setEspnS2(e.target.value)}
+                                    />
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => setShowCredentials(!showCredentials)}
+                                    >
+                                      {showCredentials ? (
+                                        <EyeOff className="h-4 w-4 mr-1" />
+                                      ) : (
+                                        <Eye className="h-4 w-4 mr-1" />
+                                      )}
+                                      {showCredentials ? 'Hide' : 'Show'}
+                                    </Button>
+                                  </div>
+                                  <div className="flex gap-2">
+                                    <Button onClick={handleSaveCredentials} disabled={credsSaving}>
+                                      {credsSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                                      Save
+                                    </Button>
+                                    <Button variant="outline" onClick={() => setEspnCredsDialogOpen(false)}>
+                                      Cancel
+                                    </Button>
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          </DialogContent>
+                        </Dialog>
 
                         <Dialog open={manualDialogOpen} onOpenChange={setManualDialogOpen}>
                           <DialogTrigger asChild>
-                            <Button variant="outline" size="sm">
-                              Add Manually
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              className="h-8 w-8"
+                              aria-label="Add league manually"
+                              title="Add Manually"
+                            >
+                              <Settings className="h-4 w-4" />
                             </Button>
                           </DialogTrigger>
                           <DialogContent>
@@ -1372,16 +1491,17 @@ function LeaguesPageContent() {
                           <DialogTrigger asChild>
                             <Button
                               variant="outline"
-                              size="sm"
+                              size="icon"
+                              className="h-8 w-8"
                               disabled={discoverableEspnLeagues.length === 0}
+                              aria-label="Discover historical seasons"
                               title={
                                 discoverableEspnLeagues.length === 0
                                   ? 'Add an ESPN football or baseball league first'
                                   : 'Discover historical seasons'
                               }
                             >
-                              <History className="h-4 w-4 mr-2" />
-                              Discover Seasons
+                              <History className="h-4 w-4" />
                             </Button>
                           </DialogTrigger>
                           <DialogContent>
