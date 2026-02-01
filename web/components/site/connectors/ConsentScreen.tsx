@@ -62,7 +62,7 @@ export default function ConsentScreen({
         <div className="p-4 bg-muted rounded-lg">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-              <Image src="/flaim-mark-hero.png" alt="Flaim" width={24} height={24} className="dark:invert" />
+              <Image src="/flaim-mark-hero.png" alt="Flaim" width={24} height={24} className="dark:brightness-0 dark:invert" />
             </div>
             <div>
               <div className="font-medium">Flaim Fantasy Connector</div>
