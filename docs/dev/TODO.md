@@ -15,6 +15,7 @@
 - **Visual Proof**: Add interaction mockups/chat screenshots and use real platform logos.
 - **Benefit-driven UX**: Add "What can you ask?" grid with high-value AI query examples.
 - **Trust & Identity**: Add personal "indie developer" note and explicit security highlights.
+- **Email Support Upgrade**: Upgrade cloudflare email functionality
 
 ## Maintenance & Refactoring
 - **ESPN API Type Safety**: Replace `as any` type assertions in `espn-client` handlers with proper TypeScript interfaces. Create interfaces for the ESPN API response fields we actually use. See TODO in `workers/espn-client/src/types.ts`.
