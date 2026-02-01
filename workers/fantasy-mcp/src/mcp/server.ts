@@ -19,6 +19,12 @@ export function createFantasyMcpServer(ctx: McpContext): McpServer {
   const server = new McpServer({
     name: 'fantasy-mcp',
     version: '1.0.0',
+    icons: [
+      {
+        src: 'https://flaim.app/icon.png',
+        mimeType: 'image/png',
+      },
+    ],
   });
 
   const tools = getUnifiedTools();
