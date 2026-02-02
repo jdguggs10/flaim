@@ -38,7 +38,7 @@ function formatJson(value: unknown) {
 }
 
 export function LlmTraceSection() {
-  const { traceEntries } = useConversationStore();
+  const traceEntries = useConversationStore((state) => state.traceEntries);
   const [openEntryIds, setOpenEntryIds] = useState<Record<string, boolean>>({});
 
   const entries = useMemo(() => [...traceEntries].reverse(), [traceEntries]);
@@ -58,12 +58,12 @@ export function LlmTraceSection() {
       ) : (
         <div className="space-y-3">
           {entries.map((entry, index) => {
-            const promptPayload = buildPromptPayload(entry);
-            const promptText = formatJson(promptPayload);
             const assistantOutput = entry.assistantOutput || "";
             const userSnippet = entry.userMessage || "(no user message)";
             const toolCount = entry.toolEvents.length;
             const isOpen = openEntryIds[entry.id] ?? index === 0;
+            const promptPayload = isOpen ? buildPromptPayload(entry) : null;
+            const promptText = promptPayload ? formatJson(promptPayload) : "";
 
             return (
               <div
