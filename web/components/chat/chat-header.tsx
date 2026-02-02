@@ -52,7 +52,8 @@ export function ChatHeader() {
           href="/"
           className="inline-flex items-center gap-2 text-lg font-bold hover:opacity-80 transition-opacity"
         >
-          <Image src="/flaim-mark-hero.png" alt="Flaim" width={28} height={28} className="dark:brightness-0 dark:invert" />
+          <Image src="/flaim-mark-hero.png" alt="Flaim" width={28} height={28} className="dark:hidden" />
+          <Image src="/flaim-mark-hero-dark.png" alt="Flaim" width={28} height={28} className="hidden dark:block" />
           <span className="hidden sm:inline">Flaim</span>
         </Link>
         <AccountHeaderButton />

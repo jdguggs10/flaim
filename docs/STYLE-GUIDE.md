@@ -347,7 +347,8 @@ The Flaim logo is a flaming baseball. Two source marks exist (both 1024x1024 B&W
 
 | File | Size | Purpose |
 |------|------|---------|
-| `web/public/flaim-mark-hero.png` | 512px | Site header logo, uses `dark:invert` for dark mode |
+| `web/public/flaim-mark-hero.png` | 512px | Site header logo (light mode) |
+| `web/public/flaim-mark-hero-dark.png` | 512px | Site header logo (dark mode, white artwork) |
 
 **Metadata references:**
 - `web/app/layout.tsx` — Next.js `metadata.icons` (favicon + apple icon)
@@ -388,6 +389,7 @@ magick $SRC -resize 128x128 -fuzz 10% -transparent white extension/assets/icons/
 
 ```bash
 magick docs/branding/flaim-mark-hero-bw.png -fuzz 10% -transparent white -resize 512x512 web/public/flaim-mark-hero.png
+magick web/public/flaim-mark-hero.png -channel RGB -negate +channel web/public/flaim-mark-hero-dark.png
 ```
 
 ## Resources
