@@ -2,13 +2,26 @@
  * Chat-only leagues store
  *
  * Simple store for managing league data in chat. Fetches from API only,
- * no wizard/onboarding logic.
+ * no wizard/onboarding logic. Supports ESPN and Yahoo leagues.
  */
 import { create } from 'zustand';
 import type { EspnLeague } from '@/lib/espn-types';
+import { getDefaultSeasonYear, type SeasonSport } from '@/lib/season-utils';
 
-export const makeLeagueKey = (league: EspnLeague) =>
-  `${league.leagueId}-${league.sport}-${league.seasonYear ?? 'unknown'}`;
+/** Platform-agnostic league used throughout the chat UI */
+export interface ChatLeague {
+  platform: 'espn' | 'yahoo';
+  leagueId: string;
+  sport: string;
+  leagueName?: string;
+  teamId?: string;
+  teamName?: string;
+  seasonYear?: number;
+  isDefault?: boolean;
+}
+
+export const makeLeagueKey = (league: ChatLeague) =>
+  `${league.platform}-${league.leagueId}-${league.sport}-${league.seasonYear ?? 'unknown'}`;
 
 interface SetupStatus {
   hasCredentials: boolean;
@@ -24,7 +37,7 @@ interface SportDefault {
 
 interface LeaguesState {
   // League data
-  leagues: EspnLeague[];
+  leagues: ChatLeague[];
   activeLeagueKey: string | null;
 
   // User preferences
@@ -41,12 +54,12 @@ interface LeaguesState {
   fetchLeagues: () => Promise<void>;
   fetchPreferences: () => Promise<void>;
   setDefaultSport: (sport: string) => Promise<void>;
-  setDefaultLeague: (league: EspnLeague) => Promise<void>;
-  setActiveLeague: (league: EspnLeague) => void;
-  getActiveLeague: () => EspnLeague | undefined;
+  setDefaultLeague: (league: ChatLeague) => Promise<void>;
+  setActiveLeague: (league: ChatLeague) => void;
+  getActiveLeague: () => ChatLeague | undefined;
   getSportConfig: (sport: string) => { name: string; emoji: string } | null;
   getAvailableSports: () => string[];
-  getLeaguesForSport: (sport: string) => EspnLeague[];
+  getLeaguesForSport: (sport: string) => ChatLeague[];
 }
 
 export const SPORT_CONFIG: Record<string, { name: string; emoji: string }> = {
@@ -85,33 +98,71 @@ export const useLeaguesStore = create<LeaguesState>()((set, get) => ({
 
     set({ isLoading: true, error: null });
     try {
-      const res = await fetch('/api/espn/leagues');
-      if (!res.ok) throw new Error('Failed to fetch leagues');
-      const data = await res.json() as { leagues?: EspnLeague[] };
+      // Fetch ESPN and Yahoo leagues in parallel
+      const [espnRes, yahooRes] = await Promise.all([
+        fetch('/api/espn/leagues'),
+        fetch('/api/connect/yahoo/leagues').catch(() => null),
+      ]);
 
-      if (Array.isArray(data.leagues)) {
-        const leagues = data.leagues;
-        // If preferences already loaded, use defaultSport to pick active league
-        const { defaultSport, sportDefaults } = get();
-        let activeKey: string | null = null;
+      const allLeagues: ChatLeague[] = [];
 
-        if (defaultSport && sportDefaults[defaultSport]) {
-          const sd = sportDefaults[defaultSport]!;
-          const match = leagues.find(
-            l => l.leagueId === sd.leagueId && l.sport === defaultSport && l.seasonYear === sd.seasonYear
-          );
-          if (match) activeKey = makeLeagueKey(match);
+      // ESPN leagues
+      if (espnRes.ok) {
+        const espnData = await espnRes.json() as { leagues?: EspnLeague[] };
+        if (Array.isArray(espnData.leagues)) {
+          for (const l of espnData.leagues) {
+            allLeagues.push({ ...l, platform: 'espn' });
+          }
         }
-
-        if (!activeKey) {
-          const defaultLeague = leagues.find(l => l.isDefault) || leagues[0];
-          activeKey = defaultLeague ? makeLeagueKey(defaultLeague) : null;
-        }
-
-        set({ leagues, activeLeagueKey: activeKey, isLoading: false });
-      } else {
-        set({ leagues: [], isLoading: false });
       }
+
+      // Yahoo leagues
+      if (yahooRes?.ok) {
+        const yahooData = await yahooRes.json() as {
+          leagues?: Array<{
+            id: string;
+            sport: string;
+            seasonYear: number;
+            leagueKey: string;
+            leagueName: string;
+            teamId?: string;
+            teamName?: string;
+          }>;
+        };
+        if (Array.isArray(yahooData.leagues)) {
+          for (const l of yahooData.leagues) {
+            allLeagues.push({
+              platform: 'yahoo',
+              leagueId: l.leagueKey,
+              sport: l.sport,
+              leagueName: l.leagueName,
+              teamId: l.teamId,
+              teamName: l.teamName,
+              seasonYear: l.seasonYear,
+            });
+          }
+        }
+      }
+
+      // Pick initial active league based on preferences or isDefault flag
+      const { defaultSport, sportDefaults } = get();
+      let activeKey: string | null = null;
+
+      if (defaultSport && sportDefaults[defaultSport]) {
+        const sd = sportDefaults[defaultSport]!;
+        const match = allLeagues.find(
+          l => l.leagueId === sd.leagueId && l.sport === defaultSport
+            && l.seasonYear === sd.seasonYear && l.platform === sd.platform
+        );
+        if (match) activeKey = makeLeagueKey(match);
+      }
+
+      if (!activeKey) {
+        const defaultLeague = allLeagues.find(l => l.isDefault) || allLeagues[0];
+        activeKey = defaultLeague ? makeLeagueKey(defaultLeague) : null;
+      }
+
+      set({ leagues: allLeagues, activeLeagueKey: activeKey, isLoading: false });
     } catch {
       set({ error: 'Failed to fetch leagues', isLoading: false });
     }
@@ -148,7 +199,8 @@ export const useLeaguesStore = create<LeaguesState>()((set, get) => ({
       if (defaultSport && sportDefaults[defaultSport] && leagues.length > 0) {
         const sd = sportDefaults[defaultSport]!;
         const match = leagues.find(
-          l => l.leagueId === sd.leagueId && l.sport === defaultSport && l.seasonYear === sd.seasonYear
+          l => l.leagueId === sd.leagueId && l.sport === defaultSport
+            && l.seasonYear === sd.seasonYear && l.platform === sd.platform
         );
         if (match) set({ activeLeagueKey: makeLeagueKey(match) });
       }
@@ -178,11 +230,12 @@ export const useLeaguesStore = create<LeaguesState>()((set, get) => ({
     const sd = sportDefaults[sport];
     if (sd) {
       const match = leagues.find(
-        l => l.leagueId === sd.leagueId && l.sport === sport && l.seasonYear === sd.seasonYear
+        l => l.leagueId === sd.leagueId && l.sport === sport
+          && l.seasonYear === sd.seasonYear && l.platform === sd.platform
       );
       if (match) set({ activeLeagueKey: makeLeagueKey(match) });
     } else {
-      // No default for this sport — pick first league of that sport
+      // No default for this sport — pick first current-season league
       const first = leagues.find(l => l.sport === sport);
       if (first) set({ activeLeagueKey: makeLeagueKey(first) });
     }
@@ -194,7 +247,7 @@ export const useLeaguesStore = create<LeaguesState>()((set, get) => ({
 
     // Optimistic update
     const newDefault: SportDefault = {
-      platform: 'espn',
+      platform: league.platform,
       leagueId: league.leagueId,
       seasonYear: league.seasonYear ?? new Date().getFullYear(),
     };
@@ -208,7 +261,7 @@ export const useLeaguesStore = create<LeaguesState>()((set, get) => ({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          platform: 'espn',
+          platform: league.platform,
           leagueId: league.leagueId,
           sport: league.sport,
           seasonYear: league.seasonYear ?? new Date().getFullYear(),
@@ -242,7 +295,12 @@ export const useLeaguesStore = create<LeaguesState>()((set, get) => ({
 
   getLeaguesForSport: (sport) => {
     const { leagues } = get();
-    return leagues.filter(l => l.sport === sport);
+    // Only show current-season leagues (no historic seasons)
+    const seasonSports = ['baseball', 'football'] as const;
+    const currentYear = seasonSports.includes(sport as SeasonSport)
+      ? getDefaultSeasonYear(sport as SeasonSport)
+      : new Date().getFullYear();
+    return leagues.filter(l => l.sport === sport && l.seasonYear === currentYear);
   },
 }));
 

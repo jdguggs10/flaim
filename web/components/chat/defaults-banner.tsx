@@ -33,6 +33,7 @@ export default function DefaultsBanner() {
   const currentSport = defaultSport || activeLeague?.sport || availableSports[0];
   const sportConfig = currentSport ? getSportConfig(currentSport) : null;
   const sportLeagues = currentSport ? getLeaguesForSport(currentSport) : [];
+  const hasMultiplePlatforms = new Set(sportLeagues.map(l => l.platform)).size > 1;
 
   return (
     <div className="flex items-center gap-2">
@@ -90,10 +91,13 @@ export default function DefaultsBanner() {
               </p>
             )}
             {sportLeagues.map((league) => {
-              const isActive = activeLeague && league.leagueId === activeLeague.leagueId && league.seasonYear === activeLeague.seasonYear;
+              const isActive = activeLeague
+                && league.platform === activeLeague.platform
+                && league.leagueId === activeLeague.leagueId
+                && league.seasonYear === activeLeague.seasonYear;
               return (
                 <button
-                  key={`${league.leagueId}-${league.seasonYear}`}
+                  key={`${league.platform}-${league.leagueId}`}
                   onClick={() => {
                     setDefaultLeague(league);
                     setTeamOpen(false);
@@ -104,9 +108,16 @@ export default function DefaultsBanner() {
                       : "hover:bg-muted text-foreground"
                   }`}
                 >
-                  <span>{league.leagueName || `League ${league.leagueId}`}</span>
+                  <span>
+                    {league.leagueName || `League ${league.leagueId}`}
+                    {hasMultiplePlatforms && (
+                      <span className="ml-1.5 text-[10px] uppercase text-muted-foreground font-normal">
+                        {league.platform}
+                      </span>
+                    )}
+                  </span>
                   <span className="text-xs text-muted-foreground">
-                    {league.teamName || "My Team"} · {league.seasonYear ?? "Unknown"}
+                    {league.teamName || "My Team"}
                   </span>
                 </button>
               );

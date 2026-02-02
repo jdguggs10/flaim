@@ -7,8 +7,7 @@
  * Token estimate: ~80-120 tokens depending on number of leagues
  */
 
-import useLeaguesStore, { makeLeagueKey } from "@/stores/chat/useLeaguesStore";
-import type { EspnLeague } from "@/lib/espn-types";
+import useLeaguesStore, { makeLeagueKey, type ChatLeague } from "@/stores/chat/useLeaguesStore";
 
 // =============================================================================
 // TEMPLATES - Edit these to change the format sent to the LLM
@@ -60,7 +59,7 @@ function fillTemplate(template: string, values: Record<string, string>): string 
 /**
  * Formats a league for the "other leagues" list
  */
-function formatOtherLeague(league: EspnLeague): string {
+function formatOtherLeague(league: ChatLeague): string {
   return fillTemplate(OTHER_LEAGUE_ITEM_TEMPLATE, {
     leagueName: league.leagueName || `League ${league.leagueId}`,
     sport: league.sport,

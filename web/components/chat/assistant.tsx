@@ -156,12 +156,13 @@ export default function Assistant() {
     const activeLeague = getActiveLeague();
     if (activeLeague && leagues.length > 0) {
       // Update tools store with selections
+      const platform = activeLeague.platform === 'yahoo' ? 'Yahoo' : 'ESPN';
       setSelectedSport(activeLeague.sport);
-      setToolsPlatform('ESPN');
+      setToolsPlatform(platform);
       setToolsAuthenticated(true);
 
       // Configure MCP tools
-      const mcpConfig = generateMcpToolsConfig('ESPN', activeLeague.sport as any);
+      const mcpConfig = generateMcpToolsConfig(platform, activeLeague.sport as any);
         if (mcpConfig) {
           setMcpConfig({
             server_label: mcpConfig.server_label,
