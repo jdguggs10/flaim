@@ -1,0 +1,31 @@
+name: Keep Supabase Alive
+
+# Runs every 3 days to prevent Supabase free-tier pausing (7-day inactivity limit).
+# Safety net — the Pi script handles frequent pings, this catches Pi downtime.
+
+on:
+  schedule:
+    - cron: '0 12 */3 * *'   # Every 3 days at noon UTC
+  workflow_dispatch:           # Manual trigger for testing
+
+jobs:
+  ping:
+    name: Ping Supabase
+    runs-on: ubuntu-latest
+    steps:
+      - name: Keep Supabase active
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: |
+          STATUS=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 \
+            "${SUPABASE_URL}/rest/v1/rate_limits?select=id&limit=1" \
+            -H "apikey: ${SUPABASE_SERVICE_KEY}" \
+            -H "Authorization: Bearer ${SUPABASE_SERVICE_KEY}")
+          echo "Supabase ping: HTTP $STATUS"
+          if [ "$STATUS" -ge 200 ] && [ "$STATUS" -lt 300 ]; then
+            echo "Success — project is active"
+          else
+            echo "::warning::Supabase returned HTTP $STATUS"
+            exit 1
+          fi

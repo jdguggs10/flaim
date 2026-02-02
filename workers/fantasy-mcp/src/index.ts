@@ -30,25 +30,24 @@ app.use('*', async (c, next) => {
   return undefined;
 });
 
-// Health check
-app.get('/health', async (c) => {
+// Shared health check logic
+async function buildHealthData(env: Env) {
   const healthData: Record<string, unknown> = {
     status: 'healthy',
     service: 'fantasy-mcp',
     version: '1.0.0',
     timestamp: new Date().toISOString(),
     bindings: {
-      espn: !!c.env.ESPN,
-      auth: !!c.env.AUTH_WORKER,
+      espn: !!env.ESPN,
+      yahoo: !!env.YAHOO,
+      auth: !!env.AUTH_WORKER,
     }
   };
 
   // Test ESPN client connectivity
-  if (c.env.ESPN) {
+  if (env.ESPN) {
     try {
-      const espnHealth = await c.env.ESPN.fetch(
-        new Request('https://internal/health')
-      );
+      const espnHealth = await env.ESPN.fetch(new Request('https://internal/health'));
       healthData.espn_status = espnHealth.ok ? 'connected' : 'error';
     } catch {
       healthData.espn_status = 'unreachable';
@@ -59,6 +58,26 @@ app.get('/health', async (c) => {
     healthData.status = 'degraded';
   }
 
+  // Test Yahoo client connectivity
+  if (env.YAHOO) {
+    try {
+      const yahooHealth = await env.YAHOO.fetch(new Request('https://internal/health'));
+      healthData.yahoo_status = yahooHealth.ok ? 'connected' : 'error';
+    } catch {
+      healthData.yahoo_status = 'unreachable';
+      healthData.status = 'degraded';
+    }
+  } else {
+    healthData.yahoo_status = 'no_binding';
+    healthData.status = 'degraded';
+  }
+
+  return healthData;
+}
+
+// Health check
+app.get('/health', async (c) => {
+  const healthData = await buildHealthData(c.env);
   const statusCode = healthData.status === 'healthy' ? 200 : 503;
   return c.json(healthData, statusCode);
 });
@@ -152,31 +171,7 @@ app.all('/mcp/*', async (c) => {
 
 // Routes via api.flaim.app/fantasy/* (Cloudflare route passes full path)
 app.get('/fantasy/health', async (c) => {
-  // Reuse health check logic
-  const healthData: Record<string, unknown> = {
-    status: 'healthy',
-    service: 'fantasy-mcp',
-    version: '1.0.0',
-    timestamp: new Date().toISOString(),
-    bindings: {
-      espn: !!c.env.ESPN,
-      auth: !!c.env.AUTH_WORKER,
-    }
-  };
-
-  if (c.env.ESPN) {
-    try {
-      const espnHealth = await c.env.ESPN.fetch(new Request('https://internal/health'));
-      healthData.espn_status = espnHealth.ok ? 'connected' : 'error';
-    } catch {
-      healthData.espn_status = 'unreachable';
-      healthData.status = 'degraded';
-    }
-  } else {
-    healthData.espn_status = 'no_binding';
-    healthData.status = 'degraded';
-  }
-
+  const healthData = await buildHealthData(c.env);
   const statusCode = healthData.status === 'healthy' ? 200 : 503;
   return c.json(healthData, statusCode);
 });
