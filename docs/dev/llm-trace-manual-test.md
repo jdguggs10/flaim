@@ -1,7 +1,9 @@
-- Open `/chat` → no LLM Trace section (expected FAIL before implementation)
-- Send a message → no prompt payload shown (expected FAIL)
-- Sending a message creates a new trace entry with input payload (expected FAIL)
-- Tool calls appear in trace with args + output (expected FAIL)
-- Trace payload shows Authorization header redacted (expected FAIL)
-- Trace payload handles Headers/Map/Set/Date values without errors (expected FAIL)
-- Trace payload handles circular references without crashing (expected FAIL)
+- LLM Trace section visible and expandable in dev console
+- Entries render newest-first
+- Each entry expands to show Prompt Sent (pretty JSON + copy), Tools (args/output/error), Assistant Output (raw text + copy)
+- Open `/chat` → LLM Trace section present
+- Send a message → new trace entry with prompt payload
+- Tool calls appear in trace with args + output + error when applicable
+- Prompt payload shows Authorization header redacted in tools snapshot
+- Prompt payload handles Headers/Map/Set/Date values without errors
+- Prompt payload handles circular references without crashing

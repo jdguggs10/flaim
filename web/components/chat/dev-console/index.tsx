@@ -4,6 +4,7 @@ import useHasMounted from "@/hooks/useHasMounted";
 import { McpSection } from "./mcp-section";
 import { ToolsSection } from "./tools-section";
 import { DebugSection } from "./debug-section";
+import { LlmTraceSection } from "./llm-trace-section";
 
 /**
  * Developer Console - Enhanced sidebar for MCP debugging.
@@ -24,6 +25,9 @@ export default function DevConsole() {
 
         {/* Available Tools */}
         <ToolsSection />
+
+        {/* LLM Trace */}
+        <LlmTraceSection />
 
         {/* Debug Options */}
         <DebugSection />
