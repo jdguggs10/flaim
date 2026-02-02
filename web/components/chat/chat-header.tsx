@@ -3,10 +3,6 @@
 import Link from "next/link";
 import Image from "next/image";
 import { UserButton } from "@clerk/nextjs";
-import { LeagueDropdown } from "./league-dropdown";
-import { SeasonDropdown } from "./season-dropdown";
-import { AccountHeaderButton } from "./account-header-button";
-import { EspnHeaderButton } from "./espn-header-button";
 
 type Environment = "development" | "preview" | "production";
 
@@ -38,7 +34,7 @@ function detectEnvironment(): Environment {
 
 /**
  * Minimal header for the chat page.
- * Shows logo, league dropdown, season dropdown, environment badge, and user avatar.
+ * Shows logo, environment badge, and user avatar.
  */
 export function ChatHeader() {
   const env = detectEnvironment();
@@ -46,7 +42,7 @@ export function ChatHeader() {
 
   return (
     <header className="flex items-center justify-between px-4 py-2 border-b bg-background shrink-0">
-      {/* Left: Logo + Account/ESPN + League + Season */}
+      {/* Left: Logo */}
       <div className="flex items-center gap-2">
         <Link
           href="/"
@@ -56,10 +52,6 @@ export function ChatHeader() {
           <Image src="/flaim-mark-hero-dark.png" alt="Flaim" width={28} height={28} className="hidden dark:block" />
           <span className="hidden sm:inline">Flaim</span>
         </Link>
-        <AccountHeaderButton />
-        <EspnHeaderButton />
-        <LeagueDropdown />
-        <SeasonDropdown />
       </div>
 
       {/* Right: Environment badge + User */}
