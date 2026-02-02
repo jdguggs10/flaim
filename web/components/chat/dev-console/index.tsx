@@ -1,6 +1,7 @@
 "use client";
 
 import useHasMounted from "@/hooks/useHasMounted";
+import { LlmTraceSection } from "./llm-trace-section";
 import { McpSection } from "./mcp-section";
 import { ToolsSection } from "./tools-section";
 import { DebugSection } from "./debug-section";
@@ -20,6 +21,9 @@ export default function DevConsole() {
   return (
     <div className="h-full p-4 lg:p-6 w-full bg-muted/50 lg:rounded-none flex flex-col">
       <div className="flex flex-col space-y-4 flex-1 min-h-0 overflow-y-auto">
+        {/* LLM Trace */}
+        <LlmTraceSection />
+
         {/* MCP Section */}
         <McpSection />
 

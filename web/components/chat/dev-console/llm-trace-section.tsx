@@ -1,268 +1,195 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Activity, ChevronDown, ChevronRight } from "lucide-react";
+import { ClipboardList } from "lucide-react";
 import useConversationStore from "@/stores/chat/useConversationStore";
 import { CollapsibleSection } from "./collapsible-section";
 import { CopyButton } from "./copy-button";
-import { LlmTraceEntry, TraceToolEvent } from "@/lib/chat/trace-types";
 
-const formatTimestamp = (value: string) => {
-  try {
-    return new Date(value).toLocaleString();
-  } catch {
-    return value;
-  }
-};
+function formatTimestamp(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleTimeString();
+}
 
-const formatJson = (value: unknown) => {
+function buildPromptPayload(entry: {
+  previousResponseId?: string | null;
+  inputItems: unknown[];
+}) {
+  return {
+    previous_response_id: entry.previousResponseId ?? null,
+    input_items: entry.inputItems,
+  };
+}
+
+function formatJson(value: unknown) {
   try {
     return JSON.stringify(value, null, 2);
   } catch {
-    try {
-      return String(value);
-    } catch {
-      return "[unserializable]";
-    }
+    return "[unserializable]";
   }
-};
-
-const formatMaybeJsonString = (value: string) => {
-  const trimmed = value.trim();
-  if (
-    (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
-    (trimmed.startsWith("[") && trimmed.endsWith("]"))
-  ) {
-    try {
-      return JSON.stringify(JSON.parse(trimmed), null, 2);
-    } catch {
-      return value;
-    }
-  }
-  return value;
-};
-
-const formatValue = (value: unknown) => {
-  if (value == null) return null;
-  if (typeof value === "string") {
-    return formatMaybeJsonString(value);
-  }
-  return formatJson(value);
-};
-
-const hasParsedArguments = (value: unknown) => {
-  if (!value || typeof value !== "object") return false;
-  if (Array.isArray(value)) return value.length > 0;
-  return Object.keys(value as Record<string, unknown>).length > 0;
-};
-
-const getToolLabel = (event: TraceToolEvent) => {
-  if (event.name) {
-    return `${event.tool_type} · ${event.name}`;
-  }
-  return event.tool_type;
-};
-
-const statusClass = (status?: string) => {
-  if (status === "completed") return "text-success";
-  if (status === "failed") return "text-destructive";
-  if (status === "in_progress") return "text-muted-foreground";
-  return "text-muted-foreground";
-};
-
-function TraceEntryCard({ entry }: { entry: LlmTraceEntry }) {
-  const [isExpanded, setIsExpanded] = useState(false);
-  const toolCount = entry.toolEvents.length;
-  const promptPayload = useMemo(
-    () => ({
-      sentAt: entry.sentAt,
-      previousResponseId: entry.previousResponseId ?? null,
-      inputItems: entry.inputItems,
-      systemPrompt: entry.systemPrompt,
-      leagueContext: entry.leagueContext ?? null,
-      userMessage: entry.userMessage ?? null,
-      toolsSnapshot: entry.toolsSnapshot,
-    }),
-    [
-      entry.sentAt,
-      entry.previousResponseId,
-      entry.inputItems,
-      entry.systemPrompt,
-      entry.leagueContext,
-      entry.userMessage,
-      entry.toolsSnapshot,
-    ],
-  );
-  const promptJson = useMemo(() => formatJson(promptPayload), [promptPayload]);
-  const assistantOutput = entry.assistantOutput ?? "";
-  const assistantOutputLabel = assistantOutput
-    ? assistantOutput
-    : "No assistant output recorded.";
-
-  return (
-    <div className="border border-border rounded-lg overflow-hidden bg-card">
-      <button
-        type="button"
-        onClick={() => setIsExpanded((prev) => !prev)}
-        className="w-full flex items-start justify-between gap-3 p-3 bg-secondary/30 hover:bg-secondary/50 transition-colors text-left"
-        aria-expanded={isExpanded}
-      >
-        <div className="flex items-start gap-2 min-w-0">
-          {isExpanded ? (
-            <ChevronDown className="h-4 w-4 text-muted-foreground mt-0.5" />
-          ) : (
-            <ChevronRight className="h-4 w-4 text-muted-foreground mt-0.5" />
-          )}
-          <div className="min-w-0">
-            <div className="text-xs font-medium text-foreground">
-              Request · {formatTimestamp(entry.sentAt)}
-            </div>
-            <div className="text-[11px] text-muted-foreground truncate">
-              {entry.userMessage ? entry.userMessage : "No user message recorded."}
-            </div>
-          </div>
-        </div>
-        <div className="flex items-center gap-2 text-xs text-muted-foreground shrink-0">
-          <span>{toolCount} tool{toolCount === 1 ? "" : "s"}</span>
-          {entry.error && (
-            <span className="text-destructive">Error</span>
-          )}
-        </div>
-      </button>
-
-      {isExpanded && (
-        <div className="p-3 space-y-3 border-t border-border">
-          <div className="border border-border rounded-md overflow-hidden bg-secondary/20">
-            <div className="flex items-center justify-between px-2 py-1 border-b border-border">
-              <span className="text-xs text-muted-foreground">Prompt Sent</span>
-              <CopyButton value={promptJson} />
-            </div>
-            <pre className="text-[11px] leading-snug font-mono whitespace-pre-wrap break-words p-2 max-h-64 overflow-y-auto">
-              {promptJson}
-            </pre>
-          </div>
-
-          <div className="border border-border rounded-md overflow-hidden bg-secondary/20">
-            <div className="flex items-center justify-between px-2 py-1 border-b border-border">
-              <span className="text-xs text-muted-foreground">Tools</span>
-              <span className="text-[11px] text-muted-foreground">
-                {toolCount === 0 ? "No tool calls" : `${toolCount} call${toolCount === 1 ? "" : "s"}`}
-              </span>
-            </div>
-            <div className="p-2 space-y-2">
-              {toolCount === 0 ? (
-                <div className="text-[11px] text-muted-foreground">
-                  No tools were invoked for this request.
-                </div>
-              ) : (
-                entry.toolEvents.map((event) => {
-                  const argsValue = hasParsedArguments(event.parsedArguments)
-                    ? event.parsedArguments
-                    : event.arguments;
-                  const argsText = formatValue(argsValue);
-                  const outputText = formatValue(event.output ?? null);
-
-                  return (
-                    <div
-                      key={event.id}
-                      className="border border-border rounded-md overflow-hidden bg-background"
-                    >
-                      <div className="flex items-center justify-between px-2 py-1 bg-secondary/40">
-                        <div className="text-[11px] font-mono text-foreground truncate">
-                          {getToolLabel(event)}
-                        </div>
-                        <div className={`text-[11px] ${statusClass(event.status)}`}>
-                          {event.status ?? "unknown"}
-                        </div>
-                      </div>
-                      <div className="p-2 space-y-2">
-                        {argsText ? (
-                          <div className="space-y-1">
-                            <div className="text-[10px] text-muted-foreground uppercase tracking-wide">
-                              Args
-                            </div>
-                            <pre className="text-[11px] leading-snug font-mono whitespace-pre-wrap break-words bg-secondary/30 p-2 rounded">
-                              {argsText}
-                            </pre>
-                          </div>
-                        ) : (
-                          <div className="text-[11px] text-muted-foreground">
-                            No arguments recorded.
-                          </div>
-                        )}
-                        {outputText ? (
-                          <div className="space-y-1">
-                            <div className="text-[10px] text-muted-foreground uppercase tracking-wide">
-                              Output
-                            </div>
-                            <pre className="text-[11px] leading-snug font-mono whitespace-pre-wrap break-words bg-secondary/30 p-2 rounded">
-                              {outputText}
-                            </pre>
-                          </div>
-                        ) : (
-                          <div className="text-[11px] text-muted-foreground">
-                            No output recorded.
-                          </div>
-                        )}
-                        {event.error && (
-                          <div className="text-[11px] text-destructive break-words">
-                            Error: {event.error}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </div>
-
-          <div className="border border-border rounded-md overflow-hidden bg-secondary/20">
-            <div className="flex items-center justify-between px-2 py-1 border-b border-border">
-              <span className="text-xs text-muted-foreground">Assistant Output</span>
-              <CopyButton value={assistantOutput} />
-            </div>
-            <pre className="text-[11px] leading-snug font-mono whitespace-pre-wrap break-words p-2 max-h-64 overflow-y-auto">
-              {assistantOutputLabel}
-            </pre>
-          </div>
-
-          {entry.error && (
-            <div className="text-[11px] text-destructive bg-destructive/10 px-2 py-1 rounded">
-              Request error: {entry.error}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
 }
 
 export function LlmTraceSection() {
-  const traceEntries = useConversationStore((state) => state.traceEntries);
+  const { traceEntries } = useConversationStore();
+  const [openEntryIds, setOpenEntryIds] = useState<Record<string, boolean>>({});
 
-  const sortedEntries = useMemo(
-    () => [...traceEntries].reverse(),
-    [traceEntries],
-  );
+  const entries = useMemo(() => [...traceEntries].reverse(), [traceEntries]);
+
+  const toggleEntry = (id: string) => {
+    setOpenEntryIds((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
 
   return (
     <CollapsibleSection
-      title={`LLM Trace (${traceEntries.length})`}
-      icon={<Activity size={16} />}
+      title={`LLM Trace${entries.length > 0 ? ` (${entries.length})` : ""}`}
+      icon={<ClipboardList size={16} />}
       defaultExpanded={false}
     >
-      <div className="space-y-3">
-        {sortedEntries.length === 0 ? (
-          <div className="text-xs text-muted-foreground text-center py-4">
-            No trace entries yet.
-          </div>
-        ) : (
-          sortedEntries.map((entry) => (
-            <TraceEntryCard key={entry.id} entry={entry} />
-          ))
-        )}
-      </div>
+      {entries.length === 0 ? (
+        <div className="text-xs text-muted-foreground">No trace entries yet.</div>
+      ) : (
+        <div className="space-y-3">
+          {entries.map((entry, index) => {
+            const promptPayload = buildPromptPayload(entry);
+            const promptText = formatJson(promptPayload);
+            const assistantOutput = entry.assistantOutput || "";
+            const userSnippet = entry.userMessage || "(no user message)";
+            const toolCount = entry.toolEvents.length;
+            const isOpen = openEntryIds[entry.id] ?? index === 0;
+
+            return (
+              <div
+                key={entry.id}
+                className="border border-border rounded-lg overflow-hidden"
+              >
+                <button
+                  type="button"
+                  onClick={() => toggleEntry(entry.id)}
+                  className="w-full flex items-center justify-between gap-3 p-2 text-left hover:bg-secondary/40 transition-colors"
+                >
+                  <div className="min-w-0">
+                    <div className="text-xs font-medium text-foreground truncate">
+                      {userSnippet}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground">
+                      {formatTimestamp(entry.sentAt)} - {toolCount} tool{toolCount === 1 ? "" : "s"}
+                    </div>
+                  </div>
+                  <div className="text-[10px] text-muted-foreground">
+                    {isOpen ? "Hide" : "Show"}
+                  </div>
+                </button>
+
+                {isOpen && (
+                  <div className="border-t border-border px-3 py-2 space-y-3">
+                    {entry.error && (
+                      <div className="text-xs text-destructive bg-destructive/10 px-2 py-1 rounded">
+                        {entry.error}
+                      </div>
+                    )}
+
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-medium text-foreground">Prompt Sent</span>
+                        <CopyButton value={promptText} />
+                      </div>
+                      <pre className="text-[11px] leading-snug font-mono bg-secondary/40 px-2 py-2 rounded max-h-48 overflow-y-auto whitespace-pre-wrap">
+                        {promptText}
+                      </pre>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="text-xs font-medium text-foreground">Tools</div>
+                      {entry.toolEvents.length === 0 ? (
+                        <div className="text-xs text-muted-foreground">No tool calls.</div>
+                      ) : (
+                        <div className="space-y-2">
+                          {entry.toolEvents.map((tool) => {
+                            const label = tool.name
+                              ? `${tool.tool_type} - ${tool.name}`
+                              : tool.tool_type;
+                            const argsText = tool.arguments
+                              ? tool.arguments
+                              : tool.parsedArguments
+                                ? formatJson(tool.parsedArguments)
+                                : "";
+                            const outputText = tool.output ?? "";
+                            return (
+                              <div
+                                key={`${entry.id}-${tool.id}`}
+                                className="border border-border rounded-md p-2 space-y-2"
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <div>
+                                    <div className="text-xs font-medium text-foreground">
+                                      {label}
+                                    </div>
+                                    <div className="text-[10px] text-muted-foreground">
+                                      {tool.status || "status unknown"}
+                                    </div>
+                                  </div>
+                                  {tool.error && (
+                                    <span className="text-[10px] text-destructive">Error</span>
+                                  )}
+                                </div>
+
+                                {tool.error && (
+                                  <div className="text-[10px] text-destructive break-words">
+                                    {tool.error}
+                                  </div>
+                                )}
+
+                                {argsText && (
+                                  <div className="space-y-1">
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-[10px] text-muted-foreground">
+                                        Arguments
+                                      </span>
+                                      <CopyButton value={argsText} />
+                                    </div>
+                                    <pre className="text-[10px] leading-snug font-mono bg-secondary/40 px-2 py-2 rounded max-h-32 overflow-y-auto whitespace-pre-wrap">
+                                      {argsText}
+                                    </pre>
+                                  </div>
+                                )}
+
+                                {outputText && (
+                                  <div className="space-y-1">
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-[10px] text-muted-foreground">
+                                        Output
+                                      </span>
+                                      <CopyButton value={outputText} />
+                                    </div>
+                                    <pre className="text-[10px] leading-snug font-mono bg-secondary/40 px-2 py-2 rounded max-h-32 overflow-y-auto whitespace-pre-wrap">
+                                      {outputText}
+                                    </pre>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-medium text-foreground">Assistant Output</span>
+                        <CopyButton value={assistantOutput} />
+                      </div>
+                      <pre className="text-[11px] leading-snug font-mono bg-secondary/40 px-2 py-2 rounded max-h-48 overflow-y-auto whitespace-pre-wrap">
+                        {assistantOutput || "(no assistant output)"}
+                      </pre>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </CollapsibleSection>
   );
 }
