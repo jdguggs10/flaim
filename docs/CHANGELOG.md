@@ -27,6 +27,8 @@ Follow Keep a Changelog; SemVer applies.
 - **Changed**: ESPN maintenance buttons restyled to match Yahoo — side-by-side `sm` buttons instead of stacked full-width.
 
 ### Chat UX
+- **Added**: Default sport and team selector pills in chat status bar. Users can click to switch sport/team without leaving the chat. Persists to Supabase via existing preference APIs.
+- **Changed**: Replaced static active-league pill with two interactive `Popover`-based pills (sport + team).
 - **Fixed**: Chat loading indicator no longer disappears 5+ seconds before content appears. Loading state stays visible until actual text or tool call UI renders.
 - **Added**: Collapsible "Thinking..." pill replaces the tiny 12px pulsing dot. Shows a spinner with status text. When using reasoning models, the pill can be expanded to show live reasoning summary text.
 - **Added**: Handles new SSE events (`response.created`, `response.in_progress`, `response.reasoning_summary_text.delta`) for richer loading feedback.

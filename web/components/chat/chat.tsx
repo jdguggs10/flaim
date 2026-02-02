@@ -10,7 +10,8 @@ import LoadingMessage from "./loading-message";
 import useConversationStore from "@/stores/chat/useConversationStore";
 import useToolsStore from "@/stores/chat/useToolsStore";
 import useLeaguesStore from "@/stores/chat/useLeaguesStore";
-import { Trash2, Bug, Trophy } from "lucide-react";
+import { Trash2, Bug } from "lucide-react";
+import DefaultsBanner from "./defaults-banner";
 
 interface ChatProps {
   items: Item[];
@@ -29,8 +30,8 @@ const Chat: React.FC<ChatProps> = ({
   const [isComposing, setIsComposing] = useState(false);
   const { loadingState, clearConversation } = useConversationStore();
   const { debugMode, setDebugMode } = useToolsStore();
-  const { getActiveLeague } = useLeaguesStore();
-  const activeLeague = getActiveLeague();
+  const { leagues } = useLeaguesStore();
+  const hasLeagues = leagues.length > 0;
 
   // Keyboard shortcut: Cmd+D / Ctrl+D to toggle debug mode
   useEffect(() => {
@@ -66,8 +67,8 @@ const Chat: React.FC<ChatProps> = ({
   return (
     <div className="flex justify-center items-center size-full">
       <div className="flex grow flex-col h-full max-w-[750px] gap-2">
-        {/* Status bar with debug mode and active league indicators */}
-        {(debugMode || activeLeague) && (
+        {/* Status bar with debug mode and default sport/team selectors */}
+        {(debugMode || hasLeagues) && (
           <div className="flex items-center justify-center gap-3 px-10 pt-2">
             {debugMode && (
               <button
@@ -79,12 +80,7 @@ const Chat: React.FC<ChatProps> = ({
                 DEBUG
               </button>
             )}
-            {activeLeague && (
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-info/10 border border-info/30 text-info text-xs font-medium rounded-full">
-                <Trophy size={12} />
-                {`${activeLeague.leagueName || `League ${activeLeague.leagueId}`} • ${activeLeague.seasonYear ?? "Unknown"} • ${activeLeague.teamName || "My Team"}`}
-              </div>
-            )}
+            <DefaultsBanner />
           </div>
         )}
         <div className="flex-1 min-h-0 overflow-y-auto px-10 flex flex-col">

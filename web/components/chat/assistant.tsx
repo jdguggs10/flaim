@@ -140,13 +140,16 @@ export default function Assistant() {
     void syncClerkAuth();
   }, [isSignedIn, isLoading, clerkUserId, getToken, setClerkUserId, setClerkToken]);
 
-  // Fetch setup status and leagues when signed in
+  const { fetchPreferences } = useLeaguesStore();
+
+  // Fetch setup status, leagues, and preferences when signed in
   useEffect(() => {
     if (isSignedIn && !isLoading) {
       fetchSetupStatus().then(() => setSetupChecked(true));
       fetchLeagues();
+      fetchPreferences();
     }
-  }, [isSignedIn, isLoading, fetchSetupStatus, fetchLeagues]);
+  }, [isSignedIn, isLoading, fetchSetupStatus, fetchLeagues, fetchPreferences]);
 
   // Configure MCP tools when leagues are loaded or active league changes
   useEffect(() => {
