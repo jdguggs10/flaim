@@ -270,6 +270,9 @@ export const processMessages = async () => {
     });
   };
 
+  const stringifyToolOutput = (output: unknown): string | null =>
+    output == null ? null : typeof output === "string" ? output : JSON.stringify(output);
+
   const setTraceAssistantOutput = (assistantOutput: string | null) => {
     updateTraceEntry(traceId, (entry) => ({
       ...entry,
@@ -289,9 +292,9 @@ export const processMessages = async () => {
   const pendingFunctionCalls: { toolCallMessage: ToolCallItem }[] = [];
 
   let assistantMessageContent = "";
-  let functionArguments = "";
+  const functionArgumentsByItem = new Map<string, string>();
   // For streaming MCP tool call arguments
-  let mcpArguments = "";
+  const mcpArgumentsByItem = new Map<string, string>();
 
   await handleTurn(inputItems, tools, async ({ event, data }) => {
     // DEBUG: Log all events for analysis
@@ -396,11 +399,13 @@ export const processMessages = async () => {
             break;
           }
           case "function_call": {
-            functionArguments += item.arguments || "";
+            const nextArguments =
+              (functionArgumentsByItem.get(item.id) ?? "") + (item.arguments || "");
+            functionArgumentsByItem.set(item.id, nextArguments);
             let parsedArguments: unknown = {};
-            if (item.arguments) {
+            if (nextArguments) {
               try {
-                parsedArguments = parse(item.arguments);
+                parsedArguments = parse(nextArguments);
               } catch {
                 parsedArguments = {};
               }
@@ -409,7 +414,7 @@ export const processMessages = async () => {
               id: item.id,
               tool_type: "function_call",
               name: item.name,
-              arguments: item.arguments || "",
+              arguments: nextArguments,
               parsedArguments,
               status: "in_progress",
             });
@@ -460,11 +465,13 @@ export const processMessages = async () => {
             break;
           }
           case "mcp_call": {
-            mcpArguments = item.arguments || "";
+            const nextArguments =
+              (mcpArgumentsByItem.get(item.id) ?? "") + (item.arguments || "");
+            mcpArgumentsByItem.set(item.id, nextArguments);
             let parsedArguments: unknown = {};
-            if (item.arguments) {
+            if (nextArguments) {
               try {
-                parsedArguments = parse(item.arguments);
+                parsedArguments = parse(nextArguments);
               } catch {
                 parsedArguments = {};
               }
@@ -473,7 +480,7 @@ export const processMessages = async () => {
               id: item.id,
               tool_type: "mcp_call",
               name: item.name,
-              arguments: item.arguments || "",
+              arguments: nextArguments,
               parsedArguments,
               status: "in_progress",
             });
@@ -521,7 +528,7 @@ export const processMessages = async () => {
             id: item.id,
             tool_type: item.type,
             status: item.status,
-            output: item.output,
+            output: stringifyToolOutput(item.output),
           });
         }
         const toolCallMessage = chatMessages.find((m) => m.id === item.id);
@@ -565,15 +572,17 @@ export const processMessages = async () => {
 
       case "response.function_call_arguments.delta": {
         // Streaming arguments delta to show in the chat
-        functionArguments += data.delta || "";
+        const nextArguments =
+          (functionArgumentsByItem.get(data.item_id) ?? "") + (data.delta || "");
+        functionArgumentsByItem.set(data.item_id, nextArguments);
         let parsedFunctionArguments = {};
 
         const toolCallMessage = chatMessages.find((m) => m.id === data.item_id);
         if (toolCallMessage && toolCallMessage.type === "tool_call") {
-          toolCallMessage.arguments = functionArguments;
+          toolCallMessage.arguments = nextArguments;
           try {
-            if (functionArguments.length > 0) {
-              parsedFunctionArguments = parse(functionArguments);
+            if (nextArguments.length > 0) {
+              parsedFunctionArguments = parse(nextArguments);
             }
             toolCallMessage.parsedArguments = parsedFunctionArguments;
           } catch {
@@ -584,7 +593,7 @@ export const processMessages = async () => {
         upsertToolEvent({
           id: data.item_id,
           tool_type: "function_call",
-          arguments: functionArguments,
+          arguments: nextArguments,
           parsedArguments: parsedFunctionArguments,
           status: "in_progress",
         });
@@ -595,7 +604,7 @@ export const processMessages = async () => {
         // This has the full final arguments string
         const { item_id, arguments: finalArgs } = data;
 
-        functionArguments = finalArgs;
+        functionArgumentsByItem.set(item_id, finalArgs);
 
         // Mark the tool_call as "completed" and parse the final JSON
         const toolCallMessage = chatMessages.find((m) => m.id === item_id);
@@ -617,14 +626,16 @@ export const processMessages = async () => {
       // Streaming MCP tool call arguments
       case "response.mcp_call_arguments.delta": {
         // Append delta to MCP arguments
-        mcpArguments += data.delta || "";
+        const nextArguments =
+          (mcpArgumentsByItem.get(data.item_id) ?? "") + (data.delta || "");
+        mcpArgumentsByItem.set(data.item_id, nextArguments);
         let parsedMcpArguments: any = {};
         const toolCallMessage = chatMessages.find((m) => m.id === data.item_id);
         if (toolCallMessage && toolCallMessage.type === "tool_call") {
-          toolCallMessage.arguments = mcpArguments;
+          toolCallMessage.arguments = nextArguments;
           try {
-            if (mcpArguments.length > 0) {
-              parsedMcpArguments = parse(mcpArguments);
+            if (nextArguments.length > 0) {
+              parsedMcpArguments = parse(nextArguments);
             }
             toolCallMessage.parsedArguments = parsedMcpArguments;
           } catch {
@@ -635,7 +646,7 @@ export const processMessages = async () => {
         upsertToolEvent({
           id: data.item_id,
           tool_type: "mcp_call",
-          arguments: mcpArguments,
+          arguments: nextArguments,
           parsedArguments: parsedMcpArguments,
           status: "in_progress",
         });
@@ -644,7 +655,7 @@ export const processMessages = async () => {
       case "response.mcp_call_arguments.done": {
         // Final MCP arguments string received
         const { item_id, arguments: finalArgs } = data;
-        mcpArguments = finalArgs;
+        mcpArgumentsByItem.set(item_id, finalArgs);
         const toolCallMessage = chatMessages.find((m) => m.id === item_id);
         if (toolCallMessage && toolCallMessage.type === "tool_call") {
           toolCallMessage.arguments = finalArgs;
@@ -680,7 +691,7 @@ export const processMessages = async () => {
         upsertToolEvent({
           id: item_id,
           tool_type: "web_search_call",
-          output,
+          output: stringifyToolOutput(output),
           status: "completed",
         });
         break;
@@ -704,7 +715,7 @@ export const processMessages = async () => {
         upsertToolEvent({
           id: item_id,
           tool_type: "file_search_call",
-          output,
+          output: stringifyToolOutput(output),
           status: "completed",
         });
         break;
@@ -728,7 +739,7 @@ export const processMessages = async () => {
           upsertToolEvent({
             id: item_id,
             tool_type: "code_interpreter_call",
-            output: toolCallMessage.code || "",
+            output: stringifyToolOutput(toolCallMessage.code || ""),
             status: "in_progress",
           });
         }
@@ -763,7 +774,7 @@ export const processMessages = async () => {
         upsertToolEvent({
           id: item_id,
           tool_type: "code_interpreter_call",
-          output: code,
+          output: stringifyToolOutput(code),
           status: "completed",
         });
         break;
@@ -888,7 +899,7 @@ export const processMessages = async () => {
       upsertToolEvent({
         id: toolCallMessage.id,
         tool_type: "function_call",
-        output: JSON.stringify(toolResult),
+        output: stringifyToolOutput(JSON.stringify(toolResult)),
         status: "completed",
       });
       setChatMessages([...chatMessages]);
@@ -916,7 +927,7 @@ export const processMessages = async () => {
       upsertToolEvent({
         id: toolCallMessage.id,
         tool_type: "function_call",
-        output: JSON.stringify({ error: message }),
+        output: stringifyToolOutput(JSON.stringify({ error: message })),
         status: "failed",
         error: message,
       });
