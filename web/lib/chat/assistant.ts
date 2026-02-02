@@ -253,9 +253,9 @@ export const processMessages = async () => {
 
       if (existingIndex === -1) {
         const nextEvent: TraceToolEvent = {
+          ...normalizedUpdate,
           id: normalizedUpdate.id,
           tool_type: resolvedToolType,
-          ...normalizedUpdate,
         };
         return { ...entry, toolEvents: [...entry.toolEvents, nextEvent] };
       }
@@ -826,7 +826,7 @@ export const processMessages = async () => {
         const { response } = data;
         const lastAssistantMessage = [...chatMessages]
           .reverse()
-          .find((item) => item.type === "message" && item.role === "assistant");
+          .find((item) => item.type === "message" && item.role === "assistant") as MessageItem | undefined;
         const lastAssistantText =
           lastAssistantMessage?.content?.[0]?.type === "output_text"
             ? lastAssistantMessage.content[0].text || ""
@@ -882,7 +882,7 @@ export const processMessages = async () => {
           content: [
             {
               type: "output_text",
-              text: `❌ Error: ${error}${status ? ` (Status: ${status})` : ''}\n\nPlease try again or check your configuration.`,
+              text: `\u274C Error: ${error}${status ? ` (Status: ${status})` : ''}\n\nPlease try again or check your configuration.`,
             },
           ],
         });
