@@ -5,6 +5,8 @@
 - Send a message → new trace entry with prompt payload
 - Tool calls appear in trace with args + output + error when applicable
 - Tool error blocks include copy controls
+- Entry-level trace errors include copy controls
+- Tool arguments fall back to parsed arguments when raw arguments are empty
 - Prompt payload shows Authorization header redacted in tools snapshot
 - Prompt payload includes tools snapshot
 - Prompt payload handles Headers/Map/Set/Date values without errors
