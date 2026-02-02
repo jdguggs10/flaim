@@ -135,8 +135,14 @@ export function LlmTraceSection() {
                                 </div>
 
                                 {tool.error && (
-                                  <div className="text-[10px] text-destructive break-words">
-                                    {tool.error}
+                                  <div className="space-y-1">
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-[10px] text-destructive">Error</span>
+                                      <CopyButton value={tool.error} />
+                                    </div>
+                                    <div className="text-[10px] text-destructive break-words">
+                                      {tool.error}
+                                    </div>
                                   </div>
                                 )}
 

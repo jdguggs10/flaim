@@ -4,6 +4,7 @@
 - Open `/chat` → LLM Trace section present
 - Send a message → new trace entry with prompt payload
 - Tool calls appear in trace with args + output + error when applicable
+- Tool error blocks include copy controls
 - Prompt payload shows Authorization header redacted in tools snapshot
 - Prompt payload handles Headers/Map/Set/Date values without errors
 - Prompt payload handles circular references without crashing
