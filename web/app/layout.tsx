@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
-import { ClerkProvider } from '@clerk/nextjs';
+import { ThemeProvider } from '@/components/theme-provider';
+import { ClerkThemeWrapper } from '@/components/clerk-theme-wrapper';
 import "./globals.css";
 
 const geistSans = localFont({
@@ -34,16 +35,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <ClerkProvider
-      allowedRedirectOrigins={[
-        'chrome-extension://mbnokejgglkfgkeeenolgdpcnfakpbkn', // CWS production
-      ]}
-    >
-      <html lang="en">
+      <html lang="en" suppressHydrationWarning>
         <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-          {children}
+          <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+            <ClerkThemeWrapper>
+              {children}
+            </ClerkThemeWrapper>
+          </ThemeProvider>
         </body>
       </html>
-    </ClerkProvider>
   );
 }

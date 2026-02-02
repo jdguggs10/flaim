@@ -7,6 +7,7 @@ import { LeagueDropdown } from "./league-dropdown";
 import { SeasonDropdown } from "./season-dropdown";
 import { AccountHeaderButton } from "./account-header-button";
 import { EspnHeaderButton } from "./espn-header-button";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 type Environment = "development" | "preview" | "production";
 
@@ -69,6 +70,7 @@ export function ChatHeader() {
         >
           {config.label}
         </span>
+        <ThemeToggle />
         <UserButton />
       </div>
     </header>
