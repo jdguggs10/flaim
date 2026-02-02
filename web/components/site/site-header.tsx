@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { SignedIn, SignedOut, SignInButton, SignUpButton, UserButton } from '@clerk/nextjs';
 import { Button } from '@/components/ui/button';
-import { ThemeToggle } from '@/components/theme-toggle';
 import Image from 'next/image';
 
 const NAV_LINKS = [
@@ -27,7 +26,6 @@ export function SiteHeader() {
           <span>Flaim</span>
         </Link>
         <div className="flex items-center gap-2 sm:gap-4">
-          <ThemeToggle />
           <SignedOut>
             <div className="flex flex-row gap-2">
               <SignInButton>
