@@ -135,7 +135,8 @@ Keyboard shortcut: `Cmd+D` / `Ctrl+D`
 ### LLM Trace
 
 The Developer Console includes an LLM Trace panel that captures prompt payloads, tool calls, and assistant output
-for each turn. Exporting a session includes a redacted copy of these trace entries for safe sharing.
+for each turn. Exporting a session includes a redacted copy of these trace entries, but exports can still contain
+sensitive data—share with care.
 
 ## Build Notes
 
