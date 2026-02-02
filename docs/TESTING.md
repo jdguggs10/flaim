@@ -8,6 +8,7 @@ Automated tests currently focus on the Workers layer:
 - **auth-worker**: OAuth handler behavior, league discovery helpers, ESPN type utilities
 - **fantasy-mcp**: tool routing and minimal tool behavior
 - **espn-client**: type utilities
+- **yahoo-client**: response normalizers
 
 The **web app** and **extension** do not have automated tests right now. Manual testing is acceptable until usage grows.
 
@@ -19,6 +20,7 @@ Workers use Vitest.
 cd workers/auth-worker && npm test
 cd workers/fantasy-mcp && npm test
 cd workers/espn-client && npm test
+cd workers/yahoo-client && npm test
 ```
 
 Type checks (where configured):
