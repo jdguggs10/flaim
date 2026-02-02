@@ -33,7 +33,6 @@ export default function DefaultsBanner() {
   const currentSport = defaultSport || activeLeague?.sport || availableSports[0];
   const sportConfig = currentSport ? getSportConfig(currentSport) : null;
   const sportLeagues = currentSport ? getLeaguesForSport(currentSport) : [];
-  const hasMultiplePlatforms = new Set(sportLeagues.map(l => l.platform)).size > 1;
 
   return (
     <div className="flex items-center gap-2">
@@ -110,11 +109,9 @@ export default function DefaultsBanner() {
                 >
                   <span>
                     {league.leagueName || `League ${league.leagueId}`}
-                    {hasMultiplePlatforms && (
-                      <span className="ml-1.5 text-[10px] uppercase text-muted-foreground font-normal">
-                        {league.platform}
-                      </span>
-                    )}
+                    <span className="ml-1.5 text-[10px] uppercase text-muted-foreground font-normal">
+                      {league.platform}
+                    </span>
                   </span>
                   <span className="text-xs text-muted-foreground">
                     {league.teamName || "My Team"}
