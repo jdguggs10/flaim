@@ -1,0 +1,2 @@
+- Open /chat -> no LLM Trace section (expected FAIL before implementation)
+- Send a message -> no prompt payload shown (expected FAIL)

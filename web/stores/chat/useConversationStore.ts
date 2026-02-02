@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { Item } from "@/lib/chat/assistant";
 import { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import { INITIAL_MESSAGE } from "@/config/constants";
+import { LlmTraceEntry } from "@/lib/chat/trace-types";
 
 export type LoadingStatus = "idle" | "connecting" | "thinking" | "responding";
 
@@ -15,6 +16,8 @@ interface ConversationState {
   chatMessages: Item[];
   // Items sent to the Responses API (only used for first turn before we have a response ID)
   conversationItems: any[];
+  // LLM trace entries (bounded to last 50)
+  traceEntries: LlmTraceEntry[];
   // Loading state for assistant response
   loadingState: LoadingState;
   // Previous response ID for stored-responses flow (avoids rebuilding conversation history)
@@ -24,13 +27,19 @@ interface ConversationState {
   setConversationItems: (messages: any[]) => void;
   addChatMessage: (item: Item) => void;
   addConversationItem: (message: ChatCompletionMessageParam) => void;
+  addTraceEntry: (entry: LlmTraceEntry) => void;
+  updateTraceEntry: (
+    id: string,
+    updater: (entry: LlmTraceEntry) => LlmTraceEntry,
+  ) => void;
   setLoadingState: (state: LoadingState) => void;
   setPreviousResponseId: (id: string | null) => void;
+  clearTraces: () => void;
   clearConversation: () => void;
   rawSet: (state: any) => void;
 }
 
-const useConversationStore = create<ConversationState>((set) => ({
+const useConversationStore = create<ConversationState>((set, get) => ({
   chatMessages: [
     {
       type: "message",
@@ -39,6 +48,7 @@ const useConversationStore = create<ConversationState>((set) => ({
     },
   ],
   conversationItems: [],
+  traceEntries: [],
   loadingState: { status: "idle", thinkingText: "" },
   previousResponseId: null,
   setChatMessages: (items) => set({ chatMessages: items }),
@@ -49,9 +59,23 @@ const useConversationStore = create<ConversationState>((set) => ({
     set((state) => ({
       conversationItems: [...state.conversationItems, message],
     })),
+  addTraceEntry: (entry) =>
+    set((state) => {
+      const nextEntries = [...state.traceEntries, entry];
+      return { traceEntries: nextEntries.slice(-50) };
+    }),
+  updateTraceEntry: (id, updater) =>
+    set((state) => {
+      const nextEntries = state.traceEntries.map((entry) =>
+        entry.id === id ? updater(entry) : entry,
+      );
+      return { traceEntries: nextEntries.slice(-50) };
+    }),
   setLoadingState: (loadingState) => set({ loadingState }),
   setPreviousResponseId: (id) => set({ previousResponseId: id }),
-  clearConversation: () =>
+  clearTraces: () => set({ traceEntries: [] }),
+  clearConversation: () => {
+    get().clearTraces();
     set({
       chatMessages: [
         {
@@ -63,7 +87,8 @@ const useConversationStore = create<ConversationState>((set) => ({
       conversationItems: [],
       loadingState: { status: "idle", thinkingText: "" },
       previousResponseId: null,
-    }),
+    });
+  },
   rawSet: set,
 }));
 
