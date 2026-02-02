@@ -904,8 +904,9 @@ export const processMessages = async () => {
         toolCallMessage.parsedArguments
       );
 
+      const toolOutput = stringifyToolOutput(toolResult) ?? "null";
       // Record tool output in display
-      toolCallMessage.output = JSON.stringify(toolResult);
+      toolCallMessage.output = toolOutput;
       toolCallMessage.status = "completed";
       if (toolCallMessage.metadata) {
         const now = Date.now();
@@ -915,7 +916,7 @@ export const processMessages = async () => {
       upsertToolEvent({
         id: toolCallMessage.id,
         tool_type: "function_call",
-        output: stringifyToolOutput(JSON.stringify(toolResult)),
+        output: toolOutput,
         status: "completed",
       });
       setChatMessages([...chatMessages]);
@@ -925,14 +926,15 @@ export const processMessages = async () => {
       setConversationItems([{
         type: "function_call_output",
         call_id: toolCallMessage.call_id,
-        output: JSON.stringify(toolResult),
+        output: toolOutput,
       }]);
 
       // Make next turn to get assistant response to tool output
       await processMessages();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Tool failed";
-      toolCallMessage.output = JSON.stringify({ error: message });
+      const errorOutput = stringifyToolOutput({ error: message }) ?? "{\"error\":\"Tool failed\"}";
+      toolCallMessage.output = errorOutput;
       toolCallMessage.status = "failed";
       if (toolCallMessage.metadata) {
         const now = Date.now();
@@ -943,7 +945,7 @@ export const processMessages = async () => {
       upsertToolEvent({
         id: toolCallMessage.id,
         tool_type: "function_call",
-        output: stringifyToolOutput(JSON.stringify({ error: message })),
+        output: errorOutput,
         status: "failed",
         error: message,
       });
@@ -953,7 +955,7 @@ export const processMessages = async () => {
       setConversationItems([{
         type: "function_call_output",
         call_id: toolCallMessage.call_id,
-        output: JSON.stringify({ error: message }),
+        output: errorOutput,
       }]);
 
       // Let the assistant respond to the tool failure
