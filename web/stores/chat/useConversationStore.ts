@@ -66,9 +66,13 @@ const useConversationStore = create<ConversationState>((set, get) => ({
     }),
   updateTraceEntry: (id, updater) =>
     set((state) => {
-      const nextEntries = state.traceEntries.map((entry) =>
-        entry.id === id ? updater(entry) : entry,
-      );
+      const entryIndex = state.traceEntries.findIndex((entry) => entry.id === id);
+      if (entryIndex === -1) {
+        return state;
+      }
+
+      const nextEntries = [...state.traceEntries];
+      nextEntries[entryIndex] = updater(nextEntries[entryIndex]);
       return { traceEntries: nextEntries.slice(-50) };
     }),
   setLoadingState: (loadingState) => set({ loadingState }),

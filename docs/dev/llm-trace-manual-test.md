@@ -1,5 +1,7 @@
 - Open `/chat` → no LLM Trace section (expected FAIL before implementation)
 - Send a message → no prompt payload shown (expected FAIL)
+- Sending a message creates a new trace entry with input payload (expected FAIL)
+- Tool calls appear in trace with args + output (expected FAIL)
 - Trace payload shows Authorization header redacted (expected FAIL)
 - Trace payload handles Headers/Map/Set/Date values without errors (expected FAIL)
 - Trace payload handles circular references without crashing (expected FAIL)

@@ -5,6 +5,8 @@ import useConversationStore from "@/stores/chat/useConversationStore";
 import { getTools } from "./tools/tools";
 import { Annotation } from "@/components/chat/annotations";
 import { functionsMap } from "@/config/functions";
+import { redactSensitive } from "@/lib/chat/trace-utils";
+import type { TraceToolEvent } from "@/lib/chat/trace-types";
 
 const normalizeAnnotation = (annotation: any): Annotation => ({
   ...annotation,
@@ -174,6 +176,8 @@ export const processMessages = async () => {
     setLoadingState,
     previousResponseId,
     setPreviousResponseId,
+    addTraceEntry,
+    updateTraceEntry,
   } = useConversationStore.getState();
 
   const tools = getTools();
@@ -211,6 +215,74 @@ export const processMessages = async () => {
       ...conversationItems,
     ];
   }
+
+  const traceId = crypto.randomUUID();
+  const userMessageItem = [...conversationItems]
+    .reverse()
+    .find((item) => item?.role === "user");
+  const userMessage =
+    typeof userMessageItem?.content === "string" ? userMessageItem.content : null;
+
+  addTraceEntry({
+    id: traceId,
+    kind: "request",
+    sentAt: new Date().toISOString(),
+    previousResponseId,
+    inputItems,
+    toolsSnapshot: redactSensitive(tools) as unknown[],
+    systemPrompt: SYSTEM_PROMPT,
+    leagueContext: leagueContext ?? null,
+    userMessage,
+    toolEvents: [],
+  });
+
+  const upsertToolEvent = (
+    toolUpdate: Partial<TraceToolEvent> & { id: string; tool_type?: string },
+  ) => {
+    const normalizedUpdate = Object.fromEntries(
+      Object.entries(toolUpdate).filter(([, value]) => value !== undefined),
+    ) as Partial<TraceToolEvent> & { id: string; tool_type?: string };
+
+    updateTraceEntry(traceId, (entry) => {
+      const existingIndex = entry.toolEvents.findIndex(
+        (event) => event.id === normalizedUpdate.id,
+      );
+      const resolvedToolType =
+        normalizedUpdate.tool_type ??
+        (existingIndex >= 0 ? entry.toolEvents[existingIndex].tool_type : "unknown");
+
+      if (existingIndex === -1) {
+        const nextEvent: TraceToolEvent = {
+          id: normalizedUpdate.id,
+          tool_type: resolvedToolType,
+          ...normalizedUpdate,
+        };
+        return { ...entry, toolEvents: [...entry.toolEvents, nextEvent] };
+      }
+
+      const nextEvents = [...entry.toolEvents];
+      nextEvents[existingIndex] = {
+        ...nextEvents[existingIndex],
+        ...normalizedUpdate,
+        tool_type: resolvedToolType,
+      };
+      return { ...entry, toolEvents: nextEvents };
+    });
+  };
+
+  const setTraceAssistantOutput = (assistantOutput: string | null) => {
+    updateTraceEntry(traceId, (entry) => ({
+      ...entry,
+      assistantOutput,
+    }));
+  };
+
+  const setTraceError = (error: string | null) => {
+    updateTraceEntry(traceId, (entry) => ({
+      ...entry,
+      error,
+    }));
+  };
 
   // Track pending function calls - we defer execution until after response.completed
   // so we have the response ID for the next turn
@@ -325,6 +397,22 @@ export const processMessages = async () => {
           }
           case "function_call": {
             functionArguments += item.arguments || "";
+            let parsedArguments: unknown = {};
+            if (item.arguments) {
+              try {
+                parsedArguments = parse(item.arguments);
+              } catch {
+                parsedArguments = {};
+              }
+            }
+            upsertToolEvent({
+              id: item.id,
+              tool_type: "function_call",
+              name: item.name,
+              arguments: item.arguments || "",
+              parsedArguments,
+              status: "in_progress",
+            });
             chatMessages.push({
               type: "tool_call",
               tool_type: "function_call",
@@ -340,6 +428,11 @@ export const processMessages = async () => {
             break;
           }
           case "web_search_call": {
+            upsertToolEvent({
+              id: item.id,
+              tool_type: "web_search_call",
+              status: item.status || "in_progress",
+            });
             chatMessages.push({
               type: "tool_call",
               tool_type: "web_search_call",
@@ -351,6 +444,11 @@ export const processMessages = async () => {
             break;
           }
           case "file_search_call": {
+            upsertToolEvent({
+              id: item.id,
+              tool_type: "file_search_call",
+              status: item.status || "in_progress",
+            });
             chatMessages.push({
               type: "tool_call",
               tool_type: "file_search_call",
@@ -363,6 +461,22 @@ export const processMessages = async () => {
           }
           case "mcp_call": {
             mcpArguments = item.arguments || "";
+            let parsedArguments: unknown = {};
+            if (item.arguments) {
+              try {
+                parsedArguments = parse(item.arguments);
+              } catch {
+                parsedArguments = {};
+              }
+            }
+            upsertToolEvent({
+              id: item.id,
+              tool_type: "mcp_call",
+              name: item.name,
+              arguments: item.arguments || "",
+              parsedArguments,
+              status: "in_progress",
+            });
             chatMessages.push({
               type: "tool_call",
               tool_type: "mcp_call",
@@ -378,6 +492,11 @@ export const processMessages = async () => {
             break;
           }
           case "code_interpreter_call": {
+            upsertToolEvent({
+              id: item.id,
+              tool_type: "code_interpreter_call",
+              status: item.status || "in_progress",
+            });
             chatMessages.push({
               type: "tool_call",
               tool_type: "code_interpreter_call",
@@ -397,6 +516,14 @@ export const processMessages = async () => {
       case "response.output_item.done": {
         // After output item is done, adding tool call ID and pushing to conversation
         const { item } = data || {};
+        if (item && item.type && item.type !== "message") {
+          upsertToolEvent({
+            id: item.id,
+            tool_type: item.type,
+            status: item.status,
+            output: item.output,
+          });
+        }
         const toolCallMessage = chatMessages.find((m) => m.id === item.id);
         if (toolCallMessage && toolCallMessage.type === "tool_call") {
           toolCallMessage.call_id = item.call_id;
@@ -454,6 +581,13 @@ export const processMessages = async () => {
           }
           setChatMessages([...chatMessages]);
         }
+        upsertToolEvent({
+          id: data.item_id,
+          tool_type: "function_call",
+          arguments: functionArguments,
+          parsedArguments: parsedFunctionArguments,
+          status: "in_progress",
+        });
         break;
       }
 
@@ -471,6 +605,13 @@ export const processMessages = async () => {
           toolCallMessage.status = "completed";
           setChatMessages([...chatMessages]);
         }
+        upsertToolEvent({
+          id: item_id,
+          tool_type: "function_call",
+          arguments: finalArgs,
+          parsedArguments: parse(finalArgs),
+          status: "completed",
+        });
         break;
       }
       // Streaming MCP tool call arguments
@@ -491,6 +632,13 @@ export const processMessages = async () => {
           }
           setChatMessages([...chatMessages]);
         }
+        upsertToolEvent({
+          id: data.item_id,
+          tool_type: "mcp_call",
+          arguments: mcpArguments,
+          parsedArguments: parsedMcpArguments,
+          status: "in_progress",
+        });
         break;
       }
       case "response.mcp_call_arguments.done": {
@@ -504,6 +652,13 @@ export const processMessages = async () => {
           toolCallMessage.status = "completed";
           setChatMessages([...chatMessages]);
         }
+        upsertToolEvent({
+          id: item_id,
+          tool_type: "mcp_call",
+          arguments: finalArgs,
+          parsedArguments: parse(finalArgs),
+          status: "completed",
+        });
         break;
       }
 
@@ -522,6 +677,12 @@ export const processMessages = async () => {
           }
           setChatMessages([...chatMessages]);
         }
+        upsertToolEvent({
+          id: item_id,
+          tool_type: "web_search_call",
+          output,
+          status: "completed",
+        });
         break;
       }
 
@@ -540,6 +701,12 @@ export const processMessages = async () => {
           }
           setChatMessages([...chatMessages]);
         }
+        upsertToolEvent({
+          id: item_id,
+          tool_type: "file_search_call",
+          output,
+          status: "completed",
+        });
         break;
       }
 
@@ -558,6 +725,12 @@ export const processMessages = async () => {
         if (toolCallMessage) {
           toolCallMessage.code = (toolCallMessage.code || "") + delta;
           setChatMessages([...chatMessages]);
+          upsertToolEvent({
+            id: item_id,
+            tool_type: "code_interpreter_call",
+            output: toolCallMessage.code || "",
+            status: "in_progress",
+          });
         }
         break;
       }
@@ -587,6 +760,12 @@ export const processMessages = async () => {
           }
           setChatMessages([...chatMessages]);
         }
+        upsertToolEvent({
+          id: item_id,
+          tool_type: "code_interpreter_call",
+          output: code,
+          status: "completed",
+        });
         break;
       }
 
@@ -606,6 +785,11 @@ export const processMessages = async () => {
           }
           setChatMessages([...chatMessages]);
         }
+        upsertToolEvent({
+          id: item_id,
+          tool_type: "code_interpreter_call",
+          status: "completed",
+        });
         break;
       }
 
@@ -613,6 +797,16 @@ export const processMessages = async () => {
         console.log("response completed", data);
         setLoadingState({ status: "idle", thinkingText: "" });
         const { response } = data;
+        const lastAssistantMessage = [...chatMessages]
+          .reverse()
+          .find((item) => item.type === "message" && item.role === "assistant");
+        const lastAssistantText =
+          lastAssistantMessage?.content?.[0]?.type === "output_text"
+            ? lastAssistantMessage.content[0].text || ""
+            : "";
+        const assistantOutput =
+          assistantMessageContent || lastAssistantText || null;
+        setTraceAssistantOutput(assistantOutput);
 
         // Store the response ID for the stored-responses flow
         // This allows subsequent turns to reference this response instead of rebuilding history
@@ -650,6 +844,9 @@ export const processMessages = async () => {
         // Handle API errors
         const { error, status } = data;
         console.error(`[ERROR] API error:`, error);
+        setTraceError(
+          `${error}${status ? ` (Status: ${status})` : ""}`,
+        );
 
         // Add error message to chat
         chatMessages.push({
@@ -688,6 +885,12 @@ export const processMessages = async () => {
         toolCallMessage.metadata.completedAt = now;
         toolCallMessage.metadata.durationMs = now - toolCallMessage.metadata.startedAt;
       }
+      upsertToolEvent({
+        id: toolCallMessage.id,
+        tool_type: "function_call",
+        output: JSON.stringify(toolResult),
+        status: "completed",
+      });
       setChatMessages([...chatMessages]);
 
       // Clear conversationItems and add only the function output for next turn
@@ -710,6 +913,13 @@ export const processMessages = async () => {
         toolCallMessage.metadata.durationMs = now - toolCallMessage.metadata.startedAt;
         toolCallMessage.metadata.error = message;
       }
+      upsertToolEvent({
+        id: toolCallMessage.id,
+        tool_type: "function_call",
+        output: JSON.stringify({ error: message }),
+        status: "failed",
+        error: message,
+      });
       setChatMessages([...chatMessages]);
 
       // Clear conversationItems and add error output for next turn
