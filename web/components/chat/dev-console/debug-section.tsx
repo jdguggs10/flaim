@@ -5,6 +5,7 @@ import useToolsStore from "@/stores/chat/useToolsStore";
 import useLeaguesStore from "@/stores/chat/useLeaguesStore";
 import useConversationStore from "@/stores/chat/useConversationStore";
 import { ToolCallItem } from "@/lib/chat/assistant";
+import { redactSensitive } from "@/lib/chat/trace-utils";
 import { CollapsibleSection } from "./collapsible-section";
 import { Switch } from "@/components/ui";
 import { Button } from "@/components/ui/button";
@@ -25,7 +26,12 @@ export function DebugSection() {
   } = useToolsStore();
 
   const { leagues, getActiveLeague } = useLeaguesStore();
-  const { chatMessages, conversationItems, clearConversation } = useConversationStore();
+  const {
+    chatMessages,
+    conversationItems,
+    traceEntries,
+    clearConversation,
+  } = useConversationStore();
 
   // Check if MCP should be available
   const shouldShow = leagues.length > 0 && isAuthenticated;
@@ -73,6 +79,7 @@ export function DebugSection() {
         } : null,
       },
       toolLog,
+      traceEntries: redactSensitive(traceEntries),
       conversation: {
         messageCount: chatMessages.length,
         messages: chatMessages,

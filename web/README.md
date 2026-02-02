@@ -132,6 +132,11 @@ Toggle in the Developer Console to show:
 
 Keyboard shortcut: `Cmd+D` / `Ctrl+D`
 
+### LLM Trace
+
+The Developer Console includes an LLM Trace panel that captures prompt payloads, tool calls, and assistant output
+for each turn. Exporting a session includes a redacted copy of these trace entries for safe sharing.
+
 ## Build Notes
 
 ### Webpack cache warning (big strings)
