@@ -17,11 +17,16 @@ function buildPromptPayload(entry: {
   inputItems: unknown[];
   toolsSnapshot: unknown[];
 }) {
-  return {
-    previous_response_id: entry.previousResponseId ?? null,
-    input_items: entry.inputItems,
-    tools_snapshot: entry.toolsSnapshot,
+  const payload: Record<string, unknown> = {
+    messages: entry.inputItems,
+    tools: entry.toolsSnapshot,
   };
+
+  if (entry.previousResponseId) {
+    payload.previous_response_id = entry.previousResponseId;
+  }
+
+  return payload;
 }
 
 function formatJson(value: unknown) {
@@ -115,7 +120,7 @@ export function LlmTraceSection() {
                             const label = tool.name
                               ? `${tool.tool_type} - ${tool.name}`
                               : tool.tool_type;
-                            const argsText = tool.arguments?.length
+                            const argsText = tool.arguments?.trim().length
                               ? tool.arguments
                               : tool.parsedArguments
                                 ? formatJson(tool.parsedArguments)
