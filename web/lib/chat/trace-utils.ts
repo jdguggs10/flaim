@@ -1,12 +1,17 @@
 const REDACTED_VALUE = "***redacted***";
 const SECRET_KEY_PATTERN = /token|jwt|secret/i;
+const CIRCULAR_VALUE = "[Circular]";
 
 function shouldRedactKey(key: string): boolean {
   const normalized = key.toLowerCase();
   return normalized === "authorization" || normalized.includes("clerk");
 }
 
-function redactValue(value: unknown, key?: string): unknown {
+function redactValue(
+  value: unknown,
+  key: string | undefined,
+  seen: WeakSet<object>,
+): unknown {
   if (key) {
     if (shouldRedactKey(key)) {
       return REDACTED_VALUE;
@@ -18,15 +23,42 @@ function redactValue(value: unknown, key?: string): unknown {
   }
 
   if (Array.isArray(value)) {
-    return value.map((item) => redactValue(item));
+    if (seen.has(value)) {
+      return CIRCULAR_VALUE;
+    }
+
+    seen.add(value);
+    return value.map((item) => redactValue(item, undefined, seen));
   }
 
   if (value && typeof value === "object") {
+    if (seen.has(value)) {
+      return CIRCULAR_VALUE;
+    }
+
+    seen.add(value);
+
+    if (value instanceof Date) {
+      return value.toISOString();
+    }
+
+    if (value instanceof Headers) {
+      return redactValue(Object.fromEntries(value.entries()), undefined, seen);
+    }
+
+    if (value instanceof Map) {
+      return redactValue(Object.fromEntries(value.entries()), undefined, seen);
+    }
+
+    if (value instanceof Set) {
+      return Array.from(value, (item) => redactValue(item, undefined, seen));
+    }
+
     const entries = Object.entries(value as Record<string, unknown>);
     const redacted: Record<string, unknown> = {};
 
     for (const [entryKey, entryValue] of entries) {
-      redacted[entryKey] = redactValue(entryValue, entryKey);
+      redacted[entryKey] = redactValue(entryValue, entryKey, seen);
     }
 
     return redacted;
@@ -36,5 +68,5 @@ function redactValue(value: unknown, key?: string): unknown {
 }
 
 export function redactSensitive(value: unknown): unknown {
-  return redactValue(value);
+  return redactValue(value, undefined, new WeakSet<object>());
 }
