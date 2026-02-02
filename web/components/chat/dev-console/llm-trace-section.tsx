@@ -15,10 +15,12 @@ function formatTimestamp(value: string) {
 function buildPromptPayload(entry: {
   previousResponseId?: string | null;
   inputItems: unknown[];
+  toolsSnapshot: unknown[];
 }) {
   return {
     previous_response_id: entry.previousResponseId ?? null,
     input_items: entry.inputItems,
+    tools_snapshot: entry.toolsSnapshot,
   };
 }
 
@@ -84,8 +86,12 @@ export function LlmTraceSection() {
                 {isOpen && (
                   <div className="border-t border-border px-3 py-2 space-y-3">
                     {entry.error && (
-                      <div className="text-xs text-destructive bg-destructive/10 px-2 py-1 rounded">
-                        {entry.error}
+                      <div className="text-xs text-destructive bg-destructive/10 px-2 py-1 rounded space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] text-destructive">Trace Error</span>
+                          <CopyButton value={entry.error} />
+                        </div>
+                        <div className="break-words">{entry.error}</div>
                       </div>
                     )}
 
@@ -109,7 +115,7 @@ export function LlmTraceSection() {
                             const label = tool.name
                               ? `${tool.tool_type} - ${tool.name}`
                               : tool.tool_type;
-                            const argsText = tool.arguments
+                            const argsText = tool.arguments?.length
                               ? tool.arguments
                               : tool.parsedArguments
                                 ? formatJson(tool.parsedArguments)
