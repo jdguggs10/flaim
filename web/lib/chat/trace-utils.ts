@@ -1,6 +1,7 @@
 const REDACTED_VALUE = "***redacted***";
 const SECRET_KEY_PATTERN = /token|jwt|secret/i;
 const CIRCULAR_VALUE = "[Circular]";
+const HAS_HEADERS = typeof Headers !== "undefined";
 
 function shouldRedactKey(key: string): boolean {
   const normalized = key.toLowerCase();
@@ -42,7 +43,7 @@ function redactValue(
       return value.toISOString();
     }
 
-    if (value instanceof Headers) {
+    if (HAS_HEADERS && value instanceof Headers) {
       return redactValue(Object.fromEntries(value.entries()), undefined, seen);
     }
 
