@@ -270,8 +270,34 @@ export const processMessages = async () => {
     });
   };
 
-  const stringifyToolOutput = (output: unknown): string | null =>
-    output == null ? null : typeof output === "string" ? output : JSON.stringify(output);
+  const safeParseArguments = (value: string | null | undefined): unknown => {
+    if (!value) {
+      return {};
+    }
+    try {
+      return parse(value);
+    } catch {
+      return {};
+    }
+  };
+
+  const stringifyToolOutput = (output: unknown): string | null => {
+    if (output == null) {
+      return null;
+    }
+    if (typeof output === "string") {
+      return output;
+    }
+    try {
+      return JSON.stringify(output);
+    } catch {
+      try {
+        return String(output);
+      } catch {
+        return "[unserializable]";
+      }
+    }
+  };
 
   const setTraceAssistantOutput = (assistantOutput: string | null) => {
     updateTraceEntry(traceId, (entry) => ({
@@ -402,14 +428,7 @@ export const processMessages = async () => {
             const nextArguments =
               (functionArgumentsByItem.get(item.id) ?? "") + (item.arguments || "");
             functionArgumentsByItem.set(item.id, nextArguments);
-            let parsedArguments: unknown = {};
-            if (nextArguments) {
-              try {
-                parsedArguments = parse(nextArguments);
-              } catch {
-                parsedArguments = {};
-              }
-            }
+            const parsedArguments = safeParseArguments(nextArguments);
             upsertToolEvent({
               id: item.id,
               tool_type: "function_call",
@@ -468,14 +487,7 @@ export const processMessages = async () => {
             const nextArguments =
               (mcpArgumentsByItem.get(item.id) ?? "") + (item.arguments || "");
             mcpArgumentsByItem.set(item.id, nextArguments);
-            let parsedArguments: unknown = {};
-            if (nextArguments) {
-              try {
-                parsedArguments = parse(nextArguments);
-              } catch {
-                parsedArguments = {};
-              }
-            }
+            const parsedArguments = safeParseArguments(nextArguments);
             upsertToolEvent({
               id: item.id,
               tool_type: "mcp_call",
@@ -491,7 +503,7 @@ export const processMessages = async () => {
               id: item.id,
               name: item.name,
               arguments: item.arguments || "",
-              parsedArguments: item.arguments ? parse(item.arguments) : {},
+              parsedArguments: safeParseArguments(item.arguments),
               output: null,
               metadata: { startedAt: Date.now() },
             });
@@ -605,12 +617,13 @@ export const processMessages = async () => {
         const { item_id, arguments: finalArgs } = data;
 
         functionArgumentsByItem.set(item_id, finalArgs);
+        const parsedArguments = safeParseArguments(finalArgs);
 
         // Mark the tool_call as "completed" and parse the final JSON
         const toolCallMessage = chatMessages.find((m) => m.id === item_id);
         if (toolCallMessage && toolCallMessage.type === "tool_call") {
           toolCallMessage.arguments = finalArgs;
-          toolCallMessage.parsedArguments = parse(finalArgs);
+          toolCallMessage.parsedArguments = parsedArguments;
           toolCallMessage.status = "completed";
           setChatMessages([...chatMessages]);
         }
@@ -618,9 +631,10 @@ export const processMessages = async () => {
           id: item_id,
           tool_type: "function_call",
           arguments: finalArgs,
-          parsedArguments: parse(finalArgs),
+          parsedArguments,
           status: "completed",
         });
+        functionArgumentsByItem.delete(item_id);
         break;
       }
       // Streaming MCP tool call arguments
@@ -656,10 +670,11 @@ export const processMessages = async () => {
         // Final MCP arguments string received
         const { item_id, arguments: finalArgs } = data;
         mcpArgumentsByItem.set(item_id, finalArgs);
+        const parsedArguments = safeParseArguments(finalArgs);
         const toolCallMessage = chatMessages.find((m) => m.id === item_id);
         if (toolCallMessage && toolCallMessage.type === "tool_call") {
           toolCallMessage.arguments = finalArgs;
-          toolCallMessage.parsedArguments = parse(finalArgs);
+          toolCallMessage.parsedArguments = parsedArguments;
           toolCallMessage.status = "completed";
           setChatMessages([...chatMessages]);
         }
@@ -667,9 +682,10 @@ export const processMessages = async () => {
           id: item_id,
           tool_type: "mcp_call",
           arguments: finalArgs,
-          parsedArguments: parse(finalArgs),
+          parsedArguments,
           status: "completed",
         });
+        mcpArgumentsByItem.delete(item_id);
         break;
       }
 
