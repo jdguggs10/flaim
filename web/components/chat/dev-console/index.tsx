@@ -1,7 +1,6 @@
 "use client";
 
 import useHasMounted from "@/hooks/useHasMounted";
-import { LlmTraceSection } from "./llm-trace-section";
 import { McpSection } from "./mcp-section";
 import { ToolsSection } from "./tools-section";
 import { DebugSection } from "./debug-section";
@@ -29,9 +28,6 @@ export default function DevConsole() {
 
         {/* Available Tools */}
         <ToolsSection />
-
-        {/* LLM Trace */}
-        <LlmTraceSection />
 
         {/* Debug Options */}
         <DebugSection />
