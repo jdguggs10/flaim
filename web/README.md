@@ -1,6 +1,6 @@
 # Flaim Web App
 
-Next.js 15 app with App Router. Handles site pages, OAuth consent, API routes, and optional built-in chat.
+Next.js 15 app with App Router, Tailwind CSS v4, and shadcn/ui. Handles site pages, OAuth consent, API routes, and optional built-in chat.
 
 ## Quick Start
 

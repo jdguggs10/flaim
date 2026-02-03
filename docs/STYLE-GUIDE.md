@@ -49,7 +49,7 @@ bg-amber-*        → bg-warning or bg-warning/20
 
 **Where tokens are defined:**
 - CSS custom properties: `web/app/globals.css` (`:root` and `.dark` blocks)
-- Tailwind wiring: `web/tailwind.config.ts` (under `theme.extend.colors`)
+- Tailwind wiring: `web/app/globals.css` (`@theme inline` block — Tailwind v4 CSS-based config)
 - Component variants: `web/components/ui/alert.tsx` and `badge.tsx`
 
 ### Typography
@@ -312,9 +312,9 @@ import { cn } from '@/lib/utils'
 
 ## Adding New Design Tokens
 
-**Process**:
-1. Add HSL values to both `:root` and `.dark` in `web/app/globals.css`
-2. Wire in `web/tailwind.config.ts` under `theme.extend.colors`
+**Process** (Tailwind v4 — all config lives in CSS):
+1. Add `hsl()` values to both `:root` and `.dark` in `web/app/globals.css`
+2. Add a `--color-<name>: var(--<name>)` entry in the `@theme inline` block in the same file
 3. Add CVA variants to Alert and Badge if applicable
 4. Update this guide with usage examples
 5. Run `npm run ui:check` to verify no violations
