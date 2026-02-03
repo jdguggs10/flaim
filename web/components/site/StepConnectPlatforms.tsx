@@ -241,12 +241,12 @@ export function StepConnectPlatforms({ className }: StepConnectPlatformsProps) {
               </div>
             ) : espnStatus === 'connected' ? (
               <div className="space-y-2">
-                <div className="flex items-center justify-center gap-2 h-8 rounded-md px-3 text-xs font-medium w-full border border-border text-muted-foreground">
+                <div className="flex items-center justify-center gap-2 h-8 rounded-md px-3 text-xs font-medium w-full bg-muted text-muted-foreground">
                   <Check className="h-3.5 w-3.5" />
                   Extension connected
                 </div>
                 {hasCredentials && (
-                  <div className="flex items-center justify-center gap-2 h-8 rounded-md px-3 text-xs font-medium w-full border border-border text-muted-foreground">
+                  <div className="flex items-center justify-center gap-2 h-8 rounded-md px-3 text-xs font-medium w-full bg-muted text-muted-foreground">
                     <Check className="h-3.5 w-3.5" />
                     Credentials saved
                   </div>
@@ -306,7 +306,7 @@ export function StepConnectPlatforms({ className }: StepConnectPlatformsProps) {
                   </Dialog>
                 </div>
                 {hasCredentials && (
-                  <div className="flex items-center justify-center gap-2 h-8 rounded-md px-3 text-xs font-medium w-full border border-border text-muted-foreground">
+                  <div className="flex items-center justify-center gap-2 h-8 rounded-md px-3 text-xs font-medium w-full bg-muted text-muted-foreground">
                     <Check className="h-3.5 w-3.5" />
                     Credentials saved
                   </div>
@@ -332,7 +332,7 @@ export function StepConnectPlatforms({ className }: StepConnectPlatformsProps) {
                 <Button variant="outline" size="sm" className="w-full" onClick={handleConnectYahoo}>
                   Refresh Yahoo Auth
                 </Button>
-                <div className="flex items-center justify-center gap-2 h-8 rounded-md px-3 text-xs font-medium w-full border border-border text-muted-foreground">
+                <div className="flex items-center justify-center gap-2 h-8 rounded-md px-3 text-xs font-medium w-full bg-muted text-muted-foreground">
                   <Check className="h-3.5 w-3.5" />
                   Auth Connected
                 </div>
