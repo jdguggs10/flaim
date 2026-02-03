@@ -104,16 +104,61 @@ Do **not** use the public ESPN sports API for verification; it uses a different 
 
 ---
 
-## Known unknowns
+## Investigated unknowns (slot IDs 18, 21, 22)
 
-Two roster slot IDs still appear without confirmed meaning:
+Three roster slot IDs appear in ESPN data without official documentation. After thorough investigation (Feb 2026), here is what we know.
 
-| ID | Context | Status |
-|----|---------|--------|
-| 18 | `lineupSlotCounts` only | Unobserved on players |
-| 22 | `eligibleSlots` on minor-league pitchers | Likely NA/Minors, unverified |
+### Community status
 
-If future data confirms these, update the roster slot map and document the source evidence.
+The authoritative community reference [`cwendt94/espn-api` baseball/constant.py](https://github.com/cwendt94/espn-api/blob/master/espn_api/baseball/constant.py) explicitly notes:
+
+> `# 18, 21, 22 have appeared but unknown what position they correspond to`
+
+After years of active community development, these remain unmapped there as well.
+
+### Cross-sport slot ID pattern
+
+ESPN follows a consistent pattern across sports: the slot immediately after the IL/IR slot is an internal/reserved ID that is never assigned to players.
+
+| Sport | Bench | IL/IR | Next slot(s) |
+|-------|-------|-------|--------------|
+| **Baseball** | 16 (BE) | 17 (IL) | **18=?**, 19=IF, **22=?** |
+| **Football** | 20 (BE) | 21 (IR) | **22=`''`** (empty), 23=FLEX |
+| **Basketball** | 12 (BE) | 13 (IR) | **14=`''`** (empty), 15=Rookie |
+| **Hockey** | 7 (Bench) | 8 (IR) | *(no higher IDs)* |
+
+### Per-slot analysis
+
+**Slot 18** — Internal/reserved (safe to ignore)
+- Appears **only** in `lineupSlotCounts` (league settings metadata), never on actual player roster entries.
+- Follows the cross-sport pattern where the slot after IL/IR is an empty internal placeholder.
+- ESPN does **not** offer IL+ in baseball (that is a Yahoo-only feature), ruling that out.
+
+**Slot 21** — Unknown internal slot
+- Noted as unknown by `cwendt94/espn-api`; not observed in Flaim production data.
+- Likely another internal/reserved slot.
+
+**Slot 22** — Eligibility-only marker for minor-league players
+- Observed in `eligibleSlots` arrays on minor-league pitchers, but never as a `lineupSlotId` (i.e., no player is ever *placed* in this slot).
+- ESPN does **not** offer dedicated minor-league/NA roster slots (that is also a Yahoo-only feature).
+- In football, slot 22 is also `''` (empty/unused).
+- Most likely an eligibility-only tag ESPN uses internally to mark minor-league players, similar to how MI (6), CI (7), and IF (19) are eligibility-only slots.
+
+### Practical impact on Flaim
+
+**None.** The current code handles these correctly:
+- `getLineupSlotName()` returns `SLOT_18` / `SLOT_22` as graceful fallbacks.
+- `transformEligiblePositions()` filters out unknown slots (they return `undefined` from the map and are excluded).
+- `console.warn` logging alerts if these appear in unexpected contexts.
+
+No code changes are needed. These IDs are intentionally left out of `LINEUP_SLOT_MAP`.
+
+### Optional future verification
+
+During a live baseball season, you could settle this definitively:
+1. Query `?view=mSettings` for a league and check if `lineupSlotCounts[18]` is non-zero.
+2. Query `?view=mRoster` and search for any player with `lineupSlotId: 18` or `22`.
+3. Inspect a dynasty/keeper league's API response where minor-league pitchers are rostered.
 
 ---
 
