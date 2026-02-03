@@ -37,11 +37,29 @@ function formatJson(value: unknown) {
   }
 }
 
+function formatTokens(n: number) {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
+  return String(n);
+}
+
 export function LlmTraceSection() {
   const traceEntries = useConversationStore((state) => state.traceEntries);
   const [openEntryIds, setOpenEntryIds] = useState<Record<string, boolean>>({});
 
   const entries = useMemo(() => [...traceEntries].reverse(), [traceEntries]);
+
+  const sessionTotals = useMemo(() => {
+    let input = 0;
+    let output = 0;
+    for (const e of traceEntries) {
+      if (e.usage) {
+        input += e.usage.input_tokens;
+        output += e.usage.output_tokens;
+      }
+    }
+    return input + output > 0 ? { input, output, total: input + output } : null;
+  }, [traceEntries]);
 
   const toggleEntry = (id: string) => {
     setOpenEntryIds((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -52,6 +70,13 @@ export function LlmTraceSection() {
       title={`LLM Trace${entries.length > 0 ? ` (${entries.length})` : ""}`}
       icon={<ClipboardList size={16} />}
       defaultExpanded={false}
+      rightElement={
+        sessionTotals ? (
+          <span className="text-[10px] text-muted-foreground font-mono">
+            {formatTokens(sessionTotals.input)} in / {formatTokens(sessionTotals.output)} out
+          </span>
+        ) : undefined
+      }
     >
       {entries.length === 0 ? (
         <div className="text-xs text-muted-foreground">No trace entries yet.</div>
@@ -80,7 +105,10 @@ export function LlmTraceSection() {
                       {userSnippet}
                     </div>
                     <div className="text-[10px] text-muted-foreground">
-                      {formatTimestamp(entry.sentAt)} - {toolCount} tool{toolCount === 1 ? "" : "s"}
+                      {formatTimestamp(entry.sentAt)} · {toolCount} tool{toolCount === 1 ? "" : "s"}
+                      {entry.usage && (
+                        <> · <span className="font-mono">{formatTokens(entry.usage.input_tokens)} in / {formatTokens(entry.usage.output_tokens)} out</span></>
+                      )}
                     </div>
                   </div>
                   <div className="text-[10px] text-muted-foreground">
@@ -109,6 +137,32 @@ export function LlmTraceSection() {
                         {promptText}
                       </pre>
                     </div>
+
+                    {entry.usage && (
+                      <div className="space-y-1">
+                        <span className="text-xs font-medium text-foreground">Token Usage</span>
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-[10px] font-mono bg-secondary/40 px-2 py-1.5 rounded">
+                          <span className="text-muted-foreground">Input</span>
+                          <span className="text-foreground">{entry.usage.input_tokens.toLocaleString()}</span>
+                          {entry.usage.input_tokens_details?.cached_tokens != null && entry.usage.input_tokens_details.cached_tokens > 0 && (
+                            <>
+                              <span className="text-muted-foreground pl-2">└ cached</span>
+                              <span className="text-foreground">{entry.usage.input_tokens_details.cached_tokens.toLocaleString()}</span>
+                            </>
+                          )}
+                          <span className="text-muted-foreground">Output</span>
+                          <span className="text-foreground">{entry.usage.output_tokens.toLocaleString()}</span>
+                          {entry.usage.output_tokens_details?.reasoning_tokens != null && entry.usage.output_tokens_details.reasoning_tokens > 0 && (
+                            <>
+                              <span className="text-muted-foreground pl-2">└ reasoning</span>
+                              <span className="text-foreground">{entry.usage.output_tokens_details.reasoning_tokens.toLocaleString()}</span>
+                            </>
+                          )}
+                          <span className="text-muted-foreground font-medium">Total</span>
+                          <span className="text-foreground font-medium">{entry.usage.total_tokens.toLocaleString()}</span>
+                        </div>
+                      </div>
+                    )}
 
                     <div className="space-y-2">
                       <div className="text-xs font-medium text-foreground">Tools</div>

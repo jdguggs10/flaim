@@ -22,4 +22,11 @@ export type LlmTraceEntry = {
   assistantOutput?: string | null;
   toolEvents: TraceToolEvent[];
   error?: string | null;
+  usage?: {
+    input_tokens: number;
+    output_tokens: number;
+    total_tokens: number;
+    input_tokens_details?: { cached_tokens?: number };
+    output_tokens_details?: { reasoning_tokens?: number };
+  };
 };

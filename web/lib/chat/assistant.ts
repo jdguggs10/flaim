@@ -835,6 +835,13 @@ export const processMessages = async () => {
           assistantMessageContent || lastAssistantText || null;
         setTraceAssistantOutput(assistantOutput);
 
+        if (response.usage) {
+          updateTraceEntry(traceId, (entry) => ({
+            ...entry,
+            usage: response.usage,
+          }));
+        }
+
         // Store the response ID for the stored-responses flow
         // This allows subsequent turns to reference this response instead of rebuilding history
         if (response.id) {

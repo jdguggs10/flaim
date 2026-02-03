@@ -29,6 +29,10 @@ Follow Keep a Changelog; SemVer applies.
 - **Fixed**: Homepage ESPN and Yahoo platform columns no longer shift height when status checks complete (added `min-h`).
 - **Changed**: ESPN maintenance buttons restyled to match Yahoo — side-by-side `sm` buttons instead of stacked full-width.
 
+### Developer Console
+- **Added**: Per-turn token usage display in LLM Trace section — shows input, output, total tokens (plus cached/reasoning subtotals when present). Ephemeral, in-memory only.
+- **Added**: Session-level token totals in LLM Trace section header.
+
 ### Chat UX
 - **Added**: Default sport and team selector pills in chat status bar. Users can click to switch sport/team without leaving the chat. Persists to Supabase via existing preference APIs.
 - **Changed**: Replaced static active-league pill with two interactive `Popover`-based pills (sport + team).
