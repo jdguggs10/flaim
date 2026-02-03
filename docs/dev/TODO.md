@@ -12,6 +12,7 @@
 - Email Support Upgrade: Upgrade cloudflare email functionality
 
 ## Maintenance & Refactoring
+- **Tailwind v3 → v4**: Migrate from Tailwind 3.4 to v4 (CSS-first config, no more `tailwind.config.js`). Non-urgent — v3 works fine, but v4 is faster and the future direction.
 - Advanced Token & Usage Analytics: Implement per-turn and per-session token usage tracking in the chat UI by capturing usage data from the Responses API stream. Include cost estimation and historical usage trends.
 - Reconcile remaining ESPN baseball mapping unknowns: Validate slot IDs `18`/`22` per `workers/espn-client/src/sports/baseball/MAPPINGS.md`.
 
