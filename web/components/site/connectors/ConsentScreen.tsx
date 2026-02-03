@@ -67,7 +67,6 @@ export default function ConsentScreen({
             </div>
             <div>
               <div className="font-medium">Flaim Fantasy Connector</div>
-              <div className="text-sm text-muted-foreground">for Claude or ChatGPT</div>
             </div>
           </div>
         </div>
@@ -78,11 +77,11 @@ export default function ConsentScreen({
           <div className="space-y-2">
             <div className="flex items-start gap-2 text-sm">
               <CheckCircle className="h-4 w-4 text-success mt-0.5 shrink-0" />
-              <span>View your fantasy league data (ESPN, Yahoo)</span>
+              <span>View your fantasy league data</span>
             </div>
             <div className="flex items-start gap-2 text-sm">
               <CheckCircle className="h-4 w-4 text-success mt-0.5 shrink-0" />
-              <span>Access team rosters, matchups, and standings</span>
+              <span>Access rosters, matchups, standings, and more</span>
             </div>
             <div className="flex items-start gap-2 text-sm">
               <CheckCircle className="h-4 w-4 text-success mt-0.5 shrink-0" />
