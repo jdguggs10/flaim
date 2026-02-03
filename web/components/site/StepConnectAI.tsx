@@ -48,20 +48,18 @@ export function StepConnectAI() {
       </p>
 
       {/* Platform badges */}
-      <div className="flex flex-wrap gap-2 mb-4">
+      <div className="grid grid-cols-3 gap-2 mb-4">
         <a
           href="https://claude.ai/settings/connectors"
           target="_blank"
           rel="noopener noreferrer"
-          className="px-3 py-1.5 bg-primary/10 rounded-lg border border-primary/30 hover:bg-primary/20 transition-colors"
+          className="flex flex-col items-center justify-center rounded-md border border-border px-3 py-2 hover:bg-muted transition-colors"
         >
-          <div className="text-sm font-medium">Claude</div>
-          <div className="text-xs text-primary inline-flex items-center gap-1">
-            <span>Ready today</span>
-          </div>
+          <div className="text-xs font-medium">Claude</div>
+          <div className="text-xs text-muted-foreground">Ready today</div>
         </a>
-        <div className="px-3 py-1.5 bg-muted rounded-lg border">
-          <div className="text-sm font-medium">ChatGPT</div>
+        <div className="flex flex-col items-center justify-center rounded-md bg-muted px-3 py-2">
+          <div className="text-xs font-medium text-muted-foreground">ChatGPT</div>
           <div className="text-xs text-muted-foreground inline-flex items-center gap-1">
             <span>Dev mode only</span>
             <Popover>
@@ -80,8 +78,8 @@ export function StepConnectAI() {
             </Popover>
           </div>
         </div>
-        <div className="px-3 py-1.5 bg-muted rounded-lg border">
-          <div className="text-sm font-medium">Gemini</div>
+        <div className="flex flex-col items-center justify-center rounded-md bg-muted px-3 py-2">
+          <div className="text-xs font-medium text-muted-foreground">Gemini</div>
           <div className="text-xs text-muted-foreground inline-flex items-center gap-1">
             <span>Coming soon?</span>
             <Popover>
