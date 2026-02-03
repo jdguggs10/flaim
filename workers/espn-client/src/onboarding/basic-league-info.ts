@@ -1,4 +1,5 @@
 import type { EspnCredentials } from '@flaim/worker-shared';
+import type { EspnLeagueResponse } from '../types';
 import { espnFetch } from '../shared/espn-api';
 
 export interface BasicLeagueInfoRequest {
@@ -103,7 +104,7 @@ export async function getBasicLeagueInfo(
 
     const responseText = await response.text();
 
-    let data: any;
+    let data: EspnLeagueResponse;
     try {
       data = JSON.parse(responseText);
     } catch (parseError) {
@@ -125,7 +126,7 @@ export async function getBasicLeagueInfo(
     const leagueName = data.settings?.name || `${sportLabel} League ${leagueId}`;
     const returnedSeasonYear = data.seasonId || seasonYear;
 
-    const teams = (data.teams || []).map((team: any) => ({
+    const teams = (data.teams || []).map((team) => ({
       teamId: team.id?.toString() || '',
       teamName: team.location && team.nickname
         ? `${team.location} ${team.nickname}`
@@ -133,11 +134,11 @@ export async function getBasicLeagueInfo(
       ownerName: team.owners?.[0]?.displayName || team.owners?.[0]?.firstName || undefined
     }));
 
-    const standings = (data.teams || []).map((team: any) => {
-      const record = team.record?.overall || {};
-      const wins = record.wins || 0;
-      const losses = record.losses || 0;
-      const ties = record.ties || 0;
+    const standings = (data.teams || []).map((team) => {
+      const record = team.record?.overall;
+      const wins = record?.wins || 0;
+      const losses = record?.losses || 0;
+      const ties = record?.ties || 0;
       const totalGames = wins + losses + ties;
       const winPercentage = totalGames > 0 ? wins / totalGames : 0;
 
@@ -153,12 +154,12 @@ export async function getBasicLeagueInfo(
         rank: team.playoffSeed || team.rank || 0,
         playoffSeed: team.playoffSeed || undefined
       };
-    }).sort((a: any, b: any) => {
+    }).sort((a, b) => {
       if (b.winPercentage !== a.winPercentage) {
         return b.winPercentage - a.winPercentage;
       }
       return b.wins - a.wins;
-    }).map((team: any, index: number) => ({
+    }).map((team, index) => ({
       ...team,
       rank: index + 1
     }));

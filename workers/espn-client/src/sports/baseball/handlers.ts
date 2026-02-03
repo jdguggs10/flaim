@@ -1,5 +1,5 @@
 // workers/espn-client/src/sports/baseball/handlers.ts
-import type { Env, ToolParams, ExecuteResponse } from '../../types';
+import type { Env, ToolParams, ExecuteResponse, EspnLeagueResponse, EspnPlayerPoolResponse } from '../../types';
 import { getCredentials } from '../../shared/auth';
 import { espnFetch, handleEspnError, requireCredentials } from '../../shared/espn-api';
 import {
@@ -50,7 +50,7 @@ async function handleGetLeagueInfo(
       handleEspnError(response);
     }
 
-    const data = await response.json() as any;
+    const data = await response.json() as EspnLeagueResponse;
 
     if (!data || !data.settings) {
       return {
@@ -117,15 +117,15 @@ async function handleGetStandings(
       handleEspnError(response);
     }
 
-    const data = await response.json() as any;
+    const data = await response.json() as EspnLeagueResponse;
     const teams = data.teams || [];
 
     // Transform and sort teams by standings
-    const standings = teams.map((team: any) => {
-      const record = team.record?.overall || {};
-      const wins = record.wins || 0;
-      const losses = record.losses || 0;
-      const ties = record.ties || 0;
+    const standings = teams.map((team) => {
+      const record = team.record?.overall;
+      const wins = record?.wins || 0;
+      const losses = record?.losses || 0;
+      const ties = record?.ties || 0;
       const totalGames = wins + losses + ties;
       const winPercentage = totalGames > 0 ? wins / totalGames : 0;
 
@@ -139,19 +139,19 @@ async function handleGetStandings(
         losses,
         ties,
         winPercentage: Math.round(winPercentage * 1000) / 1000,
-        pointsFor: record.pointsFor || 0,
-        pointsAgainst: record.pointsAgainst || 0,
+        pointsFor: record?.pointsFor || 0,
+        pointsAgainst: record?.pointsAgainst || 0,
         playoffSeed: team.playoffSeed,
         draftDayProjectedRank: team.draftDayProjectedRank,
         currentProjectedRank: team.currentProjectedRank
       };
-    }).sort((a: any, b: any) => {
+    }).sort((a, b) => {
       // Sort by win percentage descending, then by wins descending
       if (b.winPercentage !== a.winPercentage) {
         return b.winPercentage - a.winPercentage;
       }
       return b.wins - a.wins;
-    }).map((team: any, index: number) => ({
+    }).map((team, index) => ({
       ...team,
       rank: index + 1
     }));
@@ -198,13 +198,13 @@ async function handleGetMatchups(
       handleEspnError(response);
     }
 
-    const data = await response.json() as any;
+    const data = await response.json() as EspnLeagueResponse;
     const schedule = data.schedule || [];
 
     // Transform matchups
     const matchups = schedule
-      .filter((matchup: any) => matchup.matchupPeriodId === (week || data.scoringPeriodId))
-      .map((matchup: any) => ({
+      .filter((matchup) => matchup.matchupPeriodId === (week || data.scoringPeriodId))
+      .map((matchup) => ({
         matchupPeriodId: matchup.matchupPeriodId,
         home: matchup.home ? {
           teamId: matchup.home.teamId,
@@ -267,12 +267,12 @@ async function handleGetRoster(
       handleEspnError(response);
     }
 
-    const data = await response.json() as any;
+    const data = await response.json() as EspnLeagueResponse;
     const teams = data.teams || [];
 
     // Find the requested team
     const team = team_id
-      ? teams.find((t: any) => t.id.toString() === team_id)
+      ? teams.find((t) => t.id.toString() === team_id)
       : teams[0];
 
     if (!team) {
@@ -286,25 +286,25 @@ async function handleGetRoster(
     }
 
     // Transform roster entries
-    const roster = (team.roster?.entries || []).map((entry: any) => {
-      const player = entry.playerPoolEntry?.player || {};
-      const stats = player.stats || [];
+    const roster = (team.roster?.entries || []).map((entry) => {
+      const player = entry.playerPoolEntry?.player;
+      const stats = player?.stats || [];
 
       // Get current season stats if available
-      const currentStats = stats.find((s: any) =>
+      const currentStats = stats.find((s) =>
         s.seasonId === season_year && s.statSourceId === 0
       );
 
       return {
-        playerId: player.id,
-        name: player.fullName || 'Unknown',
-        position: getPositionName(player.defaultPositionId || 0),
-        eligiblePositions: transformEligiblePositions(player.eligibleSlots || []),
-        lineupSlot: getLineupSlotName(entry.lineupSlotId),
-        proTeam: getProTeamAbbrev(player.proTeamId || 0),
-        injuryStatus: player.injuryStatus ? getInjuryStatus(player.injuryStatus) : undefined,
-        percentOwned: player.ownership?.percentOwned,
-        percentStarted: player.ownership?.percentStarted,
+        playerId: player?.id,
+        name: player?.fullName || 'Unknown',
+        position: getPositionName(player?.defaultPositionId || 0),
+        eligiblePositions: transformEligiblePositions(player?.eligibleSlots || []),
+        lineupSlot: getLineupSlotName(entry.lineupSlotId ?? 0),
+        proTeam: getProTeamAbbrev(player?.proTeamId || 0),
+        injuryStatus: player?.injuryStatus ? getInjuryStatus(player.injuryStatus) : undefined,
+        percentOwned: player?.ownership?.percentOwned,
+        percentStarted: player?.ownership?.percentStarted,
         stats: currentStats?.stats ? transformStats(currentStats.stats) : undefined,
         acquisitionType: entry.acquisitionType,
         acquisitionDate: entry.acquisitionDate
@@ -375,28 +375,28 @@ async function handleGetFreeAgents(
       handleEspnError(response);
     }
 
-    const data = await response.json() as any;
+    const data = await response.json() as EspnPlayerPoolResponse;
     const players = data.players || [];
 
     // Transform player data
-    const freeAgents = players.map((entry: any) => {
-      const player = entry.player || {};
-      const stats = player.stats || [];
+    const freeAgents = players.map((entry) => {
+      const player = entry.player;
+      const stats = player?.stats || [];
 
       // Get current season stats if available
-      const currentStats = stats.find((s: any) =>
+      const currentStats = stats.find((s) =>
         s.seasonId === season_year && s.statSourceId === 0
       );
 
       return {
-        playerId: player.id,
-        name: player.fullName || 'Unknown',
-        position: getPositionName(player.defaultPositionId || 0),
-        eligiblePositions: transformEligiblePositions(player.eligibleSlots || []),
-        proTeam: getProTeamAbbrev(player.proTeamId || 0),
-        injuryStatus: player.injuryStatus ? getInjuryStatus(player.injuryStatus) : undefined,
-        percentOwned: player.ownership?.percentOwned,
-        percentStarted: player.ownership?.percentStarted,
+        playerId: player?.id,
+        name: player?.fullName || 'Unknown',
+        position: getPositionName(player?.defaultPositionId || 0),
+        eligiblePositions: transformEligiblePositions(player?.eligibleSlots || []),
+        proTeam: getProTeamAbbrev(player?.proTeamId || 0),
+        injuryStatus: player?.injuryStatus ? getInjuryStatus(player.injuryStatus) : undefined,
+        percentOwned: player?.ownership?.percentOwned,
+        percentStarted: player?.ownership?.percentStarted,
         status: entry.status, // FREEAGENT or WAIVERS
         waiverProcessDate: entry.waiverProcessDate,
         stats: currentStats?.stats ? transformStats(currentStats.stats) : undefined

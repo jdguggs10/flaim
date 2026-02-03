@@ -5,6 +5,7 @@ Follow Keep a Changelog; SemVer applies.
 ## [Unreleased]
 
 ### Infrastructure
+- **Changed**: Replaced all `as any` type assertions in `espn-client` with typed ESPN API response interfaces (`EspnLeagueResponse`, `EspnPlayerPoolResponse`, etc.). Covers football, baseball, and onboarding handlers.
 - **Removed**: Legacy sport MCP workers (`baseball-espn-mcp`, `football-espn-mcp`) archived and removed from repository. Unified gateway (`fantasy-mcp`) is now the sole MCP endpoint.
 - **Changed**: Removed legacy workers from CI/CD pipeline, local dev scripts, and documentation.
 - **Preserved**: Legacy worker code preserved in git tag `legacy-sport-mcp-workers` for reference. Access via `git checkout legacy-sport-mcp-workers` or browse on GitHub.

@@ -127,7 +127,6 @@ wrangler dev --env dev --port 8789
 
 ## Tech Debt
 
-- ESPN API responses use `as any` typing (see TODO in `src/types.ts`)
 - Consider adding Zod validation for `/execute` request body
 
 ## Related

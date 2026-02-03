@@ -18,7 +18,6 @@
 - **Email Support Upgrade**: Upgrade cloudflare email functionality
 
 ## Maintenance & Refactoring
-- **ESPN API Type Safety**: Replace `as any` type assertions in `espn-client` handlers with proper TypeScript interfaces. Create interfaces for the ESPN API response fields we actually use. See TODO in `workers/espn-client/src/types.ts`.
 - **Codebase Audit & Streamlining**: Conduct a thorough review for legacy code, unused utilities, or redundant components. Identify parts of the system that are no longer in use (specifically around older auth patterns or defunct chat features) and remove them cautiously to reduce technical debt while ensuring no regressions.
 - **Devconsole chat clarity**: Reduce excess tool verbosity when using the devconsole chat to keep responses concise.
 - ~~**Chat loading states UX**~~: Implemented (2026-01-30). See `docs/dev/chat-loading-states-investigation.md`.
