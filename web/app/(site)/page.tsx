@@ -43,7 +43,7 @@ export default function LandingPage() {
                 </Link>
               </SignedOut>
               <SignedIn>
-                <div className="flex items-center justify-center gap-2 h-8 rounded-md px-3 text-xs font-medium w-full border border-success/30 bg-success/10 text-success">
+                <div className="flex items-center justify-center gap-2 h-8 rounded-md px-3 text-xs font-medium w-full bg-muted text-muted-foreground">
                   <Check className="h-3.5 w-3.5" />
                   Signed in
                 </div>
