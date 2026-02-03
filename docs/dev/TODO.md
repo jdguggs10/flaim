@@ -21,9 +21,6 @@
 - **Automated Testing**: Core OAuth/tool routing tests added; consider deeper integration tests when usage grows.
 - **Service Monitoring**: Add external uptime checks for existing `/health` endpoints.
 
-## Long-term Complexities to Simplify
-- **Address Supabase security advisor warnings**: Review and resolve lint warnings from the Supabase dashboard security advisor.
-
 ## Long-term Potential Implementations
 - Create iOS app (Significant undertaking/Major platform expansion)
 - Automate connector additions via browser extension (might be too complex for now)

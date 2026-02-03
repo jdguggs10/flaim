@@ -137,6 +137,6 @@ Used by pre‑v1.3.0 extension auth tokens (replaced by Clerk JWT).
 These tables remain for historical data but are no longer used in current flows.
 
 ## Notes
-- Supabase service role is used in workers; RLS is enabled for OAuth and rate limit tables but bypassed by service role.
+- Supabase service role is used in workers; RLS is enabled on all public tables but bypassed by service role. No RLS policies are needed since there is no direct client access — all queries go through workers using the service role key.
 - ESPN credentials are encrypted at rest by Supabase.
 - Migrations live in `docs/migrations/` and should be treated as the canonical schema reference.
