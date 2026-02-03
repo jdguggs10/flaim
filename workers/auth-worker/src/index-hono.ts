@@ -1,10 +1,24 @@
 /**
- * Auth Worker v3.1 - Hono Migration
+ * Auth Worker — Hono-based Cloudflare Worker
+ * ---------------------------------------------------------------------------
  *
- * Centralized Cloudflare Worker for handling ESPN credentials
- * with Supabase PostgreSQL storage, plus OAuth 2.1 for Claude MCP connectors.
+ * This worker has three distinct responsibilities:
  *
- * Migrated to Hono framework for cleaner routing and middleware.
+ * 1. CREDENTIAL STORAGE — ESPN cookies and Yahoo tokens, stored in Supabase.
+ *    Routes: /credentials/espn, /leagues, /connect/yahoo/*
+ *
+ * 2. OAUTH 2.1 PROVIDER — Flaim issues access tokens to AI clients
+ *    (Claude, ChatGPT, Gemini) so they can call MCP tools on behalf of users.
+ *    Routes: /auth/register, /auth/authorize, /auth/token, /auth/revoke
+ *    See: oauth-handlers.ts, oauth-storage.ts
+ *
+ * 3. OAUTH 2.0 CLIENT — Flaim obtains tokens FROM Yahoo so it can call
+ *    Yahoo Fantasy APIs on behalf of users.
+ *    Routes: /connect/yahoo/authorize, /connect/yahoo/callback
+ *    See: yahoo-connect-handlers.ts, yahoo-storage.ts
+ *
+ * Note: Roles 2 and 3 are opposite sides of OAuth. The provider (2) issues
+ * tokens; the client (3) consumes them. They share no code paths.
  */
 
 import { Hono, Context } from 'hono';

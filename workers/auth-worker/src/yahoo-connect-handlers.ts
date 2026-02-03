@@ -1,16 +1,20 @@
 /**
- * Yahoo Connect Handlers - OAuth flow for Yahoo Fantasy Sports platform
+ * OAuth 2.0 CLIENT — Flaim obtains tokens FROM Yahoo
  * ---------------------------------------------------------------------------
  *
- * Implements the OAuth 2.0 flow for connecting user accounts to Yahoo Fantasy.
- * These handlers manage:
+ * Flaim acts as an OAuth 2.0 client to Yahoo Fantasy Sports. Users authorize
+ * Flaim to access their Yahoo Fantasy data, and Flaim stores/refreshes the
+ * resulting tokens.
+ *
+ * Handlers:
  * - Authorization: Redirect users to Yahoo's OAuth consent page
  * - Callback: Handle Yahoo's redirect with auth code, exchange for tokens
  * - Credentials: Provide access tokens (with auto-refresh) for API calls
  * - Disconnect: Remove Yahoo connection and stored data
  * - Status: Check if user is connected to Yahoo
  *
- * @version 1.0.0
+ * This is the CLIENT side of OAuth — Flaim consumes tokens from Yahoo here.
+ * For the PROVIDER side (issuing tokens TO AI clients), see oauth-handlers.ts.
  */
 
 import { YahooStorage } from './yahoo-storage';

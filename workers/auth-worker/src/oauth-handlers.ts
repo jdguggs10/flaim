@@ -1,17 +1,20 @@
 /**
- * OAuth Handlers for Claude Direct Access
+ * OAuth 2.1 PROVIDER — Flaim issues tokens to AI clients
  * ---------------------------------------------------------------------------
  *
- * Implements OAuth 2.1 endpoints for Claude MCP connector authentication.
- * Follows the MCP specification for authorization.
+ * Flaim acts as an OAuth 2.1 authorization server. AI clients (Claude,
+ * ChatGPT, Gemini) register via Dynamic Client Registration (RFC 7591),
+ * then obtain access tokens through the authorization code flow with PKCE.
  *
  * Flow:
- * 1. Claude → GET /authorize → redirect to frontend consent page
- * 2. Frontend → POST /oauth/code (with Clerk JWT) → returns auth code
- * 3. Claude → POST /token → exchanges code for access token
- * 4. Claude → uses token for MCP requests
+ * 1. AI client → POST /auth/register → Dynamic Client Registration
+ * 2. AI client → GET /auth/authorize → redirect to frontend consent page
+ * 3. Frontend → POST /oauth/code (with Clerk JWT) → returns auth code
+ * 4. AI client → POST /auth/token → exchanges code for access token
+ * 5. AI client → uses token for MCP tool requests
  *
- * @version 1.0.0
+ * This is the PROVIDER side of OAuth — Flaim issues tokens here.
+ * For the CLIENT side (obtaining tokens FROM Yahoo), see yahoo-connect-handlers.ts.
  */
 
 import { OAuthStorage } from './oauth-storage';
