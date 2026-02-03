@@ -61,9 +61,6 @@ export interface ExtensionPingResponse {
   installed: true;
   signedIn: boolean;
   userId: string | null;
-  // Legacy fields for backwards compatibility (v1.2.x)
-  paired?: boolean;
-  hasToken?: boolean;
 }
 
 /**
@@ -125,9 +122,7 @@ function pingExtensionId(extensionId: string, timeoutMs: number): Promise<Extens
         if (typedResponse && typedResponse.installed) {
           resolve({
             reachable: true,
-            // New format: signedIn field
-            // Legacy fallback: paired or hasToken
-            signedIn: typedResponse.signedIn ?? typedResponse.paired ?? typedResponse.hasToken ?? false,
+            signedIn: typedResponse.signedIn ?? false,
             userId: typedResponse.userId ?? null,
           });
         } else {

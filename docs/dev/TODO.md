@@ -12,7 +12,6 @@
 - Email Support Upgrade: Upgrade cloudflare email functionality
 
 ## Maintenance & Refactoring
-- Codebase Audit & Streamlining: Conduct a thorough review for legacy code, unused utilities, or redundant components. Identify parts of the system that are no longer in use (specifically around older auth patterns or defunct chat features) and remove them cautiously to reduce technical debt while ensuring no regressions.
 - Advanced Token & Usage Analytics: Implement per-turn and per-session token usage tracking in the chat UI by capturing usage data from the Responses API stream. Include cost estimation and historical usage trends.
 - Reconcile remaining ESPN baseball mapping unknowns: Validate slot IDs `18`/`22` per `workers/espn-client/src/sports/baseball/MAPPINGS.md`.
 

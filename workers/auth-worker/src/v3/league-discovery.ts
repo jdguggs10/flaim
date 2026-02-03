@@ -11,7 +11,7 @@ import {
   AutomaticLeagueDiscoveryFailed,
   EspnAuthenticationFailed,
   EspnCredentialsRequired,
-  GambitLeague,
+  DiscoveredEspnLeague,
   gameIdToSport
 } from '../espn-types';
 import { getLeagueInfo } from './get-league-info';
@@ -77,7 +77,7 @@ const NUMERIC_TO_GAME_ID: Record<number, string> = {
  * @param s2 - ESPN espn_s2 cookie value
  * @returns Array of discovered leagues
  */
-export async function discoverLeaguesV3(swid: string, s2: string): Promise<GambitLeague[]> {
+export async function discoverLeaguesV3(swid: string, s2: string): Promise<DiscoveredEspnLeague[]> {
   if (!swid || !s2) {
     throw new EspnCredentialsRequired('Both SWID and espn_s2 cookies are required');
   }
@@ -130,8 +130,8 @@ export async function discoverLeaguesV3(swid: string, s2: string): Promise<Gambi
       throw new AutomaticLeagueDiscoveryFailed('No fantasy leagues found for the supplied credentials');
     }
 
-    // Map preferences to GambitLeague format
-    const leagues: GambitLeague[] = [];
+    // Map preferences to DiscoveredEspnLeague format
+    const leagues: DiscoveredEspnLeague[] = [];
 
     for (const pref of fantasyPrefs) {
       try {
@@ -231,10 +231,6 @@ export interface DiscoverAndSaveResult {
   discovered: DiscoveredLeague[];
   currentSeason: SeasonCounts;
   pastSeasons: SeasonCounts;
-  // Legacy fields (deprecated, kept for backwards compatibility)
-  added: number;
-  skipped: number;
-  historical: number;
 }
 
 /**
@@ -333,10 +329,6 @@ export async function discoverAndSaveLeagues(
     discovered,
     currentSeason,
     pastSeasons,
-    // Legacy fields for backwards compatibility
-    added: currentSeason.added,
-    skipped: currentSeason.alreadySaved,
-    historical: pastSeasons.added,
   };
 }
 
@@ -354,7 +346,7 @@ export async function discoverAndSaveLeagues(
  */
 async function discoverHistoricalSeasons(
   userId: string,
-  league: GambitLeague,
+  league: DiscoveredEspnLeague,
   swid: string,
   s2: string,
   storage: EspnSupabaseStorage

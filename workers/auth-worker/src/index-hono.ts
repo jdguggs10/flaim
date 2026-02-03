@@ -583,9 +583,9 @@ api.post('/extension/discover', async (c) => {
       currentSeasonLeagues: currentSeasonWithDefault,
       currentSeason: result.currentSeason,
       pastSeasons: result.pastSeasons,
-      added: result.added,
-      skipped: result.skipped,
-      historical: result.historical,
+      added: result.currentSeason.added,
+      skipped: result.currentSeason.alreadySaved,
+      historical: result.pastSeasons.added,
     });
 
   } catch (error) {

@@ -41,9 +41,6 @@ interface PingResponse {
   installed: true;
   signedIn: boolean;
   userId: string | null;
-  // Legacy fields for backwards compatibility during transition
-  paired?: boolean;
-  hasToken?: boolean;
 }
 
 type ExternalMessage = PingMessage;
@@ -66,9 +63,6 @@ chrome.runtime.onMessageExternal.addListener(
             installed: true,
             signedIn,
             userId,
-            // Legacy fields for backwards compat
-            paired: signedIn,
-            hasToken: signedIn,
           });
         })
         .catch(() => {
@@ -76,8 +70,6 @@ chrome.runtime.onMessageExternal.addListener(
             installed: true,
             signedIn: false,
             userId: null,
-            paired: false,
-            hasToken: false,
           });
         });
 

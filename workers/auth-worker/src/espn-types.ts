@@ -1,8 +1,7 @@
 /**
  * ESPN Fantasy Sports Type Definitions
  * 
- * Consolidated types for ESPN integration, replacing Gambit-specific types
- * with a more flexible multi-league architecture.
+ * Consolidated types for ESPN integration with multi-league architecture.
  * 
  * @version 2.0 - Multi-league support with manual entry
  */
@@ -95,14 +94,14 @@ export interface EspnStanding {
 }
 
 // =============================================================================
-// LEGACY COMPATIBILITY TYPES (from Gambit)
+// LEAGUE DISCOVERY TYPES
 // =============================================================================
 
 /**
- * @deprecated Use EspnLeagueInfo instead
- * Preserved for backward compatibility during migration
+ * Flat league entry returned by the ESPN Fan API discovery flow.
+ * Distinct from EspnLeagueInfo which is a full league detail response.
  */
-export interface GambitLeague {
+export interface DiscoveredEspnLeague {
   gameId: string;        // "ffl", "flb", "fba", etc.
   leagueId: string;      // numeric string
   leagueName: string;
@@ -117,7 +116,6 @@ export interface GambitLeague {
 
 /**
  * ESPN game ID to sport name mappings
- * Updated to include hockey as 'fhl' (was 'fho' in Gambit)
  */
 export const ESPN_GAME_IDS = {
   'ffl': 'football',
