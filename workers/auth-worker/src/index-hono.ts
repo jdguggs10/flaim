@@ -421,6 +421,19 @@ api.get('/.well-known/oauth-authorization-server', (c) => {
   return handleMetadataDiscovery(c.env as OAuthEnv, getCorsHeaders(c.req.raw));
 });
 
+// Protected Resource Metadata (RFC 9728) for the MCP gateway
+// Served here because auth-worker owns /.well-known/* on the custom domain
+api.get('/.well-known/oauth-protected-resource', (c) => {
+  return c.json({
+    resource: 'https://api.flaim.app/mcp',
+    authorization_servers: ['https://api.flaim.app'],
+    bearer_methods_supported: ['header'],
+    scopes_supported: ['mcp:read', 'mcp:write'],
+  }, 200, {
+    'Cache-Control': 'public, max-age=3600',
+  });
+});
+
 // Dynamic Client Registration (RFC 7591)
 api.all('/register', (c) => {
   return handleClientRegistration(c.req.raw, c.env as OAuthEnv, getCorsHeaders(c.req.raw));

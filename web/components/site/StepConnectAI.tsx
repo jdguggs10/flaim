@@ -8,7 +8,7 @@ import { Copy, Check, Info } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 const fantasyMcpUrl =
-  process.env.NEXT_PUBLIC_FANTASY_MCP_URL || 'https://api.flaim.app/fantasy/mcp';
+  process.env.NEXT_PUBLIC_FANTASY_MCP_URL || 'https://api.flaim.app/mcp';
 
 const mcpConnectors = [
   {

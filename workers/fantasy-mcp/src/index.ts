@@ -83,27 +83,34 @@ app.get('/health', async (c) => {
 });
 
 // OAuth Protected Resource Metadata (RFC 9728)
-// Available at both paths for direct and routed access
-const oauthMetadata = {
-  resource: 'https://api.flaim.app/fantasy/mcp',
-  authorization_servers: ['https://api.flaim.app'],
-  bearer_methods_supported: ['header'],
-  scopes_supported: ['mcp:read', 'mcp:write']
-};
+// Path-sensitive: /mcp is canonical, /fantasy/mcp is legacy alias
+function buildOauthMetadata(resource: string) {
+  return {
+    resource,
+    authorization_servers: ['https://api.flaim.app'],
+    bearer_methods_supported: ['header'],
+    scopes_supported: ['mcp:read', 'mcp:write'],
+  };
+}
 
 app.get('/.well-known/oauth-protected-resource', (c) => {
-  return c.json(oauthMetadata, 200, { 'Cache-Control': 'public, max-age=3600' });
+  return c.json(buildOauthMetadata('https://api.flaim.app/mcp'), 200, { 'Cache-Control': 'public, max-age=3600' });
 });
 
 app.get('/fantasy/.well-known/oauth-protected-resource', (c) => {
-  return c.json(oauthMetadata, 200, { 'Cache-Control': 'public, max-age=3600' });
+  return c.json(buildOauthMetadata('https://api.flaim.app/fantasy/mcp'), 200, { 'Cache-Control': 'public, max-age=3600' });
 });
 
 /**
- * Build MCP-compliant 401 response with WWW-Authenticate header
+ * Build MCP-compliant 401 response with WWW-Authenticate header.
+ * Resource URL is path-sensitive: /fantasy/* advertises /fantasy/mcp, otherwise /mcp.
  */
 function buildMcpAuthErrorResponse(request: Request): Response {
   const corsHeaders = createMcpCorsHeaders(request);
+  const pathname = new URL(request.url).pathname;
+  const resource = pathname.startsWith('/fantasy/')
+    ? 'https://api.flaim.app/fantasy/mcp'
+    : 'https://api.flaim.app/mcp';
   return new Response(
     JSON.stringify({
       jsonrpc: '2.0',
@@ -117,7 +124,7 @@ function buildMcpAuthErrorResponse(request: Request): Response {
       status: 401,
       headers: {
         'Content-Type': 'application/json',
-        'WWW-Authenticate': 'Bearer realm="fantasy-mcp", resource="https://api.flaim.app/fantasy/mcp"',
+        'WWW-Authenticate': `Bearer realm="fantasy-mcp", resource="${resource}"`,
         ...corsHeaders,
       },
     }

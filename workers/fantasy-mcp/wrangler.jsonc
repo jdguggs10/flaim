@@ -28,6 +28,10 @@
         {
           "pattern": "api.flaim.app/fantasy/*",
           "zone_name": "flaim.app"
+        },
+        {
+          "pattern": "api.flaim.app/mcp*",
+          "zone_name": "flaim.app"
         }
       ],
       // Service bindings for platform workers

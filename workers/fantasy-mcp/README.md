@@ -81,7 +81,7 @@ wrangler dev --env dev --port 8790
 
 ## Production URLs
 
-- **Custom route**: `https://api.flaim.app/fantasy/mcp`
+- **Custom route**: `https://api.flaim.app/mcp` (legacy alias: `https://api.flaim.app/fantasy/mcp`)
 - **Workers.dev**: `https://fantasy-mcp.gerrygugger.workers.dev/mcp`
 
 ## Service Bindings

@@ -51,7 +51,7 @@ Season year defaults are deterministic and use America/New_York time:
 
 ## MCP Tools
 
-The unified gateway (`https://api.flaim.app/fantasy/mcp`) exposes these tools:
+The unified gateway (`https://api.flaim.app/mcp`) exposes these tools:
 
 | Tool | Description |
 |------|-------------|

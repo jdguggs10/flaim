@@ -5,7 +5,7 @@ Facts that should stay in sync with the codebase. This is the source of truth fo
 **Last updated:** 2026-01-29
 
 ## MCP Endpoints (current)
-- Unified gateway: `https://api.flaim.app/fantasy/mcp`
+- Unified gateway: `https://api.flaim.app/mcp` (legacy alias: `/fantasy/mcp`)
 
 ## Unified MCP Tools
 All tools take explicit parameters: `platform`, `sport`, `league_id`, `season_year` (plus optional fields like `team_id`, `week`, `position`, `count`).

@@ -127,10 +127,10 @@ ESPN Cookies → POST /api/extension/sync → Auth Worker → Supabase
 
 Users connect their own AI subscription to Flaim's MCP servers:
 
-- **MCP URL**: `https://api.flaim.app/fantasy/mcp` (unified gateway - handles all sports)
+- **MCP URL**: `https://api.flaim.app/mcp` (unified gateway - handles all sports; `/fantasy/mcp` also works as legacy alias)
 - **OAuth Flow**: Full OAuth 2.1 with PKCE, Dynamic Client Registration (RFC 7591), Protected Resource Metadata (RFC 9728)
 - **Endpoints**: `/auth/register` (DCR), `/auth/authorize`, `/auth/token`, `/auth/revoke`
-- **Metadata**: `/.well-known/oauth-authorization-server`, `/fantasy/.well-known/oauth-protected-resource`
+- **Metadata**: `/.well-known/oauth-authorization-server`, `/.well-known/oauth-protected-resource`
 
 **User flow**: Add MCP URL in Claude/ChatGPT → 401 triggers OAuth → user consents at `flaim.app/oauth/consent` → token exchange → tools available.
 
@@ -149,7 +149,7 @@ Claude/ChatGPT → fantasy-mcp (gateway) → espn-client → ESPN API
 ```
 
 **Key benefits:**
-- Single MCP URL for all sports: `https://api.flaim.app/fantasy/mcp`
+- Single MCP URL for all sports: `https://api.flaim.app/mcp`
 - Explicit tool parameters: `platform`, `sport`, `league_id`, `season_year`
 - Easier multi-platform support (ESPN + Yahoo)
 - Service bindings for worker-to-worker communication (no 522 timeouts)
