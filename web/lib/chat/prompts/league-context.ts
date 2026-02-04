@@ -101,6 +101,14 @@ export function buildLeagueContext(): string {
     return "";
   }
 
+  // Use deterministic season year for sports with rollover logic,
+  // so the prompt always reflects the current season even if the store is stale.
+  const sport = activeLeague.sport as SeasonSport;
+  const hasSeason = sport === 'baseball' || sport === 'football';
+  const seasonYear = hasSeason
+    ? getDefaultSeasonYear(sport)
+    : (activeLeague.seasonYear || new Date().getFullYear());
+
   // Build active league context from template
   const activeContext = fillTemplate(ACTIVE_LEAGUE_TEMPLATE, {
     platform: activeLeague.platform,
@@ -109,7 +117,7 @@ export function buildLeagueContext(): string {
     sport: activeLeague.sport,
     teamName: activeLeague.teamName || "Not selected",
     teamId: activeLeague.teamId || "N/A",
-    seasonYear: String(activeLeague.seasonYear || new Date().getFullYear()),
+    seasonYear: String(seasonYear),
   });
 
   // Find other leagues (excluding the active one, filtering to recent seasons only)

@@ -9,6 +9,8 @@
   --foreground: 224 71.4% 4.1%;
   --card: 0 0% 100%;
   --card-foreground: 224 71.4% 4.1%;
+  --primary: 220.9 39.3% 11%;
+  --primary-foreground: 210 20% 98%;
   --secondary: 220 14.3% 95.9%;
   --secondary-foreground: 220.9 39.3% 11%;
   --muted: 220 14.3% 95.9%;
@@ -16,35 +18,25 @@
   --border: 220 13% 91%;
   --input: 220 13% 91%;
   --ring: 224 71.4% 4.1%;
-  --success: 142 71% 45%;
-  --success-foreground: 144 70% 96%;
-  --warning: 38 92% 50%;
-  --warning-foreground: 48 100% 96%;
-  --info: 210 90% 45%;
-  --info-foreground: 210 100% 96%;
   --destructive: 0 84.2% 60.2%;
   --destructive-foreground: 210 20% 98%;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: 224 71.4% 4.1%;
-    --foreground: 210 20% 98%;
-    --card: 224 71.4% 4.1%;
-    --card-foreground: 210 20% 98%;
-    --secondary: 215 27.9% 16.9%;
-    --secondary-foreground: 210 20% 98%;
-    --muted: 215 27.9% 16.9%;
-    --muted-foreground: 217.9 10.6% 64.9%;
-    --border: 215 27.9% 16.9%;
-    --input: 215 27.9% 16.9%;
-    --ring: 216 12.2% 83.9%;
-    --success: 142 71% 35%;
-    --success-foreground: 144 70% 96%;
-    --warning: 38 80% 40%;
-    --warning-foreground: 48 100% 96%;
-    --info: 210 80% 55%;
-    --info-foreground: 210 100% 96%;
+    --background: 0 0% 9%;
+    --foreground: 0 0% 95%;
+    --card: 0 0% 12%;
+    --card-foreground: 0 0% 95%;
+    --primary: 0 0% 98%;
+    --primary-foreground: 0 0% 9%;
+    --secondary: 0 0% 15%;
+    --secondary-foreground: 0 0% 95%;
+    --muted: 0 0% 15%;
+    --muted-foreground: 0 0% 64%;
+    --border: 0 0% 18%;
+    --input: 0 0% 18%;
+    --ring: 0 0% 83.9%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 210 20% 98%;
   }
@@ -73,6 +65,11 @@ body {
   border-bottom: 1px solid hsl(var(--border));
 }
 
+.header-logo {
+  width: 24px;
+  height: 24px;
+}
+
 .header h1 {
   font-size: 18px;
   font-weight: 600;
@@ -99,7 +96,7 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: -8px 0 12px;
+  margin: 0 0 8px;
 }
 
 .user-avatar {
@@ -146,7 +143,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  margin: -4px 0 12px;
+  margin: 0 0 8px;
 }
 
 .diag-row {
@@ -172,26 +169,33 @@ body {
   color: hsl(var(--muted-foreground));
 }
 
+.main {
+  background: hsl(var(--muted));
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 4px;
+}
+
 .content {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
 }
 
 .message {
-  padding: 12px;
+  padding: 8px;
   border-radius: 8px;
   font-size: 13px;
 }
 
 .message.info {
-  background: hsl(var(--info) / 0.12);
-  color: hsl(var(--info));
+  background: hsl(var(--secondary));
+  color: hsl(var(--foreground));
 }
 
 .message.success {
-  background: hsl(var(--success) / 0.12);
-  color: hsl(var(--success));
+  background: hsl(var(--secondary));
+  color: hsl(var(--foreground));
 }
 
 .message.error {
@@ -200,8 +204,8 @@ body {
 }
 
 .message.warning {
-  background: hsl(var(--warning) / 0.16);
-  color: hsl(var(--warning));
+  background: hsl(var(--secondary));
+  color: hsl(var(--foreground));
 }
 
 .meta {
@@ -237,8 +241,8 @@ body {
 
 .input-group input:focus {
   outline: none;
-  border-color: hsl(var(--info));
-  box-shadow: 0 0 0 2px hsl(var(--info) / 0.2);
+  border-color: hsl(var(--ring));
+  box-shadow: 0 0 0 2px hsl(var(--ring) / 0.2);
 }
 
 .button {
@@ -261,30 +265,23 @@ body {
 }
 
 .button.primary {
-  background: hsl(var(--info));
-  color: hsl(var(--info-foreground));
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
 }
 
 .button.primary:hover:not(:disabled) {
-  filter: brightness(0.95);
+  background: hsl(var(--secondary));
 }
 
 .button.secondary {
-  background: hsl(var(--secondary));
-  color: hsl(var(--secondary-foreground));
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
 }
 
 .button.secondary:hover:not(:disabled) {
-  filter: brightness(0.97);
-}
-
-.button.success {
-  background: hsl(var(--success));
-  color: hsl(var(--success-foreground));
-}
-
-.button.success:hover:not(:disabled) {
-  filter: brightness(0.95);
+  background: hsl(var(--secondary));
 }
 
 .button.full-width {
@@ -292,8 +289,8 @@ body {
 }
 
 .link {
-  color: hsl(var(--info));
-  text-decoration: none;
+  color: hsl(var(--foreground));
+  text-decoration: underline;
   cursor: pointer;
 }
 
@@ -302,7 +299,7 @@ body {
 }
 
 .footer {
-  margin-top: 16px;
+  margin-top: 12px;
   padding-top: 12px;
   border-top: 1px solid hsl(var(--border));
   font-size: 12px;
@@ -355,11 +352,11 @@ body {
 }
 
 .setup-step.completed {
-  color: hsl(var(--success));
+  color: hsl(var(--foreground));
 }
 
 .setup-step.active {
-  color: hsl(var(--info));
+  color: hsl(var(--foreground));
   font-weight: 500;
 }
 
@@ -377,7 +374,7 @@ body {
 }
 
 .step-icon.check {
-  color: hsl(var(--success));
+  color: hsl(var(--foreground));
   font-weight: bold;
 }
 
@@ -396,30 +393,31 @@ body {
 
 .progress-bar-fill {
   height: 100%;
-  background: hsl(var(--info));
+  background: hsl(var(--foreground));
   transition: width 0.3s ease;
 }
 
 .league-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  max-height: 150px;
+  max-height: 250px;
   overflow-y: auto;
 }
 
 .league-item {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 10px;
-  padding: 10px;
-  background: hsl(var(--secondary));
-  border-radius: 8px;
+  padding: 10px 0;
+  border-bottom: 1px solid hsl(var(--border));
+}
+
+.league-item:last-child {
+  border-bottom: none;
 }
 
 .league-item.default-league {
-  background: hsl(var(--success) / 0.12);
-  border: 1px solid hsl(var(--success) / 0.35);
+  /* no special styling in monochromatic theme */
 }
 
 .league-item .sport-emoji {
@@ -470,8 +468,8 @@ body {
 
 .input-group select:focus {
   outline: none;
-  border-color: hsl(var(--info));
-  box-shadow: 0 0 0 2px hsl(var(--info) / 0.2);
+  border-color: hsl(var(--ring));
+  box-shadow: 0 0 0 2px hsl(var(--ring) / 0.2);
 }
 
 .setup-summary {

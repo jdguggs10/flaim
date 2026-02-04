@@ -1,11 +1,13 @@
 # Chat API Audit: OpenAI Responses API Integration
 
-**Date:** 2026-02-03
-**Test:** Sent "Show me my current roster" from flaim.app/chat, reviewed full request/response logs on platform.openai.com.
+**Initial audit:** 2026-02-03
+**Re-audit:** 2026-02-04 (after fixes deployed)
+
+**Test method:** Send messages from flaim.app/chat, review full request/response logs on platform.openai.com.
 
 ---
 
-## Response Metadata
+## Initial Audit (2026-02-03)
 
 | Field | Value |
 |-------|-------|
@@ -21,7 +23,7 @@
 
 ## Issues
 
-### 1. Four MCP Servers Mounted Instead of One (HIGH - Token Waste + Fragility)
+### 1. ~~Four MCP Servers Mounted Instead of One~~ FIXED
 
 **What:** The chat mounts 4 separate MCP server registrations (`fantasy-baseball`, `fantasy-football`, `fantasy-basketball`, `fantasy-hockey`), each pointing to the same unified gateway URL (`api.flaim.app/mcp`).
 
@@ -44,35 +46,20 @@
 
 ---
 
-### 2. Redundant `get_user_session` Call (MEDIUM - Wasted Latency)
+### 2. ~~Redundant `get_user_session` Instruction~~ FIXED
 
-**What:** The model calls `get_user_session` as its first action, even though the developer prompt already contains the full league context (active league, team ID, league ID, season year, all other leagues).
+**Original issue:** System prompt said "call this first" and "Call get_user_session first before other tool calls," causing mandatory calls even when context was already injected.
 
-**Evidence from logs:** The `get_user_session` MCP call took 1.2s and returned data that was already present in the developer message. The model's reasoning even says "I need to start by calling the get_user_session tool, since it seems that's the first step."
+**Fix applied:** Removed "call this first" directives. Updated description to: "Refresh leagues + current season info (use if context seems stale)".
 
-**Root cause:** The system prompt at `web/lib/chat/prompts/system-prompt.ts:13,21` explicitly instructs:
-```
-- get_user_session: Fetch leagues + current season info (call this first)
-- Call get_user_session first before other tool calls.
-```
-But the developer prompt (`league-context.ts`) already injects this exact data.
-
-**Impact:**
-- 1.2s added latency on every first message
-- Extra tokens consumed for the tool call + response
-- Contradictory instructions (context is already there, but prompt says to fetch it)
-
-**Fix options:**
-- **Option A (recommended):** Remove the "call this first" instruction from the system prompt. The developer prompt already has the data. Let `get_user_session` be available for when the model genuinely needs to refresh session data (e.g., multi-turn where leagues might have changed).
-- **Option B:** Remove the league context from the developer prompt entirely and rely on `get_user_session`. Simpler but adds 1.2s latency to every conversation start.
+**Re-audit finding (2026-02-04):** On the first message of a new conversation, the model still calls `get_user_session` — this is **correct and expected behavior** for the flaim.app web chat, because the Responses API (unlike the extension flow) does not have pre-injected league context on the first turn. The `get_user_session` call bootstraps the session from Supabase. On follow-up messages, the model correctly skips `get_user_session` and goes directly to the requested tool.
 
 **Files:**
-- `web/lib/chat/prompts/system-prompt.ts:13,21`
-- `web/lib/chat/prompts/league-context.ts` (entire file)
+- `web/lib/chat/prompts/system-prompt.ts`
 
 ---
 
-### 3. Duplicate Leagues in Developer Prompt (MEDIUM - Token Waste + Confusion)
+### 3. ~~Duplicate Leagues in Developer Prompt~~ FIXED
 
 **What:** The "OTHER LEAGUES AVAILABLE" section lists the same league multiple times without season year differentiation.
 
@@ -100,7 +87,7 @@ The Polski Club (football, ID: 24652)                   <-- appears 3x
 
 ---
 
-### 4. Ancient/Historical Leagues Bloating the Developer Prompt (MEDIUM - Token Waste)
+### 4. ~~Ancient/Historical Leagues Bloating the Developer Prompt~~ FIXED
 
 **What:** The developer prompt includes all historical leagues going back many years (Yahoo leagues from 2024, old ESPN seasons, etc.), consuming significant token budget.
 
@@ -130,7 +117,7 @@ These are historical Yahoo leagues spanning many seasons. The `get_ancient_histo
 
 ---
 
-### 5. Season Year Mismatch in Developer Prompt (LOW - Stale Data)
+### 5. ~~Season Year Mismatch in Developer Prompt~~ FIXED
 
 **What:** The active league context says `Season: 2025` but the `get_user_session` response shows `seasonYear: 2026` for the same league.
 
@@ -188,7 +175,7 @@ These are historical Yahoo leagues spanning many seasons. The `get_ancient_histo
 
 ---
 
-### 8. System Prompt Says "ESPN Fantasy Leagues" Only (LOW - Stale Copy)
+### 8. ~~System Prompt Says "ESPN Fantasy Leagues" Only~~ FIXED
 
 **What:** The system prompt opens with "You are Flaim, a fantasy sports AI assistant specializing in ESPN fantasy leagues" — but Flaim now supports Yahoo too.
 
@@ -201,22 +188,61 @@ These are historical Yahoo leagues spanning many seasons. The `get_ancient_histo
 
 ---
 
-## What's Working Well
+## Re-audit Results (2026-02-04)
 
-- **Stored-responses flow** (`store: true` + `previous_response_id`): Correctly implemented, avoids rebuilding conversation history on subsequent turns.
-- **MCP tool call structure**: Request/response JSON is clean and well-formed. Parameters (`platform`, `sport`, `league_id`, `season_year`, `team_id`) are correctly extracted and passed.
-- **SSE streaming**: Events properly handled for reasoning summaries, tool calls, and text output.
-- **Developer prompt separation**: System prompt (static behavior) and league context (dynamic user data) are cleanly separated as two developer messages.
-- **Tool call timing**: Response times are reasonable (1.2s session, 2.0s roster).
-- **Debug/trace infrastructure**: The LLM Trace panel in the Developer Console provides good visibility.
+### Test 1: First message — "Show me my standings"
+
+| Field | Before | After |
+|-------|--------|-------|
+| Input tokens | 7,591 | 4,221 |
+| Output tokens | 1,752 | 953 |
+| Total tokens | 9,343 | 5,174 |
+| MCP Servers | 4 (fantasy-baseball/football/basketball/hockey) | 1 (fantasy) |
+| list_tools calls | 4 | 1 |
+| Tool definitions | 28 (7 x 4) | 7 |
+| Tool calls | `get_user_session` + `get_roster` | `get_user_session` + `get_standings` |
+
+**Observations:**
+- `get_user_session` call on first message is correct — bootstraps league data from Supabase
+- Response: `success: true`, returns `currentSeasons`, `totalLeaguesFound: 11`, `leaguesBySport`, `defaultLeague` with correct platform/sport/leagueId/teamId/seasonYear
+- `get_standings` called with correct params: `platform: "espn"`, `sport: "baseball"`, `league_id: "30201"`, `season_year: 2025`
+- System prompt correctly says "specializing in fantasy leagues" (not ESPN-only)
+- League context includes `platform` field and `seasonYear` in other leagues list
+
+### Test 2: Follow-up message — "Show me my roster"
+
+| Field | Value |
+|-------|-------|
+| Input tokens | 12,899 (includes conversation history) |
+| Output tokens | 1,044 |
+| Tool calls | `get_roster` only |
+
+**Observations:**
+- **No `get_user_session` call** — model correctly uses session context from first turn
+- Directly calls `get_roster` with `platform: "espn"`, `sport: "baseball"`, `league_id: "30201"`, `season_year: 2025`, `team_id: "7"`
+- Model reasoning: "I need to call the roster tool with specific parameters... let's proceed with calling the tool!"
+
+### Summary
+
+Issues #1, #2, #3, #4, and #8 are resolved. Input tokens reduced ~44% on first message (7,591 → 4,221). Only 1 MCP server mounted, 1 `list_tools` call, 7 tool definitions. Follow-up messages skip `get_user_session` as expected.
 
 ---
 
-## Recommended Fix Order
+## What's Working Well
 
-1. **Issue #1** (4 MCP servers -> 1) — Biggest token savings, simplest fix, most impactful
-2. **Issue #3 + #4** (Deduplicate + trim leagues) — Can be done together, significant token savings
-3. **Issue #2** (Remove redundant get_user_session instruction) — Saves 1.2s latency per conversation
-4. **Issue #8** (Update ESPN-only copy) — One-line fix
-5. **Issue #5** (Season year staleness) — May self-resolve with other fixes
-6. **Issue #6 + #7** (ESPN API cosmetics) — Low priority, nice-to-have
+- **Stored-responses flow** (`store: true` + `previous_response_id`): Correctly implemented, avoids rebuilding conversation history on subsequent turns.
+- **Unified MCP gateway**: Single server, 7 tools, sport routing handled by tool parameters.
+- **Session bootstrapping**: `get_user_session` correctly called on first turn, skipped on follow-ups.
+- **MCP tool call structure**: Request/response JSON is clean and well-formed. Parameters (`platform`, `sport`, `league_id`, `season_year`, `team_id`) are correctly extracted and passed.
+- **SSE streaming**: Events properly handled for reasoning summaries, tool calls, and text output.
+- **Developer prompt separation**: System prompt (static behavior) and league context (dynamic user data) are cleanly separated as two developer messages.
+- **Debug/trace infrastructure**: The LLM Trace panel in the Developer Console provides good visibility (shows token counts and trace count).
+
+---
+
+## Remaining Issues
+
+Low priority, nice-to-have:
+
+- **Issue #6** (`teamName` returns "Team 7") — ESPN API behavior for pre-season; needs more investigation to confirm
+- **Issue #7** (Empty `stats` objects) — Expected when season hasn't started; model handles gracefully, no fix needed

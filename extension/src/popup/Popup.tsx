@@ -51,53 +51,38 @@ function getDiscoveryMessage(counts: DiscoveryCounts): string {
   const { currentSeason: cs, pastSeasons: ps } = counts;
 
   if (cs.found === 0) {
-    return 'No active leagues found for this season.';
+    return 'No active ESPN leagues found for this season.';
   }
 
   const parts: string[] = [];
 
   if (cs.added > 0 && cs.alreadySaved === 0) {
-    parts.push(`Found ${cs.found} league${cs.found !== 1 ? 's' : ''}`);
+    parts.push(`Found ${cs.found} ESPN league${cs.found !== 1 ? 's' : ''}`);
   } else if (cs.added === 0 && cs.alreadySaved > 0) {
-    parts.push(`${cs.found} league${cs.found !== 1 ? 's' : ''} already saved`);
+    parts.push(`${cs.found} ESPN league${cs.found !== 1 ? 's' : ''} already saved`);
   } else if (cs.added > 0 && cs.alreadySaved > 0) {
     parts.push(
-      `Found ${cs.found} league${cs.found !== 1 ? 's' : ''} (${cs.added} new, ${cs.alreadySaved} saved)`
+      `Found ${cs.found} ESPN league${cs.found !== 1 ? 's' : ''} (${cs.added} new, ${cs.alreadySaved} saved)`
     );
   } else if (cs.found > 0) {
-    parts.push(`Found ${cs.found} league${cs.found !== 1 ? 's' : ''} (save failed)`);
+    parts.push(`Found ${cs.found} ESPN league${cs.found !== 1 ? 's' : ''} (save failed)`);
   }
 
   if (ps.found > 0) {
     if (ps.added > 0 && ps.alreadySaved === 0) {
-      parts.push(`${ps.found} past season${ps.found !== 1 ? 's' : ''}`);
+      parts.push(`${ps.found} ESPN past season${ps.found !== 1 ? 's' : ''}`);
     } else if (ps.added === 0 && ps.alreadySaved > 0) {
-      parts.push(`${ps.found} past season${ps.found !== 1 ? 's' : ''} already saved`);
+      parts.push(`${ps.found} ESPN past season${ps.found !== 1 ? 's' : ''} already saved`);
     } else if (ps.added > 0) {
-      parts.push(`${ps.found} past season${ps.found !== 1 ? 's' : ''} (${ps.added} new)`);
+      parts.push(`${ps.found} ESPN past season${ps.found !== 1 ? 's' : ''} (${ps.added} new)`);
     } else {
-      parts.push(`${ps.found} past season${ps.found !== 1 ? 's' : ''} (save failed)`);
+      parts.push(`${ps.found} ESPN past season${ps.found !== 1 ? 's' : ''} (save failed)`);
     }
   }
 
   return parts.join(' + ');
 }
 
-// Helper function to generate completion summary
-function getCompletionSummary(counts: DiscoveryCounts): string {
-  const { currentSeason: cs, pastSeasons: ps } = counts;
-  const newItems = cs.added + ps.added;
-
-  if (newItems === 0) {
-    return 'Everything already saved!';
-  }
-
-  const parts: string[] = [];
-  if (cs.added > 0) parts.push(`${cs.added} new league${cs.added !== 1 ? 's' : ''}`);
-  if (ps.added > 0) parts.push(`${ps.added} new past season${ps.added !== 1 ? 's' : ''}`);
-
-  return parts.join(' + ') + ' added';
-}
 
 function formatLastSync(value: string | null): string {
   if (!value) return 'Never';
@@ -327,7 +312,8 @@ export default function Popup() {
     return (
       <div className="popup">
         <div className="header">
-          <h1>Flaim</h1>
+          <img src="/assets/icons/icon-48.png" alt="" className="header-logo" />
+        <h1>Flaim</h1>
         </div>
         <div className="content">
           <div className="message info" style={{ textAlign: 'center' }}>
@@ -343,6 +329,7 @@ export default function Popup() {
   return (
     <div className="popup">
       <div className="header">
+        <img src="/assets/icons/icon-48.png" alt="" className="header-logo" />
         <h1>Flaim</h1>
         <SignedIn>
           <button
@@ -358,6 +345,7 @@ export default function Popup() {
       </div>
 
       <SignedIn>
+        <div className="main">
         <div className="user-row">
           {user?.imageUrl ? (
             <img className="user-avatar" src={user.imageUrl} alt={displayName || 'User'} />
@@ -407,18 +395,12 @@ export default function Popup() {
             >
               {supportCopied ? 'Copied' : 'Copy support info'}
             </button>
-            <button
-              className="button secondary full-width"
-              onClick={() => openFlaim('/account')}
-            >
-              View account
-            </button>
           </div>
         )}
-      </SignedIn>
 
       {/* Signed Out: Prompt to sign in at flaim.app */}
       <SignedOut>
+        <div className="main">
         <div className="content">
           <div className="message info">
             Sign in to Flaim to sync your ESPN credentials.
@@ -427,15 +409,13 @@ export default function Popup() {
             Sign in at flaim.app
           </button>
         </div>
+        </div>
         <div className="footer">
           <span className="link" onClick={() => openFlaim('/')}>
             Learn more about Flaim
           </span>
         </div>
       </SignedOut>
-
-      {/* Signed In: Show state-based content */}
-      <SignedIn>
         {state === 'loading' && (
           <div className="content">
             <div className="message info" style={{ textAlign: 'center' }}>
@@ -475,14 +455,14 @@ export default function Popup() {
               <div className="message info">Ready to sync your ESPN credentials to Flaim.</div>
             )}
             <button
-              className="button success full-width"
+              className="button primary full-width"
               onClick={handleFullSetup}
               disabled={isSetupInProgress}
             >
-              {hasCredentials ? 'Re-sync & Discover New Leagues/Seasons' : 'Sync to Flaim'}
+              {hasCredentials ? 'Re-sync & Discover New ESPN Leagues/Seasons' : 'Sync to Flaim'}
             </button>
             <button className="button secondary full-width" onClick={() => openFlaim('/leagues')}>
-              Manage Leagues
+              Your Leagues
             </button>
           </div>
         )}
@@ -500,9 +480,6 @@ export default function Popup() {
                 <span>Discovering leagues</span>
               </div>
             </div>
-            <div className="progress-bar">
-              <div className="progress-bar-fill" style={{ width: '50%' }}></div>
-            </div>
           </div>
         )}
 
@@ -518,19 +495,14 @@ export default function Popup() {
                 <span>Discovering leagues...</span>
               </div>
             </div>
-            <div className="progress-bar">
-              <div className="progress-bar-fill" style={{ width: '100%' }}></div>
-            </div>
           </div>
         )}
 
         {state === 'setup_complete' && (
           <div className="content">
-            <div className="message success">You're all set!</div>
-
             {discoveredLeagues.length > 0 && (
               <>
-                <div className="message info" style={{ marginBottom: 8 }}>
+                <div className="message info">
                   {getDiscoveryMessage(discoveryCounts)}
                 </div>
                 <div className="league-list">
@@ -547,10 +519,8 @@ export default function Popup() {
               </>
             )}
 
-            <div className="setup-summary">{getCompletionSummary(discoveryCounts)}</div>
-
             <button className="button primary full-width" onClick={() => openFlaim('/leagues')}>
-              Manage Leagues
+              Your Leagues
             </button>
             <button
               className="button secondary full-width"
@@ -581,6 +551,8 @@ export default function Popup() {
             </button>
           </div>
         )}
+
+        </div>{/* end .main */}
 
         {/* Footer for signed-in users */}
         {!isInSetupFlow && (
