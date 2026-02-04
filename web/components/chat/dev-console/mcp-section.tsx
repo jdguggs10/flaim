@@ -4,7 +4,7 @@ import { useMemo, useState, useCallback } from "react";
 import { Zap, Check, X, Loader2, ExternalLink } from "lucide-react";
 import useToolsStore from "@/stores/chat/useToolsStore";
 import useLeaguesStore from "@/stores/chat/useLeaguesStore";
-import { getAllEspnMcpServers, getSportConfig, McpServerInfo } from "@/lib/chat/league-mapper";
+import { getAllEspnMcpServers, McpServerInfo } from "@/lib/chat/league-mapper";
 import { DISABLE_ALL_TOOLS_SENTINEL } from "@/lib/chat/tools/mcp-constants";
 import { CollapsibleSection } from "./collapsible-section";
 import { CopyButton } from "./copy-button";
@@ -32,8 +32,6 @@ function ServerCard({ server }: { server: McpServerInfo }) {
     isTesting: false,
     error: null,
   });
-
-  const sportConfig = getSportConfig(server.sport);
 
   const serverHost = useMemo(() => {
     if (!server.server_url) return null;
@@ -166,8 +164,8 @@ function ServerCard({ server }: { server: McpServerInfo }) {
       {/* Server title with sport emoji */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span>{sportConfig?.emoji || "🎮"}</span>
-          <span className="font-medium text-sm">{sportConfig?.name || server.sport}</span>
+          <Zap className="h-4 w-4 text-primary" />
+          <span className="font-medium text-sm">{server.server_label}</span>
         </div>
         <StatusBadge />
       </div>

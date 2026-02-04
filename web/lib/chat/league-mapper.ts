@@ -203,45 +203,63 @@ export function validateLeagueSelection(league: any, team: any): boolean {
 }
 
 /**
- * Generate MCP tools configuration based on selected league
+ * Generate MCP tools configuration based on selected league.
+ * Returns the unified gateway config (sport routing is handled by tool parameters).
  */
-export function generateMcpToolsConfig(platform: Platform, sport: Sport) {
-  const mcpConfig = getMcpConfig(platform, sport);
-
-  if (!mcpConfig) {
-    return null;
-  }
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export function generateMcpToolsConfig(_platform: Platform, _sport: Sport) {
+  const server = getUnifiedMcpServer();
+  if (!server) return null;
 
   return {
     type: "mcp",
-    server_label: `fantasy-${sport}`,
-    server_url: normalizeMcpUrl(mcpConfig.serverUrl),
-    allowed_tools: mcpConfig.tools,
+    server_label: server.server_label,
+    server_url: server.server_url,
+    allowed_tools: server.tools,
     require_approval: "never"
   };
 }
 
 /**
- * MCP server info for multi-server mounting
+ * MCP server info
  */
 export interface McpServerInfo {
-  sport: Sport;
   server_label: string;
   server_url: string;
   tools: string[];
 }
 
+/** Unified tool list (same across all sports — routing is by tool parameters) */
+const UNIFIED_TOOLS = [
+  'get_user_session',
+  'get_ancient_history',
+  'get_league_info',
+  'get_standings',
+  'get_matchups',
+  'get_roster',
+  'get_free_agents',
+];
+
 /**
- * Get all configured ESPN MCP servers (those with a URL set)
- * Returns servers for all sports that have a configured URL
+ * Get the unified MCP server configuration.
+ * Returns a single server pointing to the unified gateway (handles all sports/platforms).
+ * Returns null if no URL is configured.
+ */
+export function getUnifiedMcpServer(): McpServerInfo | null {
+  const url = normalizeMcpUrl(process.env.NEXT_PUBLIC_FANTASY_MCP_URL || '');
+  if (!url) return null;
+  return {
+    server_label: 'fantasy',
+    server_url: url,
+    tools: UNIFIED_TOOLS,
+  };
+}
+
+/**
+ * Get unified server as an array (convenience for callers expecting a list).
+ * @deprecated Use getUnifiedMcpServer() instead.
  */
 export function getAllEspnMcpServers(): McpServerInfo[] {
-  return (Object.entries(MCP_SERVER_CONFIG.ESPN) as [Sport, { serverUrl: string; tools: string[] }][])
-    .map(([sport, cfg]) => ({
-      sport,
-      server_label: `fantasy-${sport}`,
-      server_url: normalizeMcpUrl(cfg.serverUrl),
-      tools: cfg.tools,
-    }))
-    .filter((s) => !!s.server_url);
+  const server = getUnifiedMcpServer();
+  return server ? [server] : [];
 }

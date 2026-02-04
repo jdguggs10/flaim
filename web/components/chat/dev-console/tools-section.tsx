@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { Wrench, Square, CheckSquare, RefreshCw, Loader2, Check, X, ChevronDown, ChevronRight } from "lucide-react";
 import useToolsStore from "@/stores/chat/useToolsStore";
 import useLeaguesStore from "@/stores/chat/useLeaguesStore";
-import { getAllEspnMcpServers, getSportConfig, McpServerInfo } from "@/lib/chat/league-mapper";
+import { getAllEspnMcpServers, McpServerInfo } from "@/lib/chat/league-mapper";
 import { DISABLE_ALL_TOOLS_SENTINEL } from "@/lib/chat/tools/mcp-constants";
 import { CollapsibleSection } from "./collapsible-section";
 import { Button } from "@/components/ui/button";
@@ -50,7 +50,6 @@ function ServerToolsGroup({
   onRefresh,
 }: ServerToolsGroupProps) {
   const [isExpanded, setIsExpanded] = useState(true);
-  const sportConfig = getSportConfig(server.sport);
   const disableAll = disabledTools.includes(DISABLE_ALL_TOOLS_SENTINEL);
   const disabledSet = new Set(disabledTools);
   const toolNames = toolsState.tools.map((t) => t.name);
@@ -79,8 +78,8 @@ function ServerToolsGroup({
           ) : (
             <ChevronRight className="h-4 w-4 text-muted-foreground" />
           )}
-          <span>{sportConfig?.emoji || "🎮"}</span>
-          <span className="font-medium text-sm">{sportConfig?.name || server.sport}</span>
+          <Wrench className="h-3.5 w-3.5 text-primary" />
+          <span className="font-medium text-sm">{server.server_label}</span>
           <span className="text-xs text-muted-foreground">
             ({enabledCount}/{toolsState.tools.length})
           </span>

@@ -8,6 +8,7 @@
  */
 
 import useLeaguesStore, { makeLeagueKey, type ChatLeague } from "@/stores/chat/useLeaguesStore";
+import { getDefaultSeasonYear, type SeasonSport } from "@/lib/season-utils";
 
 // =============================================================================
 // TEMPLATES - Edit these to change the format sent to the LLM
@@ -19,13 +20,14 @@ import useLeaguesStore, { makeLeagueKey, type ChatLeague } from "@/stores/chat/u
  */
 const ACTIVE_LEAGUE_TEMPLATE = `
 USER'S ACTIVE LEAGUE:
+- Platform: {{platform}}
 - League: {{leagueName}}
 - League ID: {{leagueId}}
 - Sport: {{sport}}
 - My Team: {{teamName}} (Team ID: {{teamId}})
 - Season: {{seasonYear}}
 
-Use league_id "{{leagueId}}" for tool calls when I ask about "my league" or "my team".
+Use platform "{{platform}}", league_id "{{leagueId}}", and sport "{{sport}}" for tool calls when I ask about "my league" or "my team".
 `.trim();
 
 /**
@@ -34,16 +36,17 @@ Use league_id "{{leagueId}}" for tool calls when I ask about "my league" or "my 
  */
 const OTHER_LEAGUES_TEMPLATE = `
 
-OTHER LEAGUES AVAILABLE:
+OTHER LEAGUES (current seasons):
 {{leaguesList}}
 If I ask about one of these, use the corresponding league_id.
+For historical leagues/seasons (2+ years old), use get_ancient_history.
 `.trim();
 
 /**
  * Template for each league in the "other leagues" list.
- * Placeholders: {{leagueName}}, {{sport}}, {{leagueId}}
+ * Placeholders: {{leagueName}}, {{sport}}, {{leagueId}}, {{seasonYear}}, {{platform}}
  */
-const OTHER_LEAGUE_ITEM_TEMPLATE = `- {{leagueName}} ({{sport}}, ID: {{leagueId}})`;
+const OTHER_LEAGUE_ITEM_TEMPLATE = `- {{leagueName}} ({{platform}} {{sport}}, ID: {{leagueId}}, {{seasonYear}})`;
 
 // =============================================================================
 // BUILDER FUNCTION
@@ -62,9 +65,23 @@ function fillTemplate(template: string, values: Record<string, string>): string 
 function formatOtherLeague(league: ChatLeague): string {
   return fillTemplate(OTHER_LEAGUE_ITEM_TEMPLATE, {
     leagueName: league.leagueName || `League ${league.leagueId}`,
+    platform: league.platform,
     sport: league.sport,
     leagueId: league.leagueId,
+    seasonYear: String(league.seasonYear || ""),
   });
+}
+
+/**
+ * Returns true if a league is from a recent season (current or previous year).
+ * Leagues 2+ years old are considered "ancient" and excluded from prompt context.
+ */
+function isRecentLeague(league: ChatLeague): boolean {
+  if (!league.seasonYear) return true; // include if unknown
+  const sport = league.sport as SeasonSport;
+  const hasSeason = sport === 'baseball' || sport === 'football';
+  const currentSeason = hasSeason ? getDefaultSeasonYear(sport) : new Date().getFullYear();
+  return league.seasonYear >= currentSeason - 1;
 }
 
 /**
@@ -86,6 +103,7 @@ export function buildLeagueContext(): string {
 
   // Build active league context from template
   const activeContext = fillTemplate(ACTIVE_LEAGUE_TEMPLATE, {
+    platform: activeLeague.platform,
     leagueName: activeLeague.leagueName || `League ${activeLeague.leagueId}`,
     leagueId: activeLeague.leagueId,
     sport: activeLeague.sport,
@@ -94,9 +112,9 @@ export function buildLeagueContext(): string {
     seasonYear: String(activeLeague.seasonYear || new Date().getFullYear()),
   });
 
-  // Find other leagues (excluding the active one)
+  // Find other leagues (excluding the active one, filtering to recent seasons only)
   const otherLeagues = leagues.filter(
-    (league) => makeLeagueKey(league) !== makeLeagueKey(activeLeague)
+    (league) => makeLeagueKey(league) !== makeLeagueKey(activeLeague) && isRecentLeague(league)
   );
 
   // If user only has one league, just return active context
