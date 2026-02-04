@@ -43,7 +43,7 @@
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+  font-family: ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
   font-size: 14px;
   line-height: 1.5;
   color: hsl(var(--foreground));
@@ -151,7 +151,7 @@ body {
   justify-content: space-between;
   gap: 8px;
   font-size: 12px;
-  color: hsl(var(--foreground));
+  color: hsl(var(--muted-foreground));
 }
 
 .diag-label {
@@ -160,11 +160,11 @@ body {
 
 .diag-value {
   text-align: right;
-  color: hsl(var(--foreground));
+  color: hsl(var(--muted-foreground));
 }
 
 .diag-value.mono {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
   font-size: 11px;
   color: hsl(var(--muted-foreground));
 }
@@ -188,14 +188,11 @@ body {
   font-size: 13px;
 }
 
-.message.info {
+.message.info,
+.message.success,
+.message.warning {
   background: hsl(var(--secondary));
-  color: hsl(var(--foreground));
-}
-
-.message.success {
-  background: hsl(var(--secondary));
-  color: hsl(var(--foreground));
+  color: hsl(var(--muted-foreground));
 }
 
 .message.error {
@@ -203,57 +200,17 @@ body {
   color: hsl(var(--destructive));
 }
 
-.message.warning {
-  background: hsl(var(--secondary));
-  color: hsl(var(--foreground));
-}
-
-.meta {
-  font-size: 12px;
-  color: hsl(var(--muted-foreground));
-  padding: 0 2px;
-}
-
-.input-group {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.input-group label {
-  font-size: 12px;
-  font-weight: 500;
-  color: hsl(var(--muted-foreground));
-}
-
-.input-group input {
-  padding: 8px 12px;
-  border: 1px solid hsl(var(--border));
-  border-radius: 6px;
-  font-size: 16px;
-  font-family: monospace;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  text-align: center;
-  background: hsl(var(--background));
-  color: hsl(var(--foreground));
-}
-
-.input-group input:focus {
-  outline: none;
-  border-color: hsl(var(--ring));
-  box-shadow: 0 0 0 2px hsl(var(--ring) / 0.2);
-}
-
 .button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 10px 16px;
+  min-height: 32px;
+  padding: 6px 12px;
   border: none;
   border-radius: 6px;
-  font-size: 14px;
+  font-family: inherit;
+  font-size: 12px;
   font-weight: 500;
   cursor: pointer;
   transition: background-color 0.15s, opacity 0.15s;
@@ -289,7 +246,7 @@ body {
 }
 
 .link {
-  color: hsl(var(--foreground));
+  color: hsl(var(--muted-foreground));
   text-decoration: underline;
   cursor: pointer;
 }
@@ -323,15 +280,6 @@ body {
   }
 }
 
-.icon {
-  width: 16px;
-  height: 16px;
-}
-
-.icon.large {
-  width: 24px;
-  height: 24px;
-}
 
 /* =============================================================================
    SETUP FLOW STYLES (v1.1)
@@ -352,11 +300,11 @@ body {
 }
 
 .setup-step.completed {
-  color: hsl(var(--foreground));
+  color: hsl(var(--muted-foreground));
 }
 
 .setup-step.active {
-  color: hsl(var(--foreground));
+  color: hsl(var(--muted-foreground));
   font-weight: 500;
 }
 
@@ -374,7 +322,7 @@ body {
 }
 
 .step-icon.check {
-  color: hsl(var(--foreground));
+  color: hsl(var(--muted-foreground));
   font-weight: bold;
 }
 
@@ -383,19 +331,6 @@ body {
   height: 14px;
 }
 
-.progress-bar {
-  height: 4px;
-  background: hsl(var(--secondary));
-  border-radius: 2px;
-  overflow: hidden;
-  margin-top: 8px;
-}
-
-.progress-bar-fill {
-  height: 100%;
-  background: hsl(var(--foreground));
-  transition: width 0.3s ease;
-}
 
 .league-list {
   display: flex;
@@ -416,9 +351,6 @@ body {
   border-bottom: none;
 }
 
-.league-item.default-league {
-  /* no special styling in monochromatic theme */
-}
 
 .league-item .sport-emoji {
   font-size: 18px;
@@ -436,7 +368,7 @@ body {
 .league-item .league-name {
   font-weight: 500;
   font-size: 13px;
-  color: hsl(var(--foreground));
+  color: hsl(var(--muted-foreground));
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -450,31 +382,5 @@ body {
   text-overflow: ellipsis;
 }
 
-.input-group select {
-  padding: 10px 12px;
-  border: 1px solid hsl(var(--border));
-  border-radius: 6px;
-  font-size: 14px;
-  background: hsl(var(--background));
-  color: hsl(var(--foreground));
-  cursor: pointer;
-  appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='currentColor'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 10px center;
-  background-size: 16px;
-  padding-right: 36px;
-}
 
-.input-group select:focus {
-  outline: none;
-  border-color: hsl(var(--ring));
-  box-shadow: 0 0 0 2px hsl(var(--ring) / 0.2);
-}
 
-.setup-summary {
-  font-size: 13px;
-  color: hsl(var(--muted-foreground));
-  text-align: center;
-  padding: 8px 0;
-}

@@ -81,4 +81,3 @@ chrome.runtime.onMessageExternal.addListener(
   }
 );
 
-console.log('[Flaim] Background service worker started (Clerk auth)');

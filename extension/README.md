@@ -2,7 +2,7 @@
 
 Chrome extension that auto-captures ESPN credentials (SWID, espn_s2 cookies) and syncs them to Flaim via Clerk Sync Host (no pairing codes). Eliminates manual DevTools cookie extraction.
 
-## User Flow (v1.4.0)
+## User Flow (v1.5.0)
 
 1. Install extension from [Chrome Web Store](https://chromewebstore.google.com/detail/flaim-espn-fantasy-connec/mbnokejgglkfgkeeenolgdpcnfakpbkn)
 2. Sign in to `flaim.app` (session syncs to the extension)
@@ -41,7 +41,7 @@ npm run build:dev
 npm run build
 
 # Create zip for Chrome Web Store upload
-zip -r flaim-extension-v1.4.2.zip dist/
+zip -r flaim-extension-v1.5.0.zip dist/
 ```
 
 ### Load Unpacked Extension

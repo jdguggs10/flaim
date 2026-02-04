@@ -28,8 +28,7 @@ export async function getEspnCredentials(): Promise<EspnCredentials | null> {
       swid: swidCookie.value,
       s2: s2Cookie.value,
     };
-  } catch (error) {
-    console.error('Failed to read ESPN cookies:', error);
+  } catch {
     return null;
   }
 }

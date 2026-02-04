@@ -5,6 +5,7 @@ interface ImportMetaEnv {
   readonly VITE_CLERK_SYNC_HOST: string;
   readonly VITE_CLERK_FRONTEND_API: string;
   readonly VITE_EXTENSION_DEV_KEY?: string;
+  readonly VITE_SITE_BASE?: string;
 }
 
 interface ImportMeta {

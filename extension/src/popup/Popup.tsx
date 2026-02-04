@@ -206,7 +206,7 @@ export default function Popup() {
 
   // Handle full setup flow (sync + discover)
   const handleFullSetup = async () => {
-    if (isSetupInProgress) return;
+    if (isSetupInProgress || !isLoaded || !isSignedIn) return;
 
     const token = await getToken();
     if (!token) {
@@ -270,7 +270,7 @@ export default function Popup() {
     setIsRefreshing(true);
     setError(null);
 
-    if (!isSignedIn) {
+    if (!isLoaded || !isSignedIn) {
       setState('ready');
       setIsRefreshing(false);
       return;
@@ -294,7 +294,7 @@ export default function Popup() {
       }
       setState('ready');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to refresh status');
+      setError(err instanceof Error ? err.message : 'Unable to reach Flaim');
       setState('ready');
     } finally {
       setIsRefreshing(false);
@@ -315,9 +315,11 @@ export default function Popup() {
           <img src="/assets/icons/icon-48.png" alt="" className="header-logo" />
         <h1>Flaim</h1>
         </div>
-        <div className="content">
-          <div className="message info" style={{ textAlign: 'center' }}>
-            <span className="spinner"></span>
+        <div className="main">
+          <div className="content">
+            <div className="message info" style={{ textAlign: 'center' }}>
+              <span className="spinner"></span>
+            </div>
           </div>
         </div>
       </div>
@@ -344,6 +346,26 @@ export default function Popup() {
         </SignedIn>
       </div>
 
+      {/* Signed Out: Prompt to sign in at flaim.app */}
+      <SignedOut>
+        <div className="main">
+          <div className="content">
+            <div className="message info">
+              Sign in to Flaim to sync your ESPN credentials.
+            </div>
+            <button className="button primary full-width" onClick={() => openFlaim('/sign-in')}>
+              Sign in at flaim.app
+            </button>
+          </div>
+        </div>
+        <div className="footer">
+          <span className="link" onClick={() => openFlaim('/')}>
+            Learn more about Flaim
+          </span>
+        </div>
+      </SignedOut>
+
+      {/* Signed In: Show state-based content */}
       <SignedIn>
         <div className="main">
         <div className="user-row">
@@ -398,24 +420,6 @@ export default function Popup() {
           </div>
         )}
 
-      {/* Signed Out: Prompt to sign in at flaim.app */}
-      <SignedOut>
-        <div className="main">
-        <div className="content">
-          <div className="message info">
-            Sign in to Flaim to sync your ESPN credentials.
-          </div>
-          <button className="button primary full-width" onClick={() => openFlaim('/sign-in')}>
-            Sign in at flaim.app
-          </button>
-        </div>
-        </div>
-        <div className="footer">
-          <span className="link" onClick={() => openFlaim('/')}>
-            Learn more about Flaim
-          </span>
-        </div>
-      </SignedOut>
         {state === 'loading' && (
           <div className="content">
             <div className="message info" style={{ textAlign: 'center' }}>
@@ -557,15 +561,15 @@ export default function Popup() {
         {/* Footer for signed-in users */}
         {!isInSetupFlow && (
           <div className="footer">
-            <span
-              className="link"
+            <button
+              className="button secondary"
               onClick={() => {
                 setError(null);
                 void clerk.signOut();
               }}
             >
               Sign Out
-            </span>
+            </button>
           </div>
         )}
       </SignedIn>

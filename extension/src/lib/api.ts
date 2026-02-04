@@ -90,6 +90,7 @@ export async function syncCredentials(
 
   if (!response.ok) {
     const error = (await response.json()) as ApiError;
+    console.warn('[Flaim] sync failed:', response.status, error.error);
     throw new Error(error.error_description || error.error || 'Sync failed');
   }
 
@@ -112,6 +113,7 @@ export async function checkStatus(token: string): Promise<StatusResponse> {
 
   if (!response.ok) {
     const error = (await response.json()) as ApiError;
+    console.warn('[Flaim] status check failed:', response.status, error.error);
     throw new Error(error.error_description || error.error || 'Status check failed');
   }
 
@@ -162,6 +164,7 @@ export async function discoverLeagues(token: string): Promise<DiscoverResponse> 
 
   if (!response.ok) {
     const error = (await response.json()) as ApiError;
+    console.warn('[Flaim] discover failed:', response.status, error.error);
     throw new Error(error.error_description || error.error || 'Discovery failed');
   }
 
