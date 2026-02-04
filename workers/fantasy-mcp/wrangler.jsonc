@@ -32,6 +32,14 @@
         {
           "pattern": "api.flaim.app/mcp*",
           "zone_name": "flaim.app"
+        },
+        {
+          "pattern": "api.flaim.app/favicon.ico",
+          "zone_name": "flaim.app"
+        },
+        {
+          "pattern": "api.flaim.app/apple-icon.png",
+          "zone_name": "flaim.app"
         }
       ],
       // Service bindings for platform workers

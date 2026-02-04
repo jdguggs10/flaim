@@ -222,6 +222,7 @@ app.all('/fantasy/mcp/*', async (c) => {
 // Favicon — redirect to canonical icon so crawlers/clients pick up the current asset
 app.get('/favicon.ico', (c) => c.redirect('https://flaim.app/favicon.ico', 302));
 app.get('/fantasy/favicon.ico', (c) => c.redirect('https://flaim.app/favicon.ico', 302));
+app.get('/apple-icon.png', (c) => c.redirect('https://flaim.app/apple-icon.png', 302));
 
 // 404 handler
 app.notFound((c) => {
