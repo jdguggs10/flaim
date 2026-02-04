@@ -12,7 +12,6 @@
 - Email Support Upgrade: Upgrade cloudflare email functionality
 
 ## Maintenance & Refactoring
-- **Tailwind v3 → v4**: Migrate from Tailwind 3.4 to v4 (CSS-first config, no more `tailwind.config.js`). Non-urgent — v3 works fine, but v4 is faster and the future direction.
 
 
 ## Infrastructure & UX Polish
