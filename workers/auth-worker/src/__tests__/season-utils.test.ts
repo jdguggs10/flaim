@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { getDefaultSeasonYear, isCurrentSeason, SeasonSport } from '../season-utils';
+import {
+  getDefaultSeasonYear,
+  isCurrentSeason,
+  toCanonicalYear,
+  toPlatformYear,
+  getSeasonLabel,
+  SeasonSport,
+} from '../season-utils';
 
 describe('season-utils', () => {
   describe('getDefaultSeasonYear', () => {
@@ -21,16 +28,16 @@ describe('season-utils', () => {
       });
     });
 
-    // Football: rolls over Jun 1
+    // Football: rolls over Jul 1
     describe('football', () => {
-      it('returns previous year before Jun 1', () => {
-        const may15 = new Date('2026-05-15T12:00:00-04:00');
-        expect(getDefaultSeasonYear('football', may15)).toBe(2025);
+      it('returns previous year before Jul 1', () => {
+        const jun15 = new Date('2026-06-15T12:00:00-04:00');
+        expect(getDefaultSeasonYear('football', jun15)).toBe(2025);
       });
 
-      it('returns current year on Jun 1', () => {
-        const jun1 = new Date('2026-06-01T00:00:00-04:00');
-        expect(getDefaultSeasonYear('football', jun1)).toBe(2026);
+      it('returns current year on Jul 1', () => {
+        const jul1 = new Date('2026-07-01T00:00:00-04:00');
+        expect(getDefaultSeasonYear('football', jul1)).toBe(2026);
       });
 
       it('returns current year in January (post-playoffs)', () => {
@@ -39,29 +46,34 @@ describe('season-utils', () => {
       });
     });
 
-    // Basketball: rolls over Oct 1
+    // Basketball: rolls over Aug 1
     describe('basketball', () => {
-      it('returns previous year before Oct 1', () => {
-        const sep15 = new Date('2026-09-15T12:00:00-04:00');
-        expect(getDefaultSeasonYear('basketball', sep15)).toBe(2025);
+      it('returns previous year before Aug 1', () => {
+        const jul15 = new Date('2026-07-15T12:00:00-04:00');
+        expect(getDefaultSeasonYear('basketball', jul15)).toBe(2025);
       });
 
-      it('returns current year on Oct 1', () => {
-        const oct1 = new Date('2026-10-01T00:00:00-04:00');
-        expect(getDefaultSeasonYear('basketball', oct1)).toBe(2026);
+      it('returns current year on Aug 1', () => {
+        const aug1 = new Date('2026-08-01T00:00:00-04:00');
+        expect(getDefaultSeasonYear('basketball', aug1)).toBe(2026);
+      });
+
+      it('returns previous year in January (mid-season)', () => {
+        const jan15 = new Date('2026-01-15T12:00:00-05:00');
+        expect(getDefaultSeasonYear('basketball', jan15)).toBe(2025);
       });
     });
 
-    // Hockey: rolls over Oct 1
+    // Hockey: rolls over Aug 1
     describe('hockey', () => {
-      it('returns previous year before Oct 1', () => {
-        const sep15 = new Date('2026-09-15T12:00:00-04:00');
-        expect(getDefaultSeasonYear('hockey', sep15)).toBe(2025);
+      it('returns previous year before Aug 1', () => {
+        const jul15 = new Date('2026-07-15T12:00:00-04:00');
+        expect(getDefaultSeasonYear('hockey', jul15)).toBe(2025);
       });
 
-      it('returns current year on Oct 1', () => {
-        const oct1 = new Date('2026-10-01T00:00:00-04:00');
-        expect(getDefaultSeasonYear('hockey', oct1)).toBe(2026);
+      it('returns current year on Aug 1', () => {
+        const aug1 = new Date('2026-08-01T00:00:00-04:00');
+        expect(getDefaultSeasonYear('hockey', aug1)).toBe(2026);
       });
     });
 
@@ -91,6 +103,83 @@ describe('season-utils', () => {
       const jan15 = new Date('2026-01-15T12:00:00-05:00');
       expect(isCurrentSeason('football', 2025, jan15)).toBe(true);
       expect(isCurrentSeason('football', 2026, jan15)).toBe(false);
+    });
+  });
+
+  describe('toCanonicalYear', () => {
+    it('subtracts 1 for ESPN basketball', () => {
+      expect(toCanonicalYear(2025, 'basketball', 'espn')).toBe(2024);
+    });
+
+    it('subtracts 1 for ESPN hockey', () => {
+      expect(toCanonicalYear(2025, 'hockey', 'espn')).toBe(2024);
+    });
+
+    it('passes through ESPN baseball', () => {
+      expect(toCanonicalYear(2025, 'baseball', 'espn')).toBe(2025);
+    });
+
+    it('passes through ESPN football', () => {
+      expect(toCanonicalYear(2025, 'football', 'espn')).toBe(2025);
+    });
+
+    it('passes through Yahoo basketball', () => {
+      expect(toCanonicalYear(2024, 'basketball', 'yahoo')).toBe(2024);
+    });
+
+    it('passes through Yahoo hockey', () => {
+      expect(toCanonicalYear(2024, 'hockey', 'yahoo')).toBe(2024);
+    });
+  });
+
+  describe('toPlatformYear', () => {
+    it('adds 1 for ESPN basketball', () => {
+      expect(toPlatformYear(2024, 'basketball', 'espn')).toBe(2025);
+    });
+
+    it('adds 1 for ESPN hockey', () => {
+      expect(toPlatformYear(2024, 'hockey', 'espn')).toBe(2025);
+    });
+
+    it('passes through ESPN baseball', () => {
+      expect(toPlatformYear(2025, 'baseball', 'espn')).toBe(2025);
+    });
+
+    it('passes through ESPN football', () => {
+      expect(toPlatformYear(2025, 'football', 'espn')).toBe(2025);
+    });
+
+    it('passes through Yahoo basketball', () => {
+      expect(toPlatformYear(2024, 'basketball', 'yahoo')).toBe(2024);
+    });
+
+    it('round-trips correctly for ESPN basketball', () => {
+      const espnYear = 2025;
+      const canonical = toCanonicalYear(espnYear, 'basketball', 'espn');
+      const backToEspn = toPlatformYear(canonical, 'basketball', 'espn');
+      expect(backToEspn).toBe(espnYear);
+    });
+  });
+
+  describe('getSeasonLabel', () => {
+    it('returns hyphenated label for basketball', () => {
+      expect(getSeasonLabel(2024, 'basketball')).toBe('2024-25');
+    });
+
+    it('returns hyphenated label for hockey', () => {
+      expect(getSeasonLabel(2025, 'hockey')).toBe('2025-26');
+    });
+
+    it('returns plain year for baseball', () => {
+      expect(getSeasonLabel(2025, 'baseball')).toBe('2025');
+    });
+
+    it('returns plain year for football', () => {
+      expect(getSeasonLabel(2025, 'football')).toBe('2025');
+    });
+
+    it('handles century boundary', () => {
+      expect(getSeasonLabel(2099, 'basketball')).toBe('2099-00');
     });
   });
 });

@@ -16,6 +16,7 @@ import {
 } from '../espn-types';
 import { getLeagueInfo } from './get-league-info';
 import { getLeagueTeams } from './get-league-teams';
+import { toCanonicalYear } from '../season-utils';
 
 // =============================================================================
 // FAN API TYPES
@@ -265,28 +266,33 @@ export async function discoverAndSaveLeagues(
         continue;
       }
 
+      // Normalize ESPN-native seasonId to canonical start year for DB operations.
+      // ESPN uses end-year for NBA/NHL (e.g., 2025 for the 2024-25 season).
+      // For baseball/football this is a no-op.
+      const canonicalSeasonYear = toCanonicalYear(league.seasonId, sport, 'espn');
+
       // Count this league as found
       currentSeason.found++;
 
-      // Check if league already exists
+      // Check if league already exists (DB stores canonical year)
       const exists = await storage.leagueExists(
         userId,
         sport,
         league.leagueId,
-        league.seasonId
+        canonicalSeasonYear
       );
 
       if (exists) {
         currentSeason.alreadySaved++;
       } else {
-        // Add the league
+        // Add the league with canonical year
         const result = await storage.addLeague(userId, {
           leagueId: league.leagueId,
           sport: sport as 'football' | 'baseball' | 'basketball' | 'hockey',
           leagueName: league.leagueName,
           teamId: String(league.teamId),
           teamName: league.teamName,
-          seasonYear: league.seasonId,
+          seasonYear: canonicalSeasonYear,
         });
 
         if (result.success) {
@@ -296,14 +302,14 @@ export async function discoverAndSaveLeagues(
         }
       }
 
-      // Add to discovered list for UI (regardless of whether it was new or existing)
+      // Add to discovered list for UI (canonical year)
       discovered.push({
         sport: sport as 'football' | 'baseball' | 'basketball' | 'hockey',
         leagueId: league.leagueId,
         leagueName: league.leagueName,
         teamId: String(league.teamId),
         teamName: league.teamName,
-        seasonYear: league.seasonId,
+        seasonYear: canonicalSeasonYear,
       });
 
       // 3. Discover historical seasons for this league (synchronously)
@@ -381,14 +387,18 @@ async function discoverHistoricalSeasons(
         // User was a member - count it as found
         result.found++;
 
-        // Check if already saved
-        const exists = await storage.leagueExists(userId, sport, league.leagueId, year);
+        // Normalize ESPN-native year to canonical for DB operations.
+        // `year` stays ESPN-native for API calls above; only DB writes use canonical.
+        const canonicalYear = toCanonicalYear(year, sport, 'espn');
+
+        // Check if already saved (DB stores canonical year)
+        const exists = await storage.leagueExists(userId, sport, league.leagueId, canonicalYear);
         if (exists) {
           result.alreadySaved++;
           continue;
         }
 
-        // Get league info for historical season (for league name)
+        // Get league info for historical season (for league name) — uses ESPN-native year
         const historicalInfo = await getLeagueInfo(swid, s2, league.leagueId, year, league.gameId);
 
         const addResult = await storage.addLeague(userId, {
@@ -397,7 +407,7 @@ async function discoverHistoricalSeasons(
           leagueName: historicalInfo?.leagueName || league.leagueName,
           teamId: String(league.teamId),
           teamName: league.teamName,
-          seasonYear: year,
+          seasonYear: canonicalYear,
         });
 
         if (addResult.success) {

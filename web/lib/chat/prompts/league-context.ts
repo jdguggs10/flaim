@@ -8,7 +8,6 @@
  */
 
 import useLeaguesStore, { makeLeagueKey, type ChatLeague } from "@/stores/chat/useLeaguesStore";
-import { getDefaultSeasonYear, type SeasonSport } from "@/lib/season-utils";
 
 // =============================================================================
 // TEMPLATES - Edit these to change the format sent to the LLM
@@ -78,10 +77,8 @@ function formatOtherLeague(league: ChatLeague): string {
  */
 function isRecentLeague(league: ChatLeague): boolean {
   if (!league.seasonYear) return true; // include if unknown
-  const sport = league.sport as SeasonSport;
-  const hasSeason = sport === 'baseball' || sport === 'football';
-  const currentSeason = hasSeason ? getDefaultSeasonYear(sport) : new Date().getFullYear();
-  return league.seasonYear >= currentSeason - 1;
+  const currentYear = new Date().getFullYear();
+  return league.seasonYear >= currentYear - 1;
 }
 
 /**
@@ -101,13 +98,8 @@ export function buildLeagueContext(): string {
     return "";
   }
 
-  // Use deterministic season year for sports with rollover logic,
-  // so the prompt always reflects the current season even if the store is stale.
-  const sport = activeLeague.sport as SeasonSport;
-  const hasSeason = sport === 'baseball' || sport === 'football';
-  const seasonYear = hasSeason
-    ? getDefaultSeasonYear(sport)
-    : (activeLeague.seasonYear || new Date().getFullYear());
+  // The stored seasonYear is canonical (auth-worker normalizes at discovery).
+  const seasonYear = activeLeague.seasonYear || new Date().getFullYear();
 
   // Build active league context from template
   const activeContext = fillTemplate(ACTIVE_LEAGUE_TEMPLATE, {

@@ -1,7 +1,7 @@
 # The Season Year Problem
 
 **Date:** 2026-02-04
-**Status:** Open — needs design decision before adding basketball/hockey support
+**Status:** Resolved — Option B implemented (normalize to start year)
 
 ## Problem Statement
 
@@ -28,16 +28,29 @@ This is easy to miss: the NFL season runs Sep–Feb, so the "2025 NFL season" te
 
 ESPN is internally inconsistent — it uses the **start year** for NFL but the **end year** for NBA/NHL. Yahoo consistently uses the **start year** for all sports. Neither is "wrong"; these are just the conventions each platform chose.
 
+### Platform comparison (verified 2026-02-04)
+
+| Platform | MLB 2025 | NFL 2025-26 | NBA 2024-25 | NHL 2024-25 | Convention |
+|----------|----------|-------------|-------------|-------------|------------|
+| **ESPN** | `2025` | `2025` | `2025` | `2025` | Start year for MLB/NFL, **end year for NBA/NHL** |
+| **Yahoo** | `2025` | `2025` | `2024` | `2024` | **Start year for all sports** |
+| **Sleeper** | `2025` | `2025` | `2024` | `2024` | **Start year for all sports** |
+
+Verified via Sleeper's public state API (`api.sleeper.app/v1/state/{sport}`):
+- NBA: `season: "2025"`, `season_start_date: "2025-10-21"` → `2025` = the **2025-26** season (start year)
+- NHL: `season: "2025"`, `season_start_date: "2025-10-07"` → `2025` = the **2025-26** season (start year)
+- NFL: `season: "2025"`, `season_type: "post"` → `2025` = the **2025-26** season (start year)
+- MLB: `season: "2026"`, `previous_season: 2025` → single-year seasons, no ambiguity
+
+**ESPN is the only outlier.** Yahoo and Sleeper both use start year consistently. The translation problem is narrower than initially thought — it only affects ESPN basketball and hockey.
+
 ### Other platforms for reference
 
 | Platform | NBA/NHL 2024-25 | Convention | Source |
 |----------|-----------------|------------|--------|
-| Sleeper | `2025` | End year | [docs](https://docs.sleeper.com/) |
 | NHL official API | `20242025` | Both years concatenated | [ref](https://github.com/Zmalski/NHL-API-Reference) |
 | NBA official API | `2024-25` | Hyphenated string | |
 | SportsDataIO | `2024REG` | Start year + type suffix | [docs](https://support.sportsdata.io/hc/en-us/articles/15196612633623-Process-Guide-Season-Types-and-Parameters) |
-
-There is no industry standard.
 
 ## Concrete Example of the Problem
 
@@ -228,19 +241,65 @@ Leagues reference `season_id` FK instead of storing a bare integer.
 **Pros:** Most robust. All three concerns cleanly separated.
 **Cons:** Heaviest change. Must populate reference data. Over-engineering for current scale.
 
-## Recommendation
+## Recommendation: Option B — Normalize to start year
 
-TBD — needs further discussion. Key questions to decide:
+**Decision:** Flaim's canonical `season_year` is always the year the season **starts**.
 
-1. **How soon is basketball/hockey support coming?** This determines urgency.
-2. **Do we need cross-platform season comparison?** If a user has ESPN NBA and Yahoo NBA for the same season, does any part of the app need to know they're the same season? (League grouping in UI? LLM context? Historical analysis?)
-3. **How much complexity is acceptable?** Option B is the best balance of correctness and simplicity, but the +1/-1 translation is a footgun if someone forgets it.
+The translation is narrower than initially feared. ESPN is the only platform that deviates, and only for two sports. Yahoo and Sleeper already use start year natively.
+
+| Sport | Season | Flaim stores | ESPN needs | Yahoo needs | Sleeper needs |
+|-------|--------|-------------|------------|-------------|---------------|
+| Baseball | Apr–Oct 2025 | `2025` | `2025` (same) | `2025` (same) | `2025` (same) |
+| Football | Sep 2025–Feb 2026 | `2025` | `2025` (same) | `2025` (same) | `2025` (same) |
+| Basketball | Oct 2024–Jun 2025 | `2024` | `2025` (+1) | `2024` (same) | `2024` (same) |
+| Hockey | Oct 2024–Jun 2025 | `2024` | `2025` (+1) | `2024` (same) | `2024` (same) |
+
+**Translation only applies to: ESPN + basketball/hockey.** Everything else is pass-through.
+
+### Implementation
+
+Two functions in `season-utils.ts`, called at two boundaries:
+
+```ts
+/** ESPN uses end-year for NBA/NHL; all other platform/sport combos use start-year. */
+function toCanonicalYear(platformYear: number, sport: Sport, platform: Platform): number {
+  if ((sport === 'basketball' || sport === 'hockey') && platform === 'ESPN') {
+    return platformYear - 1;
+  }
+  return platformYear;
+}
+
+function toPlatformYear(canonicalYear: number, sport: Sport, platform: Platform): number {
+  if ((sport === 'basketball' || sport === 'hockey') && platform === 'ESPN') {
+    return canonicalYear + 1;
+  }
+  return canonicalYear;
+}
+```
+
+1. **At discovery** (write to Supabase): `toCanonicalYear(espnSeasonId, sport, 'ESPN')`
+2. **At MCP gateway** (call ESPN workers): `toPlatformYear(canonicalYear, sport, 'ESPN')`
+
+No migration needed — no basketball/hockey data exists yet. `getDefaultSeasonYear()` extends to basketball/hockey returning start year, no platform parameter needed.
+
+## Implementation (2026-02-04)
+
+Option B was implemented. Key changes:
+
+- **Canonical form:** `season_year` always stores the start year of the season for all sports.
+- **Rollover months:** Baseball Feb 1, Football Jul 1, Basketball Aug 1, Hockey Aug 1.
+- **Translation functions:** `toCanonicalYear()` and `toPlatformYear()` in `workers/auth-worker/src/season-utils.ts`. Only ESPN basketball/hockey need translation (±1); everything else is pass-through.
+- **ESPN discovery** (`workers/auth-worker/src/v3/league-discovery.ts`): Normalizes via `toCanonicalYear()` before all Supabase writes. ESPN API calls keep native values.
+- **ESPN-client** (`workers/espn-client/src/index.ts`): Translates canonical → ESPN-native at the `/execute` entry point via `toEspnSeasonYear()` before routing to sport handlers.
+- **MCP gateway** (`workers/fantasy-mcp/src/mcp/tools.ts`): Updated rollover months. Added `getSeasonLabel()` for human-readable labels (e.g., "2024-25" for basketball). Enriched `get_user_session` response with season labels.
+- **Web app:** Deleted `web/lib/season-utils.ts`. Callers replaced with `new Date().getFullYear()` for UI defaults — auth-worker is the source of truth for season computation.
+- **No migration needed:** No basketball/hockey data existed in Supabase at time of implementation.
 
 ## References
 
 - [ESPN Fantasy API (espn-api)](https://github.com/cwendt94/espn-api) — uses end year for NBA/NHL
 - [Yahoo Fantasy Sports API Guide](https://developer.yahoo.com/fantasysports/guide/) — uses start year for all sports
-- [Sleeper API](https://docs.sleeper.com/) — uses end year
+- [Sleeper API](https://docs.sleeper.com/) — uses start year for all sports (verified via `api.sleeper.app/v1/state/{sport}`)
 - [SportsDataIO Season Parameters](https://support.sportsdata.io/hc/en-us/articles/15196612633623-Process-Guide-Season-Types-and-Parameters) — uses start year + type suffix
 - [NHL API Reference](https://github.com/Zmalski/NHL-API-Reference) — concatenates both years
 - [YFPY (Yahoo Fantasy Python)](https://github.com/uberfastman/yfpy) — passes through Yahoo's start year

@@ -42,7 +42,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import { getDefaultSeasonYear, type SeasonSport } from '@/lib/season-utils';
 import { useEspnCredentials } from '@/lib/use-espn-credentials';
 
 const CHROME_EXTENSION_URL = "https://chromewebstore.google.com/detail/flaim-espn-fantasy-connec/mbnokejgglkfgkeeenolgdpcnfakpbkn";
@@ -241,7 +240,7 @@ function LeaguesPageContent() {
   const [discoverDialogOpen, setDiscoverDialogOpen] = useState(false);
   const [newLeagueId, setNewLeagueId] = useState('');
   const [newLeagueSport, setNewLeagueSport] = useState<Sport>('football');
-  const [newLeagueSeason, setNewLeagueSeason] = useState<number>(() => getDefaultSeasonYear('football'));
+  const [newLeagueSeason, setNewLeagueSeason] = useState<number>(() => new Date().getFullYear());
   const [seasonManuallySet, setSeasonManuallySet] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
   const [verifiedLeague, setVerifiedLeague] = useState<VerifiedLeague | null>(null);
@@ -1378,34 +1377,30 @@ function LeaguesPageContent() {
                           </DialogHeader>
                           <div className="space-y-4 pt-2">
                             {/* Quick season toggles */}
-                            {(newLeagueSport === 'baseball' || newLeagueSport === 'football') && (
-                              <div className="flex gap-2">
-                                <Button
-                                  variant={newLeagueSeason === getDefaultSeasonYear(newLeagueSport as SeasonSport) ? 'default' : 'outline'}
-                                  size="sm"
-                                  onClick={() => {
-                                    const sport = newLeagueSport as SeasonSport;
-                                    setNewLeagueSeason(getDefaultSeasonYear(sport));
-                                    setSeasonManuallySet(false);
-                                  }}
-                                  disabled={isVerifying}
-                                >
-                                  This season
-                                </Button>
-                                <Button
-                                  variant={newLeagueSeason === getDefaultSeasonYear(newLeagueSport as SeasonSport) - 1 ? 'default' : 'outline'}
-                                  size="sm"
-                                  onClick={() => {
-                                    const sport = newLeagueSport as SeasonSport;
-                                    setNewLeagueSeason(getDefaultSeasonYear(sport) - 1);
-                                    setSeasonManuallySet(true);
-                                  }}
-                                  disabled={isVerifying}
-                                >
-                                  Last season
-                                </Button>
-                              </div>
-                            )}
+                            <div className="flex gap-2">
+                              <Button
+                                variant={newLeagueSeason === new Date().getFullYear() ? 'default' : 'outline'}
+                                size="sm"
+                                onClick={() => {
+                                  setNewLeagueSeason(new Date().getFullYear());
+                                  setSeasonManuallySet(false);
+                                }}
+                                disabled={isVerifying}
+                              >
+                                This season
+                              </Button>
+                              <Button
+                                variant={newLeagueSeason === new Date().getFullYear() - 1 ? 'default' : 'outline'}
+                                size="sm"
+                                onClick={() => {
+                                  setNewLeagueSeason(new Date().getFullYear() - 1);
+                                  setSeasonManuallySet(true);
+                                }}
+                                disabled={isVerifying}
+                              >
+                                Last season
+                              </Button>
+                            </div>
                             <div className="space-y-2">
                               <Label htmlFor="leagueId">League ID</Label>
                               <Input
@@ -1425,8 +1420,8 @@ function LeaguesPageContent() {
                                   onValueChange={(v) => {
                                     const sport = v as Sport;
                                     setNewLeagueSport(sport);
-                                    if (!seasonManuallySet && (sport === 'baseball' || sport === 'football')) {
-                                      setNewLeagueSeason(getDefaultSeasonYear(sport));
+                                    if (!seasonManuallySet) {
+                                      setNewLeagueSeason(new Date().getFullYear());
                                     }
                                   }}
                                   disabled={isVerifying}

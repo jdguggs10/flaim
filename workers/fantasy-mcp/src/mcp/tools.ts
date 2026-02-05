@@ -159,23 +159,31 @@ function getCurrentSeason(sport: Sport): number {
   const year = Number(ny.find((p) => p.type === 'year')?.value);
   const month = Number(ny.find((p) => p.type === 'month')?.value);
 
-  // Different rollover dates for different sports
+  // Rollover months — must match auth-worker's ROLLOVER_MONTHS.
+  // Returns canonical start year for the current season.
   switch (sport) {
     case 'baseball':
-      // Rollover on Feb 1 (month 2)
-      return month < 2 ? year - 1 : year;
+      return month < 2 ? year - 1 : year;   // Feb 1
     case 'football':
-      // Rollover on Jun 1 (month 6) - NFL season spans calendar years
-      return month < 6 ? year - 1 : year;
+      return month < 7 ? year - 1 : year;   // Jul 1
     case 'basketball':
-      // Rollover on October 1 (month 10)
-      return month < 10 ? year - 1 : year;
+      return month < 8 ? year - 1 : year;   // Aug 1
     case 'hockey':
-      // Rollover on October 1 (month 10)
-      return month < 10 ? year - 1 : year;
+      return month < 8 ? year - 1 : year;   // Aug 1
     default:
       return year;
   }
+}
+
+/**
+ * Get a human-readable season label from a canonical start year.
+ * Cross-year sports (basketball, hockey) → "2024-25"; others → "2025".
+ */
+function getSeasonLabel(canonicalYear: number, sport: string): string {
+  if (sport === 'basketball' || sport === 'hockey') {
+    return `${canonicalYear}-${String(canonicalYear + 1).slice(2)}`;
+  }
+  return String(canonicalYear);
 }
 
 // =============================================================================
@@ -193,7 +201,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       name: 'get_user_session',
       title: 'User Session',
       description:
-        "IMPORTANT: Call this tool FIRST before any other tool. Returns the user's configured fantasy leagues across all platforms (ESPN, Yahoo), along with current date/time and season info. Use the returned leagueId, teamId, platform, and sport values for all subsequent tool calls.",
+        "Returns the user's configured fantasy leagues with current season info. Use the returned platform, sport, leagueId, teamId, and seasonYear values for all subsequent tool calls. season_year always represents the start year of the season.",
       inputSchema: {},
       handler: async (_args, env, authHeader, correlationId) => {
         try {
@@ -365,10 +373,10 @@ export function getUnifiedTools(): UnifiedTool[] {
             success: true,
             currentDate: new Date().toISOString(),
             currentSeasons: {
-              football: getCurrentSeason('football'),
-              baseball: getCurrentSeason('baseball'),
-              basketball: getCurrentSeason('basketball'),
-              hockey: getCurrentSeason('hockey'),
+              football: { year: getCurrentSeason('football'), label: getSeasonLabel(getCurrentSeason('football'), 'football') },
+              baseball: { year: getCurrentSeason('baseball'), label: getSeasonLabel(getCurrentSeason('baseball'), 'baseball') },
+              basketball: { year: getCurrentSeason('basketball'), label: getSeasonLabel(getCurrentSeason('basketball'), 'basketball') },
+              hockey: { year: getCurrentSeason('hockey'), label: getSeasonLabel(getCurrentSeason('hockey'), 'hockey') },
             },
             timezone: 'America/New_York',
             totalLeaguesFound: leagues.length,
@@ -381,6 +389,7 @@ export function getUnifiedTools(): UnifiedTool[] {
                   leagueId: defaultLeague.leagueId,
                   teamId: defaultLeague.teamId,
                   seasonYear: defaultLeague.seasonYear,
+                  season: getSeasonLabel(defaultLeague.seasonYear || getCurrentSeason(defaultLeague.sport as Sport), defaultLeague.sport || ''),
                   leagueName: defaultLeague.leagueName,
                   teamName: defaultLeague.teamName,
                 }
@@ -394,6 +403,7 @@ export function getUnifiedTools(): UnifiedTool[] {
                   leagueName: league.leagueName,
                   sport: league.sport,
                   seasonYear: league.seasonYear,
+                  season: getSeasonLabel(league.seasonYear || getCurrentSeason(sport as Sport), sport),
                   teamId: league.teamId,
                   teamName: league.teamName,
                 },
@@ -547,7 +557,7 @@ export function getUnifiedTools(): UnifiedTool[] {
           .enum(['football', 'baseball', 'basketball', 'hockey'])
           .describe('Sport type (e.g., "football", "baseball")'),
         league_id: z.string().describe('League ID (get from get_user_session)'),
-        season_year: z.number().describe('Season year (e.g., 2024)'),
+        season_year: z.number().describe('Season start year (e.g., 2025 for MLB 2025, 2024 for NBA 2024-25)'),
       } as ZodShape,
       handler: async (args, env, authHeader, correlationId) => {
         const params: ToolParams = {
@@ -577,7 +587,7 @@ export function getUnifiedTools(): UnifiedTool[] {
           .enum(['football', 'baseball', 'basketball', 'hockey'])
           .describe('Sport type (e.g., "football", "baseball")'),
         league_id: z.string().describe('League ID (get from get_user_session)'),
-        season_year: z.number().describe('Season year (e.g., 2024)'),
+        season_year: z.number().describe('Season start year (e.g., 2025 for MLB 2025, 2024 for NBA 2024-25)'),
       } as ZodShape,
       handler: async (args, env, authHeader, correlationId) => {
         const params: ToolParams = {
@@ -607,7 +617,7 @@ export function getUnifiedTools(): UnifiedTool[] {
           .enum(['football', 'baseball', 'basketball', 'hockey'])
           .describe('Sport type (e.g., "football", "baseball")'),
         league_id: z.string().describe('League ID (get from get_user_session)'),
-        season_year: z.number().describe('Season year (e.g., 2024)'),
+        season_year: z.number().describe('Season start year (e.g., 2025 for MLB 2025, 2024 for NBA 2024-25)'),
         week: z.number().optional().describe('Week number (optional, defaults to current week)'),
       } as ZodShape,
       handler: async (args, env, authHeader, correlationId) => {
@@ -639,7 +649,7 @@ export function getUnifiedTools(): UnifiedTool[] {
           .enum(['football', 'baseball', 'basketball', 'hockey'])
           .describe('Sport type (e.g., "football", "baseball")'),
         league_id: z.string().describe('League ID (get from get_user_session)'),
-        season_year: z.number().describe('Season year (e.g., 2024)'),
+        season_year: z.number().describe('Season start year (e.g., 2025 for MLB 2025, 2024 for NBA 2024-25)'),
         team_id: z.string().optional().describe('Team ID (optional, defaults to user\'s team)'),
         week: z.number().optional().describe('Week number (optional, defaults to current week)'),
       } as ZodShape,
@@ -673,7 +683,7 @@ export function getUnifiedTools(): UnifiedTool[] {
           .enum(['football', 'baseball', 'basketball', 'hockey'])
           .describe('Sport type (e.g., "football", "baseball")'),
         league_id: z.string().describe('League ID (get from get_user_session)'),
-        season_year: z.number().describe('Season year (e.g., 2024)'),
+        season_year: z.number().describe('Season start year (e.g., 2025 for MLB 2025, 2024 for NBA 2024-25)'),
         position: z
           .string()
           .optional()

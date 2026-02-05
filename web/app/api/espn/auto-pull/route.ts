@@ -12,7 +12,6 @@ import type {
   EspnLeagueInfo,
   SportName
 } from '@/lib/espn-types';
-import { getDefaultSeasonYear, type SeasonSport } from '@/lib/season-utils';
 
 export async function POST(request: NextRequest) {
   try {
@@ -35,11 +34,8 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Use provided seasonYear or compute default based on sport + date
-    const seasonYear = requestedSeasonYear ||
-      ((sport === 'baseball' || sport === 'football')
-        ? getDefaultSeasonYear(sport as SeasonSport)
-        : new Date().getFullYear());
+    // Pass through user's requested year; ESPN-client computes default if omitted.
+    const seasonYear = requestedSeasonYear;
 
     console.log(`[auto-pull] Using season year: ${seasonYear} (requested: ${requestedSeasonYear || 'none'})`);
 

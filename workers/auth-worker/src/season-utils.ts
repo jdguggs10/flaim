@@ -4,11 +4,14 @@
  * Provides deterministic season year calculation based on sport and date.
  * Uses America/New_York timezone for consistency with ESPN fantasy seasons.
  *
- * Rollover rules:
- * - Baseball: defaults to previous year until Feb 1, then current year
- * - Football: defaults to previous year until Jun 1, then current year
- * - Basketball: defaults to previous year until Oct 1, then current year
- * - Hockey: defaults to previous year until Oct 1, then current year
+ * Canonical form: season_year always stores the START year of the season.
+ * See docs/dev/season-year-problem.md for rationale.
+ *
+ * Rollover rules (when the "current season" flips to next year):
+ * - Baseball: Feb 1 (~10 weeks before Opening Day late March)
+ * - Football: Jul 1 (~10 weeks before NFL kickoff early September)
+ * - Basketball: Aug 1 (~10 weeks before NBA opening night late October)
+ * - Hockey: Aug 1 (~10 weeks before NHL opening night early October)
  */
 
 export type SeasonSport = 'baseball' | 'football' | 'basketball' | 'hockey';
@@ -19,9 +22,9 @@ export type SeasonSport = 'baseball' | 'football' | 'basketball' | 'hockey';
  */
 const ROLLOVER_MONTHS: Record<SeasonSport, number> = {
   baseball: 2,    // Feb 1
-  football: 6,    // Jun 1
-  basketball: 10, // Oct 1
-  hockey: 10,     // Oct 1
+  football: 7,    // Jul 1
+  basketball: 8,  // Aug 1
+  hockey: 8,      // Aug 1
 };
 
 /**
@@ -69,4 +72,43 @@ export function getDefaultSeasonYear(sport: SeasonSport, now = new Date()): numb
 export function isCurrentSeason(sport: SeasonSport, seasonYear: number, now = new Date()): boolean {
   const currentSeason = getDefaultSeasonYear(sport, now);
   return seasonYear === currentSeason;
+}
+
+/**
+ * Normalize a platform-specific season year to Flaim's canonical form (start year).
+ *
+ * ESPN uses the END year for NBA/NHL (e.g., 2025 for the 2024-25 season).
+ * All other platform/sport combinations already use the start year.
+ */
+export function toCanonicalYear(platformYear: number, sport: string, platform: string): number {
+  if ((sport === 'basketball' || sport === 'hockey') && platform === 'espn') {
+    return platformYear - 1;
+  }
+  return platformYear;
+}
+
+/**
+ * Convert Flaim's canonical season year (start year) to a platform-native value.
+ *
+ * ESPN expects the END year for NBA/NHL (e.g., 2025 for the 2024-25 season).
+ * All other platform/sport combinations expect the start year as-is.
+ */
+export function toPlatformYear(canonicalYear: number, sport: string, platform: string): number {
+  if ((sport === 'basketball' || sport === 'hockey') && platform === 'espn') {
+    return canonicalYear + 1;
+  }
+  return canonicalYear;
+}
+
+/**
+ * Get a human-readable season label from a canonical start year.
+ *
+ * Cross-year sports (basketball, hockey) return "2024-25" format.
+ * Single-year sports (baseball) and football return "2025" format.
+ */
+export function getSeasonLabel(canonicalYear: number, sport: string): string {
+  if (sport === 'basketball' || sport === 'hockey') {
+    return `${canonicalYear}-${String(canonicalYear + 1).slice(2)}`;
+  }
+  return String(canonicalYear);
 }

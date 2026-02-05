@@ -6,7 +6,6 @@
  */
 import { create } from 'zustand';
 import type { EspnLeague } from '@/lib/espn-types';
-import { getDefaultSeasonYear, type SeasonSport } from '@/lib/season-utils';
 
 /** Platform-agnostic league used throughout the chat UI */
 export interface ChatLeague {
@@ -295,11 +294,9 @@ export const useLeaguesStore = create<LeaguesState>()((set, get) => ({
 
   getLeaguesForSport: (sport) => {
     const { leagues } = get();
-    // Only show current-season leagues (no historic seasons)
-    const seasonSports = ['baseball', 'football'] as const;
-    const currentYear = seasonSports.includes(sport as SeasonSport)
-      ? getDefaultSeasonYear(sport as SeasonSport)
-      : new Date().getFullYear();
+    // Only show current-season leagues (no historic seasons).
+    // seasonYear is canonical (auth-worker normalizes); calendar year is close enough for filtering.
+    const currentYear = new Date().getFullYear();
     return leagues.filter(l => l.sport === sport && l.seasonYear === currentYear);
   },
 }));
