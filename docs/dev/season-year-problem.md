@@ -85,9 +85,11 @@ On Jan 15, 2025 (mid-NBA-season), what should this function return for basketbal
 **In the database unique constraint:**
 The current key is `(user, league_id, sport, season_year)`. If someone had the same NBA league on both platforms (hypothetically), they'd be stored with different season_year values, making it impossible to correlate them.
 
-## Current State of the Code
+## State Before Implementation
 
-### How `seasonYear` flows through the system
+> This section describes how the code worked **before** the fix was implemented. See "Implementation" below for the current state.
+
+### How `seasonYear` flowed through the system
 
 **ESPN:**
 ```
@@ -105,22 +107,7 @@ Yahoo API → game[0].season
   → getYahooLeagues() → /api/connect/yahoo/leagues → useLeaguesStore → ChatLeague.seasonYear
 ```
 
-Neither flow transforms the value — both store exactly what the platform returns. This is correct for round-tripping back to the same platform's API.
-
-### Recent fix (2026-02-04): `getDefaultSeasonYear()` in league context
-
-The league context builder (`league-context.ts`) was using the stored `seasonYear` from the client store, which could be stale if a season rolled over after discovery. The fix uses `getDefaultSeasonYear(sport)` to compute the current season dynamically for the LLM prompt:
-
-```ts
-const hasSeason = sport === 'baseball' || sport === 'football';
-const seasonYear = hasSeason
-  ? getDefaultSeasonYear(sport)
-  : (activeLeague.seasonYear || new Date().getFullYear());
-```
-
-**This fix is safe but incomplete.** It only handles baseball and football (where the platforms agree). For basketball and hockey, it falls through to the stored value, which means:
-- It would work correctly for whichever platform the league belongs to (round-trip is preserved)
-- But it wouldn't address the display/comparison inconsistency across platforms
+Neither flow transformed the value — both stored exactly what the platform returned. This was correct for round-tripping back to the same platform's API, but problematic for cross-platform comparison.
 
 ### Database schema
 
