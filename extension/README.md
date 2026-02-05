@@ -40,8 +40,8 @@ npm run build:dev
 # Production build (strips localhost, ready for CWS)
 npm run build
 
-# Create zip for Chrome Web Store upload
-zip -r flaim-extension-v1.5.0.zip dist/
+# Create zip for Chrome Web Store upload (manifest.json must be at archive root)
+cd dist && zip -r ../flaim-extension-v1.5.0.zip . && cd ..
 ```
 
 ### Load Unpacked Extension
@@ -149,7 +149,7 @@ web/app/(site)/privacy/         # Privacy policy page
 
 1. Bump `version` in `manifest.json` (e.g., "1.0.0" → "1.0.1")
 2. Run `npm run build`
-3. Zip the `dist/` folder
+3. Zip from inside `dist/`: `cd dist && zip -r ../flaim-extension-vX.Y.Z.zip . && cd ..`
 4. Upload to [Chrome Web Store Developer Dashboard](https://chrome.google.com/webstore/devconsole)
 5. Submit for review (updates typically reviewed in hours to 1 day)
 6. Chrome auto-updates users within ~24 hours

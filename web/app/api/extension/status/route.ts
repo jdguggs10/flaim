@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
  * -----------------------------------------------------------
  * Check extension connection status.
  * Called by the extension to verify connection and credentials.
- * Requires Bearer token authentication (extension token).
+ * Requires Bearer token authentication (Clerk JWT).
  * Proxies to auth-worker GET /extension/status.
  */
 export async function GET(request: NextRequest) {

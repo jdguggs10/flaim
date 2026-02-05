@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
  * -----------------------------------------------------------
  * Discover and save all ESPN leagues for a user.
  * Called by the extension after syncing credentials.
- * Requires Bearer token authentication (extension token).
+ * Requires Bearer token authentication (Clerk JWT).
  * Proxies to auth-worker POST /extension/discover.
  */
 export async function POST(request: NextRequest) {

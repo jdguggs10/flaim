@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
  * -----------------------------------------------------------
  * Sync ESPN credentials from the Chrome extension.
  * Called by the extension after capturing cookies from ESPN.
- * Requires Bearer token authentication (extension token).
+ * Requires Bearer token authentication (Clerk JWT).
  * Proxies to auth-worker POST /extension/sync.
  */
 export async function POST(request: NextRequest) {

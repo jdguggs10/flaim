@@ -47,5 +47,5 @@ All tools take explicit parameters: `platform`, `sport`, `league_id`, `season_ye
 - `fantasy-mcp`
 
 ## Extension Version
-- Chrome extension `manifest.json`: `1.4.0`
+- Chrome extension `manifest.json`: `1.5.0`
 

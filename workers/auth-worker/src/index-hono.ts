@@ -69,6 +69,7 @@ export interface Env {
   SUPABASE_SERVICE_KEY: string;
   NODE_ENV?: string;
   ENVIRONMENT?: string; // 'dev' | 'preview' | 'prod'
+  CLERK_ISSUER?: string; // Expected Clerk JWT issuer (e.g. "https://clerk.flaim.app")
   // Yahoo OAuth
   YAHOO_CLIENT_ID?: string;
   YAHOO_CLIENT_SECRET?: string;
@@ -220,6 +221,26 @@ async function verifyJwtAndGetUserId(authorization: string | null, env: Env): Pr
   if (!payload.iss) throw new Error('JWT missing iss');
   if (!header.kid) throw new Error('JWT missing kid');
   if (payload.exp && Date.now() / 1000 > payload.exp) throw new Error('JWT expired');
+
+  // Validate issuer against allowlist to prevent forged JWKS attacks
+  const allowedIssuers = [
+    env.CLERK_ISSUER,            // Explicit override (prod: "https://clerk.flaim.app")
+    'https://clerk.flaim.app',   // Production Clerk issuer
+  ].filter(Boolean) as string[];
+
+  const isProd = env.ENVIRONMENT === 'prod' && env.NODE_ENV === 'production';
+  if (isProd) {
+    if (!allowedIssuers.includes(payload.iss)) {
+      throw new Error(`JWT issuer "${payload.iss}" not in allowlist`);
+    }
+  } else {
+    // Dev/preview: also allow Clerk dev issuers
+    const isClerkIssuer = allowedIssuers.includes(payload.iss) ||
+      payload.iss.endsWith('.clerk.accounts.dev');
+    if (!isClerkIssuer) {
+      throw new Error(`JWT issuer "${payload.iss}" not recognized`);
+    }
+  }
 
   const keys = await fetchJwks(payload.iss, getJwksOptions(env));
   const jwk = keys.get(header.kid);

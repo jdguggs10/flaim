@@ -151,7 +151,7 @@ export default function PrivacyPage() {
               You have the right to:
             </p>
             <ul className="list-disc list-inside text-muted-foreground mt-2 space-y-1">
-              <li>Disconnect the extension at any time, which immediately revokes our access</li>
+              <li>Disconnect the extension at any time and remove stored credentials via <a href="/leagues" className="text-primary hover:underline">flaim.app/leagues</a></li>
               <li>Request a copy of your stored data</li>
               <li>Request deletion of your account and all associated data</li>
             </ul>
