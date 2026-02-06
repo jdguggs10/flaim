@@ -33,4 +33,12 @@ export {
 export { authWorkerFetch } from './auth-fetch.js';
 
 // Tracing utilities
-export { CORRELATION_ID_HEADER, getCorrelationId, withCorrelationId } from './tracing.js';
+export {
+  CORRELATION_ID_HEADER,
+  EVAL_RUN_HEADER,
+  EVAL_TRACE_HEADER,
+  getCorrelationId,
+  getEvalContext,
+  withCorrelationId,
+  withEvalHeaders,
+} from './tracing.js';

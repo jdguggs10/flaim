@@ -3,7 +3,14 @@ import { cors } from 'hono/cors';
 import type { Env, ExecuteRequest, ExecuteResponse, Sport } from './types';
 import { footballHandlers } from './sports/football/handlers';
 import { baseballHandlers } from './sports/baseball/handlers';
-import { CORRELATION_ID_HEADER, getCorrelationId } from '@flaim/worker-shared';
+import {
+  CORRELATION_ID_HEADER,
+  EVAL_RUN_HEADER,
+  EVAL_TRACE_HEADER,
+  getCorrelationId,
+  getEvalContext,
+} from '@flaim/worker-shared';
+import { logEvalEvent } from './logging';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -20,6 +27,7 @@ app.get('/health', (c) => {
 
 app.post('/execute', async (c) => {
   const correlationId = getCorrelationId(c.req.raw);
+  const { evalRunId, evalTraceId } = getEvalContext(c.req.raw);
   const startTime = Date.now();
 
   try {
@@ -28,19 +36,53 @@ app.post('/execute', async (c) => {
     const { sport, league_id, season_year } = params;
 
     console.log(`[yahoo-client] ${correlationId} ${tool} ${sport} league=${league_id} season=${season_year}`);
+    logEvalEvent({
+      service: 'yahoo-client',
+      phase: 'execute_start',
+      correlation_id: correlationId,
+      run_id: evalRunId,
+      trace_id: evalTraceId,
+      tool,
+      sport,
+      league_id,
+    });
 
     const result = await routeToSport(c.env, sport, tool, params, authHeader, correlationId);
 
     const duration = Date.now() - startTime;
     console.log(`[yahoo-client] ${correlationId} ${tool} ${sport} completed in ${duration}ms success=${result.success}`);
+    logEvalEvent({
+      service: 'yahoo-client',
+      phase: 'execute_end',
+      correlation_id: correlationId,
+      run_id: evalRunId,
+      trace_id: evalTraceId,
+      tool,
+      sport,
+      league_id,
+      duration_ms: duration,
+      status: String(result.success),
+    });
 
     const response = c.json(result);
     response.headers.set(CORRELATION_ID_HEADER, correlationId);
+    if (evalRunId) response.headers.set(EVAL_RUN_HEADER, evalRunId);
+    if (evalTraceId) response.headers.set(EVAL_TRACE_HEADER, evalTraceId);
     return response;
   } catch (error) {
     const duration = Date.now() - startTime;
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.error(`[yahoo-client] ${correlationId} error in ${duration}ms: ${message}`);
+    logEvalEvent({
+      service: 'yahoo-client',
+      phase: 'execute_error',
+      correlation_id: correlationId,
+      run_id: evalRunId,
+      trace_id: evalTraceId,
+      duration_ms: duration,
+      status: 'error',
+      error: message,
+    });
 
     const response = c.json({
       success: false,
@@ -48,6 +90,8 @@ app.post('/execute', async (c) => {
       code: 'INTERNAL_ERROR'
     } satisfies ExecuteResponse, 500);
     response.headers.set(CORRELATION_ID_HEADER, correlationId);
+    if (evalRunId) response.headers.set(EVAL_RUN_HEADER, evalRunId);
+    if (evalTraceId) response.headers.set(EVAL_TRACE_HEADER, evalTraceId);
     return response;
   }
 });

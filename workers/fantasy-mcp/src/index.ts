@@ -1,14 +1,18 @@
 // workers/fantasy-mcp/src/index.ts
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import {
   createMcpCorsHeaders,
   isCorsPreflightRequest,
   CORRELATION_ID_HEADER,
+  EVAL_RUN_HEADER,
+  EVAL_TRACE_HEADER,
   getCorrelationId,
+  getEvalContext,
 } from '@flaim/worker-shared';
 import type { Env } from './types';
 import { createFantasyMcpServer } from './mcp/server';
 import { createMcpHandler } from './mcp/create-mcp-handler';
+import { logEvalEvent } from './logging';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -131,49 +135,64 @@ function buildMcpAuthErrorResponse(request: Request): Response {
   );
 }
 
-// MCP endpoints - handle both /mcp (direct) and /fantasy/mcp (via route pattern)
-app.all('/mcp', async (c) => {
+async function handleMcpRequest(c: Context<{ Bindings: Env }>): Promise<Response> {
   const correlationId = getCorrelationId(c.req.raw);
-  // Check for Authorization header
+  const { evalRunId, evalTraceId } = getEvalContext(c.req.raw);
+  const startTime = Date.now();
+
+  logEvalEvent({
+    service: 'fantasy-mcp',
+    phase: 'request_start',
+    correlation_id: correlationId,
+    run_id: evalRunId,
+    trace_id: evalTraceId,
+    message: c.req.path,
+  });
+
   const authHeader = c.req.header('Authorization');
   if (!authHeader) {
     return buildMcpAuthErrorResponse(c.req.raw);
   }
 
-  // Create MCP server and handler
   const server = createFantasyMcpServer({
     env: c.env,
     authHeader,
     correlationId,
+    evalRunId,
+    evalTraceId,
   });
   const handler = createMcpHandler(server);
-
-  // Handle the request
   const response = await handler(c.req.raw, c.env, c.executionCtx);
+
   response.headers.set(CORRELATION_ID_HEADER, correlationId);
+  if (evalRunId) {
+    response.headers.set(EVAL_RUN_HEADER, evalRunId);
+  }
+  if (evalTraceId) {
+    response.headers.set(EVAL_TRACE_HEADER, evalTraceId);
+  }
+
+  logEvalEvent({
+    service: 'fantasy-mcp',
+    phase: 'request_end',
+    correlation_id: correlationId,
+    run_id: evalRunId,
+    trace_id: evalTraceId,
+    duration_ms: Date.now() - startTime,
+    status: String(response.status),
+    message: c.req.path,
+  });
+
   return response;
+}
+
+// MCP endpoints - handle both /mcp (direct) and /fantasy/mcp (via route pattern)
+app.all('/mcp', async (c) => {
+  return handleMcpRequest(c);
 });
 
 app.all('/mcp/*', async (c) => {
-  const correlationId = getCorrelationId(c.req.raw);
-  // Check for Authorization header
-  const authHeader = c.req.header('Authorization');
-  if (!authHeader) {
-    return buildMcpAuthErrorResponse(c.req.raw);
-  }
-
-  // Create MCP server and handler
-  const server = createFantasyMcpServer({
-    env: c.env,
-    authHeader,
-    correlationId,
-  });
-  const handler = createMcpHandler(server);
-
-  // Handle the request
-  const response = await handler(c.req.raw, c.env, c.executionCtx);
-  response.headers.set(CORRELATION_ID_HEADER, correlationId);
-  return response;
+  return handleMcpRequest(c);
 });
 
 // Routes via api.flaim.app/fantasy/* (Cloudflare route passes full path)
@@ -184,39 +203,11 @@ app.get('/fantasy/health', async (c) => {
 });
 
 app.all('/fantasy/mcp', async (c) => {
-  const correlationId = getCorrelationId(c.req.raw);
-  const authHeader = c.req.header('Authorization');
-  if (!authHeader) {
-    return buildMcpAuthErrorResponse(c.req.raw);
-  }
-
-  const server = createFantasyMcpServer({
-    env: c.env,
-    authHeader,
-    correlationId,
-  });
-  const handler = createMcpHandler(server);
-  const response = await handler(c.req.raw, c.env, c.executionCtx);
-  response.headers.set(CORRELATION_ID_HEADER, correlationId);
-  return response;
+  return handleMcpRequest(c);
 });
 
 app.all('/fantasy/mcp/*', async (c) => {
-  const correlationId = getCorrelationId(c.req.raw);
-  const authHeader = c.req.header('Authorization');
-  if (!authHeader) {
-    return buildMcpAuthErrorResponse(c.req.raw);
-  }
-
-  const server = createFantasyMcpServer({
-    env: c.env,
-    authHeader,
-    correlationId,
-  });
-  const handler = createMcpHandler(server);
-  const response = await handler(c.req.raw, c.env, c.executionCtx);
-  response.headers.set(CORRELATION_ID_HEADER, correlationId);
-  return response;
+  return handleMcpRequest(c);
 });
 
 // Favicon — redirect to canonical icon so crawlers/clients pick up the current asset

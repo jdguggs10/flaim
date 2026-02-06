@@ -4,10 +4,17 @@ import { cors } from 'hono/cors';
 import type { Env, ExecuteRequest, ExecuteResponse, Sport, ToolParams } from './types';
 import { baseballHandlers } from './sports/baseball/handlers';
 import { footballHandlers } from './sports/football/handlers';
-import { CORRELATION_ID_HEADER, getCorrelationId } from '@flaim/worker-shared';
+import {
+  CORRELATION_ID_HEADER,
+  EVAL_RUN_HEADER,
+  EVAL_TRACE_HEADER,
+  getCorrelationId,
+  getEvalContext,
+} from '@flaim/worker-shared';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import { discoverSeasons, initializeOnboarding } from './onboarding/handlers';
 import { toEspnSeasonYear } from './shared/season';
+import { logEvalEvent } from './logging';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -57,6 +64,7 @@ app.post('/onboarding/discover-seasons', async (c) => {
 // Main execute endpoint - called by fantasy-mcp gateway via service binding
 app.post('/execute', async (c) => {
   const correlationId = getCorrelationId(c.req.raw);
+  const { evalRunId, evalTraceId } = getEvalContext(c.req.raw);
   const body = await c.req.json<ExecuteRequest>();
   const { tool, params, authHeader } = body;
   const { sport, league_id, season_year } = params;
@@ -67,25 +75,64 @@ app.post('/execute', async (c) => {
 
   const startTime = Date.now();
   console.log(`[espn-client] ${correlationId} ${tool} ${sport} league=${league_id} season=${espnParams.season_year}`);
+  logEvalEvent({
+    service: 'espn-client',
+    phase: 'execute_start',
+    correlation_id: correlationId,
+    run_id: evalRunId,
+    trace_id: evalTraceId,
+    tool,
+    sport,
+    league_id,
+  });
 
   // Route to sport-specific handler
   try {
     const result = await routeToSport(c.env, sport, tool, espnParams, authHeader, correlationId);
     const duration = Date.now() - startTime;
     console.log(`[espn-client] ${correlationId} ${tool} ${sport} completed in ${duration}ms success=${result.success}`);
+    logEvalEvent({
+      service: 'espn-client',
+      phase: 'execute_end',
+      correlation_id: correlationId,
+      run_id: evalRunId,
+      trace_id: evalTraceId,
+      tool,
+      sport,
+      league_id,
+      duration_ms: duration,
+      status: String(result.success),
+    });
     const response = c.json(result);
     response.headers.set(CORRELATION_ID_HEADER, correlationId);
+    if (evalRunId) response.headers.set(EVAL_RUN_HEADER, evalRunId);
+    if (evalTraceId) response.headers.set(EVAL_TRACE_HEADER, evalTraceId);
     return response;
   } catch (error) {
     const duration = Date.now() - startTime;
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.error(`[espn-client] ${correlationId} ${tool} ${sport} failed in ${duration}ms: ${message}`);
+    logEvalEvent({
+      service: 'espn-client',
+      phase: 'execute_error',
+      correlation_id: correlationId,
+      run_id: evalRunId,
+      trace_id: evalTraceId,
+      tool,
+      sport,
+      league_id,
+      duration_ms: duration,
+      status: 'error',
+      error: message,
+    });
     const response = c.json({
       success: false,
       error: message,
       code: 'INTERNAL_ERROR'
     } satisfies ExecuteResponse, 500);
     response.headers.set(CORRELATION_ID_HEADER, correlationId);
+    if (evalRunId) response.headers.set(EVAL_RUN_HEADER, evalRunId);
+    if (evalTraceId) response.headers.set(EVAL_TRACE_HEADER, evalTraceId);
     return response;
   }
 });

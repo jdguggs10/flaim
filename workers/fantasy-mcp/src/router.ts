@@ -1,5 +1,6 @@
 // workers/fantasy-mcp/src/router.ts
 import type { Env, Platform, ToolParams } from './types';
+import { withCorrelationId, withEvalHeaders } from '@flaim/worker-shared';
 
 export interface RouteResult {
   success: boolean;
@@ -16,7 +17,9 @@ export async function routeToClient(
   tool: string,
   params: ToolParams,
   authHeader?: string,
-  correlationId?: string
+  correlationId?: string,
+  evalRunId?: string,
+  evalTraceId?: string
 ): Promise<RouteResult> {
   const { platform } = params;
 
@@ -32,15 +35,14 @@ export async function routeToClient(
 
   // Forward request to platform worker
   try {
-    const headers: Record<string, string> = {
+    const baseHeaders: Record<string, string> = {
       'Content-Type': 'application/json',
     };
     if (authHeader) {
-      headers['Authorization'] = authHeader;
+      baseHeaders['Authorization'] = authHeader;
     }
-    if (correlationId) {
-      headers['X-Correlation-ID'] = correlationId;
-    }
+    const withCorrelation = correlationId ? withCorrelationId(baseHeaders, correlationId) : new Headers(baseHeaders);
+    const headers = withEvalHeaders(withCorrelation, evalRunId, evalTraceId);
 
     const response = await client.fetch(
       new Request('https://internal/execute', {

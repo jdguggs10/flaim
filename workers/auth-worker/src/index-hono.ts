@@ -59,6 +59,7 @@ import {
   YahooConnectEnv,
 } from './yahoo-connect-handlers';
 import { YahooStorage } from './yahoo-storage';
+import { logEvalEvent } from './logging';
 
 // =============================================================================
 // TYPES
@@ -92,6 +93,8 @@ type JwtPayload = { sub?: string; iss?: string; exp?: number; [k: string]: unkno
 // =============================================================================
 
 const RATE_LIMIT_PER_DAY = 200;
+const EVAL_RUN_HEADER = 'X-Flaim-Eval-Run';
+const EVAL_TRACE_HEADER = 'X-Flaim-Eval-Trace';
 
 const ALLOWED_ORIGINS = [
   'https://flaim-*.vercel.app',
@@ -374,6 +377,20 @@ const api = new Hono<{ Bindings: Env }>();
 // CORS middleware - handles preflight and adds headers to all responses
 api.use('*', async (c, next) => {
   const corsHeaders = getCorsHeaders(c.req.raw);
+  const evalRunId = c.req.header(EVAL_RUN_HEADER) || undefined;
+  const evalTraceId = c.req.header(EVAL_TRACE_HEADER) || undefined;
+  const correlationId = c.req.header('X-Correlation-ID') || undefined;
+  const startTime = Date.now();
+
+  logEvalEvent({
+    service: 'auth-worker',
+    phase: 'request_start',
+    correlation_id: correlationId,
+    run_id: evalRunId,
+    trace_id: evalTraceId,
+    path: c.req.path,
+    method: c.req.method,
+  });
 
   // Handle preflight
   if (c.req.method === 'OPTIONS') {
@@ -389,11 +406,23 @@ api.use('*', async (c, next) => {
       headers.set(key, value);
     }
   });
-  return new Response(c.res.body, {
+  const response = new Response(c.res.body, {
     status: c.res.status,
     statusText: c.res.statusText,
     headers,
   });
+  logEvalEvent({
+    service: 'auth-worker',
+    phase: 'request_end',
+    correlation_id: correlationId,
+    run_id: evalRunId,
+    trace_id: evalTraceId,
+    path: c.req.path,
+    method: c.req.method,
+    status: String(response.status),
+    duration_ms: Date.now() - startTime,
+  });
+  return response;
 });
 
 // =============================================================================

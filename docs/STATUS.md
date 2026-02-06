@@ -2,7 +2,7 @@
 
 Facts that should stay in sync with the codebase. This is the source of truth for tools, parity, and deploy targets.
 
-**Last updated:** 2026-01-29
+**Last updated:** 2026-02-06
 
 ## MCP Endpoints (current)
 - Unified gateway: `https://api.flaim.app/mcp` (legacy alias: `/fantasy/mcp`)
@@ -40,6 +40,20 @@ All tools take explicit parameters: `platform`, `sport`, `league_id`, `season_ye
 - `espn-client`
 - `yahoo-client`
 
+## Eval Observability (current)
+- Eval runner sends `X-Flaim-Eval-Run` and `X-Flaim-Eval-Trace` on MCP calls.
+- Header propagation implemented through gateway and downstream worker calls.
+- Structured JSON eval logs implemented in:
+  - `workers/fantasy-mcp`
+  - `workers/espn-client`
+  - `workers/yahoo-client`
+  - `workers/auth-worker`
+- Eval artifacts are trace-scoped:
+  - `runs/<run_id>/<trace_id>/trace.json`
+  - `runs/<run_id>/<trace_id>/logs/<worker>.json`
+- `flaim-eval` supports post-run re-enrichment:
+  - `npm run enrich -- <run_id> [trace_id]`
+
 ## CI Deploy Targets (from `.github/workflows/deploy-workers.yml`)
 - `auth-worker`
 - `espn-client`
@@ -48,4 +62,3 @@ All tools take explicit parameters: `platform`, `sport`, `league_id`, `season_ye
 
 ## Extension Version
 - Chrome extension `manifest.json`: `1.5.0`
-
