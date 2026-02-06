@@ -205,14 +205,14 @@ See `workers/README.md` for worker-to-worker communication requirements.
 
 | Component | Platform | Trigger | Environment |
 |-----------|----------|---------|-------------|
-| Workers (auth, baseball, football, espn-client, fantasy-mcp) | Cloudflare | Push to `main` | `--env prod` |
-| Workers (auth, baseball, football, espn-client, fantasy-mcp) | Cloudflare | PR opened/updated | `--env preview` |
+| Workers (auth-worker, espn-client, yahoo-client, fantasy-mcp) | Cloudflare | Push to `main` | `--env prod` |
+| Workers (auth-worker, espn-client, yahoo-client, fantasy-mcp) | Cloudflare | PR opened/updated | `--env preview` |
 | Frontend (`/web`) | Vercel | Push to `main` | Production |
 | Frontend (`/web`) | Vercel | PR opened/updated | Preview |
 | Extension | Chrome Web Store | Manual | N/A |
 
 **GitHub Actions workflows** (`.github/workflows/`):
-- `deploy-workers.yml` — Deploys all 3 workers on push/PR via wrangler
+- `deploy-workers.yml` — Deploys all 4 workers on push/PR via wrangler
 - `claude.yml` — Claude Code bot responds to `@claude` mentions in issues/PRs
 - `claude-code-review.yml` — Auto-reviews PRs with Claude
 

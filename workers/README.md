@@ -14,16 +14,17 @@ Cloudflare Workers handling authentication and MCP data fetching.
 ### New Architecture (Unified Gateway)
 
 ```
-Claude/ChatGPT → fantasy-mcp → espn-client → ESPN API
-                            → auth-worker → Supabase
+Claude/ChatGPT → fantasy-mcp → espn-client  → ESPN API
+                            → yahoo-client → Yahoo API
+                            → auth-worker  → Supabase
 ```
 
-The unified gateway (`fantasy-mcp`) uses explicit tool parameters (`platform`, `sport`, `league_id`, `season_year`) and routes to platform-specific workers (`espn-client`) via Cloudflare service bindings.
+The unified gateway (`fantasy-mcp`) uses explicit tool parameters (`platform`, `sport`, `league_id`, `season_year`) and routes to platform-specific workers (`espn-client`, `yahoo-client`) via Cloudflare service bindings.
 
 ## Development
 
 ```bash
-# Run all workers (auth + legacy + unified + platform clients)
+# Run all workers (auth + unified gateway + platform clients)
 npm run dev:workers
 
 # Run unified gateway workers
@@ -39,8 +40,7 @@ npm run dev:yahoo-client   # Port 8791
 cd workers/auth-worker && npm run dev
 cd workers/fantasy-mcp && npm run dev
 cd workers/espn-client && npm run dev
-cd workers/baseball-espn-mcp && npm run dev
-cd workers/football-espn-mcp && npm run dev
+cd workers/yahoo-client && npm run dev
 
 # Or with wrangler directly
 cd workers/auth-worker && wrangler dev --env dev --port 8786
@@ -50,8 +50,8 @@ cd workers/auth-worker && wrangler dev --env dev --port 8786
 
 ```bash
 cd workers/<worker-name>
-npm test           # Run Vitest tests (auth-worker, espn-client, fantasy-mcp)
-npm run type-check # TypeScript check (auth-worker, espn-client, fantasy-mcp)
+npm test           # Run Vitest tests (auth-worker, espn-client, yahoo-client, fantasy-mcp)
+npm run type-check # TypeScript check (auth-worker, espn-client, yahoo-client, fantasy-mcp)
 ```
 
 Add focused tests for handler changes in `__tests__/` or `*.test.ts`.
@@ -67,7 +67,7 @@ ENVIRONMENT=prod|preview|dev
 NODE_ENV=production|development
 ```
 
-### MCP Workers (baseball/football)
+### MCP + Platform Workers (`fantasy-mcp`, `espn-client`, `yahoo-client`)
 
 ```
 AUTH_WORKER_URL=https://auth-worker.YOUR-ACCOUNT.workers.dev
@@ -102,31 +102,12 @@ Ensure `wrangler.jsonc` has `"workers_dev": true` so the `.workers.dev` URL exis
 All tools take explicit parameters: `platform`, `sport`, `league_id`, `season_year`
 
 - `get_user_session` — All leagues across platforms with IDs (call first to get params)
+- `get_ancient_history` — Historical leagues and seasons (2+ years old)
 - `get_league_info` — League settings and members
 - `get_standings` — League standings
 - `get_matchups` — Current/specified week matchups
 - `get_roster` — Team roster with player details
 - `get_free_agents` — Available free agents
-
-### Legacy Workers
-
-#### Both Workers
-- `get_user_session` — User's configured leagues, team IDs, season years, default league, current date/season
-
-#### Baseball (`baseball-espn-mcp`)
-- `get_espn_baseball_league_info` — League settings and members
-- `get_espn_baseball_team_roster` — Team roster with player stats
-- `get_espn_baseball_matchups` — Current and upcoming matchups
-- `get_espn_baseball_standings` — League standings
-- `get_espn_baseball_free_agents` — Available free agents
-- `get_espn_baseball_box_scores` — Box scores for games
-- `get_espn_baseball_recent_activity` — Recent league activity (trades, adds, drops)
-
-### Football (`football-espn-mcp`)
-- `get_espn_football_league_info` — League settings and members
-- `get_espn_football_team` — Team roster with player stats
-- `get_espn_football_matchups` — Current and upcoming matchups
-- `get_espn_football_standings` — League standings
 
 ## ESPN API Reference
 
@@ -161,8 +142,7 @@ npm run deploy:workers:prod     # Deploy to production
 Workers use custom routes via `api.flaim.app`:
 - `/auth/*` → auth-worker
 - `/fantasy/*` → fantasy-mcp (unified gateway)
-- `/baseball/*` → baseball-espn-mcp (legacy)
-- `/football/*` → football-espn-mcp (legacy)
+- `/mcp*` → fantasy-mcp (primary MCP endpoint)
 
 Note: `espn-client` is called internally via service binding for MCP traffic, but the web app uses its `/onboarding/*` endpoints via the public workers.dev URL.
 
@@ -172,7 +152,7 @@ Note: `espn-client` is called internally via service binding for MCP traffic, bu
 |---------|-------|-----|
 | 522 timeouts (worker-to-worker) | Using custom domain for internal calls | Use `.workers.dev` URL for `AUTH_WORKER_URL` |
 | 500s in prod | Missing Cloudflare secrets | Add secrets in dashboard |
-| 404s on custom routes | Worker expects stripped path | Cloudflare routes strip `/auth`, `/baseball`, `/football` prefixes |
+| 404s on custom routes | Worker expects stripped path | Cloudflare routes strip `/auth` and `/fantasy` prefixes |
 | 424 from Responses API | Wrong MCP endpoint | Ensure `server_url` ends with `/mcp` |
 | `EMFILE: too many open files, watch` | File descriptor limit too low for dev watchers | Run `ulimit -n 8192` (or higher) and restart `wrangler dev` |
 | `EPERM` writing Wrangler logs/registry | Global Wrangler directory not writable | Use `WRANGLER_LOG_PATH` + `WRANGLER_REGISTRY_PATH` env vars |
@@ -188,17 +168,6 @@ fantasy-mcp (gateway)
 espn-client → ESPN API
      ↓
 auth-worker ← Supabase
-```
-
-### Legacy Workers
-```
-Claude/ChatGPT
-     ↓ (OAuth token)
-MCP Worker (baseball/football)
-     ↓ (internal fetch)
-auth-worker ← Supabase
-     ↓
-ESPN API
 ```
 
 See `docs/ARCHITECTURE.md` for full system design.
