@@ -32,7 +32,7 @@ Flaim is **not** a chatbot or AI product itself — it's the bridge that lets yo
 
 ## Features
 
-- **Chrome Extension (v1.4.0)**: Auto-capture ESPN credentials without manual cookie extraction
+- **Chrome Extension (v1.5.0)**: Auto-capture ESPN credentials without manual cookie extraction
 - **Auto-Discovery (v1.2.1+)**: Fan API-based discovery of leagues + past seasons, with granular status messaging and default selection
 - **Claude + ChatGPT OAuth**: Direct access via MCP protocol (OAuth 2.1)
 - **Live ESPN Data**: espn-client worker with real-time stats
@@ -47,7 +47,7 @@ Flaim is a solo indie project — built with care, maintained for the long term.
 Season year defaults are deterministic and use America/New_York time:
 
 - **Baseball (flb)**: Defaults to the previous year until Feb 1, then switches to the current year
-- **Football (ffl)**: Defaults to the previous year until Jun 1, then switches to the current year
+- **Football (ffl)**: Defaults to the previous year until Jul 1, then switches to the current year
 
 ## MCP Tools
 
