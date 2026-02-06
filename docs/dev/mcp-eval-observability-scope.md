@@ -4,6 +4,7 @@
 - Revised after codebase audit + MCP tool discovery
 - Date: 2026-02-06
 - Owner: solo maintainer
+- Note: This file is a scope/design reference. Day-to-day operations and runbooks are maintained in `../flaim-eval/docs/`.
 
 ## What this is
 A separate repo (`flaim-eval`) that serves two purposes:

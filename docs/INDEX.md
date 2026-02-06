@@ -11,6 +11,7 @@ This file is the canonical map for Flaim docs. Always read this first and use it
 | Deploy targets + envs | `docs/STATUS.md` | Keep in sync with `.github/workflows/deploy-workers.yml` and worker wranglers. |
 | Database schema summary | `docs/DATABASE.md` | Migrations in `docs/migrations/` are canonical. |
 | Test strategy | `docs/TESTING.md` | Keep light; focus on critical paths. |
+| Eval harness operations + runbooks | `flaim-eval/docs/*` | Canonical in separate repo; keep only short links in this repo. |
 | Public product overview | `README.md` | User-facing, high level. |
 | Architecture overview | `docs/ARCHITECTURE.md` | System design + data flow. |
 | Release history | `docs/CHANGELOG.md` | Keep a concise, high-level record. |
@@ -40,6 +41,10 @@ This file is the canonical map for Flaim docs. Always read this first and use it
 - `web/README.md`: Web app routes, env vars, local dev.
 - `extension/README.md`: Extension build, sync host, Chrome Web Store details.
 - `workers/README.md`: Worker overview, envs, shared patterns.
+
+### External repo docs
+- `../flaim-eval/README.md`: Eval harness overview and quickstart.
+- `../flaim-eval/docs/INDEX.md`: Eval docs map (operations, observability, troubleshooting, acceptance).
 
 ### Per-worker READMEs
 - `workers/auth-worker/README.md`: Auth/OAuth, credentials, extension APIs.

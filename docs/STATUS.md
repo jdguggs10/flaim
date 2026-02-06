@@ -53,6 +53,8 @@ All tools take explicit parameters: `platform`, `sport`, `league_id`, `season_ye
   - `runs/<run_id>/<trace_id>/logs/<worker>.json`
 - `flaim-eval` supports post-run re-enrichment:
   - `npm run enrich -- <run_id> [trace_id]`
+- Canonical eval operations/runbooks live in:
+  - `../flaim-eval/docs/INDEX.md`
 
 ## CI Deploy Targets (from `.github/workflows/deploy-workers.yml`)
 - `auth-worker`
