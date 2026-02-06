@@ -144,6 +144,12 @@ function buildSuccessRedirect(redirectUri: string, code: string, state?: string)
   return url.toString();
 }
 
+function maskState(state: string): string {
+  if (!state) return '***';
+  if (state.length <= 10) return `${state.substring(0, 3)}...`;
+  return `${state.substring(0, 6)}...${state.substring(state.length - 4)}`;
+}
+
 // =============================================================================
 // METADATA DISCOVERY
 // =============================================================================
@@ -365,7 +371,12 @@ export async function handleAuthorize(request: Request, env: OAuthEnv): Promise<
   // Pass all OAuth params to frontend
   consentUrl.searchParams.set('redirect_uri', params.redirect_uri);
   if (params.scope) consentUrl.searchParams.set('scope', params.scope);
-  if (params.state) consentUrl.searchParams.set('state', params.state);
+  // Use oauth_state to avoid collisions with auth providers that may use state.
+  // Keep legacy state for backward compatibility with older frontend builds.
+  if (params.state) {
+    consentUrl.searchParams.set('oauth_state', params.state);
+    consentUrl.searchParams.set('state', params.state);
+  }
   if (params.code_challenge) consentUrl.searchParams.set('code_challenge', params.code_challenge);
   if (params.code_challenge_method) consentUrl.searchParams.set('code_challenge_method', params.code_challenge_method);
   if (params.client_id) consentUrl.searchParams.set('client_id', params.client_id);
@@ -429,6 +440,9 @@ export async function handleCreateCode(
         body.client_id
       );
       if (!validState) {
+        console.log(
+          `[oauth] Invalid state during /oauth/code: state=${maskState(body.state)}, redirect_uri=${body.redirect_uri}, client_id=${body.client_id || 'none'}`
+        );
         return new Response(JSON.stringify({
           error: 'invalid_request',
           error_description: 'Invalid or expired state',

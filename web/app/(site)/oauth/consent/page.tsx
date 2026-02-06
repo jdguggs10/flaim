@@ -28,9 +28,10 @@ function OAuthConsentContent() {
   // Removed league checking - OAuth consent works regardless of fantasy setup
 
   // Extract OAuth params from URL
+  const oauthState = searchParams.get('oauth_state') || searchParams.get('state') || undefined;
   const oauthParams = {
     redirectUri: searchParams.get('redirect_uri') || '',
-    state: searchParams.get('state') || undefined,
+    state: oauthState,
     scope: searchParams.get('scope') || 'mcp:read',
     codeChallenge: searchParams.get('code_challenge') || undefined,
     codeChallengeMethod: searchParams.get('code_challenge_method') || 'S256',

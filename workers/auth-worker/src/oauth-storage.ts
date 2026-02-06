@@ -234,20 +234,30 @@ export class OAuthStorage {
       .single();
 
     if (error || !data) {
+      console.log(
+        `[oauth-storage] OAuth state lookup failed: state=${state.substring(0, 8)}..., found=${!!data}, error=${error?.message || 'none'}`
+      );
       return false;
     }
 
     const expiresAt = new Date(data.expires_at);
     if (Number.isNaN(expiresAt.getTime()) || expiresAt.getTime() < Date.now()) {
       await this.supabase.from('oauth_states').delete().eq('state', state);
+      console.log(`[oauth-storage] OAuth state expired: ${state.substring(0, 8)}...`);
       return false;
     }
 
     if (data.redirect_uri !== redirectUri) {
+      console.log(
+        `[oauth-storage] OAuth state redirect URI mismatch: state=${state.substring(0, 8)}..., expected=${data.redirect_uri}, got=${redirectUri}`
+      );
       return false;
     }
 
     if (clientId && data.client_id && data.client_id !== clientId) {
+      console.log(
+        `[oauth-storage] OAuth state client_id mismatch: state=${state.substring(0, 8)}..., expected=${data.client_id}, got=${clientId}`
+      );
       return false;
     }
 
