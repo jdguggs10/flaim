@@ -36,6 +36,10 @@ These endpoints let Claude, ChatGPT, and Gemini authenticate via MCP.
 | `POST /oauth/revoke-all` | Clerk JWT | Revoke all AI client tokens |
 | `POST /oauth/revoke` | Clerk JWT | Revoke a single AI client token |
 
+OAuth consent callback note:
+The consent screen accepts `oauth_state` (preferred) and legacy `state` query params.
+This avoids state collisions during sign-in redirects while maintaining backward compatibility.
+
 ### Yahoo Connect (Flaim → Yahoo)
 
 These endpoints manage the OAuth 2.0 client flow with Yahoo Fantasy.

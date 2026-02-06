@@ -4,6 +4,11 @@ Follow Keep a Changelog; SemVer applies.
 
 ## [Unreleased]
 
+### OAuth
+- **Fixed**: Resolved intermittent `Invalid or expired state` failures during MCP connector approval (Codex/ChatGPT) when returning from sign-in to consent.
+- **Changed**: Authorization redirect now includes `oauth_state` (while preserving legacy `state`) to avoid collisions with auth-provider query params during consent round-trips.
+- **Added**: More specific auth-worker logging for OAuth state validation failures (missing lookup, expiry, redirect URI mismatch, client ID mismatch).
+
 ### Infrastructure
 - **Changed**: Upgraded Tailwind CSS v3 → v4. Migrated config from `tailwind.config.ts` to CSS-based `@theme` in `globals.css`. Replaced `tailwindcss-animate` with `tw-animate-css`. Updated PostCSS to use `@tailwindcss/postcss`.
 - **Removed**: Codebase audit — deleted legacy KV auth archive, 5 orphaned UI components, abandoned vector store feature (components + API routes), extension v1.2.x backwards-compat fields, and deprecated `GambitLeague` type (renamed to `DiscoveredEspnLeague`).
