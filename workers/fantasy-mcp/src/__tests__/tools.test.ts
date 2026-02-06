@@ -79,7 +79,15 @@ describe('fantasy-mcp tools', () => {
 
     const correlationId = 'corr-456';
     const result = await tool!.handler(args, env, 'Bearer token', correlationId);
-    expect(routeToClient).toHaveBeenCalledWith(env, 'get_league_info', args, 'Bearer token', correlationId);
+    expect(routeToClient).toHaveBeenCalledWith(
+      env,
+      'get_league_info',
+      args,
+      'Bearer token',
+      correlationId,
+      undefined,
+      undefined
+    );
 
     const text = result.content?.[0]?.text;
     const payload = JSON.parse(text as string) as { success?: boolean; data?: unknown };
