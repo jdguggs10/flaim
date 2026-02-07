@@ -113,6 +113,24 @@ describe('oauth-handlers', () => {
     expect(location.searchParams.get('error_description')).toContain('S256');
   });
 
+  it('uses FRONTEND_URL override for consent redirect', async () => {
+    const req = new Request(
+      'https://api.flaim.app/authorize?response_type=code&client_id=test' +
+      '&redirect_uri=https://claude.ai/api/mcp/auth_callback' +
+      '&code_challenge=abc123&code_challenge_method=S256'
+    );
+    const res = await handleAuthorize(req, {
+      ...env,
+      ENVIRONMENT: 'preview',
+      FRONTEND_URL: 'https://preview.example.com/',
+    });
+
+    expect(res.status).toBe(302);
+    const location = new URL(res.headers.get('Location')!);
+    expect(location.origin).toBe('https://preview.example.com');
+    expect(location.pathname).toBe('/oauth/consent');
+  });
+
   it('authorization server metadata advertises S256 only', async () => {
     const res = handleMetadataDiscovery(env, {});
     const body = await res.json() as { code_challenge_methods_supported: string[] };

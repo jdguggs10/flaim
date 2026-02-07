@@ -30,6 +30,7 @@ export interface YahooConnectEnv {
   YAHOO_CLIENT_SECRET: string;
   ENVIRONMENT?: string;
   NODE_ENV?: string;
+  FRONTEND_URL?: string;
 }
 
 interface YahooTokenResponse {
@@ -67,11 +68,11 @@ function getCallbackUrl(env: YahooConnectEnv): string {
  * Get the frontend URL for redirects after OAuth flow
  */
 function getFrontendUrl(env: YahooConnectEnv): string {
+  if (env.FRONTEND_URL) {
+    return env.FRONTEND_URL.replace(/\/$/, '');
+  }
   if (env.ENVIRONMENT === 'dev' || env.NODE_ENV === 'development') {
     return 'http://localhost:3000';
-  }
-  if (env.ENVIRONMENT === 'preview') {
-    return 'https://flaim-preview.vercel.app';
   }
   return 'https://flaim.app';
 }

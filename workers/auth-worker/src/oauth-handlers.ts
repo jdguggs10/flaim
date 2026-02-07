@@ -28,6 +28,7 @@ export interface OAuthEnv {
   SUPABASE_SERVICE_KEY: string;
   NODE_ENV?: string;
   ENVIRONMENT?: string;
+  FRONTEND_URL?: string;
 }
 
 interface AuthorizeParams {
@@ -98,11 +99,11 @@ const OAUTH_CLIENT_ID = 'flaim-mcp';
 
 // Frontend URL for consent page
 const getFrontendUrl = (env: OAuthEnv): string => {
+  if (env.FRONTEND_URL) {
+    return env.FRONTEND_URL.replace(/\/$/, '');
+  }
   if (env.ENVIRONMENT === 'dev' || env.NODE_ENV === 'development') {
     return 'http://localhost:3000';
-  }
-  if (env.ENVIRONMENT === 'preview') {
-    return 'https://flaim-preview.vercel.app'; // Update with actual preview URL
   }
   return 'https://flaim.app';
 };

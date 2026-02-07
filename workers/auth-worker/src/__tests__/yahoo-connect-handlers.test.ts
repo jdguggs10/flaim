@@ -151,6 +151,25 @@ describe('yahoo-connect-handlers', () => {
       expect(location).toContain('error=missing_code');
     });
 
+    it('uses FRONTEND_URL override for callback redirects', async () => {
+      const request = new Request('https://api.flaim.app/connect/yahoo/callback?state=user_123:abc123');
+      const response = await handleYahooCallback(
+        request,
+        {
+          ...env,
+          ENVIRONMENT: 'preview',
+          FRONTEND_URL: 'https://preview.example.com/',
+        },
+        corsHeaders
+      );
+
+      expect(response.status).toBe(302);
+      const location = new URL(response.headers.get('Location')!);
+      expect(location.origin).toBe('https://preview.example.com');
+      expect(location.pathname).toBe('/leagues');
+      expect(location.searchParams.get('error')).toBe('missing_code');
+    });
+
     it('returns error redirect for missing state', async () => {
       const request = new Request('https://api.flaim.app/connect/yahoo/callback?code=auth_code');
 

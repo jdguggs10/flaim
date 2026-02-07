@@ -70,6 +70,7 @@ export interface Env {
   SUPABASE_SERVICE_KEY: string;
   NODE_ENV?: string;
   ENVIRONMENT?: string; // 'dev' | 'preview' | 'prod'
+  FRONTEND_URL?: string;
   CLERK_ISSUER?: string; // Expected Clerk JWT issuer (e.g. "https://clerk.flaim.app")
   // Yahoo OAuth
   YAHOO_CLIENT_ID?: string;
