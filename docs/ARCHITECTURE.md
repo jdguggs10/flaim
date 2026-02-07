@@ -82,7 +82,7 @@ Both paths write to the same `espn_leagues` storage.
 Season year defaults are deterministic and use America/New_York time:
 
 - **Baseball (flb)**: Defaults to the previous year until Feb 1, then switches to the current year
-- **Football (ffl)**: Defaults to the previous year until Jun 1, then switches to the current year
+- **Football (ffl)**: Defaults to the previous year until Jul 1, then switches to the current year
 
 ## User Defaults
 

@@ -50,6 +50,32 @@ One row per user + league + sport + season (same structure as espn_leagues).
 | team_key | text | Yahoo team key |
 | team_name | text | User's team name |
 
+### yahoo_credentials
+Stores Yahoo OAuth credentials for a Clerk user.
+
+| Column | Type | Notes |
+|---|---|---|
+| clerk_user_id | text | Primary key (one Yahoo account per user) |
+| access_token | text | Yahoo OAuth access token |
+| refresh_token | text | Yahoo OAuth refresh token |
+| expires_at | timestamptz | Access token expiry |
+| yahoo_guid | text | Optional Yahoo user GUID |
+| created_at | timestamptz | Created timestamp |
+| updated_at | timestamptz | Updated timestamp |
+
+### platform_oauth_states
+Short-lived OAuth state values for platform-connect flows (separate from MCP OAuth state table).
+
+| Column | Type | Notes |
+|---|---|---|
+| id | uuid | Primary key |
+| state | text | Unique state value |
+| platform | text | Platform key (`yahoo`, `sleeper`, `cbs`) |
+| clerk_user_id | text | Clerk user ID |
+| redirect_after | text | Optional post-connect redirect path |
+| expires_at | timestamptz | State expiry |
+| created_at | timestamptz | Created timestamp |
+
 ### user_preferences
 Per-user preferences including default leagues (one per sport).
 

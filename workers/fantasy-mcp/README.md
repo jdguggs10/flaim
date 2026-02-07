@@ -18,8 +18,8 @@ Claude/ChatGPT
 fantasy-mcp (this worker)
      |
      +---> espn-client (service binding) ---> ESPN API
+     +---> yahoo-client (service binding) --> Yahoo Fantasy API
      +---> auth-worker (service binding) ---> Supabase
-     +---> (future) yahoo-client
 ```
 
 ## Endpoints
@@ -39,6 +39,7 @@ All tools take explicit parameters. Call `get_user_session` first to get league 
 | Tool | Description |
 |------|-------------|
 | `get_user_session` | User's leagues across all platforms (call first) |
+| `get_ancient_history` | Historical leagues and seasons (2+ years old) |
 | `get_league_info` | League settings, scoring, roster config |
 | `get_standings` | League standings with records |
 | `get_matchups` | Weekly matchups/scoreboard |
@@ -64,7 +65,7 @@ All tools take explicit parameters. Call `get_user_session` first to get league 
 
 Requires Bearer token in Authorization header. Tokens are:
 - Clerk JWTs (from web app)
-- OAuth tokens (from Claude/ChatGPT)
+- OAuth tokens (from Claude/ChatGPT/Gemini)
 
 Auth is validated by auth-worker via service binding.
 
@@ -89,6 +90,7 @@ wrangler dev --env dev --port 8790
 | Binding | Worker | Purpose |
 |---------|--------|---------|
 | `ESPN` | espn-client | ESPN API calls |
+| `YAHOO` | yahoo-client | Yahoo Fantasy API calls |
 | `AUTH_WORKER` | auth-worker | Credentials and auth |
 
 ## Related
