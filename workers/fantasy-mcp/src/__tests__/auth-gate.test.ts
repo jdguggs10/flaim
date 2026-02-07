@@ -2,6 +2,15 @@ import { describe, expect, it } from 'vitest';
 import { isPublicMcpHandshakeRequest, normalizeMcpAcceptHeader } from '../mcp/auth-gate';
 
 describe('mcp auth gate helpers', () => {
+  it('allows unauthenticated GET handshake stream requests', async () => {
+    const getReq = new Request('https://api.flaim.app/mcp', {
+      method: 'GET',
+      headers: { Accept: 'text/event-stream' },
+    });
+
+    await expect(isPublicMcpHandshakeRequest(getReq)).resolves.toBe(true);
+  });
+
   it('recognizes public handshake/list methods', async () => {
     const listReq = new Request('https://api.flaim.app/mcp', {
       method: 'POST',
