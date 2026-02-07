@@ -12,6 +12,7 @@ import {
 import type { Env } from './types';
 import { createFantasyMcpServer } from './mcp/server';
 import { createMcpHandler } from './mcp/create-mcp-handler';
+import { isPublicMcpHandshakeRequest, normalizeMcpAcceptHeader } from './mcp/auth-gate';
 import { logEvalEvent } from './logging';
 import { buildMcpAuthErrorResponse } from './auth-response';
 
@@ -121,7 +122,8 @@ async function handleMcpRequest(c: Context<{ Bindings: Env }>): Promise<Response
   });
 
   const authHeader = c.req.header('Authorization');
-  if (!authHeader) {
+  const allowPublicHandshake = !authHeader && await isPublicMcpHandshakeRequest(c.req.raw);
+  if (!authHeader && !allowPublicHandshake) {
     return buildMcpAuthErrorResponse(c.req.raw);
   }
 
@@ -132,40 +134,43 @@ async function handleMcpRequest(c: Context<{ Bindings: Env }>): Promise<Response
     : 'https://api.flaim.app/mcp';
 
   let tokenScope: string | undefined;
-  try {
-    const introspectRes = await c.env.AUTH_WORKER.fetch(
-      new Request('https://internal/auth/introspect', {
-        headers: {
-          Authorization: authHeader,
-          'X-Flaim-Expected-Resource': expectedResource,
-        },
-      })
-    );
-    if (!introspectRes.ok) {
+  if (authHeader) {
+    try {
+      const introspectRes = await c.env.AUTH_WORKER.fetch(
+        new Request('https://internal/auth/introspect', {
+          headers: {
+            Authorization: authHeader,
+            'X-Flaim-Expected-Resource': expectedResource,
+          },
+        })
+      );
+      if (!introspectRes.ok) {
+        return buildMcpAuthErrorResponse(c.req.raw);
+      }
+      const tokenInfo = await introspectRes.json() as { valid: boolean; scope?: string };
+      if (!tokenInfo.valid) {
+        return buildMcpAuthErrorResponse(c.req.raw);
+      }
+      tokenScope = typeof tokenInfo.scope === 'string' ? tokenInfo.scope.trim() : undefined;
+      if (!tokenScope) {
+        return buildMcpAuthErrorResponse(c.req.raw);
+      }
+    } catch {
       return buildMcpAuthErrorResponse(c.req.raw);
     }
-    const tokenInfo = await introspectRes.json() as { valid: boolean; scope?: string };
-    if (!tokenInfo.valid) {
-      return buildMcpAuthErrorResponse(c.req.raw);
-    }
-    tokenScope = typeof tokenInfo.scope === 'string' ? tokenInfo.scope.trim() : undefined;
-    if (!tokenScope) {
-      return buildMcpAuthErrorResponse(c.req.raw);
-    }
-  } catch {
-    return buildMcpAuthErrorResponse(c.req.raw);
   }
 
   const server = createFantasyMcpServer({
     env: c.env,
-    authHeader,
+    authHeader: authHeader ?? null,
     tokenScope,
     correlationId,
     evalRunId,
     evalTraceId,
   });
   const handler = createMcpHandler(server);
-  const response = await handler(c.req.raw, c.env, c.executionCtx);
+  const normalizedRequest = normalizeMcpAcceptHeader(c.req.raw);
+  const response = await handler(normalizedRequest, c.env, c.executionCtx);
 
   response.headers.set(CORRELATION_ID_HEADER, correlationId);
   if (evalRunId) {
