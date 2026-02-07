@@ -51,8 +51,11 @@ All tools take explicit parameters: `platform`, `sport`, `league_id`, `season_ye
 - Eval artifacts are trace-scoped:
   - `runs/<run_id>/<trace_id>/trace.json`
   - `runs/<run_id>/<trace_id>/logs/<worker>.json`
+- Trace isolation is strict by default (legacy run-level fallback is opt-in).
 - `flaim-eval` supports post-run re-enrichment:
   - `npm run enrich -- <run_id> [trace_id]`
+- `flaim-eval` supports acceptance summarization:
+  - `npm run accept -- <run_id>`
 - Canonical eval operations/runbooks live in:
   - `../flaim-eval/docs/INDEX.md`
 

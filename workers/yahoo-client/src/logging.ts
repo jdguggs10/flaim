@@ -9,6 +9,7 @@ interface TraceLogEvent {
   league_id?: string;
   status?: string;
   duration_ms?: number;
+  message?: string;
   error?: string;
 }
 

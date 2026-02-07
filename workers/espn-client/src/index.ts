@@ -84,6 +84,7 @@ app.post('/execute', async (c) => {
     tool,
     sport,
     league_id,
+    message: `${tool} ${sport} league=${league_id} season=${espnParams.season_year}`,
   });
 
   // Route to sport-specific handler
@@ -102,6 +103,7 @@ app.post('/execute', async (c) => {
       league_id,
       duration_ms: duration,
       status: String(result.success),
+      message: `${tool} ${sport} completed success=${result.success}`,
     });
     const response = c.json(result);
     response.headers.set(CORRELATION_ID_HEADER, correlationId);
@@ -123,6 +125,7 @@ app.post('/execute', async (c) => {
       league_id,
       duration_ms: duration,
       status: 'error',
+      message: `${tool} ${sport} failed`,
       error: message,
     });
     const response = c.json({

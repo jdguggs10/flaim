@@ -45,6 +45,7 @@ app.post('/execute', async (c) => {
       tool,
       sport,
       league_id,
+      message: `${tool} ${sport} league=${league_id} season=${season_year}`,
     });
 
     const result = await routeToSport(c.env, sport, tool, params, authHeader, correlationId);
@@ -62,6 +63,7 @@ app.post('/execute', async (c) => {
       league_id,
       duration_ms: duration,
       status: String(result.success),
+      message: `${tool} ${sport} completed success=${result.success}`,
     });
 
     const response = c.json(result);
@@ -81,6 +83,7 @@ app.post('/execute', async (c) => {
       trace_id: evalTraceId,
       duration_ms: duration,
       status: 'error',
+      message: 'execute failed',
       error: message,
     });
 

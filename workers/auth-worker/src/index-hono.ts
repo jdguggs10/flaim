@@ -390,6 +390,7 @@ api.use('*', async (c, next) => {
     trace_id: evalTraceId,
     path: c.req.path,
     method: c.req.method,
+    message: `${c.req.method} ${c.req.path}`,
   });
 
   // Handle preflight
@@ -421,6 +422,7 @@ api.use('*', async (c, next) => {
     method: c.req.method,
     status: String(response.status),
     duration_ms: Date.now() - startTime,
+    message: `${c.req.method} ${c.req.path} status=${response.status}`,
   });
   return response;
 });

@@ -8,6 +8,7 @@ interface TraceLogEvent {
   method?: string;
   status?: string;
   duration_ms?: number;
+  message?: string;
   error?: string;
 }
 
