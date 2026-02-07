@@ -85,7 +85,9 @@ function isLoopbackRedirectUri(uri: string): boolean {
     const isLoopback = parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1';
     // Check for /callback path (Claude Desktop pattern)
     const isCallback = parsed.pathname === '/callback' || parsed.pathname === '/oauth/callback';
-    return isLoopback && isCallback;
+    // Reject URIs with query strings or fragments (prevent open redirect)
+    const isClean = !parsed.search && !parsed.hash;
+    return isLoopback && isCallback && isClean;
   } catch {
     return false;
   }
@@ -117,15 +119,11 @@ const getBaseUrl = (env: OAuthEnv): string => {
 // UTILITIES
 // =============================================================================
 
-function isValidRedirectUri(uri: string): boolean {
-  // First check static allowlist
-  const isAllowed = ALLOWED_REDIRECT_URIS.some(allowed => {
-    // Exact match or starts with (for local dev with ports)
-    return uri === allowed || uri.startsWith(allowed);
-  });
-  if (isAllowed) return true;
+export function isValidRedirectUri(uri: string): boolean {
+  // Exact match against static allowlist
+  if (ALLOWED_REDIRECT_URIS.includes(uri)) return true;
 
-  // Also allow dynamic loopback URIs for Claude Desktop (RFC 8252)
+  // Dynamic loopback URIs for Claude Desktop (RFC 8252)
   return isLoopbackRedirectUri(uri);
 }
 
@@ -175,7 +173,7 @@ export function handleMetadataDiscovery(env: OAuthEnv, corsHeaders: Record<strin
     // Supported features
     response_types_supported: ['code'],
     grant_types_supported: ['authorization_code', 'refresh_token'],
-    code_challenge_methods_supported: ['S256', 'plain'],
+    code_challenge_methods_supported: ['S256'],
     token_endpoint_auth_methods_supported: ['none', 'client_secret_post'],
     scopes_supported: ['mcp:read', 'mcp:write'],
 
@@ -345,6 +343,14 @@ export async function handleAuthorize(request: Request, env: OAuthEnv): Promise<
     );
   }
 
+  // Only S256 PKCE is supported
+  if (params.code_challenge_method && params.code_challenge_method !== 'S256') {
+    return Response.redirect(
+      buildErrorRedirect(params.redirect_uri, 'invalid_request', 'Only S256 PKCE is supported', params.state),
+      302
+    );
+  }
+
   // Store state for server-side validation (if provided)
   if (params.state) {
     try {
@@ -450,12 +456,21 @@ export async function handleCreateCode(
       }
     }
 
+    // Only S256 PKCE is supported
+    const codeChallengeMethod = body.code_challenge_method || 'S256';
+    if (codeChallengeMethod !== 'S256') {
+      return new Response(JSON.stringify({
+        error: 'invalid_request',
+        error_description: 'Only S256 PKCE is supported',
+      }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+    }
+
     const code = await storage.createAuthorizationCode({
       userId,
       redirectUri: body.redirect_uri,
       scope: body.scope || 'mcp:read',
       codeChallenge: body.code_challenge,
-      codeChallengeMethod: (body.code_challenge_method as 'S256' | 'plain') || 'S256',
+      codeChallengeMethod: 'S256',
       resource: body.resource, // RFC 8707
       expiresInSeconds: 600, // 10 minutes
     });
@@ -693,12 +708,18 @@ export async function handleRevoke(
  */
 export async function validateOAuthToken(
   token: string,
-  env: OAuthEnv
+  env: OAuthEnv,
+  expectedResource?: string
 ): Promise<{ userId: string; scope: string } | null> {
   const storage = OAuthStorage.fromEnvironment(env);
-  const result = await storage.validateAccessToken(token);
+  const result = await storage.validateAccessToken(token, expectedResource);
 
   if (!result.valid || !result.userId) {
+    return null;
+  }
+
+  // Defense-in-depth: also check resource at handler level
+  if (expectedResource && result.resource && result.resource !== expectedResource) {
     return null;
   }
 

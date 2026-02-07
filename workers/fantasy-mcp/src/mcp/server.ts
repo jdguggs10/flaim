@@ -1,11 +1,12 @@
 // workers/fantasy-mcp/src/mcp/server.ts
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { Env } from '../types';
-import { getUnifiedTools } from './tools';
+import { getUnifiedTools, hasRequiredScope, mcpAuthError } from './tools';
 
 export interface McpContext {
   env: Env;
   authHeader: string | null;
+  tokenScope?: string;
   correlationId?: string;
   evalRunId?: string;
   evalTraceId?: string;
@@ -16,7 +17,7 @@ export interface McpContext {
  * Uses closure capture to make env/authHeader available to tool handlers.
  */
 export function createFantasyMcpServer(ctx: McpContext): McpServer {
-  const { env, authHeader, correlationId, evalRunId, evalTraceId } = ctx;
+  const { env, authHeader, tokenScope, correlationId, evalRunId, evalTraceId } = ctx;
 
   const server = new McpServer({
     name: 'fantasy-mcp',
@@ -38,9 +39,14 @@ export function createFantasyMcpServer(ctx: McpContext): McpServer {
         description: tool.description,
         inputSchema: tool.inputSchema,
         annotations: { readOnlyHint: true },
+        _meta: { securitySchemes: tool.securitySchemes },
       },
-      async (args) =>
-        tool.handler(args, env, authHeader || undefined, correlationId, evalRunId, evalTraceId)
+      async (args) => {
+        if (!hasRequiredScope(tokenScope, tool.requiredScope)) {
+          return mcpAuthError('https://api.flaim.app/mcp');
+        }
+        return tool.handler(args, env, authHeader || undefined, correlationId, evalRunId, evalTraceId);
+      }
     );
   }
 

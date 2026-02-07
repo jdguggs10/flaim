@@ -147,9 +147,4 @@ export interface ToolParams {
   count?: number;
 }
 
-export interface ExecuteResponse {
-  success: boolean;
-  data?: unknown;
-  error?: string;
-  code?: string;
-}
+export type { ExecuteResponse } from '@flaim/worker-shared';

@@ -3,6 +3,7 @@ import { getYahooCredentials } from '../../shared/auth';
 import { yahooFetch, handleYahooError, requireCredentials } from '../../shared/yahoo-api';
 import { asArray, getPath, unwrapLeague, unwrapTeam, logStructure } from '../../shared/normalizers';
 import { getPositionFilter } from './mappings';
+import { extractErrorCode } from '@flaim/worker-shared';
 
 type HandlerFn = (
   env: Env,
@@ -18,14 +19,6 @@ export const footballHandlers: Record<string, HandlerFn> = {
   get_matchups: handleGetMatchups,
   get_free_agents: handleGetFreeAgents,
 };
-
-function extractErrorCode(error: unknown): string {
-  if (error instanceof Error) {
-    const match = error.message.match(/^([A-Z_]+):/);
-    if (match) return match[1];
-  }
-  return 'INTERNAL_ERROR';
-}
 
 async function handleGetLeagueInfo(
   env: Env,

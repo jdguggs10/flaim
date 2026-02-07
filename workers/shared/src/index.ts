@@ -32,6 +32,10 @@ export {
 // Auth-worker fetch helper
 export { authWorkerFetch } from './auth-fetch.js';
 
+// Error utilities
+export { ErrorCode, extractErrorCode } from './errors.js';
+export type { ErrorCodeValue, ExecuteResponse } from './errors.js';
+
 // Tracing utilities
 export {
   CORRELATION_ID_HEADER,

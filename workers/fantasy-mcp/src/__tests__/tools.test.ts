@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, type MockedFunction } from 'vitest';
-import { getUnifiedTools } from '../mcp/tools';
+import { getUnifiedTools, hasRequiredScope, mcpAuthError } from '../mcp/tools';
+import { buildMcpAuthErrorResponse } from '../auth-response';
 import type { Env } from '../types';
 import { routeToClient } from '../router';
 
@@ -23,7 +24,7 @@ describe('fantasy-mcp tools', () => {
     ]);
   });
 
-  it('get_user_session throws on auth failure', async () => {
+  it('get_user_session returns auth error with _meta on 401', async () => {
     const tool = getUnifiedTools().find((t) => t.name === 'get_user_session');
     expect(tool).toBeTruthy();
 
@@ -33,7 +34,10 @@ describe('fantasy-mcp tools', () => {
       },
     } as unknown as Env;
 
-    await expect(tool!.handler({}, env, 'Bearer test-token')).rejects.toThrow('AUTH_FAILED');
+    const result = await tool!.handler({}, env, 'Bearer test-token');
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('AUTH_FAILED');
+    expect(result._meta?.['mcp/www_authenticate']).toBeDefined();
   });
 
   it('get_user_session returns success payload for empty leagues', async () => {
@@ -93,5 +97,132 @@ describe('fantasy-mcp tools', () => {
     const payload = JSON.parse(text as string) as { success?: boolean; data?: unknown };
     expect(payload.success).toBe(true);
     expect(payload.data).toEqual({ league: { id: 123, name: 'Test League' } });
+  });
+
+  it('each tool declares a required scope', () => {
+    const tools = getUnifiedTools();
+    for (const tool of tools) {
+      expect(tool.requiredScope).toBeDefined();
+      expect(['mcp:read', 'mcp:write']).toContain(tool.requiredScope);
+    }
+  });
+
+  it('each tool declares securitySchemes (source) for _meta mirror', () => {
+    const tools = getUnifiedTools();
+    for (const tool of tools) {
+      // Source: explicit securitySchemes field on UnifiedTool
+      expect(tool.securitySchemes).toBeDefined();
+      expect(tool.securitySchemes).toEqual({
+        oauth: { type: 'oauth2', scope: tool.requiredScope },
+      });
+
+      // Mirror construction: { securitySchemes: tool.securitySchemes } should match
+      // what server.ts passes to registerTool's _meta
+      const mirrorMeta = { securitySchemes: tool.securitySchemes };
+      expect(mirrorMeta.securitySchemes.oauth.scope).toBe(tool.requiredScope);
+    }
+  });
+});
+
+describe('auth error _meta', () => {
+  it('auth failure response includes _meta with mcp/www_authenticate', async () => {
+    const tool = getUnifiedTools().find((t) => t.name === 'get_user_session');
+
+    const env = {
+      AUTH_WORKER: {
+        fetch: async () => new Response('unauthorized', { status: 401 }),
+      },
+    } as unknown as Env;
+
+    const result = await tool!.handler({}, env, 'Bearer bad-token');
+    expect(result.isError).toBe(true);
+    expect(result._meta).toBeDefined();
+    expect(result._meta?.['mcp/www_authenticate']).toBeDefined();
+    expect(Array.isArray(result._meta?.['mcp/www_authenticate'])).toBe(true);
+  });
+
+  it('scope-denied mcpAuthError includes correct resource_metadata URL', () => {
+    const result = mcpAuthError('https://api.flaim.app/mcp');
+    expect(result.isError).toBe(true);
+    expect(result._meta).toBeDefined();
+    expect(Array.isArray(result._meta?.['mcp/www_authenticate'])).toBe(true);
+    const challenge = (result._meta?.['mcp/www_authenticate'] as string[])[0];
+    expect(challenge).toContain('Bearer');
+    // Must point to the actual served route, not /mcp/.well-known
+    expect(challenge).toContain('resource_metadata="https://api.flaim.app/.well-known/oauth-protected-resource"');
+    expect(challenge).not.toContain('/mcp/.well-known');
+  });
+
+  it('mcpAuthError derives correct metadata URL for /fantasy/mcp resource', () => {
+    const result = mcpAuthError('https://api.flaim.app/fantasy/mcp');
+    const challenge = (result._meta?.['mcp/www_authenticate'] as string[])[0];
+    expect(challenge).toContain('resource_metadata="https://api.flaim.app/fantasy/.well-known/oauth-protected-resource"');
+    expect(challenge).not.toContain('/fantasy/mcp/.well-known');
+  });
+});
+
+describe('buildMcpAuthErrorResponse', () => {
+  it('401 includes resource_metadata in WWW-Authenticate', () => {
+    const request = new Request('https://api.flaim.app/mcp', { method: 'POST' });
+    const response = buildMcpAuthErrorResponse(request);
+
+    expect(response.status).toBe(401);
+    const wwwAuth = response.headers.get('WWW-Authenticate')!;
+    expect(wwwAuth).toContain('resource_metadata=');
+    expect(wwwAuth).toContain('.well-known/oauth-protected-resource');
+  });
+
+  it('uses /fantasy/mcp resource for /fantasy/* paths', () => {
+    const request = new Request('https://api.flaim.app/fantasy/mcp', { method: 'POST' });
+    const response = buildMcpAuthErrorResponse(request);
+
+    const wwwAuth = response.headers.get('WWW-Authenticate')!;
+    expect(wwwAuth).toContain('resource="https://api.flaim.app/fantasy/mcp"');
+    expect(wwwAuth).toContain('resource_metadata="https://api.flaim.app/fantasy/.well-known/oauth-protected-resource"');
+  });
+
+  it('resource_metadata for /mcp points to root .well-known', () => {
+    const request = new Request('https://api.flaim.app/mcp', { method: 'POST' });
+    const response = buildMcpAuthErrorResponse(request);
+
+    const wwwAuth = response.headers.get('WWW-Authenticate')!;
+    expect(wwwAuth).toContain('resource_metadata="https://api.flaim.app/.well-known/oauth-protected-resource"');
+    // Must NOT contain /mcp/.well-known (that route doesn't exist)
+    expect(wwwAuth).not.toContain('/mcp/.well-known');
+  });
+});
+
+describe('gateway introspection fail-closed', () => {
+  // Tests the fail-closed contract that handleMcpRequest in index.ts relies on:
+  // if introspection returns !ok, !valid, or empty scope, the gateway must reject.
+  // We can't import index.ts directly (MCP SDK workerd JSON module issue),
+  // so we validate the introspection contract at the component level.
+
+  it('hasRequiredScope rejects undefined scope (fail-closed)', () => {
+    expect(hasRequiredScope(undefined, 'mcp:read')).toBe(false);
+  });
+
+  it('hasRequiredScope rejects empty string scope (fail-closed)', () => {
+    expect(hasRequiredScope('', 'mcp:read')).toBe(false);
+    expect(hasRequiredScope('  ', 'mcp:read')).toBe(false);
+  });
+
+  it('hasRequiredScope rejects scope that does not contain required', () => {
+    expect(hasRequiredScope('mcp:write', 'mcp:read')).toBe(false);
+    expect(hasRequiredScope('other:scope', 'mcp:read')).toBe(false);
+  });
+});
+
+describe('hasRequiredScope', () => {
+  it('rejects when scope is insufficient', () => {
+    expect(hasRequiredScope('mcp:write', 'mcp:read')).toBe(false);
+    expect(hasRequiredScope(undefined, 'mcp:read')).toBe(false);
+    expect(hasRequiredScope('', 'mcp:read')).toBe(false);
+  });
+
+  it('accepts when scope matches', () => {
+    expect(hasRequiredScope('mcp:read', 'mcp:read')).toBe(true);
+    expect(hasRequiredScope('mcp:read mcp:write', 'mcp:read')).toBe(true);
+    expect(hasRequiredScope('mcp:read mcp:write', 'mcp:write')).toBe(true);
   });
 });

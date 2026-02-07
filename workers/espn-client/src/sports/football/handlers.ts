@@ -2,6 +2,7 @@
 import type { Env, ToolParams, ExecuteResponse, EspnLeagueResponse, EspnPlayerPoolResponse } from '../../types';
 import { getCredentials } from '../../shared/auth';
 import { espnFetch, handleEspnError, requireCredentials } from '../../shared/espn-api';
+import { extractErrorCode } from '@flaim/worker-shared';
 import {
   getPositionName,
   getLineupSlotName,
@@ -422,15 +423,3 @@ async function handleGetFreeAgents(
   }
 }
 
-/**
- * Extract error code from error message if present
- */
-function extractErrorCode(error: unknown): string {
-  if (error instanceof Error) {
-    const match = error.message.match(/^([A-Z_]+):/);
-    if (match) {
-      return match[1];
-    }
-  }
-  return 'INTERNAL_ERROR';
-}

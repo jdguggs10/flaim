@@ -23,7 +23,7 @@ export interface OAuthCode {
   userId: string;
   redirectUri: string;
   codeChallenge?: string;
-  codeChallengeMethod?: 'S256' | 'plain';
+  codeChallengeMethod?: 'S256';
   scope: string;
   resource?: string; // RFC 8707 resource indicator
   expiresAt: Date;
@@ -54,7 +54,7 @@ export interface CreateCodeParams {
   userId: string;
   redirectUri: string;
   codeChallenge?: string;
-  codeChallengeMethod?: 'S256' | 'plain';
+  codeChallengeMethod?: 'S256';
   scope?: string;
   resource?: string; // RFC 8707 resource indicator
   expiresInSeconds?: number; // Default: 600 (10 minutes)
@@ -82,6 +82,7 @@ export interface TokenValidationResult {
   valid: boolean;
   userId?: string;
   scope?: string;
+  resource?: string | null;
   error?: string;
 }
 
@@ -114,12 +115,8 @@ function generateSecureToken(length: number = 32): string {
 async function verifyPkceChallenge(
   codeVerifier: string,
   codeChallenge: string,
-  method: 'S256' | 'plain'
+  method: 'S256'
 ): Promise<boolean> {
-  if (method === 'plain') {
-    return codeVerifier === codeChallenge;
-  }
-
   // S256: SHA-256 hash of verifier, base64url encoded
   const encoder = new TextEncoder();
   const data = encoder.encode(codeVerifier);
@@ -433,10 +430,10 @@ export class OAuthStorage {
    * Validate an access token
    * Returns user ID and scope if valid
    */
-  async validateAccessToken(accessToken: string): Promise<TokenValidationResult> {
+  async validateAccessToken(accessToken: string, expectedResource?: string): Promise<TokenValidationResult> {
     const { data, error } = await this.supabase
       .from('oauth_tokens')
-      .select('user_id, scope, expires_at, revoked_at')
+      .select('user_id, scope, resource, expires_at, revoked_at')
       .eq('access_token', accessToken)
       .single();
 
@@ -454,10 +451,16 @@ export class OAuthStorage {
       return { valid: false, error: 'Token has expired' };
     }
 
+    // Check resource/audience if stored
+    if (expectedResource && data.resource && data.resource !== expectedResource) {
+      return { valid: false, error: 'Token resource mismatch' };
+    }
+
     return {
       valid: true,
       userId: data.user_id,
       scope: data.scope,
+      resource: data.resource || null,
     };
   }
 

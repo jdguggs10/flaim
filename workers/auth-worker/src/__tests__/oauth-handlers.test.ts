@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { handleAuthorize, handleClientRegistration } from '../oauth-handlers';
+import { handleAuthorize, handleClientRegistration, handleMetadataDiscovery, isValidRedirectUri, validateOAuthToken } from '../oauth-handlers';
 import { handleToken } from '../oauth-handlers';
 import { OAuthStorage } from '../oauth-storage';
 import type { OAuthEnv } from '../oauth-handlers';
@@ -99,6 +99,26 @@ describe('oauth-handlers', () => {
     );
   });
 
+  it('rejects plain PKCE code_challenge_method', async () => {
+    const req = new Request(
+      'https://api.flaim.app/authorize?response_type=code&client_id=test' +
+      '&redirect_uri=https://claude.ai/api/mcp/auth_callback' +
+      '&code_challenge=abc123&code_challenge_method=plain'
+    );
+    const res = await handleAuthorize(req, env);
+
+    expect(res.status).toBe(302);
+    const location = new URL(res.headers.get('Location')!);
+    expect(location.searchParams.get('error')).toBe('invalid_request');
+    expect(location.searchParams.get('error_description')).toContain('S256');
+  });
+
+  it('authorization server metadata advertises S256 only', async () => {
+    const res = handleMetadataDiscovery(env, {});
+    const body = await res.json() as { code_challenge_methods_supported: string[] };
+    expect(body.code_challenge_methods_supported).toEqual(['S256']);
+  });
+
   it('returns a token response for valid authorization_code exchange', async () => {
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
     const exchangeCodeForToken = vi.fn().mockResolvedValue({
@@ -138,5 +158,69 @@ describe('oauth-handlers', () => {
     expect(body.refresh_token).toBe('refresh-token');
     expect(typeof body.expires_in).toBe('number');
     expect(body.expires_in).toBeGreaterThan(0);
+  });
+});
+
+describe('redirect URI validation', () => {
+  it('rejects allowlisted URI with appended query string (startsWith exploit)', () => {
+    // startsWith() currently allows this — exact match shouldn't
+    expect(isValidRedirectUri('http://localhost:3000/oauth/callback?redirect=http://evil.com')).toBe(false);
+  });
+
+  it('accepts exact allowlist match', () => {
+    expect(isValidRedirectUri('https://claude.ai/api/mcp/auth_callback')).toBe(true);
+  });
+
+  it('accepts loopback with valid callback path', () => {
+    expect(isValidRedirectUri('http://localhost:9999/callback')).toBe(true);
+    expect(isValidRedirectUri('http://127.0.0.1:9999/oauth/callback')).toBe(true);
+  });
+
+  it('rejects loopback with arbitrary path', () => {
+    expect(isValidRedirectUri('http://localhost:9999/evil')).toBe(false);
+  });
+});
+
+describe('validateOAuthToken resource enforcement', () => {
+  it('rejects token when resource does not match', async () => {
+    vi.spyOn(OAuthStorage, 'fromEnvironment').mockReturnValue({
+      validateAccessToken: vi.fn().mockResolvedValue({
+        valid: true,
+        userId: 'user-123',
+        scope: 'mcp:read',
+        resource: 'https://api.flaim.app/mcp',
+      }),
+    } as unknown as OAuthStorage);
+
+    const result = await validateOAuthToken('test-token', env, 'https://wrong-resource.com/mcp');
+    expect(result).toBeNull();
+  });
+
+  it('accepts token when resource matches', async () => {
+    vi.spyOn(OAuthStorage, 'fromEnvironment').mockReturnValue({
+      validateAccessToken: vi.fn().mockResolvedValue({
+        valid: true,
+        userId: 'user-123',
+        scope: 'mcp:read',
+        resource: 'https://api.flaim.app/mcp',
+      }),
+    } as unknown as OAuthStorage);
+
+    const result = await validateOAuthToken('test-token', env, 'https://api.flaim.app/mcp');
+    expect(result).toEqual({ userId: 'user-123', scope: 'mcp:read' });
+  });
+
+  it('accepts token when no resource was stored (backwards compat)', async () => {
+    vi.spyOn(OAuthStorage, 'fromEnvironment').mockReturnValue({
+      validateAccessToken: vi.fn().mockResolvedValue({
+        valid: true,
+        userId: 'user-123',
+        scope: 'mcp:read',
+        resource: null,
+      }),
+    } as unknown as OAuthStorage);
+
+    const result = await validateOAuthToken('test-token', env, 'https://api.flaim.app/mcp');
+    expect(result).toEqual({ userId: 'user-123', scope: 'mcp:read' });
   });
 });

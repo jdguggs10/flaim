@@ -13,6 +13,7 @@ import type { Env } from './types';
 import { createFantasyMcpServer } from './mcp/server';
 import { createMcpHandler } from './mcp/create-mcp-handler';
 import { logEvalEvent } from './logging';
+import { buildMcpAuthErrorResponse } from './auth-response';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -105,36 +106,6 @@ app.get('/fantasy/.well-known/oauth-protected-resource', (c) => {
   return c.json(buildOauthMetadata('https://api.flaim.app/fantasy/mcp'), 200, { 'Cache-Control': 'public, max-age=3600' });
 });
 
-/**
- * Build MCP-compliant 401 response with WWW-Authenticate header.
- * Resource URL is path-sensitive: /fantasy/* advertises /fantasy/mcp, otherwise /mcp.
- */
-function buildMcpAuthErrorResponse(request: Request): Response {
-  const corsHeaders = createMcpCorsHeaders(request);
-  const pathname = new URL(request.url).pathname;
-  const resource = pathname.startsWith('/fantasy/')
-    ? 'https://api.flaim.app/fantasy/mcp'
-    : 'https://api.flaim.app/mcp';
-  return new Response(
-    JSON.stringify({
-      jsonrpc: '2.0',
-      error: {
-        code: -32001,
-        message: 'Authentication required. Please provide a valid Bearer token.',
-      },
-      id: null,
-    }),
-    {
-      status: 401,
-      headers: {
-        'Content-Type': 'application/json',
-        'WWW-Authenticate': `Bearer realm="fantasy-mcp", resource="${resource}"`,
-        ...corsHeaders,
-      },
-    }
-  );
-}
-
 async function handleMcpRequest(c: Context<{ Bindings: Env }>): Promise<Response> {
   const correlationId = getCorrelationId(c.req.raw);
   const { evalRunId, evalTraceId } = getEvalContext(c.req.raw);
@@ -154,9 +125,41 @@ async function handleMcpRequest(c: Context<{ Bindings: Env }>): Promise<Response
     return buildMcpAuthErrorResponse(c.req.raw);
   }
 
+  // Scope pre-flight: resolve token scope via auth-worker introspection
+  const pathname = new URL(c.req.raw.url).pathname;
+  const expectedResource = pathname.startsWith('/fantasy/')
+    ? 'https://api.flaim.app/fantasy/mcp'
+    : 'https://api.flaim.app/mcp';
+
+  let tokenScope: string | undefined;
+  try {
+    const introspectRes = await c.env.AUTH_WORKER.fetch(
+      new Request('https://internal/auth/introspect', {
+        headers: {
+          Authorization: authHeader,
+          'X-Flaim-Expected-Resource': expectedResource,
+        },
+      })
+    );
+    if (!introspectRes.ok) {
+      return buildMcpAuthErrorResponse(c.req.raw);
+    }
+    const tokenInfo = await introspectRes.json() as { valid: boolean; scope?: string };
+    if (!tokenInfo.valid) {
+      return buildMcpAuthErrorResponse(c.req.raw);
+    }
+    tokenScope = typeof tokenInfo.scope === 'string' ? tokenInfo.scope.trim() : undefined;
+    if (!tokenScope) {
+      return buildMcpAuthErrorResponse(c.req.raw);
+    }
+  } catch {
+    return buildMcpAuthErrorResponse(c.req.raw);
+  }
+
   const server = createFantasyMcpServer({
     env: c.env,
     authHeader,
+    tokenScope,
     correlationId,
     evalRunId,
     evalTraceId,

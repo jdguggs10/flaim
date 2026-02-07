@@ -10,6 +10,7 @@ This file is the canonical map for Flaim docs. Always read this first and use it
 | Platform/sport feature parity | `docs/STATUS.md` | Keep parity tables here; link elsewhere. |
 | Deploy targets + envs | `docs/STATUS.md` | Keep in sync with `.github/workflows/deploy-workers.yml` and worker wranglers. |
 | Database schema summary | `docs/DATABASE.md` | Migrations in `docs/migrations/` are canonical. |
+| Error code taxonomy | `docs/ERROR-CODES.md` | Canonical list; codes defined in `workers/shared/src/errors.ts`. |
 | Test strategy | `docs/TESTING.md` | Keep light; focus on critical paths. |
 | Eval harness operations + runbooks | `flaim-eval/docs/*` | Canonical in separate repo; keep only short links in this repo. |
 | Public product overview | `README.md` | User-facing, high level. |
@@ -31,6 +32,7 @@ This file is the canonical map for Flaim docs. Always read this first and use it
 - `docs/DATABASE.md`: Schema summary; refer to `docs/migrations/` for truth.
 - `docs/TESTING.md`: Testing guidance and commands.
 - `docs/STYLE-GUIDE.md`: Design tokens, component guidelines, accessibility standards, and frontend code conventions.
+- `docs/ERROR-CODES.md`: Error code taxonomy used across all workers. Codes defined in `@flaim/worker-shared`.
 - `docs/CHANGELOG.md`: Release history (keep it concise).
 
 ### Dev docs (temporal / work-in-progress)

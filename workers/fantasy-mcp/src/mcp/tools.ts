@@ -18,8 +18,13 @@ type ZodShape = Record<string, any>;
 export interface McpToolResponse {
   content: Array<{ type: 'text'; text: string }>;
   isError?: boolean;
+  _meta?: Record<string, unknown>;
   // Index signature to satisfy MCP SDK types
   [key: string]: unknown;
+}
+
+export interface ToolSecuritySchemes {
+  oauth: { type: 'oauth2'; scope: string };
 }
 
 export interface UnifiedTool {
@@ -27,6 +32,8 @@ export interface UnifiedTool {
   title: string;
   description: string;
   inputSchema: ZodShape;
+  requiredScope: 'mcp:read' | 'mcp:write';
+  securitySchemes: ToolSecuritySchemes;
   handler: (
     args: Record<string, unknown>,
     env: Env,
@@ -35,6 +42,20 @@ export interface UnifiedTool {
     evalRunId?: string,
     evalTraceId?: string
   ) => Promise<McpToolResponse>;
+}
+
+/**
+ * Check whether a granted OAuth scope string includes the required scope.
+ * Fail-closed: returns false if grantedScope is missing or empty.
+ */
+export function hasRequiredScope(grantedScope: string | undefined, requiredScope: 'mcp:read' | 'mcp:write'): boolean {
+  if (!grantedScope) return false;
+  const granted = new Set(grantedScope.split(/\s+/).filter(Boolean));
+  return granted.has(requiredScope);
+}
+
+function buildSecuritySchemes(scope: 'mcp:read' | 'mcp:write'): ToolSecuritySchemes {
+  return { oauth: { type: 'oauth2', scope } };
 }
 
 // =============================================================================
@@ -138,6 +159,24 @@ function mcpError(message: string): McpToolResponse {
   return {
     content: [{ type: 'text', text: message }],
     isError: true,
+  };
+}
+
+export function mcpAuthError(resource: string): McpToolResponse {
+  // Derive metadata URL from resource: strip /mcp path, add .well-known
+  // e.g. https://api.flaim.app/mcp → https://api.flaim.app/.well-known/oauth-protected-resource
+  //      https://api.flaim.app/fantasy/mcp → https://api.flaim.app/fantasy/.well-known/oauth-protected-resource
+  const url = new URL(resource);
+  const basePath = url.pathname.replace(/\/mcp$/, '');
+  const resourceMetadata = `${url.origin}${basePath}/.well-known/oauth-protected-resource`;
+  return {
+    content: [{ type: 'text', text: 'AUTH_FAILED: Authentication required' }],
+    isError: true,
+    _meta: {
+      'mcp/www_authenticate': [
+        `Bearer resource_metadata="${resourceMetadata}", error="invalid_token", error_description="Authentication required"`,
+      ],
+    },
   };
 }
 
@@ -265,8 +304,10 @@ export function getUnifiedTools(): UnifiedTool[] {
     {
       name: 'get_user_session',
       title: 'User Session',
+      requiredScope: 'mcp:read',
+      securitySchemes: buildSecuritySchemes('mcp:read'),
       description:
-        "Returns the user's configured fantasy leagues with current season info. Use the returned platform, sport, leagueId, teamId, and seasonYear values for all subsequent tool calls. season_year always represents the start year of the season.",
+        "Returns the user's configured fantasy leagues with current season info. Use the returned platform, sport, leagueId, teamId, and seasonYear values for all subsequent tool calls. season_year always represents the start year of the season. Read-only and safe to retry.",
       inputSchema: {},
       handler: async (_args, env, authHeader, correlationId, evalRunId, evalTraceId) => {
         return withToolLogging(correlationId, 'get_user_session', 'session', async () => {
@@ -281,7 +322,7 @@ export function getUnifiedTools(): UnifiedTool[] {
           );
 
           if (fetchStatus === 401 || fetchStatus === 403) {
-            throw new Error('AUTH_FAILED: Authentication failed');
+            return mcpAuthError('https://api.flaim.app/mcp');
           }
 
           // Fetch Yahoo leagues
@@ -488,9 +529,6 @@ export function getUnifiedTools(): UnifiedTool[] {
           });
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Unknown error';
-          if (message.includes('AUTH_FAILED')) {
-            throw error; // Re-throw auth errors to be handled by MCP handler
-          }
           return mcpError(`Failed to fetch user session: ${message}`);
         }
         }, evalRunId, evalTraceId);
@@ -503,8 +541,10 @@ export function getUnifiedTools(): UnifiedTool[] {
     {
       name: 'get_ancient_history',
       title: 'Ancient History',
+      requiredScope: 'mcp:read',
+      securitySchemes: buildSecuritySchemes('mcp:read'),
       description:
-        'Retrieve archived leagues and old seasons beyond the 2-year window. Use when user asks about inactive leagues, past seasons, or historical performance.',
+        'Retrieve archived leagues and old seasons beyond the 2-year window. Use when user asks about inactive leagues, past seasons, or historical performance. Read-only and safe to retry.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -631,7 +671,9 @@ export function getUnifiedTools(): UnifiedTool[] {
     {
       name: 'get_league_info',
       title: 'League Information',
-      description: `Get fantasy league information including settings, scoring type, roster configuration, and schedule. Use values from get_user_session. Current date is ${currentDate}.`,
+      requiredScope: 'mcp:read',
+      securitySchemes: buildSecuritySchemes('mcp:read'),
+      description: `Get fantasy league information including settings, scoring type, roster configuration, and schedule. Use values from get_user_session. Read-only and safe to retry. Current date is ${currentDate}.`,
       inputSchema: {
         platform: z
           .enum(['espn', 'yahoo'])
@@ -663,7 +705,9 @@ export function getUnifiedTools(): UnifiedTool[] {
     {
       name: 'get_standings',
       title: 'League Standings',
-      description: `Get current league standings with team records, rankings, and playoff seeds. Use values from get_user_session. Current date is ${currentDate}.`,
+      requiredScope: 'mcp:read',
+      securitySchemes: buildSecuritySchemes('mcp:read'),
+      description: `Get current league standings with team records, rankings, and playoff seeds. Use values from get_user_session. Read-only and safe to retry. Current date is ${currentDate}.`,
       inputSchema: {
         platform: z
           .enum(['espn', 'yahoo'])
@@ -695,7 +739,9 @@ export function getUnifiedTools(): UnifiedTool[] {
     {
       name: 'get_matchups',
       title: 'League Matchups',
-      description: `Get matchups/scoreboard for a specific week or the current week. Use values from get_user_session. Current date is ${currentDate}.`,
+      requiredScope: 'mcp:read',
+      securitySchemes: buildSecuritySchemes('mcp:read'),
+      description: `Get matchups/scoreboard for a specific week or the current week. Use values from get_user_session. Read-only and safe to retry. Current date is ${currentDate}.`,
       inputSchema: {
         platform: z
           .enum(['espn', 'yahoo'])
@@ -729,7 +775,9 @@ export function getUnifiedTools(): UnifiedTool[] {
     {
       name: 'get_roster',
       title: 'Team Roster',
-      description: `Get detailed roster for a specific team including players, positions, and stats. Requires authentication. Use values from get_user_session. Current date is ${currentDate}.`,
+      requiredScope: 'mcp:read',
+      securitySchemes: buildSecuritySchemes('mcp:read'),
+      description: `Get detailed roster for a specific team including players, positions, and stats. Requires authentication. Use values from get_user_session. Read-only and safe to retry. Current date is ${currentDate}.`,
       inputSchema: {
         platform: z
           .enum(['espn', 'yahoo'])
@@ -765,7 +813,9 @@ export function getUnifiedTools(): UnifiedTool[] {
     {
       name: 'get_free_agents',
       title: 'Free Agents',
-      description: `Get available free agents, optionally filtered by position. Sorted by ownership percentage. Requires authentication. Use values from get_user_session. Current date is ${currentDate}.`,
+      requiredScope: 'mcp:read',
+      securitySchemes: buildSecuritySchemes('mcp:read'),
+      description: `Get available free agents, optionally filtered by position. Sorted by ownership percentage. Requires authentication. Use values from get_user_session. Read-only and safe to retry. Current date is ${currentDate}.`,
       inputSchema: {
         platform: z
           .enum(['espn', 'yahoo'])

@@ -8,7 +8,7 @@
     "deploy:dev": "wrangler deploy --env dev",
     "deploy:preview": "wrangler deploy --env preview",
     "deploy:prod": "wrangler deploy --env prod",
-    "test": "vitest run",
+    "test": "vitest run && vitest run -c vitest.integration.config.ts",
     "type-check": "tsc --noEmit"
   },
   "dependencies": {

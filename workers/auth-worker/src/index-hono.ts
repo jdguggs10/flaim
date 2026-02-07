@@ -276,9 +276,10 @@ interface AuthResult {
   userId: string | null;
   error?: string;
   authType?: 'clerk' | 'oauth';
+  scope?: string;
 }
 
-async function getVerifiedUserId(request: Request, env: Env): Promise<AuthResult> {
+async function getVerifiedUserId(request: Request, env: Env, expectedResource?: string): Promise<AuthResult> {
   const authz = request.headers.get('Authorization');
   const requestUrl = new URL(request.url);
   debugLog(env, `🔐 [auth-worker] getVerifiedUserId called for ${requestUrl.pathname}`);
@@ -302,10 +303,10 @@ async function getVerifiedUserId(request: Request, env: Env): Promise<AuthResult
     const token = authz.slice(7).trim();
     try {
       debugLog(env, `🔐 [auth-worker] Attempting OAuth token validation...`);
-      const oauthResult = await validateOAuthToken(token, env as OAuthEnv);
+      const oauthResult = await validateOAuthToken(token, env as OAuthEnv, expectedResource);
       if (oauthResult) {
         debugLog(env, `✅ [auth-worker] OAuth token validated, userId: ${maskUserId(oauthResult.userId)}`);
-        return { userId: oauthResult.userId, authType: 'oauth' };
+        return { userId: oauthResult.userId, authType: 'oauth', scope: oauthResult.scope };
       }
       debugLog(env, `⚠️ [auth-worker] OAuth token validation returned null`);
     } catch (e) {
@@ -504,6 +505,18 @@ api.post('/token', (c) => {
 // Revocation endpoint (public)
 api.post('/revoke', (c) => {
   return handleRevoke(c.req.raw, c.env as OAuthEnv, getCorsHeaders(c.req.raw));
+});
+
+// Token introspection (internal — called by fantasy-mcp gateway via service binding)
+api.get('/introspect', async (c) => {
+  const expectedResource = c.req.header('X-Flaim-Expected-Resource') || undefined;
+  const { userId, error: authError, scope } = await getVerifiedUserId(c.req.raw, c.env, expectedResource);
+
+  if (!userId) {
+    return c.json({ valid: false, error: authError || 'Invalid token' }, 401);
+  }
+
+  return c.json({ valid: true, userId, scope: scope || 'mcp:read' });
 });
 
 // =============================================================================
