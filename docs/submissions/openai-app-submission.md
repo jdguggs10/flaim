@@ -1,6 +1,20 @@
 # OpenAI App Submission Packet
 
-Prepared for submission to the ChatGPT Apps Directory. Re-verify fields against the [submission guidelines](https://developers.openai.com/apps-sdk/deploy/submission/) and [app submission guidelines](https://developers.openai.com/apps-sdk/app-submission-guidelines) within 7 days before submitting.
+Prepared for submission to the ChatGPT Apps Directory.
+
+## Pre-submission verification checklist
+
+Before submitting, re-verify this packet against official sources (policies change):
+
+- [ ] [Submission guide](https://developers.openai.com/apps-sdk/deploy/submission/) — confirm required fields match
+- [ ] [App submission guidelines](https://developers.openai.com/apps-sdk/app-submission-guidelines) — confirm review criteria
+- [ ] [MCP server concept](https://developers.openai.com/apps-sdk/concepts/mcp-server/) — confirm transport/auth requirements
+- [ ] [Auth docs](https://developers.openai.com/apps-sdk/build/auth/) — confirm OAuth flow requirements
+- [ ] [Connect from ChatGPT](https://developers.openai.com/apps-sdk/deploy/connect-chatgpt) — confirm user-facing flow
+- [ ] Run manual OAuth runbook for ChatGPT (see `docs/MANUAL-OAUTH-RUNBOOKS.md`)
+- [ ] Run `npm run presubmit -- <run_id>` and confirm PASS
+
+**Last verified against official sources:** 2026-02-07
 
 ---
 

@@ -1,6 +1,19 @@
 # Anthropic Connector Submission Packet
 
-Prepared for submission to the Anthropic Connectors Directory. Re-verify fields against the [submission guide](https://support.claude.com/en/articles/12922490-remote-mcp-server-submission-guide) within 7 days before submitting.
+Prepared for submission to the Anthropic Connectors Directory.
+
+## Pre-submission verification checklist
+
+Before submitting, re-verify this packet against official sources (policies change):
+
+- [ ] [Submission guide](https://support.claude.com/en/articles/12922490-remote-mcp-server-submission-guide) — confirm required fields match
+- [ ] [Build guide](https://support.claude.com/en/articles/11503834-building-custom-connectors-via-remote-mcp-servers) — confirm auth/transport requirements
+- [ ] [Connectors directory FAQ](https://support.claude.com/en/articles/11596036-anthropic-connectors-directory-faq) — confirm review process hasn't changed
+- [ ] [MCP connector docs](https://platform.claude.com/docs/en/agents-and-tools/mcp-connector) — confirm API-level requirements
+- [ ] Run manual OAuth runbook for Claude (see `docs/MANUAL-OAUTH-RUNBOOKS.md`)
+- [ ] Run `npm run presubmit -- <run_id>` and confirm PASS
+
+**Last verified against official sources:** 2026-02-07
 
 ---
 
