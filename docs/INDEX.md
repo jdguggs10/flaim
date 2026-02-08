@@ -18,7 +18,7 @@ This file is the canonical map for Flaim docs. Update this when document ownersh
 | Backlog | `docs/dev/TODO.md` | Active backlog only. |
 | Directory submission packets | `docs/submissions/*` | Re-verify before submission. |
 | Tool versioning policy | `docs/TOOL-VERSIONING.md` | Breaking vs non-breaking guidance. |
-| Historical docs | `docs/archive/*` | Superseded docs and reports. |
+| Historical docs/plans pointers | `docs/archive/README.md`, `docs/plans/README.md` | External archive source-of-truth for stale docs. |
 
 ## Permanent Docs (Long-Lived)
 
@@ -35,6 +35,8 @@ This file is the canonical map for Flaim docs. Update this when document ownersh
 - `docs/CHANGELOG.md`
 - `docs/MANUAL-OAUTH-RUNBOOKS.md`
 - `docs/TOOL-VERSIONING.md`
+- `docs/archive/README.md`
+- `docs/plans/README.md`
 - `docs/submissions/anthropic-connector-submission.md`
 - `docs/submissions/openai-app-submission.md`
 
@@ -44,9 +46,9 @@ This file is the canonical map for Flaim docs. Update this when document ownersh
 - `docs/dev/TODO.md`
 - `docs/dev/basketball-hockey-api-spike.md`
 
-Historical analyses moved to archive:
-- `docs/archive/season-year-problem.md`
-- `docs/archive/chat-api-audit.md`
+Historical analyses/plans were externalized:
+- `docs/archive/README.md`
+- `docs/plans/README.md`
 
 ## External Repo Docs
 
@@ -67,5 +69,5 @@ Historical analyses moved to archive:
 
 1. Update `docs/STATUS.md` when tool coverage, endpoints, deploy targets, or channel readiness changes.
 2. Update `docs/dev/CURRENT-EXECUTION-STATE.md` when sprint/phase status changes.
-3. Move superseded plans/reports into `docs/archive/` rather than leaving conflicting active docs.
+3. Move superseded plans/reports to the external archive bundle, then update `docs/archive/README.md` and/or `docs/plans/README.md`.
 4. Prefer links to canonical docs instead of duplicating tables across files.

@@ -32,6 +32,7 @@ Follow Keep a Changelog; SemVer applies.
 - **Changed**: Archived `docs/dev/ADD_YAHOO_PLATFORM.md` to `docs/archive/` (Phase 3 complete).
 - **Changed**: Consolidated current execution/sprint state into `docs/dev/CURRENT-EXECUTION-STATE.md` and archived superseded Feb 2026 sprint/incident plans.
 - **Changed**: Refreshed docs source-of-truth routing in `docs/INDEX.md`, `docs/STATUS.md`, and `docs/dev/TODO.md`.
+- **Changed**: Externalized stale `docs/archive/*.md` and `docs/plans/*.md` to `/Users/ggugger/Code/flaim-docs-archive/2026-02-08-repo-doc-cleanup/` and left in-repo pointer files for lightweight checkouts.
 
 ### Branding
 - **Changed**: New flaming baseball logo for site favicon, apple-touch-icon, and Chrome extension icons.
@@ -113,7 +114,7 @@ Major architectural restructure implementing a unified gateway pattern for multi
 - **Fixed**: Football season rollover date (March 1 → June 1) to match documentation
 - **Deprecated**: Legacy workers (`baseball-espn-mcp`, `football-espn-mcp`) - still functional as fallback
 
-See `docs/plans/2025-01-19-phase0-unified-gateway.md` for implementation details.
+See `docs/plans/README.md` for the externalized historical implementation-plan location.
 
 ### Worker Infrastructure: Hono + MCP SDK
 Migrated all 3 Cloudflare Workers to Hono routing framework and official MCP SDK. Cleaner code, better testing support, ~400 lines removed.

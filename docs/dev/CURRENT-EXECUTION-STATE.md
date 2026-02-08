@@ -3,7 +3,7 @@
 Last updated: 2026-02-08
 Owner: Flaim (solo)
 
-This is the canonical execution-status page for current work. It replaces the recent overlapping sprint/incident plans that were moved to `docs/archive/`.
+This is the canonical execution-status page for current work. It replaces overlapping sprint/incident plans that were moved to the external archive bundle (see `docs/archive/README.md`).
 
 ## Snapshot
 
@@ -72,15 +72,11 @@ This is the canonical execution-status page for current work. It replaces the re
 - Active backlog: `docs/dev/TODO.md`
 - Manual OAuth verification: `docs/MANUAL-OAUTH-RUNBOOKS.md`
 - Submission packets: `docs/submissions/*`
-- Historical implementation details: `docs/archive/*`
+- Historical implementation details: `docs/archive/README.md` and `docs/plans/README.md`
 
 ## Archived During Cleanup (Superseded)
 
-- `docs/archive/plugins-buildout-plan.md`
-- `docs/archive/mcp-eval-observability-scope.md`
-- `docs/archive/openai-mcp-424-investigation-2026-02-08.md`
-- `docs/archive/2026-02-06-mcp-eval-harness.md`
-- `docs/archive/2026-02-06-eval-trace-observability-plan.md`
-- `docs/archive/2026-02-06-sprint-a-auth-hardening-plan.md`
-- `docs/archive/2026-02-07-eval-observability-remediation-plan.md`
-- `docs/archive/2026-02-07-sprint-b-testing-packaging-plan.md`
+- In-repo archive/plans markdown moved to external bundle:
+  - `/Users/ggugger/Code/flaim-docs-archive/2026-02-08-repo-doc-cleanup/`
+- Full file list:
+  - `/Users/ggugger/Code/flaim-docs-archive/2026-02-08-repo-doc-cleanup/README.md`

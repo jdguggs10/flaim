@@ -5,7 +5,7 @@
  * Uses America/New_York timezone for consistency with ESPN fantasy seasons.
  *
  * Canonical form: season_year always stores the START year of the season.
- * Historical rationale: docs/archive/season-year-problem.md.
+ * Historical rationale pointer: docs/archive/README.md.
  *
  * Rollover rules (when the "current season" flips to next year):
  * - Baseball: Feb 1 (~10 weeks before Opening Day late March)
