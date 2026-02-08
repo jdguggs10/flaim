@@ -22,7 +22,7 @@ Before submitting, re-verify this packet against official sources (policies chan
 - **App name:** Flaim — Fantasy League AI Connector
 - **Description:** Connect your ESPN and Yahoo fantasy sports leagues to Claude. Get standings, rosters, matchups, free agents, and league info via natural conversation. Read-only access — Flaim never modifies your league data.
 - **MCP server URL:** `https://api.flaim.app/mcp`
-- **Transport:** Streamable HTTP (also supports legacy SSE)
+- **Transport:** Streamable HTTP over `POST https://api.flaim.app/mcp` (non-POST requests return `405` with `Allow: POST`)
 
 ## Links
 

@@ -4,10 +4,17 @@ Follow Keep a Changelog; SemVer applies.
 
 ## [Unreleased]
 
+### MCP Interoperability
+- **Fixed**: Resolved MCP connector discovery failures (`424`) by hardening transport behavior at `/mcp`.
+- **Changed**: MCP protocol endpoint now rejects non-POST requests with `405 Allow: POST` to avoid hanging GET stream paths.
+- **Changed**: Fantasy MCP handler now uses stream-mode responses (`enableJsonResponse: false`) for improved connector compatibility.
+- **Changed**: Tool security metadata normalized to canonical array-based `securitySchemes` shape.
+
 ### OAuth
 - **Fixed**: Resolved intermittent `Invalid or expired state` failures during MCP connector approval (Codex/ChatGPT) when returning from sign-in to consent.
 - **Changed**: Authorization redirect now includes `oauth_state` (while preserving legacy `state`) to avoid collisions with auth-provider query params during consent round-trips.
 - **Added**: More specific auth-worker logging for OAuth state validation failures (missing lookup, expiry, redirect URI mismatch, client ID mismatch).
+- **Added**: Eval API key auth path in auth-worker for headless `flaim-eval` execution (optional allowlist for MCP-read routes).
 
 ### Infrastructure
 - **Changed**: Upgraded Tailwind CSS v3 → v4. Migrated config from `tailwind.config.ts` to CSS-based `@theme` in `globals.css`. Replaced `tailwindcss-animate` with `tw-animate-css`. Updated PostCSS to use `@tailwindcss/postcss`.
@@ -23,6 +30,8 @@ Follow Keep a Changelog; SemVer applies.
 - **Added**: `workers/yahoo-client/README.md` — Yahoo client worker documentation covering OAuth, JSON normalizers, and sports handlers.
 - **Changed**: Promoted UI consistency rules from `docs/dev/ui-consistency.md` to permanent documentation with expanded scope.
 - **Changed**: Archived `docs/dev/ADD_YAHOO_PLATFORM.md` to `docs/archive/` (Phase 3 complete).
+- **Changed**: Consolidated current execution/sprint state into `docs/dev/CURRENT-EXECUTION-STATE.md` and archived superseded Feb 2026 sprint/incident plans.
+- **Changed**: Refreshed docs source-of-truth routing in `docs/INDEX.md`, `docs/STATUS.md`, and `docs/dev/TODO.md`.
 
 ### Branding
 - **Changed**: New flaming baseball logo for site favicon, apple-touch-icon, and Chrome extension icons.

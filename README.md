@@ -95,10 +95,11 @@ Solo developer, hobby project. Keep it simple and stable.
 | Document | Description |
 |----------|-------------|
 | [Architecture](docs/ARCHITECTURE.md) | System design, deployment, troubleshooting |
+| [Current Execution State](docs/dev/CURRENT-EXECUTION-STATE.md) | What is done, in progress, and next |
 | [Changelog](docs/CHANGELOG.md) | Release history |
 | [Web App](web/README.md) | Next.js routes, components, environment |
 | [Workers](workers/README.md) | Cloudflare Workers, MCP tools, ESPN API |
-| [Gemini CLI Setup](docs/GEMINI-CLI-SETUP.md) | Gemini CLI MCP setup, OAuth, troubleshooting |
+| [Manual OAuth Runbooks](docs/MANUAL-OAUTH-RUNBOOKS.md) | Claude, ChatGPT, and Gemini verification checklists |
 | [Extension](extension/README.md) | Chrome extension build, Sync Host, CWS |
 
 ### Quick Start (Development)

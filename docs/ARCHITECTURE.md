@@ -228,7 +228,11 @@ See `workers/README.md` for worker-to-worker communication requirements.
 
 Usually not needed since CI/CD handles it, but available for debugging:
 
-- **Workers**: `npm run deploy:workers:preview` or `npm run deploy:workers:prod`
+- **Workers** (manual fallback, per worker):
+  - `cd workers/auth-worker && wrangler deploy --env preview` (or `--env prod`)
+  - `cd workers/fantasy-mcp && npm run deploy:preview` (or `npm run deploy:prod`)
+  - `cd workers/espn-client && npm run deploy:preview` (or `npm run deploy:prod`)
+  - `cd workers/yahoo-client && npm run deploy:preview` (or `npm run deploy:prod`)
 - **Frontend**: Push to `main` or PR (Vercel auto-deploys)
 - **Extension**: See `extension/README.md` for Chrome Web Store update process
 

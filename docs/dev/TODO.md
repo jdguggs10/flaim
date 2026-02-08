@@ -1,29 +1,37 @@
 # TODO
 
-## Bugs
+Last updated: 2026-02-08
 
+Use this as the active backlog only. For overall phase status, see `docs/dev/CURRENT-EXECUTION-STATE.md`.
 
-## Features
-- Deepen MCP functionality for football and baseball: expand coverage (edge cases, richer data, pagination), and add more tests for existing tools.
+## Immediate (Current Gate)
 
-## Marketing
-- Visual Proof: Add interaction mockups/chat screenshots and use real platform logos.
-- Benefit-driven UX: Add "What can you ask?" grid with high-value AI query examples.
-- Email Support Upgrade: Upgrade cloudflare email functionality
+1. Make eval acceptance pass reliably on full runs.
+- Resolve missing-worker coverage failures in `flaim-eval` acceptance (`MISSING_AUTH_WORKER`, `MISSING_FANTASY_MCP`, downstream escalation).
+- Goal: two consecutive clean runs of `eval` + `accept` + `presubmit`.
 
-## Maintenance & Refactoring
+2. Finish submission preflight checks.
+- Run manual OAuth runbooks for Claude, ChatGPT, and Gemini.
+- Complete OpenAI packet screenshot checklist.
+- Re-verify vendor submission docs within 7 days of submission.
 
+3. Set Anthropic submission strategy.
+- Decide whether to submit now or delay based on likely directory review fit.
 
-## Infrastructure & UX Polish
-- Dynamic preview URLs for OAuth: Yahoo OAuth callback redirects to hardcoded `flaim-preview.vercel.app`. Should support dynamic Vercel preview URLs (e.g., pass preview URL in OAuth state, or use Vercel preview domain aliases). Currently can't test Yahoo OAuth on preview deployments.
-- Automated Testing: Core OAuth/tool routing tests added; consider deeper integration tests when usage grows.
-- Service Monitoring: Add external uptime checks for existing `/health` endpoints.
+## Next (Sprint C Candidate)
 
-## Long-term Potential Implementations
-- Create iOS app (Significant undertaking/Major platform expansion)
-- Automate connector additions via browser extension (might be too complex for now)
-- Add basketball and hockey support: Implement handlers for basketball and hockey in both `espn-client` and `yahoo-client` workers (5 tools each: get_league_info, get_standings, get_roster, get_matchups, get_free_agents)
-- Expand to additional fantasy platforms: Add Sleeper, CBS Sports, or other platforms (each platform = new `{platform}-client` worker + service binding + OAuth routes)
+1. Add basketball support (ESPN + Yahoo) for all read tools.
+2. Add hockey support (ESPN + Yahoo) for all read tools.
+3. Add tool/eval scenarios covering basketball and hockey.
 
-## Parked / Blocked
-- Claude Connector Directory listing: Flaim is technically compliant with Anthropic's MCP directory requirements (OAuth 2.1, tool annotations, Streamable HTTP, etc.), but unlikely to be approved because Flaim doesn't control the endpoint domain—it proxies to ESPN's APIs. Anthropic's directory appears to favor connectors where the submitter owns/controls the data source. Revisit if policy changes or if ESPN ever offers an official partnership/API program. (Analysis: Jan 2026)
+## Maintenance / Reliability
+
+1. Add external uptime checks for `/health` endpoints.
+2. Improve preview OAuth callback handling for dynamic Vercel preview URLs.
+3. Add deeper integration tests only where recent regressions justify it.
+
+## Deferred / Long-Term
+
+1. Additional fantasy platforms (Sleeper, CBS, others).
+2. iOS app.
+3. Browser-extension-driven connector automation.

@@ -1,79 +1,82 @@
 # Current Project Status
 
-Facts that should stay in sync with the codebase. This is the source of truth for tools, parity, and deploy targets.
+Facts that should stay in sync with the codebase.
 
-**Last updated:** 2026-02-06
+Last updated: 2026-02-08
 
-## MCP Endpoints (current)
-- Unified gateway: `https://api.flaim.app/mcp` (legacy alias: `/fantasy/mcp`)
+## Current Delivery Phase
+
+- Active phase: post-Sprint-B stabilization and submission preflight.
+- Canonical execution tracker: `docs/dev/CURRENT-EXECUTION-STATE.md`.
+
+## MCP Endpoints
+
+- Primary endpoint: `https://api.flaim.app/mcp`
+- Legacy alias: `https://api.flaim.app/fantasy/mcp`
+- Transport note: MCP endpoint is POST-only for protocol calls (`GET` returns `405` with `Allow: POST`).
 
 ## Unified MCP Tools
-All tools take explicit parameters: `platform`, `sport`, `league_id`, `season_year` (plus optional fields like `team_id`, `week`, `position`, `count`).
+
+All tools are read-only and use explicit parameters (`platform`, `sport`, `league_id`, `season_year`, plus optional fields where applicable).
 
 | Tool | Description |
 |---|---|
-| `get_user_session` | User's leagues across all platforms with IDs |
+| `get_user_session` | User leagues across platforms with IDs |
 | `get_ancient_history` | Historical leagues and seasons (2+ years old) |
 | `get_league_info` | League settings and members |
 | `get_roster` | Team roster with player stats |
 | `get_matchups` | Current/specified week matchups |
 | `get_standings` | League standings |
-| `get_free_agents` | Available free agents (platform/sport dependent) |
+| `get_free_agents` | Available free agents |
 
-## Feature Parity Matrix (by platform/sport)
+## Platform/Sport Support
 
-| Tool | ESPN Football | ESPN Baseball | Yahoo Football | Yahoo Baseball |
-|------|:-------------:|:-------------:|:--------------:|:--------------:|
-| `get_user_session` | ✅ | ✅ | ✅ | ✅ |
-| `get_ancient_history` | ✅ | ✅ | ✅ | ✅ |
-| `get_league_info` | ✅ | ✅ | ✅ | ✅ |
-| `get_standings` | ✅ | ✅ | ✅ | ✅ |
-| `get_matchups` | ✅ | ✅ | ✅ | ✅ |
-| `get_roster` | ✅ | ✅ | ✅ | ✅ |
-| `get_free_agents` | ✅ | ✅ | ✅ | ✅ |
+| Sport | ESPN | Yahoo | Notes |
+|---|---|---|---|
+| Football | ✅ | ✅ | Full read-tool coverage |
+| Baseball | ✅ | ✅ | Full read-tool coverage |
+| Basketball | ❌ | ❌ | Not implemented yet (`NOT_SUPPORTED`) |
+| Hockey | ❌ | ❌ | Not implemented yet (`NOT_SUPPORTED`) |
 
-**Legend:** ✅ Implemented | ❌ Not implemented | — Not applicable
+## Worker Inventory
 
-## Workers (repo inventory)
 - `auth-worker`
 - `fantasy-mcp` (gateway)
 - `espn-client`
 - `yahoo-client`
 
-## Eval Observability (current)
-- Eval runner sends `X-Flaim-Eval-Run` and `X-Flaim-Eval-Trace` on MCP calls.
-- Header propagation implemented through gateway and downstream worker calls.
-- Structured JSON eval logs implemented in:
-  - `workers/fantasy-mcp`
-  - `workers/espn-client`
-  - `workers/yahoo-client`
-  - `workers/auth-worker`
-- Eval artifacts are trace-scoped:
-  - `runs/<run_id>/<trace_id>/trace.json`
-  - `runs/<run_id>/<trace_id>/logs/<worker>.json`
-- Trace isolation is strict by default (legacy run-level fallback is opt-in).
-- `flaim-eval` supports post-run re-enrichment:
-  - `npm run enrich -- <run_id> [trace_id]`
-- `flaim-eval` supports acceptance summarization:
-  - `npm run accept -- <run_id>`
-- Canonical eval operations/runbooks live in:
-  - `../flaim-eval/docs/INDEX.md`
+## Eval Observability
+
+- Eval headers: `X-Flaim-Eval-Run`, `X-Flaim-Eval-Trace`
+- Structured eval logs implemented across all 4 workers.
+- Artifact layout is trace-scoped in `flaim-eval`.
+- Acceptance tooling exists (`npm run accept`, `npm run presubmit`).
+- Latest full eval run (`2026-02-08T16-00-07Z`) completed `9/9`, `0` errored.
+
+## Current Blocking Gate
+
+- Discovery/connectivity blocker is resolved (OpenAI MCP 424 issue fixed).
+- Current blocker is acceptance coverage policy failures in `flaim-eval` (`MISSING_AUTH_WORKER`, `MISSING_FANTASY_MCP`, downstream escalation) on the latest run.
 
 ## Client Channel Readiness
 
 | Channel | Status | Notes |
-|---------|--------|-------|
-| Claude (custom connector) | Working | OAuth flow functional; submission packet ready |
-| ChatGPT (custom connector) | Working | OAuth flow functional; submission packet ready |
-| Gemini CLI (direct MCP) | Working | Setup guide at `docs/GEMINI-CLI-SETUP.md`. Verified 2026-02-07. |
-| Anthropic Connectors Directory | Pending submission | Packet at `docs/submissions/anthropic-connector-submission.md` |
-| OpenAI Apps Directory | Pending submission | Packet at `docs/submissions/openai-app-submission.md` |
+|---|---|---|
+| Claude custom connector | Working | OAuth flow works; runbook exists |
+| ChatGPT custom connector | Working | OAuth flow works; runbook exists |
+| Gemini CLI direct MCP | Working | Covered in `docs/MANUAL-OAUTH-RUNBOOKS.md` |
+| Anthropic Connectors Directory | Pending | Packet drafted; submission decision pending |
+| OpenAI Apps Directory | Pending | Packet drafted; screenshot + preflight checks pending |
 
-## CI Deploy Targets (from `.github/workflows/deploy-workers.yml`)
+## CI Deploy Targets
+
+From `.github/workflows/deploy-workers.yml`:
+
 - `auth-worker`
 - `espn-client`
 - `yahoo-client`
 - `fantasy-mcp`
 
 ## Extension Version
+
 - Chrome extension `manifest.json`: `1.5.0`

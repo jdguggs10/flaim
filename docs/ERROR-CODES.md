@@ -33,6 +33,8 @@ Errors are thrown in `CODE: Human-readable message` format. Use `extractErrorCod
 | `SPORT_NOT_SUPPORTED` | Sport not supported on this platform | Platform client doesn't handle this sport yet | Check platform parity in STATUS.md |
 | `UNKNOWN_TOOL` | Unknown tool name | Misspelled or nonexistent tool | Check available tools via `tools/list` |
 
+Note: `basketball` and `hockey` are valid sport values in the contract, but current ESPN/Yahoo support is still pending. Expect `NOT_SUPPORTED`/`SPORT_NOT_SUPPORTED` until those handlers ship.
+
 ### ESPN-Specific
 
 | Code | Description | Likely Cause | User Action |

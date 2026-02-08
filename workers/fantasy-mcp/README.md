@@ -30,7 +30,9 @@ fantasy-mcp (this worker)
 | `/fantasy/health` | GET | Same (for routed access) |
 | `/.well-known/oauth-protected-resource` | GET | OAuth metadata (RFC 9728) |
 | `/mcp` | POST | MCP protocol endpoint |
+| `/mcp` | non-POST | Returns `405` with `Allow: POST` |
 | `/fantasy/mcp` | POST | Same (for routed access via `api.flaim.app/fantasy/*`) |
+| `/fantasy/mcp` | non-POST | Returns `405` with `Allow: POST` |
 
 ## MCP Tools
 
@@ -84,6 +86,7 @@ wrangler dev --env dev --port 8790
 
 - **Custom route**: `https://api.flaim.app/mcp` (legacy alias: `https://api.flaim.app/fantasy/mcp`)
 - **Workers.dev**: `https://fantasy-mcp.gerrygugger.workers.dev/mcp`
+- **Transport behavior**: Streamable HTTP over POST with stream-mode responses (`text/event-stream`).
 
 ## Service Bindings
 

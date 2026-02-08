@@ -135,14 +135,18 @@ Credentials are fetched from auth-worker per request; MCP workers don't store th
 ## Deployment
 
 ```bash
-npm run deploy:workers:preview  # Deploy to preview env
-npm run deploy:workers:prod     # Deploy to production
+# Usually handled by GitHub Actions (.github/workflows/deploy-workers.yml)
+# Manual fallback (deploy each worker explicitly):
+cd workers/auth-worker && wrangler deploy --env preview   # or --env prod
+cd workers/fantasy-mcp && npm run deploy:preview          # or npm run deploy:prod
+cd workers/espn-client && npm run deploy:preview          # or npm run deploy:prod
+cd workers/yahoo-client && npm run deploy:preview         # or npm run deploy:prod
 ```
 
 Workers use custom routes via `api.flaim.app`:
 - `/auth/*` → auth-worker
 - `/fantasy/*` → fantasy-mcp (unified gateway)
-- `/mcp*` → fantasy-mcp (primary MCP endpoint)
+- `/mcp*` → fantasy-mcp (primary MCP endpoint, POST required; non-POST returns `405`)
 
 Note: `espn-client` is called internally via service binding for MCP traffic, but the web app uses its `/onboarding/*` endpoints via the public workers.dev URL.
 
@@ -153,7 +157,7 @@ Note: `espn-client` is called internally via service binding for MCP traffic, bu
 | 522 timeouts (worker-to-worker) | Using custom domain for internal calls | Use `.workers.dev` URL for `AUTH_WORKER_URL` |
 | 500s in prod | Missing Cloudflare secrets | Add secrets in dashboard |
 | 404s on custom routes | Worker expects stripped path | Cloudflare routes strip `/auth` and `/fantasy` prefixes |
-| 424 from Responses API | Wrong MCP endpoint | Ensure `server_url` ends with `/mcp` |
+| 424 from Responses API | MCP transport/protocol mismatch | Ensure `server_url` is `https://api.flaim.app/mcp`, calls are POST-based, and deployed `fantasy-mcp` includes stream-mode MCP responses plus non-POST `405` handling |
 | `EMFILE: too many open files, watch` | File descriptor limit too low for dev watchers | Run `ulimit -n 8192` (or higher) and restart `wrangler dev` |
 | `EPERM` writing Wrangler logs/registry | Global Wrangler directory not writable | Use `WRANGLER_LOG_PATH` + `WRANGLER_REGISTRY_PATH` env vars |
 

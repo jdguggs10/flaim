@@ -4,10 +4,8 @@
   "workspaces": [
     "web",
     "workers/auth-worker",
-    "workers/baseball-espn-mcp",
     "workers/espn-client",
     "workers/fantasy-mcp",
-    "workers/football-espn-mcp",
     "workers/shared",
     "workers/yahoo-client"
   ],
@@ -22,8 +20,8 @@
     "dev:fantasy-mcp": "cd workers/fantasy-mcp && npm run dev",
     "build": "cd web && npm run build",
     "lint": "cd web && npm run lint",
-    "deploy:workers:preview": "concurrently \"cd workers/auth-worker && wrangler deploy --env preview\" \"cd workers/baseball-espn-mcp && wrangler deploy --env preview\" \"cd workers/football-espn-mcp && wrangler deploy --env preview\"",
-    "deploy:workers:prod": "concurrently \"cd workers/auth-worker && wrangler deploy --env prod\" \"cd workers/baseball-espn-mcp && wrangler deploy --env prod\" \"cd workers/football-espn-mcp && wrangler deploy --env prod\"",
+    "deploy:workers:preview": "concurrently \"cd workers/auth-worker && wrangler deploy --env preview\" \"cd workers/fantasy-mcp && wrangler deploy --env preview\" \"cd workers/espn-client && wrangler deploy --env preview\" \"cd workers/yahoo-client && wrangler deploy --env preview\"",
+    "deploy:workers:prod": "concurrently \"cd workers/auth-worker && wrangler deploy --env prod\" \"cd workers/fantasy-mcp && wrangler deploy --env prod\" \"cd workers/espn-client && wrangler deploy --env prod\" \"cd workers/yahoo-client && wrangler deploy --env prod\"",
     "deploy:espn-client:preview": "cd workers/espn-client && npm run deploy:preview",
     "deploy:espn-client:prod": "cd workers/espn-client && npm run deploy:prod",
     "deploy:fantasy-mcp:preview": "cd workers/fantasy-mcp && npm run deploy:preview",

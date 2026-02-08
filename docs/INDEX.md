@@ -1,81 +1,71 @@
 # Documentation Index
 
-This file is the canonical map for Flaim docs. Always read this first and use it to decide where updates belong. Avoid duplicating facts across multiple docs.
+This file is the canonical map for Flaim docs. Update this when document ownership changes.
 
-## Source-of-truth map (update these first)
+## Source-of-Truth Map
 
 | Fact type | Source of truth | Notes |
 |---|---|---|
-| Tools list + descriptions | `docs/STATUS.md` | If a tool is added/changed, update here first. |
-| Platform/sport feature parity | `docs/STATUS.md` | Keep parity tables here; link elsewhere. |
-| Deploy targets + envs | `docs/STATUS.md` | Keep in sync with `.github/workflows/deploy-workers.yml` and worker wranglers. |
-| Database schema summary | `docs/DATABASE.md` | Migrations in `docs/migrations/` are canonical. |
-| Error code taxonomy | `docs/ERROR-CODES.md` | Canonical list; codes defined in `workers/shared/src/errors.ts`. |
-| Test strategy | `docs/TESTING.md` | Keep light; focus on critical paths. |
-| Eval harness operations + runbooks | `flaim-eval/docs/*` | Canonical in separate repo; keep only short links in this repo. |
-| Public product overview | `README.md` | User-facing, high level. |
-| Architecture overview | `docs/ARCHITECTURE.md` | System design + data flow. |
-| Release history | `docs/CHANGELOG.md` | Keep a concise, high-level record. |
-| Backlog | `docs/dev/TODO.md` | Active list of bugs/features/maintenance. |
-| Design/implementation plans | `docs/plans/*` | Short-lived design notes. |
-| Submission packets | `docs/submissions/*` | Directory submission artifacts. Re-verify before each submission. |
-| Tool versioning policy | `docs/TOOL-VERSIONING.md` | Breaking vs non-breaking changes, deprecation process. |
-| Historical reports | `docs/archive/*` | Read-only; do not update. |
+| Current delivery phase + what is next | `docs/dev/CURRENT-EXECUTION-STATE.md` | Canonical execution tracker. |
+| Tools list + platform/sport support + deploy targets | `docs/STATUS.md` | Keep aligned with code and CI. |
+| Database schema summary | `docs/DATABASE.md` | Migrations in `docs/migrations/` remain canonical. |
+| Error code taxonomy | `docs/ERROR-CODES.md` | Codes defined in `workers/shared/src/errors.ts`. |
+| Testing strategy | `docs/TESTING.md` | Keep lightweight and practical. |
+| Eval harness operations/runbooks | `../flaim-eval/docs/*` | Canonical in separate repo. |
+| Public product overview | `README.md` | User-facing high-level overview. |
+| Architecture overview | `docs/ARCHITECTURE.md` | System design and data flow. |
+| Release history | `docs/CHANGELOG.md` | Condensed historical release notes. |
+| Backlog | `docs/dev/TODO.md` | Active backlog only. |
+| Directory submission packets | `docs/submissions/*` | Re-verify before submission. |
+| Tool versioning policy | `docs/TOOL-VERSIONING.md` | Breaking vs non-breaking guidance. |
+| Historical docs | `docs/archive/*` | Superseded docs and reports. |
 
-## Doc map (what each doc is for)
+## Permanent Docs (Long-Lived)
 
-### Permanent docs (long-lived)
-- `README.md`: Public overview, how it works, key features, basic setup.
-- `AGENTS.md`: Agent behavior rules and repo guardrails for automated tooling.
-- `CLAUDE.md`: Claude-specific guidance (treat as repo tooling notes).
-- `GEMINI.md`: Gemini-specific guidance (treat as repo tooling notes).
-- `docs/ARCHITECTURE.md`: System architecture, runtime choices, data flow, deployment notes.
-- `docs/STATUS.md`: Canonical tools list, parity matrix, deploy targets.
-- `docs/DATABASE.md`: Schema summary; refer to `docs/migrations/` for truth.
-- `docs/TESTING.md`: Testing guidance and commands.
-- `docs/STYLE-GUIDE.md`: Design tokens, component guidelines, accessibility standards, and frontend code conventions.
-- `docs/ERROR-CODES.md`: Error code taxonomy used across all workers. Codes defined in `@flaim/worker-shared`.
-- `docs/CHANGELOG.md`: Release history (keep it concise).
-- `docs/MANUAL-OAUTH-RUNBOOKS.md`: Per-client OAuth connect checklists (Claude, ChatGPT, Gemini CLI). Run before submissions.
-- `docs/GEMINI-CLI-SETUP.md`: Gemini CLI setup guide — MCP server config, OAuth walkthrough, troubleshooting.
-- `docs/TOOL-VERSIONING.md`: Policy for tool contract changes and directory resubmission.
-- `docs/submissions/anthropic-connector-submission.md`: Anthropic Connectors Directory submission packet.
-- `docs/submissions/openai-app-submission.md`: OpenAI Apps Directory submission packet.
+- `README.md`
+- `AGENTS.md`
+- `CLAUDE.md`
+- `GEMINI.md`
+- `docs/ARCHITECTURE.md`
+- `docs/STATUS.md`
+- `docs/DATABASE.md`
+- `docs/TESTING.md`
+- `docs/STYLE-GUIDE.md`
+- `docs/ERROR-CODES.md`
+- `docs/CHANGELOG.md`
+- `docs/MANUAL-OAUTH-RUNBOOKS.md`
+- `docs/TOOL-VERSIONING.md`
+- `docs/submissions/anthropic-connector-submission.md`
+- `docs/submissions/openai-app-submission.md`
 
-### Dev docs (temporal / work-in-progress)
-- `docs/dev/`: Active plans, in-progress feature notes, and short-lived checklists. These are expected to change frequently.
-- `docs/dev/TODO.md`: Active backlog items. When an item becomes permanent knowledge, move it to a permanent doc.
+## Dev Docs (Working Set)
 
-### Component READMEs
-- `web/README.md`: Web app routes, env vars, local dev.
-- `extension/README.md`: Extension build, sync host, Chrome Web Store details.
-- `workers/README.md`: Worker overview, envs, shared patterns.
+- `docs/dev/CURRENT-EXECUTION-STATE.md` (primary execution tracker)
+- `docs/dev/TODO.md`
+- `docs/dev/basketball-hockey-api-spike.md`
 
-### External repo docs
-- `../flaim-eval/README.md`: Eval harness overview and quickstart.
-- `../flaim-eval/docs/INDEX.md`: Eval docs map (operations, observability, troubleshooting, acceptance).
+Historical analyses moved to archive:
+- `docs/archive/season-year-problem.md`
+- `docs/archive/chat-api-audit.md`
 
-### Per-worker READMEs
-- `workers/auth-worker/README.md`: Auth/OAuth, credentials, extension APIs.
-- `workers/fantasy-mcp/README.md`: Unified MCP gateway, tools, routing.
-- `workers/espn-client/README.md`: ESPN platform client details.
-- `workers/yahoo-client/README.md`: Yahoo platform client details.
+## External Repo Docs
 
-### Internal/reference markdown
-- `workers/espn-client/src/sports/baseball/MAPPINGS.md`: ESPN baseball slot/position mapping notes.
-- `workers/espn-client/src/sports/football/MAPPINGS.md`: ESPN football slot/position mapping notes.
+- `../flaim-eval/README.md`
+- `../flaim-eval/docs/INDEX.md`
 
-## After feature work checklist (LLM + human)
+## Component READMEs
 
-1. Did you add/change a tool or handler? Update `docs/STATUS.md`.
-2. Did you change platform coverage or parity? Update `docs/STATUS.md`.
-3. Did you change data storage or schema? Update `docs/DATABASE.md` (and migrations).
-4. Did you change deploy targets or envs? Update `docs/STATUS.md` (and verify CI).
-5. Did you change user-facing behavior? Update `README.md`.
-6. Did you change system design or flows? Update `docs/ARCHITECTURE.md`.
-7. Did you add/remove a worker or major component? Update `workers/README.md` and the relevant per-worker README.
-8. Did you change frontend components or design tokens? Verify compliance with `docs/STYLE-GUIDE.md` and run `npm run ui:check`.
+- `web/README.md`
+- `extension/README.md`
+- `workers/README.md`
+- `workers/auth-worker/README.md`
+- `workers/fantasy-mcp/README.md`
+- `workers/espn-client/README.md`
+- `workers/yahoo-client/README.md`
 
-## Rule: no duplication
+## Maintenance Rules
 
-If a fact already lives in a source-of-truth doc, link to it instead of copying tables or lists.
+1. Update `docs/STATUS.md` when tool coverage, endpoints, deploy targets, or channel readiness changes.
+2. Update `docs/dev/CURRENT-EXECUTION-STATE.md` when sprint/phase status changes.
+3. Move superseded plans/reports into `docs/archive/` rather than leaving conflicting active docs.
+4. Prefer links to canonical docs instead of duplicating tables across files.
