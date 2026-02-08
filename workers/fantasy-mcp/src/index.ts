@@ -99,6 +99,14 @@ function buildOauthMetadata(resource: string) {
   };
 }
 
+function buildResourceFromSuffix(baseResource: string, suffix: string): string {
+  if (!suffix || suffix === '/') {
+    return baseResource;
+  }
+  const normalizedSuffix = suffix.startsWith('/') ? suffix : `/${suffix}`;
+  return `https://api.flaim.app${normalizedSuffix}`;
+}
+
 app.get('/.well-known/oauth-protected-resource', (c) => {
   return c.json(buildOauthMetadata('https://api.flaim.app/mcp'), 200, { 'Cache-Control': 'public, max-age=3600' });
 });
@@ -217,8 +225,20 @@ app.get('/mcp/.well-known/oauth-authorization-server', async (c) => {
   return proxyAuthorizationServerMetadata(c);
 });
 
+app.get('/mcp/.well-known/oauth-authorization-server/*', async (c) => {
+  return proxyAuthorizationServerMetadata(c);
+});
+
 app.get('/mcp/.well-known/oauth-protected-resource', (c) => {
   return c.json(buildOauthMetadata('https://api.flaim.app/mcp'), 200, {
+    'Cache-Control': 'public, max-age=3600',
+  });
+});
+
+app.get('/mcp/.well-known/oauth-protected-resource/*', (c) => {
+  const path = new URL(c.req.raw.url).pathname;
+  const suffix = path.slice('/mcp/.well-known/oauth-protected-resource'.length);
+  return c.json(buildOauthMetadata(buildResourceFromSuffix('https://api.flaim.app/mcp', suffix)), 200, {
     'Cache-Control': 'public, max-age=3600',
   });
 });
@@ -242,8 +262,20 @@ app.get('/fantasy/mcp/.well-known/oauth-authorization-server', async (c) => {
   return proxyAuthorizationServerMetadata(c);
 });
 
+app.get('/fantasy/mcp/.well-known/oauth-authorization-server/*', async (c) => {
+  return proxyAuthorizationServerMetadata(c);
+});
+
 app.get('/fantasy/mcp/.well-known/oauth-protected-resource', (c) => {
   return c.json(buildOauthMetadata('https://api.flaim.app/fantasy/mcp'), 200, {
+    'Cache-Control': 'public, max-age=3600',
+  });
+});
+
+app.get('/fantasy/mcp/.well-known/oauth-protected-resource/*', (c) => {
+  const path = new URL(c.req.raw.url).pathname;
+  const suffix = path.slice('/fantasy/mcp/.well-known/oauth-protected-resource'.length);
+  return c.json(buildOauthMetadata(buildResourceFromSuffix('https://api.flaim.app/fantasy/mcp', suffix)), 200, {
     'Cache-Control': 'public, max-age=3600',
   });
 });

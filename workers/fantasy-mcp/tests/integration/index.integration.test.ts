@@ -61,6 +61,13 @@ describe('fantasy-mcp gateway integration', () => {
     const authzPayload = await authzMetadataResponse.json() as { issuer?: string };
     expect(authzPayload.issuer).toBe('https://api.flaim.app');
 
+    const authzMetadataSuffixedResponse = await app.fetch(
+      new Request('https://api.flaim.app/mcp/.well-known/oauth-authorization-server/mcp'),
+      env,
+      mockExecutionContext()
+    );
+    expect(authzMetadataSuffixedResponse.status).toBe(200);
+
     const resourceMetadataResponse = await app.fetch(
       new Request('https://api.flaim.app/mcp/.well-known/oauth-protected-resource'),
       env,
@@ -69,6 +76,15 @@ describe('fantasy-mcp gateway integration', () => {
     expect(resourceMetadataResponse.status).toBe(200);
     const resourcePayload = await resourceMetadataResponse.json() as { resource?: string };
     expect(resourcePayload.resource).toBe('https://api.flaim.app/mcp');
+
+    const resourceMetadataSuffixedResponse = await app.fetch(
+      new Request('https://api.flaim.app/mcp/.well-known/oauth-protected-resource/mcp'),
+      env,
+      mockExecutionContext()
+    );
+    expect(resourceMetadataSuffixedResponse.status).toBe(200);
+    const suffixedResourcePayload = await resourceMetadataSuffixedResponse.json() as { resource?: string };
+    expect(suffixedResourcePayload.resource).toBe('https://api.flaim.app/mcp');
   });
 
   it('emits _meta.securitySchemes in tools/list wire response', async () => {
