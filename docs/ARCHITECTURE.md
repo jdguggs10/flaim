@@ -2,7 +2,7 @@
 
 Doc routing: see `docs/INDEX.md`.
 
-Flaim is an MCP (Model Context Protocol) service that connects ESPN fantasy leagues to AI assistants like Claude and ChatGPT. It handles authentication, credential management, and real-time data fetching — the built-in chat is a secondary feature for testing.
+Flaim is an MCP (Model Context Protocol) service that connects ESPN fantasy leagues to AI assistants like Claude, ChatGPT, and Gemini CLI. It handles authentication, credential management, and real-time data fetching — the built-in chat is a secondary feature for testing.
 
 ## Quick Start
 
@@ -51,7 +51,7 @@ docs/                       # Documentation
 
 Flaim is an **authentication and data service**, not a chatbot:
 
-- **MCP Server**: Exposes fantasy league data to Claude and ChatGPT via Model Context Protocol
+- **MCP Server**: Exposes fantasy league data to Claude, ChatGPT, and Gemini CLI via Model Context Protocol
 - **OAuth Provider**: Handles secure authentication between AI clients and ESPN data
 - **Credential Manager**: Securely stores ESPN session cookies (via extension or manual entry)
 
@@ -75,7 +75,7 @@ The built-in `/chat` is for testing and users without Claude/ChatGPT subscriptio
 Both paths write to the same `espn_leagues` storage.
 
 **Connect AI (both paths):**
-- Copy the MCP URLs from the landing page and add them as custom connectors in Claude/ChatGPT.
+- Copy the MCP URLs from the landing page and add them as custom connectors in Claude, ChatGPT, or Gemini CLI.
 
 ## Season Year Defaults
 
@@ -143,7 +143,7 @@ The unified gateway exposes tools with explicit parameters (`platform`, `sport`,
 The unified gateway (`fantasy-mcp`) provides a single MCP endpoint for all platforms and sports, replacing the per-sport workers.
 
 ```
-Claude/ChatGPT → fantasy-mcp (gateway) → espn-client → ESPN API
+Claude/ChatGPT/Gemini CLI → fantasy-mcp (gateway) → espn-client → ESPN API
                                        → yahoo-client → Yahoo API
                                        → auth-worker → Supabase
 ```

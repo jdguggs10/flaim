@@ -2,7 +2,7 @@
 
 Doc routing: see `docs/INDEX.md`.
 
-Flaim connects your ESPN fantasy leagues to AI assistants like Claude and ChatGPT. It's an MCP (Model Context Protocol) service that gives AI tools access to your live fantasy data.
+Flaim connects your ESPN fantasy leagues to AI assistants like Claude, ChatGPT, and Gemini CLI. It's an MCP (Model Context Protocol) service that gives AI tools access to your live fantasy data.
 
 ## How It Works
 
@@ -10,7 +10,7 @@ Flaim connects your ESPN fantasy leagues to AI assistants like Claude and ChatGP
 2. **Sync ESPN credentials** — Install the [Chrome extension](https://chromewebstore.google.com/detail/flaim-espn-fantasy-connec/mbnokejgglkfgkeeenolgdpcnfakpbkn) to sync automatically, or enter them manually
 3. **Leagues auto-discovered** — Extension finds all your leagues + past seasons and saves them
 4. **Pick a default** — Select which league to use by default in AI conversations
-5. **Connect your AI** — Add Flaim as a custom MCP connector in Claude (or ChatGPT in dev) using the MCP URL
+5. **Connect your AI** — Add Flaim as a custom MCP connector in Claude, ChatGPT, or Gemini CLI using the MCP URL
 6. **Use MCP tools** — Ask about your roster, matchups, standings, etc. directly in your AI
 
 Bring your own LLM subscription. Flaim provides the data bridge.
@@ -34,7 +34,7 @@ Flaim is **not** a chatbot or AI product itself — it's the bridge that lets yo
 
 - **Chrome Extension (v1.5.0)**: Auto-capture ESPN credentials without manual cookie extraction
 - **Auto-Discovery (v1.2.1+)**: Fan API-based discovery of leagues + past seasons, with granular status messaging and default selection
-- **Claude + ChatGPT OAuth**: Direct access via MCP protocol (OAuth 2.1)
+- **Claude + ChatGPT + Gemini CLI**: Direct access via MCP protocol (OAuth 2.1)
 - **Live ESPN Data**: espn-client worker with real-time stats
 - **Multi-League + Multi-Season Support**: Store multiple seasons per league and discover past seasons
 
@@ -70,7 +70,7 @@ All tools take explicit parameters: `platform`, `sport`, `league_id`, `season_ye
 ```
 Chrome Extension → flaim.app → Auth Worker → Supabase
                       ↓
-Claude/ChatGPT → Fantasy MCP Gateway → ESPN Client → ESPN API
+Claude/ChatGPT/Gemini CLI → Fantasy MCP Gateway → ESPN Client → ESPN API
 ```
 
 - **Chrome Extension**: Captures ESPN cookies, syncs to Flaim
@@ -98,6 +98,7 @@ Solo developer, hobby project. Keep it simple and stable.
 | [Changelog](docs/CHANGELOG.md) | Release history |
 | [Web App](web/README.md) | Next.js routes, components, environment |
 | [Workers](workers/README.md) | Cloudflare Workers, MCP tools, ESPN API |
+| [Gemini CLI Setup](docs/GEMINI-CLI-SETUP.md) | Gemini CLI MCP setup, OAuth, troubleshooting |
 | [Extension](extension/README.md) | Chrome extension build, Sync Host, CWS |
 
 ### Quick Start (Development)

@@ -59,6 +59,16 @@ All tools take explicit parameters: `platform`, `sport`, `league_id`, `season_ye
 - Canonical eval operations/runbooks live in:
   - `../flaim-eval/docs/INDEX.md`
 
+## Client Channel Readiness
+
+| Channel | Status | Notes |
+|---------|--------|-------|
+| Claude (custom connector) | Working | OAuth flow functional; submission packet ready |
+| ChatGPT (custom connector) | Working | OAuth flow functional; submission packet ready |
+| Gemini CLI (direct MCP) | Working | Setup guide at `docs/GEMINI-CLI-SETUP.md` |
+| Anthropic Connectors Directory | Pending submission | Packet at `docs/submissions/anthropic-connector-submission.md` |
+| OpenAI Apps Directory | Pending submission | Packet at `docs/submissions/openai-app-submission.md` |
+
 ## CI Deploy Targets (from `.github/workflows/deploy-workers.yml`)
 - `auth-worker`
 - `espn-client`
