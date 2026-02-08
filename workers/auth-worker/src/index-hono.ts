@@ -75,6 +75,9 @@ export interface Env {
   // Yahoo OAuth
   YAHOO_CLIENT_ID?: string;
   YAHOO_CLIENT_SECRET?: string;
+  // Eval/CI API key auth (Cloudflare secrets)
+  EVAL_API_KEY?: string;   // Static API key for eval/CI
+  EVAL_USER_ID?: string;   // Clerk user ID that the API key resolves to
 }
 
 type Jwk = {
@@ -276,17 +279,37 @@ function debugLog(env: Env, message: string): void {
 interface AuthResult {
   userId: string | null;
   error?: string;
-  authType?: 'clerk' | 'oauth';
+  authType?: 'clerk' | 'oauth' | 'eval-api-key';
   scope?: string;
 }
 
-async function getVerifiedUserId(request: Request, env: Env, expectedResource?: string): Promise<AuthResult> {
+async function constantTimeEqual(a: string, b: string): Promise<boolean> {
+  const encoder = new TextEncoder();
+  const [aHash, bHash] = await Promise.all([
+    crypto.subtle.digest('SHA-256', encoder.encode(a)),
+    crypto.subtle.digest('SHA-256', encoder.encode(b)),
+  ]);
+  const aArr = new Uint8Array(aHash);
+  const bArr = new Uint8Array(bHash);
+  let result = 0;
+  for (let i = 0; i < aArr.length; i++) {
+    result |= aArr[i] ^ bArr[i];
+  }
+  return result === 0;
+}
+
+async function getVerifiedUserId(
+  request: Request,
+  env: Env,
+  expectedResource?: string,
+  options?: { allowEvalApiKey?: boolean }
+): Promise<AuthResult> {
   const authz = request.headers.get('Authorization');
   const requestUrl = new URL(request.url);
   debugLog(env, `🔐 [auth-worker] getVerifiedUserId called for ${requestUrl.pathname}`);
   debugLog(env, `🔐 [auth-worker] Authorization header present: ${!!authz}, length: ${authz?.length || 0}`);
 
-  // Try Clerk JWT first (in-app requests)
+  // 1. Try Clerk JWT first (in-app requests)
   try {
     debugLog(env, `🔐 [auth-worker] Attempting Clerk JWT verification...`);
     const verified = await verifyJwtAndGetUserId(authz, env);
@@ -299,7 +322,33 @@ async function getVerifiedUserId(request: Request, env: Env, expectedResource?: 
     debugLog(env, `⚠️ [auth-worker] Clerk JWT verification failed: ${e instanceof Error ? e.message : 'unknown error'}`);
   }
 
-  // Try OAuth token (Claude direct access)
+  // 2. Try eval API key (only if route opts in)
+  if (options?.allowEvalApiKey && authz && authz.toLowerCase().startsWith('bearer ')) {
+    const token = authz.slice(7).trim();
+    const { EVAL_API_KEY, EVAL_USER_ID } = env;
+
+    if (EVAL_API_KEY && EVAL_USER_ID) {
+      if (await constantTimeEqual(token, EVAL_API_KEY)) {
+        // Enforce resource allowlist when expectedResource is provided
+        if (expectedResource) {
+          const allowedResources = [
+            'https://api.flaim.app/mcp',
+            'https://api.flaim.app/fantasy/mcp',
+          ];
+          if (!allowedResources.includes(expectedResource)) {
+            return { userId: null, error: 'Resource not allowed for API key' };
+          }
+        }
+
+        debugLog(env, `✅ [auth-worker] Eval API key validated, userId: ${maskUserId(EVAL_USER_ID)}`);
+        return { userId: EVAL_USER_ID, authType: 'eval-api-key', scope: 'mcp:read' };
+      }
+    } else if (EVAL_API_KEY && !EVAL_USER_ID) {
+      console.error('[auth-worker] EVAL_API_KEY set but EVAL_USER_ID missing — skipping API key auth');
+    }
+  }
+
+  // 3. Try OAuth token (Claude direct access)
   if (authz && authz.toLowerCase().startsWith('bearer ')) {
     const token = authz.slice(7).trim();
     try {
@@ -533,7 +582,7 @@ api.post('/revoke', (c) => {
 // Token introspection (internal — called by fantasy-mcp gateway via service binding)
 api.get('/introspect', async (c) => {
   const expectedResource = c.req.header('X-Flaim-Expected-Resource') || undefined;
-  const { userId, error: authError, scope } = await getVerifiedUserId(c.req.raw, c.env, expectedResource);
+  const { userId, error: authError, scope } = await getVerifiedUserId(c.req.raw, c.env, expectedResource, { allowEvalApiKey: true });
 
   if (!userId) {
     return c.json({ valid: false, error: authError || 'Invalid token' }, 401);
@@ -761,7 +810,7 @@ api.get('/connect/yahoo/callback', async (c) => {
 
 // Get Yahoo credentials (internal use - requires auth)
 api.get('/connect/yahoo/credentials', async (c) => {
-  const { userId, error: authError } = await getVerifiedUserId(c.req.raw, c.env);
+  const { userId, error: authError } = await getVerifiedUserId(c.req.raw, c.env, undefined, { allowEvalApiKey: true });
   if (!userId) {
     return c.json({
       error: 'unauthorized',
@@ -809,7 +858,7 @@ api.post('/connect/yahoo/discover', async (c) => {
 
 // List Yahoo leagues (requires auth)
 api.get('/leagues/yahoo', async (c) => {
-  const { userId, error: authError } = await getVerifiedUserId(c.req.raw, c.env);
+  const { userId, error: authError } = await getVerifiedUserId(c.req.raw, c.env, undefined, { allowEvalApiKey: true });
   if (!userId) {
     return c.json({
       error: 'unauthorized',
@@ -851,7 +900,7 @@ api.delete('/leagues/yahoo/:id', async (c) => {
 
 // Get user preferences
 api.get('/user/preferences', async (c) => {
-  const { userId, error: authError } = await getVerifiedUserId(c.req.raw, c.env);
+  const { userId, error: authError } = await getVerifiedUserId(c.req.raw, c.env, undefined, { allowEvalApiKey: true });
   if (!userId) {
     return c.json({ error: 'unauthorized', error_description: authError || 'Authentication required' }, 401);
   }
@@ -914,7 +963,8 @@ async function handleCredentialsEspn(c: Context<{ Bindings: Env }>, method: stri
   const url = new URL(c.req.url);
   const corsHeaders = getCorsHeaders(c.req.raw);
 
-  const { userId: clerkUserId, error: authError, authType } = await getVerifiedUserId(c.req.raw, env);
+  const isRawGet = method === 'GET' && url.searchParams.get('raw') === 'true';
+  const { userId: clerkUserId, error: authError, authType } = await getVerifiedUserId(c.req.raw, env, undefined, { allowEvalApiKey: isRawGet });
   debugLog(env, `🔐 [auth-worker] /credentials/espn - Verified user: ${clerkUserId ? maskUserId(clerkUserId) : 'null'}, authType: ${authType || 'none'}, authError: ${authError || 'none'}`);
 
   if (!clerkUserId) {
@@ -1089,7 +1139,7 @@ async function handleLeagues(c: Context<{ Bindings: Env }>, method: string): Pro
   const url = new URL(c.req.url);
   const corsHeaders = getCorsHeaders(c.req.raw);
 
-  const { userId: clerkUserId, error: authError } = await getVerifiedUserId(c.req.raw, env);
+  const { userId: clerkUserId, error: authError } = await getVerifiedUserId(c.req.raw, env, undefined, { allowEvalApiKey: method === 'GET' });
   if (!clerkUserId) {
     return c.json({
       error: 'Authentication required',

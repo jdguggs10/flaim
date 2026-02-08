@@ -88,12 +88,41 @@ These endpoints manage the OAuth 2.0 client flow with Yahoo Fantasy.
 
 ## Authentication
 
-Two auth mechanisms, depending on caller:
+Three auth mechanisms, depending on caller:
 
 - **Clerk JWT** — used by the web app, extension, and frontend OAuth consent flow.
 - **OAuth access token** — used by AI clients (Claude, ChatGPT, Gemini) after completing the OAuth 2.1 flow.
+- **Eval API key** — static key for eval/CI/agent use. Bypasses OAuth browser flow entirely.
 
-Both are validated in middleware; the resolved `userId` is the same regardless of method.
+All are validated in `getVerifiedUserId()`; the resolved `userId` is the same regardless of method.
+
+### Eval API Key
+
+A static Bearer token that resolves to a specific Clerk user ID with `mcp:read` scope. Designed for headless eval/CI where browser-based OAuth is impractical.
+
+**Security model:**
+- **Default-deny:** Only routes that explicitly opt in via `{ allowEvalApiKey: true }` accept the key. New routes reject it by default.
+- **Fixed scope:** Always `mcp:read` — no write/admin access.
+- **Constant-time comparison:** Uses SHA-256 digest comparison to prevent timing attacks.
+- **Both secrets required:** `EVAL_API_KEY` + `EVAL_USER_ID` must both be set. If only `EVAL_API_KEY` is set, API key auth is skipped (logged) and falls through to OAuth.
+
+**Allowlisted routes (MCP-read path only):**
+- `GET /auth/introspect`
+- `GET /credentials/espn?raw=true`
+- `GET /connect/yahoo/credentials`
+- `GET /leagues`
+- `GET /leagues/yahoo`
+- `GET /user/preferences`
+
+**Current mapping:** `EVAL_USER_ID` → `user_36UBCM4x2hK1aJYY1F7iV1svNw6` (test email on Clerk prod).
+
+**Setup:**
+```bash
+openssl rand -hex 32   # generate key
+cd workers/auth-worker
+wrangler secret put EVAL_API_KEY --env prod    # paste key with flaim_eval_ prefix
+wrangler secret put EVAL_USER_ID --env prod    # paste Clerk user ID
+```
 
 ## Key Source Files
 
@@ -120,6 +149,9 @@ wrangler secret put SUPABASE_URL --env preview
 wrangler secret put SUPABASE_SERVICE_KEY --env preview
 wrangler secret put YAHOO_CLIENT_ID --env preview
 wrangler secret put YAHOO_CLIENT_SECRET --env preview
+# Eval API key (optional — for headless eval/CI)
+wrangler secret put EVAL_API_KEY --env preview
+wrangler secret put EVAL_USER_ID --env preview
 ```
 
 ### 3. Local Development
