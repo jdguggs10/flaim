@@ -65,7 +65,7 @@ All tools take explicit parameters: `platform`, `sport`, `league_id`, `season_ye
 |---------|--------|-------|
 | Claude (custom connector) | Working | OAuth flow functional; submission packet ready |
 | ChatGPT (custom connector) | Working | OAuth flow functional; submission packet ready |
-| Gemini CLI (direct MCP) | Working | Setup guide at `docs/GEMINI-CLI-SETUP.md` |
+| Gemini CLI (direct MCP) | Experimental | Setup guide at `docs/GEMINI-CLI-SETUP.md`. Unverified — run OAuth runbook end-to-end before promoting. |
 | Anthropic Connectors Directory | Pending submission | Packet at `docs/submissions/anthropic-connector-submission.md` |
 | OpenAI Apps Directory | Pending submission | Packet at `docs/submissions/openai-app-submission.md` |
 

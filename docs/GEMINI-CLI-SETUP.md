@@ -1,5 +1,7 @@
 # Gemini CLI Setup Guide
 
+> **Status: Experimental.** This guide has not yet been verified end-to-end via the manual OAuth runbook (`docs/MANUAL-OAUTH-RUNBOOKS.md`). Promote to stable after successful walkthrough.
+
 Connect your fantasy leagues to Gemini CLI via Flaim's MCP server. Clean machine to first tool call in ~5 minutes.
 
 ## Prerequisites
