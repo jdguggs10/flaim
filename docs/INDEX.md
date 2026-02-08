@@ -18,6 +18,8 @@ This file is the canonical map for Flaim docs. Always read this first and use it
 | Release history | `docs/CHANGELOG.md` | Keep a concise, high-level record. |
 | Backlog | `docs/dev/TODO.md` | Active list of bugs/features/maintenance. |
 | Design/implementation plans | `docs/plans/*` | Short-lived design notes. |
+| Submission packets | `docs/submissions/*` | Directory submission artifacts. Re-verify before each submission. |
+| Tool versioning policy | `docs/TOOL-VERSIONING.md` | Breaking vs non-breaking changes, deprecation process. |
 | Historical reports | `docs/archive/*` | Read-only; do not update. |
 
 ## Doc map (what each doc is for)
@@ -36,6 +38,9 @@ This file is the canonical map for Flaim docs. Always read this first and use it
 - `docs/CHANGELOG.md`: Release history (keep it concise).
 - `docs/MANUAL-OAUTH-RUNBOOKS.md`: Per-client OAuth connect checklists (Claude, ChatGPT, Gemini CLI). Run before submissions.
 - `docs/GEMINI-CLI-SETUP.md`: Gemini CLI setup guide — MCP server config, OAuth walkthrough, troubleshooting.
+- `docs/TOOL-VERSIONING.md`: Policy for tool contract changes and directory resubmission.
+- `docs/submissions/anthropic-connector-submission.md`: Anthropic Connectors Directory submission packet.
+- `docs/submissions/openai-app-submission.md`: OpenAI Apps Directory submission packet.
 
 ### Dev docs (temporal / work-in-progress)
 - `docs/dev/`: Active plans, in-progress feature notes, and short-lived checklists. These are expected to change frequently.
