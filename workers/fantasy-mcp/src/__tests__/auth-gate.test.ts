@@ -11,6 +11,23 @@ describe('mcp auth gate helpers', () => {
     await expect(isPublicMcpHandshakeRequest(getReq)).resolves.toBe(true);
   });
 
+  it('allows unauthenticated GET handshake json requests', async () => {
+    const getReq = new Request('https://api.flaim.app/mcp', {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+
+    await expect(isPublicMcpHandshakeRequest(getReq)).resolves.toBe(true);
+  });
+
+  it('allows unauthenticated GET handshake requests without accept header', async () => {
+    const getReq = new Request('https://api.flaim.app/mcp', {
+      method: 'GET',
+    });
+
+    await expect(isPublicMcpHandshakeRequest(getReq)).resolves.toBe(true);
+  });
+
   it('recognizes public handshake/list methods', async () => {
     const listReq = new Request('https://api.flaim.app/mcp', {
       method: 'POST',

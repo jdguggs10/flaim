@@ -14,8 +14,7 @@ export function normalizeMcpAcceptHeader(request: Request): Request {
 
 export async function isPublicMcpHandshakeRequest(request: Request): Promise<boolean> {
   if (request.method === 'GET') {
-    const accept = request.headers.get('Accept') || '';
-    return accept.includes('text/event-stream');
+    return true;
   }
 
   if (request.method !== 'POST') {
