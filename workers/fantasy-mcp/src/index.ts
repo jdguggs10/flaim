@@ -107,6 +107,20 @@ app.get('/fantasy/.well-known/oauth-protected-resource', (c) => {
   return c.json(buildOauthMetadata('https://api.flaim.app/fantasy/mcp'), 200, { 'Cache-Control': 'public, max-age=3600' });
 });
 
+async function proxyAuthorizationServerMetadata(c: Context<{ Bindings: Env }>): Promise<Response> {
+  const metadataResponse = await c.env.AUTH_WORKER.fetch(
+    new Request('https://internal/.well-known/oauth-authorization-server')
+  );
+  const headers = new Headers(metadataResponse.headers);
+  if (!headers.has('Cache-Control')) {
+    headers.set('Cache-Control', 'public, max-age=3600');
+  }
+  return new Response(metadataResponse.body, {
+    status: metadataResponse.status,
+    headers,
+  });
+}
+
 async function handleMcpRequest(c: Context<{ Bindings: Env }>): Promise<Response> {
   const correlationId = getCorrelationId(c.req.raw);
   const { evalRunId, evalTraceId } = getEvalContext(c.req.raw);
@@ -199,6 +213,16 @@ app.all('/mcp', async (c) => {
   return handleMcpRequest(c);
 });
 
+app.get('/mcp/.well-known/oauth-authorization-server', async (c) => {
+  return proxyAuthorizationServerMetadata(c);
+});
+
+app.get('/mcp/.well-known/oauth-protected-resource', (c) => {
+  return c.json(buildOauthMetadata('https://api.flaim.app/mcp'), 200, {
+    'Cache-Control': 'public, max-age=3600',
+  });
+});
+
 app.all('/mcp/*', async (c) => {
   return handleMcpRequest(c);
 });
@@ -212,6 +236,16 @@ app.get('/fantasy/health', async (c) => {
 
 app.all('/fantasy/mcp', async (c) => {
   return handleMcpRequest(c);
+});
+
+app.get('/fantasy/mcp/.well-known/oauth-authorization-server', async (c) => {
+  return proxyAuthorizationServerMetadata(c);
+});
+
+app.get('/fantasy/mcp/.well-known/oauth-protected-resource', (c) => {
+  return c.json(buildOauthMetadata('https://api.flaim.app/fantasy/mcp'), 200, {
+    'Cache-Control': 'public, max-age=3600',
+  });
 });
 
 app.all('/fantasy/mcp/*', async (c) => {

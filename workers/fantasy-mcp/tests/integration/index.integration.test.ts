@@ -36,6 +36,41 @@ function buildEnv(authFetch: (request: Request) => Promise<Response>): Env {
 }
 
 describe('fantasy-mcp gateway integration', () => {
+  it('serves oauth metadata aliases under /mcp/.well-known', async () => {
+    const authFetch = vi.fn(async (request: Request) => {
+      if (new URL(request.url).pathname === '/.well-known/oauth-authorization-server') {
+        return new Response(
+          JSON.stringify({
+            issuer: 'https://api.flaim.app',
+            authorization_endpoint: 'https://api.flaim.app/auth/authorize',
+            token_endpoint: 'https://api.flaim.app/auth/token',
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+      return new Response('not found', { status: 404 });
+    });
+    const env = buildEnv(authFetch);
+
+    const authzMetadataResponse = await app.fetch(
+      new Request('https://api.flaim.app/mcp/.well-known/oauth-authorization-server'),
+      env,
+      mockExecutionContext()
+    );
+    expect(authzMetadataResponse.status).toBe(200);
+    const authzPayload = await authzMetadataResponse.json() as { issuer?: string };
+    expect(authzPayload.issuer).toBe('https://api.flaim.app');
+
+    const resourceMetadataResponse = await app.fetch(
+      new Request('https://api.flaim.app/mcp/.well-known/oauth-protected-resource'),
+      env,
+      mockExecutionContext()
+    );
+    expect(resourceMetadataResponse.status).toBe(200);
+    const resourcePayload = await resourceMetadataResponse.json() as { resource?: string };
+    expect(resourcePayload.resource).toBe('https://api.flaim.app/mcp');
+  });
+
   it('emits _meta.securitySchemes in tools/list wire response', async () => {
     const authFetch = vi.fn(async () =>
       new Response(JSON.stringify({ valid: true, userId: 'user-123', scope: 'mcp:read mcp:write' }), {
