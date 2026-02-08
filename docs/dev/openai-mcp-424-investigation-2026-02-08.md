@@ -8,6 +8,40 @@ The eval harness failures (`424 Error retrieving tool list from MCP server`) are
 
 This document captures all findings, evidence, hypotheses, and a concrete remediation plan.
 
+## Post-Remediation Update (2026-02-08)
+The fix set has now been implemented, deployed, and validated end-to-end.
+
+### Code/behavior changes shipped
+- `GET /mcp` and `GET /fantasy/mcp` now return `405 Method Not Allowed` with `Allow: POST` (no hanging request path).
+- MCP handler now runs in stream mode (`enableJsonResponse: false`) for connector compatibility.
+- Tool `_meta.securitySchemes` now uses canonical array shape:
+  - from object-style `{ oauth: { type: "oauth2", scope: "..." } }`
+  - to array-style `[{ type: "oauth2", scopes: ["..."] }]`
+
+### Deployment status
+- Commit: `01f97b96f6df646f16498f5ab5ee2daecc328474`
+- Branch: `main` (pushed to `origin/main`)
+- GitHub Actions deploy: `Deploy Workers` run `21801039429` completed `success`
+
+### E2E validation results
+From `/Users/ggugger/Code/flaim-eval`:
+- `npm run eval` (run id `2026-02-08T16-00-07Z`) => `9/9 completed`, `0 errored`
+- Prior `424 Error retrieving tool list from MCP server` did not recur.
+- `npm run accept -- 2026-02-08T16-00-07Z` => generated acceptance artifact but final status `FAIL`
+- `npm run presubmit -- 2026-02-08T16-00-07Z` => `FAIL` (downstream coverage policy), not MCP discovery failure
+
+### Remaining failures are downstream policy/coverage, not MCP connectivity
+From `/Users/ggugger/Code/flaim-eval/runs/2026-02-08T16-00-07Z/acceptance-summary.json`:
+- `DOWNSTREAM_COVERAGE_ESCALATION`
+- `MISSING_AUTH_WORKER`
+- `MISSING_FANTASY_MCP`
+- warning: `MISSING_ESPN_CLIENT`
+
+### Revised root-cause ranking after fix validation
+1. **Primary**: MCP transport compatibility bug around `GET /mcp` handling (runtime hang path).
+2. **Contributing correctness issue**: non-canonical `_meta.securitySchemes` shape.
+3. **Context factor**: auth/API-key path issues can independently produce wrapped `424` (from upstream `401`), but this is separate from the discovery transport failure resolved above.
+
 ---
 
 ## Scope
