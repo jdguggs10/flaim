@@ -86,8 +86,31 @@ For each client:
 3. Token expiry triggers re-auth (or auto-refresh for Gemini CLI)
 4. Post-re-auth tools work identically to fresh connect
 
+## Verification gates
+
+### Preview gate (before merging to main)
+
+Run against preview environment (PR deploy):
+
+1. `npm run eval` in flaim-eval — all scenarios complete without errors
+2. `npm run accept -- <run_id>` — acceptance passes
+3. `npm run presubmit -- <run_id>` — prints PASS
+4. Per-worker unit tests pass (all 4 workers)
+5. `npm run lint` — no errors
+
+### Production smoke (after merge to main)
+
+Run against production after auto-deploy completes:
+
+1. `curl https://api.flaim.app/auth/health` — returns 200
+2. Quick manual check: connect one client, call `get_user_session` → returns real data
+3. `npm run eval` in flaim-eval (targets production by default) — spot-check 1-2 scenarios
+4. If auth changes: run full OAuth runbook for the affected client(s)
+
 ## When to run
 
-- Before each directory submission (Anthropic, OpenAI)
-- After any auth-worker changes that touch OAuth flows
-- After any changes to redirect URI validation or token handling
+- **Preview gate:** Every PR that touches workers, auth, or tool contracts
+- **Production smoke:** After every merge to main that touches workers
+- **Full manual runbook:** Before each directory submission (Anthropic, OpenAI)
+- **Full manual runbook:** After any auth-worker changes that touch OAuth flows
+- **Full manual runbook:** After any changes to redirect URI validation or token handling
