@@ -35,6 +35,7 @@ This file is the canonical map for Flaim docs. Always read this first and use it
 - `docs/ERROR-CODES.md`: Error code taxonomy used across all workers. Codes defined in `@flaim/worker-shared`.
 - `docs/CHANGELOG.md`: Release history (keep it concise).
 - `docs/MANUAL-OAUTH-RUNBOOKS.md`: Per-client OAuth connect checklists (Claude, ChatGPT, Gemini CLI). Run before submissions.
+- `docs/GEMINI-CLI-SETUP.md`: Gemini CLI setup guide — MCP server config, OAuth walkthrough, troubleshooting.
 
 ### Dev docs (temporal / work-in-progress)
 - `docs/dev/`: Active plans, in-progress feature notes, and short-lived checklists. These are expected to change frequently.
