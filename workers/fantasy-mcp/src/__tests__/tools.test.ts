@@ -112,14 +112,14 @@ describe('fantasy-mcp tools', () => {
     for (const tool of tools) {
       // Source: explicit securitySchemes field on UnifiedTool
       expect(tool.securitySchemes).toBeDefined();
-      expect(tool.securitySchemes).toEqual({
-        oauth: { type: 'oauth2', scope: tool.requiredScope },
-      });
+      expect(tool.securitySchemes).toEqual([
+        { type: 'oauth2', scopes: [tool.requiredScope] },
+      ]);
 
       // Mirror construction: { securitySchemes: tool.securitySchemes } should match
       // what server.ts passes to registerTool's _meta
       const mirrorMeta = { securitySchemes: tool.securitySchemes };
-      expect(mirrorMeta.securitySchemes.oauth.scope).toBe(tool.requiredScope);
+      expect(mirrorMeta.securitySchemes[0]?.scopes).toContain(tool.requiredScope);
     }
   });
 });

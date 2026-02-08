@@ -20,6 +20,57 @@ function buildMcpRequest(pathname: '/mcp' | '/fantasy/mcp'): Request {
   });
 }
 
+function buildMcpGetRequest(pathname: '/mcp' | '/fantasy/mcp'): Request {
+  return new Request(`https://api.flaim.app${pathname}`, {
+    method: 'GET',
+    headers: {
+      Accept: 'text/event-stream',
+    },
+  });
+}
+
+async function parseJsonRpcResponse(response: Response): Promise<{
+  result?: {
+    tools?: Array<{
+      name: string;
+      _meta?: { securitySchemes?: Array<{ type?: string; scopes?: string[] }> };
+    }>;
+  };
+}> {
+  const contentType = response.headers.get('Content-Type') || '';
+
+  if (contentType.includes('application/json')) {
+    return response.json() as Promise<{
+      result?: {
+        tools?: Array<{
+          name: string;
+          _meta?: { securitySchemes?: Array<{ type?: string; scopes?: string[] }> };
+        }>;
+      };
+    }>;
+  }
+
+  if (contentType.includes('text/event-stream')) {
+    const text = await response.text();
+    const data = text
+      .split(/\r?\n/)
+      .filter((line) => line.startsWith('data:'))
+      .map((line) => line.slice(5).trim())
+      .join('\n')
+      .trim();
+    return JSON.parse(data) as {
+      result?: {
+        tools?: Array<{
+          name: string;
+          _meta?: { securitySchemes?: Array<{ type?: string; scopes?: string[] }> };
+        }>;
+      };
+    };
+  }
+
+  throw new Error(`Unsupported MCP response content type: ${contentType}`);
+}
+
 function mockExecutionContext(): ExecutionContext {
   return {
     waitUntil: vi.fn(),
@@ -36,6 +87,21 @@ function buildEnv(authFetch: (request: Request) => Promise<Response>): Env {
 }
 
 describe('fantasy-mcp gateway integration', () => {
+  it('returns 405 for GET on MCP transport endpoints in stateless mode', async () => {
+    const authFetch = vi.fn(async () => new Response('unexpected', { status: 500 }));
+    const env = buildEnv(authFetch);
+
+    const mcpResponse = await app.fetch(buildMcpGetRequest('/mcp'), env, mockExecutionContext());
+    expect(mcpResponse.status).toBe(405);
+    expect(mcpResponse.headers.get('Allow')).toBe('POST');
+
+    const fantasyResponse = await app.fetch(buildMcpGetRequest('/fantasy/mcp'), env, mockExecutionContext());
+    expect(fantasyResponse.status).toBe(405);
+    expect(fantasyResponse.headers.get('Allow')).toBe('POST');
+
+    expect(authFetch).not.toHaveBeenCalled();
+  });
+
   it('serves oauth metadata aliases under /mcp/.well-known', async () => {
     const authFetch = vi.fn(async (request: Request) => {
       if (new URL(request.url).pathname === '/.well-known/oauth-authorization-server') {
@@ -98,22 +164,16 @@ describe('fantasy-mcp gateway integration', () => {
 
     const response = await app.fetch(buildMcpRequest('/mcp'), env, mockExecutionContext());
     expect(response.status).toBe(200);
+    expect(response.headers.get('Content-Type')).toContain('text/event-stream');
 
-    const payload = await response.json() as {
-      result?: {
-        tools?: Array<{
-          name: string;
-          _meta?: { securitySchemes?: { oauth?: { type?: string; scope?: string } } };
-        }>;
-      };
-    };
+    const payload = await parseJsonRpcResponse(response);
     const tools = payload.result?.tools;
     expect(Array.isArray(tools)).toBe(true);
 
     const scopeByTool = new Map(getUnifiedTools().map((tool) => [tool.name, tool.requiredScope]));
     for (const tool of tools || []) {
-      expect(tool._meta?.securitySchemes?.oauth?.type).toBe('oauth2');
-      expect(tool._meta?.securitySchemes?.oauth?.scope).toBe(scopeByTool.get(tool.name));
+      expect(tool._meta?.securitySchemes?.[0]?.type).toBe('oauth2');
+      expect(tool._meta?.securitySchemes?.[0]?.scopes).toContain(scopeByTool.get(tool.name));
     }
 
     expect(authFetch).toHaveBeenCalledTimes(1);

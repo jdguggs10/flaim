@@ -129,6 +129,26 @@ async function proxyAuthorizationServerMetadata(c: Context<{ Bindings: Env }>): 
   });
 }
 
+function buildMethodNotAllowedResponse(allow: string): Response {
+  return new Response(
+    JSON.stringify({
+      jsonrpc: '2.0',
+      error: {
+        code: -32000,
+        message: 'Method not allowed.',
+      },
+      id: null,
+    }),
+    {
+      status: 405,
+      headers: {
+        Allow: allow,
+        'Content-Type': 'application/json',
+      },
+    }
+  );
+}
+
 async function handleMcpRequest(c: Context<{ Bindings: Env }>): Promise<Response> {
   const correlationId = getCorrelationId(c.req.raw);
   const { evalRunId, evalTraceId } = getEvalContext(c.req.raw);
@@ -190,7 +210,7 @@ async function handleMcpRequest(c: Context<{ Bindings: Env }>): Promise<Response
     evalRunId,
     evalTraceId,
   });
-  const handler = createMcpHandler(server);
+  const handler = createMcpHandler(server, { enableJsonResponse: false });
   const normalizedRequest = normalizeMcpAcceptHeader(c.req.raw);
   const response = await handler(normalizedRequest, c.env, c.executionCtx);
 
@@ -216,9 +236,21 @@ async function handleMcpRequest(c: Context<{ Bindings: Env }>): Promise<Response
   return response;
 }
 
+async function handleMcpEndpoint(c: Context<{ Bindings: Env }>): Promise<Response> {
+  if (c.req.method !== 'POST') {
+    return buildMethodNotAllowedResponse('POST');
+  }
+
+  return handleMcpRequest(c);
+}
+
 // MCP endpoints - handle both /mcp (direct) and /fantasy/mcp (via route pattern)
 app.all('/mcp', async (c) => {
-  return handleMcpRequest(c);
+  return handleMcpEndpoint(c);
+});
+
+app.all('/mcp/', async (c) => {
+  return handleMcpEndpoint(c);
 });
 
 app.get('/mcp/.well-known/oauth-authorization-server', async (c) => {
@@ -243,10 +275,6 @@ app.get('/mcp/.well-known/oauth-protected-resource/*', (c) => {
   });
 });
 
-app.all('/mcp/*', async (c) => {
-  return handleMcpRequest(c);
-});
-
 // Routes via api.flaim.app/fantasy/* (Cloudflare route passes full path)
 app.get('/fantasy/health', async (c) => {
   const healthData = await buildHealthData(c.env);
@@ -255,7 +283,11 @@ app.get('/fantasy/health', async (c) => {
 });
 
 app.all('/fantasy/mcp', async (c) => {
-  return handleMcpRequest(c);
+  return handleMcpEndpoint(c);
+});
+
+app.all('/fantasy/mcp/', async (c) => {
+  return handleMcpEndpoint(c);
 });
 
 app.get('/fantasy/mcp/.well-known/oauth-authorization-server', async (c) => {
@@ -278,10 +310,6 @@ app.get('/fantasy/mcp/.well-known/oauth-protected-resource/*', (c) => {
   return c.json(buildOauthMetadata(buildResourceFromSuffix('https://api.flaim.app/fantasy/mcp', suffix)), 200, {
     'Cache-Control': 'public, max-age=3600',
   });
-});
-
-app.all('/fantasy/mcp/*', async (c) => {
-  return handleMcpRequest(c);
 });
 
 // Favicon — redirect to canonical icon so crawlers/clients pick up the current asset

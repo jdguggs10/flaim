@@ -23,9 +23,10 @@ export interface McpToolResponse {
   [key: string]: unknown;
 }
 
-export interface ToolSecuritySchemes {
-  oauth: { type: 'oauth2'; scope: string };
-}
+export type ToolSecuritySchemes = Array<{
+  type: 'oauth2';
+  scopes: string[];
+}>;
 
 export interface UnifiedTool {
   name: string;
@@ -55,7 +56,7 @@ export function hasRequiredScope(grantedScope: string | undefined, requiredScope
 }
 
 function buildSecuritySchemes(scope: 'mcp:read' | 'mcp:write'): ToolSecuritySchemes {
-  return { oauth: { type: 'oauth2', scope } };
+  return [{ type: 'oauth2', scopes: [scope] }];
 }
 
 // =============================================================================
