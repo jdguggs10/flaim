@@ -1,8 +1,8 @@
 # Gemini CLI Setup Guide
 
-> **Status: Experimental.** This guide has not yet been verified end-to-end via the manual OAuth runbook (`docs/MANUAL-OAUTH-RUNBOOKS.md`). Promote to stable after successful walkthrough.
-
 Connect your fantasy leagues to Gemini CLI via Flaim's MCP server. Clean machine to first tool call in ~5 minutes.
+
+**Verified:** 2026-02-07 — full OAuth flow + `get_user_session` tool call confirmed end-to-end.
 
 ## Prerequisites
 
@@ -16,13 +16,17 @@ Connect your fantasy leagues to Gemini CLI via Flaim's MCP server. Clean machine
 gemini mcp add flaim --scope user --transport http https://api.flaim.app/mcp
 ```
 
-Verify it was added:
+**Important:** Gemini CLI only loads MCP servers in trusted folders. If you run `gemini` from an untrusted directory (like `~`), `/mcp list` will show nothing. Either:
+- Run `gemini` from a trusted project folder, or
+- Trust your current folder via Gemini CLI settings (`/settings`)
+
+Verify it was added (from a trusted folder):
 
 ```
 /mcp list
 ```
 
-You should see `flaim` in the list of configured servers.
+You should see `flaim` listed (possibly as "Disconnected — OAuth not authenticated" until Step 2).
 
 ## Step 2: Authorize
 
@@ -120,6 +124,9 @@ Your Flaim account may not have leagues synced:
 2. Verify you have leagues listed
 3. Ensure a default league is selected
 4. If using ESPN: confirm your ESPN credentials are synced (use the Chrome extension or manual entry)
+
+### `/mcp list` shows "No MCP servers configured"
+You're likely in an untrusted folder. Gemini CLI suppresses MCP servers in untrusted directories. Run `gemini` from a trusted project folder or trust the current one via `/settings`.
 
 ### Connection timeout or server unreachable
 - Verify the URL is `https://api.flaim.app/mcp` (not localhost, not http)
