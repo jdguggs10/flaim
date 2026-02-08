@@ -52,6 +52,7 @@ build/
 *agents*.md
 # Exception: tracked docs about Gemini CLI integration
 !docs/GEMINI-CLI-SETUP.md
+!docs/plans/*gemini*
 
 # OS files
 .DS_Store
