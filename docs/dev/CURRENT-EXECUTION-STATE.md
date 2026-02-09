@@ -1,6 +1,6 @@
 # Current Execution State
 
-Last updated: 2026-02-08
+Last updated: 2026-02-09
 Owner: Flaim (solo)
 
 This is the canonical execution-status page for current work. It replaces overlapping sprint/incident plans that were moved to the external archive bundle (see `docs/archive/README.md`).
@@ -9,9 +9,12 @@ This is the canonical execution-status page for current work. It replaces overla
 
 - Unified MCP service is live on `https://api.flaim.app/mcp`.
 - Auth hardening and error taxonomy work from Sprint A are shipped.
-- End-to-end eval execution is healthy again (`9/9` scenarios completed on run `2026-02-08T16-00-07Z`).
+- End-to-end eval execution is healthy (`9/9` scenarios completed on three consecutive fresh runs: `2026-02-08T22-39-03Z`, `2026-02-08T22-48-28Z`, `2026-02-09T11-53-41Z`).
 - The previous OpenAI MCP `424` discovery failure is resolved.
-- Remaining gate is eval acceptance coverage policy (`accept`/`presubmit` still fail on missing worker coverage in some traces).
+- Automated submission preflight is passing (`eval` + `accept` + `presubmit`) on consecutive fresh runs.
+- Manual OAuth token-lifecycle checks are complete for ChatGPT, Gemini CLI, Claude Code, and claude.ai.
+- Vendor-doc revalidation is complete (see `docs/submissions/*`).
+- Ready for directory submission (OpenAI submission is the next concrete action).
 
 ## Completed Recently
 
@@ -32,19 +35,24 @@ This is the canonical execution-status page for current work. It replaces overla
 - Tool security metadata shape normalized to canonical array form.
 - Production deploy and CI are green.
 
-## In Progress
+4. Submission preflight reruns (2026-02-08)
+- Fresh full eval run passed: `2026-02-08T22-39-03Z` (`9/9`, `0` errors).
+- Acceptance passed: `npm run accept -- 2026-02-08T22-39-03Z`.
+- Presubmit passed: `npm run presubmit -- 2026-02-08T22-39-03Z` (`RESULT: PASS`).
+- Second consecutive fresh full eval run passed: `2026-02-08T22-48-28Z` (`9/9`, `0` errors).
+- Acceptance passed: `npm run accept -- 2026-02-08T22-48-28Z`.
+- Presubmit passed: `npm run presubmit -- 2026-02-08T22-48-28Z` (`RESULT: PASS`).
 
-1. Eval acceptance reliability (highest priority)
-- `npm run eval` succeeds, but `npm run accept`/`npm run presubmit` fail for coverage reasons.
-- Current failing reasons include:
-  - `MISSING_AUTH_WORKER`
-  - `MISSING_FANTASY_MCP`
-  - `DOWNSTREAM_COVERAGE_ESCALATION`
-- This is now the main blocking gate before submission readiness.
+5. Submission preflight rerun (2026-02-09)
+- Fresh full eval run passed: `2026-02-09T11-53-41Z` (`9/9`, `0` errors).
+- Acceptance passed: `npm run accept -- 2026-02-09T11-53-41Z`.
+- Presubmit passed: `npm run presubmit -- 2026-02-09T11-53-41Z` (`RESULT: PASS`).
 
-2. Submission-readiness verification
-- Manual OAuth runbook execution still needs to be run and checked off for each target client.
-- OpenAI submission packet screenshot checklist is still incomplete.
+## Next Actions
+
+1. Submit to OpenAI Apps Directory (packet is ready: `docs/submissions/openai-app-submission.md`).
+2. Decide Anthropic submission strategy (submit now vs delay).
+3. Keep preflight evidence current if any auth/tool changes land.
 
 ## Not Started / Deferred
 
@@ -60,11 +68,8 @@ This is the canonical execution-status page for current work. It replaces overla
 
 ## Current Execution Order
 
-1. Fix acceptance coverage gaps so `accept` and `presubmit` pass on full runs.
-2. Run two consecutive clean eval cycles (`eval` + `accept` + `presubmit`).
-3. Execute manual OAuth runbooks and record outcomes.
-4. Finish OpenAI screenshot checklist.
-5. Decide Anthropic submission strategy (submit now vs delay).
+1. OpenAI submission.
+2. Anthropic submission decision.
 
 ## Canonical Documents
 

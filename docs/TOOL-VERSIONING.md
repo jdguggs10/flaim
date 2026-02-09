@@ -1,48 +1,34 @@
-# Tool Versioning Policy
+# Tool Versioning Policy (Slim)
 
-Rules for changing MCP tool contracts after directory submission. Both Anthropic and OpenAI lock tool names/signatures after publication, so changes require resubmission.
+After directory publication, treat the MCP tool surface as a contract. If you change the contract, expect resubmission.
 
-## Breaking Changes (require resubmission)
+## Breaking (assume resubmission)
 
-These changes alter the tool contract and require re-review:
+- Remove or rename a tool
+- Change required parameters (add/remove/rename) or parameter types
+- Change semantics in a way that breaks existing prompts
 
-- Removing a tool
-- Renaming a tool
-- Changing or removing required parameters
-- Changing parameter types
-- Changing tool behavior in ways that break existing prompts
+## Non-breaking (usually OK)
 
-## Non-Breaking Changes (no resubmission)
+- Add optional parameters
+- Add new tools
+- Clarify descriptions (no semantic change)
+- Bugfixes/perf work that preserve inputs/outputs
 
-These changes are backward-compatible and can be deployed freely:
+## Deprecations
 
-- Adding optional parameters to existing tools
-- Improving tool descriptions (clarifying, not changing semantics)
-- Adding new tools
-- Bug fixes that don't change the tool interface
-- Performance improvements
-- Adding support for new sports/platforms within existing tool parameters
+1. Mark tool description with `[Deprecated]`
+2. Wait at least 30 days
+3. Remove tool
+4. Resubmit to impacted directories (if required by their rules)
 
-## Deprecation Process
+## Tracking
 
-1. Mark the tool description with `[Deprecated]` prefix — deploy immediately
-2. Wait 30 days minimum
-3. Remove the tool
-4. Resubmit to affected directories
+- Record tool changes in `docs/CHANGELOG.md`
+  - `[tool-contract]` for any contract change
+  - `[breaking]` when you expect resubmission
 
-## Version Tracking
+## Pre-change sanity
 
-Use `docs/CHANGELOG.md` for all tool contract changes. Tag entries with:
-- `[tool-contract]` for any change to tool names, parameters, or behavior
-- `[breaking]` for changes that require resubmission
-- `[non-breaking]` for backward-compatible changes
-
-## Pre-Change Checklist
-
-Before modifying any tool:
-
-1. Is this a breaking change? If yes, plan a resubmission
-2. Update `docs/CHANGELOG.md` with the change
-3. Update `docs/STATUS.md` if the parity matrix changes
-4. Run `npm run eval` in flaim-eval to verify no regressions
-5. Run the pre-submission check before resubmitting
+- Update `docs/STATUS.md` if support matrix changes
+- Run `npm run eval` + `npm run presubmit -- <run_id>` in `flaim-eval`

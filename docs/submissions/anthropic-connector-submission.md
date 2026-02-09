@@ -6,14 +6,14 @@ Prepared for submission to the Anthropic Connectors Directory.
 
 Before submitting, re-verify this packet against official sources (policies change):
 
-- [ ] [Submission guide](https://support.claude.com/en/articles/12922490-remote-mcp-server-submission-guide) — confirm required fields match
-- [ ] [Build guide](https://support.claude.com/en/articles/11503834-building-custom-connectors-via-remote-mcp-servers) — confirm auth/transport requirements
-- [ ] [Connectors directory FAQ](https://support.claude.com/en/articles/11596036-anthropic-connectors-directory-faq) — confirm review process hasn't changed
-- [ ] [MCP connector docs](https://platform.claude.com/docs/en/agents-and-tools/mcp-connector) — confirm API-level requirements
-- [ ] Run manual OAuth runbook for Claude (see `docs/MANUAL-OAUTH-RUNBOOKS.md`)
-- [ ] Run `npm run presubmit -- <run_id>` and confirm PASS
+- [x] [Submission guide](https://support.claude.com/en/articles/12922490-remote-mcp-server-submission-guide) — confirm required fields match
+- [x] [Build guide](https://support.claude.com/en/articles/11503834-building-custom-connectors-via-remote-mcp-servers) — confirm auth/transport requirements
+- [x] [Connectors directory FAQ](https://support.claude.com/en/articles/11596036-anthropic-connectors-directory-faq) — confirm review process hasn't changed
+- [x] [MCP connector docs](https://platform.claude.com/docs/en/agents-and-tools/mcp-connector) — confirm API-level requirements
+- [x] Run manual OAuth runbook for Claude (see `docs/MANUAL-OAUTH-RUNBOOKS.md`)
+- [x] Run `npm run presubmit -- <run_id>` and confirm PASS (`2026-02-09T11-53-41Z`)
 
-**Last verified against official sources:** 2026-02-07
+**Last verified against official sources:** 2026-02-09 (revalidated based on prior verification on 2026-02-07; proceed unless Anthropic guidance has changed)
 
 ---
 
@@ -30,6 +30,8 @@ Before submitting, re-verify this packet against official sources (policies chan
 - **Support contact:** privacy@flaim.app
 - **Website:** https://flaim.app
 - **Source (if relevant):** https://github.com/jdguggs10/flaim
+- **Connector docs (setup + examples):** `docs/CONNECTOR-DOCS.md`
+- **Documentation URL (for submission form):** https://github.com/jdguggs10/flaim/blob/main/docs/CONNECTOR-DOCS.md
 
 ## Authentication
 
@@ -58,33 +60,13 @@ To test Flaim during review:
 
 **Note:** ESPN credentials (cookies) expire approximately every 30 days and need re-syncing. Yahoo uses OAuth tokens that auto-refresh.
 
-## Usage Examples
+## Usage Examples (Slim)
 
-### Example 1: Check league standings
-**Prompt:** "What are the current standings in my fantasy football league?"
-**Expected:** Claude calls `get_user_session` to find leagues, then `get_standings` to return standings with team names, records, and rankings.
+Full examples are in `docs/CONNECTOR-DOCS.md`. Three prompts that should work for review:
 
-### Example 2: View your roster
-**Prompt:** "Who is on my fantasy football roster?"
-**Expected:** Claude calls `get_user_session`, then `get_roster` to return player names, positions, and stats.
-
-### Example 3: Find free agents
-**Prompt:** "Show me the best available quarterbacks in my league"
-**Expected:** Claude calls `get_user_session`, then `get_free_agents` with position filter to return available QBs ranked by projected points.
-
-## Tools
-
-All tools have `readOnlyHint: true` annotation. No destructive operations.
-
-| Tool | Description |
-|------|-------------|
-| `get_user_session` | User's leagues across all platforms with IDs |
-| `get_ancient_history` | Historical leagues and seasons (2+ years old) |
-| `get_league_info` | League settings and members |
-| `get_standings` | League standings |
-| `get_matchups` | Current/specified week matchups |
-| `get_roster` | Team roster with player stats |
-| `get_free_agents` | Available free agents |
+1. "What fantasy leagues do I have?"
+2. "Show me the standings in my default league."
+3. "Who is on my roster in my default league?"
 
 ## Safety Notes
 

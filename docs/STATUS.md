@@ -2,7 +2,7 @@
 
 Facts that should stay in sync with the codebase.
 
-Last updated: 2026-02-08
+Last updated: 2026-02-09
 
 ## Current Delivery Phase
 
@@ -51,22 +51,23 @@ All tools are read-only and use explicit parameters (`platform`, `sport`, `leagu
 - Structured eval logs implemented across all 4 workers.
 - Artifact layout is trace-scoped in `flaim-eval`.
 - Acceptance tooling exists (`npm run accept`, `npm run presubmit`).
-- Latest full eval run (`2026-02-08T16-00-07Z`) completed `9/9`, `0` errored.
+- Latest full eval run (`2026-02-09T11-53-41Z`) completed `9/9`, `0` errored.
+- Latest acceptance + presubmit for that run are `PASS`.
 
 ## Current Blocking Gate
 
 - Discovery/connectivity blocker is resolved (OpenAI MCP 424 issue fixed).
-- Current blocker is acceptance coverage policy failures in `flaim-eval` (`MISSING_AUTH_WORKER`, `MISSING_FANTASY_MCP`, downstream escalation) on the latest run.
+- No technical blockers remain for submission. Remaining work is operational: submit and respond to review feedback.
 
 ## Client Channel Readiness
 
 | Channel | Status | Notes |
 |---|---|---|
-| Claude custom connector | Working | OAuth flow works; runbook exists |
+| Claude custom connector | Working | Token-lifecycle re-auth verified (claude.ai and Claude Code). |
 | ChatGPT custom connector | Working | OAuth flow works; runbook exists |
-| Gemini CLI direct MCP | Working | Covered in `docs/MANUAL-OAUTH-RUNBOOKS.md` |
+| Gemini CLI direct MCP | Working (with CLI caveat) | Token-lifecycle re-auth is verified; Gemini CLI may emit intermittent internal rendering errors, but MCP tool calls succeed |
 | Anthropic Connectors Directory | Pending | Packet drafted; submission decision pending |
-| OpenAI Apps Directory | Pending | Packet drafted; screenshot + preflight checks pending |
+| OpenAI Apps Directory | Pending | Packet drafted; screenshot evidence + preflight runs are complete; final submission timing pending |
 
 ## CI Deploy Targets
 

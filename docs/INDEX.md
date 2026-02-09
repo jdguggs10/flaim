@@ -18,6 +18,7 @@ This file is the canonical map for Flaim docs. Update this when document ownersh
 | Backlog | `docs/dev/TODO.md` | Active backlog only. |
 | Directory submission packets | `docs/submissions/*` | Re-verify before submission. |
 | Tool versioning policy | `docs/TOOL-VERSIONING.md` | Breaking vs non-breaking guidance. |
+| Connector user docs | `docs/CONNECTOR-DOCS.md` | Single user-facing setup + examples (for directory reviewers too). |
 | Historical docs/plans pointers | `docs/archive/README.md`, `docs/plans/README.md` | External archive source-of-truth for stale docs. |
 
 ## Permanent Docs (Long-Lived)
@@ -33,6 +34,7 @@ This file is the canonical map for Flaim docs. Update this when document ownersh
 - `docs/STYLE-GUIDE.md`
 - `docs/ERROR-CODES.md`
 - `docs/CHANGELOG.md`
+- `docs/CONNECTOR-DOCS.md`
 - `docs/MANUAL-OAUTH-RUNBOOKS.md`
 - `docs/TOOL-VERSIONING.md`
 - `docs/archive/README.md`

@@ -111,3 +111,6 @@ tests/config/.env.test
 workers/auth-worker/.env
 extension/*.zip
 .worktrees/
+
+# Submission evidence (local only)
+docs/submissions/openai-screenshots/

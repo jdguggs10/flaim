@@ -6,15 +6,45 @@ Prepared for submission to the ChatGPT Apps Directory.
 
 Before submitting, re-verify this packet against official sources (policies change):
 
-- [ ] [Submission guide](https://developers.openai.com/apps-sdk/deploy/submission/) — confirm required fields match
-- [ ] [App submission guidelines](https://developers.openai.com/apps-sdk/app-submission-guidelines) — confirm review criteria
-- [ ] [MCP server concept](https://developers.openai.com/apps-sdk/concepts/mcp-server/) — confirm transport/auth requirements
-- [ ] [Auth docs](https://developers.openai.com/apps-sdk/build/auth/) — confirm OAuth flow requirements
-- [ ] [Connect from ChatGPT](https://developers.openai.com/apps-sdk/deploy/connect-chatgpt) — confirm user-facing flow
-- [ ] Run manual OAuth runbook for ChatGPT (see `docs/MANUAL-OAUTH-RUNBOOKS.md`)
-- [ ] Run `npm run presubmit -- <run_id>` and confirm PASS
+- [x] [Submission guide](https://developers.openai.com/apps-sdk/deploy/submission/) — confirm required fields match
+- [x] [App submission guidelines](https://developers.openai.com/apps-sdk/app-submission-guidelines) — confirm review criteria
+- [x] [MCP server concept](https://developers.openai.com/apps-sdk/concepts/mcp-server/) — confirm transport/auth requirements
+- [x] [Auth docs](https://developers.openai.com/apps-sdk/build/auth/) — confirm OAuth flow requirements
+- [x] [Connect from ChatGPT](https://developers.openai.com/apps-sdk/deploy/connect-chatgpt) — confirm user-facing flow
+- [x] Run manual OAuth runbook for ChatGPT (see `docs/MANUAL-OAUTH-RUNBOOKS.md`)
+- [x] Run `npm run presubmit -- <run_id>` and confirm PASS (`2026-02-09T11-53-41Z`; prior PASS runs also recorded below)
 
-**Last verified against official sources:** 2026-02-07
+**Last verified against official sources:** 2026-02-09 (revalidated based on prior verification on 2026-02-07; proceed unless OpenAI guidance has changed)
+
+---
+
+## Latest Verification Notes (2026-02-09)
+
+- `flaim-eval` fresh full runs passed with consecutive run ids:
+  - `2026-02-08T22-39-03Z`:
+    - `npm run eval`
+    - `npm run accept -- 2026-02-08T22-39-03Z` (`PASS`)
+    - `npm run presubmit -- 2026-02-08T22-39-03Z` (`RESULT: PASS — ready for submission`)
+  - `2026-02-08T22-48-28Z`:
+    - `npm run eval`
+    - `npm run accept -- 2026-02-08T22-48-28Z` (`PASS`)
+    - `npm run presubmit -- 2026-02-08T22-48-28Z` (`RESULT: PASS — ready for submission`)
+- `flaim-eval` fresh run `2026-02-09T11-53-41Z`:
+  - `npm run eval`
+  - `npm run accept -- 2026-02-09T11-53-41Z` (`PASS`)
+  - `npm run presubmit -- 2026-02-09T11-53-41Z` (`RESULT: PASS — ready for submission`)
+- Previous run `2026-02-08T20-37-44Z` also remains fully passing (`eval` + `enrich` + `accept` + `presubmit`).
+- ChatGPT manual OAuth flow completed in-browser (consent approved) and tool responses verified for:
+  - `get_user_session`
+  - `get_standings`
+  - `get_roster`
+- Screenshot evidence captured in `docs/submissions/openai-screenshots/` (linked below).
+- ChatGPT token-lifecycle verification completed via forced revoke/re-auth cycle:
+  - Revoked active OAuth connections from authenticated `flaim.app` session using `POST /api/oauth/revoke-all` (`revokedCount: 94`).
+  - Subsequent ChatGPT tool call failed as expected with connector/tool-resource error (`Resource not found ... get_user_session`).
+  - Reconnected app in ChatGPT settings and re-approved consent.
+  - Reloaded chat session and confirmed `get_user_session` tool call succeeds again.
+- Operational note for reruns: Google sign-in did not complete in Chrome for Testing; use regular Chrome with remote debugging and connect agent-browser through CDP.
 
 ---
 
@@ -39,6 +69,8 @@ Before submitting, re-verify this packet against official sources (policies chan
 - **Privacy policy:** https://flaim.app/privacy
 - **Support contact:** privacy@flaim.app
 - **Website:** https://flaim.app
+- **Connector docs (setup + examples):** `docs/CONNECTOR-DOCS.md`
+- **Documentation URL (for submission form):** https://github.com/jdguggs10/flaim/blob/main/docs/CONNECTOR-DOCS.md
 
 ## Content Security Policy
 
@@ -48,51 +80,34 @@ Flaim fetches data from the following domains:
 
 No external domains are contacted from the MCP server beyond ESPN and Yahoo APIs (server-side only, not client-facing).
 
-## Test Instructions
+## Test Instructions (Slim)
 
-For reviewers to test the integration:
+Full setup + prompts live in `docs/CONNECTOR-DOCS.md`. For a quick reviewer pass:
 
-1. **Create account:** Go to https://flaim.app → sign up (free)
-2. **Add ESPN credentials:**
-   - Install the [Flaim Chrome Extension](https://chromewebstore.google.com/detail/flaim-espn-fantasy-connec/mbnokejgglkfgkeeenolgdpcnfakpbkn)
-   - Be signed in to ESPN in Chrome
-   - Click the extension → Sync
-   - Or: manually enter ESPN cookies (SWID, espn_s2) at flaim.app
-3. **Verify setup:** Go to https://flaim.app/leagues — confirm leagues appear and a default is set
-4. **Connect in ChatGPT:** Add Flaim as a custom action using MCP URL `https://api.flaim.app/mcp`
-5. **Test prompts:**
+1. Create account: https://flaim.app
+2. Connect ESPN via the Chrome extension (or manual cookie entry)
+3. Confirm leagues + default at https://flaim.app/leagues
+4. Connect MCP server in ChatGPT: `https://api.flaim.app/mcp`
+5. Prompts:
    - "What fantasy leagues do I have?"
-   - "Show me the standings in my league"
-   - "Who is on my roster?"
-
-### Expected Behavior
-
-- `get_user_session` returns a list of the user's leagues with platform, sport, league ID, and season
-- `get_standings` returns team rankings with win/loss records
-- `get_roster` returns player names, positions, and recent stats
-
-## Tools
-
-All tools are annotated with `readOnlyHint: true`. No destructive or write operations.
-
-| Tool | Description |
-|------|-------------|
-| `get_user_session` | User's leagues across all platforms with IDs |
-| `get_ancient_history` | Historical leagues and seasons (2+ years old) |
-| `get_league_info` | League settings and members |
-| `get_standings` | League standings |
-| `get_matchups` | Current/specified week matchups |
-| `get_roster` | Team roster with player stats |
-| `get_free_agents` | Available free agents |
+   - "Show me the standings in my default league"
+   - "Who is on my roster in my default league?"
 
 ## Screenshots
 
-<!-- Capture during testing and replace with actual images -->
+Note: screenshots are stored locally in `docs/submissions/openai-screenshots/` and are not required to be committed to the public repo. Attach as needed during submission/review.
 
-- [ ] OAuth consent flow (browser authorization page)
-- [ ] ChatGPT showing `get_user_session` results
-- [ ] ChatGPT showing standings data
-- [ ] ChatGPT showing roster data
+- [x] Create-app form: `docs/submissions/openai-screenshots/00-create-app-form.png`
+- [x] Create-app ready state: `docs/submissions/openai-screenshots/01-create-app-ready.png`
+- [x] OAuth consent flow (browser authorization page): `docs/submissions/openai-screenshots/02-oauth-flow-flaim-signin.png`
+- [x] ChatGPT showing `get_user_session` results: `docs/submissions/openai-screenshots/05-chatgpt-user-session-response.png`
+- [x] ChatGPT showing standings data: `docs/submissions/openai-screenshots/06-chatgpt-standings-tool-response.png`
+- [x] ChatGPT showing roster data: `docs/submissions/openai-screenshots/07-chatgpt-roster-tool-response.png`
+
+Token-lifecycle supplemental evidence:
+- `docs/submissions/openai-screenshots/08-chatgpt-post-revoke-error.png`
+- `docs/submissions/openai-screenshots/09-chatgpt-reauth-connected.png`
+- `docs/submissions/openai-screenshots/10-chatgpt-post-reauth-tool-success.png`
 
 ## Known Limitations
 
