@@ -46,7 +46,6 @@ This file is the canonical map for Flaim docs. Update this when document ownersh
 
 - `docs/dev/CURRENT-EXECUTION-STATE.md` (primary execution tracker)
 - `docs/dev/TODO.md`
-- `docs/dev/basketball-hockey-api-spike.md`
 
 Historical analyses/plans were externalized:
 - `docs/archive/README.md`
