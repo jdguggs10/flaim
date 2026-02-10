@@ -1,8 +1,10 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import type { Env, ExecuteRequest, ExecuteResponse, Sport } from './types';
-import { footballHandlers } from './sports/football/handlers';
 import { baseballHandlers } from './sports/baseball/handlers';
+import { basketballHandlers } from './sports/basketball/handlers';
+import { footballHandlers } from './sports/football/handlers';
+import { hockeyHandlers } from './sports/hockey/handlers';
 import {
   CORRELATION_ID_HEADER,
   EVAL_RUN_HEADER,
@@ -132,11 +134,29 @@ async function routeToSport(
       return handler(env, params, authHeader, correlationId);
     }
 
-    case 'basketball':
-      return { success: false, error: 'Yahoo basketball not yet supported', code: 'NOT_SUPPORTED' };
+    case 'basketball': {
+      const handler = basketballHandlers[tool];
+      if (!handler) {
+        return {
+          success: false,
+          error: `Unknown basketball tool: ${tool}`,
+          code: 'UNKNOWN_TOOL'
+        };
+      }
+      return handler(env, params, authHeader, correlationId);
+    }
 
-    case 'hockey':
-      return { success: false, error: 'Yahoo hockey not yet supported', code: 'NOT_SUPPORTED' };
+    case 'hockey': {
+      const handler = hockeyHandlers[tool];
+      if (!handler) {
+        return {
+          success: false,
+          error: `Unknown hockey tool: ${tool}`,
+          code: 'UNKNOWN_TOOL'
+        };
+      }
+      return handler(env, params, authHeader, correlationId);
+    }
 
     default:
       return { success: false, error: `Unknown sport: ${sport}`, code: 'INVALID_SPORT' };

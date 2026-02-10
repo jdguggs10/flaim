@@ -35,8 +35,8 @@ All tools are read-only and use explicit parameters (`platform`, `sport`, `leagu
 |---|---|---|---|
 | Football | ✅ | ✅ | Full read-tool coverage |
 | Baseball | ✅ | ✅ | Full read-tool coverage |
-| Basketball | ❌ | ❌ | Not implemented yet (`NOT_SUPPORTED`) |
-| Hockey | ❌ | ❌ | Not implemented yet (`NOT_SUPPORTED`) |
+| Basketball | ✅ | ✅ | Full read-tool coverage (ESPN mappings unverified — no live credentials yet) |
+| Hockey | ✅ | ✅ | Full read-tool coverage (ESPN mappings unverified — no live credentials yet) |
 
 ## Worker Inventory
 

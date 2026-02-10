@@ -1,6 +1,7 @@
 import type { EspnCredentials } from '@flaim/worker-shared';
 import type { EspnLeagueResponse } from '../types';
 import { espnFetch } from '../shared/espn-api';
+import { toEspnSeasonYear } from '../shared/season';
 
 export interface BasicLeagueInfoRequest {
   leagueId: string;
@@ -48,7 +49,8 @@ export async function getBasicLeagueInfo(
     }
 
     const seasonYear = requestedSeasonYear || new Date().getFullYear();
-    const apiPath = `/seasons/${seasonYear}/segments/0/leagues/${leagueId}?view=mStandings&view=mTeam&view=mSettings`;
+    const espnSeasonYear = toEspnSeasonYear(seasonYear, sport);
+    const apiPath = `/seasons/${espnSeasonYear}/segments/0/leagues/${leagueId}?view=mStandings&view=mTeam&view=mSettings`;
 
     let response: Response;
     try {

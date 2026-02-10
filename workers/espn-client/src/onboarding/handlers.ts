@@ -48,8 +48,8 @@ function getEspnGameId(sport: Sport): string {
   return ESPN_GAME_IDS[sport] || 'ffl';
 }
 
-function isOnboardingSport(sport: Sport): sport is 'football' | 'baseball' {
-  return sport === 'football' || sport === 'baseball';
+function isOnboardingSport(sport: Sport): boolean {
+  return sport === 'football' || sport === 'baseball' || sport === 'basketball' || sport === 'hockey';
 }
 
 function buildAuthHeaders(
@@ -167,12 +167,12 @@ export async function initializeOnboarding(
         });
 
         leagueResults.push({
+          ...basicInfo,
           leagueId: league.leagueId,
           sport: league.sport,
           teamId: league.teamId,
           seasonYear: leagueSeasonYear,
           gameId,
-          ...basicInfo
         });
       } catch (error) {
         console.error(`❌ Failed to get info for league ${league.leagueId}:`, error);

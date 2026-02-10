@@ -4,6 +4,15 @@ Follow Keep a Changelog; SemVer applies.
 
 ## [Unreleased]
 
+### Basketball & Hockey Support
+- **Added**: ESPN basketball handlers (5 tools) with position, team, and stat mappings.
+- **Added**: ESPN hockey handlers (5 tools) with skater/goalie stat split mappings.
+- **Added**: Yahoo basketball handlers (5 tools) with position mappings.
+- **Added**: Yahoo hockey handlers (5 tools) with position mappings.
+- **Added**: Basketball/hockey now routable in both ESPN and Yahoo clients.
+- **Added**: Basketball/hockey enabled for ESPN onboarding (discover-seasons).
+- **Note**: All ESPN mappings sourced from `cwendt94/espn-api` — marked unverified pending live league testing.
+
 ### Distribution
 - **Added**: Published Flaim to the official MCP registry (`registry.modelcontextprotocol.io`) as `app.flaim/mcp` with DNS-based domain verification. Added `server.json` to repo root.
 - **Added**: Gemini CLI extension manifest (`gemini-extension.json`) for auto-indexing into the Gemini CLI extensions gallery.
