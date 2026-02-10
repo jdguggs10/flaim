@@ -1,6 +1,6 @@
 # Current Execution State
 
-Last updated: 2026-02-09
+Last updated: 2026-02-10
 Owner: Flaim (solo)
 
 This is the canonical execution-status page for current work. It replaces overlapping sprint/incident plans that were moved to the external archive bundle (see `docs/archive/README.md`).
@@ -47,6 +47,13 @@ This is the canonical execution-status page for current work. It replaces overla
 - Fresh full eval run passed: `2026-02-09T11-53-41Z` (`9/9`, `0` errors).
 - Acceptance passed: `npm run accept -- 2026-02-09T11-53-41Z`.
 - Presubmit passed: `npm run presubmit -- 2026-02-09T11-53-41Z` (`RESULT: PASS`).
+
+6. Tool annotations fixed and verified (2026-02-10)
+- Added missing `openWorldHint: false` and `destructiveHint: false` to all MCP tools (identified as common OpenAI rejection reason).
+- Fresh full eval run passed: `2026-02-10T19-27-44Z` (`9/9`, `0` errors).
+- Acceptance passed: `npm run accept -- 2026-02-10T19-27-44Z`.
+- Presubmit passed: `npm run presubmit -- 2026-02-10T19-27-44Z` (`RESULT: PASS`).
+- OpenAI organization verification initiated (status: in review).
 
 ## Next Actions
 
