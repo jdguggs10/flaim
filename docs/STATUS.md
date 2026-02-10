@@ -69,6 +69,11 @@ All tools are read-only and use explicit parameters (`platform`, `sport`, `leagu
 | Anthropic Connectors Directory | Pending | Packet drafted; submission decision pending |
 | OpenAI Apps Directory | Pending | Packet drafted; screenshot evidence + preflight runs are complete; final submission timing pending |
 | MCP Registry | Live | Published as `app.flaim/mcp` via `mcp-publisher` CLI with DNS verification |
+| Gemini CLI Extensions Gallery | Pending | `gemini-extension.json` committed; auto-indexes within ~1 week |
+| Glama | Pending review | Submitted via GitHub; [glama.ai/mcp/servers/@jdguggs10/flaim](https://glama.ai/mcp/servers/@jdguggs10/flaim) |
+| MCP.so | Pending review | Submitted with description, tags, server config |
+| awesome-mcp-servers | PR open | [PR #1918](https://github.com/punkpeye/awesome-mcp-servers/pull/1918) |
+| PulseMCP | Auto-indexing | Ingests official registry daily; should appear within ~1 week |
 
 ## CI Deploy Targets
 

@@ -6,6 +6,8 @@ Follow Keep a Changelog; SemVer applies.
 
 ### Distribution
 - **Added**: Published Flaim to the official MCP registry (`registry.modelcontextprotocol.io`) as `app.flaim/mcp` with DNS-based domain verification. Added `server.json` to repo root.
+- **Added**: Gemini CLI extension manifest (`gemini-extension.json`) for auto-indexing into the Gemini CLI extensions gallery.
+- **Added**: Submitted to Glama, MCP.so, and awesome-mcp-servers (PR #1918). PulseMCP auto-indexes from official registry.
 
 ### MCP Interoperability
 - **Fixed**: Resolved MCP connector discovery failures (`424`) by hardening transport behavior at `/mcp`.
