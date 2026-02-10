@@ -38,7 +38,8 @@ export function createFantasyMcpServer(ctx: McpContext): McpServer {
         title: tool.title,
         description: tool.description,
         inputSchema: tool.inputSchema,
-        annotations: { readOnlyHint: true },
+        // OpenAI Apps Directory: explicitly declare tool safety hints for reviewers.
+        annotations: { readOnlyHint: true, openWorldHint: false, destructiveHint: false },
         _meta: { securitySchemes: tool.securitySchemes },
       },
       async (args) => {

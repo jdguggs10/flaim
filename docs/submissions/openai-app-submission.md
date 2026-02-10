@@ -12,14 +12,23 @@ Before submitting, re-verify this packet against official sources (policies chan
 - [x] [Auth docs](https://developers.openai.com/apps-sdk/build/auth/) — confirm OAuth flow requirements
 - [x] [Connect from ChatGPT](https://developers.openai.com/apps-sdk/deploy/connect-chatgpt) — confirm user-facing flow
 - [x] Run manual OAuth runbook for ChatGPT (see `docs/MANUAL-OAUTH-RUNBOOKS.md`)
-- [x] Run `npm run presubmit -- <run_id>` and confirm PASS (`2026-02-09T11-53-41Z`; prior PASS runs also recorded below)
+- [x] Run `npm run presubmit -- <run_id>` and confirm PASS (`2026-02-10T19-27-44Z`; prior PASS runs also recorded below)
 
 **Last verified against official sources:** 2026-02-09 (revalidated based on prior verification on 2026-02-07; proceed unless OpenAI guidance has changed)
 
 ---
 
-## Latest Verification Notes (2026-02-09)
+## Latest Verification Notes (2026-02-10)
 
+- **Tool annotations updated** (2026-02-10):
+  - Added `openWorldHint: false` to all tools (was missing - identified as common rejection reason)
+  - Added `destructiveHint: false` to all tools (recommended for read-only tools)
+  - All tools now have complete annotation set: `{ readOnlyHint: true, openWorldHint: false, destructiveHint: false }`
+  - Change location: `workers/fantasy-mcp/src/mcp/server.ts:42`
+- `flaim-eval` fresh run `2026-02-10T19-27-44Z` (with updated annotations):
+  - `npm run eval` (`9/9 completed, 0 errored`)
+  - `npm run accept -- 2026-02-10T19-27-44Z` (`PASS`)
+  - `npm run presubmit -- 2026-02-10T19-27-44Z` (`RESULT: PASS — ready for submission`)
 - `flaim-eval` fresh full runs passed with consecutive run ids:
   - `2026-02-08T22-39-03Z`:
     - `npm run eval`
@@ -120,7 +129,7 @@ Token-lifecycle supplemental evidence:
 
 ## Safety & Privacy
 
-- All tools are read-only with `readOnlyHint: true` annotation
+- All tools are read-only with tool annotations: `readOnlyHint: true`, `openWorldHint: false`, `destructiveHint: false`
 - No PII collected beyond what's needed for authentication
 - ESPN/Yahoo credentials encrypted at rest (Supabase AES-256)
 - Per-user data isolation via verified JWT claims
