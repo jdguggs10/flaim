@@ -16,6 +16,15 @@ Before submitting, re-verify this packet against official sources (policies chan
 
 **Last verified against official sources:** 2026-02-09 (revalidated based on prior verification on 2026-02-07; proceed unless OpenAI guidance has changed)
 
+## Submission Record
+
+- **Submitted:** 2026-02-10
+- **Organization verification:** Individual verification approved 2026-02-10
+- **Data residency:** Global (Flaim project)
+- **Verification run:** `2026-02-10T19-27-44Z` (PASS)
+- **Case ID:** [Add after submission]
+- **Status:** Submitted - awaiting review
+
 ---
 
 ## Latest Verification Notes (2026-02-10)

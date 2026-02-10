@@ -68,7 +68,7 @@ All tools are read-only and use explicit parameters (`platform`, `sport`, `leagu
 | ChatGPT custom connector | Working | OAuth flow works; runbook exists |
 | Gemini CLI direct MCP | Working (with CLI caveat) | Token-lifecycle re-auth is verified; Gemini CLI may emit intermittent internal rendering errors, but MCP tool calls succeed |
 | Anthropic Connectors Directory | Pending | Packet drafted; submission decision pending |
-| OpenAI Apps Directory | Pending verification | Packet complete; tool annotations fixed; verification run `2026-02-10T19-27-44Z` passing; organization verification in review |
+| OpenAI Apps Directory | Ready to submit | Individual verification approved 2026-02-10; all requirements met; ready for immediate submission |
 | MCP Registry | Live | Published as `app.flaim/mcp` via `mcp-publisher` CLI with DNS verification |
 | Gemini CLI Extensions Gallery | Pending | `gemini-extension.json` committed; auto-indexes within ~1 week |
 | Glama | Pending review | Submitted via GitHub; [glama.ai/mcp/servers/@jdguggs10/flaim](https://glama.ai/mcp/servers/@jdguggs10/flaim) |
