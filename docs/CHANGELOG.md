@@ -4,6 +4,9 @@ Follow Keep a Changelog; SemVer applies.
 
 ## [Unreleased]
 
+### Distribution
+- **Added**: Published Flaim to the official MCP registry (`registry.modelcontextprotocol.io`) as `app.flaim/mcp` with DNS-based domain verification. Added `server.json` to repo root.
+
 ### MCP Interoperability
 - **Fixed**: Resolved MCP connector discovery failures (`424`) by hardening transport behavior at `/mcp`.
 - **Changed**: MCP protocol endpoint now rejects non-POST requests with `405 Allow: POST` to avoid hanging GET stream paths.

@@ -53,6 +53,7 @@ This is the canonical execution-status page for current work. It replaces overla
 1. Submit to OpenAI Apps Directory (packet is ready: `docs/submissions/openai-app-submission.md`).
 2. Decide Anthropic submission strategy (submit now vs delay).
 3. Keep preflight evidence current if any auth/tool changes land.
+4. ~~Submit to MCP Registry~~ — **Done** (published as `app.flaim/mcp` on 2026-02-10).
 
 ## Not Started / Deferred
 

@@ -68,6 +68,7 @@ All tools are read-only and use explicit parameters (`platform`, `sport`, `leagu
 | Gemini CLI direct MCP | Working (with CLI caveat) | Token-lifecycle re-auth is verified; Gemini CLI may emit intermittent internal rendering errors, but MCP tool calls succeed |
 | Anthropic Connectors Directory | Pending | Packet drafted; submission decision pending |
 | OpenAI Apps Directory | Pending | Packet drafted; screenshot evidence + preflight runs are complete; final submission timing pending |
+| MCP Registry | Live | Published as `app.flaim/mcp` via `mcp-publisher` CLI with DNS verification |
 
 ## CI Deploy Targets
 
