@@ -21,6 +21,10 @@ Use this as the active backlog only. For overall phase status, see `docs/dev/CUR
 2. Add hockey support (ESPN + Yahoo) for all read tools.
 3. Add tool/eval scenarios covering basketball and hockey.
 
+## Medium-Term 
+
+1. Improve clerk magic link emails
+
 ## Maintenance / Reliability
 
 1. Add external uptime checks for `/health` endpoints.
