@@ -401,7 +401,7 @@ export default function Popup() {
             </div>
             <div className="diag-row">
               <span className="diag-label">User ID</span>
-              <span className="diag-value mono">{userId ?? 'Unknown'}</span>
+              <span className="diag-value mono">{userId ? `${userId.slice(0, 12)}…` : 'Unknown'}</span>
             </div>
             <button
               className="button secondary full-width"
