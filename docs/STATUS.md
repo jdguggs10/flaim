@@ -2,11 +2,11 @@
 
 Facts that should stay in sync with the codebase.
 
-Last updated: 2026-02-10
+Last updated: 2026-02-13
 
 ## Current Delivery Phase
 
-- Active phase: post-Sprint-B stabilization and submission preflight.
+- Active phase: basketball/hockey shipped; submission and verification ongoing.
 - Canonical execution tracker: `docs/dev/CURRENT-EXECUTION-STATE.md`.
 
 ## MCP Endpoints

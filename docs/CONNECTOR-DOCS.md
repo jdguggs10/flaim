@@ -54,7 +54,7 @@ All tools take explicit parameters: `platform`, `sport`, `league_id`, `season_ye
 - `get_free_agents`
 - `get_ancient_history`
 
-Supported today: ESPN + Yahoo; football + baseball. Basketball/hockey are not implemented yet.
+Supported today: ESPN + Yahoo; football, baseball, basketball, and hockey.
 
 ## Working Examples (Copy/Paste)
 

@@ -22,8 +22,8 @@ npm run dev
 - **Next.js web app (`/web`)**: Site pages (landing with setup flow, leagues, privacy policy), OAuth consent screens, optional chat UI.
 - **Auth worker (`/workers/auth-worker`)**: Supabase credential + league storage, JWT verification, OAuth token management, extension APIs. Uses Hono for routing.
 - **Unified Gateway (`/workers/fantasy-mcp`)**: Single MCP endpoint exposing unified tools for all platforms and sports. Routes to platform-specific workers via service bindings.
-- **ESPN Client (`/workers/espn-client`)**: Internal worker handling all ESPN API calls for all sports (football, baseball). Called by fantasy-mcp gateway.
-- **Yahoo Client (`/workers/yahoo-client`)**: Internal worker handling all Yahoo Fantasy API calls for all sports (football, baseball). Called by fantasy-mcp gateway.
+- **ESPN Client (`/workers/espn-client`)**: Internal worker handling all ESPN API calls for all sports (football, baseball, basketball, hockey). Called by fantasy-mcp gateway.
+- **Yahoo Client (`/workers/yahoo-client`)**: Internal worker handling all Yahoo Fantasy API calls for all sports (football, baseball, basketball, hockey). Called by fantasy-mcp gateway.
 - **Shared package (`/workers/shared`)**: Common utilities (CORS middleware, auth-fetch helper, types) used by all workers.
 - **Supabase Postgres**: `espn_credentials`, `espn_leagues`, `yahoo_leagues`, `user_preferences` (defaults), `oauth_tokens`, `oauth_codes`, `rate_limits`, plus legacy `extension_tokens`/`extension_pairing_codes` (deprecated).
 
