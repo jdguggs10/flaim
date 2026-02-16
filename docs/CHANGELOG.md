@@ -4,6 +4,10 @@ Follow Keep a Changelog; SemVer applies.
 
 ## [Unreleased]
 
+### SEO
+- **Added**: Next.js metadata routes for `/sitemap.xml` and `/robots.txt` in `web/app/sitemap.ts` and `web/app/robots.ts`.
+- **Fixed**: Search Console sitemap submission now has a real crawl target instead of `404` for missing sitemap/robots endpoints.
+
 ### Basketball & Hockey Support
 - **Added**: ESPN basketball handlers (5 tools) with position, team, and stat mappings.
 - **Added**: ESPN hockey handlers (5 tools) with skater/goalie stat split mappings.

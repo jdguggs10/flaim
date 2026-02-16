@@ -62,6 +62,8 @@ Both site and chat can use shared `components/ui/` (shadcn).
 | `/` | Landing page + onboarding flow (sign-in, sync credentials, MCP URLs) |
 | `/leagues` | Manage ESPN leagues and seasons |
 | `/privacy` | Privacy policy (CWS compliance) |
+| `/sitemap.xml` | XML sitemap for search engine discovery |
+| `/robots.txt` | Crawl rules + sitemap location for search engines |
 | `/oauth/consent` | OAuth authorization screen |
 
 ### API Routes (`/api/`)
