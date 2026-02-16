@@ -149,6 +149,35 @@ function getClientNameFromRedirectUri(redirectUri: string): string {
   return 'MCP Client';
 }
 
+function isLoopbackHostname(hostname: string): boolean {
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1' || hostname === '[::1]';
+}
+
+/**
+ * Normalize redirect URI for equality checks.
+ * OAuth loopback callbacks can use localhost or 127.0.0.1 interchangeably;
+ * treat them as equivalent when scheme/port/path/query/hash are identical.
+ */
+function normalizeRedirectUriForComparison(redirectUri: string): string {
+  try {
+    const parsed = new URL(redirectUri);
+    const hostname = parsed.hostname.toLowerCase();
+    if (isLoopbackHostname(hostname)) {
+      parsed.hostname = 'localhost';
+      if (!parsed.port) {
+        parsed.port = parsed.protocol === 'https:' ? '443' : '80';
+      }
+    }
+    return parsed.toString();
+  } catch {
+    return redirectUri;
+  }
+}
+
+function redirectUrisMatch(expectedRedirectUri: string, actualRedirectUri: string): boolean {
+  return normalizeRedirectUriForComparison(expectedRedirectUri) === normalizeRedirectUriForComparison(actualRedirectUri);
+}
+
 // =============================================================================
 // OAUTH STORAGE CLASS
 // =============================================================================
@@ -244,7 +273,7 @@ export class OAuthStorage {
       return false;
     }
 
-    if (data.redirect_uri !== redirectUri) {
+    if (!redirectUrisMatch(data.redirect_uri, redirectUri)) {
       console.log(
         `[oauth-storage] OAuth state redirect URI mismatch: state=${state.substring(0, 8)}..., expected=${data.redirect_uri}, got=${redirectUri}`
       );
@@ -336,7 +365,7 @@ export class OAuthStorage {
     }
 
     // Validate redirect URI matches
-    if (authCode.redirectUri !== redirectUri) {
+    if (!redirectUrisMatch(authCode.redirectUri, redirectUri)) {
       console.log(`[oauth-storage] Redirect URI mismatch: expected ${authCode.redirectUri}, got ${redirectUri}`);
       return null;
     }
