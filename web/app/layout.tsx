@@ -19,7 +19,11 @@ export const metadata: Metadata = {
   title: "Flaim - Fantasy League AI Connector",
   description: "Connect your AI assistant to ESPN fantasy sports",
   icons: {
-    icon: "/favicon.ico",
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/icon-light.png", type: "image/png", media: "(prefers-color-scheme: light)" },
+      { url: "/icon-dark.png", type: "image/png", media: "(prefers-color-scheme: dark)" },
+    ],
     apple: "/apple-icon.png",
   },
 };

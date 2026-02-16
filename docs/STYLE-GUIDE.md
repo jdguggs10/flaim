@@ -330,20 +330,61 @@ The Flaim logo is a flaming baseball. Two source marks exist (both 1024x1024 B&W
 
 **Rule of thumb:** If it needs to read as "flaming ball" at 24px, use the icon mark. Otherwise use the hero mark.
 
+### Icon & Favicon Standards
+
+Three distinct icon contexts exist, each with different transparency and dark-mode rules.
+
+#### 1. Apple Touch Icon (`apple-icon.png`)
+
+**Must be opaque.** iOS fills transparent areas with black — not the theme background, just flat black. Apple's HIG requires app icons to have no transparency. iOS also does **not** swap touch icons based on `prefers-color-scheme`; you get one icon, always.
+
+- Format: PNG, no alpha channel (or alpha with solid fill — no visible transparency)
+- Size: 180x180 minimum (Apple's recommendation for iPhone retina). Larger is fine — iOS downscales.
+- Background: Solid white (or brand color). Never transparent.
+- Sources: [Apple HIG — App Icons](https://developer.apple.com/design/human-interface-guidelines/app-icons), [Apple Safari Web Content Guide](https://developer.apple.com/library/archive/documentation/AppleApplications/Reference/SafariWebContent/ConfiguringWebApplications/ConfiguringWebApplications.html)
+
+#### 2. Browser Tab Favicon (`icon` / `favicon.ico`)
+
+**Transparency is fine, but requires light + dark variants.** Browser tabs can be light or dark, so a single transparent black-on-clear icon disappears on dark tabs.
+
+- The `media` attribute on `<link rel="icon">` enables per-scheme switching: `media="(prefers-color-scheme: light)"` / `dark`. Supported in Chrome 76+, Firefox 67+, Safari 12.1+, Edge 79+ (~95% coverage, including iOS Safari).
+- Next.js App Router supports `media` natively in the `metadata.icons` array.
+- `favicon.ico` serves as a legacy fallback for the ~5% without `media` support.
+- SVG favicons with embedded `@media (prefers-color-scheme)` CSS are another option, but Safari only added SVG favicon support in Safari 26 (late 2025), so PNG with `media` is more reliable today.
+- Sources: [favicon.im — Adaptive Favicons](https://favicon.im/blog/favicon-for-light-dark-modes), [web.dev — Adaptive Favicon](https://web.dev/articles/building/an-adaptive-favicon), [browserux.com — Favicons 2025](https://browserux.com/blog/guides/web-icons/favicons-best-practices.html)
+
+#### 3. Chrome Extension Icons
+
+**Transparency is fine.** Chrome renders extension icons on its own managed backgrounds (toolbar, extensions page, CWS listing). Transparent PNGs work well and are standard practice.
+
+- Sizes: 16px (toolbar), 48px (extensions page), 128px (CWS listing)
+- Format: PNG with alpha
+
+#### Summary Table
+
+| Context | Transparent? | Dark mode swap? | Format |
+|---------|-------------|-----------------|--------|
+| `apple-touch-icon` | **No** — must be opaque | Not possible (single icon) | PNG, solid background |
+| Browser tab `icon` | Yes, with light+dark pair | Yes — via `media` attribute | PNG pair (or SVG) |
+| `favicon.ico` (legacy) | Can be, but risky on dark tabs | No — single file | ICO |
+| Chrome extension | Yes | N/A (Chrome manages bg) | PNG with alpha |
+| Site header / inline logo | Yes — swapped via CSS class | Yes — `dark:hidden` / `hidden dark:block` | PNG with alpha |
+
 ### Asset Inventory
 
-**From icon mark** (white background, threshold pipeline):
+**From icon mark** (simplified art for small sizes):
 
-| File | Size | Purpose |
-|------|------|---------|
-| `web/app/favicon.ico` | 16/32px | Browser tab icon |
-| `web/app/apple-icon.png` | 180px | iOS home screen icon |
-| `web/app/icon.png` | 512px | General web app icon / PWA |
-| `extension/assets/icons/icon-16.png` | 16px | Chrome extension UI |
-| `extension/assets/icons/icon-48.png` | 48px | Chrome extension UI |
-| `extension/assets/icons/icon-128.png` | 128px | Chrome Web Store listing |
+| File | Size | Background | Purpose |
+|------|------|-----------|---------|
+| `web/app/favicon.ico` | 16/32/48px | Transparent | Legacy browser tab fallback |
+| `web/app/icon-light.png` | 512px | Transparent | Browser tab icon (light mode) |
+| `web/app/icon-dark.png` | 512px | Transparent | Browser tab icon (dark mode, white artwork) |
+| `web/app/apple-icon.png` | 512px | **Solid white** | iOS home screen / bookmarks (always opaque) |
+| `extension/assets/icons/icon-16.png` | 16px | Transparent | Chrome extension toolbar |
+| `extension/assets/icons/icon-48.png` | 48px | Transparent | Chrome extensions page |
+| `extension/assets/icons/icon-128.png` | 128px | Transparent | Chrome Web Store listing |
 
-**From hero mark** (transparent background):
+**From hero mark** (full-detail art for display sizes):
 
 | File | Size | Purpose |
 |------|------|---------|
@@ -351,10 +392,11 @@ The Flaim logo is a flaming baseball. Two source marks exist (both 1024x1024 B&W
 | `web/public/flaim-mark-hero-dark.png` | 512px | Site header logo (dark mode, white artwork) |
 
 **Metadata references:**
-- `web/app/layout.tsx` — Next.js `metadata.icons` (favicon + apple icon)
+- `web/app/layout.tsx` — Next.js `metadata.icons` (favicon, icon light/dark, apple icon)
 - `extension/manifest.json` — `icons` and `default_icon` fields
 - `web/components/site/site-header.tsx` — Hero mark in site header
 - `web/components/chat/chat-header.tsx` — Hero mark in chat header
+- `web/components/site/connectors/ConsentScreen.tsx` — Hero mark in OAuth consent
 
 ### Other Images
 
@@ -364,22 +406,25 @@ The Flaim logo is a flaming baseball. Two source marks exist (both 1024x1024 B&W
 
 ### Regenerating Icons
 
-**Icon mark** → favicon, apple icon, extension icons (anti-aliased resize, transparent background):
+**Icon mark** → favicon, browser icons, apple icon, extension icons:
 
 ```bash
 SRC=docs/branding/flaim-mark-icon-bw.png
 
-# Favicon (16 + 32 + 48px ICO — 48px for Retina tabs)
+# Favicon ICO (legacy fallback — 16 + 32 + 48px)
 magick $SRC -resize 16x16 -fuzz 10% -transparent white /tmp/16.png
 magick $SRC -resize 32x32 -fuzz 10% -transparent white /tmp/32.png
 magick $SRC -resize 48x48 -fuzz 10% -transparent white /tmp/48.png
 magick /tmp/16.png /tmp/32.png /tmp/48.png web/app/favicon.ico
 
-# Apple icon + general icon
-magick $SRC -resize 180x180 -fuzz 10% -transparent white web/app/apple-icon.png
-magick $SRC -resize 512x512 -fuzz 10% -transparent white web/app/icon.png
+# Browser tab icons (light = black on transparent, dark = white on transparent)
+magick $SRC -resize 512x512 -fuzz 10% -transparent white web/app/icon-light.png
+magick web/app/icon-light.png -channel RGB -negate +channel web/app/icon-dark.png
 
-# Extension icons
+# Apple touch icon (MUST be opaque — black artwork on solid white)
+magick $SRC -resize 512x512 web/app/apple-icon.png
+
+# Extension icons (transparent)
 magick $SRC -resize 16x16 -fuzz 10% -transparent white extension/assets/icons/icon-16.png
 magick $SRC -resize 48x48 -fuzz 10% -transparent white extension/assets/icons/icon-48.png
 magick $SRC -resize 128x128 -fuzz 10% -transparent white extension/assets/icons/icon-128.png
