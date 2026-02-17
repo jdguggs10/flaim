@@ -5,6 +5,7 @@ export interface Env extends BaseEnvWithAuth {
   ESPN: Fetcher;        // Service binding to espn-client
   YAHOO: Fetcher;       // Service binding to yahoo-client
   AUTH_WORKER: Fetcher; // Service binding to auth-worker
+  OPENAI_APPS_VERIFICATION_TOKEN?: string; // Wrangler secret for OpenAI domain verification
 }
 
 export type Platform = 'espn' | 'yahoo';

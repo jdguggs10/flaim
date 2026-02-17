@@ -3,7 +3,7 @@ import { Lock, Shield, User } from 'lucide-react';
 
 export const metadata: Metadata = {
   title: 'Privacy Policy | Flaim',
-  description: 'Privacy policy for Flaim and the Flaim Chrome Extension',
+  description: 'Privacy policy for Flaim — fantasy sports AI connector for ESPN and Yahoo',
 };
 
 export default function PrivacyPage() {
@@ -11,7 +11,7 @@ export default function PrivacyPage() {
     <div className="min-h-screen bg-background">
       <div className="container max-w-3xl mx-auto py-12 px-4">
         <h1 className="text-3xl font-bold mb-2">Privacy Policy</h1>
-        <p className="text-muted-foreground mb-8">Last updated: December 31, 2025</p>
+        <p className="text-muted-foreground mb-8">Last updated: February 16, 2026</p>
 
         <div className="prose prose-neutral dark:prose-invert max-w-none space-y-8">
           <section id="your-data" className="not-prose">
@@ -23,7 +23,7 @@ export default function PrivacyPage() {
                 </div>
                 <h3 className="font-semibold mb-1">Credentials Stay Here</h3>
                 <p className="text-sm text-muted-foreground">
-                  ESPN cookies are stored securely and never sent to the AI.
+                  ESPN and Yahoo credentials are stored securely and never sent to the AI.
                 </p>
               </div>
               <div className="text-center">
@@ -50,9 +50,10 @@ export default function PrivacyPage() {
           <section>
             <h2 className="text-xl font-semibold mb-3">Overview</h2>
             <p className="text-muted-foreground">
-              Flaim is a fantasy sports analysis tool that helps you make better decisions
-              for your ESPN fantasy leagues. This privacy policy explains how we collect,
-              use, and protect your information when you use Flaim and the Flaim Chrome Extension.
+              Flaim is a fantasy sports analysis tool that connects your ESPN and Yahoo fantasy
+              leagues to AI assistants like ChatGPT and Claude. This privacy policy explains how
+              we collect, use, and protect your information when you use Flaim, the Flaim Chrome
+              Extension, and the Flaim MCP server.
             </p>
           </section>
 
@@ -67,9 +68,9 @@ export default function PrivacyPage() {
 
             <h3 className="text-lg font-medium mt-4 mb-2">ESPN Credentials (Chrome Extension)</h3>
             <p className="text-muted-foreground">
-              If you use the Flaim Chrome Extension, we collect your ESPN session cookies
+              If you use the Flaim Chrome Extension, we collect your ESPN session credentials
               (SWID and espn_s2) when you explicitly click &quot;Sync to Flaim&quot; in the extension.
-              These cookies are session identifiers that allow us to fetch your fantasy league
+              These are session identifiers that allow us to fetch your fantasy league
               data from ESPN on your behalf.
             </p>
             <ul className="list-disc list-inside text-muted-foreground mt-2 space-y-1">
@@ -78,14 +79,22 @@ export default function PrivacyPage() {
             </ul>
             <p className="text-muted-foreground mt-2">
               We do not collect your ESPN username or password. The extension only reads
-              cookies that ESPN has already set in your browser.
+              session credentials that ESPN has already set in your browser.
+            </p>
+
+            <h3 className="text-lg font-medium mt-4 mb-2">Yahoo Credentials (OAuth)</h3>
+            <p className="text-muted-foreground">
+              If you connect a Yahoo account, we store OAuth refresh tokens issued by Yahoo
+              through a standard authorization flow. These tokens allow us to fetch your Yahoo
+              fantasy league data on your behalf. We do not collect your Yahoo username or
+              password.
             </p>
           </section>
 
           <section>
             <h2 className="text-xl font-semibold mb-3">How We Use Your Information</h2>
             <p className="text-muted-foreground">
-              We use your ESPN credentials solely to:
+              We use your platform credentials (ESPN session credentials and Yahoo OAuth tokens) solely to:
             </p>
             <ul className="list-disc list-inside text-muted-foreground mt-2 space-y-1">
               <li>Fetch your fantasy league rosters, scores, and standings</li>
@@ -108,7 +117,7 @@ export default function PrivacyPage() {
 
             <h3 className="text-lg font-medium mt-4 mb-2">Storage</h3>
             <p className="text-muted-foreground">
-              Your ESPN credentials are stored in our database (Supabase) with the following
+              Your platform credentials are stored in our database (Supabase) with the following
               security measures:
             </p>
             <ul className="list-disc list-inside text-muted-foreground mt-2 space-y-1">
@@ -121,17 +130,30 @@ export default function PrivacyPage() {
           <section>
             <h2 className="text-xl font-semibold mb-3">Data Retention</h2>
             <p className="text-muted-foreground">
-              We retain your ESPN credentials until you disconnect the extension or delete
-              your account:
+              We retain your platform credentials only as long as needed to provide the service:
             </p>
             <ul className="list-disc list-inside text-muted-foreground mt-2 space-y-1">
               <li>
-                <strong>Remove credentials:</strong> Visit{' '}
-                <a href="/leagues" className="text-primary hover:underline">flaim.app/leagues</a>
-                {' '}to manage or remove your ESPN credentials.
+                <strong>ESPN credentials:</strong> Retained until you disconnect, or automatically
+                invalidated when ESPN expires them (typically ~30 days).
               </li>
               <li>
-                <strong>Delete account:</strong> Contact us to request complete account deletion.
+                <strong>Yahoo tokens:</strong> Retained until you disconnect your Yahoo account.
+                Tokens auto-refresh; revoking access in Yahoo immediately invalidates them.
+              </li>
+              <li>
+                <strong>Account data:</strong> Retained until you request deletion. Upon deletion,
+                all stored credentials and league data are permanently removed within 30 days.
+              </li>
+              <li>
+                <strong>Remove credentials:</strong> Visit{' '}
+                <a href="/leagues" className="text-primary hover:underline">flaim.app/leagues</a>
+                {' '}to manage or remove your platform credentials.
+              </li>
+              <li>
+                <strong>Delete account:</strong> Contact us at{' '}
+                <a href="mailto:privacy@flaim.app" className="text-primary hover:underline">privacy@flaim.app</a>
+                {' '}to request complete account deletion.
               </li>
             </ul>
           </section>
@@ -139,9 +161,10 @@ export default function PrivacyPage() {
           <section>
             <h2 className="text-xl font-semibold mb-3">Third-Party Sharing</h2>
             <p className="text-muted-foreground">
-              We do not sell, rent, or share your personal information or ESPN credentials
+              We do not sell, rent, or share your personal information or platform credentials
               with any third parties. Your data is used exclusively to provide Flaim&apos;s
-              services to you.
+              services to you. Our service providers (Clerk for authentication, Supabase for
+              data storage) process data only as necessary to operate the service.
             </p>
           </section>
 
@@ -158,11 +181,41 @@ export default function PrivacyPage() {
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold mb-3">ESPN Affiliation Disclaimer</h2>
+            <h2 className="text-xl font-semibold mb-3">Platform Affiliation Disclaimer</h2>
             <p className="text-muted-foreground">
-              Flaim is not affiliated with, endorsed by, or sponsored by ESPN or The Walt
-              Disney Company. ESPN is a trademark of ESPN, Inc. We access ESPN&apos;s fantasy
-              data with your explicit consent using the credentials you provide.
+              Flaim is not affiliated with, endorsed by, or sponsored by ESPN, The Walt
+              Disney Company, Yahoo, or any of their subsidiaries. ESPN is a trademark of
+              ESPN, Inc. Yahoo is a trademark of Yahoo Inc. We access fantasy data with
+              your explicit consent using the credentials you provide.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-xl font-semibold mb-3">Children&apos;s Privacy</h2>
+            <p className="text-muted-foreground">
+              Flaim is not directed at children under the age of 13. We do not knowingly
+              collect personal information from children under 13. If you believe a child
+              under 13 has provided us with personal information, please contact us at{' '}
+              <a href="mailto:privacy@flaim.app" className="text-primary hover:underline">privacy@flaim.app</a>
+              {' '}and we will promptly delete it.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-xl font-semibold mb-3">Legal Compliance</h2>
+            <p className="text-muted-foreground">
+              If you are a resident of the European Economic Area (EEA), United Kingdom, or
+              Switzerland, we process your data on the legal basis of your consent (provided
+              when you connect your fantasy platform accounts) and our legitimate interest in
+              operating the service. You have the right to access, correct, or delete your
+              personal data, and to withdraw consent at any time by disconnecting your accounts.
+            </p>
+            <p className="text-muted-foreground mt-2">
+              If you are a California resident, you have the right under the California Consumer
+              Privacy Act (CCPA) to request disclosure of the categories of personal information
+              we collect, the purposes for collection, and to request deletion of your data.
+              We do not sell personal information. To exercise these rights, contact us at{' '}
+              <a href="mailto:privacy@flaim.app" className="text-primary hover:underline">privacy@flaim.app</a>.
             </p>
           </section>
 

@@ -107,6 +107,15 @@ function buildResourceFromSuffix(baseResource: string, suffix: string): string {
   return `https://api.flaim.app${normalizedSuffix}`;
 }
 
+// OpenAI Apps Directory domain verification (token set via `wrangler secret put OPENAI_APPS_VERIFICATION_TOKEN`)
+app.get('/.well-known/openai-apps-challenge', (c) => {
+  const token = c.env.OPENAI_APPS_VERIFICATION_TOKEN;
+  if (!token) {
+    return c.text('Verification token not configured', 404);
+  }
+  return c.text(token, 200);
+});
+
 app.get('/.well-known/oauth-protected-resource', (c) => {
   return c.json(buildOauthMetadata('https://api.flaim.app/mcp'), 200, { 'Cache-Control': 'public, max-age=3600' });
 });

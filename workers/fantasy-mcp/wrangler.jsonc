@@ -40,6 +40,10 @@
         {
           "pattern": "api.flaim.app/apple-icon.png",
           "zone_name": "flaim.app"
+        },
+        {
+          "pattern": "api.flaim.app/.well-known/openai-apps-challenge",
+          "zone_name": "flaim.app"
         }
       ],
       // Service bindings for platform workers
