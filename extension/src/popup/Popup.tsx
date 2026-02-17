@@ -459,7 +459,7 @@ export default function Popup() {
                 <span>Signed in to Flaim</span>
               </div>
               <div className={`setup-step ${hasEspnCookies ? 'completed' : 'pending'}`}>
-                <span className="step-icon check">{checkmark(hasEspnCookies)}</span>
+                <span className={`step-icon${hasEspnCookies ? ' check' : ''}`}>{checkmark(hasEspnCookies)}</span>
                 <span>
                   {hasEspnCookies === null
                     ? 'ESPN (checking…)'
