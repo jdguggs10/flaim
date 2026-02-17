@@ -24,7 +24,7 @@ export function createFantasyMcpServer(ctx: McpContext): McpServer {
     version: '1.0.0',
     icons: [
       {
-        src: 'https://flaim.app/icon.png',
+        src: 'https://flaim.app/icon-light.png',
         mimeType: 'image/png',
       },
     ],
@@ -40,7 +40,13 @@ export function createFantasyMcpServer(ctx: McpContext): McpServer {
         inputSchema: tool.inputSchema,
         // OpenAI Apps Directory: explicitly declare tool safety hints for reviewers.
         annotations: { readOnlyHint: true, openWorldHint: false, destructiveHint: false },
-        _meta: { securitySchemes: tool.securitySchemes },
+        _meta: {
+          securitySchemes: tool.securitySchemes,
+          ...(tool.openaiMeta && {
+            'openai/toolInvocation/invoking': tool.openaiMeta.invoking,
+            'openai/toolInvocation/invoked': tool.openaiMeta.invoked,
+          }),
+        },
       },
       async (args) => {
         if (!hasRequiredScope(tokenScope, tool.requiredScope)) {

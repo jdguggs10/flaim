@@ -2,7 +2,7 @@
 
 Facts that should stay in sync with the codebase.
 
-Last updated: 2026-02-13
+Last updated: 2026-02-16
 
 ## Current Delivery Phase
 
@@ -54,11 +54,14 @@ All tools are read-only and use explicit parameters (`platform`, `sport`, `leagu
 - Latest full eval run (`2026-02-10T19-27-44Z`) completed `9/9`, `0` errored.
 - Latest acceptance + presubmit for that run are `PASS`.
 - All MCP tools have complete annotation set (`readOnlyHint`, `openWorldHint`, `destructiveHint`).
+- All MCP tools have OpenAI `toolInvocation` status metadata (`invoking`/`invoked` messages).
 
 ## Current Blocking Gate
 
 - Discovery/connectivity blocker is resolved (OpenAI MCP 424 issue fixed).
-- No technical blockers remain for submission. Remaining work is operational: submit and respond to review feedback.
+- No technical blockers remain for submission.
+- Domain verification route (`/.well-known/openai-apps-challenge`) deployed; token set via `wrangler secret put` during submission.
+- Demo account (`demo@flaim.app`) configured with password auth for reviewer access.
 
 ## Client Channel Readiness
 
@@ -68,7 +71,7 @@ All tools are read-only and use explicit parameters (`platform`, `sport`, `leagu
 | ChatGPT custom connector | Working | OAuth flow works; runbook exists |
 | Gemini CLI direct MCP | Working (with CLI caveat) | Token-lifecycle re-auth is verified; Gemini CLI may emit intermittent internal rendering errors, but MCP tool calls succeed |
 | Anthropic Connectors Directory | Pending | Packet drafted; submission decision pending |
-| OpenAI Apps Directory | Ready to submit | Individual verification approved 2026-02-10; all requirements met; ready for immediate submission |
+| OpenAI Apps Directory | Ready to submit | Individual verification approved; demo account configured; domain verification route deployed; all requirements met |
 | MCP Registry | Live | Published as `app.flaim/mcp` via `mcp-publisher` CLI with DNS verification |
 | Gemini CLI Extensions Gallery | Pending | `gemini-extension.json` committed; auto-indexes within ~1 week |
 | Glama | Pending review | Submitted via GitHub; [glama.ai/mcp/servers/@jdguggs10/flaim](https://glama.ai/mcp/servers/@jdguggs10/flaim) |

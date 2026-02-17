@@ -4,6 +4,9 @@ Follow Keep a Changelog; SemVer applies.
 
 ## [Unreleased]
 
+### MCP
+- **Added**: OpenAI `toolInvocation` status messages on all 7 MCP tools — ChatGPT now shows contextual status text (e.g., "Fetching standings…") instead of generic "Called tool" while tools run.
+
 ### Chrome Extension v1.5.1
 - **Added**: ESPN login status checklist in popup ready state — shows "Signed in to Flaim" and "ESPN detected" before syncing.
 - **Fixed**: Discovery message no longer includes redundant "ESPN" prefix ("Found 3 leagues + 6 past seasons").

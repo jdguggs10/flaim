@@ -35,6 +35,10 @@ export interface UnifiedTool {
   inputSchema: ZodShape;
   requiredScope: 'mcp:read' | 'mcp:write';
   securitySchemes: ToolSecuritySchemes;
+  openaiMeta?: {
+    invoking: string;
+    invoked: string;
+  };
   handler: (
     args: Record<string, unknown>,
     env: Env,
@@ -307,6 +311,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       title: 'User Session',
       requiredScope: 'mcp:read',
       securitySchemes: buildSecuritySchemes('mcp:read'),
+      openaiMeta: { invoking: 'Loading your leagues\u2026', invoked: 'Leagues loaded' },
       description:
         "Returns the user's configured fantasy leagues with current season info. Use the returned platform, sport, leagueId, teamId, and seasonYear values for all subsequent tool calls. season_year always represents the start year of the season. Read-only and safe to retry.",
       inputSchema: {},
@@ -544,6 +549,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       title: 'Ancient History',
       requiredScope: 'mcp:read',
       securitySchemes: buildSecuritySchemes('mcp:read'),
+      openaiMeta: { invoking: 'Searching old seasons\u2026', invoked: 'History loaded' },
       description:
         'Retrieve archived leagues and old seasons beyond the 2-year window. Use when user asks about inactive leagues, past seasons, or historical performance. Read-only and safe to retry.',
       inputSchema: {
@@ -674,6 +680,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       title: 'League Information',
       requiredScope: 'mcp:read',
       securitySchemes: buildSecuritySchemes('mcp:read'),
+      openaiMeta: { invoking: 'Fetching league info\u2026', invoked: 'League info ready' },
       description: `Get fantasy league information including settings, scoring type, roster configuration, and schedule. Use values from get_user_session. Read-only and safe to retry. Current date is ${currentDate}.`,
       inputSchema: {
         platform: z
@@ -708,6 +715,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       title: 'League Standings',
       requiredScope: 'mcp:read',
       securitySchemes: buildSecuritySchemes('mcp:read'),
+      openaiMeta: { invoking: 'Fetching standings\u2026', invoked: 'Standings ready' },
       description: `Get current league standings with team records, rankings, and playoff seeds. Use values from get_user_session. Read-only and safe to retry. Current date is ${currentDate}.`,
       inputSchema: {
         platform: z
@@ -742,6 +750,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       title: 'League Matchups',
       requiredScope: 'mcp:read',
       securitySchemes: buildSecuritySchemes('mcp:read'),
+      openaiMeta: { invoking: 'Fetching matchups\u2026', invoked: 'Matchups ready' },
       description: `Get matchups/scoreboard for a specific week or the current week. Use values from get_user_session. Read-only and safe to retry. Current date is ${currentDate}.`,
       inputSchema: {
         platform: z
@@ -778,6 +787,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       title: 'Team Roster',
       requiredScope: 'mcp:read',
       securitySchemes: buildSecuritySchemes('mcp:read'),
+      openaiMeta: { invoking: 'Fetching roster\u2026', invoked: 'Roster ready' },
       description: `Get detailed roster for a specific team including players, positions, and stats. Requires authentication. Use values from get_user_session. Read-only and safe to retry. Current date is ${currentDate}.`,
       inputSchema: {
         platform: z
@@ -816,6 +826,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       title: 'Free Agents',
       requiredScope: 'mcp:read',
       securitySchemes: buildSecuritySchemes('mcp:read'),
+      openaiMeta: { invoking: 'Searching free agents\u2026', invoked: 'Free agents ready' },
       description: `Get available free agents, optionally filtered by position. Sorted by ownership percentage. Requires authentication. Use values from get_user_session. Read-only and safe to retry. Current date is ${currentDate}.`,
       inputSchema: {
         platform: z
