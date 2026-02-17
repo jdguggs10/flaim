@@ -453,6 +453,22 @@ export default function Popup() {
         {state === 'ready' && (
           <div className="content">
             {error && <div className="message error">{error}</div>}
+            <div className="setup-progress">
+              <div className="setup-step completed">
+                <span className="step-icon check">✓</span>
+                <span>Signed in to Flaim</span>
+              </div>
+              <div className={`setup-step ${hasEspnCookies ? 'completed' : 'pending'}`}>
+                <span className="step-icon check">{checkmark(hasEspnCookies)}</span>
+                <span>
+                  {hasEspnCookies === null
+                    ? 'ESPN (checking…)'
+                    : hasEspnCookies
+                    ? 'ESPN detected'
+                    : 'ESPN not detected'}
+                </span>
+              </div>
+            </div>
             {hasCredentials ? (
               <div className="message success">Your ESPN credentials are synced!</div>
             ) : (
