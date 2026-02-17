@@ -1,6 +1,6 @@
 # Current Execution State
 
-Last updated: 2026-02-13
+Last updated: 2026-02-16
 Owner: Flaim (solo)
 
 This is the canonical execution-status page for current work. It replaces overlapping sprint/incident plans that were moved to the external archive bundle (see `docs/archive/README.md`).
@@ -57,7 +57,7 @@ This is the canonical execution-status page for current work. It replaces overla
 
 ## Next Actions
 
-1. **[READY NOW]** Submit to OpenAI Apps Directory (packet ready, individual verification approved 2026-02-10: `docs/submissions/openai-app-submission.md`).
+1. **[READY NOW]** Submit to OpenAI Apps Directory. All blockers resolved: demo account ready, domain verification route deployed, packet updated. See `docs/submissions/openai-app-submission.md`.
 2. Decide Anthropic submission strategy (submit now vs delay).
 3. Keep preflight evidence current if any auth/tool changes land.
 4. ~~Submit to MCP Registry~~ — **Done** (published as `app.flaim/mcp` on 2026-02-10).
@@ -70,6 +70,12 @@ This is the canonical execution-status page for current work. It replaces overla
 - Yahoo mappings use human-readable position strings (no ID research needed).
 - ESPN onboarding gate expanded to include basketball and hockey.
 - Deployed to production 2026-02-13.
+
+8. OpenAI submission prep (2026-02-16)
+- Demo account (`demo@flaim.app`) created with password auth via Clerk for reviewer access.
+- Domain verification route (`/.well-known/openai-apps-challenge`) added to `fantasy-mcp`; reads token from `OPENAI_APPS_VERIFICATION_TOKEN` Wrangler secret.
+- Submission packet fully updated: demo account section, domain verification instructions, basketball/hockey status corrected, checklist refreshed.
+- Submission packet status: ready to submit.
 
 ## Not Started / Deferred
 

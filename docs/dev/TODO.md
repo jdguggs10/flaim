@@ -1,6 +1,6 @@
 # TODO
 
-Last updated: 2026-02-09
+Last updated: 2026-02-16
 
 Use this as the active backlog only. For overall phase status, see `docs/dev/CURRENT-EXECUTION-STATE.md`.
 
@@ -14,6 +14,11 @@ Use this as the active backlog only. For overall phase status, see `docs/dev/CUR
 3. Keep submission preflight evidence current.
 - Latest full PASS run: `2026-02-09T11-53-41Z`.
 - Re-run preflight if auth/tool code changes, or if evidence is older than 7 days at submission time.
+
+4. CWS/Search Console listing optimization follow-up.
+- Canonical handoff + exact copy/checklist: `docs/dev/2026-02-16-search-console-cws-handoff.md`.
+- Implement copy/screenshot updates in CWS dashboard under `gerry@flaim.app`.
+- Collect first 2-3 honest ratings/reviews.
 
 ## Next (Sprint C Candidate)
 

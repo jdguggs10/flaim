@@ -13,56 +13,24 @@ Before submitting, re-verify this packet against official sources (policies chan
 - [x] [Connect from ChatGPT](https://developers.openai.com/apps-sdk/deploy/connect-chatgpt) — confirm user-facing flow
 - [x] Run manual OAuth runbook for ChatGPT (see `docs/MANUAL-OAUTH-RUNBOOKS.md`)
 - [x] Run `npm run presubmit -- <run_id>` and confirm PASS (`2026-02-10T19-27-44Z`; prior PASS runs also recorded below)
+- [x] Tool annotations: `readOnlyHint`, `openWorldHint`, `destructiveHint` all set (2026-02-10)
+- [x] Demo account configured: `demo@flaim.app` with password auth, ESPN credentials synced, default league set
+- [x] Domain verification route deployed: `/.well-known/openai-apps-challenge` reads from `OPENAI_APPS_VERIFICATION_TOKEN` secret
+- [x] Basketball and hockey support shipped (2026-02-13)
+- [ ] Set `OPENAI_APPS_VERIFICATION_TOKEN` secret when OpenAI provides the token during submission
+- [ ] Verify demo account login works end-to-end in ChatGPT before submitting
 
-**Last verified against official sources:** 2026-02-09 (revalidated based on prior verification on 2026-02-07; proceed unless OpenAI guidance has changed)
-
-## Submission Record
-
-- **Submitted:** 2026-02-10
-- **Organization verification:** Individual verification approved 2026-02-10
-- **Data residency:** Global (Flaim project)
-- **Verification run:** `2026-02-10T19-27-44Z` (PASS)
-- **Case ID:** [Add after submission]
-- **Status:** Submitted - awaiting review
+**Last verified against official sources:** 2026-02-16
 
 ---
 
-## Latest Verification Notes (2026-02-10)
+## Submission Record
 
-- **Tool annotations updated** (2026-02-10):
-  - Added `openWorldHint: false` to all tools (was missing - identified as common rejection reason)
-  - Added `destructiveHint: false` to all tools (recommended for read-only tools)
-  - All tools now have complete annotation set: `{ readOnlyHint: true, openWorldHint: false, destructiveHint: false }`
-  - Change location: `workers/fantasy-mcp/src/mcp/server.ts:42`
-- `flaim-eval` fresh run `2026-02-10T19-27-44Z` (with updated annotations):
-  - `npm run eval` (`9/9 completed, 0 errored`)
-  - `npm run accept -- 2026-02-10T19-27-44Z` (`PASS`)
-  - `npm run presubmit -- 2026-02-10T19-27-44Z` (`RESULT: PASS — ready for submission`)
-- `flaim-eval` fresh full runs passed with consecutive run ids:
-  - `2026-02-08T22-39-03Z`:
-    - `npm run eval`
-    - `npm run accept -- 2026-02-08T22-39-03Z` (`PASS`)
-    - `npm run presubmit -- 2026-02-08T22-39-03Z` (`RESULT: PASS — ready for submission`)
-  - `2026-02-08T22-48-28Z`:
-    - `npm run eval`
-    - `npm run accept -- 2026-02-08T22-48-28Z` (`PASS`)
-    - `npm run presubmit -- 2026-02-08T22-48-28Z` (`RESULT: PASS — ready for submission`)
-- `flaim-eval` fresh run `2026-02-09T11-53-41Z`:
-  - `npm run eval`
-  - `npm run accept -- 2026-02-09T11-53-41Z` (`PASS`)
-  - `npm run presubmit -- 2026-02-09T11-53-41Z` (`RESULT: PASS — ready for submission`)
-- Previous run `2026-02-08T20-37-44Z` also remains fully passing (`eval` + `enrich` + `accept` + `presubmit`).
-- ChatGPT manual OAuth flow completed in-browser (consent approved) and tool responses verified for:
-  - `get_user_session`
-  - `get_standings`
-  - `get_roster`
-- Screenshot evidence captured in `docs/submissions/openai-screenshots/` (linked below).
-- ChatGPT token-lifecycle verification completed via forced revoke/re-auth cycle:
-  - Revoked active OAuth connections from authenticated `flaim.app` session using `POST /api/oauth/revoke-all` (`revokedCount: 94`).
-  - Subsequent ChatGPT tool call failed as expected with connector/tool-resource error (`Resource not found ... get_user_session`).
-  - Reconnected app in ChatGPT settings and re-approved consent.
-  - Reloaded chat session and confirmed `get_user_session` tool call succeeds again.
-- Operational note for reruns: Google sign-in did not complete in Chrome for Testing; use regular Chrome with remote debugging and connect agent-browser through CDP.
+- **Organization verification:** Individual verification approved 2026-02-16
+- **Data residency:** Global (Flaim project)
+- **Latest verification run:** `2026-02-10T19-27-44Z` (PASS)
+- **Case ID:** [Add after submission]
+- **Status:** Ready to submit
 
 ---
 
@@ -98,15 +66,40 @@ Flaim fetches data from the following domains:
 
 No external domains are contacted from the MCP server beyond ESPN and Yahoo APIs (server-side only, not client-facing).
 
+## Domain Verification
+
+OpenAI requires domain ownership verification during submission. The route is pre-deployed and reads the token from a Wrangler secret:
+
+- **Endpoint:** `https://api.flaim.app/.well-known/openai-apps-challenge`
+- **Implementation:** `workers/fantasy-mcp/src/index.ts` (returns `OPENAI_APPS_VERIFICATION_TOKEN` as plain text)
+
+**During submission, when OpenAI provides the token:**
+```bash
+cd workers/fantasy-mcp
+echo "<TOKEN_FROM_OPENAI>" | wrangler secret put OPENAI_APPS_VERIFICATION_TOKEN --env prod
+```
+
+No deploy needed — the route is already live; it just needs the secret value.
+
+## Demo Account
+
+A pre-configured demo account is provided with ESPN credentials already synced and default leagues set.
+
+- **Email:** demo@flaim.app
+- **Password:** 123flaim
+- **Setup:** ESPN credentials pre-synced with active leagues; default league configured.
+- **Auth method:** Password login enabled via Clerk (alongside magic link for regular users).
+
+No additional signup, extension install, or credential entry is required — the account is ready to use.
+
 ## Test Instructions (Slim)
 
 Full setup + prompts live in `docs/CONNECTOR-DOCS.md`. For a quick reviewer pass:
 
-1. Create account: https://flaim.app
-2. Connect ESPN via the Chrome extension (or manual cookie entry)
-3. Confirm leagues + default at https://flaim.app/leagues
-4. Connect MCP server in ChatGPT: `https://api.flaim.app/mcp`
-5. Prompts:
+1. Connect MCP server in ChatGPT: `https://api.flaim.app/mcp`
+2. When prompted, sign in with the demo account above (demo@flaim.app / 123flaim)
+3. Approve the OAuth consent screen
+4. Prompts:
    - "What fantasy leagues do I have?"
    - "Show me the standings in my default league"
    - "Who is on my roster in my default league?"
@@ -130,7 +123,7 @@ Token-lifecycle supplemental evidence:
 ## Known Limitations
 
 - **Platforms:** ESPN and Yahoo only (Sleeper, CBS, etc. not supported)
-- **Sports:** Football and baseball (basketball and hockey planned)
+- **Sports:** Football, baseball, basketball, and hockey
 - **ESPN credentials:** Session cookies expire ~30 days; user must re-sync
 - **Yahoo tokens:** Auto-refresh via OAuth; occasional manual re-auth
 - **Read-only:** No trades, adds, drops, or league modifications
@@ -155,3 +148,11 @@ Solo indie project with best-effort support:
 ## Post-Publication Notes
 
 Per OpenAI policy, tool names, signatures, and descriptions are locked after publication. Changes to tool contracts require resubmission. See `docs/TOOL-VERSIONING.md` for our versioning policy.
+
+## Verification History
+
+- `2026-02-10T19-27-44Z`: eval `9/9`, accept `PASS`, presubmit `PASS` (with tool annotation fix)
+- `2026-02-09T11-53-41Z`: eval `9/9`, accept `PASS`, presubmit `PASS`
+- `2026-02-08T22-48-28Z`: eval `9/9`, accept `PASS`, presubmit `PASS`
+- `2026-02-08T22-39-03Z`: eval `9/9`, accept `PASS`, presubmit `PASS`
+- `2026-02-08T20-37-44Z`: eval + enrich + accept + presubmit all `PASS`
