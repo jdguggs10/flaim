@@ -93,10 +93,12 @@ All routes go through Next.js proxy (`/api/extension/*`) to auth-worker:
 extension/
 ├── dist/                       # Built output (load this in Chrome)
 ├── src/
+│   ├── background.ts           # Background service worker (Clerk ping)
 │   ├── popup/
 │   │   ├── index.html          # Popup entry point
 │   │   ├── main.tsx            # React mount
 │   │   ├── Popup.tsx           # Main UI component
+│   │   ├── ClerkProvider.tsx   # Clerk auth wrapper
 │   │   └── popup.css           # Styles
 │   └── lib/
 │       ├── api.ts              # Flaim API client (dev/prod detection)
@@ -170,7 +172,7 @@ The website can ping the extension directly to verify it's installed and signed 
    - Set `NEXT_PUBLIC_EXTENSION_IDS` in `web/.env.local`:
      ```
      # Comma-separated: production ID first, then local dev ID
-     NEXT_PUBLIC_EXTENSION_IDS=ogkkejmgkoolfaidplldmcghbikpmonn,YOUR_LOCAL_EXTENSION_ID
+     NEXT_PUBLIC_EXTENSION_IDS=mbnokejgglkfgkeeenolgdpcnfakpbkn,YOUR_LOCAL_EXTENSION_ID
      ```
    - The website will try each ID until one responds
 
