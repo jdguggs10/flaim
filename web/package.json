@@ -6,7 +6,7 @@
     "node": "24.x"
   },
   "scripts": {
-    "dev": "NODE_OPTIONS='--no-webstorage' next dev",
+    "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint ."
