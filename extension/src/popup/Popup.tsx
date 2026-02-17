@@ -51,32 +51,32 @@ function getDiscoveryMessage(counts: DiscoveryCounts): string {
   const { currentSeason: cs, pastSeasons: ps } = counts;
 
   if (cs.found === 0) {
-    return 'No active ESPN leagues found for this season.';
+    return 'No active leagues found for this season.';
   }
 
   const parts: string[] = [];
 
   if (cs.added > 0 && cs.alreadySaved === 0) {
-    parts.push(`Found ${cs.found} ESPN league${cs.found !== 1 ? 's' : ''}`);
+    parts.push(`Found ${cs.found} league${cs.found !== 1 ? 's' : ''}`);
   } else if (cs.added === 0 && cs.alreadySaved > 0) {
-    parts.push(`${cs.found} ESPN league${cs.found !== 1 ? 's' : ''} already saved`);
+    parts.push(`${cs.found} league${cs.found !== 1 ? 's' : ''} already saved`);
   } else if (cs.added > 0 && cs.alreadySaved > 0) {
     parts.push(
-      `Found ${cs.found} ESPN league${cs.found !== 1 ? 's' : ''} (${cs.added} new, ${cs.alreadySaved} saved)`
+      `Found ${cs.found} league${cs.found !== 1 ? 's' : ''} (${cs.added} new, ${cs.alreadySaved} saved)`
     );
   } else if (cs.found > 0) {
-    parts.push(`Found ${cs.found} ESPN league${cs.found !== 1 ? 's' : ''} (save failed)`);
+    parts.push(`Found ${cs.found} league${cs.found !== 1 ? 's' : ''} (save failed)`);
   }
 
   if (ps.found > 0) {
     if (ps.added > 0 && ps.alreadySaved === 0) {
-      parts.push(`${ps.found} ESPN past season${ps.found !== 1 ? 's' : ''}`);
+      parts.push(`${ps.found} past season${ps.found !== 1 ? 's' : ''}`);
     } else if (ps.added === 0 && ps.alreadySaved > 0) {
-      parts.push(`${ps.found} ESPN past season${ps.found !== 1 ? 's' : ''} already saved`);
+      parts.push(`${ps.found} past season${ps.found !== 1 ? 's' : ''} already saved`);
     } else if (ps.added > 0) {
-      parts.push(`${ps.found} ESPN past season${ps.found !== 1 ? 's' : ''} (${ps.added} new)`);
+      parts.push(`${ps.found} past season${ps.found !== 1 ? 's' : ''} (${ps.added} new)`);
     } else {
-      parts.push(`${ps.found} ESPN past season${ps.found !== 1 ? 's' : ''} (save failed)`);
+      parts.push(`${ps.found} past season${ps.found !== 1 ? 's' : ''} (save failed)`);
     }
   }
 
