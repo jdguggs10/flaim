@@ -4,6 +4,11 @@ Follow Keep a Changelog; SemVer applies.
 
 ## [Unreleased]
 
+### Chrome Extension v1.5.1
+- **Added**: ESPN login status checklist in popup ready state — shows "Signed in to Flaim" and "ESPN detected" before syncing.
+- **Fixed**: Discovery message no longer includes redundant "ESPN" prefix ("Found 3 leagues + 6 past seasons").
+- **Fixed**: `getCredentials` and `getCredentialMetadata` use `.maybeSingle()` — no longer logs spurious PGRST116 errors for new users with no credentials.
+
 ### SEO
 - **Added**: Next.js metadata routes for `/sitemap.xml` and `/robots.txt` in `web/app/sitemap.ts` and `web/app/robots.ts`.
 - **Fixed**: Search Console sitemap submission now has a real crawl target instead of `404` for missing sitemap/robots endpoints.

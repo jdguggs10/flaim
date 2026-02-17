@@ -32,7 +32,7 @@ Flaim is **not** a chatbot or AI product itself — it's the bridge that lets yo
 
 ## Features
 
-- **Chrome Extension (v1.5.0)**: Auto-capture ESPN credentials without manual cookie extraction
+- **Chrome Extension (v1.5.1)**: Auto-capture ESPN credentials without manual cookie extraction
 - **Auto-Discovery (v1.2.1+)**: Fan API-based discovery of leagues + past seasons, with granular status messaging and default selection
 - **Claude + ChatGPT + Gemini CLI**: Direct access via MCP protocol (OAuth 2.1)
 - **Live ESPN Data**: espn-client worker with real-time stats

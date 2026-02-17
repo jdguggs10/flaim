@@ -87,4 +87,4 @@ From `.github/workflows/deploy-workers.yml`:
 
 ## Extension Version
 
-- Chrome extension `manifest.json`: `1.5.0`
+- Chrome extension `manifest.json`: `1.5.1`
