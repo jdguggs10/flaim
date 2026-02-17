@@ -121,7 +121,7 @@ export class EspnSupabaseStorage {
         .from('espn_credentials')
         .select('swid, s2')
         .eq('clerk_user_id', clerkUserId)
-        .single();
+        .maybeSingle();
 
       if (error) {
         console.error(`[supabase-storage] getCredentials error:`, error.code, error.message);
@@ -169,7 +169,7 @@ export class EspnSupabaseStorage {
         .from('espn_credentials')
         .select('email, updated_at, swid, s2')
         .eq('clerk_user_id', clerkUserId)
-        .single();
+        .maybeSingle();
 
       if (error) {
         console.error(`[supabase-storage] getCredentialMetadata error:`, error.code, error.message);
