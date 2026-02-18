@@ -1,4 +1,11 @@
+import type { Metadata } from 'next';
 import { SignedIn, SignedOut } from '@clerk/nextjs';
+
+export const metadata: Metadata = {
+  alternates: {
+    canonical: 'https://flaim.app',
+  },
+};
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';

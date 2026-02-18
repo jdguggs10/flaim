@@ -1,4 +1,11 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
+
+export const metadata: Metadata = {
+  alternates: {
+    canonical: 'https://flaim.app/inspirations',
+  },
+};
 import { ExternalLink } from 'lucide-react';
 
 const inspirations = [

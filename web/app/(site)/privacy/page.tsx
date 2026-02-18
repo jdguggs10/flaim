@@ -4,6 +4,9 @@ import { Lock, Shield, User } from 'lucide-react';
 export const metadata: Metadata = {
   title: 'Privacy Policy | Flaim',
   description: 'Privacy policy for Flaim — fantasy sports AI connector for ESPN and Yahoo',
+  alternates: {
+    canonical: 'https://flaim.app/privacy',
+  },
 };
 
 export default function PrivacyPage() {
