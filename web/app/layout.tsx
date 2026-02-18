@@ -18,6 +18,20 @@ const geistMono = localFont({
 export const metadata: Metadata = {
   title: "Flaim - Fantasy League AI Connector",
   description: "Connect your AI assistant to ESPN fantasy sports",
+  metadataBase: new URL('https://flaim.app'),
+  openGraph: {
+    title: "Flaim - Fantasy League AI Connector",
+    description: "MCP Connector for Fantasy Sports — Give AI access to your ESPN & Yahoo fantasy leagues",
+    url: "https://flaim.app",
+    siteName: "Flaim",
+    type: "website",
+    locale: "en_US",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Flaim - Fantasy League AI Connector",
+    description: "MCP Connector for Fantasy Sports — Give AI access to your ESPN & Yahoo fantasy leagues",
+  },
   icons: {
     icon: [
       { url: "/favicon.ico", sizes: "any" },
