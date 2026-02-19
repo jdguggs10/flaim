@@ -63,6 +63,36 @@ Stores Yahoo OAuth credentials for a Clerk user.
 | created_at | timestamptz | Created timestamp |
 | updated_at | timestamptz | Updated timestamp |
 
+### sleeper_connections
+Stores a Sleeper username association for a Clerk user (Sleeper has no OAuth — identity is username-based).
+
+| Column | Type | Notes |
+|---|---|---|
+| clerk_user_id | text | Primary key (one Sleeper account per user) |
+| sleeper_user_id | text | Sleeper numeric user ID (looked up from username) |
+| sleeper_username | text | Sleeper username |
+| display_name | text | Optional Sleeper display name |
+| avatar | text | Optional Sleeper avatar hash |
+| created_at | timestamptz | Created timestamp |
+| updated_at | timestamptz | Updated timestamp |
+
+### sleeper_leagues
+One row per user + league + sport + season.
+
+| Column | Type | Notes |
+|---|---|---|
+| id | uuid | Primary key |
+| clerk_user_id | text | User owner |
+| league_id | text | Sleeper league ID |
+| sport | text | football/basketball |
+| season_year | int | Season year |
+| league_name | text | League name (optional) |
+| team_id | text | User's roster/team ID in league (optional) |
+| team_name | text | User's team name (optional) |
+
+Constraints/Indexes:
+- Unique per season: unique on `(clerk_user_id, league_id, sport, season_year)`.
+
 ### platform_oauth_states
 Short-lived OAuth state values for platform-connect flows (separate from MCP OAuth state table).
 
@@ -91,7 +121,7 @@ Per-user preferences including default leagues (one per sport).
 | updated_at | timestamptz | Updated timestamp |
 
 Notes:
-- Per-sport defaults are JSONB with `{ platform: "espn"|"yahoo", leagueId: string, seasonYear: number }`.
+- Per-sport defaults are JSONB with `{ platform: "espn"|"yahoo"|"sleeper", leagueId: string, seasonYear: number }`.
 - Cross-platform exclusivity is automatic (one column per sport = one default).
 
 ### oauth_codes

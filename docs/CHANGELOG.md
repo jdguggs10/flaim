@@ -4,6 +4,12 @@ Follow Keep a Changelog; SemVer applies.
 
 ## [Unreleased]
 
+### Added
+- Sleeper fantasy platform support (Phase 1): `get_league_info`, `get_standings`, `get_roster`, `get_matchups` for NFL and NBA
+- Sleeper username-based onboarding with historical season discovery (up to 5 years)
+- New `sleeper-client` Cloudflare Worker
+- `sleeper_connections` and `sleeper_leagues` database tables
+
 ### MCP
 - **Added**: OpenAI `toolInvocation` status messages on all 7 MCP tools — ChatGPT now shows contextual status text (e.g., "Fetching standings…") instead of generic "Called tool" while tools run.
 

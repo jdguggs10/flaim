@@ -24,8 +24,9 @@ npm run dev
 - **Unified Gateway (`/workers/fantasy-mcp`)**: Single MCP endpoint exposing unified tools for all platforms and sports. Routes to platform-specific workers via service bindings.
 - **ESPN Client (`/workers/espn-client`)**: Internal worker handling all ESPN API calls for all sports (football, baseball, basketball, hockey). Called by fantasy-mcp gateway.
 - **Yahoo Client (`/workers/yahoo-client`)**: Internal worker handling all Yahoo Fantasy API calls for all sports (football, baseball, basketball, hockey). Called by fantasy-mcp gateway.
+- **Sleeper Client (`/workers/sleeper-client`)**: Internal worker handling all Sleeper API calls for NFL and NBA (public API, no auth required). Called by fantasy-mcp gateway.
 - **Shared package (`/workers/shared`)**: Common utilities (CORS middleware, auth-fetch helper, types) used by all workers.
-- **Supabase Postgres**: `espn_credentials`, `espn_leagues`, `yahoo_leagues`, `user_preferences` (defaults), `oauth_tokens`, `oauth_codes`, `rate_limits`, plus legacy `extension_tokens`/`extension_pairing_codes` (deprecated).
+- **Supabase Postgres**: `espn_credentials`, `espn_leagues`, `yahoo_leagues`, `sleeper_connections`, `sleeper_leagues`, `user_preferences` (defaults), `oauth_tokens`, `oauth_codes`, `rate_limits`, plus legacy `extension_tokens`/`extension_pairing_codes` (deprecated).
 
 ## Runtime Choices (Next.js)
 
@@ -42,6 +43,7 @@ workers/                    # Cloudflare Workers (see workers/README.md)
   fantasy-mcp/              # Unified MCP gateway (routes to platform workers)
   espn-client/              # ESPN API client (called by fantasy-mcp)
   yahoo-client/             # Yahoo API client (called by fantasy-mcp)
+  sleeper-client/           # Sleeper API client (called by fantasy-mcp; public API)
   shared/                   # @flaim/worker-shared package
 extension/                  # Chrome extension (see extension/README.md)
 docs/                       # Documentation
@@ -143,9 +145,10 @@ The unified gateway exposes tools with explicit parameters (`platform`, `sport`,
 The unified gateway (`fantasy-mcp`) provides a single MCP endpoint for all platforms and sports, replacing the per-sport workers.
 
 ```
-Claude/ChatGPT/Gemini CLI → fantasy-mcp (gateway) → espn-client → ESPN API
-                                       → yahoo-client → Yahoo API
-                                       → auth-worker → Supabase
+Claude/ChatGPT/Gemini CLI → fantasy-mcp (gateway) → espn-client    → ESPN API
+                                       → yahoo-client   → Yahoo API
+                                       → sleeper-client → Sleeper API (public)
+                                       → auth-worker    → Supabase
 ```
 
 **Key benefits:**
@@ -205,14 +208,14 @@ See `workers/README.md` for worker-to-worker communication requirements.
 
 | Component | Platform | Trigger | Environment |
 |-----------|----------|---------|-------------|
-| Workers (auth-worker, espn-client, yahoo-client, fantasy-mcp) | Cloudflare | Push to `main` | `--env prod` |
-| Workers (auth-worker, espn-client, yahoo-client, fantasy-mcp) | Cloudflare | PR opened/updated | `--env preview` |
+| Workers (auth-worker, espn-client, yahoo-client, sleeper-client, fantasy-mcp) | Cloudflare | Push to `main` | `--env prod` |
+| Workers (auth-worker, espn-client, yahoo-client, sleeper-client, fantasy-mcp) | Cloudflare | PR opened/updated | `--env preview` |
 | Frontend (`/web`) | Vercel | Push to `main` | Production |
 | Frontend (`/web`) | Vercel | PR opened/updated | Preview |
 | Extension | Chrome Web Store | Manual | N/A |
 
 **GitHub Actions workflows** (`.github/workflows/`):
-- `deploy-workers.yml` — Deploys all 4 workers on push/PR via wrangler
+- `deploy-workers.yml` — Deploys all 5 workers on push/PR via wrangler
 - `claude.yml` — Claude Code bot responds to `@claude` mentions in issues/PRs
 - `claude-code-review.yml` — Auto-reviews PRs with Claude
 
@@ -233,6 +236,7 @@ Usually not needed since CI/CD handles it, but available for debugging:
   - `cd workers/fantasy-mcp && npm run deploy:preview` (or `npm run deploy:prod`)
   - `cd workers/espn-client && npm run deploy:preview` (or `npm run deploy:prod`)
   - `cd workers/yahoo-client && npm run deploy:preview` (or `npm run deploy:prod`)
+  - `cd workers/sleeper-client && npm run deploy:preview` (or `npm run deploy:prod`)
 - **Frontend**: Push to `main` or PR (Vercel auto-deploys)
 - **Extension**: See `extension/README.md` for Chrome Web Store update process
 

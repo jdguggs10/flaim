@@ -65,6 +65,7 @@ Historical analyses/plans were externalized:
 - `workers/fantasy-mcp/README.md`
 - `workers/espn-client/README.md`
 - `workers/yahoo-client/README.md`
+- `workers/sleeper-client/README.md`
 
 ## Maintenance Rules
 

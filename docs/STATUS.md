@@ -2,7 +2,7 @@
 
 Facts that should stay in sync with the codebase.
 
-Last updated: 2026-02-16
+Last updated: 2026-02-19
 
 ## Current Delivery Phase
 
@@ -31,12 +31,14 @@ All tools are read-only and use explicit parameters (`platform`, `sport`, `leagu
 
 ## Platform/Sport Support
 
-| Sport | ESPN | Yahoo | Notes |
-|---|---|---|---|
-| Football | ✅ | ✅ | Full read-tool coverage |
-| Baseball | ✅ | ✅ | Full read-tool coverage |
-| Basketball | ✅ | ✅ | Full read-tool coverage (ESPN mappings unverified — no live credentials yet) |
-| Hockey | ✅ | ✅ | Full read-tool coverage (ESPN mappings unverified — no live credentials yet) |
+| Sport | ESPN | Yahoo | Sleeper | Notes |
+|---|---|---|---|---|
+| Football | ✅ | ✅ | ✅ | Full read-tool coverage |
+| Baseball | ✅ | ✅ | — | Full read-tool coverage (ESPN/Yahoo); Sleeper does not support baseball |
+| Basketball | ✅ | ✅ | ✅ | Full read-tool coverage (ESPN mappings unverified — no live credentials yet) |
+| Hockey | ✅ | ✅ | — | Full read-tool coverage (ESPN mappings unverified — no live credentials yet); Sleeper does not support hockey |
+
+Sleeper tool coverage (Phase 1): `get_league_info`, `get_standings`, `get_roster`, `get_matchups` for NFL (football) and NBA (basketball). No `get_free_agents` — Sleeper does not expose a free agent endpoint in Phase 1. Standings are computed from matchup records (no dedicated Sleeper standings endpoint).
 
 ## Worker Inventory
 
@@ -44,6 +46,7 @@ All tools are read-only and use explicit parameters (`platform`, `sport`, `leagu
 - `fantasy-mcp` (gateway)
 - `espn-client`
 - `yahoo-client`
+- `sleeper-client`
 
 ## Eval Observability
 
@@ -86,6 +89,7 @@ From `.github/workflows/deploy-workers.yml`:
 - `auth-worker`
 - `espn-client`
 - `yahoo-client`
+- `sleeper-client`
 - `fantasy-mcp`
 
 ## Extension Version
