@@ -59,6 +59,14 @@ import {
   YahooConnectEnv,
 } from './yahoo-connect-handlers';
 import { YahooStorage } from './yahoo-storage';
+import {
+  handleSleeperDiscover,
+  handleSleeperStatus,
+  handleSleeperDisconnect,
+  handleSleeperLeagues,
+  handleSleeperLeagueDelete,
+  type SleeperConnectEnv,
+} from './sleeper-connect-handlers';
 import { logEvalEvent } from './logging';
 
 // =============================================================================
@@ -892,6 +900,72 @@ api.delete('/leagues/yahoo/:id', async (c) => {
   const leagues = await storage.getYahooLeagues(userId);
 
   return c.json({ success: true, leagues }, 200);
+});
+
+// =============================================================================
+// SLEEPER CONNECT ROUTES
+// =============================================================================
+
+// Discover Sleeper leagues (requires Clerk JWT)
+api.post('/connect/sleeper/discover', async (c) => {
+  const { userId, error: authError } = await getVerifiedUserId(c.req.raw, c.env);
+  if (!userId) {
+    return c.json({
+      error: 'unauthorized',
+      error_description: authError || 'Authentication required',
+    }, 401);
+  }
+  return handleSleeperDiscover(c.req.raw, c.env as SleeperConnectEnv, userId, getCorsHeaders(c.req.raw));
+});
+
+// Check Sleeper connection status (requires Clerk JWT)
+api.get('/connect/sleeper/status', async (c) => {
+  const { userId, error: authError } = await getVerifiedUserId(c.req.raw, c.env);
+  if (!userId) {
+    return c.json({
+      error: 'unauthorized',
+      error_description: authError || 'Authentication required',
+    }, 401);
+  }
+  return handleSleeperStatus(c.env as SleeperConnectEnv, userId, getCorsHeaders(c.req.raw));
+});
+
+// Disconnect Sleeper (requires Clerk JWT)
+api.delete('/connect/sleeper/disconnect', async (c) => {
+  const { userId, error: authError } = await getVerifiedUserId(c.req.raw, c.env);
+  if (!userId) {
+    return c.json({
+      error: 'unauthorized',
+      error_description: authError || 'Authentication required',
+    }, 401);
+  }
+  return handleSleeperDisconnect(c.env as SleeperConnectEnv, userId, getCorsHeaders(c.req.raw));
+});
+
+// List Sleeper leagues (requires auth)
+api.get('/leagues/sleeper', async (c) => {
+  const { userId, error: authError } = await getVerifiedUserId(c.req.raw, c.env, undefined, { allowEvalApiKey: true });
+  if (!userId) {
+    return c.json({
+      error: 'unauthorized',
+      error_description: authError || 'Authentication required',
+    }, 401);
+  }
+  return handleSleeperLeagues(c.env as SleeperConnectEnv, userId, getCorsHeaders(c.req.raw));
+});
+
+// Delete Sleeper league (requires auth)
+api.delete('/leagues/sleeper/:id', async (c) => {
+  const { userId, error: authError } = await getVerifiedUserId(c.req.raw, c.env);
+  if (!userId) {
+    return c.json({
+      error: 'unauthorized',
+      error_description: authError || 'Authentication required',
+    }, 401);
+  }
+  const leagueId = c.req.param('id');
+  if (!leagueId) return c.json({ error: 'League ID required' }, 400);
+  return handleSleeperLeagueDelete(c.env as SleeperConnectEnv, userId, leagueId, getCorsHeaders(c.req.raw));
 });
 
 // =============================================================================
