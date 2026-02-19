@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        worker: [auth-worker, espn-client, yahoo-client, fantasy-mcp]
+        worker: [auth-worker, espn-client, yahoo-client, sleeper-client, fantasy-mcp]
     steps:
       - uses: actions/checkout@v4
 
@@ -41,7 +41,7 @@ jobs:
     if: github.ref == 'refs/heads/main' || github.event_name == 'pull_request'
     strategy:
       matrix:
-        worker: [auth-worker, espn-client, yahoo-client, fantasy-mcp]
+        worker: [auth-worker, espn-client, yahoo-client, sleeper-client, fantasy-mcp]
     steps:
       - uses: actions/checkout@v4
 
