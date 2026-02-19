@@ -53,6 +53,12 @@ export function StepConnectPlatforms({ className }: StepConnectPlatformsProps) {
   const [yahooStatus, setYahooStatus] = useState<YahooStatus>('loading');
   const [yahooLeagueCount, setYahooLeagueCount] = useState(0);
 
+  // Sleeper state
+  const [sleeperUsername, setSleeperUsername] = useState('');
+  const [sleeperStatus, setSleeperStatus] = useState<{ connected: boolean; sleeperUsername?: string | null; leagueCount?: number } | null>(null);
+  const [sleeperConnecting, setSleeperConnecting] = useState(false);
+  const [sleeperError, setSleeperError] = useState<string | null>(null);
+
   useEffect(() => {
     if (!isLoaded || !isSignedIn) {
       setEspnStatus('loading');
@@ -128,8 +134,19 @@ export function StepConnectPlatforms({ className }: StepConnectPlatformsProps) {
       }
     };
 
+    const checkSleeper = async () => {
+      try {
+        const res = await fetch('/api/connect/sleeper/status');
+        if (res.ok) {
+          const data = await res.json() as { connected: boolean; sleeperUsername?: string | null; leagueCount?: number };
+          setSleeperStatus(data);
+        }
+      } catch { /* ignore */ }
+    };
+
     checkEspn();
     checkYahoo();
+    checkSleeper();
   }, [isLoaded, isSignedIn]);
 
   const handleOpenDialog = async () => {
@@ -180,6 +197,37 @@ export function StepConnectPlatforms({ className }: StepConnectPlatformsProps) {
     window.location.href = '/api/connect/yahoo/authorize';
   };
 
+  const handleConnectSleeper = async () => {
+    if (!sleeperUsername.trim()) return;
+    setSleeperConnecting(true);
+    setSleeperError(null);
+    try {
+      const res = await fetch('/api/connect/sleeper/discover', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: sleeperUsername.trim() }),
+      });
+      const data = await res.json() as { error?: string; username?: string; leagues_found?: number };
+      if (!res.ok) {
+        setSleeperError(data.error || 'Failed to connect Sleeper');
+      } else {
+        setSleeperStatus({ connected: true, sleeperUsername: data.username, leagueCount: data.leagues_found });
+        setSleeperUsername('');
+      }
+    } catch {
+      setSleeperError('Connection failed. Please try again.');
+    } finally {
+      setSleeperConnecting(false);
+    }
+  };
+
+  const handleDisconnectSleeper = async () => {
+    try {
+      await fetch('/api/connect/sleeper/disconnect', { method: 'DELETE' });
+      setSleeperStatus(null);
+    } catch { /* ignore */ }
+  };
+
   if (!isLoaded) {
     return (
       <Card className={`p-5 ${className ?? ''}`}>
@@ -226,8 +274,8 @@ export function StepConnectPlatforms({ className }: StepConnectPlatformsProps) {
         </Popover>
       </div>
 
-      {/* Two-column layout */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      {/* Three-column layout */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {/* ESPN Column */}
         <div className="p-4 border rounded-lg space-y-3">
           <div className="font-medium text-sm">ESPN</div>
@@ -341,6 +389,52 @@ export function StepConnectPlatforms({ className }: StepConnectPlatformsProps) {
               <Button variant="outline" size="sm" className="w-full" onClick={handleConnectYahoo}>
                 Authenticate Yahoo
               </Button>
+            )}
+          </div>
+        </div>
+
+        {/* Sleeper Column */}
+        <div className="p-4 border rounded-lg space-y-3">
+          <div className="font-medium text-sm">Sleeper</div>
+          <p className="text-xs text-muted-foreground">Enter your Sleeper username to auto-discover leagues.</p>
+
+          <div className="min-h-[60px]">
+            {sleeperStatus?.connected ? (
+              <div className="space-y-2">
+                <div className="flex items-center justify-center gap-2 h-8 rounded-md px-3 text-xs font-medium w-full bg-muted text-muted-foreground">
+                  <Check className="h-3.5 w-3.5" />
+                  {sleeperStatus.sleeperUsername
+                    ? `@${sleeperStatus.sleeperUsername}`
+                    : 'Connected'}
+                  {sleeperStatus.leagueCount !== undefined && ` · ${sleeperStatus.leagueCount} league${sleeperStatus.leagueCount === 1 ? '' : 's'}`}
+                </div>
+                <Button variant="outline" size="sm" className="w-full" onClick={handleDisconnectSleeper}>
+                  Disconnect
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Input
+                  placeholder="Sleeper username"
+                  value={sleeperUsername}
+                  onChange={(e) => setSleeperUsername(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleConnectSleeper(); }}
+                  disabled={sleeperConnecting}
+                />
+                {sleeperError && (
+                  <p className="text-xs text-destructive">{sleeperError}</p>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full"
+                  onClick={handleConnectSleeper}
+                  disabled={sleeperConnecting || !sleeperUsername.trim()}
+                >
+                  {sleeperConnecting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                  Connect
+                </Button>
+              </div>
             )}
           </div>
         </div>
