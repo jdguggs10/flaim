@@ -374,8 +374,48 @@ export function getUnifiedTools(): UnifiedTool[] {
             // Don't fail - just return ESPN leagues
           }
 
+          // Fetch Sleeper leagues
+          const sleeperLeagues: UserLeague[] = [];
+          try {
+            const baseHeaders: Record<string, string> = {
+              'Content-Type': 'application/json',
+              ...(authHeader ? { Authorization: authHeader } : {}),
+            };
+            const withCorrelation = correlationId ? withCorrelationId(baseHeaders, correlationId) : new Headers(baseHeaders);
+            const headers = withEvalHeaders(withCorrelation, evalRunId, evalTraceId);
+
+            const sleeperResponse = await env.AUTH_WORKER.fetch(
+              new Request('https://internal/leagues/sleeper', { headers })
+            );
+            if (sleeperResponse.ok) {
+              const sleeperData = (await sleeperResponse.json()) as {
+                leagues?: Array<{
+                  sport: string;
+                  leagueId: string;
+                  leagueName: string;
+                  rosterId?: number;
+                  seasonYear: number;
+                }>;
+              };
+              if (sleeperData.leagues) {
+                for (const league of sleeperData.leagues) {
+                  sleeperLeagues.push({
+                    platform: 'sleeper',
+                    sport: league.sport,
+                    leagueId: league.leagueId,
+                    leagueName: league.leagueName,
+                    teamId: league.rosterId ? String(league.rosterId) : '',
+                    seasonYear: league.seasonYear,
+                  });
+                }
+              }
+            }
+          } catch (error) {
+            console.error('[get_user_session] Failed to fetch Sleeper leagues:', error);
+          }
+
           // Combine all leagues
-          const allLeagues = [...espnLeagues, ...yahooLeagues];
+          const allLeagues = [...espnLeagues, ...yahooLeagues, ...sleeperLeagues];
 
           // Filter to active leagues (have a season within 2 years) and limit to 2 most recent seasons
           const thresholdYear = getActiveThresholdYear();
@@ -431,7 +471,7 @@ export function getUnifiedTools(): UnifiedTool[] {
 
           // Fetch user preferences for defaults
           interface LeagueDefault {
-            platform: 'espn' | 'yahoo';
+            platform: 'espn' | 'yahoo' | 'sleeper';
             leagueId: string;
             seasonYear: number;
           }
@@ -557,13 +597,13 @@ export function getUnifiedTools(): UnifiedTool[] {
         properties: {
           platform: {
             type: 'string',
-            enum: ['espn', 'yahoo'],
+            enum: ['espn', 'yahoo', 'sleeper'],
             description: 'Optional: filter to specific platform',
           },
         },
       },
       handler: async (args, env, authHeader, correlationId, evalRunId, evalTraceId) => {
-        const { platform } = args as { platform?: 'espn' | 'yahoo' };
+        const { platform } = args as { platform?: 'espn' | 'yahoo' | 'sleeper' };
         return withToolLogging(correlationId, 'get_ancient_history', `ancient platform=${platform || 'all'}`, async () => {
         try {
           // Fetch all leagues (same logic as get_user_session)
@@ -619,6 +659,47 @@ export function getUnifiedTools(): UnifiedTool[] {
               }
             } catch (error) {
               console.error('[get_ancient_history] Failed to fetch Yahoo leagues:', error);
+            }
+          }
+
+          // Fetch Sleeper leagues
+          if (!platform || platform === 'sleeper') {
+            try {
+              const baseHeaders: Record<string, string> = {
+                'Content-Type': 'application/json',
+                ...(authHeader ? { Authorization: authHeader } : {}),
+              };
+              const withCorrelation = correlationId ? withCorrelationId(baseHeaders, correlationId) : new Headers(baseHeaders);
+              const headers = withEvalHeaders(withCorrelation, evalRunId, evalTraceId);
+
+              const sleeperResponse = await env.AUTH_WORKER.fetch(
+                new Request('https://internal/leagues/sleeper', { headers })
+              );
+              if (sleeperResponse.ok) {
+                const sleeperData = (await sleeperResponse.json()) as {
+                  leagues?: Array<{
+                    sport: string;
+                    leagueId: string;
+                    leagueName: string;
+                    rosterId?: number;
+                    seasonYear: number;
+                  }>;
+                };
+                if (sleeperData.leagues) {
+                  for (const league of sleeperData.leagues) {
+                    allLeagues.push({
+                      platform: 'sleeper',
+                      sport: league.sport,
+                      leagueId: league.leagueId,
+                      leagueName: league.leagueName,
+                      teamId: league.rosterId ? String(league.rosterId) : '',
+                      seasonYear: league.seasonYear,
+                    });
+                  }
+                }
+              }
+            } catch (error) {
+              console.error('[get_ancient_history] Failed to fetch Sleeper leagues:', error);
             }
           }
 
@@ -684,7 +765,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       description: `Get fantasy league information including settings, scoring type, roster configuration, and schedule. Use values from get_user_session. Read-only and safe to retry. Current date is ${currentDate}.`,
       inputSchema: {
         platform: z
-          .enum(['espn', 'yahoo'])
+          .enum(['espn', 'yahoo', 'sleeper'])
           .describe('Fantasy platform (e.g., "espn", "yahoo")'),
         sport: z
           .enum(['football', 'baseball', 'basketball', 'hockey'])
@@ -719,7 +800,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       description: `Get current league standings with team records, rankings, and playoff seeds. Use values from get_user_session. Read-only and safe to retry. Current date is ${currentDate}.`,
       inputSchema: {
         platform: z
-          .enum(['espn', 'yahoo'])
+          .enum(['espn', 'yahoo', 'sleeper'])
           .describe('Fantasy platform (e.g., "espn", "yahoo")'),
         sport: z
           .enum(['football', 'baseball', 'basketball', 'hockey'])
@@ -754,7 +835,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       description: `Get matchups/scoreboard for a specific week or the current week. Use values from get_user_session. Read-only and safe to retry. Current date is ${currentDate}.`,
       inputSchema: {
         platform: z
-          .enum(['espn', 'yahoo'])
+          .enum(['espn', 'yahoo', 'sleeper'])
           .describe('Fantasy platform (e.g., "espn", "yahoo")'),
         sport: z
           .enum(['football', 'baseball', 'basketball', 'hockey'])
@@ -791,7 +872,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       description: `Get detailed roster for a specific team including players, positions, and stats. Requires authentication. Use values from get_user_session. Read-only and safe to retry. Current date is ${currentDate}.`,
       inputSchema: {
         platform: z
-          .enum(['espn', 'yahoo'])
+          .enum(['espn', 'yahoo', 'sleeper'])
           .describe('Fantasy platform (e.g., "espn", "yahoo")'),
         sport: z
           .enum(['football', 'baseball', 'basketball', 'hockey'])
@@ -830,7 +911,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       description: `Get available free agents, optionally filtered by position. Sorted by ownership percentage. Requires authentication. Use values from get_user_session. Read-only and safe to retry. Current date is ${currentDate}.`,
       inputSchema: {
         platform: z
-          .enum(['espn', 'yahoo'])
+          .enum(['espn', 'yahoo', 'sleeper'])
           .describe('Fantasy platform (e.g., "espn", "yahoo")'),
         sport: z
           .enum(['football', 'baseball', 'basketball', 'hockey'])

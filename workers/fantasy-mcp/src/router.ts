@@ -81,6 +81,8 @@ function selectClient(env: Env, platform: Platform): Fetcher | null {
       return env.ESPN;
     case 'yahoo':
       return env.YAHOO;
+    case 'sleeper':
+      return env.SLEEPER;
     default:
       return null;
   }

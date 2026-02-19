@@ -50,6 +50,7 @@
       "services": [
         { "binding": "ESPN", "service": "espn-client" },
         { "binding": "YAHOO", "service": "yahoo-client" },
+        { "binding": "SLEEPER", "service": "sleeper-client" },
         { "binding": "AUTH_WORKER", "service": "auth-worker" }
       ],
       // Environment variables for production
@@ -67,6 +68,7 @@
       "services": [
         { "binding": "ESPN", "service": "espn-client-preview" },
         { "binding": "YAHOO", "service": "yahoo-client-preview" },
+        { "binding": "SLEEPER", "service": "sleeper-client-preview" },
         { "binding": "AUTH_WORKER", "service": "auth-worker-preview" }
       ],
       // Environment variables for preview
@@ -84,6 +86,7 @@
       "services": [
         { "binding": "ESPN", "service": "espn-client-dev" },
         { "binding": "YAHOO", "service": "yahoo-client-dev" },
+        { "binding": "SLEEPER", "service": "sleeper-client-dev" },
         { "binding": "AUTH_WORKER", "service": "auth-worker-dev" }
       ],
       // Environment variables for dev

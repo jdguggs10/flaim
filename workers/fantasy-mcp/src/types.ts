@@ -4,11 +4,12 @@ import type { BaseEnvWithAuth } from '@flaim/worker-shared';
 export interface Env extends BaseEnvWithAuth {
   ESPN: Fetcher;        // Service binding to espn-client
   YAHOO: Fetcher;       // Service binding to yahoo-client
+  SLEEPER: Fetcher;     // Service binding to sleeper-client
   AUTH_WORKER: Fetcher; // Service binding to auth-worker
   OPENAI_APPS_VERIFICATION_TOKEN?: string; // Wrangler secret for OpenAI domain verification
 }
 
-export type Platform = 'espn' | 'yahoo';
+export type Platform = 'espn' | 'yahoo' | 'sleeper';
 export type Sport = 'football' | 'baseball' | 'basketball' | 'hockey';
 
 export interface ToolParams {
