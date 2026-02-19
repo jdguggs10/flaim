@@ -87,8 +87,8 @@ One row per user + league + sport + season.
 | sport | text | football/basketball |
 | season_year | int | Season year |
 | league_name | text | League name (optional) |
-| team_id | text | User's roster/team ID in league (optional) |
-| team_name | text | User's team name (optional) |
+| roster_id | integer | User's roster ID in this league (optional, found during discovery) |
+| sleeper_user_id | text | Sleeper user ID (not null) |
 
 Constraints/Indexes:
 - Unique per season: unique on `(clerk_user_id, league_id, sport, season_year)`.
