@@ -1,0 +1,53 @@
+{
+  "name": "sleeper-client",
+  "main": "src/index.ts",
+  "compatibility_date": "2024-12-01",
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "persist": true,
+      "invocation_logs": true
+    }
+  },
+  "env": {
+    "prod": {
+      "name": "sleeper-client",
+      "workers_dev": true,
+      "services": [
+        { "binding": "AUTH_WORKER", "service": "auth-worker" }
+      ],
+      "vars": {
+        "NODE_ENV": "production",
+        "ENVIRONMENT": "prod",
+        "AUTH_WORKER_URL": "https://auth-worker.gerrygugger.workers.dev"
+      }
+    },
+    "preview": {
+      "name": "sleeper-client-preview",
+      "workers_dev": true,
+      "services": [
+        { "binding": "AUTH_WORKER", "service": "auth-worker-preview" }
+      ],
+      "vars": {
+        "NODE_ENV": "production",
+        "ENVIRONMENT": "preview",
+        "AUTH_WORKER_URL": "https://auth-worker-preview.gerrygugger.workers.dev"
+      }
+    },
+    "dev": {
+      "name": "sleeper-client-dev",
+      "workers_dev": true,
+      "services": [
+        { "binding": "AUTH_WORKER", "service": "auth-worker-dev" }
+      ],
+      "vars": {
+        "NODE_ENV": "development",
+        "ENVIRONMENT": "dev",
+        "AUTH_WORKER_URL": "http://localhost:8786"
+      }
+    }
+  }
+}
