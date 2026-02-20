@@ -23,6 +23,10 @@ export default function SiteLayout({
                 Privacy
               </a>
               <span aria-hidden="true">·</span>
+              <a href="/terms" className="underline hover:text-foreground">
+                Terms
+              </a>
+              <span aria-hidden="true">·</span>
               <a href="/inspirations" className="underline hover:text-foreground">
                 Inspirations
               </a>
