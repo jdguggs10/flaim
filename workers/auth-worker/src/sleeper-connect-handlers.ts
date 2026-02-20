@@ -1,7 +1,7 @@
 import { SleeperStorage } from './sleeper-storage';
+import { getDefaultSeasonYear } from './season-utils';
 
 const SLEEPER_API = 'https://api.sleeper.app/v1';
-const CURRENT_SEASON = 2025;
 const MAX_HISTORY_YEARS = 5;
 
 export interface SleeperConnectEnv {
@@ -72,8 +72,8 @@ export async function handleSleeperDiscover(
 
     // Discover leagues for current season (NFL + NBA)
     const [nflLeagues, nbaLeagues] = await Promise.all([
-      sleeperGet<SleeperApiLeague[]>(`/user/${sleeperUser.user_id}/leagues/nfl/${CURRENT_SEASON}`).catch(() => [] as SleeperApiLeague[]),
-      sleeperGet<SleeperApiLeague[]>(`/user/${sleeperUser.user_id}/leagues/nba/${CURRENT_SEASON}`).catch(() => [] as SleeperApiLeague[]),
+      sleeperGet<SleeperApiLeague[]>(`/user/${sleeperUser.user_id}/leagues/nfl/${getDefaultSeasonYear('football')}`).catch(() => [] as SleeperApiLeague[]),
+      sleeperGet<SleeperApiLeague[]>(`/user/${sleeperUser.user_id}/leagues/nba/${getDefaultSeasonYear('basketball')}`).catch(() => [] as SleeperApiLeague[]),
     ]);
 
     const currentLeagues = [...(nflLeagues ?? []), ...(nbaLeagues ?? [])];
@@ -98,7 +98,7 @@ export async function handleSleeperDiscover(
         clerkUserId: userId,
         leagueId: league.league_id,
         sport: mapSport(league.sport),
-        seasonYear: parseInt(league.season, 10) || CURRENT_SEASON - depth,
+        seasonYear: parseInt(league.season, 10) || getDefaultSeasonYear('football'),
         leagueName: league.name,
         rosterId,
         sleeperUserId: sleeperUser.user_id,
