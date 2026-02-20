@@ -4,8 +4,8 @@ import type { Platform, Sport, ToolParams } from '../types';
 describe('fantasy-mcp types', () => {
   describe('Platform type', () => {
     it('accepts valid platforms', () => {
-      const platforms: Platform[] = ['espn', 'yahoo'];
-      expect(platforms).toHaveLength(2);
+      const platforms: Platform[] = ['espn', 'yahoo', 'sleeper'];
+      expect(platforms).toHaveLength(3);
     });
   });
 

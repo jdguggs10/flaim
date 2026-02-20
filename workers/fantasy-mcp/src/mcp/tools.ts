@@ -766,7 +766,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       inputSchema: {
         platform: z
           .enum(['espn', 'yahoo', 'sleeper'])
-          .describe('Fantasy platform (e.g., "espn", "yahoo")'),
+          .describe('Fantasy platform (e.g., "espn", "yahoo", "sleeper")'),
         sport: z
           .enum(['football', 'baseball', 'basketball', 'hockey'])
           .describe('Sport type (e.g., "football", "baseball")'),
@@ -801,7 +801,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       inputSchema: {
         platform: z
           .enum(['espn', 'yahoo', 'sleeper'])
-          .describe('Fantasy platform (e.g., "espn", "yahoo")'),
+          .describe('Fantasy platform (e.g., "espn", "yahoo", "sleeper")'),
         sport: z
           .enum(['football', 'baseball', 'basketball', 'hockey'])
           .describe('Sport type (e.g., "football", "baseball")'),
@@ -836,7 +836,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       inputSchema: {
         platform: z
           .enum(['espn', 'yahoo', 'sleeper'])
-          .describe('Fantasy platform (e.g., "espn", "yahoo")'),
+          .describe('Fantasy platform (e.g., "espn", "yahoo", "sleeper")'),
         sport: z
           .enum(['football', 'baseball', 'basketball', 'hockey'])
           .describe('Sport type (e.g., "football", "baseball")'),
@@ -873,7 +873,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       inputSchema: {
         platform: z
           .enum(['espn', 'yahoo', 'sleeper'])
-          .describe('Fantasy platform (e.g., "espn", "yahoo")'),
+          .describe('Fantasy platform (e.g., "espn", "yahoo", "sleeper")'),
         sport: z
           .enum(['football', 'baseball', 'basketball', 'hockey'])
           .describe('Sport type (e.g., "football", "baseball")'),
@@ -912,7 +912,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       inputSchema: {
         platform: z
           .enum(['espn', 'yahoo'])
-          .describe('Fantasy platform (e.g., "espn", "yahoo")'),
+          .describe('Fantasy platform (e.g., "espn", "yahoo", "sleeper")'),
         sport: z
           .enum(['football', 'baseball', 'basketball', 'hockey'])
           .describe('Sport type (e.g., "football", "baseball")'),

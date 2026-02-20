@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body: {
-      platform?: 'espn' | 'yahoo';
+      platform?: 'espn' | 'yahoo' | 'sleeper';
       leagueId?: string;
       sport?: string;
       seasonYear?: number;

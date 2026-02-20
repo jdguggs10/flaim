@@ -19,6 +19,7 @@ fantasy-mcp (this worker)
      |
      +---> espn-client (service binding) ---> ESPN API
      +---> yahoo-client (service binding) --> Yahoo Fantasy API
+     +---> sleeper-client (service binding) -> Sleeper API (public)
      +---> auth-worker (service binding) ---> Supabase
 ```
 
@@ -52,7 +53,7 @@ All tools take explicit parameters. Call `get_user_session` first to get league 
 
 ```typescript
 {
-  platform: 'espn' | 'yahoo';    // Required
+  platform: 'espn' | 'yahoo' | 'sleeper'; // Required
   sport: 'football' | 'baseball' | 'basketball' | 'hockey';
   league_id: string;             // From get_user_session
   season_year: number;           // e.g., 2024
@@ -94,10 +95,12 @@ wrangler dev --env dev --port 8790
 |---------|--------|---------|
 | `ESPN` | espn-client | ESPN API calls |
 | `YAHOO` | yahoo-client | Yahoo Fantasy API calls |
+| `SLEEPER` | sleeper-client | Sleeper API calls |
 | `AUTH_WORKER` | auth-worker | Credentials and auth |
 
 ## Related
 
 - [`espn-client`](../espn-client/) - ESPN platform worker
+- [`sleeper-client`](../sleeper-client/) - Sleeper platform worker
 - [`auth-worker`](../auth-worker/) - Authentication and credentials
 - [Architecture docs](../../docs/ARCHITECTURE.md) - Full system design

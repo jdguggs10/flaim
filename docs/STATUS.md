@@ -2,7 +2,7 @@
 
 Facts that should stay in sync with the codebase.
 
-Last updated: 2026-02-19
+Last updated: 2026-02-20
 
 ## Current Delivery Phase
 
@@ -38,7 +38,7 @@ All tools are read-only and use explicit parameters (`platform`, `sport`, `leagu
 | Basketball | ✅ | ✅ | ✅ | Full read-tool coverage (ESPN mappings unverified — no live credentials yet) |
 | Hockey | ✅ | ✅ | — | Full read-tool coverage (ESPN mappings unverified — no live credentials yet); Sleeper does not support hockey |
 
-Sleeper tool coverage (Phase 1): `get_league_info`, `get_standings`, `get_roster`, `get_matchups` for NFL (football) and NBA (basketball). No `get_free_agents` — Sleeper does not expose a free agent endpoint in Phase 1. Standings are computed from matchup records (no dedicated Sleeper standings endpoint).
+Sleeper tool coverage (Phase 1): `get_league_info`, `get_standings`, `get_roster`, `get_matchups` for NFL (football) and NBA (basketball). No `get_free_agents` — Sleeper does not expose a free agent endpoint in Phase 1. Standings are computed from roster settings (no dedicated Sleeper standings endpoint).
 
 ## Worker Inventory
 
@@ -51,7 +51,7 @@ Sleeper tool coverage (Phase 1): `get_league_info`, `get_standings`, `get_roster
 ## Eval Observability
 
 - Eval headers: `X-Flaim-Eval-Run`, `X-Flaim-Eval-Trace`
-- Structured eval logs implemented across all 4 workers.
+- Structured eval logs implemented across all 5 workers.
 - Artifact layout is trace-scoped in `flaim-eval`.
 - Acceptance tooling exists (`npm run accept`, `npm run presubmit`).
 - Latest full eval run (`2026-02-10T19-27-44Z`) completed `9/9`, `0` errored.

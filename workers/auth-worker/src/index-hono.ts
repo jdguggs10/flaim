@@ -1307,7 +1307,7 @@ api.post('/leagues/default', async (c) => {
   }
 
   const body = await c.req.json() as {
-    platform?: 'espn' | 'yahoo';
+    platform?: 'espn' | 'yahoo' | 'sleeper';
     leagueId?: string;
     sport?: string;
     seasonYear?: number;

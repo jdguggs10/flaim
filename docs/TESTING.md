@@ -31,6 +31,36 @@ cd workers/fantasy-mcp && npm run type-check
 cd workers/espn-client && npm run type-check
 ```
 
+## Sleeper Smoke Test Fixtures
+
+Public Sleeper leagues verified on **2026-02-20** (via `GET /v1/league/{id}`).
+Use these for local smoke tests of `workers/sleeper-client` and gateway routing.
+
+| Sport | League ID | Season | Status (at verification) |
+|---|---|---:|---|
+| football | `1002102487509295104` | 2023 | complete |
+| football | `1180208192901685248` | 2025 | complete |
+| football | `1121209248362463232` | 2024 | complete |
+| basketball | `1243369670405267456` | 2025 | post_season |
+| basketball | `1284871999146979328` | 2025 | in_season |
+| basketball | `1283572291543777280` | 2025 | in_season |
+
+Quick local checks:
+
+```bash
+curl -s http://localhost:8792/health | jq
+
+curl -s -X POST http://localhost:8792/execute \
+  -H 'content-type: application/json' \
+  -d '{"tool":"get_league_info","params":{"sport":"football","league_id":"1180208192901685248","season_year":2025}}' | jq
+
+curl -s -X POST http://localhost:8792/execute \
+  -H 'content-type: application/json' \
+  -d '{"tool":"get_league_info","params":{"sport":"basketball","league_id":"1284871999146979328","season_year":2025}}' | jq
+```
+
+Note: public leagues can be deleted or made private. Re-validate IDs periodically.
+
 ## When to Add Tests
 
 Add tests when you touch:

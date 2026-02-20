@@ -10,16 +10,18 @@ Cloudflare Workers handling authentication and MCP data fetching.
 | `fantasy-mcp` | 8790 | **Unified MCP gateway** - routes to platform workers via service bindings |
 | `espn-client` | 8789 | **ESPN API client** - handles all ESPN sports (called by fantasy-mcp) |
 | `yahoo-client` | 8791 | **Yahoo API client** - handles all Yahoo sports (called by fantasy-mcp) |
+| `sleeper-client` | 8792 | **Sleeper API client** - handles Sleeper NFL/NBA (called by fantasy-mcp) |
 
 ### New Architecture (Unified Gateway)
 
 ```
 Claude/ChatGPT → fantasy-mcp → espn-client  → ESPN API
                             → yahoo-client → Yahoo API
+                            → sleeper-client → Sleeper API
                             → auth-worker  → Supabase
 ```
 
-The unified gateway (`fantasy-mcp`) uses explicit tool parameters (`platform`, `sport`, `league_id`, `season_year`) and routes to platform-specific workers (`espn-client`, `yahoo-client`) via Cloudflare service bindings.
+The unified gateway (`fantasy-mcp`) uses explicit tool parameters (`platform`, `sport`, `league_id`, `season_year`) and routes to platform-specific workers (`espn-client`, `yahoo-client`, `sleeper-client`) via Cloudflare service bindings.
 
 ## Development
 
@@ -31,9 +33,10 @@ npm run dev:workers
 npm run dev:fantasy-mcp    # Port 8790
 npm run dev:espn-client    # Port 8789
 npm run dev:yahoo-client   # Port 8791
+npm run dev --workspace workers/sleeper-client  # Port 8792
 
 **Local service bindings note:** `fantasy-mcp` relies on Wrangler's local registry to resolve
-`ESPN` and `YAHOO` service bindings. Use `WRANGLER_LOG_PATH` + `WRANGLER_REGISTRY_PATH`
+`ESPN`, `YAHOO`, and `SLEEPER` service bindings. Use `WRANGLER_LOG_PATH` + `WRANGLER_REGISTRY_PATH`
 (already wired into `npm run dev:workers`) to avoid binding resolution issues.
 
 # Run individually
@@ -41,6 +44,7 @@ cd workers/auth-worker && npm run dev
 cd workers/fantasy-mcp && npm run dev
 cd workers/espn-client && npm run dev
 cd workers/yahoo-client && npm run dev
+cd workers/sleeper-client && npm run dev
 
 # Or with wrangler directly
 cd workers/auth-worker && wrangler dev --env dev --port 8786
@@ -50,8 +54,8 @@ cd workers/auth-worker && wrangler dev --env dev --port 8786
 
 ```bash
 cd workers/<worker-name>
-npm test           # Run Vitest tests (auth-worker, espn-client, yahoo-client, fantasy-mcp)
-npm run type-check # TypeScript check (auth-worker, espn-client, yahoo-client, fantasy-mcp)
+npm test           # Run Vitest tests (auth-worker, espn-client, yahoo-client, sleeper-client, fantasy-mcp)
+npm run type-check # TypeScript check (auth-worker, espn-client, yahoo-client, sleeper-client, fantasy-mcp)
 ```
 
 Add focused tests for handler changes in `__tests__/` or `*.test.ts`.
@@ -67,7 +71,7 @@ ENVIRONMENT=prod|preview|dev
 NODE_ENV=production|development
 ```
 
-### MCP + Platform Workers (`fantasy-mcp`, `espn-client`, `yahoo-client`)
+### MCP + Platform Workers (`fantasy-mcp`, `espn-client`, `yahoo-client`, `sleeper-client`)
 
 ```
 AUTH_WORKER_URL=https://auth-worker.YOUR-ACCOUNT.workers.dev
