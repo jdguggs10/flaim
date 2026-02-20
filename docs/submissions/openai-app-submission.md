@@ -12,15 +12,16 @@ Before submitting, re-verify this packet against official sources (policies chan
 - [x] [Auth docs](https://developers.openai.com/apps-sdk/build/auth/) — confirm OAuth flow requirements
 - [x] [Connect from ChatGPT](https://developers.openai.com/apps-sdk/deploy/connect-chatgpt) — confirm user-facing flow
 - [x] Run manual OAuth runbook for ChatGPT (see `docs/MANUAL-OAUTH-RUNBOOKS.md`)
-- [x] Run `npm run presubmit -- <run_id>` and confirm PASS (`2026-02-10T19-27-44Z`; prior PASS runs also recorded below)
+- [x] Run `npm run presubmit -- <run_id>` and confirm PASS (`2026-02-19T13-39-48Z`; prior PASS runs also recorded below)
 - [x] Tool annotations: `readOnlyHint`, `openWorldHint`, `destructiveHint` all set (2026-02-10)
 - [x] Demo account configured: `demo@flaim.app` with password auth, ESPN credentials synced, default league set
 - [x] Domain verification route deployed: `/.well-known/openai-apps-challenge` reads from `OPENAI_APPS_VERIFICATION_TOKEN` secret
 - [x] Basketball and hockey support shipped (2026-02-13)
+- [x] Demo-account eval re-verified end-to-end for submission readiness (`eval` + `enrich` + `accept` + `presubmit` PASS on `2026-02-19T13-39-48Z`)
 - [ ] Set `OPENAI_APPS_VERIFICATION_TOKEN` secret when OpenAI provides the token during submission
-- [ ] Verify demo account login works end-to-end in ChatGPT before submitting
+- [x] Verify demo account login works end-to-end in ChatGPT before submitting (manual OAuth runbook complete; screenshots captured)
 
-**Last verified against official sources:** 2026-02-16
+**Last verified against official sources:** 2026-02-19
 
 ---
 
@@ -28,11 +29,28 @@ Before submitting, re-verify this packet against official sources (policies chan
 
 - **Organization verification:** Individual verification approved 2026-02-16
 - **Data residency:** Global (Flaim project)
-- **Latest verification run:** `2026-02-10T19-27-44Z` (PASS)
+- **Latest verification run:** `2026-02-19T13-39-48Z` (PASS)
 - **Case ID:** [Add after submission]
-- **Status:** Ready to submit
+- **Status:** Ready to submit (pending OpenAI-provided domain verification token at submission time)
 
 ---
+
+## Remaining Steps To Submit
+
+1. In the OpenAI submission flow, copy the provided challenge token and set `OPENAI_APPS_VERIFICATION_TOKEN` in Cloudflare prod (`workers/fantasy-mcp`) before final submit.
+2. Submit in the OpenAI dashboard and record the returned Case ID in this document.
+3. ~~Publish a Terms of Service page at `https://flaim.app/terms` and use that URL in the submission form.~~ **Done** (2026-02-20)
+4. ~~Upload an unlisted, no-login end-to-end demo recording (Developer Mode flow) and add its URL in the submission form.~~ **Done**: `https://youtu.be/Fw4JwqelEeQ`
+
+## Final Dashboard Checks (Submission-Time)
+
+- [ ] Submitter account has **Owner** role for the OpenAI Platform organization.
+- [ ] MCP server URL entered in submission is the public production URL (`https://api.flaim.app/mcp`), not localhost/testing.
+- [ ] OAuth metadata fields in dashboard match this packet (`authorize`, `token`, `register`, discovery endpoints).
+- [ ] Privacy policy and support contact are present and valid in the submission form.
+- [x] Terms of Service URL is populated with the production page (`https://flaim.app/terms`).
+- [x] Demo Recording URL points to an **unlisted, no-login** end-to-end video covering main tools and OAuth in Developer Mode (`https://youtu.be/Fw4JwqelEeQ`).
+- [ ] If requested by reviewer workflow, test credentials remain valid and accessible without extra friction (demo credentials + consent flow).
 
 ## App Details
 
@@ -57,6 +75,7 @@ Before submitting, re-verify this packet against official sources (policies chan
 - **Website:** https://flaim.app
 - **Connector docs (setup + examples):** `docs/CONNECTOR-DOCS.md`
 - **Documentation URL (for submission form):** https://github.com/jdguggs10/flaim/blob/main/docs/CONNECTOR-DOCS.md
+- **Demo Recording URL:** https://youtu.be/Fw4JwqelEeQ
 
 ## Content Security Policy
 
@@ -129,6 +148,15 @@ Token-lifecycle supplemental evidence:
 - **Read-only:** No trades, adds, drops, or league modifications
 - **Rate limit:** 200 MCP calls per day per user
 
+## Data Sources
+
+Flaim retrieves the user's own fantasy league data from ESPN and Yahoo at the user's explicit request. All access is strictly read-only by design.
+
+- **Yahoo:** OAuth 2.0 via Yahoo's Fantasy Sports API
+- **ESPN:** User-provided session cookies (via Chrome extension or manual entry), stored encrypted (AES-256)
+
+Flaim cannot make trades, add/drop players, or modify league data. No data is redistributed or shared with third parties.
+
 ## Safety & Privacy
 
 - All tools are read-only with tool annotations: `readOnlyHint: true`, `openWorldHint: false`, `destructiveHint: false`
@@ -151,6 +179,7 @@ Per OpenAI policy, tool names, signatures, and descriptions are locked after pub
 
 ## Verification History
 
+- `2026-02-19T13-39-48Z`: eval `9/9`, enrich `9/9`, accept `PASS`, presubmit `PASS` (demo-account readiness recheck)
 - `2026-02-10T19-27-44Z`: eval `9/9`, accept `PASS`, presubmit `PASS` (with tool annotation fix)
 - `2026-02-09T11-53-41Z`: eval `9/9`, accept `PASS`, presubmit `PASS`
 - `2026-02-08T22-48-28Z`: eval `9/9`, accept `PASS`, presubmit `PASS`
