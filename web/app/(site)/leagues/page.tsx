@@ -66,8 +66,17 @@ interface YahooLeague {
   teamName?: string;
 }
 
+interface SleeperLeague {
+  id: string;        // DB UUID for deletion
+  sport: string;
+  seasonYear: number;
+  leagueId: string;  // Sleeper's numeric string league ID
+  leagueName: string;
+  rosterId: number | null;
+}
+
 interface LeagueDefault {
-  platform: 'espn' | 'yahoo';
+  platform: 'espn' | 'yahoo' | 'sleeper';
   leagueId: string;
   seasonYear: number;
 }
@@ -96,9 +105,9 @@ interface VerifiedLeague {
 
 type Sport = 'football' | 'baseball' | 'basketball' | 'hockey';
 
-// Unified league for display - combines ESPN and Yahoo into common format
+// Unified league for display - combines ESPN, Yahoo, and Sleeper into common format
 interface UnifiedLeague {
-  platform: 'espn' | 'yahoo';
+  platform: 'espn' | 'yahoo' | 'sleeper';
   // Common fields
   sport: string;
   seasonYear: number;
@@ -106,15 +115,17 @@ interface UnifiedLeague {
   teamName?: string;
   isDefault: boolean;
   // Platform-specific identifiers
-  leagueId: string;      // ESPN: numeric ID, Yahoo: league_key
+  leagueId: string;      // ESPN: numeric ID, Yahoo: league_key, Sleeper: numeric string league ID
   teamId?: string;
   // Yahoo-specific
   yahooId?: string;      // UUID for Yahoo league (for API calls)
+  // Sleeper-specific
+  sleeperId?: string;    // DB UUID for deletion (Sleeper only)
 }
 
 interface UnifiedLeagueGroup {
   key: string;           // e.g., "espn:football:12345" or "yahoo:football:nfl.l.54321"
-  platform: 'espn' | 'yahoo';
+  platform: 'espn' | 'yahoo' | 'sleeper';
   sport: string;
   leagueId: string;
   leagueName: string;
@@ -182,6 +193,32 @@ function yahooToUnified(leagues: YahooLeague[], preferences: UserPreferencesStat
   });
 }
 
+// Convert Sleeper leagues to unified format (isDefault computed from preferences)
+function sleeperToUnified(
+  sleepers: SleeperLeague[],
+  preferences: UserPreferencesState
+): UnifiedLeague[] {
+  return sleepers.map((sl) => {
+    const sportKey = `default${capitalize(sl.sport)}` as keyof UserPreferencesState;
+    const sportDefault = preferences[sportKey] as LeagueDefault | null;
+    const isDefault =
+      sportDefault?.platform === 'sleeper' &&
+      sportDefault?.leagueId === sl.leagueId &&
+      sportDefault?.seasonYear === sl.seasonYear;
+
+    return {
+      platform: 'sleeper' as const,
+      sport: sl.sport,
+      seasonYear: sl.seasonYear,
+      leagueId: sl.leagueId,
+      leagueName: sl.leagueName,
+      teamId: sl.rosterId != null ? String(sl.rosterId) : undefined,
+      isDefault,
+      sleeperId: sl.id,
+    };
+  });
+}
+
 function LeaguesPageContent() {
   const { isLoaded, isSignedIn } = useAuth();
   const {
@@ -221,6 +258,9 @@ function LeaguesPageContent() {
   const [isYahooDisconnecting, setIsYahooDisconnecting] = useState(false);
   const [yahooLeagues, setYahooLeagues] = useState<YahooLeague[]>([]);
   const [isDiscoveringYahoo, setIsDiscoveringYahoo] = useState(false);
+  const [sleeperLeagues, setSleeperLeagues] = useState<SleeperLeague[]>([]);
+  const [isSleeperConnected, setIsSleeperConnected] = useState(false);
+  const [deletingSleeperKey, setDeletingSleeperKey] = useState<string | null>(null);
   const [espnCredsDialogOpen, setEspnCredsDialogOpen] = useState(false);
   const [preferences, setPreferences] = useState<UserPreferencesState>({
     defaultSport: null,
@@ -257,10 +297,11 @@ function LeaguesPageContent() {
 
   // Group all leagues by sport, then by platform+leagueId
   const leaguesBySport = useMemo(() => {
-    // Convert both platforms to unified format
+    // Convert all platforms to unified format
     const allLeagues = [
       ...espnToUnified(leagues, preferences),
       ...yahooToUnified(yahooLeagues, preferences),
+      ...sleeperToUnified(sleeperLeagues, preferences),
     ];
 
     // Group by platform + leagueId (ESPN) or leagueName (Yahoo)
@@ -333,7 +374,7 @@ function LeaguesPageContent() {
     });
 
     return { active: sortedActive, old: oldLeagueGroups };
-  }, [leagues, yahooLeagues, preferences]);
+  }, [leagues, yahooLeagues, sleeperLeagues, preferences]);
 
   const discoverableEspnLeagues = useMemo(() => {
     const groups: Array<{
@@ -424,6 +465,26 @@ function LeaguesPageContent() {
     }
   };
 
+  const checkSleeperStatus = async () => {
+    try {
+      const res = await fetch('/api/connect/sleeper/status');
+      if (res.ok) {
+        const data = await res.json() as { connected?: boolean };
+        setIsSleeperConnected(data.connected ?? false);
+      }
+    } catch {}
+  };
+
+  const loadSleeperLeagues = async () => {
+    try {
+      const res = await fetch('/api/connect/sleeper/leagues');
+      if (res.ok) {
+        const data = await res.json() as { leagues?: SleeperLeague[] };
+        setSleeperLeagues(data.leagues || []);
+      }
+    } catch {}
+  };
+
   const discoverYahooLeagues = async () => {
     setIsDiscoveringYahoo(true);
     try {
@@ -496,6 +557,10 @@ function LeaguesPageContent() {
       // Normal page load — check status from backend
       checkYahooStatus().then(() => loadYahooLeagues());
     }
+
+    // Load Sleeper leagues and status
+    checkSleeperStatus();
+    loadSleeperLeagues();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSignedIn]);
 
@@ -652,9 +717,9 @@ function LeaguesPageContent() {
     }
   };
 
-  // Set default league (unified for ESPN and Yahoo)
+  // Set default league (unified for ESPN, Yahoo, and Sleeper)
   const handleSetDefault = async (
-    platform: 'espn' | 'yahoo',
+    platform: 'espn' | 'yahoo' | 'sleeper',
     leagueId: string,
     sport: string,
     seasonYear: number,
@@ -662,6 +727,8 @@ function LeaguesPageContent() {
   ) => {
     const leagueKey = platform === 'yahoo'
       ? `yahoo:${yahooId}`
+      : platform === 'sleeper'
+      ? `sleeper:${leagueId}-${sport}-${seasonYear}`
       : `${leagueId}-${sport}-${seasonYear}`;
     setSettingDefaultKey(leagueKey);
     setLeagueError(null);
@@ -779,6 +846,31 @@ function LeaguesPageContent() {
       setLeagueError(err instanceof Error ? err.message : 'Failed to delete league');
     } finally {
       setDeletingLeagueKey(null);
+    }
+  };
+
+  // Delete a Sleeper league (by DB UUID)
+  const handleDeleteSleeperLeague = async (sleeperId: string, leagueId: string) => {
+    const key = `sleeper:${leagueId}`;
+    setDeletingSleeperKey(key);
+    setLeagueNotice(null);
+
+    try {
+      const res = await fetch(`/api/connect/sleeper/leagues/${sleeperId}`, {
+        method: 'DELETE',
+      });
+
+      if (!res.ok) {
+        const data = await res.json() as { error?: string };
+        throw new Error(data.error || 'Failed to delete league');
+      }
+
+      // Refresh leagues
+      await loadSleeperLeagues();
+    } catch (err) {
+      setLeagueError(err instanceof Error ? err.message : 'Failed to delete league');
+    } finally {
+      setDeletingSleeperKey(null);
     }
   };
 
@@ -1006,9 +1098,11 @@ function LeaguesPageContent() {
                                   {(() => {
                                     const mostRecentSeason = group.seasons[0];
                                     const isLeagueDefault = mostRecentSeason?.isDefault;
-                                    const leagueKey = group.platform === 'espn'
-                                      ? `${mostRecentSeason?.leagueId}-${mostRecentSeason?.sport}-${mostRecentSeason?.seasonYear || 'all'}`
-                                      : `yahoo:${mostRecentSeason?.yahooId}`;
+                                    const leagueKey = group.platform === 'yahoo'
+                                      ? `yahoo:${mostRecentSeason?.yahooId}`
+                                      : group.platform === 'sleeper'
+                                      ? `sleeper:${mostRecentSeason?.leagueId}-${mostRecentSeason?.sport}-${mostRecentSeason?.seasonYear || 'all'}`
+                                      : `${mostRecentSeason?.leagueId}-${mostRecentSeason?.sport}-${mostRecentSeason?.seasonYear || 'all'}`;
                                     const isSettingThis = settingDefaultKey === leagueKey;
 
                                     return (
@@ -1043,7 +1137,7 @@ function LeaguesPageContent() {
                                     );
                                   })()}
                                   <span className="break-words">
-                                    {group.platform === 'espn' ? 'ESPN' : 'Yahoo'}
+                                    {group.platform === 'espn' ? 'ESPN' : group.platform === 'yahoo' ? 'Yahoo' : 'Sleeper'}
                                     {` • League: ${group.leagueId}`}
                                     {primaryTeamId && ` • Team: ${primaryTeamId}`}
                                   </span>
@@ -1057,6 +1151,12 @@ function LeaguesPageContent() {
                                   onClick={() => {
                                     if (group.platform === 'espn') {
                                       handleDeleteLeague(group.leagueId, group.sport);
+                                    } else if (group.platform === 'sleeper') {
+                                      // Delete all Sleeper seasons in the group sequentially
+                                      const sleeperIds = group.seasons.map(s => s.sleeperId).filter((id): id is string => !!id);
+                                      if (sleeperIds.length > 0) {
+                                        handleDeleteSleeperLeague(sleeperIds[0], group.leagueId);
+                                      }
                                     } else {
                                       // For Yahoo, delete all seasons in the group
                                       handleDeleteYahooLeagueGroup(group.seasons);
@@ -1064,10 +1164,16 @@ function LeaguesPageContent() {
                                   }}
                                   disabled={group.platform === 'espn'
                                     ? deletingLeagueKey === baseKey
+                                    : group.platform === 'sleeper'
+                                    ? deletingSleeperKey === `sleeper:${group.leagueId}`
                                     : deletingLeagueKey === `yahoo:${group.seasons[0]?.yahooId}`}
                                   title="Delete all seasons"
                                 >
-                                  {(group.platform === 'espn' ? isDeleting : deletingLeagueKey === `yahoo:${group.seasons[0]?.yahooId}`) ? (
+                                  {(group.platform === 'espn'
+                                    ? isDeleting
+                                    : group.platform === 'sleeper'
+                                    ? deletingSleeperKey === `sleeper:${group.leagueId}`
+                                    : deletingLeagueKey === `yahoo:${group.seasons[0]?.yahooId}`) ? (
                                     <Loader2 className="h-4 w-4 animate-spin" />
                                   ) : (
                                     <Trash2 className="h-4 w-4" />
@@ -1145,7 +1251,7 @@ function LeaguesPageContent() {
                                         {group.leagueName || `League ${group.leagueId}`}
                                       </div>
                                       <div className="text-xs text-muted-foreground/70 break-words">
-                                        {group.platform === 'espn' ? 'ESPN' : 'Yahoo'}
+                                        {group.platform === 'espn' ? 'ESPN' : group.platform === 'yahoo' ? 'Yahoo' : 'Sleeper'}
                                         {` • Last active: ${mostRecentYear}`}
                                       </div>
                                     </div>
@@ -1156,15 +1262,18 @@ function LeaguesPageContent() {
                                       onClick={() => {
                                         if (group.platform === 'espn') {
                                           handleDeleteLeague(group.leagueId, group.sport);
+                                        } else if (group.platform === 'sleeper') {
+                                          const sleeperId = group.seasons[0]?.sleeperId;
+                                          if (sleeperId) handleDeleteSleeperLeague(sleeperId, group.leagueId);
                                         } else {
                                           const yahooId = group.seasons[0]?.yahooId;
                                           if (yahooId) handleDeleteYahooLeague(yahooId);
                                         }
                                       }}
-                                      disabled={isDeleting}
+                                      disabled={isDeleting || (group.platform === 'sleeper' && deletingSleeperKey === `sleeper:${group.leagueId}`)}
                                       title="Delete league"
                                     >
-                                      {isDeleting ? (
+                                      {(isDeleting || (group.platform === 'sleeper' && deletingSleeperKey === `sleeper:${group.leagueId}`)) ? (
                                         <Loader2 className="h-4 w-4 animate-spin" />
                                       ) : (
                                         <Trash2 className="h-4 w-4" />
