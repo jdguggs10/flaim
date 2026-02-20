@@ -6,7 +6,7 @@ import useConversationStore from "@/stores/chat/useConversationStore";
 import { Item, processMessages } from "@/lib/chat/assistant";
 import useToolsStore from "@/stores/chat/useToolsStore";
 import useLeaguesStore from "@/stores/chat/useLeaguesStore";
-import { generateMcpToolsConfig } from "@/lib/chat/league-mapper";
+import { generateMcpToolsConfig, type Platform } from "@/lib/chat/league-mapper";
 import useHasMounted from "@/hooks/useHasMounted";
 import { AlertCircle, ArrowRight } from "lucide-react";
 import Link from "next/link";
@@ -156,7 +156,8 @@ export default function Assistant() {
     const activeLeague = getActiveLeague();
     if (activeLeague && leagues.length > 0) {
       // Update tools store with selections
-      const platform = activeLeague.platform === 'yahoo' ? 'Yahoo' : 'ESPN';
+      const platformMap: Record<string, Platform> = { espn: 'ESPN', yahoo: 'Yahoo', sleeper: 'Sleeper' };
+      const platform = platformMap[activeLeague.platform] ?? 'ESPN';
       setSelectedSport(activeLeague.sport);
       setToolsPlatform(platform);
       setToolsAuthenticated(true);
@@ -207,7 +208,7 @@ export default function Assistant() {
               <h3 className="font-medium text-secondary-foreground mb-2">Features:</h3>
               <ul className="text-sm text-muted-foreground space-y-1">
                 <li>MCP tool debugging</li>
-                <li>ESPN league integration</li>
+                <li>Fantasy league integration</li>
                 <li>Request/response inspection</li>
               </ul>
             </div>

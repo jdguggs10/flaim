@@ -1,7 +1,7 @@
 {
   "name": "flaim",
   "version": "1.0.0",
-  "description": "Connect your ESPN & Yahoo fantasy leagues to Gemini. Get rosters, standings, matchups, free agents, and league info via MCP.",
+  "description": "Connect your ESPN, Yahoo, and Sleeper fantasy leagues to Gemini. Get rosters, standings, matchups, free agents, and league info via MCP.",
   "mcpServers": {
     "flaim": {
       "url": "https://api.flaim.app/mcp"

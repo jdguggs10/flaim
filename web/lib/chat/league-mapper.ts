@@ -3,7 +3,7 @@
  */
 
 export type Sport = 'baseball' | 'football' | 'basketball' | 'hockey';
-export type Platform = 'ESPN' | 'Yahoo';
+export type Platform = 'ESPN' | 'Yahoo' | 'Sleeper';
 
 /**
  * ESPN Game ID mappings to sports
@@ -54,10 +54,11 @@ export const SPORT_CONFIG: Record<Sport, {
 /**
  * Platform-specific MCP server configurations
  */
-export const MCP_SERVER_CONFIG: Record<Platform, Record<Sport, {
+// TODO: Remove legacy MCP_SERVER_CONFIG once chat fully migrates to unified gateway
+export const MCP_SERVER_CONFIG: Partial<Record<Platform, Record<Sport, {
   serverUrl: string;
   tools: string[];
-}>> = {
+}>>> = {
   ESPN: {
     baseball: {
       serverUrl: process.env.NEXT_PUBLIC_FANTASY_MCP_URL || '',

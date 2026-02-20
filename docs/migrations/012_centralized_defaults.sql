@@ -10,7 +10,7 @@ BEGIN;
 -- =============================================================================
 
 -- Add per-sport default league columns (nullable JSONB)
--- Each stores: { "platform": "espn"|"yahoo", "leagueId": "123", "seasonYear": 2024 }
+-- Each stores: { "platform": "espn"|"yahoo"|"sleeper", "leagueId": "123", "seasonYear": 2024 }
 ALTER TABLE user_preferences
 ADD COLUMN IF NOT EXISTS default_football JSONB,
 ADD COLUMN IF NOT EXISTS default_baseball JSONB,

@@ -6,7 +6,7 @@ Centralized Cloudflare Worker for authentication, credential storage, and OAuth.
 
 This worker has three distinct responsibilities:
 
-1. **Credential Storage** — ESPN cookies and league data, stored in Supabase.
+1. **Credential/Connection Storage** — ESPN credentials, Yahoo tokens, Sleeper connections, and league data, stored in Supabase.
 2. **OAuth 2.1 Provider** — Flaim *issues* access tokens to AI clients (Claude, ChatGPT, Gemini) so they can call MCP tools on behalf of users.
 3. **OAuth 2.0 Client** — Flaim *obtains* tokens from Yahoo so it can call Yahoo Fantasy APIs on behalf of users.
 

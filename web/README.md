@@ -60,7 +60,7 @@ Both site and chat can use shared `components/ui/` (shadcn).
 | Path | Purpose |
 |------|---------|
 | `/` | Landing page + onboarding flow (sign-in, sync credentials, MCP URLs) |
-| `/leagues` | Manage ESPN leagues and seasons |
+| `/leagues` | Manage ESPN, Yahoo, and Sleeper leagues and seasons |
 | `/privacy` | Privacy policy (CWS compliance) |
 | `/sitemap.xml` | XML sitemap for search engine discovery |
 | `/robots.txt` | Crawl rules + sitemap location for search engines |

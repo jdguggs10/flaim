@@ -2,14 +2,14 @@
  * Chat-only leagues store
  *
  * Simple store for managing league data in chat. Fetches from API only,
- * no wizard/onboarding logic. Supports ESPN and Yahoo leagues.
+ * no wizard/onboarding logic. Supports ESPN, Yahoo, and Sleeper leagues.
  */
 import { create } from 'zustand';
 import type { EspnLeague } from '@/lib/espn-types';
 
 /** Platform-agnostic league used throughout the chat UI */
 export interface ChatLeague {
-  platform: 'espn' | 'yahoo';
+  platform: 'espn' | 'yahoo' | 'sleeper';
   leagueId: string;
   sport: string;
   leagueName?: string;
@@ -97,10 +97,11 @@ export const useLeaguesStore = create<LeaguesState>()((set, get) => ({
 
     set({ isLoading: true, error: null });
     try {
-      // Fetch ESPN and Yahoo leagues in parallel
-      const [espnRes, yahooRes] = await Promise.all([
+      // Fetch ESPN, Yahoo, and Sleeper leagues in parallel
+      const [espnRes, yahooRes, sleeperRes] = await Promise.all([
         fetch('/api/espn/leagues'),
         fetch('/api/connect/yahoo/leagues').catch(() => null),
+        fetch('/api/connect/sleeper/leagues').catch(() => null),
       ]);
 
       const allLeagues: ChatLeague[] = [];
@@ -137,6 +138,32 @@ export const useLeaguesStore = create<LeaguesState>()((set, get) => ({
               leagueName: l.leagueName,
               teamId: l.teamId,
               teamName: l.teamName,
+              seasonYear: l.seasonYear,
+            });
+          }
+        }
+      }
+
+      // Sleeper leagues
+      if (sleeperRes?.ok) {
+        const sleeperData = await sleeperRes.json() as {
+          leagues?: Array<{
+            id: string;
+            sport: string;
+            seasonYear: number;
+            leagueId: string;
+            leagueName: string;
+            rosterId: number | null;
+          }>;
+        };
+        if (Array.isArray(sleeperData.leagues)) {
+          for (const l of sleeperData.leagues) {
+            allLeagues.push({
+              platform: 'sleeper',
+              leagueId: l.leagueId,
+              sport: l.sport,
+              leagueName: l.leagueName,
+              teamId: l.rosterId != null ? String(l.rosterId) : undefined,
               seasonYear: l.seasonYear,
             });
           }

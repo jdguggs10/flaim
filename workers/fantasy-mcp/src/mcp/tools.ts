@@ -912,7 +912,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       inputSchema: {
         platform: z
           .enum(['espn', 'yahoo'])
-          .describe('Fantasy platform (e.g., "espn", "yahoo", "sleeper")'),
+          .describe('Fantasy platform — "espn" or "yahoo" (Sleeper does not support free agents)'),
         sport: z
           .enum(['football', 'baseball', 'basketball', 'hockey'])
           .describe('Sport type (e.g., "football", "baseball")'),

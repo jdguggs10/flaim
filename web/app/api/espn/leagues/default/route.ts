@@ -1,7 +1,7 @@
 /**
  * Default League API Route
  * ---------------------------------------------------------------------------
- * Sets a league as the user's default for a sport (works for ESPN and Yahoo).
+ * Sets a league as the user's default for a sport (works for ESPN, Yahoo, and Sleeper).
  */
 
 import { NextRequest, NextResponse } from 'next/server';
