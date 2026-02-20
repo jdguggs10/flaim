@@ -16,7 +16,7 @@ Publish a production Terms of Service page at `https://flaim.app/terms` needed f
 | `web/app/(site)/layout.tsx` | Add "Terms" link to footer |
 | `web/app/sitemap.ts` | Add `/terms` entry |
 | `docs/CONNECTOR-DOCS.md` | Add Terms link alongside privacy link |
-| `docs/submissions/openai-app-submission.md` | Check off step 3 and dashboard checklist item |
+| `../submissions/openai-app-submission.md` | Check off step 3 and dashboard checklist item |
 | `docs/dev/CURRENT-EXECUTION-STATE.md` | One-line note: ToS page published |
 
 ## Implementation Approach

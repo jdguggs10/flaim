@@ -2,12 +2,12 @@
 
 Doc routing: see `docs/INDEX.md`.
 
-Flaim connects your ESPN fantasy leagues to AI assistants like Claude, ChatGPT, and Gemini CLI. It's an MCP (Model Context Protocol) service that gives AI tools access to your live fantasy data.
+Flaim connects your ESPN, Yahoo, and Sleeper fantasy leagues to AI assistants like Claude, ChatGPT, and Gemini CLI. It's an MCP (Model Context Protocol) service that gives AI tools access to your live fantasy data.
 
 ## How It Works
 
-1. **Create a Clerk account & sign in** — This is where your ESPN credentials and league info are stored
-2. **Sync ESPN credentials** — Install the [Chrome extension](https://chromewebstore.google.com/detail/flaim-espn-fantasy-connec/mbnokejgglkfgkeeenolgdpcnfakpbkn) to sync automatically, or enter them manually
+1. **Create a Clerk account & sign in** — This is where your platform connections and league info are stored
+2. **Connect your platforms** — Sync ESPN credentials with the [Chrome extension](https://chromewebstore.google.com/detail/flaim-espn-fantasy-connec/mbnokejgglkfgkeeenolgdpcnfakpbkn) (or manual cookies), connect Yahoo via OAuth, and add your Sleeper username
 3. **Leagues auto-discovered** — Extension finds all your leagues + past seasons and saves them
 4. **Pick a default** — Select which league to use by default in AI conversations
 5. **Connect your AI** — Add Flaim as a custom MCP connector in Claude, ChatGPT, or Gemini CLI using the MCP URL
@@ -25,8 +25,8 @@ Bring your own LLM subscription. Flaim provides the data bridge.
 Flaim is an **authentication and data service** for fantasy sports AI integrations:
 
 - **MCP Server**: Exposes fantasy league data to Claude and ChatGPT via the Model Context Protocol
-- **OAuth Provider**: Handles secure authentication between AI clients and your ESPN data
-- **Credential Manager**: Securely stores and manages ESPN session cookies
+- **OAuth Provider**: Handles secure authentication between AI clients and your fantasy data
+- **Credential Manager**: Securely stores and manages ESPN/Yahoo credentials; Sleeper uses username-only lookup
 
 Flaim is **not** a chatbot or AI product itself — it's the bridge that lets you use your preferred AI tool with your fantasy data.
 
@@ -35,7 +35,7 @@ Flaim is **not** a chatbot or AI product itself — it's the bridge that lets yo
 - **Chrome Extension (v1.5.1)**: Auto-capture ESPN credentials without manual cookie extraction
 - **Auto-Discovery (v1.2.1+)**: Fan API-based discovery of leagues + past seasons, with granular status messaging and default selection
 - **Claude + ChatGPT + Gemini CLI**: Direct access via MCP protocol (OAuth 2.1)
-- **Live ESPN Data**: espn-client worker with real-time stats
+- **Live Multi-Platform Data**: ESPN, Yahoo, and Sleeper workers with real-time stats
 - **Multi-League + Multi-Season Support**: Store multiple seasons per league and discover past seasons
 
 ## About
@@ -70,7 +70,7 @@ All tools take explicit parameters: `platform`, `sport`, `league_id`, `season_ye
 ```
 Chrome Extension → flaim.app → Auth Worker → Supabase
                       ↓
-Claude/ChatGPT/Gemini CLI → Fantasy MCP Gateway → ESPN Client → ESPN API
+Claude/ChatGPT/Gemini CLI → Fantasy MCP Gateway → ESPN/Yahoo/Sleeper Clients → Platform APIs
 ```
 
 - **Chrome Extension**: Captures ESPN cookies, syncs to Flaim
@@ -78,7 +78,9 @@ Claude/ChatGPT/Gemini CLI → Fantasy MCP Gateway → ESPN Client → ESPN API
 - **Auth Worker (Cloudflare)**: Token validation, rate limiting, credential storage
 - **Fantasy MCP Gateway (Cloudflare)**: Unified MCP endpoint for all sports
 - **ESPN Client (Cloudflare)**: ESPN API calls (internal, called by gateway)
-- **Supabase**: User data, OAuth tokens, ESPN credentials
+- **Yahoo Client (Cloudflare)**: Yahoo API calls (internal, called by gateway)
+- **Sleeper Client (Cloudflare)**: Sleeper API calls (internal, called by gateway)
+- **Supabase**: User data, OAuth tokens, platform credentials/connections
 
 ---
 

@@ -16,7 +16,7 @@ This file is the canonical map for Flaim docs. Update this when document ownersh
 | Architecture overview | `docs/ARCHITECTURE.md` | System design and data flow. |
 | Release history | `docs/CHANGELOG.md` | Condensed historical release notes. |
 | Backlog | `docs/dev/TODO.md` | Active backlog only. |
-| Directory submission packets | `docs/submissions/*` | Re-verify before submission. |
+| Directory submission packets (private) | `../submissions/*` | Kept outside repo; re-verify before submission. |
 | Tool versioning policy | `docs/TOOL-VERSIONING.md` | Breaking vs non-breaking guidance. |
 | Connector user docs | `docs/CONNECTOR-DOCS.md` | Single user-facing setup + examples (for directory reviewers too). |
 | Historical docs/plans pointers | `docs/archive/README.md`, `docs/plans/README.md` | External archive source-of-truth for stale docs. |
@@ -39,8 +39,6 @@ This file is the canonical map for Flaim docs. Update this when document ownersh
 - `docs/TOOL-VERSIONING.md`
 - `docs/archive/README.md`
 - `docs/plans/README.md`
-- `docs/submissions/anthropic-connector-submission.md`
-- `docs/submissions/openai-app-submission.md`
 
 ## Dev Docs (Working Set)
 

@@ -3,7 +3,7 @@ import { Lock, Shield, User } from 'lucide-react';
 
 export const metadata: Metadata = {
   title: 'Privacy Policy | Flaim',
-  description: 'Privacy policy for Flaim — fantasy sports AI connector for ESPN and Yahoo',
+  description: 'Privacy policy for Flaim — fantasy sports AI connector for ESPN, Yahoo, and Sleeper',
   alternates: {
     canonical: 'https://flaim.app/privacy',
   },
@@ -14,7 +14,7 @@ export default function PrivacyPage() {
     <div className="min-h-screen bg-background">
       <div className="container max-w-3xl mx-auto py-12 px-4">
         <h1 className="text-3xl font-bold mb-2">Privacy Policy</h1>
-        <p className="text-muted-foreground mb-8">Last updated: February 16, 2026</p>
+        <p className="text-muted-foreground mb-8">Last updated: February 20, 2026</p>
 
         <div className="prose prose-neutral dark:prose-invert max-w-none space-y-8">
           <section id="your-data" className="not-prose">
@@ -26,7 +26,7 @@ export default function PrivacyPage() {
                 </div>
                 <h3 className="font-semibold mb-1">Credentials Stay Here</h3>
                 <p className="text-sm text-muted-foreground">
-                  ESPN and Yahoo credentials are stored securely and never sent to the AI.
+                  ESPN/Yahoo credentials and Sleeper connection data are stored securely and never sent to the AI.
                 </p>
               </div>
               <div className="text-center">
@@ -35,7 +35,7 @@ export default function PrivacyPage() {
                 </div>
                 <h3 className="font-semibold mb-1">Your AI, Your Account</h3>
                 <p className="text-sm text-muted-foreground">
-                  You use your own Claude or ChatGPT subscription. Flaim just connects the data.
+                  You use your own Claude, ChatGPT, or Gemini subscription. Flaim just connects the data.
                 </p>
               </div>
               <div className="text-center">
@@ -53,7 +53,7 @@ export default function PrivacyPage() {
           <section>
             <h2 className="text-xl font-semibold mb-3">Overview</h2>
             <p className="text-muted-foreground">
-              Flaim is a fantasy sports analysis tool that connects your ESPN and Yahoo fantasy
+              Flaim is a fantasy sports analysis tool that connects your ESPN, Yahoo, and Sleeper fantasy
               leagues to AI assistants like ChatGPT and Claude. This privacy policy explains how
               we collect, use, and protect your information when you use Flaim, the Flaim Chrome
               Extension, and the Flaim MCP server.
@@ -92,12 +92,20 @@ export default function PrivacyPage() {
               fantasy league data on your behalf. We do not collect your Yahoo username or
               password.
             </p>
+
+            <h3 className="text-lg font-medium mt-4 mb-2">Sleeper Connection Data</h3>
+            <p className="text-muted-foreground">
+              If you connect Sleeper, we store your Sleeper username so we can look up your
+              public league data through Sleeper&apos;s public API. We do not store a Sleeper
+              password or token.
+            </p>
           </section>
 
           <section>
             <h2 className="text-xl font-semibold mb-3">How We Use Your Information</h2>
             <p className="text-muted-foreground">
-              We use your platform credentials (ESPN session credentials and Yahoo OAuth tokens) solely to:
+              We use your platform connection data (ESPN session credentials, Yahoo OAuth tokens,
+              and Sleeper username) solely to:
             </p>
             <ul className="list-disc list-inside text-muted-foreground mt-2 space-y-1">
               <li>Fetch your fantasy league rosters, scores, and standings</li>
@@ -105,7 +113,7 @@ export default function PrivacyPage() {
               <li>Display your league information within the Flaim application</li>
             </ul>
             <p className="text-muted-foreground mt-2">
-              We do not use your credentials for any other purpose.
+              We do not use your connection data for any other purpose.
             </p>
           </section>
 
@@ -120,7 +128,7 @@ export default function PrivacyPage() {
 
             <h3 className="text-lg font-medium mt-4 mb-2">Storage</h3>
             <p className="text-muted-foreground">
-              Your platform credentials are stored in our database (Supabase) with the following
+              Your platform connection data is stored in our database (Supabase) with the following
               security measures:
             </p>
             <ul className="list-disc list-inside text-muted-foreground mt-2 space-y-1">
@@ -133,7 +141,7 @@ export default function PrivacyPage() {
           <section>
             <h2 className="text-xl font-semibold mb-3">Data Retention</h2>
             <p className="text-muted-foreground">
-              We retain your platform credentials only as long as needed to provide the service:
+              We retain your platform connection data only as long as needed to provide the service:
             </p>
             <ul className="list-disc list-inside text-muted-foreground mt-2 space-y-1">
               <li>
@@ -143,6 +151,9 @@ export default function PrivacyPage() {
               <li>
                 <strong>Yahoo tokens:</strong> Retained until you disconnect your Yahoo account.
                 Tokens auto-refresh; revoking access in Yahoo immediately invalidates them.
+              </li>
+              <li>
+                <strong>Sleeper username:</strong> Retained until you disconnect Sleeper from your account.
               </li>
               <li>
                 <strong>Account data:</strong> Retained until you request deletion. Upon deletion,
@@ -187,7 +198,7 @@ export default function PrivacyPage() {
             <h2 className="text-xl font-semibold mb-3">Platform Affiliation Disclaimer</h2>
             <p className="text-muted-foreground">
               Flaim is not affiliated with, endorsed by, or sponsored by ESPN, The Walt
-              Disney Company, Yahoo, or any of their subsidiaries. ESPN is a trademark of
+              Disney Company, Yahoo, Sleeper, or any of their subsidiaries. ESPN is a trademark of
               ESPN, Inc. Yahoo is a trademark of Yahoo Inc. We access fantasy data with
               your explicit consent using the credentials you provide.
             </p>

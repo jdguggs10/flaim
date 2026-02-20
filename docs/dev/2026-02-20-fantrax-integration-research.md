@@ -22,12 +22,12 @@ Flaim currently integrates platforms through a unified gateway pattern:
 
 Key local references:
 
-- `/Users/ggugger/Code/flaim/README.md`
-- `/Users/ggugger/Code/flaim/docs/ARCHITECTURE.md`
-- `/Users/ggugger/Code/flaim/docs/INDEX.md`
-- `/Users/ggugger/Code/flaim/workers/fantasy-mcp/src/types.ts`
-- `/Users/ggugger/Code/flaim/workers/fantasy-mcp/src/router.ts`
-- `/Users/ggugger/Code/flaim/workers/fantasy-mcp/README.md`
+- `flaim/README.md`
+- `flaim/docs/ARCHITECTURE.md`
+- `flaim/docs/INDEX.md`
+- `flaim/workers/fantasy-mcp/src/types.ts`
+- `flaim/workers/fantasy-mcp/src/router.ts`
+- `flaim/workers/fantasy-mcp/README.md`
 
 Current platform union in gateway types is:
 

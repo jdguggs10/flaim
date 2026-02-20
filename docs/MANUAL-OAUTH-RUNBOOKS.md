@@ -5,11 +5,11 @@ This is a lightweight checklist for re-verifying OAuth + MCP connectivity in eac
 **MCP URL:** `https://api.flaim.app/mcp`  
 **Consent page:** `https://flaim.app/oauth/consent`
 
-## Current Status (Last Verified: 2026-02-09)
+## Current Status (Last Verified: 2026-02-19)
 
 | Client | Fresh connect | Tools (`get_user_session`, `get_standings`, `get_roster`) | Token lifecycle | Evidence |
 |---|---|---|---|---|
-| ChatGPT | ✅ | ✅ | ✅ (forced revoke + re-auth) | `docs/submissions/openai-screenshots/` (local; not committed) |
+| ChatGPT | ✅ | ✅ | ✅ (forced revoke + re-auth) | `../submissions/openai-screenshots/` (private workspace folder) |
 | Claude (claude.ai) | ✅ | ✅ | ✅ (post-revoke re-auth) | (see notes in `docs/dev/CURRENT-EXECUTION-STATE.md`) |
 | Claude Code (CLI) | ✅ | ✅ | ✅ (post-revoke re-auth via `/mcp`) | (terminal transcript) |
 | Gemini CLI | ✅ | ✅ | ✅ (post-revoke re-auth via `/mcp auth`) | (terminal transcript; CLI may emit internal rendering errors) |

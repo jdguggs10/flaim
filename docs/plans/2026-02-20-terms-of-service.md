@@ -362,7 +362,7 @@ git commit -m "docs: add Terms of Service link to CONNECTOR-DOCS"
 ### Task 5: Update OpenAI submission doc
 
 **Files:**
-- Modify: `docs/submissions/openai-app-submission.md`
+- Modify: `../submissions/openai-app-submission.md`
 
 **Step 1: Check off step 3 in Remaining Steps**
 
@@ -391,7 +391,7 @@ Replace with:
 **Step 3: Commit**
 
 ```bash
-git add docs/submissions/openai-app-submission.md
+git add ../submissions/openai-app-submission.md
 git commit -m "docs: mark Terms of Service as complete in OpenAI submission packet"
 ```
 

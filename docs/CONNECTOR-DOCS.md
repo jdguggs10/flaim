@@ -23,6 +23,7 @@ Flaim connects your fantasy leagues to AI assistants using the Model Context Pro
 2. Add fantasy credentials:
    - ESPN: install the Chrome extension and click Sync, or enter cookies manually in the Flaim UI.
    - Yahoo: connect via OAuth in the Flaim UI (if applicable for your setup).
+   - Sleeper: connect your Sleeper username in the Flaim UI.
 3. Visit `https://flaim.app/leagues` and set a **default** league (recommended).
 
 ## Connect Your AI Client
@@ -54,7 +55,8 @@ All tools take explicit parameters: `platform`, `sport`, `league_id`, `season_ye
 - `get_free_agents`
 - `get_ancient_history`
 
-Supported today: ESPN + Yahoo; football, baseball, basketball, and hockey.
+Supported today: ESPN, Yahoo, and Sleeper.
+Sleeper support is currently football + basketball (Phase 1) and does not include a Sleeper free-agent endpoint.
 
 ## Working Examples (Copy/Paste)
 

@@ -154,7 +154,7 @@ Claude/ChatGPT/Gemini CLI → fantasy-mcp (gateway) → espn-client    → ESPN 
 **Key benefits:**
 - Single MCP URL for all sports: `https://api.flaim.app/mcp`
 - Explicit tool parameters: `platform`, `sport`, `league_id`, `season_year`
-- Easier multi-platform support (ESPN + Yahoo)
+- Easier multi-platform support (ESPN + Yahoo + Sleeper)
 - Service bindings for worker-to-worker communication (no 522 timeouts)
 
 **Unified tools:**

@@ -13,7 +13,7 @@ This is the canonical execution-status page for current work. It replaces overla
 - The previous OpenAI MCP `424` discovery failure is resolved.
 - Automated submission preflight is passing (`eval` + `accept` + `presubmit`) on consecutive fresh runs.
 - Manual OAuth token-lifecycle checks are complete for ChatGPT, Gemini CLI, Claude Code, and claude.ai.
-- Vendor-doc revalidation is complete (see `docs/submissions/*`).
+- Vendor-doc revalidation is complete (see `../submissions/*`).
 - Ready for directory submission (OpenAI submission is the next concrete action).
 
 ## Completed Recently
@@ -57,7 +57,7 @@ This is the canonical execution-status page for current work. It replaces overla
 
 ## Next Actions
 
-1. **[READY NOW]** Submit to OpenAI Apps Directory. Internal blockers are resolved (demo account ready, verification route deployed, packet updated); remaining external step is setting `OPENAI_APPS_VERIFICATION_TOKEN` when OpenAI issues it during submission. See `docs/submissions/openai-app-submission.md`.
+1. **[READY NOW]** Submit to OpenAI Apps Directory. Internal blockers are resolved (demo account ready, verification route deployed, packet updated); remaining external step is setting `OPENAI_APPS_VERIFICATION_TOKEN` when OpenAI issues it during submission. See `../submissions/openai-app-submission.md`.
 2. Decide Anthropic submission strategy (submit now vs delay).
 3. Keep preflight evidence current if any auth/tool changes land.
 4. ~~Submit to MCP Registry~~ — **Done** (published as `app.flaim/mcp` on 2026-02-10).
@@ -106,12 +106,12 @@ This is the canonical execution-status page for current work. It replaces overla
 - Facts and platform/tool status: `docs/STATUS.md`
 - Active backlog: `docs/dev/TODO.md`
 - Manual OAuth verification: `docs/MANUAL-OAUTH-RUNBOOKS.md`
-- Submission packets: `docs/submissions/*`
+- Submission packets: `../submissions/*`
 - Historical implementation details: `docs/archive/README.md` and `docs/plans/README.md`
 
 ## Archived During Cleanup (Superseded)
 
 - In-repo archive/plans markdown moved to external bundle:
-  - `/Users/ggugger/Code/flaim-docs-archive/2026-02-08-repo-doc-cleanup/`
+  - `../flaim-docs-archive/2026-02-08-repo-doc-cleanup/`
 - Full file list:
-  - `/Users/ggugger/Code/flaim-docs-archive/2026-02-08-repo-doc-cleanup/README.md`
+  - `../flaim-docs-archive/2026-02-08-repo-doc-cleanup/README.md`

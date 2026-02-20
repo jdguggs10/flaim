@@ -6,7 +6,7 @@ Last updated: 2026-02-20
 
 ## Current Delivery Phase
 
-- Active phase: basketball/hockey shipped; submission and verification ongoing.
+- Active phase: basketball/hockey and Sleeper integration shipped; submission and verification ongoing.
 - Canonical execution tracker: `docs/dev/CURRENT-EXECUTION-STATE.md`.
 
 ## MCP Endpoints
@@ -54,7 +54,7 @@ Sleeper tool coverage (Phase 1): `get_league_info`, `get_standings`, `get_roster
 - Structured eval logs implemented across all 5 workers.
 - Artifact layout is trace-scoped in `flaim-eval`.
 - Acceptance tooling exists (`npm run accept`, `npm run presubmit`).
-- Latest full eval run (`2026-02-10T19-27-44Z`) completed `9/9`, `0` errored.
+- Latest full eval run (`2026-02-19T13-39-48Z`) completed `9/9`, `0` errored.
 - Latest acceptance + presubmit for that run are `PASS`.
 - All MCP tools have complete annotation set (`readOnlyHint`, `openWorldHint`, `destructiveHint`).
 - All MCP tools have OpenAI `toolInvocation` status metadata (`invoking`/`invoked` messages).
@@ -64,7 +64,7 @@ Sleeper tool coverage (Phase 1): `get_league_info`, `get_standings`, `get_roster
 - Discovery/connectivity blocker is resolved (OpenAI MCP 424 issue fixed).
 - No technical blockers remain for submission.
 - Domain verification route (`/.well-known/openai-apps-challenge`) deployed; token set via `wrangler secret put` during submission.
-- Demo account (`demo@flaim.app`) configured with password auth for reviewer access.
+- Demo reviewer account configured with password auth for reviewer access (credentials handled out-of-repo).
 
 ## Client Channel Readiness
 
@@ -74,7 +74,7 @@ Sleeper tool coverage (Phase 1): `get_league_info`, `get_standings`, `get_roster
 | ChatGPT custom connector | Working | OAuth flow works; runbook exists |
 | Gemini CLI direct MCP | Working (with CLI caveat) | Token-lifecycle re-auth is verified; Gemini CLI may emit intermittent internal rendering errors, but MCP tool calls succeed |
 | Anthropic Connectors Directory | Pending | Packet drafted; submission decision pending |
-| OpenAI Apps Directory | Ready to submit | Individual verification approved; demo account configured; domain verification route deployed; all requirements met |
+| OpenAI Apps Directory | Ready to submit | Individual verification approved; demo reviewer account configured; domain verification route deployed; all requirements met |
 | MCP Registry | Live | Published as `app.flaim/mcp` via `mcp-publisher` CLI with DNS verification |
 | Gemini CLI Extensions Gallery | Pending | `gemini-extension.json` committed; auto-indexes within ~1 week |
 | Glama | Pending review | Submitted via GitHub; [glama.ai/mcp/servers/@jdguggs10/flaim](https://glama.ai/mcp/servers/@jdguggs10/flaim) |
