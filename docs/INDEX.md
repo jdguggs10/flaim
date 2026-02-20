@@ -19,7 +19,7 @@ This file is the canonical map for Flaim docs. Update this when document ownersh
 | Directory submission packets (private) | `../submissions/*` | Kept outside repo; re-verify before submission. |
 | Tool versioning policy | `docs/TOOL-VERSIONING.md` | Breaking vs non-breaking guidance. |
 | Connector user docs | `docs/CONNECTOR-DOCS.md` | Single user-facing setup + examples (for directory reviewers too). |
-| Historical docs/plans pointers | `docs/archive/README.md`, `docs/plans/README.md` | External archive source-of-truth for stale docs. |
+| Historical docs/plans pointers | `docs/plans/README.md`, `../flaim-docs-archive/2026-02-08-repo-doc-cleanup/README.md` | External archive source-of-truth for stale docs. |
 
 ## Permanent Docs (Long-Lived)
 
@@ -37,7 +37,6 @@ This file is the canonical map for Flaim docs. Update this when document ownersh
 - `docs/CONNECTOR-DOCS.md`
 - `docs/MANUAL-OAUTH-RUNBOOKS.md`
 - `docs/TOOL-VERSIONING.md`
-- `docs/archive/README.md`
 - `docs/plans/README.md`
 
 ## Dev Docs (Working Set)
@@ -46,8 +45,8 @@ This file is the canonical map for Flaim docs. Update this when document ownersh
 - `docs/dev/TODO.md`
 
 Historical analyses/plans were externalized:
-- `docs/archive/README.md`
 - `docs/plans/README.md`
+- `../flaim-docs-archive/2026-02-08-repo-doc-cleanup/README.md`
 
 ## External Repo Docs
 
@@ -69,5 +68,5 @@ Historical analyses/plans were externalized:
 
 1. Update `docs/STATUS.md` when tool coverage, endpoints, deploy targets, or channel readiness changes.
 2. Update `docs/dev/CURRENT-EXECUTION-STATE.md` when sprint/phase status changes.
-3. Move superseded plans/reports to the external archive bundle, then update `docs/archive/README.md` and/or `docs/plans/README.md`.
+3. Move superseded plans/reports to the external archive bundle, then update `docs/plans/README.md` and/or `../flaim-docs-archive/2026-02-08-repo-doc-cleanup/README.md`.
 4. Prefer links to canonical docs instead of duplicating tables across files.

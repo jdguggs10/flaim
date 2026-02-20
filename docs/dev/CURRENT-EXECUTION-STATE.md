@@ -3,7 +3,7 @@
 Last updated: 2026-02-20
 Owner: Flaim (solo)
 
-This is the canonical execution-status page for current work. It replaces overlapping sprint/incident plans that were moved to the external archive bundle (see `docs/archive/README.md`).
+This is the canonical execution-status page for current work. It replaces overlapping sprint/incident plans that were moved to the external archive bundle (see `../flaim-docs-archive/2026-02-08-repo-doc-cleanup/README.md`).
 
 ## Snapshot
 
@@ -107,7 +107,7 @@ This is the canonical execution-status page for current work. It replaces overla
 - Active backlog: `docs/dev/TODO.md`
 - Manual OAuth verification: `docs/MANUAL-OAUTH-RUNBOOKS.md`
 - Submission packets: `../submissions/*`
-- Historical implementation details: `docs/archive/README.md` and `docs/plans/README.md`
+- Historical implementation details: `docs/plans/README.md` and `../flaim-docs-archive/2026-02-08-repo-doc-cleanup/README.md`
 
 ## Archived During Cleanup (Superseded)
 
