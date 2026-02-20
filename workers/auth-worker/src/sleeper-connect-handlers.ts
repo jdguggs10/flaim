@@ -59,21 +59,28 @@ export async function handleSleeperDiscover(
     }
 
     // Resolve username → user_id
-    const sleeperUser = await sleeperGet<SleeperApiUser>(`/user/${username}`);
+    let sleeperUser: SleeperApiUser | null = null;
+    try {
+      sleeperUser = await sleeperGet<SleeperApiUser>(`/user/${username}`);
+    } catch {
+      // Sleeper returns null for unknown users, but catch any API errors too
+    }
     if (!sleeperUser?.user_id) {
-      return new Response(JSON.stringify({ error: 'Sleeper user not found' }), {
+      return new Response(JSON.stringify({ error: 'Sleeper user not found. Check the username and try again.' }), {
         status: 404,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
+    // TypeScript narrowing: sleeperUser is confirmed non-null with a valid user_id beyond this point
+    const confirmedUser = sleeperUser;
 
     const storage = SleeperStorage.fromEnvironment(env);
-    await storage.saveSleeperConnection(userId, sleeperUser.user_id, sleeperUser.username ?? username);
+    await storage.saveSleeperConnection(userId, confirmedUser.user_id, confirmedUser.username ?? username);
 
     // Discover leagues for current season (NFL + NBA)
     const [nflLeagues, nbaLeagues] = await Promise.all([
-      sleeperGet<SleeperApiLeague[]>(`/user/${sleeperUser.user_id}/leagues/nfl/${getDefaultSeasonYear('football')}`).catch(() => [] as SleeperApiLeague[]),
-      sleeperGet<SleeperApiLeague[]>(`/user/${sleeperUser.user_id}/leagues/nba/${getDefaultSeasonYear('basketball')}`).catch(() => [] as SleeperApiLeague[]),
+      sleeperGet<SleeperApiLeague[]>(`/user/${confirmedUser.user_id}/leagues/nfl/${getDefaultSeasonYear('football')}`).catch(() => [] as SleeperApiLeague[]),
+      sleeperGet<SleeperApiLeague[]>(`/user/${confirmedUser.user_id}/leagues/nba/${getDefaultSeasonYear('basketball')}`).catch(() => [] as SleeperApiLeague[]),
     ]);
 
     const currentLeagues = [...(nflLeagues ?? []), ...(nbaLeagues ?? [])];
@@ -88,7 +95,7 @@ export async function handleSleeperDiscover(
       let rosterId: number | null = null;
       try {
         const rosters = await sleeperGet<SleeperApiRoster[]>(`/league/${league.league_id}/rosters`);
-        const userRoster = rosters?.find((r) => r.owner_id === sleeperUser.user_id);
+        const userRoster = rosters?.find((r) => r.owner_id === confirmedUser.user_id);
         rosterId = userRoster?.roster_id ?? null;
       } catch {
         // Non-fatal: save without roster_id
@@ -101,7 +108,7 @@ export async function handleSleeperDiscover(
         seasonYear: parseInt(league.season, 10) || getDefaultSeasonYear('football'),
         leagueName: league.name,
         rosterId,
-        sleeperUserId: sleeperUser.user_id,
+        sleeperUserId: confirmedUser.user_id,
       });
       totalSaved++;
       seasonsDiscovered.add(league.season);
@@ -124,7 +131,7 @@ export async function handleSleeperDiscover(
     return new Response(
       JSON.stringify({
         success: true,
-        username: sleeperUser.username ?? username,
+        username: confirmedUser.username ?? username,
         leagues_found: totalSaved,
         seasons_discovered: seasonsDiscovered.size,
       }),
