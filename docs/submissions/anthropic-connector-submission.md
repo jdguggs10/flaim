@@ -46,17 +46,21 @@ Before submitting, re-verify this packet against official sources (policies chan
 - **Scopes:** `mcp:read` (read-only fantasy data access)
 - **Redirect URIs:** Configured for Claude Desktop (`http://localhost:*`) and claude.ai callbacks
 
-## Test Account
+## Demo Account
 
-To test Flaim during review:
+A pre-configured demo account is provided with ESPN credentials already synced and default leagues set.
 
-1. Go to https://flaim.app and create a free account (Clerk sign-up)
-2. Connect ESPN credentials using the Chrome extension or manual entry:
-   - Install: [Flaim Chrome Extension](https://chromewebstore.google.com/detail/flaim-espn-fantasy-connec/mbnokejgglkfgkeeenolgdpcnfakpbkn)
-   - Sign in to ESPN in Chrome → click extension → Sync
-3. Verify leagues appear at https://flaim.app/leagues
-4. Set a default league
-5. Add MCP server in Claude: `https://api.flaim.app/mcp`
+- **Email:** demo@flaim.app
+- **Password:** 123flaim
+- **Setup:** ESPN credentials pre-synced with active leagues; default league configured.
+- **Auth method:** Password login enabled via Clerk (alongside magic link for regular users).
+
+No additional signup, extension install, or credential entry is required — the account is ready to use.
+
+**To test:**
+1. Add MCP server in Claude: `https://api.flaim.app/mcp`
+2. When prompted, sign in with the demo account above (demo@flaim.app / 123flaim)
+3. Approve the OAuth consent screen
 
 **Note:** ESPN credentials (cookies) expire approximately every 30 days and need re-syncing. Yahoo uses OAuth tokens that auto-refresh.
 
@@ -79,11 +83,20 @@ Full examples are in `docs/CONNECTOR-DOCS.md`. Three prompts that should work fo
 ## Known Limitations
 
 - **Supported platforms:** ESPN and Yahoo only (Sleeper, CBS, etc. not supported)
-- **Supported sports:** Football and baseball (basketball and hockey planned)
+- **Supported sports:** Football, baseball, basketball, and hockey
 - **ESPN credentials:** Session cookies expire ~30 days; user must re-sync via extension
 - **Yahoo tokens:** OAuth refresh tokens handle auto-renewal
 - **No write operations:** Cannot make trades, add/drop players, or modify league settings
 - **Rate limit:** 200 calls/day per user
+
+## Data Sources
+
+Flaim retrieves the user's own fantasy league data from ESPN and Yahoo at the user's explicit request. All access is strictly read-only by design.
+
+- **Yahoo:** OAuth 2.0 via Yahoo's Fantasy Sports API
+- **ESPN:** User-provided session cookies (via Chrome extension or manual entry), stored encrypted (AES-256)
+
+Flaim cannot make trades, add/drop players, or modify league data. No data is redistributed or shared with third parties.
 
 ## Production Status
 
