@@ -12,6 +12,7 @@ This file is the canonical map for Flaim docs. Update this when document ownersh
 | Error code taxonomy (private reference) | `workers/shared/src/errors.ts` | Canonical source in code; reviewer-facing doc moved to private submissions folder. |
 | Testing strategy | `docs/TESTING.md` | Keep lightweight and practical. |
 | Eval harness operations/runbooks | `../flaim-eval/docs/*` | Canonical in separate repo. |
+| Local Codex eval helper skill | `~/.codex/skills/flaim-eval-ops/SKILL.md` | Optional local-only helper for running eval flow; policy remains in `../flaim-eval/docs/*`. |
 | Public product overview | `README.md` | User-facing high-level overview. |
 | Architecture overview | `docs/ARCHITECTURE.md` | System design and data flow. |
 | Release history | `docs/CHANGELOG.md` | Condensed historical release notes. |
