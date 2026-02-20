@@ -46,6 +46,7 @@ async function buildHealthData(env: Env) {
     bindings: {
       espn: !!env.ESPN,
       yahoo: !!env.YAHOO,
+      sleeper: !!env.SLEEPER,
       auth: !!env.AUTH_WORKER,
     }
   };
@@ -75,6 +76,20 @@ async function buildHealthData(env: Env) {
     }
   } else {
     healthData.yahoo_status = 'no_binding';
+    healthData.status = 'degraded';
+  }
+
+  // Test Sleeper client connectivity
+  if (env.SLEEPER) {
+    try {
+      const sleeperHealth = await env.SLEEPER.fetch(new Request('https://internal/health'));
+      healthData.sleeper_status = sleeperHealth.ok ? 'connected' : 'error';
+    } catch {
+      healthData.sleeper_status = 'unreachable';
+      healthData.status = 'degraded';
+    }
+  } else {
+    healthData.sleeper_status = 'no_binding';
     healthData.status = 'degraded';
   }
 
