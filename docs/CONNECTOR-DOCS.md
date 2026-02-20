@@ -85,4 +85,5 @@ These are intentionally short and “directory reviewer friendly”.
 ## Privacy + Support
 
 - Privacy policy: `https://flaim.app/privacy`
+- Terms of service: `https://flaim.app/terms`
 - Support: `privacy@flaim.app`
