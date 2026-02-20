@@ -71,8 +71,6 @@ Stores a Sleeper username association for a Clerk user (Sleeper has no OAuth —
 | clerk_user_id | text | Primary key (one Sleeper account per user) |
 | sleeper_user_id | text | Sleeper numeric user ID (looked up from username) |
 | sleeper_username | text | Sleeper username |
-| display_name | text | Optional Sleeper display name |
-| avatar | text | Optional Sleeper avatar hash |
 | created_at | timestamptz | Created timestamp |
 | updated_at | timestamptz | Updated timestamp |
 
@@ -91,7 +89,8 @@ One row per user + league + sport + season.
 | sleeper_user_id | text | Sleeper user ID (not null) |
 
 Constraints/Indexes:
-- Unique per season: unique on `(clerk_user_id, league_id, sport, season_year)`.
+- Unique per season: unique on `(clerk_user_id, league_id, season_year)`.
+- Index on `clerk_user_id` for fast user lookups.
 
 ### platform_oauth_states
 Short-lived OAuth state values for platform-connect flows (separate from MCP OAuth state table).

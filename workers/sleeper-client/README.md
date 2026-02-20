@@ -18,7 +18,7 @@ fantasy-mcp (gateway)
      v (service binding)
 sleeper-client
      |
-     +---> Sleeper API (api.sleeper.com — public, no auth)
+     +---> Sleeper API (api.sleeper.app/v1 — public, no auth)
      +---> auth-worker (user lookup via service binding)
 ```
 
@@ -49,20 +49,20 @@ interface ExecuteRequest {
 
 ### Football (NFL)
 - `get_league_info` — League settings and members
-- `get_standings` — League standings (computed from matchup win/loss records)
+- `get_standings` — League standings (computed from roster settings: wins, losses, ties, points)
 - `get_roster` — Team roster with player details
 - `get_matchups` — Weekly matchups (paired by `matchup_id`)
 
 ### Basketball (NBA)
 - `get_league_info` — League settings and members
-- `get_standings` — League standings (computed from matchup win/loss records)
+- `get_standings` — League standings (computed from roster settings: wins, losses, ties, points)
 - `get_roster` — Team roster with player details
 - `get_matchups` — Weekly matchups (paired by `matchup_id`)
 
 ## Sleeper API Notes
 
 - **Public API**: No authentication is required. All endpoints are open (no API key, no OAuth).
-- **No standings endpoint**: Sleeper does not expose a dedicated standings endpoint. Standings are computed by fetching all matchups across completed weeks and tallying wins/losses/points.
+- **No standings endpoint**: Sleeper does not expose a dedicated standings endpoint. Standings are computed from each roster's `settings` (wins, losses, ties, fpts) which Sleeper keeps current.
 - **Matchup pairing**: Matchup results are returned as a flat list; opponents are paired by matching `matchup_id` values.
 - **Username-based onboarding**: Users connect via Sleeper username. The worker resolves the username to a numeric `sleeper_user_id` via `GET /user/{username}`.
 - **Historical season discovery**: Onboarding discovers up to 5 years of past leagues via the Sleeper user leagues endpoint.

@@ -39,7 +39,7 @@ export interface SupabaseEnvironment {
 }
 
 export interface LeagueDefault {
-  platform: 'espn' | 'yahoo';
+  platform: 'espn' | 'yahoo' | 'sleeper';
   leagueId: string;
   seasonYear: number;
 }
@@ -549,7 +549,7 @@ export class EspnSupabaseStorage {
    */
   async setDefaultLeague(
     clerkUserId: string,
-    platform: 'espn' | 'yahoo',
+    platform: 'espn' | 'yahoo' | 'sleeper',
     sport: 'football' | 'baseball' | 'basketball' | 'hockey',
     leagueId: string,
     seasonYear: number

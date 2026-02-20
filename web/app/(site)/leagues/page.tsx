@@ -259,7 +259,6 @@ function LeaguesPageContent() {
   const [yahooLeagues, setYahooLeagues] = useState<YahooLeague[]>([]);
   const [isDiscoveringYahoo, setIsDiscoveringYahoo] = useState(false);
   const [sleeperLeagues, setSleeperLeagues] = useState<SleeperLeague[]>([]);
-  const [isSleeperConnected, setIsSleeperConnected] = useState(false);
   const [deletingSleeperKey, setDeletingSleeperKey] = useState<string | null>(null);
   const [espnCredsDialogOpen, setEspnCredsDialogOpen] = useState(false);
   const [preferences, setPreferences] = useState<UserPreferencesState>({
@@ -465,16 +464,6 @@ function LeaguesPageContent() {
     }
   };
 
-  const checkSleeperStatus = async () => {
-    try {
-      const res = await fetch('/api/connect/sleeper/status');
-      if (res.ok) {
-        const data = await res.json() as { connected?: boolean };
-        setIsSleeperConnected(data.connected ?? false);
-      }
-    } catch {}
-  };
-
   const loadSleeperLeagues = async () => {
     try {
       const res = await fetch('/api/connect/sleeper/leagues');
@@ -558,8 +547,7 @@ function LeaguesPageContent() {
       checkYahooStatus().then(() => loadYahooLeagues());
     }
 
-    // Load Sleeper leagues and status
-    checkSleeperStatus();
+    // Load Sleeper leagues
     loadSleeperLeagues();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSignedIn]);
