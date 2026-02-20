@@ -274,8 +274,8 @@ export function StepConnectPlatforms({ className }: StepConnectPlatformsProps) {
         </Popover>
       </div>
 
-      {/* Three-column layout */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      {/* Stacked platform cards on all viewports */}
+      <div className="grid grid-cols-1 gap-4">
         {/* ESPN Column */}
         <div className="p-4 border rounded-lg space-y-3">
           <div className="font-medium text-sm">ESPN</div>
