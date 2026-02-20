@@ -9,7 +9,7 @@ This file is the canonical map for Flaim docs. Update this when document ownersh
 | Current delivery phase + what is next | `docs/dev/CURRENT-EXECUTION-STATE.md` | Canonical execution tracker. |
 | Tools list + platform/sport support + deploy targets | `docs/STATUS.md` | Keep aligned with code and CI. |
 | Database schema summary | `docs/DATABASE.md` | Migrations in `docs/migrations/` remain canonical. |
-| Error code taxonomy | `docs/ERROR-CODES.md` | Codes defined in `workers/shared/src/errors.ts`. |
+| Error code taxonomy (private reference) | `workers/shared/src/errors.ts` | Canonical source in code; reviewer-facing doc moved to private submissions folder. |
 | Testing strategy | `docs/TESTING.md` | Keep lightweight and practical. |
 | Eval harness operations/runbooks | `../flaim-eval/docs/*` | Canonical in separate repo. |
 | Public product overview | `README.md` | User-facing high-level overview. |
@@ -17,7 +17,8 @@ This file is the canonical map for Flaim docs. Update this when document ownersh
 | Release history | `docs/CHANGELOG.md` | Condensed historical release notes. |
 | Backlog | `docs/dev/TODO.md` | Active backlog only. |
 | Directory submission packets (private) | `../submissions/*` | Kept outside repo; re-verify before submission. |
-| Tool versioning policy | `docs/TOOL-VERSIONING.md` | Breaking vs non-breaking guidance. |
+| Tool versioning policy (private) | `../submissions/internal-docs/TOOL-VERSIONING.md` | Internal submission/versioning operations guide. |
+| Manual OAuth runbooks (private) | `../submissions/internal-docs/MANUAL-OAUTH-RUNBOOKS.md` | Internal reviewer verification checklists and evidence pointers. |
 | Connector user docs | `docs/CONNECTOR-DOCS.md` | Single user-facing setup + examples (for directory reviewers too). |
 | Historical docs/plans pointers | `docs/plans/README.md`, `../flaim-docs-archive/2026-02-08-repo-doc-cleanup/README.md` | External archive source-of-truth for stale docs. |
 
@@ -32,11 +33,8 @@ This file is the canonical map for Flaim docs. Update this when document ownersh
 - `docs/DATABASE.md`
 - `docs/TESTING.md`
 - `docs/STYLE-GUIDE.md`
-- `docs/ERROR-CODES.md`
 - `docs/CHANGELOG.md`
 - `docs/CONNECTOR-DOCS.md`
-- `docs/MANUAL-OAUTH-RUNBOOKS.md`
-- `docs/TOOL-VERSIONING.md`
 - `docs/plans/README.md`
 
 ## Dev Docs (Working Set)
@@ -70,3 +68,4 @@ Historical analyses/plans were externalized:
 2. Update `docs/dev/CURRENT-EXECUTION-STATE.md` when sprint/phase status changes.
 3. Move superseded plans/reports to the external archive bundle, then update `docs/plans/README.md` and/or `../flaim-docs-archive/2026-02-08-repo-doc-cleanup/README.md`.
 4. Prefer links to canonical docs instead of duplicating tables across files.
+5. Keep submission-operational docs in `../submissions/internal-docs/` (private), not in this repo.

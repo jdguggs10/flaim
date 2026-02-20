@@ -105,7 +105,7 @@ This is the canonical execution-status page for current work. It replaces overla
 
 - Facts and platform/tool status: `docs/STATUS.md`
 - Active backlog: `docs/dev/TODO.md`
-- Manual OAuth verification: `docs/MANUAL-OAUTH-RUNBOOKS.md`
+- Manual OAuth verification (private): `../submissions/internal-docs/MANUAL-OAUTH-RUNBOOKS.md`
 - Submission packets: `../submissions/*`
 - Historical implementation details: `docs/plans/README.md` and `../flaim-docs-archive/2026-02-08-repo-doc-cleanup/README.md`
 

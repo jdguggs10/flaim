@@ -101,7 +101,6 @@ Solo developer, hobby project. Keep it simple and stable.
 | [Changelog](docs/CHANGELOG.md) | Release history |
 | [Web App](web/README.md) | Next.js routes, components, environment |
 | [Workers](workers/README.md) | Cloudflare Workers, MCP tools, ESPN API |
-| [Manual OAuth Runbooks](docs/MANUAL-OAUTH-RUNBOOKS.md) | Claude, ChatGPT, and Gemini verification checklists |
 | [Extension](extension/README.md) | Chrome extension build, Sync Host, CWS |
 
 ### Quick Start (Development)
