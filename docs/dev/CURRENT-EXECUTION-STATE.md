@@ -1,6 +1,6 @@
 # Current Execution State
 
-Last updated: 2026-02-16
+Last updated: 2026-02-20
 Owner: Flaim (solo)
 
 This is the canonical execution-status page for current work. It replaces overlapping sprint/incident plans that were moved to the external archive bundle (see `docs/archive/README.md`).
@@ -9,7 +9,7 @@ This is the canonical execution-status page for current work. It replaces overla
 
 - Unified MCP service is live on `https://api.flaim.app/mcp`.
 - Auth hardening and error taxonomy work from Sprint A are shipped.
-- End-to-end eval execution is healthy (`9/9` scenarios completed on three consecutive fresh runs: `2026-02-08T22-39-03Z`, `2026-02-08T22-48-28Z`, `2026-02-09T11-53-41Z`).
+- End-to-end eval execution is healthy (`9/9` scenarios completed on four consecutive fresh runs: `2026-02-08T22-39-03Z`, `2026-02-08T22-48-28Z`, `2026-02-09T11-53-41Z`, `2026-02-19T13-39-48Z`).
 - The previous OpenAI MCP `424` discovery failure is resolved.
 - Automated submission preflight is passing (`eval` + `accept` + `presubmit`) on consecutive fresh runs.
 - Manual OAuth token-lifecycle checks are complete for ChatGPT, Gemini CLI, Claude Code, and claude.ai.
@@ -57,7 +57,7 @@ This is the canonical execution-status page for current work. It replaces overla
 
 ## Next Actions
 
-1. **[READY NOW]** Submit to OpenAI Apps Directory. All blockers resolved: demo account ready, domain verification route deployed, packet updated. See `docs/submissions/openai-app-submission.md`.
+1. **[READY NOW]** Submit to OpenAI Apps Directory. Internal blockers are resolved (demo account ready, verification route deployed, packet updated); remaining external step is setting `OPENAI_APPS_VERIFICATION_TOKEN` when OpenAI issues it during submission. See `docs/submissions/openai-app-submission.md`.
 2. Decide Anthropic submission strategy (submit now vs delay).
 3. Keep preflight evidence current if any auth/tool changes land.
 4. ~~Submit to MCP Registry~~ — **Done** (published as `app.flaim/mcp` on 2026-02-10).
@@ -76,6 +76,17 @@ This is the canonical execution-status page for current work. It replaces overla
 - Domain verification route (`/.well-known/openai-apps-challenge`) added to `fantasy-mcp`; reads token from `OPENAI_APPS_VERIFICATION_TOKEN` Wrangler secret.
 - Submission packet fully updated: demo account section, domain verification instructions, basketball/hockey status corrected, checklist refreshed.
 - Submission packet status: ready to submit.
+
+9. Submission readiness recheck (2026-02-19)
+- Fresh full eval run passed: `2026-02-19T13-39-48Z` (`9/9`, `0` errors).
+- Enrichment passed: `npm run enrich -- 2026-02-19T13-39-48Z` (`9/9` traces).
+- Acceptance passed: `npm run accept -- 2026-02-19T13-39-48Z`.
+- Presubmit passed: `npm run presubmit -- 2026-02-19T13-39-48Z` (`RESULT: PASS`).
+
+10. Terms of Service page published (2026-02-20)
+- `/terms` page live at `https://flaim.app/terms`.
+- Footer, sitemap, and CONNECTOR-DOCS updated with Terms link.
+- OpenAI submission packet updated (step 3 and dashboard checklist item checked off).
 
 ## Not Started / Deferred
 
