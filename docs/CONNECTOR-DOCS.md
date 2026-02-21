@@ -1,10 +1,12 @@
-# Flaim Connector Docs (Claude + ChatGPT + Gemini)
+# Flaim Setup Docs (Claude + ChatGPT + Gemini)
 
-This page is the single, user-facing guide for connecting Flaim to AI clients (Claude, ChatGPT, Gemini CLI) via MCP.
+This page is the single user-facing guide for connecting Flaim to AI clients (Claude, ChatGPT, Gemini CLI) and using read-only fantasy analysis tools.
 
 ## What Flaim Is
 
-Flaim connects your fantasy leagues to AI assistants using the Model Context Protocol (MCP). It provides **read-only** tools for rosters, standings, matchups, league info, and free agents.
+Flaim is a read-only fantasy analysis service for ESPN, Yahoo, and Sleeper leagues. It provides tools for rosters, standings, matchups, league settings, and free agents with explicit platform and season context.
+
+Flaim cannot place trades, add/drop players, or modify league settings.
 
 ## Server + Auth
 

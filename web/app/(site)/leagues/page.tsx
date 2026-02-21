@@ -555,7 +555,7 @@ function LeaguesPageContent() {
   // Verify league (call auto-pull to get league info)
   const handleVerifyLeague = async () => {
     if (!hasCredentials) {
-      setLeagueError('Add your ESPN credentials on the Connectors page first');
+      setLeagueError('Add your ESPN credentials on the setup page first');
       return;
     }
 

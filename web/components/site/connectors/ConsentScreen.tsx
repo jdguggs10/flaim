@@ -51,9 +51,9 @@ export default function ConsentScreen({
         <div className="mx-auto mb-4 w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
           <Shield className="h-6 w-6 text-primary" />
         </div>
-        <CardTitle>Authorize Connector</CardTitle>
+        <CardTitle>Authorize Flaim Access</CardTitle>
         <CardDescription>
-          An AI assistant is requesting access to your Flaim account
+          An AI app is requesting read-only access to your Flaim account
         </CardDescription>
       </CardHeader>
 
@@ -66,7 +66,7 @@ export default function ConsentScreen({
               <Image src="/flaim-mark-hero-dark.png" alt="Flaim" width={24} height={24} className="hidden dark:block" />
             </div>
             <div>
-              <div className="font-medium">Flaim Fantasy Connector</div>
+              <div className="font-medium">Flaim Fantasy Analysis</div>
             </div>
           </div>
         </div>
@@ -108,7 +108,7 @@ export default function ConsentScreen({
 
         {/* Security note */}
         <p className="text-xs text-muted-foreground text-center">
-          You can revoke this access anytime from your AI app&apos;s connector settings.
+          You can revoke this access anytime from your AI app&apos;s integration settings.
         </p>
       </CardContent>
 

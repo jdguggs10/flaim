@@ -4,17 +4,15 @@ import { useState } from 'react';
 import { useAuth } from '@clerk/nextjs';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Copy, Check, Info } from 'lucide-react';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Copy, Check } from 'lucide-react';
 
 const fantasyMcpUrl =
   process.env.NEXT_PUBLIC_FANTASY_MCP_URL || 'https://api.flaim.app/mcp';
 
-const mcpConnectors = [
+const mcpServers = [
   {
     name: 'Flaim Fantasy MCP',
     url: fantasyMcpUrl,
-    description: 'All sports in one connector',
   },
 ];
 
@@ -32,7 +30,7 @@ export function StepConnectAI() {
     }
   };
 
-  const canShowConnectors = isLoaded && isSignedIn;
+  const canShowServers = isLoaded && isSignedIn;
 
   return (
     <Card className="p-5 flex flex-col">
@@ -44,7 +42,7 @@ export function StepConnectAI() {
       </div>
 
       <p className="text-sm text-muted-foreground mb-4">
-        Click on your preferred AI, then copy the name and url to add Flaim as a custom connector.
+        Open your AI client&apos;s MCP settings, then copy the name and URL below to add Flaim as a remote MCP server.
       </p>
 
       {/* Platform badges */}
@@ -57,45 +55,13 @@ export function StepConnectAI() {
         >
           <div className="text-xs font-medium">Claude</div>
         </a>
-        <div className="flex flex-col items-center justify-center rounded-md bg-muted px-3 py-2">
-          <div className="text-xs font-medium text-muted-foreground">ChatGPT</div>
-          <div className="text-xs text-muted-foreground inline-flex items-center gap-1">
-            <span>Dev mode only</span>
-            <Popover>
-              <PopoverTrigger asChild>
-                <button
-                  type="button"
-                  className="inline-flex items-center"
-                  aria-label="Why is ChatGPT dev mode only?"
-                >
-                  <Info className="h-3 w-3" />
-                </button>
-              </PopoverTrigger>
-              <PopoverContent className="w-64 text-xs">
-                OpenAI has not released their connector functionality publicly yet
-              </PopoverContent>
-            </Popover>
-          </div>
+        <div className="flex flex-col items-center justify-center rounded-md border border-border px-3 py-2">
+          <div className="text-xs font-medium">ChatGPT</div>
+          <div className="text-xs text-muted-foreground">Use MCP settings</div>
         </div>
-        <div className="flex flex-col items-center justify-center rounded-md bg-muted px-3 py-2">
-          <div className="text-xs font-medium text-muted-foreground">Gemini</div>
-          <div className="text-xs text-muted-foreground inline-flex items-center gap-1">
-            <span>Coming soon?</span>
-            <Popover>
-              <PopoverTrigger asChild>
-                <button
-                  type="button"
-                  className="inline-flex items-center"
-                  aria-label="What is the status of Gemini connectors?"
-                >
-                  <Info className="h-3 w-3" />
-                </button>
-              </PopoverTrigger>
-              <PopoverContent className="w-64 text-xs">
-                Google is reportedly working on MCP connectors but nothing has been released yet
-              </PopoverContent>
-            </Popover>
-          </div>
+        <div className="flex flex-col items-center justify-center rounded-md border border-border px-3 py-2">
+          <div className="text-xs font-medium">Gemini</div>
+          <div className="text-xs text-muted-foreground">Use MCP settings</div>
         </div>
       </div>
 
@@ -107,13 +73,13 @@ export function StepConnectAI() {
 
       {isLoaded && !isSignedIn && (
         <div className="rounded-lg border bg-muted p-3 text-xs text-muted-foreground">
-          Sign in to unlock the connector URLs.
+          Sign in to unlock the MCP server name and URL.
         </div>
       )}
 
-      {canShowConnectors && (
+      {canShowServers && (
         <div className="space-y-3">
-          {mcpConnectors.map(({ name, url }) => (
+          {mcpServers.map(({ name, url }) => (
             <div key={name} className="p-3 bg-muted rounded-lg space-y-2">
               {/* Name row */}
               <div className="flex items-center justify-between gap-2">

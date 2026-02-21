@@ -1,8 +1,8 @@
-# Flaim - Fantasy League AI Connector
+# Flaim - Fantasy League Analysis
 
 Doc routing: see `docs/INDEX.md`.
 
-Flaim connects your ESPN, Yahoo, and Sleeper fantasy leagues to AI assistants like Claude, ChatGPT, and Gemini CLI. It's an MCP (Model Context Protocol) service that gives AI tools access to your live fantasy data.
+Flaim is a read-only fantasy analysis app for ESPN, Yahoo, and Sleeper leagues. It helps you make lineup, waiver, and matchup decisions by bringing your league context into ChatGPT, Claude, and Gemini CLI.
 
 ## How It Works
 
@@ -10,10 +10,8 @@ Flaim connects your ESPN, Yahoo, and Sleeper fantasy leagues to AI assistants li
 2. **Connect your platforms** — Sync ESPN credentials with the [Chrome extension](https://chromewebstore.google.com/detail/flaim-espn-fantasy-connec/mbnokejgglkfgkeeenolgdpcnfakpbkn) (or manual cookies), connect Yahoo via OAuth, and add your Sleeper username
 3. **Leagues auto-discovered** — Extension finds all your leagues + past seasons and saves them
 4. **Pick a default** — Select which league to use by default in AI conversations
-5. **Connect your AI** — Add Flaim as a custom MCP connector in Claude, ChatGPT, or Gemini CLI using the MCP URL
+5. **Connect your AI** — Add Flaim in Claude, ChatGPT, or Gemini CLI using the MCP URL
 6. **Use MCP tools** — Ask about your roster, matchups, standings, etc. directly in your AI
-
-Bring your own LLM subscription. Flaim provides the data bridge.
 
 ## Automation vs Manual (Quick Clarification)
 
@@ -22,13 +20,13 @@ Bring your own LLM subscription. Flaim provides the data bridge.
 
 ## What Flaim Is
 
-Flaim is an **authentication and data service** for fantasy sports AI integrations:
+Flaim is a **read-only fantasy decision-support service**:
 
-- **MCP Server**: Exposes fantasy league data to Claude and ChatGPT via the Model Context Protocol
-- **OAuth Provider**: Handles secure authentication between AI clients and your fantasy data
-- **Credential Manager**: Securely stores and manages ESPN/Yahoo credentials; Sleeper uses username-only lookup
+- **Unified league context**: Normalizes ESPN, Yahoo, and Sleeper data so analysis stays consistent across platforms
+- **Season-aware retrieval**: Returns standings, roster, matchup, and free-agent context with explicit platform and season inputs
+- **Secure access model**: Uses user-authorized access paths (Yahoo OAuth, Sleeper public API context, ESPN user-provided session credentials)
 
-Flaim is **not** a chatbot or AI product itself — it's the bridge that lets you use your preferred AI tool with your fantasy data.
+Flaim cannot place trades, add or drop players, or modify league settings.
 
 ## Features
 

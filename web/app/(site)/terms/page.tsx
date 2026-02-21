@@ -2,7 +2,7 @@ import { Metadata } from 'next';
 
 export const metadata: Metadata = {
   title: 'Terms of Service | Flaim',
-  description: 'Terms of Service for Flaim — fantasy sports AI connector for ESPN, Yahoo, and Sleeper',
+  description: 'Terms of Service for Flaim — read-only fantasy league analysis for ESPN, Yahoo, and Sleeper',
   alternates: {
     canonical: 'https://flaim.app/terms',
   },
@@ -20,11 +20,10 @@ export default function TermsPage() {
           <section>
             <h2 className="text-xl font-semibold mb-3">What Flaim Is</h2>
             <p className="text-muted-foreground">
-              Flaim is a read-only fantasy sports data connector. It links your ESPN, Yahoo, and Sleeper
-              fantasy league data to AI assistants (such as Claude, ChatGPT, and Gemini CLI) via the
-              Model Context Protocol (MCP). Flaim fetches data on your behalf and surfaces it to
-              the AI tool of your choice — it does not place trades, add or drop players, or modify
-              your league in any way.
+              Flaim is a read-only fantasy analysis service. It retrieves your ESPN, Yahoo, and Sleeper
+              fantasy league data and makes it available to AI assistants (such as Claude, ChatGPT, and
+              Gemini CLI) via the Model Context Protocol (MCP). Flaim does not place trades, add or drop
+              players, or modify your league in any way.
             </p>
             <p className="text-muted-foreground mt-2">
               Flaim is an independent project and is not affiliated with, endorsed by, or sponsored

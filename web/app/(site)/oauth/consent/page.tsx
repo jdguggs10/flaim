@@ -140,7 +140,7 @@ function OAuthConsentContent() {
           <div className="text-center space-y-2">
             <h1 className="text-2xl font-semibold">Sign in to continue</h1>
           <p className="text-muted-foreground">
-              Sign in to your Flaim account to authorize the connector.
+              Sign in to your Flaim account to authorize access.
           </p>
           </div>
           <SignIn

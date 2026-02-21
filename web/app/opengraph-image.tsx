@@ -1,6 +1,6 @@
 import { ImageResponse } from 'next/og'
 
-export const alt = 'Flaim - MCP Connector for Fantasy Sports'
+export const alt = 'Flaim - Fantasy League Analysis'
 export const size = { width: 1200, height: 630 }
 export const contentType = 'image/png'
 
@@ -48,7 +48,7 @@ export default function Image() {
             textAlign: 'center',
           }}
         >
-          MCP Connector for Fantasy Sports
+          Read-Only Fantasy League Analysis
         </div>
         <div
           style={{

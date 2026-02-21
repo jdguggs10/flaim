@@ -77,7 +77,7 @@ The built-in `/chat` is for testing and users without Claude/ChatGPT subscriptio
 Both paths write to the same `espn_leagues` storage.
 
 **Connect AI (both paths):**
-- Copy the MCP URLs from the landing page and add them as custom connectors in Claude, ChatGPT, or Gemini CLI.
+- Copy the MCP URL from the landing page and add it in Claude, ChatGPT, or Gemini CLI MCP settings.
 
 ## Season Year Defaults
 

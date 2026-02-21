@@ -19,10 +19,10 @@ export default function LandingPage() {
       {/* Hero */}
       <section className="py-8 px-4 text-center">
         <h1 className="text-4xl md:text-5xl font-bold mb-2">
-          MCP Connector for Fantasy Sports
+          Fantasy League Analysis Across ESPN, Yahoo, and Sleeper
         </h1>
         <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-          Give AI access to your fantasy leagues. Ask questions about your teams, roster, free agents, and more.
+          Use your AI to evaluate standings, rosters, matchups, and free agents with unified league context and read-only access.
         </p>
       </section>
 
@@ -65,7 +65,7 @@ export default function LandingPage() {
 
             {/* Completion message */}
             <p className="text-center text-sm text-muted-foreground pt-2">
-              Boom, you&apos;re done. Use your AI as normal. Football and Baseball are supported today, maybe Hockey and Basketball if people care. Enjoy.
+              Once connected, ask normal fantasy questions in your AI client. Flaim is read-only and cannot modify league data.
             </p>
           </div>
         </div>
@@ -83,7 +83,7 @@ export default function LandingPage() {
                 <ChevronDown className="ml-2 h-5 w-5 transition-transform group-open:rotate-180" />
               </summary>
               <div className="px-4 pb-4 text-sm text-muted-foreground space-y-2">
-                <p>Flaim provides MCP servers and user auth so you can connect your fantasy leagues to your preferred AI. That&apos;s it. I don&apos;t supply the AI, you do. Flaim just connects the dots.</p>
+                <p>Flaim gives you a read-only fantasy analysis workflow across ESPN, Yahoo, and Sleeper. It returns league-aware standings, roster, matchup, and free-agent context so you can make lineup and waiver decisions faster.</p>
               </div>
             </details>
 
@@ -94,18 +94,18 @@ export default function LandingPage() {
                 <ChevronDown className="ml-2 h-5 w-5 transition-transform group-open:rotate-180" />
               </summary>
               <div className="px-4 pb-4 text-sm text-muted-foreground space-y-2">
-                <p>It makes grabbing your ESPN credentials easy and matches them to your Flaim account. The connector needs to know what ESPN leagues are yours somehow.</p>
+                <p>The extension syncs ESPN session credentials that already exist in your browser after you log into ESPN. Flaim uses them only for read-only retrieval, and you can re-sync when ESPN credentials expire.</p>
               </div>
             </details>
 
-            {/* Why custom connectors */}
+            {/* How does AI connection work */}
             <details className="group border rounded-lg bg-background">
               <summary className="flex cursor-pointer items-center justify-between p-4 font-medium">
-                Why do you use custom connectors with only some AIs?
+                How does Flaim connect to AI clients?
                 <ChevronDown className="ml-2 h-5 w-5 transition-transform group-open:rotate-180" />
               </summary>
               <div className="px-4 pb-4 text-sm text-muted-foreground space-y-2">
-                <p>The MCP protocol was just created in late 2024, and standard implementations are still forming. Trust me, I&apos;ll add ChatGPT and Gemini as soon as I can.</p>
+                <p>Flaim uses a remote MCP endpoint with OAuth authorization. You connect your AI client, approve access, then use normal prompts to retrieve read-only league context.</p>
               </div>
             </details>
 
@@ -116,7 +116,7 @@ export default function LandingPage() {
                 <ChevronDown className="ml-2 h-5 w-5 transition-transform group-open:rotate-180" />
               </summary>
               <div className="px-4 pb-4 text-sm text-muted-foreground space-y-2">
-                <p>You can &quot;force&quot; your AI to activate the connector by saying &quot;Use Flaim.&quot; at the end of your message.</p>
+                <p>Set a default league at <code>/leagues</code> for faster prompts, and if a platform token expires, reconnect and retry. Flaim only supports read operations.</p>
               </div>
             </details>
 

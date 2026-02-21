@@ -3,7 +3,7 @@ import { Lock, Shield, User } from 'lucide-react';
 
 export const metadata: Metadata = {
   title: 'Privacy Policy | Flaim',
-  description: 'Privacy policy for Flaim — fantasy sports AI connector for ESPN, Yahoo, and Sleeper',
+  description: 'Privacy policy for Flaim — read-only fantasy league analysis for ESPN, Yahoo, and Sleeper',
   alternates: {
     canonical: 'https://flaim.app/privacy',
   },
@@ -35,7 +35,7 @@ export default function PrivacyPage() {
                 </div>
                 <h3 className="font-semibold mb-1">Your AI, Your Account</h3>
                 <p className="text-sm text-muted-foreground">
-                  You use your own Claude, ChatGPT, or Gemini subscription. Flaim just connects the data.
+                  You use your own Claude, ChatGPT, or Gemini subscription. Flaim provides read-only league analysis context.
                 </p>
               </div>
               <div className="text-center">
@@ -53,8 +53,8 @@ export default function PrivacyPage() {
           <section>
             <h2 className="text-xl font-semibold mb-3">Overview</h2>
             <p className="text-muted-foreground">
-              Flaim is a fantasy sports analysis tool that connects your ESPN, Yahoo, and Sleeper fantasy
-              leagues to AI assistants like ChatGPT and Claude. This privacy policy explains how
+              Flaim is a read-only fantasy sports analysis service for ESPN, Yahoo, and Sleeper leagues.
+              This privacy policy explains how
               we collect, use, and protect your information when you use Flaim, the Flaim Chrome
               Extension, and the Flaim MCP server.
             </p>

@@ -1,8 +1,8 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "app.flaim/mcp",
-  "title": "Flaim - Fantasy Sports AI Connector",
-  "description": "Connect ESPN, Yahoo, and Sleeper fantasy leagues to Claude, ChatGPT, and Gemini via MCP",
+  "title": "Flaim - Fantasy League Analysis",
+  "description": "Read-only fantasy analysis for ESPN, Yahoo, and Sleeper with unified league context for standings, rosters, matchups, and free agents",
   "version": "1.0.0",
   "websiteUrl": "https://flaim.app",
   "repository": {
