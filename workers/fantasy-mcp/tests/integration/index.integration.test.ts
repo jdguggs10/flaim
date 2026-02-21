@@ -37,6 +37,7 @@ async function parseJsonRpcResponse(response: Response): Promise<{
         readOnlyHint?: boolean;
         openWorldHint?: boolean;
         destructiveHint?: boolean;
+        idempotentHint?: boolean;
       };
       _meta?: { securitySchemes?: Array<{ type?: string; scopes?: string[] }> };
     }>;
@@ -53,6 +54,7 @@ async function parseJsonRpcResponse(response: Response): Promise<{
             readOnlyHint?: boolean;
             openWorldHint?: boolean;
             destructiveHint?: boolean;
+            idempotentHint?: boolean;
           };
           _meta?: { securitySchemes?: Array<{ type?: string; scopes?: string[] }> };
         }>;
@@ -76,6 +78,7 @@ async function parseJsonRpcResponse(response: Response): Promise<{
             readOnlyHint?: boolean;
             openWorldHint?: boolean;
             destructiveHint?: boolean;
+            idempotentHint?: boolean;
           };
           _meta?: { securitySchemes?: Array<{ type?: string; scopes?: string[] }> };
         }>;
@@ -190,7 +193,12 @@ describe('fantasy-mcp gateway integration', () => {
       expect(tool._meta?.securitySchemes?.[0]?.type).toBe('oauth2');
       expect(tool._meta?.securitySchemes?.[0]?.scopes).toContain(scopeByTool.get(tool.name));
       // OpenAI Apps Directory review expects these hints to be explicitly declared.
-      expect(tool.annotations).toEqual({ readOnlyHint: true, openWorldHint: false, destructiveHint: false });
+      expect(tool.annotations).toEqual({
+        readOnlyHint: true,
+        openWorldHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+      });
     }
 
     expect(authFetch).toHaveBeenCalledTimes(1);
