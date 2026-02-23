@@ -1,49 +1,29 @@
 # TODO
-
-Last updated: 2026-02-16
+Last updated: 2026-02-22
 
 Use this as the active backlog only. For overall phase status, see `docs/dev/CURRENT-EXECUTION-STATE.md`.
 
-## Immediate (Current Gate)
-
+## Short-Term
 1. Submit to OpenAI Apps Directory.
-
 2. Decide Anthropic submission strategy.
 - Submit now vs delay based on directory fit.
-
 3. Keep submission preflight evidence current.
-- Latest full PASS run: `2026-02-19T13-39-48Z`.
-- Re-run preflight if auth/tool code changes, or if evidence is older than 7 days at submission time.
-
-4. CWS/Search Console listing optimization follow-up.
-- Canonical handoff + exact copy/checklist: `docs/dev/2026-02-16-search-console-cws-handoff.md`.
-- Implement copy/screenshot updates in CWS dashboard under `gerry@flaim.app`.
-- Collect first 2-3 honest ratings/reviews.
-
-## Next (Sprint C Candidate)
-
-1. Add basketball support (ESPN + Yahoo) for all read tools.
-2. Add hockey support (ESPN + Yahoo) for all read tools.
-3. Add tool/eval scenarios covering basketball and hockey.
 
 ## Medium-Term 
-
 1. Improve clerk magic link emails
+2. Add free agent support for Sleeper (phase 2 in /plans)
+3. Add stat enrichment for Sleeper (phase 3 in /plans)
 
 ## Maintenance / Reliability
-
 1. Add external uptime checks for `/health` endpoints.
 2. Improve preview OAuth callback handling for dynamic Vercel preview URLs.
 3. Add deeper integration tests only where recent regressions justify it.
 
 ## Deferred / Long-Term
-
-1. Additional fantasy platforms beyond current support (CBS, others).
-2. iOS app.
-3. Browser-extension-driven connector automation.
+1. Additional fantasy platforms beyond current support (Fantrax, others).
+2. iOS app with Foundation Models + MCP (see `docs/dev/2026-02-22-ios-app-research.md` for full research, recommendations, and timeline).
 
 ## Recent Verification Notes
-
 - `flaim-eval` fresh run `2026-02-09T11-53-41Z` passed end-to-end: `eval`, `accept`, and `presubmit`.
 - `flaim-eval` fresh run `2026-02-08T22-39-03Z` passed end-to-end: `eval`, `accept`, and `presubmit`.
 - `flaim-eval` fresh run `2026-02-08T22-48-28Z` also passed end-to-end: `eval`, `accept`, and `presubmit`.
