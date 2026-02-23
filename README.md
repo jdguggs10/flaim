@@ -15,7 +15,7 @@ Flaim is a read-only fantasy analysis app for ESPN, Yahoo, and Sleeper leagues. 
 
 ## Automation vs Manual (Quick Clarification)
 
-- **Extension (automatic)**: Auto-pulls ESPN s2/swid and saves to supabase. Runs only when the user clicks **Sync / Re-sync**. It discovers leagues + past seasons and can set a default.
+- **Extension (automatic)**: Auto-pulls ESPN s2/swid and saves to supabase. Runs only when the user clicks **Sync / Re-sync**. It discovers leagues + past seasons.
 - **Site (manual)**: `/leagues` is independent. Users can add leagues by ID and manually trigger season discovery.
 
 ## What Flaim Is
@@ -60,8 +60,10 @@ The unified gateway (`https://api.flaim.app/mcp`) exposes these tools:
 | `get_matchups` | Current/upcoming matchups |
 | `get_standings` | League standings |
 | `get_free_agents` | Available free agents |
+| `get_transactions` | Recent transactions (adds, drops, waivers, trades) |
 
 All tools take explicit parameters: `platform`, `sport`, `league_id`, `season_year`.
+For `get_transactions`, week semantics are platform-specific: ESPN/Sleeper support week windows, while Yahoo uses a recent 14-day timestamp window and ignores explicit `week`. Yahoo `type=waiver` filtering is not supported in v1.
 
 ## Architecture
 

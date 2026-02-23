@@ -112,6 +112,12 @@ All tools take explicit parameters: `platform`, `sport`, `league_id`, `season_ye
 - `get_matchups` — Current/specified week matchups
 - `get_roster` — Team roster with player details
 - `get_free_agents` — Available free agents
+- `get_transactions` — Recent transactions (adds, drops, waivers, trades)
+
+`get_transactions` v1 semantics are platform-specific:
+- ESPN/Sleeper: explicit `week` supported; default window is current+previous week.
+- Yahoo: explicit `week` ignored; uses a recent 14-day timestamp window.
+- Yahoo: `type=waiver` filter is intentionally unsupported in v1.
 
 ## ESPN API Reference
 

@@ -52,12 +52,14 @@ interface ExecuteRequest {
 - `get_standings` — League standings (computed from roster settings: wins, losses, ties, points)
 - `get_roster` — Team roster with player details
 - `get_matchups` — Weekly matchups (paired by `matchup_id`)
+- `get_transactions` — Recent transactions (adds, drops, waivers, trades)
 
 ### Basketball (NBA)
 - `get_league_info` — League settings and members
 - `get_standings` — League standings (computed from roster settings: wins, losses, ties, points)
 - `get_roster` — Team roster with player details
 - `get_matchups` — Weekly matchups (paired by `matchup_id`)
+- `get_transactions` — Recent transactions (adds, drops, waivers, trades)
 
 ## Sleeper API Notes
 

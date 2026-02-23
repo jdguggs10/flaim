@@ -2,6 +2,7 @@
 import type { Env, ToolParams, ExecuteResponse, EspnLeagueResponse, EspnPlayerPoolResponse } from '../../types';
 import { getCredentials } from '../../shared/auth';
 import { espnFetch, handleEspnError, requireCredentials } from '../../shared/espn-api';
+import { fetchEspnTransactionsByWeeks, getCurrentEspnScoringPeriod } from '../../shared/espn-transactions';
 import { extractErrorCode } from '@flaim/worker-shared';
 import {
   getPositionName,
@@ -28,6 +29,7 @@ export const baseballHandlers: Record<string, HandlerFn> = {
   get_matchups: handleGetMatchups,
   get_roster: handleGetRoster,
   get_free_agents: handleGetFreeAgents,
+  get_transactions: handleGetTransactions,
 };
 
 /**
@@ -423,3 +425,49 @@ async function handleGetFreeAgents(
   }
 }
 
+async function handleGetTransactions(
+  env: Env,
+  params: ToolParams,
+  authHeader?: string,
+  correlationId?: string
+): Promise<ExecuteResponse> {
+  const { league_id, season_year, week, count, type } = params;
+
+  try {
+    const credentials = await getCredentials(env, authHeader, correlationId);
+    requireCredentials(credentials, 'get_transactions');
+
+    const currentWeek = await getCurrentEspnScoringPeriod(GAME_ID, league_id, season_year, credentials);
+    const weeks = week
+      ? [Math.max(1, week)]
+      : Array.from(new Set([currentWeek, Math.max(1, currentWeek - 1)]));
+
+    const maxCount = count ?? 25;
+    const rows = await fetchEspnTransactionsByWeeks(GAME_ID, league_id, season_year, credentials, weeks);
+    const filtered = rows
+      .filter((txn) => !type || txn.type === type)
+      .slice(0, maxCount);
+
+    return {
+      success: true,
+      data: {
+        platform: 'espn',
+        sport: params.sport,
+        league_id,
+        season_year,
+        window: {
+          mode: week ? 'explicit_week' : 'recent_two_weeks',
+          weeks
+        },
+        count: filtered.length,
+        transactions: filtered,
+      }
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error occurred',
+      code: extractErrorCode(error)
+    };
+  }
+}

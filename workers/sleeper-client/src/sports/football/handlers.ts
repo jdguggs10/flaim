@@ -1,5 +1,6 @@
 import type { Env, ToolParams, ExecuteResponse, SleeperLeague, SleeperRoster, SleeperMatchup, SleeperLeagueUser } from '../../types';
 import { sleeperFetch, handleSleeperError } from '../../shared/sleeper-api';
+import { fetchSleeperTransactionsByWeeks, getSleeperCurrentWeek } from '../../shared/sleeper-transactions';
 import { extractErrorCode } from '@flaim/worker-shared';
 
 type HandlerFn = (
@@ -14,6 +15,7 @@ export const footballHandlers: Record<string, HandlerFn> = {
   get_standings: handleGetStandings,
   get_roster: handleGetRoster,
   get_matchups: handleGetMatchups,
+  get_transactions: handleGetTransactions,
 };
 
 async function handleGetLeagueInfo(
@@ -291,6 +293,46 @@ async function handleGetMatchups(
         leagueId: league_id,
         week: matchupWeek,
         matchups: pairedMatchups,
+      },
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+      code: extractErrorCode(error),
+    };
+  }
+}
+
+async function handleGetTransactions(
+  _env: Env,
+  params: ToolParams,
+): Promise<ExecuteResponse> {
+  const { league_id, week, count, type } = params;
+
+  try {
+    const currentWeek = week || await getSleeperCurrentWeek('/state/nfl');
+    const weeks = week ? [Math.max(1, week)] : Array.from(new Set([currentWeek, Math.max(1, currentWeek - 1)]));
+    const maxCount = count ?? 25;
+
+    const rows = await fetchSleeperTransactionsByWeeks(league_id, weeks);
+    const filtered = rows
+      .filter((txn) => !type || txn.type === type)
+      .slice(0, maxCount);
+
+    return {
+      success: true,
+      data: {
+        platform: 'sleeper',
+        sport: params.sport,
+        league_id,
+        season_year: params.season_year,
+        window: {
+          mode: week ? 'explicit_week' : 'recent_two_weeks',
+          weeks,
+        },
+        count: filtered.length,
+        transactions: filtered,
       },
     };
   } catch (error) {

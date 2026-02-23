@@ -2,6 +2,7 @@ import type { Env, ToolParams, ExecuteResponse } from '../../types';
 import { getYahooCredentials } from '../../shared/auth';
 import { yahooFetch, handleYahooError, requireCredentials } from '../../shared/yahoo-api';
 import { asArray, getPath, unwrapLeague, unwrapTeam, logStructure } from '../../shared/normalizers';
+import { buildYahooTransactionsPath, normalizeYahooTransactions } from '../../shared/yahoo-transactions';
 import { getPositionFilter } from './mappings';
 import { extractErrorCode } from '@flaim/worker-shared';
 
@@ -18,6 +19,7 @@ export const hockeyHandlers: Record<string, HandlerFn> = {
   get_roster: handleGetRoster,
   get_matchups: handleGetMatchups,
   get_free_agents: handleGetFreeAgents,
+  get_transactions: handleGetTransactions,
 };
 
 async function handleGetLeagueInfo(
@@ -404,6 +406,87 @@ async function handleGetFreeAgents(
         position: position?.toUpperCase() || 'ALL',
         count: freeAgents.length,
         freeAgents
+      }
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+      code: extractErrorCode(error)
+    };
+  }
+}
+
+async function handleGetTransactions(
+  env: Env,
+  params: ToolParams,
+  authHeader?: string,
+  correlationId?: string
+): Promise<ExecuteResponse> {
+  const { league_id, count, type, week } = params;
+
+  if (type === 'waiver') {
+    return {
+      success: false,
+      error: 'Yahoo league-wide transactions do not support type=waiver filtering in v1. Use type=add for now; waiver-specific enrichment is planned as a follow-up phase.',
+      code: 'YAHOO_FILTER_UNSUPPORTED',
+    };
+  }
+
+  try {
+    const credentials = await getYahooCredentials(env, authHeader, correlationId);
+    requireCredentials(credentials, 'get_transactions');
+
+    const path = buildYahooTransactionsPath(league_id, count || 25);
+    const response = await yahooFetch(path, { credentials });
+    if (!response.ok) {
+      handleYahooError(response);
+    }
+
+    const raw = await response.json();
+
+    const cid = correlationId || 'no-cid';
+    const maxCount = count ?? 25;
+    const now = Date.now();
+    const cutoff = now - (14 * 24 * 60 * 60 * 1000);
+    const parsed = normalizeYahooTransactions(raw);
+    const invalidTimestampCount = parsed.filter((txn) => !Number.isFinite(txn.timestamp) || txn.timestamp <= 0).length;
+    if (invalidTimestampCount > 0) {
+      console.warn(
+        `[yahoo-client] ${cid} get_transactions excluded ${invalidTimestampCount} rows with missing/invalid timestamp`,
+      );
+    }
+
+    const normalized = parsed
+      .filter((txn) => txn.timestamp >= cutoff)
+      .filter((txn) => !type || txn.type === type)
+      .slice(0, maxCount);
+
+    const warnings: string[] = [];
+    if (week !== undefined) {
+      warnings.push('Explicit week filtering is not supported for Yahoo transactions in v1; Yahoo always uses a recent timestamp window and ignored week.');
+    }
+    if (invalidTimestampCount > 0) {
+      warnings.push(`${invalidTimestampCount} transaction(s) were excluded because Yahoo did not provide a valid timestamp.`);
+    }
+
+    return {
+      success: true,
+      data: {
+        platform: 'yahoo',
+        sport: params.sport,
+        league_id,
+        season_year: params.season_year,
+        window: {
+          mode: 'recent_two_weeks_timestamp',
+          weeks: [],
+          start_timestamp_ms: cutoff,
+          end_timestamp_ms: now,
+        },
+        warning: warnings.length > 0 ? warnings.join(' ') : undefined,
+        dropped_invalid_timestamp_count: invalidTimestampCount,
+        count: normalized.length,
+        transactions: normalized,
       }
     };
   } catch (error) {

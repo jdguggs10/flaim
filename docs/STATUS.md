@@ -2,7 +2,7 @@
 
 Facts that should stay in sync with the codebase.
 
-Last updated: 2026-02-20
+Last updated: 2026-02-23
 
 ## Current Delivery Phase
 
@@ -28,6 +28,11 @@ All tools are read-only and use explicit parameters (`platform`, `sport`, `leagu
 | `get_matchups` | Current/specified week matchups |
 | `get_standings` | League standings |
 | `get_free_agents` | Available free agents |
+| `get_transactions` | Recent transactions (adds, drops, waivers, trades) |
+
+`get_transactions` semantics in v1 are platform-specific:
+- ESPN and Sleeper support explicit week filtering and default to current+previous week when `week` is omitted.
+- Yahoo ignores explicit `week`, uses a recent 14-day timestamp window, and does not support `type=waiver` filtering in v1.
 
 ## Platform/Sport Support
 
@@ -38,7 +43,7 @@ All tools are read-only and use explicit parameters (`platform`, `sport`, `leagu
 | Basketball | ✅ | ✅ | ✅ | Full read-tool coverage (ESPN mappings unverified — no live credentials yet) |
 | Hockey | ✅ | ✅ | — | Full read-tool coverage (ESPN mappings unverified — no live credentials yet); Sleeper does not support hockey |
 
-Sleeper tool coverage (Phase 1): `get_league_info`, `get_standings`, `get_roster`, `get_matchups` for NFL (football) and NBA (basketball). No `get_free_agents` — Sleeper does not expose a free agent endpoint in Phase 1. Standings are computed from roster settings (no dedicated Sleeper standings endpoint).
+Sleeper tool coverage (Phase 1): `get_league_info`, `get_standings`, `get_roster`, `get_matchups`, `get_transactions` for NFL (football) and NBA (basketball). No `get_free_agents` — Sleeper does not expose a free agent endpoint in Phase 1. Standings are computed from roster settings (no dedicated Sleeper standings endpoint).
 
 ## Worker Inventory
 

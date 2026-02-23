@@ -56,6 +56,7 @@ interface ExecuteRequest {
 - `get_matchups` - Weekly matchups
 - `get_roster` - Team roster with player stats
 - `get_free_agents` - Available free agents
+- `get_transactions` - Recent transactions (adds, drops, waivers, trades)
 
 ### Baseball
 - `get_league_info` - League settings and members
@@ -63,6 +64,11 @@ interface ExecuteRequest {
 - `get_matchups` - Weekly matchups (scoring periods)
 - `get_roster` - Team roster with player stats
 - `get_free_agents` - Available free agents
+- `get_transactions` - Recent transactions (adds, drops, waivers, trades)
+
+`get_transactions` Yahoo-specific behavior in v1:
+- Explicit `week` is ignored and replaced with a recent 14-day timestamp window.
+- `type=waiver` filter is intentionally unsupported in v1 to avoid false-empty results from league-wide Yahoo endpoints.
 
 ## Yahoo API Specifics
 

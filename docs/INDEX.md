@@ -18,6 +18,7 @@ This file is the canonical map for Flaim docs. Update this when document ownersh
 | Release history | `docs/CHANGELOG.md` | Condensed historical release notes. |
 | Backlog | `docs/dev/TODO.md` | Active backlog only. |
 | iOS app research (Foundation Models + MCP) | `docs/dev/2026-02-22-ios-app-research.md` | Technical feasibility, repo options, timeline, strategy. |
+| Transactions API research (ESPN, Yahoo, Sleeper) | `docs/dev/2026-02-23-transactions-api-research.md` | Endpoint details, response shapes, caveats, and implementation notes for a `get_transactions` MCP tool. |
 | Directory submission packets (private) | `../submissions/*` | Kept outside repo; re-verify before submission. |
 | Tool versioning policy (private) | `../submissions/internal-docs/TOOL-VERSIONING.md` | Internal submission/versioning operations guide. |
 | Manual OAuth runbooks (private) | `../submissions/internal-docs/MANUAL-OAUTH-RUNBOOKS.md` | Internal reviewer verification checklists and evidence pointers. |

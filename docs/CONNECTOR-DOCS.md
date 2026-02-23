@@ -55,10 +55,12 @@ All tools take explicit parameters: `platform`, `sport`, `league_id`, `season_ye
 - `get_matchups`
 - `get_league_info`
 - `get_free_agents`
+- `get_transactions`
 - `get_ancient_history`
 
 Supported today: ESPN, Yahoo, and Sleeper.
 Sleeper support is currently football + basketball (Phase 1) and does not include a Sleeper free-agent endpoint.
+`get_transactions` note: ESPN/Sleeper support week filtering; Yahoo ignores explicit `week` and uses a recent 14-day timestamp window. Yahoo `type=waiver` filtering is not supported in v1.
 
 ## Working Examples (Copy/Paste)
 

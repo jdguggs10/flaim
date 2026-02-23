@@ -20,6 +20,7 @@ describe('fantasy-mcp tools', () => {
       'get_matchups',
       'get_roster',
       'get_standings',
+      'get_transactions',
       'get_user_session',
     ]);
   });
@@ -97,6 +98,52 @@ describe('fantasy-mcp tools', () => {
     const payload = JSON.parse(text as string) as { success?: boolean; data?: unknown };
     expect(payload.success).toBe(true);
     expect(payload.data).toEqual({ league: { id: 123, name: 'Test League' } });
+  });
+
+  it('get_transactions routes with clamped count and preserves filters', async () => {
+    const tool = getUnifiedTools().find((t) => t.name === 'get_transactions');
+    expect(tool).toBeTruthy();
+
+    const routeToClientMock = routeToClient as MockedFunction<typeof routeToClient>;
+    routeToClientMock.mockResolvedValue({
+      success: true,
+      data: { count: 1, transactions: [{ transaction_id: 'tx-1', type: 'trade' }] },
+    });
+
+    const env = {} as Env;
+    const args = {
+      platform: 'yahoo',
+      sport: 'football',
+      league_id: '449.l.123',
+      season_year: 2025,
+      type: 'trade',
+      count: 999,
+    };
+
+    const correlationId = 'corr-789';
+    const result = await tool!.handler(args, env, 'Bearer token', correlationId);
+    expect(routeToClient).toHaveBeenCalledWith(
+      env,
+      'get_transactions',
+      {
+        platform: 'yahoo',
+        sport: 'football',
+        league_id: '449.l.123',
+        season_year: 2025,
+        week: undefined,
+        type: 'trade',
+        count: 100,
+      },
+      'Bearer token',
+      correlationId,
+      undefined,
+      undefined
+    );
+
+    const text = result.content?.[0]?.text;
+    const payload = JSON.parse(text as string) as { success?: boolean; data?: { count?: number } };
+    expect(payload.success).toBe(true);
+    expect(payload.data?.count).toBe(1);
   });
 
   it('each tool declares a required scope', () => {

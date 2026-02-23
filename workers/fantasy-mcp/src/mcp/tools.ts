@@ -943,5 +943,53 @@ export function getUnifiedTools(): UnifiedTool[] {
         }, evalRunId, evalTraceId);
       },
     },
+
+    // -------------------------------------------------------------------------
+    // Tool 7: get_transactions
+    // -------------------------------------------------------------------------
+    {
+      name: 'get_transactions',
+      title: 'League Transactions',
+      requiredScope: 'mcp:read',
+      securitySchemes: buildSecuritySchemes('mcp:read'),
+      openaiMeta: { invoking: 'Fetching transactions\u2026', invoked: 'Transactions ready' },
+      description: `Get recent league transactions including adds, drops, waivers, and trades. Week handling is platform-specific: ESPN/Sleeper use week windows (default current + previous week), while Yahoo uses a recent 14-day timestamp window and ignores explicit week. Yahoo type=waiver filtering is not supported in v1. Use values from get_user_session. Read-only and safe to retry. Current date is ${currentDate}.`,
+      inputSchema: {
+        platform: z
+          .enum(['espn', 'yahoo', 'sleeper'])
+          .describe('Fantasy platform (e.g., "espn", "yahoo", "sleeper")'),
+        sport: z
+          .enum(['football', 'baseball', 'basketball', 'hockey'])
+          .describe('Sport type (e.g., "football", "baseball")'),
+        league_id: z.string().describe('League ID (get from get_user_session)'),
+        season_year: z.number().describe('Season start year (e.g., 2025 for MLB 2025, 2024 for NBA 2024-25)'),
+        week: z.number().int().min(1).optional().describe('Week number (optional, must be ≥ 1). ESPN/Sleeper support explicit week; Yahoo ignores week and uses a recent 14-day timestamp window'),
+        type: z
+          .enum(['add', 'drop', 'trade', 'waiver'])
+          .optional()
+          .describe('Optional transaction type filter. Note: Yahoo type=waiver is not supported in v1'),
+        count: z
+          .number()
+          .optional()
+          .describe('Maximum transactions to return (default: 25, max: 100)'),
+      } as ZodShape,
+      handler: async (args, env, authHeader, correlationId, evalRunId, evalTraceId) => {
+        const requestedCount = Number(args.count ?? 25);
+        const params: ToolParams = {
+          platform: args.platform as Platform,
+          sport: args.sport as Sport,
+          league_id: args.league_id as string,
+          season_year: args.season_year as number,
+          week: args.week as number | undefined,
+          type: args.type as 'add' | 'drop' | 'trade' | 'waiver' | undefined,
+          count: Number.isFinite(requestedCount) ? Math.max(1, Math.min(100, requestedCount)) : 25,
+        };
+
+        return withToolLogging(correlationId, 'get_transactions', `${params.platform} ${params.sport} league=${params.league_id} week=${params.week || 'recent'}`, async () => {
+          const result = await routeToClient(env, 'get_transactions', params, authHeader, correlationId, evalRunId, evalTraceId);
+          return routeResultToMcp(result);
+        }, evalRunId, evalTraceId);
+      },
+    },
   ];
 }

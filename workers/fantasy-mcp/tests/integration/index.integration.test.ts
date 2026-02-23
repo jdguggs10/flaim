@@ -101,6 +101,7 @@ function buildEnv(authFetch: (request: Request) => Promise<Response>): Env {
     AUTH_WORKER: { fetch: authFetch } as unknown as Fetcher,
     ESPN: { fetch: vi.fn() } as unknown as Fetcher,
     YAHOO: { fetch: vi.fn() } as unknown as Fetcher,
+    SLEEPER: { fetch: vi.fn() } as unknown as Fetcher,
   } as unknown as Env;
 }
 
@@ -246,5 +247,63 @@ describe('fantasy-mcp gateway integration', () => {
     expect(authFetch).toHaveBeenCalledTimes(1);
     const introspectReq = authFetch.mock.calls[0]?.[0] as Request;
     expect(introspectReq.headers.get('X-Flaim-Expected-Resource')).toBe('https://api.flaim.app/fantasy/mcp');
+  });
+
+  it('routes tools/call through to platform worker and returns shaped MCP response', async () => {
+    const authFetch = vi.fn(async () =>
+      new Response(JSON.stringify({ valid: true, userId: 'user-123', scope: 'mcp:read mcp:write' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    );
+    const espnFetch = vi.fn(async () =>
+      new Response(
+        JSON.stringify({ success: true, data: { leagueId: '123', standings: [] } }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      )
+    );
+    const env = {
+      AUTH_WORKER: { fetch: authFetch } as unknown as Fetcher,
+      ESPN: { fetch: espnFetch } as unknown as Fetcher,
+      YAHOO: { fetch: vi.fn() } as unknown as Fetcher,
+      SLEEPER: { fetch: vi.fn() } as unknown as Fetcher,
+    } as unknown as Env;
+
+    const request = new Request('https://api.flaim.app/mcp', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer test-token',
+        'Content-Type': 'application/json',
+        Accept: 'application/json, text/event-stream',
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 'call-test-1',
+        method: 'tools/call',
+        params: {
+          name: 'get_standings',
+          arguments: { platform: 'espn', sport: 'football', league_id: '123', season_year: 2025 },
+        },
+      }),
+    });
+
+    const response = await app.fetch(request, env, mockExecutionContext());
+    expect(response.status).toBe(200);
+
+    const contentType = response.headers.get('Content-Type') || '';
+    let result: { isError?: boolean; content?: unknown[] };
+    if (contentType.includes('text/event-stream')) {
+      const text = await response.text();
+      const data = text.split(/\r?\n/).filter((l) => l.startsWith('data:')).map((l) => l.slice(5).trim()).join('\n').trim();
+      const parsed = JSON.parse(data) as { result?: { isError?: boolean; content?: unknown[] } };
+      result = parsed.result ?? {};
+    } else {
+      const parsed = await response.json() as { result?: { isError?: boolean; content?: unknown[] } };
+      result = parsed.result ?? {};
+    }
+
+    expect(result.isError).not.toBe(true);
+    expect(Array.isArray(result.content)).toBe(true);
+    expect(espnFetch).toHaveBeenCalledTimes(1);
   });
 });

@@ -58,6 +58,7 @@ interface ExecuteRequest {
 - `get_matchups` - Weekly matchups
 - `get_roster` - Team roster with player stats
 - `get_free_agents` - Available free agents
+- `get_transactions` - Recent transactions (adds, drops, waivers, trades)
 
 ### Baseball
 - `get_league_info` - League settings and members
@@ -65,6 +66,7 @@ interface ExecuteRequest {
 - `get_matchups` - Weekly matchups
 - `get_roster` - Team roster with player stats
 - `get_free_agents` - Available free agents
+- `get_transactions` - Recent transactions (adds, drops, waivers, trades)
 
 ## Mappings Architecture
 
