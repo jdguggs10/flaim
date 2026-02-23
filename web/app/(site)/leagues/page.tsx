@@ -260,6 +260,14 @@ function LeaguesPageContent() {
   const [isDiscoveringYahoo, setIsDiscoveringYahoo] = useState(false);
   const [sleeperLeagues, setSleeperLeagues] = useState<SleeperLeague[]>([]);
   const [deletingSleeperKey, setDeletingSleeperKey] = useState<string | null>(null);
+  const [isSleeperSetupOpen, setIsSleeperSetupOpen] = useState(false);
+  const [isSleeperConnected, setIsSleeperConnected] = useState(false);
+  const [sleeperUsername, setSleeperUsername] = useState<string | null>(null);
+  const [isCheckingSleeper, setIsCheckingSleeper] = useState(true);
+  const [isSleeperDisconnecting, setIsSleeperDisconnecting] = useState(false);
+  const [isDiscoveringSleeper, setIsDiscoveringSleeper] = useState(false);
+  const [sleeperConnectInput, setSleeperConnectInput] = useState('');
+  const [sleeperError, setSleeperError] = useState<string | null>(null);
   const [espnCredsDialogOpen, setEspnCredsDialogOpen] = useState(false);
   const [preferences, setPreferences] = useState<UserPreferencesState>({
     defaultSport: null,
@@ -452,6 +460,21 @@ function LeaguesPageContent() {
     }
   };
 
+  const checkSleeperStatus = async () => {
+    try {
+      const res = await fetch('/api/connect/sleeper/status');
+      if (res.ok) {
+        const data = await res.json() as { connected?: boolean; sleeperUsername?: string };
+        setIsSleeperConnected(data.connected ?? false);
+        setSleeperUsername(data.sleeperUsername || null);
+      }
+    } catch (err) {
+      console.error('Failed to check Sleeper status:', err);
+    } finally {
+      setIsCheckingSleeper(false);
+    }
+  };
+
   const loadYahooLeagues = async () => {
     try {
       const res = await fetch('/api/connect/yahoo/leagues');
@@ -472,6 +495,46 @@ function LeaguesPageContent() {
         setSleeperLeagues(data.leagues || []);
       }
     } catch {}
+  };
+
+  const discoverSleeperLeagues = async (username: string) => {
+    setIsDiscoveringSleeper(true);
+    setSleeperError(null);
+    try {
+      const res = await fetch('/api/connect/sleeper/discover', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username }),
+      });
+      if (!res.ok) {
+        const data = await res.json() as { error?: string };
+        throw new Error(data.error || 'Failed to discover Sleeper leagues');
+      }
+      setIsSleeperConnected(true);
+      setSleeperUsername(username);
+      setSleeperConnectInput('');
+      await loadSleeperLeagues();
+    } catch (err) {
+      setSleeperError(err instanceof Error ? err.message : 'Failed to connect Sleeper');
+    } finally {
+      setIsDiscoveringSleeper(false);
+    }
+  };
+
+  const disconnectSleeper = async () => {
+    setIsSleeperDisconnecting(true);
+    try {
+      const res = await fetch('/api/connect/sleeper/disconnect', { method: 'DELETE' });
+      if (res.ok) {
+        setIsSleeperConnected(false);
+        setSleeperUsername(null);
+        setSleeperLeagues([]);
+      }
+    } catch (err) {
+      console.error('Failed to disconnect Sleeper:', err);
+    } finally {
+      setIsSleeperDisconnecting(false);
+    }
   };
 
   const discoverYahooLeagues = async () => {
@@ -547,8 +610,8 @@ function LeaguesPageContent() {
       checkYahooStatus().then(() => loadYahooLeagues());
     }
 
-    // Load Sleeper leagues
-    loadSleeperLeagues();
+    // Load Sleeper leagues and check connection
+    checkSleeperStatus().then(() => loadSleeperLeagues());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSignedIn]);
 
@@ -1827,6 +1890,112 @@ function LeaguesPageContent() {
                       >
                         Connect Yahoo
                       </Button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="border rounded-lg bg-background">
+              <button
+                type="button"
+                onClick={() => setIsSleeperSetupOpen((prev) => !prev)}
+                aria-expanded={isSleeperSetupOpen}
+                aria-controls="sleeper-setup-content"
+                className="w-full flex cursor-pointer items-center justify-between p-4 font-medium text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">Sleeper</span>
+                  {isSleeperConnected && (
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-success/20 text-success">
+                      Connected
+                    </span>
+                  )}
+                </div>
+                <ChevronDown
+                  className={`h-5 w-5 text-muted-foreground transition-transform ${
+                    isSleeperSetupOpen ? 'rotate-180' : ''
+                  }`}
+                />
+              </button>
+              {isSleeperSetupOpen && (
+                <div id="sleeper-setup-content" className="px-4 pb-4 space-y-3">
+                  {sleeperError && (
+                    <Alert variant="destructive">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>{sleeperError}</AlertDescription>
+                    </Alert>
+                  )}
+                  {isCheckingSleeper ? (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Checking Sleeper connection...
+                    </div>
+                  ) : isSleeperConnected ? (
+                    <div className="space-y-3">
+                      <p className="text-sm text-muted-foreground">
+                        Connected as <strong>{sleeperUsername}</strong>. Refresh to pull latest leagues.
+                      </p>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => sleeperUsername && discoverSleeperLeagues(sleeperUsername)}
+                          disabled={isDiscoveringSleeper || !sleeperUsername}
+                        >
+                          {isDiscoveringSleeper ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Discovering...
+                            </>
+                          ) : (
+                            'Refresh Leagues'
+                          )}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={disconnectSleeper}
+                          disabled={isSleeperDisconnecting}
+                          className="text-destructive hover:text-destructive"
+                        >
+                          {isSleeperDisconnecting ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            'Disconnect'
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <p className="text-sm text-muted-foreground">
+                        Enter your Sleeper username to discover your leagues. No password needed — Sleeper&apos;s API is public.
+                      </p>
+                      <div className="flex gap-2">
+                        <Input
+                          placeholder="Sleeper username"
+                          value={sleeperConnectInput}
+                          onChange={(e) => setSleeperConnectInput(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && sleeperConnectInput.trim() && discoverSleeperLeagues(sleeperConnectInput.trim())}
+                          disabled={isDiscoveringSleeper}
+                          className="flex-1"
+                        />
+                        <Button
+                          size="sm"
+                          onClick={() => discoverSleeperLeagues(sleeperConnectInput.trim())}
+                          disabled={isDiscoveringSleeper || !sleeperConnectInput.trim()}
+                        >
+                          {isDiscoveringSleeper ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Connecting...
+                            </>
+                          ) : (
+                            'Connect'
+                          )}
+                        </Button>
+                      </div>
                     </div>
                   )}
                 </div>
