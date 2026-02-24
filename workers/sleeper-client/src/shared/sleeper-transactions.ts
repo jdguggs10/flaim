@@ -9,11 +9,15 @@ export interface NormalizedTransaction {
   timestamp: number;
   week: number | null;
   team_ids?: string[];
-  players_added?: Array<{ id: string }>;
-  players_dropped?: Array<{ id: string }>;
+  players_added?: Array<{ id: string; name?: string; position?: string; team?: string }>;
+  players_dropped?: Array<{ id: string; name?: string; position?: string; team?: string }>;
   faab_bid?: number | null;
   draft_picks?: unknown[] | null;
 }
+
+export type PlayerResolver = (
+  playerId: string
+) => { name?: string; position?: string; team?: string } | undefined;
 
 interface SleeperTransaction {
   transaction_id?: string;
@@ -45,12 +49,27 @@ function mapStatus(value?: string): 'complete' | 'failed' | 'pending' | 'unknown
   return 'unknown';
 }
 
-function normalizeOne(txn: SleeperTransaction): NormalizedTransaction | null {
+function mapPlayers(
+  playerIds: string[],
+  resolvePlayer?: PlayerResolver,
+): Array<{ id: string; name?: string; position?: string; team?: string }> {
+  return playerIds.map((id) => {
+    const resolved = resolvePlayer?.(id);
+    return {
+      id,
+      name: resolved?.name,
+      position: resolved?.position,
+      team: resolved?.team,
+    };
+  });
+}
+
+function normalizeOne(txn: SleeperTransaction, resolvePlayer?: PlayerResolver): NormalizedTransaction | null {
   const type = mapType(txn.type);
   if (!type) return null;
 
-  const added = Object.keys(txn.adds ?? {}).map((id) => ({ id }));
-  const dropped = Object.keys(txn.drops ?? {}).map((id) => ({ id }));
+  const added = mapPlayers(Object.keys(txn.adds ?? {}), resolvePlayer);
+  const dropped = mapPlayers(Object.keys(txn.drops ?? {}), resolvePlayer);
 
   return {
     transaction_id: String(txn.transaction_id ?? `${txn.type || 'unknown'}-${txn.status_updated || txn.created || 0}`),
@@ -76,6 +95,7 @@ export async function getSleeperCurrentWeek(statePath: '/state/nfl' | '/state/nb
 export async function fetchSleeperTransactionsByWeeks(
   leagueId: string,
   weeks: number[],
+  resolvePlayer?: PlayerResolver,
 ): Promise<NormalizedTransaction[]> {
   const seen = new Set<string>();
   const out: NormalizedTransaction[] = [];
@@ -86,7 +106,7 @@ export async function fetchSleeperTransactionsByWeeks(
     const txns = await res.json() as SleeperTransaction[];
 
     for (const txn of txns ?? []) {
-      const normalized = normalizeOne(txn);
+      const normalized = normalizeOne(txn, resolvePlayer);
       if (!normalized) continue;
       if (seen.has(normalized.transaction_id)) continue;
       seen.add(normalized.transaction_id);

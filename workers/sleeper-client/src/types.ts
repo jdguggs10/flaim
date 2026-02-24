@@ -1,7 +1,7 @@
 import type { BaseEnvWithAuth } from '@flaim/worker-shared';
 
 export interface Env extends BaseEnvWithAuth {
-  // Sleeper API is public — no extra bindings needed beyond auth-worker (for league storage)
+  SLEEPER_PLAYERS_CACHE: KVNamespace;
 }
 
 export type Sport = 'football' | 'basketball';

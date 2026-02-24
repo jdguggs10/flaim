@@ -81,6 +81,15 @@ These are intentionally short and “directory reviewer friendly”.
    - “Who are the best available free agents in my league right now?”
    - “Show best available QBs in my league.”
 
+5. **Transactions**
+   - “Show recent transactions in my default league.”
+   - “Show week 8 transactions for ESPN football league 12345678 in 2025.”
+   - “Show recent Yahoo transactions for league 423.l.193847 in 2025 (adds/drops/trades).”
+
+For Yahoo in v1, avoid requesting `type=waiver` and avoid relying on explicit `week` filtering:
+- Yahoo ignores explicit `week` and always uses a recent 14-day timestamp window.
+- Yahoo `type=waiver` filtering is intentionally unsupported in v1.
+
 ## Troubleshooting
 
 - **“Authentication required” / “token expired”**: re-run the client’s connect flow (Gemini CLI: `/mcp auth flaim`; Claude/ChatGPT: click Connect and approve).

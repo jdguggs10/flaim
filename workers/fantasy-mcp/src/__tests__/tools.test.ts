@@ -146,6 +146,112 @@ describe('fantasy-mcp tools', () => {
     expect(payload.data?.count).toBe(1);
   });
 
+  it('get_free_agents schema accepts sleeper platform', () => {
+    const tool = getUnifiedTools().find((t) => t.name === 'get_free_agents');
+    expect(tool).toBeTruthy();
+
+    const schema = tool!.inputSchema as { platform: { parse: (value: unknown) => unknown } };
+    expect(schema.platform.parse('sleeper')).toBe('sleeper');
+  });
+
+  it('get_free_agents schema still accepts espn and yahoo platforms', () => {
+    const tool = getUnifiedTools().find((t) => t.name === 'get_free_agents');
+    expect(tool).toBeTruthy();
+
+    const schema = tool!.inputSchema as { platform: { parse: (value: unknown) => unknown } };
+    expect(schema.platform.parse('espn')).toBe('espn');
+    expect(schema.platform.parse('yahoo')).toBe('yahoo');
+  });
+
+  it('get_free_agents routes sleeper params to client', async () => {
+    const tool = getUnifiedTools().find((t) => t.name === 'get_free_agents');
+    expect(tool).toBeTruthy();
+
+    const routeToClientMock = routeToClient as MockedFunction<typeof routeToClient>;
+    routeToClientMock.mockResolvedValue({
+      success: true,
+      data: { count: 0, players: [] },
+    });
+
+    const env = {} as Env;
+    const args = {
+      platform: 'sleeper',
+      sport: 'football',
+      league_id: '123',
+      season_year: 2025,
+      count: 10,
+    };
+
+    const correlationId = 'corr-free-agents';
+    const result = await tool!.handler(args, env, 'Bearer token', correlationId);
+    expect(routeToClient).toHaveBeenCalledWith(
+      env,
+      'get_free_agents',
+      {
+        platform: 'sleeper',
+        sport: 'football',
+        league_id: '123',
+        season_year: 2025,
+        position: undefined,
+        count: 10,
+      },
+      'Bearer token',
+      correlationId,
+      undefined,
+      undefined
+    );
+
+    const text = result.content?.[0]?.text;
+    const payload = JSON.parse(text as string) as { success?: boolean; data?: { count?: number } };
+    expect(payload.success).toBe(true);
+    expect(payload.data?.count).toBe(0);
+  });
+
+  it.each(['espn', 'yahoo'] as const)('get_free_agents routing remains unchanged for %s', async (platform) => {
+    const tool = getUnifiedTools().find((t) => t.name === 'get_free_agents');
+    expect(tool).toBeTruthy();
+
+    const routeToClientMock = routeToClient as MockedFunction<typeof routeToClient>;
+    routeToClientMock.mockResolvedValue({
+      success: true,
+      data: { count: 2, players: [{ id: 'p1' }, { id: 'p2' }] },
+    });
+
+    const env = {} as Env;
+    const args = {
+      platform,
+      sport: 'football',
+      league_id: '123',
+      season_year: 2025,
+      position: 'QB',
+      count: 15,
+    };
+
+    const correlationId = `corr-free-agents-${platform}`;
+    const result = await tool!.handler(args, env, 'Bearer token', correlationId);
+    expect(routeToClient).toHaveBeenCalledWith(
+      env,
+      'get_free_agents',
+      {
+        platform,
+        sport: 'football',
+        league_id: '123',
+        season_year: 2025,
+        position: 'QB',
+        count: 15,
+      },
+      'Bearer token',
+      correlationId,
+      undefined,
+      undefined
+    );
+
+    const text = result.content?.[0]?.text;
+    const payload = JSON.parse(text as string) as { success?: boolean; data?: { count?: number } };
+    expect(payload.success).toBe(true);
+    expect(payload.data?.count).toBe(2);
+  });
+
   it('each tool declares a required scope', () => {
     const tools = getUnifiedTools();
     for (const tool of tools) {

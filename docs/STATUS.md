@@ -2,7 +2,7 @@
 
 Facts that should stay in sync with the codebase.
 
-Last updated: 2026-02-23
+Last updated: 2026-02-24
 
 ## Current Delivery Phase
 
@@ -59,7 +59,7 @@ Sleeper tool coverage (Phase 1): `get_league_info`, `get_standings`, `get_roster
 - Structured eval logs implemented across all 5 workers.
 - Artifact layout is trace-scoped in `flaim-eval`.
 - Acceptance tooling exists (`npm run accept`, `npm run presubmit`).
-- Latest full eval run (`2026-02-19T13-39-48Z`) completed `9/9`, `0` errored.
+- Latest full eval run (`2026-02-24T00-56-48Z`) completed `17/17`, `0` errored.
 - Latest acceptance + presubmit for that run are `PASS`.
 - All MCP tools have complete annotation set (`readOnlyHint`, `openWorldHint`, `destructiveHint`).
 - All MCP tools have OpenAI `toolInvocation` status metadata (`invoking`/`invoked` messages).

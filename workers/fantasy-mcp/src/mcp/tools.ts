@@ -911,8 +911,8 @@ export function getUnifiedTools(): UnifiedTool[] {
       description: `Get available free agents, optionally filtered by position. Sorted by ownership percentage. Requires authentication. Use values from get_user_session. Read-only and safe to retry. Current date is ${currentDate}.`,
       inputSchema: {
         platform: z
-          .enum(['espn', 'yahoo'])
-          .describe('Fantasy platform — "espn" or "yahoo" (Sleeper does not support free agents)'),
+          .enum(['espn', 'yahoo', 'sleeper'])
+          .describe('Fantasy platform — "espn", "yahoo", or "sleeper"'),
         sport: z
           .enum(['football', 'baseball', 'basketball', 'hockey'])
           .describe('Sport type (e.g., "football", "baseball")'),
