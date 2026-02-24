@@ -9,6 +9,7 @@ Automated tests currently focus on the Workers layer:
 - **fantasy-mcp**: tool routing and minimal tool behavior
 - **espn-client**: type utilities
 - **yahoo-client**: response normalizers
+- **sleeper-client**: sport handlers, KV player cache, free-agent computation, transactions enrichment, routing
 
 The **web app** and **extension** do not have automated tests right now. Manual testing is acceptable until usage grows.
 
@@ -21,6 +22,7 @@ cd workers/auth-worker && npm test
 cd workers/fantasy-mcp && npm test
 cd workers/espn-client && npm test
 cd workers/yahoo-client && npm test
+cd workers/sleeper-client && npm test
 ```
 
 Type checks (where configured):
@@ -29,6 +31,7 @@ Type checks (where configured):
 cd workers/auth-worker && npm run type-check
 cd workers/fantasy-mcp && npm run type-check
 cd workers/espn-client && npm run type-check
+cd workers/sleeper-client && npm run type-check
 ```
 
 ## Sleeper Smoke Test Fixtures
@@ -50,6 +53,7 @@ Quick local checks:
 ```bash
 curl -s http://localhost:8792/health | jq
 
+# Phase 1 tools
 curl -s -X POST http://localhost:8792/execute \
   -H 'content-type: application/json' \
   -d '{"tool":"get_league_info","params":{"sport":"football","league_id":"1180208192901685248","season_year":2025}}' | jq
@@ -57,7 +61,22 @@ curl -s -X POST http://localhost:8792/execute \
 curl -s -X POST http://localhost:8792/execute \
   -H 'content-type: application/json' \
   -d '{"tool":"get_league_info","params":{"sport":"basketball","league_id":"1284871999146979328","season_year":2025}}' | jq
+
+# Phase 2 tools (free agents + enriched transactions)
+curl -s -X POST http://localhost:8792/execute \
+  -H 'content-type: application/json' \
+  -d '{"tool":"get_free_agents","params":{"sport":"football","league_id":"1180208192901685248","season_year":2025,"count":10}}' | jq
+
+curl -s -X POST http://localhost:8792/execute \
+  -H 'content-type: application/json' \
+  -d '{"tool":"get_free_agents","params":{"sport":"basketball","league_id":"1284871999146979328","season_year":2025,"count":10}}' | jq
+
+curl -s -X POST http://localhost:8792/execute \
+  -H 'content-type: application/json' \
+  -d '{"tool":"get_transactions","params":{"sport":"football","league_id":"1180208192901685248","season_year":2025}}' | jq
 ```
+
+On a second consecutive free-agents call, the KV cache should be warm and no `/players/nfl` upstream request should appear in worker logs.
 
 Note: public leagues can be deleted or made private. Re-validate IDs periodically.
 

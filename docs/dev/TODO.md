@@ -16,7 +16,7 @@ Use this as the active backlog only. For overall phase status, see `docs/dev/CUR
 - ESPN `mTransactions2` enrichment for richer bid/transaction detail.
 - Yahoo pending waiver/pending trade team fan-out.
 - Sleeper player-name enrichment (aligned with Sleeper free-agents work).
-3. Add free agent support for Sleeper (phase 2 in /plans)
+3. ~~Add free agent support for Sleeper~~ — **Done** (Phase 2 shipped 2026-02-24)
 4. Add stat enrichment for Sleeper (phase 3 in /plans)
 
 ## Maintenance / Reliability

@@ -56,6 +56,13 @@ This is the canonical execution-status page for current work. It replaces overla
 - Presubmit passed: `npm run presubmit -- 2026-02-10T19-27-44Z` (`RESULT: PASS`).
 - OpenAI organization verification initiated (status: in review).
 
+8. Sleeper Phase 2 (2026-02-24)
+- `get_free_agents` added for Sleeper NFL and NBA; routed through unified gateway.
+- KV-backed player index cache (`SLEEPER_PLAYERS_CACHE`) with 24h TTL; falls back to in-memory when KV unavailable.
+- Sleeper transactions now enriched with player name/position/team from cached index.
+- KV namespaces created and wired into all sleeper-client wrangler configs (prod + preview).
+- All sleeper-client and targeted fantasy-mcp tests pass (43 + 47 tests); type-check clean.
+
 7. Transactions tool rollout (2026-02-23)
 - `get_transactions` shipped in unified gateway (`fantasy-mcp`) and ESPN/Yahoo/Sleeper clients.
 - Tool contract and docs updated for v1 behavior:

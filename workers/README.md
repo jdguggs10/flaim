@@ -151,6 +151,7 @@ cd workers/auth-worker && wrangler deploy --env preview   # or --env prod
 cd workers/fantasy-mcp && npm run deploy:preview          # or npm run deploy:prod
 cd workers/espn-client && npm run deploy:preview          # or npm run deploy:prod
 cd workers/yahoo-client && npm run deploy:preview         # or npm run deploy:prod
+cd workers/sleeper-client && npm run deploy:preview       # or npm run deploy:prod
 ```
 
 Workers use custom routes via `api.flaim.app`:
