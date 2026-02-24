@@ -80,8 +80,8 @@ This is the canonical execution-status page for current work. It replaces overla
 2. **[READY NEXT]** Submit to OpenAI Apps Directory. Remaining external step is setting `OPENAI_APPS_VERIFICATION_TOKEN` when OpenAI issues it during submission. See `../submissions/openai-app-submission.md`.
 3. Decide Anthropic submission strategy (submit now vs delay).
 4. Keep preflight evidence current if any auth/tool changes land.
-4. ~~Submit to MCP Registry~~ — **Done** (published as `app.flaim/mcp` on 2026-02-10).
-5. ~~Gemini CLI extension packaging~~ — **Done** (`gemini-extension.json` committed 2026-02-10; auto-indexes within ~1 week).
+5. ~~Submit to MCP Registry~~ — **Done** (published as `app.flaim/mcp` on 2026-02-10).
+6. ~~Gemini CLI extension packaging~~ — **Done** (`gemini-extension.json` committed 2026-02-10; auto-indexes within ~1 week).
 6. ~~Submit to community directories~~ — **Done** (2026-02-10): Glama (pending review), MCP.so (pending review), awesome-mcp-servers (PR #1918 open), PulseMCP (auto-indexing from official registry).
 
 7. Basketball & Hockey buildout (2026-02-10, shipped 2026-02-13)

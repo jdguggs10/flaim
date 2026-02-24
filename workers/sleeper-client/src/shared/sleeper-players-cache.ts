@@ -106,7 +106,13 @@ export async function getSleeperPlayersIndex(
   const cachedInMemory = inMemoryPlayersCache.get(cacheKey);
   let cached = cachedInMemory && cachedInMemory.expiresAt > now ? cachedInMemory.value : null;
 
-  if (!cached) cached = await env.SLEEPER_PLAYERS_CACHE.get(cacheKey);
+  if (!cached) {
+    try {
+      cached = await env.SLEEPER_PLAYERS_CACHE.get(cacheKey);
+    } catch {
+      // KV read failed — treat as cache miss and fall through to Sleeper fetch.
+    }
+  }
 
   if (cached) {
     try {
@@ -129,9 +135,13 @@ export async function getSleeperPlayersIndex(
   const payload = await response.json();
   const parsedPlayers = normalizePlayers(payload) ?? [];
   const serialized = JSON.stringify(parsedPlayers);
-  await env.SLEEPER_PLAYERS_CACHE.put(cacheKey, serialized, {
-    expirationTtl: PLAYERS_CACHE_TTL_SECONDS,
-  });
+  try {
+    await env.SLEEPER_PLAYERS_CACHE.put(cacheKey, serialized, {
+      expirationTtl: PLAYERS_CACHE_TTL_SECONDS,
+    });
+  } catch (error) {
+    console.error('[sleeper-players-cache] KV write failed; serving from in-memory only:', error);
+  }
   inMemoryPlayersCache.set(cacheKey, {
     value: serialized,
     expiresAt: now + PLAYERS_CACHE_TTL_SECONDS * 1000,

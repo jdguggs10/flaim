@@ -336,8 +336,8 @@ async function handleGetTransactions(
           team: player.team,
         };
       };
-    } catch {
-      // Graceful degradation: transactions still return IDs when metadata lookup fails.
+    } catch (error) {
+      console.error('[handleGetTransactions] Failed to get player index for enrichment:', error);
       resolvePlayer = undefined;
     }
 

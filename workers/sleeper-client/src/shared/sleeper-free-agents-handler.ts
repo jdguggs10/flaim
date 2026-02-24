@@ -35,7 +35,8 @@ export function createSleeperGetFreeAgentsHandler(cacheSport: Sport) {
       try {
         const playersIndex = await getSleeperPlayersIndex(env, cacheSport);
         freeAgents = buildSleeperFreeAgents(playersIndex, rostered, params.position, requestedCount);
-      } catch {
+      } catch (error) {
+        console.error('[handleGetFreeAgents] Failed to get player index:', error);
         warning = 'PLAYER_ENRICHMENT_UNAVAILABLE: free-agent player index unavailable; returning empty list';
       }
 
