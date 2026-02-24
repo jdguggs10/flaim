@@ -1,0 +1,40 @@
+import type { SleeperPlayerRecord } from './sleeper-players-cache';
+
+export interface SleeperFreeAgent {
+  id: string;
+  name: string;
+  position?: string;
+  team?: string;
+}
+
+function clampCount(count: number): number {
+  return Math.max(1, Math.min(100, Math.trunc(count)));
+}
+
+export function buildSleeperFreeAgents(
+  players: Map<string, SleeperPlayerRecord>,
+  rosteredPlayerIds: Set<string>,
+  position?: string,
+  count = 25,
+): SleeperFreeAgent[] {
+  const normalizedPosition = position?.trim().toUpperCase();
+  const maxCount = clampCount(count);
+
+  const freeAgents = Array.from(players.values())
+    .filter((player) => player.active)
+    .filter((player) => !rosteredPlayerIds.has(player.player_id))
+    .filter((player) => !normalizedPosition || player.position?.toUpperCase() === normalizedPosition)
+    .sort((a, b) => {
+      const nameCmp = a.full_name.localeCompare(b.full_name);
+      if (nameCmp !== 0) return nameCmp;
+      return a.player_id.localeCompare(b.player_id);
+    })
+    .slice(0, maxCount);
+
+  return freeAgents.map((player) => ({
+    id: player.player_id,
+    name: player.full_name,
+    position: player.position,
+    team: player.team,
+  }));
+}

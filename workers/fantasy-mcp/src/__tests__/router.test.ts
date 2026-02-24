@@ -93,5 +93,45 @@ describe('fantasy-mcp router', () => {
         code: 'PLATFORM_NOT_SUPPORTED',
       });
     });
+
+    it('routes sleeper get_free_agents through SLEEPER binding', async () => {
+      const params: ToolParams = {
+        platform: 'sleeper',
+        sport: 'football',
+        league_id: 'league-77',
+        season_year: 2025,
+        count: 10,
+      };
+      const responseBody: RouteResult = {
+        success: true,
+        data: {
+          platform: 'sleeper',
+          league_id: 'league-77',
+          count: 1,
+          players: [{ id: 'p2' }],
+        },
+      };
+
+      const env = {
+        SLEEPER: {
+          fetch: async (request: Request) => {
+            expect(request.url).toBe('https://internal/execute');
+            expect(await request.json()).toEqual({
+              tool: 'get_free_agents',
+              params,
+              authHeader: undefined,
+            });
+            return new Response(JSON.stringify(responseBody), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          },
+        },
+      } as unknown as Env;
+
+      const result = await routeToClient(env, 'get_free_agents', params);
+
+      expect(result).toEqual(responseBody);
+    });
   });
 });

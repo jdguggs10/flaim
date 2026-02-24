@@ -56,5 +56,28 @@ describe('sleeper-transactions', () => {
     expect(rows[0].transaction_id).toBe('b1');
     expect(rows[0].type).toBe('waiver');
     expect(rows[0].faab_bid).toBe(17);
+    expect(rows[0].players_added).toEqual([{ id: '123', name: undefined, position: undefined, team: undefined }]);
+  });
+
+  it('enriches player adds/drops when resolver provides metadata', async () => {
+    mockFetch.mockResolvedValueOnce(jsonResponse([
+      {
+        transaction_id: 'x1',
+        type: 'waiver',
+        status: 'complete',
+        status_updated: 200,
+        leg: 9,
+        adds: { '123': 3 },
+        drops: { '456': 3 },
+      },
+    ]));
+
+    const rows = await fetchSleeperTransactionsByWeeks('league', [9], (playerId) => {
+      if (playerId === '123') return { name: 'Josh Allen', position: 'QB', team: 'BUF' };
+      return undefined;
+    });
+
+    expect(rows[0].players_added).toEqual([{ id: '123', name: 'Josh Allen', position: 'QB', team: 'BUF' }]);
+    expect(rows[0].players_dropped).toEqual([{ id: '456', name: undefined, position: undefined, team: undefined }]);
   });
 });

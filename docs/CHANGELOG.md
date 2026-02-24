@@ -9,6 +9,10 @@ Follow Keep a Changelog; SemVer applies.
 - Sleeper username-based onboarding with historical season discovery (up to 5 years)
 - New `sleeper-client` Cloudflare Worker
 - `sleeper_connections` and `sleeper_leagues` database tables
+- **Sleeper Phase 2**: `get_free_agents` for Sleeper NFL and NBA through unified gateway
+- **Sleeper Phase 2**: KV-backed player index cache (`SLEEPER_PLAYERS_CACHE`) with 24h TTL and in-memory fallback
+- **Sleeper Phase 2**: Sleeper transactions now enriched with player name, position, and team from KV cache
+- **Sleeper Phase 2**: `get_free_agents` gateway schema updated to accept `platform: "sleeper"` alongside ESPN and Yahoo
 
 ### MCP
 - **Added**: OpenAI `toolInvocation` status messages on all 7 MCP tools — ChatGPT now shows contextual status text (e.g., "Fetching standings…") instead of generic "Called tool" while tools run.

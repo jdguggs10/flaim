@@ -1,5 +1,8 @@
 {
   "name": "sleeper-client-test",
   "main": "./src/index.ts",
-  "compatibility_date": "2024-12-01"
+  "compatibility_date": "2024-12-01",
+  "kv_namespaces": [
+    { "binding": "SLEEPER_PLAYERS_CACHE", "id": "81df4492a52c456c9f6362a5cc5a5816", "preview_id": "81df4492a52c456c9f6362a5cc5a5816" }
+  ]
 }

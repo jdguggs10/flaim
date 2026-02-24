@@ -1,14 +1,15 @@
 # iOS App Research: On-Device Foundation Models + Flaim MCP
 
 **Date:** 2026-02-22
+**Last verified:** 2026-02-24
 **Status:** Research complete, not started
-**Decision:** Worth pursuing as a fun/learning project with App Store distribution upside. Not a priority over directory submissions or draft-season marketing.
+**Decision (updated):** Proceed only with a timeboxed spike. Do not commit to MVP until the spike passes explicit go/no-go criteria.
 
 ---
 
 ## Summary
 
-Investigated building a native iOS app that wraps Flaim's MCP gateway using Apple's on-device Foundation Models framework (~3B parameter LLM with tool calling). All key technical claims from the initial deep-research report were independently verified. The approach is technically feasible but has significant constraints that shape the product design.
+Investigated building a native iOS app that wraps Flaim's MCP gateway using Apple's on-device Foundation Models framework (~3B parameter LLM with tool calling). The approach is technically feasible but has significant constraints that shape the product design.
 
 **Primary motivation:** App Store distribution as a discoverability channel (not AI superiority over Claude/ChatGPT).
 
@@ -45,6 +46,12 @@ Investigated building a native iOS app that wraps Flaim's MCP gateway using Appl
 - ~7 GB storage required for on-device models
 - Auto-enabled since iOS 18.3 (opt-out, not opt-in)
 - Available in 16+ languages; not available in China mainland
+
+### Corrections From Independent Verification
+
+- The App Store fantasy + AI category is **not** greenfield. There is existing competition (for example, WalterPicks and RotoBot).
+- Repository stars and "last pushed" metrics are point-in-time snapshots and should not be used as durable decision inputs.
+- The strongest durable technical constraints remain token budget, device/region availability, and solo-maintenance cost.
 
 ---
 
@@ -87,7 +94,7 @@ The motivation is **discoverability**, not on-device AI superiority.
 App Store advantages:
 - You control the submission
 - Search is powerful ("fantasy football AI", "fantasy assistant")
-- The "AI-powered fantasy copilot" category is novel — no direct competition
+- Direct distribution channel independent of connector directory approval timelines
 - Ratings/reviews create a flywheel
 - **Draft season (Aug-Sep)** is when fantasy app downloads spike massively
 
@@ -100,7 +107,7 @@ The app doesn't need to be better than Claude/ChatGPT. It needs to:
 
 ## AnyLanguageModel: Fallback Strategy
 
-[AnyLanguageModel](https://github.com/mattt/AnyLanguageModel) (779 stars, MIT, by Matt Thompson / Hugging Face) provides an API-compatible drop-in replacement for Foundation Models with support for multiple backends:
+[AnyLanguageModel](https://github.com/mattt/AnyLanguageModel) (MIT, by Matt Thompson) provides an API-compatible drop-in replacement for Foundation Models with support for multiple backends:
 
 - **On-device:** Foundation Models (A17 Pro+), Core ML, MLX, llama.cpp
 - **Cloud:** OpenAI, Anthropic, Gemini, Hugging Face, Ollama
@@ -115,7 +122,7 @@ Same `@Generable`, `Tool` protocol, and session API. Write code once, swap backe
 
 ### Primary: Fork [Dimillian/FoundationChat](https://github.com/Dimillian/FoundationChat)
 
-- **313 stars**, MIT, by Thomas Ricouard (creator of IceCubesApp)
+- MIT, by Thomas Ricouard (creator of IceCubesApp)
 - Clean SwiftUI chat with streaming, multi-conversation, SwiftData persistence
 - **Already has tool calling** via `Tool` protocol with working example
 - Small enough to understand in an evening, clean enough to fork confidently
@@ -123,25 +130,25 @@ Same `@Generable`, `Tool` protocol, and session API. Write code once, swap backe
 
 ### Reference: [rudrankriyam/Foundation-Models-Framework-Example](https://github.com/rudrankriyam/Foundation-Models-Framework-Example)
 
-- **928 stars**, MIT, last pushed 2026-02-17
+- MIT
 - 9 tool implementations, RAG, voice, multi-language
 - Best reference for Foundation Models patterns (not for forking — too large/demo-oriented)
 
 ### Alternative: [CherryHQ/hanlin-ai](https://github.com/CherryHQ/hanlin-ai)
 
-- **204 stars**, MIT, last pushed 2026-01-24
+- MIT
 - 20+ LLM providers, tool calling, streaming, RAG, voice, vision
 - Production-grade but large codebase — strip down rather than build up
 
-### Other notable repos:
+### Other notable repos (reference only):
 
-| Repo | Stars | Notes |
-|------|-------|-------|
-| [mattt/chat-ui-swift](https://github.com/mattt/chat-ui-swift) | 68 | Designed for AnyLanguageModel; currently macOS only |
-| [mi12labs/SwiftAI](https://github.com/mi12labs/SwiftAI) | 317 | Library (not app); best AI orchestration layer |
-| [exyte/Chat](https://github.com/exyte/Chat) | 1,682 | Best pure chat UI framework; no AI integration |
-| [indragiek/Context](https://github.com/indragiek/Context) | 777 | MCP debugging tool; extractable MCP client code |
-| [jamesrochabrun/MCPSwiftWrapper](https://github.com/jamesrochabrun/MCPSwiftWrapper) | 35 | Only repo combining MCP + chat UI; basic/demo quality |
+| Repo | Notes |
+|------|-------|
+| [mattt/chat-ui-swift](https://github.com/mattt/chat-ui-swift) | Designed for AnyLanguageModel; currently macOS only |
+| [mi12labs/SwiftAI](https://github.com/mi12labs/SwiftAI) | Library (not app); AI orchestration layer |
+| [exyte/Chat](https://github.com/exyte/Chat) | Pure chat UI framework; no AI integration |
+| [indragiek/Context](https://github.com/indragiek/Context) | MCP debugging tool; extractable MCP client code |
+| [jamesrochabrun/MCPSwiftWrapper](https://github.com/jamesrochabrun/MCPSwiftWrapper) | MCP + chat UI demo-style wrapper |
 
 ---
 
@@ -149,8 +156,9 @@ Same `@Generable`, `Tool` protocol, and session API. Write code once, swap backe
 
 | Phase | When | What |
 |-------|------|------|
-| Spike | Mar-Apr 2026 | Fork FoundationChat, get it talking to Flaim MCP gateway. Test 4096-token limit viability. |
-| MVP | May-Jun 2026 | Auth integration, 7 tool wrappers, local caching, polish |
+| Spike | Mar 2026 (4 weeks) | Fork FoundationChat, connect Flaim MCP gateway, validate single-turn UX and token budget constraints on real prompts. |
+| Go/No-Go Gate | End of Mar 2026 | Proceed only if quality bar is met and scope does not disrupt directory + marketing priorities. |
+| MVP | Apr-May 2026 (only if Go) | Auth integration, 7 tool wrappers, local caching, polish |
 | TestFlight | Jun-Jul 2026 | Family-and-friends beta |
 | App Store | Late Jul 2026 | Ship before fantasy football draft season (Aug-Sep) |
 
@@ -167,6 +175,7 @@ Same `@Generable`, `Tool` protocol, and session API. Write code once, swap backe
 | Maintenance burden for solo dev | Medium | Keep scope minimal; use standard Apple stack (SwiftUI + SwiftData) |
 | iOS dev learning curve (new stack) | Medium | Fork a working repo; learn by modifying, not from scratch |
 | Crowds out draft-season marketing | High | Treat as secondary; spike first, commit only if fun |
+| Existing AI fantasy app competition | Medium | Position Flaim on verifiable league-context accuracy + MCP ecosystem interoperability |
 | App Store review rejection | Low | Read-only, no user-generated content, standard auth patterns |
 
 ---
@@ -176,10 +185,11 @@ Same `@Generable`, `Tool` protocol, and session API. Write code once, swap backe
 Answer these after the spike:
 1. Is the 4096-token limit workable for simple fantasy queries?
 2. Is SwiftUI/iOS development fun or a chore?
-3. Can you realistically ship by late July without sacrificing marketing work?
-4. Does the on-device experience feel good enough to be worth the App Store listing?
+3. Can you hit useful output quality in a single-turn workflow (start/sit, waivers, matchup summary)?
+4. Can you realistically ship by late July without sacrificing marketing work?
+5. Does the experience differentiate enough from existing AI fantasy apps to win installs?
 
-If 3/4 are "yes," proceed to MVP. Otherwise, shelve and focus on directory submissions + Reddit/Threads ramp.
+If 4/5 are "yes," proceed to MVP. Otherwise, shelve and focus on directory submissions + Reddit/Threads ramp.
 
 ---
 
@@ -190,7 +200,10 @@ If 3/4 are "yes," proceed to MVP. Otherwise, shelve and focus on directory submi
 - [WWDC25: Meet the Foundation Models framework](https://developer.apple.com/videos/play/wwdc2025/286/)
 - [WWDC25: Deep dive into Foundation Models](https://developer.apple.com/videos/play/wwdc2025/301/)
 - [Apple ML Research: 2025 Foundation Models updates](https://machinelearning.apple.com/research/apple-foundation-models-2025-updates)
+- [How to get Apple Intelligence (requirements, languages, regions)](https://support.apple.com/en-us/121115)
 - [MCP Swift SDK](https://github.com/modelcontextprotocol/swift-sdk)
 - [AnyLanguageModel](https://github.com/mattt/AnyLanguageModel)
 - [MCP Specification (Streamable HTTP)](https://modelcontextprotocol.io)
+- [WalterPicks – AI Insights (App Store)](https://apps.apple.com/us/app/walterpicks-ai-insights/id1521523140)
+- [RotoBot - AI Fantasy Advice (App Store)](https://apps.apple.com/us/app/annual-subscription/id6502530085)
 - Deep research report: `/Users/ggugger/Code/deep-research-report.md`

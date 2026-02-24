@@ -16,6 +16,9 @@
     "prod": {
       "name": "sleeper-client",
       "workers_dev": true,
+      "kv_namespaces": [
+        { "binding": "SLEEPER_PLAYERS_CACHE", "id": "b34c0c797b7b4e1285458361694b8d5e", "preview_id": "81df4492a52c456c9f6362a5cc5a5816" }
+      ],
       "services": [
         { "binding": "AUTH_WORKER", "service": "auth-worker" }
       ],
@@ -28,6 +31,9 @@
     "preview": {
       "name": "sleeper-client-preview",
       "workers_dev": true,
+      "kv_namespaces": [
+        { "binding": "SLEEPER_PLAYERS_CACHE", "id": "81df4492a52c456c9f6362a5cc5a5816", "preview_id": "81df4492a52c456c9f6362a5cc5a5816" }
+      ],
       "services": [
         { "binding": "AUTH_WORKER", "service": "auth-worker-preview" }
       ],
@@ -40,6 +46,9 @@
     "dev": {
       "name": "sleeper-client-dev",
       "workers_dev": true,
+      "kv_namespaces": [
+        { "binding": "SLEEPER_PLAYERS_CACHE", "id": "81df4492a52c456c9f6362a5cc5a5816", "preview_id": "81df4492a52c456c9f6362a5cc5a5816" }
+      ],
       "services": [
         { "binding": "AUTH_WORKER", "service": "auth-worker-dev" }
       ],

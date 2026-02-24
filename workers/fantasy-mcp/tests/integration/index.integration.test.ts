@@ -33,6 +33,13 @@ async function parseJsonRpcResponse(response: Response): Promise<{
   result?: {
     tools?: Array<{
       name: string;
+      inputSchema?: {
+        properties?: {
+          platform?: {
+            enum?: string[];
+          };
+        };
+      };
       annotations?: {
         readOnlyHint?: boolean;
         openWorldHint?: boolean;
@@ -50,6 +57,13 @@ async function parseJsonRpcResponse(response: Response): Promise<{
       result?: {
         tools?: Array<{
           name: string;
+          inputSchema?: {
+            properties?: {
+              platform?: {
+                enum?: string[];
+              };
+            };
+          };
           annotations?: {
             readOnlyHint?: boolean;
             openWorldHint?: boolean;
@@ -74,6 +88,13 @@ async function parseJsonRpcResponse(response: Response): Promise<{
       result?: {
         tools?: Array<{
           name: string;
+          inputSchema?: {
+            properties?: {
+              platform?: {
+                enum?: string[];
+              };
+            };
+          };
           annotations?: {
             readOnlyHint?: boolean;
             openWorldHint?: boolean;
@@ -188,6 +209,9 @@ describe('fantasy-mcp gateway integration', () => {
     const payload = await parseJsonRpcResponse(response);
     const tools = payload.result?.tools;
     expect(Array.isArray(tools)).toBe(true);
+    const freeAgentsTool = tools?.find((tool) => tool.name === 'get_free_agents');
+    expect(freeAgentsTool).toBeDefined();
+    expect(freeAgentsTool?.inputSchema?.properties?.platform?.enum).toContain('sleeper');
 
     const scopeByTool = new Map(getUnifiedTools().map((tool) => [tool.name, tool.requiredScope]));
     for (const tool of tools || []) {
@@ -305,5 +329,75 @@ describe('fantasy-mcp gateway integration', () => {
     expect(result.isError).not.toBe(true);
     expect(Array.isArray(result.content)).toBe(true);
     expect(espnFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('routes get_free_agents tools/call to sleeper worker when platform is sleeper', async () => {
+    const authFetch = vi.fn(async () =>
+      new Response(JSON.stringify({ valid: true, userId: 'user-123', scope: 'mcp:read mcp:write' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    );
+    const sleeperFetch = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          success: true,
+          data: {
+            platform: 'sleeper',
+            sport: 'football',
+            league_id: 'league-42',
+            season_year: 2025,
+            count: 1,
+            players: [{ id: 'p9', name: 'Sleeper FA', position: 'QB', team: 'BUF' }],
+          },
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      )
+    );
+    const env = buildEnv(authFetch);
+    env.SLEEPER = { fetch: sleeperFetch } as unknown as Fetcher;
+
+    const request = new Request('https://api.flaim.app/mcp', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer test-token',
+        'Content-Type': 'application/json',
+        Accept: 'application/json, text/event-stream',
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 'call-test-sleeper-free-agents',
+        method: 'tools/call',
+        params: {
+          name: 'get_free_agents',
+          arguments: {
+            platform: 'sleeper',
+            sport: 'football',
+            league_id: 'league-42',
+            season_year: 2025,
+            count: 10,
+          },
+        },
+      }),
+    });
+
+    const response = await app.fetch(request, env, mockExecutionContext());
+    expect(response.status).toBe(200);
+    const contentType = response.headers.get('Content-Type') || '';
+    let result: { isError?: boolean; content?: Array<{ text?: string }> };
+    if (contentType.includes('text/event-stream')) {
+      const text = await response.text();
+      const data = text.split(/\r?\n/).filter((line) => line.startsWith('data:')).map((line) => line.slice(5).trim()).join('\n').trim();
+      const parsed = JSON.parse(data) as { result?: { isError?: boolean; content?: Array<{ text?: string }> } };
+      result = parsed.result ?? {};
+    } else {
+      const parsed = await response.json() as { result?: { isError?: boolean; content?: Array<{ text?: string }> } };
+      result = parsed.result ?? {};
+    }
+
+    expect(result.isError).not.toBe(true);
+    const payloadText = result.content?.[0]?.text ?? '';
+    expect(payloadText).toContain('"platform": "sleeper"');
+    expect(payloadText).toContain('"name": "Sleeper FA"');
   });
 });

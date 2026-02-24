@@ -52,14 +52,25 @@ interface ExecuteRequest {
 - `get_standings` — League standings (computed from roster settings: wins, losses, ties, points)
 - `get_roster` — Team roster with player details
 - `get_matchups` — Weekly matchups (paired by `matchup_id`)
-- `get_transactions` — Recent transactions (adds, drops, waivers, trades)
+- `get_free_agents` — Available free agents (uses KV-backed player index cache)
+- `get_transactions` — Recent transactions with player name/position enrichment
 
 ### Basketball (NBA)
 - `get_league_info` — League settings and members
 - `get_standings` — League standings (computed from roster settings: wins, losses, ties, points)
 - `get_roster` — Team roster with player details
 - `get_matchups` — Weekly matchups (paired by `matchup_id`)
-- `get_transactions` — Recent transactions (adds, drops, waivers, trades)
+- `get_free_agents` — Available free agents (uses KV-backed player index cache)
+- `get_transactions` — Recent transactions with player name/position enrichment
+
+## Player Cache (KV)
+
+`get_free_agents` and `get_transactions` enrichment both use a shared KV-backed player index (`SLEEPER_PLAYERS_CACHE`):
+- Fetches `GET /v1/players/{sport}` (NFL or NBA) on cache miss.
+- Caches active players only, with a 24-hour TTL.
+- Cache key format: `players:{sport}:v1`.
+- Falls back to in-memory cache if the KV binding is unavailable.
+- Gracefully degrades: if the player index fails, transactions still return player IDs and `get_free_agents` returns an empty list with a `warning` field.
 
 ## Sleeper API Notes
 

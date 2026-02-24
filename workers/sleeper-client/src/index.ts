@@ -48,7 +48,7 @@ app.post('/execute', async (c) => {
       message: `${tool} ${sport} league=${league_id} season=${season_year}`,
     });
 
-    const result = await routeToSport(sport, tool, params);
+    const result = await routeToSport(c.env, sport, tool, params);
 
     const duration = Date.now() - startTime;
     console.log(`[sleeper-client] ${correlationId} ${tool} ${sport} completed in ${duration}ms success=${result.success}`);
@@ -100,6 +100,7 @@ app.post('/execute', async (c) => {
 });
 
 async function routeToSport(
+  env: Env,
   sport: Sport,
   tool: string,
   params: ExecuteRequest['params'],
@@ -108,13 +109,12 @@ async function routeToSport(
     case 'football': {
       const handler = footballHandlers[tool];
       if (!handler) return { success: false, error: `Unknown football tool: ${tool}`, code: 'UNKNOWN_TOOL' };
-      // Sleeper API is public — no env/authHeader needed by handlers
-      return handler({} as Env, params);
+      return handler(env, params);
     }
     case 'basketball': {
       const handler = basketballHandlers[tool];
       if (!handler) return { success: false, error: `Unknown basketball tool: ${tool}`, code: 'UNKNOWN_TOOL' };
-      return handler({} as Env, params);
+      return handler(env, params);
     }
     default:
       return { success: false, error: `Sport "${sport}" is not supported for Sleeper`, code: 'SPORT_NOT_SUPPORTED' };
