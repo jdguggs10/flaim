@@ -1,6 +1,8 @@
 import type { Env, ToolParams, ExecuteResponse, SleeperLeague, SleeperRoster, SleeperMatchup, SleeperLeagueUser } from '../../types';
 import { sleeperFetch, handleSleeperError } from '../../shared/sleeper-api';
 import { fetchSleeperTransactionsByWeeks, getSleeperCurrentWeek } from '../../shared/sleeper-transactions';
+import { getSleeperPlayersIndex } from '../../shared/sleeper-players-cache';
+import { createSleeperGetFreeAgentsHandler } from '../../shared/sleeper-free-agents-handler';
 import { extractErrorCode } from '@flaim/worker-shared';
 
 type HandlerFn = (
@@ -10,11 +12,14 @@ type HandlerFn = (
   correlationId?: string
 ) => Promise<ExecuteResponse>;
 
+const handleGetFreeAgents = createSleeperGetFreeAgentsHandler('football');
+
 export const footballHandlers: Record<string, HandlerFn> = {
   get_league_info: handleGetLeagueInfo,
   get_standings: handleGetStandings,
   get_roster: handleGetRoster,
   get_matchups: handleGetMatchups,
+  get_free_agents: handleGetFreeAgents,
   get_transactions: handleGetTransactions,
 };
 
@@ -305,7 +310,7 @@ async function handleGetMatchups(
 }
 
 async function handleGetTransactions(
-  _env: Env,
+  env: Env,
   params: ToolParams,
 ): Promise<ExecuteResponse> {
   const { league_id, week, count, type } = params;
@@ -313,9 +318,30 @@ async function handleGetTransactions(
   try {
     const currentWeek = week || await getSleeperCurrentWeek('/state/nfl');
     const weeks = week ? [Math.max(1, week)] : Array.from(new Set([currentWeek, Math.max(1, currentWeek - 1)]));
-    const maxCount = count ?? 25;
+    const rawCount = Number.isFinite(Number(count)) ? Number(count) : 25;
+    const maxCount = Math.max(1, Math.min(100, Math.trunc(rawCount)));
 
-    const rows = await fetchSleeperTransactionsByWeeks(league_id, weeks);
+    let resolvePlayer:
+      | ((playerId: string) => { name?: string; position?: string; team?: string } | undefined)
+      | undefined;
+
+    try {
+      const playersIndex = await getSleeperPlayersIndex(env, 'football');
+      resolvePlayer = (playerId) => {
+        const player = playersIndex.get(playerId);
+        if (!player) return undefined;
+        return {
+          name: player.full_name,
+          position: player.position,
+          team: player.team,
+        };
+      };
+    } catch {
+      // Graceful degradation: transactions still return IDs when metadata lookup fails.
+      resolvePlayer = undefined;
+    }
+
+    const rows = await fetchSleeperTransactionsByWeeks(league_id, weeks, resolvePlayer);
     const filtered = rows
       .filter((txn) => !type || txn.type === type)
       .slice(0, maxCount);
