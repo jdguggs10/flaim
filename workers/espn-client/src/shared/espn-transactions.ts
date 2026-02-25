@@ -196,37 +196,59 @@ export async function fetchEspnPlayersByIds(
   credentials: EspnCredentials,
   playerIds: string[],
 ): Promise<Map<string, EspnPlayerBasic>> {
-  // kona_playercard supports filterIds and returns PlayerPoolEntry objects (same structure as mRoster)
-  const path = `/seasons/${seasonYear}/segments/0/leagues/${leagueId}?view=kona_playercard`;
-  const filter = {
-    players: {
-      filterIds: { value: playerIds.map(Number) },
-      limit: playerIds.length,
-    },
-  };
-
-  const res = await espnFetch(path, gameId, {
-    credentials,
-    timeout: 7000,
-    headers: { 'X-Fantasy-Filter': JSON.stringify(filter) },
-  });
-  if (!res.ok) handleEspnError(res);
-
+  // ESPN's league endpoint does not support filterIds — build the map from two known-working sources:
+  // 1. mRoster view: all players currently on team rosters (covers adds)
+  // 2. kona_player_info with filterStatus: free agents / waivers (covers drops)
   type PlayerShape = { id?: number; fullName?: string; defaultPositionId?: number; proTeamId?: number };
-  const body = await res.json() as { players?: Array<{ player?: PlayerShape; playerPoolEntry?: { player?: PlayerShape } }> };
-  const playerCount = body.players?.length ?? 0;
-  console.log(`[fetchEspnPlayersByIds] ${gameId} league=${leagueId} requested=${playerIds.length} resolved=${playerCount}`);
   const map = new Map<string, EspnPlayerBasic>();
-  for (const entry of body.players ?? []) {
-    // kona_playercard nests player under playerPoolEntry; fall back to entry.player for safety
-    const p = entry.playerPoolEntry?.player ?? entry.player;
-    if (!p?.id) continue;
-    map.set(String(p.id), {
-      fullName: p.fullName,
-      defaultPositionId: p.defaultPositionId,
-      proTeamId: p.proTeamId,
-    });
+  const needed = new Set(playerIds);
+
+  // Source 1: roster
+  const rosterRes = await espnFetch(
+    `/seasons/${seasonYear}/segments/0/leagues/${leagueId}?view=mRoster`,
+    gameId,
+    { credentials, timeout: 10000 },
+  );
+  if (rosterRes.ok) {
+    const rosterBody = await rosterRes.json() as { teams?: Array<{ roster?: { entries?: Array<{ playerPoolEntry?: { player?: PlayerShape } }> } }> };
+    for (const team of rosterBody.teams ?? []) {
+      for (const entry of team.roster?.entries ?? []) {
+        const p = entry.playerPoolEntry?.player;
+        if (p?.id && needed.has(String(p.id))) {
+          map.set(String(p.id), { fullName: p.fullName, defaultPositionId: p.defaultPositionId, proTeamId: p.proTeamId });
+        }
+      }
+    }
   }
+
+  // Source 2: free agent pool (for any IDs not found on rosters)
+  const notFound = playerIds.filter(id => !map.has(id));
+  if (notFound.length > 0) {
+    const notFoundSet = new Set(notFound);
+    const faFilter = {
+      players: {
+        filterStatus: { value: ['FREEAGENT', 'WAIVERS'] },
+        sortPercOwned: { sortPriority: 1, sortAsc: false },
+        limit: 300,
+      },
+    };
+    const faRes = await espnFetch(
+      `/seasons/${seasonYear}/segments/0/leagues/${leagueId}?view=kona_player_info`,
+      gameId,
+      { credentials, timeout: 10000, headers: { 'X-Fantasy-Filter': JSON.stringify(faFilter) } },
+    );
+    if (faRes.ok) {
+      const faBody = await faRes.json() as { players?: Array<{ player?: PlayerShape }> };
+      for (const entry of faBody.players ?? []) {
+        const p = entry.player;
+        if (p?.id && notFoundSet.has(String(p.id))) {
+          map.set(String(p.id), { fullName: p.fullName, defaultPositionId: p.defaultPositionId, proTeamId: p.proTeamId });
+        }
+      }
+    }
+  }
+
+  console.log(`[fetchEspnPlayersByIds] ${gameId} league=${leagueId} requested=${playerIds.length} resolved=${map.size}`);
   return map;
 }
 
