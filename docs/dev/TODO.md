@@ -9,6 +9,9 @@ Use this as the active backlog only. For overall phase status, see `docs/dev/CUR
 3. Decide Anthropic submission strategy.
 - Submit now vs delay based on directory fit.
 4. Keep submission preflight evidence current.
+5. Verify eval-harness can support dynamic prompts, skill.md creation, and OpenAI API log viewing.
+6. Create Claude skill.md for custom skill creation. 
+7. Update homepage with social links
 
 ## Medium-Term 
 1. Improve clerk magic link emails
