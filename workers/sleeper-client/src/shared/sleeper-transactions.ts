@@ -7,6 +7,7 @@ export interface NormalizedTransaction {
   type: TransactionType;
   status: 'complete' | 'failed' | 'pending' | 'unknown';
   timestamp: number;
+  date: string;
   week: number | null;
   team_ids?: string[];
   players_added?: Array<{ id: string; name?: string; position?: string; team?: string }>;
@@ -76,6 +77,7 @@ function normalizeOne(txn: SleeperTransaction, resolvePlayer?: PlayerResolver): 
     type,
     status: mapStatus(txn.status),
     timestamp: Number(txn.status_updated ?? txn.created ?? 0),
+    date: new Date(Number(txn.status_updated ?? txn.created ?? 0)).toISOString().slice(0, 10),
     week: txn.leg ?? null,
     team_ids: (txn.roster_ids ?? []).map((id) => String(id)),
     players_added: added,

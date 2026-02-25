@@ -8,6 +8,7 @@ export interface NormalizedTransaction {
   type: TransactionType;
   status: 'complete' | 'failed' | 'pending' | 'unknown';
   timestamp: number;
+  date: string;
   week: number | null;
   team_ids?: string[];
   players_added?: Array<{ id: string; name?: string; position?: string; team?: string }>;
@@ -191,6 +192,7 @@ export async function fetchEspnTransactionsByWeeks(
           type: normalizedType,
           status: 'complete',
           timestamp,
+          date: new Date(timestamp).toISOString().slice(0, 10),
           week: inferredWeek,
           team_ids: getTeamIds(msg.messageTypeId || 0, msg),
           players_added: added,

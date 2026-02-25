@@ -953,7 +953,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       requiredScope: 'mcp:read',
       securitySchemes: buildSecuritySchemes('mcp:read'),
       openaiMeta: { invoking: 'Fetching transactions\u2026', invoked: 'Transactions ready' },
-      description: `Get recent league transactions including adds, drops, waivers, and trades. Week handling is platform-specific: ESPN/Sleeper use week windows (default current + previous week), while Yahoo uses a recent 14-day timestamp window and ignores explicit week. Yahoo type=waiver filtering is not supported in v1. ESPN responses include a "teams" map (team ID → display name) to resolve the numeric team_ids on each transaction, and player entries include name, position, and pro team. Use values from get_user_session. Read-only and safe to retry. Current date is ${currentDate}.`,
+      description: `Get recent league transactions including adds, drops, waivers, and trades. Each transaction has a "date" field (YYYY-MM-DD) — use it to organize results by recency (today, yesterday, this week, older). Week handling is platform-specific: ESPN/Sleeper use week windows (default current + previous week), while Yahoo uses a recent 14-day timestamp window and ignores explicit week. Yahoo type=waiver filtering is not supported in v1. ESPN responses include a "teams" map (team ID → display name) to resolve the numeric team_ids on each transaction, and player entries include name, position, and pro team. Use values from get_user_session. Read-only and safe to retry. Current date is ${currentDate}.`,
       inputSchema: {
         platform: z
           .enum(['espn', 'yahoo', 'sleeper'])

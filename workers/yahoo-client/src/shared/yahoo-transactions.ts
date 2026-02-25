@@ -7,6 +7,7 @@ export interface NormalizedTransaction {
   type: TransactionType;
   status: 'complete' | 'failed' | 'pending' | 'unknown';
   timestamp: number;
+  date: string;
   week: number | null;
   team_ids?: string[];
   players_added?: Array<{ id: string; name?: string }>;
@@ -116,6 +117,7 @@ export function normalizeYahooTransactions(raw: unknown): NormalizedTransaction[
       type,
       status: mapStatus(meta.status),
       timestamp,
+      date: new Date(timestamp).toISOString().slice(0, 10),
       week: null,
       team_ids: teamIds.length > 0 ? teamIds : undefined,
       players_added: playersAdded,
