@@ -102,7 +102,7 @@ describe('football get_transactions handler', () => {
         ['4362887', { fullName: 'Geno Smith', defaultPositionId: 1, proTeamId: 26 }],
       ]) as never,
     );
-    enrichTransactionsMock.mockImplementation((txns, playerMap, getPos, getTeam) => {
+    enrichTransactionsMock.mockImplementation((txns, playerMap, _getPos, _getTeam) => {
       // Call the real implementation shape — just verify it gets called with correct map
       return txns.map((t) => ({
         ...t,
