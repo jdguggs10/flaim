@@ -9,7 +9,8 @@ Internal ESPN API client used by the unified gateway (`fantasy-mcp`). Handles al
 Consolidates all ESPN API interactions for multiple sports into a single worker:
 - Football handlers
 - Baseball handlers
-- (Future: Basketball, Hockey)
+- Basketball handlers
+- Hockey handlers
 
 ## Architecture
 
@@ -38,13 +39,14 @@ espn-client
 interface ExecuteRequest {
   tool: string;           // e.g., "get_league_info"
   params: {
-    sport: 'football' | 'baseball';
+    sport: 'football' | 'baseball' | 'basketball' | 'hockey';
     league_id: string;
     season_year: number;
     team_id?: string;
     week?: number;
     position?: string;
     count?: number;
+    type?: string;        // Transaction type filter (add, drop, trade, waiver)
   };
   authHeader?: string;    // Bearer token for auth-worker
 }
@@ -52,7 +54,8 @@ interface ExecuteRequest {
 
 ## Supported Tools
 
-### Football
+All four sports (football, baseball, basketball, hockey) support the same 6 tools:
+
 - `get_league_info` - League settings and members
 - `get_standings` - League standings
 - `get_matchups` - Weekly matchups
@@ -60,13 +63,14 @@ interface ExecuteRequest {
 - `get_free_agents` - Available free agents
 - `get_transactions` - Recent transactions (adds, drops, waivers, trades)
 
-### Baseball
-- `get_league_info` - League settings and members
-- `get_standings` - League standings
-- `get_matchups` - Weekly matchups
-- `get_roster` - Team roster with player stats
-- `get_free_agents` - Available free agents
-- `get_transactions` - Recent transactions (adds, drops, waivers, trades)
+### `get_transactions` Response Shape
+
+The `get_transactions` response includes:
+- **`transactions`**: Array of normalized transactions with enriched player entries (name, position, pro team) and numeric `team_ids`.
+- **`teams`**: A `Record<string, string>` map of team ID → display name, so consumers can resolve `team_ids` to human-readable names.
+- **`window`**: The week window used (`explicit_week` or `recent_two_weeks`).
+
+Player enrichment uses ESPN's global `/players?view=players_wl` endpoint (public, no auth required). Team names come from the league's `mTeam` view.
 
 ## Mappings Architecture
 
@@ -85,6 +89,8 @@ ESPN Fantasy APIs use internal numeric IDs for positions, teams, roster slots, a
 |-------|------|---------------|
 | Football | `src/sports/football/mappings.ts` | [MAPPINGS.md](./src/sports/football/MAPPINGS.md) |
 | Baseball | `src/sports/baseball/mappings.ts` | [MAPPINGS.md](./src/sports/baseball/MAPPINGS.md) |
+| Basketball | `src/sports/basketball/mappings.ts` | — |
+| Hockey | `src/sports/hockey/mappings.ts` | — |
 
 ### Standard mapping structure
 
@@ -111,7 +117,6 @@ Each sport's mappings.ts exports:
 
 ### Adding a new sport
 
-When adding basketball or hockey:
 1. Create `src/sports/{sport}/mappings.ts` following the standard structure
 2. Create `src/sports/{sport}/MAPPINGS.md` documenting the ID mappings and verification sources
 3. Add handlers in `src/sports/{sport}/handlers.ts`
@@ -140,3 +145,4 @@ wrangler dev --env dev --port 8789
 
 - [Football MAPPINGS.md](./src/sports/football/MAPPINGS.md) - ESPN Fantasy Football mapping notes
 - [Baseball MAPPINGS.md](./src/sports/baseball/MAPPINGS.md) - ESPN Fantasy Baseball mapping notes
+- Basketball and hockey mappings are in code only (sourced from `cwendt94/espn-api`, unverified pending live credentials)

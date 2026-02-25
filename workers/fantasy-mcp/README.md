@@ -50,7 +50,7 @@ All tools take explicit parameters. Call `get_user_session` first to get league 
 | `get_free_agents` | Available free agents |
 | `get_transactions` | Recent transactions (adds, drops, waivers, trades) |
 
-`get_transactions` uses platform-specific week semantics in v1: ESPN/Sleeper support explicit `week`, while Yahoo ignores explicit `week` and uses a recent 14-day timestamp window. Yahoo `type=waiver` filtering is intentionally unsupported in v1.
+`get_transactions` uses platform-specific week semantics in v1: ESPN/Sleeper support explicit `week`, while Yahoo ignores explicit `week` and uses a recent 14-day timestamp window. Yahoo `type=waiver` filtering is intentionally unsupported in v1. ESPN responses include a `teams` map (team ID → display name) so the LLM can resolve numeric `team_ids` on each transaction to human-readable names. Player entries are enriched with name, position, and pro team.
 
 ### Tool Parameters
 
