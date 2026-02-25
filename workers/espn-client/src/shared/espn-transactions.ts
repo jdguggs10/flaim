@@ -196,7 +196,8 @@ export async function fetchEspnPlayersByIds(
   credentials: EspnCredentials,
   playerIds: string[],
 ): Promise<Map<string, EspnPlayerBasic>> {
-  const path = `/seasons/${seasonYear}/segments/0/leagues/${leagueId}?view=kona_player_info`;
+  // kona_playercard supports filterIds and returns PlayerPoolEntry objects (same structure as mRoster)
+  const path = `/seasons/${seasonYear}/segments/0/leagues/${leagueId}?view=kona_playercard`;
   const filter = {
     players: {
       filterIds: { value: playerIds.map(Number) },
@@ -211,12 +212,14 @@ export async function fetchEspnPlayersByIds(
   });
   if (!res.ok) handleEspnError(res);
 
-  const body = await res.json() as { players?: Array<{ player?: { id?: number; fullName?: string; defaultPositionId?: number; proTeamId?: number } }> };
+  type PlayerShape = { id?: number; fullName?: string; defaultPositionId?: number; proTeamId?: number };
+  const body = await res.json() as { players?: Array<{ player?: PlayerShape; playerPoolEntry?: { player?: PlayerShape } }> };
   const playerCount = body.players?.length ?? 0;
   console.log(`[fetchEspnPlayersByIds] ${gameId} league=${leagueId} requested=${playerIds.length} resolved=${playerCount}`);
   const map = new Map<string, EspnPlayerBasic>();
   for (const entry of body.players ?? []) {
-    const p = entry.player;
+    // kona_playercard nests player under playerPoolEntry; fall back to entry.player for safety
+    const p = entry.playerPoolEntry?.player ?? entry.player;
     if (!p?.id) continue;
     map.set(String(p.id), {
       fullName: p.fullName,
