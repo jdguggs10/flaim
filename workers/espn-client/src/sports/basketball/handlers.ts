@@ -458,8 +458,9 @@ async function handleGetTransactions(
         if (playerMap) {
           filtered = enrichTransactions(filtered, playerMap, getPositionName, getProTeamAbbrev);
         }
-      } catch {
+      } catch (enrichErr) {
         // Degrade gracefully — return transactions without player names
+        console.error('[get_transactions] Player enrichment failed:', enrichErr instanceof Error ? enrichErr.message : enrichErr);
       }
     }
 

@@ -200,6 +200,7 @@ export async function fetchEspnPlayersByIds(
   const filter = {
     players: {
       filterIds: { value: playerIds.map(Number) },
+      filterStatus: { value: ['FREEAGENT', 'WAIVERS', 'ONTEAM'] },
       limit: playerIds.length,
     },
   };
@@ -212,6 +213,8 @@ export async function fetchEspnPlayersByIds(
   if (!res.ok) handleEspnError(res);
 
   const body = await res.json() as { players?: Array<{ player?: { id?: number; fullName?: string; defaultPositionId?: number; proTeamId?: number } }> };
+  const playerCount = body.players?.length ?? 0;
+  console.log(`[fetchEspnPlayersByIds] ${gameId} league=${leagueId} requested=${playerIds.length} resolved=${playerCount}`);
   const map = new Map<string, EspnPlayerBasic>();
   for (const entry of body.players ?? []) {
     const p = entry.player;
