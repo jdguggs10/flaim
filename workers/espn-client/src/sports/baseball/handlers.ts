@@ -2,7 +2,7 @@
 import type { Env, ToolParams, ExecuteResponse, EspnLeagueResponse, EspnPlayerPoolResponse } from '../../types';
 import { getCredentials } from '../../shared/auth';
 import { espnFetch, handleEspnError, requireCredentials } from '../../shared/espn-api';
-import { fetchEspnTransactionsByWeeks, getCurrentEspnScoringPeriod, fetchEspnPlayersByIds, enrichTransactions } from '../../shared/espn-transactions';
+import { fetchEspnTransactionsByWeeks, getEspnLeagueContext, fetchEspnPlayersByIds, enrichTransactions } from '../../shared/espn-transactions';
 import { extractErrorCode } from '@flaim/worker-shared';
 import {
   getPositionName,
@@ -437,7 +437,8 @@ async function handleGetTransactions(
     const credentials = await getCredentials(env, authHeader, correlationId);
     requireCredentials(credentials, 'get_transactions');
 
-    const currentWeek = await getCurrentEspnScoringPeriod(GAME_ID, league_id, season_year, credentials);
+    const ctx = await getEspnLeagueContext(GAME_ID, league_id, season_year, credentials);
+    const currentWeek = ctx.scoringPeriodId;
     const weeks = week
       ? [Math.max(1, week)]
       : Array.from(new Set([currentWeek, Math.max(1, currentWeek - 1)]));
@@ -454,7 +455,7 @@ async function handleGetTransactions(
     ]))];
     if (allIds.length > 0) {
       try {
-        const playerMap = await fetchEspnPlayersByIds(GAME_ID, league_id, season_year, credentials, allIds);
+        const playerMap = await fetchEspnPlayersByIds(GAME_ID, season_year, allIds);
         if (playerMap) {
           filtered = enrichTransactions(filtered, playerMap, getPositionName, getProTeamAbbrev);
         }
@@ -477,6 +478,7 @@ async function handleGetTransactions(
         },
         count: filtered.length,
         transactions: filtered,
+        teams: ctx.teams,
       }
     };
   } catch (error) {

@@ -4,14 +4,14 @@ import { basketballHandlers } from '../basketball/handlers';
 import { hockeyHandlers } from '../hockey/handlers';
 import type { ToolParams } from '../../types';
 import { getCredentials } from '../../shared/auth';
-import { fetchEspnTransactionsByWeeks, getCurrentEspnScoringPeriod } from '../../shared/espn-transactions';
+import { fetchEspnTransactionsByWeeks, getEspnLeagueContext } from '../../shared/espn-transactions';
 
 vi.mock('../../shared/auth', () => ({
   getCredentials: vi.fn(),
 }));
 
 vi.mock('../../shared/espn-transactions', () => ({
-  getCurrentEspnScoringPeriod: vi.fn(),
+  getEspnLeagueContext: vi.fn(),
   fetchEspnTransactionsByWeeks: vi.fn(),
   fetchEspnPlayersByIds: vi.fn(),
   enrichTransactions: vi.fn((txns) => txns),
@@ -25,7 +25,7 @@ const scenarios = [
 
 describe('espn cross-sport get_transactions handlers', () => {
   const getCredentialsMock = getCredentials as MockedFunction<typeof getCredentials>;
-  const getCurrentWeekMock = getCurrentEspnScoringPeriod as MockedFunction<typeof getCurrentEspnScoringPeriod>;
+  const getLeagueContextMock = getEspnLeagueContext as MockedFunction<typeof getEspnLeagueContext>;
   const fetchTransactionsMock = fetchEspnTransactionsByWeeks as MockedFunction<typeof fetchEspnTransactionsByWeeks>;
 
   beforeEach(() => {
@@ -34,7 +34,7 @@ describe('espn cross-sport get_transactions handlers', () => {
 
   it.each(scenarios)('$label routes get_transactions using the sport game id', async ({ sport, gameId, handlers }) => {
     getCredentialsMock.mockResolvedValue({ s2: 'token', swid: '{swid}' });
-    getCurrentWeekMock.mockResolvedValue(10);
+    getLeagueContextMock.mockResolvedValue({ scoringPeriodId: 10, teams: { '1': 'Team One' } });
     fetchTransactionsMock.mockResolvedValue([
       { transaction_id: 'a1', type: 'add', status: 'complete', timestamp: 3000, week: 7 },
       { transaction_id: 't1', type: 'trade', status: 'complete', timestamp: 2000, week: 7 },
@@ -53,14 +53,15 @@ describe('espn cross-sport get_transactions handlers', () => {
     const result = await handlers.get_transactions({} as never, params, 'Bearer x', `cid-${sport}`);
 
     expect(result.success).toBe(true);
-    expect(getCurrentWeekMock).toHaveBeenCalledWith(gameId, '123', 2025, { s2: 'token', swid: '{swid}' });
+    expect(getLeagueContextMock).toHaveBeenCalledWith(gameId, '123', 2025, { s2: 'token', swid: '{swid}' });
     expect(fetchTransactionsMock).toHaveBeenCalledWith(gameId, '123', 2025, { s2: 'token', swid: '{swid}' }, [7]);
 
     if (!result.success) return;
-    const data = result.data as { count: number; window: { mode: string; weeks: number[] }; transactions: Array<{ transaction_id: string }> };
+    const data = result.data as { count: number; window: { mode: string; weeks: number[] }; teams: Record<string, string>; transactions: Array<{ transaction_id: string }> };
     expect(data.window).toEqual({ mode: 'explicit_week', weeks: [7] });
     expect(data.count).toBe(1);
     expect(data.transactions[0]?.transaction_id).toBe('t1');
+    expect(data.teams).toEqual({ '1': 'Team One' });
   });
 
   it.each(scenarios)('$label returns credentials error when ESPN is not connected', async ({ sport, handlers }) => {

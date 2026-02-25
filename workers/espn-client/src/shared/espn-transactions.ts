@@ -85,17 +85,34 @@ function getTeamIds(messageTypeId: number, message: EspnActivityMessage): string
   return Array.from(set);
 }
 
-export async function getCurrentEspnScoringPeriod(
+export interface EspnLeagueContext {
+  scoringPeriodId: number;
+  teams: Record<string, string>;
+}
+
+export async function getEspnLeagueContext(
   gameId: string,
   leagueId: string,
   seasonYear: number,
   credentials: EspnCredentials,
-): Promise<number> {
-  const path = `/seasons/${seasonYear}/segments/0/leagues/${leagueId}?view=mSettings`;
+): Promise<EspnLeagueContext> {
+  const path = `/seasons/${seasonYear}/segments/0/leagues/${leagueId}?view=mSettings&view=mTeam`;
   const res = await espnFetch(path, gameId, { credentials, timeout: 7000 });
   if (!res.ok) handleEspnError(res);
-  const data = await res.json() as { scoringPeriodId?: number };
-  return data.scoringPeriodId ?? 1;
+  const data = await res.json() as {
+    scoringPeriodId?: number;
+    teams?: Array<{ id: number; location?: string; nickname?: string; name?: string }>;
+  };
+  const teams: Record<string, string> = {};
+  for (const t of data.teams ?? []) {
+    teams[String(t.id)] = t.location && t.nickname
+      ? `${t.location} ${t.nickname}`
+      : t.name || `Team ${t.id}`;
+  }
+  return {
+    scoringPeriodId: data.scoringPeriodId ?? 1,
+    teams,
+  };
 }
 
 export async function fetchEspnTransactionsByWeeks(
@@ -191,64 +208,31 @@ export async function fetchEspnTransactionsByWeeks(
 
 export async function fetchEspnPlayersByIds(
   gameId: string,
-  leagueId: string,
   seasonYear: number,
-  credentials: EspnCredentials,
   playerIds: string[],
 ): Promise<Map<string, EspnPlayerBasic>> {
-  // ESPN's league endpoint does not support filterIds — build the map from two known-working sources:
-  // 1. mRoster view: all players currently on team rosters (covers adds)
-  // 2. kona_player_info with filterStatus: free agents / waivers (covers drops)
-  type PlayerShape = { id?: number; fullName?: string; defaultPositionId?: number; proTeamId?: number };
   const map = new Map<string, EspnPlayerBasic>();
-  const needed = new Set(playerIds);
+  if (playerIds.length === 0) return map;
 
-  // Source 1: roster
-  const rosterRes = await espnFetch(
-    `/seasons/${seasonYear}/segments/0/leagues/${leagueId}?view=mRoster`,
-    gameId,
-    { credentials, timeout: 10000 },
-  );
-  if (rosterRes.ok) {
-    const rosterBody = await rosterRes.json() as { teams?: Array<{ roster?: { entries?: Array<{ playerPoolEntry?: { player?: PlayerShape } }> } }> };
-    for (const team of rosterBody.teams ?? []) {
-      for (const entry of team.roster?.entries ?? []) {
-        const p = entry.playerPoolEntry?.player;
-        if (p?.id && needed.has(String(p.id))) {
-          map.set(String(p.id), { fullName: p.fullName, defaultPositionId: p.defaultPositionId, proTeamId: p.proTeamId });
-        }
+  const numericIds = playerIds.map(Number).filter(Number.isFinite);
+  const path = `/seasons/${seasonYear}/players?view=players_wl`;
+  const filterHeader = JSON.stringify({ filterIds: { value: numericIds } });
+
+  const res = await espnFetch(path, gameId, {
+    timeout: 10000,
+    headers: { 'x-fantasy-filter': filterHeader },
+  });
+
+  if (res.ok) {
+    const players = await res.json() as Array<{ id?: number; fullName?: string; defaultPositionId?: number; proTeamId?: number }>;
+    for (const p of players) {
+      if (p.id !== undefined) {
+        map.set(String(p.id), { fullName: p.fullName, defaultPositionId: p.defaultPositionId, proTeamId: p.proTeamId });
       }
     }
   }
 
-  // Source 2: free agent pool (for any IDs not found on rosters)
-  const notFound = playerIds.filter(id => !map.has(id));
-  if (notFound.length > 0) {
-    const notFoundSet = new Set(notFound);
-    const faFilter = {
-      players: {
-        filterStatus: { value: ['FREEAGENT', 'WAIVERS'] },
-        sortPercOwned: { sortPriority: 1, sortAsc: false },
-        limit: 300,
-      },
-    };
-    const faRes = await espnFetch(
-      `/seasons/${seasonYear}/segments/0/leagues/${leagueId}?view=kona_player_info`,
-      gameId,
-      { credentials, timeout: 10000, headers: { 'X-Fantasy-Filter': JSON.stringify(faFilter) } },
-    );
-    if (faRes.ok) {
-      const faBody = await faRes.json() as { players?: Array<{ player?: PlayerShape }> };
-      for (const entry of faBody.players ?? []) {
-        const p = entry.player;
-        if (p?.id && notFoundSet.has(String(p.id))) {
-          map.set(String(p.id), { fullName: p.fullName, defaultPositionId: p.defaultPositionId, proTeamId: p.proTeamId });
-        }
-      }
-    }
-  }
-
-  console.log(`[fetchEspnPlayersByIds] ${gameId} league=${leagueId} requested=${playerIds.length} resolved=${map.size}`);
+  console.log(`[fetchEspnPlayersByIds] ${gameId} requested=${playerIds.length} resolved=${map.size}`);
   return map;
 }
 

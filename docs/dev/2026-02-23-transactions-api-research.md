@@ -172,6 +172,22 @@ Returns pending trade proposals and unprocessed waiver claims. Format is "very i
 
 ---
 
+### Player Enrichment: Global Endpoint (Adopted 2026-02-25)
+
+ESPN's league-scoped endpoints (`kona_player_info`, `kona_playercard`) do **not** support `filterIds` — requests return 400. The workaround (mRoster + top-300 FA pool) was replaced with a **global players endpoint** that supports `filterIds` without league context or auth:
+
+```
+GET /seasons/{year}/players?view=players_wl
+x-fantasy-filter: {"filterIds":{"value":[3054211,4362887]}}
+```
+
+Key details:
+- Path has no `/segments/0/leagues/{id}` — it's a global, public endpoint.
+- `filterIds` must be **top-level** in the filter header (not nested under `"players"`).
+- No credentials required.
+- Returns a flat array of `{id, fullName, defaultPositionId, proTeamId}` objects.
+- Works for all sports (ffl, flb, fba, fhl).
+
 ### ESPN Caveats
 
 - No official rate limit published. Community practice: add small delays when looping over weeks.

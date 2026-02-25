@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi, type MockedFunction } from 'vitest';
-import { fetchEspnTransactionsByWeeks, getCurrentEspnScoringPeriod } from '../espn-transactions';
+import { fetchEspnTransactionsByWeeks, getEspnLeagueContext, fetchEspnPlayersByIds } from '../espn-transactions';
 
 const mockFetch = vi.fn() as MockedFunction<typeof fetch>;
 global.fetch = mockFetch;
@@ -16,10 +16,70 @@ describe('espn-transactions', () => {
     mockFetch.mockReset();
   });
 
-  it('reads current scoring period from mSettings', async () => {
-    mockFetch.mockResolvedValueOnce(jsonResponse({ scoringPeriodId: 7 }));
-    const week = await getCurrentEspnScoringPeriod('ffl', '123', 2025, { s2: 'x', swid: '{y}' });
-    expect(week).toBe(7);
+  describe('getEspnLeagueContext', () => {
+    it('returns scoringPeriodId and teams map from mSettings+mTeam', async () => {
+      mockFetch.mockResolvedValueOnce(jsonResponse({
+        scoringPeriodId: 7,
+        teams: [
+          { id: 1, location: 'Gotham', nickname: 'Knights' },
+          { id: 2, name: 'Team Two' },
+          { id: 3 },
+        ],
+      }));
+      const ctx = await getEspnLeagueContext('ffl', '123', 2025, { s2: 'x', swid: '{y}' });
+      expect(ctx.scoringPeriodId).toBe(7);
+      expect(ctx.teams).toEqual({
+        '1': 'Gotham Knights',
+        '2': 'Team Two',
+        '3': 'Team 3',
+      });
+      // Verify URL includes both views
+      const url = mockFetch.mock.calls[0]?.[0] as string;
+      expect(url).toContain('view=mSettings&view=mTeam');
+    });
+
+    it('defaults scoringPeriodId to 1 when missing', async () => {
+      mockFetch.mockResolvedValueOnce(jsonResponse({}));
+      const ctx = await getEspnLeagueContext('ffl', '123', 2025, { s2: 'x', swid: '{y}' });
+      expect(ctx.scoringPeriodId).toBe(1);
+      expect(ctx.teams).toEqual({});
+    });
+  });
+
+  describe('fetchEspnPlayersByIds', () => {
+    it('fetches players from global endpoint with top-level filterIds', async () => {
+      mockFetch.mockResolvedValueOnce(jsonResponse([
+        { id: 3054211, fullName: 'Josh Allen', defaultPositionId: 1, proTeamId: 2 },
+        { id: 4362887, fullName: 'Geno Smith', defaultPositionId: 1, proTeamId: 26 },
+      ]));
+
+      const map = await fetchEspnPlayersByIds('ffl', 2025, ['3054211', '4362887']);
+
+      expect(map.size).toBe(2);
+      expect(map.get('3054211')?.fullName).toBe('Josh Allen');
+      expect(map.get('4362887')?.fullName).toBe('Geno Smith');
+
+      const url = mockFetch.mock.calls[0]?.[0] as string;
+      expect(url).toContain('/players?view=players_wl');
+      expect(url).not.toContain('/leagues/');
+
+      const init = mockFetch.mock.calls[0]?.[1] as RequestInit;
+      const filterHeader = (init.headers as Record<string, string>)?.['x-fantasy-filter'];
+      const parsed = JSON.parse(filterHeader);
+      expect(parsed.filterIds.value).toEqual([3054211, 4362887]);
+    });
+
+    it('returns empty map for empty playerIds', async () => {
+      const map = await fetchEspnPlayersByIds('ffl', 2025, []);
+      expect(map.size).toBe(0);
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it('returns empty map when fetch fails', async () => {
+      mockFetch.mockResolvedValueOnce(new Response('error', { status: 500 }));
+      const map = await fetchEspnPlayersByIds('ffl', 2025, ['123']);
+      expect(map.size).toBe(0);
+    });
   });
 
   it('maps all six message type IDs to correct transaction types', async () => {

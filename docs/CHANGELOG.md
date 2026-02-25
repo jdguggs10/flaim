@@ -4,6 +4,11 @@ Follow Keep a Changelog; SemVer applies.
 
 ## [Unreleased]
 
+### ESPN Transaction Enrichment
+- **Changed**: Player name enrichment now uses ESPN's global `/players?view=players_wl` endpoint with `filterIds` instead of the mRoster + FA pool workaround. Single request, no auth required, works for all sports.
+- **Added**: `teams` map (team ID → display name) included in `get_transactions` response so the LLM can resolve numeric team IDs to human-readable names.
+- **Changed**: `getCurrentEspnScoringPeriod` replaced with `getEspnLeagueContext` which returns both `scoringPeriodId` and teams in one call (`mSettings` + `mTeam` views).
+
 ### Added
 - Sleeper fantasy platform support (Phase 1): `get_league_info`, `get_standings`, `get_roster`, `get_matchups` for NFL and NBA
 - Sleeper username-based onboarding with historical season discovery (up to 5 years)

@@ -2,14 +2,14 @@ import { beforeEach, describe, expect, it, vi, type MockedFunction } from 'vites
 import { footballHandlers } from '../handlers';
 import type { ToolParams } from '../../../types';
 import { getCredentials } from '../../../shared/auth';
-import { fetchEspnTransactionsByWeeks, getCurrentEspnScoringPeriod, fetchEspnPlayersByIds, enrichTransactions } from '../../../shared/espn-transactions';
+import { fetchEspnTransactionsByWeeks, getEspnLeagueContext, fetchEspnPlayersByIds, enrichTransactions } from '../../../shared/espn-transactions';
 
 vi.mock('../../../shared/auth', () => ({
   getCredentials: vi.fn(),
 }));
 
 vi.mock('../../../shared/espn-transactions', () => ({
-  getCurrentEspnScoringPeriod: vi.fn(),
+  getEspnLeagueContext: vi.fn(),
   fetchEspnTransactionsByWeeks: vi.fn(),
   fetchEspnPlayersByIds: vi.fn(),
   enrichTransactions: vi.fn((txns) => txns),
@@ -17,7 +17,7 @@ vi.mock('../../../shared/espn-transactions', () => ({
 
 describe('football get_transactions handler', () => {
   const getCredentialsMock = getCredentials as MockedFunction<typeof getCredentials>;
-  const getCurrentWeekMock = getCurrentEspnScoringPeriod as MockedFunction<typeof getCurrentEspnScoringPeriod>;
+  const getLeagueContextMock = getEspnLeagueContext as MockedFunction<typeof getEspnLeagueContext>;
   const fetchTransactionsMock = fetchEspnTransactionsByWeeks as MockedFunction<typeof fetchEspnTransactionsByWeeks>;
   const fetchPlayersByIdsMock = fetchEspnPlayersByIds as MockedFunction<typeof fetchEspnPlayersByIds>;
   const enrichTransactionsMock = enrichTransactions as MockedFunction<typeof enrichTransactions>;
@@ -28,7 +28,7 @@ describe('football get_transactions handler', () => {
 
   it('uses current+previous week window when week is omitted', async () => {
     getCredentialsMock.mockResolvedValue({ s2: 'token', swid: '{swid}' });
-    getCurrentWeekMock.mockResolvedValue(10);
+    getLeagueContextMock.mockResolvedValue({ scoringPeriodId: 10, teams: { '1': 'Team One' } });
     fetchTransactionsMock.mockResolvedValue([
       { transaction_id: 't2', type: 'trade', status: 'complete', timestamp: 2000, week: 10 },
       { transaction_id: 't1', type: 'add', status: 'complete', timestamp: 1000, week: 9 },
@@ -44,18 +44,19 @@ describe('football get_transactions handler', () => {
     const result = await footballHandlers.get_transactions({} as never, params, 'Bearer x', 'cid-1');
 
     expect(result.success).toBe(true);
-    expect(getCurrentWeekMock).toHaveBeenCalledWith('ffl', '123', 2025, { s2: 'token', swid: '{swid}' });
+    expect(getLeagueContextMock).toHaveBeenCalledWith('ffl', '123', 2025, { s2: 'token', swid: '{swid}' });
     expect(fetchTransactionsMock).toHaveBeenCalledWith('ffl', '123', 2025, { s2: 'token', swid: '{swid}' }, [10, 9]);
 
     if (!result.success) return;
-    const data = result.data as { count: number; window: { mode: string; weeks: number[] } };
+    const data = result.data as { count: number; window: { mode: string; weeks: number[] }; teams: Record<string, string> };
     expect(data.count).toBe(2);
     expect(data.window).toEqual({ mode: 'recent_two_weeks', weeks: [10, 9] });
+    expect(data.teams).toEqual({ '1': 'Team One' });
   });
 
   it('applies explicit week, type filter, and count clamp', async () => {
     getCredentialsMock.mockResolvedValue({ s2: 'token', swid: '{swid}' });
-    getCurrentWeekMock.mockResolvedValue(10);
+    getLeagueContextMock.mockResolvedValue({ scoringPeriodId: 10, teams: { '1': 'Team One' } });
     fetchTransactionsMock.mockResolvedValue([
       { transaction_id: 'a1', type: 'add', status: 'complete', timestamp: 3000, week: 7 },
       { transaction_id: 't1', type: 'trade', status: 'complete', timestamp: 2000, week: 7 },
@@ -82,9 +83,9 @@ describe('football get_transactions handler', () => {
     expect(data.transactions[0]?.transaction_id).toBe('t1');
   });
 
-  it('enriches player names from kona_player_info when player IDs are present', async () => {
+  it('enriches player names from global player endpoint when player IDs are present', async () => {
     getCredentialsMock.mockResolvedValue({ s2: 'token', swid: '{swid}' });
-    getCurrentWeekMock.mockResolvedValue(8);
+    getLeagueContextMock.mockResolvedValue({ scoringPeriodId: 8, teams: {} });
     fetchTransactionsMock.mockResolvedValue([
       {
         transaction_id: 'a1',
@@ -103,7 +104,6 @@ describe('football get_transactions handler', () => {
       ]) as never,
     );
     enrichTransactionsMock.mockImplementation((txns, playerMap, _getPos, _getTeam) => {
-      // Call the real implementation shape — just verify it gets called with correct map
       return txns.map((t) => ({
         ...t,
         players_added: t.players_added?.map((p: { id: string }) => ({
@@ -127,7 +127,7 @@ describe('football get_transactions handler', () => {
     const result = await footballHandlers.get_transactions({} as never, params, 'Bearer x', 'cid-enrich');
 
     expect(result.success).toBe(true);
-    expect(fetchPlayersByIdsMock).toHaveBeenCalledWith('ffl', '123', 2025, { s2: 'token', swid: '{swid}' }, ['3054211', '4362887']);
+    expect(fetchPlayersByIdsMock).toHaveBeenCalledWith('ffl', 2025, ['3054211', '4362887']);
     expect(enrichTransactionsMock).toHaveBeenCalled();
 
     if (!result.success) return;
@@ -137,7 +137,7 @@ describe('football get_transactions handler', () => {
 
   it('degrades gracefully when player enrichment fetch fails', async () => {
     getCredentialsMock.mockResolvedValue({ s2: 'token', swid: '{swid}' });
-    getCurrentWeekMock.mockResolvedValue(8);
+    getLeagueContextMock.mockResolvedValue({ scoringPeriodId: 8, teams: {} });
     fetchTransactionsMock.mockResolvedValue([
       {
         transaction_id: 'a1',
