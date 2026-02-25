@@ -200,7 +200,6 @@ export async function fetchEspnPlayersByIds(
   const filter = {
     players: {
       filterIds: { value: playerIds.map(Number) },
-      filterStatus: { value: ['FREEAGENT', 'WAIVERS', 'ONTEAM'] },
       limit: playerIds.length,
     },
   };
