@@ -57,13 +57,14 @@ describe('sleeper-players-cache', () => {
     expect(mockFetch).toHaveBeenCalledTimes(1);
     expect(mockFetch.mock.calls[0]?.[0]).toBe('https://api.sleeper.app/v1/players/nfl');
     expect(index.has('11')).toBe(true);
-    expect(index.has('12')).toBe(false);
+    expect(index.has('12')).toBe(true);
     expect(kvPut).toHaveBeenCalledTimes(1);
     const [key, value, options] = kvPut.mock.calls[0] as [string, string, { expirationTtl: number }];
     expect(key).toBe(cacheKeyForSport('football'));
     expect(options).toEqual({ expirationTtl: 86400 });
     expect(JSON.parse(value)).toEqual([
       { player_id: '11', full_name: 'Alpha A', position: 'RB', team: 'NYJ', active: true },
+      { player_id: '12', full_name: 'Inactive B', position: 'WR', team: 'SF', active: false },
     ]);
   });
 
@@ -81,7 +82,7 @@ describe('sleeper-players-cache', () => {
     expect(kvPut).toHaveBeenCalledTimes(1);
   });
 
-  it('retains only active players from cached array payloads', async () => {
+  it('retains all players regardless of active flag from cached array payloads', async () => {
     kvGet.mockResolvedValueOnce(JSON.stringify([
       { player_id: '31', full_name: 'Active D', active: true },
       { player_id: '32', full_name: 'Inactive E', active: false },
@@ -91,8 +92,8 @@ describe('sleeper-players-cache', () => {
     const index = await getSleeperPlayersIndex(env, 'football');
 
     expect(index.has('31')).toBe(true);
-    expect(index.has('32')).toBe(false);
-    expect(index.has('33')).toBe(false);
+    expect(index.has('32')).toBe(true);
+    expect(index.has('33')).toBe(true);
     expect(mockFetch).not.toHaveBeenCalled();
   });
 

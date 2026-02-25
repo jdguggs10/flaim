@@ -64,7 +64,7 @@ function normalizePlayers(input: unknown): SleeperPlayerRecord[] | null {
     for (const item of input) {
       if (!item || typeof item !== 'object') continue;
       const parsed = parsePlayerRecord(item as SleeperPlayersApiRecord);
-      if (!parsed || !parsed.active) continue;
+      if (!parsed) continue;
       fromArray.push(parsed);
     }
     return fromArray;
@@ -78,7 +78,7 @@ function normalizePlayers(input: unknown): SleeperPlayerRecord[] | null {
   for (const [playerId, value] of Object.entries(input as Record<string, unknown>)) {
     if (!value || typeof value !== 'object') continue;
     const parsed = parsePlayerRecord(value as SleeperPlayersApiRecord, playerId);
-    if (!parsed || !parsed.active) continue;
+    if (!parsed) continue;
     fromObject.push(parsed);
   }
 

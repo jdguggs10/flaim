@@ -10,9 +10,15 @@ export interface NormalizedTransaction {
   timestamp: number;
   week: number | null;
   team_ids?: string[];
-  players_added?: Array<{ id: string }>;
-  players_dropped?: Array<{ id: string }>;
+  players_added?: Array<{ id: string; name?: string; position?: string; team?: string }>;
+  players_dropped?: Array<{ id: string; name?: string; position?: string; team?: string }>;
   faab_bid?: number | null;
+}
+
+export interface EspnPlayerBasic {
+  fullName?: string;
+  defaultPositionId?: number;
+  proTeamId?: number;
 }
 
 interface EspnActivityMessage {
@@ -181,4 +187,67 @@ export async function fetchEspnTransactionsByWeeks(
   }
 
   return out.sort((a, b) => b.timestamp - a.timestamp);
+}
+
+export async function fetchEspnPlayersByIds(
+  gameId: string,
+  leagueId: string,
+  seasonYear: number,
+  credentials: EspnCredentials,
+  playerIds: string[],
+): Promise<Map<string, EspnPlayerBasic>> {
+  const path = `/seasons/${seasonYear}/segments/0/leagues/${leagueId}?view=kona_player_info`;
+  const filter = {
+    players: {
+      filterIds: { value: playerIds.map(Number) },
+      limit: playerIds.length,
+    },
+  };
+
+  const res = await espnFetch(path, gameId, {
+    credentials,
+    timeout: 7000,
+    headers: { 'X-Fantasy-Filter': JSON.stringify(filter) },
+  });
+  if (!res.ok) handleEspnError(res);
+
+  const body = await res.json() as { players?: Array<{ player?: { id?: number; fullName?: string; defaultPositionId?: number; proTeamId?: number } }> };
+  const map = new Map<string, EspnPlayerBasic>();
+  for (const entry of body.players ?? []) {
+    const p = entry.player;
+    if (!p?.id) continue;
+    map.set(String(p.id), {
+      fullName: p.fullName,
+      defaultPositionId: p.defaultPositionId,
+      proTeamId: p.proTeamId,
+    });
+  }
+  return map;
+}
+
+export function enrichTransactions(
+  transactions: NormalizedTransaction[],
+  playerMap: Map<string, EspnPlayerBasic>,
+  getPositionName: (id: number) => string,
+  getProTeamAbbrev: (id: number) => string,
+): NormalizedTransaction[] {
+  const enrich = (
+    entries?: Array<{ id: string; name?: string; position?: string; team?: string }>,
+  ) =>
+    entries?.map((p) => {
+      const info = playerMap.get(p.id);
+      if (!info) return p;
+      return {
+        ...p,
+        name: info.fullName,
+        position: info.defaultPositionId !== undefined ? getPositionName(info.defaultPositionId) : undefined,
+        team: info.proTeamId !== undefined ? getProTeamAbbrev(info.proTeamId) : undefined,
+      };
+    });
+
+  return transactions.map((txn) => ({
+    ...txn,
+    players_added: enrich(txn.players_added),
+    players_dropped: enrich(txn.players_dropped),
+  }));
 }

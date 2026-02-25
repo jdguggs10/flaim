@@ -2,7 +2,7 @@
 import type { Env, ToolParams, ExecuteResponse, EspnLeagueResponse, EspnPlayerPoolResponse } from '../../types';
 import { getCredentials } from '../../shared/auth';
 import { espnFetch, handleEspnError, requireCredentials } from '../../shared/espn-api';
-import { fetchEspnTransactionsByWeeks, getCurrentEspnScoringPeriod } from '../../shared/espn-transactions';
+import { fetchEspnTransactionsByWeeks, getCurrentEspnScoringPeriod, fetchEspnPlayersByIds, enrichTransactions } from '../../shared/espn-transactions';
 import { extractErrorCode } from '@flaim/worker-shared';
 import {
   getPositionName,
@@ -444,9 +444,24 @@ async function handleGetTransactions(
 
     const maxCount = count ?? 25;
     const rows = await fetchEspnTransactionsByWeeks(GAME_ID, league_id, season_year, credentials, weeks);
-    const filtered = rows
+    let filtered = rows
       .filter((txn) => !type || txn.type === type)
       .slice(0, maxCount);
+
+    const allIds = [...new Set(filtered.flatMap((t) => [
+      ...(t.players_added ?? []).map((p) => p.id),
+      ...(t.players_dropped ?? []).map((p) => p.id),
+    ]))];
+    if (allIds.length > 0) {
+      try {
+        const playerMap = await fetchEspnPlayersByIds(GAME_ID, league_id, season_year, credentials, allIds);
+        if (playerMap) {
+          filtered = enrichTransactions(filtered, playerMap, getPositionName, getProTeamAbbrev);
+        }
+      } catch {
+        // Degrade gracefully — return transactions without player names
+      }
+    }
 
     return {
       success: true,

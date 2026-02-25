@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi, type MockedFunction } from 'vites
 import { footballHandlers } from '../handlers';
 import type { ToolParams } from '../../../types';
 import { getCredentials } from '../../../shared/auth';
-import { fetchEspnTransactionsByWeeks, getCurrentEspnScoringPeriod } from '../../../shared/espn-transactions';
+import { fetchEspnTransactionsByWeeks, getCurrentEspnScoringPeriod, fetchEspnPlayersByIds, enrichTransactions } from '../../../shared/espn-transactions';
 
 vi.mock('../../../shared/auth', () => ({
   getCredentials: vi.fn(),
@@ -11,12 +11,16 @@ vi.mock('../../../shared/auth', () => ({
 vi.mock('../../../shared/espn-transactions', () => ({
   getCurrentEspnScoringPeriod: vi.fn(),
   fetchEspnTransactionsByWeeks: vi.fn(),
+  fetchEspnPlayersByIds: vi.fn(),
+  enrichTransactions: vi.fn((txns) => txns),
 }));
 
 describe('football get_transactions handler', () => {
   const getCredentialsMock = getCredentials as MockedFunction<typeof getCredentials>;
   const getCurrentWeekMock = getCurrentEspnScoringPeriod as MockedFunction<typeof getCurrentEspnScoringPeriod>;
   const fetchTransactionsMock = fetchEspnTransactionsByWeeks as MockedFunction<typeof fetchEspnTransactionsByWeeks>;
+  const fetchPlayersByIdsMock = fetchEspnPlayersByIds as MockedFunction<typeof fetchEspnPlayersByIds>;
+  const enrichTransactionsMock = enrichTransactions as MockedFunction<typeof enrichTransactions>;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -76,6 +80,91 @@ describe('football get_transactions handler', () => {
     const data = result.data as { count: number; transactions: Array<{ transaction_id: string }> };
     expect(data.count).toBe(1);
     expect(data.transactions[0]?.transaction_id).toBe('t1');
+  });
+
+  it('enriches player names from kona_player_info when player IDs are present', async () => {
+    getCredentialsMock.mockResolvedValue({ s2: 'token', swid: '{swid}' });
+    getCurrentWeekMock.mockResolvedValue(8);
+    fetchTransactionsMock.mockResolvedValue([
+      {
+        transaction_id: 'a1',
+        type: 'add',
+        status: 'complete',
+        timestamp: 1000,
+        week: 8,
+        players_added: [{ id: '3054211' }],
+        players_dropped: [{ id: '4362887' }],
+      },
+    ] as never);
+    fetchPlayersByIdsMock.mockResolvedValue(
+      new Map([
+        ['3054211', { fullName: 'Josh Allen', defaultPositionId: 1, proTeamId: 2 }],
+        ['4362887', { fullName: 'Geno Smith', defaultPositionId: 1, proTeamId: 26 }],
+      ]) as never,
+    );
+    enrichTransactionsMock.mockImplementation((txns, playerMap, getPos, getTeam) => {
+      // Call the real implementation shape — just verify it gets called with correct map
+      return txns.map((t) => ({
+        ...t,
+        players_added: t.players_added?.map((p: { id: string }) => ({
+          ...p,
+          name: (playerMap as Map<string, { fullName?: string }>).get(p.id)?.fullName,
+        })),
+        players_dropped: t.players_dropped?.map((p: { id: string }) => ({
+          ...p,
+          name: (playerMap as Map<string, { fullName?: string }>).get(p.id)?.fullName,
+        })),
+      }));
+    });
+
+    const params: ToolParams = {
+      sport: 'football',
+      league_id: '123',
+      season_year: 2025,
+      week: 8,
+    };
+
+    const result = await footballHandlers.get_transactions({} as never, params, 'Bearer x', 'cid-enrich');
+
+    expect(result.success).toBe(true);
+    expect(fetchPlayersByIdsMock).toHaveBeenCalledWith('ffl', '123', 2025, { s2: 'token', swid: '{swid}' }, ['3054211', '4362887']);
+    expect(enrichTransactionsMock).toHaveBeenCalled();
+
+    if (!result.success) return;
+    const data = result.data as { transactions: Array<{ players_added?: Array<{ id: string; name?: string }> }> };
+    expect(data.transactions[0]?.players_added?.[0]?.name).toBe('Josh Allen');
+  });
+
+  it('degrades gracefully when player enrichment fetch fails', async () => {
+    getCredentialsMock.mockResolvedValue({ s2: 'token', swid: '{swid}' });
+    getCurrentWeekMock.mockResolvedValue(8);
+    fetchTransactionsMock.mockResolvedValue([
+      {
+        transaction_id: 'a1',
+        type: 'add',
+        status: 'complete',
+        timestamp: 1000,
+        week: 8,
+        players_added: [{ id: '3054211' }],
+      },
+    ] as never);
+    fetchPlayersByIdsMock.mockRejectedValue(new Error('ESPN API error'));
+
+    const params: ToolParams = {
+      sport: 'football',
+      league_id: '123',
+      season_year: 2025,
+      week: 8,
+    };
+
+    const result = await footballHandlers.get_transactions({} as never, params, 'Bearer x', 'cid-degrade');
+
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    const data = result.data as { count: number; transactions: Array<{ players_added?: Array<{ id: string; name?: string }> }> };
+    expect(data.count).toBe(1);
+    expect(data.transactions[0]?.players_added?.[0]?.id).toBe('3054211');
+    expect(data.transactions[0]?.players_added?.[0]?.name).toBeUndefined();
   });
 
   it('returns credentials error when ESPN is not connected', async () => {

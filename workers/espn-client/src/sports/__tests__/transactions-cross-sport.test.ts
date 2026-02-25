@@ -13,6 +13,8 @@ vi.mock('../../shared/auth', () => ({
 vi.mock('../../shared/espn-transactions', () => ({
   getCurrentEspnScoringPeriod: vi.fn(),
   fetchEspnTransactionsByWeeks: vi.fn(),
+  fetchEspnPlayersByIds: vi.fn(),
+  enrichTransactions: vi.fn((txns) => txns),
 }));
 
 const scenarios = [
