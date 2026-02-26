@@ -66,7 +66,7 @@ export default function ConsentScreen({
               <Image src="/flaim-mark-hero-dark.png" alt="Flaim" width={24} height={24} className="hidden dark:block" />
             </div>
             <div>
-              <div className="font-medium">Flaim Fantasy Analysis</div>
+              <div className="font-medium">Flaim Fantasy</div>
             </div>
           </div>
         </div>

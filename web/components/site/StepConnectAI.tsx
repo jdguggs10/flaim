@@ -11,7 +11,7 @@ const fantasyMcpUrl =
 
 const mcpServers = [
   {
-    name: 'Flaim Fantasy MCP',
+    name: 'Flaim Fantasy',
     url: fantasyMcpUrl,
   },
 ];

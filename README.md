@@ -1,4 +1,4 @@
-# Flaim - Fantasy League Analysis
+# Flaim Fantasy
 
 Doc routing: see `docs/INDEX.md`.
 

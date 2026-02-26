@@ -56,7 +56,7 @@ export default function PrivacyPage() {
               Flaim is a read-only fantasy sports analysis service for ESPN, Yahoo, and Sleeper leagues.
               This privacy policy explains how
               we collect, use, and protect your information when you use Flaim, the Flaim Chrome
-              Extension, and the Flaim MCP server.
+              Extension, and the Flaim Fantasy service.
             </p>
           </section>
 

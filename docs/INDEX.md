@@ -7,7 +7,8 @@ This file is the canonical map for Flaim docs. Update this when document ownersh
 | Fact type | Source of truth | Notes |
 |---|---|---|
 | Active tasks + execution state | Linear (Flaim team) | Source of truth for all actionable work. |
-| Tools list + platform/sport support + deploy targets | `docs/STATUS.md` | Keep aligned with code and CI. |
+| Tool list + platform/sport support | `README.md`, `docs/CONNECTOR-DOCS.md` | Keep user-facing capabilities aligned with code and MCP schema. |
+| Deploy targets + runtime topology | `docs/ARCHITECTURE.md` | Keep infra/runtime details aligned with active deployments. |
 | Database schema summary | `docs/DATABASE.md` | Migrations in `docs/migrations/` remain canonical. |
 | Error code taxonomy (private reference) | `workers/shared/src/errors.ts` | Canonical source in code; reviewer-facing doc moved to private submissions folder. |
 | Testing strategy | `docs/TESTING.md` | Keep lightweight and practical. |
@@ -31,7 +32,6 @@ This file is the canonical map for Flaim docs. Update this when document ownersh
 - `CLAUDE.md`
 - `GEMINI.md`
 - `docs/ARCHITECTURE.md`
-- `docs/STATUS.md`
 - `docs/DATABASE.md`
 - `docs/TESTING.md`
 - `docs/STYLE-GUIDE.md`
@@ -70,7 +70,7 @@ Historical analyses/plans were externalized:
 
 ## Maintenance Rules
 
-1. Update `docs/STATUS.md` when tool coverage, endpoints, deploy targets, or channel readiness changes.
+1. Update `README.md`, `docs/CONNECTOR-DOCS.md`, and/or `docs/ARCHITECTURE.md` when tool coverage, endpoints, deploy targets, or channel readiness changes.
 2. Track all tasks and execution state in Linear (Flaim team). Do not create task lists in docs.
 3. Move superseded plans/reports to the external archive bundle, then update `docs/plans/README.md` and/or `../flaim-docs-archive/2026-02-08-repo-doc-cleanup/README.md`.
 4. Prefer links to canonical docs instead of duplicating tables across files.
