@@ -4,6 +4,23 @@ Follow Keep a Changelog; SemVer applies.
 
 ## [Unreleased]
 
+### Transactions Tool
+- **Added**: `get_transactions` tool shipped in unified gateway (`fantasy-mcp`) and ESPN, Yahoo, and Sleeper clients.
+- **Changed**: ESPN and Sleeper honor explicit `week` parameter; default to current + previous week when omitted.
+- **Changed**: Yahoo uses a recent 14-day timestamp window and ignores explicit `week` (v1 limitation documented).
+- **Note**: Yahoo `type=waiver` filtering intentionally unsupported in v1.
+
+### OpenAI Submission Prep
+- **Added**: Demo account (`demo@flaim.app`) with password auth via Clerk for OpenAI reviewer access.
+- **Added**: Domain verification route (`/.well-known/openai-apps-challenge`) in `fantasy-mcp`; reads token from `OPENAI_APPS_VERIFICATION_TOKEN` Wrangler secret.
+
+### Terms of Service
+- **Added**: `/terms` page live at `https://flaim.app/terms`.
+- **Changed**: Footer, sitemap, and connector docs updated with Terms link.
+
+### MCP Tool Annotations
+- **Added**: `openWorldHint: true` and `destructiveHint: false` annotations on all MCP tools for OpenAI directory compatibility.
+
 ### ESPN Transaction Enrichment
 - **Changed**: Player name enrichment now uses ESPN's global `/players?view=players_wl` endpoint with `filterIds` instead of the mRoster + FA pool workaround. Single request, no auth required, works for all sports.
 - **Added**: `teams` map (team ID → display name) included in `get_transactions` response so the LLM can resolve numeric team IDs to human-readable names.
