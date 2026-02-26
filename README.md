@@ -97,7 +97,6 @@ Solo developer, hobby project. Keep it simple and stable.
 | Document | Description |
 |----------|-------------|
 | [Architecture](docs/ARCHITECTURE.md) | System design, deployment, troubleshooting |
-| [Current Execution State](docs/dev/CURRENT-EXECUTION-STATE.md) | What is done, in progress, and next |
 | [Changelog](docs/CHANGELOG.md) | Release history |
 | [flaim-eval README](../flaim-eval/README.md) | Eval harness usage and local Codex skill notes (`flaim-eval-ops`) |
 | [Web App](web/README.md) | Next.js routes, components, environment |
