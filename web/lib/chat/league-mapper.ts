@@ -52,52 +52,6 @@ export const SPORT_CONFIG: Record<Sport, {
 };
 
 /**
- * Platform-specific MCP server configurations
- */
-// TODO: Remove legacy MCP_SERVER_CONFIG once chat fully migrates to unified gateway
-export const MCP_SERVER_CONFIG: Partial<Record<Platform, Record<Sport, {
-  serverUrl: string;
-  tools: string[];
-}>>> = {
-  ESPN: {
-    baseball: {
-      serverUrl: process.env.NEXT_PUBLIC_FANTASY_MCP_URL || '',
-      tools: SPORT_CONFIG.baseball.mcpTools
-    },
-    football: {
-      serverUrl: process.env.NEXT_PUBLIC_FANTASY_MCP_URL || '',
-      tools: SPORT_CONFIG.football.mcpTools
-    },
-    basketball: {
-      serverUrl: process.env.NEXT_PUBLIC_FANTASY_MCP_URL || '',
-      tools: SPORT_CONFIG.basketball.mcpTools
-    },
-    hockey: {
-      serverUrl: process.env.NEXT_PUBLIC_FANTASY_MCP_URL || '',
-      tools: SPORT_CONFIG.hockey.mcpTools
-    }
-  },
-  Yahoo: {
-    baseball: {
-      serverUrl: process.env.BASEBALL_YAHOO_MCP_URL || 'https://baseball-yahoo-mcp.workers.dev',
-      tools: ['get_yahoo_league_info', 'get_yahoo_team_roster', 'get_yahoo_matchups']
-    },
-    football: {
-      serverUrl: process.env.FOOTBALL_YAHOO_MCP_URL || 'https://football-yahoo-mcp.workers.dev',
-      tools: ['get_yahoo_football_league_info', 'get_yahoo_football_team', 'get_yahoo_football_matchups']
-    },
-    basketball: {
-      serverUrl: process.env.BASKETBALL_YAHOO_MCP_URL || 'https://basketball-yahoo-mcp.workers.dev',
-      tools: ['get_yahoo_basketball_league_info', 'get_yahoo_basketball_team', 'get_yahoo_basketball_matchups']
-    },
-    hockey: {
-      serverUrl: process.env.HOCKEY_YAHOO_MCP_URL || 'https://hockey-yahoo-mcp.workers.dev',
-      tools: ['get_yahoo_hockey_league_info', 'get_yahoo_hockey_team', 'get_yahoo_hockey_matchups']
-    }
-  }
-};
-
-/**
  * Automatically detect sport from ESPN gameId
  */
 export function detectSportFromGameId(gameId: string): Sport {
@@ -126,13 +80,6 @@ export function detectSportFromGameId(gameId: string): Sport {
   
   // Default to football if detection fails
   return 'football';
-}
-
-/**
- * Get MCP configuration for a platform and sport
- */
-export function getMcpConfig(platform: Platform, sport: Sport) {
-  return MCP_SERVER_CONFIG[platform]?.[sport] || null;
 }
 
 /**
