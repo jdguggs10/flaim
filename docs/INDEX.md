@@ -6,7 +6,7 @@ This file is the canonical map for Flaim docs. Update this when document ownersh
 
 | Fact type | Source of truth | Notes |
 |---|---|---|
-| Current delivery phase + what is next | `docs/dev/CURRENT-EXECUTION-STATE.md` | Canonical execution tracker. |
+| Active tasks + execution state | Linear (Flaim team) | Source of truth for all actionable work. |
 | Tools list + platform/sport support + deploy targets | `docs/STATUS.md` | Keep aligned with code and CI. |
 | Database schema summary | `docs/DATABASE.md` | Migrations in `docs/migrations/` remain canonical. |
 | Error code taxonomy (private reference) | `workers/shared/src/errors.ts` | Canonical source in code; reviewer-facing doc moved to private submissions folder. |
@@ -16,7 +16,6 @@ This file is the canonical map for Flaim docs. Update this when document ownersh
 | Public product overview | `README.md` | User-facing high-level overview. |
 | Architecture overview | `docs/ARCHITECTURE.md` | System design and data flow. |
 | Release history | `docs/CHANGELOG.md` | Condensed historical release notes. |
-| Backlog | `docs/dev/TODO.md` | Active backlog only. |
 | iOS app research (Foundation Models + MCP) | `docs/dev/2026-02-22-ios-app-research.md` | Technical feasibility, repo options, timeline, strategy. |
 | Transactions API research (ESPN, Yahoo, Sleeper) | `docs/dev/2026-02-23-transactions-api-research.md` | Endpoint details, response shapes, caveats, and implementation notes for a `get_transactions` MCP tool. |
 | Directory submission packets (private) | `../submissions/*` | Kept outside repo; re-verify before submission. |
@@ -40,10 +39,14 @@ This file is the canonical map for Flaim docs. Update this when document ownersh
 - `docs/CONNECTOR-DOCS.md`
 - `docs/plans/README.md`
 
-## Dev Docs (Working Set)
+## Dev Docs (Research Archive)
 
-- `docs/dev/CURRENT-EXECUTION-STATE.md` (primary execution tracker)
-- `docs/dev/TODO.md`
+Static dated research and analysis artifacts. Not updated in place — new investigations get new files.
+
+- `docs/dev/2026-02-22-ios-app-research.md`
+- `docs/dev/2026-02-23-transactions-api-research.md`
+- `docs/dev/2026-02-20-fantrax-integration-research.md`
+- `docs/dev/2026-02-20-platform-integration-sleeper-audit.md`
 
 Historical analyses/plans were externalized:
 - `docs/plans/README.md`
@@ -68,7 +71,7 @@ Historical analyses/plans were externalized:
 ## Maintenance Rules
 
 1. Update `docs/STATUS.md` when tool coverage, endpoints, deploy targets, or channel readiness changes.
-2. Update `docs/dev/CURRENT-EXECUTION-STATE.md` when sprint/phase status changes.
+2. Track all tasks and execution state in Linear (Flaim team). Do not create task lists in docs.
 3. Move superseded plans/reports to the external archive bundle, then update `docs/plans/README.md` and/or `../flaim-docs-archive/2026-02-08-repo-doc-cleanup/README.md`.
 4. Prefer links to canonical docs instead of duplicating tables across files.
 5. Keep submission-operational docs in `../submissions/internal-docs/` (private), not in this repo.
