@@ -10,7 +10,7 @@ This file is the canonical map for Flaim docs. Update this when document ownersh
 | Tool list + platform/sport support | `README.md`, `docs/CONNECTOR-DOCS.md` | Keep user-facing capabilities aligned with code and MCP schema. |
 | Deploy targets + runtime topology | `docs/ARCHITECTURE.md` | Keep infra/runtime details aligned with active deployments. |
 | Database schema summary | `docs/DATABASE.md` | Migrations in `docs/migrations/` remain canonical. |
-| Error code taxonomy (private reference) | `workers/shared/src/errors.ts` | Canonical source in code; reviewer-facing doc moved to private submissions folder. |
+| Error code taxonomy (private reference) | `workers/shared/src/errors.ts` | Canonical source in code; reviewer-facing doc in private workspace. |
 | Testing strategy | `docs/TESTING.md` | Keep lightweight and practical. |
 | Eval harness operations/runbooks | `../flaim-eval/docs/*` | Canonical in separate repo. |
 | Local Codex eval helper skill | `~/.codex/skills/flaim-eval-ops/SKILL.md` | Optional local-only helper for running eval flow; policy remains in `../flaim-eval/docs/*`. |
@@ -19,9 +19,7 @@ This file is the canonical map for Flaim docs. Update this when document ownersh
 | Release history | `docs/CHANGELOG.md` | Condensed historical release notes. |
 | iOS app research (Foundation Models + MCP) | `docs/dev/2026-02-22-ios-app-research.md` | Technical feasibility, repo options, timeline, strategy. |
 | Transactions API research (ESPN, Yahoo, Sleeper) | `docs/dev/2026-02-23-transactions-api-research.md` | Endpoint details, response shapes, caveats, and implementation notes for a `get_transactions` MCP tool. |
-| Directory submission packets (private) | `../submissions/*` | Kept outside repo; re-verify before submission. |
-| Tool versioning policy (private) | `../submissions/internal-docs/TOOL-VERSIONING.md` | Internal submission/versioning operations guide. |
-| Manual OAuth runbooks (private) | `../submissions/internal-docs/MANUAL-OAUTH-RUNBOOKS.md` | Internal reviewer verification checklists and evidence pointers. |
+| Distribution strategy + submission packets (private) | Private workspace | Strategy, submission packets, runbooks, tool versioning. Not in this repo. |
 | Connector user docs | `docs/CONNECTOR-DOCS.md` | Single user-facing setup + examples (for directory reviewers too). |
 | Historical docs/plans pointers | `docs/plans/README.md`, `../flaim-docs-archive/2026-02-08-repo-doc-cleanup/README.md` | External archive source-of-truth for stale docs. |
 
@@ -74,4 +72,4 @@ Historical analyses/plans were externalized:
 2. Track all tasks and execution state in Linear (Flaim team). Do not create task lists in docs.
 3. Move superseded plans/reports to the external archive bundle, then update `docs/plans/README.md` and/or `../flaim-docs-archive/2026-02-08-repo-doc-cleanup/README.md`.
 4. Prefer links to canonical docs instead of duplicating tables across files.
-5. Keep submission-operational docs in `../submissions/internal-docs/` (private), not in this repo.
+5. Keep distribution strategy and submission-operational docs in the private workspace, not in this repo.
