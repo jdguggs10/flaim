@@ -22,6 +22,7 @@ describe('fantasy-mcp tools', () => {
       'get_standings',
       'get_transactions',
       'get_user_session',
+      'search_players',
     ]);
   });
 
