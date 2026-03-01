@@ -945,7 +945,57 @@ export function getUnifiedTools(): UnifiedTool[] {
     },
 
     // -------------------------------------------------------------------------
-    // Tool 7: get_transactions
+    // Tool 7: search_players
+    // -------------------------------------------------------------------------
+    {
+      name: 'search_players',
+      title: 'Search Players',
+      requiredScope: 'mcp:read',
+      securitySchemes: buildSecuritySchemes('mcp:read'),
+      openaiMeta: { invoking: 'Searching players\u2026', invoked: 'Players ready' },
+      description: `Search for players by name across all roster statuses (rostered, free agent, waived). Returns identity-only results: name, position, pro team. Use values from get_user_session. Read-only and safe to retry. Current date is ${currentDate}.`,
+      inputSchema: {
+        query: z
+          .string()
+          .min(2)
+          .describe('Player name search string (minimum 2 characters)'),
+        platform: z
+          .enum(['espn', 'yahoo', 'sleeper'])
+          .describe('Fantasy platform (e.g., "espn", "yahoo", "sleeper")'),
+        sport: z
+          .enum(['football', 'baseball', 'basketball', 'hockey'])
+          .describe('Sport type (e.g., "football", "baseball")'),
+        league_id: z.string().describe('League ID (get from get_user_session)'),
+        season_year: z.number().describe('Season start year (e.g., 2025 for MLB 2025, 2024 for NBA 2024-25)'),
+        position: z
+          .string()
+          .optional()
+          .describe('Filter by position (e.g., "QB", "RB", "SP", "C"). Default: ALL'),
+        count: z
+          .number()
+          .optional()
+          .describe('Maximum number of players to return (default: 10, max: 25)'),
+      } as ZodShape,
+      handler: async (args, env, authHeader, correlationId, evalRunId, evalTraceId) => {
+        const params: ToolParams = {
+          platform: args.platform as Platform,
+          sport: args.sport as Sport,
+          league_id: args.league_id as string,
+          season_year: args.season_year as number,
+          query: args.query as string,
+          position: args.position as string | undefined,
+          count: args.count as number | undefined,
+        };
+
+        return withToolLogging(correlationId, 'search_players', `${params.platform} ${params.sport} q=${params.query} pos=${params.position || 'ALL'}`, async () => {
+          const result = await routeToClient(env, 'search_players', params, authHeader, correlationId, evalRunId, evalTraceId);
+          return routeResultToMcp(result);
+        }, evalRunId, evalTraceId);
+      },
+    },
+
+    // -------------------------------------------------------------------------
+    // Tool 8: get_transactions
     // -------------------------------------------------------------------------
     {
       name: 'get_transactions',

@@ -3,6 +3,7 @@ import { sleeperFetch, handleSleeperError } from '../../shared/sleeper-api';
 import { fetchSleeperTransactionsByWeeks, getSleeperCurrentWeek } from '../../shared/sleeper-transactions';
 import { getSleeperPlayersIndex } from '../../shared/sleeper-players-cache';
 import { createSleeperGetFreeAgentsHandler } from '../../shared/sleeper-free-agents-handler';
+import { buildSleeperPlayerSearch } from '../../shared/sleeper-free-agents';
 import { extractErrorCode } from '@flaim/worker-shared';
 
 type HandlerFn = (
@@ -21,7 +22,42 @@ export const basketballHandlers: Record<string, HandlerFn> = {
   get_matchups: handleGetMatchups,
   get_free_agents: handleGetFreeAgents,
   get_transactions: handleGetTransactions,
+  search_players: handleSearchPlayers,
 };
+
+async function handleSearchPlayers(
+  env: Env,
+  params: ToolParams,
+): Promise<ExecuteResponse> {
+  const { query, position, count } = params;
+
+  if (!query) {
+    return { success: false, error: 'query is required for search_players', code: 'MISSING_PARAM' };
+  }
+
+  try {
+    const requestedCount = Math.max(1, Math.min(25, Math.trunc(Number.isFinite(Number(count)) ? Number(count) : 10)));
+    const playersIndex = await getSleeperPlayersIndex(env, 'basketball');
+    const players = buildSleeperPlayerSearch(playersIndex, query, position, requestedCount);
+
+    return {
+      success: true,
+      data: {
+        platform: 'sleeper',
+        sport: params.sport,
+        query,
+        count: players.length,
+        players,
+      },
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+      code: extractErrorCode(error),
+    };
+  }
+}
 
 // Handlers are identical to football except get_matchups uses /state/nba
 // for the default week. Since Sleeper's league/roster/matchup endpoints

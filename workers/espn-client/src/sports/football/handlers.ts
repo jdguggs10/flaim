@@ -3,6 +3,7 @@ import type { Env, ToolParams, ExecuteResponse, EspnLeagueResponse, EspnPlayerPo
 import { getCredentials } from '../../shared/auth';
 import { espnFetch, handleEspnError, requireCredentials } from '../../shared/espn-api';
 import { fetchEspnTransactionsByWeeks, getEspnLeagueContext, fetchEspnPlayersByIds, enrichTransactions } from '../../shared/espn-transactions';
+import { getEspnPlayersIndex } from '../../shared/espn-players-cache';
 import { extractErrorCode } from '@flaim/worker-shared';
 import {
   getPositionName,
@@ -30,6 +31,7 @@ export const footballHandlers: Record<string, HandlerFn> = {
   get_roster: handleGetRoster,
   get_free_agents: handleGetFreeAgents,
   get_transactions: handleGetTransactions,
+  search_players: handleSearchPlayers,
 };
 
 /**
@@ -421,6 +423,58 @@ async function handleGetFreeAgents(
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error occurred',
       code: extractErrorCode(error)
+    };
+  }
+}
+
+async function handleSearchPlayers(
+  env: Env,
+  params: ToolParams,
+): Promise<ExecuteResponse> {
+  const { query, position, count, season_year } = params;
+
+  if (!query) {
+    return { success: false, error: 'query is required for search_players', code: 'MISSING_PARAM' };
+  }
+
+  try {
+    const limit = Math.max(1, Math.min(25, Math.trunc(Number.isFinite(Number(count)) ? Number(count) : 10)));
+    const playersIndex = await getEspnPlayersIndex(env, 'football', season_year);
+    const normalizedQuery = query.toLowerCase();
+    // Normalize common D/ST alias so "DST" matches ESPN's "D/ST" label
+    const rawPosition = position?.trim().toUpperCase();
+    const normalizedPosition = rawPosition === 'DST' ? 'D/ST' : rawPosition;
+
+    const players = Array.from(playersIndex.values())
+      .filter((p) => p.fullName.toLowerCase().includes(normalizedQuery))
+      .filter((p) => {
+        if (!normalizedPosition) return true;
+        return getPositionName(p.defaultPositionId).toUpperCase() === normalizedPosition;
+      })
+      .slice(0, limit)
+      .map((p) => ({
+        id: String(p.id),
+        name: p.fullName,
+        position: getPositionName(p.defaultPositionId),
+        team: getProTeamAbbrev(p.proTeamId),
+        percentOwned: p.percentOwned,
+      }));
+
+    return {
+      success: true,
+      data: {
+        platform: 'espn',
+        sport: params.sport,
+        query,
+        count: players.length,
+        players,
+      },
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+      code: extractErrorCode(error),
     };
   }
 }

@@ -126,7 +126,7 @@ export interface EspnPlayerPoolEntry {
 }
 
 export interface Env extends BaseEnvWithAuth {
-  // ESPN-client specific vars if needed
+  ESPN_PLAYERS_CACHE: KVNamespace;
 }
 
 export type Sport = 'football' | 'baseball' | 'basketball' | 'hockey';
@@ -146,6 +146,7 @@ export interface ToolParams {
   type?: 'add' | 'drop' | 'trade' | 'waiver';
   position?: string;
   count?: number;
+  query?: string;
 }
 
 export type { ExecuteResponse } from '@flaim/worker-shared';

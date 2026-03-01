@@ -24,6 +24,9 @@
     "prod": {
       "name": "espn-client",
       "workers_dev": true,
+      "kv_namespaces": [
+        { "binding": "ESPN_PLAYERS_CACHE", "id": "8aed89c806d34c53aa5edf53c26f9d32", "preview_id": "ed5d96feef944254af880eafe9c131b3" }
+      ],
       // Service binding for auth-worker (avoids same-zone fetch error 1042)
       "services": [
         { "binding": "AUTH_WORKER", "service": "auth-worker" }
@@ -39,6 +42,9 @@
     "preview": {
       "name": "espn-client-preview",
       "workers_dev": true,
+      "kv_namespaces": [
+        { "binding": "ESPN_PLAYERS_CACHE", "id": "ed5d96feef944254af880eafe9c131b3", "preview_id": "ed5d96feef944254af880eafe9c131b3" }
+      ],
       // Service binding for auth-worker
       "services": [
         { "binding": "AUTH_WORKER", "service": "auth-worker-preview" }
@@ -54,6 +60,9 @@
     "dev": {
       "name": "espn-client-dev",
       "workers_dev": true,
+      "kv_namespaces": [
+        { "binding": "ESPN_PLAYERS_CACHE", "id": "ed5d96feef944254af880eafe9c131b3", "preview_id": "ed5d96feef944254af880eafe9c131b3" }
+      ],
       // Service binding for auth-worker
       "services": [
         { "binding": "AUTH_WORKER", "service": "auth-worker-dev" }

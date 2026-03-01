@@ -21,6 +21,7 @@ export interface ToolParams {
   type?: 'add' | 'drop' | 'trade' | 'waiver';
   position?: string;
   count?: number;
+  query?: string;
 }
 
 export type { ExecuteResponse } from '@flaim/worker-shared';
