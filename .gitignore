@@ -39,7 +39,11 @@ build/
 .gemini/
 .windsurf/
 .agent/
-.agents/
+# .agents/ contains personal config but also the published flaim-fantasy skill
+.agents/*
+!.agents/skills
+.agents/skills/*
+!.agents/skills/flaim-fantasy
 .codex/
 .github/skills/
 
