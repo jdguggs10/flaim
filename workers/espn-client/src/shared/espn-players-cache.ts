@@ -60,8 +60,8 @@ export async function getEspnPlayersIndex(
   let cached: string | null = null;
   try {
     cached = await env.ESPN_PLAYERS_CACHE.get(key);
-  } catch {
-    // KV read failed — fall through to fetch
+  } catch (error) {
+    console.error('[espn-players-cache] KV read failed; falling through to fetch:', error);
   }
 
   if (cached) {
@@ -75,8 +75,8 @@ export async function getEspnPlayersIndex(
         }
         return index;
       }
-    } catch {
-      // Corrupt cache — fall through to fetch
+    } catch (error) {
+      console.error('[espn-players-cache] Corrupt KV cache; falling through to fetch:', error);
     }
   }
 

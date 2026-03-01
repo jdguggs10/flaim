@@ -441,7 +441,9 @@ async function handleSearchPlayers(
     const limit = Math.max(1, Math.min(25, Math.trunc(Number.isFinite(Number(count)) ? Number(count) : 10)));
     const playersIndex = await getEspnPlayersIndex(env, 'football', season_year);
     const normalizedQuery = query.toLowerCase();
-    const normalizedPosition = position?.trim().toUpperCase();
+    // Normalize common D/ST alias so "DST" matches ESPN's "D/ST" label
+    const rawPosition = position?.trim().toUpperCase();
+    const normalizedPosition = rawPosition === 'DST' ? 'D/ST' : rawPosition;
 
     const players = Array.from(playersIndex.values())
       .filter((p) => p.fullName.toLowerCase().includes(normalizedQuery))
