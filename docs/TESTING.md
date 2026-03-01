@@ -6,9 +6,9 @@ Keep testing light and focused. Flaim is a solo hobby project; prioritize critic
 
 Automated tests currently focus on the Workers layer:
 - **auth-worker**: OAuth handler behavior, league discovery helpers, ESPN type utilities
-- **fantasy-mcp**: tool routing and minimal tool behavior
-- **espn-client**: type utilities
-- **yahoo-client**: response normalizers
+- **fantasy-mcp**: tool routing, schema constraints, and core tool contract behavior
+- **espn-client**: type utilities plus cross-sport handler behavior (transactions and search)
+- **yahoo-client**: response normalizers plus cross-sport handler behavior (transactions and search)
 - **sleeper-client**: sport handlers, KV player cache, free-agent computation, transactions enrichment, routing
 
 The **web app** and **extension** do not have automated tests right now. Manual testing is acceptable until usage grows.
@@ -36,7 +36,7 @@ cd workers/sleeper-client && npm run type-check
 
 ## Sleeper Smoke Test Fixtures
 
-Public Sleeper leagues verified on **2026-02-20** (via `GET /v1/league/{id}`).
+Public Sleeper leagues last verified on **2026-02-20** (via `GET /v1/league/{id}`). Re-validate before relying on these for regression testing.
 Use these for local smoke tests of `workers/sleeper-client` and gateway routing.
 
 | Sport | League ID | Season | Status (at verification) |

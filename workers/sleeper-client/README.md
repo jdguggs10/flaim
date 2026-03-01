@@ -53,6 +53,7 @@ interface ExecuteRequest {
 - `get_roster` — Team roster with player details
 - `get_matchups` — Weekly matchups (paired by `matchup_id`)
 - `get_free_agents` — Available free agents (uses KV-backed player index cache)
+- `search_players` — Player lookup with ownership unavailable semantics (`market_percent_owned: null`, `ownership_scope: "unavailable"`)
 - `get_transactions` — Recent transactions with player name/position enrichment
 
 ### Basketball (NBA)
@@ -61,6 +62,7 @@ interface ExecuteRequest {
 - `get_roster` — Team roster with player details
 - `get_matchups` — Weekly matchups (paired by `matchup_id`)
 - `get_free_agents` — Available free agents (uses KV-backed player index cache)
+- `search_players` — Player lookup with ownership unavailable semantics (`market_percent_owned: null`, `ownership_scope: "unavailable"`)
 - `get_transactions` — Recent transactions with player name/position enrichment
 
 ## Player Cache (KV)

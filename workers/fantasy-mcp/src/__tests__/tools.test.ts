@@ -253,6 +253,81 @@ describe('fantasy-mcp tools', () => {
     expect(payload.data?.count).toBe(2);
   });
 
+  it('search_players schema remains unchanged and includes ownership guardrails in description', () => {
+    const tool = getUnifiedTools().find((t) => t.name === 'search_players');
+    expect(tool).toBeTruthy();
+
+    const schema = tool!.inputSchema as {
+      query: { parse: (value: unknown) => unknown };
+      platform: { parse: (value: unknown) => unknown };
+      sport: { parse: (value: unknown) => unknown };
+      league_id: { parse: (value: unknown) => unknown };
+      season_year: { parse: (value: unknown) => unknown };
+      position: { parse: (value: unknown) => unknown };
+      count: { parse: (value: unknown) => unknown };
+    };
+    expect(schema.query.parse('judge')).toBe('judge');
+    expect(schema.platform.parse('espn')).toBe('espn');
+    expect(schema.sport.parse('baseball')).toBe('baseball');
+    expect(schema.league_id.parse('449.l.123')).toBe('449.l.123');
+    expect(schema.season_year.parse(2025)).toBe(2025);
+    expect(schema.position.parse('OF')).toBe('OF');
+    expect(schema.count.parse(25)).toBe(25);
+
+    expect(tool!.description).toContain('market/global ownership context');
+    expect(tool!.description).toContain('NOT league ownership data');
+    expect(tool!.description).toContain('Do not infer free-agent status or who owns a player');
+    expect(tool!.description).toContain('get_league_info');
+    expect(tool!.description).toContain('get_roster');
+  });
+
+  it('search_players routes unchanged to client', async () => {
+    const tool = getUnifiedTools().find((t) => t.name === 'search_players');
+    expect(tool).toBeTruthy();
+
+    const routeToClientMock = routeToClient as MockedFunction<typeof routeToClient>;
+    routeToClientMock.mockResolvedValue({
+      success: true,
+      data: { count: 1, players: [{ id: '123', name: 'Aaron Judge', ownership_scope: 'platform_global' }] },
+    });
+
+    const env = {} as Env;
+    const args = {
+      platform: 'espn',
+      sport: 'baseball',
+      league_id: '123',
+      season_year: 2025,
+      query: 'judge',
+      position: 'OF',
+      count: 5,
+    };
+
+    const correlationId = 'corr-search-players';
+    const result = await tool!.handler(args, env, 'Bearer token', correlationId);
+    expect(routeToClient).toHaveBeenCalledWith(
+      env,
+      'search_players',
+      {
+        platform: 'espn',
+        sport: 'baseball',
+        league_id: '123',
+        season_year: 2025,
+        query: 'judge',
+        position: 'OF',
+        count: 5,
+      },
+      'Bearer token',
+      correlationId,
+      undefined,
+      undefined
+    );
+
+    const text = result.content?.[0]?.text;
+    const payload = JSON.parse(text as string) as { success?: boolean; data?: { count?: number } };
+    expect(payload.success).toBe(true);
+    expect(payload.data?.count).toBe(1);
+  });
+
   it('each tool declares a required scope', () => {
     const tools = getUnifiedTools();
     for (const tool of tools) {

@@ -953,7 +953,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       requiredScope: 'mcp:read',
       securitySchemes: buildSecuritySchemes('mcp:read'),
       openaiMeta: { invoking: 'Searching players\u2026', invoked: 'Players ready' },
-      description: `Search for player identity by name across all roster statuses (rostered, free agent, waived). Returns identity-only fields (name, position, pro team) and is NOT league ownership data. Do not infer free-agent status from this tool. To answer who owns a player in a league: call get_league_info to enumerate teams, then call get_roster per team and match player names. Use values from get_user_session. Read-only and safe to retry. Current date is ${currentDate}.`,
+      description: `Search for player identity by name across all roster statuses (rostered, free agent, waived). Returns identity fields plus market/global ownership context when available (market_percent_owned + ownership_scope). This is NOT league ownership data. Do not infer free-agent status or who owns a player in the user's league from market ownership values. To answer who owns a player in a league: call get_league_info to enumerate teams, then call get_roster per team and match player names. Use values from get_user_session. Read-only and safe to retry. Current date is ${currentDate}.`,
       inputSchema: {
         query: z
           .string()

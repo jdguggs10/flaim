@@ -165,6 +165,7 @@ Claude/ChatGPT/Gemini CLI → fantasy-mcp (gateway) → espn-client    → ESPN 
 - `get_matchups` — Current/specified week matchups
 - `get_roster` — Team roster with player details
 - `get_free_agents` — Available free agents (platform/sport dependent)
+- `search_players` — Player lookup across roster statuses with market/global ownership context (`market_percent_owned`, `ownership_scope`); not league ownership
 - `get_transactions` — Recent transactions (adds, drops, waivers, trades)
   - Week semantics are platform-specific in v1: ESPN/Sleeper support explicit week windows; Yahoo uses a recent 14-day timestamp window and ignores explicit week.
   - Yahoo `type=waiver` filter is intentionally unsupported in v1 (waiver enrichment is a separate phase).

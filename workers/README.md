@@ -112,6 +112,7 @@ All tools take explicit parameters: `platform`, `sport`, `league_id`, `season_ye
 - `get_matchups` — Current/specified week matchups
 - `get_roster` — Team roster with player details
 - `get_free_agents` — Available free agents
+- `search_players` — Player lookup with market/global ownership context (not league ownership)
 - `get_transactions` — Recent transactions (adds, drops, waivers, trades)
 
 `get_transactions` v1 semantics are platform-specific:

@@ -4,6 +4,12 @@ Follow Keep a Changelog; SemVer applies.
 
 ## [Unreleased]
 
+### Search Players Tool
+- **Added**: `search_players` to the unified tool surface in public docs and worker docs.
+- **Changed**: `search_players` now includes market ownership fields (`market_percent_owned`, `ownership_scope`) with explicit scope semantics.
+- **Changed**: Ownership guardrails clarified — market ownership is platform/global context only and must not be used to infer league ownership.
+- **Changed**: Sleeper `search_players` explicitly returns ownership unavailable semantics (`market_percent_owned: null`, `ownership_scope: "unavailable"`).
+
 ### Transactions Tool
 - **Added**: `get_transactions` tool shipped in unified gateway (`fantasy-mcp`) and ESPN, Yahoo, and Sleeper clients.
 - **Changed**: ESPN and Sleeper honor explicit `week` parameter; default to current + previous week when omitted.

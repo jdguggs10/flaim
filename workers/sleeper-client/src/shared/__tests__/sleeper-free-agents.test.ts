@@ -57,6 +57,8 @@ describe('buildSleeperPlayerSearch', () => {
     const result = buildSleeperPlayerSearch(players, 'patrick');
     expect(result.map((p) => p.id)).toContain('1');
     expect(result.map((p) => p.id)).toContain('2');
+    expect(result.every((p) => p.market_percent_owned === null)).toBe(true);
+    expect(result.every((p) => p.ownership_scope === 'unavailable')).toBe(true);
   });
 
   it('includes inactive players', () => {
@@ -68,6 +70,8 @@ describe('buildSleeperPlayerSearch', () => {
     const result = buildSleeperPlayerSearch(players, 'MAHOMES');
     expect(result).toHaveLength(1);
     expect(result[0].id).toBe('1');
+    expect(result[0].market_percent_owned).toBeNull();
+    expect(result[0].ownership_scope).toBe('unavailable');
   });
 
   it('applies position filter', () => {

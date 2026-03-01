@@ -102,3 +102,18 @@ export function logStructure(label: string, obj: unknown, _depth = 2): void {
   };
   console.log(`[yahoo-debug] ${label}:`, JSON.stringify(obj, replacer, 2).slice(0, 2000));
 }
+
+/**
+ * Parse Yahoo ownership.percent_owned safely.
+ * Returns null for missing/non-finite values and preserves valid 0 values.
+ */
+export function parseYahooPercentOwned(value: unknown): number | null {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value === 'string') {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}

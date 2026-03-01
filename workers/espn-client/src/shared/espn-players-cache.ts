@@ -8,7 +8,7 @@ export interface EspnPlayerRecord {
   fullName: string;
   defaultPositionId: number;
   proTeamId: number;
-  percentOwned: number;
+  percentOwned: number | null;
 }
 
 type EspnPlayerCacheSport = 'football' | 'baseball' | 'basketball' | 'hockey';
@@ -39,7 +39,7 @@ function parsePlayerRecord(raw: unknown): EspnPlayerRecord | null {
   if (!id || !fullName) return null;
 
   const ownership = r.ownership as Record<string, unknown> | undefined;
-  const percentOwned = typeof ownership?.percentOwned === 'number' ? ownership.percentOwned : 0;
+  const percentOwned = typeof ownership?.percentOwned === 'number' ? ownership.percentOwned : null;
 
   return {
     id,

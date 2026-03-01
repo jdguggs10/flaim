@@ -60,10 +60,12 @@ The unified gateway (`https://api.flaim.app/mcp`) exposes these tools:
 | `get_matchups` | Current/upcoming matchups |
 | `get_standings` | League standings |
 | `get_free_agents` | Available free agents |
+| `search_players` | Player lookup with market/global ownership context |
 | `get_transactions` | Recent transactions (adds, drops, waivers, trades) |
 
 All tools take explicit parameters: `platform`, `sport`, `league_id`, `season_year`.
 For `get_transactions`, week semantics are platform-specific: ESPN/Sleeper support week windows, while Yahoo uses a recent 14-day timestamp window and ignores explicit `week`. Yahoo `type=waiver` filtering is not supported in v1.
+For `search_players`, `market_percent_owned` is platform/global context only and is not league ownership.
 
 ## Architecture
 

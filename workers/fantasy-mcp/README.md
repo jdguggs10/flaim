@@ -48,9 +48,11 @@ All tools take explicit parameters. Call `get_user_session` first to get league 
 | `get_matchups` | Weekly matchups/scoreboard |
 | `get_roster` | Team roster with player stats |
 | `get_free_agents` | Available free agents |
+| `search_players` | Player lookup with market/global ownership context |
 | `get_transactions` | Recent transactions (adds, drops, waivers, trades) |
 
 `get_transactions` uses platform-specific week semantics in v1: ESPN/Sleeper support explicit `week`, while Yahoo ignores explicit `week` and uses a recent 14-day timestamp window. Yahoo `type=waiver` filtering is intentionally unsupported in v1. ESPN responses include a `teams` map (team ID → display name) so the LLM can resolve numeric `team_ids` on each transaction to human-readable names. Player entries are enriched with name, position, and pro team.
+`search_players` ownership fields are market/global context only (`market_percent_owned`, `ownership_scope`) and must not be used to infer league ownership.
 
 ### Tool Parameters
 
@@ -63,8 +65,9 @@ All tools take explicit parameters. Call `get_user_session` first to get league 
   team_id?: string;              // For roster queries
   week?: number;                 // For matchups; and transactions on ESPN/Sleeper (ignored by Yahoo transactions)
   type?: 'add' | 'drop' | 'trade' | 'waiver'; // For transactions (Yahoo "waiver" unsupported in v1)
+  query?: string;                // For search_players (required when calling that tool)
   position?: string;             // For free agents filter
-  count?: number;                // For free agents limit
+  count?: number;                // For free agents / search_players limits
 }
 ```
 

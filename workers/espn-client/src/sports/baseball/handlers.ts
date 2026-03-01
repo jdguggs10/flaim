@@ -62,6 +62,8 @@ async function handleSearchPlayers(
         name: p.fullName,
         position: getPositionName(p.defaultPositionId),
         team: getProTeamAbbrev(p.proTeamId),
+        market_percent_owned: p.percentOwned ?? null,
+        ownership_scope: 'platform_global' as const,
       }));
 
     return {

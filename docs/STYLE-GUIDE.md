@@ -302,13 +302,14 @@ import { cn } from '@/lib/utils'
 
 **Type checking**: Run `npm run type-check` (if configured) or `npx tsc --noEmit` in `web/`.
 
-### Manual Review
+### Manual Review Criteria
 
-- [ ] All new components use design tokens (no hard-coded colors)
-- [ ] Responsive behavior tested on mobile + desktop
-- [ ] Focus states visible on all interactive elements
-- [ ] No accessibility violations (use browser dev tools)
-- [ ] Component follows shadcn/ui patterns where applicable
+When reviewing frontend changes, verify:
+- All new components use design tokens (no hard-coded colors)
+- Responsive behavior tested on mobile + desktop
+- Focus states visible on all interactive elements
+- No accessibility violations (use browser dev tools)
+- Component follows shadcn/ui patterns where applicable
 
 ## Adding New Design Tokens
 

@@ -55,12 +55,14 @@ All tools take explicit parameters: `platform`, `sport`, `league_id`, `season_ye
 - `get_matchups`
 - `get_league_info`
 - `get_free_agents`
+- `search_players`
 - `get_transactions`
 - `get_ancient_history`
 
 Supported today: ESPN, Yahoo, and Sleeper.
-Sleeper support is currently football + basketball (Phase 1) and does not include a Sleeper free-agent endpoint.
+Sleeper support is currently football + basketball (Phase 1).
 `get_transactions` note: ESPN/Sleeper support week filtering; Yahoo ignores explicit `week` and uses a recent 14-day timestamp window. Yahoo `type=waiver` filtering is not supported in v1.
+`search_players` note: `market_percent_owned` is market/platform-wide context only, not league ownership. For "who owns X in my league," enumerate rosters.
 
 ## Working Examples (Copy/Paste)
 
@@ -81,7 +83,11 @@ These are intentionally short and “directory reviewer friendly”.
    - “Who are the best available free agents in my league right now?”
    - “Show best available QBs in my league.”
 
-5. **Transactions**
+5. **Player search**
+   - "Search for Giancarlo Stanton and Ben Rice in my league context."
+   - "Find matching players for 'Rice' and show market ownership context."
+
+6. **Transactions**
    - “Show recent transactions in my default league.”
    - “Show week 8 transactions for ESPN football league 12345678 in 2025.”
    - “Show recent Yahoo transactions for league 423.l.193847 in 2025 (adds/drops/trades).”

@@ -1,7 +1,7 @@
 import type { Env, ToolParams, ExecuteResponse } from '../../types';
 import { getYahooCredentials } from '../../shared/auth';
 import { yahooFetch, handleYahooError, requireCredentials } from '../../shared/yahoo-api';
-import { asArray, getPath, unwrapLeague, unwrapTeam, logStructure } from '../../shared/normalizers';
+import { asArray, getPath, unwrapLeague, unwrapTeam, logStructure, parseYahooPercentOwned } from '../../shared/normalizers';
 import { buildYahooTransactionsPath, normalizeYahooTransactions } from '../../shared/yahoo-transactions';
 import { getPositionFilter } from './mappings';
 import { extractErrorCode } from '@flaim/worker-shared';
@@ -74,12 +74,16 @@ async function handleSearchPlayers(
         }
       }
 
+      const ownershipData = playerData?.[1] as Record<string, unknown> | undefined;
+      const ownership = ownershipData?.ownership as Record<string, unknown> | undefined;
+
       return {
-        playerKey: playerMeta.player_key as string,
-        playerId: playerMeta.player_id as string,
+        id: playerMeta.player_id as string,
         name: (playerMeta.name as Record<string, unknown>)?.full as string,
         team: playerMeta.editorial_team_abbr as string,
         position: playerMeta.display_position as string,
+        market_percent_owned: parseYahooPercentOwned(ownership?.percent_owned),
+        ownership_scope: 'platform_global' as const,
       };
     });
 

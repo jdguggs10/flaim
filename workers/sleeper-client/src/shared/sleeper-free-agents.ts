@@ -12,6 +12,8 @@ export interface SleeperPlayerSearchResult {
   name: string;
   position?: string;
   team?: string;
+  market_percent_owned: null;
+  ownership_scope: 'unavailable';
 }
 
 function clampCount(count: number): number {
@@ -37,6 +39,8 @@ export function buildSleeperPlayerSearch(
       name: player.full_name,
       position: player.position,
       team: player.team,
+      market_percent_owned: null,
+      ownership_scope: 'unavailable',
     }));
 }
 

@@ -54,13 +54,14 @@ interface ExecuteRequest {
 
 ## Supported Tools
 
-All four sports (football, baseball, basketball, hockey) support the same 6 tools:
+All four sports (football, baseball, basketball, hockey) support the same 7 tools:
 
 - `get_league_info` - League settings and members
 - `get_standings` - League standings
 - `get_matchups` - Weekly matchups
 - `get_roster` - Team roster with player stats
 - `get_free_agents` - Available free agents
+- `search_players` - Player lookup with market/global ownership context
 - `get_transactions` - Recent transactions (adds, drops, waivers, trades)
 
 ### `get_transactions` Response Shape

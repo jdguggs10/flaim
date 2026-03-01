@@ -21,7 +21,7 @@ This file is the canonical map for Flaim docs. Update this when document ownersh
 | Transactions API research (ESPN, Yahoo, Sleeper) | `docs/dev/2026-02-23-transactions-api-research.md` | Endpoint details, response shapes, caveats, and implementation notes for a `get_transactions` MCP tool. |
 | Distribution strategy + submission packets (private) | Private workspace | Strategy, submission packets, runbooks, tool versioning. Not in this repo. |
 | Connector user docs | `docs/CONNECTOR-DOCS.md` | Single user-facing setup + examples (for directory reviewers too). |
-| Historical docs/plans pointers | `docs/plans/README.md`, `../flaim-docs-archive/2026-02-08-repo-doc-cleanup/README.md` | External archive source-of-truth for stale docs. |
+| Historical docs/plans pointers | `docs/plans/README.md`, `../flaim-archive/2026-02-08-repo-doc-cleanup/README.md`, `../flaim-archive/2026-03-01-search-players-rollout/README.md` | External archive source-of-truth for stale docs. |
 
 ## Permanent Docs (Long-Lived)
 
@@ -35,6 +35,7 @@ This file is the canonical map for Flaim docs. Update this when document ownersh
 - `docs/STYLE-GUIDE.md`
 - `docs/CHANGELOG.md`
 - `docs/CONNECTOR-DOCS.md`
+- `docs/STATUS.md` (deprecated stub — points to canonical sources)
 - `docs/plans/README.md`
 
 ## Dev Docs (Research Archive)
@@ -48,7 +49,8 @@ Static dated research and analysis artifacts. Not updated in place — new inves
 
 Historical analyses/plans were externalized:
 - `docs/plans/README.md`
-- `../flaim-docs-archive/2026-02-08-repo-doc-cleanup/README.md`
+- `../flaim-archive/2026-02-08-repo-doc-cleanup/README.md`
+- `../flaim-archive/2026-03-01-search-players-rollout/README.md`
 
 ## External Repo Docs
 
@@ -70,6 +72,6 @@ Historical analyses/plans were externalized:
 
 1. Update `README.md`, `docs/CONNECTOR-DOCS.md`, and/or `docs/ARCHITECTURE.md` when tool coverage, endpoints, deploy targets, or channel readiness changes.
 2. Track all tasks and execution state in Linear (Flaim team). Do not create task lists in docs.
-3. Move superseded plans/reports to the external archive bundle, then update `docs/plans/README.md` and/or `../flaim-docs-archive/2026-02-08-repo-doc-cleanup/README.md`.
+3. Move superseded plans/reports to the external archive bundle, then update `docs/plans/README.md` and relevant archive README in `../flaim-archive/*`.
 4. Prefer links to canonical docs instead of duplicating tables across files.
 5. Keep distribution strategy and submission-operational docs in the private workspace, not in this repo.

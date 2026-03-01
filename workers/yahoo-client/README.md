@@ -56,6 +56,7 @@ interface ExecuteRequest {
 - `get_matchups` - Weekly matchups
 - `get_roster` - Team roster with player stats
 - `get_free_agents` - Available free agents
+- `search_players` - Player lookup with market/global ownership context
 - `get_transactions` - Recent transactions (adds, drops, waivers, trades)
 
 ### Baseball
@@ -64,6 +65,7 @@ interface ExecuteRequest {
 - `get_matchups` - Weekly matchups (scoring periods)
 - `get_roster` - Team roster with player stats
 - `get_free_agents` - Available free agents
+- `search_players` - Player lookup with market/global ownership context
 - `get_transactions` - Recent transactions (adds, drops, waivers, trades)
 
 `get_transactions` Yahoo-specific behavior in v1:
