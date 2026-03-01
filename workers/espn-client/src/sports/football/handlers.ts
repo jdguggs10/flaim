@@ -457,7 +457,6 @@ async function handleSearchPlayers(
         name: p.fullName,
         position: getPositionName(p.defaultPositionId),
         team: getProTeamAbbrev(p.proTeamId),
-        percentOwned: p.percentOwned,
       }));
 
     return {

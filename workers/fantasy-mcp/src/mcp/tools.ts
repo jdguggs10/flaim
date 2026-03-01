@@ -908,7 +908,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       requiredScope: 'mcp:read',
       securitySchemes: buildSecuritySchemes('mcp:read'),
       openaiMeta: { invoking: 'Searching free agents\u2026', invoked: 'Free agents ready' },
-      description: `Get available free agents, optionally filtered by position. Sorted by ownership percentage. Requires authentication. Use values from get_user_session. Read-only and safe to retry. Current date is ${currentDate}.`,
+      description: `Get available free agents, optionally filtered by position. Sorted by ownership percentage. Use this for waiver-wire availability only. Do not use percentOwned to infer who owns a player in the user's league; for ownership questions, verify team rosters via get_league_info + get_roster. Requires authentication. Use values from get_user_session. Read-only and safe to retry. Current date is ${currentDate}.`,
       inputSchema: {
         platform: z
           .enum(['espn', 'yahoo', 'sleeper'])
@@ -953,7 +953,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       requiredScope: 'mcp:read',
       securitySchemes: buildSecuritySchemes('mcp:read'),
       openaiMeta: { invoking: 'Searching players\u2026', invoked: 'Players ready' },
-      description: `Search for players by name across all roster statuses (rostered, free agent, waived). Returns identity-only results: name, position, pro team. Use values from get_user_session. Read-only and safe to retry. Current date is ${currentDate}.`,
+      description: `Search for player identity by name across all roster statuses (rostered, free agent, waived). Returns identity-only fields (name, position, pro team) and is NOT league ownership data. Do not infer free-agent status from this tool. To answer who owns a player in a league: call get_league_info to enumerate teams, then call get_roster per team and match player names. Use values from get_user_session. Read-only and safe to retry. Current date is ${currentDate}.`,
       inputSchema: {
         query: z
           .string()

@@ -74,17 +74,12 @@ async function handleSearchPlayers(
         }
       }
 
-      const ownershipData = playerData?.[1] as Record<string, unknown> | undefined;
-      const ownership = ownershipData?.ownership as Record<string, unknown> | undefined;
-
       return {
         playerKey: playerMeta.player_key as string,
         playerId: playerMeta.player_id as string,
         name: (playerMeta.name as Record<string, unknown>)?.full as string,
         team: playerMeta.editorial_team_abbr as string,
         position: playerMeta.display_position as string,
-        percentOwned: ownership?.percent_owned ? parseFloat(String(ownership.percent_owned)) : undefined,
-        status: playerMeta.status as string | undefined,
       };
     });
 
