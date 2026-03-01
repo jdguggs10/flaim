@@ -7,8 +7,37 @@ export interface SleeperFreeAgent {
   team?: string;
 }
 
+export interface SleeperPlayerSearchResult {
+  id: string;
+  name: string;
+  position?: string;
+  team?: string;
+}
+
 function clampCount(count: number): number {
   return Math.max(1, Math.min(100, Math.trunc(count)));
+}
+
+export function buildSleeperPlayerSearch(
+  players: Map<string, SleeperPlayerRecord>,
+  query: string,
+  position?: string,
+  count = 10,
+): SleeperPlayerSearchResult[] {
+  const normalizedQuery = query.toLowerCase();
+  const normalizedPosition = position?.trim().toUpperCase();
+  const maxCount = Math.max(1, Math.min(25, Math.trunc(count)));
+
+  return Array.from(players.values())
+    .filter((player) => player.full_name.toLowerCase().includes(normalizedQuery))
+    .filter((player) => !normalizedPosition || player.position?.toUpperCase() === normalizedPosition)
+    .slice(0, maxCount)
+    .map((player) => ({
+      id: player.player_id,
+      name: player.full_name,
+      position: player.position,
+      team: player.team,
+    }));
 }
 
 export function buildSleeperFreeAgents(

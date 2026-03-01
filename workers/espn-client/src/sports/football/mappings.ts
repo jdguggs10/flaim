@@ -12,6 +12,12 @@ export const POSITION_MAP: Record<number, string> = {
   3: 'WR',     // Wide Receiver
   4: 'TE',     // Tight End
   5: 'K',      // Kicker
+  6: 'D/ST',   // Defense/Special Teams (IDP)
+  8: 'DT',     // Defensive Tackle (IDP)
+  9: 'DE',     // Defensive End (IDP)
+  10: 'LB',    // Linebacker (IDP)
+  11: 'CB',    // Cornerback (IDP)
+  12: 'S',     // Safety (IDP)
   16: 'D/ST',  // Defense/Special Teams
 };
 

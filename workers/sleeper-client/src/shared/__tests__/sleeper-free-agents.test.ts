@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildSleeperFreeAgents } from '../sleeper-free-agents';
+import { buildSleeperFreeAgents, buildSleeperPlayerSearch } from '../sleeper-free-agents';
 import type { SleeperPlayerRecord } from '../sleeper-players-cache';
 
 describe('sleeper-free-agents', () => {
@@ -42,5 +42,52 @@ describe('sleeper-free-agents', () => {
 
     const minResult = buildSleeperFreeAgents(players, new Set(), undefined, 0);
     expect(minResult).toHaveLength(1);
+  });
+});
+
+describe('buildSleeperPlayerSearch', () => {
+  const players = new Map<string, SleeperPlayerRecord>([
+    ['1', { player_id: '1', full_name: 'Patrick Mahomes', position: 'QB', team: 'KC', active: true }],
+    ['2', { player_id: '2', full_name: 'Patrick Queen', position: 'LB', team: 'PIT', active: true }],
+    ['3', { player_id: '3', full_name: 'Josh Allen', position: 'QB', team: 'BUF', active: true }],
+    ['4', { player_id: '4', full_name: 'Retired Patrick', position: 'WR', team: undefined, active: false }],
+  ]);
+
+  it('returns players matching query regardless of roster status', () => {
+    const result = buildSleeperPlayerSearch(players, 'patrick');
+    expect(result.map((p) => p.id)).toContain('1');
+    expect(result.map((p) => p.id)).toContain('2');
+  });
+
+  it('includes inactive players', () => {
+    const result = buildSleeperPlayerSearch(players, 'patrick');
+    expect(result.map((p) => p.id)).toContain('4');
+  });
+
+  it('is case-insensitive', () => {
+    const result = buildSleeperPlayerSearch(players, 'MAHOMES');
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('1');
+  });
+
+  it('applies position filter', () => {
+    const result = buildSleeperPlayerSearch(players, 'patrick', 'LB');
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('2');
+  });
+
+  it('returns empty array when no matches', () => {
+    const result = buildSleeperPlayerSearch(players, 'zzznomatch');
+    expect(result).toHaveLength(0);
+  });
+
+  it('clamps count to 1..25', () => {
+    const big = new Map<string, SleeperPlayerRecord>();
+    for (let i = 0; i < 50; i += 1) {
+      const id = `p${i}`;
+      big.set(id, { player_id: id, full_name: `Test Player ${i}`, active: true });
+    }
+    const result = buildSleeperPlayerSearch(big, 'test', undefined, 100);
+    expect(result).toHaveLength(25);
   });
 });
