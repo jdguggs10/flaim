@@ -81,10 +81,16 @@ Both paths write to the same `espn_leagues` storage.
 
 ## Season Year Defaults
 
-Season year defaults are deterministic and use America/New_York time:
+Season year defaults are deterministic and use America/New_York time. The canonical form always stores the **start year** of the season.
 
-- **Baseball (flb)**: Defaults to the previous year until Feb 1, then switches to the current year
-- **Football (ffl)**: Defaults to the previous year until Jul 1, then switches to the current year
+| Sport | Rollover Date | Rationale |
+|-------|--------------|-----------|
+| Baseball | Feb 1 | ~10 weeks before Opening Day (late March) |
+| Football | Jul 1 | ~10 weeks before NFL kickoff (early September) |
+| Basketball | Aug 1 | ~10 weeks before NBA opening night (late October) |
+| Hockey | Aug 1 | ~10 weeks before NHL opening night (early October) |
+
+**ESPN normalization:** ESPN uses the END year for NBA/NHL seasons (e.g., `2025` for the 2024-25 season). Flaim normalizes this to the start year internally via `toCanonicalYear()`/`toPlatformYear()` in `workers/auth-worker/src/season-utils.ts`.
 
 ## User Defaults
 

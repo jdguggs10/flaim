@@ -1,18 +1,5 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { defaultVectorStore } from "@/config/constants";
-
-type File = {
-  id: string;
-  name: string;
-  content: string;
-};
-
-type VectorStore = {
-  id: string;
-  name: string;
-  files?: File[];
-};
 
 export type WebSearchConfig = {
   user_location?: {
@@ -31,9 +18,6 @@ export type McpConfig = {
 };
 
 interface StoreState {
-  fileSearchEnabled: boolean;
-  //previousFileSearchEnabled: boolean;
-  setFileSearchEnabled: (enabled: boolean) => void;
   webSearchEnabled: boolean;
   setWebSearchEnabled: (enabled: boolean) => void;
   functionsEnabled: boolean;
@@ -41,8 +25,6 @@ interface StoreState {
   setFunctionsEnabled: (enabled: boolean) => void;
   codeInterpreterEnabled: boolean;
   setCodeInterpreterEnabled: (enabled: boolean) => void;
-  vectorStore: VectorStore | null;
-  setVectorStore: (store: VectorStore) => void;
   webSearchConfig: WebSearchConfig;
   setWebSearchConfig: (config: WebSearchConfig) => void;
   mcpEnabled: boolean;
@@ -88,7 +70,6 @@ interface StoreState {
 const useToolsStore = create<StoreState>()(
   persist(
     (set) => ({
-      vectorStore: defaultVectorStore.id !== "" ? defaultVectorStore : null,
       webSearchConfig: {
         user_location: {
           type: "approximate",
@@ -116,11 +97,6 @@ const useToolsStore = create<StoreState>()(
       espnS2: "",
       espnSWID: "",
       isAuthenticated: false,
-      fileSearchEnabled: false,
-      previousFileSearchEnabled: false,
-      setFileSearchEnabled: (enabled) => {
-        set({ fileSearchEnabled: enabled });
-      },
       webSearchEnabled: false,
       setWebSearchEnabled: (enabled) => {
         set({ webSearchEnabled: enabled });
@@ -138,7 +114,6 @@ const useToolsStore = create<StoreState>()(
       setCodeInterpreterEnabled: (enabled) => {
         set({ codeInterpreterEnabled: enabled });
       },
-      setVectorStore: (store) => set({ vectorStore: store }),
       setWebSearchConfig: (config) => set({ webSearchConfig: config }),
       setMcpConfig: (config) => set({ mcpConfig: config }),
       setMcpAvailableTools: (tools) => set({ mcpAvailableTools: tools }),

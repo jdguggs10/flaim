@@ -37,12 +37,12 @@ const ROLLOVER_MONTHS: Record<SeasonSport, number> = {
  * @example
  * // On Jan 4, 2026:
  * getDefaultSeasonYear('baseball') // => 2025 (before Feb 1)
- * getDefaultSeasonYear('football') // => 2025 (before Jun 1)
+ * getDefaultSeasonYear('football') // => 2025 (before Jul 1)
  *
  * // On Feb 1, 2026:
  * getDefaultSeasonYear('baseball') // => 2026
  *
- * // On Jun 1, 2026:
+ * // On Jul 1, 2026:
  * getDefaultSeasonYear('football') // => 2026
  */
 export function getDefaultSeasonYear(sport: SeasonSport, now = new Date()): number {
