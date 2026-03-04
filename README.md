@@ -8,8 +8,6 @@ Bring your fantasy league into ChatGPT, Claude, and Gemini CLI — with expert a
 
 Read-only. No trades, no drops, no roster changes — just analysis.
 
-<!-- TODO: Add demo GIF here -->
-
 ## How It Works
 
 The **Flaim skill** teaches your AI assistant how to be an expert fantasy analyst — when to pull which data, how to interpret it, and how to give actionable advice. The **MCP tools** feed it your actual league data. Together, they turn a general-purpose AI into a fantasy expert that knows your specific team.
@@ -50,7 +48,7 @@ The AI will detect and activate the skill automatically when you ask fantasy que
 | `get_matchups` | Weekly matchups and scores |
 | `get_standings` | League standings and rankings |
 | `get_free_agents` | Available free agents sorted by ownership |
-| `search_players` | Player lookup with ownership context |
+| `get_players` | Player lookup with ownership context |
 | `get_transactions` | Recent adds, drops, waivers, and trades |
 
 All tools connect through a single MCP endpoint: `https://api.flaim.app/mcp`

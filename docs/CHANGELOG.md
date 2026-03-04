@@ -5,10 +5,14 @@ Follow Keep a Changelog; SemVer applies.
 ## [Unreleased]
 
 ### Search Players Tool
-- **Added**: `search_players` to the unified tool surface in public docs and worker docs.
-- **Changed**: `search_players` now includes market ownership fields (`market_percent_owned`, `ownership_scope`) with explicit scope semantics.
+- **Changed**: Renamed MCP tool `search_players` -> `get_players` for naming consistency with `get_*` tool conventions. **[tool-contract][breaking]**
+- **Changed**: Updated worker routing, tests, and docs to use `get_players`.
+- **Changed**: `get_players` now includes market ownership fields (`market_percent_owned`, `ownership_scope`) with explicit scope semantics.
 - **Changed**: Ownership guardrails clarified — market ownership is platform/global context only and must not be used to infer league ownership.
-- **Changed**: Sleeper `search_players` explicitly returns ownership unavailable semantics (`market_percent_owned: null`, `ownership_scope: "unavailable"`).
+- **Changed**: Sleeper `get_players` explicitly returns ownership unavailable semantics (`market_percent_owned: null`, `ownership_scope: "unavailable"`).
+
+### Plugin Commands
+- **Changed**: Renamed plugin slash commands `/activity` -> `/activity-brief` and `/matchup` -> `/analyze-matchup` to reduce ambiguity with MCP tools.
 
 ### Transactions Tool
 - **Added**: `get_transactions` tool shipped in unified gateway (`fantasy-mcp`) and ESPN, Yahoo, and Sleeper clients.
@@ -43,7 +47,7 @@ Follow Keep a Changelog; SemVer applies.
 - **Sleeper Phase 2**: `get_free_agents` gateway schema updated to accept `platform: "sleeper"` alongside ESPN and Yahoo
 
 ### MCP
-- **Added**: OpenAI `toolInvocation` status messages on all 7 MCP tools — ChatGPT now shows contextual status text (e.g., "Fetching standings…") instead of generic "Called tool" while tools run.
+- **Added**: OpenAI `toolInvocation` status messages on all MCP tools — ChatGPT now shows contextual status text (e.g., "Fetching standings…") instead of generic "Called tool" while tools run.
 
 ### Chrome Extension v1.5.1
 - **Added**: ESPN login status checklist in popup ready state — shows "Signed in to Flaim" and "ESPN detected" before syncing.
@@ -96,7 +100,7 @@ Follow Keep a Changelog; SemVer applies.
 - **Changed**: Archived `docs/dev/ADD_YAHOO_PLATFORM.md` to `docs/archive/` (Phase 3 complete).
 - **Changed**: Consolidated current execution/sprint state into `docs/dev/CURRENT-EXECUTION-STATE.md` and archived superseded Feb 2026 sprint/incident plans.
 - **Changed**: Refreshed docs source-of-truth routing in `docs/INDEX.md`, `docs/STATUS.md`, and `docs/dev/TODO.md`.
-- **Changed**: Externalized stale `docs/archive/*.md` and `docs/plans/*.md` to `../flaim-docs-archive/2026-02-08-repo-doc-cleanup/` and left in-repo pointer files for lightweight checkouts.
+- **Changed**: Externalized stale `docs/archive/*.md` and `docs/plans/*.md` to an external archive bundle and left in-repo pointer files for lightweight checkouts.
 
 ### Branding
 - **Changed**: New flaming baseball logo for site favicon, apple-touch-icon, and Chrome extension icons.
