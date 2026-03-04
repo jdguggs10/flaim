@@ -13,8 +13,8 @@
 
 ## Verification Checklist
 When live credentials become available:
-- [ ] Confirm POSITION_MAP IDs against actual roster entries
-- [ ] Confirm goalie vs skater stat ID boundary
-- [ ] Confirm PRO_TEAM_MAP — especially expansion team IDs
-- [ ] Check if Arizona (24) still appears or is fully replaced by Utah (129764)
-- [ ] Log any unknown IDs that appear in practice
+- Confirm POSITION_MAP IDs against actual roster entries
+- Confirm goalie vs skater stat ID boundary
+- Confirm PRO_TEAM_MAP — especially expansion team IDs
+- Check if Arizona (24) still appears or is fully replaced by Utah (129764)
+- Log any unknown IDs that appear in practice

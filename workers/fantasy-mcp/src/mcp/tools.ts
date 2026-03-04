@@ -945,10 +945,10 @@ export function getUnifiedTools(): UnifiedTool[] {
     },
 
     // -------------------------------------------------------------------------
-    // Tool 7: search_players
+    // Tool 7: get_players
     // -------------------------------------------------------------------------
     {
-      name: 'search_players',
+      name: 'get_players',
       title: 'Search Players',
       requiredScope: 'mcp:read',
       securitySchemes: buildSecuritySchemes('mcp:read'),
@@ -987,8 +987,8 @@ export function getUnifiedTools(): UnifiedTool[] {
           count: args.count as number | undefined,
         };
 
-        return withToolLogging(correlationId, 'search_players', `${params.platform} ${params.sport} q=${params.query} pos=${params.position || 'ALL'}`, async () => {
-          const result = await routeToClient(env, 'search_players', params, authHeader, correlationId, evalRunId, evalTraceId);
+        return withToolLogging(correlationId, 'get_players', `${params.platform} ${params.sport} q=${params.query} pos=${params.position || 'ALL'}`, async () => {
+          const result = await routeToClient(env, 'get_players', params, authHeader, correlationId, evalRunId, evalTraceId);
           return routeResultToMcp(result);
         }, evalRunId, evalTraceId);
       },

@@ -74,7 +74,7 @@ function buildSearchResponse(): unknown {
   };
 }
 
-describe('yahoo cross-sport search_players handlers', () => {
+describe('yahoo cross-sport get_players handlers', () => {
   const getCredsMock = getYahooCredentials as MockedFunction<typeof getYahooCredentials>;
   const fetchMock = yahooFetch as MockedFunction<typeof yahooFetch>;
 
@@ -99,7 +99,7 @@ describe('yahoo cross-sport search_players handlers', () => {
       count: 10,
     };
 
-    const result = await handlers.search_players({} as never, params, 'Bearer x', `cid-${sport}`);
+    const result = await handlers.get_players({} as never, params, 'Bearer x', `cid-${sport}`);
     expect(result.success).toBe(true);
     if (!result.success) return;
 

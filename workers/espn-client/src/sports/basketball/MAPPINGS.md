@@ -13,7 +13,7 @@
 
 ## Verification Checklist
 When live credentials become available:
-- [ ] Confirm POSITION_MAP IDs against actual roster entries
-- [ ] Confirm STATS_MAP IDs against player stat objects
-- [ ] Confirm PRO_TEAM_MAP against proTeamSchedules endpoint
-- [ ] Log any unknown IDs that appear in practice
+- Confirm POSITION_MAP IDs against actual roster entries
+- Confirm STATS_MAP IDs against player stat objects
+- Confirm PRO_TEAM_MAP against proTeamSchedules endpoint
+- Log any unknown IDs that appear in practice

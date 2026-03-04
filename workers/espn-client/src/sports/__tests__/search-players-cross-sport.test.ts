@@ -17,7 +17,7 @@ const scenarios = [
   { label: 'hockey', sport: 'hockey', handlers: hockeyHandlers },
 ] as const;
 
-describe('espn cross-sport search_players handlers', () => {
+describe('espn cross-sport get_players handlers', () => {
   const getPlayersIndexMock = getEspnPlayersIndex as MockedFunction<typeof getEspnPlayersIndex>;
 
   beforeEach(() => {
@@ -40,7 +40,7 @@ describe('espn cross-sport search_players handlers', () => {
       count: 10,
     };
 
-    const result = await handlers.search_players({} as never, params);
+    const result = await handlers.get_players({} as never, params);
     expect(result.success).toBe(true);
     if (!result.success) return;
 

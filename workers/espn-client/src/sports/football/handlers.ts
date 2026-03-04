@@ -31,7 +31,7 @@ export const footballHandlers: Record<string, HandlerFn> = {
   get_roster: handleGetRoster,
   get_free_agents: handleGetFreeAgents,
   get_transactions: handleGetTransactions,
-  search_players: handleSearchPlayers,
+  get_players: handleSearchPlayers,
 };
 
 /**
@@ -434,7 +434,7 @@ async function handleSearchPlayers(
   const { query, position, count, season_year } = params;
 
   if (!query) {
-    return { success: false, error: 'query is required for search_players', code: 'MISSING_PARAM' };
+    return { success: false, error: 'query is required for get_players', code: 'MISSING_PARAM' };
   }
 
   try {

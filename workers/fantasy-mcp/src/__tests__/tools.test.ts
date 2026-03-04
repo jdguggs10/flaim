@@ -18,11 +18,11 @@ describe('fantasy-mcp tools', () => {
       'get_free_agents',
       'get_league_info',
       'get_matchups',
+      'get_players',
       'get_roster',
       'get_standings',
       'get_transactions',
       'get_user_session',
-      'search_players',
     ]);
   });
 
@@ -253,8 +253,8 @@ describe('fantasy-mcp tools', () => {
     expect(payload.data?.count).toBe(2);
   });
 
-  it('search_players schema remains unchanged and includes ownership guardrails in description', () => {
-    const tool = getUnifiedTools().find((t) => t.name === 'search_players');
+  it('get_players schema remains unchanged and includes ownership guardrails in description', () => {
+    const tool = getUnifiedTools().find((t) => t.name === 'get_players');
     expect(tool).toBeTruthy();
 
     const schema = tool!.inputSchema as {
@@ -281,8 +281,8 @@ describe('fantasy-mcp tools', () => {
     expect(tool!.description).toContain('get_roster');
   });
 
-  it('search_players routes unchanged to client', async () => {
-    const tool = getUnifiedTools().find((t) => t.name === 'search_players');
+  it('get_players routes unchanged to client', async () => {
+    const tool = getUnifiedTools().find((t) => t.name === 'get_players');
     expect(tool).toBeTruthy();
 
     const routeToClientMock = routeToClient as MockedFunction<typeof routeToClient>;
@@ -306,7 +306,7 @@ describe('fantasy-mcp tools', () => {
     const result = await tool!.handler(args, env, 'Bearer token', correlationId);
     expect(routeToClient).toHaveBeenCalledWith(
       env,
-      'search_players',
+      'get_players',
       {
         platform: 'espn',
         sport: 'baseball',
