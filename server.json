@@ -2,8 +2,8 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "app.flaim/mcp",
   "title": "Flaim Fantasy",
-  "description": "Read-only fantasy analysis for ESPN, Yahoo, and Sleeper with unified league context for standings, rosters, matchups, and free agents",
-  "version": "1.0.0",
+  "description": "Read-only fantasy analysis for ESPN, Yahoo, and Sleeper leagues via MCP",
+  "version": "1.0.1",
   "websiteUrl": "https://flaim.app",
   "repository": {
     "url": "https://github.com/jdguggs10/flaim",

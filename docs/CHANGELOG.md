@@ -1,8 +1,10 @@
 # Changelog (Condensed)
 
-Follow Keep a Changelog; SemVer applies.
+Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
+
+## [8.0.0] - 2026-03-04
 
 ### Search Players Tool
 - **Changed**: Renamed MCP tool `search_players` -> `get_players` for naming consistency with `get_*` tool conventions. **[tool-contract][breaking]**
@@ -68,9 +70,10 @@ Follow Keep a Changelog; SemVer applies.
 - **Note**: All ESPN mappings sourced from `cwendt94/espn-api` — marked unverified pending live league testing.
 
 ### Distribution
-- **Added**: Published Flaim to the official MCP registry (`registry.modelcontextprotocol.io`) as `app.flaim/mcp` with DNS-based domain verification. Added `server.json` to repo root.
-- **Added**: Gemini CLI extension manifest (`gemini-extension.json`) for auto-indexing into the Gemini CLI extensions gallery.
-- **Added**: Submitted to Glama, MCP.so, and awesome-mcp-servers (PR #1918). PulseMCP auto-indexes from official registry.
+- **Added**: Published Flaim to the official MCP registry (`registry.modelcontextprotocol.io`) as `app.flaim/mcp` v1.0.1 with DNS-based domain verification.
+- **Added**: Listed on MCP.so as `flaim-fantasy`. Listed on Glama (auto-indexed from GitHub).
+- **Added**: Submitted to awesome-mcp-servers (PR #1918, pending review). PulseMCP auto-indexes from official registry.
+- **Added**: `server.json` in repo root for MCP registry publishing. Gemini CLI extension manifest (`gemini-extension.json`).
 
 ### MCP Interoperability
 - **Fixed**: Resolved MCP connector discovery failures (`424`) by hardening transport behavior at `/mcp`.
