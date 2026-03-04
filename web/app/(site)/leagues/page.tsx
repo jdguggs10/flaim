@@ -43,6 +43,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { useEspnCredentials } from '@/lib/use-espn-credentials';
+import { getDefaultSeasonYear } from '@/lib/season-utils';
 
 const CHROME_EXTENSION_URL = "https://chromewebstore.google.com/detail/flaim-espn-fantasy-connec/mbnokejgglkfgkeeenolgdpcnfakpbkn";
 
@@ -287,7 +288,7 @@ function LeaguesPageContent() {
   const [discoverDialogOpen, setDiscoverDialogOpen] = useState(false);
   const [newLeagueId, setNewLeagueId] = useState('');
   const [newLeagueSport, setNewLeagueSport] = useState<Sport>('football');
-  const [newLeagueSeason, setNewLeagueSeason] = useState<number>(() => new Date().getFullYear());
+  const [newLeagueSeason, setNewLeagueSeason] = useState<number>(() => getDefaultSeasonYear('football'));
   const [seasonManuallySet, setSeasonManuallySet] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
   const [verifiedLeague, setVerifiedLeague] = useState<VerifiedLeague | null>(null);
@@ -1539,10 +1540,10 @@ function LeaguesPageContent() {
                             {/* Quick season toggles */}
                             <div className="flex gap-2">
                               <Button
-                                variant={newLeagueSeason === new Date().getFullYear() ? 'default' : 'outline'}
+                                variant={newLeagueSeason === getDefaultSeasonYear(newLeagueSport) ? 'default' : 'outline'}
                                 size="sm"
                                 onClick={() => {
-                                  setNewLeagueSeason(new Date().getFullYear());
+                                  setNewLeagueSeason(getDefaultSeasonYear(newLeagueSport));
                                   setSeasonManuallySet(false);
                                 }}
                                 disabled={isVerifying}
@@ -1581,7 +1582,7 @@ function LeaguesPageContent() {
                                     const sport = v as Sport;
                                     setNewLeagueSport(sport);
                                     if (!seasonManuallySet) {
-                                      setNewLeagueSeason(new Date().getFullYear());
+                                      setNewLeagueSeason(getDefaultSeasonYear(sport));
                                     }
                                   }}
                                   disabled={isVerifying}
