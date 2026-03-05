@@ -2,6 +2,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { Env } from '../types';
 import { getUnifiedTools, hasRequiredScope, mcpAuthError } from './tools';
+import { USER_SESSION_WIDGET_HTML } from '../widgets/user-session-widget';
 
 export interface McpContext {
   env: Env;
@@ -30,6 +31,20 @@ export function createFantasyMcpServer(ctx: McpContext): McpServer {
     ],
   });
 
+  // Register widget resources
+  server.registerResource(
+    'user-session-widget',
+    'ui://widget/user-session.html',
+    {},
+    async () => ({
+      contents: [{
+        uri: 'ui://widget/user-session.html',
+        mimeType: 'text/html+skybridge',
+        text: USER_SESSION_WIDGET_HTML,
+      }],
+    })
+  );
+
   const tools = getUnifiedTools();
   for (const tool of tools) {
     server.registerTool(
@@ -45,6 +60,11 @@ export function createFantasyMcpServer(ctx: McpContext): McpServer {
           ...(tool.openaiMeta && {
             'openai/toolInvocation/invoking': tool.openaiMeta.invoking,
             'openai/toolInvocation/invoked': tool.openaiMeta.invoked,
+          }),
+          ...(tool.widgetUri && {
+            'openai/outputTemplate': tool.widgetUri,
+            'openai/widgetAccessible': true,
+            'openai/resultCanProduceWidget': true,
           }),
         },
       },

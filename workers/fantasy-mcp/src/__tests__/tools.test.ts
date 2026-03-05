@@ -63,6 +63,15 @@ describe('fantasy-mcp tools', () => {
     const payload = JSON.parse(text as string) as { success?: boolean; totalLeaguesFound?: number };
     expect(payload.success).toBe(true);
     expect(payload.totalLeaguesFound).toBe(0);
+
+    // structuredContent mirrors the text payload
+    expect(result.structuredContent).toBeDefined();
+    expect((result.structuredContent as Record<string, unknown>).totalLeaguesFound).toBe(0);
+  });
+
+  it('get_user_session includes widgetUri in tool definition', () => {
+    const tool = getUnifiedTools().find((t) => t.name === 'get_user_session');
+    expect(tool?.widgetUri).toBe('ui://widget/user-session.html');
   });
 
   it('get_league_info routes to client and formats a success payload', async () => {
