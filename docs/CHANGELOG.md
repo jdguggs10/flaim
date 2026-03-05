@@ -4,6 +4,11 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Session & History Tool Contract
+- **Changed**: `get_user_session` now returns only current-season leagues (was top 2 seasons). Smaller payload, no contradictory instructions. **[tool-contract]**
+- **Changed**: `get_ancient_history` now includes last season (was only 2+ years old). Closes the gap where last season appeared in neither tool.
+- **Removed**: Widget client-side dedupe logic (no longer needed — server sends one season per league).
+
 ### Season Year Defaults
 - **Fixed**: Manual "Add League" dialog now defaults to the sport-aware current season year instead of the calendar year. Football/basketball/hockey now correctly default to 2025 in March 2026 (rollover not yet hit). Baseball correctly shows 2026 (Feb 1 rollover passed). Affects initial state, "This season" button, and sport-change reset.
 - **Added**: `web/lib/season-utils.ts` — `getDefaultSeasonYear(sport)` mirroring the auth-worker rollover logic for use in the web layer.
