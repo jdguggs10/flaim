@@ -341,6 +341,9 @@ app.get('/fantasy/mcp/.well-known/oauth-protected-resource/*', (c) => {
 app.get('/widgets/user-session', (c) => {
   return c.html(USER_SESSION_WIDGET_HTML);
 });
+app.get('/fantasy/widgets/user-session', (c) => {
+  return c.html(USER_SESSION_WIDGET_HTML);
+});
 
 // Favicon — redirect to canonical icon so crawlers/clients pick up the current asset
 app.get('/favicon.ico', (c) => c.redirect('https://flaim.app/favicon.ico', 302));

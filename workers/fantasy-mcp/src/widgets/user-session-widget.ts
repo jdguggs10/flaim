@@ -115,6 +115,8 @@ export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
 </div>
 <script>
 (function() {
+  var ALLOWED_ORIGINS = ['https://chatgpt.com', 'https://chat.openai.com'];
+  var VALID_PLATFORMS = { espn: true, yahoo: true, sleeper: true };
   var SPORT_ICONS = {
     football: '\\u{1F3C8}',
     baseball: '\\u26BE',
@@ -152,11 +154,12 @@ export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
     var html = '';
     order.forEach(function(sport) {
       html += '<div class="sport-group">';
-      html += '<div class="sport-label">' + (SPORT_ICONS[sport] || '') + ' ' + sport + '</div>';
+      html += '<div class="sport-label">' + (SPORT_ICONS[sport] || '') + ' ' + esc(sport) + '</div>';
       groups[sport].forEach(function(league) {
         var key = league.platform + ':' + league.leagueId + ':' + league.seasonYear;
         var isDefault = key === defaultKey;
-        var platformClass = 'platform-' + (league.platform || 'espn');
+        var platform = VALID_PLATFORMS[league.platform] ? league.platform : 'espn';
+        var platformClass = 'platform-' + platform;
         html += '<div class="league-row' + (isDefault ? ' is-default' : '') + '">';
         html += '<span class="platform-badge ' + platformClass + '">' + esc(league.platform || '') + '</span>';
         html += '<div class="league-info">';
@@ -180,6 +183,7 @@ export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
   }
 
   window.addEventListener('message', function(event) {
+    if (ALLOWED_ORIGINS.indexOf(event.origin) === -1) return;
     if (event.data && event.data.method === 'ui/notifications/tool-result') {
       var params = event.data.params || {};
       var data = params.structuredContent || null;
