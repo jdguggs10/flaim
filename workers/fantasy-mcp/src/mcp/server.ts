@@ -42,7 +42,7 @@ export function createFantasyMcpServer(ctx: McpContext): McpServer {
         mimeType: 'text/html+skybridge',
         text: USER_SESSION_WIDGET_HTML,
         _meta: {
-          'openai/widgetDomain': 'https://chatgpt.com',
+          'openai/widgetDomain': 'https://flaim.app',
           'openai/widgetCSP': {
             connect_domains: [],
             resource_domains: [],

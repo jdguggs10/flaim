@@ -8,7 +8,11 @@
  * - No external scripts, fonts, or stylesheets (CSP-safe for iframe)
  * - 353px wide (ChatGPT text response template)
  * - System fonts only
- * - Light background to match ChatGPT container
+ * - Aligns with flaim.app branding
+ *
+ * Data access:
+ * - Primary: window.openai.toolOutput (synchronous, available on load)
+ * - Fallback: postMessage from parent (use event.source === window.parent, NOT origin allowlist)
  */
 export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
 <html lang="en">
@@ -22,7 +26,7 @@ export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     font-size: 14px;
     line-height: 1.5;
-    color: #1a1a1a;
+    color: #0b1222;
     background: #fff;
     width: 353px;
     overflow-x: hidden;
@@ -32,47 +36,66 @@ export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-bottom: 12px;
+    margin-bottom: 14px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #e4e7ec;
   }
-  .wordmark {
+  .hero-icon { font-size: 22px; }
+  .app-name {
     font-size: 18px;
     font-weight: 700;
     letter-spacing: -0.02em;
-    color: #1a1a1a;
+    color: #0b1222;
   }
-  .wordmark .ai { color: #61f2b0; }
   .sport-group { margin-bottom: 12px; }
+  .sport-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+    padding-left: 2px;
+  }
   .sport-label {
     font-size: 11px;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    color: #888;
-    margin-bottom: 6px;
+    color: #6b7280;
+  }
+  .default-pill {
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: #fbbf24;
+    color: #78350f;
   }
   .league-row {
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 8px;
+    padding: 8px 10px;
     border-radius: 8px;
-    background: #f9f9f9;
+    background: #f8f9fb;
     margin-bottom: 4px;
+    border-right: 3px solid transparent;
   }
   .league-row.is-default {
-    border-left: 3px solid #61f2b0;
-    padding-left: 5px;
+    border-right-color: #fbbf24;
   }
-  .sport-icon { font-size: 16px; flex-shrink: 0; width: 20px; text-align: center; }
   .platform-badge {
     font-size: 10px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    padding: 2px 6px;
+    padding: 2px 0;
     border-radius: 4px;
     color: #fff;
     flex-shrink: 0;
+    width: 56px;
+    text-align: center;
   }
   .platform-espn { background: #c4122e; }
   .platform-yahoo { background: #7b1fa2; }
@@ -81,13 +104,14 @@ export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
   .league-name {
     font-size: 13px;
     font-weight: 600;
+    color: #0b1222;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
   .league-detail {
     font-size: 11px;
-    color: #666;
+    color: #6b7280;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -95,27 +119,34 @@ export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
   .empty-state {
     text-align: center;
     padding: 24px 16px;
-    color: #666;
+    color: #6b7280;
+    font-size: 13px;
   }
   .empty-state a {
-    color: #1a1a1a;
+    color: #0b1222;
     font-weight: 600;
     text-decoration: underline;
+  }
+  .loading {
+    text-align: center;
+    padding: 24px 16px;
+    color: #9ca3af;
+    font-size: 13px;
   }
 </style>
 </head>
 <body>
 <div class="widget">
   <div class="header">
-    <span class="wordmark">fl<span class="ai">ai</span>m</span>
+    <span class="hero-icon">\\u{1F525}\\u26BE</span>
+    <span class="app-name">Flaim</span>
   </div>
   <div id="content">
-    <div class="empty-state">Loading&hellip;</div>
+    <div class="loading">Loading&hellip;</div>
   </div>
 </div>
 <script>
 (function() {
-  var ALLOWED_ORIGINS = ['https://chatgpt.com', 'https://chat.openai.com'];
   var VALID_PLATFORMS = { espn: true, yahoo: true, sleeper: true };
   var SPORT_ICONS = {
     football: '\\u{1F3C8}',
@@ -123,26 +154,43 @@ export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
     basketball: '\\u{1F3C0}',
     hockey: '\\u{1F3D2}'
   };
+  // Order sports: baseball first, then football, basketball, hockey, then anything else
+  var SPORT_ORDER = { baseball: 0, football: 1, basketball: 2, hockey: 3 };
 
   function render(data) {
     var container = document.getElementById('content');
     if (!data || !data.allLeagues || data.allLeagues.length === 0) {
       container.innerHTML =
         '<div class="empty-state">' +
-        'No leagues configured.<br>' +
-        '<a href="https://flaim.app/settings" target="_blank" rel="noopener">Add leagues in Settings</a>' +
+        'No leagues found.<br>' +
+        '<a href="https://flaim.app/leagues" target="_blank" rel="noopener">Connect a league</a>' +
         '</div>';
       return;
     }
 
-    var defaultKey = data.defaultLeague
-      ? data.defaultLeague.platform + ':' + data.defaultLeague.leagueId + ':' + data.defaultLeague.seasonYear
-      : null;
+    var leagues = data.allLeagues;
 
-    // Group by sport
+    // Build set of default league keys (per-sport defaults from defaultLeagues map)
+    var defaultKeys = {};
+    if (data.defaultLeagues) {
+      Object.keys(data.defaultLeagues).forEach(function(sport) {
+        var dl = data.defaultLeagues[sport];
+        if (dl) {
+          defaultKeys[dl.platform + ':' + dl.leagueId + ':' + dl.seasonYear] = true;
+        }
+      });
+    }
+    // Also include the primary default
+    if (data.defaultLeague) {
+      defaultKeys[data.defaultLeague.platform + ':' + data.defaultLeague.leagueId + ':' + data.defaultLeague.seasonYear] = true;
+    }
+
+    // Determine which sports have a default (for the DEFAULT pill on the sport header)
+    var defaultSport = data.defaultSport || null;
+
     var groups = {};
     var order = [];
-    data.allLeagues.forEach(function(league) {
+    leagues.forEach(function(league) {
       var sport = (league.sport || 'other').toLowerCase();
       if (!groups[sport]) {
         groups[sport] = [];
@@ -151,17 +199,29 @@ export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
       groups[sport].push(league);
     });
 
+    // Sort sports by preferred order
+    order.sort(function(a, b) {
+      var oa = SPORT_ORDER[a] !== undefined ? SPORT_ORDER[a] : 99;
+      var ob = SPORT_ORDER[b] !== undefined ? SPORT_ORDER[b] : 99;
+      return oa - ob;
+    });
+
     var html = '';
     order.forEach(function(sport) {
+      var isDefaultSport = sport === defaultSport;
       html += '<div class="sport-group">';
-      html += '<div class="sport-label">' + (SPORT_ICONS[sport] || '') + ' ' + esc(sport) + '</div>';
+      html += '<div class="sport-header">';
+      html += '<span class="sport-label">' + (SPORT_ICONS[sport] || '') + ' ' + esc(sport) + '</span>';
+      if (isDefaultSport) {
+        html += '<span class="default-pill">DEFAULT</span>';
+      }
+      html += '</div>';
       groups[sport].forEach(function(league) {
         var key = league.platform + ':' + league.leagueId + ':' + league.seasonYear;
-        var isDefault = key === defaultKey;
+        var isDefault = !!defaultKeys[key];
         var platform = VALID_PLATFORMS[league.platform] ? league.platform : 'espn';
-        var platformClass = 'platform-' + platform;
         html += '<div class="league-row' + (isDefault ? ' is-default' : '') + '">';
-        html += '<span class="platform-badge ' + platformClass + '">' + esc(league.platform || '') + '</span>';
+        html += '<span class="platform-badge platform-' + platform + '">' + esc(league.platform || '') + '</span>';
         html += '<div class="league-info">';
         html += '<div class="league-name">' + esc(league.leagueName || league.leagueId || '') + '</div>';
         var detail = [];
@@ -182,8 +242,21 @@ export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
     return d.innerHTML;
   }
 
+  // Primary: read data synchronously from openai.toolOutput
+  if (window.openai && window.openai.toolOutput) {
+    try {
+      var output = typeof window.openai.toolOutput === 'string'
+        ? JSON.parse(window.openai.toolOutput)
+        : window.openai.toolOutput;
+      render(output);
+    } catch (e) {
+      // fall through to postMessage listener
+    }
+  }
+
+  // Fallback: listen for postMessage from parent
   window.addEventListener('message', function(event) {
-    if (ALLOWED_ORIGINS.indexOf(event.origin) === -1) return;
+    if (event.source !== window.parent) return;
     if (event.data && event.data.method === 'ui/notifications/tool-result') {
       var params = event.data.params || {};
       var data = params.structuredContent || null;
