@@ -4,6 +4,10 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Season Year Defaults
+- **Fixed**: Manual "Add League" dialog now defaults to the sport-aware current season year instead of the calendar year. Football/basketball/hockey now correctly default to 2025 in March 2026 (rollover not yet hit). Baseball correctly shows 2026 (Feb 1 rollover passed). Affects initial state, "This season" button, and sport-change reset.
+- **Added**: `web/lib/season-utils.ts` — `getDefaultSeasonYear(sport)` mirroring the auth-worker rollover logic for use in the web layer.
+
 ## [8.0.0] - 2026-03-04
 
 ### Search Players Tool

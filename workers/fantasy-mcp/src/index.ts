@@ -15,6 +15,7 @@ import { createMcpHandler } from './mcp/create-mcp-handler';
 import { isPublicMcpHandshakeRequest, normalizeMcpAcceptHeader } from './mcp/auth-gate';
 import { logEvalEvent } from './logging';
 import { buildMcpAuthErrorResponse } from './auth-response';
+import { USER_SESSION_WIDGET_HTML } from './widgets/user-session-widget';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -334,6 +335,14 @@ app.get('/fantasy/mcp/.well-known/oauth-protected-resource/*', (c) => {
   return c.json(buildOauthMetadata(buildResourceFromSuffix('https://api.flaim.app/fantasy/mcp', suffix)), 200, {
     'Cache-Control': 'public, max-age=3600',
   });
+});
+
+// Widget HTML endpoint (fallback for HTTP-fetching clients)
+app.get('/widgets/user-session', (c) => {
+  return c.html(USER_SESSION_WIDGET_HTML);
+});
+app.get('/fantasy/widgets/user-session', (c) => {
+  return c.html(USER_SESSION_WIDGET_HTML);
 });
 
 // Favicon — redirect to canonical icon so crawlers/clients pick up the current asset

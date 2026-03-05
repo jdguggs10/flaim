@@ -59,7 +59,7 @@ All tools connect through a single MCP endpoint: `https://api.flaim.app/mcp`
 |----------|--------|------|
 | **ESPN** | Football, Baseball, Basketball, Hockey | Chrome extension or manual cookies |
 | **Yahoo** | Football, Baseball, Basketball, Hockey | OAuth 2.0 |
-| **Sleeper** | Football, Baseball, Basketball, Hockey | Username (public API) |
+| **Sleeper** | Football, Basketball | Username (public API) |
 
 ## Architecture
 

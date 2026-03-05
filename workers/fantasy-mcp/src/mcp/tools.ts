@@ -17,6 +17,7 @@ type ZodShape = Record<string, any>;
 
 export interface McpToolResponse {
   content: Array<{ type: 'text'; text: string }>;
+  structuredContent?: Record<string, unknown>;
   isError?: boolean;
   _meta?: Record<string, unknown>;
   // Index signature to satisfy MCP SDK types
@@ -39,6 +40,7 @@ export interface UnifiedTool {
     invoking: string;
     invoked: string;
   };
+  widgetUri?: string;
   handler: (
     args: Record<string, unknown>,
     env: Env,
@@ -312,6 +314,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       requiredScope: 'mcp:read',
       securitySchemes: buildSecuritySchemes('mcp:read'),
       openaiMeta: { invoking: 'Loading your leagues\u2026', invoked: 'Leagues loaded' },
+      widgetUri: 'ui://widget/user-session.html',
       description:
         "Returns the user's configured fantasy leagues with current season info. Use the returned platform, sport, leagueId, teamId, and seasonYear values for all subsequent tool calls. season_year always represents the start year of the season. Read-only and safe to retry.",
       inputSchema: {},
@@ -530,7 +533,7 @@ export function getUnifiedTools(): UnifiedTool[] {
             Object.values(defaultLeagues)[0] ||
             leagues[0];
 
-          return mcpSuccess({
+          const sessionData = {
             success: true,
             currentDate: new Date().toISOString(),
             currentSeasons: {
@@ -572,7 +575,11 @@ export function getUnifiedTools(): UnifiedTool[] {
             ),
             allLeagues: leagues,
             instructions: sessionMessage,
-          });
+          };
+          return {
+            content: [{ type: 'text' as const, text: JSON.stringify(sessionData, null, 2) }],
+            structuredContent: sessionData as unknown as Record<string, unknown>,
+          };
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Unknown error';
           return mcpError(`Failed to fetch user session: ${message}`);

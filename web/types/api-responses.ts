@@ -45,10 +45,3 @@ export interface TurnResponseRequest {
   tools?: any[];
   previous_response_id?: string;
 }
-
-export interface VectorStoreRequest {
-  name?: string;
-  vectorStoreId?: string;
-  fileId?: string;
-  fileObject?: any;
-}

@@ -183,10 +183,8 @@ export const buildMcpToolsFromState = (state: MultiMcpState): any[] => {
 export const getTools = () => {
   const {
     webSearchEnabled,
-    fileSearchEnabled,
     functionsEnabled,
     codeInterpreterEnabled,
-    vectorStore,
     webSearchConfig,
     mcpEnabled,
     mcpConfig,
@@ -214,14 +212,6 @@ export const getTools = () => {
     }
 
     tools.push(webSearchTool);
-  }
-
-  if (fileSearchEnabled) {
-    const fileSearchTool = {
-      type: "file_search",
-      vector_store_ids: [vectorStore?.id],
-    };
-    tools.push(fileSearchTool);
   }
 
   if (codeInterpreterEnabled) {
