@@ -67,7 +67,7 @@ const ALLOWED_REDIRECT_URIS = [
   // Claude.ai web
   'https://claude.ai/api/mcp/auth_callback',
   'https://claude.com/api/mcp/auth_callback',
-  // ChatGPT OAuth callbacks
+  // ChatGPT OAuth callbacks (wildcard matched below)
   'https://chatgpt.com/connector_platform_oauth_redirect',
   'https://platform.openai.com/apps-manage/oauth',
   // For local development/testing
@@ -124,8 +124,26 @@ export function isValidRedirectUri(uri: string): boolean {
   // Exact match against static allowlist
   if (ALLOWED_REDIRECT_URIS.includes(uri)) return true;
 
+  // ChatGPT dev-mode apps generate unique per-app callback paths
+  if (isChatGptConnectorUri(uri)) return true;
+
   // Dynamic loopback URIs for Claude Desktop (RFC 8252)
   return isLoopbackRedirectUri(uri);
+}
+
+function isChatGptConnectorUri(uri: string): boolean {
+  try {
+    const parsed = new URL(uri);
+    return (
+      parsed.protocol === 'https:' &&
+      parsed.hostname === 'chatgpt.com' &&
+      parsed.pathname.startsWith('/connector/oauth/') &&
+      !parsed.search &&
+      !parsed.hash
+    );
+  } catch {
+    return false;
+  }
 }
 
 function buildErrorRedirect(redirectUri: string, error: string, description: string, state?: string): string {

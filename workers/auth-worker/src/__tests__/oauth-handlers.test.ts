@@ -197,6 +197,20 @@ describe('redirect URI validation', () => {
   it('rejects loopback with arbitrary path', () => {
     expect(isValidRedirectUri('http://localhost:9999/evil')).toBe(false);
   });
+
+  it('accepts ChatGPT connector OAuth callback with any app ID', () => {
+    expect(isValidRedirectUri('https://chatgpt.com/connector/oauth/pV6dW4LxKl3M')).toBe(true);
+    expect(isValidRedirectUri('https://chatgpt.com/connector/oauth/fQYjWb9wMu_y')).toBe(true);
+  });
+
+  it('rejects ChatGPT connector URI with query string or fragment', () => {
+    expect(isValidRedirectUri('https://chatgpt.com/connector/oauth/abc?evil=true')).toBe(false);
+    expect(isValidRedirectUri('https://chatgpt.com/connector/oauth/abc#frag')).toBe(false);
+  });
+
+  it('rejects non-chatgpt.com host using connector path', () => {
+    expect(isValidRedirectUri('https://evil.com/connector/oauth/abc')).toBe(false);
+  });
 });
 
 describe('validateOAuthToken resource enforcement', () => {
