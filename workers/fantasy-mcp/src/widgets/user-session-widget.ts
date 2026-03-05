@@ -138,7 +138,7 @@ export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
 <body>
 <div class="widget">
   <div class="header">
-    <span class="hero-icon">\\u{1F525}\\u26BE</span>
+    <span class="hero-icon">\u{1F525}\u26BE</span>
     <span class="app-name">Flaim</span>
   </div>
   <div id="content">
@@ -242,25 +242,46 @@ export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
     return d.innerHTML;
   }
 
-  // Primary: read data synchronously from openai.toolOutput
-  if (window.openai && window.openai.toolOutput) {
-    try {
-      var output = typeof window.openai.toolOutput === 'string'
-        ? JSON.parse(window.openai.toolOutput)
-        : window.openai.toolOutput;
-      render(output);
-    } catch (e) {
-      // fall through to postMessage listener
+  var rendered = false;
+
+  function tryReadToolOutput() {
+    if (rendered) return;
+    if (window.openai && window.openai.toolOutput) {
+      try {
+        var output = typeof window.openai.toolOutput === 'string'
+          ? JSON.parse(window.openai.toolOutput)
+          : window.openai.toolOutput;
+        render(output);
+        rendered = true;
+      } catch (e) {
+        // ignore parse errors
+      }
     }
   }
 
+  // Try reading immediately
+  tryReadToolOutput();
+
+  // Retry on DOMContentLoaded and after short delays (SDK may inject after initial parse)
+  document.addEventListener('DOMContentLoaded', tryReadToolOutput);
+  setTimeout(tryReadToolOutput, 100);
+  setTimeout(tryReadToolOutput, 500);
+
   // Fallback: listen for postMessage from parent
   window.addEventListener('message', function(event) {
+    if (rendered) return;
     if (event.source !== window.parent) return;
+    var data = null;
     if (event.data && event.data.method === 'ui/notifications/tool-result') {
-      var params = event.data.params || {};
-      var data = params.structuredContent || null;
-      if (data) render(data);
+      data = (event.data.params || {}).structuredContent || null;
+    } else if (event.data && event.data.structuredContent) {
+      data = event.data.structuredContent;
+    } else if (event.data && event.data.allLeagues) {
+      data = event.data;
+    }
+    if (data) {
+      render(data);
+      rendered = true;
     }
   });
 })();
