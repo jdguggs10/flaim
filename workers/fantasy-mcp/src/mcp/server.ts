@@ -41,6 +41,13 @@ export function createFantasyMcpServer(ctx: McpContext): McpServer {
         uri: 'ui://widget/user-session.html',
         mimeType: 'text/html+skybridge',
         text: USER_SESSION_WIDGET_HTML,
+        _meta: {
+          'openai/widgetDomain': 'https://chatgpt.com',
+          'openai/widgetCSP': {
+            connect_domains: [],
+            resource_domains: [],
+          },
+        },
       }],
     })
   );

@@ -579,6 +579,11 @@ export function getUnifiedTools(): UnifiedTool[] {
           return {
             content: [{ type: 'text' as const, text: JSON.stringify(sessionData, null, 2) }],
             structuredContent: sessionData as unknown as Record<string, unknown>,
+            _meta: {
+              'openai/outputTemplate': 'ui://widget/user-session.html',
+              'openai/widgetAccessible': true,
+              'openai/resultCanProduceWidget': true,
+            },
           };
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Unknown error';
