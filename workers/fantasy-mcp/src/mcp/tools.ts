@@ -444,8 +444,17 @@ export function getUnifiedTools(): UnifiedTool[] {
 
             // Only include if most recent season is within threshold
             if (mostRecentYear >= thresholdYear) {
-              // Take only the 2 most recent seasons
-              leagues.push(...groupSeasons.slice(0, 2));
+              // Determine current season for this league's sport
+              const sport = (groupSeasons[0]?.sport || '').toLowerCase();
+              const currentYear = getCurrentSeason(sport as Sport);
+              // Take only the current-season entry (or most recent if no exact match)
+              const currentSeason = groupSeasons.find(s => s.seasonYear === currentYear);
+              if (currentSeason) {
+                leagues.push(currentSeason);
+              } else {
+                // Fallback: most recent season (e.g., league not yet created for current season)
+                leagues.push(groupSeasons[0]);
+              }
             }
           }
 
@@ -467,9 +476,9 @@ export function getUnifiedTools(): UnifiedTool[] {
             const league = leagues[0];
             sessionMessage = `Use platform="${league.platform}", sport="${league.sport}", leagueId="${league.leagueId}", teamId="${league.teamId || 'none'}", seasonYear=${league.seasonYear} for all tool calls.`;
           } else {
-            sessionMessage = `User has ${leagues.length} league-seasons configured across: ${Object.entries(sportCounts)
+            sessionMessage = `User has ${leagues.length} leagues configured across: ${Object.entries(sportCounts)
               .map(([sport, count]) => `${count} ${sport}`)
-              .join(', ')}. When presenting leagues to the user, show only current-season leagues (not historical seasons) unless the user explicitly asks about past seasons. For historical leagues/seasons (2+ years old), use get_ancient_history. Infer sport from context (e.g., "tight ends" → football) and use that sport's default league. If sport is unclear, use the default sport and its default league. Only ask when no default applies.`;
+              .join(', ')}. Only current-season leagues are shown. For past seasons or historical data, use get_ancient_history. Infer sport from context (e.g., "tight ends" → football) and use that sport's default league. If sport is unclear, use the default sport and its default league. Only ask when no default applies.`;
           }
 
           // Fetch user preferences for defaults
@@ -603,7 +612,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       securitySchemes: buildSecuritySchemes('mcp:read'),
       openaiMeta: { invoking: 'Searching old seasons\u2026', invoked: 'History loaded' },
       description:
-        'Retrieve archived leagues and old seasons beyond the 2-year window. Use when user asks about inactive leagues, past seasons, or historical performance. Read-only and safe to retry.',
+        'Past seasons and historical leagues — everything not in the current season. Use when user asks about last season, inactive leagues, past seasons, or historical performance. Read-only and safe to retry.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -741,8 +750,10 @@ export function getUnifiedTools(): UnifiedTool[] {
               // Entire league is old - include all seasons
               oldLeagues.push(...groupSeasons);
             } else {
-              // Active league - only include seasons beyond the 2-season window
-              const ancientSeasons = groupSeasons.slice(2);
+              // Active league - include everything except the current season
+              const sport = (groupSeasons[0]?.sport || '').toLowerCase();
+              const currentYear = getCurrentSeason(sport as Sport);
+              const ancientSeasons = groupSeasons.filter(s => s.seasonYear !== currentYear);
               if (ancientSeasons.length > 0) {
                 oldSeasons[key] = ancientSeasons;
               }

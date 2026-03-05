@@ -74,6 +74,96 @@ describe('fantasy-mcp tools', () => {
     expect(tool?.widgetUri).toBe('ui://widget/user-session.html');
   });
 
+  it('get_user_session returns only current-season leagues', async () => {
+    const tool = getUnifiedTools().find((t) => t.name === 'get_user_session');
+    expect(tool).toBeTruthy();
+
+    // Today is 2026-03-05: football current season = 2025, baseball current season = 2026
+    const espnLeagues = [
+      { platform: 'espn', sport: 'football', leagueId: 'fb1', leagueName: 'Gridiron', teamId: 't1', seasonYear: 2025 },
+      { platform: 'espn', sport: 'football', leagueId: 'fb1', leagueName: 'Gridiron', teamId: 't1', seasonYear: 2024 },
+      { platform: 'espn', sport: 'baseball', leagueId: 'bb1', leagueName: 'Diamond', teamId: 't2', seasonYear: 2026 },
+      { platform: 'espn', sport: 'baseball', leagueId: 'bb1', leagueName: 'Diamond', teamId: 't2', seasonYear: 2025 },
+    ];
+
+    const env = {
+      AUTH_WORKER: {
+        fetch: async (req: Request) => {
+          const url = new URL(req.url);
+          if (url.pathname === '/leagues') {
+            return new Response(JSON.stringify({ leagues: espnLeagues }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          // Yahoo, Sleeper, preferences — empty
+          return new Response(JSON.stringify({ leagues: [] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        },
+      },
+    } as unknown as Env;
+
+    const result = await tool!.handler({}, env, 'Bearer test-token');
+    const payload = JSON.parse(result.content[0].text) as {
+      allLeagues: Array<{ leagueId: string; seasonYear: number; sport: string }>;
+      totalLeaguesFound: number;
+    };
+
+    // Should have exactly 2 entries: football 2025 and baseball 2026
+    expect(payload.totalLeaguesFound).toBe(2);
+    const football = payload.allLeagues.find((l) => l.sport === 'football');
+    const baseball = payload.allLeagues.find((l) => l.sport === 'baseball');
+    expect(football?.seasonYear).toBe(2025);
+    expect(baseball?.seasonYear).toBe(2026);
+  });
+
+  it('get_ancient_history includes last season from active leagues', async () => {
+    const tool = getUnifiedTools().find((t) => t.name === 'get_ancient_history');
+    expect(tool).toBeTruthy();
+
+    // Today is 2026-03-05: football current season = 2025, baseball current season = 2026
+    const espnLeagues = [
+      { platform: 'espn', sport: 'football', leagueId: 'fb1', leagueName: 'Gridiron', teamId: 't1', seasonYear: 2025 },
+      { platform: 'espn', sport: 'football', leagueId: 'fb1', leagueName: 'Gridiron', teamId: 't1', seasonYear: 2024 },
+      { platform: 'espn', sport: 'baseball', leagueId: 'bb1', leagueName: 'Diamond', teamId: 't2', seasonYear: 2026 },
+      { platform: 'espn', sport: 'baseball', leagueId: 'bb1', leagueName: 'Diamond', teamId: 't2', seasonYear: 2025 },
+    ];
+
+    const env = {
+      AUTH_WORKER: {
+        fetch: async (req: Request) => {
+          const url = new URL(req.url);
+          if (url.pathname === '/leagues') {
+            return new Response(JSON.stringify({ leagues: espnLeagues }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          return new Response(JSON.stringify({ leagues: [] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        },
+      },
+    } as unknown as Env;
+
+    const result = await tool!.handler({}, env, 'Bearer test-token');
+    const payload = JSON.parse(result.content[0].text) as {
+      oldSeasonsFromActiveLeagues: Record<string, Array<{ seasonYear: number; sport: string }>>;
+      totalOldSeasons: number;
+    };
+
+    // Football 2024 and baseball 2025 should be in oldSeasonsFromActiveLeagues
+    expect(payload.totalOldSeasons).toBe(2);
+    const allOldSeasons = Object.values(payload.oldSeasonsFromActiveLeagues).flat();
+    const fbOld = allOldSeasons.find((s) => s.sport === 'football');
+    const bbOld = allOldSeasons.find((s) => s.sport === 'baseball');
+    expect(fbOld?.seasonYear).toBe(2024);
+    expect(bbOld?.seasonYear).toBe(2025);
+  });
+
   it('get_league_info routes to client and formats a success payload', async () => {
     const tool = getUnifiedTools().find((t) => t.name === 'get_league_info');
     expect(tool).toBeTruthy();

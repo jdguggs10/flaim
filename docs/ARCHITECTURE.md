@@ -164,8 +164,8 @@ Claude/ChatGPT/Gemini CLI → fantasy-mcp (gateway) → espn-client    → ESPN 
 - Service bindings for worker-to-worker communication (no 522 timeouts)
 
 **Unified tools:**
-- `get_user_session` — All configured leagues across platforms with IDs
-- `get_ancient_history` — Historical leagues and seasons (2+ years old)
+- `get_user_session` — Current-season leagues only with `structuredContent` for ChatGPT widget rendering
+- `get_ancient_history` — Past seasons and historical leagues (everything not in the current season)
 - `get_league_info` — League settings (requires platform, sport, league_id, season_year)
 - `get_standings` — League standings
 - `get_matchups` — Current/specified week matchups
