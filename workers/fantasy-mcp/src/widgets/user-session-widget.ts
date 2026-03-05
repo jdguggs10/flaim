@@ -10,9 +10,14 @@
  * - System fonts only
  * - Aligns with flaim.app branding
  *
- * Data access — tries every known method:
- * 1. window.openai.toolOutput (Apps SDK synchronous)
- * 2. postMessage from parent in any known envelope format
+ * Data access — in order of priority:
+ * 1. openai:set_globals CustomEvent → window.openai.toolOutput (primary, async)
+ * 2. window.openai.toolOutput on immediate/DOMContentLoaded (may already be set)
+ * 3. postMessage JSON-RPC ui/notifications/tool-result (fallback)
+ *
+ * References:
+ * - https://developers.openai.com/apps-sdk/build/chatgpt-ui/
+ * - https://developers.openai.com/apps-sdk/build/mcp-server/
  */
 export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
 <html lang="en">
@@ -132,13 +137,6 @@ export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
     color: #9ca3af;
     font-size: 13px;
   }
-  .debug {
-    font-size: 10px;
-    color: #ccc;
-    text-align: center;
-    padding-top: 4px;
-    word-break: break-all;
-  }
 </style>
 </head>
 <body>
@@ -149,18 +147,12 @@ export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
   <div id="content">
     <div class="loading">Loading&hellip;</div>
   </div>
-  <div id="debug"></div>
 </div>
 <script>
 (function() {
   var VALID_PLATFORMS = { espn: true, yahoo: true, sleeper: true };
   var SPORT_ORDER = { baseball: 0, football: 1, basketball: 2, hockey: 3 };
   var rendered = false;
-  var dbg = document.getElementById('debug');
-
-  function log(msg) {
-    if (dbg) dbg.textContent = msg;
-  }
 
   function render(data) {
     if (rendered) return;
@@ -226,7 +218,7 @@ export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
         var detail = [];
         if (league.teamName) detail.push(league.teamName);
         if (league.seasonYear) detail.push(String(league.seasonYear));
-        html += '<div class="league-detail">' + esc(detail.join(' · ')) + '</div>';
+        html += '<div class="league-detail">' + esc(detail.join(' \\u00B7 ')) + '</div>';
         html += '</div></div>';
       });
       html += '</div>';
@@ -234,7 +226,6 @@ export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
 
     container.innerHTML = html;
     rendered = true;
-    log('');
   }
 
   function esc(s) {
@@ -249,47 +240,48 @@ export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
     if (typeof obj === 'string') {
       try { obj = JSON.parse(obj); } catch(e) { return null; }
     }
-    // Direct data (has allLeagues)
     if (obj.allLeagues) return obj;
-    // Nested in structuredContent
     if (obj.structuredContent) return extract(obj.structuredContent);
-    // Nested in params.structuredContent
     if (obj.params && obj.params.structuredContent) return extract(obj.params.structuredContent);
-    // Nested in content[0].text
     if (obj.content && obj.content[0] && obj.content[0].text) return extract(obj.content[0].text);
     return null;
   }
 
   function tryToolOutput() {
     if (rendered) return;
-    try {
-      if (window.openai && window.openai.toolOutput) {
-        var data = extract(window.openai.toolOutput);
-        if (data) { render(data); return; }
-        log('toolOutput found but no allLeagues');
-      }
-    } catch(e) {
-      log('toolOutput error: ' + e.message);
+    if (window.openai && window.openai.toolOutput != null) {
+      var data = extract(window.openai.toolOutput);
+      if (data) render(data);
     }
   }
 
-  // Try immediately, on DOMContentLoaded, and with delays
+  // 1. Primary: listen for openai:set_globals CustomEvent (fires when SDK populates toolOutput)
+  window.addEventListener('openai:set_globals', function(event) {
+    if (rendered) return;
+    var globals = event.detail && event.detail.globals;
+    if (globals && globals.toolOutput !== undefined) {
+      tryToolOutput();
+    }
+  });
+
+  // 2. Check immediately and on DOMContentLoaded (toolOutput may already be set)
   tryToolOutput();
   document.addEventListener('DOMContentLoaded', tryToolOutput);
-  setTimeout(tryToolOutput, 50);
-  setTimeout(tryToolOutput, 200);
-  setTimeout(tryToolOutput, 1000);
-  setTimeout(function() {
-    if (!rendered) log('no data received');
-  }, 3000);
 
-  // Listen for ANY postMessage and try to extract data
+  // 3. Fallback: postMessage JSON-RPC from parent
   window.addEventListener('message', function(event) {
     if (rendered) return;
-    var data = extract(event.data);
-    if (data) {
-      render(data);
+    if (!event.data) return;
+    var msg = event.data;
+    // JSON-RPC tool-result envelope
+    if (msg.jsonrpc === '2.0' && msg.method === 'ui/notifications/tool-result') {
+      var data = extract(msg.params);
+      if (data) render(data);
+      return;
     }
+    // Direct data
+    var data = extract(msg);
+    if (data) render(data);
   });
 })();
 </script>
