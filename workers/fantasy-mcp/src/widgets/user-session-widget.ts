@@ -167,7 +167,15 @@ export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
       return;
     }
 
-    var leagues = data.allLeagues;
+    // Dedupe: show only the most recent season per unique league
+    var best = {};
+    data.allLeagues.forEach(function(l) {
+      var key = l.platform + ':' + l.leagueId;
+      if (!best[key] || (l.seasonYear || 0) > (best[key].seasonYear || 0)) {
+        best[key] = l;
+      }
+    });
+    var leagues = Object.keys(best).map(function(k) { return best[k]; });
 
     var defaultKeys = {};
     if (data.defaultLeagues) {

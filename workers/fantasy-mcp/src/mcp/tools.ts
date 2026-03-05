@@ -469,7 +469,7 @@ export function getUnifiedTools(): UnifiedTool[] {
           } else {
             sessionMessage = `User has ${leagues.length} league-seasons configured across: ${Object.entries(sportCounts)
               .map(([sport, count]) => `${count} ${sport}`)
-              .join(', ')}. For historical leagues/seasons (2+ years old), use get_ancient_history. Infer sport from context (e.g., "tight ends" → football) and use that sport's default league. If sport is unclear, use the default sport and its default league. Only ask when no default applies.`;
+              .join(', ')}. When presenting leagues to the user, show only current-season leagues (not historical seasons) unless the user explicitly asks about past seasons. For historical leagues/seasons (2+ years old), use get_ancient_history. Infer sport from context (e.g., "tight ends" → football) and use that sport's default league. If sport is unclear, use the default sport and its default league. Only ask when no default applies.`;
           }
 
           // Fetch user preferences for defaults
