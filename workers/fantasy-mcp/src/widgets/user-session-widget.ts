@@ -139,7 +139,7 @@ export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
 <body>
 <div class="widget">
   <div class="header">
-    <span class="app-name">Flaim</span>
+    <span class="app-name">Your Leagues</span>
   </div>
   <div id="content">
     <div class="loading">Loading&hellip;</div>
