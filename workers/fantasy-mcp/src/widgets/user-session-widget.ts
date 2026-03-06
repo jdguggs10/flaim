@@ -71,11 +71,16 @@ export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
   }
   .default-label {
     margin-left: auto;
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 600;
-    text-transform: lowercase;
-    letter-spacing: 0.02em;
-    color: #d97706;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #92400e;
+    background: #fffbeb;
+    border: 1px solid #fcd34d;
+    border-radius: 999px;
+    padding: 1px 7px;
+    line-height: 1.2;
   }
   .league-row {
     display: flex;
@@ -88,7 +93,8 @@ export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
     border-right: 3px solid transparent;
   }
   .league-row.is-default {
-    border-right-color: #fbbf24;
+    background: #fffbeb;
+    border-right-color: #d97706;
   }
   .platform-badge {
     font-size: 10px;
@@ -104,7 +110,7 @@ export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
   }
   .platform-espn { background: #c4122e; }
   .platform-yahoo { background: #7b1fa2; }
-  .platform-sleeper { background: #1b9e5a; }
+  .platform-sleeper { background: #137a45; }
   .league-info { flex: 1; min-width: 0; }
   .league-name {
     font-size: 13px;
@@ -206,7 +212,7 @@ export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
       html += '<div class="sport-group">';
       html += '<div class="sport-header">';
       html += '<span class="sport-label">' + esc(sport) + '</span>';
-      if (isDefaultSport) html += '<span class="default-label">default</span>';
+      if (isDefaultSport) html += '<span class="default-label">DEFAULT</span>';
       html += '</div>';
       groups[sport].forEach(function(league) {
         var key = league.platform + ':' + league.leagueId + ':' + league.seasonYear;
