@@ -36,7 +36,11 @@ export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
     width: 353px;
     overflow-x: hidden;
   }
-  .widget { padding: 16px; }
+  .widget {
+    padding: 16px;
+    border: 1px solid #e4e7ec;
+    border-radius: 12px;
+  }
   .header {
     display: flex;
     align-items: center;
