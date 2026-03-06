@@ -55,7 +55,6 @@ export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
   .sport-header {
     display: flex;
     align-items: center;
-    gap: 6px;
     margin-bottom: 6px;
     padding-left: 2px;
   }
@@ -66,15 +65,13 @@ export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
     letter-spacing: 0.05em;
     color: #6b7280;
   }
-  .default-pill {
-    font-size: 9px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    padding: 1px 6px;
-    border-radius: 4px;
-    background: #fbbf24;
-    color: #78350f;
+  .default-label {
+    margin-left: auto;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: lowercase;
+    letter-spacing: 0.02em;
+    color: #d97706;
   }
   .league-row {
     display: flex;
@@ -176,9 +173,6 @@ export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
         if (dl) defaultKeys[dl.platform + ':' + dl.leagueId + ':' + dl.seasonYear] = true;
       });
     }
-    if (data.defaultLeague) {
-      defaultKeys[data.defaultLeague.platform + ':' + data.defaultLeague.leagueId + ':' + data.defaultLeague.seasonYear] = true;
-    }
 
     var defaultSport = data.defaultSport || null;
 
@@ -194,6 +188,9 @@ export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
     });
 
     order.sort(function(a, b) {
+      // Default sport always sorts first
+      if (a === defaultSport && b !== defaultSport) return -1;
+      if (b === defaultSport && a !== defaultSport) return 1;
       var oa = SPORT_ORDER[a] !== undefined ? SPORT_ORDER[a] : 99;
       var ob = SPORT_ORDER[b] !== undefined ? SPORT_ORDER[b] : 99;
       return oa - ob;
@@ -205,7 +202,7 @@ export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
       html += '<div class="sport-group">';
       html += '<div class="sport-header">';
       html += '<span class="sport-label">' + esc(sport) + '</span>';
-      if (isDefaultSport) html += '<span class="default-pill">DEFAULT</span>';
+      if (isDefaultSport) html += '<span class="default-label">default</span>';
       html += '</div>';
       groups[sport].forEach(function(league) {
         var key = league.platform + ':' + league.leagueId + ':' + league.seasonYear;

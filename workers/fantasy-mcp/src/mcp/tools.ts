@@ -356,6 +356,7 @@ export function getUnifiedTools(): UnifiedTool[] {
                   leagueKey: string;
                   leagueName: string;
                   teamId?: string;
+                  teamName?: string;
                   seasonYear: number;
                 }>;
               };
@@ -367,6 +368,7 @@ export function getUnifiedTools(): UnifiedTool[] {
                     leagueId: league.leagueKey,
                     leagueName: league.leagueName,
                     teamId: league.teamId || '',
+                    teamName: league.teamName,
                     seasonYear: league.seasonYear,
                   });
                 }
