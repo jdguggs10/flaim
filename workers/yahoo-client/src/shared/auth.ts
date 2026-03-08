@@ -67,7 +67,10 @@ export async function resolveUserTeamKey(
     headers,
   });
 
-  if (!response.ok) return null;
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({})) as { error?: string };
+    throw new Error(`Auth-worker error: ${errorData.error || response.statusText}`);
+  }
 
   const data = (await response.json()) as { leagues?: YahooLeagueEntry[] };
   const league = data.leagues?.find((l) => l.leagueKey === leagueKey);

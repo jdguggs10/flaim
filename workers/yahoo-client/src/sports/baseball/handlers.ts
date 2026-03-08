@@ -528,6 +528,7 @@ async function handleGetTransactions(
     }
 
     const normalized = parsed
+      .filter((txn) => Number.isFinite(txn.timestamp) && txn.timestamp > 0)
       .filter((txn) => isPending || txn.timestamp >= cutoff)
       .filter((txn) => !type || txn.type === type)
       .slice(0, maxCount);
