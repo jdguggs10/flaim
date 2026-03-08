@@ -4,6 +4,10 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Yahoo Pending Transactions
+- **Added**: Yahoo `get_transactions` now supports `type=waiver` (pending waiver claims) and `type=pending_trade` (proposed trades). These fetch the authenticated user's own team's pending items using stored team_key.
+- **Added**: `waiver_priority` and `pending_trade` type to transaction responses.
+
 ### Session & History Tool Contract
 - **Changed**: `get_user_session` now returns only current-season leagues (was top 2 seasons). Smaller payload, no contradictory instructions. **[tool-contract]**
 - **Changed**: `get_ancient_history` now includes last season (was only 2+ years old). Closes the gap where last season appeared in neither tool.

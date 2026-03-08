@@ -1,8 +1,8 @@
 import type { Env, ToolParams, ExecuteResponse } from '../../types';
-import { getYahooCredentials } from '../../shared/auth';
+import { getYahooCredentials, resolveUserTeamKey } from '../../shared/auth';
 import { yahooFetch, handleYahooError, requireCredentials } from '../../shared/yahoo-api';
 import { asArray, getPath, unwrapLeague, unwrapTeam, logStructure, parseYahooPercentOwned } from '../../shared/normalizers';
-import { buildYahooTransactionsPath, normalizeYahooTransactions } from '../../shared/yahoo-transactions';
+import { buildYahooTransactionsPath, buildYahooPendingTransactionsPath, normalizeYahooTransactions } from '../../shared/yahoo-transactions';
 import { getPositionFilter } from './mappings';
 import { extractErrorCode } from '@flaim/worker-shared';
 
@@ -487,20 +487,27 @@ async function handleGetTransactions(
   correlationId?: string
 ): Promise<ExecuteResponse> {
   const { league_id, count, type, week } = params;
-
-  if (type === 'waiver') {
-    return {
-      success: false,
-      error: 'Yahoo league-wide transactions do not support type=waiver filtering in v1. Use type=add for now; waiver-specific enrichment is planned as a follow-up phase.',
-      code: 'YAHOO_FILTER_UNSUPPORTED',
-    };
-  }
+  const isPending = type === 'waiver' || type === 'pending_trade';
 
   try {
     const credentials = await getYahooCredentials(env, authHeader, correlationId);
     requireCredentials(credentials, 'get_transactions');
 
-    const path = buildYahooTransactionsPath(league_id, count || 25);
+    let path: string;
+    if (isPending) {
+      const teamKey = await resolveUserTeamKey(env, league_id, authHeader, correlationId);
+      if (!teamKey) {
+        return {
+          success: false,
+          error: 'Team key not found for this league. Reconnect Yahoo in settings.',
+          code: 'TEAM_KEY_MISSING',
+        };
+      }
+      path = buildYahooPendingTransactionsPath(league_id, teamKey, [type], count || 25);
+    } else {
+      path = buildYahooTransactionsPath(league_id, count || 25);
+    }
+
     const response = await yahooFetch(path, { credentials });
     if (!response.ok) {
       handleYahooError(response);
@@ -521,7 +528,7 @@ async function handleGetTransactions(
     }
 
     const normalized = parsed
-      .filter((txn) => txn.timestamp >= cutoff)
+      .filter((txn) => isPending || txn.timestamp >= cutoff)
       .filter((txn) => !type || txn.type === type)
       .slice(0, maxCount);
 
@@ -541,10 +548,10 @@ async function handleGetTransactions(
         league_id,
         season_year: params.season_year,
         window: {
-          mode: 'recent_two_weeks_timestamp',
+          mode: isPending ? 'pending' : 'recent_two_weeks_timestamp',
           weeks: [],
-          start_timestamp_ms: cutoff,
-          end_timestamp_ms: now,
+          start_timestamp_ms: isPending ? undefined : cutoff,
+          end_timestamp_ms: isPending ? undefined : now,
         },
         warning: warnings.length > 0 ? warnings.join(' ') : undefined,
         dropped_invalid_timestamp_count: invalidTimestampCount,

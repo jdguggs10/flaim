@@ -44,3 +44,32 @@ export async function getYahooCredentials(
 
   return { accessToken: data.access_token };
 }
+
+interface YahooLeagueEntry {
+  leagueKey: string;
+  teamKey?: string;
+}
+
+export async function resolveUserTeamKey(
+  env: Env,
+  leagueKey: string,
+  authHeader?: string,
+  correlationId?: string,
+): Promise<string | null> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  if (authHeader) headers['Authorization'] = authHeader;
+  if (correlationId) headers['X-Correlation-ID'] = correlationId;
+
+  const response = await authWorkerFetch(env, '/leagues/yahoo', {
+    method: 'GET',
+    headers,
+  });
+
+  if (!response.ok) return null;
+
+  const data = (await response.json()) as { leagues?: YahooLeagueEntry[] };
+  const league = data.leagues?.find((l) => l.leagueKey === leagueKey);
+  return league?.teamKey ?? null;
+}

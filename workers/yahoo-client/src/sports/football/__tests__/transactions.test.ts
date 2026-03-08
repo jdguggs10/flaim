@@ -1,12 +1,13 @@
 import { beforeEach, describe, expect, it, vi, type MockedFunction } from 'vitest';
 import { footballHandlers } from '../handlers';
 import type { ToolParams } from '../../../types';
-import { getYahooCredentials } from '../../../shared/auth';
+import { getYahooCredentials, resolveUserTeamKey } from '../../../shared/auth';
 import { yahooFetch } from '../../../shared/yahoo-api';
-import { buildYahooTransactionsPath, normalizeYahooTransactions } from '../../../shared/yahoo-transactions';
+import { buildYahooTransactionsPath, buildYahooPendingTransactionsPath, normalizeYahooTransactions } from '../../../shared/yahoo-transactions';
 
 vi.mock('../../../shared/auth', () => ({
   getYahooCredentials: vi.fn(),
+  resolveUserTeamKey: vi.fn(),
 }));
 
 vi.mock('../../../shared/yahoo-api', async () => {
@@ -19,6 +20,7 @@ vi.mock('../../../shared/yahoo-api', async () => {
 
 vi.mock('../../../shared/yahoo-transactions', () => ({
   buildYahooTransactionsPath: vi.fn(),
+  buildYahooPendingTransactionsPath: vi.fn(),
   normalizeYahooTransactions: vi.fn(),
 }));
 
@@ -31,8 +33,10 @@ function jsonResponse(payload: unknown, status = 200): Response {
 
 describe('yahoo football get_transactions handler', () => {
   const getCredsMock = getYahooCredentials as MockedFunction<typeof getYahooCredentials>;
+  const resolveTeamKeyMock = resolveUserTeamKey as MockedFunction<typeof resolveUserTeamKey>;
   const fetchMock = yahooFetch as MockedFunction<typeof yahooFetch>;
   const buildPathMock = buildYahooTransactionsPath as MockedFunction<typeof buildYahooTransactionsPath>;
+  const buildPendingPathMock = buildYahooPendingTransactionsPath as MockedFunction<typeof buildYahooPendingTransactionsPath>;
   const normalizeMock = normalizeYahooTransactions as MockedFunction<typeof normalizeYahooTransactions>;
 
   beforeEach(() => {
@@ -87,7 +91,32 @@ describe('yahoo football get_transactions handler', () => {
     nowSpy.mockRestore();
   });
 
-  it('returns explicit unsupported error for type=waiver', async () => {
+  it('type=waiver resolves team key and uses pending path', async () => {
+    getCredsMock.mockResolvedValue({ accessToken: 'token' });
+    resolveTeamKeyMock.mockResolvedValue('449.l.123.t.3');
+    buildPendingPathMock.mockReturnValue('/league/449.l.123/transactions;types=waiver;team_key=449.l.123.t.3;count=25');
+    fetchMock.mockResolvedValue(jsonResponse({ ok: true }));
+    normalizeMock.mockReturnValue([]);
+
+    const params: ToolParams = {
+      sport: 'football',
+      league_id: '449.l.123',
+      season_year: 2025,
+      type: 'waiver',
+    };
+
+    const result = await footballHandlers.get_transactions({} as never, params, 'Bearer x', 'cid-waiver');
+
+    expect(result.success).toBe(true);
+    expect(resolveTeamKeyMock).toHaveBeenCalledWith({}, '449.l.123', 'Bearer x', 'cid-waiver');
+    expect(buildPendingPathMock).toHaveBeenCalledWith('449.l.123', '449.l.123.t.3', ['waiver'], 25);
+    expect(buildPathMock).not.toHaveBeenCalled();
+  });
+
+  it('type=waiver returns TEAM_KEY_MISSING when team key not found', async () => {
+    getCredsMock.mockResolvedValue({ accessToken: 'token' });
+    resolveTeamKeyMock.mockResolvedValue(null);
+
     const params: ToolParams = {
       sport: 'football',
       league_id: '449.l.123',
@@ -98,8 +127,7 @@ describe('yahoo football get_transactions handler', () => {
     const result = await footballHandlers.get_transactions({} as never, params, 'Bearer x', 'cid-waiver');
 
     expect(result.success).toBe(false);
-    expect(result.code).toBe('YAHOO_FILTER_UNSUPPORTED');
-    expect(getCredsMock).not.toHaveBeenCalled();
+    expect(result.code).toBe('TEAM_KEY_MISSING');
   });
 
   it('returns not-connected error when credentials are missing', async () => {

@@ -3,12 +3,13 @@ import { baseballHandlers } from '../baseball/handlers';
 import { basketballHandlers } from '../basketball/handlers';
 import { hockeyHandlers } from '../hockey/handlers';
 import type { ToolParams } from '../../types';
-import { getYahooCredentials } from '../../shared/auth';
+import { getYahooCredentials, resolveUserTeamKey } from '../../shared/auth';
 import { yahooFetch } from '../../shared/yahoo-api';
-import { buildYahooTransactionsPath, normalizeYahooTransactions } from '../../shared/yahoo-transactions';
+import { buildYahooTransactionsPath, buildYahooPendingTransactionsPath, normalizeYahooTransactions } from '../../shared/yahoo-transactions';
 
 vi.mock('../../shared/auth', () => ({
   getYahooCredentials: vi.fn(),
+  resolveUserTeamKey: vi.fn(),
 }));
 
 vi.mock('../../shared/yahoo-api', async () => {
@@ -21,6 +22,7 @@ vi.mock('../../shared/yahoo-api', async () => {
 
 vi.mock('../../shared/yahoo-transactions', () => ({
   buildYahooTransactionsPath: vi.fn(),
+  buildYahooPendingTransactionsPath: vi.fn(),
   normalizeYahooTransactions: vi.fn(),
 }));
 
@@ -39,15 +41,23 @@ function jsonResponse(payload: unknown, status = 200): Response {
 
 describe('yahoo cross-sport get_transactions handlers', () => {
   const getCredsMock = getYahooCredentials as MockedFunction<typeof getYahooCredentials>;
+  const resolveTeamKeyMock = resolveUserTeamKey as MockedFunction<typeof resolveUserTeamKey>;
   const fetchMock = yahooFetch as MockedFunction<typeof yahooFetch>;
   const buildPathMock = buildYahooTransactionsPath as MockedFunction<typeof buildYahooTransactionsPath>;
+  const buildPendingPathMock = buildYahooPendingTransactionsPath as MockedFunction<typeof buildYahooPendingTransactionsPath>;
   const normalizeMock = normalizeYahooTransactions as MockedFunction<typeof normalizeYahooTransactions>;
 
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it.each(scenarios)('$label returns explicit unsupported error for type=waiver', async ({ sport, handlers }) => {
+  it.each(scenarios)('$label type=waiver resolves team key and uses pending path', async ({ sport, handlers }) => {
+    getCredsMock.mockResolvedValue({ accessToken: 'token' });
+    resolveTeamKeyMock.mockResolvedValue('449.l.123.t.3');
+    buildPendingPathMock.mockReturnValue('/league/449.l.123/transactions;types=waiver;team_key=449.l.123.t.3;count=25');
+    fetchMock.mockResolvedValue(jsonResponse({ ok: true }));
+    normalizeMock.mockReturnValue([]);
+
     const params: ToolParams = {
       sport,
       league_id: '449.l.123',
@@ -57,9 +67,10 @@ describe('yahoo cross-sport get_transactions handlers', () => {
 
     const result = await handlers.get_transactions({} as never, params, 'Bearer x', `cid-waiver-${sport}`);
 
-    expect(result.success).toBe(false);
-    expect(result.code).toBe('YAHOO_FILTER_UNSUPPORTED');
-    expect(getCredsMock).not.toHaveBeenCalled();
+    expect(result.success).toBe(true);
+    expect(resolveTeamKeyMock).toHaveBeenCalledWith({}, '449.l.123', 'Bearer x', `cid-waiver-${sport}`);
+    expect(buildPendingPathMock).toHaveBeenCalledWith('449.l.123', '449.l.123.t.3', ['waiver'], 25);
+    expect(buildPathMock).not.toHaveBeenCalled();
   });
 
   it.each(scenarios)('$label ignores explicit week and returns timestamp-window metadata', async ({ sport, handlers }) => {

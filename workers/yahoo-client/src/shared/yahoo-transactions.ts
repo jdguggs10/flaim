@@ -1,6 +1,6 @@
 import { asArray, getPath, unwrapLeague } from './normalizers';
 
-export type TransactionType = 'add' | 'drop' | 'trade' | 'waiver';
+export type TransactionType = 'add' | 'drop' | 'trade' | 'waiver' | 'pending_trade';
 
 export interface NormalizedTransaction {
   transaction_id: string;
@@ -13,6 +13,7 @@ export interface NormalizedTransaction {
   players_added?: Array<{ id: string; name?: string }>;
   players_dropped?: Array<{ id: string; name?: string }>;
   faab_bid?: number | null;
+  waiver_priority?: number | null;
   draft_picks?: unknown[] | null;
 }
 
@@ -21,12 +22,23 @@ export function buildYahooTransactionsPath(leagueKey: string, count = 25): strin
   return `/league/${leagueKey}/transactions;types=add,drop,trade;count=${clamped}`;
 }
 
+export function buildYahooPendingTransactionsPath(
+  leagueKey: string,
+  teamKey: string,
+  types: string[],
+  count = 25,
+): string {
+  const clamped = Math.max(1, Math.min(100, count));
+  return `/league/${leagueKey}/transactions;types=${types.join(',')};team_key=${teamKey};count=${clamped}`;
+}
+
 function canonicalType(value: unknown): TransactionType | null {
   if (typeof value !== 'string') return null;
   if (value === 'add') return 'add';
   if (value === 'drop') return 'drop';
   if (value === 'trade') return 'trade';
   if (value === 'waiver') return 'waiver';
+  if (value === 'pending_trade') return 'pending_trade';
   return null;
 }
 
@@ -112,6 +124,12 @@ export function normalizeYahooTransactions(raw: unknown): NormalizedTransaction[
     if (faabBid === null) {
       faabBid = parseFaabBid(meta.faab_bid ?? meta.waiver_bid);
     }
+    const rawPriority = meta.waiver_priority;
+    const waiverPriority =
+      typeof rawPriority === 'number' && Number.isFinite(rawPriority) ? rawPriority
+      : typeof rawPriority === 'string' && Number.isFinite(Number(rawPriority)) ? Number(rawPriority)
+      : null;
+
     out.push({
       transaction_id: String(meta.transaction_key ?? meta.transaction_id ?? `${type}-${timestamp}`),
       type,
@@ -123,6 +141,7 @@ export function normalizeYahooTransactions(raw: unknown): NormalizedTransaction[
       players_added: playersAdded,
       players_dropped: playersDropped,
       faab_bid: faabBid,
+      waiver_priority: waiverPriority,
       draft_picks: Array.isArray(meta.picks) ? meta.picks : null,
     });
   }

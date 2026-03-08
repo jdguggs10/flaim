@@ -18,7 +18,7 @@ export interface ToolParams {
   season_year: number;
   team_id?: string;       // Yahoo team_key (e.g., "449.l.12345.t.3")
   week?: number;
-  type?: 'add' | 'drop' | 'trade' | 'waiver';
+  type?: 'add' | 'drop' | 'trade' | 'waiver' | 'pending_trade';
   position?: string;
   count?: number;
   query?: string;
