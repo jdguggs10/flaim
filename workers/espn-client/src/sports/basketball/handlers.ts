@@ -2,7 +2,8 @@
 import type { Env, ToolParams, ExecuteResponse, EspnLeagueResponse, EspnPlayerPoolResponse } from '../../types';
 import { getCredentials } from '../../shared/auth';
 import { espnFetch, handleEspnError, requireCredentials } from '../../shared/espn-api';
-import { fetchEspnTransactionsByWeeks, getEspnLeagueContext, fetchEspnPlayersByIds, enrichTransactions } from '../../shared/espn-transactions';
+import { fetchEspnTransactionsByWeeks, fetchEspnMTransactions2, mergeTradePlayerDetails, getEspnLeagueContext, fetchEspnPlayersByIds, enrichTransactions } from '../../shared/espn-transactions';
+import type { NormalizedTransaction } from '../../shared/espn-transactions';
 import { getEspnPlayersIndex } from '../../shared/espn-players-cache';
 import { extractErrorCode } from '@flaim/worker-shared';
 import {
@@ -497,8 +498,35 @@ async function handleGetTransactions(
       : Array.from(new Set([currentWeek, Math.max(1, currentWeek - 1)]));
 
     const maxCount = count ?? 25;
-    const rows = await fetchEspnTransactionsByWeeks(GAME_ID, league_id, season_year, credentials, weeks);
-    let filtered = rows
+
+    // Primary: mTransactions2 (structured data, FAAB bids, trade lifecycle)
+    // Falls back to activity feed if mTransactions2 fails entirely
+    let merged: NormalizedTransaction[];
+    let truncated = false;
+    try {
+      const mResult = await fetchEspnMTransactions2(GAME_ID, league_id, season_year, credentials, weeks);
+      truncated = mResult.truncated;
+
+      // Trade player detail fallback: activity feed for accepted/upheld trades (ESPN items bug)
+      const hasEmptyTrades = mResult.transactions.some(
+        (t) => (t.type === 'trade' || t.type === 'trade_uphold') &&
+          (t.players_added?.length ?? 0) + (t.players_dropped?.length ?? 0) === 0,
+      );
+      merged = mResult.transactions;
+      if (hasEmptyTrades) {
+        try {
+          const activityRows = await fetchEspnTransactionsByWeeks(GAME_ID, league_id, season_year, credentials, weeks);
+          merged = mergeTradePlayerDetails(mResult.transactions, activityRows);
+        } catch (fallbackErr) {
+          console.warn('[get_transactions] Activity feed trade fallback failed:', fallbackErr instanceof Error ? fallbackErr.message : fallbackErr);
+        }
+      }
+    } catch (mTxnErr) {
+      console.warn('[get_transactions] mTransactions2 failed, falling back to activity feed:', mTxnErr instanceof Error ? mTxnErr.message : mTxnErr);
+      merged = await fetchEspnTransactionsByWeeks(GAME_ID, league_id, season_year, credentials, weeks);
+    }
+
+    let filtered = merged
       .filter((txn) => !type || txn.type === type)
       .slice(0, maxCount);
 
@@ -530,6 +558,7 @@ async function handleGetTransactions(
           weeks
         },
         count: filtered.length,
+        truncated: truncated || undefined,
         transactions: filtered,
         teams: ctx.teams,
       }

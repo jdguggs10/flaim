@@ -1,7 +1,7 @@
 import type { EspnCredentials } from '@flaim/worker-shared';
 import { espnFetch, handleEspnError } from './espn-api';
 
-export type TransactionType = 'add' | 'drop' | 'trade' | 'waiver';
+export type TransactionType = 'add' | 'drop' | 'trade' | 'waiver' | 'trade_proposal' | 'trade_decline' | 'trade_veto' | 'trade_uphold' | 'failed_bid';
 
 export interface NormalizedTransaction {
   transaction_id: string;
@@ -44,6 +44,249 @@ interface EspnActivityTopic {
 
 interface EspnActivityResponse {
   topics?: EspnActivityTopic[];
+}
+
+// ---------------------------------------------------------------------------
+// mTransactions2 response types
+// ---------------------------------------------------------------------------
+
+interface EspnMTransactionItem {
+  fromTeamId?: number;
+  playerId?: number;
+  toTeamId?: number;
+  type?: string; // "ADD" | "DROP"
+}
+
+interface EspnMTransaction {
+  id?: number;
+  bidAmount?: number;
+  executionType?: string;
+  isPending?: boolean;
+  items?: EspnMTransactionItem[];
+  memberId?: number;
+  proposedDate?: number;
+  processDate?: number;
+  scoringPeriodId?: number;
+  status?: string;
+  subOrder?: number;
+  teamId?: number;
+  type?: string; // "WAIVER" | "WAIVER_ERROR" | "FREEAGENT" | "TRADE_ACCEPT" | "TRADE_UPHOLD" | "TRADE_PROPOSAL" | "TRADE_DECLINE" | "TRADE_VETO"
+}
+
+interface EspnMTransactions2Response {
+  transactions?: EspnMTransaction[];
+}
+
+export type { EspnMTransaction };
+
+// ---------------------------------------------------------------------------
+// mTransactions2 normalizer
+// ---------------------------------------------------------------------------
+
+function toTxnTypeFromMTransaction(type?: string): TransactionType | null {
+  if (!type) return null;
+  switch (type) {
+    case 'FREEAGENT': return 'add';
+    case 'WAIVER': return 'waiver';
+    case 'WAIVER_ERROR': return 'failed_bid';
+    case 'TRADE_ACCEPT': return 'trade';
+    case 'TRADE_UPHOLD': return 'trade_uphold';
+    case 'TRADE_PROPOSAL': return 'trade_proposal';
+    case 'TRADE_DECLINE': return 'trade_decline';
+    case 'TRADE_VETO': return 'trade_veto';
+    default: return null;
+  }
+}
+
+function toStatus(type: TransactionType, rawStatus?: string): 'complete' | 'failed' | 'pending' | 'unknown' {
+  if (type === 'failed_bid') return 'failed';
+  if (type === 'trade_proposal') return 'pending';
+  if (rawStatus === 'EXECUTED') return 'complete';
+  if (rawStatus?.startsWith('FAILED')) return 'failed';
+  if (rawStatus === 'PENDING') return 'pending';
+  return 'unknown';
+}
+
+export function normalizeMTransactions2(transactions: EspnMTransaction[]): NormalizedTransaction[] {
+  const out: NormalizedTransaction[] = [];
+
+  for (const txn of transactions) {
+    const rawType = toTxnTypeFromMTransaction(txn.type);
+    if (!rawType) continue;
+
+    const added: Array<{ id: string }> = [];
+    const dropped: Array<{ id: string }> = [];
+
+    for (const item of txn.items ?? []) {
+      if (!item.playerId) continue;
+      const pid = String(item.playerId);
+      if (item.type === 'ADD' && item.toTeamId !== -1) {
+        added.push({ id: pid });
+      }
+      if (item.type === 'DROP' || (item.type === 'ADD' && item.toTeamId === -1)) {
+        dropped.push({ id: pid });
+      }
+    }
+
+    const timestamp = txn.processDate ?? txn.proposedDate ?? 0;
+    const teamIds = txn.teamId ? [String(txn.teamId)] : [];
+
+    // ESPN marks standalone free-agent drops as FREEAGENT with only drop items.
+    const type: TransactionType = rawType === 'add' && added.length === 0 && dropped.length > 0
+      ? 'drop'
+      : rawType;
+
+    out.push({
+      transaction_id: String(txn.id ?? `mtx-${timestamp}`),
+      type,
+      status: toStatus(type, txn.status),
+      timestamp,
+      date: new Date(timestamp).toISOString().slice(0, 10),
+      week: txn.scoringPeriodId ?? null,
+      team_ids: teamIds.length > 0 ? teamIds : undefined,
+      players_added: added,
+      players_dropped: dropped,
+      faab_bid: typeof txn.bidAmount === 'number' ? txn.bidAmount : null,
+    });
+  }
+
+  return out.sort((a, b) => b.timestamp - a.timestamp);
+}
+
+// ---------------------------------------------------------------------------
+// mTransactions2 fetch function
+// ---------------------------------------------------------------------------
+
+const MTRANSACTIONS2_TYPES = [
+  'WAIVER', 'WAIVER_ERROR', 'FREEAGENT',
+  'TRADE_ACCEPT', 'TRADE_UPHOLD', 'TRADE_PROPOSAL', 'TRADE_DECLINE', 'TRADE_VETO',
+];
+
+const MTRANSACTIONS2_PAGE_SIZE = 50;
+const MTRANSACTIONS2_MAX_PAGES = 4;
+
+export interface MTransactions2Result {
+  transactions: NormalizedTransaction[];
+  truncated: boolean;
+}
+
+export async function fetchEspnMTransactions2(
+  gameId: string,
+  leagueId: string,
+  seasonYear: number,
+  credentials: EspnCredentials,
+  weeks: number[],
+): Promise<MTransactions2Result> {
+  const seen = new Set<string>();
+  const all: NormalizedTransaction[] = [];
+  let truncated = false;
+
+  for (const week of weeks) {
+    let hitMaxPageWithFullResults = false;
+    for (let page = 0; page < MTRANSACTIONS2_MAX_PAGES; page++) {
+      const offset = page * MTRANSACTIONS2_PAGE_SIZE;
+      const path = `/seasons/${seasonYear}/segments/0/leagues/${leagueId}?view=mTransactions2&scoringPeriodId=${week}`;
+      const headers = {
+        'x-fantasy-filter': JSON.stringify({
+          transactions: {
+            filterType: { value: MTRANSACTIONS2_TYPES },
+            limit: MTRANSACTIONS2_PAGE_SIZE,
+            offset,
+            sortDatePublished: { sortPriority: 1, sortAsc: false },
+          },
+        }),
+      };
+
+      const res = await espnFetch(path, gameId, { credentials, timeout: 7000, headers });
+      if (!res.ok) handleEspnError(res);
+
+      const body = await res.json() as EspnMTransactions2Response;
+      const rawTxns = body.transactions ?? [];
+      const normalized = normalizeMTransactions2(rawTxns);
+
+      for (const txn of normalized) {
+        if (!seen.has(txn.transaction_id)) {
+          seen.add(txn.transaction_id);
+          all.push(txn);
+        }
+      }
+
+      if (rawTxns.length < MTRANSACTIONS2_PAGE_SIZE) break;
+
+      // Hit max pages for this week with a full page; probe one extra row later.
+      if (page === MTRANSACTIONS2_MAX_PAGES - 1) {
+        hitMaxPageWithFullResults = true;
+      }
+    }
+
+    if (hitMaxPageWithFullResults) {
+      const probeOffset = MTRANSACTIONS2_MAX_PAGES * MTRANSACTIONS2_PAGE_SIZE;
+      const probePath = `/seasons/${seasonYear}/segments/0/leagues/${leagueId}?view=mTransactions2&scoringPeriodId=${week}`;
+      const probeHeaders = {
+        'x-fantasy-filter': JSON.stringify({
+          transactions: {
+            filterType: { value: MTRANSACTIONS2_TYPES },
+            limit: 1,
+            offset: probeOffset,
+            sortDatePublished: { sortPriority: 1, sortAsc: false },
+          },
+        }),
+      };
+
+      const probeRes = await espnFetch(probePath, gameId, { credentials, timeout: 7000, headers: probeHeaders });
+      if (!probeRes.ok) handleEspnError(probeRes);
+      const probeBody = await probeRes.json() as EspnMTransactions2Response;
+      if ((probeBody.transactions?.length ?? 0) > 0) {
+        truncated = true;
+        console.warn(`[fetchEspnMTransactions2] Hit page limit for week ${week}, results may be incomplete`);
+      }
+    }
+  }
+
+  return { transactions: all.sort((a, b) => b.timestamp - a.timestamp), truncated };
+}
+
+// ---------------------------------------------------------------------------
+// Trade player detail fallback via activity feed
+// ---------------------------------------------------------------------------
+
+const TRADE_TYPES: TransactionType[] = ['trade', 'trade_uphold'];
+
+export function mergeTradePlayerDetails(
+  mTxns: NormalizedTransaction[],
+  activityTxns: NormalizedTransaction[],
+): NormalizedTransaction[] {
+  const activityTrades = activityTxns.filter((t) => t.type === 'trade');
+  const used = new Set<number>();
+
+  return mTxns.map((txn) => {
+    if (!TRADE_TYPES.includes(txn.type)) return txn;
+
+    const hasPlayers = (txn.players_added?.length ?? 0) + (txn.players_dropped?.length ?? 0) > 0;
+    if (hasPlayers) return txn;
+
+    const txnTeams = new Set(txn.team_ids ?? []);
+    const matchIdx = activityTrades.findIndex((at, idx) => {
+      if (used.has(idx)) return false;
+      if (Math.abs(at.timestamp - txn.timestamp) >= 60_000) return false;
+      // Require at least one overlapping team ID when both sides have team info
+      if (txnTeams.size > 0 && at.team_ids?.length) {
+        return at.team_ids.some((id) => txnTeams.has(id));
+      }
+      return true;
+    });
+    if (matchIdx === -1) return txn;
+
+    used.add(matchIdx);
+    const match = activityTrades[matchIdx];
+
+    return {
+      ...txn,
+      players_added: match.players_added,
+      players_dropped: match.players_dropped,
+      team_ids: match.team_ids?.length ? match.team_ids : txn.team_ids,
+    };
+  });
 }
 
 const ACTIVITY_MESSAGE_IDS = [178, 180, 179, 239, 181, 244];

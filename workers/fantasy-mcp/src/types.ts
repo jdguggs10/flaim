@@ -19,7 +19,7 @@ export interface ToolParams {
   season_year: number;
   team_id?: string;
   week?: number;
-  type?: 'add' | 'drop' | 'trade' | 'waiver' | 'pending_trade';
+  type?: 'add' | 'drop' | 'trade' | 'waiver' | 'pending_trade' | 'trade_proposal' | 'trade_decline' | 'trade_veto' | 'trade_uphold' | 'failed_bid';
   position?: string;
   count?: number;
   query?: string;

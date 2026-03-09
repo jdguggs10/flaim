@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi, type MockedFunction } from 'vites
 import { footballHandlers } from '../handlers';
 import type { ToolParams } from '../../../types';
 import { getCredentials } from '../../../shared/auth';
-import { fetchEspnTransactionsByWeeks, getEspnLeagueContext, fetchEspnPlayersByIds, enrichTransactions } from '../../../shared/espn-transactions';
+import { fetchEspnTransactionsByWeeks, fetchEspnMTransactions2, mergeTradePlayerDetails, getEspnLeagueContext, fetchEspnPlayersByIds, enrichTransactions } from '../../../shared/espn-transactions';
 
 vi.mock('../../../shared/auth', () => ({
   getCredentials: vi.fn(),
@@ -11,6 +11,8 @@ vi.mock('../../../shared/auth', () => ({
 vi.mock('../../../shared/espn-transactions', () => ({
   getEspnLeagueContext: vi.fn(),
   fetchEspnTransactionsByWeeks: vi.fn(),
+  fetchEspnMTransactions2: vi.fn(),
+  mergeTradePlayerDetails: vi.fn((mTxns) => mTxns),
   fetchEspnPlayersByIds: vi.fn(),
   enrichTransactions: vi.fn((txns) => txns),
 }));
@@ -18,21 +20,23 @@ vi.mock('../../../shared/espn-transactions', () => ({
 describe('football get_transactions handler', () => {
   const getCredentialsMock = getCredentials as MockedFunction<typeof getCredentials>;
   const getLeagueContextMock = getEspnLeagueContext as MockedFunction<typeof getEspnLeagueContext>;
+  const fetchMTransactions2Mock = fetchEspnMTransactions2 as MockedFunction<typeof fetchEspnMTransactions2>;
   const fetchTransactionsMock = fetchEspnTransactionsByWeeks as MockedFunction<typeof fetchEspnTransactionsByWeeks>;
+  const mergeTradeDetailsMock = mergeTradePlayerDetails as MockedFunction<typeof mergeTradePlayerDetails>;
   const fetchPlayersByIdsMock = fetchEspnPlayersByIds as MockedFunction<typeof fetchEspnPlayersByIds>;
   const enrichTransactionsMock = enrichTransactions as MockedFunction<typeof enrichTransactions>;
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
   });
 
   it('uses current+previous week window when week is omitted', async () => {
     getCredentialsMock.mockResolvedValue({ s2: 'token', swid: '{swid}' });
     getLeagueContextMock.mockResolvedValue({ scoringPeriodId: 10, teams: { '1': 'Team One' } });
-    fetchTransactionsMock.mockResolvedValue([
-      { transaction_id: 't2', type: 'trade', status: 'complete', timestamp: 2000, week: 10 },
+    fetchMTransactions2Mock.mockResolvedValue({ truncated: false, transactions: [
+      { transaction_id: 't2', type: 'trade', status: 'complete', timestamp: 2000, week: 10, players_added: [{ id: '1' }], players_dropped: [] },
       { transaction_id: 't1', type: 'add', status: 'complete', timestamp: 1000, week: 9 },
-    ] as never);
+    ] } as never);
 
     const params: ToolParams = {
       sport: 'football',
@@ -45,7 +49,7 @@ describe('football get_transactions handler', () => {
 
     expect(result.success).toBe(true);
     expect(getLeagueContextMock).toHaveBeenCalledWith('ffl', '123', 2025, { s2: 'token', swid: '{swid}' });
-    expect(fetchTransactionsMock).toHaveBeenCalledWith('ffl', '123', 2025, { s2: 'token', swid: '{swid}' }, [10, 9]);
+    expect(fetchMTransactions2Mock).toHaveBeenCalledWith('ffl', '123', 2025, { s2: 'token', swid: '{swid}' }, [10, 9]);
 
     if (!result.success) return;
     const data = result.data as { count: number; window: { mode: string; weeks: number[] }; teams: Record<string, string> };
@@ -57,11 +61,11 @@ describe('football get_transactions handler', () => {
   it('applies explicit week, type filter, and count clamp', async () => {
     getCredentialsMock.mockResolvedValue({ s2: 'token', swid: '{swid}' });
     getLeagueContextMock.mockResolvedValue({ scoringPeriodId: 10, teams: { '1': 'Team One' } });
-    fetchTransactionsMock.mockResolvedValue([
+    fetchMTransactions2Mock.mockResolvedValue({ truncated: false, transactions: [
       { transaction_id: 'a1', type: 'add', status: 'complete', timestamp: 3000, week: 7 },
-      { transaction_id: 't1', type: 'trade', status: 'complete', timestamp: 2000, week: 7 },
-      { transaction_id: 't2', type: 'trade', status: 'complete', timestamp: 1000, week: 7 },
-    ] as never);
+      { transaction_id: 't1', type: 'trade', status: 'complete', timestamp: 2000, week: 7, players_added: [{ id: '1' }], players_dropped: [] },
+      { transaction_id: 't2', type: 'trade', status: 'complete', timestamp: 1000, week: 7, players_added: [{ id: '2' }], players_dropped: [] },
+    ] } as never);
 
     const params: ToolParams = {
       sport: 'football',
@@ -75,7 +79,7 @@ describe('football get_transactions handler', () => {
     const result = await footballHandlers.get_transactions({} as never, params, 'Bearer x', 'cid-2');
 
     expect(result.success).toBe(true);
-    expect(fetchTransactionsMock).toHaveBeenCalledWith('ffl', '123', 2025, { s2: 'token', swid: '{swid}' }, [7]);
+    expect(fetchMTransactions2Mock).toHaveBeenCalledWith('ffl', '123', 2025, { s2: 'token', swid: '{swid}' }, [7]);
 
     if (!result.success) return;
     const data = result.data as { count: number; transactions: Array<{ transaction_id: string }> };
@@ -86,7 +90,7 @@ describe('football get_transactions handler', () => {
   it('enriches player names from global player endpoint when player IDs are present', async () => {
     getCredentialsMock.mockResolvedValue({ s2: 'token', swid: '{swid}' });
     getLeagueContextMock.mockResolvedValue({ scoringPeriodId: 8, teams: {} });
-    fetchTransactionsMock.mockResolvedValue([
+    fetchMTransactions2Mock.mockResolvedValue({ truncated: false, transactions: [
       {
         transaction_id: 'a1',
         type: 'add',
@@ -96,7 +100,7 @@ describe('football get_transactions handler', () => {
         players_added: [{ id: '3054211' }],
         players_dropped: [{ id: '4362887' }],
       },
-    ] as never);
+    ] } as never);
     fetchPlayersByIdsMock.mockResolvedValue(
       new Map([
         ['3054211', { fullName: 'Josh Allen', defaultPositionId: 1, proTeamId: 2 }],
@@ -138,7 +142,7 @@ describe('football get_transactions handler', () => {
   it('degrades gracefully when player enrichment fetch fails', async () => {
     getCredentialsMock.mockResolvedValue({ s2: 'token', swid: '{swid}' });
     getLeagueContextMock.mockResolvedValue({ scoringPeriodId: 8, teams: {} });
-    fetchTransactionsMock.mockResolvedValue([
+    fetchMTransactions2Mock.mockResolvedValue({ truncated: false, transactions: [
       {
         transaction_id: 'a1',
         type: 'add',
@@ -147,7 +151,7 @@ describe('football get_transactions handler', () => {
         week: 8,
         players_added: [{ id: '3054211' }],
       },
-    ] as never);
+    ] } as never);
     fetchPlayersByIdsMock.mockRejectedValue(new Error('ESPN API error'));
 
     const params: ToolParams = {
@@ -165,6 +169,95 @@ describe('football get_transactions handler', () => {
     expect(data.count).toBe(1);
     expect(data.transactions[0]?.players_added?.[0]?.id).toBe('3054211');
     expect(data.transactions[0]?.players_added?.[0]?.name).toBeUndefined();
+  });
+
+  it('calls activity feed fallback when mTransactions2 returns trades with empty players', async () => {
+    getCredentialsMock.mockResolvedValue({ s2: 'token', swid: '{swid}' });
+    getLeagueContextMock.mockResolvedValue({ scoringPeriodId: 10, teams: {} });
+    fetchMTransactions2Mock.mockResolvedValue({ truncated: false, transactions: [
+      {
+        transaction_id: '400',
+        type: 'trade',
+        status: 'complete',
+        timestamp: 1700300000000,
+        date: '2023-11-18',
+        week: 9,
+        team_ids: ['1'],
+        players_added: [],
+        players_dropped: [],
+        faab_bid: null,
+      },
+    ] } as never);
+
+    const activityRows = [
+      {
+        transaction_id: 'act-1',
+        type: 'trade',
+        status: 'complete',
+        timestamp: 1700300000000,
+        date: '2023-11-18',
+        week: 9,
+        team_ids: ['1', '3'],
+        players_added: [{ id: '2001' }],
+        players_dropped: [{ id: '2002' }],
+        faab_bid: null,
+      },
+    ];
+    fetchTransactionsMock.mockResolvedValue(activityRows as never);
+    mergeTradeDetailsMock.mockReturnValue([
+      { ...activityRows[0], transaction_id: '400', type: 'trade' as const, status: 'complete' as const },
+    ] as never);
+
+    const params: ToolParams = { sport: 'football', league_id: '123', season_year: 2025 };
+    const result = await footballHandlers.get_transactions({} as never, params, 'Bearer x', 'cid-merge');
+
+    expect(result.success).toBe(true);
+    expect(fetchTransactionsMock).toHaveBeenCalled();
+    expect(mergeTradeDetailsMock).toHaveBeenCalled();
+  });
+
+  it('skips activity feed fallback when all trades have player data', async () => {
+    getCredentialsMock.mockResolvedValue({ s2: 'token', swid: '{swid}' });
+    getLeagueContextMock.mockResolvedValue({ scoringPeriodId: 10, teams: {} });
+    fetchMTransactions2Mock.mockResolvedValue({ truncated: false, transactions: [
+      {
+        transaction_id: '500',
+        type: 'trade_proposal',
+        status: 'pending',
+        timestamp: 1700400000000,
+        date: '2023-11-19',
+        week: 10,
+        team_ids: ['3'],
+        players_added: [{ id: '3001' }],
+        players_dropped: [],
+        faab_bid: null,
+      },
+    ] } as never);
+
+    const params: ToolParams = { sport: 'football', league_id: '123', season_year: 2025 };
+    const result = await footballHandlers.get_transactions({} as never, params, 'Bearer x', 'cid-no-merge');
+
+    expect(result.success).toBe(true);
+    expect(fetchTransactionsMock).not.toHaveBeenCalled();
+    expect(mergeTradeDetailsMock).not.toHaveBeenCalled();
+  });
+
+  it('falls back to activity feed when mTransactions2 throws', async () => {
+    getCredentialsMock.mockResolvedValue({ s2: 'token', swid: '{swid}' });
+    getLeagueContextMock.mockResolvedValue({ scoringPeriodId: 10, teams: {} });
+    fetchMTransactions2Mock.mockRejectedValue(new Error('ESPN 500'));
+    fetchTransactionsMock.mockResolvedValue([
+      { transaction_id: 'a1', type: 'add', status: 'complete', timestamp: 1000, week: 10 },
+    ] as never);
+
+    const params: ToolParams = { sport: 'football', league_id: '123', season_year: 2025 };
+    const result = await footballHandlers.get_transactions({} as never, params, 'Bearer x', 'cid-fallback');
+
+    expect(result.success).toBe(true);
+    expect(fetchTransactionsMock).toHaveBeenCalledWith('ffl', '123', 2025, { s2: 'token', swid: '{swid}' }, [10, 9]);
+    if (!result.success) return;
+    const data = result.data as { count: number };
+    expect(data.count).toBe(1);
   });
 
   it('returns credentials error when ESPN is not connected', async () => {

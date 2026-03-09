@@ -4,6 +4,11 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### ESPN Transaction Enrichment
+- **Changed**: ESPN `get_transactions` now uses `mTransactions2` endpoint as primary data source instead of the activity feed. Provides structured FAAB bid amounts, failed/losing waiver bids (`type=failed_bid`), and full trade lifecycle (`trade_proposal`, `trade_decline`, `trade_veto`, `trade_uphold`).
+- **Changed**: Accepted/upheld trade player details automatically supplemented from activity feed (ESPN bug workaround — accepted trade `items` arrays are empty).
+- **Added**: New transaction types: `failed_bid`, `trade_proposal`, `trade_decline`, `trade_veto`, `trade_uphold`.
+
 ### Yahoo Pending Transactions
 - **Added**: Yahoo `get_transactions` now supports `type=waiver` (pending waiver claims) and `type=pending_trade` (proposed trades). These fetch the authenticated user's own team's pending items using stored team_key.
 - **Added**: `waiver_priority` and `pending_trade` type to transaction responses.
