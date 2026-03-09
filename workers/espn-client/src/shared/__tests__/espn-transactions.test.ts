@@ -402,8 +402,9 @@ describe('espn-transactions', () => {
 
       const result = await fetchEspnMTransactions2('ffl', '123', 2025, { s2: 'x', swid: '{y}' }, [7]);
 
-      expect(result).toHaveLength(1);
-      expect(result[0].type).toBe('add');
+      expect(result.transactions).toHaveLength(1);
+      expect(result.transactions[0].type).toBe('add');
+      expect(result.truncated).toBe(false);
 
       const url = mockFetch.mock.calls[0]?.[0] as string;
       expect(url).toContain('/leagues/123');
@@ -433,7 +434,8 @@ describe('espn-transactions', () => {
 
       const result = await fetchEspnMTransactions2('ffl', '123', 2025, { s2: 'x', swid: '{y}' }, [7, 8]);
 
-      expect(result).toHaveLength(2);
+      expect(result.transactions).toHaveLength(2);
+      expect(result.truncated).toBe(false);
       expect(mockFetch).toHaveBeenCalledTimes(2);
     });
 
@@ -442,7 +444,8 @@ describe('espn-transactions', () => {
 
       const result = await fetchEspnMTransactions2('ffl', '123', 2025, { s2: 'x', swid: '{y}' }, [7]);
 
-      expect(result).toHaveLength(0);
+      expect(result.transactions).toHaveLength(0);
+      expect(result.truncated).toBe(false);
     });
 
     it('paginates when a page is full (50 transactions)', async () => {
@@ -462,7 +465,8 @@ describe('espn-transactions', () => {
       const result = await fetchEspnMTransactions2('ffl', '123', 2025, { s2: 'x', swid: '{y}' }, [7]);
 
       expect(mockFetch).toHaveBeenCalledTimes(2);
-      expect(result).toHaveLength(51);
+      expect(result.transactions).toHaveLength(51);
+      expect(result.truncated).toBe(false);
 
       // Verify offset was sent on second call
       const secondInit = mockFetch.mock.calls[1]?.[1] as RequestInit;

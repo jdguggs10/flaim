@@ -39,11 +39,11 @@ describe('espn cross-sport get_transactions handlers', () => {
   it.each(scenarios)('$label routes get_transactions using the sport game id', async ({ sport, gameId, handlers }) => {
     getCredentialsMock.mockResolvedValue({ s2: 'token', swid: '{swid}' });
     getLeagueContextMock.mockResolvedValue({ scoringPeriodId: 10, teams: { '1': 'Team One' } });
-    fetchMTransactions2Mock.mockResolvedValue([
+    fetchMTransactions2Mock.mockResolvedValue({ truncated: false, transactions: [
       { transaction_id: 'a1', type: 'add', status: 'complete', timestamp: 3000, week: 7 },
       { transaction_id: 't1', type: 'trade', status: 'complete', timestamp: 2000, week: 7, players_added: [{ id: '1' }], players_dropped: [] },
       { transaction_id: 't2', type: 'trade', status: 'complete', timestamp: 1000, week: 7, players_added: [{ id: '2' }], players_dropped: [] },
-    ] as never);
+    ] } as never);
 
     const params: ToolParams = {
       sport,
@@ -71,7 +71,7 @@ describe('espn cross-sport get_transactions handlers', () => {
   it.each(scenarios)('$label triggers trade fallback when empty trade items detected', async ({ sport, gameId, handlers }) => {
     getCredentialsMock.mockResolvedValue({ s2: 'token', swid: '{swid}' });
     getLeagueContextMock.mockResolvedValue({ scoringPeriodId: 10, teams: {} });
-    fetchMTransactions2Mock.mockResolvedValue([
+    fetchMTransactions2Mock.mockResolvedValue({ truncated: false, transactions: [
       {
         transaction_id: '400',
         type: 'trade',
@@ -84,7 +84,7 @@ describe('espn cross-sport get_transactions handlers', () => {
         players_dropped: [],
         faab_bid: null,
       },
-    ] as never);
+    ] } as never);
     fetchTransactionsMock.mockResolvedValue([] as never);
 
     const params: ToolParams = { sport, league_id: '123', season_year: 2025 };

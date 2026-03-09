@@ -160,15 +160,21 @@ const MTRANSACTIONS2_TYPES = [
 const MTRANSACTIONS2_PAGE_SIZE = 50;
 const MTRANSACTIONS2_MAX_PAGES = 4;
 
+export interface MTransactions2Result {
+  transactions: NormalizedTransaction[];
+  truncated: boolean;
+}
+
 export async function fetchEspnMTransactions2(
   gameId: string,
   leagueId: string,
   seasonYear: number,
   credentials: EspnCredentials,
   weeks: number[],
-): Promise<NormalizedTransaction[]> {
+): Promise<MTransactions2Result> {
   const seen = new Set<string>();
   const all: NormalizedTransaction[] = [];
+  let truncated = false;
 
   for (const week of weeks) {
     for (let page = 0; page < MTRANSACTIONS2_MAX_PAGES; page++) {
@@ -200,10 +206,16 @@ export async function fetchEspnMTransactions2(
       }
 
       if (rawTxns.length < MTRANSACTIONS2_PAGE_SIZE) break;
+
+      // Hit max pages for this week — results may be incomplete
+      if (page === MTRANSACTIONS2_MAX_PAGES - 1) {
+        truncated = true;
+        console.warn(`[fetchEspnMTransactions2] Hit page limit for week ${week}, results may be incomplete`);
+      }
     }
   }
 
-  return all.sort((a, b) => b.timestamp - a.timestamp);
+  return { transactions: all.sort((a, b) => b.timestamp - a.timestamp), truncated };
 }
 
 // ---------------------------------------------------------------------------
