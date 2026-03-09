@@ -46,7 +46,7 @@ interface ExecuteRequest {
     week?: number;
     position?: string;
     count?: number;
-    type?: string;        // Transaction type filter (add, drop, trade, waiver)
+    type?: string;        // Transaction type filter (add, drop, trade, waiver, trade_proposal, trade_decline, trade_veto, trade_uphold, failed_bid)
   };
   authHeader?: string;    // Bearer token for auth-worker
 }
@@ -62,7 +62,7 @@ All four sports (football, baseball, basketball, hockey) support the same 7 tool
 - `get_roster` - Team roster with player stats
 - `get_free_agents` - Available free agents
 - `get_players` - Player lookup with market/global ownership context
-- `get_transactions` - Recent transactions (adds, drops, waivers, trades)
+- `get_transactions` - Recent transactions (adds, drops, waivers, trades, failed bids, trade lifecycle)
 
 ### `get_transactions` Response Shape
 
@@ -70,8 +70,9 @@ The `get_transactions` response includes:
 - **`transactions`**: Array of normalized transactions with enriched player entries (name, position, pro team) and numeric `team_ids`.
 - **`teams`**: A `Record<string, string>` map of team ID → display name, so consumers can resolve `team_ids` to human-readable names.
 - **`window`**: The week window used (`explicit_week` or `recent_two_weeks`).
+- **`truncated`**: Present and `true` when pagination cap (200/week) was hit and results may be incomplete.
 
-Player enrichment uses ESPN's global `/players?view=players_wl` endpoint (public, no auth required). Team names come from the league's `mTeam` view.
+Uses ESPN's `mTransactions2` endpoint as the primary data source, with the activity feed (`kona_league_communication`) as fallback for accepted trade player details (ESPN bug workaround) and full fallback if mTransactions2 errors. Player enrichment uses ESPN's global `/players?view=players_wl` endpoint (public, no auth required). Team names come from the league's `mTeam` view.
 
 ## Mappings Architecture
 
