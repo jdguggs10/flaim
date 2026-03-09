@@ -1,15 +1,10 @@
 // workers/fantasy-mcp/src/mcp/tools.ts
 import { z } from 'zod';
+import type { ZodRawShapeCompat } from '@modelcontextprotocol/sdk/server/zod-compat.js';
 import type { Env, Platform, Sport, ToolParams } from '../types';
 import { routeToClient, type RouteResult } from '../router';
 import { withCorrelationId, withEvalHeaders } from '@flaim/worker-shared';
 import { logEvalEvent } from '../logging';
-
-// TODO: Revisit this workaround. Casting to 'any' is used due to type compatibility issues
-// between Zod v3/v4 and @modelcontextprotocol/sdk's registerTool().
-// See: https://github.com/modelcontextprotocol/typescript-sdk/issues/906
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type ZodShape = Record<string, any>;
 
 // =============================================================================
 // MCP RESPONSE TYPES
@@ -33,7 +28,7 @@ export interface UnifiedTool {
   name: string;
   title: string;
   description: string;
-  inputSchema: ZodShape;
+  inputSchema: ZodRawShapeCompat;
   requiredScope: 'mcp:read' | 'mcp:write';
   securitySchemes: ToolSecuritySchemes;
   openaiMeta?: {
@@ -616,14 +611,10 @@ export function getUnifiedTools(): UnifiedTool[] {
       description:
         'Past seasons and historical leagues — everything not in the current season. Use when user asks about last season, inactive leagues, past seasons, or historical performance. Read-only and safe to retry.',
       inputSchema: {
-        type: 'object',
-        properties: {
-          platform: {
-            type: 'string',
-            enum: ['espn', 'yahoo', 'sleeper'],
-            description: 'Optional: filter to specific platform',
-          },
-        },
+        platform: z
+          .enum(['espn', 'yahoo', 'sleeper'])
+          .optional()
+          .describe('Optional: filter to specific platform'),
       },
       handler: async (args, env, authHeader, correlationId, evalRunId, evalTraceId) => {
         const { platform } = args as { platform?: 'espn' | 'yahoo' | 'sleeper' };
@@ -797,7 +788,7 @@ export function getUnifiedTools(): UnifiedTool[] {
           .describe('Sport type (e.g., "football", "baseball")'),
         league_id: z.string().describe('League ID (get from get_user_session)'),
         season_year: z.number().describe('Season start year (e.g., 2025 for MLB 2025, 2024 for NBA 2024-25)'),
-      } as ZodShape,
+      },
       handler: async (args, env, authHeader, correlationId, evalRunId, evalTraceId) => {
         const params: ToolParams = {
           platform: args.platform as Platform,
@@ -832,7 +823,7 @@ export function getUnifiedTools(): UnifiedTool[] {
           .describe('Sport type (e.g., "football", "baseball")'),
         league_id: z.string().describe('League ID (get from get_user_session)'),
         season_year: z.number().describe('Season start year (e.g., 2025 for MLB 2025, 2024 for NBA 2024-25)'),
-      } as ZodShape,
+      },
       handler: async (args, env, authHeader, correlationId, evalRunId, evalTraceId) => {
         const params: ToolParams = {
           platform: args.platform as Platform,
@@ -868,7 +859,7 @@ export function getUnifiedTools(): UnifiedTool[] {
         league_id: z.string().describe('League ID (get from get_user_session)'),
         season_year: z.number().describe('Season start year (e.g., 2025 for MLB 2025, 2024 for NBA 2024-25)'),
         week: z.number().optional().describe('Week number (optional, defaults to current week)'),
-      } as ZodShape,
+      },
       handler: async (args, env, authHeader, correlationId, evalRunId, evalTraceId) => {
         const params: ToolParams = {
           platform: args.platform as Platform,
@@ -906,7 +897,7 @@ export function getUnifiedTools(): UnifiedTool[] {
         season_year: z.number().describe('Season start year (e.g., 2025 for MLB 2025, 2024 for NBA 2024-25)'),
         team_id: z.string().optional().describe('Team ID (optional, defaults to user\'s team)'),
         week: z.number().optional().describe('Week number (optional, defaults to current week)'),
-      } as ZodShape,
+      },
       handler: async (args, env, authHeader, correlationId, evalRunId, evalTraceId) => {
         const params: ToolParams = {
           platform: args.platform as Platform,
@@ -951,7 +942,7 @@ export function getUnifiedTools(): UnifiedTool[] {
           .number()
           .optional()
           .describe('Maximum number of players to return (default: 25, max: 100)'),
-      } as ZodShape,
+      },
       handler: async (args, env, authHeader, correlationId, evalRunId, evalTraceId) => {
         const params: ToolParams = {
           platform: args.platform as Platform,
@@ -1000,7 +991,7 @@ export function getUnifiedTools(): UnifiedTool[] {
           .number()
           .optional()
           .describe('Maximum number of players to return (default: 10, max: 25)'),
-      } as ZodShape,
+      },
       handler: async (args, env, authHeader, correlationId, evalRunId, evalTraceId) => {
         const params: ToolParams = {
           platform: args.platform as Platform,
@@ -1047,7 +1038,7 @@ export function getUnifiedTools(): UnifiedTool[] {
           .number()
           .optional()
           .describe('Maximum transactions to return (default: 25, max: 100)'),
-      } as ZodShape,
+      },
       handler: async (args, env, authHeader, correlationId, evalRunId, evalTraceId) => {
         const requestedCount = Number(args.count ?? 25);
         const params: ToolParams = {

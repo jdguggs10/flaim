@@ -1,8 +1,12 @@
 import { describe, expect, it, vi, type MockedFunction } from 'vitest';
+import type { z } from 'zod';
 import { getUnifiedTools, hasRequiredScope, mcpAuthError } from '../mcp/tools';
 import { buildMcpAuthErrorResponse } from '../auth-response';
 import type { Env } from '../types';
 import { routeToClient } from '../router';
+
+/** Helper to cast an AnySchema value to z3 ZodTypeAny for .parse() in tests. */
+const asZod = (schema: unknown) => schema as z.ZodTypeAny;
 
 vi.mock('../router', () => ({
   routeToClient: vi.fn(),
@@ -250,17 +254,17 @@ describe('fantasy-mcp tools', () => {
     const tool = getUnifiedTools().find((t) => t.name === 'get_free_agents');
     expect(tool).toBeTruthy();
 
-    const schema = tool!.inputSchema as { platform: { parse: (value: unknown) => unknown } };
-    expect(schema.platform.parse('sleeper')).toBe('sleeper');
+    const schema = tool!.inputSchema;
+    expect(asZod(schema.platform).parse('sleeper')).toBe('sleeper');
   });
 
   it('get_free_agents schema still accepts espn and yahoo platforms', () => {
     const tool = getUnifiedTools().find((t) => t.name === 'get_free_agents');
     expect(tool).toBeTruthy();
 
-    const schema = tool!.inputSchema as { platform: { parse: (value: unknown) => unknown } };
-    expect(schema.platform.parse('espn')).toBe('espn');
-    expect(schema.platform.parse('yahoo')).toBe('yahoo');
+    const schema = tool!.inputSchema;
+    expect(asZod(schema.platform).parse('espn')).toBe('espn');
+    expect(asZod(schema.platform).parse('yahoo')).toBe('yahoo');
   });
 
   it('get_free_agents routes sleeper params to client', async () => {
@@ -356,22 +360,14 @@ describe('fantasy-mcp tools', () => {
     const tool = getUnifiedTools().find((t) => t.name === 'get_players');
     expect(tool).toBeTruthy();
 
-    const schema = tool!.inputSchema as {
-      query: { parse: (value: unknown) => unknown };
-      platform: { parse: (value: unknown) => unknown };
-      sport: { parse: (value: unknown) => unknown };
-      league_id: { parse: (value: unknown) => unknown };
-      season_year: { parse: (value: unknown) => unknown };
-      position: { parse: (value: unknown) => unknown };
-      count: { parse: (value: unknown) => unknown };
-    };
-    expect(schema.query.parse('judge')).toBe('judge');
-    expect(schema.platform.parse('espn')).toBe('espn');
-    expect(schema.sport.parse('baseball')).toBe('baseball');
-    expect(schema.league_id.parse('449.l.123')).toBe('449.l.123');
-    expect(schema.season_year.parse(2025)).toBe(2025);
-    expect(schema.position.parse('OF')).toBe('OF');
-    expect(schema.count.parse(25)).toBe(25);
+    const schema = tool!.inputSchema;
+    expect(asZod(schema.query).parse('judge')).toBe('judge');
+    expect(asZod(schema.platform).parse('espn')).toBe('espn');
+    expect(asZod(schema.sport).parse('baseball')).toBe('baseball');
+    expect(asZod(schema.league_id).parse('449.l.123')).toBe('449.l.123');
+    expect(asZod(schema.season_year).parse(2025)).toBe(2025);
+    expect(asZod(schema.position).parse('OF')).toBe('OF');
+    expect(asZod(schema.count).parse(25)).toBe(25);
 
     expect(tool!.description).toContain('market/global ownership context');
     expect(tool!.description).toContain('NOT league ownership data');
