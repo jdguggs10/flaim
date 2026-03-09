@@ -111,8 +111,8 @@ export function normalizeMTransactions2(transactions: EspnMTransaction[]): Norma
   const out: NormalizedTransaction[] = [];
 
   for (const txn of transactions) {
-    const type = toTxnTypeFromMTransaction(txn.type);
-    if (!type) continue;
+    const rawType = toTxnTypeFromMTransaction(txn.type);
+    if (!rawType) continue;
 
     const added: Array<{ id: string }> = [];
     const dropped: Array<{ id: string }> = [];
@@ -130,6 +130,11 @@ export function normalizeMTransactions2(transactions: EspnMTransaction[]): Norma
 
     const timestamp = txn.processDate ?? txn.proposedDate ?? 0;
     const teamIds = txn.teamId ? [String(txn.teamId)] : [];
+
+    // ESPN marks standalone free-agent drops as FREEAGENT with only drop items.
+    const type: TransactionType = rawType === 'add' && added.length === 0 && dropped.length > 0
+      ? 'drop'
+      : rawType;
 
     out.push({
       transaction_id: String(txn.id ?? `mtx-${timestamp}`),
@@ -177,6 +182,7 @@ export async function fetchEspnMTransactions2(
   let truncated = false;
 
   for (const week of weeks) {
+    let hitMaxPageWithFullResults = false;
     for (let page = 0; page < MTRANSACTIONS2_MAX_PAGES; page++) {
       const offset = page * MTRANSACTIONS2_PAGE_SIZE;
       const path = `/seasons/${seasonYear}/segments/0/leagues/${leagueId}?view=mTransactions2&scoringPeriodId=${week}`;
@@ -207,8 +213,30 @@ export async function fetchEspnMTransactions2(
 
       if (rawTxns.length < MTRANSACTIONS2_PAGE_SIZE) break;
 
-      // Hit max pages for this week — results may be incomplete
+      // Hit max pages for this week with a full page; probe one extra row later.
       if (page === MTRANSACTIONS2_MAX_PAGES - 1) {
+        hitMaxPageWithFullResults = true;
+      }
+    }
+
+    if (hitMaxPageWithFullResults) {
+      const probeOffset = MTRANSACTIONS2_MAX_PAGES * MTRANSACTIONS2_PAGE_SIZE;
+      const probePath = `/seasons/${seasonYear}/segments/0/leagues/${leagueId}?view=mTransactions2&scoringPeriodId=${week}`;
+      const probeHeaders = {
+        'x-fantasy-filter': JSON.stringify({
+          transactions: {
+            filterType: { value: MTRANSACTIONS2_TYPES },
+            limit: 1,
+            offset: probeOffset,
+            sortDatePublished: { sortPriority: 1, sortAsc: false },
+          },
+        }),
+      };
+
+      const probeRes = await espnFetch(probePath, gameId, { credentials, timeout: 7000, headers: probeHeaders });
+      if (!probeRes.ok) handleEspnError(probeRes);
+      const probeBody = await probeRes.json() as EspnMTransactions2Response;
+      if ((probeBody.transactions?.length ?? 0) > 0) {
         truncated = true;
         console.warn(`[fetchEspnMTransactions2] Hit page limit for week ${week}, results may be incomplete`);
       }

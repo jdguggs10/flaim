@@ -27,7 +27,7 @@ describe('football get_transactions handler', () => {
   const enrichTransactionsMock = enrichTransactions as MockedFunction<typeof enrichTransactions>;
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
   });
 
   it('uses current+previous week window when week is omitted', async () => {

@@ -190,6 +190,33 @@ describe('espn-transactions', () => {
       expect(result[0].players_dropped).toEqual([{ id: '4362887' }]);
     });
 
+    it('classifies FREEAGENT transactions with only drops as type drop', () => {
+      const txns: EspnMTransaction[] = [
+        {
+          id: 101,
+          type: 'FREEAGENT',
+          status: 'EXECUTED',
+          teamId: 3,
+          processDate: 1700000000001,
+          scoringPeriodId: 7,
+          items: [
+            { playerId: 4362887, fromTeamId: 3, toTeamId: -1, type: 'DROP' },
+          ],
+        },
+      ];
+
+      const result = normalizeMTransactions2(txns);
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({
+        transaction_id: '101',
+        type: 'drop',
+        status: 'complete',
+        team_ids: ['3'],
+      });
+      expect(result[0].players_added).toEqual([]);
+      expect(result[0].players_dropped).toEqual([{ id: '4362887' }]);
+    });
+
     it('normalizes a WAIVER with FAAB bid amount', () => {
       const txns: EspnMTransaction[] = [
         {
@@ -472,6 +499,47 @@ describe('espn-transactions', () => {
       const secondInit = mockFetch.mock.calls[1]?.[1] as RequestInit;
       const filter = JSON.parse((secondInit.headers as Record<string, string>)['x-fantasy-filter']);
       expect(filter.transactions.offset).toBe(50);
+    });
+
+    it('does not mark truncated when exactly 200 rows exist for a week', async () => {
+      const fullPage = Array.from({ length: 50 }, (_, i) => ({
+        id: i + 1, type: 'FREEAGENT', status: 'EXECUTED', teamId: 1,
+        processDate: 50000 - i, scoringPeriodId: 7, items: [],
+      }));
+
+      mockFetch.mockResolvedValueOnce(jsonResponse({ transactions: fullPage }));
+      mockFetch.mockResolvedValueOnce(jsonResponse({ transactions: fullPage.map((p) => ({ ...p, id: p.id + 100 })) }));
+      mockFetch.mockResolvedValueOnce(jsonResponse({ transactions: fullPage.map((p) => ({ ...p, id: p.id + 200 })) }));
+      mockFetch.mockResolvedValueOnce(jsonResponse({ transactions: fullPage.map((p) => ({ ...p, id: p.id + 300 })) }));
+      // Probe offset 200 returns no rows => not truncated.
+      mockFetch.mockResolvedValueOnce(jsonResponse({ transactions: [] }));
+
+      const result = await fetchEspnMTransactions2('ffl', '123', 2025, { s2: 'x', swid: '{y}' }, [7]);
+
+      expect(result.transactions).toHaveLength(200);
+      expect(result.truncated).toBe(false);
+      expect(mockFetch).toHaveBeenCalledTimes(5);
+    });
+
+    it('marks truncated when probe finds rows beyond max page limit', async () => {
+      const fullPage = Array.from({ length: 50 }, (_, i) => ({
+        id: i + 1, type: 'FREEAGENT', status: 'EXECUTED', teamId: 1,
+        processDate: 50000 - i, scoringPeriodId: 7, items: [],
+      }));
+
+      mockFetch.mockResolvedValueOnce(jsonResponse({ transactions: fullPage }));
+      mockFetch.mockResolvedValueOnce(jsonResponse({ transactions: fullPage.map((p) => ({ ...p, id: p.id + 100 })) }));
+      mockFetch.mockResolvedValueOnce(jsonResponse({ transactions: fullPage.map((p) => ({ ...p, id: p.id + 200 })) }));
+      mockFetch.mockResolvedValueOnce(jsonResponse({ transactions: fullPage.map((p) => ({ ...p, id: p.id + 300 })) }));
+      // Probe offset 200 returns one row => truncated.
+      mockFetch.mockResolvedValueOnce(jsonResponse({
+        transactions: [{ id: 999, type: 'WAIVER', status: 'EXECUTED', teamId: 3, processDate: 1, scoringPeriodId: 7, items: [] }],
+      }));
+
+      const result = await fetchEspnMTransactions2('ffl', '123', 2025, { s2: 'x', swid: '{y}' }, [7]);
+
+      expect(result.truncated).toBe(true);
+      expect(mockFetch).toHaveBeenCalledTimes(5);
     });
   });
 
