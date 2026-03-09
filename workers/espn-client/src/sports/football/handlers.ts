@@ -2,7 +2,7 @@
 import type { Env, ToolParams, ExecuteResponse, EspnLeagueResponse, EspnPlayerPoolResponse } from '../../types';
 import { getCredentials } from '../../shared/auth';
 import { espnFetch, handleEspnError, requireCredentials } from '../../shared/espn-api';
-import { fetchEspnTransactionsByWeeks, getEspnLeagueContext, fetchEspnPlayersByIds, enrichTransactions } from '../../shared/espn-transactions';
+import { fetchEspnTransactionsByWeeks, fetchEspnMTransactions2, mergeTradePlayerDetails, getEspnLeagueContext, fetchEspnPlayersByIds, enrichTransactions } from '../../shared/espn-transactions';
 import { getEspnPlayersIndex } from '../../shared/espn-players-cache';
 import { extractErrorCode } from '@flaim/worker-shared';
 import {
@@ -499,8 +499,26 @@ async function handleGetTransactions(
       : Array.from(new Set([currentWeek, Math.max(1, currentWeek - 1)]));
 
     const maxCount = count ?? 25;
-    const rows = await fetchEspnTransactionsByWeeks(GAME_ID, league_id, season_year, credentials, weeks);
-    let filtered = rows
+
+    // Primary: mTransactions2 (structured data, FAAB bids, trade lifecycle)
+    const mTxns = await fetchEspnMTransactions2(GAME_ID, league_id, season_year, credentials, weeks);
+
+    // Fallback: activity feed for accepted/upheld trade player details (ESPN items bug)
+    const hasEmptyTrades = mTxns.some(
+      (t) => (t.type === 'trade' || t.type === 'trade_uphold') &&
+        (t.players_added?.length ?? 0) + (t.players_dropped?.length ?? 0) === 0,
+    );
+    let merged = mTxns;
+    if (hasEmptyTrades) {
+      try {
+        const activityRows = await fetchEspnTransactionsByWeeks(GAME_ID, league_id, season_year, credentials, weeks);
+        merged = mergeTradePlayerDetails(mTxns, activityRows);
+      } catch (fallbackErr) {
+        console.warn('[get_transactions] Activity feed fallback failed:', fallbackErr instanceof Error ? fallbackErr.message : fallbackErr);
+      }
+    }
+
+    let filtered = merged
       .filter((txn) => !type || txn.type === type)
       .slice(0, maxCount);
 

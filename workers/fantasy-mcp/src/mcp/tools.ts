@@ -1028,7 +1028,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       requiredScope: 'mcp:read',
       securitySchemes: buildSecuritySchemes('mcp:read'),
       openaiMeta: { invoking: 'Fetching transactions\u2026', invoked: 'Transactions ready' },
-      description: `Get recent league transactions including adds, drops, waivers, and trades. Each transaction has a "date" field (YYYY-MM-DD) and "team_ids". When presenting results, organize by time period (today, yesterday, this week, older) AND by team within each period so the user can see both when moves happened and what each team did. Week handling is platform-specific: ESPN/Sleeper use week windows (default current + previous week), while Yahoo uses a recent 14-day timestamp window and ignores explicit week. Yahoo type=waiver and type=pending_trade fetch the authenticated user's own pending claims/trades. ESPN responses include a "teams" map (team ID → display name) to resolve the numeric team_ids on each transaction, and player entries include name, position, and pro team. Use values from get_user_session. Read-only and safe to retry. Current date is ${currentDate}.`,
+      description: `Get recent league transactions including adds, drops, waivers, and trades. Each transaction has a "date" field (YYYY-MM-DD) and "team_ids". When presenting results, organize by time period (today, yesterday, this week, older) AND by team within each period so the user can see both when moves happened and what each team did. Week handling is platform-specific: ESPN/Sleeper use week windows (default current + previous week), while Yahoo uses a recent 14-day timestamp window and ignores explicit week. ESPN uses mTransactions2 for structured transaction data including FAAB bids, failed bids (type=failed_bid), and trade lifecycle (trade_proposal, trade_decline, trade_veto, trade_uphold). Accepted trade player details are supplemented from the activity feed. Yahoo type=waiver and type=pending_trade fetch the authenticated user's own pending claims/trades. ESPN responses include a "teams" map (team ID → display name) to resolve the numeric team_ids on each transaction, and player entries include name, position, and pro team. Use values from get_user_session. Read-only and safe to retry. Current date is ${currentDate}.`,
       inputSchema: {
         platform: z
           .enum(['espn', 'yahoo', 'sleeper'])
@@ -1040,9 +1040,9 @@ export function getUnifiedTools(): UnifiedTool[] {
         season_year: z.number().describe('Season start year (e.g., 2025 for MLB 2025, 2024 for NBA 2024-25)'),
         week: z.number().int().min(1).optional().describe('Week number (optional, must be ≥ 1). ESPN/Sleeper support explicit week; Yahoo ignores week and uses a recent 14-day timestamp window'),
         type: z
-          .enum(['add', 'drop', 'trade', 'waiver', 'pending_trade'])
+          .enum(['add', 'drop', 'trade', 'waiver', 'pending_trade', 'trade_proposal', 'trade_decline', 'trade_veto', 'trade_uphold', 'failed_bid'])
           .optional()
-          .describe('Optional transaction type filter. Yahoo waiver/pending_trade return user\'s own pending items.'),
+          .describe('Optional transaction type filter. Yahoo waiver/pending_trade return user\'s own pending items. ESPN trade_proposal/trade_decline/trade_veto/trade_uphold/failed_bid provide trade lifecycle and losing FAAB bids.'),
         count: z
           .number()
           .optional()
@@ -1056,7 +1056,7 @@ export function getUnifiedTools(): UnifiedTool[] {
           league_id: args.league_id as string,
           season_year: args.season_year as number,
           week: args.week as number | undefined,
-          type: args.type as 'add' | 'drop' | 'trade' | 'waiver' | 'pending_trade' | undefined,
+          type: args.type as 'add' | 'drop' | 'trade' | 'waiver' | 'pending_trade' | 'trade_proposal' | 'trade_decline' | 'trade_veto' | 'trade_uphold' | 'failed_bid' | undefined,
           count: Number.isFinite(requestedCount) ? Math.max(1, Math.min(100, requestedCount)) : 25,
         };
 
