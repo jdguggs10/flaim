@@ -48,7 +48,7 @@ export default function Image() {
             textAlign: 'center',
           }}
         >
-          Read-Only Fantasy League Analysis
+          Your Fantasy League, Inside Your AI
         </div>
         <div
           style={{

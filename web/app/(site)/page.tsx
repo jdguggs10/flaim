@@ -19,10 +19,10 @@ export default function LandingPage() {
       {/* Hero */}
       <section className="py-8 px-4 text-center">
         <h1 className="text-4xl md:text-5xl font-bold mb-2">
-          Fantasy League Analysis Across ESPN, Yahoo, and Sleeper
+          Your Fantasy League, Inside Your AI
         </h1>
         <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-          Use your AI to evaluate standings, rosters, matchups, and free agents with unified league context and read-only access.
+          Flaim connects your ESPN, Yahoo, and Sleeper leagues to Claude, ChatGPT, and Gemini. Get real analysis from your real leagues — rosters, matchups, free agents, and more.
         </p>
       </section>
 
