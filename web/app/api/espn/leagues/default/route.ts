@@ -7,6 +7,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 
+const VALID_PLATFORMS = ['espn', 'yahoo', 'sleeper'] as const;
+const VALID_SPORTS = ['football', 'baseball', 'basketball', 'hockey'] as const;
+
 export async function POST(request: NextRequest) {
   try {
     const { userId, getToken } = await auth();
@@ -21,9 +24,6 @@ export async function POST(request: NextRequest) {
       sport?: string;
       seasonYear?: number;
     } = await request.json();
-
-    const VALID_PLATFORMS = ['espn', 'yahoo', 'sleeper'] as const;
-    const VALID_SPORTS = ['football', 'baseball', 'basketball', 'hockey'] as const;
 
     if (!body.platform || !body.leagueId || !body.sport || body.seasonYear === undefined) {
       return NextResponse.json({
@@ -90,11 +90,10 @@ export async function DELETE(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const sport = searchParams.get('sport');
 
-    const VALID_DELETE_SPORTS = ['football', 'baseball', 'basketball', 'hockey'];
     if (!sport) {
       return NextResponse.json({ error: 'sport query param is required' }, { status: 400 });
     }
-    if (!VALID_DELETE_SPORTS.includes(sport)) {
+    if (!VALID_SPORTS.includes(sport as typeof VALID_SPORTS[number])) {
       return NextResponse.json({ error: 'Invalid sport' }, { status: 400 });
     }
 

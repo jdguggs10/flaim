@@ -44,10 +44,13 @@ function isAllowedUrl(urlString: string): boolean {
     if (matchesStatic) return true;
 
     // Check workers.dev — only allow known Flaim worker prefixes
+    // Validate exact first segment to prevent bypass via fantasy-mcp.evil.workers.dev
     if (url.hostname.endsWith('.workers.dev')) {
-      return ALLOWED_WORKER_PREFIXES.some(prefix =>
-        url.hostname.startsWith(`${prefix}.`)
-      );
+      const parts = url.hostname.split('.');
+      return parts.length >= 3
+        && parts[parts.length - 1] === 'dev'
+        && parts[parts.length - 2] === 'workers'
+        && ALLOWED_WORKER_PREFIXES.some(prefix => parts[0] === prefix);
     }
 
     return false;

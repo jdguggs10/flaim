@@ -39,7 +39,8 @@ export async function GET() {
           console.error('Yahoo authorize: unexpected redirect target:', redirectUrl.hostname);
           return NextResponse.json({ error: 'Invalid redirect target' }, { status: 502 });
         }
-      } catch {
+      } catch (e) {
+        console.error('Yahoo authorize: failed to parse redirect URL', e);
         return NextResponse.json({ error: 'Invalid redirect URL' }, { status: 502 });
       }
       return NextResponse.redirect(location);

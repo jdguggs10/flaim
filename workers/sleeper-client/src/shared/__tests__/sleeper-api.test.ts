@@ -48,7 +48,7 @@ describe('sleeper-api helpers', () => {
       'SLEEPER_BAD_REQUEST: Invalid request',
     );
     expect(() => handleSleeperError(new Response(null, { status: 503 }))).toThrow(
-      'SLEEPER_API_ERROR: Sleeper returned 503',
+      'SLEEPER_API_ERROR: An unexpected error occurred with Sleeper. Please try again.',
     );
   });
 
