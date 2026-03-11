@@ -8,11 +8,20 @@ import { auth } from '@clerk/nextjs/server';
 const ALLOWED_MCP_HOST_PATTERNS = [
   // Flaim production domains
   'flaim.app',
-  // Cloudflare Workers (any account - for contributors and preview)
-  'workers.dev',
   // Localhost for development
   'localhost',
   '127.0.0.1',
+];
+
+/**
+ * Flaim-specific worker name prefixes allowed on workers.dev.
+ * Prevents probing arbitrary Cloudflare Workers.
+ */
+const ALLOWED_WORKER_PREFIXES = [
+  'fantasy-mcp',
+  'fantasy-mcp-preview',
+  'auth-worker',
+  'auth-worker-preview',
 ];
 
 /**
@@ -28,10 +37,20 @@ function isAllowedUrl(urlString: string): boolean {
       return false;
     }
 
-    // Check against allowlist patterns
-    return ALLOWED_MCP_HOST_PATTERNS.some(pattern =>
+    // Check against static allowlist patterns
+    const matchesStatic = ALLOWED_MCP_HOST_PATTERNS.some(pattern =>
       url.hostname === pattern || url.hostname.endsWith(`.${pattern}`)
     );
+    if (matchesStatic) return true;
+
+    // Check workers.dev — only allow known Flaim worker prefixes
+    if (url.hostname.endsWith('.workers.dev')) {
+      return ALLOWED_WORKER_PREFIXES.some(prefix =>
+        url.hostname.startsWith(`${prefix}.`)
+      );
+    }
+
+    return false;
   } catch {
     return false;
   }

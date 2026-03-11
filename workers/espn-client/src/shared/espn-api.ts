@@ -66,7 +66,8 @@ export function handleEspnError(response: Response): never {
     case 429:
       throw new Error('ESPN_RATE_LIMIT: Too many requests to ESPN. Please wait and try again.');
     default:
-      throw new Error(`ESPN_API_ERROR: ESPN returned ${response.status}`);
+      console.error(`[espn-api] Unexpected ESPN status: ${response.status}`);
+      throw new Error('ESPN_API_ERROR: An unexpected error occurred with ESPN. Please try again.');
   }
 }
 

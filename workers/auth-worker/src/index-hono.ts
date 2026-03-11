@@ -249,11 +249,18 @@ async function verifyJwtAndGetUserId(authorization: string | null, env: Env): Pr
       throw new Error(`JWT issuer "${payload.iss}" not in allowlist`);
     }
   } else {
-    // Dev/preview: also allow Clerk dev issuers
-    const isClerkIssuer = allowedIssuers.includes(payload.iss) ||
-      payload.iss.endsWith('.clerk.accounts.dev');
-    if (!isClerkIssuer) {
-      throw new Error(`JWT issuer "${payload.iss}" not recognized`);
+    // Dev/preview: prefer explicit CLERK_ISSUER; fall back to wildcard only if unset
+    if (env.CLERK_ISSUER) {
+      if (!allowedIssuers.includes(payload.iss)) {
+        throw new Error(`JWT issuer "${payload.iss}" not in allowlist`);
+      }
+    } else {
+      console.warn('[auth-worker] CLERK_ISSUER not set in non-prod — falling back to wildcard .clerk.accounts.dev matching');
+      const isClerkIssuer = allowedIssuers.includes(payload.iss) ||
+        payload.iss.endsWith('.clerk.accounts.dev');
+      if (!isClerkIssuer) {
+        throw new Error(`JWT issuer "${payload.iss}" not recognized`);
+      }
     }
   }
 
@@ -577,8 +584,19 @@ api.get('/authorize', (c) => {
   return handleAuthorize(c.req.raw, c.env as OAuthEnv);
 });
 
-// Token endpoint - exchange code for access token
-api.post('/token', (c) => {
+// Token endpoint - exchange code for access token (rate-limited per IP)
+api.post('/token', async (c) => {
+  // Rate limit token exchange per IP to prevent brute-force PKCE attacks
+  const clientIp = c.req.header('CF-Connecting-IP') || c.req.header('X-Forwarded-For') || 'unknown';
+  const storage = OAuthStorage.fromEnvironment(c.env);
+  const tokenRateLimit = await storage.checkRateLimit(`token:${clientIp}`, 30); // 30 token attempts/day per IP
+  if (!tokenRateLimit.allowed) {
+    return c.json({
+      error: 'rate_limit_exceeded',
+      error_description: 'Too many token requests. Please try again later.',
+    }, 429);
+  }
+  await storage.incrementRateLimit(`token:${clientIp}`);
   return handleToken(c.req.raw, c.env as OAuthEnv, getCorsHeaders(c.req.raw));
 });
 

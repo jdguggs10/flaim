@@ -25,11 +25,14 @@ export async function DELETE(
       return NextResponse.json({ error: 'AUTH_WORKER_URL not configured' }, { status: 500 });
     }
 
-    const bearer = (await getToken?.()) || undefined;
-    const workerRes = await fetch(`${authWorkerUrl}/leagues/sleeper/${leagueId}`, {
+    const bearer = await getToken?.();
+    if (!bearer) {
+      return NextResponse.json({ error: 'Authentication token unavailable' }, { status: 401 });
+    }
+    const workerRes = await fetch(`${authWorkerUrl}/leagues/sleeper/${encodeURIComponent(leagueId)}`, {
       method: 'DELETE',
       headers: {
-        ...(bearer ? { Authorization: `Bearer ${bearer}` } : {}),
+        Authorization: `Bearer ${bearer}`,
       },
     });
 

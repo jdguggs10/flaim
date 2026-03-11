@@ -37,12 +37,15 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       return NextResponse.json({ error: 'NEXT_PUBLIC_AUTH_WORKER_URL is not configured' }, { status: 500 });
     }
 
-    const bearer = (await getToken?.()) || undefined;
-    const response = await fetch(`${authWorkerUrl}/leagues/${leagueId}/team`, {
+    const bearer = await getToken?.();
+    if (!bearer) {
+      return NextResponse.json({ error: 'Authentication token unavailable' }, { status: 401 });
+    }
+    const response = await fetch(`${authWorkerUrl}/leagues/${encodeURIComponent(leagueId)}/team`, {
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',
-        ...(bearer ? { 'Authorization': `Bearer ${bearer}` } : {})
+        'Authorization': `Bearer ${bearer}`,
       },
       body: JSON.stringify({
         teamId: body.teamId,
@@ -98,12 +101,15 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ error: 'NEXT_PUBLIC_AUTH_WORKER_URL is not configured' }, { status: 500 });
     }
 
-    const bearer = (await getToken?.()) || undefined;
+    const bearer = await getToken?.();
+    if (!bearer) {
+      return NextResponse.json({ error: 'Authentication token unavailable' }, { status: 401 });
+    }
     const response = await fetch(`${authWorkerUrl}/leagues`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-        ...(bearer ? { 'Authorization': `Bearer ${bearer}` } : {})
+        'Authorization': `Bearer ${bearer}`,
       }
     });
 

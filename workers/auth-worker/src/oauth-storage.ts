@@ -111,21 +111,38 @@ function generateSecureToken(length: number = 32): string {
 
 /**
  * Verify PKCE code verifier against stored challenge
+ * RFC 7636 requires code_verifier to be 43-128 characters, unreserved charset.
  */
 async function verifyPkceChallenge(
   codeVerifier: string,
   codeChallenge: string,
   method: 'S256'
 ): Promise<boolean> {
+  // RFC 7636 §4.1: code_verifier must be 43-128 characters
+  if (codeVerifier.length < 43 || codeVerifier.length > 128) {
+    console.log(`[oauth-storage] PKCE code_verifier length out of range: ${codeVerifier.length}`);
+    return false;
+  }
+
   // S256: SHA-256 hash of verifier, base64url encoded
   const encoder = new TextEncoder();
   const data = encoder.encode(codeVerifier);
   const hashBuffer = await crypto.subtle.digest('SHA-256', data);
   const hashArray = new Uint8Array(hashBuffer);
   const base64 = btoa(String.fromCharCode(...hashArray));
-  const base64url = base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+  const computed = base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 
-  return base64url === codeChallenge;
+  // Constant-time comparison to prevent timing attacks
+  const computedBytes = encoder.encode(computed);
+  const expectedBytes = encoder.encode(codeChallenge);
+  if (computedBytes.length !== expectedBytes.length) {
+    return false;
+  }
+  let result = 0;
+  for (let i = 0; i < computedBytes.length; i++) {
+    result |= computedBytes[i] ^ expectedBytes[i];
+  }
+  return result === 0;
 }
 
 /**
@@ -352,22 +369,50 @@ export class OAuthStorage {
   /**
    * Exchange authorization code for access token
    * Validates PKCE if present
+   *
+   * Uses atomic claim (UPDATE ... WHERE used_at IS NULL) to prevent
+   * race conditions where two concurrent requests exchange the same code.
    */
   async exchangeCodeForToken(
     code: string,
     redirectUri: string,
     codeVerifier?: string
   ): Promise<OAuthToken | null> {
-    // Get and validate the code
-    const authCode = await this.getAuthorizationCode(code);
-    if (!authCode) {
+    // Atomically claim the code — only succeeds if not already used
+    const { data, error } = await this.supabase
+      .from('oauth_codes')
+      .update({ used_at: new Date().toISOString() })
+      .eq('code', code)
+      .is('used_at', null)
+      .select('*')
+      .single();
+
+    if (error || !data) {
+      console.log(`[oauth-storage] Auth code not found, expired, or already used: ${code.substring(0, 8)}...`);
       return null;
     }
+
+    // Check if expired
+    if (new Date(data.expires_at) < new Date()) {
+      console.log(`[oauth-storage] Auth code expired: ${code.substring(0, 8)}...`);
+      return null;
+    }
+
+    const authCode: OAuthCode = {
+      code: data.code,
+      userId: data.user_id,
+      redirectUri: data.redirect_uri,
+      codeChallenge: data.code_challenge || undefined,
+      codeChallengeMethod: data.code_challenge_method || undefined,
+      scope: data.scope,
+      resource: data.resource || undefined,
+      expiresAt: new Date(data.expires_at),
+    };
 
     // Validate redirect URI matches
     if (!redirectUrisMatch(authCode.redirectUri, redirectUri)) {
       console.log(`[oauth-storage] Redirect URI mismatch: expected ${authCode.redirectUri}, got ${redirectUri}`);
-      return null;
+      return null; // Code is already burned — correct per RFC 6749 §4.1.2
     }
 
     // Validate PKCE if challenge was provided
@@ -384,9 +429,6 @@ export class OAuthStorage {
         return null;
       }
     }
-
-    // Mark code as used
-    await this.markCodeAsUsed(code);
 
     // Create and return access token
     const token = await this.createAccessToken({

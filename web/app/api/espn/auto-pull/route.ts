@@ -39,25 +39,9 @@ export async function POST(request: NextRequest) {
 
     console.log(`[auto-pull] Using season year: ${seasonYear} (requested: ${requestedSeasonYear || 'none'})`);
 
-    const bearer = (await getToken?.()) || undefined;
-
-    // Debug: Log token availability and details (helps diagnose auth issues)
-    console.log(`[auto-pull] User: ${userId}, bearer token available: ${!!bearer}`);
-    if (bearer) {
-      // Log JWT structure without exposing full token
-      const parts = bearer.split('.');
-      console.log(`[auto-pull] JWT structure: ${parts.length} parts, length: ${bearer.length} chars`);
-      try {
-        const payload = JSON.parse(atob(parts[1]));
-        console.log(`[auto-pull] JWT payload - sub: ${payload.sub}, iss: ${payload.iss}, exp: ${new Date(payload.exp * 1000).toISOString()}`);
-      } catch (parseError) {
-        console.log('[auto-pull] Could not parse JWT payload', parseError);
-      }
-    }
-
-    // If no bearer token, auth-worker and sport workers will reject the request
+    const bearer = await getToken?.();
     if (!bearer) {
-      console.error('[auto-pull] getToken() returned undefined - cannot authenticate with workers');
+      console.error('[auto-pull] getToken() returned undefined');
       return NextResponse.json({
         error: 'Authentication token unavailable. Please try signing out and back in.',
         code: 'TOKEN_UNAVAILABLE'
