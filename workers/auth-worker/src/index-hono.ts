@@ -37,7 +37,6 @@ import {
   validateOAuthToken,
   OAuthEnv,
 } from './oauth-handlers';
-import { OAuthStorage } from './oauth-storage';
 import {
   handleSyncCredentials,
   handleGetExtensionStatus,
@@ -73,6 +72,10 @@ import { logEvalEvent } from './logging';
 // TYPES
 // =============================================================================
 
+interface RateLimit {
+  limit(options: { key: string }): Promise<{ success: boolean }>;
+}
+
 export interface Env {
   SUPABASE_URL: string;
   SUPABASE_SERVICE_KEY: string;
@@ -86,6 +89,9 @@ export interface Env {
   // Eval/CI API key auth (Cloudflare secrets)
   EVAL_API_KEY?: string;   // Static API key for eval/CI
   EVAL_USER_ID?: string;   // Clerk user ID that the API key resolves to
+  // Rate limiting (Cloudflare Workers native)
+  TOKEN_RATE_LIMITER: RateLimit;
+  CREDENTIALS_RATE_LIMITER: RateLimit;
 }
 
 type Jwk = {
@@ -104,7 +110,6 @@ type JwtPayload = { sub?: string; iss?: string; exp?: number; [k: string]: unkno
 // CONSTANTS
 // =============================================================================
 
-const RATE_LIMIT_PER_DAY = 200;
 const EVAL_RUN_HEADER = 'X-Flaim-Eval-Run';
 const EVAL_TRACE_HEADER = 'X-Flaim-Eval-Trace';
 
@@ -249,11 +254,18 @@ async function verifyJwtAndGetUserId(authorization: string | null, env: Env): Pr
       throw new Error(`JWT issuer "${payload.iss}" not in allowlist`);
     }
   } else {
-    // Dev/preview: also allow Clerk dev issuers
-    const isClerkIssuer = allowedIssuers.includes(payload.iss) ||
-      payload.iss.endsWith('.clerk.accounts.dev');
-    if (!isClerkIssuer) {
-      throw new Error(`JWT issuer "${payload.iss}" not recognized`);
+    // Dev/preview: prefer explicit CLERK_ISSUER; fall back to wildcard only if unset
+    if (env.CLERK_ISSUER) {
+      if (!allowedIssuers.includes(payload.iss)) {
+        throw new Error(`JWT issuer "${payload.iss}" not in allowlist`);
+      }
+    } else {
+      console.warn('[auth-worker] CLERK_ISSUER not set in non-prod — falling back to wildcard .clerk.accounts.dev matching');
+      const isClerkIssuer = allowedIssuers.includes(payload.iss) ||
+        payload.iss.endsWith('.clerk.accounts.dev');
+      if (!isClerkIssuer) {
+        throw new Error(`JWT issuer "${payload.iss}" not recognized`);
+      }
     }
   }
 
@@ -577,8 +589,16 @@ api.get('/authorize', (c) => {
   return handleAuthorize(c.req.raw, c.env as OAuthEnv);
 });
 
-// Token endpoint - exchange code for access token
-api.post('/token', (c) => {
+// Token endpoint - exchange code for access token (rate-limited per IP)
+api.post('/token', async (c) => {
+  const clientIp = c.req.header('CF-Connecting-IP') || 'unknown';
+  const { success } = await c.env.TOKEN_RATE_LIMITER.limit({ key: clientIp });
+  if (!success) {
+    return c.json({
+      error: 'rate_limit_exceeded',
+      error_description: 'Too many token requests. Please try again later.',
+    }, 429);
+  }
   return handleToken(c.req.raw, c.env as OAuthEnv, getCorsHeaders(c.req.raw));
 });
 
@@ -1078,32 +1098,17 @@ async function handleCredentialsEspn(c: Context<{ Bindings: Env }>, method: stri
     if (getRawCredentials) {
       console.log(`🔍 [auth-worker] GET raw credentials for user: ${maskUserId(clerkUserId)}`);
 
-      // Check rate limit before returning credentials
-      const oauthStorage = OAuthStorage.fromEnvironment(env);
-      const rateLimit = await oauthStorage.checkRateLimit(clerkUserId, RATE_LIMIT_PER_DAY);
-
-      if (!rateLimit.allowed) {
+      const { success } = await env.CREDENTIALS_RATE_LIMITER.limit({ key: clerkUserId });
+      if (!success) {
         console.log(`⚠️ [auth-worker] Rate limit exceeded for user: ${maskUserId(clerkUserId)}`);
         return new Response(JSON.stringify({
           error: 'Rate limit exceeded',
-          message: `Daily limit of ${rateLimit.limit} calls reached. Limit resets at ${rateLimit.resetAt.toISOString()}.`,
-          resetAt: rateLimit.resetAt.toISOString(),
+          message: 'Too many requests. Please try again later.',
         }), {
           status: 429,
-          headers: {
-            'Content-Type': 'application/json',
-            'X-RateLimit-Limit': String(rateLimit.limit),
-            'X-RateLimit-Remaining': '0',
-            'X-RateLimit-Reset': String(Math.floor(rateLimit.resetAt.getTime() / 1000)),
-            'Retry-After': String(Math.ceil((rateLimit.resetAt.getTime() - Date.now()) / 1000)),
-            ...corsHeaders
-          }
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
         });
       }
-
-      // Increment rate limit counter
-      const currentUsage = await oauthStorage.incrementRateLimit(clerkUserId);
-      const remaining = Math.max(0, RATE_LIMIT_PER_DAY - currentUsage);
 
       const credentials = await storage.getCredentials(clerkUserId);
 
@@ -1113,13 +1118,7 @@ async function handleCredentialsEspn(c: Context<{ Bindings: Env }>, method: stri
           message: 'No ESPN credentials found for user. Add your ESPN credentials at /settings/espn'
         }), {
           status: 404,
-          headers: {
-            'Content-Type': 'application/json',
-            'X-RateLimit-Limit': String(RATE_LIMIT_PER_DAY),
-            'X-RateLimit-Remaining': String(remaining),
-            'X-RateLimit-Reset': String(Math.floor(rateLimit.resetAt.getTime() / 1000)),
-            ...corsHeaders
-          }
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
         });
       }
 
@@ -1128,13 +1127,7 @@ async function handleCredentialsEspn(c: Context<{ Bindings: Env }>, method: stri
         platform: 'espn',
         credentials
       }), {
-        headers: {
-          'Content-Type': 'application/json',
-          'X-RateLimit-Limit': String(RATE_LIMIT_PER_DAY),
-          'X-RateLimit-Remaining': String(remaining),
-          'X-RateLimit-Reset': String(Math.floor(rateLimit.resetAt.getTime() / 1000)),
-          ...corsHeaders
-        }
+        headers: { 'Content-Type': 'application/json', ...corsHeaders }
       });
     }
 

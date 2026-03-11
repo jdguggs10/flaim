@@ -7,6 +7,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 
+const VALID_PLATFORMS = ['espn', 'yahoo', 'sleeper'] as const;
+const VALID_SPORTS = ['football', 'baseball', 'basketball', 'hockey'] as const;
+
 export async function POST(request: NextRequest) {
   try {
     const { userId, getToken } = await auth();
@@ -28,17 +31,32 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
+    if (!VALID_PLATFORMS.includes(body.platform as typeof VALID_PLATFORMS[number])) {
+      return NextResponse.json({ error: 'Invalid platform' }, { status: 400 });
+    }
+
+    if (!VALID_SPORTS.includes(body.sport as typeof VALID_SPORTS[number])) {
+      return NextResponse.json({ error: 'Invalid sport' }, { status: 400 });
+    }
+
+    if (!Number.isInteger(body.seasonYear) || body.seasonYear < 2000 || body.seasonYear > 2100) {
+      return NextResponse.json({ error: 'Invalid seasonYear' }, { status: 400 });
+    }
+
     const authWorkerUrl = process.env.NEXT_PUBLIC_AUTH_WORKER_URL;
     if (!authWorkerUrl) {
       return NextResponse.json({ error: 'NEXT_PUBLIC_AUTH_WORKER_URL is not configured' }, { status: 500 });
     }
 
-    const bearer = (await getToken?.()) || undefined;
+    const bearer = await getToken?.();
+    if (!bearer) {
+      return NextResponse.json({ error: 'Authentication token unavailable' }, { status: 401 });
+    }
     const workerResponse = await fetch(`${authWorkerUrl}/leagues/default`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(bearer ? { 'Authorization': `Bearer ${bearer}` } : {})
+        'Authorization': `Bearer ${bearer}`,
       },
       body: JSON.stringify(body)
     });
@@ -75,16 +93,22 @@ export async function DELETE(request: NextRequest) {
     if (!sport) {
       return NextResponse.json({ error: 'sport query param is required' }, { status: 400 });
     }
+    if (!VALID_SPORTS.includes(sport as typeof VALID_SPORTS[number])) {
+      return NextResponse.json({ error: 'Invalid sport' }, { status: 400 });
+    }
 
     const authWorkerUrl = process.env.NEXT_PUBLIC_AUTH_WORKER_URL;
     if (!authWorkerUrl) {
       return NextResponse.json({ error: 'NEXT_PUBLIC_AUTH_WORKER_URL is not configured' }, { status: 500 });
     }
 
-    const bearer = (await getToken?.()) || undefined;
-    const workerResponse = await fetch(`${authWorkerUrl}/leagues/default/${sport}`, {
+    const bearer = await getToken?.();
+    if (!bearer) {
+      return NextResponse.json({ error: 'Authentication token unavailable' }, { status: 401 });
+    }
+    const workerResponse = await fetch(`${authWorkerUrl}/leagues/default/${encodeURIComponent(sport)}`, {
       method: 'DELETE',
-      headers: bearer ? { 'Authorization': `Bearer ${bearer}` } : {}
+      headers: { 'Authorization': `Bearer ${bearer}` }
     });
 
     const workerData = await workerResponse.json() as any;

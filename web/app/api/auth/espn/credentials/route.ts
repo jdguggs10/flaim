@@ -27,10 +27,13 @@ export async function GET(request: NextRequest) {
     const forEdit = request.nextUrl.searchParams.get('forEdit') === 'true';
     const queryString = forEdit ? '?forEdit=true' : '';
 
-    const bearer = (await getToken?.()) || undefined;
+    const bearer = await getToken?.();
+    if (!bearer) {
+      return NextResponse.json({ error: 'Authentication token unavailable' }, { status: 401 });
+    }
     const workerRes = await fetch(`${authWorkerUrl}/credentials/espn${queryString}`, {
       headers: {
-        ...(bearer ? { 'Authorization': `Bearer ${bearer}` } : {})
+        'Authorization': `Bearer ${bearer}`,
       },
     });
 
@@ -101,12 +104,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'NEXT_PUBLIC_AUTH_WORKER_URL is not configured' }, { status: 500 });
     }
 
-    const bearer = (await getToken?.()) || undefined;
+    const bearer = await getToken?.();
+    if (!bearer) {
+      return NextResponse.json({ error: 'Authentication token unavailable' }, { status: 401 });
+    }
     const workerRes = await fetch(`${authWorkerUrl}/credentials/espn`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(bearer ? { 'Authorization': `Bearer ${bearer}` } : {})
+        'Authorization': `Bearer ${bearer}`,
       },
       body: JSON.stringify({
         swid: body.swid,
