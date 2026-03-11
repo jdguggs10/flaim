@@ -24,6 +24,20 @@
   // - YAHOO_CLIENT_ID      (Yahoo Developer App)
   // - YAHOO_CLIENT_SECRET  (Yahoo Developer App)
 
+  // Rate limiting (Cloudflare Workers native — zero-latency, no DB calls)
+  "rate_limits": [
+    {
+      "binding": "TOKEN_RATE_LIMITER",
+      "namespace_id": "1001",
+      "simple": { "limit": 10, "period": 60 }
+    },
+    {
+      "binding": "CREDENTIALS_RATE_LIMITER",
+      "namespace_id": "1002",
+      "simple": { "limit": 15, "period": 60 }
+    }
+  ],
+
   // Environment configurations
   "env": {
     // Production environment
