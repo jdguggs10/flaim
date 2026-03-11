@@ -8,10 +8,14 @@ import { auth } from '@clerk/nextjs/server';
 const ALLOWED_MCP_HOST_PATTERNS = [
   // Flaim production domains
   'flaim.app',
-  // Localhost for development
-  'localhost',
-  '127.0.0.1',
+  // Localhost for development (excluded in production)
+  ...(process.env.NODE_ENV === 'development' ? ['localhost', '127.0.0.1'] : []),
 ];
+
+/**
+ * Flaim CF account subdomain. Workers are <name>.gerrygugger.workers.dev.
+ */
+const CF_ACCOUNT_SUBDOMAIN = 'gerrygugger';
 
 /**
  * Flaim-specific worker name prefixes allowed on workers.dev.
@@ -43,13 +47,12 @@ function isAllowedUrl(urlString: string): boolean {
     );
     if (matchesStatic) return true;
 
-    // Check workers.dev — only allow known Flaim worker prefixes
-    // Validate exact first segment to prevent bypass via fantasy-mcp.evil.workers.dev
+    // Check workers.dev — only allow known Flaim worker prefixes on our account
+    // Format: <worker>.<account>.workers.dev (exactly 4 segments)
     if (url.hostname.endsWith('.workers.dev')) {
       const parts = url.hostname.split('.');
-      return parts.length >= 3
-        && parts[parts.length - 1] === 'dev'
-        && parts[parts.length - 2] === 'workers'
+      return parts.length === 4
+        && parts[1] === CF_ACCOUNT_SUBDOMAIN
         && ALLOWED_WORKER_PREFIXES.some(prefix => parts[0] === prefix);
     }
 
