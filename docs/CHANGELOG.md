@@ -4,6 +4,14 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Security Hardening
+- **Fixed**: OAuth authorization code race condition — atomic `UPDATE...WHERE used_at IS NULL` prevents double-exchange attacks.
+- **Fixed**: PKCE `code_verifier` validation — enforces 43-128 char length and unreserved charset per RFC 7636, with constant-time challenge comparison.
+- **Changed**: Rate limiting replaced from Supabase `rate_limits` table to Cloudflare Workers native `rate_limits` bindings (zero-latency, no DB round-trips). Token endpoint: 10 req/60s per IP. Credentials endpoint: 15 req/60s per user.
+- **Fixed**: SSRF allowlist in debug route — pins `workers.dev` check to Flaim CF account subdomain (blocks `fantasy-mcp.evil.workers.dev`), gates localhost behind `NODE_ENV=development`.
+- **Changed**: Error messages in platform clients sanitized — details logged server-side only.
+- **Changed**: Yahoo OAuth redirect validated against `*.yahoo.com` to prevent open redirects.
+
 ### ESPN Transaction Enrichment
 - **Changed**: ESPN `get_transactions` now uses `mTransactions2` endpoint as primary data source instead of the activity feed. Provides structured FAAB bid amounts, failed/losing waiver bids (`type=failed_bid`), and full trade lifecycle (`trade_proposal`, `trade_decline`, `trade_veto`, `trade_uphold`).
 - **Changed**: Accepted/upheld trade player details automatically supplemented from activity feed (ESPN bug workaround — accepted trade `items` arrays are empty).

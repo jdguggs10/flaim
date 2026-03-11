@@ -169,8 +169,10 @@ Short-lived OAuth state values used for server-side validation.
 | expires_at | timestamptz | State expiry |
 | created_at | timestamptz | Created timestamp |
 
-### rate_limits
-Per-user daily request counters (UTC).
+## Legacy/Deprecated Tables
+
+### rate_limits (inert)
+Formerly used for per-user daily request counters. Replaced by Cloudflare Workers native `rate_limits` bindings (March 2026). Table and `increment_rate_limit` RPC remain in Supabase but nothing reads or writes to them. Safe to drop in a future cleanup.
 
 | Column | Type | Notes |
 |---|---|---|
@@ -180,8 +182,6 @@ Per-user daily request counters (UTC).
 | request_count | int | Requests in window |
 | created_at | timestamptz | Created timestamp |
 | updated_at | timestamptz | Updated timestamp |
-
-## Legacy/Deprecated Tables
 
 ### extension_pairing_codes (deprecated)
 Used by pre‑v1.3.0 extension pairing flow (replaced by Clerk Sync Host).

@@ -26,7 +26,7 @@ npm run dev
 - **Yahoo Client (`/workers/yahoo-client`)**: Internal worker handling all Yahoo Fantasy API calls for all sports (football, baseball, basketball, hockey). Called by fantasy-mcp gateway.
 - **Sleeper Client (`/workers/sleeper-client`)**: Internal worker handling all Sleeper API calls for NFL and NBA (public API, no auth required). Called by fantasy-mcp gateway.
 - **Shared package (`/workers/shared`)**: Common utilities (CORS middleware, auth-fetch helper, types) used by all workers.
-- **Supabase Postgres**: `espn_credentials`, `espn_leagues`, `yahoo_leagues`, `sleeper_connections`, `sleeper_leagues`, `user_preferences` (defaults), `oauth_tokens`, `oauth_codes`, `rate_limits`, plus legacy `extension_tokens`/`extension_pairing_codes` (deprecated).
+- **Supabase Postgres**: `espn_credentials`, `espn_leagues`, `yahoo_leagues`, `sleeper_connections`, `sleeper_leagues`, `user_preferences` (defaults), `oauth_tokens`, `oauth_codes`, plus legacy `rate_limits` (inert — replaced by CF Workers native rate limiting), `extension_tokens`/`extension_pairing_codes` (deprecated).
 
 ## Runtime Choices (Next.js)
 
@@ -184,7 +184,7 @@ Claude/ChatGPT/Gemini CLI → fantasy-mcp (gateway) → espn-client    → ESPN 
 - JWKS-based Clerk JWT verification in auth-worker (5m cache). Prod rejects spoofed headers.
 - MCP workers forward `Authorization`; auth-worker alone validates tokens.
 - Per-user isolation via verified `sub`; credentials never sent back to client after setup.
-- Rate limiting: 200 MCP calls/day per user via `rate_limits` table.
+- Rate limiting: Cloudflare Workers native `rate_limits` bindings — 10 req/60s per IP on token endpoint, 15 req/60s per user on credentials endpoint.
 - OAuth tokens stored in Supabase with expiration tracking.
 - ESPN credentials: AES-256 encrypted at rest (Supabase default).
 
