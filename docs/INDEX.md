@@ -23,7 +23,6 @@ Canonical map for docs that live inside this repository.
 - `docs/STYLE-GUIDE.md`
 - `docs/CHANGELOG.md`
 - `docs/CONNECTOR-DOCS.md`
-- `docs/plans/README.md`
 
 ## Component READMEs
 
@@ -40,5 +39,5 @@ Canonical map for docs that live inside this repository.
 
 1. Keep docs inside this repo internally consistent and cross-linked by repo-relative paths.
 2. Avoid duplicating large tables/facts when a canonical in-repo doc already exists.
-3. Treat plans as historical context unless explicitly marked active.
+3. Implementation plans and migration runbooks are maintained outside this repo; do not add them to this index.
 4. Keep execution checklists out of repo docs.

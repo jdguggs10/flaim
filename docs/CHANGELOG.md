@@ -111,7 +111,7 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 - **Fixed**: Resolved intermittent `Invalid or expired state` failures during MCP connector approval (Codex/ChatGPT) when returning from sign-in to consent.
 - **Changed**: Authorization redirect now includes `oauth_state` (while preserving legacy `state`) to avoid collisions with auth-provider query params during consent round-trips.
 - **Added**: More specific auth-worker logging for OAuth state validation failures (missing lookup, expiry, redirect URI mismatch, client ID mismatch).
-- **Added**: Eval API key auth path in auth-worker for headless `flaim-eval` execution (optional allowlist for MCP-read routes).
+- **Added**: Eval API key auth path in auth-worker for headless eval-harness execution (optional allowlist for MCP-read routes).
 
 ### Infrastructure
 - **Changed**: Upgraded Tailwind CSS v3 → v4. Migrated config from `tailwind.config.ts` to CSS-based `@theme` in `globals.css`. Replaced `tailwindcss-animate` with `tw-animate-css`. Updated PostCSS to use `@tailwindcss/postcss`.
@@ -129,7 +129,7 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 - **Changed**: Archived `docs/dev/ADD_YAHOO_PLATFORM.md` to `docs/archive/` (Phase 3 complete).
 - **Changed**: Consolidated current execution/sprint state into `docs/dev/CURRENT-EXECUTION-STATE.md` and archived superseded Feb 2026 sprint/incident plans.
 - **Changed**: Refreshed docs source-of-truth routing in `docs/INDEX.md`, `docs/STATUS.md`, and `docs/dev/TODO.md`.
-- **Changed**: Externalized stale `docs/archive/*.md` and `docs/plans/*.md` to an external archive bundle and left in-repo pointer files for lightweight checkouts.
+- **Changed**: Externalized stale `docs/archive/*.md` and `docs/plans/*.md` out of the public repo for lightweight checkouts.
 
 ### Branding
 - **Changed**: New flaming baseball logo for site favicon, apple-touch-icon, and Chrome extension icons.
@@ -211,7 +211,7 @@ Major architectural restructure implementing a unified gateway pattern for multi
 - **Fixed**: Football season rollover date (March 1 → June 1) to match documentation
 - **Deprecated**: Legacy workers (`baseball-espn-mcp`, `football-espn-mcp`) - still functional as fallback
 
-See `docs/plans/README.md` for the externalized historical implementation-plan location.
+Historical implementation plans are maintained outside this public repo.
 
 ### Worker Infrastructure: Hono + MCP SDK
 Migrated all 3 Cloudflare Workers to Hono routing framework and official MCP SDK. Cleaner code, better testing support, ~400 lines removed.

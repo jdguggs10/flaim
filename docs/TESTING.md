@@ -97,7 +97,7 @@ Skip tests for small UI copy tweaks or non-critical refactors.
 
 ## Eval Harness
 
-The `flaim-eval` repo supports headless API key auth via `FLAIM_EVAL_API_KEY`. When set, `npm run eval` skips the OAuth browser flow entirely. See `workers/auth-worker/README.md` for the eval API key security model.
+The eval harness supports headless API key auth via `FLAIM_EVAL_API_KEY`. When set, `npm run eval` skips the OAuth browser flow entirely. See `workers/auth-worker/README.md` for the eval API key security model.
 
 ## Deferred (for now)
 
