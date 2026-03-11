@@ -7,6 +7,8 @@ vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('no network in test')
 const EVAL_API_KEY = 'flaim_eval_abc123testkey';
 const EVAL_USER_ID = 'user_eval_test_12345';
 
+const mockRateLimiter = { limit: async () => ({ success: true }) };
+
 const baseEnv = {
   SUPABASE_URL: 'https://example.supabase.co',
   SUPABASE_SERVICE_KEY: 'test-key',
@@ -14,6 +16,8 @@ const baseEnv = {
   ENVIRONMENT: 'test',
   EVAL_API_KEY,
   EVAL_USER_ID,
+  TOKEN_RATE_LIMITER: mockRateLimiter,
+  CREDENTIALS_RATE_LIMITER: mockRateLimiter,
 };
 
 function makeRequest(path: string, options?: RequestInit): Request {
@@ -55,17 +59,9 @@ vi.mock('../supabase-storage', () => {
 });
 
 vi.mock('../oauth-storage', () => {
-  const mockOAuthStorage = {
-    checkRateLimit: vi.fn().mockResolvedValue({
-      allowed: true,
-      limit: 200,
-      resetAt: new Date(Date.now() + 86400000),
-    }),
-    incrementRateLimit: vi.fn().mockResolvedValue(1),
-  };
   return {
     OAuthStorage: {
-      fromEnvironment: vi.fn().mockReturnValue(mockOAuthStorage),
+      fromEnvironment: vi.fn().mockReturnValue({}),
     },
   };
 });

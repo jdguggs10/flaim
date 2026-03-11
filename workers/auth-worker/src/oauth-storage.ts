@@ -86,13 +86,6 @@ export interface TokenValidationResult {
   error?: string;
 }
 
-export interface RateLimitResult {
-  allowed: boolean;
-  remaining: number;
-  limit: number;
-  resetAt: Date;
-}
-
 // =============================================================================
 // UTILITIES
 // =============================================================================
@@ -118,6 +111,12 @@ async function verifyPkceChallenge(
   codeChallenge: string,
   method: 'S256'
 ): Promise<boolean> {
+  // RFC 7636 §4.1: code_verifier must use unreserved characters only
+  if (!/^[A-Za-z0-9\-._~]+$/.test(codeVerifier)) {
+    console.log('[oauth-storage] PKCE code_verifier contains invalid characters');
+    return false;
+  }
+
   // RFC 7636 §4.1: code_verifier must be 43-128 characters
   if (codeVerifier.length < 43 || codeVerifier.length > 128) {
     console.log(`[oauth-storage] PKCE code_verifier length out of range: ${codeVerifier.length}`);
@@ -378,23 +377,18 @@ export class OAuthStorage {
     redirectUri: string,
     codeVerifier?: string
   ): Promise<OAuthToken | null> {
-    // Atomically claim the code — only succeeds if not already used
+    // Atomically claim the code — only succeeds if not already used and not expired
     const { data, error } = await this.supabase
       .from('oauth_codes')
       .update({ used_at: new Date().toISOString() })
       .eq('code', code)
       .is('used_at', null)
+      .gt('expires_at', new Date().toISOString())
       .select('*')
       .single();
 
     if (error || !data) {
       console.log(`[oauth-storage] Auth code not found, expired, or already used: ${code.substring(0, 8)}...`);
-      return null;
-    }
-
-    // Check if expired
-    if (new Date(data.expires_at) < new Date()) {
-      console.log(`[oauth-storage] Auth code expired: ${code.substring(0, 8)}...`);
       return null;
     }
 
@@ -675,68 +669,6 @@ export class OAuthStorage {
   async hasActiveConnection(userId: string): Promise<boolean> {
     const tokens = await this.getUserTokens(userId);
     return tokens.length > 0;
-  }
-
-  // ---------------------------------------------------------------------------
-  // RATE LIMITING
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Check rate limit for a user (does not increment)
-   * Default limit: 200 calls/day
-   */
-  async checkRateLimit(userId: string, limit: number = 200): Promise<RateLimitResult> {
-    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-
-    const { data, error } = await this.supabase
-      .from('rate_limits')
-      .select('request_count, window_date')
-      .eq('user_id', userId)
-      .eq('window_date', today)
-      .single();
-
-    // Calculate reset time (next midnight UTC)
-    const now = new Date();
-    const resetAt = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 0, 0, 0));
-
-    if (error || !data) {
-      // No record yet - user hasn't made any calls today
-      return {
-        allowed: true,
-        remaining: limit,
-        limit,
-        resetAt,
-      };
-    }
-
-    const count = data.request_count || 0;
-    const remaining = Math.max(0, limit - count);
-
-    return {
-      allowed: count < limit,
-      remaining,
-      limit,
-      resetAt,
-    };
-  }
-
-  /**
-   * Increment rate limit counter for a user (upsert)
-   * Returns the updated count
-   */
-  async incrementRateLimit(userId: string): Promise<number> {
-    // Use the RPC function which handles the upsert/increment logic atomically in SQL
-    const { data: updated, error: updateError } = await this.supabase.rpc('increment_rate_limit', {
-      p_user_id: userId,
-    });
-
-    if (updateError) {
-      console.error('[oauth-storage] Failed to increment rate limit:', updateError);
-      // Don't fail the request on rate limit errors - log and continue
-      return 0;
-    }
-
-    return updated?.[0]?.request_count || 0;
   }
 
   // ---------------------------------------------------------------------------
