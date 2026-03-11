@@ -17,12 +17,15 @@ export async function POST() {
       return NextResponse.json({ error: 'AUTH_WORKER_URL not configured' }, { status: 500 });
     }
 
-    const bearer = (await getToken?.()) || undefined;
+    const bearer = await getToken?.();
+    if (!bearer) {
+      return NextResponse.json({ error: 'Authentication token unavailable' }, { status: 401 });
+    }
     const workerRes = await fetch(`${authWorkerUrl}/connect/yahoo/discover`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(bearer ? { Authorization: `Bearer ${bearer}` } : {}),
+        Authorization: `Bearer ${bearer}`,
       },
     });
 

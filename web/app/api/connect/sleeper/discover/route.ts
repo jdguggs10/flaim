@@ -17,13 +17,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'AUTH_WORKER_URL not configured' }, { status: 500 });
     }
 
-    const body = await req.json().catch(() => ({}));
-    const bearer = (await getToken?.()) || undefined;
+    const body = await req.json().catch(() => null);
+    if (!body || typeof body !== 'object') {
+      return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
+    }
+    const bearer = await getToken?.();
+    if (!bearer) {
+      return NextResponse.json({ error: 'Authentication token unavailable' }, { status: 401 });
+    }
     const workerRes = await fetch(`${authWorkerUrl}/connect/sleeper/discover`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(bearer ? { Authorization: `Bearer ${bearer}` } : {}),
+        Authorization: `Bearer ${bearer}`,
       },
       body: JSON.stringify(body),
     });

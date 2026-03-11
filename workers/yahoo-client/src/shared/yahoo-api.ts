@@ -61,7 +61,8 @@ export function handleYahooError(response: Response): never {
     case 429:
       throw new Error('YAHOO_RATE_LIMITED: Too many requests. Please wait.');
     default:
-      throw new Error(`YAHOO_API_ERROR: Yahoo returned ${response.status}`);
+      console.error(`[yahoo-api] Unexpected Yahoo status: ${response.status}`);
+      throw new Error('YAHOO_API_ERROR: An unexpected error occurred with Yahoo. Please try again.');
   }
 }
 

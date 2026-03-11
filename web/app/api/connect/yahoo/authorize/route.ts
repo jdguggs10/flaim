@@ -18,17 +18,30 @@ export async function GET() {
       return NextResponse.json({ error: 'AUTH_WORKER_URL not configured' }, { status: 500 });
     }
 
-    const bearer = (await getToken?.()) || undefined;
+    const bearer = await getToken?.();
+    if (!bearer) {
+      return NextResponse.json({ error: 'Authentication token unavailable' }, { status: 401 });
+    }
     const workerRes = await fetch(`${authWorkerUrl}/connect/yahoo/authorize`, {
       redirect: 'manual',
       headers: {
-        ...(bearer ? { Authorization: `Bearer ${bearer}` } : {}),
+        Authorization: `Bearer ${bearer}`,
       },
     });
 
     // auth-worker returns 302 with Location header
     const location = workerRes.headers.get('Location');
     if (workerRes.status === 302 && location) {
+      // Validate redirect target to prevent open redirect attacks
+      try {
+        const redirectUrl = new URL(location);
+        if (redirectUrl.hostname !== 'api.login.yahoo.com' && !redirectUrl.hostname.endsWith('.yahoo.com')) {
+          console.error('Yahoo authorize: unexpected redirect target:', redirectUrl.hostname);
+          return NextResponse.json({ error: 'Invalid redirect target' }, { status: 502 });
+        }
+      } catch {
+        return NextResponse.json({ error: 'Invalid redirect URL' }, { status: 502 });
+      }
       return NextResponse.redirect(location);
     }
 

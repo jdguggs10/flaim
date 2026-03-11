@@ -49,7 +49,8 @@ export function handleSleeperError(response: Response): never {
     case 400:
       throw new Error('SLEEPER_BAD_REQUEST: Invalid request');
     default:
-      throw new Error(`SLEEPER_API_ERROR: Sleeper returned ${response.status}`);
+      console.error(`[sleeper-api] Unexpected Sleeper status: ${response.status}`);
+      throw new Error('SLEEPER_API_ERROR: An unexpected error occurred with Sleeper. Please try again.');
   }
 }
 
