@@ -24,26 +24,25 @@
   // - YAHOO_CLIENT_ID      (Yahoo Developer App)
   // - YAHOO_CLIENT_SECRET  (Yahoo Developer App)
 
-  // Rate limiting (Cloudflare Workers native — zero-latency, no DB calls)
-  "rate_limits": [
-    {
-      "binding": "TOKEN_RATE_LIMITER",
-      "namespace_id": "1001",
-      "simple": { "limit": 10, "period": 60 }
-    },
-    {
-      "binding": "CREDENTIALS_RATE_LIMITER",
-      "namespace_id": "1002",
-      "simple": { "limit": 15, "period": 60 }
-    }
-  ],
-
   // Environment configurations
   "env": {
     // Production environment
     "prod": {
       "name": "auth-worker",
       "workers_dev": true, // Enable .workers.dev URL for worker-to-worker calls
+      // Cloudflare native rate limiting is configured per-environment.
+      "ratelimits": [
+        {
+          "name": "TOKEN_RATE_LIMITER",
+          "namespace_id": "1001",
+          "simple": { "limit": 10, "period": 60 }
+        },
+        {
+          "name": "CREDENTIALS_RATE_LIMITER",
+          "namespace_id": "1002",
+          "simple": { "limit": 15, "period": 60 }
+        }
+      ],
       // Custom domain routes for production (external clients)
       // OAuth routes at root level for MCP spec compliance
       "routes": [
@@ -84,6 +83,18 @@
     "preview": {
       "name": "auth-worker-preview",
       "workers_dev": true, // Also keep workers.dev URL available
+      "ratelimits": [
+        {
+          "name": "TOKEN_RATE_LIMITER",
+          "namespace_id": "1001",
+          "simple": { "limit": 10, "period": 60 }
+        },
+        {
+          "name": "CREDENTIALS_RATE_LIMITER",
+          "namespace_id": "1002",
+          "simple": { "limit": 15, "period": 60 }
+        }
+      ],
       // Custom domain routes for preview (needed for worker-to-worker calls)
       // Note: OAuth routes are shared with prod at base URL (api.flaim.app)
       // Preview testers can use .workers.dev URLs for isolated testing
@@ -105,6 +116,18 @@
     "dev": {
       "name": "auth-worker-dev",
       "workers_dev": true, // Use workers.dev URL for development
+      "ratelimits": [
+        {
+          "name": "TOKEN_RATE_LIMITER",
+          "namespace_id": "1001",
+          "simple": { "limit": 10, "period": 60 }
+        },
+        {
+          "name": "CREDENTIALS_RATE_LIMITER",
+          "namespace_id": "1002",
+          "simple": { "limit": 15, "period": 60 }
+        }
+      ],
       // Environment variables for dev  
       // Note: SUPABASE_URL and SUPABASE_SERVICE_KEY loaded from .env.local for local development
       "vars": {

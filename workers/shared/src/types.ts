@@ -11,6 +11,7 @@ export interface BaseEnvWithAuth {
   ENVIRONMENT?: string;
   AUTH_WORKER_URL: string;
   AUTH_WORKER?: Fetcher;  // Service binding for auth-worker
+  INTERNAL_SERVICE_TOKEN?: string;
 }
 
 /**

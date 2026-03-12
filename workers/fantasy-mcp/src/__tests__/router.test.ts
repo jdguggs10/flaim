@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { routeToClient, type RouteResult } from '../router';
 import type { Env, ToolParams } from '../types';
+import { INTERNAL_SERVICE_TOKEN_HEADER } from '@flaim/worker-shared';
 
 describe('fantasy-mcp router', () => {
   describe('RouteResult interface', () => {
@@ -42,19 +43,20 @@ describe('fantasy-mcp router', () => {
         data: { standings: [] },
       };
       const env = {
+        INTERNAL_SERVICE_TOKEN: 'internal-secret',
         ESPN: {
           fetch: async (request: Request) => {
             expect(request.method).toBe('POST');
             expect(request.url).toBe('https://internal/execute');
             expect(request.headers.get('Content-Type')).toBe('application/json');
             expect(request.headers.get('Authorization')).toBe(authHeader);
+            expect(request.headers.get(INTERNAL_SERVICE_TOKEN_HEADER)).toBe('internal-secret');
             expect(request.headers.get('X-Correlation-ID')).toBe(correlationId);
             expect(request.headers.get('X-Flaim-Eval-Run')).toBe(evalRunId);
             expect(request.headers.get('X-Flaim-Eval-Trace')).toBe(evalTraceId);
             expect(await request.json()).toEqual({
               tool: 'get_standings',
               params,
-              authHeader,
             });
             return new Response(JSON.stringify(responseBody), {
               status: 200,
@@ -113,13 +115,14 @@ describe('fantasy-mcp router', () => {
       };
 
       const env = {
+        INTERNAL_SERVICE_TOKEN: 'internal-secret',
         SLEEPER: {
           fetch: async (request: Request) => {
             expect(request.url).toBe('https://internal/execute');
+            expect(request.headers.get(INTERNAL_SERVICE_TOKEN_HEADER)).toBe('internal-secret');
             expect(await request.json()).toEqual({
               tool: 'get_free_agents',
               params,
-              authHeader: undefined,
             });
             return new Response(JSON.stringify(responseBody), {
               status: 200,

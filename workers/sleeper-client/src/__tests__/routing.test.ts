@@ -16,11 +16,14 @@ function mockExecutionContext(): ExecutionContext {
 async function executeRequest(
   sport: string,
   tool = 'get_league_info',
-  env: Env = {} as Env
+  env: Env = { INTERNAL_SERVICE_TOKEN: 'internal-secret' } as Env
 ): Promise<{ success: boolean; code?: string }> {
   const req = new Request('https://internal/execute', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Flaim-Internal-Token': 'internal-secret',
+    },
     body: JSON.stringify({ tool, params: { sport, league_id: 'lg1', season_year: 2025 } }),
   });
   const res = await app.fetch(req, env, mockExecutionContext());
@@ -50,6 +53,7 @@ describe('sleeper-client sport routing', () => {
 
   it('passes env bindings through execute route', async () => {
     const env = {
+      INTERNAL_SERVICE_TOKEN: 'internal-secret',
       SLEEPER_PLAYERS_CACHE: {} as KVNamespace,
     } as Env;
     const handlerSpy = vi.spyOn(footballHandlers, 'get_league_info').mockImplementation(async (receivedEnv: Env) => ({
@@ -63,6 +67,7 @@ describe('sleeper-client sport routing', () => {
 
   it('returns UNKNOWN_TOOL for unknown football tool when env is provided', async () => {
     const env = {
+      INTERNAL_SERVICE_TOKEN: 'internal-secret',
       SLEEPER_PLAYERS_CACHE: {} as KVNamespace,
     } as Env;
     const body = await executeRequest('football', 'unknown_tool_name', env);
@@ -72,6 +77,7 @@ describe('sleeper-client sport routing', () => {
 
   it('routes get_free_agents for supported sport with structured success payload', async () => {
     const env = {
+      INTERNAL_SERVICE_TOKEN: 'internal-secret',
       SLEEPER_PLAYERS_CACHE: {
         get: vi.fn().mockResolvedValueOnce(JSON.stringify([
           { player_id: 'p1', full_name: 'Rostered', position: 'QB', team: 'BUF', active: true },
@@ -87,7 +93,10 @@ describe('sleeper-client sport routing', () => {
 
     const req = new Request('https://internal/execute', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Flaim-Internal-Token': 'internal-secret',
+      },
       body: JSON.stringify({
         tool: 'get_free_agents',
         params: { sport: 'football', league_id: 'lg1', season_year: 2025, count: 10, position: 'QB' },
@@ -108,6 +117,7 @@ describe('sleeper-client sport routing', () => {
 
   it('routes get_free_agents for basketball with structured success payload', async () => {
     const env = {
+      INTERNAL_SERVICE_TOKEN: 'internal-secret',
       SLEEPER_PLAYERS_CACHE: {
         get: vi.fn().mockResolvedValueOnce(JSON.stringify([
           { player_id: 'b1', full_name: 'Rostered Guard', position: 'PG', team: 'BOS', active: true },
@@ -123,7 +133,10 @@ describe('sleeper-client sport routing', () => {
 
     const req = new Request('https://internal/execute', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Flaim-Internal-Token': 'internal-secret',
+      },
       body: JSON.stringify({
         tool: 'get_free_agents',
         params: { sport: 'basketball', league_id: 'lg2', season_year: 2025, count: 10, position: 'PG' },
@@ -140,5 +153,19 @@ describe('sleeper-client sport routing', () => {
     expect(body.data?.league_id).toBe('lg2');
     expect(body.data?.count).toBe(1);
     expect(body.data?.players?.[0]?.id).toBe('b2');
+  });
+
+  it('rejects execute without internal service token', async () => {
+    const req = new Request('https://internal/execute', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tool: 'get_league_info',
+        params: { sport: 'football', league_id: 'lg1', season_year: 2025 },
+      }),
+    });
+
+    const res = await app.fetch(req, { INTERNAL_SERVICE_TOKEN: 'internal-secret' } as Env, mockExecutionContext());
+    expect(res.status).toBe(403);
   });
 });

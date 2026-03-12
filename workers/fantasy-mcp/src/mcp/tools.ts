@@ -3,7 +3,7 @@ import { z } from 'zod';
 import type { ZodRawShapeCompat } from '@modelcontextprotocol/sdk/server/zod-compat.js';
 import type { Env, Platform, Sport, ToolParams } from '../types';
 import { routeToClient, type RouteResult } from '../router';
-import { withCorrelationId, withEvalHeaders } from '@flaim/worker-shared';
+import { withCorrelationId, withEvalHeaders, withInternalServiceToken } from '@flaim/worker-shared';
 import { logEvalEvent } from '../logging';
 
 // =============================================================================
@@ -105,10 +105,11 @@ async function fetchUserLeagues(
       ...(authHeader ? { Authorization: authHeader } : {}),
     };
     const withCorrelation = correlationId ? withCorrelationId(baseHeaders, correlationId) : new Headers(baseHeaders);
-    const headers = withEvalHeaders(withCorrelation, evalRunId, evalTraceId);
+    const withInternal = withInternalServiceToken(withCorrelation, env, 'auth-worker /internal/leagues');
+    const headers = withEvalHeaders(withInternal, evalRunId, evalTraceId);
 
     const response = await env.AUTH_WORKER.fetch(
-      new Request('https://internal/leagues', {
+      new Request('https://internal/internal/leagues', {
         method: 'GET',
         headers,
         signal: controller.signal,
@@ -337,10 +338,11 @@ export function getUnifiedTools(): UnifiedTool[] {
               ...(authHeader ? { Authorization: authHeader } : {}),
             };
             const withCorrelation = correlationId ? withCorrelationId(baseHeaders, correlationId) : new Headers(baseHeaders);
-            const headers = withEvalHeaders(withCorrelation, evalRunId, evalTraceId);
+            const withInternal = withInternalServiceToken(withCorrelation, env, 'auth-worker /internal/leagues/yahoo');
+            const headers = withEvalHeaders(withInternal, evalRunId, evalTraceId);
 
             const yahooResponse = await env.AUTH_WORKER.fetch(
-              new Request('https://internal/leagues/yahoo', {
+              new Request('https://internal/internal/leagues/yahoo', {
                 headers,
               })
             );
@@ -382,10 +384,11 @@ export function getUnifiedTools(): UnifiedTool[] {
               ...(authHeader ? { Authorization: authHeader } : {}),
             };
             const withCorrelation = correlationId ? withCorrelationId(baseHeaders, correlationId) : new Headers(baseHeaders);
-            const headers = withEvalHeaders(withCorrelation, evalRunId, evalTraceId);
+            const withInternal = withInternalServiceToken(withCorrelation, env, 'auth-worker /internal/leagues/sleeper');
+            const headers = withEvalHeaders(withInternal, evalRunId, evalTraceId);
 
             const sleeperResponse = await env.AUTH_WORKER.fetch(
-              new Request('https://internal/leagues/sleeper', { headers })
+              new Request('https://internal/internal/leagues/sleeper', { headers })
             );
             if (sleeperResponse.ok) {
               const sleeperData = (await sleeperResponse.json()) as {
@@ -498,9 +501,10 @@ export function getUnifiedTools(): UnifiedTool[] {
               ...(authHeader ? { Authorization: authHeader } : {}),
             };
             const withCorrelation = correlationId ? withCorrelationId(baseHeaders, correlationId) : new Headers(baseHeaders);
-            const headers = withEvalHeaders(withCorrelation, evalRunId, evalTraceId);
+            const withInternal = withInternalServiceToken(withCorrelation, env, 'auth-worker /internal/user/preferences');
+            const headers = withEvalHeaders(withInternal, evalRunId, evalTraceId);
             const prefsResponse = await env.AUTH_WORKER.fetch(
-              new Request('https://internal/user/preferences', { headers })
+              new Request('https://internal/internal/user/preferences', { headers })
             );
             if (prefsResponse.ok) {
               preferences = await prefsResponse.json();
@@ -643,10 +647,11 @@ export function getUnifiedTools(): UnifiedTool[] {
                 ...(authHeader ? { Authorization: authHeader } : {}),
               };
               const withCorrelation = correlationId ? withCorrelationId(baseHeaders, correlationId) : new Headers(baseHeaders);
-              const headers = withEvalHeaders(withCorrelation, evalRunId, evalTraceId);
+              const withInternal = withInternalServiceToken(withCorrelation, env, 'auth-worker /internal/leagues/yahoo');
+              const headers = withEvalHeaders(withInternal, evalRunId, evalTraceId);
 
               const yahooResponse = await env.AUTH_WORKER.fetch(
-                new Request('https://internal/leagues/yahoo', { headers })
+                new Request('https://internal/internal/leagues/yahoo', { headers })
               );
               if (yahooResponse.ok) {
                 const yahooData = (await yahooResponse.json()) as {
@@ -684,10 +689,11 @@ export function getUnifiedTools(): UnifiedTool[] {
                 ...(authHeader ? { Authorization: authHeader } : {}),
               };
               const withCorrelation = correlationId ? withCorrelationId(baseHeaders, correlationId) : new Headers(baseHeaders);
-              const headers = withEvalHeaders(withCorrelation, evalRunId, evalTraceId);
+              const withInternal = withInternalServiceToken(withCorrelation, env, 'auth-worker /internal/leagues/sleeper');
+              const headers = withEvalHeaders(withInternal, evalRunId, evalTraceId);
 
               const sleeperResponse = await env.AUTH_WORKER.fetch(
-                new Request('https://internal/leagues/sleeper', { headers })
+                new Request('https://internal/internal/leagues/sleeper', { headers })
               );
               if (sleeperResponse.ok) {
                 const sleeperData = (await sleeperResponse.json()) as {

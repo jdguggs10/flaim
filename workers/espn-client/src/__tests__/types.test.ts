@@ -47,10 +47,9 @@ describe('espn-client types', () => {
           league_id: '12345',
           season_year: 2024,
         },
-        authHeader: 'Bearer token123',
       };
       expect(request.tool).toBe('get_standings');
-      expect(request.authHeader).toBe('Bearer token123');
+      expect(request.params.league_id).toBe('12345');
     });
   });
 

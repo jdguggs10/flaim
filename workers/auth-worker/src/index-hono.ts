@@ -89,6 +89,7 @@ export interface Env {
   // Eval/CI API key auth (Cloudflare secrets)
   EVAL_API_KEY?: string;   // Static API key for eval/CI
   EVAL_USER_ID?: string;   // Clerk user ID that the API key resolves to
+  INTERNAL_SERVICE_TOKEN?: string;
   // Rate limiting (Cloudflare Workers native)
   TOKEN_RATE_LIMITER: RateLimit;
   CREDENTIALS_RATE_LIMITER: RateLimit;
@@ -112,6 +113,7 @@ type JwtPayload = { sub?: string; iss?: string; exp?: number; [k: string]: unkno
 
 const EVAL_RUN_HEADER = 'X-Flaim-Eval-Run';
 const EVAL_TRACE_HEADER = 'X-Flaim-Eval-Trace';
+const INTERNAL_SERVICE_TOKEN_HEADER = 'X-Flaim-Internal-Token';
 
 const ALLOWED_ORIGINS = [
   'https://flaim-*.vercel.app',
@@ -388,6 +390,51 @@ async function getVerifiedUserId(
   return { userId: null, error: 'Missing or invalid Authorization token' };
 }
 
+async function getClerkUserId(request: Request, env: Env): Promise<AuthResult> {
+  const authz = request.headers.get('Authorization');
+  try {
+    const userId = await verifyJwtAndGetUserId(authz, env);
+    if (userId) {
+      return { userId, authType: 'clerk' };
+    }
+  } catch (error) {
+    debugLog(env, `⚠️ [auth-worker] Clerk-only auth failed: ${error instanceof Error ? error.message : 'unknown error'}`);
+  }
+
+  return { userId: null, error: 'Clerk authentication required' };
+}
+
+async function requireInternalService(request: Request, env: Env): Promise<string | null> {
+  if (!env.INTERNAL_SERVICE_TOKEN) {
+    return 'Internal service authentication is not configured';
+  }
+
+  const providedToken = request.headers.get(INTERNAL_SERVICE_TOKEN_HEADER);
+  if (!providedToken) {
+    return `Missing or invalid ${INTERNAL_SERVICE_TOKEN_HEADER}`;
+  }
+
+  if (!(await constantTimeEqual(providedToken, env.INTERNAL_SERVICE_TOKEN))) {
+    return `Missing or invalid ${INTERNAL_SERVICE_TOKEN_HEADER}`;
+  }
+
+  return null;
+}
+
+async function getInternalUserId(
+  request: Request,
+  env: Env,
+  expectedResource?: string,
+  options?: { allowEvalApiKey?: boolean }
+): Promise<AuthResult> {
+  const internalError = await requireInternalService(request, env);
+  if (internalError) {
+    return { userId: null, error: internalError };
+  }
+
+  return getVerifiedUserId(request, env, expectedResource, options);
+}
+
 function maskUserId(userId: string): string {
   if (!userId || userId.length <= 8) return '***';
   return `${userId.substring(0, 8)}...`;
@@ -608,12 +655,12 @@ api.post('/revoke', (c) => {
 });
 
 // Token introspection (internal — called by fantasy-mcp gateway via service binding)
-api.get('/introspect', async (c) => {
+api.get('/internal/introspect', async (c) => {
   const expectedResource = c.req.header('X-Flaim-Expected-Resource') || undefined;
-  const { userId, error: authError, scope } = await getVerifiedUserId(c.req.raw, c.env, expectedResource, { allowEvalApiKey: true });
+  const { userId, error: authError, scope } = await getInternalUserId(c.req.raw, c.env, expectedResource, { allowEvalApiKey: true });
 
   if (!userId) {
-    return c.json({ valid: false, error: authError || 'Invalid token' }, 401);
+    return c.json({ valid: false, error: authError || 'Invalid token' }, authError?.includes(INTERNAL_SERVICE_TOKEN_HEADER) || authError?.includes('Internal service authentication') ? 403 : 401);
   }
 
   return c.json({ valid: true, userId, scope: scope || 'mcp:read' });
@@ -625,7 +672,7 @@ api.get('/introspect', async (c) => {
 
 // Create authorization code (called by frontend after user consent)
 api.post('/oauth/code', async (c) => {
-  const { userId, error: authError } = await getVerifiedUserId(c.req.raw, c.env);
+  const { userId, error: authError } = await getClerkUserId(c.req.raw, c.env);
   if (!userId) {
     return c.json({
       error: 'unauthorized',
@@ -637,7 +684,7 @@ api.post('/oauth/code', async (c) => {
 
 // Check connection status (called by frontend)
 api.get('/oauth/status', async (c) => {
-  const { userId, error: authError } = await getVerifiedUserId(c.req.raw, c.env);
+  const { userId, error: authError } = await getClerkUserId(c.req.raw, c.env);
   if (!userId) {
     return c.json({
       error: 'unauthorized',
@@ -649,7 +696,7 @@ api.get('/oauth/status', async (c) => {
 
 // Revoke all tokens for user (called by frontend)
 api.post('/oauth/revoke-all', async (c) => {
-  const { userId, error: authError } = await getVerifiedUserId(c.req.raw, c.env);
+  const { userId, error: authError } = await getClerkUserId(c.req.raw, c.env);
   if (!userId) {
     return c.json({
       error: 'unauthorized',
@@ -661,7 +708,7 @@ api.post('/oauth/revoke-all', async (c) => {
 
 // Revoke a single token by ID (called by frontend)
 api.post('/oauth/revoke', async (c) => {
-  const { userId, error: authError } = await getVerifiedUserId(c.req.raw, c.env);
+  const { userId, error: authError } = await getClerkUserId(c.req.raw, c.env);
   if (!userId) {
     return c.json({
       error: 'unauthorized',
@@ -677,7 +724,7 @@ api.post('/oauth/revoke', async (c) => {
 
 // Sync ESPN credentials (requires Clerk JWT)
 api.post('/extension/sync', async (c) => {
-  const { userId, error: authError } = await getVerifiedUserId(c.req.raw, c.env);
+  const { userId, error: authError } = await getClerkUserId(c.req.raw, c.env);
   if (!userId) {
     return c.json({
       error: 'unauthorized',
@@ -689,7 +736,7 @@ api.post('/extension/sync', async (c) => {
 
 // Get extension status (requires Clerk JWT)
 api.get('/extension/status', async (c) => {
-  const { userId, error: authError } = await getVerifiedUserId(c.req.raw, c.env);
+  const { userId, error: authError } = await getClerkUserId(c.req.raw, c.env);
   if (!userId) {
     return c.json({
       error: 'unauthorized',
@@ -701,7 +748,7 @@ api.get('/extension/status', async (c) => {
 
 // Get extension connection for web UI (requires Clerk auth)
 api.get('/extension/connection', async (c) => {
-  const { userId, error: authError } = await getVerifiedUserId(c.req.raw, c.env);
+  const { userId, error: authError } = await getClerkUserId(c.req.raw, c.env);
   if (!userId) {
     return c.json({
       error: 'unauthorized',
@@ -713,7 +760,7 @@ api.get('/extension/connection', async (c) => {
 
 // Discover and save leagues (requires Clerk JWT)
 api.post('/extension/discover', async (c) => {
-  const { userId, error: authError } = await getVerifiedUserId(c.req.raw, c.env);
+  const { userId, error: authError } = await getClerkUserId(c.req.raw, c.env);
   if (!userId) {
     return c.json({
       error: 'unauthorized',
@@ -821,7 +868,7 @@ api.post('/extension/discover', async (c) => {
 
 // Redirect to Yahoo OAuth (requires Clerk JWT)
 api.get('/connect/yahoo/authorize', async (c) => {
-  const { userId, error: authError } = await getVerifiedUserId(c.req.raw, c.env);
+  const { userId, error: authError } = await getClerkUserId(c.req.raw, c.env);
   if (!userId) {
     return c.json({
       error: 'unauthorized',
@@ -837,8 +884,8 @@ api.get('/connect/yahoo/callback', async (c) => {
 });
 
 // Get Yahoo credentials (internal use - requires auth)
-api.get('/connect/yahoo/credentials', async (c) => {
-  const { userId, error: authError } = await getVerifiedUserId(c.req.raw, c.env, undefined, { allowEvalApiKey: true });
+api.get('/internal/connect/yahoo/credentials', async (c) => {
+  const { userId, error: authError } = await getInternalUserId(c.req.raw, c.env, undefined, { allowEvalApiKey: true });
   if (!userId) {
     return c.json({
       error: 'unauthorized',
@@ -850,7 +897,7 @@ api.get('/connect/yahoo/credentials', async (c) => {
 
 // Check Yahoo connection status (requires Clerk JWT)
 api.get('/connect/yahoo/status', async (c) => {
-  const { userId, error: authError } = await getVerifiedUserId(c.req.raw, c.env);
+  const { userId, error: authError } = await getClerkUserId(c.req.raw, c.env);
   if (!userId) {
     return c.json({
       error: 'unauthorized',
@@ -862,7 +909,7 @@ api.get('/connect/yahoo/status', async (c) => {
 
 // Disconnect Yahoo (requires Clerk JWT)
 api.delete('/connect/yahoo/disconnect', async (c) => {
-  const { userId, error: authError } = await getVerifiedUserId(c.req.raw, c.env);
+  const { userId, error: authError } = await getClerkUserId(c.req.raw, c.env);
   if (!userId) {
     return c.json({
       error: 'unauthorized',
@@ -874,7 +921,7 @@ api.delete('/connect/yahoo/disconnect', async (c) => {
 
 // Discover Yahoo leagues (requires Clerk JWT)
 api.post('/connect/yahoo/discover', async (c) => {
-  const { userId, error: authError } = await getVerifiedUserId(c.req.raw, c.env);
+  const { userId, error: authError } = await getClerkUserId(c.req.raw, c.env);
   if (!userId) {
     return c.json({
       error: 'unauthorized',
@@ -886,7 +933,7 @@ api.post('/connect/yahoo/discover', async (c) => {
 
 // List Yahoo leagues (requires auth)
 api.get('/leagues/yahoo', async (c) => {
-  const { userId, error: authError } = await getVerifiedUserId(c.req.raw, c.env, undefined, { allowEvalApiKey: true });
+  const { userId, error: authError } = await getClerkUserId(c.req.raw, c.env);
   if (!userId) {
     return c.json({
       error: 'unauthorized',
@@ -900,9 +947,25 @@ api.get('/leagues/yahoo', async (c) => {
   return c.json({ leagues }, 200);
 });
 
+api.get('/internal/leagues/yahoo', async (c) => {
+  const { userId, error: authError } = await getInternalUserId(c.req.raw, c.env, undefined, { allowEvalApiKey: true });
+  if (!userId) {
+    const status = authError?.includes(INTERNAL_SERVICE_TOKEN_HEADER) || authError?.includes('Internal service authentication') ? 403 : 401;
+    return c.json({
+      error: 'unauthorized',
+      error_description: authError || 'Authentication required',
+    }, status);
+  }
+
+  const storage = YahooStorage.fromEnvironment(c.env);
+  const leagues = await storage.getYahooLeagues(userId);
+
+  return c.json({ leagues }, 200);
+});
+
 // Delete Yahoo league (requires auth)
 api.delete('/leagues/yahoo/:id', async (c) => {
-  const { userId, error: authError } = await getVerifiedUserId(c.req.raw, c.env);
+  const { userId, error: authError } = await getClerkUserId(c.req.raw, c.env);
   if (!userId) {
     return c.json({
       error: 'unauthorized',
@@ -928,7 +991,7 @@ api.delete('/leagues/yahoo/:id', async (c) => {
 
 // Discover Sleeper leagues (requires Clerk JWT)
 api.post('/connect/sleeper/discover', async (c) => {
-  const { userId, error: authError } = await getVerifiedUserId(c.req.raw, c.env);
+  const { userId, error: authError } = await getClerkUserId(c.req.raw, c.env);
   if (!userId) {
     return c.json({
       error: 'unauthorized',
@@ -940,7 +1003,7 @@ api.post('/connect/sleeper/discover', async (c) => {
 
 // Check Sleeper connection status (requires Clerk JWT)
 api.get('/connect/sleeper/status', async (c) => {
-  const { userId, error: authError } = await getVerifiedUserId(c.req.raw, c.env);
+  const { userId, error: authError } = await getClerkUserId(c.req.raw, c.env);
   if (!userId) {
     return c.json({
       error: 'unauthorized',
@@ -952,7 +1015,7 @@ api.get('/connect/sleeper/status', async (c) => {
 
 // Disconnect Sleeper (requires Clerk JWT)
 api.delete('/connect/sleeper/disconnect', async (c) => {
-  const { userId, error: authError } = await getVerifiedUserId(c.req.raw, c.env);
+  const { userId, error: authError } = await getClerkUserId(c.req.raw, c.env);
   if (!userId) {
     return c.json({
       error: 'unauthorized',
@@ -964,7 +1027,7 @@ api.delete('/connect/sleeper/disconnect', async (c) => {
 
 // List Sleeper leagues (requires auth)
 api.get('/leagues/sleeper', async (c) => {
-  const { userId, error: authError } = await getVerifiedUserId(c.req.raw, c.env, undefined, { allowEvalApiKey: true });
+  const { userId, error: authError } = await getClerkUserId(c.req.raw, c.env);
   if (!userId) {
     return c.json({
       error: 'unauthorized',
@@ -974,9 +1037,21 @@ api.get('/leagues/sleeper', async (c) => {
   return handleSleeperLeagues(c.env as SleeperConnectEnv, userId, getCorsHeaders(c.req.raw));
 });
 
+api.get('/internal/leagues/sleeper', async (c) => {
+  const { userId, error: authError } = await getInternalUserId(c.req.raw, c.env, undefined, { allowEvalApiKey: true });
+  if (!userId) {
+    const status = authError?.includes(INTERNAL_SERVICE_TOKEN_HEADER) || authError?.includes('Internal service authentication') ? 403 : 401;
+    return c.json({
+      error: 'unauthorized',
+      error_description: authError || 'Authentication required',
+    }, status);
+  }
+  return handleSleeperLeagues(c.env as SleeperConnectEnv, userId, getCorsHeaders(c.req.raw));
+});
+
 // Delete Sleeper league (requires auth)
 api.delete('/leagues/sleeper/:id', async (c) => {
-  const { userId, error: authError } = await getVerifiedUserId(c.req.raw, c.env);
+  const { userId, error: authError } = await getClerkUserId(c.req.raw, c.env);
   if (!userId) {
     return c.json({
       error: 'unauthorized',
@@ -994,7 +1069,7 @@ api.delete('/leagues/sleeper/:id', async (c) => {
 
 // Get user preferences
 api.get('/user/preferences', async (c) => {
-  const { userId, error: authError } = await getVerifiedUserId(c.req.raw, c.env, undefined, { allowEvalApiKey: true });
+  const { userId, error: authError } = await getClerkUserId(c.req.raw, c.env);
   if (!userId) {
     return c.json({ error: 'unauthorized', error_description: authError || 'Authentication required' }, 401);
   }
@@ -1011,9 +1086,28 @@ api.get('/user/preferences', async (c) => {
   });
 });
 
+api.get('/internal/user/preferences', async (c) => {
+  const { userId, error: authError } = await getInternalUserId(c.req.raw, c.env, undefined, { allowEvalApiKey: true });
+  if (!userId) {
+    const status = authError?.includes(INTERNAL_SERVICE_TOKEN_HEADER) || authError?.includes('Internal service authentication') ? 403 : 401;
+    return c.json({ error: 'unauthorized', error_description: authError || 'Authentication required' }, status);
+  }
+
+  const storage = EspnSupabaseStorage.fromEnvironment(c.env);
+  const preferences = await storage.getUserPreferences(userId);
+
+  return c.json({
+    defaultSport: preferences.defaultSport,
+    defaultFootball: preferences.defaultFootball,
+    defaultBaseball: preferences.defaultBaseball,
+    defaultBasketball: preferences.defaultBasketball,
+    defaultHockey: preferences.defaultHockey,
+  });
+});
+
 // Set default sport
 api.post('/user/preferences/default-sport', async (c) => {
-  const { userId, error: authError } = await getVerifiedUserId(c.req.raw, c.env);
+  const { userId, error: authError } = await getClerkUserId(c.req.raw, c.env);
   if (!userId) {
     return c.json({ error: 'unauthorized', error_description: authError || 'Authentication required' }, 401);
   }
@@ -1052,13 +1146,25 @@ api.delete('/credentials/espn', async (c) => {
   return handleCredentialsEspn(c, 'DELETE');
 });
 
+api.get('/internal/credentials/espn/raw', async (c) => {
+  const { userId, error: authError, authType } = await getInternalUserId(c.req.raw, c.env, undefined, { allowEvalApiKey: true });
+  debugLog(c.env, `🔐 [auth-worker] /internal/credentials/espn/raw - Verified user: ${userId ? maskUserId(userId) : 'null'}, authType: ${authType || 'none'}, authError: ${authError || 'none'}`);
+
+  if (!userId) {
+    const status = authError?.includes(INTERNAL_SERVICE_TOKEN_HEADER) || authError?.includes('Internal service authentication') ? 403 : 401;
+    return c.json({
+      error: 'Authentication required',
+      message: authError || 'Missing or invalid Authorization token'
+    }, status);
+  }
+
+  return getRawEspnCredentialsResponse(c.env, userId, getCorsHeaders(c.req.raw));
+});
+
 async function handleCredentialsEspn(c: Context<{ Bindings: Env }>, method: string): Promise<Response> {
   const env = c.env;
   const url = new URL(c.req.url);
-  const corsHeaders = getCorsHeaders(c.req.raw);
-
-  const isRawGet = method === 'GET' && url.searchParams.get('raw') === 'true';
-  const { userId: clerkUserId, error: authError, authType } = await getVerifiedUserId(c.req.raw, env, undefined, { allowEvalApiKey: isRawGet });
+  const { userId: clerkUserId, error: authError, authType } = await getClerkUserId(c.req.raw, env);
   debugLog(env, `🔐 [auth-worker] /credentials/espn - Verified user: ${clerkUserId ? maskUserId(clerkUserId) : 'null'}, authType: ${authType || 'none'}, authError: ${authError || 'none'}`);
 
   if (!clerkUserId) {
@@ -1096,39 +1202,10 @@ async function handleCredentialsEspn(c: Context<{ Bindings: Env }>, method: stri
     const getRawCredentials = url.searchParams.get('raw') === 'true';
 
     if (getRawCredentials) {
-      console.log(`🔍 [auth-worker] GET raw credentials for user: ${maskUserId(clerkUserId)}`);
-
-      const { success } = await env.CREDENTIALS_RATE_LIMITER.limit({ key: clerkUserId });
-      if (!success) {
-        console.log(`⚠️ [auth-worker] Rate limit exceeded for user: ${maskUserId(clerkUserId)}`);
-        return new Response(JSON.stringify({
-          error: 'Rate limit exceeded',
-          message: 'Too many requests. Please try again later.',
-        }), {
-          status: 429,
-          headers: { 'Content-Type': 'application/json', ...corsHeaders }
-        });
-      }
-
-      const credentials = await storage.getCredentials(clerkUserId);
-
-      if (!credentials) {
-        return new Response(JSON.stringify({
-          error: 'Credentials not found',
-          message: 'No ESPN credentials found for user. Add your ESPN credentials at /settings/espn'
-        }), {
-          status: 404,
-          headers: { 'Content-Type': 'application/json', ...corsHeaders }
-        });
-      }
-
-      return new Response(JSON.stringify({
-        success: true,
-        platform: 'espn',
-        credentials
-      }), {
-        headers: { 'Content-Type': 'application/json', ...corsHeaders }
-      });
+      return c.json({
+        error: 'forbidden',
+        message: 'Raw credential reads are available only via /internal/credentials/espn/raw',
+      }, 403);
     }
 
     // Check if this is an edit request
@@ -1181,6 +1258,43 @@ async function handleCredentialsEspn(c: Context<{ Bindings: Env }>, method: stri
   return c.json({ error: 'Method not allowed' }, 405);
 }
 
+async function getRawEspnCredentialsResponse(env: Env, clerkUserId: string, corsHeaders: Record<string, string>): Promise<Response> {
+  console.log(`🔍 [auth-worker] GET raw credentials for user: ${maskUserId(clerkUserId)}`);
+
+  const { success } = await env.CREDENTIALS_RATE_LIMITER.limit({ key: clerkUserId });
+  if (!success) {
+    console.log(`⚠️ [auth-worker] Rate limit exceeded for user: ${maskUserId(clerkUserId)}`);
+    return new Response(JSON.stringify({
+      error: 'Rate limit exceeded',
+      message: 'Too many requests. Please try again later.',
+    }), {
+      status: 429,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders }
+    });
+  }
+
+  const storage = EspnSupabaseStorage.fromEnvironment(env);
+  const credentials = await storage.getCredentials(clerkUserId);
+
+  if (!credentials) {
+    return new Response(JSON.stringify({
+      error: 'Credentials not found',
+      message: 'No ESPN credentials found for user. Add your ESPN credentials at /settings/espn'
+    }), {
+      status: 404,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders }
+    });
+  }
+
+  return new Response(JSON.stringify({
+    success: true,
+    platform: 'espn',
+    credentials
+  }), {
+    headers: { 'Content-Type': 'application/json', ...corsHeaders }
+  });
+}
+
 // =============================================================================
 // LEAGUES ENDPOINTS
 // =============================================================================
@@ -1201,12 +1315,34 @@ api.delete('/leagues', async (c) => {
   return handleLeagues(c, 'DELETE');
 });
 
+api.get('/internal/leagues', async (c) => {
+  const { userId: clerkUserId, error: authError } = await getInternalUserId(c.req.raw, c.env, undefined, { allowEvalApiKey: true });
+  if (!clerkUserId) {
+    const status = authError?.includes(INTERNAL_SERVICE_TOKEN_HEADER) || authError?.includes('Internal service authentication') ? 403 : 401;
+    return c.json({
+      error: 'Authentication required',
+      message: authError || 'Missing or invalid Authorization token'
+    }, status);
+  }
+
+  const storage = EspnSupabaseStorage.fromEnvironment(c.env);
+  const leagues = await storage.getLeagues(clerkUserId);
+  const leaguesWithPlatform = leagues.map(league => ({
+    ...league,
+    platform: 'espn' as const
+  }));
+
+  return c.json({
+    success: true,
+    leagues: leaguesWithPlatform,
+    totalLeagues: leagues.length
+  });
+});
+
 async function handleLeagues(c: Context<{ Bindings: Env }>, method: string): Promise<Response> {
   const env = c.env;
   const url = new URL(c.req.url);
-  const corsHeaders = getCorsHeaders(c.req.raw);
-
-  const { userId: clerkUserId, error: authError } = await getVerifiedUserId(c.req.raw, env, undefined, { allowEvalApiKey: method === 'GET' });
+  const { userId: clerkUserId, error: authError } = await getClerkUserId(c.req.raw, env);
   if (!clerkUserId) {
     return c.json({
       error: 'Authentication required',
@@ -1291,7 +1427,7 @@ async function handleLeagues(c: Context<{ Bindings: Env }>, method: string): Pro
 
 // Set default league endpoint
 api.post('/leagues/default', async (c) => {
-  const { userId: clerkUserId, error: authError } = await getVerifiedUserId(c.req.raw, c.env);
+  const { userId: clerkUserId, error: authError } = await getClerkUserId(c.req.raw, c.env);
   if (!clerkUserId) {
     return c.json({
       error: 'Authentication required',
@@ -1352,7 +1488,7 @@ api.post('/leagues/default', async (c) => {
 
 // Clear default league for a sport
 api.delete('/leagues/default/:sport', async (c) => {
-  const { userId: clerkUserId, error: authError } = await getVerifiedUserId(c.req.raw, c.env);
+  const { userId: clerkUserId, error: authError } = await getClerkUserId(c.req.raw, c.env);
   if (!clerkUserId) {
     return c.json({
       error: 'Authentication required',
@@ -1392,7 +1528,7 @@ api.delete('/leagues/default/:sport', async (c) => {
 
 // Add single league endpoint
 api.post('/leagues/add', async (c) => {
-  const { userId: clerkUserId, error: authError } = await getVerifiedUserId(c.req.raw, c.env);
+  const { userId: clerkUserId, error: authError } = await getClerkUserId(c.req.raw, c.env);
   if (!clerkUserId) {
     return c.json({
       error: 'Authentication required',
@@ -1431,7 +1567,7 @@ api.post('/leagues/add', async (c) => {
 api.patch('/leagues/:leagueId/team', async (c) => {
   const leagueId = c.req.param('leagueId');
 
-  const { userId: clerkUserId, error: authError } = await getVerifiedUserId(c.req.raw, c.env);
+  const { userId: clerkUserId, error: authError } = await getClerkUserId(c.req.raw, c.env);
   if (!clerkUserId) {
     return c.json({
       error: 'Authentication required',
@@ -1508,7 +1644,7 @@ api.notFound((c) => {
     endpoints: {
       '/health': 'GET - Health check with Supabase connectivity test',
       '/credentials/espn': 'GET/POST/DELETE - ESPN credential management',
-      '/credentials/espn?raw=true': 'GET - Retrieve actual credentials for sport workers',
+      '/internal/credentials/espn/raw': 'GET - Retrieve actual credentials for internal sport workers',
       '/leagues': 'GET/POST/DELETE - League management (list, store, remove)',
       '/leagues/default': 'POST - Set default league (requires platform, leagueId, sport, seasonYear)',
       '/leagues/default/:sport': 'DELETE - Clear default league for a sport',
@@ -1529,10 +1665,11 @@ api.notFound((c) => {
       '/extension/discover': 'POST - Discover and save leagues',
       '/connect/yahoo/authorize': 'GET - Start Yahoo OAuth flow',
       '/connect/yahoo/callback': 'GET - Yahoo OAuth callback (public)',
-      '/connect/yahoo/credentials': 'GET - Get Yahoo access token',
+      '/internal/connect/yahoo/credentials': 'GET - Get Yahoo access token for internal workers',
       '/connect/yahoo/status': 'GET - Check Yahoo connection status',
       '/connect/yahoo/disconnect': 'DELETE - Disconnect Yahoo account',
       '/user/preferences': 'GET - Get user preferences (default sport and per-sport defaults)',
+      '/internal/user/preferences': 'GET - Get user preferences for internal workers',
       '/user/preferences/default-sport': 'POST - Set user default sport',
     },
     storage: 'supabase',

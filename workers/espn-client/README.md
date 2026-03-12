@@ -30,8 +30,6 @@ espn-client
 |----------|--------|---------|
 | `/health` | GET | Health check |
 | `/execute` | POST | Execute tool (internal only) |
-| `/onboarding/initialize` | POST | Initialize onboarding with league data (requires Authorization header) |
-| `/onboarding/discover-seasons` | POST | Discover and save historical seasons (requires Authorization header) |
 
 ### `/execute` Request Format
 
@@ -48,9 +46,10 @@ interface ExecuteRequest {
     count?: number;
     type?: string;        // Transaction type filter (add, drop, trade, waiver, trade_proposal, trade_decline, trade_veto, trade_uphold, failed_bid)
   };
-  authHeader?: string;    // Bearer token for auth-worker
 }
 ```
+
+`/execute` reads end-user auth from the HTTP `Authorization` header and requires `X-Flaim-Internal-Token` for internal calls. Manual ESPN onboarding now runs in the web server layer, not through public ESPN worker routes.
 
 ## Supported Tools
 

@@ -44,9 +44,10 @@ interface ExecuteRequest {
     position?: string;
     count?: number;
   };
-  authHeader?: string;    // Bearer token for auth-worker
 }
 ```
+
+`/execute` reads end-user auth from the HTTP `Authorization` header and requires `X-Flaim-Internal-Token` for internal calls.
 
 ## Supported Tools
 

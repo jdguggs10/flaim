@@ -48,11 +48,12 @@ These endpoints manage the OAuth 2.0 client flow with Yahoo Fantasy.
 |----------|------|---------|
 | `GET /connect/yahoo/authorize` | Clerk JWT | Start Yahoo OAuth flow |
 | `GET /connect/yahoo/callback` | None (state param) | Handle Yahoo redirect |
-| `GET /connect/yahoo/credentials` | Clerk JWT / OAuth | Get Yahoo tokens (auto-refreshes) |
+| `GET /internal/connect/yahoo/credentials` | Internal + Clerk JWT / OAuth / Eval key | Get Yahoo tokens (auto-refreshes) for internal workers |
 | `GET /connect/yahoo/status` | Clerk JWT | Check Yahoo connection status |
 | `DELETE /connect/yahoo/disconnect` | Clerk JWT | Remove Yahoo connection |
 | `POST /connect/yahoo/discover` | Clerk JWT | Discover Yahoo leagues |
-| `GET /leagues/yahoo` | Clerk JWT / OAuth | Get stored Yahoo leagues |
+| `GET /leagues/yahoo` | Clerk JWT | Get stored Yahoo leagues |
+| `GET /internal/leagues/yahoo` | Internal + Clerk JWT / OAuth / Eval key | Get stored Yahoo leagues for internal workers |
 | `DELETE /leagues/yahoo/:id` | Clerk JWT | Delete a Yahoo league |
 
 ### Extension APIs
@@ -69,9 +70,11 @@ These endpoints manage the OAuth 2.0 client flow with Yahoo Fantasy.
 | Endpoint | Auth | Purpose |
 |----------|------|---------|
 | `POST /credentials/espn` | Clerk JWT | Store ESPN credentials |
-| `GET /credentials/espn` | Clerk JWT / OAuth | Get ESPN credential metadata (or raw with `?raw=true`) |
+| `GET /credentials/espn` | Clerk JWT | Get ESPN credential metadata |
+| `GET /internal/credentials/espn/raw` | Internal + Clerk JWT / OAuth / Eval key | Get raw ESPN credentials for internal workers |
 | `DELETE /credentials/espn` | Clerk JWT | Delete ESPN credentials |
-| `GET /leagues` | Clerk JWT / OAuth | Get ESPN leagues |
+| `GET /leagues` | Clerk JWT | Get ESPN leagues |
+| `GET /internal/leagues` | Internal + Clerk JWT / OAuth / Eval key | Get ESPN leagues for internal workers |
 | `POST /leagues` | Clerk JWT | Store ESPN leagues |
 | `POST /leagues/add` | Clerk JWT | Add a single ESPN league (season-aware) |
 | `DELETE /leagues` | Clerk JWT | Remove all seasons for a league |
@@ -83,18 +86,19 @@ These endpoints manage the OAuth 2.0 client flow with Yahoo Fantasy.
 
 | Endpoint | Auth | Purpose |
 |----------|------|---------|
-| `GET /user/preferences` | Clerk JWT / OAuth | Get user preferences |
+| `GET /user/preferences` | Clerk JWT | Get user preferences |
+| `GET /internal/user/preferences` | Internal + Clerk JWT / OAuth / Eval key | Get user preferences for internal workers |
 | `POST /user/preferences/default-sport` | Clerk JWT | Set default sport |
 
 ## Authentication
 
-Three auth mechanisms, depending on caller:
+Three user auth mechanisms, depending on caller:
 
 - **Clerk JWT** — used by the web app, extension, and frontend OAuth consent flow.
 - **OAuth access token** — used by AI clients (Claude, ChatGPT, Gemini) after completing the OAuth 2.1 flow.
 - **Eval API key** — static key for eval/CI/agent use. Bypasses OAuth browser flow entirely.
 
-All are validated in `getVerifiedUserId()`; the resolved `userId` is the same regardless of method.
+Public app routes are Clerk-only. Internal helper routes additionally require `X-Flaim-Internal-Token` and can resolve Clerk, OAuth, or eval auth to a user ID.
 
 ### Eval API Key
 
@@ -106,13 +110,13 @@ A static Bearer token that resolves to a specific Clerk user ID with `mcp:read` 
 - **Constant-time comparison:** Uses SHA-256 digest comparison to prevent timing attacks.
 - **Both secrets required:** `EVAL_API_KEY` + `EVAL_USER_ID` must both be set. If only `EVAL_API_KEY` is set, API key auth is skipped (logged) and falls through to OAuth.
 
-**Allowlisted routes (MCP-read path only):**
-- `GET /auth/introspect`
-- `GET /credentials/espn?raw=true`
-- `GET /connect/yahoo/credentials`
-- `GET /leagues`
-- `GET /leagues/yahoo`
-- `GET /user/preferences`
+**Allowlisted internal routes (MCP-read path only):**
+- `GET /auth/internal/introspect`
+- `GET /auth/internal/credentials/espn/raw`
+- `GET /auth/internal/connect/yahoo/credentials`
+- `GET /auth/internal/leagues`
+- `GET /auth/internal/leagues/yahoo`
+- `GET /auth/internal/user/preferences`
 
 **Current mapping:** `EVAL_USER_ID` → `user_36UBCM4x2hK1aJYY1F7iV1svNw6` (test email on Clerk prod).
 

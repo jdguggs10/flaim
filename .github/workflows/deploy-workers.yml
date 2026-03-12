@@ -34,6 +34,19 @@ jobs:
         run: npm run type-check
         working-directory: workers/${{ matrix.worker }}
 
+      - name: Validate auth-worker Wrangler bindings
+        if: matrix.worker == 'auth-worker'
+        working-directory: workers/auth-worker
+        run: |
+          output="$(npx wrangler deploy --dry-run --env dev 2>&1)"
+          printf '%s\n' "$output"
+          if printf '%s\n' "$output" | grep -q 'Unexpected fields'; then
+            echo "Wrangler config contains unexpected fields"
+            exit 1
+          fi
+          printf '%s\n' "$output" | grep -q 'env.TOKEN_RATE_LIMITER'
+          printf '%s\n' "$output" | grep -q 'env.CREDENTIALS_RATE_LIMITER'
+
   deploy:
     name: Deploy ${{ matrix.worker }}
     needs: test

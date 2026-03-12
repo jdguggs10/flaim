@@ -102,8 +102,8 @@ CLERK_SECRET_KEY=sk_...
 # Worker URLs (unified gateway is primary)
 NEXT_PUBLIC_AUTH_WORKER_URL=https://api.flaim.app/auth
 NEXT_PUBLIC_FANTASY_MCP_URL=https://api.flaim.app/mcp
-# ESPN onboarding (auto-pull + discover seasons)
-NEXT_PUBLIC_ESPN_CLIENT_URL=https://espn-client.gerrygugger.workers.dev
+# Shared internal token for server-to-worker helper calls
+INTERNAL_SERVICE_TOKEN=...
 # Yahoo MCP client (not called by web directly; useful for local debugging)
 NEXT_PUBLIC_YAHOO_CLIENT_URL=https://yahoo-client.gerrygugger.workers.dev
 ```
