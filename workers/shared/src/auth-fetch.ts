@@ -7,6 +7,10 @@
  */
 
 import type { BaseEnvWithAuth } from './types.js';
+import {
+  isProductionLikeEnvironment,
+  withInternalServiceToken,
+} from './internal-service.js';
 
 /**
  * Fetch from auth-worker using service binding (preferred) or URL fallback.
@@ -31,16 +35,24 @@ export function authWorkerFetch(
 ): Promise<Response> {
   // Ensure path starts with /
   const safePath = path.startsWith('/') ? path : `/${path}`;
+  const requiresInternalToken = safePath.startsWith('/internal/');
+  const headers = requiresInternalToken
+    ? withInternalServiceToken(init?.headers, env, `auth-worker path "${safePath}"`)
+    : new Headers(init?.headers);
+  const requestInit = {
+    ...init,
+    headers,
+  } satisfies RequestInit;
 
   // Prefer service binding
   if (env.AUTH_WORKER) {
     const url = new URL(safePath, 'https://auth-worker.internal');
-    return env.AUTH_WORKER.fetch(new Request(url.toString(), init));
+    return env.AUTH_WORKER.fetch(new Request(url.toString(), requestInit));
   }
 
-  // Log warning in prod when binding is missing
-  if (env.ENVIRONMENT === 'prod') {
-    console.warn('[authWorkerFetch] AUTH_WORKER binding missing in prod; using URL fallback');
+  // Internal auth-worker calls must stay on service bindings outside local dev.
+  if (isProductionLikeEnvironment(env)) {
+    throw new Error(`[authWorkerFetch] AUTH_WORKER binding is required for ${safePath} in ${env.ENVIRONMENT || env.NODE_ENV || 'production-like'} environments`);
   }
 
   // Fall back to URL
@@ -48,5 +60,5 @@ export function authWorkerFetch(
     throw new Error('AUTH_WORKER_URL is not configured and AUTH_WORKER binding is unavailable');
   }
 
-  return fetch(`${env.AUTH_WORKER_URL}${safePath}`, init);
+  return fetch(`${env.AUTH_WORKER_URL}${safePath}`, requestInit);
 }

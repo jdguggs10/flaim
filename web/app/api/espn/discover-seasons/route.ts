@@ -1,17 +1,10 @@
-/**
- * ESPN Discover Seasons API Route
- * ---------------------------------------------------------------------------
- * Proxies to sport workers' /onboarding/discover-seasons endpoints.
- * Probes ESPN API for all historical seasons of a league and auto-saves them.
- */
-
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
+import { runEspnDiscoverSeasons } from '@/lib/server/espn-onboarding';
 
 export async function POST(request: NextRequest) {
   try {
     const { userId, getToken } = await auth();
-
     if (!userId) {
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
     }
@@ -19,56 +12,27 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { sport, leagueId } = body as { sport?: string; leagueId?: string };
 
-    if (!sport || !leagueId) {
-      return NextResponse.json({
-        error: 'Missing required fields: sport and leagueId'
-      }, { status: 400 });
-    }
-
     if (sport !== 'baseball' && sport !== 'football') {
       return NextResponse.json({
-        error: 'Sport must be baseball or football'
+        error: 'Sport must be baseball or football',
       }, { status: 400 });
     }
 
     const bearer = await getToken?.();
     if (!bearer) {
       return NextResponse.json({
-        error: 'Authentication token unavailable'
+        error: 'Authentication token unavailable',
       }, { status: 401 });
     }
 
-    const workerUrl = process.env.NEXT_PUBLIC_ESPN_CLIENT_URL;
+    const result = await runEspnDiscoverSeasons({
+      sport,
+      leagueId,
+      authHeader: `Bearer ${bearer}`,
+      correlationId: request.headers.get('X-Correlation-ID') || undefined,
+    });
 
-    if (!workerUrl) {
-      return NextResponse.json({
-        error: 'NEXT_PUBLIC_ESPN_CLIENT_URL is not configured'
-      }, { status: 500 });
-    }
-
-    console.log(`[discover-seasons] Calling ${sport} worker: ${workerUrl}/onboarding/discover-seasons`);
-
-    try {
-      const response = await fetch(`${workerUrl}/onboarding/discover-seasons`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${bearer}`
-        },
-        body: JSON.stringify({ leagueId, sport })
-      });
-
-      const data = await response.json();
-      console.log(`[discover-seasons] Worker response status: ${response.status}`);
-
-      return NextResponse.json(data, { status: response.status });
-    } catch (workerError) {
-      console.error('Worker connection error:', workerError);
-      return NextResponse.json({
-        error: 'Failed to connect to league discovery service'
-      }, { status: 502 });
-    }
-
+    return NextResponse.json(result.body, { status: result.status });
   } catch (error) {
     console.error('Discover seasons API error:', error);
     return NextResponse.json(

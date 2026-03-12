@@ -1,4 +1,4 @@
-import { Hono } from 'hono';
+import { Context, Hono } from 'hono';
 import { cors } from 'hono/cors';
 import type { Env, ExecuteRequest, ExecuteResponse, Sport } from './types';
 import { footballHandlers } from './sports/football/handlers';
@@ -9,12 +9,34 @@ import {
   EVAL_TRACE_HEADER,
   getCorrelationId,
   getEvalContext,
+  hasValidInternalServiceToken,
+  INTERNAL_SERVICE_TOKEN_HEADER,
 } from '@flaim/worker-shared';
 import { logEvalEvent } from './logging';
 
 const app = new Hono<{ Bindings: Env }>();
 
 app.use('*', cors());
+
+async function requireInternalService(c: Context<{ Bindings: Env }>, target: string): Promise<Response | null> {
+  if (!c.env.INTERNAL_SERVICE_TOKEN) {
+    return c.json({
+      success: false,
+      error: `INTERNAL_SERVICE_TOKEN is not configured for ${target}`,
+      code: 'INTERNAL_AUTH_NOT_CONFIGURED',
+    }, 500);
+  }
+
+  if (!(await hasValidInternalServiceToken(c.req.raw, c.env))) {
+    return c.json({
+      success: false,
+      error: `Missing or invalid ${INTERNAL_SERVICE_TOKEN_HEADER}`,
+      code: 'INTERNAL_AUTH_REQUIRED',
+    }, 403);
+  }
+
+  return null;
+}
 
 app.get('/health', (c) => {
   return c.json({
@@ -26,6 +48,9 @@ app.get('/health', (c) => {
 });
 
 app.post('/execute', async (c) => {
+  const internalAuthError = await requireInternalService(c, '/execute');
+  if (internalAuthError) return internalAuthError;
+
   const correlationId = getCorrelationId(c.req.raw);
   const { evalRunId, evalTraceId } = getEvalContext(c.req.raw);
   const startTime = Date.now();

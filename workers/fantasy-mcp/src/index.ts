@@ -8,6 +8,7 @@ import {
   EVAL_TRACE_HEADER,
   getCorrelationId,
   getEvalContext,
+  withInternalServiceToken,
 } from '@flaim/worker-shared';
 import type { Env } from './types';
 import { createFantasyMcpServer } from './mcp/server';
@@ -204,11 +205,11 @@ async function handleMcpRequest(c: Context<{ Bindings: Env }>): Promise<Response
   if (authHeader) {
     try {
       const introspectRes = await c.env.AUTH_WORKER.fetch(
-        new Request('https://internal/auth/introspect', {
-          headers: {
+        new Request('https://internal/internal/introspect', {
+          headers: withInternalServiceToken({
             Authorization: authHeader,
             'X-Flaim-Expected-Resource': expectedResource,
-          },
+          }, c.env, 'auth-worker /internal/introspect'),
         })
       );
       if (!introspectRes.ok) {

@@ -18,7 +18,7 @@ export async function getCredentials(
     headers['X-Correlation-ID'] = correlationId;
   }
 
-  const response = await authWorkerFetch(env, '/credentials/espn?raw=true', {
+  const response = await authWorkerFetch(env, '/internal/credentials/espn/raw', {
     method: 'GET',
     headers
   });

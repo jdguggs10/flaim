@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import app from '../../src/index';
 import type { Env } from '../../src/types';
 import { getUnifiedTools } from '../../src/mcp/tools';
+import { INTERNAL_SERVICE_TOKEN_HEADER } from '@flaim/worker-shared';
 
 function buildMcpRequest(pathname: '/mcp' | '/fantasy/mcp'): Request {
   return new Request(`https://api.flaim.app${pathname}`, {
@@ -119,6 +120,7 @@ function mockExecutionContext(): ExecutionContext {
 
 function buildEnv(authFetch: (request: Request) => Promise<Response>): Env {
   return {
+    INTERNAL_SERVICE_TOKEN: 'internal-secret',
     AUTH_WORKER: { fetch: authFetch } as unknown as Fetcher,
     ESPN: { fetch: vi.fn() } as unknown as Fetcher,
     YAHOO: { fetch: vi.fn() } as unknown as Fetcher,
@@ -228,8 +230,9 @@ describe('fantasy-mcp gateway integration', () => {
 
     expect(authFetch).toHaveBeenCalledTimes(1);
     const introspectReq = authFetch.mock.calls[0]?.[0] as Request;
-    expect(introspectReq.url).toBe('https://internal/auth/introspect');
+    expect(introspectReq.url).toBe('https://internal/internal/introspect');
     expect(introspectReq.headers.get('X-Flaim-Expected-Resource')).toBe('https://api.flaim.app/mcp');
+    expect(introspectReq.headers.get(INTERNAL_SERVICE_TOKEN_HEADER)).toBe('internal-secret');
   });
 
   it('fails closed with 401 when introspection returns non-OK', async () => {
@@ -271,6 +274,7 @@ describe('fantasy-mcp gateway integration', () => {
     expect(authFetch).toHaveBeenCalledTimes(1);
     const introspectReq = authFetch.mock.calls[0]?.[0] as Request;
     expect(introspectReq.headers.get('X-Flaim-Expected-Resource')).toBe('https://api.flaim.app/fantasy/mcp');
+    expect(introspectReq.headers.get(INTERNAL_SERVICE_TOKEN_HEADER)).toBe('internal-secret');
   });
 
   it('routes tools/call through to platform worker and returns shaped MCP response', async () => {
@@ -286,12 +290,8 @@ describe('fantasy-mcp gateway integration', () => {
         { status: 200, headers: { 'Content-Type': 'application/json' } }
       )
     );
-    const env = {
-      AUTH_WORKER: { fetch: authFetch } as unknown as Fetcher,
-      ESPN: { fetch: espnFetch } as unknown as Fetcher,
-      YAHOO: { fetch: vi.fn() } as unknown as Fetcher,
-      SLEEPER: { fetch: vi.fn() } as unknown as Fetcher,
-    } as unknown as Env;
+    const env = buildEnv(authFetch);
+    env.ESPN = { fetch: espnFetch } as unknown as Fetcher;
 
     const request = new Request('https://api.flaim.app/mcp', {
       method: 'POST',

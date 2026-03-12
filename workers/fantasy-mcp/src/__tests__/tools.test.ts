@@ -35,6 +35,7 @@ describe('fantasy-mcp tools', () => {
     expect(tool).toBeTruthy();
 
     const env = {
+      INTERNAL_SERVICE_TOKEN: 'internal-secret',
       AUTH_WORKER: {
         fetch: async () => new Response('unauthorized', { status: 401 }),
       },
@@ -51,6 +52,7 @@ describe('fantasy-mcp tools', () => {
     expect(tool).toBeTruthy();
 
     const env = {
+      INTERNAL_SERVICE_TOKEN: 'internal-secret',
       AUTH_WORKER: {
         fetch: async () =>
           new Response(JSON.stringify({ leagues: [] }), {
@@ -91,10 +93,11 @@ describe('fantasy-mcp tools', () => {
     ];
 
     const env = {
+      INTERNAL_SERVICE_TOKEN: 'internal-secret',
       AUTH_WORKER: {
         fetch: async (req: Request) => {
           const url = new URL(req.url);
-          if (url.pathname === '/leagues') {
+          if (url.pathname === '/internal/leagues') {
             return new Response(JSON.stringify({ leagues: espnLeagues }), {
               status: 200,
               headers: { 'Content-Type': 'application/json' },
@@ -136,10 +139,11 @@ describe('fantasy-mcp tools', () => {
     ];
 
     const env = {
+      INTERNAL_SERVICE_TOKEN: 'internal-secret',
       AUTH_WORKER: {
         fetch: async (req: Request) => {
           const url = new URL(req.url);
-          if (url.pathname === '/leagues') {
+          if (url.pathname === '/internal/leagues') {
             return new Response(JSON.stringify({ leagues: espnLeagues }), {
               status: 200,
               headers: { 'Content-Type': 'application/json' },
@@ -453,6 +457,7 @@ describe('auth error _meta', () => {
     const tool = getUnifiedTools().find((t) => t.name === 'get_user_session');
 
     const env = {
+      INTERNAL_SERVICE_TOKEN: 'internal-secret',
       AUTH_WORKER: {
         fetch: async () => new Response('unauthorized', { status: 401 }),
       },

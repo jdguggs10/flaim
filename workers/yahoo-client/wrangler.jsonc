@@ -15,7 +15,7 @@
   "env": {
     "prod": {
       "name": "yahoo-client",
-      "workers_dev": true,
+      "workers_dev": false,
       "services": [
         { "binding": "AUTH_WORKER", "service": "auth-worker" }
       ],
@@ -27,7 +27,7 @@
     },
     "preview": {
       "name": "yahoo-client-preview",
-      "workers_dev": true,
+      "workers_dev": false,
       "services": [
         { "binding": "AUTH_WORKER", "service": "auth-worker-preview" }
       ],

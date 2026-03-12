@@ -41,9 +41,10 @@ interface ExecuteRequest {
     team_id?: string;  // Sleeper roster/user ID within the league
     week?: number;
   };
-  authHeader?: string; // Bearer token forwarded to auth-worker for user lookup
 }
 ```
+
+`/execute` requires `X-Flaim-Internal-Token` for internal calls.
 
 ## Supported Tools
 

@@ -6,6 +6,7 @@ vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('no network in test')
 
 const EVAL_API_KEY = 'flaim_eval_abc123testkey';
 const EVAL_USER_ID = 'user_eval_test_12345';
+const INTERNAL_SERVICE_TOKEN = 'internal-service-secret';
 
 const mockRateLimiter = { limit: async () => ({ success: true }) };
 
@@ -16,6 +17,7 @@ const baseEnv = {
   ENVIRONMENT: 'test',
   EVAL_API_KEY,
   EVAL_USER_ID,
+  INTERNAL_SERVICE_TOKEN,
   TOKEN_RATE_LIMITER: mockRateLimiter,
   CREDENTIALS_RATE_LIMITER: mockRateLimiter,
 };
@@ -26,6 +28,13 @@ function makeRequest(path: string, options?: RequestInit): Request {
 
 function bearerHeaders(token: string): HeadersInit {
   return { Authorization: `Bearer ${token}` };
+}
+
+function internalHeaders(token: string): HeadersInit {
+  return {
+    ...bearerHeaders(token),
+    'X-Flaim-Internal-Token': INTERNAL_SERVICE_TOKEN,
+  };
 }
 
 async function appFetch(req: Request, env = baseEnv): Promise<Response> {
@@ -113,11 +122,11 @@ describe('eval API key auth', () => {
   // Positive — MCP-read path works
   // =========================================================================
 
-  it('GET /auth/introspect with valid API key returns valid', async () => {
+  it('GET /auth/internal/introspect with valid API key returns valid', async () => {
     const res = await appFetch(
-      makeRequest('/auth/introspect', {
+      makeRequest('/auth/internal/introspect', {
         headers: {
-          ...bearerHeaders(EVAL_API_KEY),
+          ...internalHeaders(EVAL_API_KEY),
           'X-Flaim-Expected-Resource': 'https://api.flaim.app/mcp',
         },
       })
@@ -129,10 +138,10 @@ describe('eval API key auth', () => {
     expect(body.scope).toBe('mcp:read');
   });
 
-  it('GET /credentials/espn?raw=true with valid API key returns credentials', async () => {
+  it('GET /auth/internal/credentials/espn/raw with valid API key returns credentials', async () => {
     const res = await appFetch(
-      makeRequest('/auth/credentials/espn?raw=true', {
-        headers: bearerHeaders(EVAL_API_KEY),
+      makeRequest('/auth/internal/credentials/espn/raw', {
+        headers: internalHeaders(EVAL_API_KEY),
       })
     );
     expect(res.status).toBe(200);
@@ -141,10 +150,10 @@ describe('eval API key auth', () => {
     expect(body.credentials).toBeTruthy();
   });
 
-  it('GET /auth/leagues with valid API key returns leagues', async () => {
+  it('GET /auth/internal/leagues with valid API key returns leagues', async () => {
     const res = await appFetch(
-      makeRequest('/auth/leagues', {
-        headers: bearerHeaders(EVAL_API_KEY),
+      makeRequest('/auth/internal/leagues', {
+        headers: internalHeaders(EVAL_API_KEY),
       })
     );
     expect(res.status).toBe(200);
@@ -152,10 +161,10 @@ describe('eval API key auth', () => {
     expect(body.success).toBe(true);
   });
 
-  it('GET /auth/leagues/yahoo with valid API key returns leagues', async () => {
+  it('GET /auth/internal/leagues/yahoo with valid API key returns leagues', async () => {
     const res = await appFetch(
-      makeRequest('/auth/leagues/yahoo', {
-        headers: bearerHeaders(EVAL_API_KEY),
+      makeRequest('/auth/internal/leagues/yahoo', {
+        headers: internalHeaders(EVAL_API_KEY),
       })
     );
     expect(res.status).toBe(200);
@@ -163,19 +172,19 @@ describe('eval API key auth', () => {
     expect(body.leagues).toEqual([]);
   });
 
-  it('GET /auth/connect/yahoo/credentials with valid API key succeeds', async () => {
+  it('GET /auth/internal/connect/yahoo/credentials with valid API key succeeds', async () => {
     const res = await appFetch(
-      makeRequest('/auth/connect/yahoo/credentials', {
-        headers: bearerHeaders(EVAL_API_KEY),
+      makeRequest('/auth/internal/connect/yahoo/credentials', {
+        headers: internalHeaders(EVAL_API_KEY),
       })
     );
     expect(res.status).toBe(200);
   });
 
-  it('GET /auth/user/preferences with valid API key returns preferences', async () => {
+  it('GET /auth/internal/user/preferences with valid API key returns preferences', async () => {
     const res = await appFetch(
-      makeRequest('/auth/user/preferences', {
-        headers: bearerHeaders(EVAL_API_KEY),
+      makeRequest('/auth/internal/user/preferences', {
+        headers: internalHeaders(EVAL_API_KEY),
       })
     );
     expect(res.status).toBe(200);
@@ -267,10 +276,10 @@ describe('eval API key auth', () => {
   // Edge cases
   // =========================================================================
 
-  it('wrong API key falls through to OAuth and returns 401', async () => {
+  it('wrong API key with internal token falls through to OAuth and returns 401', async () => {
     const res = await appFetch(
-      makeRequest('/auth/introspect', {
-        headers: bearerHeaders('wrong-key'),
+      makeRequest('/auth/internal/introspect', {
+        headers: internalHeaders('wrong-key'),
       })
     );
     expect(res.status).toBe(401);
@@ -281,8 +290,8 @@ describe('eval API key auth', () => {
     const envMissingUserId = { ...baseEnv, EVAL_USER_ID: undefined };
 
     const res = await appFetch(
-      makeRequest('/auth/introspect', {
-        headers: bearerHeaders(EVAL_API_KEY),
+      makeRequest('/auth/internal/introspect', {
+        headers: internalHeaders(EVAL_API_KEY),
       }),
       envMissingUserId as any
     );
@@ -301,8 +310,8 @@ describe('eval API key auth', () => {
     };
 
     const res = await appFetch(
-      makeRequest('/auth/introspect', {
-        headers: bearerHeaders('some-token'),
+      makeRequest('/auth/internal/introspect', {
+        headers: internalHeaders('some-token'),
       }),
       envNoSecrets as any
     );
@@ -311,9 +320,9 @@ describe('eval API key auth', () => {
 
   it('valid API key with wrong expectedResource on introspect is rejected', async () => {
     const res = await appFetch(
-      makeRequest('/auth/introspect', {
+      makeRequest('/auth/internal/introspect', {
         headers: {
-          ...bearerHeaders(EVAL_API_KEY),
+          ...internalHeaders(EVAL_API_KEY),
           'X-Flaim-Expected-Resource': 'https://evil.example.com/mcp',
         },
       })
@@ -325,9 +334,9 @@ describe('eval API key auth', () => {
 
   it('valid API key with legacy fantasy/mcp resource passes', async () => {
     const res = await appFetch(
-      makeRequest('/auth/introspect', {
+      makeRequest('/auth/internal/introspect', {
         headers: {
-          ...bearerHeaders(EVAL_API_KEY),
+          ...internalHeaders(EVAL_API_KEY),
           'X-Flaim-Expected-Resource': 'https://api.flaim.app/fantasy/mcp',
         },
       })
@@ -341,8 +350,8 @@ describe('eval API key auth', () => {
     // Same length as EVAL_API_KEY but different content
     const wrongKey = 'flaim_eval_xyz789wrongkey';
     const res = await appFetch(
-      makeRequest('/auth/introspect', {
-        headers: bearerHeaders(wrongKey),
+      makeRequest('/auth/internal/introspect', {
+        headers: internalHeaders(wrongKey),
       })
     );
     expect(res.status).toBe(401);
@@ -362,8 +371,10 @@ describe('eval API key auth', () => {
     });
 
     const res = await appFetch(
-      makeRequest('/auth/introspect', {
-        headers: bearerHeaders('valid-oauth-token-not-api-key'),
+      makeRequest('/auth/internal/introspect', {
+        headers: {
+          ...internalHeaders('valid-oauth-token-not-api-key'),
+        },
       })
     );
     expect(res.status).toBe(200);
@@ -372,7 +383,7 @@ describe('eval API key auth', () => {
     expect(body.userId).toBe('user_oauth_regular');
   });
 
-  it('GET /credentials/espn without ?raw=true rejects API key (no opt-in)', async () => {
+  it('GET /auth/credentials/espn without ?raw=true rejects API key (no opt-in)', async () => {
     const res = await appFetch(
       makeRequest('/auth/credentials/espn', {
         headers: bearerHeaders(EVAL_API_KEY),
@@ -381,9 +392,27 @@ describe('eval API key auth', () => {
     expect(res.status).toBe(401);
   });
 
-  it('GET /credentials/espn?forEdit=true rejects API key (no opt-in)', async () => {
+  it('GET /auth/credentials/espn?forEdit=true rejects API key (no opt-in)', async () => {
     const res = await appFetch(
       makeRequest('/auth/credentials/espn?forEdit=true', {
+        headers: bearerHeaders(EVAL_API_KEY),
+      })
+    );
+    expect(res.status).toBe(401);
+  });
+
+  it('internal helper route rejects requests missing internal token', async () => {
+    const res = await appFetch(
+      makeRequest('/auth/internal/credentials/espn/raw', {
+        headers: bearerHeaders(EVAL_API_KEY),
+      })
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it('public Yahoo credentials route rejects eval API key', async () => {
+    const res = await appFetch(
+      makeRequest('/auth/connect/yahoo/status', {
         headers: bearerHeaders(EVAL_API_KEY),
       })
     );

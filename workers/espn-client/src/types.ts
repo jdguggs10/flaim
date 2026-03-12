@@ -134,7 +134,6 @@ export type Sport = 'football' | 'baseball' | 'basketball' | 'hockey';
 export interface ExecuteRequest {
   tool: string;
   params: ToolParams;
-  authHeader?: string;
 }
 
 export interface ToolParams {

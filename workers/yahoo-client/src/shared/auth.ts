@@ -22,7 +22,7 @@ export async function getYahooCredentials(
   }
 
   // Call auth-worker to get Yahoo token (handles refresh automatically)
-  const response = await authWorkerFetch(env, '/connect/yahoo/credentials', {
+  const response = await authWorkerFetch(env, '/internal/connect/yahoo/credentials', {
     method: 'GET',
     headers
   });
@@ -62,7 +62,7 @@ export async function resolveUserTeamKey(
   if (authHeader) headers['Authorization'] = authHeader;
   if (correlationId) headers['X-Correlation-ID'] = correlationId;
 
-  const response = await authWorkerFetch(env, '/leagues/yahoo', {
+  const response = await authWorkerFetch(env, '/internal/leagues/yahoo', {
     method: 'GET',
     headers,
   });
