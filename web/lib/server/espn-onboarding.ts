@@ -202,7 +202,7 @@ async function patchLeagueTeam(
   body: Record<string, unknown>,
   correlationId?: string
 ): Promise<Response> {
-  return fetch(`${getAuthWorkerUrl()}/leagues/${leagueId}/team`, {
+  return fetch(`${getAuthWorkerUrl()}/leagues/${encodeURIComponent(leagueId)}/team`, {
     method: 'PATCH',
     headers: buildAuthHeaders(authHeader, correlationId, true),
     body: JSON.stringify(body),
