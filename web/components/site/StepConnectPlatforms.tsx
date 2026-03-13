@@ -233,7 +233,7 @@ export function StepConnectPlatforms({ className }: StepConnectPlatformsProps) {
       <Card className={`p-5 ${className ?? ''}`}>
         <div className="flex items-center gap-3 mb-4">
           <div className="w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold">2</div>
-          <h3 className="font-semibold text-lg">Connect your platforms</h3>
+          <h3 className="font-semibold text-lg">Connect your leagues</h3>
         </div>
         <div className="flex items-center justify-center py-4">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -247,7 +247,7 @@ export function StepConnectPlatforms({ className }: StepConnectPlatformsProps) {
       <Card className={`p-5 ${className ?? ''}`}>
         <div className="flex items-center gap-3 mb-4">
           <div className="w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold">2</div>
-          <h3 className="font-semibold text-lg">Connect your platforms</h3>
+          <h3 className="font-semibold text-lg">Connect your leagues</h3>
         </div>
         <p className="text-sm text-muted-foreground">Sign in first to connect your fantasy platforms.</p>
       </Card>
@@ -258,7 +258,7 @@ export function StepConnectPlatforms({ className }: StepConnectPlatformsProps) {
     <Card className={`p-5 ${className ?? ''}`}>
       <div className="flex items-center gap-3 mb-4">
         <div className="w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold">2</div>
-        <h3 className="font-semibold text-lg">Connect your platforms</h3>
+        <h3 className="font-semibold text-lg">Connect your leagues</h3>
         <Popover>
           <PopoverTrigger asChild>
             <button type="button" className="ml-auto text-muted-foreground hover:text-foreground transition-colors" aria-label="Security information">

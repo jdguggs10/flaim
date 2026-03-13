@@ -19,10 +19,10 @@ export default function LandingPage() {
       {/* Hero */}
       <section className="py-8 px-4 text-center">
         <h1 className="text-4xl md:text-5xl font-bold mb-2">
-          Your Fantasy League, Inside Your AI
+          Your Fantasy League {'<>'} Your AI
         </h1>
         <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-          Connect your ESPN, Yahoo, and Sleeper leagues to Claude, ChatGPT, and Gemini. Ask about your actual team, matchup, standings, and waiver wire, and get answers grounded in your league.
+          Connect ESPN, Yahoo, and Sleeper leagues to Claude, ChatGPT, and Gemini. Get real advice based on your league, your team, your waiver wire, and more.
         </p>
       </section>
 
@@ -36,10 +36,10 @@ export default function LandingPage() {
                 <div className="w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold">
                   1
                 </div>
-                <h3 className="font-semibold text-lg">Create Account</h3>
+                <h3 className="font-semibold text-lg">Make an account</h3>
               </div>
               <p className="text-sm text-muted-foreground mb-4">
-                Sign up to save your connected platforms, leagues, and AI access in one place.
+                First create a Flaim account. This is the glue.
               </p>
               <SignedOut>
                 <Link href="/sign-up">
@@ -65,7 +65,7 @@ export default function LandingPage() {
 
             {/* Completion message */}
             <p className="text-center text-sm text-muted-foreground pt-2">
-              Once connected, ask normal fantasy questions in your AI client. Flaim is read-only, so nothing in your league gets changed.
+              Boom, you&apos;re done. Chat as normal and Flaim will activate automatically based on context. Edit and manage defaults in <code>Your Leagues</code> above. Flaim is read-only, so nothing in your league can automatically change.
             </p>
           </div>
         </div>
@@ -83,18 +83,18 @@ export default function LandingPage() {
                 <ChevronDown className="ml-2 h-5 w-5 transition-transform group-open:rotate-180" />
               </summary>
               <div className="px-4 pb-4 text-sm text-muted-foreground space-y-2">
-                <p>Flaim lets you ask Claude, ChatGPT, or Gemini about your real fantasy team. It pulls in your roster, matchup, standings, and waiver wire so the answers are about your league, not generic rankings.</p>
+                <p>Flaim is a skill that turns your AI into a fantasy sports expert, and a connector to data from your actual fantasy leagues. It lets you ask Claude, ChatGPT, or Gemini about your actual roster, matchup, standings, transactions, available free agents, waiver wire, and more.</p>
               </div>
             </details>
 
-            {/* How does the extension work */}
+            {/* Why a Chrome extension */}
             <details className="group border rounded-lg bg-background">
               <summary className="flex cursor-pointer items-center justify-between p-4 font-medium">
-                How does the extension work?
+                Why a Chrome extension?
                 <ChevronDown className="ml-2 h-5 w-5 transition-transform group-open:rotate-180" />
               </summary>
               <div className="px-4 pb-4 text-sm text-muted-foreground space-y-2">
-                <p>After you log into ESPN in Chrome, the extension securely syncs the session Flaim needs to read your league data. It cannot make changes in ESPN, and you can re-sync anytime your session expires.</p>
+                <p>You only need it if you have leagues at ESPN. Log in to fantasy.espn.com and the extension will piggyback on that session to auto-sync your leagues.</p>
               </div>
             </details>
 
@@ -105,7 +105,7 @@ export default function LandingPage() {
                 <ChevronDown className="ml-2 h-5 w-5 transition-transform group-open:rotate-180" />
               </summary>
               <div className="px-4 pb-4 text-sm text-muted-foreground space-y-2">
-                <p>You add Flaim in Claude, ChatGPT, or Gemini, approve access to your account, and then ask normal questions. Under the hood it uses MCP, but from your side it should feel like connecting any other AI tool.</p>
+                <p>Sync your league data to Flaim, and then Flaim connects that data to Claude, ChatGPT, or Gemini. In other words, your Flaim account tells your AI about your leagues, team name, and season year, while also giving the AI dedicated tools to pull out league data.</p>
               </div>
             </details>
 
@@ -116,7 +116,7 @@ export default function LandingPage() {
                 <ChevronDown className="ml-2 h-5 w-5 transition-transform group-open:rotate-180" />
               </summary>
               <div className="px-4 pb-4 text-sm text-muted-foreground space-y-2">
-                <p>Set a default league at <code>/leagues</code> so your prompts can stay short. If a platform connection expires, reconnect and retry. Flaim can advise on adds, drops, starts, and trades without making those moves for you.</p>
+                <p>Set a default sport and default leagues at <code>flaim.app/leagues</code> to save you time. Manually trigger the AI by saying <code>Use Flaim</code> if needed.</p>
               </div>
             </details>
 

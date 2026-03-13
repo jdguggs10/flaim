@@ -42,7 +42,7 @@ export function StepConnectAI() {
       </div>
 
       <p className="text-sm text-muted-foreground mb-4">
-        Open your AI client&apos;s MCP or integrations settings, then copy the name and URL below to connect Flaim.
+        Click below to connect Flaim Fantasy to your AI. Copy and add the name and URL below.
       </p>
 
       {/* Platform badges */}
