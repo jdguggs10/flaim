@@ -42,7 +42,7 @@ export function StepConnectAI() {
       </div>
 
       <p className="text-sm text-muted-foreground mb-4">
-        Open your AI client&apos;s MCP settings, then copy the name and URL below to add Flaim as a remote MCP server.
+        Open your AI client&apos;s MCP or integrations settings, then copy the name and URL below to connect Flaim.
       </p>
 
       {/* Platform badges */}

@@ -4,13 +4,13 @@
 [![MCP Tools](https://img.shields.io/badge/MCP_Tools-9-green.svg)](https://api.flaim.app/mcp)
 [![Chrome Web Store](https://img.shields.io/badge/Chrome_Extension-v1.5.1-yellow.svg)](https://chromewebstore.google.com/detail/flaim-espn-fantasy-connec/mbnokejgglkfgkeeenolgdpcnfakpbkn)
 
-Bring your fantasy league into ChatGPT, Claude, and Gemini CLI — with expert analyst guidance built in. Flaim combines a fantasy analyst skill with live ESPN, Yahoo, and Sleeper data via MCP so you get real advice, not just raw stats.
+Connect your ESPN, Yahoo, and Sleeper leagues to ChatGPT, Claude, and Gemini CLI so you can ask about your actual team, matchup, standings, and waiver wire. Flaim combines live league data with built-in fantasy analyst guidance, so the answers are grounded in your league instead of generic rankings.
 
-Read-only. No trades, no drops, no roster changes — just analysis.
+Read-only by design. No trades, no drops, no roster changes — just advice.
 
 ## How It Works
 
-The **Flaim skill** teaches your AI assistant how to be an expert fantasy analyst — when to pull which data, how to interpret it, and how to give actionable advice. The **MCP tools** feed it your actual league data. Together, they turn a general-purpose AI into a fantasy expert that knows your specific team.
+The **Flaim skill** teaches your AI assistant how to behave like a fantasy analyst — which data to pull, how to interpret it, and how to turn it into useful advice. The **MCP tools** feed it your actual league data. Together, they give a general-purpose AI enough structure to answer like it knows your specific league.
 
 ## Get Started
 
@@ -18,13 +18,13 @@ The **Flaim skill** teaches your AI assistant how to be an expert fantasy analys
 2. **Connect your platforms** — ESPN via [Chrome extension](https://chromewebstore.google.com/detail/flaim-espn-fantasy-connec/mbnokejgglkfgkeeenolgdpcnfakpbkn), Yahoo via OAuth, Sleeper by username
 3. **Leagues auto-discovered** — all your leagues and past seasons are found automatically
 4. **Pick a default league** for AI conversations
-5. **Install the skill** — copy `.agents/skills/flaim-fantasy/` into your project or home directory (see [The Skill](#the-skill) below)
+5. **Install the skill** — recommended for agent-skill tools; copy `.agents/skills/flaim-fantasy/` into your project or home directory (see [The Skill](#the-skill) below)
 6. **Add Flaim to your AI** — use the MCP URL in Claude, ChatGPT, or Gemini CLI
 7. **Ask questions** — "Who should I start this week?", "What's on the waiver wire?", etc.
 
 ## The Skill
 
-The Flaim skill teaches your AI assistant how to be an expert fantasy analyst — when to use which tools, how to interpret league data, and how to give actionable advice.
+The Flaim skill teaches your AI assistant how to behave like a fantasy analyst — when to use which tools, how to interpret league data, and how to turn that context into useful advice.
 
 **Install for Claude Code (or any Agent Skills-compatible tool):**
 

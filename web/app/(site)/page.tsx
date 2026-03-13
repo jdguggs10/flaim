@@ -22,7 +22,7 @@ export default function LandingPage() {
           Your Fantasy League, Inside Your AI
         </h1>
         <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-          Flaim connects your ESPN, Yahoo, and Sleeper leagues to Claude, ChatGPT, and Gemini. Get real analysis from your real leagues — rosters, matchups, free agents, and more.
+          Connect your ESPN, Yahoo, and Sleeper leagues to Claude, ChatGPT, and Gemini. Ask about your actual team, matchup, standings, and waiver wire, and get answers grounded in your league.
         </p>
       </section>
 
@@ -39,7 +39,7 @@ export default function LandingPage() {
                 <h3 className="font-semibold text-lg">Create Account</h3>
               </div>
               <p className="text-sm text-muted-foreground mb-4">
-                Sign up to get started. This is where your platform credentials and league info will be stored.
+                Sign up to save your connected platforms, leagues, and AI access in one place.
               </p>
               <SignedOut>
                 <Link href="/sign-up">
@@ -65,7 +65,7 @@ export default function LandingPage() {
 
             {/* Completion message */}
             <p className="text-center text-sm text-muted-foreground pt-2">
-              Once connected, ask normal fantasy questions in your AI client. Flaim is read-only and cannot modify league data.
+              Once connected, ask normal fantasy questions in your AI client. Flaim is read-only, so nothing in your league gets changed.
             </p>
           </div>
         </div>
@@ -83,7 +83,7 @@ export default function LandingPage() {
                 <ChevronDown className="ml-2 h-5 w-5 transition-transform group-open:rotate-180" />
               </summary>
               <div className="px-4 pb-4 text-sm text-muted-foreground space-y-2">
-                <p>Flaim gives you a read-only fantasy analysis workflow across ESPN, Yahoo, and Sleeper. It returns league-aware standings, roster, matchup, and free-agent context so you can make lineup and waiver decisions faster.</p>
+                <p>Flaim lets you ask Claude, ChatGPT, or Gemini about your real fantasy team. It pulls in your roster, matchup, standings, and waiver wire so the answers are about your league, not generic rankings.</p>
               </div>
             </details>
 
@@ -94,7 +94,7 @@ export default function LandingPage() {
                 <ChevronDown className="ml-2 h-5 w-5 transition-transform group-open:rotate-180" />
               </summary>
               <div className="px-4 pb-4 text-sm text-muted-foreground space-y-2">
-                <p>The extension syncs ESPN session credentials that already exist in your browser after you log into ESPN. Flaim uses them only for read-only retrieval, and you can re-sync when ESPN credentials expire.</p>
+                <p>After you log into ESPN in Chrome, the extension securely syncs the session Flaim needs to read your league data. It cannot make changes in ESPN, and you can re-sync anytime your session expires.</p>
               </div>
             </details>
 
@@ -105,7 +105,7 @@ export default function LandingPage() {
                 <ChevronDown className="ml-2 h-5 w-5 transition-transform group-open:rotate-180" />
               </summary>
               <div className="px-4 pb-4 text-sm text-muted-foreground space-y-2">
-                <p>Flaim uses a remote MCP endpoint with OAuth authorization. You connect your AI client, approve access, then use normal prompts to retrieve read-only league context.</p>
+                <p>You add Flaim in Claude, ChatGPT, or Gemini, approve access to your account, and then ask normal questions. Under the hood it uses MCP, but from your side it should feel like connecting any other AI tool.</p>
               </div>
             </details>
 
@@ -116,7 +116,7 @@ export default function LandingPage() {
                 <ChevronDown className="ml-2 h-5 w-5 transition-transform group-open:rotate-180" />
               </summary>
               <div className="px-4 pb-4 text-sm text-muted-foreground space-y-2">
-                <p>Set a default league at <code>/leagues</code> for faster prompts, and if a platform token expires, reconnect and retry. Flaim only supports read operations.</p>
+                <p>Set a default league at <code>/leagues</code> so your prompts can stay short. If a platform connection expires, reconnect and retry. Flaim can advise on adds, drops, starts, and trades without making those moves for you.</p>
               </div>
             </details>
 
