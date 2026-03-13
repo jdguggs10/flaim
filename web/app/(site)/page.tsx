@@ -19,7 +19,7 @@ export default function LandingPage() {
       {/* Hero */}
       <section className="py-8 px-4 text-center">
         <h1 className="text-4xl md:text-5xl font-bold mb-2">
-          Your Fantasy League {'<>'} Your AI
+          Your Fantasy Leagues + Your AI
         </h1>
         <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
           Connect ESPN, Yahoo, and Sleeper leagues to Claude, ChatGPT, and Gemini. Get real advice based on your league, your team, your waiver wire, and more.
