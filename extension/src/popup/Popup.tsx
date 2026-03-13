@@ -548,7 +548,10 @@ export default function Popup() {
                 </div>
                 <div className="league-list">
                   {discoveredLeagues.map((league) => (
-                    <div key={`${league.leagueId}-${league.seasonYear}`} className="league-item">
+                    <div
+                      key={`${league.sport}-${league.leagueId}-${league.seasonYear}`}
+                      className="league-item"
+                    >
                       <span className="sport-emoji">{sportEmoji[league.sport] || '🏆'}</span>
                       <div className="league-info">
                         <span className="league-name">{league.leagueName}</span>

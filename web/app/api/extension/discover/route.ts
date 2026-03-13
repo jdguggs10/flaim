@@ -1,5 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+function isSeasonCounts(value: unknown): value is {
+  found: number;
+  added: number;
+  alreadySaved: number;
+} {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as Record<string, unknown>).found === 'number' &&
+    typeof (value as Record<string, unknown>).added === 'number' &&
+    typeof (value as Record<string, unknown>).alreadySaved === 'number'
+  );
+}
+
 /**
  * POST /api/extension/discover
  * -----------------------------------------------------------
@@ -47,15 +61,15 @@ export async function POST(request: NextRequest) {
 
     const data = await workerRes.json().catch(() => null) as {
       discovered?: unknown[];
-      currentSeason?: Record<string, number>;
-      pastSeasons?: Record<string, number>;
+      currentSeason?: unknown;
+      pastSeasons?: unknown;
     } | null;
 
     if (
       !data ||
       !Array.isArray(data.discovered) ||
-      (data.currentSeason != null && typeof data.currentSeason !== 'object') ||
-      (data.pastSeasons != null && typeof data.pastSeasons !== 'object')
+      !isSeasonCounts(data.currentSeason) ||
+      !isSeasonCounts(data.pastSeasons)
     ) {
       return NextResponse.json(
         { error: 'server_error', error_description: 'Unexpected response from discovery service' },
