@@ -5,7 +5,7 @@
  * Session syncs automatically from flaim.app when user is signed in there.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth, useClerk, useUser, SignedIn, SignedOut } from '@clerk/chrome-extension';
 import {
   getSetupState,
@@ -39,6 +39,12 @@ const sportEmoji: Record<string, string> = {
   basketball: '🏀',
   hockey: '🏒',
 };
+
+// Cap error message length and provide fallbacks for unexpected errors
+function sanitizeError(msg: string, fallback: string): string {
+  if (!msg || msg.length > 200) return fallback;
+  return msg;
+}
 
 // Discovery counts for granular messaging
 interface DiscoveryCounts {
@@ -107,6 +113,10 @@ export default function Popup() {
   const { isLoaded, isSignedIn, getToken } = useAuth();
   const clerk = useClerk();
   const { user } = useUser();
+
+  // Stable ref for getToken to avoid re-running init effect on every render
+  const getTokenRef = useRef(getToken);
+  getTokenRef.current = getToken;
 
   const primaryEmail =
     user?.primaryEmailAddress?.emailAddress ?? user?.emailAddresses?.[0]?.emailAddress ?? null;
@@ -188,7 +198,7 @@ export default function Popup() {
 
       // Check status with server using Clerk token
       try {
-        const token = await getToken();
+        const token = await getTokenRef.current();
         if (token) {
           const status = await checkStatus(token);
           setHasCredentials(status.hasCredentials);
@@ -202,7 +212,7 @@ export default function Popup() {
     };
 
     init();
-  }, [isLoaded, isSignedIn, getToken]);
+  }, [isLoaded, isSignedIn]);
 
   // Handle full setup flow (sync + discover)
   const handleFullSetup = async () => {
@@ -232,7 +242,10 @@ export default function Popup() {
       setHasCredentials(true);
       setLastSync(new Date().toISOString());
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Failed to sync credentials';
+      const errorMsg = sanitizeError(
+        err instanceof Error ? err.message : '',
+        'Failed to sync credentials'
+      );
       setError(errorMsg);
       setState('setup_error');
       await setSetupState({ step: 'error', error: errorMsg });
@@ -245,7 +258,12 @@ export default function Popup() {
     await setSetupState({ step: 'discovering' });
 
     try {
-      const result = await discoverLeagues(token);
+      // Re-fetch token in case the JWT expired during sync
+      const freshToken = await getToken();
+      if (!freshToken) {
+        throw new Error('Session expired. Please sign in again.');
+      }
+      const result = await discoverLeagues(freshToken);
 
       setDiscoveredLeagues(result.discovered);
       setDiscoveryCounts({
@@ -258,7 +276,10 @@ export default function Popup() {
       await clearSetupState();
       setIsSetupInProgress(false);
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Discovery failed';
+      const errorMsg = sanitizeError(
+        err instanceof Error ? err.message : '',
+        'Discovery failed'
+      );
       setError(errorMsg);
       setState('setup_error');
       await setSetupState({ step: 'error', error: errorMsg });
@@ -294,7 +315,7 @@ export default function Popup() {
       }
       setState('ready');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to reach Flaim');
+      setError(sanitizeError(err instanceof Error ? err.message : '', 'Unable to reach Flaim'));
       setState('ready');
     } finally {
       setIsRefreshing(false);
@@ -526,8 +547,11 @@ export default function Popup() {
                   {getDiscoveryMessage(discoveryCounts)}
                 </div>
                 <div className="league-list">
-                  {discoveredLeagues.map((league, i) => (
-                    <div key={i} className="league-item">
+                  {discoveredLeagues.map((league) => (
+                    <div
+                      key={`${league.sport}-${league.leagueId}-${league.seasonYear}`}
+                      className="league-item"
+                    >
                       <span className="sport-emoji">{sportEmoji[league.sport] || '🏆'}</span>
                       <div className="league-info">
                         <span className="league-name">{league.leagueName}</span>

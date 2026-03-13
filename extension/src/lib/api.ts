@@ -8,6 +8,9 @@
 // Cache the API base URL after first detection
 let cachedApiBase: string | null = null;
 
+const DEFAULT_TIMEOUT_MS = 15_000;
+const DISCOVER_TIMEOUT_MS = 60_000;
+
 /**
  * Detect API base URL.
  * Priority:
@@ -38,6 +41,23 @@ async function detectApiBase(): Promise<string> {
   }
 
   return cachedApiBase;
+}
+
+/**
+ * Fetch with a timeout via AbortController.
+ */
+async function fetchWithTimeout(
+  url: string,
+  options: RequestInit,
+  timeoutMs = DEFAULT_TIMEOUT_MS
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 /**
@@ -79,7 +99,7 @@ export async function syncCredentials(
   credentials: { swid: string; s2: string }
 ): Promise<SyncResponse> {
   const apiBase = await detectApiBase();
-  const response = await fetch(`${apiBase}/sync`, {
+  const response = await fetchWithTimeout(`${apiBase}/sync`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -89,8 +109,7 @@ export async function syncCredentials(
   });
 
   if (!response.ok) {
-    const error = (await response.json()) as ApiError;
-    console.warn('[Flaim] sync failed:', response.status, error.error);
+    const error = await response.json().catch(() => ({ error: `HTTP ${response.status}` })) as ApiError;
     throw new Error(error.error_description || error.error || 'Sync failed');
   }
 
@@ -103,7 +122,7 @@ export async function syncCredentials(
  */
 export async function checkStatus(token: string): Promise<StatusResponse> {
   const apiBase = await detectApiBase();
-  const response = await fetch(`${apiBase}/status`, {
+  const response = await fetchWithTimeout(`${apiBase}/status`, {
     method: 'GET',
     headers: {
       Accept: 'application/json',
@@ -112,8 +131,7 @@ export async function checkStatus(token: string): Promise<StatusResponse> {
   });
 
   if (!response.ok) {
-    const error = (await response.json()) as ApiError;
-    console.warn('[Flaim] status check failed:', response.status, error.error);
+    const error = await response.json().catch(() => ({ error: `HTTP ${response.status}` })) as ApiError;
     throw new Error(error.error_description || error.error || 'Status check failed');
   }
 
@@ -154,17 +172,16 @@ export interface DiscoverResponse {
  */
 export async function discoverLeagues(token: string): Promise<DiscoverResponse> {
   const apiBase = await detectApiBase();
-  const response = await fetch(`${apiBase}/discover`, {
+  const response = await fetchWithTimeout(`${apiBase}/discover`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
     },
-  });
+  }, DISCOVER_TIMEOUT_MS);
 
   if (!response.ok) {
-    const error = (await response.json()) as ApiError;
-    console.warn('[Flaim] discover failed:', response.status, error.error);
+    const error = await response.json().catch(() => ({ error: `HTTP ${response.status}` })) as ApiError;
     throw new Error(error.error_description || error.error || 'Discovery failed');
   }
 

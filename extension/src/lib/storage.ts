@@ -4,6 +4,9 @@
  * Wrapper for chrome.storage.local API to persist setup state.
  */
 
+import type { DiscoveredLeague, SeasonCounts } from './api';
+export type { SeasonCounts };
+
 // =============================================================================
 // SETUP STATE PERSISTENCE
 // =============================================================================
@@ -17,23 +20,10 @@ export type SetupStep =
   | 'complete'
   | 'error';
 
-/**
- * Season counts for granular messaging
- */
-export interface SeasonCounts {
-  found: number;
-  added: number;
-  alreadySaved: number;
-}
-
 export interface SetupState {
   step: SetupStep;
   error?: string;
-  discovered?: Array<{
-    sport: string;
-    leagueName: string;
-    teamName: string;
-  }>;
+  discovered?: Pick<DiscoveredLeague, 'sport' | 'leagueName' | 'teamName'>[];
   // Structured counts
   currentSeason?: SeasonCounts;
   pastSeasons?: SeasonCounts;
