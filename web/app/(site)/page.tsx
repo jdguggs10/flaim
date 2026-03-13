@@ -65,7 +65,11 @@ export default function LandingPage() {
 
             {/* Completion message */}
             <p className="text-center text-sm text-muted-foreground pt-2">
-              Boom, you&apos;re done. Chat as normal and Flaim will activate automatically based on context. Edit and manage defaults in <code>Your Leagues</code> above. Flaim is read-only, so nothing in your league can automatically change.
+              Boom, you&apos;re done. Chat as normal and Flaim will activate automatically based on context. Edit and manage defaults in{' '}
+              <Link href="/leagues" className="underline underline-offset-4 hover:text-foreground">
+                Your Leagues
+              </Link>{' '}
+              above. Flaim is read-only, so nothing in your league can automatically change.
             </p>
           </div>
         </div>
