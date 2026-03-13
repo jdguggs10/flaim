@@ -8,7 +8,8 @@
 // Cache the API base URL after first detection
 let cachedApiBase: string | null = null;
 
-const FETCH_TIMEOUT_MS = 15_000;
+const DEFAULT_TIMEOUT_MS = 15_000;
+const DISCOVER_TIMEOUT_MS = 60_000;
 
 /**
  * Detect API base URL.
@@ -47,10 +48,11 @@ async function detectApiBase(): Promise<string> {
  */
 async function fetchWithTimeout(
   url: string,
-  options: RequestInit
+  options: RequestInit,
+  timeoutMs = DEFAULT_TIMEOUT_MS
 ): Promise<Response> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     return await fetch(url, { ...options, signal: controller.signal });
   } finally {
@@ -176,7 +178,7 @@ export async function discoverLeagues(token: string): Promise<DiscoverResponse> 
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
     },
-  });
+  }, DISCOVER_TIMEOUT_MS);
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({ error: `HTTP ${response.status}` })) as ApiError;

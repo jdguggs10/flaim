@@ -45,8 +45,16 @@ interface PingResponse {
 
 type ExternalMessage = PingMessage;
 
-// Allowed origins for external messages (defense-in-depth; also enforced by manifest)
-const ALLOWED_ORIGINS = ['https://flaim.app', 'http://localhost:3000'];
+// Allowed origins for external messages (defense-in-depth; also enforced by manifest).
+// Built dynamically so preview builds (VITE_SITE_BASE) are included automatically.
+const ALLOWED_ORIGINS: string[] = ['https://flaim.app', 'http://localhost:3000'];
+const siteBase = import.meta.env.VITE_SITE_BASE as string | undefined;
+if (siteBase) {
+  try {
+    const origin = new URL(siteBase).origin;
+    if (!ALLOWED_ORIGINS.includes(origin)) ALLOWED_ORIGINS.push(origin);
+  } catch { /* ignore invalid VITE_SITE_BASE */ }
+}
 
 /**
  * Handle messages from external web pages (flaim.app, localhost:3000)
@@ -58,7 +66,7 @@ chrome.runtime.onMessageExternal.addListener(
     sender: chrome.runtime.MessageSender,
     sendResponse: (response: PingResponse) => void
   ) => {
-    if (!sender.origin || !ALLOWED_ORIGINS.some((o) => sender.origin!.startsWith(o))) {
+    if (!sender.origin || !ALLOWED_ORIGINS.includes(sender.origin)) {
       return false;
     }
 

@@ -51,7 +51,12 @@ export async function POST(request: NextRequest) {
       pastSeasons?: Record<string, number>;
     } | null;
 
-    if (!data || !Array.isArray(data.discovered)) {
+    if (
+      !data ||
+      !Array.isArray(data.discovered) ||
+      (data.currentSeason != null && typeof data.currentSeason !== 'object') ||
+      (data.pastSeasons != null && typeof data.pastSeasons !== 'object')
+    ) {
       return NextResponse.json(
         { error: 'server_error', error_description: 'Unexpected response from discovery service' },
         { status: 502 }
