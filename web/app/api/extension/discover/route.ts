@@ -34,13 +34,35 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    const data = await workerRes.json() as Record<string, unknown>;
-
     if (!workerRes.ok) {
-      return NextResponse.json(data, { status: workerRes.status });
+      const err = await workerRes.json().catch(() => ({ error: 'Unknown error' })) as {
+        error?: string;
+        error_description?: string;
+      };
+      return NextResponse.json(
+        { error: err.error || 'Failed to discover leagues', error_description: err.error_description },
+        { status: workerRes.status }
+      );
     }
 
-    return NextResponse.json(data);
+    const data = await workerRes.json().catch(() => null) as {
+      discovered?: unknown[];
+      currentSeason?: Record<string, number>;
+      pastSeasons?: Record<string, number>;
+    } | null;
+
+    if (!data || !Array.isArray(data.discovered)) {
+      return NextResponse.json(
+        { error: 'server_error', error_description: 'Unexpected response from discovery service' },
+        { status: 502 }
+      );
+    }
+
+    return NextResponse.json({
+      discovered: data.discovered,
+      currentSeason: data.currentSeason,
+      pastSeasons: data.pastSeasons,
+    });
   } catch (error) {
     console.error('Extension discover route error:', error);
     return NextResponse.json(

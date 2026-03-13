@@ -45,6 +45,9 @@ interface PingResponse {
 
 type ExternalMessage = PingMessage;
 
+// Allowed origins for external messages (defense-in-depth; also enforced by manifest)
+const ALLOWED_ORIGINS = ['https://flaim.app', 'http://localhost:3000'];
+
 /**
  * Handle messages from external web pages (flaim.app, localhost:3000)
  * Configured via externally_connectable in manifest.json
@@ -52,9 +55,13 @@ type ExternalMessage = PingMessage;
 chrome.runtime.onMessageExternal.addListener(
   (
     message: ExternalMessage,
-    _sender: chrome.runtime.MessageSender,
+    sender: chrome.runtime.MessageSender,
     sendResponse: (response: PingResponse) => void
   ) => {
+    if (!sender.origin || !ALLOWED_ORIGINS.some((o) => sender.origin!.startsWith(o))) {
+      return false;
+    }
+
     if (message?.type === 'ping') {
       // Check Clerk session state
       getClerkState()
