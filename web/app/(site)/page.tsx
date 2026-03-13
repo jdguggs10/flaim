@@ -65,11 +65,7 @@ export default function LandingPage() {
 
             {/* Completion message */}
             <p className="text-center text-sm text-muted-foreground pt-2">
-              Boom, you&apos;re done. Chat as normal and Flaim will activate automatically based on context. Edit and manage defaults in{' '}
-              <Link href="/leagues" className="underline underline-offset-4 hover:text-foreground">
-                Your Leagues
-              </Link>{' '}
-              above. Flaim is read-only, so nothing in your league can automatically change.
+              Boom, you&apos;re done. Chat as normal and Flaim will activate automatically based on context. Edit and manage defaults in Your Leagues above. Flaim is read-only, so nothing in your league can automatically change.
             </p>
           </div>
         </div>
@@ -120,7 +116,7 @@ export default function LandingPage() {
                 <ChevronDown className="ml-2 h-5 w-5 transition-transform group-open:rotate-180" />
               </summary>
               <div className="px-4 pb-4 text-sm text-muted-foreground space-y-2">
-                <p>Set a default sport and default leagues at <code>flaim.app/leagues</code> to save you time. Manually trigger the AI by saying <code>Use Flaim</code> if needed.</p>
+                <p>Set a default sport and default leagues at <code>flaim.app/leagues</code> to save yourself some repeated explanation. If the AI needs a nudge, just say <code>Use Flaim</code>.</p>
               </div>
             </details>
 
