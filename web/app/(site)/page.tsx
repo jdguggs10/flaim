@@ -116,7 +116,7 @@ export default function LandingPage() {
                 <ChevronDown className="ml-2 h-5 w-5 transition-transform group-open:rotate-180" />
               </summary>
               <div className="px-4 pb-4 text-sm text-muted-foreground space-y-2">
-                <p>Set a default sport and default leagues at <code>flaim.app/leagues</code> to save yourself some repeated explanation. If the AI needs a nudge, just say <code>Use Flaim</code>.</p>
+                <p>Set a default sport and default leagues at flaim.app/leagues to save yourself some repeated explanation. If the AI needs a nudge, just say "Use Flaim."</p>
               </div>
             </details>
 
