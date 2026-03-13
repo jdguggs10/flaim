@@ -1,22 +1,39 @@
 import { afterEach, beforeEach, describe, expect, it, vi, type MockedFunction } from 'vitest';
+vi.mock('../v3/get-league-info', () => ({
+  getLeagueInfo: vi.fn(),
+}));
+vi.mock('../v3/get-league-teams', () => ({
+  getLeagueTeams: vi.fn(),
+}));
+
 import {
   discoverLeaguesV3,
+  discoverAndSaveLeagues,
 } from '../v3/league-discovery';
 import { EspnCredentialsRequired, AutomaticLeagueDiscoveryFailed } from '../espn-types';
+import { getLeagueInfo } from '../v3/get-league-info';
+import { getLeagueTeams } from '../v3/get-league-teams';
 
 // Mock global fetch
 const mockFetch = vi.fn() as MockedFunction<typeof fetch>;
 global.fetch = mockFetch;
 let logSpy: ReturnType<typeof vi.spyOn>;
+let errorSpy: ReturnType<typeof vi.spyOn>;
+const mockGetLeagueInfo = vi.mocked(getLeagueInfo);
+const mockGetLeagueTeams = vi.mocked(getLeagueTeams);
 
 describe('discoverLeaguesV3', () => {
   beforeEach(() => {
     logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     mockFetch.mockReset();
+    mockGetLeagueInfo.mockReset();
+    mockGetLeagueTeams.mockReset();
   });
 
   afterEach(() => {
     logSpy.mockRestore();
+    errorSpy.mockRestore();
   });
 
   it('throws EspnCredentialsRequired when cookies are missing', async () => {
@@ -73,5 +90,134 @@ describe('discoverLeaguesV3', () => {
 
     await expect(discoverLeaguesV3('{BFA3386F-9501-4F4A-88C7-C56D6BB86C11}', 's2token'))
       .rejects.toBeInstanceOf(AutomaticLeagueDiscoveryFailed);
+  });
+});
+
+describe('discoverAndSaveLeagues', () => {
+  beforeEach(() => {
+    logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mockFetch.mockReset();
+    mockGetLeagueInfo.mockReset();
+    mockGetLeagueTeams.mockReset();
+  });
+
+  afterEach(() => {
+    logSpy.mockRestore();
+    errorSpy.mockRestore();
+  });
+
+  it('stores historical seasons with the season-specific team name', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({
+        preferences: [
+          {
+            id: 'pref-1',
+            type: { code: 'fantasy' },
+            metaData: {
+              entry: {
+                entryId: 8,
+                gameId: 1,
+                seasonId: 2025,
+                entryMetadata: { teamName: 'Doubs on my Chubb' },
+                groups: [{ groupId: 12345, groupName: 'Test League' }],
+              },
+            },
+          },
+        ],
+      }),
+    } as Response);
+
+    mockGetLeagueInfo
+      .mockResolvedValueOnce({
+        status: { previousSeasons: [2024, 2023] },
+      } as any)
+      .mockResolvedValueOnce({ leagueName: 'Test League 2024' } as any)
+      .mockResolvedValueOnce({ leagueName: 'Test League 2023' } as any);
+
+    mockGetLeagueTeams
+      .mockResolvedValueOnce([{ teamId: '8', teamName: 'Love Hurts 2024' }])
+      .mockResolvedValueOnce([{ teamId: '8', teamName: 'Lamb of God 2023' }]);
+
+    const storage = {
+      leagueExists: vi.fn()
+        .mockResolvedValueOnce(false)
+        .mockResolvedValueOnce(false)
+        .mockResolvedValueOnce(false),
+      addLeague: vi.fn().mockResolvedValue({ success: true }),
+      updateLeague: vi.fn().mockResolvedValue(true),
+    } as any;
+
+    await discoverAndSaveLeagues('user_123', '{swid}', 's2token', storage);
+
+    expect(storage.addLeague).toHaveBeenCalledWith('user_123', expect.objectContaining({
+      leagueId: '12345',
+      seasonYear: 2024,
+      teamId: '8',
+      teamName: 'Love Hurts 2024',
+    }));
+    expect(storage.addLeague).toHaveBeenCalledWith('user_123', expect.objectContaining({
+      leagueId: '12345',
+      seasonYear: 2023,
+      teamId: '8',
+      teamName: 'Lamb of God 2023',
+    }));
+  });
+
+  it('repairs existing historical rows with the season-specific team name', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({
+        preferences: [
+          {
+            id: 'pref-1',
+            type: { code: 'fantasy' },
+            metaData: {
+              entry: {
+                entryId: 8,
+                gameId: 1,
+                seasonId: 2025,
+                entryMetadata: { teamName: 'Doubs on my Chubb' },
+                groups: [{ groupId: 12345, groupName: 'Test League' }],
+              },
+            },
+          },
+        ],
+      }),
+    } as Response);
+
+    mockGetLeagueInfo.mockResolvedValueOnce({
+      status: { previousSeasons: [2024] },
+    } as any);
+
+    mockGetLeagueTeams.mockResolvedValueOnce([
+      { teamId: '8', teamName: 'Old Team Name 2024' },
+    ]);
+
+    const storage = {
+      leagueExists: vi.fn()
+        .mockResolvedValueOnce(true)
+        .mockResolvedValueOnce(true),
+      addLeague: vi.fn().mockResolvedValue({ success: true }),
+      updateLeague: vi.fn().mockResolvedValue(true),
+    } as any;
+
+    await discoverAndSaveLeagues('user_123', '{swid}', 's2token', storage);
+
+    expect(storage.updateLeague).toHaveBeenCalledWith(
+      'user_123',
+      '12345',
+      'football',
+      2024,
+      expect.objectContaining({
+        teamId: '8',
+        teamName: 'Old Team Name 2024',
+      })
+    );
   });
 });

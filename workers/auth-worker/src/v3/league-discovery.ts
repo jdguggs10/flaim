@@ -376,9 +376,9 @@ async function discoverHistoricalSeasons(
       try {
         // FIRST: Validate membership - only count if user was a member
         const teams = await getLeagueTeams(swid, s2, league.leagueId, year, league.gameId);
-        const hasTeam = teams.some(t => t.teamId === String(league.teamId));
+        const historicalTeam = teams.find(t => t.teamId === String(league.teamId));
 
-        if (!hasTeam) {
+        if (!historicalTeam) {
           // User wasn't in this season - don't count it at all
           console.log(`Skipping season ${year} for league ${league.leagueId}: teamId ${league.teamId} not found`);
           continue;
@@ -394,6 +394,11 @@ async function discoverHistoricalSeasons(
         // Check if already saved (DB stores canonical year)
         const exists = await storage.leagueExists(userId, sport, league.leagueId, canonicalYear);
         if (exists) {
+          // Heal prior bad writes where historical seasons inherited the current season name.
+          await storage.updateLeague(userId, league.leagueId, sport, canonicalYear, {
+            teamId: historicalTeam.teamId,
+            teamName: historicalTeam.teamName || league.teamName,
+          });
           result.alreadySaved++;
           continue;
         }
@@ -405,8 +410,8 @@ async function discoverHistoricalSeasons(
           leagueId: league.leagueId,
           sport: sport as 'football' | 'baseball' | 'basketball' | 'hockey',
           leagueName: historicalInfo?.leagueName || league.leagueName,
-          teamId: String(league.teamId),
-          teamName: league.teamName,
+          teamId: historicalTeam.teamId,
+          teamName: historicalTeam.teamName || league.teamName,
           seasonYear: canonicalYear,
         });
 
