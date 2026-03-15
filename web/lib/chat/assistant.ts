@@ -172,18 +172,24 @@ export const handleTurn = async (
       }
     }
   } catch (error) {
-    if (error instanceof DOMException && error.name === "AbortError") return;
-    console.error("Error handling turn:", error);
+    if (!(error instanceof DOMException && error.name === "AbortError")) {
+      console.error("Error handling turn:", error);
+    }
+    throw error;
   }
 };
 
-export const processMessages = async () => {
-  abortActiveStream();
-  activeController = new AbortController();
+export const processMessages = async (controller?: AbortController) => {
+  if (controller) {
+    activeController = controller;
+  } else {
+    abortActiveStream();
+    activeController = new AbortController();
+  }
+
   const signal = activeController.signal;
 
   const {
-    chatMessages,
     conversationItems,
     setChatMessages,
     setConversationItems,
@@ -327,14 +333,23 @@ export const processMessages = async () => {
     }));
   };
 
-  // Track pending function calls - we defer execution until after response.completed
-  // so we have the response ID for the next turn
-  const pendingFunctionCalls: { toolCallMessage: ToolCallItem }[] = [];
+  // Track pending function call item IDs - we defer execution until after
+  // response.completed so we have the response ID for the next turn
+  const pendingFunctionCallIds: string[] = [];
 
   let assistantMessageContent = "";
   const functionArgumentsByItem = new Map<string, string>();
   // For streaming MCP tool call arguments
   const mcpArgumentsByItem = new Map<string, string>();
+
+  const getCurrentChatMessages = (): Item[] =>
+    useConversationStore.getState().chatMessages;
+
+  const mutateChatMessages = (mutator: (items: Item[]) => void): void => {
+    const next = structuredClone(getCurrentChatMessages()) as Item[];
+    mutator(next);
+    setChatMessages(next);
+  };
 
   await handleTurn(inputItems, tools, async ({ event, data }) => {
     if (signal.aborted) return;
@@ -368,26 +383,28 @@ export const processMessages = async () => {
         }
         assistantMessageContent += partial;
 
-        // If the last message isn't an assistant message, create a new one
-        const lastItem = chatMessages[chatMessages.length - 1];
-        if (
-          !lastItem ||
-          lastItem.type !== "message" ||
-          lastItem.role !== "assistant" ||
-          (lastItem.id && lastItem.id !== item_id)
-        ) {
-          chatMessages.push({
-            type: "message",
-            role: "assistant",
-            id: item_id,
-            content: [
-              {
-                type: "output_text",
-                text: assistantMessageContent,
-              },
-            ],
-          } as MessageItem);
-        } else {
+        mutateChatMessages((chatMessages) => {
+          const lastItem = chatMessages[chatMessages.length - 1];
+          if (
+            !lastItem ||
+            lastItem.type !== "message" ||
+            lastItem.role !== "assistant" ||
+            (lastItem.id && lastItem.id !== item_id)
+          ) {
+            chatMessages.push({
+              type: "message",
+              role: "assistant",
+              id: item_id,
+              content: [
+                {
+                  type: "output_text",
+                  text: assistantMessageContent,
+                },
+              ],
+            } as MessageItem);
+            return;
+          }
+
           const contentItem = lastItem.content[0];
           if (contentItem && contentItem.type === "output_text") {
             contentItem.text = assistantMessageContent;
@@ -398,9 +415,7 @@ export const processMessages = async () => {
               ];
             }
           }
-        }
-
-        setChatMessages([...chatMessages]);
+        });
         setLoadingState({ status: "responding", thinkingText: "" });
         break;
       }
@@ -422,21 +437,22 @@ export const processMessages = async () => {
             const text = item.content?.text || "";
             const annotations =
               item.content?.annotations?.map(normalizeAnnotation) || [];
-            chatMessages.push({
-              type: "message",
-              role: "assistant",
-              id: item.id,
-              content: [
-                {
-                  type: "output_text",
-                  text,
-                  ...(annotations.length > 0 ? { annotations } : {}),
-                },
-              ],
+            mutateChatMessages((chatMessages) => {
+              chatMessages.push({
+                type: "message",
+                role: "assistant",
+                id: item.id,
+                content: [
+                  {
+                    type: "output_text",
+                    text,
+                    ...(annotations.length > 0 ? { annotations } : {}),
+                  },
+                ],
+              });
             });
             // NOTE: Don't push to conversationItems here - the content is incomplete.
             // We'll push the complete message in response.output_item.done
-            setChatMessages([...chatMessages]);
             break;
           }
           case "function_call": {
@@ -452,18 +468,19 @@ export const processMessages = async () => {
               parsedArguments,
               status: "in_progress",
             });
-            chatMessages.push({
-              type: "tool_call",
-              tool_type: "function_call",
-              status: "in_progress",
-              id: item.id,
-              name: item.name, // function name,e.g. "get_weather"
-              arguments: item.arguments || "",
-              parsedArguments: {},
-              output: null,
-              metadata: { startedAt: Date.now() },
+            mutateChatMessages((chatMessages) => {
+              chatMessages.push({
+                type: "tool_call",
+                tool_type: "function_call",
+                status: "in_progress",
+                id: item.id,
+                name: item.name, // function name,e.g. "get_weather"
+                arguments: item.arguments || "",
+                parsedArguments: {},
+                output: null,
+                metadata: { startedAt: Date.now() },
+              });
             });
-            setChatMessages([...chatMessages]);
             break;
           }
           case "web_search_call": {
@@ -472,14 +489,15 @@ export const processMessages = async () => {
               tool_type: "web_search_call",
               status: item.status || "in_progress",
             });
-            chatMessages.push({
-              type: "tool_call",
-              tool_type: "web_search_call",
-              status: item.status || "in_progress",
-              id: item.id,
-              metadata: { startedAt: Date.now() },
+            mutateChatMessages((chatMessages) => {
+              chatMessages.push({
+                type: "tool_call",
+                tool_type: "web_search_call",
+                status: item.status || "in_progress",
+                id: item.id,
+                metadata: { startedAt: Date.now() },
+              });
             });
-            setChatMessages([...chatMessages]);
             break;
           }
           case "file_search_call": {
@@ -488,14 +506,15 @@ export const processMessages = async () => {
               tool_type: "file_search_call",
               status: item.status || "in_progress",
             });
-            chatMessages.push({
-              type: "tool_call",
-              tool_type: "file_search_call",
-              status: item.status || "in_progress",
-              id: item.id,
-              metadata: { startedAt: Date.now() },
+            mutateChatMessages((chatMessages) => {
+              chatMessages.push({
+                type: "tool_call",
+                tool_type: "file_search_call",
+                status: item.status || "in_progress",
+                id: item.id,
+                metadata: { startedAt: Date.now() },
+              });
             });
-            setChatMessages([...chatMessages]);
             break;
           }
           case "mcp_call": {
@@ -511,18 +530,19 @@ export const processMessages = async () => {
               parsedArguments,
               status: "in_progress",
             });
-            chatMessages.push({
-              type: "tool_call",
-              tool_type: "mcp_call",
-              status: "in_progress",
-              id: item.id,
-              name: item.name,
-              arguments: item.arguments || "",
-              parsedArguments: safeParseArguments(item.arguments),
-              output: null,
-              metadata: { startedAt: Date.now() },
+            mutateChatMessages((chatMessages) => {
+              chatMessages.push({
+                type: "tool_call",
+                tool_type: "mcp_call",
+                status: "in_progress",
+                id: item.id,
+                name: item.name,
+                arguments: item.arguments || "",
+                parsedArguments: safeParseArguments(item.arguments),
+                output: null,
+                metadata: { startedAt: Date.now() },
+              });
             });
-            setChatMessages([...chatMessages]);
             break;
           }
           case "code_interpreter_call": {
@@ -531,16 +551,17 @@ export const processMessages = async () => {
               tool_type: "code_interpreter_call",
               status: item.status || "in_progress",
             });
-            chatMessages.push({
-              type: "tool_call",
-              tool_type: "code_interpreter_call",
-              status: item.status || "in_progress",
-              id: item.id,
-              code: "",
-              files: [],
-              metadata: { startedAt: Date.now() },
+            mutateChatMessages((chatMessages) => {
+              chatMessages.push({
+                type: "tool_call",
+                tool_type: "code_interpreter_call",
+                status: item.status || "in_progress",
+                id: item.id,
+                code: "",
+                files: [],
+                metadata: { startedAt: Date.now() },
+              });
             });
-            setChatMessages([...chatMessages]);
             break;
           }
         }
@@ -558,10 +579,14 @@ export const processMessages = async () => {
             output: stringifyToolOutput(item.output),
           });
         }
-        const toolCallMessage = chatMessages.find((m) => m.id === item.id);
+        const toolCallMessage = getCurrentChatMessages().find((m) => m.id === item.id);
         if (toolCallMessage && toolCallMessage.type === "tool_call") {
-          toolCallMessage.call_id = item.call_id;
-          setChatMessages([...chatMessages]);
+          mutateChatMessages((chatMessages) => {
+            const nextToolCall = chatMessages.find((m) => m.id === item.id);
+            if (nextToolCall && nextToolCall.type === "tool_call") {
+              nextToolCall.call_id = item.call_id;
+            }
+          });
         }
 
         // With stored-responses flow, we do NOT push assistant output/tool call items
@@ -576,23 +601,25 @@ export const processMessages = async () => {
         ) {
           // Defer function execution until after response.completed
           // This ensures we have the response ID for the stored-responses flow
-          pendingFunctionCalls.push({ toolCallMessage });
+          pendingFunctionCallIds.push(toolCallMessage.id);
         }
         if (
           toolCallMessage &&
           toolCallMessage.type === "tool_call" &&
           toolCallMessage.tool_type === "mcp_call"
         ) {
-          toolCallMessage.output = item.output;
-          toolCallMessage.status = "completed";
-          // Add completion timing
-          if (toolCallMessage.metadata) {
-            const now = Date.now();
-            toolCallMessage.metadata.completedAt = now;
-            toolCallMessage.metadata.durationMs =
-              now - toolCallMessage.metadata.startedAt;
-          }
-          setChatMessages([...chatMessages]);
+          mutateChatMessages((chatMessages) => {
+            const nextToolCall = chatMessages.find((m) => m.id === item.id);
+            if (!nextToolCall || nextToolCall.type !== "tool_call") return;
+            nextToolCall.output = item.output;
+            nextToolCall.status = "completed";
+            if (nextToolCall.metadata) {
+              const now = Date.now();
+              nextToolCall.metadata.completedAt = now;
+              nextToolCall.metadata.durationMs =
+                now - nextToolCall.metadata.startedAt;
+            }
+          });
         }
         break;
       }
@@ -604,8 +631,9 @@ export const processMessages = async () => {
         functionArgumentsByItem.set(data.item_id, nextArguments);
         let parsedFunctionArguments = {};
 
-        const toolCallMessage = chatMessages.find((m) => m.id === data.item_id);
-        if (toolCallMessage && toolCallMessage.type === "tool_call") {
+        mutateChatMessages((chatMessages) => {
+          const toolCallMessage = chatMessages.find((m) => m.id === data.item_id);
+          if (!toolCallMessage || toolCallMessage.type !== "tool_call") return;
           toolCallMessage.arguments = nextArguments;
           try {
             if (nextArguments.length > 0) {
@@ -615,8 +643,7 @@ export const processMessages = async () => {
           } catch {
             // partial JSON can fail parse; ignore
           }
-          setChatMessages([...chatMessages]);
-        }
+        });
         upsertToolEvent({
           id: data.item_id,
           tool_type: "function_call",
@@ -635,13 +662,13 @@ export const processMessages = async () => {
         const parsedArguments = safeParseArguments(finalArgs);
 
         // Mark the tool_call as "completed" and parse the final JSON
-        const toolCallMessage = chatMessages.find((m) => m.id === item_id);
-        if (toolCallMessage && toolCallMessage.type === "tool_call") {
+        mutateChatMessages((chatMessages) => {
+          const toolCallMessage = chatMessages.find((m) => m.id === item_id);
+          if (!toolCallMessage || toolCallMessage.type !== "tool_call") return;
           toolCallMessage.arguments = finalArgs;
           toolCallMessage.parsedArguments = parsedArguments;
           toolCallMessage.status = "completed";
-          setChatMessages([...chatMessages]);
-        }
+        });
         upsertToolEvent({
           id: item_id,
           tool_type: "function_call",
@@ -659,8 +686,9 @@ export const processMessages = async () => {
           (mcpArgumentsByItem.get(data.item_id) ?? "") + (data.delta || "");
         mcpArgumentsByItem.set(data.item_id, nextArguments);
         let parsedMcpArguments: any = {};
-        const toolCallMessage = chatMessages.find((m) => m.id === data.item_id);
-        if (toolCallMessage && toolCallMessage.type === "tool_call") {
+        mutateChatMessages((chatMessages) => {
+          const toolCallMessage = chatMessages.find((m) => m.id === data.item_id);
+          if (!toolCallMessage || toolCallMessage.type !== "tool_call") return;
           toolCallMessage.arguments = nextArguments;
           try {
             if (nextArguments.length > 0) {
@@ -670,8 +698,7 @@ export const processMessages = async () => {
           } catch {
             // partial JSON can fail parse; ignore
           }
-          setChatMessages([...chatMessages]);
-        }
+        });
         upsertToolEvent({
           id: data.item_id,
           tool_type: "mcp_call",
@@ -686,13 +713,13 @@ export const processMessages = async () => {
         const { item_id, arguments: finalArgs } = data;
         mcpArgumentsByItem.set(item_id, finalArgs);
         const parsedArguments = safeParseArguments(finalArgs);
-        const toolCallMessage = chatMessages.find((m) => m.id === item_id);
-        if (toolCallMessage && toolCallMessage.type === "tool_call") {
+        mutateChatMessages((chatMessages) => {
+          const toolCallMessage = chatMessages.find((m) => m.id === item_id);
+          if (!toolCallMessage || toolCallMessage.type !== "tool_call") return;
           toolCallMessage.arguments = finalArgs;
           toolCallMessage.parsedArguments = parsedArguments;
           toolCallMessage.status = "completed";
-          setChatMessages([...chatMessages]);
-        }
+        });
         upsertToolEvent({
           id: item_id,
           tool_type: "mcp_call",
@@ -706,19 +733,18 @@ export const processMessages = async () => {
 
       case "response.web_search_call.completed": {
         const { item_id, output } = data;
-        const toolCallMessage = chatMessages.find((m) => m.id === item_id);
-        if (toolCallMessage && toolCallMessage.type === "tool_call") {
+        mutateChatMessages((chatMessages) => {
+          const toolCallMessage = chatMessages.find((m) => m.id === item_id);
+          if (!toolCallMessage || toolCallMessage.type !== "tool_call") return;
           toolCallMessage.output = output;
           toolCallMessage.status = "completed";
-          // Add completion timing
           if (toolCallMessage.metadata) {
             const now = Date.now();
             toolCallMessage.metadata.completedAt = now;
             toolCallMessage.metadata.durationMs =
               now - toolCallMessage.metadata.startedAt;
           }
-          setChatMessages([...chatMessages]);
-        }
+        });
         upsertToolEvent({
           id: item_id,
           tool_type: "web_search_call",
@@ -730,19 +756,18 @@ export const processMessages = async () => {
 
       case "response.file_search_call.completed": {
         const { item_id, output } = data;
-        const toolCallMessage = chatMessages.find((m) => m.id === item_id);
-        if (toolCallMessage && toolCallMessage.type === "tool_call") {
+        mutateChatMessages((chatMessages) => {
+          const toolCallMessage = chatMessages.find((m) => m.id === item_id);
+          if (!toolCallMessage || toolCallMessage.type !== "tool_call") return;
           toolCallMessage.output = output;
           toolCallMessage.status = "completed";
-          // Add completion timing
           if (toolCallMessage.metadata) {
             const now = Date.now();
             toolCallMessage.metadata.completedAt = now;
             toolCallMessage.metadata.durationMs =
               now - toolCallMessage.metadata.startedAt;
           }
-          setChatMessages([...chatMessages]);
-        }
+        });
         upsertToolEvent({
           id: item_id,
           tool_type: "file_search_call",
@@ -754,7 +779,7 @@ export const processMessages = async () => {
 
       case "response.code_interpreter_call_code.delta": {
         const { delta, item_id } = data;
-        const toolCallMessage = [...chatMessages]
+        const toolCallMessage = [...getCurrentChatMessages()]
           .reverse()
           .find(
             (m) =>
@@ -765,12 +790,24 @@ export const processMessages = async () => {
           ) as ToolCallItem | undefined;
         // Accumulate deltas to show the code streaming
         if (toolCallMessage) {
-          toolCallMessage.code = (toolCallMessage.code || "") + delta;
-          setChatMessages([...chatMessages]);
+          const nextCode = (toolCallMessage.code || "") + delta;
+          mutateChatMessages((chatMessages) => {
+            const nextToolCall = [...chatMessages]
+              .reverse()
+              .find(
+                (m) =>
+                  m.type === "tool_call" &&
+                  m.tool_type === "code_interpreter_call" &&
+                  m.status !== "completed" &&
+                  m.id === item_id
+              ) as ToolCallItem | undefined;
+            if (!nextToolCall) return;
+            nextToolCall.code = nextCode;
+          });
           upsertToolEvent({
             id: item_id,
             tool_type: "code_interpreter_call",
-            output: stringifyToolOutput(toolCallMessage.code || ""),
+            output: stringifyToolOutput(nextCode),
             status: "in_progress",
           });
         }
@@ -779,7 +816,7 @@ export const processMessages = async () => {
 
       case "response.code_interpreter_call_code.done": {
         const { code, item_id } = data;
-        const toolCallMessage = [...chatMessages]
+        const toolCallMessage = [...getCurrentChatMessages()]
           .reverse()
           .find(
             (m) =>
@@ -791,16 +828,26 @@ export const processMessages = async () => {
 
         // Mark the call as completed and set the code
         if (toolCallMessage) {
-          toolCallMessage.code = code;
-          toolCallMessage.status = "completed";
-          // Add completion timing
-          if (toolCallMessage.metadata) {
-            const now = Date.now();
-            toolCallMessage.metadata.completedAt = now;
-            toolCallMessage.metadata.durationMs =
-              now - toolCallMessage.metadata.startedAt;
-          }
-          setChatMessages([...chatMessages]);
+          mutateChatMessages((chatMessages) => {
+            const nextToolCall = [...chatMessages]
+              .reverse()
+              .find(
+                (m) =>
+                  m.type === "tool_call" &&
+                  m.tool_type === "code_interpreter_call" &&
+                  m.status !== "completed" &&
+                  m.id === item_id
+              ) as ToolCallItem | undefined;
+            if (!nextToolCall) return;
+            nextToolCall.code = code;
+            nextToolCall.status = "completed";
+            if (nextToolCall.metadata) {
+              const now = Date.now();
+              nextToolCall.metadata.completedAt = now;
+              nextToolCall.metadata.durationMs =
+                now - nextToolCall.metadata.startedAt;
+            }
+          });
         }
         upsertToolEvent({
           id: item_id,
@@ -813,19 +860,23 @@ export const processMessages = async () => {
 
       case "response.code_interpreter_call.completed": {
         const { item_id } = data;
-        const toolCallMessage = chatMessages.find(
+        const toolCallMessage = getCurrentChatMessages().find(
           (m) => m.type === "tool_call" && m.id === item_id
         ) as ToolCallItem | undefined;
         if (toolCallMessage) {
-          toolCallMessage.status = "completed";
-          // Add completion timing (only if not already set)
-          if (toolCallMessage.metadata && !toolCallMessage.metadata.completedAt) {
-            const now = Date.now();
-            toolCallMessage.metadata.completedAt = now;
-            toolCallMessage.metadata.durationMs =
-              now - toolCallMessage.metadata.startedAt;
-          }
-          setChatMessages([...chatMessages]);
+          mutateChatMessages((chatMessages) => {
+            const nextToolCall = chatMessages.find(
+              (m) => m.type === "tool_call" && m.id === item_id
+            ) as ToolCallItem | undefined;
+            if (!nextToolCall) return;
+            nextToolCall.status = "completed";
+            if (nextToolCall.metadata && !nextToolCall.metadata.completedAt) {
+              const now = Date.now();
+              nextToolCall.metadata.completedAt = now;
+              nextToolCall.metadata.durationMs =
+                now - nextToolCall.metadata.startedAt;
+            }
+          });
         }
         upsertToolEvent({
           id: item_id,
@@ -839,7 +890,7 @@ export const processMessages = async () => {
         console.log("response completed", data);
         setLoadingState({ status: "idle", thinkingText: "" });
         const { response } = data;
-        const lastAssistantMessage = [...chatMessages]
+        const lastAssistantMessage = [...getCurrentChatMessages()]
           .reverse()
           .find((item) => item.type === "message" && item.role === "assistant") as MessageItem | undefined;
         const lastAssistantText =
@@ -871,19 +922,19 @@ export const processMessages = async () => {
           (m: Item) => m.type === "mcp_approval_request"
         );
 
-        for (const mcpApprovalRequestMessage of mcpApprovalRequestMessages) {
-          chatMessages.push({
-            type: "mcp_approval_request",
-            id: mcpApprovalRequestMessage.id,
-            server_label: mcpApprovalRequestMessage.server_label,
-            name: mcpApprovalRequestMessage.name,
-            arguments: mcpApprovalRequestMessage.arguments,
-          });
-        }
-
         // Only update state if we added any MCP approval items
         if (mcpApprovalRequestMessages.length > 0) {
-          setChatMessages([...chatMessages]);
+          mutateChatMessages((chatMessages) => {
+            for (const mcpApprovalRequestMessage of mcpApprovalRequestMessages) {
+              chatMessages.push({
+                type: "mcp_approval_request",
+                id: mcpApprovalRequestMessage.id,
+                server_label: mcpApprovalRequestMessage.server_label,
+                name: mcpApprovalRequestMessage.name,
+                arguments: mcpApprovalRequestMessage.arguments,
+              });
+            }
+          });
         }
 
         break;
@@ -897,18 +948,18 @@ export const processMessages = async () => {
           `${error}${status ? ` (Status: ${status})` : ""}`,
         );
 
-        // Add error message to chat
-        chatMessages.push({
-          type: "message",
-          role: "assistant",
-          content: [
-            {
-              type: "output_text",
-              text: `\u274C Error: ${error}${status ? ` (Status: ${status})` : ''}\n\nPlease try again or check your configuration.`,
-            },
-          ],
+        mutateChatMessages((chatMessages) => {
+          chatMessages.push({
+            type: "message",
+            role: "assistant",
+            content: [
+              {
+                type: "output_text",
+                text: `\u274C Error: ${error}${status ? ` (Status: ${status})` : ''}\n\nPlease try again or check your configuration.`,
+              },
+            ],
+          });
         });
-        setChatMessages([...chatMessages]);
         setLoadingState({ status: "idle", thinkingText: "" });
         break;
       }
@@ -919,70 +970,92 @@ export const processMessages = async () => {
 
   // After handleTurn completes, process any pending function calls
   // We deferred these until we have the response ID for proper stored-responses linking
-  for (const { toolCallMessage } of pendingFunctionCalls) {
+  for (const toolCallId of pendingFunctionCallIds) {
     if (signal.aborted) break;
+    const currentToolCall = getCurrentChatMessages().find(
+      (m) => m.type === "tool_call" && m.id === toolCallId
+    ) as ToolCallItem | undefined;
+    if (!currentToolCall) continue;
+
     try {
       const toolResult = await handleTool(
-        toolCallMessage.name as keyof typeof functionsMap,
-        toolCallMessage.parsedArguments
+        currentToolCall.name as keyof typeof functionsMap,
+        currentToolCall.parsedArguments
       );
+      if (signal.aborted) break;
 
       const toolOutput = stringifyToolOutput(toolResult) ?? "null";
-      // Record tool output in display
-      toolCallMessage.output = toolOutput;
-      toolCallMessage.status = "completed";
-      if (toolCallMessage.metadata) {
-        const now = Date.now();
-        toolCallMessage.metadata.completedAt = now;
-        toolCallMessage.metadata.durationMs = now - toolCallMessage.metadata.startedAt;
-      }
+      mutateChatMessages((chatMessages) => {
+        const toolCallMessage = chatMessages.find(
+          (m) => m.type === "tool_call" && m.id === toolCallId
+        ) as ToolCallItem | undefined;
+        if (!toolCallMessage) return;
+        toolCallMessage.output = toolOutput;
+        toolCallMessage.status = "completed";
+        if (toolCallMessage.metadata) {
+          const now = Date.now();
+          toolCallMessage.metadata.completedAt = now;
+          toolCallMessage.metadata.durationMs = now - toolCallMessage.metadata.startedAt;
+        }
+      });
       upsertToolEvent({
-        id: toolCallMessage.id,
+        id: toolCallId,
         tool_type: "function_call",
         output: toolOutput,
         status: "completed",
       });
-      setChatMessages([...chatMessages]);
 
       // Clear conversationItems and add only the function output for next turn
       // (with stored-responses, the API reconstructs context from previousResponseId)
+      const latestToolCall = getCurrentChatMessages().find(
+        (m) => m.type === "tool_call" && m.id === toolCallId
+      ) as ToolCallItem | undefined;
       setConversationItems([{
         type: "function_call_output",
-        call_id: toolCallMessage.call_id,
+        call_id: latestToolCall?.call_id,
         output: toolOutput,
       }]);
 
       // Make next turn to get assistant response to tool output
-      await processMessages();
+      await processMessages(activeController ?? undefined);
     } catch (error) {
+      if (signal.aborted) break;
       const message = error instanceof Error ? error.message : "Tool failed";
       const errorOutput = stringifyToolOutput({ error: message }) ?? "{\"error\":\"Tool failed\"}";
-      toolCallMessage.output = errorOutput;
-      toolCallMessage.status = "failed";
-      if (toolCallMessage.metadata) {
-        const now = Date.now();
-        toolCallMessage.metadata.completedAt = now;
-        toolCallMessage.metadata.durationMs = now - toolCallMessage.metadata.startedAt;
-        toolCallMessage.metadata.error = message;
-      }
+      mutateChatMessages((chatMessages) => {
+        const toolCallMessage = chatMessages.find(
+          (m) => m.type === "tool_call" && m.id === toolCallId
+        ) as ToolCallItem | undefined;
+        if (!toolCallMessage) return;
+        toolCallMessage.output = errorOutput;
+        toolCallMessage.status = "failed";
+        if (toolCallMessage.metadata) {
+          const now = Date.now();
+          toolCallMessage.metadata.completedAt = now;
+          toolCallMessage.metadata.durationMs = now - toolCallMessage.metadata.startedAt;
+          toolCallMessage.metadata.error = message;
+        }
+      });
       upsertToolEvent({
-        id: toolCallMessage.id,
+        id: toolCallId,
         tool_type: "function_call",
         output: errorOutput,
         status: "failed",
         error: message,
       });
-      setChatMessages([...chatMessages]);
 
       // Clear conversationItems and add error output for next turn
+      const latestToolCall = getCurrentChatMessages().find(
+        (m) => m.type === "tool_call" && m.id === toolCallId
+      ) as ToolCallItem | undefined;
       setConversationItems([{
         type: "function_call_output",
-        call_id: toolCallMessage.call_id,
+        call_id: latestToolCall?.call_id,
         output: errorOutput,
       }]);
 
       // Let the assistant respond to the tool failure
-      await processMessages();
+      await processMessages(activeController ?? undefined);
     }
   }
 };

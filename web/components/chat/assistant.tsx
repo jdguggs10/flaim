@@ -102,6 +102,7 @@ export default function Assistant() {
       addConversationItem(approvalItem);
       await processMessages();
     } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
       console.error("Error sending approval response:", error);
     }
   };

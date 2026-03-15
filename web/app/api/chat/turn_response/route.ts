@@ -45,23 +45,70 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // SSRF protection: validate MCP tool URLs against allowlist
-    if (tools && Array.isArray(tools)) {
+    let validatedTools: any[] = [];
+    if (tools !== undefined && !Array.isArray(tools)) {
+      return NextResponse.json(
+        { error: "Invalid tools payload" },
+        { status: 400 }
+      );
+    }
+
+    // SSRF protection: validate MCP tool URLs against allowlist and sanitize headers
+    if (Array.isArray(tools)) {
+      validatedTools = [];
       for (const tool of tools) {
-        if (tool.type === 'mcp' && typeof tool.server_url === 'string') {
-          if (!isAllowedUrl(tool.server_url)) {
+        if (!tool || typeof tool !== "object") {
+          return NextResponse.json(
+            { error: "Invalid tool entry in request payload" },
+            { status: 400 }
+          );
+        }
+
+        if (tool.type !== "mcp") {
+          validatedTools.push(tool);
+          continue;
+        }
+
+        if (typeof tool.server_url !== "string" || !tool.server_url) {
+          return NextResponse.json(
+            { error: "MCP tool requires a valid server_url" },
+            { status: 400 }
+          );
+        }
+
+        if (!isAllowedUrl(tool.server_url)) {
+          return NextResponse.json(
+            { error: "MCP server URL not allowed" },
+            { status: 400 }
+          );
+        }
+
+        const sanitizedHeaders: Record<string, string> = {};
+        if (tool.headers && typeof tool.headers === "object") {
+          for (const [key, value] of Object.entries(tool.headers as Record<string, unknown>)) {
+            if (typeof value !== "string") continue;
+            const normalized = key.toLowerCase();
+            if (normalized === "authorization" || normalized === "content-type") {
+              sanitizedHeaders[key] = value;
+              continue;
+            }
             return NextResponse.json(
-              { error: `MCP server URL not allowed: ${tool.server_url}` },
+              { error: `Unexpected MCP header: ${key}` },
               { status: 400 }
             );
           }
         }
+
+        validatedTools.push({
+          ...tool,
+          headers: sanitizedHeaders,
+        });
       }
     }
 
     // Debug: Log tool configuration (without sensitive headers)
-    if (tools && tools.length > 0) {
-      const sanitizedTools = tools.map(tool => {
+    if (validatedTools.length > 0) {
+      const sanitizedTools = validatedTools.map(tool => {
         if (tool.type === 'mcp') {
           return {
             type: tool.type,
@@ -74,7 +121,7 @@ export async function POST(request: NextRequest) {
         }
         return { type: tool.type };
       });
-      console.log(`[DEBUG] User ${userId} sending ${tools.length} tools:`, JSON.stringify(sanitizedTools));
+      console.log(`[DEBUG] User ${userId} sending ${validatedTools.length} tools:`, JSON.stringify(sanitizedTools));
     }
 
     const openai = new OpenAI();
@@ -87,7 +134,7 @@ export async function POST(request: NextRequest) {
       events = await openai.responses.create({
         model: MODEL,
         input: messages,
-        tools: tools || [],
+        tools: validatedTools,
         stream: true,
         store: true,
         parallel_tool_calls: false,
