@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState } from "react";
-import useLeaguesStore, { SPORT_CONFIG } from "@/stores/chat/useLeaguesStore";
+import useLeaguesStore from "@/stores/chat/useLeaguesStore";
+import { SPORT_CONFIG, type Sport } from "@/lib/chat/league-mapper";
 import {
   Popover,
   PopoverContent,
@@ -47,7 +48,7 @@ export default function DefaultsBanner() {
         <PopoverContent className="w-44 p-1" align="start">
           <div className="flex flex-col">
             {availableSports.map((sport) => {
-              const cfg = SPORT_CONFIG[sport];
+              const cfg = SPORT_CONFIG[sport as Sport];
               if (!cfg) return null;
               const isActive = sport === currentSport;
               return (

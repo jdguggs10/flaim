@@ -6,6 +6,7 @@
  */
 import { create } from 'zustand';
 import type { EspnLeague } from '@/lib/espn-types';
+import { SPORT_CONFIG, type Sport } from '@/lib/chat/league-mapper';
 
 /** Platform-agnostic league used throughout the chat UI */
 export interface ChatLeague {
@@ -60,13 +61,6 @@ interface LeaguesState {
   getAvailableSports: () => string[];
   getLeaguesForSport: (sport: string) => ChatLeague[];
 }
-
-export const SPORT_CONFIG: Record<string, { name: string; emoji: string }> = {
-  baseball: { name: 'Baseball', emoji: '⚾' },
-  football: { name: 'Football', emoji: '🏈' },
-  basketball: { name: 'Basketball', emoji: '🏀' },
-  hockey: { name: 'Hockey', emoji: '🏒' },
-};
 
 export const useLeaguesStore = create<LeaguesState>()((set, get) => ({
   leagues: [],
@@ -204,7 +198,7 @@ export const useLeaguesStore = create<LeaguesState>()((set, get) => ({
       const sportDefaults: Record<string, SportDefault | null> = {};
 
       // Map per-sport defaults from API response
-      for (const sport of Object.keys(SPORT_CONFIG)) {
+      for (const sport of Object.keys(SPORT_CONFIG) as Sport[]) {
         const key = `default_${sport}`;
         const val = data[key] as { platform?: string; league_id?: string; season_year?: number } | undefined;
         if (val?.platform && val?.league_id && val?.season_year !== undefined) {
@@ -311,7 +305,7 @@ export const useLeaguesStore = create<LeaguesState>()((set, get) => ({
     );
   },
 
-  getSportConfig: (sport) => SPORT_CONFIG[sport] || null,
+  getSportConfig: (sport) => SPORT_CONFIG[sport as Sport] || null,
 
   getAvailableSports: () => {
     const { leagues } = get();
