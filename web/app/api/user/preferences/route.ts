@@ -17,9 +17,12 @@ export async function GET() {
       return NextResponse.json({ error: 'AUTH_WORKER_URL not configured' }, { status: 500 });
     }
 
-    const bearer = (await getToken?.()) || undefined;
+    const bearer = await getToken?.();
+    if (!bearer) {
+      return NextResponse.json({ error: 'Authentication token unavailable' }, { status: 401 });
+    }
     const res = await fetch(`${authWorkerUrl}/user/preferences`, {
-      headers: bearer ? { Authorization: `Bearer ${bearer}` } : {},
+      headers: { Authorization: `Bearer ${bearer}` },
     });
 
     const data = await res.json();
@@ -48,12 +51,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'AUTH_WORKER_URL not configured' }, { status: 500 });
     }
 
-    const bearer = (await getToken?.()) || undefined;
+    const bearer = await getToken?.();
+    if (!bearer) {
+      return NextResponse.json({ error: 'Authentication token unavailable' }, { status: 401 });
+    }
     const res = await fetch(`${authWorkerUrl}/user/preferences/default-sport`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(bearer ? { Authorization: `Bearer ${bearer}` } : {}),
+        Authorization: `Bearer ${bearer}`,
       },
       body: JSON.stringify({ sport: body.defaultSport }),
     });

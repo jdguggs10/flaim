@@ -30,13 +30,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'AUTH_WORKER_URL is not configured' }, { status: 500 });
     }
 
-    const bearer = (await getToken?.()) || undefined;
+    const bearer = await getToken?.();
+    if (!bearer) {
+      return NextResponse.json({ error: 'Authentication token unavailable' }, { status: 401 });
+    }
 
     const workerRes = await fetch(`${authWorkerUrl}/oauth/revoke`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(bearer ? { 'Authorization': `Bearer ${bearer}` } : {})
+        'Authorization': `Bearer ${bearer}`,
       },
       body: JSON.stringify({ tokenId: body.tokenId })
     });

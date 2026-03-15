@@ -22,7 +22,10 @@ export async function GET() {
       return NextResponse.json({ error: 'AUTH_WORKER_URL is not configured' }, { status: 500 });
     }
 
-    const bearer = (await getToken?.()) || undefined;
+    const bearer = await getToken?.();
+    if (!bearer) {
+      return NextResponse.json({ error: 'Authentication token unavailable' }, { status: 401 });
+    }
 
     let workerRes: Response;
     try {
@@ -30,7 +33,7 @@ export async function GET() {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
-          ...(bearer ? { 'Authorization': `Bearer ${bearer}` } : {})
+          'Authorization': `Bearer ${bearer}`,
         },
       });
     } catch {

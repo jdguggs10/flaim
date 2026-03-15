@@ -94,7 +94,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           error: "Failed to process request",
-          details: message,
+          details: process.env.NODE_ENV === "development" ? message : "An error occurred while processing your request",
           debug: process.env.NODE_ENV === "development" ? error : undefined,
         },
         { status: statusCode }

@@ -147,6 +147,8 @@ const useToolsStore = create<StoreState>()(
     }),
     {
       name: "tools-store",
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars -- destructured to exclude from persistence
+      partialize: ({ clerkToken, espnS2, espnSWID, ...rest }) => rest,
     }
   )
 );

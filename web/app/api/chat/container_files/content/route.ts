@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
   try {
     const safeFileId = encodeURIComponent(fileId);
     const safeContainerId = containerId ? encodeURIComponent(containerId) : null;
-    const safeFilename = (filename ?? fileId).replace(/[\r\n]/g, "").replace(/[\\/]/g, "_");
+    const safeFilename = (filename ?? fileId).replace(/[\r\n"]/g, "").replace(/[\\/]/g, "_");
     const url = safeContainerId
       ? `https://api.openai.com/v1/containers/${safeContainerId}/files/${safeFileId}/content`
       : `https://api.openai.com/v1/container-files/${safeFileId}/content`;

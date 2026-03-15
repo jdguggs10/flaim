@@ -25,13 +25,15 @@ export async function GET() {
       return NextResponse.json({ error: 'NEXT_PUBLIC_AUTH_WORKER_URL is not configured' }, { status: 500 });
     }
 
-    const bearer = (await getToken?.()) || undefined;
+    const bearer = await getToken?.();
+    if (!bearer) {
+      return NextResponse.json({ error: 'Authentication token unavailable' }, { status: 401 });
+    }
     const workerResponse = await fetch(`${authWorkerUrl}/leagues`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-        // Pass Clerk user in header (Auth-Worker uses this instead of JWT)
-        ...(bearer ? { 'Authorization': `Bearer ${bearer}` } : {})
+        'Authorization': `Bearer ${bearer}`,
       }
     });
 
@@ -124,13 +126,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'NEXT_PUBLIC_AUTH_WORKER_URL is not configured' }, { status: 500 });
     }
 
-    const bearer = (await getToken?.()) || undefined;
+    const bearer = await getToken?.();
+    if (!bearer) {
+      return NextResponse.json({ error: 'Authentication token unavailable' }, { status: 401 });
+    }
     const workerResponse = await fetch(`${authWorkerUrl}/leagues`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        // Pass Clerk user in header (Auth-Worker uses this instead of JWT)
-        ...(bearer ? { 'Authorization': `Bearer ${bearer}` } : {})
+        'Authorization': `Bearer ${bearer}`,
       },
       body: JSON.stringify({ leagues: body.leagues })
     });
@@ -182,12 +186,15 @@ export async function DELETE(request: NextRequest) {
     // Never pass seasonYear - delete always removes ALL seasons for this league
     const deleteUrl = `${authWorkerUrl}/leagues?leagueId=${encodeURIComponent(leagueId)}&sport=${encodeURIComponent(sport)}`;
 
-    const bearer = (await getToken?.()) || undefined;
+    const bearer = await getToken?.();
+    if (!bearer) {
+      return NextResponse.json({ error: 'Authentication token unavailable' }, { status: 401 });
+    }
     const workerResponse = await fetch(deleteUrl, {
       method: 'DELETE',
       headers: {
         'Content-Type': 'application/json',
-        ...(bearer ? { 'Authorization': `Bearer ${bearer}` } : {})
+        'Authorization': `Bearer ${bearer}`,
       }
     });
 
