@@ -75,7 +75,16 @@ export default function Assistant() {
       addChatMessage(userItem);
       await processMessages();
     } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
       console.error("Error processing message:", error);
+      useConversationStore.setState(state => ({
+        chatMessages: [...state.chatMessages, {
+          type: "message" as const,
+          role: "assistant" as const,
+          id: `error-${Date.now()}`,
+          content: [{ type: "output_text" as const, text: "Sorry, something went wrong. Please try again." }],
+        }],
+      }));
       setLoadingState({ status: "idle", thinkingText: "" });
     }
   };

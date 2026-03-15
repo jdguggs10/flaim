@@ -4,7 +4,7 @@ import { Bug, Download } from "lucide-react";
 import useToolsStore from "@/stores/chat/useToolsStore";
 import useLeaguesStore from "@/stores/chat/useLeaguesStore";
 import useConversationStore from "@/stores/chat/useConversationStore";
-import { ToolCallItem } from "@/lib/chat/assistant";
+import { ToolCallItem, abortActiveStream } from "@/lib/chat/assistant";
 import { redactSensitive } from "@/lib/chat/trace-utils";
 import { CollapsibleSection } from "./collapsible-section";
 import { Switch } from "@/components/ui";
@@ -133,7 +133,7 @@ export function DebugSection() {
           <Button
             variant="outline"
             size="sm"
-            onClick={clearConversation}
+            onClick={() => { abortActiveStream(); clearConversation(); }}
             className="w-full text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
           >
             Clear Conversation

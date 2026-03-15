@@ -5,7 +5,7 @@ import ToolCall from "./tool-call";
 import Message from "./message";
 import Annotations from "./annotations";
 import McpApproval from "./mcp-approval";
-import { Item, McpApprovalRequestItem } from "@/lib/chat/assistant";
+import { Item, McpApprovalRequestItem, abortActiveStream } from "@/lib/chat/assistant";
 import LoadingMessage from "./loading-message";
 import useConversationStore from "@/stores/chat/useConversationStore";
 import useToolsStore from "@/stores/chat/useToolsStore";
@@ -133,7 +133,7 @@ const Chat: React.FC<ChatProps> = ({
                     />
                   </div>
                   <button
-                    onClick={clearConversation}
+                    onClick={() => { abortActiveStream(); clearConversation(); }}
                     className="flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground hover:bg-muted focus-visible:outline-none"
                     title="Clear conversation"
                     aria-label="Clear conversation"

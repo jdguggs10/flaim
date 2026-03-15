@@ -8,6 +8,13 @@ import { functionsMap } from "@/config/functions";
 import { redactSensitive } from "@/lib/chat/trace-utils";
 import type { TraceToolEvent } from "@/lib/chat/trace-types";
 
+let activeController: AbortController | null = null;
+
+export function abortActiveStream() {
+  activeController?.abort();
+  activeController = null;
+}
+
 const normalizeAnnotation = (annotation: any): Annotation => ({
   ...annotation,
   fileId: annotation.file_id ?? annotation.fileId,
@@ -88,7 +95,8 @@ export const handleTurn = async (
   messages: any[],
   tools: any[],
   onMessage: (data: any) => void,
-  previousResponseId?: string | null
+  previousResponseId?: string | null,
+  signal?: AbortSignal
 ) => {
   try {
     // Get response from the API (defined in app/api/chat/turn_response/route.ts)
@@ -97,6 +105,7 @@ export const handleTurn = async (
     const response = await fetch("/api/chat/turn_response", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      signal,
       body: JSON.stringify({
         messages: messages,
         tools: tools,
@@ -163,11 +172,16 @@ export const handleTurn = async (
       }
     }
   } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") return;
     console.error("Error handling turn:", error);
   }
 };
 
 export const processMessages = async () => {
+  abortActiveStream();
+  activeController = new AbortController();
+  const signal = activeController.signal;
+
   const {
     chatMessages,
     conversationItems,
@@ -323,6 +337,7 @@ export const processMessages = async () => {
   const mcpArgumentsByItem = new Map<string, string>();
 
   await handleTurn(inputItems, tools, async ({ event, data }) => {
+    if (signal.aborted) return;
     // DEBUG: Log all events for analysis
     console.log(`[SSE EVENT] ${event}`, data);
 
@@ -900,11 +915,12 @@ export const processMessages = async () => {
 
       // Handle other events as needed
     }
-  }, previousResponseId);
+  }, previousResponseId, signal);
 
   // After handleTurn completes, process any pending function calls
   // We deferred these until we have the response ID for proper stored-responses linking
   for (const { toolCallMessage } of pendingFunctionCalls) {
+    if (signal.aborted) break;
     try {
       const toolResult = await handleTool(
         toolCallMessage.name as keyof typeof functionsMap,
