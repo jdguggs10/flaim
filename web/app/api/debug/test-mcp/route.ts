@@ -1,66 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
-
-/**
- * Allowlist of valid MCP server host patterns.
- * Only these hosts can be tested to prevent SSRF attacks.
- */
-const ALLOWED_MCP_HOST_PATTERNS = [
-  // Flaim production domains
-  'flaim.app',
-  // Localhost for development (excluded in production)
-  ...(process.env.NODE_ENV === 'development' ? ['localhost', '127.0.0.1'] : []),
-];
-
-/**
- * Flaim CF account subdomain. Workers are <name>.gerrygugger.workers.dev.
- */
-const CF_ACCOUNT_SUBDOMAIN = 'gerrygugger';
-
-/**
- * Flaim-specific worker name prefixes allowed on workers.dev.
- * Prevents probing arbitrary Cloudflare Workers.
- */
-const ALLOWED_WORKER_PREFIXES = [
-  'fantasy-mcp',
-  'fantasy-mcp-preview',
-  'auth-worker',
-  'auth-worker-preview',
-];
-
-/**
- * Validate that a URL is safe to fetch (SSRF protection)
- */
-function isAllowedUrl(urlString: string): boolean {
-  try {
-    const url = new URL(urlString);
-
-    // Must be HTTPS in production, allow HTTP for localhost
-    const isLocalhost = url.hostname === 'localhost' || url.hostname === '127.0.0.1';
-    if (!isLocalhost && url.protocol !== 'https:') {
-      return false;
-    }
-
-    // Check against static allowlist patterns
-    const matchesStatic = ALLOWED_MCP_HOST_PATTERNS.some(pattern =>
-      url.hostname === pattern || url.hostname.endsWith(`.${pattern}`)
-    );
-    if (matchesStatic) return true;
-
-    // Check workers.dev — only allow known Flaim worker prefixes on our account
-    // Format: <worker>.<account>.workers.dev (exactly 4 segments)
-    if (url.hostname.endsWith('.workers.dev')) {
-      const parts = url.hostname.split('.');
-      return parts.length === 4
-        && parts[1] === CF_ACCOUNT_SUBDOMAIN
-        && ALLOWED_WORKER_PREFIXES.some(prefix => parts[0] === prefix);
-    }
-
-    return false;
-  } catch {
-    return false;
-  }
-}
+import { isAllowedUrl } from '@/lib/mcp-url-allowlist';
 
 /**
  * POST /api/debug/test-mcp

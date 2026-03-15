@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from '@clerk/nextjs/server';
 import type { TurnResponseRequest } from '@/types/api-responses';
 import OpenAI from "openai";
+import { isAllowedUrl } from '@/lib/mcp-url-allowlist';
 
 // Simple auth helper
 async function requireAuth(): Promise<{ userId: string } | NextResponse> {
@@ -42,6 +43,20 @@ export async function POST(request: NextRequest) {
         { error: "Messages are required" },
         { status: 400 }
       );
+    }
+
+    // SSRF protection: validate MCP tool URLs against allowlist
+    if (tools && Array.isArray(tools)) {
+      for (const tool of tools) {
+        if (tool.type === 'mcp' && typeof tool.server_url === 'string') {
+          if (!isAllowedUrl(tool.server_url)) {
+            return NextResponse.json(
+              { error: `MCP server URL not allowed: ${tool.server_url}` },
+              { status: 400 }
+            );
+          }
+        }
+      }
     }
 
     // Debug: Log tool configuration (without sensitive headers)
