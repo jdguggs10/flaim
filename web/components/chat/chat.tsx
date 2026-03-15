@@ -86,14 +86,13 @@ const Chat: React.FC<ChatProps> = ({
         <div className="flex-1 min-h-0 overflow-y-auto px-10 flex flex-col">
           <div className="mt-auto space-y-5 pt-4">
             {items.map((item, index) => (
-              <React.Fragment key={index}>
+              <React.Fragment key={'id' in item && item.id ? item.id : `item-${index}`}>
                 {item.type === "tool_call" ? (
                   <ToolCall toolCall={item} />
                 ) : item.type === "message" ? (
                   <div className="flex flex-col gap-1">
                     <Message message={item} />
-                    {item.content &&
-                      item.content[0].annotations &&
+                    {item.content?.[0]?.annotations &&
                       item.content[0].annotations.length > 0 && (
                         <Annotations
                           annotations={item.content[0].annotations}
@@ -124,6 +123,7 @@ const Chat: React.FC<ChatProps> = ({
                       dir="auto"
                       rows={2}
                       placeholder="Message..."
+                      aria-label="Message input"
                       className="mb-2 resize-none border-0 focus:outline-none text-sm bg-transparent px-0 pb-6 pt-2"
                       value={inputMessageText}
                       onChange={(e) => setinputMessageText(e.target.value)}
@@ -136,6 +136,7 @@ const Chat: React.FC<ChatProps> = ({
                     onClick={clearConversation}
                     className="flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground hover:bg-muted focus-visible:outline-none"
                     title="Clear conversation"
+                    aria-label="Clear conversation"
                     type="button"
                   >
                     <Trash2 size={18} />
@@ -143,6 +144,7 @@ const Chat: React.FC<ChatProps> = ({
                   <button
                     disabled={!inputMessageText}
                     data-testid="send-button"
+                    aria-label="Send message"
                     className="flex size-8 items-center justify-center rounded-full bg-foreground text-background transition-colors hover:opacity-70 focus-visible:outline-none focus-visible:outline-foreground disabled:bg-muted disabled:text-muted-foreground disabled:hover:opacity-100"
                     onClick={() => {
                       onSendMessage(inputMessageText);

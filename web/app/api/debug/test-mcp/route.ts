@@ -69,6 +69,11 @@ function isAllowedUrl(urlString: string): boolean {
  * Only allows requests to known MCP server hosts (SSRF protection).
  */
 export async function POST(req: NextRequest) {
+  // Environment gate: only available in development or when explicitly enabled
+  if (process.env.NODE_ENV !== "development" && process.env.ENABLE_DEBUG_ROUTES !== "true") {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
   const startedAt = Date.now();
   const respond = (body: Record<string, unknown>, status = 200) => (
     NextResponse.json({
@@ -100,7 +105,10 @@ export async function POST(req: NextRequest) {
       }, 403);
     }
 
-    const bearer = (await getToken?.()) || undefined;
+    const bearer = await getToken?.();
+    if (!bearer) {
+      return respond({ connected: false, error: 'Authentication token unavailable' }, 401);
+    }
 
     // Try to make a tools/list request to the MCP server
     const mcpRes = await fetch(serverUrl, {
@@ -109,7 +117,7 @@ export async function POST(req: NextRequest) {
         'Content-Type': 'application/json',
         // MCP SDK rejects requests without an explicit Accept header (406)
         'Accept': 'application/json, text/event-stream',
-        ...(bearer ? { 'Authorization': `Bearer ${bearer}` } : {})
+        'Authorization': `Bearer ${bearer}`,
       },
       body: JSON.stringify({
         jsonrpc: '2.0',

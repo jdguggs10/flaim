@@ -61,6 +61,7 @@ export default function Assistant() {
     const userItem: Item = {
       type: "message",
       role: "user",
+      id: crypto.randomUUID(),
       content: [{ type: "input_text", text: message.trim() }],
     };
     const userMessage: any = {

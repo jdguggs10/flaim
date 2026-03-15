@@ -54,7 +54,7 @@ export function LeagueDropdown() {
 
   const copyLeagueId = () => {
     if (activeLeague) {
-      navigator.clipboard.writeText(activeLeague.leagueId.toString());
+      navigator.clipboard.writeText(activeLeague.leagueId.toString()).catch(() => {});
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     }

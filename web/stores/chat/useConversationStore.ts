@@ -44,6 +44,7 @@ const useConversationStore = create<ConversationState>((set, get) => ({
     {
       type: "message",
       role: "assistant",
+      id: "initial-greeting",
       content: [{ type: "output_text", text: INITIAL_MESSAGE }],
     },
   ],
@@ -85,6 +86,7 @@ const useConversationStore = create<ConversationState>((set, get) => ({
         {
           type: "message",
           role: "assistant",
+          id: "initial-greeting",
           content: [{ type: "output_text", text: INITIAL_MESSAGE }],
         },
       ],

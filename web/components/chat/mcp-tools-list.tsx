@@ -7,35 +7,35 @@ interface Props {
   item: McpListToolsItem;
 }
 
-export default function McpToolsList({ item }: Props) {
-  function ToolDescription({ description }: { description: string }) {
-    const [expanded, setExpanded] = useState(false);
-    return (
-      <div className="flex items-start mt-1 gap-2">
-        <div
-          className={
-            `text-muted-foreground text-xs whitespace-pre-wrap transition-all duration-200 ` +
-            (expanded ? "line-clamp-none" : "line-clamp-1 overflow-hidden")
-          }
-          style={{ maxWidth: 400 }}
-        >
-          {description}
-        </div>
-        <div
-          className="flex items-center text-xs text-muted-foreground focus:outline-none select-none cursor-pointer"
-          onClick={() => setExpanded((prev) => !prev)}
-        >
-          <ChevronRight
-            className={`h-4 w-4 transition-transform duration-200 mr-1 ${
-              expanded ? "rotate-90" : "rotate-0"
-            }`}
-            aria-hidden="true"
-          />
-        </div>
+function ToolDescription({ description }: { description: string }) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div className="flex items-start mt-1 gap-2">
+      <div
+        className={
+          `text-muted-foreground text-xs whitespace-pre-wrap transition-all duration-200 ` +
+          (expanded ? "line-clamp-none" : "line-clamp-1 overflow-hidden")
+        }
+        style={{ maxWidth: 400 }}
+      >
+        {description}
       </div>
-    );
-  }
+      <div
+        className="flex items-center text-xs text-muted-foreground focus:outline-none select-none cursor-pointer"
+        onClick={() => setExpanded((prev) => !prev)}
+      >
+        <ChevronRight
+          className={`h-4 w-4 transition-transform duration-200 mr-1 ${
+            expanded ? "rotate-90" : "rotate-0"
+          }`}
+          aria-hidden="true"
+        />
+      </div>
+    </div>
+  );
+}
 
+export default function McpToolsList({ item }: Props) {
   return (
     <div className="flex flex-col">
       <div className="flex">

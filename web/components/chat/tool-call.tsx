@@ -375,14 +375,12 @@ function McpCallCell({ toolCall }: ToolCallProps) {
 }
 
 function CodeInterpreterCell({ toolCall }: ToolCallProps) {
-  const [open, setOpen] = React.useState(false);
   return (
     <div className="flex flex-col w-[70%] relative mb-[-8px]">
       <div className="flex flex-col text-sm rounded-[16px]">
         <div className="font-semibold p-3 pl-0 text-muted-foreground rounded-b-none flex gap-2">
           <div
-            className="flex gap-2 items-center text-info ml-[-8px] cursor-pointer"
-            onClick={() => setOpen(!open)}
+            className="flex gap-2 items-center text-info ml-[-8px]"
           >
             <Code2 size={16} />
             <div className="text-sm font-medium">

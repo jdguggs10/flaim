@@ -64,7 +64,7 @@ export default function ChatInterface() {
           <>
             {/* Backdrop */}
             <div
-              className="fixed inset-0 z-50 bg-black/50 lg:hidden"
+              className="fixed inset-0 z-50 bg-foreground/50 lg:hidden"
               onClick={() => setIsToolsPanelOpen(false)}
             />
 

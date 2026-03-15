@@ -7,6 +7,9 @@ interface MessageProps {
 }
 
 const Message: React.FC<MessageProps> = ({ message }) => {
+  const firstContent = message.content?.[0];
+  if (!firstContent) return null;
+
   return (
     <div className="text-sm">
       {message.role === "user" ? (
@@ -16,7 +19,7 @@ const Message: React.FC<MessageProps> = ({ message }) => {
               <div>
                 <div>
                   <ReactMarkdown>
-                    {message.content[0].text as string}
+                    {firstContent.text as string}
                   </ReactMarkdown>
                 </div>
               </div>
@@ -29,10 +32,10 @@ const Message: React.FC<MessageProps> = ({ message }) => {
             <div className="mr-4 rounded-[16px] px-4 py-2 md:mr-24 text-foreground bg-card font-light">
               <div>
                 <ReactMarkdown>
-                  {message.content[0].text as string}
+                  {firstContent.text as string}
                 </ReactMarkdown>
-                {message.content[0].annotations &&
-                  message.content[0].annotations
+                {firstContent.annotations &&
+                  firstContent.annotations
                     .filter(
                       (a) =>
                         a.type === "container_file_citation" &&
