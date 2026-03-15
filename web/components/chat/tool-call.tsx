@@ -5,8 +5,13 @@ import { ToolCallItem } from "@/lib/chat/assistant";
 import useToolsStore from "@/stores/chat/useToolsStore";
 import { BookOpenText, Clock, Globe, Zap, Code2, Download, Timer, Copy, Check, ChevronDown, ChevronRight, AlertTriangle, ExternalLink } from "lucide-react";
 import Link from "next/link";
-import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import { PrismLight as SyntaxHighlighter } from "react-syntax-highlighter";
+import json from "react-syntax-highlighter/dist/esm/languages/prism/json";
+import python from "react-syntax-highlighter/dist/esm/languages/prism/python";
 import { coy } from "react-syntax-highlighter/dist/esm/styles/prism";
+
+SyntaxHighlighter.registerLanguage("json", json);
+SyntaxHighlighter.registerLanguage("python", python);
 
 interface ToolCallProps {
   toolCall: ToolCallItem;
