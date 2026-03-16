@@ -68,18 +68,18 @@ async function buildHealthData(env: Env) {
     })
   );
 
-  for (const result of results) {
+  results.forEach((result, index) => {
     if (result.status === 'fulfilled') {
       healthData[result.value.key] = result.value.status;
       // Preserve previous health semantics: degrade only when unavailable.
       if (result.value.status === 'no_binding') healthData.status = 'degraded';
     } else {
       // Promise rejected — binding threw
-      const check = checks[results.indexOf(result)];
+      const check = checks[index];
       healthData[check.key] = 'unreachable';
       healthData.status = 'degraded';
     }
-  }
+  });
 
   return healthData;
 }
