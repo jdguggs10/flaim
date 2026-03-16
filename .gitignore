@@ -118,3 +118,4 @@ extension/*.zip
 
 # Submission evidence (local only)
 docs/submissions/openai-screenshots/
+.vercel
