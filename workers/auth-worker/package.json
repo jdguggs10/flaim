@@ -29,6 +29,7 @@
     "wrangler": "^4.53.0"
   },
   "dependencies": {
+    "@flaim/worker-shared": "*",
     "@supabase/supabase-js": "^2.52.0",
     "hono": "^4.7.0"
   }

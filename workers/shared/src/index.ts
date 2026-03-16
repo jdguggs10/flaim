@@ -45,6 +45,10 @@ export {
 export { ErrorCode, extractErrorCode } from './errors.js';
 export type { ErrorCodeValue, ExecuteResponse } from './errors.js';
 
+// Logging
+export { logEvalEvent } from './logging.js';
+export type { TraceLogEvent } from './logging.js';
+
 // Tracing utilities
 export {
   CORRELATION_ID_HEADER,
