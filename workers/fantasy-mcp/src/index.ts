@@ -71,7 +71,8 @@ async function buildHealthData(env: Env) {
   for (const result of results) {
     if (result.status === 'fulfilled') {
       healthData[result.value.key] = result.value.status;
-      if (result.value.status !== 'connected') healthData.status = 'degraded';
+      // Preserve previous health semantics: degrade only when unavailable.
+      if (result.value.status === 'no_binding') healthData.status = 'degraded';
     } else {
       // Promise rejected — binding threw
       const check = checks[results.indexOf(result)];

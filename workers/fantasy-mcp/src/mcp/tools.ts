@@ -449,21 +449,22 @@ export function getUnifiedTools(): UnifiedTool[] {
       handler: async (_args, env, authHeader, correlationId, evalRunId, evalTraceId) => {
         return withToolLogging(correlationId, 'get_user_session', 'session', async () => {
         try {
-          // Fetch all platform leagues in parallel
-          const [espnResult, yahooResult, sleeperResult] = await Promise.allSettled([
-            fetchUserLeagues(env, authHeader, correlationId, evalRunId, evalTraceId),
+          // Fetch ESPN first so auth failures return immediately.
+          const espnData = await fetchUserLeagues(env, authHeader, correlationId, evalRunId, evalTraceId);
+
+          // Check ESPN auth errors
+          if (espnData.status === 401 || espnData.status === 403) {
+            return mcpAuthError('https://api.flaim.app/mcp');
+          }
+
+          // Fetch Yahoo + Sleeper in parallel after ESPN auth passes.
+          const [yahooResult, sleeperResult] = await Promise.allSettled([
             fetchYahooLeagues(env, authHeader, correlationId, evalRunId, evalTraceId),
             fetchSleeperLeagues(env, authHeader, correlationId, evalRunId, evalTraceId),
           ]);
 
-          const espnData = espnResult.status === 'fulfilled' ? espnResult.value : { leagues: [] as UserLeague[] };
           const yahooData = yahooResult.status === 'fulfilled' ? yahooResult.value : { leagues: [] as UserLeague[] };
           const sleeperData = sleeperResult.status === 'fulfilled' ? sleeperResult.value : { leagues: [] as UserLeague[] };
-
-          // Check ESPN auth errors
-          if ('status' in espnData && (espnData.status === 401 || espnData.status === 403)) {
-            return mcpAuthError('https://api.flaim.app/mcp');
-          }
 
           // Combine all leagues
           const allLeagues = [...espnData.leagues, ...yahooData.leagues, ...sleeperData.leagues];
