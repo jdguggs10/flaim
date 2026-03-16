@@ -14,17 +14,6 @@ interface WebSearchTool extends WebSearchConfig {
   type: "web_search";
 }
 
-interface McpState {
-  mcpEnabled: boolean;
-  mcpConfig: McpConfig;
-  selectedPlatform: string;
-  isAuthenticated: boolean;
-  clerkUserId: string;
-  clerkToken: string;
-  mcpAvailableTools: string[];
-  disabledMcpTools: string[];
-}
-
 interface MultiMcpState {
   mcpEnabled: boolean;
   mcpConfig: McpConfig;
@@ -35,73 +24,6 @@ interface MultiMcpState {
   mcpAvailableToolsByServer: Record<string, string[]>;
   disabledMcpToolsByServer: Record<string, string[]>;
 }
-
-export const buildMcpToolFromState = (state: McpState) => {
-  // Allow disabling MCP entirely via env flag
-  const mcpGloballyDisabled = process.env.NEXT_PUBLIC_DISABLE_MCP === "true";
-
-  // Enable MCP for authenticated ESPN users when a server is configured
-  const shouldEnableMcp =
-    state.selectedPlatform === "ESPN" &&
-    state.isAuthenticated &&
-    !!state.mcpConfig.server_url &&
-    !!state.mcpConfig.server_label;
-
-  if (mcpGloballyDisabled || !state.mcpEnabled || !shouldEnableMcp) {
-    return null;
-  }
-
-  // Validate MCP server URL
-  if (
-    !state.mcpConfig.server_url.startsWith("http://") &&
-    !state.mcpConfig.server_url.startsWith("https://")
-  ) {
-    console.error("[ERROR] Invalid MCP server URL:", state.mcpConfig.server_url);
-    return null;
-  }
-
-  // Follow documented pattern from Responses API & MCP Tools docs
-  const mcpTool: any = {
-    type: "mcp",
-    server_label: state.mcpConfig.server_label,
-    server_url: state.mcpConfig.server_url,
-    headers: {
-      "Content-Type": "application/json",
-      ...(state.clerkToken ? { Authorization: `Bearer ${state.clerkToken}` } : {}),
-    },
-  };
-
-  // Set approval requirement (following docs pattern)
-  if (state.mcpConfig.skip_approval) {
-    mcpTool.require_approval = "never";
-  } else {
-    mcpTool.require_approval = "manual";
-  }
-
-  // Set allowed tools to limit what gets exposed (following docs pattern)
-  // Prefer disabledMcpTools list when available; fall back to legacy allowed_tools.
-  if (state.mcpAvailableTools.length > 0 && state.disabledMcpTools.length > 0) {
-    const allowed = state.mcpAvailableTools.filter(
-      (tool) => !state.disabledMcpTools.includes(tool)
-    );
-    mcpTool.allowed_tools = allowed;
-  } else {
-    // Legacy support: allowed_tools string
-    // Sentinel "none" means disable all tools (different from empty which means "no restriction")
-    const allowedTools = (state.mcpConfig.allowed_tools || "").trim();
-    if (allowedTools === "none") {
-      // Explicitly disable all tools by setting empty array
-      mcpTool.allowed_tools = [];
-    } else if (allowedTools) {
-      mcpTool.allowed_tools = allowedTools.split(",")
-        .map((t) => t.trim())
-        .filter((t) => t);
-    }
-    // If allowedTools is empty string, don't set allowed_tools (means no restriction)
-  }
-
-  return mcpTool;
-};
 
 /**
  * Validate MCP server URL scheme
@@ -122,8 +44,8 @@ export const buildMcpToolsFromState = (state: MultiMcpState): any[] => {
     return [];
   }
 
-  // Only mount MCP servers for ESPN platform when authenticated
-  if (state.selectedPlatform !== "ESPN" || !state.isAuthenticated) {
+  // Only mount MCP servers when authenticated
+  if (!state.isAuthenticated) {
     return [];
   }
 
@@ -252,9 +174,11 @@ export const getTools = () => {
   });
 
   // Debug logging for MCP auth troubleshooting
-  const serverCount = mcpTools.length;
-  console.log(`[MCP Config] Platform: ${selectedPlatform}, Authenticated: ${isAuthenticated}, Servers: ${serverCount}`);
-  console.log(`[MCP Auth] User ID: ${clerkUserId ? 'present' : 'MISSING'}, Token: ${clerkToken ? 'present' : 'MISSING'}`);
+  if (useToolsStore.getState().debugMode) {
+    const serverCount = mcpTools.length;
+    console.log(`[MCP Config] Platform: ${selectedPlatform}, Authenticated: ${isAuthenticated}, Servers: ${serverCount}`);
+    console.log(`[MCP Auth] User ID: ${clerkUserId ? 'present' : 'MISSING'}, Token: ${clerkToken ? 'present' : 'MISSING'}`);
+  }
 
   if (mcpTools.length > 0 && (!clerkUserId || !clerkToken)) {
     console.warn(
