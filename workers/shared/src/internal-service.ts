@@ -36,6 +36,34 @@ export function withInternalServiceToken(
   return headers;
 }
 
+export interface InternalServiceResult {
+  authorized: boolean;
+  error?: { success: false; error: string; code: string };
+  status?: number;
+}
+
+export async function validateInternalService(
+  request: Request,
+  env: { INTERNAL_SERVICE_TOKEN?: string },
+  target: string,
+): Promise<InternalServiceResult> {
+  if (!env.INTERNAL_SERVICE_TOKEN) {
+    return {
+      authorized: false,
+      error: { success: false, error: `INTERNAL_SERVICE_TOKEN is not configured for ${target}`, code: 'INTERNAL_AUTH_NOT_CONFIGURED' },
+      status: 500,
+    };
+  }
+  if (!(await hasValidInternalServiceToken(request, env))) {
+    return {
+      authorized: false,
+      error: { success: false, error: `Missing or invalid ${INTERNAL_SERVICE_TOKEN_HEADER}`, code: 'INTERNAL_AUTH_REQUIRED' },
+      status: 403,
+    };
+  }
+  return { authorized: true };
+}
+
 export async function hasValidInternalServiceToken(
   request: Request,
   env: { INTERNAL_SERVICE_TOKEN?: string }
