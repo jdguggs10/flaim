@@ -7,6 +7,7 @@
 import { create } from 'zustand';
 import type { EspnLeague } from '@/lib/espn-types';
 import { SPORT_CONFIG, type Sport } from '@/lib/chat/league-mapper';
+import { getDefaultSeasonYear } from '@/lib/season-utils';
 
 /** Platform-agnostic league used throughout the chat UI */
 export interface ChatLeague {
@@ -51,7 +52,7 @@ interface LeaguesState {
 
   // Actions
   fetchSetupStatus: () => Promise<SetupStatus>;
-  fetchLeagues: () => Promise<void>;
+  fetchLeagues: (forceRefresh?: boolean) => Promise<void>;
   fetchPreferences: () => Promise<void>;
   setDefaultSport: (sport: string) => Promise<void>;
   setDefaultLeague: (league: ChatLeague) => Promise<void>;
@@ -85,9 +86,9 @@ export const useLeaguesStore = create<LeaguesState>()((set, get) => ({
     }
   },
 
-  fetchLeagues: async () => {
+  fetchLeagues: async (forceRefresh?: boolean) => {
     const state = get();
-    if (state.leagues.length > 0) return;
+    if (!forceRefresh && state.leagues.length > 0) return;
 
     set({ isLoading: true, error: null });
     try {
@@ -316,9 +317,9 @@ export const useLeaguesStore = create<LeaguesState>()((set, get) => ({
   getLeaguesForSport: (sport) => {
     const { leagues } = get();
     // Only show current-season leagues (no historic seasons).
-    // seasonYear is canonical (auth-worker normalizes); calendar year is close enough for filtering.
-    const currentYear = new Date().getFullYear();
-    return leagues.filter(l => l.sport === sport && l.seasonYear === currentYear);
+    // Use sport-specific rollover logic shared with the auth-worker.
+    const seasonYear = getDefaultSeasonYear(sport as 'baseball' | 'football' | 'basketball' | 'hockey');
+    return leagues.filter(l => l.sport === sport && l.seasonYear === seasonYear);
   },
 }));
 

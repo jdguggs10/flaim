@@ -7,6 +7,7 @@ import { Annotation } from "@/components/chat/annotations";
 import { functionsMap } from "@/config/functions";
 import { redactSensitive } from "@/lib/chat/trace-utils";
 import type { TraceToolEvent } from "@/lib/chat/trace-types";
+import useToolsStore from "@/stores/chat/useToolsStore";
 
 let activeController: AbortController | null = null;
 
@@ -353,8 +354,9 @@ export const processMessages = async (controller?: AbortController) => {
 
   await handleTurn(inputItems, tools, async ({ event, data }) => {
     if (signal.aborted) return;
-    // DEBUG: Log all events for analysis
-    console.log(`[SSE EVENT] ${event}`, data);
+    if (useToolsStore.getState().debugMode) {
+      console.log(`[SSE EVENT] ${event}`, data);
+    }
 
     switch (event) {
       case "response.created":
@@ -887,7 +889,9 @@ export const processMessages = async (controller?: AbortController) => {
       }
 
       case "response.completed": {
-        console.log("response completed", data);
+        if (useToolsStore.getState().debugMode) {
+          console.log("response completed", data);
+        }
         setLoadingState({ status: "idle", thinkingText: "" });
         const { response } = data;
         const lastAssistantMessage = [...getCurrentChatMessages()]

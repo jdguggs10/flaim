@@ -102,7 +102,6 @@ const useToolsStore = create<StoreState>()(
         set({ webSearchEnabled: enabled });
       },
       functionsEnabled: true,
-      previousFunctionsEnabled: true,
       setFunctionsEnabled: (enabled) => {
         set({ functionsEnabled: enabled });
       },

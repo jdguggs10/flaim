@@ -71,6 +71,7 @@ export default function Assistant() {
 
     try {
       setLoadingState({ status: "connecting", thinkingText: "" });
+      await refreshClerkToken();
       addConversationItem(userMessage);
       addChatMessage(userItem);
       await processMessages();
@@ -99,6 +100,7 @@ export default function Assistant() {
       approval_request_id: id,
     } as any;
     try {
+      await refreshClerkToken();
       addConversationItem(approvalItem);
       await processMessages();
     } catch (error) {
@@ -141,11 +143,10 @@ export default function Assistant() {
       setClerkUserId(clerkUserId || "");
       try {
         const token = (await getToken?.({ template: "cf-worker" })) || "";
-        if (token) {
-          setClerkToken(token);
-        }
+        setClerkToken(token);
       } catch (error) {
         console.warn("Unable to fetch Clerk token for MCP", error);
+        setClerkToken("");
       }
     };
     void syncClerkAuth();
@@ -153,11 +154,22 @@ export default function Assistant() {
 
   const { fetchPreferences } = useLeaguesStore();
 
+  // Helper to refresh Clerk token before API calls (tokens expire after ~1 hour)
+  const refreshClerkToken = async () => {
+    try {
+      const token = (await getToken?.({ template: "cf-worker" })) || "";
+      setClerkToken(token);
+    } catch (error) {
+      console.warn("Unable to refresh Clerk token", error);
+      setClerkToken("");
+    }
+  };
+
   // Fetch setup status, leagues, and preferences when signed in
   useEffect(() => {
     if (isSignedIn && !isLoading) {
       fetchSetupStatus().then(() => setSetupChecked(true));
-      fetchLeagues();
+      fetchLeagues(true);
       fetchPreferences();
     }
   }, [isSignedIn, isLoading, fetchSetupStatus, fetchLeagues, fetchPreferences]);
