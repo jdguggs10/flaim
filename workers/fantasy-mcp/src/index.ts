@@ -53,47 +53,33 @@ async function buildHealthData(env: Env) {
     }
   };
 
-  // Test ESPN client connectivity
-  if (env.ESPN) {
-    try {
-      const espnHealth = await env.ESPN.fetch(new Request('https://internal/health'));
-      healthData.espn_status = espnHealth.ok ? 'connected' : 'error';
-    } catch {
-      healthData.espn_status = 'unreachable';
-      healthData.status = 'degraded';
-    }
-  } else {
-    healthData.espn_status = 'no_binding';
-    healthData.status = 'degraded';
-  }
+  // Test client connectivity in parallel
+  const checks = [
+    { key: 'espn_status', binding: env.ESPN },
+    { key: 'yahoo_status', binding: env.YAHOO },
+    { key: 'sleeper_status', binding: env.SLEEPER },
+  ] as const;
 
-  // Test Yahoo client connectivity
-  if (env.YAHOO) {
-    try {
-      const yahooHealth = await env.YAHOO.fetch(new Request('https://internal/health'));
-      healthData.yahoo_status = yahooHealth.ok ? 'connected' : 'error';
-    } catch {
-      healthData.yahoo_status = 'unreachable';
-      healthData.status = 'degraded';
-    }
-  } else {
-    healthData.yahoo_status = 'no_binding';
-    healthData.status = 'degraded';
-  }
+  const results = await Promise.allSettled(
+    checks.map(async ({ key, binding }) => {
+      if (!binding) return { key, status: 'no_binding' as const };
+      const res = await binding.fetch(new Request('https://internal/health'));
+      return { key, status: res.ok ? 'connected' as const : 'error' as const };
+    })
+  );
 
-  // Test Sleeper client connectivity
-  if (env.SLEEPER) {
-    try {
-      const sleeperHealth = await env.SLEEPER.fetch(new Request('https://internal/health'));
-      healthData.sleeper_status = sleeperHealth.ok ? 'connected' : 'error';
-    } catch {
-      healthData.sleeper_status = 'unreachable';
+  results.forEach((result, index) => {
+    if (result.status === 'fulfilled') {
+      healthData[result.value.key] = result.value.status;
+      // Preserve previous health semantics: degrade only when unavailable.
+      if (result.value.status === 'no_binding') healthData.status = 'degraded';
+    } else {
+      // Promise rejected — binding threw
+      const check = checks[index];
+      healthData[check.key] = 'unreachable';
       healthData.status = 'degraded';
     }
-  } else {
-    healthData.sleeper_status = 'no_binding';
-    healthData.status = 'degraded';
-  }
+  });
 
   return healthData;
 }

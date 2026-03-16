@@ -21,7 +21,6 @@ interface StoreState {
   webSearchEnabled: boolean;
   setWebSearchEnabled: (enabled: boolean) => void;
   functionsEnabled: boolean;
-  //previousFunctionsEnabled: boolean;
   setFunctionsEnabled: (enabled: boolean) => void;
   codeInterpreterEnabled: boolean;
   setCodeInterpreterEnabled: (enabled: boolean) => void;

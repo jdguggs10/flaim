@@ -7,6 +7,7 @@ import {
   CORRELATION_ID_HEADER,
   EVAL_RUN_HEADER,
   EVAL_TRACE_HEADER,
+  extractErrorCode,
   getCorrelationId,
   getEvalContext,
   hasValidInternalServiceToken,
@@ -115,7 +116,7 @@ app.post('/execute', async (c) => {
     const response = c.json({
       success: false,
       error: message,
-      code: 'INTERNAL_ERROR',
+      code: extractErrorCode(error),
     } satisfies ExecuteResponse, 500);
     response.headers.set(CORRELATION_ID_HEADER, correlationId);
     if (evalRunId) response.headers.set(EVAL_RUN_HEADER, evalRunId);
