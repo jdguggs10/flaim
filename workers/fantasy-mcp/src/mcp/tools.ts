@@ -148,6 +148,138 @@ async function fetchUserLeagues(
   }
 }
 
+async function fetchYahooLeagues(
+  env: Env,
+  authHeader?: string,
+  correlationId?: string,
+  evalRunId?: string,
+  evalTraceId?: string
+): Promise<{ leagues: UserLeague[]; error?: string }> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 5000);
+  const cid = correlationId || 'no-cid';
+
+  try {
+    console.log(`[fantasy-mcp] ${cid} fetching Yahoo leagues from auth-worker`);
+
+    const baseHeaders: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...(authHeader ? { Authorization: authHeader } : {}),
+    };
+    const withCorrelation = correlationId ? withCorrelationId(baseHeaders, correlationId) : new Headers(baseHeaders);
+    const withInternal = withInternalServiceToken(withCorrelation, env, 'auth-worker /internal/leagues/yahoo');
+    const headers = withEvalHeaders(withInternal, evalRunId, evalTraceId);
+
+    const response = await env.AUTH_WORKER.fetch(
+      new Request('https://internal/internal/leagues/yahoo', {
+        headers,
+        signal: controller.signal,
+      })
+    );
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      console.error(`[fantasy-mcp] ${cid} Yahoo leagues fetch failed: ${response.status}`);
+      return { leagues: [] };
+    }
+
+    const data = (await response.json()) as {
+      leagues?: Array<{
+        sport: string;
+        leagueKey: string;
+        leagueName: string;
+        teamId?: string;
+        teamName?: string;
+        seasonYear: number;
+      }>;
+    };
+
+    const leagues: UserLeague[] = (data.leagues || []).map((league) => ({
+      platform: 'yahoo' as const,
+      sport: league.sport,
+      leagueId: league.leagueKey,
+      leagueName: league.leagueName,
+      teamId: league.teamId || '',
+      teamName: league.teamName,
+      seasonYear: league.seasonYear,
+    }));
+
+    console.log(`[fantasy-mcp] ${cid} found ${leagues.length} Yahoo leagues`);
+    return { leagues };
+  } catch (error) {
+    clearTimeout(timeoutId);
+    const isTimeout = (error as Error).name === 'AbortError';
+    console.error(`[fantasy-mcp] ${cid} failed to fetch Yahoo leagues: ${isTimeout ? 'timeout' : (error as Error).message}`);
+    return { leagues: [] };
+  }
+}
+
+async function fetchSleeperLeagues(
+  env: Env,
+  authHeader?: string,
+  correlationId?: string,
+  evalRunId?: string,
+  evalTraceId?: string
+): Promise<{ leagues: UserLeague[]; error?: string }> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 5000);
+  const cid = correlationId || 'no-cid';
+
+  try {
+    console.log(`[fantasy-mcp] ${cid} fetching Sleeper leagues from auth-worker`);
+
+    const baseHeaders: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...(authHeader ? { Authorization: authHeader } : {}),
+    };
+    const withCorrelation = correlationId ? withCorrelationId(baseHeaders, correlationId) : new Headers(baseHeaders);
+    const withInternal = withInternalServiceToken(withCorrelation, env, 'auth-worker /internal/leagues/sleeper');
+    const headers = withEvalHeaders(withInternal, evalRunId, evalTraceId);
+
+    const response = await env.AUTH_WORKER.fetch(
+      new Request('https://internal/internal/leagues/sleeper', {
+        headers,
+        signal: controller.signal,
+      })
+    );
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      console.error(`[fantasy-mcp] ${cid} Sleeper leagues fetch failed: ${response.status}`);
+      return { leagues: [] };
+    }
+
+    const data = (await response.json()) as {
+      leagues?: Array<{
+        sport: string;
+        leagueId: string;
+        leagueName: string;
+        rosterId?: number;
+        seasonYear: number;
+      }>;
+    };
+
+    const leagues: UserLeague[] = (data.leagues || []).map((league) => ({
+      platform: 'sleeper' as const,
+      sport: league.sport,
+      leagueId: league.leagueId,
+      leagueName: league.leagueName,
+      teamId: league.rosterId ? String(league.rosterId) : '',
+      seasonYear: league.seasonYear,
+    }));
+
+    console.log(`[fantasy-mcp] ${cid} found ${leagues.length} Sleeper leagues`);
+    return { leagues };
+  } catch (error) {
+    clearTimeout(timeoutId);
+    const isTimeout = (error as Error).name === 'AbortError';
+    console.error(`[fantasy-mcp] ${cid} failed to fetch Sleeper leagues: ${isTimeout ? 'timeout' : (error as Error).message}`);
+    return { leagues: [] };
+  }
+}
+
 // =============================================================================
 // HELPER: Format MCP response
 // =============================================================================
@@ -317,108 +449,24 @@ export function getUnifiedTools(): UnifiedTool[] {
       handler: async (_args, env, authHeader, correlationId, evalRunId, evalTraceId) => {
         return withToolLogging(correlationId, 'get_user_session', 'session', async () => {
         try {
-          // Fetch ESPN leagues
-          const { leagues: espnLeagues, status: fetchStatus } = await fetchUserLeagues(
-            env,
-            authHeader,
-            correlationId,
-            evalRunId,
-            evalTraceId
-          );
+          // Fetch all platform leagues in parallel
+          const [espnResult, yahooResult, sleeperResult] = await Promise.allSettled([
+            fetchUserLeagues(env, authHeader, correlationId, evalRunId, evalTraceId),
+            fetchYahooLeagues(env, authHeader, correlationId, evalRunId, evalTraceId),
+            fetchSleeperLeagues(env, authHeader, correlationId, evalRunId, evalTraceId),
+          ]);
 
-          if (fetchStatus === 401 || fetchStatus === 403) {
+          const espnData = espnResult.status === 'fulfilled' ? espnResult.value : { leagues: [] as UserLeague[] };
+          const yahooData = yahooResult.status === 'fulfilled' ? yahooResult.value : { leagues: [] as UserLeague[] };
+          const sleeperData = sleeperResult.status === 'fulfilled' ? sleeperResult.value : { leagues: [] as UserLeague[] };
+
+          // Check ESPN auth errors
+          if ('status' in espnData && (espnData.status === 401 || espnData.status === 403)) {
             return mcpAuthError('https://api.flaim.app/mcp');
           }
 
-          // Fetch Yahoo leagues
-          const yahooLeagues: UserLeague[] = [];
-          try {
-            const baseHeaders: Record<string, string> = {
-              'Content-Type': 'application/json',
-              ...(authHeader ? { Authorization: authHeader } : {}),
-            };
-            const withCorrelation = correlationId ? withCorrelationId(baseHeaders, correlationId) : new Headers(baseHeaders);
-            const withInternal = withInternalServiceToken(withCorrelation, env, 'auth-worker /internal/leagues/yahoo');
-            const headers = withEvalHeaders(withInternal, evalRunId, evalTraceId);
-
-            const yahooResponse = await env.AUTH_WORKER.fetch(
-              new Request('https://internal/internal/leagues/yahoo', {
-                headers,
-              })
-            );
-            if (yahooResponse.ok) {
-              const yahooData = (await yahooResponse.json()) as {
-                leagues?: Array<{
-                  sport: string;
-                  leagueKey: string;
-                  leagueName: string;
-                  teamId?: string;
-                  teamName?: string;
-                  seasonYear: number;
-                }>;
-              };
-              if (yahooData.leagues) {
-                for (const league of yahooData.leagues) {
-                  yahooLeagues.push({
-                    platform: 'yahoo',
-                    sport: league.sport,
-                    leagueId: league.leagueKey,
-                    leagueName: league.leagueName,
-                    teamId: league.teamId || '',
-                    teamName: league.teamName,
-                    seasonYear: league.seasonYear,
-                  });
-                }
-              }
-            }
-          } catch (error) {
-            console.error('[get_user_session] Failed to fetch Yahoo leagues:', error);
-            // Don't fail - just return ESPN leagues
-          }
-
-          // Fetch Sleeper leagues
-          const sleeperLeagues: UserLeague[] = [];
-          try {
-            const baseHeaders: Record<string, string> = {
-              'Content-Type': 'application/json',
-              ...(authHeader ? { Authorization: authHeader } : {}),
-            };
-            const withCorrelation = correlationId ? withCorrelationId(baseHeaders, correlationId) : new Headers(baseHeaders);
-            const withInternal = withInternalServiceToken(withCorrelation, env, 'auth-worker /internal/leagues/sleeper');
-            const headers = withEvalHeaders(withInternal, evalRunId, evalTraceId);
-
-            const sleeperResponse = await env.AUTH_WORKER.fetch(
-              new Request('https://internal/internal/leagues/sleeper', { headers })
-            );
-            if (sleeperResponse.ok) {
-              const sleeperData = (await sleeperResponse.json()) as {
-                leagues?: Array<{
-                  sport: string;
-                  leagueId: string;
-                  leagueName: string;
-                  rosterId?: number;
-                  seasonYear: number;
-                }>;
-              };
-              if (sleeperData.leagues) {
-                for (const league of sleeperData.leagues) {
-                  sleeperLeagues.push({
-                    platform: 'sleeper',
-                    sport: league.sport,
-                    leagueId: league.leagueId,
-                    leagueName: league.leagueName,
-                    teamId: league.rosterId ? String(league.rosterId) : '',
-                    seasonYear: league.seasonYear,
-                  });
-                }
-              }
-            }
-          } catch (error) {
-            console.error('[get_user_session] Failed to fetch Sleeper leagues:', error);
-          }
-
           // Combine all leagues
-          const allLeagues = [...espnLeagues, ...yahooLeagues, ...sleeperLeagues];
+          const allLeagues = [...espnData.leagues, ...yahooData.leagues, ...sleeperData.leagues];
 
           // Filter to active leagues (have a season within 2 years) and limit to 2 most recent seasons
           const thresholdYear = getActiveThresholdYear();
@@ -624,102 +672,18 @@ export function getUnifiedTools(): UnifiedTool[] {
         const { platform } = args as { platform?: 'espn' | 'yahoo' | 'sleeper' };
         return withToolLogging(correlationId, 'get_ancient_history', `ancient platform=${platform || 'all'}`, async () => {
         try {
-          // Fetch all leagues (same logic as get_user_session)
+          // Fetch platform leagues in parallel (only requested platforms)
+          const fetchArgs = [env, authHeader, correlationId, evalRunId, evalTraceId] as const;
+          const promises: Promise<{ leagues: UserLeague[]; error?: string }>[] = [];
+          if (!platform || platform === 'espn') promises.push(fetchUserLeagues(...fetchArgs));
+          if (!platform || platform === 'yahoo') promises.push(fetchYahooLeagues(...fetchArgs));
+          if (!platform || platform === 'sleeper') promises.push(fetchSleeperLeagues(...fetchArgs));
+
+          const results = await Promise.allSettled(promises);
           const allLeagues: UserLeague[] = [];
-
-          // Fetch ESPN leagues
-          if (!platform || platform === 'espn') {
-            const { leagues: espnLeagues } = await fetchUserLeagues(
-              env,
-              authHeader,
-              correlationId,
-              evalRunId,
-              evalTraceId
-            );
-            allLeagues.push(...espnLeagues);
-          }
-
-          // Fetch Yahoo leagues
-          if (!platform || platform === 'yahoo') {
-            try {
-              const baseHeaders: Record<string, string> = {
-                'Content-Type': 'application/json',
-                ...(authHeader ? { Authorization: authHeader } : {}),
-              };
-              const withCorrelation = correlationId ? withCorrelationId(baseHeaders, correlationId) : new Headers(baseHeaders);
-              const withInternal = withInternalServiceToken(withCorrelation, env, 'auth-worker /internal/leagues/yahoo');
-              const headers = withEvalHeaders(withInternal, evalRunId, evalTraceId);
-
-              const yahooResponse = await env.AUTH_WORKER.fetch(
-                new Request('https://internal/internal/leagues/yahoo', { headers })
-              );
-              if (yahooResponse.ok) {
-                const yahooData = (await yahooResponse.json()) as {
-                  leagues?: Array<{
-                    sport: string;
-                    leagueKey: string;
-                    leagueName: string;
-                    teamId?: string;
-                    seasonYear: number;
-                  }>;
-                };
-                if (yahooData.leagues) {
-                  for (const league of yahooData.leagues) {
-                    allLeagues.push({
-                      platform: 'yahoo',
-                      sport: league.sport,
-                      leagueId: league.leagueKey,
-                      leagueName: league.leagueName,
-                      teamId: league.teamId || '',
-                      seasonYear: league.seasonYear,
-                    });
-                  }
-                }
-              }
-            } catch (error) {
-              console.error('[get_ancient_history] Failed to fetch Yahoo leagues:', error);
-            }
-          }
-
-          // Fetch Sleeper leagues
-          if (!platform || platform === 'sleeper') {
-            try {
-              const baseHeaders: Record<string, string> = {
-                'Content-Type': 'application/json',
-                ...(authHeader ? { Authorization: authHeader } : {}),
-              };
-              const withCorrelation = correlationId ? withCorrelationId(baseHeaders, correlationId) : new Headers(baseHeaders);
-              const withInternal = withInternalServiceToken(withCorrelation, env, 'auth-worker /internal/leagues/sleeper');
-              const headers = withEvalHeaders(withInternal, evalRunId, evalTraceId);
-
-              const sleeperResponse = await env.AUTH_WORKER.fetch(
-                new Request('https://internal/internal/leagues/sleeper', { headers })
-              );
-              if (sleeperResponse.ok) {
-                const sleeperData = (await sleeperResponse.json()) as {
-                  leagues?: Array<{
-                    sport: string;
-                    leagueId: string;
-                    leagueName: string;
-                    rosterId?: number;
-                    seasonYear: number;
-                  }>;
-                };
-                if (sleeperData.leagues) {
-                  for (const league of sleeperData.leagues) {
-                    allLeagues.push({
-                      platform: 'sleeper',
-                      sport: league.sport,
-                      leagueId: league.leagueId,
-                      leagueName: league.leagueName,
-                      teamId: league.rosterId ? String(league.rosterId) : '',
-                      seasonYear: league.seasonYear,
-                    });
-                  }
-                }
-              }
-            } catch (error) {
-              console.error('[get_ancient_history] Failed to fetch Sleeper leagues:', error);
+          for (const result of results) {
+            if (result.status === 'fulfilled') {
+              allLeagues.push(...result.value.leagues);
             }
           }
 
