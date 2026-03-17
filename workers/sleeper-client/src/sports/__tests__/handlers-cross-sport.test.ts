@@ -187,5 +187,32 @@ describe('sleeper cross-sport handler characterization tests', () => {
       const data = result.data as { week: number };
       expect(data.week).toBe(1);
     });
+
+    it.each(scenarios)('$label falls back to week 1 when state response returns week 0', async ({ sport, handlers }) => {
+      mockFetch.mockResolvedValueOnce(jsonResponse({ week: 0 }));
+      // Matchups
+      mockFetch.mockResolvedValueOnce(jsonResponse([
+        { matchup_id: 1, roster_id: 1, points: 0, starters: [] },
+        { matchup_id: 1, roster_id: 2, points: 0, starters: [] },
+      ]));
+      // Rosters
+      mockFetch.mockResolvedValueOnce(jsonResponse([
+        { roster_id: 1, owner_id: 'u1', players: [], starters: [], reserve: [], settings: { wins: 0, losses: 0, ties: 0, fpts: 0, fpts_decimal: 0 } },
+        { roster_id: 2, owner_id: 'u2', players: [], starters: [], reserve: [], settings: { wins: 0, losses: 0, ties: 0, fpts: 0, fpts_decimal: 0 } },
+      ]));
+      // Users
+      mockFetch.mockResolvedValueOnce(jsonResponse([
+        { user_id: 'u1', display_name: 'Alice', avatar: null },
+        { user_id: 'u2', display_name: 'Bob', avatar: null },
+      ]));
+
+      const params: ToolParams = { sport, league_id: '12345', season_year: 2025 };
+      const result = await handlers.get_matchups({} as never, params);
+
+      expect(result.success).toBe(true);
+      expect(mockFetch.mock.calls.some(([url]) => String(url).includes('/matchups/1'))).toBe(true);
+      const data = result.data as { week: number };
+      expect(data.week).toBe(1);
+    });
   });
 });

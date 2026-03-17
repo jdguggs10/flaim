@@ -22,6 +22,12 @@ describe('sleeper-transactions', () => {
     expect(week).toBe(9);
   });
 
+  it('falls back to week 1 when state endpoint returns week 0', async () => {
+    mockFetch.mockResolvedValueOnce(jsonResponse({ week: 0 }));
+    const week = await getSleeperCurrentWeek('/state/nba');
+    expect(week).toBe(1);
+  });
+
   it('fetches and normalizes transactions across weeks', async () => {
     mockFetch
       .mockResolvedValueOnce(jsonResponse([
