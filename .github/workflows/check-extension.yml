@@ -28,6 +28,7 @@ jobs:
 
       - name: Install Dependencies
         run: npm ci
+        working-directory: extension
 
       - name: Build extension
         run: npm run build
