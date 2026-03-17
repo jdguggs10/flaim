@@ -228,7 +228,6 @@ See `workers/README.md` for worker-to-worker communication requirements.
 **GitHub Actions workflows** (`.github/workflows/`):
 - `deploy-workers.yml` — Tests + deploys all 5 workers on push/PR (paths-filtered to `workers/**`)
 - `check-web.yml` — Lint + type-check for Next.js app (paths-filtered to `web/**`)
-- `check-extension.yml` — Build check for Chrome extension (paths-filtered to `extension/**`)
 - `claude.yml` — Claude Code bot responds to `@claude` mentions in issues/PRs
 - `claude-code-review.yml` — Auto-reviews PRs with Claude
 
