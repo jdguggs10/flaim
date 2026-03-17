@@ -9,6 +9,40 @@ import { Loader2 } from 'lucide-react';
 // League checking removed - OAuth consent should work regardless of fantasy setup
 // Tools handle missing configuration gracefully when called
 
+// Must stay in sync with workers/auth-worker/src/oauth-handlers.ts isValidRedirectUri()
+const ALLOWED_REDIRECT_HOSTS = [
+  'claude.ai',
+  'claude.com',
+  'cdn.claude.ai',
+  'chatgpt.com',
+  'platform.openai.com',
+  'gemini.google.com',
+];
+
+function isAllowedRedirectUri(uri: string): boolean {
+  try {
+    const url = new URL(uri);
+
+    // HTTPS host allowlist (covers Claude web, ChatGPT, OpenAI, Gemini)
+    if (url.protocol === 'https:') {
+      return ALLOWED_REDIRECT_HOSTS.some(
+        host => url.hostname === host || url.hostname.endsWith('.' + host)
+      );
+    }
+
+    // Loopback callbacks for Claude Desktop (RFC 8252)
+    if (url.protocol === 'http:') {
+      const isLoopback = url.hostname === 'localhost' || url.hostname === '127.0.0.1';
+      const isCallback = url.pathname === '/callback' || url.pathname === '/oauth/callback';
+      return isLoopback && isCallback;
+    }
+
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 function LoadingFallback() {
   return (
     <div className="min-h-screen bg-background flex items-center justify-center">
@@ -26,40 +60,6 @@ function OAuthConsentContent() {
   const { isLoaded, isSignedIn } = useAuth();
 
   // Removed league checking - OAuth consent works regardless of fantasy setup
-
-  // Must stay in sync with workers/auth-worker/src/oauth-handlers.ts isValidRedirectUri()
-  const ALLOWED_REDIRECT_HOSTS = [
-    'claude.ai',
-    'claude.com',
-    'cdn.claude.ai',
-    'chatgpt.com',
-    'platform.openai.com',
-    'gemini.google.com',
-  ];
-
-  function isAllowedRedirectUri(uri: string): boolean {
-    try {
-      const url = new URL(uri);
-
-      // HTTPS host allowlist (covers Claude web, ChatGPT, OpenAI, Gemini)
-      if (url.protocol === 'https:') {
-        return ALLOWED_REDIRECT_HOSTS.some(
-          host => url.hostname === host || url.hostname.endsWith('.' + host)
-        );
-      }
-
-      // Loopback callbacks for Claude Desktop (RFC 8252)
-      if (url.protocol === 'http:') {
-        const isLoopback = url.hostname === 'localhost' || url.hostname === '127.0.0.1';
-        const isCallback = url.pathname === '/callback' || url.pathname === '/oauth/callback';
-        return isLoopback && isCallback;
-      }
-
-      return false;
-    } catch {
-      return false;
-    }
-  }
 
   // Extract OAuth params from URL
   const oauthState = searchParams.get('oauth_state') || searchParams.get('state') || undefined;

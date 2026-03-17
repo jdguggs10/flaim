@@ -22,7 +22,7 @@ function ToolDescription({ description }: { description: string }) {
       </div>
       <button
         type="button"
-        className="flex items-center text-xs text-muted-foreground focus:outline-none select-none"
+        className="flex items-center text-xs text-muted-foreground select-none rounded-sm focus-visible:ring-2 focus-visible:ring-ring"
         onClick={() => setExpanded((prev) => !prev)}
         aria-label="Toggle tool details"
         aria-expanded={expanded}

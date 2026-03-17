@@ -141,6 +141,11 @@ const SPORT_OPTIONS: { value: Sport; label: string; emoji: string }[] = [
 
 // Generate season options (current year down to 2000)
 const MIN_YEAR = 2000;
+const currentYear = new Date().getFullYear();
+const SEASON_OPTIONS = Array.from(
+  { length: currentYear - MIN_YEAR + 1 },
+  (_, i) => currentYear - i
+);
 
 function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
@@ -216,12 +221,6 @@ function sleeperToUnified(
 }
 
 function LeaguesPageContent() {
-  const currentYear = new Date().getFullYear();
-  const SEASON_OPTIONS = Array.from(
-    { length: currentYear - MIN_YEAR + 1 },
-    (_, i) => currentYear - i
-  );
-
   const { isLoaded, isSignedIn } = useAuth();
   const {
     hasCredentials,
