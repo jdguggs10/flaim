@@ -2,6 +2,7 @@ import type { HandlerFn, YahooHandlerContext } from './types';
 import { getYahooCredentials } from '../auth';
 import { yahooFetch, handleYahooError, requireCredentials } from '../yahoo-api';
 import { asArray, getPath, unwrapLeague, parseYahooPercentOwned } from '../normalizers';
+import { ErrorCode } from '@flaim/worker-shared';
 import { extractPlayerMeta, toExecuteErrorResponse } from './utils';
 
 export function createSearchPlayersHandler(config: YahooHandlerContext): HandlerFn {
@@ -9,7 +10,7 @@ export function createSearchPlayersHandler(config: YahooHandlerContext): Handler
     const { league_id, query, position, count } = params;
 
     if (!query) {
-      return { success: false, error: 'query is required for get_players', code: 'MISSING_PARAM' };
+      return { success: false, error: 'query is required for get_players', code: ErrorCode.MISSING_PARAM };
     }
 
     try {

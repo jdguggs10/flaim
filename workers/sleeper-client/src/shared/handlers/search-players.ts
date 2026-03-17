@@ -1,6 +1,7 @@
 import type { HandlerFn, SleeperSportConfig } from './types';
 import { getSleeperPlayersIndex } from '../sleeper-players-cache';
 import { buildSleeperPlayerSearch } from '../sleeper-free-agents';
+import { ErrorCode } from '@flaim/worker-shared';
 import { toExecuteErrorResponse } from './utils';
 
 export function createSearchPlayersHandler(config: SleeperSportConfig): HandlerFn {
@@ -8,7 +9,7 @@ export function createSearchPlayersHandler(config: SleeperSportConfig): HandlerF
     const { query, position, count } = params;
 
     if (!query) {
-      return { success: false, error: 'query is required for get_players', code: 'MISSING_PARAM' };
+      return { success: false, error: 'query is required for get_players', code: ErrorCode.MISSING_PARAM };
     }
 
     try {

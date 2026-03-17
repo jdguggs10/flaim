@@ -2,6 +2,7 @@ import type { HandlerFn, YahooHandlerContext } from './types';
 import { getYahooCredentials } from '../auth';
 import { yahooFetch, handleYahooError, requireCredentials } from '../yahoo-api';
 import { asArray, getPath, logStructure, unwrapTeam } from '../normalizers';
+import { ErrorCode } from '@flaim/worker-shared';
 import { extractPlayerMeta, toExecuteErrorResponse, withLogLabel } from './utils';
 
 export function createGetRosterHandler(config: YahooHandlerContext): HandlerFn {
@@ -12,7 +13,7 @@ export function createGetRosterHandler(config: YahooHandlerContext): HandlerFn {
       return {
         success: false,
         error: 'team_id is required for get_roster',
-        code: 'MISSING_PARAM',
+        code: ErrorCode.MISSING_PARAM,
       };
     }
 

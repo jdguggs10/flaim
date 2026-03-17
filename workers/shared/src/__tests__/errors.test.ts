@@ -16,6 +16,7 @@ describe('error utilities', () => {
 
   it('ErrorCode enum contains all known codes', () => {
     expect(ErrorCode.NOT_SUPPORTED).toBe('NOT_SUPPORTED');
+    expect(ErrorCode.MISSING_PARAM).toBe('MISSING_PARAM');
     expect(ErrorCode.AUTH_FAILED).toBe('AUTH_FAILED');
     expect(ErrorCode.INTERNAL_ERROR).toBe('INTERNAL_ERROR');
     expect(ErrorCode.ESPN_NOT_FOUND).toBe('ESPN_NOT_FOUND');

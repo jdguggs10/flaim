@@ -13,7 +13,7 @@ export function createGetMatchupsHandler(config: SleeperSportConfig): HandlerFn 
         const stateRes = await sleeperFetch(config.statePath);
         if (stateRes.ok) {
           const state = await stateRes.json() as { week: number };
-          matchupWeek = state.week;
+          matchupWeek = state.week ?? 1;
         } else {
           matchupWeek = 1;
         }
