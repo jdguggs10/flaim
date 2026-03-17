@@ -24,7 +24,7 @@ app.use('*', cors());
 
 async function requireInternalService(c: Context<{ Bindings: Env }>, target: string): Promise<Response | null> {
   const result = await validateInternalService(c.req.raw, c.env, target);
-  if (!result.authorized) return c.json(result.error, result.status as 403 | 500);
+  if (!result.authorized) return c.json(result.error, result.status);
   return null;
 }
 

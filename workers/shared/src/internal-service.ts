@@ -36,11 +36,13 @@ export function withInternalServiceToken(
   return headers;
 }
 
-export interface InternalServiceResult {
-  authorized: boolean;
-  error?: { success: false; error: string; code: string };
-  status?: number;
-}
+export type InternalServiceResult =
+  | { authorized: true }
+  | {
+      authorized: false;
+      error: { success: false; error: string; code: string };
+      status: 403 | 500;
+    };
 
 export async function validateInternalService(
   request: Request,
