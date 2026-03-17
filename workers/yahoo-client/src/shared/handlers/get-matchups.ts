@@ -2,11 +2,20 @@ import type { HandlerFn, YahooHandlerContext } from './types';
 import { getYahooCredentials } from '../auth';
 import { yahooFetch, handleYahooError, requireCredentials } from '../yahoo-api';
 import { asArray, getPath, logStructure, unwrapLeague, unwrapTeam } from '../normalizers';
+import { ErrorCode } from '@flaim/worker-shared';
 import { toExecuteErrorResponse, withLogLabel } from './utils';
 
 export function createGetMatchupsHandler(config: YahooHandlerContext): HandlerFn {
   return async (env, params, authHeader, correlationId) => {
     const { league_id, week } = params;
+
+    if (!league_id) {
+      return {
+        success: false,
+        error: 'league_id is required for get_matchups',
+        code: ErrorCode.MISSING_PARAM,
+      };
+    }
 
     try {
       const credentials = await getYahooCredentials(env, authHeader, correlationId);

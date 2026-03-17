@@ -2,6 +2,7 @@ import type { HandlerFn } from './types';
 import { getYahooCredentials, resolveUserTeamKey } from '../auth';
 import { yahooFetch, handleYahooError, requireCredentials } from '../yahoo-api';
 import { buildYahooPendingTransactionsPath, buildYahooTransactionsPath, normalizeYahooTransactions } from '../yahoo-transactions';
+import { ErrorCode } from '@flaim/worker-shared';
 import { toExecuteErrorResponse } from './utils';
 
 export function createGetTransactionsHandler(): HandlerFn {
@@ -20,7 +21,7 @@ export function createGetTransactionsHandler(): HandlerFn {
           return {
             success: false,
             error: 'Team key not found for this league. Reconnect Yahoo in settings.',
-            code: 'TEAM_KEY_MISSING',
+            code: ErrorCode.TEAM_KEY_MISSING,
           };
         }
         path = buildYahooPendingTransactionsPath(league_id, teamKey, [type], count || 25);

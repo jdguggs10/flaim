@@ -2,11 +2,20 @@ import type { HandlerFn, YahooHandlerContext } from './types';
 import { getYahooCredentials } from '../auth';
 import { yahooFetch, handleYahooError, requireCredentials } from '../yahoo-api';
 import { asArray, getPath, logStructure, unwrapLeague } from '../normalizers';
+import { ErrorCode } from '@flaim/worker-shared';
 import { extractPlayerMeta, toExecuteErrorResponse, withLogLabel } from './utils';
 
 export function createGetFreeAgentsHandler(config: YahooHandlerContext): HandlerFn {
   return async (env, params, authHeader, correlationId) => {
     const { league_id, position, count } = params;
+
+    if (!league_id) {
+      return {
+        success: false,
+        error: 'league_id is required for get_free_agents',
+        code: ErrorCode.MISSING_PARAM,
+      };
+    }
 
     try {
       const credentials = await getYahooCredentials(env, authHeader, correlationId);

@@ -224,6 +224,15 @@ describe('yahoo cross-sport handler characterization tests', () => {
       expect(data.startDate).toBeUndefined();
       expect(data.endDate).toBeUndefined();
     });
+
+    it.each(scenarios)('$label returns error when league_id is missing', async ({ sport, handlers }) => {
+      const params: ToolParams = { sport, league_id: '', season_year: 2025 };
+      const result = await handlers.get_league_info({} as never, params, 'Bearer x', 'cid');
+
+      expect(result.success).toBe(false);
+      expect(result.code).toBe('MISSING_PARAM');
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
   });
 
   describe('get_standings', () => {
@@ -238,6 +247,15 @@ describe('yahoo cross-sport handler characterization tests', () => {
       expect(data.standings).toHaveLength(2);
       expect(data.standings[0]).toMatchObject({ rank: 1, name: 'Team A', wins: 8, losses: 2 });
       expect(data.standings[1]).toMatchObject({ rank: 2, name: 'Team B', wins: 6, losses: 4 });
+    });
+
+    it.each(scenarios)('$label returns error when league_id is missing', async ({ sport, handlers }) => {
+      const params: ToolParams = { sport, league_id: '', season_year: 2025 };
+      const result = await handlers.get_standings({} as never, params, 'Bearer x', 'cid');
+
+      expect(result.success).toBe(false);
+      expect(result.code).toBe('MISSING_PARAM');
+      expect(fetchMock).not.toHaveBeenCalled();
     });
   });
 
@@ -283,6 +301,15 @@ describe('yahoo cross-sport handler characterization tests', () => {
       expect(matchup.away).toMatchObject({ teamName: 'Team B', points: 105.3 });
       expect(matchup.winner).toBe('home');
     });
+
+    it.each(scenarios)('$label returns error when league_id is missing', async ({ sport, handlers }) => {
+      const params: ToolParams = { sport, league_id: '', season_year: 2025 };
+      const result = await handlers.get_matchups({} as never, params, 'Bearer x', 'cid');
+
+      expect(result.success).toBe(false);
+      expect(result.code).toBe('MISSING_PARAM');
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
   });
 
   describe('get_free_agents', () => {
@@ -301,6 +328,15 @@ describe('yahoo cross-sport handler characterization tests', () => {
         team: 'BOS',
         percentOwned: 12.5,
       });
+    });
+
+    it.each(scenarios)('$label returns error when league_id is missing', async ({ sport, handlers }) => {
+      const params: ToolParams = { sport, league_id: '', season_year: 2025 };
+      const result = await handlers.get_free_agents({} as never, params, 'Bearer x', 'cid');
+
+      expect(result.success).toBe(false);
+      expect(result.code).toBe('MISSING_PARAM');
+      expect(fetchMock).not.toHaveBeenCalled();
     });
   });
 });
