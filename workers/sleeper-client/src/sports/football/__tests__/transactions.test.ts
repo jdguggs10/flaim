@@ -22,6 +22,21 @@ describe('sleeper football get_transactions handler', () => {
     vi.clearAllMocks();
   });
 
+  it('returns MISSING_PARAM when league_id is omitted', async () => {
+    const params = {
+      sport: 'football',
+      season_year: 2025,
+      week: 9,
+    } as unknown as ToolParams;
+
+    const result = await footballHandlers.get_transactions({} as never, params);
+
+    expect(result.success).toBe(false);
+    expect(result.code).toBe('MISSING_PARAM');
+    expect(getCurrentWeekMock).not.toHaveBeenCalled();
+    expect(fetchTransactionsMock).not.toHaveBeenCalled();
+  });
+
   it('uses NFL state week when week is omitted', async () => {
     getCurrentWeekMock.mockResolvedValue(12);
     getPlayersIndexMock.mockResolvedValue(new Map([
@@ -46,7 +61,8 @@ describe('sleeper football get_transactions handler', () => {
     expect(fetchTransactionsMock).toHaveBeenCalledWith('league_1', [12, 11], expect.any(Function));
 
     if (!result.success) return;
-    const data = result.data as { count: number; window: { mode: string; weeks: number[] } };
+    const data = result.data as { sport: string; count: number; window: { mode: string; weeks: number[] } };
+    expect(data.sport).toBe('football');
     expect(data.count).toBe(2);
     expect(data.window).toEqual({ mode: 'recent_two_weeks', weeks: [12, 11] });
   });

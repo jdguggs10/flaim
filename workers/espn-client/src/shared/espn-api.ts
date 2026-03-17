@@ -48,6 +48,9 @@ export async function espnFetch(
     return response;
   } catch (error) {
     clearTimeout(timeoutId);
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error('ESPN_TIMEOUT: Request timed out');
+    }
     throw error;
   }
 }

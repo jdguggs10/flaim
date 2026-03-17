@@ -1,4 +1,4 @@
-import { extractErrorCode, type ExecuteResponse } from '@flaim/worker-shared';
+import { ErrorCode, extractErrorCode, type ExecuteResponse } from '@flaim/worker-shared';
 import type { Env, SleeperRoster, Sport, ToolParams } from '../types';
 import { handleSleeperError, sleeperFetch } from './sleeper-api';
 import { buildSleeperFreeAgents } from './sleeper-free-agents';
@@ -15,6 +15,9 @@ export function createSleeperGetFreeAgentsHandler(cacheSport: Sport) {
     params: ToolParams,
   ): Promise<ExecuteResponse> {
     const { league_id } = params;
+    if (!league_id) {
+      return { success: false, error: 'league_id is required for get_free_agents', code: ErrorCode.MISSING_PARAM };
+    }
 
     try {
       const rostersRes = await sleeperFetch(`/league/${league_id}/rosters`);

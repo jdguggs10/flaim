@@ -12,8 +12,7 @@ import {
   extractErrorCode,
   getCorrelationId,
   getEvalContext,
-  hasValidInternalServiceToken,
-  INTERNAL_SERVICE_TOKEN_HEADER,
+  validateInternalService,
 } from '@flaim/worker-shared';
 import { logEvalEvent } from './logging';
 
@@ -22,22 +21,8 @@ const app = new Hono<{ Bindings: Env }>();
 app.use('*', cors());
 
 async function requireInternalService(c: Context<{ Bindings: Env }>, target: string): Promise<Response | null> {
-  if (!c.env.INTERNAL_SERVICE_TOKEN) {
-    return c.json({
-      success: false,
-      error: `INTERNAL_SERVICE_TOKEN is not configured for ${target}`,
-      code: 'INTERNAL_AUTH_NOT_CONFIGURED',
-    }, 500);
-  }
-
-  if (!(await hasValidInternalServiceToken(c.req.raw, c.env))) {
-    return c.json({
-      success: false,
-      error: `Missing or invalid ${INTERNAL_SERVICE_TOKEN_HEADER}`,
-      code: 'INTERNAL_AUTH_REQUIRED',
-    }, 403);
-  }
-
+  const result = await validateInternalService(c.req.raw, c.env, target);
+  if (!result.authorized) return c.json(result.error, result.status);
   return null;
 }
 

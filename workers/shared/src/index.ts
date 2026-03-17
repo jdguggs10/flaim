@@ -38,12 +38,18 @@ export {
   hasValidInternalServiceToken,
   isProductionLikeEnvironment,
   requireInternalServiceToken,
+  validateInternalService,
   withInternalServiceToken,
 } from './internal-service.js';
+export type { InternalServiceResult } from './internal-service.js';
 
 // Error utilities
 export { ErrorCode, extractErrorCode } from './errors.js';
 export type { ErrorCodeValue, ExecuteResponse } from './errors.js';
+
+// Logging
+export { logEvalEvent } from './logging.js';
+export type { TraceLogEvent } from './logging.js';
 
 // Tracing utilities
 export {

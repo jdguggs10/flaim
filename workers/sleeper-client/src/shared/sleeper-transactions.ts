@@ -91,7 +91,8 @@ export async function getSleeperCurrentWeek(statePath: '/state/nfl' | '/state/nb
   const res = await sleeperFetch(statePath);
   if (!res.ok) handleSleeperError(res);
   const state = await res.json() as { week?: number };
-  return state.week ?? 1;
+  const stateWeek = state.week;
+  return typeof stateWeek === 'number' && Number.isFinite(stateWeek) && stateWeek > 0 ? stateWeek : 1;
 }
 
 export async function fetchSleeperTransactionsByWeeks(

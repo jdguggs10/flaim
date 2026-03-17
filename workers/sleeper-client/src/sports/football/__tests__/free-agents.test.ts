@@ -29,6 +29,22 @@ describe('sleeper football get_free_agents handler', () => {
     vi.clearAllMocks();
   });
 
+  it('returns MISSING_PARAM when league_id is omitted', async () => {
+    const params = {
+      sport: 'football',
+      season_year: 2025,
+      count: 5,
+    } as unknown as ToolParams;
+
+    const result = await footballHandlers.get_free_agents({} as Env, params);
+
+    expect(result.success).toBe(false);
+    expect(result.code).toBe('MISSING_PARAM');
+    expect(sleeperFetchMock).not.toHaveBeenCalled();
+    expect(getPlayersIndexMock).not.toHaveBeenCalled();
+    expect(buildFreeAgentsMock).not.toHaveBeenCalled();
+  });
+
   it('fetches rosters, uses player cache helper, and returns shaped response', async () => {
     sleeperFetchMock.mockResolvedValueOnce(new Response(JSON.stringify([
       { players: ['101', '102'] },

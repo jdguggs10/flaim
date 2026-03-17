@@ -1,15 +1,19 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "module": "ES2022",
-    "moduleResolution": "node",
     "lib": ["ES2022"],
-    "strict": true,
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
+    "isolatedModules": true,
     "skipLibCheck": true,
+    "strict": true,
     "forceConsistentCasingInFileNames": true,
-    "declaration": true,
-    "outDir": "./dist",
+    "baseUrl": "../../",
+    "paths": {
+      "@flaim/worker-shared": ["workers/shared/src"]
+    },
     "types": ["@cloudflare/workers-types", "node", "vitest", "@cloudflare/vitest-pool-workers"]
   },
   "include": [
@@ -17,7 +21,6 @@
     "tests/**/*"
   ],
   "exclude": [
-    "node_modules",
-    "dist"
+    "node_modules"
   ]
 }
