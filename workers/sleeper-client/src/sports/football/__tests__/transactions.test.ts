@@ -61,7 +61,8 @@ describe('sleeper football get_transactions handler', () => {
     expect(fetchTransactionsMock).toHaveBeenCalledWith('league_1', [12, 11], expect.any(Function));
 
     if (!result.success) return;
-    const data = result.data as { count: number; window: { mode: string; weeks: number[] } };
+    const data = result.data as { sport: string; count: number; window: { mode: string; weeks: number[] } };
+    expect(data.sport).toBe('football');
     expect(data.count).toBe(2);
     expect(data.window).toEqual({ mode: 'recent_two_weeks', weeks: [12, 11] });
   });

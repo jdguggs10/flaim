@@ -18,6 +18,8 @@ describe('error utilities', () => {
     expect(ErrorCode.NOT_SUPPORTED).toBe('NOT_SUPPORTED');
     expect(ErrorCode.MISSING_PARAM).toBe('MISSING_PARAM');
     expect(ErrorCode.AUTH_FAILED).toBe('AUTH_FAILED');
+    expect(ErrorCode.INTERNAL_AUTH_NOT_CONFIGURED).toBe('INTERNAL_AUTH_NOT_CONFIGURED');
+    expect(ErrorCode.INTERNAL_AUTH_REQUIRED).toBe('INTERNAL_AUTH_REQUIRED');
     expect(ErrorCode.INTERNAL_ERROR).toBe('INTERNAL_ERROR');
     expect(ErrorCode.ESPN_NOT_FOUND).toBe('ESPN_NOT_FOUND');
     expect(ErrorCode.YAHOO_API_ERROR).toBe('YAHOO_API_ERROR');

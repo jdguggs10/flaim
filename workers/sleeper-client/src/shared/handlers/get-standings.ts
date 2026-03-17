@@ -38,8 +38,8 @@ export function createGetStandingsHandler(): HandlerFn {
           const fpts_decimal = settings?.fpts_decimal ?? 0;
           const fpts_against = settings?.fpts_against ?? 0;
           const fpts_against_decimal = settings?.fpts_against_decimal ?? 0;
-          const pointsFor = fpts + (fpts_decimal ?? 0) / 100;
-          const pointsAgainst = (fpts_against ?? 0) + (fpts_against_decimal ?? 0) / 100;
+          const pointsFor = fpts + fpts_decimal / 100;
+          const pointsAgainst = fpts_against + fpts_against_decimal / 100;
           const totalGames = wins + losses + ties;
           const winPct = totalGames > 0 ? wins / totalGames : 0;
 

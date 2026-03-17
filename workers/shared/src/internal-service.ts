@@ -1,3 +1,5 @@
+import { ErrorCode } from './errors';
+
 export const INTERNAL_SERVICE_TOKEN_HEADER = 'X-Flaim-Internal-Token';
 
 async function constantTimeEqual(a: string, b: string): Promise<boolean> {
@@ -52,14 +54,14 @@ export async function validateInternalService(
   if (!env.INTERNAL_SERVICE_TOKEN) {
     return {
       authorized: false,
-      error: { success: false, error: `INTERNAL_SERVICE_TOKEN is not configured for ${target}`, code: 'INTERNAL_AUTH_NOT_CONFIGURED' },
+      error: { success: false, error: `INTERNAL_SERVICE_TOKEN is not configured for ${target}`, code: ErrorCode.INTERNAL_AUTH_NOT_CONFIGURED },
       status: 500,
     };
   }
   if (!(await hasValidInternalServiceToken(request, env))) {
     return {
       authorized: false,
-      error: { success: false, error: `Missing or invalid ${INTERNAL_SERVICE_TOKEN_HEADER}`, code: 'INTERNAL_AUTH_REQUIRED' },
+      error: { success: false, error: `Missing or invalid ${INTERNAL_SERVICE_TOKEN_HEADER}`, code: ErrorCode.INTERNAL_AUTH_REQUIRED },
       status: 403,
     };
   }

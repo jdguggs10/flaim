@@ -21,7 +21,7 @@ export function createSearchPlayersHandler(config: SleeperSportConfig): HandlerF
         success: true,
         data: {
           platform: 'sleeper',
-          sport: params.sport,
+          sport: config.sport,
           query,
           count: players.length,
           players,

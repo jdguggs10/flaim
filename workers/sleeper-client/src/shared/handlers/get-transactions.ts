@@ -46,7 +46,7 @@ export function createGetTransactionsHandler(config: SleeperSportConfig): Handle
         success: true,
         data: {
           platform: 'sleeper',
-          sport: params.sport,
+          sport: config.sport,
           league_id,
           season_year: params.season_year,
           window: {
