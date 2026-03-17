@@ -20,8 +20,6 @@ export type McpConfig = {
 interface StoreState {
   webSearchEnabled: boolean;
   setWebSearchEnabled: (enabled: boolean) => void;
-  functionsEnabled: boolean;
-  setFunctionsEnabled: (enabled: boolean) => void;
   codeInterpreterEnabled: boolean;
   setCodeInterpreterEnabled: (enabled: boolean) => void;
   webSearchConfig: WebSearchConfig;
@@ -99,10 +97,6 @@ const useToolsStore = create<StoreState>()(
       webSearchEnabled: false,
       setWebSearchEnabled: (enabled) => {
         set({ webSearchEnabled: enabled });
-      },
-      functionsEnabled: true,
-      setFunctionsEnabled: (enabled) => {
-        set({ functionsEnabled: enabled });
       },
       mcpEnabled: false,
       setMcpEnabled: (enabled) => {

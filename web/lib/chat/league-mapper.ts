@@ -22,31 +22,26 @@ export const ESPN_GAME_IDS: Record<string, Sport> = {
 export const SPORT_CONFIG: Record<Sport, {
   name: string;
   emoji: string;
-  color: string;
   mcpTools: string[];
 }> = {
   baseball: {
     name: 'Baseball',
     emoji: '⚾',
-    color: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
     mcpTools: ['get_user_session', 'get_league_info', 'get_standings', 'get_matchups', 'get_roster', 'get_free_agents']
   },
   football: {
     name: 'Football',
     emoji: '🏈',
-    color: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400',
     mcpTools: ['get_user_session', 'get_league_info', 'get_standings', 'get_matchups', 'get_roster', 'get_free_agents']
   },
   basketball: {
     name: 'Basketball',
     emoji: '🏀',
-    color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
     mcpTools: ['get_user_session', 'get_league_info', 'get_standings', 'get_matchups', 'get_roster', 'get_free_agents']
   },
   hockey: {
     name: 'Hockey',
     emoji: '🏒',
-    color: 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400',
     mcpTools: ['get_user_session', 'get_league_info', 'get_standings', 'get_matchups', 'get_roster', 'get_free_agents']
   }
 };
@@ -203,11 +198,3 @@ export function getUnifiedMcpServer(): McpServerInfo | null {
   };
 }
 
-/**
- * Get unified server as an array (convenience for callers expecting a list).
- * @deprecated Use getUnifiedMcpServer() instead.
- */
-export function getAllEspnMcpServers(): McpServerInfo[] {
-  const server = getUnifiedMcpServer();
-  return server ? [server] : [];
-}

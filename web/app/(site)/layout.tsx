@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { SiteHeader } from "@/components/site/site-header";
 
 /**
@@ -19,17 +20,17 @@ export default function SiteLayout({
             <div className="text-sm text-muted-foreground flex items-center justify-center gap-2">
               <a href="https://www.threads.com/@jdguggs10" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">Built by Gerry</a>
               <span aria-hidden="true">·</span>
-              <a href="/privacy" className="underline hover:text-foreground">
+              <Link href="/privacy" className="underline hover:text-foreground">
                 Privacy
-              </a>
+              </Link>
               <span aria-hidden="true">·</span>
-              <a href="/terms" className="underline hover:text-foreground">
+              <Link href="/terms" className="underline hover:text-foreground">
                 Terms
-              </a>
+              </Link>
               <span aria-hidden="true">·</span>
-              <a href="/inspirations" className="underline hover:text-foreground">
+              <Link href="/inspirations" className="underline hover:text-foreground">
                 Inspirations
-              </a>
+              </Link>
             </div>
           </footer>
         </div>

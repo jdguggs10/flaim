@@ -20,9 +20,12 @@ function ToolDescription({ description }: { description: string }) {
       >
         {description}
       </div>
-      <div
-        className="flex items-center text-xs text-muted-foreground focus:outline-none select-none cursor-pointer"
+      <button
+        type="button"
+        className="flex items-center text-xs text-muted-foreground select-none rounded-sm focus-visible:ring-2 focus-visible:ring-ring"
         onClick={() => setExpanded((prev) => !prev)}
+        aria-label="Toggle tool details"
+        aria-expanded={expanded}
       >
         <ChevronRight
           className={`h-4 w-4 transition-transform duration-200 mr-1 ${
@@ -30,7 +33,7 @@ function ToolDescription({ description }: { description: string }) {
           }`}
           aria-hidden="true"
         />
-      </div>
+      </button>
     </div>
   );
 }

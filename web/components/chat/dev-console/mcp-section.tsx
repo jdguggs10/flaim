@@ -4,7 +4,7 @@ import { useMemo, useState, useCallback } from "react";
 import { Zap, Check, X, Loader2, ExternalLink } from "lucide-react";
 import useToolsStore from "@/stores/chat/useToolsStore";
 import useLeaguesStore from "@/stores/chat/useLeaguesStore";
-import { getAllEspnMcpServers, McpServerInfo } from "@/lib/chat/league-mapper";
+import { getUnifiedMcpServer, McpServerInfo } from "@/lib/chat/league-mapper";
 import { DISABLE_ALL_TOOLS_SENTINEL } from "@/lib/chat/tools/mcp-constants";
 import { CollapsibleSection } from "./collapsible-section";
 import { CopyButton } from "./copy-button";
@@ -271,7 +271,7 @@ export function McpSection() {
   const shouldShowMcp = leagues.length > 0 && isAuthenticated;
 
   // Get all configured ESPN MCP servers
-  const servers = useMemo(() => getAllEspnMcpServers(), []);
+  const servers = useMemo(() => { const s = getUnifiedMcpServer(); return s ? [s] : []; }, []);
 
   if (!shouldShowMcp) {
     return null;
