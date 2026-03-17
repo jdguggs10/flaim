@@ -1,11 +1,15 @@
 import type { HandlerFn } from './types';
 import type { SleeperLeagueUser, SleeperRoster } from '../../types';
+import { ErrorCode } from '@flaim/worker-shared';
 import { sleeperFetch, handleSleeperError } from '../sleeper-api';
 import { toExecuteErrorResponse } from './utils';
 
 export function createGetRosterHandler(): HandlerFn {
   return async (_env, params) => {
     const { league_id, team_id } = params;
+    if (!league_id) {
+      return { success: false, error: 'league_id is required for get_roster', code: ErrorCode.MISSING_PARAM };
+    }
 
     try {
       const [rostersRes, usersRes] = await Promise.all([
@@ -47,7 +51,7 @@ export function createGetRosterHandler(): HandlerFn {
         return {
           success: false,
           error: `Roster not found for team_id: ${team_id}`,
-          code: 'SLEEPER_NOT_FOUND',
+          code: ErrorCode.SLEEPER_NOT_FOUND,
         };
       }
 
@@ -56,6 +60,7 @@ export function createGetRosterHandler(): HandlerFn {
       const allPlayers = roster.players ?? [];
       const reserve = roster.reserve ?? [];
       const bench = allPlayers.filter((p) => !starters.includes(p) && !reserve.includes(p));
+      const settings = roster.settings;
 
       return {
         success: true,
@@ -68,9 +73,9 @@ export function createGetRosterHandler(): HandlerFn {
           bench,
           reserve,
           record: {
-            wins: roster.settings.wins,
-            losses: roster.settings.losses,
-            ties: roster.settings.ties,
+            wins: settings?.wins ?? 0,
+            losses: settings?.losses ?? 0,
+            ties: settings?.ties ?? 0,
           },
         },
       };

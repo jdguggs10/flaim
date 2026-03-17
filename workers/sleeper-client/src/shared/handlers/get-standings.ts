@@ -1,11 +1,15 @@
 import type { HandlerFn } from './types';
 import type { SleeperLeagueUser, SleeperRoster } from '../../types';
+import { ErrorCode } from '@flaim/worker-shared';
 import { sleeperFetch, handleSleeperError } from '../sleeper-api';
 import { toExecuteErrorResponse } from './utils';
 
 export function createGetStandingsHandler(): HandlerFn {
   return async (_env, params) => {
     const { league_id } = params;
+    if (!league_id) {
+      return { success: false, error: 'league_id is required for get_standings', code: ErrorCode.MISSING_PARAM };
+    }
 
     try {
       const [rostersRes, usersRes] = await Promise.all([
@@ -26,7 +30,14 @@ export function createGetStandingsHandler(): HandlerFn {
 
       const standings = rosters
         .map((roster) => {
-          const { wins, losses, ties, fpts, fpts_decimal, fpts_against, fpts_against_decimal } = roster.settings;
+          const settings = roster.settings;
+          const wins = settings?.wins ?? 0;
+          const losses = settings?.losses ?? 0;
+          const ties = settings?.ties ?? 0;
+          const fpts = settings?.fpts ?? 0;
+          const fpts_decimal = settings?.fpts_decimal ?? 0;
+          const fpts_against = settings?.fpts_against ?? 0;
+          const fpts_against_decimal = settings?.fpts_against_decimal ?? 0;
           const pointsFor = fpts + (fpts_decimal ?? 0) / 100;
           const pointsAgainst = (fpts_against ?? 0) + (fpts_against_decimal ?? 0) / 100;
           const totalGames = wins + losses + ties;

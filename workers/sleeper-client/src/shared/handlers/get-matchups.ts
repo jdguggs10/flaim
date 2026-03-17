@@ -1,11 +1,15 @@
 import type { HandlerFn, SleeperSportConfig } from './types';
 import type { SleeperLeagueUser, SleeperMatchup, SleeperRoster } from '../../types';
+import { ErrorCode } from '@flaim/worker-shared';
 import { sleeperFetch, handleSleeperError } from '../sleeper-api';
 import { toExecuteErrorResponse } from './utils';
 
 export function createGetMatchupsHandler(config: SleeperSportConfig): HandlerFn {
   return async (_env, params) => {
     const { league_id, week } = params;
+    if (!league_id) {
+      return { success: false, error: 'league_id is required for get_matchups', code: ErrorCode.MISSING_PARAM };
+    }
 
     try {
       let matchupWeek = week;

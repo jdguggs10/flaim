@@ -23,6 +23,40 @@ describe('sleeper cross-sport handler characterization tests', () => {
     mockFetch.mockReset();
   });
 
+  describe('parameter validation', () => {
+    it.each(scenarios)('$label get_league_info rejects missing league_id', async ({ sport, handlers }) => {
+      const params = { sport, season_year: 2025 } as unknown as ToolParams;
+      const result = await handlers.get_league_info({} as never, params);
+      expect(result.success).toBe(false);
+      expect(result.code).toBe('MISSING_PARAM');
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it.each(scenarios)('$label get_standings rejects missing league_id', async ({ sport, handlers }) => {
+      const params = { sport, season_year: 2025 } as unknown as ToolParams;
+      const result = await handlers.get_standings({} as never, params);
+      expect(result.success).toBe(false);
+      expect(result.code).toBe('MISSING_PARAM');
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it.each(scenarios)('$label get_roster rejects missing league_id', async ({ sport, handlers }) => {
+      const params = { sport, season_year: 2025, team_id: '1' } as unknown as ToolParams;
+      const result = await handlers.get_roster({} as never, params);
+      expect(result.success).toBe(false);
+      expect(result.code).toBe('MISSING_PARAM');
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it.each(scenarios)('$label get_matchups rejects missing league_id', async ({ sport, handlers }) => {
+      const params = { sport, season_year: 2025 } as unknown as ToolParams;
+      const result = await handlers.get_matchups({} as never, params);
+      expect(result.success).toBe(false);
+      expect(result.code).toBe('MISSING_PARAM');
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+  });
+
   describe('get_league_info', () => {
     it.each(scenarios)('$label returns consistent league metadata shape', async ({ sport, handlers }) => {
       mockFetch.mockResolvedValueOnce(jsonResponse({

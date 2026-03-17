@@ -1,11 +1,15 @@
 import type { HandlerFn, SleeperSportConfig } from './types';
 import { fetchSleeperTransactionsByWeeks, getSleeperCurrentWeek } from '../sleeper-transactions';
 import { getSleeperPlayersIndex } from '../sleeper-players-cache';
+import { ErrorCode } from '@flaim/worker-shared';
 import { toExecuteErrorResponse } from './utils';
 
 export function createGetTransactionsHandler(config: SleeperSportConfig): HandlerFn {
   return async (env, params) => {
     const { league_id, week, count, type } = params;
+    if (!league_id) {
+      return { success: false, error: 'league_id is required for get_transactions', code: ErrorCode.MISSING_PARAM };
+    }
 
     try {
       const currentWeek = week || await getSleeperCurrentWeek(config.statePath);
