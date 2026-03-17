@@ -15,7 +15,7 @@ export default function TermsPage() {
         <h1 className="text-3xl font-bold mb-2">Terms of Service</h1>
         <p className="text-muted-foreground mb-8">Effective date: February 20, 2026</p>
 
-        <div className="prose prose-neutral dark:prose-invert max-w-none space-y-8">
+        <div className="max-w-none space-y-8">
 
           <section>
             <h2 className="text-xl font-semibold mb-3">What Flaim Is</h2>

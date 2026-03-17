@@ -1,4 +1,5 @@
 import type { AutoPullResponse, EspnLeagueInfo, SportName } from '@/lib/espn-types';
+import { getDefaultSeasonYear } from '@/lib/season-utils';
 
 interface EspnCredentials {
   swid: string;
@@ -251,7 +252,7 @@ async function getBasicLeagueInfo(
   seasonYear?: number
 ): Promise<BasicLeagueInfoResponse> {
   try {
-    const requestedSeasonYear = seasonYear || new Date().getFullYear();
+    const requestedSeasonYear = seasonYear || getDefaultSeasonYear(sport);
     const espnSeasonYear = toEspnSeasonYear(requestedSeasonYear, sport);
     const gameId = ESPN_GAME_IDS[sport];
     const apiPath = `/seasons/${espnSeasonYear}/segments/0/leagues/${leagueId}?view=mStandings&view=mTeam&view=mSettings`;

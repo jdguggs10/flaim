@@ -1,14 +1,7 @@
-import { toolsList } from "@/config/tools-list";
 import useToolsStore from "@/stores/chat/useToolsStore";
 import { WebSearchConfig, McpConfig } from "@/stores/chat/useToolsStore";
-import { getAllEspnMcpServers } from "@/lib/chat/league-mapper";
+import { getUnifiedMcpServer } from "@/lib/chat/league-mapper";
 import { DISABLE_ALL_TOOLS_SENTINEL } from "@/lib/chat/tools/mcp-constants";
-
-interface ToolDefinition {
-  name: string;
-  description: string;
-  parameters: Record<string, any>;
-}
 
 interface WebSearchTool extends WebSearchConfig {
   type: "web_search";
@@ -49,7 +42,8 @@ export const buildMcpToolsFromState = (state: MultiMcpState): any[] => {
     return [];
   }
 
-  const servers = getAllEspnMcpServers();
+  const server = getUnifiedMcpServer();
+  const servers = server ? [server] : [];
   if (servers.length === 0) {
     return [];
   }
@@ -105,7 +99,6 @@ export const buildMcpToolsFromState = (state: MultiMcpState): any[] => {
 export const getTools = () => {
   const {
     webSearchEnabled,
-    functionsEnabled,
     codeInterpreterEnabled,
     webSearchConfig,
     mcpEnabled,
@@ -138,27 +131,6 @@ export const getTools = () => {
 
   if (codeInterpreterEnabled) {
     tools.push({ type: "code_interpreter", container: { type: "auto" } });
-  }
-
-  if (functionsEnabled) {
-    // Type assertion to ensure toolsList matches ToolDefinition[]
-    const typedToolsList = toolsList as ToolDefinition[];
-    tools.push(
-      ...typedToolsList.map((tool) => {
-        return {
-          type: "function",
-          name: tool.name,
-          description: tool.description,
-          parameters: {
-            type: "object",
-            properties: { ...tool.parameters },
-            required: Object.keys(tool.parameters),
-            additionalProperties: false,
-          },
-          strict: true,
-        };
-      })
-    );
   }
 
   // Build MCP tools for all configured ESPN servers

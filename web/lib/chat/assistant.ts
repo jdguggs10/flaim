@@ -4,7 +4,6 @@ import { handleTool } from "@/lib/chat/tools/tools-handling";
 import useConversationStore from "@/stores/chat/useConversationStore";
 import { getTools } from "./tools/tools";
 import { Annotation } from "@/components/chat/annotations";
-import { functionsMap } from "@/config/functions";
 import { redactSensitive } from "@/lib/chat/trace-utils";
 import type { TraceToolEvent } from "@/lib/chat/trace-types";
 import useToolsStore from "@/stores/chat/useToolsStore";
@@ -137,7 +136,11 @@ export const handleTurn = async (
     }
 
     // Reader for streaming data
-    const reader = response.body!.getReader();
+    if (!response.body) {
+      onMessage({ event: 'error', data: { error: 'Response body is null', status: response.status } });
+      return;
+    }
+    const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let done = false;
     let buffer = "";
@@ -145,7 +148,7 @@ export const handleTurn = async (
     while (!done) {
       const { value, done: doneReading } = await reader.read();
       done = doneReading;
-      const chunkValue = decoder.decode(value);
+      const chunkValue = decoder.decode(value, { stream: true });
       buffer += chunkValue;
 
       const lines = buffer.split("\n\n");
@@ -158,8 +161,12 @@ export const handleTurn = async (
             done = true;
             break;
           }
-          const data = JSON.parse(dataStr);
-          onMessage(data);
+          try {
+            const data = JSON.parse(dataStr);
+            onMessage(data);
+          } catch (e) {
+            console.warn('Failed to parse SSE chunk:', e);
+          }
         }
       }
     }
@@ -168,8 +175,12 @@ export const handleTurn = async (
     if (buffer && buffer.startsWith("data: ")) {
       const dataStr = buffer.slice(6);
       if (dataStr !== "[DONE]") {
-        const data = JSON.parse(dataStr);
-        onMessage(data);
+        try {
+          const data = JSON.parse(dataStr);
+          onMessage(data);
+        } catch (e) {
+          console.warn('Failed to parse SSE trailing buffer:', e);
+        }
       }
     }
   } catch (error) {
@@ -983,7 +994,7 @@ export const processMessages = async (controller?: AbortController) => {
 
     try {
       const toolResult = await handleTool(
-        currentToolCall.name as keyof typeof functionsMap,
+        currentToolCall.name!,
         currentToolCall.parsedArguments
       );
       if (signal.aborted) break;

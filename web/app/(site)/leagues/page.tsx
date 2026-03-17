@@ -141,11 +141,6 @@ const SPORT_OPTIONS: { value: Sport; label: string; emoji: string }[] = [
 
 // Generate season options (current year down to 2000)
 const MIN_YEAR = 2000;
-const currentYear = new Date().getFullYear();
-const SEASON_OPTIONS = Array.from(
-  { length: currentYear - MIN_YEAR + 1 },
-  (_, i) => currentYear - i
-);
 
 function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
@@ -221,6 +216,12 @@ function sleeperToUnified(
 }
 
 function LeaguesPageContent() {
+  const currentYear = new Date().getFullYear();
+  const SEASON_OPTIONS = Array.from(
+    { length: currentYear - MIN_YEAR + 1 },
+    (_, i) => currentYear - i
+  );
+
   const { isLoaded, isSignedIn } = useAuth();
   const {
     hasCredentials,
@@ -839,32 +840,6 @@ function LeaguesPageContent() {
     }
   };
 
-  // Delete Yahoo league (single season)
-  const handleDeleteYahooLeague = async (yahooId: string) => {
-    setDeletingLeagueKey(`yahoo:${yahooId}`);
-    setLeagueNotice(null);
-
-    try {
-      const res = await fetch(`/api/connect/yahoo/leagues/${yahooId}`, {
-        method: 'DELETE',
-      });
-
-      if (!res.ok) {
-        const data = await res.json() as { error?: string };
-        throw new Error(data.error || 'Failed to delete league');
-      }
-
-      const data = await res.json() as { leagues?: YahooLeague[] };
-      if (data.leagues) {
-        setYahooLeagues(data.leagues);
-      }
-    } catch (err) {
-      setLeagueError(err instanceof Error ? err.message : 'Failed to delete league');
-    } finally {
-      setDeletingLeagueKey(null);
-    }
-  };
-
   // Delete all seasons of a Yahoo league group
   const handleDeleteYahooLeagueGroup = async (seasons: UnifiedLeague[]) => {
     const yahooIds = seasons.map(s => s.yahooId).filter((id): id is string => !!id);
@@ -901,23 +876,22 @@ function LeaguesPageContent() {
     }
   };
 
-  // Delete a Sleeper league (by DB UUID)
-  const handleDeleteSleeperLeague = async (sleeperId: string, leagueId: string) => {
-    const key = `sleeper:${leagueId}`;
-    setDeletingSleeperKey(key);
+  // Delete all seasons of a Sleeper league group
+  const handleDeleteSleeperLeagueGroup = async (seasons: UnifiedLeague[], leagueId: string) => {
+    const sleeperIds = seasons.map(s => s.sleeperId).filter((id): id is string => !!id);
+    if (sleeperIds.length === 0) return;
+
+    setDeletingSleeperKey(`sleeper:${leagueId}`);
     setLeagueNotice(null);
 
     try {
-      const res = await fetch(`/api/connect/sleeper/leagues/${sleeperId}`, {
-        method: 'DELETE',
-      });
-
-      if (!res.ok) {
-        const data = await res.json() as { error?: string };
-        throw new Error(data.error || 'Failed to delete league');
+      for (const sleeperId of sleeperIds) {
+        const res = await fetch(`/api/connect/sleeper/leagues/${sleeperId}`, { method: 'DELETE' });
+        if (!res.ok) {
+          const data = await res.json() as { error?: string };
+          throw new Error(data.error || 'Failed to delete league');
+        }
       }
-
-      // Refresh leagues
       await loadSleeperLeagues();
     } catch (err) {
       setLeagueError(err instanceof Error ? err.message : 'Failed to delete league');
@@ -1204,11 +1178,7 @@ function LeaguesPageContent() {
                                     if (group.platform === 'espn') {
                                       handleDeleteLeague(group.leagueId, group.sport);
                                     } else if (group.platform === 'sleeper') {
-                                      // Delete all Sleeper seasons in the group sequentially
-                                      const sleeperIds = group.seasons.map(s => s.sleeperId).filter((id): id is string => !!id);
-                                      if (sleeperIds.length > 0) {
-                                        handleDeleteSleeperLeague(sleeperIds[0], group.leagueId);
-                                      }
+                                      handleDeleteSleeperLeagueGroup(group.seasons, group.leagueId);
                                     } else {
                                       // For Yahoo, delete all seasons in the group
                                       handleDeleteYahooLeagueGroup(group.seasons);
@@ -1315,17 +1285,23 @@ function LeaguesPageContent() {
                                         if (group.platform === 'espn') {
                                           handleDeleteLeague(group.leagueId, group.sport);
                                         } else if (group.platform === 'sleeper') {
-                                          const sleeperId = group.seasons[0]?.sleeperId;
-                                          if (sleeperId) handleDeleteSleeperLeague(sleeperId, group.leagueId);
+                                          handleDeleteSleeperLeagueGroup(group.seasons, group.leagueId);
                                         } else {
-                                          const yahooId = group.seasons[0]?.yahooId;
-                                          if (yahooId) handleDeleteYahooLeague(yahooId);
+                                          handleDeleteYahooLeagueGroup(group.seasons);
                                         }
                                       }}
-                                      disabled={isDeleting || (group.platform === 'sleeper' && deletingSleeperKey === `sleeper:${group.leagueId}`)}
+                                      disabled={
+                                        isDeleting
+                                        || (group.platform === 'sleeper' && deletingSleeperKey === `sleeper:${group.leagueId}`)
+                                        || (group.platform === 'yahoo' && deletingLeagueKey === `yahoo:${group.seasons[0]?.yahooId}`)
+                                      }
                                       title="Delete league"
                                     >
-                                      {(isDeleting || (group.platform === 'sleeper' && deletingSleeperKey === `sleeper:${group.leagueId}`)) ? (
+                                      {(
+                                        isDeleting
+                                        || (group.platform === 'sleeper' && deletingSleeperKey === `sleeper:${group.leagueId}`)
+                                        || (group.platform === 'yahoo' && deletingLeagueKey === `yahoo:${group.seasons[0]?.yahooId}`)
+                                      ) ? (
                                         <Loader2 className="h-4 w-4 animate-spin" />
                                       ) : (
                                         <Trash2 className="h-4 w-4" />

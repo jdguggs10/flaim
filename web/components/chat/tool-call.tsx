@@ -9,9 +9,16 @@ import { PrismLight as SyntaxHighlighter } from "react-syntax-highlighter";
 import json from "react-syntax-highlighter/dist/esm/languages/prism/json";
 import python from "react-syntax-highlighter/dist/esm/languages/prism/python";
 import { coy } from "react-syntax-highlighter/dist/esm/styles/prism";
+import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
+import { useTheme } from "next-themes";
 
 SyntaxHighlighter.registerLanguage("json", json);
 SyntaxHighlighter.registerLanguage("python", python);
+
+function useDarkMode() {
+  const { resolvedTheme } = useTheme();
+  return resolvedTheme === "dark";
+}
 
 interface ToolCallProps {
   toolCall: ToolCallItem;
@@ -134,6 +141,7 @@ function ServerUrlBadge({ serverUrl }: { serverUrl?: string }) {
 
 function ApiCallCell({ toolCall }: ToolCallProps) {
   const { debugMode } = useToolsStore();
+  const isDark = useDarkMode();
   const [expanded, setExpanded] = useState(true);
 
   const requestJson = JSON.stringify(toolCall.parsedArguments, null, 2);
@@ -192,7 +200,7 @@ function ApiCallCell({ toolCall }: ToolCallProps) {
                     marginBottom: 0,
                   }}
                   language="json"
-                  style={coy}
+                  style={isDark ? vscDarkPlus : coy}
                 >
                   {requestJson}
                 </SyntaxHighlighter>
@@ -215,7 +223,7 @@ function ApiCallCell({ toolCall }: ToolCallProps) {
                       marginTop: 0,
                     }}
                     language="json"
-                    style={coy}
+                    style={isDark ? vscDarkPlus : coy}
                   >
                     {responseJson}
                   </SyntaxHighlighter>
@@ -267,6 +275,7 @@ function WebSearchCell({ toolCall }: ToolCallProps) {
 
 function McpCallCell({ toolCall }: ToolCallProps) {
   const { debugMode, mcpConfig } = useToolsStore();
+  const isDark = useDarkMode();
   const [expanded, setExpanded] = useState(true);
 
   const requestJson = JSON.stringify(toolCall.parsedArguments, null, 2);
@@ -338,7 +347,7 @@ function McpCallCell({ toolCall }: ToolCallProps) {
                     marginBottom: 0,
                   }}
                   language="json"
-                  style={coy}
+                  style={isDark ? vscDarkPlus : coy}
                 >
                   {requestJson}
                 </SyntaxHighlighter>
@@ -361,7 +370,7 @@ function McpCallCell({ toolCall }: ToolCallProps) {
                       marginTop: 0,
                     }}
                     language="json"
-                    style={coy}
+                    style={isDark ? vscDarkPlus : coy}
                   >
                     {responseJson}
                   </SyntaxHighlighter>
@@ -380,6 +389,7 @@ function McpCallCell({ toolCall }: ToolCallProps) {
 }
 
 function CodeInterpreterCell({ toolCall }: ToolCallProps) {
+  const isDark = useDarkMode();
   return (
     <div className="flex flex-col w-[70%] relative mb-[-8px]">
       <div className="flex flex-col text-sm rounded-[16px]">
@@ -408,7 +418,7 @@ function CodeInterpreterCell({ toolCall }: ToolCallProps) {
                 marginTop: 0,
               }}
               language="python"
-              style={coy}
+              style={isDark ? vscDarkPlus : coy}
             >
               {toolCall.code || ""}
             </SyntaxHighlighter>

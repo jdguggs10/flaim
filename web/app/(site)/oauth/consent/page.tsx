@@ -27,6 +27,40 @@ function OAuthConsentContent() {
 
   // Removed league checking - OAuth consent works regardless of fantasy setup
 
+  // Must stay in sync with workers/auth-worker/src/oauth-handlers.ts isValidRedirectUri()
+  const ALLOWED_REDIRECT_HOSTS = [
+    'claude.ai',
+    'claude.com',
+    'cdn.claude.ai',
+    'chatgpt.com',
+    'platform.openai.com',
+    'gemini.google.com',
+  ];
+
+  function isAllowedRedirectUri(uri: string): boolean {
+    try {
+      const url = new URL(uri);
+
+      // HTTPS host allowlist (covers Claude web, ChatGPT, OpenAI, Gemini)
+      if (url.protocol === 'https:') {
+        return ALLOWED_REDIRECT_HOSTS.some(
+          host => url.hostname === host || url.hostname.endsWith('.' + host)
+        );
+      }
+
+      // Loopback callbacks for Claude Desktop (RFC 8252)
+      if (url.protocol === 'http:') {
+        const isLoopback = url.hostname === 'localhost' || url.hostname === '127.0.0.1';
+        const isCallback = url.pathname === '/callback' || url.pathname === '/oauth/callback';
+        return isLoopback && isCallback;
+      }
+
+      return false;
+    } catch {
+      return false;
+    }
+  }
+
   // Extract OAuth params from URL
   const oauthState = searchParams.get('oauth_state') || searchParams.get('state') || undefined;
   const oauthParams = {
@@ -40,7 +74,9 @@ function OAuthConsentContent() {
   };
 
   // Validate required params
-  const isValidRequest = oauthParams.redirectUri && oauthParams.codeChallenge;
+  const isValidRequest = oauthParams.redirectUri
+    && oauthParams.codeChallenge
+    && isAllowedRedirectUri(oauthParams.redirectUri);
 
   // League checking removed - tools handle missing configuration when called
 
@@ -82,7 +118,7 @@ function OAuthConsentContent() {
 
   // Handle "Deny" - redirect to Claude with error
   const handleDeny = () => {
-    if (oauthParams.redirectUri) {
+    if (oauthParams.redirectUri && isAllowedRedirectUri(oauthParams.redirectUri)) {
       const url = new URL(oauthParams.redirectUri);
       url.searchParams.set('error', 'access_denied');
       url.searchParams.set('error_description', 'User denied the authorization request');
@@ -91,7 +127,6 @@ function OAuthConsentContent() {
       }
       window.location.href = url.toString();
     } else {
-      // No redirect URI, just go home
       router.push('/');
     }
   };

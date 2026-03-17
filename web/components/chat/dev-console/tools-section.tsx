@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { Wrench, Square, CheckSquare, RefreshCw, Loader2, Check, X, ChevronDown, ChevronRight } from "lucide-react";
 import useToolsStore from "@/stores/chat/useToolsStore";
 import useLeaguesStore from "@/stores/chat/useLeaguesStore";
-import { getAllEspnMcpServers, McpServerInfo } from "@/lib/chat/league-mapper";
+import { getUnifiedMcpServer, McpServerInfo } from "@/lib/chat/league-mapper";
 import { DISABLE_ALL_TOOLS_SENTINEL } from "@/lib/chat/tools/mcp-constants";
 import { CollapsibleSection } from "./collapsible-section";
 import { Button } from "@/components/ui/button";
@@ -239,7 +239,7 @@ export function ToolsSection() {
   const { leagues } = useLeaguesStore();
 
   // Get all configured ESPN MCP servers
-  const servers = useMemo(() => getAllEspnMcpServers(), []);
+  const servers = useMemo(() => { const s = getUnifiedMcpServer(); return s ? [s] : []; }, []);
 
   // Track tools state per server
   const [toolsStateByServer, setToolsStateByServer] = useState<Record<string, ServerToolsState>>({});
