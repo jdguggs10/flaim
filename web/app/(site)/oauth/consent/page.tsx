@@ -34,7 +34,8 @@ function isAllowedRedirectUri(uri: string): boolean {
     if (url.protocol === 'http:') {
       const isLoopback = url.hostname === 'localhost' || url.hostname === '127.0.0.1';
       const isCallback = url.pathname === '/callback' || url.pathname === '/oauth/callback';
-      return isLoopback && isCallback;
+      const isClean = !url.search && !url.hash;
+      return isLoopback && isCallback && isClean;
     }
 
     return false;
