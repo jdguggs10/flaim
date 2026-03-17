@@ -4,12 +4,22 @@ on:
   push:
     branches:
       - main
+    paths:
+      - 'workers/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/deploy-workers.yml'
   pull_request:
+    paths:
+      - 'workers/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/deploy-workers.yml'
   workflow_dispatch:
 
 jobs:
-  test:
-    name: Run Tests
+  test-and-deploy:
+    name: ${{ matrix.worker }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -47,27 +57,8 @@ jobs:
           printf '%s\n' "$output" | grep -q 'env.TOKEN_RATE_LIMITER'
           printf '%s\n' "$output" | grep -q 'env.CREDENTIALS_RATE_LIMITER'
 
-  deploy:
-    name: Deploy ${{ matrix.worker }}
-    needs: test
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' || github.event_name == 'pull_request'
-    strategy:
-      matrix:
-        worker: [auth-worker, espn-client, yahoo-client, sleeper-client, fantasy-mcp]
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: '24'
-          cache: 'npm'
-
-      - name: Install Dependencies
-        run: npm ci
-
       - name: Deploy ${{ matrix.worker }}
+        if: github.ref == 'refs/heads/main' || github.event_name == 'pull_request'
         run: npx wrangler deploy --env ${{ github.ref == 'refs/heads/main' && 'prod' || 'preview' }}
         working-directory: workers/${{ matrix.worker }}
         env:

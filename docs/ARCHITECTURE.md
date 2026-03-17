@@ -210,6 +210,7 @@ See `workers/README.md` for worker-to-worker communication requirements.
 | Test locally | `npm run dev` | Nothing deploys, runs on localhost |
 | Check deploy status | `gh run list --limit 5` | Shows recent GitHub Actions runs |
 | Fix broken prod | Revert commit, push to `main` | Auto-redeploys with fix |
+| Instant worker rollback | `wrangler rollback --env prod` in worker dir | Reverts to previous version without git commit |
 | Update extension | Manual CWS upload | See `extension/README.md` |
 
 ### Automatic Deployment (CI/CD)
@@ -225,7 +226,9 @@ See `workers/README.md` for worker-to-worker communication requirements.
 | Extension | Chrome Web Store | Manual | N/A |
 
 **GitHub Actions workflows** (`.github/workflows/`):
-- `deploy-workers.yml` — Deploys all 5 workers on push/PR via wrangler
+- `deploy-workers.yml` — Tests + deploys all 5 workers on push/PR (paths-filtered to `workers/**`)
+- `check-web.yml` — Lint + type-check for Next.js app (paths-filtered to `web/**`)
+- `check-extension.yml` — Build check for Chrome extension (paths-filtered to `extension/**`)
 - `claude.yml` — Claude Code bot responds to `@claude` mentions in issues/PRs
 - `claude-code-review.yml` — Auto-reviews PRs with Claude
 
