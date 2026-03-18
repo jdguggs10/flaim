@@ -631,8 +631,16 @@ api.all('/register', (c) => {
   return handleClientRegistration(c.req.raw, c.env as OAuthEnv, getCorsHeaders(c.req.raw));
 });
 
-// Authorization endpoint - redirects to frontend consent page
-api.get('/authorize', (c) => {
+// Authorization endpoint - redirects to frontend consent page (rate-limited per IP)
+api.get('/authorize', async (c) => {
+  const clientIp = c.req.header('CF-Connecting-IP') || 'unknown';
+  const { success } = await c.env.TOKEN_RATE_LIMITER.limit({ key: `authorize:${clientIp}` });
+  if (!success) {
+    return c.json({
+      error: 'rate_limit_exceeded',
+      error_description: 'Too many authorization requests. Please try again later.',
+    }, 429, { 'Retry-After': '60' });
+  }
   return handleAuthorize(c.req.raw, c.env as OAuthEnv);
 });
 
@@ -644,7 +652,7 @@ api.post('/token', async (c) => {
     return c.json({
       error: 'rate_limit_exceeded',
       error_description: 'Too many token requests. Please try again later.',
-    }, 429);
+    }, 429, { 'Retry-After': '60' });
   }
   return handleToken(c.req.raw, c.env as OAuthEnv, getCorsHeaders(c.req.raw));
 });

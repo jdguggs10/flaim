@@ -1,7 +1,7 @@
 import type { HandlerFn, YahooHandlerContext } from './types';
 import { getYahooCredentials } from '../auth';
 import { yahooFetch, handleYahooError, requireCredentials } from '../yahoo-api';
-import { asArray, getPath, logStructure, unwrapLeague } from '../normalizers';
+import { asArray, getPath, logStructure, unwrapLeague, parseYahooPercentOwned } from '../normalizers';
 import { ErrorCode } from '@flaim/worker-shared';
 import { extractPlayerMeta, toExecuteErrorResponse, withLogLabel } from './utils';
 
@@ -55,7 +55,7 @@ export function createGetFreeAgentsHandler(config: YahooHandlerContext): Handler
           name: (playerMeta.name as Record<string, unknown>)?.full as string,
           team: playerMeta.editorial_team_abbr as string,
           position: playerMeta.display_position as string,
-          percentOwned: ownership?.percent_owned ? parseFloat(String(ownership.percent_owned)) : undefined,
+          percentOwned: parseYahooPercentOwned(ownership?.percent_owned),
           status: playerMeta.status as string | undefined,
         };
       });

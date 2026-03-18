@@ -418,4 +418,20 @@ describe('eval API key auth', () => {
     );
     expect(res.status).toBe(401);
   });
+
+  it('GET /authorize returns 429 when rate limited', async () => {
+    const rateLimitedEnv = {
+      ...baseEnv,
+      TOKEN_RATE_LIMITER: { limit: async () => ({ success: false }) },
+    };
+
+    const res = await appFetch(
+      makeRequest('/authorize?response_type=code&client_id=test&redirect_uri=https://claude.ai/callback&code_challenge=abc&code_challenge_method=S256'),
+      rateLimitedEnv as any
+    );
+    expect(res.status).toBe(429);
+    expect(res.headers.get('Retry-After')).toBe('60');
+    const body = await res.json() as { error?: string };
+    expect(body.error).toBe('rate_limit_exceeded');
+  });
 });

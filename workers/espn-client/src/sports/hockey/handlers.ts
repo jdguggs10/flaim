@@ -259,8 +259,9 @@ async function handleGetMatchups(
     const schedule = data.schedule || [];
 
     // Transform matchups
+    const matchupPeriod = week ?? data.scoringPeriodId ?? data.currentMatchupPeriod;
     const matchups = schedule
-      .filter((matchup) => matchup.matchupPeriodId === (week || data.scoringPeriodId))
+      .filter((matchup) => matchupPeriod == null || matchup.matchupPeriodId === matchupPeriod)
       .map((matchup) => ({
         matchupPeriodId: matchup.matchupPeriodId,
         home: matchup.home ? {
@@ -285,7 +286,7 @@ async function handleGetMatchups(
         leagueId: league_id,
         seasonYear: season_year,
         currentScoringPeriod: data.scoringPeriodId,
-        matchupPeriod: week || data.scoringPeriodId,
+        matchupPeriod: matchupPeriod ?? null,
         matchups
       }
     };
