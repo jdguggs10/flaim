@@ -639,7 +639,7 @@ api.get('/authorize', async (c) => {
     return c.json({
       error: 'rate_limit_exceeded',
       error_description: 'Too many authorization requests. Please try again later.',
-    }, 429);
+    }, 429, { 'Retry-After': '60' });
   }
   return handleAuthorize(c.req.raw, c.env as OAuthEnv);
 });
@@ -652,7 +652,7 @@ api.post('/token', async (c) => {
     return c.json({
       error: 'rate_limit_exceeded',
       error_description: 'Too many token requests. Please try again later.',
-    }, 429);
+    }, 429, { 'Retry-After': '60' });
   }
   return handleToken(c.req.raw, c.env as OAuthEnv, getCorsHeaders(c.req.raw));
 });

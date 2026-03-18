@@ -208,7 +208,7 @@ async function handleGetMatchups(
     const schedule = data.schedule || [];
 
     // Transform matchups
-    const matchupPeriod = week || data.scoringPeriodId;
+    const matchupPeriod = week ?? data.scoringPeriodId;
     const matchups = schedule
       .filter((matchup) => matchupPeriod == null || matchup.matchupPeriodId === matchupPeriod)
       .map((matchup) => ({
