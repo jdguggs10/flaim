@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { routeToClient, type RouteResult } from '../router';
 import type { Env, ToolParams } from '../types';
 import { INTERNAL_SERVICE_TOKEN_HEADER } from '@flaim/worker-shared';
@@ -135,6 +135,46 @@ describe('fantasy-mcp router', () => {
       const result = await routeToClient(env, 'get_free_agents', params);
 
       expect(result).toEqual(responseBody);
+    });
+
+    it('returns a timeout error when the platform worker takes too long', async () => {
+      vi.useFakeTimers();
+
+      const params: ToolParams = {
+        platform: 'espn',
+        sport: 'football',
+        league_id: '12345',
+        season_year: 2024,
+      };
+
+      const env = {
+        INTERNAL_SERVICE_TOKEN: 'internal-secret',
+        ESPN: {
+          fetch: async (request: Request) => {
+            // Simulate a fetch that hangs until aborted
+            return new Promise<Response>((_resolve, reject) => {
+              request.signal.addEventListener('abort', () => {
+                reject(new DOMException('The operation was aborted.', 'AbortError'));
+              });
+            });
+          },
+        },
+      } as unknown as Env;
+
+      const resultPromise = routeToClient(env, 'get_standings', params);
+
+      // Advance timers past the 25s timeout
+      await vi.advanceTimersByTimeAsync(26000);
+
+      const result = await resultPromise;
+
+      expect(result).toEqual({
+        success: false,
+        error: 'Platform worker "espn" timed out after 25s',
+        code: 'ROUTING_ERROR',
+      });
+
+      vi.useRealTimers();
     });
   });
 });

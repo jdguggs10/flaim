@@ -181,7 +181,7 @@ async function fetchYahooLeagues(
 
     if (!response.ok) {
       console.error(`[fantasy-mcp] ${cid} Yahoo leagues fetch failed: ${response.status}`);
-      return { leagues: [] };
+      return { leagues: [], error: `Yahoo leagues fetch failed: ${response.status}` };
     }
 
     const data = (await response.json()) as {
@@ -210,8 +210,9 @@ async function fetchYahooLeagues(
   } catch (error) {
     clearTimeout(timeoutId);
     const isTimeout = (error as Error).name === 'AbortError';
-    console.error(`[fantasy-mcp] ${cid} failed to fetch Yahoo leagues: ${isTimeout ? 'timeout' : (error as Error).message}`);
-    return { leagues: [] };
+    const errorMsg = isTimeout ? 'Yahoo leagues fetch timed out' : `Yahoo leagues fetch failed: ${(error as Error).message}`;
+    console.error(`[fantasy-mcp] ${cid} failed to fetch Yahoo leagues: ${errorMsg}`);
+    return { leagues: [], error: errorMsg };
   }
 }
 
@@ -248,7 +249,7 @@ async function fetchSleeperLeagues(
 
     if (!response.ok) {
       console.error(`[fantasy-mcp] ${cid} Sleeper leagues fetch failed: ${response.status}`);
-      return { leagues: [] };
+      return { leagues: [], error: `Sleeper leagues fetch failed: ${response.status}` };
     }
 
     const data = (await response.json()) as {
@@ -275,8 +276,9 @@ async function fetchSleeperLeagues(
   } catch (error) {
     clearTimeout(timeoutId);
     const isTimeout = (error as Error).name === 'AbortError';
-    console.error(`[fantasy-mcp] ${cid} failed to fetch Sleeper leagues: ${isTimeout ? 'timeout' : (error as Error).message}`);
-    return { leagues: [] };
+    const errorMsg = isTimeout ? 'Sleeper leagues fetch timed out' : `Sleeper leagues fetch failed: ${(error as Error).message}`;
+    console.error(`[fantasy-mcp] ${cid} failed to fetch Sleeper leagues: ${errorMsg}`);
+    return { leagues: [], error: errorMsg };
   }
 }
 
@@ -463,8 +465,14 @@ export function getUnifiedTools(): UnifiedTool[] {
             fetchSleeperLeagues(env, authHeader, correlationId, evalRunId, evalTraceId),
           ]);
 
-          const yahooData = yahooResult.status === 'fulfilled' ? yahooResult.value : { leagues: [] as UserLeague[] };
-          const sleeperData = sleeperResult.status === 'fulfilled' ? sleeperResult.value : { leagues: [] as UserLeague[] };
+          const yahooData = yahooResult.status === 'fulfilled' ? yahooResult.value : { leagues: [] as UserLeague[], error: `Yahoo fetch rejected: ${yahooResult.reason}` };
+          const sleeperData = sleeperResult.status === 'fulfilled' ? sleeperResult.value : { leagues: [] as UserLeague[], error: `Sleeper fetch rejected: ${sleeperResult.reason}` };
+
+          // Collect warnings from failed fetches
+          const warnings: string[] = [];
+          if (espnData.error) warnings.push(`ESPN: ${espnData.error}`);
+          if (yahooData.error) warnings.push(`Yahoo: ${yahooData.error}`);
+          if (sleeperData.error) warnings.push(`Sleeper: ${sleeperData.error}`);
 
           // Combine all leagues
           const allLeagues = [...espnData.leagues, ...yahooData.leagues, ...sleeperData.leagues];
@@ -633,6 +641,7 @@ export function getUnifiedTools(): UnifiedTool[] {
               ])
             ),
             allLeagues: leagues,
+            warnings: warnings.length > 0 ? warnings : undefined,
             instructions: sessionMessage,
           };
           return {
@@ -682,9 +691,13 @@ export function getUnifiedTools(): UnifiedTool[] {
 
           const results = await Promise.allSettled(promises);
           const allLeagues: UserLeague[] = [];
+          const warnings: string[] = [];
           for (const result of results) {
             if (result.status === 'fulfilled') {
               allLeagues.push(...result.value.leagues);
+              if (result.value.error) warnings.push(result.value.error);
+            } else {
+              warnings.push(`Fetch rejected: ${result.reason}`);
             }
           }
 
@@ -731,6 +744,7 @@ export function getUnifiedTools(): UnifiedTool[] {
             oldSeasonsFromActiveLeagues: oldSeasons,
             totalOldLeagues: oldLeagues.length,
             totalOldSeasons: Object.values(oldSeasons).flat().length,
+            warnings: warnings.length > 0 ? warnings : undefined,
           });
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Unknown error';
