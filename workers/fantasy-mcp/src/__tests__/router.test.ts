@@ -163,14 +163,14 @@ describe('fantasy-mcp router', () => {
 
       const resultPromise = routeToClient(env, 'get_standings', params);
 
-      // Advance timers past the 15s timeout
-      await vi.advanceTimersByTimeAsync(16000);
+      // Advance timers past the 25s timeout
+      await vi.advanceTimersByTimeAsync(26000);
 
       const result = await resultPromise;
 
       expect(result).toEqual({
         success: false,
-        error: 'Platform worker "espn" timed out after 15s',
+        error: 'Platform worker "espn" timed out after 25s',
         code: 'ROUTING_ERROR',
       });
 

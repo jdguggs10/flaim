@@ -39,7 +39,7 @@ export async function routeToClient(
 
   // Forward request to platform worker
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15000);
+  const timeoutId = setTimeout(() => controller.abort(), 25000);
 
   try {
     const baseHeaders: Record<string, string> = {
@@ -81,7 +81,7 @@ export async function routeToClient(
     if (error instanceof Error && error.name === 'AbortError') {
       return {
         success: false,
-        error: `Platform worker "${platform}" timed out after 15s`,
+        error: `Platform worker "${platform}" timed out after 25s`,
         code: 'ROUTING_ERROR',
       };
     }
