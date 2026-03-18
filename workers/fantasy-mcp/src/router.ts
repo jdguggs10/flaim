@@ -38,6 +38,9 @@ export async function routeToClient(
   }
 
   // Forward request to platform worker
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
+
   try {
     const baseHeaders: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -56,9 +59,12 @@ export async function routeToClient(
         body: JSON.stringify({
           tool,
           params,
-        })
+        }),
+        signal: controller.signal,
       })
     );
+
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({})) as { error?: string; code?: string };
@@ -71,6 +77,14 @@ export async function routeToClient(
 
     return await response.json() as RouteResult;
   } catch (error) {
+    clearTimeout(timeoutId);
+    if (error instanceof Error && error.name === 'AbortError') {
+      return {
+        success: false,
+        error: `Platform worker "${platform}" timed out after 15s`,
+        code: 'ROUTING_ERROR',
+      };
+    }
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to reach platform worker',
