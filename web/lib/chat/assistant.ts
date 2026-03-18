@@ -209,7 +209,10 @@ export const handleTurn = async (
     if (error instanceof SseTimeoutError) {
       await reader?.cancel();
     }
-    if (!(error instanceof DOMException && error.name === "AbortError")) {
+    if (
+      !(error instanceof DOMException && error.name === "AbortError") &&
+      !(error instanceof SseTimeoutError)
+    ) {
       console.error("Error handling turn:", error);
     }
     throw error;

@@ -107,6 +107,7 @@ export default function Assistant() {
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
       console.error("Error sending approval response:", error);
+      setLoadingState({ status: "idle", thinkingText: "" });
     }
   };
 
