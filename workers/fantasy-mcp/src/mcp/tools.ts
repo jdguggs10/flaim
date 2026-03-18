@@ -829,7 +829,7 @@ export function getUnifiedTools(): UnifiedTool[] {
           .describe('Sport type (e.g., "football", "baseball")'),
         league_id: z.string().describe('League ID (get from get_user_session)'),
         season_year: z.number().describe('Season start year (e.g., 2025 for MLB 2025, 2024 for NBA 2024-25)'),
-        week: z.number().optional().describe('Week number (optional, defaults to current week)'),
+        week: z.number().int().min(1).optional().describe('Week number (optional, must be ≥ 1, defaults to current week)'),
       },
       handler: async (args, env, authHeader, correlationId, evalRunId, evalTraceId) => {
         const params: ToolParams = {
@@ -867,7 +867,7 @@ export function getUnifiedTools(): UnifiedTool[] {
         league_id: z.string().describe('League ID (get from get_user_session)'),
         season_year: z.number().describe('Season start year (e.g., 2025 for MLB 2025, 2024 for NBA 2024-25)'),
         team_id: z.string().optional().describe('Team ID (optional, defaults to user\'s team)'),
-        week: z.number().optional().describe('Week number (optional, defaults to current week)'),
+        week: z.number().int().min(1).optional().describe('Week number (optional, must be ≥ 1, defaults to current week)'),
       },
       handler: async (args, env, authHeader, correlationId, evalRunId, evalTraceId) => {
         const params: ToolParams = {
