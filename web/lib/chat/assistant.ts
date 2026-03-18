@@ -154,7 +154,9 @@ export const handleTurn = async (
     let done = false;
     let buffer = "";
 
-    const READ_TIMEOUT_MS = 60_000;
+    // Allow long-running tool calls (web/code interpreter/MCP) before considering
+    // the stream stalled.
+    const READ_TIMEOUT_MS = 300_000;
     const readWithTimeout = (): Promise<ReadableStreamReadResult<Uint8Array>> => {
       clearTimeout(timeoutId);
       const readPromise = reader!.read();
@@ -1017,6 +1019,8 @@ export const processMessages = async (controller?: AbortController) => {
           content: [{ type: "output_text", text: "Connection timed out. Please try again." }],
         });
       });
+      // Avoid replaying stale queued items on retry after a timed-out turn.
+      setConversationItems([]);
       setLoadingState({ status: "idle", thinkingText: "" });
       return;
     }
