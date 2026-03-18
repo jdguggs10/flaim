@@ -50,6 +50,7 @@ export function StepConnectPlatforms({ className }: StepConnectPlatformsProps) {
 
   // Yahoo state
   const [yahooStatus, setYahooStatus] = useState<YahooStatus>('loading');
+
   // Sleeper state
   const [sleeperUsername, setSleeperUsername] = useState('');
   const [sleeperStatus, setSleeperStatus] = useState<{ connected: boolean; sleeperUsername?: string | null; leagueCount?: number } | null>(null);

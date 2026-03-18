@@ -140,14 +140,14 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify({ leagues: body.leagues })
     });
 
-    const workerData = await workerResponse.json() as WorkerLeaguesResponse;
-
     if (!workerResponse.ok) {
+      const workerData = await workerResponse.json() as WorkerErrorResponse;
       return NextResponse.json({
         error: workerData?.error || 'Failed to save leagues'
       }, { status: workerResponse.status });
     }
 
+    const workerData = await workerResponse.json() as WorkerLeaguesResponse;
     return NextResponse.json(workerData, { status: 200 });
 
   } catch (error) {
@@ -199,14 +199,14 @@ export async function DELETE(request: NextRequest) {
       }
     });
 
-    const workerData = await workerResponse.json() as WorkerLeaguesResponse;
-
     if (!workerResponse.ok) {
+      const workerData = await workerResponse.json() as WorkerErrorResponse;
       return NextResponse.json({
         error: workerData?.error || 'Failed to remove league'
       }, { status: workerResponse.status });
     }
 
+    const workerData = await workerResponse.json() as WorkerLeaguesResponse;
     return NextResponse.json(workerData, { status: 200 });
 
   } catch (error) {
