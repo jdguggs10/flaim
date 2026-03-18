@@ -25,7 +25,7 @@ const Chat: React.FC<ChatProps> = ({
   onApprovalResponse,
 }) => {
   const itemsEndRef = useRef<HTMLDivElement>(null);
-  const [inputMessageText, setinputMessageText] = useState<string>("");
+  const [inputMessageText, setInputMessageText] = useState<string>("");
   // This state is used to provide better user experience for non-English IMEs such as Japanese
   const [isComposing, setIsComposing] = useState(false);
   const { loadingState, clearConversation } = useConversationStore();
@@ -53,11 +53,12 @@ const Chat: React.FC<ChatProps> = ({
     (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
       if (event.key === "Enter" && !event.shiftKey && !isComposing) {
         event.preventDefault();
+        if (loadingState.status !== "idle") return;
         onSendMessage(inputMessageText);
-        setinputMessageText("");
+        setInputMessageText("");
       }
     },
-    [onSendMessage, inputMessageText, isComposing]
+    [onSendMessage, inputMessageText, isComposing, loadingState.status]
   );
 
   useEffect(() => {
@@ -126,7 +127,7 @@ const Chat: React.FC<ChatProps> = ({
                       aria-label="Message input"
                       className="mb-2 resize-none border-0 focus:outline-none text-sm bg-transparent px-0 pb-6 pt-2"
                       value={inputMessageText}
-                      onChange={(e) => setinputMessageText(e.target.value)}
+                      onChange={(e) => setInputMessageText(e.target.value)}
                       onKeyDown={handleKeyDown}
                       onCompositionStart={() => setIsComposing(true)}
                       onCompositionEnd={() => setIsComposing(false)}
@@ -142,13 +143,14 @@ const Chat: React.FC<ChatProps> = ({
                     <Trash2 size={18} />
                   </button>
                   <button
-                    disabled={!inputMessageText}
+                    disabled={!inputMessageText.trim() || loadingState.status !== "idle"}
                     data-testid="send-button"
                     aria-label="Send message"
                     className="flex size-8 items-center justify-center rounded-full bg-foreground text-background transition-colors hover:opacity-70 focus-visible:outline-none focus-visible:outline-foreground disabled:bg-muted disabled:text-muted-foreground disabled:hover:opacity-100"
                     onClick={() => {
+                      if (loadingState.status !== "idle") return;
                       onSendMessage(inputMessageText);
-                      setinputMessageText("");
+                      setInputMessageText("");
                     }}
                   >
                     <svg

@@ -98,6 +98,8 @@ export const handleTurn = async (
   previousResponseId?: string | null,
   signal?: AbortSignal
 ) => {
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
   try {
     // Get response from the API (defined in app/api/chat/turn_response/route.ts)
     // Uses stored-responses flow: when previousResponseId is provided, the API
@@ -140,13 +142,24 @@ export const handleTurn = async (
       onMessage({ event: 'error', data: { error: 'Response body is null', status: response.status } });
       return;
     }
-    const reader = response.body.getReader();
+    reader = response.body.getReader();
     const decoder = new TextDecoder();
     let done = false;
     let buffer = "";
 
+    const READ_TIMEOUT_MS = 60_000;
+    const readWithTimeout = (): Promise<ReadableStreamReadResult<Uint8Array>> => {
+      clearTimeout(timeoutId);
+      return Promise.race([
+        reader!.read(),
+        new Promise<never>((_, reject) => {
+          timeoutId = setTimeout(() => reject(new Error('SSE_READ_TIMEOUT')), READ_TIMEOUT_MS);
+        }),
+      ]);
+    };
+
     while (!done) {
-      const { value, done: doneReading } = await reader.read();
+      const { value, done: doneReading } = await readWithTimeout();
       done = doneReading;
       const chunkValue = decoder.decode(value, { stream: true });
       buffer += chunkValue;
@@ -170,7 +183,6 @@ export const handleTurn = async (
         }
       }
     }
-
     // Handle any remaining data in buffer
     if (buffer && buffer.startsWith("data: ")) {
       const dataStr = buffer.slice(6);
@@ -184,10 +196,15 @@ export const handleTurn = async (
       }
     }
   } catch (error) {
+    if (error instanceof Error && error.message === 'SSE_READ_TIMEOUT') {
+      await reader?.cancel();
+    }
     if (!(error instanceof DOMException && error.name === "AbortError")) {
       console.error("Error handling turn:", error);
     }
     throw error;
+  } finally {
+    clearTimeout(timeoutId!);
   }
 };
 
@@ -363,6 +380,7 @@ export const processMessages = async (controller?: AbortController) => {
     setChatMessages(next);
   };
 
+  try {
   await handleTurn(inputItems, tools, async ({ event, data }) => {
     if (signal.aborted) return;
     if (useToolsStore.getState().debugMode) {
@@ -982,6 +1000,20 @@ export const processMessages = async (controller?: AbortController) => {
       // Handle other events as needed
     }
   }, previousResponseId, signal);
+  } catch (error) {
+    if (error instanceof Error && error.message === 'SSE_READ_TIMEOUT') {
+      mutateChatMessages((chatMessages) => {
+        chatMessages.push({
+          type: "message",
+          role: "assistant",
+          content: [{ type: "output_text", text: "Connection timed out. Please try again." }],
+        });
+      });
+      setLoadingState({ status: "idle", thinkingText: "" });
+      return;
+    }
+    throw error;
+  }
 
   // After handleTurn completes, process any pending function calls
   // We deferred these until we have the response ID for proper stored-responses linking

@@ -57,6 +57,7 @@ export default function Assistant() {
 
   const handleSendMessage = async (message: string) => {
     if (!message.trim()) return;
+    if (useConversationStore.getState().loadingState.status !== "idle") return;
 
     const userItem: Item = {
       type: "message",

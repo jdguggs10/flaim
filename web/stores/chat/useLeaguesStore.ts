@@ -94,9 +94,9 @@ export const useLeaguesStore = create<LeaguesState>()((set, get) => ({
     try {
       // Fetch ESPN, Yahoo, and Sleeper leagues in parallel
       const [espnRes, yahooRes, sleeperRes] = await Promise.all([
-        fetch('/api/espn/leagues'),
-        fetch('/api/connect/yahoo/leagues').catch(() => null),
-        fetch('/api/connect/sleeper/leagues').catch(() => null),
+        fetch('/api/espn/leagues', { cache: 'no-store' }),
+        fetch('/api/connect/yahoo/leagues', { cache: 'no-store' }).catch(() => null),
+        fetch('/api/connect/sleeper/leagues', { cache: 'no-store' }).catch(() => null),
       ]);
 
       const allLeagues: ChatLeague[] = [];
@@ -191,7 +191,7 @@ export const useLeaguesStore = create<LeaguesState>()((set, get) => ({
 
   fetchPreferences: async () => {
     try {
-      const res = await fetch('/api/user/preferences');
+      const res = await fetch('/api/user/preferences', { cache: 'no-store' });
       if (!res.ok) return;
       const data = await res.json() as Record<string, unknown>;
 
