@@ -211,7 +211,7 @@ async function fetchYahooLeagues(
     clearTimeout(timeoutId);
     const isTimeout = (error as Error).name === 'AbortError';
     const errorMsg = isTimeout ? 'Yahoo leagues fetch timed out' : `Yahoo leagues fetch failed: ${(error as Error).message}`;
-    console.error(`[fantasy-mcp] ${cid} failed to fetch Yahoo leagues: ${isTimeout ? 'timeout' : (error as Error).message}`);
+    console.error(`[fantasy-mcp] ${cid} failed to fetch Yahoo leagues: ${errorMsg}`);
     return { leagues: [], error: errorMsg };
   }
 }
@@ -277,7 +277,7 @@ async function fetchSleeperLeagues(
     clearTimeout(timeoutId);
     const isTimeout = (error as Error).name === 'AbortError';
     const errorMsg = isTimeout ? 'Sleeper leagues fetch timed out' : `Sleeper leagues fetch failed: ${(error as Error).message}`;
-    console.error(`[fantasy-mcp] ${cid} failed to fetch Sleeper leagues: ${isTimeout ? 'timeout' : (error as Error).message}`);
+    console.error(`[fantasy-mcp] ${cid} failed to fetch Sleeper leagues: ${errorMsg}`);
     return { leagues: [], error: errorMsg };
   }
 }
@@ -465,8 +465,8 @@ export function getUnifiedTools(): UnifiedTool[] {
             fetchSleeperLeagues(env, authHeader, correlationId, evalRunId, evalTraceId),
           ]);
 
-          const yahooData = yahooResult.status === 'fulfilled' ? yahooResult.value : { leagues: [] as UserLeague[], error: 'Yahoo fetch rejected' };
-          const sleeperData = sleeperResult.status === 'fulfilled' ? sleeperResult.value : { leagues: [] as UserLeague[], error: 'Sleeper fetch rejected' };
+          const yahooData = yahooResult.status === 'fulfilled' ? yahooResult.value : { leagues: [] as UserLeague[], error: `Yahoo fetch rejected: ${yahooResult.reason}` };
+          const sleeperData = sleeperResult.status === 'fulfilled' ? sleeperResult.value : { leagues: [] as UserLeague[], error: `Sleeper fetch rejected: ${sleeperResult.reason}` };
 
           // Collect warnings from failed fetches
           const warnings: string[] = [];
