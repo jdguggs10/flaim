@@ -8,6 +8,13 @@ import { redactSensitive } from "@/lib/chat/trace-utils";
 import type { TraceToolEvent } from "@/lib/chat/trace-types";
 import useToolsStore from "@/stores/chat/useToolsStore";
 
+class SseTimeoutError extends Error {
+  constructor() {
+    super('SSE_READ_TIMEOUT');
+    this.name = 'SseTimeoutError';
+  }
+}
+
 let activeController: AbortController | null = null;
 
 export function abortActiveStream() {
@@ -150,10 +157,11 @@ export const handleTurn = async (
     const READ_TIMEOUT_MS = 60_000;
     const readWithTimeout = (): Promise<ReadableStreamReadResult<Uint8Array>> => {
       clearTimeout(timeoutId);
+      const readPromise = reader!.read();
       return Promise.race([
-        reader!.read(),
+        readPromise.then((result) => { clearTimeout(timeoutId); return result; }),
         new Promise<never>((_, reject) => {
-          timeoutId = setTimeout(() => reject(new Error('SSE_READ_TIMEOUT')), READ_TIMEOUT_MS);
+          timeoutId = setTimeout(() => reject(new SseTimeoutError()), READ_TIMEOUT_MS);
         }),
       ]);
     };
@@ -196,7 +204,7 @@ export const handleTurn = async (
       }
     }
   } catch (error) {
-    if (error instanceof Error && error.message === 'SSE_READ_TIMEOUT') {
+    if (error instanceof SseTimeoutError) {
       await reader?.cancel();
     }
     if (!(error instanceof DOMException && error.name === "AbortError")) {
@@ -204,7 +212,7 @@ export const handleTurn = async (
     }
     throw error;
   } finally {
-    clearTimeout(timeoutId!);
+    clearTimeout(timeoutId);
   }
 };
 
@@ -1001,7 +1009,7 @@ export const processMessages = async (controller?: AbortController) => {
     }
   }, previousResponseId, signal);
   } catch (error) {
-    if (error instanceof Error && error.message === 'SSE_READ_TIMEOUT') {
+    if (error instanceof SseTimeoutError) {
       mutateChatMessages((chatMessages) => {
         chatMessages.push({
           type: "message",

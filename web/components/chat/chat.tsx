@@ -148,7 +148,6 @@ const Chat: React.FC<ChatProps> = ({
                     aria-label="Send message"
                     className="flex size-8 items-center justify-center rounded-full bg-foreground text-background transition-colors hover:opacity-70 focus-visible:outline-none focus-visible:outline-foreground disabled:bg-muted disabled:text-muted-foreground disabled:hover:opacity-100"
                     onClick={() => {
-                      if (loadingState.status !== "idle") return;
                       onSendMessage(inputMessageText);
                       setInputMessageText("");
                     }}
