@@ -44,8 +44,7 @@ import {
 } from '@/components/ui/dialog';
 import { useEspnCredentials } from '@/lib/use-espn-credentials';
 import { getDefaultSeasonYear } from '@/lib/season-utils';
-
-const CHROME_EXTENSION_URL = "https://chromewebstore.google.com/detail/flaim-espn-fantasy-connec/mbnokejgglkfgkeeenolgdpcnfakpbkn";
+import { CHROME_EXTENSION_URL } from '@/config/constants';
 
 interface League {
   leagueId: string;
@@ -137,6 +136,8 @@ interface UnifiedLeagueGroup {
 const SPORT_OPTIONS: { value: Sport; label: string; emoji: string }[] = [
   { value: 'football', label: 'Football', emoji: '\u{1F3C8}' },
   { value: 'baseball', label: 'Baseball', emoji: '\u26BE' },
+  { value: 'basketball', label: 'Basketball', emoji: '\u{1F3C0}' },
+  { value: 'hockey', label: 'Hockey', emoji: '\u{1F3D2}' },
 ];
 
 // Generate season options (current year down to 2000)
@@ -533,6 +534,7 @@ function LeaguesPageContent() {
       }
     } catch (err) {
       console.error('Failed to disconnect Sleeper:', err);
+      setLeagueError('Failed to disconnect Sleeper. Please try again.');
     } finally {
       setIsSleeperDisconnecting(false);
     }
@@ -562,6 +564,7 @@ function LeaguesPageContent() {
       }
     } catch (err) {
       console.error('Failed to disconnect Yahoo:', err);
+      setLeagueError('Failed to disconnect Yahoo. Please try again.');
     } finally {
       setIsYahooDisconnecting(false);
     }
