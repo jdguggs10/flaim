@@ -338,5 +338,35 @@ describe('yahoo cross-sport handler characterization tests', () => {
       expect(result.code).toBe('MISSING_PARAM');
       expect(fetchMock).not.toHaveBeenCalled();
     });
+
+    it.each(scenarios)('$label preserves percent_owned: 0 instead of dropping it', async ({ sport, handlers }) => {
+      const response = {
+        fantasy_content: {
+          league: [
+            { league_key: '449.l.123', name: 'Test League' },
+            {
+              players: {
+                '0': {
+                  player: [
+                    [{ player_key: 'fa101', player_id: '201', name: { full: 'Zero Owned' }, editorial_team_abbr: 'BOS', display_position: 'OF' }],
+                    { ownership: { percent_owned: '0' } },
+                  ],
+                },
+                count: 1,
+              },
+            },
+          ],
+        },
+      };
+      fetchMock.mockResolvedValue(jsonResponse(response));
+
+      const params: ToolParams = { sport, league_id: '449.l.123', season_year: 2025 };
+      const result = await handlers.get_free_agents({} as never, params, 'Bearer x', `cid-${sport}`);
+
+      expect(result.success).toBe(true);
+      const data = result.data as { freeAgents: Array<{ percentOwned: number | null | undefined }> };
+      // percent_owned: "0" must not be dropped as undefined
+      expect(data.freeAgents[0].percentOwned).toBe(0);
+    });
   });
 });

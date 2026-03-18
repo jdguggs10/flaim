@@ -427,6 +427,32 @@ describe('fantasy-mcp tools', () => {
     expect(payload.data?.count).toBe(1);
   });
 
+  it('get_matchups week schema rejects zero and negative values', () => {
+    const tool = getUnifiedTools().find((t) => t.name === 'get_matchups');
+    expect(tool).toBeTruthy();
+
+    const weekSchema = asZod(tool!.inputSchema.week);
+    // Valid: undefined (optional), positive integer
+    expect(weekSchema.safeParse(undefined).success).toBe(true);
+    expect(weekSchema.safeParse(1).success).toBe(true);
+    expect(weekSchema.safeParse(17).success).toBe(true);
+    // Invalid: zero, negative, float
+    expect(weekSchema.safeParse(0).success).toBe(false);
+    expect(weekSchema.safeParse(-1).success).toBe(false);
+    expect(weekSchema.safeParse(1.5).success).toBe(false);
+  });
+
+  it('get_roster week schema rejects zero and negative values', () => {
+    const tool = getUnifiedTools().find((t) => t.name === 'get_roster');
+    expect(tool).toBeTruthy();
+
+    const weekSchema = asZod(tool!.inputSchema.week);
+    expect(weekSchema.safeParse(undefined).success).toBe(true);
+    expect(weekSchema.safeParse(1).success).toBe(true);
+    expect(weekSchema.safeParse(0).success).toBe(false);
+    expect(weekSchema.safeParse(-1).success).toBe(false);
+  });
+
   it('each tool declares a required scope', () => {
     const tools = getUnifiedTools();
     for (const tool of tools) {
