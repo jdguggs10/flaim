@@ -17,8 +17,7 @@ import { Card } from '@/components/ui/card';
 import { Chrome, Check, Loader2, Shield, Eye, EyeOff, Wrench } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { pingExtension, isChromeBrowser, type ExtensionPingResult } from '@/lib/extension-ping';
-
-const CHROME_EXTENSION_URL = "https://chromewebstore.google.com/detail/flaim-espn-fantasy-connec/mbnokejgglkfgkeeenolgdpcnfakpbkn";
+import { CHROME_EXTENSION_URL } from '@/config/constants';
 
 type EspnStatus =
   | 'loading'
@@ -51,8 +50,6 @@ export function StepConnectPlatforms({ className }: StepConnectPlatformsProps) {
 
   // Yahoo state
   const [yahooStatus, setYahooStatus] = useState<YahooStatus>('loading');
-  const [yahooLeagueCount, setYahooLeagueCount] = useState(0);
-
   // Sleeper state
   const [sleeperUsername, setSleeperUsername] = useState('');
   const [sleeperStatus, setSleeperStatus] = useState<{ connected: boolean; sleeperUsername?: string | null; leagueCount?: number } | null>(null);
@@ -88,15 +85,10 @@ export function StepConnectPlatforms({ className }: StepConnectPlatformsProps) {
       } catch { /* ignore */ }
 
       try {
-        const credsRes = await fetch('/api/auth/espn/credentials?forEdit=true');
+        const credsRes = await fetch('/api/auth/espn/credentials');
         if (credsRes.ok) {
-          const data = (await credsRes.json()) as { hasCredentials?: boolean; swid?: string; s2?: string };
+          const data = (await credsRes.json()) as { hasCredentials?: boolean };
           setHasCredentials(!!data.hasCredentials);
-          if (data.swid || data.s2) {
-            if (data.swid) setSwid(data.swid);
-            if (data.s2) setEspnS2(data.s2);
-            setHasLoadedCreds(true);
-          }
         }
       } catch { /* ignore */ }
 
@@ -117,12 +109,6 @@ export function StepConnectPlatforms({ className }: StepConnectPlatformsProps) {
           const data = (await res.json()) as { connected?: boolean };
           if (data.connected) {
             setYahooStatus('connected');
-            // Get league count
-            const leaguesRes = await fetch('/api/connect/yahoo/leagues');
-            if (leaguesRes.ok) {
-              const leaguesData = (await leaguesRes.json()) as { leagues?: unknown[] };
-              setYahooLeagueCount(leaguesData.leagues?.length || 0);
-            }
           } else {
             setYahooStatus('not_connected');
           }

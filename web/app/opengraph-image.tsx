@@ -28,6 +28,7 @@ export default function Image() {
           src={`${baseUrl}/flaim-mark-hero-dark.png`}
           width={100}
           height={100}
+          alt=""
           style={{ marginBottom: '32px' }}
         />
         <div

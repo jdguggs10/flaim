@@ -7,6 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
+import type { WorkerErrorResponse, WorkerLeaguesResponse } from '@/types/api-responses';
 
 export async function GET() {
   try {
@@ -43,13 +44,13 @@ export async function GET() {
         return NextResponse.json({ leagues: [] }, { status: 200 });
       }
       
-      const workerData = await workerResponse.json() as any;
+      const workerData = await workerResponse.json() as WorkerErrorResponse;
       return NextResponse.json({
         error: workerData?.error || 'Failed to fetch leagues'
       }, { status: workerResponse.status });
     }
 
-    const workerData = await workerResponse.json() as any;
+    const workerData = await workerResponse.json() as WorkerLeaguesResponse;
     return NextResponse.json(workerData, { status: 200 });
 
   } catch (error) {
@@ -139,7 +140,7 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify({ leagues: body.leagues })
     });
 
-    const workerData = await workerResponse.json() as any;
+    const workerData = await workerResponse.json() as WorkerLeaguesResponse;
 
     if (!workerResponse.ok) {
       return NextResponse.json({
@@ -198,7 +199,7 @@ export async function DELETE(request: NextRequest) {
       }
     });
 
-    const workerData = await workerResponse.json() as any;
+    const workerData = await workerResponse.json() as WorkerLeaguesResponse;
 
     if (!workerResponse.ok) {
       return NextResponse.json({
