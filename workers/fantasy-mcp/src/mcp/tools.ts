@@ -763,7 +763,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       requiredScope: 'mcp:read',
       securitySchemes: buildSecuritySchemes('mcp:read'),
       openaiMeta: { invoking: 'Fetching league info\u2026', invoked: 'League info ready' },
-      description: `Get fantasy league information including settings, scoring type, roster configuration, and schedule. Use values from get_user_session. Read-only and safe to retry. Current date is ${currentDate}.`,
+      description: `Get fantasy league information including settings, scoring type, roster configuration, schedule, and a teams array listing each team with its owner name. Use this to enumerate teams and resolve team ownership before calling get_roster. The exact team fields vary by platform but all include ownerName. Use values from get_user_session. Read-only and safe to retry. Current date is ${currentDate}.`,
       inputSchema: {
         platform: z
           .enum(['espn', 'yahoo', 'sleeper'])
@@ -870,7 +870,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       requiredScope: 'mcp:read',
       securitySchemes: buildSecuritySchemes('mcp:read'),
       openaiMeta: { invoking: 'Fetching roster\u2026', invoked: 'Roster ready' },
-      description: `Get detailed roster for a specific team including players, positions, and stats. Requires authentication. Use values from get_user_session. Read-only and safe to retry. Current date is ${currentDate}.`,
+      description: `Get detailed roster for a specific team including players, positions, stats, and ownerName. Requires authentication. Use values from get_user_session. Read-only and safe to retry. Current date is ${currentDate}.`,
       inputSchema: {
         platform: z
           .enum(['espn', 'yahoo', 'sleeper'])
@@ -909,7 +909,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       requiredScope: 'mcp:read',
       securitySchemes: buildSecuritySchemes('mcp:read'),
       openaiMeta: { invoking: 'Searching free agents\u2026', invoked: 'Free agents ready' },
-      description: `Get available free agents, optionally filtered by position. Sorted by ownership percentage. Use this for waiver-wire availability only. Do not use percentOwned to infer who owns a player in the user's league; for ownership questions, verify team rosters via get_league_info + get_roster. Requires authentication. Use values from get_user_session. Read-only and safe to retry. Current date is ${currentDate}.`,
+      description: `Get available free agents, optionally filtered by position. Sorted by ownership percentage. Use this for waiver-wire availability only. Do not use percentOwned to infer who owns a player in the user's league; for ownership questions, use get_league_info (returns teams with ownerName) and get_roster. Requires authentication. Use values from get_user_session. Read-only and safe to retry. Current date is ${currentDate}.`,
       inputSchema: {
         platform: z
           .enum(['espn', 'yahoo', 'sleeper'])
@@ -954,7 +954,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       requiredScope: 'mcp:read',
       securitySchemes: buildSecuritySchemes('mcp:read'),
       openaiMeta: { invoking: 'Searching players\u2026', invoked: 'Players ready' },
-      description: `Search for player identity by name across all roster statuses (rostered, free agent, waived). Returns identity fields plus market/global ownership context when available (market_percent_owned + ownership_scope). This is NOT league ownership data. Do not infer free-agent status or who owns a player in the user's league from market ownership values. To answer who owns a player in a league: call get_league_info to enumerate teams, then call get_roster per team and match player names. Use values from get_user_session. Read-only and safe to retry. Current date is ${currentDate}.`,
+      description: `Search for player identity by name across all roster statuses (rostered, free agent, waived). Returns identity fields plus market/global ownership context when available (market_percent_owned + ownership_scope). This is NOT league ownership data. Do not infer free-agent status or who owns a player in the user's league from market ownership values. To answer who owns a player in a league: call get_league_info (which returns a teams array with ownerName for each team), then call get_roster for specific teams to find the player. Use values from get_user_session. Read-only and safe to retry. Current date is ${currentDate}.`,
       inputSchema: {
         query: z
           .string()
