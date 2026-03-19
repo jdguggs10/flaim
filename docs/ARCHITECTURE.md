@@ -57,7 +57,7 @@ Flaim is an **authentication and data service**, not a chatbot:
 - **OAuth Provider**: Handles secure authentication between AI clients and ESPN data
 - **Credential Manager**: Securely stores ESPN session cookies (via extension or manual entry)
 
-The built-in `/chat` is for testing and users without Claude/ChatGPT subscriptions.
+The built-in `/chat` is an internal dev/debug surface, not a product feature. It is gated behind Clerk metadata (`chatAccess: true`) at both the page and API level. It exists for manual tool testing and exploratory debugging alongside the structured eval harness (`flaim-eval/`). See `web/README.md` for access setup.
 
 ## Primary User Flow
 

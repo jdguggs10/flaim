@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
+import { requireChatAccess } from '@/lib/chat/auth';
 
 export async function GET(request: NextRequest) {
-  const { userId } = await auth();
-  if (!userId) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const authResult = await requireChatAccess();
+  if (authResult instanceof NextResponse) {
+    return authResult;
   }
   const { searchParams } = new URL(request.url);
   const fileId = searchParams.get("file_id");

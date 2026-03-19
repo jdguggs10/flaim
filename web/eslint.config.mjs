@@ -19,6 +19,42 @@ const eslintConfig = [
   {
     ignores: ["node_modules/**", ".next/**", "out/**", "build/**", "next-env.d.ts"],
   },
+  // Block non-chat code from importing chat modules
+  {
+    ignores: [
+      "components/chat/**",
+      "lib/chat/**",
+      "stores/chat/**",
+      "app/(chat)/**",
+      "app/api/chat/**",
+    ],
+    rules: {
+      "no-restricted-imports": ["error", {
+        patterns: [
+          { group: ["@/components/chat/*"], message: "Only chat code may import chat components." },
+          { group: ["@/lib/chat/*"], message: "Only chat code may import chat libraries." },
+          { group: ["@/stores/chat/*"], message: "Only chat code may import chat stores." },
+        ]
+      }]
+    },
+  },
+  // Block chat code from importing site components
+  {
+    files: [
+      "components/chat/**",
+      "lib/chat/**",
+      "stores/chat/**",
+      "app/(chat)/**",
+      "app/api/chat/**",
+    ],
+    rules: {
+      "no-restricted-imports": ["error", {
+        patterns: [
+          { group: ["@/components/site/*"], message: "Chat code must not import site components." },
+        ]
+      }]
+    },
+  },
 ];
 
 export default eslintConfig;

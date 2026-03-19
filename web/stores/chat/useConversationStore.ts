@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { Item } from "@/lib/chat/assistant";
 import { ChatCompletionMessageParam } from "openai/resources/chat/completions";
-import { INITIAL_MESSAGE } from "@/config/constants";
+import { INITIAL_MESSAGE } from "@/lib/chat/constants";
 import { LlmTraceEntry } from "@/lib/chat/trace-types";
 
 export type LoadingStatus = "idle" | "connecting" | "thinking" | "responding";

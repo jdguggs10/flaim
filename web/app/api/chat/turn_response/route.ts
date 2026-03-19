@@ -1,36 +1,14 @@
-import { MODEL } from "@/config/constants";
+import { MODEL } from "@/lib/chat/constants";
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from '@clerk/nextjs/server';
+import { requireChatAccess } from '@/lib/chat/auth';
 import type { TurnResponseRequest } from '@/types/api-responses';
 import OpenAI from "openai";
 import { isAllowedUrl } from '@/lib/mcp-url-allowlist';
 
-// Simple auth helper
-async function requireAuth(): Promise<{ userId: string } | NextResponse> {
-  try {
-    const { userId } = await auth();
-
-    if (!userId) {
-      return NextResponse.json(
-        { error: "Authentication required" },
-        { status: 401 }
-      );
-    }
-
-    return { userId };
-  } catch (error) {
-    console.error('Auth error:', error);
-    return NextResponse.json(
-      { error: "Authentication failed" },
-      { status: 401 }
-    );
-  }
-}
-
 export async function POST(request: NextRequest) {
   try {
     // Check auth
-    const authResult = await requireAuth();
+    const authResult = await requireChatAccess();
     if (authResult instanceof NextResponse) {
       return authResult;
     }

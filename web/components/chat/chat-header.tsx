@@ -54,8 +54,11 @@ export function ChatHeader() {
         </Link>
       </div>
 
-      {/* Right: Environment badge + User */}
+      {/* Right: Badges + User */}
       <div className="flex items-center gap-3">
+        <span className="px-2 py-0.5 text-xs font-bold rounded bg-muted text-muted-foreground">
+          INTERNAL
+        </span>
         <span
           className={`px-2 py-0.5 text-xs font-bold rounded ${config.color} ${config.textColor}`}
         >

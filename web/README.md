@@ -112,18 +112,18 @@ For local development with workers, point to `http://localhost:8786` etc.
 
 ## Built-in Chat (Dev Only)
 
-The `/chat` page is **not a product feature**. It exists solely for internal/dev use to test and debug MCP behavior. It's gated by Clerk metadata.
+The `/chat` page is **not a product feature**. It's an internal dev/debug surface for manual MCP tool testing and exploratory debugging. For structured, repeatable testing, use the eval harness (`flaim-eval/`). The two are complementary — chat is the visual scratchpad, eval is the structured test bench.
 
 ### Access Control
 
-Users need `publicMetadata.chatAccess: true` in Clerk to access `/chat`.
+Both the page and all `/api/chat/*` routes require `publicMetadata.chatAccess: true` in Clerk. Without it:
+- `/chat` page → redirects to home
+- API routes → 403 Forbidden
 
 Set in Clerk Dashboard → Users → [user] → Public metadata:
 ```json
 { "chatAccess": true }
 ```
-
-Without this metadata, `/chat` redirects to home.
 
 ### Debug Mode
 
