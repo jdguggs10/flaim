@@ -53,6 +53,31 @@ function buildLeagueInfoResponse(): unknown {
           is_finished: 0,
           draft_status: 'postdraft',
         },
+        {
+          teams: {
+            '0': {
+              team: [
+                [
+                  { team_key: '449.l.123.t.1' },
+                  { team_id: '1' },
+                  { name: 'Team A' },
+                  { managers: { '0': { manager: { manager_id: 'm1', nickname: 'Alice' } }, count: 1 } },
+                ],
+              ],
+            },
+            '1': {
+              team: [
+                [
+                  { team_key: '449.l.123.t.2' },
+                  { team_id: '2' },
+                  { name: 'Team B' },
+                  // No managers — tests graceful fallback
+                ],
+              ],
+            },
+            count: 2,
+          },
+        },
       ],
     },
   };
@@ -93,7 +118,11 @@ function buildRosterResponse(): unknown {
   return {
     fantasy_content: {
       team: [
-        [{ team_key: '449.l.123.t.1', name: 'Team A' }],
+        [
+          { team_key: '449.l.123.t.1' },
+          { name: 'Team A' },
+          { managers: { '0': { manager: { manager_id: 'm1', nickname: 'Alice' } }, count: 1 } },
+        ],
         {
           roster: {
             '0': {
@@ -199,6 +228,13 @@ describe('yahoo cross-sport handler characterization tests', () => {
       expect(data.currentWeek).toBe(5);
       expect(data.isFinished).toBe(false);
       expect(data.draftStatus).toBe('postdraft');
+
+      // Teams array with owner names from Yahoo's numeric-keyed managers
+      const teams = data.teams as Array<{ teamId?: string; teamName?: string; ownerName?: string }>;
+      expect(teams).toHaveLength(2);
+      expect(teams[0]).toMatchObject({ teamId: '1', teamName: 'Team A', ownerName: 'Alice' });
+      expect(teams[1]).toMatchObject({ teamId: '2', teamName: 'Team B' });
+      expect(teams[1].ownerName).toBeUndefined();
     });
 
     it('baseball includes startDate and endDate', async () => {
@@ -260,14 +296,16 @@ describe('yahoo cross-sport handler characterization tests', () => {
   });
 
   describe('get_roster', () => {
-    it.each(scenarios)('$label returns roster players with selected positions', async ({ sport, handlers }) => {
+    it.each(scenarios)('$label returns roster players with selected positions and ownerName', async ({ sport, handlers }) => {
       fetchMock.mockResolvedValue(jsonResponse(buildRosterResponse()));
 
       const params: ToolParams = { sport, league_id: '449.l.123', season_year: 2025, team_id: '449.l.123.t.1' };
       const result = await handlers.get_roster({} as never, params, 'Bearer x', `cid-${sport}`);
 
       expect(result.success).toBe(true);
-      const data = result.data as { players: Array<Record<string, unknown>> };
+      const data = result.data as { teamName: string; ownerName?: string; players: Array<Record<string, unknown>> };
+      expect(data.teamName).toBe('Team A');
+      expect(data.ownerName).toBe('Alice');
       expect(data.players).toHaveLength(1);
       expect(data.players[0]).toMatchObject({
         playerId: '101',

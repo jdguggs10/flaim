@@ -100,7 +100,7 @@ async function handleGetLeagueInfo(
   try {
     const credentials = await getCredentials(env, authHeader, correlationId);
 
-    const path = `/seasons/${season_year}/segments/0/leagues/${league_id}?view=mSettings`;
+    const path = `/seasons/${season_year}/segments/0/leagues/${league_id}?view=mSettings&view=mTeam`;
     const response = await espnFetch(path, GAME_ID, { credentials, timeout: 7000 });
 
     if (!response.ok) {
@@ -117,6 +117,20 @@ async function handleGetLeagueInfo(
       };
     }
 
+    const teams = (data.teams || []).map((team) => {
+      const ownerNames = team.owners?.map((o) => o.displayName || o.firstName).filter(Boolean) as string[] | undefined;
+      const hasOwners = ownerNames && ownerNames.length > 0;
+      return {
+        teamId: team.id,
+        teamName: team.location && team.nickname
+          ? `${team.location} ${team.nickname}`
+          : team.name || `Team ${team.id}`,
+        abbrev: team.abbrev,
+        ownerName: hasOwners ? ownerNames[0] : undefined,
+        owners: hasOwners ? ownerNames : undefined,
+      };
+    });
+
     return {
       success: true,
       data: {
@@ -128,6 +142,7 @@ async function handleGetLeagueInfo(
         currentMatchupPeriod: data.currentMatchupPeriod,
         seasonId: data.seasonId,
         segmentId: data.segmentId,
+        teams,
         scoringSettings: {
           type: data.settings.scoringSettings?.scoringType,
           matchupPeriods: data.settings.scoringSettings?.matchupPeriods,
@@ -314,7 +329,7 @@ async function handleGetRoster(
     const credentials = await getCredentials(env, authHeader, correlationId);
     requireCredentials(credentials, 'roster data');
 
-    let path = `/seasons/${season_year}/segments/0/leagues/${league_id}?view=mRoster`;
+    let path = `/seasons/${season_year}/segments/0/leagues/${league_id}?view=mRoster&view=mTeam`;
     if (week) {
       path += `&scoringPeriodId=${week}`;
     }
@@ -369,6 +384,8 @@ async function handleGetRoster(
       };
     });
 
+    const ownerName = team.owners?.map((o) => o.displayName || o.firstName).find(Boolean) || undefined;
+
     return {
       success: true,
       data: {
@@ -377,6 +394,7 @@ async function handleGetRoster(
         teamName: team.location && team.nickname
           ? `${team.location} ${team.nickname}`
           : team.name || `Team ${team.id}`,
+        ownerName,
         roster
       }
     };

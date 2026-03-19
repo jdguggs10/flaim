@@ -59,18 +59,28 @@ describe('sleeper cross-sport handler characterization tests', () => {
 
   describe('get_league_info', () => {
     it.each(scenarios)('$label returns consistent league metadata shape', async ({ sport, handlers }) => {
-      mockFetch.mockResolvedValueOnce(jsonResponse({
-        league_id: '12345',
-        name: 'Test League',
-        sport: 'nfl',
-        season: '2025',
-        status: 'in_season',
-        total_rosters: 10,
-        roster_positions: ['QB', 'RB'],
-        scoring_settings: { pass_yd: 0.04 },
-        previous_league_id: null,
-        draft_id: 'draft_1',
-      }));
+      // get_league_info now makes 3 parallel fetches: league, rosters, users
+      mockFetch
+        .mockResolvedValueOnce(jsonResponse({
+          league_id: '12345',
+          name: 'Test League',
+          sport: 'nfl',
+          season: '2025',
+          status: 'in_season',
+          total_rosters: 10,
+          roster_positions: ['QB', 'RB'],
+          scoring_settings: { pass_yd: 0.04 },
+          previous_league_id: null,
+          draft_id: 'draft_1',
+        }))
+        .mockResolvedValueOnce(jsonResponse([
+          { roster_id: 1, owner_id: 'u1', players: [], starters: [], reserve: [], settings: { wins: 0, losses: 0, ties: 0, fpts: 0, fpts_decimal: 0 } },
+          { roster_id: 2, owner_id: 'u2', players: [], starters: [], reserve: [], settings: { wins: 0, losses: 0, ties: 0, fpts: 0, fpts_decimal: 0 } },
+        ]))
+        .mockResolvedValueOnce(jsonResponse([
+          { user_id: 'u1', display_name: 'Alice', avatar: null },
+          { user_id: 'u2', display_name: 'Bob', avatar: null },
+        ]));
 
       const params: ToolParams = { sport, league_id: '12345', season_year: 2025 };
       const result = await handlers.get_league_info({} as never, params);
@@ -80,6 +90,11 @@ describe('sleeper cross-sport handler characterization tests', () => {
       expect(data.leagueId).toBe('12345');
       expect(data.name).toBe('Test League');
       expect(data.totalRosters).toBe(10);
+
+      const teams = data.teams as Array<{ rosterId: number; ownerName?: string }>;
+      expect(teams).toHaveLength(2);
+      expect(teams[0]).toMatchObject({ rosterId: 1, ownerName: 'Alice' });
+      expect(teams[1]).toMatchObject({ rosterId: 2, ownerName: 'Bob' });
     });
   });
 

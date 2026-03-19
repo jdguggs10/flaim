@@ -1,5 +1,5 @@
 import type { HandlerFn } from './types';
-import type { SleeperLeague } from '../../types';
+import type { SleeperLeague, SleeperLeagueUser, SleeperRoster } from '../../types';
 import { ErrorCode } from '@flaim/worker-shared';
 import { sleeperFetch, handleSleeperError } from '../sleeper-api';
 import { toExecuteErrorResponse } from './utils';
@@ -12,10 +12,30 @@ export function createGetLeagueInfoHandler(): HandlerFn {
     }
 
     try {
-      const response = await sleeperFetch(`/league/${league_id}`);
-      if (!response.ok) handleSleeperError(response);
+      const [leagueRes, rostersRes, usersRes] = await Promise.all([
+        sleeperFetch(`/league/${league_id}`),
+        sleeperFetch(`/league/${league_id}/rosters`),
+        sleeperFetch(`/league/${league_id}/users`),
+      ]);
 
-      const league: SleeperLeague = await response.json();
+      if (!leagueRes.ok) handleSleeperError(leagueRes);
+      if (!rostersRes.ok) handleSleeperError(rostersRes);
+      if (!usersRes.ok) handleSleeperError(usersRes);
+
+      const league: SleeperLeague = await leagueRes.json();
+      const rosters: SleeperRoster[] = await rostersRes.json();
+      const users: SleeperLeagueUser[] = await usersRes.json();
+
+      const userMap = new Map<string, string>();
+      for (const user of users) {
+        userMap.set(user.user_id, user.display_name);
+      }
+
+      const teams = rosters.map((roster) => ({
+        rosterId: roster.roster_id,
+        ownerId: roster.owner_id,
+        ownerName: userMap.get(roster.owner_id) || undefined,
+      }));
 
       return {
         success: true,
@@ -30,6 +50,7 @@ export function createGetLeagueInfoHandler(): HandlerFn {
           scoringSettings: league.scoring_settings,
           previousLeagueId: league.previous_league_id,
           draftId: league.draft_id,
+          teams,
         },
       };
     } catch (error) {

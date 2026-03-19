@@ -3,7 +3,7 @@ import { getYahooCredentials } from '../auth';
 import { yahooFetch, handleYahooError, requireCredentials } from '../yahoo-api';
 import { asArray, getPath, logStructure, unwrapTeam } from '../normalizers';
 import { ErrorCode } from '@flaim/worker-shared';
-import { extractPlayerMeta, toExecuteErrorResponse, withLogLabel } from './utils';
+import { extractManagerName, extractPlayerMeta, toExecuteErrorResponse, withLogLabel } from './utils';
 
 export function createGetRosterHandler(config: YahooHandlerContext): HandlerFn {
   return async (env, params, authHeader, correlationId) => {
@@ -63,6 +63,7 @@ export function createGetRosterHandler(config: YahooHandlerContext): HandlerFn {
         data: {
           teamKey: team.team_key,
           teamName: team.name,
+          ownerName: extractManagerName(team),
           week: week || 'current',
           players,
         },
