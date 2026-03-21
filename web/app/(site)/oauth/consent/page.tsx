@@ -17,25 +17,40 @@ const ALLOWED_REDIRECT_HOSTS = [
   'chatgpt.com',
   'platform.openai.com',
   'gemini.google.com',
+  'perplexity.ai',
+  'perplexity.com',
+  'vscode.dev',
 ];
+
+const ALLOWED_LOOPBACK_PATHS = new Set([
+  '/callback',
+  '/oauth/callback',
+  '/oauth2callback',
+  '/windsurf-auth-callback',
+]);
 
 function isAllowedRedirectUri(uri: string): boolean {
   try {
     const url = new URL(uri);
 
-    // HTTPS host allowlist (covers Claude web, ChatGPT, OpenAI, Gemini)
+    // HTTPS host allowlist (covers Claude, ChatGPT, OpenAI, Gemini, Perplexity, VS Code)
     if (url.protocol === 'https:') {
       return ALLOWED_REDIRECT_HOSTS.some(
         host => url.hostname === host || url.hostname.endsWith('.' + host)
       );
     }
 
-    // Loopback callbacks for Claude Desktop (RFC 8252)
+    // Loopback callbacks for desktop/CLI apps (RFC 8252)
     if (url.protocol === 'http:') {
       const isLoopback = url.hostname === 'localhost' || url.hostname === '127.0.0.1';
-      const isCallback = url.pathname === '/callback' || url.pathname === '/oauth/callback';
+      const isCallback = ALLOWED_LOOPBACK_PATHS.has(url.pathname);
       const isClean = !url.search && !url.hash;
       return isLoopback && isCallback && isClean;
+    }
+
+    // Cursor IDE custom URI scheme
+    if (uri.startsWith('cursor://anysphere.cursor-')) {
+      return uri.includes('/oauth/') && uri.endsWith('/callback') && !uri.includes('?') && !uri.includes('#');
     }
 
     return false;
@@ -152,7 +167,7 @@ function OAuthConsentContent() {
           <h1 className="text-xl font-semibold">Invalid Authorization Request</h1>
           <p className="text-muted-foreground">
             This authorization request is missing required parameters.
-            Please try connecting from Claude or ChatGPT again.
+            Please try connecting from your AI assistant again.
           </p>
           <button
             onClick={() => router.push('/')}
