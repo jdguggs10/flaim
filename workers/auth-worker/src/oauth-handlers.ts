@@ -67,8 +67,9 @@ const ALLOWED_REDIRECT_URIS = [
   // ChatGPT MCP connectors (dynamic per-app paths matched below)
   'https://chatgpt.com/connector_platform_oauth_redirect',
   'https://platform.openai.com/apps-manage/oauth',
-  // Perplexity custom connectors
+  // Perplexity custom connectors (.ai and .com domains)
   'https://www.perplexity.ai/rest/connections/oauth_callback',
+  'https://www.perplexity.com/rest/connections/oauth_callback',
   // VS Code / GitHub Copilot
   'http://127.0.0.1:33418',
   'https://vscode.dev/redirect',

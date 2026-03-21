@@ -214,6 +214,7 @@ describe('redirect URI validation', () => {
 
   it('accepts Perplexity custom connector callback', () => {
     expect(isValidRedirectUri('https://www.perplexity.ai/rest/connections/oauth_callback')).toBe(true);
+    expect(isValidRedirectUri('https://www.perplexity.com/rest/connections/oauth_callback')).toBe(true);
   });
 
   it('accepts Gemini CLI loopback with /oauth2callback path', () => {
