@@ -43,7 +43,7 @@ export default function SleeperGuidePage() {
         <section className="mb-10">
           <h2 className="text-xl font-semibold mb-3">Supported sports</h2>
           <p className="text-muted-foreground">
-            Football and basketball. Baseball and hockey support is in progress.
+            Football and basketball.
           </p>
         </section>
 

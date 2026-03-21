@@ -6,7 +6,7 @@
 
 - Read-only access to fantasy league data via AI assistants
 - Supports ESPN and Yahoo across football, baseball, basketball, hockey
-- Supports Sleeper for football and basketball (baseball and hockey in progress)
+- Supports Sleeper for football and basketball
 - 9 tools: roster, standings, matchups, free agents, transactions, league info, player search, league history, session info
 - Works with Claude, ChatGPT, and Gemini via MCP (Model Context Protocol)
 - Read-only — Flaim cannot trade, drop, or modify anything in your league
