@@ -211,6 +211,41 @@ describe('redirect URI validation', () => {
   it('rejects non-chatgpt.com host using connector path', () => {
     expect(isValidRedirectUri('https://evil.com/connector/oauth/abc')).toBe(false);
   });
+
+  it('accepts Perplexity custom connector callback', () => {
+    expect(isValidRedirectUri('https://www.perplexity.ai/rest/connections/oauth_callback')).toBe(true);
+  });
+
+  it('accepts Gemini CLI loopback with /oauth2callback path', () => {
+    expect(isValidRedirectUri('http://127.0.0.1:9876/oauth2callback')).toBe(true);
+    expect(isValidRedirectUri('http://localhost:9876/oauth2callback')).toBe(true);
+  });
+
+  it('accepts Windsurf loopback callback', () => {
+    expect(isValidRedirectUri('http://127.0.0.1:5555/windsurf-auth-callback')).toBe(true);
+  });
+
+  it('accepts VS Code fixed-port callback', () => {
+    expect(isValidRedirectUri('http://127.0.0.1:33418')).toBe(true);
+  });
+
+  it('accepts VS Code web redirect', () => {
+    expect(isValidRedirectUri('https://vscode.dev/redirect')).toBe(true);
+  });
+
+  it('accepts Cursor custom URI scheme', () => {
+    expect(isValidRedirectUri('cursor://anysphere.cursor-mcp/oauth/abc123/callback')).toBe(true);
+    expect(isValidRedirectUri('cursor://anysphere.cursor-retrieval/oauth/xyz/callback')).toBe(true);
+  });
+
+  it('rejects Cursor URI with query string or fragment', () => {
+    expect(isValidRedirectUri('cursor://anysphere.cursor-mcp/oauth/abc/callback?evil=true')).toBe(false);
+    expect(isValidRedirectUri('cursor://anysphere.cursor-mcp/oauth/abc/callback#frag')).toBe(false);
+  });
+
+  it('rejects non-Cursor custom URI scheme', () => {
+    expect(isValidRedirectUri('evil://anysphere.cursor-mcp/oauth/abc/callback')).toBe(false);
+  });
 });
 
 describe('validateOAuthToken resource enforcement', () => {
