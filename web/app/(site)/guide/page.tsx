@@ -31,7 +31,7 @@ export default function GuidePage() {
             <Link href="/guide/yahoo" className="block rounded-lg border bg-background p-4 hover:border-foreground/20 transition-colors">
               <h3 className="font-semibold">Yahoo</h3>
               <p className="text-sm text-muted-foreground mt-1">
-                Clean OAuth flow — no extension needed. Yahoo auto-discovers all your active leagues. Supports football, baseball, basketball, and hockey.
+                No extension needed — just sign in with Yahoo. Auto-discovers all your active leagues. Supports football, baseball, basketball, and hockey.
               </p>
             </Link>
             <Link href="/guide/sleeper" className="block rounded-lg border bg-background p-4 hover:border-foreground/20 transition-colors">
@@ -46,22 +46,23 @@ export default function GuidePage() {
         <section className="mb-10">
           <h2 className="text-xl font-semibold mb-3">Connect your AI assistant</h2>
           <p className="text-muted-foreground mb-4">
-            After connecting your fantasy platform, add Flaim as an MCP server in your AI assistant using this URL:
+            After connecting your fantasy platform, add Flaim to your AI assistant. You&apos;ll need this server URL:
           </p>
           <div className="rounded-lg border bg-muted p-3 mb-4">
             <code className="text-sm">https://api.flaim.app/mcp</code>
           </div>
           <p className="text-muted-foreground mb-4">
-            Complete the OAuth authorization screen when prompted. Setup varies by assistant:
+            You&apos;ll see a Flaim authorization screen — sign in and approve, then you&apos;re all set. Here&apos;s how to add it in each assistant:
           </p>
           <ul className="space-y-3 text-sm text-muted-foreground">
             <li>
-              <span className="font-medium text-foreground">Claude</span> — Add Flaim as a remote MCP server in your Claude settings.{' '}
-              <a href="https://support.anthropic.com/en/articles/11175166-how-can-i-use-integrations-connectors-in-claude" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Anthropic&apos;s connector docs</a>
+              <span className="font-medium text-foreground">Claude</span> — Add Flaim as an integration in your Claude settings.{' '}
+              <a href="https://support.anthropic.com/en/articles/11175166-how-can-i-use-integrations-connectors-in-claude" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Claude&apos;s setup guide</a>
             </li>
             <li>
-              <span className="font-medium text-foreground">ChatGPT</span> — Add an MCP connection in ChatGPT settings.{' '}
-              <a href="https://platform.openai.com/docs/guides/tools/mcp" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">OpenAI&apos;s MCP docs</a>
+              <span className="font-medium text-foreground">ChatGPT</span> — Add Flaim as a connector in ChatGPT. The setup flow changes occasionally — check{' '}
+              <a href="https://help.openai.com/en/collections/11617038-connectors-in-chatgpt" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">OpenAI&apos;s connector docs</a>{' '}
+              for the latest steps.
             </li>
             <li>
               <span className="font-medium text-foreground">Gemini CLI</span> — Run:{' '}

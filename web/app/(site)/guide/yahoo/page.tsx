@@ -4,7 +4,7 @@ import Link from 'next/link';
 export const metadata: Metadata = {
   title: 'Connect Yahoo Fantasy to ChatGPT, Claude, or Gemini | Flaim',
   description:
-    'Step-by-step guide to connecting your Yahoo fantasy leagues to AI assistants using Flaim. Standard OAuth — no extension needed.',
+    'Step-by-step guide to connecting your Yahoo fantasy leagues to AI assistants using Flaim. No extension needed — just sign in with Yahoo.',
   alternates: {
     canonical: 'https://flaim.app/guide/yahoo',
   },
@@ -16,7 +16,7 @@ export default function YahooGuidePage() {
       <div className="container max-w-2xl mx-auto py-12 px-4">
         <h1 className="text-3xl font-bold mb-4">Connect Yahoo Fantasy to ChatGPT, Claude, or Gemini</h1>
         <p className="text-muted-foreground mb-8">
-          Flaim connects your Yahoo fantasy leagues to AI assistants for read-only analysis. Yahoo uses a standard OAuth flow — no extension needed. Setup takes about 5 minutes.
+          Flaim connects your Yahoo fantasy leagues to AI assistants for read-only analysis. No extension needed — just sign in with your Yahoo account and Flaim handles the rest. Setup takes about 5 minutes.
         </p>
 
         <section className="mb-10">
@@ -36,7 +36,7 @@ export default function YahooGuidePage() {
             <li>Yahoo auto-discovers all your active leagues</li>
             <li>Add the Flaim MCP server URL to your AI assistant: <code className="text-xs bg-muted px-1 py-0.5 rounded">https://api.flaim.app/mcp</code>{' '}
               (<Link href="/guide" className="text-primary hover:underline">AI setup details</Link>)</li>
-            <li>Complete the OAuth authorization screen</li>
+            <li>Sign in to Flaim and approve the connection</li>
             <li>Start chatting about your league</li>
           </ol>
         </section>

@@ -37,7 +37,7 @@ export default function EspnGuidePage() {
             <li>Click the Flaim extension icon and hit Sync</li>
             <li>Add the Flaim MCP server URL to your AI assistant: <code className="text-xs bg-muted px-1 py-0.5 rounded">https://api.flaim.app/mcp</code>{' '}
               (<Link href="/guide" className="text-primary hover:underline">AI setup details</Link>)</li>
-            <li>Complete the OAuth authorization screen</li>
+            <li>Sign in to Flaim and approve the connection</li>
             <li>Start chatting about your league</li>
           </ol>
         </section>
