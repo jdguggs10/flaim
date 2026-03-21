@@ -212,9 +212,16 @@ describe('redirect URI validation', () => {
     expect(isValidRedirectUri('https://evil.com/connector/oauth/abc')).toBe(false);
   });
 
-  it('accepts Perplexity custom connector callback', () => {
+  it('accepts Perplexity custom connector callback on any subdomain/TLD', () => {
     expect(isValidRedirectUri('https://www.perplexity.ai/rest/connections/oauth_callback')).toBe(true);
     expect(isValidRedirectUri('https://www.perplexity.com/rest/connections/oauth_callback')).toBe(true);
+    expect(isValidRedirectUri('https://enterprise.perplexity.ai/rest/connections/oauth_callback')).toBe(true);
+    expect(isValidRedirectUri('https://perplexity.ai/rest/connections/oauth_callback')).toBe(true);
+  });
+
+  it('rejects non-perplexity host using perplexity callback path', () => {
+    expect(isValidRedirectUri('https://evil-perplexity.ai/rest/connections/oauth_callback')).toBe(false);
+    expect(isValidRedirectUri('https://evil.com/rest/connections/oauth_callback')).toBe(false);
   });
 
   it('accepts Gemini CLI loopback with /oauth2callback path', () => {

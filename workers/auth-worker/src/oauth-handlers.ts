@@ -67,9 +67,7 @@ const ALLOWED_REDIRECT_URIS = [
   // ChatGPT MCP connectors (dynamic per-app paths matched below)
   'https://chatgpt.com/connector_platform_oauth_redirect',
   'https://platform.openai.com/apps-manage/oauth',
-  // Perplexity custom connectors (.ai and .com domains)
-  'https://www.perplexity.ai/rest/connections/oauth_callback',
-  'https://www.perplexity.com/rest/connections/oauth_callback',
+  // Perplexity custom connectors (pattern matched below for all subdomains)
   // VS Code / GitHub Copilot
   'http://127.0.0.1:33418',
   'https://vscode.dev/redirect',
@@ -138,6 +136,9 @@ export function isValidRedirectUri(uri: string): boolean {
   // ChatGPT dev-mode apps generate unique per-app callback paths
   if (isChatGptConnectorUri(uri)) return true;
 
+  // Perplexity uses multiple domains (www.perplexity.ai, www.perplexity.com, enterprise.perplexity.ai, etc.)
+  if (isPerplexityRedirectUri(uri)) return true;
+
   // Cursor IDE uses a custom URI scheme
   if (isCursorRedirectUri(uri)) return true;
 
@@ -156,6 +157,23 @@ function isChatGptConnectorUri(uri: string): boolean {
       !parsed.search &&
       !parsed.hash
     );
+  } catch {
+    return false;
+  }
+}
+
+// Perplexity uses multiple domains/subdomains (www.perplexity.ai, www.perplexity.com,
+// enterprise.perplexity.ai, etc.) — match any *.perplexity.{ai,com} with the known path.
+function isPerplexityRedirectUri(uri: string): boolean {
+  try {
+    const parsed = new URL(uri);
+    if (parsed.protocol !== 'https:') return false;
+    const host = parsed.hostname;
+    const isPerplexity =
+      (host === 'perplexity.ai' || host.endsWith('.perplexity.ai') ||
+       host === 'perplexity.com' || host.endsWith('.perplexity.com'));
+    const isCallbackPath = parsed.pathname === '/rest/connections/oauth_callback';
+    return isPerplexity && isCallbackPath && !parsed.search && !parsed.hash;
   } catch {
     return false;
   }
