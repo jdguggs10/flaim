@@ -26,6 +26,35 @@ export default function LandingPage() {
         </p>
       </section>
 
+      <p className="text-sm text-muted-foreground max-w-xl mx-auto text-center px-4 pb-2">
+        Flaim connects your ESPN, Yahoo, and Sleeper fantasy leagues to Claude, ChatGPT, and Gemini for read-only, league-specific analysis. Ask about your roster, matchups, standings, free agents, and transactions — using your actual league data.
+      </p>
+
+      {/* What you can ask */}
+      <section className="px-4 pb-4">
+        <div className="container max-w-xl mx-auto">
+          <h2 className="text-lg font-semibold text-center mb-3">What you can ask</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div className="rounded-lg border bg-background p-3">
+              <p className="text-sm font-medium">&ldquo;Who should I start this week?&rdquo;</p>
+              <p className="text-xs text-muted-foreground mt-1">Pulls your real matchup and roster</p>
+            </div>
+            <div className="rounded-lg border bg-background p-3">
+              <p className="text-sm font-medium">&ldquo;Who&rsquo;s on the waiver wire?&rdquo;</p>
+              <p className="text-xs text-muted-foreground mt-1">Scans available free agents in your league</p>
+            </div>
+            <div className="rounded-lg border bg-background p-3">
+              <p className="text-sm font-medium">&ldquo;How do I stack up against first place?&rdquo;</p>
+              <p className="text-xs text-muted-foreground mt-1">Compares your roster to the standings leader</p>
+            </div>
+            <div className="rounded-lg border bg-background p-3">
+              <p className="text-sm font-medium">&ldquo;What trades happened this week?&rdquo;</p>
+              <p className="text-xs text-muted-foreground mt-1">Shows recent transactions in your league</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* How It Works */}
       <section className="py-8 bg-muted">
         <div className="container max-w-xl mx-auto px-4">
