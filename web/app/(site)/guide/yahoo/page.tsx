@@ -13,6 +13,26 @@ export const metadata: Metadata = {
 export default function YahooGuidePage() {
   return (
     <div className="min-h-screen bg-background">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            '@context': 'https://schema.org',
+            '@type': 'HowTo',
+            name: 'Connect Yahoo Fantasy to ChatGPT, Claude, or Gemini',
+            description: 'Step-by-step guide to connecting your Yahoo fantasy leagues to AI assistants using Flaim.',
+            step: [
+              { '@type': 'HowToStep', name: 'Create a Flaim account', text: 'Create a Flaim account at flaim.app.' },
+              { '@type': 'HowToStep', name: 'Authenticate Yahoo', text: 'Click "Authenticate Yahoo" on the Flaim homepage.' },
+              { '@type': 'HowToStep', name: 'Sign in with Yahoo', text: 'Sign in with your Yahoo account and authorize Flaim.' },
+              { '@type': 'HowToStep', name: 'Leagues auto-discovered', text: 'Yahoo auto-discovers all your active leagues.' },
+              { '@type': 'HowToStep', name: 'Add Flaim to your AI assistant', text: 'Add the Flaim MCP server URL (https://api.flaim.app/mcp) to your AI assistant.' },
+              { '@type': 'HowToStep', name: 'Authorize', text: 'Sign in to Flaim and approve the connection.' },
+              { '@type': 'HowToStep', name: 'Start chatting', text: 'Start chatting about your league.' },
+            ],
+          }),
+        }}
+      />
       <div className="container max-w-2xl mx-auto py-12 px-4">
         <h1 className="text-3xl font-bold mb-4">Connect Yahoo Fantasy to ChatGPT, Claude, or Gemini</h1>
         <p className="text-muted-foreground mb-8">

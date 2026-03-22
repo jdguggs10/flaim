@@ -13,6 +13,26 @@ export const metadata: Metadata = {
 export default function EspnGuidePage() {
   return (
     <div className="min-h-screen bg-background">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            '@context': 'https://schema.org',
+            '@type': 'HowTo',
+            name: 'Connect ESPN Fantasy to ChatGPT, Claude, or Gemini',
+            description: 'Step-by-step guide to connecting your ESPN fantasy leagues to AI assistants using Flaim.',
+            step: [
+              { '@type': 'HowToStep', name: 'Create a Flaim account', text: 'Create a Flaim account at flaim.app.' },
+              { '@type': 'HowToStep', name: 'Install the Chrome extension', text: 'Install the Flaim Chrome extension from the Chrome Web Store.' },
+              { '@type': 'HowToStep', name: 'Log in to ESPN', text: 'Log in to fantasy.espn.com in Chrome.' },
+              { '@type': 'HowToStep', name: 'Sync your leagues', text: 'Click the Flaim extension icon and hit Sync.' },
+              { '@type': 'HowToStep', name: 'Add Flaim to your AI assistant', text: 'Add the Flaim MCP server URL (https://api.flaim.app/mcp) to your AI assistant.' },
+              { '@type': 'HowToStep', name: 'Authorize', text: 'Sign in to Flaim and approve the connection.' },
+              { '@type': 'HowToStep', name: 'Start chatting', text: 'Start chatting about your league.' },
+            ],
+          }),
+        }}
+      />
       <div className="container max-w-2xl mx-auto py-12 px-4">
         <h1 className="text-3xl font-bold mb-4">Connect ESPN Fantasy to ChatGPT, Claude, or Gemini</h1>
         <p className="text-muted-foreground mb-8">

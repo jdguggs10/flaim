@@ -16,6 +16,49 @@ import { StepConnectAI } from '@/components/site/StepConnectAI';
 export default function LandingPage() {
   return (
     <div className="min-h-screen bg-background">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            '@context': 'https://schema.org',
+            '@type': 'FAQPage',
+            mainEntity: [
+              {
+                '@type': 'Question',
+                name: 'What does Flaim do?',
+                acceptedAnswer: {
+                  '@type': 'Answer',
+                  text: 'Flaim is a skill that turns your AI into a fantasy sports expert, and a connector to data from your actual fantasy leagues. It lets you ask Claude, ChatGPT, or Gemini about your actual roster, matchup, standings, transactions, available free agents, waiver wire, and more.',
+                },
+              },
+              {
+                '@type': 'Question',
+                name: 'Why a Chrome extension?',
+                acceptedAnswer: {
+                  '@type': 'Answer',
+                  text: 'You only need it if you have leagues at ESPN. Log in to fantasy.espn.com and the extension will piggyback on that session to auto-sync your leagues.',
+                },
+              },
+              {
+                '@type': 'Question',
+                name: 'How does Flaim connect to AI clients?',
+                acceptedAnswer: {
+                  '@type': 'Answer',
+                  text: 'Sync your league data to Flaim, and then Flaim connects that data to Claude, ChatGPT, or Gemini. Your Flaim account tells your AI about your leagues, team name, and season year, while also giving the AI dedicated tools to pull out league data.',
+                },
+              },
+              {
+                '@type': 'Question',
+                name: 'Any other tips or tricks?',
+                acceptedAnswer: {
+                  '@type': 'Answer',
+                  text: 'Set a default sport and default leagues at flaim.app/leagues to save yourself some repeated explanation. If the AI needs a nudge, just say "Use Flaim."',
+                },
+              },
+            ],
+          }),
+        }}
+      />
       {/* Hero */}
       <section className="py-8 px-4 text-center">
         <h1 className="text-4xl md:text-5xl font-bold mb-2">
