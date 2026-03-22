@@ -258,6 +258,8 @@ Usually not needed since CI/CD handles it, but available for debugging:
 - **Workers**: Via `wrangler dev` locally, Cloudflare Dashboard in prod (see `workers/README.md`)
 - **GitHub Actions**: `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN` in repo secrets
 
+**Clerk keys are scoped by Vercel environment.** Production and Preview use separate Clerk instances with independently scoped environment variables in Vercel. See Notion (Platform + Infrastructure) for details.
+
 ### DNS for Custom Routes
 
 Cloudflare DNS: `A` record, name `api`, IPv4 `192.0.2.1`, proxied (orange).

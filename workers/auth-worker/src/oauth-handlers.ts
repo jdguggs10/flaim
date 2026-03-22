@@ -107,12 +107,22 @@ function isLoopbackRedirectUri(uri: string): boolean {
 const OAUTH_CLIENT_ID = 'flaim-mcp';
 
 // Frontend URL for consent page
-const getFrontendUrl = (env: OAuthEnv): string => {
+const getFrontendUrl = (env: OAuthEnv, request?: Request): string => {
   if (env.FRONTEND_URL) {
     return env.FRONTEND_URL.replace(/\/$/, '');
   }
   if (env.ENVIRONMENT === 'dev' || env.NODE_ENV === 'development') {
     return 'http://localhost:3000';
+  }
+  // In preview, use the request origin if it's a Vercel preview URL
+  if (env.ENVIRONMENT === 'preview' && request) {
+    const origin = request.headers.get('Origin') || request.headers.get('Referer');
+    if (origin) {
+      const url = origin.startsWith('http') ? new URL(origin).origin : origin;
+      if (/^https:\/\/flaim(-[a-z0-9-]+)?\.vercel\.app$/.test(url)) {
+        return url;
+      }
+    }
   }
   return 'https://flaim.app';
 };
@@ -442,7 +452,7 @@ export async function handleAuthorize(request: Request, env: OAuthEnv): Promise<
   }
 
   // Build frontend consent URL
-  const frontendUrl = getFrontendUrl(env);
+  const frontendUrl = getFrontendUrl(env, request);
   const consentUrl = new URL(`${frontendUrl}/oauth/consent`);
 
   // Pass all OAuth params to frontend
