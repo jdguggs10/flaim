@@ -258,7 +258,29 @@ Usually not needed since CI/CD handles it, but available for debugging:
 - **Workers**: Via `wrangler dev` locally, Cloudflare Dashboard in prod (see `workers/README.md`)
 - **GitHub Actions**: `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN` in repo secrets
 
-**Clerk keys are scoped by Vercel environment.** Production and Preview use separate Clerk instances with independently scoped environment variables in Vercel. See Notion (Platform + Infrastructure) for details.
+### Preview Environment
+
+Opening a PR triggers a full preview stack: Vercel preview deploy + all 5 Cloudflare Workers in `--env preview`. The preview chain is fully isolated from production at the worker level (preview workers bind to each other via service bindings).
+
+**Key differences from production:**
+
+| Layer | Production | Preview |
+|-------|-----------|---------|
+| Frontend | `flaim.app` (Vercel) | `flaim-git-{branch}-gerald-guggers-projects.vercel.app` |
+| Clerk | Production instance (`pk_live_`) | Development instance (`pk_test_`), separate user pool |
+| Workers | `auth-worker`, `fantasy-mcp`, etc. | `auth-worker-preview`, `fantasy-mcp-preview`, etc. |
+| Supabase | Shared (same instance) | Shared (same instance) |
+| Worker URLs | Custom domains (`api.flaim.app/*`) | `.workers.dev` URLs |
+
+**Vercel env vars are scoped by environment.** `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, `NEXT_PUBLIC_AUTH_WORKER_URL`, and `NEXT_PUBLIC_FANTASY_MCP_URL` each have separate Production and Preview values. Preview points to dev Clerk and preview worker URLs.
+
+**Auth-worker resolves frontend redirects dynamically in preview** — no static `FRONTEND_URL` needed. It reads the `Origin` header (OAuth consent) or stored `redirect_after` (Yahoo callback) and accepts any `flaim-*.vercel.app` origin.
+
+**Supabase is shared.** Preview and prod write to the same database. Clerk instance isolation prevents cross-contamination (dev Clerk user IDs never match prod user IDs). Preview testing may leave orphan rows keyed to dev Clerk IDs — these are inert and can be cleaned up periodically.
+
+**Triggering preview deploys:** Workers only deploy on PRs (not bare branch pushes). A PR must exist for GitHub Actions to run `deploy-workers.yml` with `--env preview`. Vercel deploys on any push.
+
+See Notion (Platform + Infrastructure) for decision rationale.
 
 ### DNS for Custom Routes
 
