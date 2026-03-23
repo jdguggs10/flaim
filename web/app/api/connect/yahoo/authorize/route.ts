@@ -26,6 +26,7 @@ export async function GET() {
       redirect: 'manual',
       headers: {
         Authorization: `Bearer ${bearer}`,
+        'X-Forwarded-Origin': process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '',
       },
     });
 

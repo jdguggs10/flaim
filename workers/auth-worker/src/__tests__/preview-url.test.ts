@@ -26,6 +26,19 @@ describe('resolvePreviewOrigin', () => {
     expect(resolvePreviewOrigin(req)).toBe('https://flaim-git-feature-gerald-guggers-projects.vercel.app');
   });
 
+  it('uses X-Forwarded-Origin from Next.js API proxies', () => {
+    const req = makeRequest({ 'X-Forwarded-Origin': 'https://flaim-git-feature-gerald-guggers-projects.vercel.app' });
+    expect(resolvePreviewOrigin(req)).toBe('https://flaim-git-feature-gerald-guggers-projects.vercel.app');
+  });
+
+  it('prefers X-Forwarded-Origin over Origin', () => {
+    const req = makeRequest({
+      'X-Forwarded-Origin': 'https://flaim-git-preview-gerald-guggers-projects.vercel.app',
+      Origin: 'https://flaim-git-other-gerald-guggers-projects.vercel.app',
+    });
+    expect(resolvePreviewOrigin(req)).toBe('https://flaim-git-preview-gerald-guggers-projects.vercel.app');
+  });
+
   it('rejects non-Vercel origins', () => {
     const req = makeRequest({ Origin: 'https://evil.com' });
     expect(resolvePreviewOrigin(req)).toBeUndefined();

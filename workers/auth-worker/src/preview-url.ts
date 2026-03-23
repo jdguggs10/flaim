@@ -14,7 +14,10 @@ const VERCEL_PREVIEW_PATTERN = /^https:\/\/flaim(-[a-z0-9-]+)?\.vercel\.app$/;
  * Returns the origin if it matches the preview URL pattern, undefined otherwise.
  */
 export function resolvePreviewOrigin(request: Request): string | undefined {
-  const origin = request.headers.get('Origin') || request.headers.get('Referer');
+  // Check X-Forwarded-Origin first (set by Next.js API proxies), then standard headers
+  const origin = request.headers.get('X-Forwarded-Origin')
+    || request.headers.get('Origin')
+    || request.headers.get('Referer');
   if (!origin) return undefined;
   const url = origin.startsWith('http') ? new URL(origin).origin : origin;
   return VERCEL_PREVIEW_PATTERN.test(url) ? url : undefined;
