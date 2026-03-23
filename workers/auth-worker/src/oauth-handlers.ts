@@ -18,6 +18,7 @@
  */
 
 import { OAuthStorage } from './oauth-storage';
+import { getFrontendUrl } from './preview-url';
 
 // =============================================================================
 // TYPES
@@ -106,26 +107,6 @@ function isLoopbackRedirectUri(uri: string): boolean {
 // OAuth client ID (static for now, no DCR)
 const OAUTH_CLIENT_ID = 'flaim-mcp';
 
-// Frontend URL for consent page
-const getFrontendUrl = (env: OAuthEnv, request?: Request): string => {
-  if (env.FRONTEND_URL) {
-    return env.FRONTEND_URL.replace(/\/$/, '');
-  }
-  if (env.ENVIRONMENT === 'dev' || env.NODE_ENV === 'development') {
-    return 'http://localhost:3000';
-  }
-  // In preview, use the request origin if it's a Vercel preview URL
-  if (env.ENVIRONMENT === 'preview' && request) {
-    const origin = request.headers.get('Origin') || request.headers.get('Referer');
-    if (origin) {
-      const url = origin.startsWith('http') ? new URL(origin).origin : origin;
-      if (/^https:\/\/flaim(-[a-z0-9-]+)?\.vercel\.app$/.test(url)) {
-        return url;
-      }
-    }
-  }
-  return 'https://flaim.app';
-};
 
 // Base URL for OAuth endpoints (used in metadata)
 const getBaseUrl = (env: OAuthEnv): string => {

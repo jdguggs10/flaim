@@ -41,7 +41,7 @@ export default function SleeperGuidePage() {
         <section className="mb-10">
           <h2 className="text-xl font-semibold mb-3">What you need</h2>
           <ul className="list-disc list-inside text-muted-foreground space-y-1">
-            <li>A Flaim account (<a href="https://flaim.app" className="text-primary hover:underline">flaim.app</a>)</li>
+            <li>A Flaim account (<Link href="/" className="text-primary hover:underline">flaim.app</Link>)</li>
             <li>Your Sleeper username</li>
           </ul>
         </section>
@@ -49,7 +49,7 @@ export default function SleeperGuidePage() {
         <section className="mb-10">
           <h2 className="text-xl font-semibold mb-3">Step by step</h2>
           <ol className="list-decimal list-inside text-muted-foreground space-y-2">
-            <li>Create a Flaim account at <a href="https://flaim.app" className="text-primary hover:underline">flaim.app</a></li>
+            <li>Create a Flaim account at <Link href="/" className="text-primary hover:underline">flaim.app</Link></li>
             <li>Enter your Sleeper username on the Flaim homepage</li>
             <li>Flaim auto-discovers your leagues</li>
             <li>Add the Flaim MCP server URL to your AI assistant: <code className="text-xs bg-muted px-1 py-0.5 rounded">https://api.flaim.app/mcp</code>{' '}

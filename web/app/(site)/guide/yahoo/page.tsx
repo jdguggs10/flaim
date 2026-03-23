@@ -42,7 +42,7 @@ export default function YahooGuidePage() {
         <section className="mb-10">
           <h2 className="text-xl font-semibold mb-3">What you need</h2>
           <ul className="list-disc list-inside text-muted-foreground space-y-1">
-            <li>A Flaim account (<a href="https://flaim.app" className="text-primary hover:underline">flaim.app</a>)</li>
+            <li>A Flaim account (<Link href="/" className="text-primary hover:underline">flaim.app</Link>)</li>
             <li>A Yahoo account with an active fantasy league</li>
           </ul>
         </section>
@@ -50,7 +50,7 @@ export default function YahooGuidePage() {
         <section className="mb-10">
           <h2 className="text-xl font-semibold mb-3">Step by step</h2>
           <ol className="list-decimal list-inside text-muted-foreground space-y-2">
-            <li>Create a Flaim account at <a href="https://flaim.app" className="text-primary hover:underline">flaim.app</a></li>
+            <li>Create a Flaim account at <Link href="/" className="text-primary hover:underline">flaim.app</Link></li>
             <li>Click &ldquo;Authenticate Yahoo&rdquo; on the Flaim homepage</li>
             <li>Sign in with your Yahoo account and authorize Flaim</li>
             <li>Yahoo auto-discovers all your active leagues</li>

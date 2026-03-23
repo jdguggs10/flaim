@@ -18,6 +18,7 @@
  */
 
 import { YahooStorage } from './yahoo-storage';
+import { getFrontendUrl, resolvePreviewOrigin } from './preview-url';
 
 // =============================================================================
 // TYPES
@@ -64,28 +65,7 @@ function getCallbackUrl(env: YahooConnectEnv): string {
   return 'https://api.flaim.app/auth/connect/yahoo/callback';
 }
 
-/**
- * Get the frontend URL for redirects after OAuth flow
- */
-function getFrontendUrl(env: YahooConnectEnv, request?: Request): string {
-  if (env.FRONTEND_URL) {
-    return env.FRONTEND_URL.replace(/\/$/, '');
-  }
-  if (env.ENVIRONMENT === 'dev' || env.NODE_ENV === 'development') {
-    return 'http://localhost:3000';
-  }
-  // In preview, use the request origin if it's a Vercel preview URL
-  if (env.ENVIRONMENT === 'preview' && request) {
-    const origin = request.headers.get('Origin') || request.headers.get('Referer');
-    if (origin) {
-      const url = origin.startsWith('http') ? new URL(origin).origin : origin;
-      if (/^https:\/\/flaim(-[a-z0-9-]+)?\.vercel\.app$/.test(url)) {
-        return url;
-      }
-    }
-  }
-  return 'https://flaim.app';
-}
+// getFrontendUrl imported from ./preview-url
 
 /**
  * Generate a random nonce for CSRF protection
@@ -126,16 +106,9 @@ export async function handleYahooAuthorize(
     const state = `${userId}:${nonce}`;
 
     // In preview, store the frontend origin so the callback can redirect back
-    let redirectAfter: string | undefined;
-    if (env.ENVIRONMENT === 'preview' && request) {
-      const origin = request.headers.get('Origin') || request.headers.get('Referer');
-      if (origin) {
-        const url = origin.startsWith('http') ? new URL(origin).origin : origin;
-        if (/^https:\/\/flaim(-[a-z0-9-]+)?\.vercel\.app$/.test(url)) {
-          redirectAfter = url;
-        }
-      }
-    }
+    const redirectAfter = (env.ENVIRONMENT === 'preview' && request)
+      ? resolvePreviewOrigin(request)
+      : undefined;
 
     // Store state for validation in callback
     await storage.createPlatformOAuthState({
