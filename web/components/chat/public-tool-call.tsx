@@ -62,18 +62,18 @@ export function PublicToolCall({
   const argumentSummary = summarizeArguments(parsedArguments);
 
   return (
-    <div className="overflow-hidden rounded-[1.75rem] border border-white/60 bg-white/75 px-4 py-4 shadow-[0_24px_80px_rgba(15,23,42,0.08)] backdrop-blur">
+    <div className="overflow-hidden rounded-[1.75rem] border border-border bg-card px-4 py-4 shadow-sm">
       <div className="mb-4 flex items-center justify-between gap-3">
-        <div className="inline-flex items-center gap-2 rounded-full border border-slate-900/10 bg-slate-950 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-white">
-          <Telescope className="h-3.5 w-3.5 text-cyan-300" />
+        <div className="inline-flex items-center gap-2 rounded-full border border-border bg-muted px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-foreground">
+          <Telescope className="h-3.5 w-3.5" />
           Live tool call
         </div>
         <div
           className={cn(
-            "inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold",
+            "inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-semibold",
             status === "completed"
-              ? "bg-emerald-500/12 text-emerald-700"
-              : "bg-amber-500/12 text-amber-700"
+              ? "border-border bg-primary text-primary-foreground"
+              : "border-border bg-muted text-foreground"
           )}
         >
           {status === "completed" ? (
@@ -87,8 +87,8 @@ export function PublicToolCall({
 
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-            <Sparkles className="h-4 w-4 text-fuchsia-500" />
+          <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <Sparkles className="h-4 w-4" />
             <span>{formatToolName(name)}</span>
           </div>
           {argumentSummary.length > 0 ? (
@@ -96,22 +96,22 @@ export function PublicToolCall({
               {argumentSummary.map((item) => (
                 <span
                   key={item}
-                  className="rounded-full border border-slate-900/10 bg-slate-900/[0.03] px-2.5 py-1 text-xs text-slate-600"
+                  className="rounded-full border border-border bg-muted px-2.5 py-1 text-xs text-muted-foreground"
                 >
                   {item}
                 </span>
               ))}
             </div>
           ) : (
-            <p className="mt-2 text-xs text-slate-500">
+            <p className="mt-2 text-xs text-muted-foreground">
               Inspecting Gerry&apos;s live league data.
             </p>
           )}
         </div>
       </div>
 
-      <div className="mt-4 flex items-center gap-2 border-t border-slate-900/8 pt-3 text-xs text-slate-500">
-        <Radio className="h-3.5 w-3.5 text-cyan-600" />
+      <div className="mt-4 flex items-center gap-2 border-t border-border pt-3 text-xs text-muted-foreground">
+        <Radio className="h-3.5 w-3.5" />
         Live data from Gerry&apos;s actual leagues
       </div>
     </div>
