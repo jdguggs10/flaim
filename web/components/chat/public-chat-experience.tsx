@@ -223,7 +223,7 @@ export function PublicChatExperience() {
                 disabled={runStatus === "running"}
                 aria-pressed={isSelected}
                 className={cn(
-                  "group relative min-w-[12.5rem] overflow-hidden rounded-full border px-4 py-3 text-left transition-all duration-200 sm:min-w-[14rem] sm:px-5 sm:py-3.5",
+                  "group relative min-w-[10.75rem] max-w-[10.75rem] overflow-hidden rounded-full border px-3.5 py-2.5 text-left transition-all duration-200 sm:min-w-[12rem] sm:max-w-[12rem] sm:px-4 sm:py-3",
                   isSelected
                     ? "border-primary bg-primary text-primary-foreground shadow-sm"
                     : "border-border bg-background text-foreground hover:bg-muted",
@@ -235,7 +235,7 @@ export function PublicChatExperience() {
                 <div className="relative">
                   <h3
                     className={cn(
-                      "line-clamp-2 min-h-[2.5rem] text-sm font-semibold leading-[1.15] tracking-tight sm:min-h-[2.65rem] sm:text-[0.95rem]",
+                      "line-clamp-2 min-h-[2rem] text-[0.82rem] font-semibold leading-[1.1] tracking-tight sm:min-h-[2.2rem] sm:text-[0.9rem]",
                       isSelected ? "text-primary-foreground" : "text-foreground"
                     )}
                   >
@@ -468,7 +468,7 @@ export function PublicChatExperience() {
                       <div className="max-w-xl text-center">
                         <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-[1.2rem] border border-border bg-primary text-primary-foreground sm:h-16 sm:w-16 sm:rounded-[1.5rem]">
                           <Image
-                            src="/flaim-mark-hero-dark.png"
+                            src="/icon-dark.png"
                             alt="Flaim"
                             width={28}
                             height={28}

@@ -140,8 +140,7 @@
   }
 
   .public-chat-ticker-track--bottom {
-    animation-duration: 42s;
-    animation-direction: reverse;
+    animation-duration: 40s;
   }
 
   .public-chat-ticker-track--paused {
