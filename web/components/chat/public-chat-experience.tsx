@@ -17,8 +17,6 @@ import {
   Database,
   Eye,
   LoaderCircle,
-  LockKeyhole,
-  Radio,
   RefreshCw,
   Search,
   ShieldCheck,
@@ -29,7 +27,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { PublicMessage } from "./public-message";
-import { PublicToolCall } from "./public-tool-call";
 
 type PublicRunStatus = "idle" | "running" | "completed" | "error";
 
@@ -40,42 +37,6 @@ interface PublicToolCallState {
   arguments: string;
   parsedArguments?: Record<string, unknown>;
 }
-
-const DEMO_SIGNALS = [
-  {
-    title: "Gerry's actual leagues",
-    description: "Every run reads from Gerry's real connected leagues, not mocked data.",
-    icon: Database,
-  },
-  {
-    title: "Tool calls in public",
-    description: "Visitors watch the actual MCP sequence unfold instead of a canned screenshot.",
-    icon: Eye,
-  },
-  {
-    title: "Locked down on purpose",
-    description: "Preset prompts keep the demo fast, safe, and repeatable while still feeling live.",
-    icon: LockKeyhole,
-  },
-] as const;
-
-const DEMO_STEPS = [
-  {
-    step: "01",
-    title: "Pick a scenario",
-    description: "Choose a curated live prompt that shows off a different part of Flaim.",
-  },
-  {
-    step: "02",
-    title: "Watch the tools fire",
-    description: "The demo streams league reads and tool activity while the answer is being built.",
-  },
-  {
-    step: "03",
-    title: "See the grounded answer",
-    description: "The final response is based on Gerry's live leagues, not static content.",
-  },
-] as const;
 
 const PRESET_ICONS: Record<PublicChatPresetId, LucideIcon> = {
   "show-leagues": Database,
@@ -204,7 +165,6 @@ export function PublicChatExperience() {
   const [selectedPresetId, setSelectedPresetId] =
     useState<PublicChatPresetId | null>(null);
   const [assistantText, setAssistantText] = useState("");
-  const [thinkingText, setThinkingText] = useState("");
   const [toolCalls, setToolCalls] = useState<PublicToolCallState[]>([]);
   const [error, setError] = useState<string | null>(null);
   const transcriptEndRef = useRef<HTMLDivElement | null>(null);
@@ -218,8 +178,6 @@ export function PublicChatExperience() {
         : null,
     [selectedPresetId]
   );
-  const heroPreset = selectedPreset ?? PUBLIC_CHAT_PRESETS[0];
-  const HeroIcon = PRESET_ICONS[heroPreset.id];
   const runStatusLabel =
     runStatus === "running"
       ? "Running live"
@@ -232,7 +190,7 @@ export function PublicChatExperience() {
 
   useEffect(() => {
     transcriptEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [assistantText, thinkingText, toolCalls.length, runStatus]);
+  }, [assistantText, toolCalls.length, runStatus]);
 
   useEffect(() => {
     return () => {
@@ -248,7 +206,6 @@ export function PublicChatExperience() {
     setSelectedPresetId(preset.id);
     setRunStatus("running");
     setAssistantText("");
-    setThinkingText("");
     setToolCalls([]);
     setError(null);
     hasStreamedAssistantTextRef.current = false;
@@ -289,10 +246,6 @@ export function PublicChatExperience() {
 
         switch (event) {
           case "reasoning_delta": {
-            const delta = typeof data.delta === "string" ? data.delta : "";
-            if (delta) {
-              setThinkingText((current) => current + delta);
-            }
             break;
           }
           case "tool_start": {
@@ -410,295 +363,137 @@ export function PublicChatExperience() {
     <div className="relative h-full overflow-y-auto bg-background">
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_bottom,transparent_0,transparent_23px,var(--border)_24px)] bg-[length:100%_24px] opacity-25" />
 
-      <div className="relative mx-auto flex min-h-full w-full max-w-7xl flex-col px-4 py-5 sm:px-6 lg:px-8 lg:py-8">
-        <div className="rounded-[1.75rem] border border-border bg-card p-3 shadow-sm">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-border bg-primary text-primary-foreground">
-                <Image
-                  src="/flaim-mark-hero-dark.png"
-                  alt="Flaim"
-                  width={26}
-                  height={26}
-                />
-              </div>
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-muted-foreground">
-                  Public Chat
-                </p>
-                <p className="text-sm font-medium text-foreground">
-                  Live fantasy data. Real tool calls. No sign-in required.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="outline" className="gap-2 px-3 py-1 text-xs font-semibold">
-                <span className="h-2 w-2 rounded-full bg-foreground" />
-                Gerry&apos;s leagues
-              </Badge>
-              <Button
-                asChild
-                variant="outline"
-                className="rounded-full"
-              >
-                <Link href="/">
-                  Back home
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </Link>
-              </Button>
-            </div>
-          </div>
-        </div>
-
-        <section className="grid gap-5 pb-6 pt-5 lg:grid-cols-[minmax(0,1.2fr)_24rem] lg:items-start lg:pb-8 lg:pt-6">
-          <div>
-            <Badge variant="outline" className="gap-2 rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">
+      <div className="relative mx-auto flex min-h-full w-full max-w-5xl flex-col px-4 py-4 sm:px-6 lg:px-8 lg:py-6">
+        <section className="pb-4">
+          <div className="flex items-center justify-between gap-3">
+            <Badge
+              variant="outline"
+              className="gap-2 rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-muted-foreground"
+            >
               <Sparkles className="h-3.5 w-3.5" />
               Live on real league data
             </Badge>
+            <Button asChild variant="ghost" size="sm" className="rounded-full px-0 text-muted-foreground">
+              <Link href="/">
+                Back home
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Link>
+            </Button>
+          </div>
 
-            <h1 className="mt-4 max-w-4xl text-3xl font-semibold leading-[0.96] tracking-[-0.05em] text-foreground sm:mt-5 sm:text-5xl lg:text-7xl">
-              Watch Flaim work
-              <span className="block text-muted-foreground">on my actual leagues</span>
-              <span className="block">right now.</span>
-            </h1>
+          <h1 className="mt-4 max-w-4xl text-3xl font-semibold leading-[0.96] tracking-[-0.05em] text-foreground sm:text-5xl">
+            Watch Flaim work on my actual leagues right now.
+          </h1>
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
+            Pick a prompt and jump straight into the live run.
+          </p>
+        </section>
 
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground sm:mt-5 sm:text-lg sm:leading-7">
-              This page runs against my actual leagues and streams the actual tool
-              chain in public. Pick a scenario, watch the MCP reads happen, and see
-              the answer come together in real time.
-            </p>
-
-            <div className="mt-4 flex flex-wrap gap-2 sm:mt-6 sm:gap-3">
-              <div className="rounded-full border border-border bg-card px-4 py-2 text-sm font-medium text-foreground">
-                My real league data
-              </div>
-              <div className="rounded-full border border-border bg-card px-4 py-2 text-sm font-medium text-foreground">
-                Preset live prompts
-              </div>
-              <div className="rounded-full border border-border bg-card px-4 py-2 text-sm font-medium text-foreground">
-                Streaming MCP activity
+        <Card className="flex min-h-[32rem] flex-col overflow-hidden rounded-[1.6rem] border-border bg-card p-0 shadow-sm lg:min-h-[38rem] lg:rounded-[2rem]">
+          <div className="border-b border-border bg-card px-3 py-3 sm:px-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">
+                Choose a live scenario
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge
+                  variant={
+                    runStatus === "completed"
+                      ? "default"
+                      : runStatus === "running"
+                        ? "secondary"
+                        : runStatus === "error"
+                          ? "destructive"
+                          : "outline"
+                  }
+                  className="px-3 py-1 text-xs font-semibold"
+                >
+                  {runStatusLabel}
+                </Badge>
+                {selectedPreset ? (
+                  <Badge variant="outline" className="hidden px-3 py-1 text-xs font-medium sm:inline-flex">
+                    {selectedPreset.title}
+                  </Badge>
+                ) : null}
               </div>
             </div>
 
-            <div className="mt-8 hidden gap-3 sm:grid sm:grid-cols-3">
-              {DEMO_SIGNALS.map((signal) => {
-                const Icon = signal.icon;
-                return (
-                  <div
-                    key={signal.title}
-                    className="rounded-[1.5rem] border border-border bg-card p-4 shadow-sm"
-                  >
-                    <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-border bg-muted text-foreground">
-                      <Icon className="h-5 w-5" />
-                    </div>
-                    <h2 className="mt-4 text-base font-semibold text-foreground">
-                      {signal.title}
-                    </h2>
-                    <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                      {signal.description}
-                    </p>
-                  </div>
-                );
-              })}
+            <div className="-mx-3 overflow-x-auto px-3 pb-1 pt-3 sm:mx-0 sm:px-0">
+              <div className="flex snap-x snap-mandatory gap-3">
+                {PUBLIC_CHAT_PRESETS.map((preset) => {
+                  const isSelected = preset.id === selectedPresetId;
+                  const Icon = PRESET_ICONS[preset.id];
+
+                  return (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      onClick={() => void handleRunPreset(preset)}
+                      disabled={runStatus === "running"}
+                      aria-pressed={isSelected}
+                      className={cn(
+                        "group relative min-w-[15rem] snap-start overflow-hidden rounded-[1.1rem] border p-3 text-left transition-all duration-200 sm:min-w-[18rem] sm:p-4",
+                        isSelected
+                          ? "border-primary bg-primary text-primary-foreground shadow-sm"
+                          : "border-border bg-background text-foreground hover:bg-muted",
+                        runStatus === "running" && !isSelected
+                          ? "cursor-not-allowed opacity-70"
+                          : ""
+                      )}
+                    >
+                      <div className="relative">
+                        <div className="flex items-center justify-between gap-3">
+                          <div
+                            className={cn(
+                              "flex h-9 w-9 items-center justify-center rounded-xl",
+                              isSelected
+                                ? "border border-primary-foreground/15 bg-primary text-primary-foreground"
+                                : "border border-border bg-muted text-foreground"
+                            )}
+                          >
+                            <Icon className="h-4.5 w-4.5" />
+                          </div>
+                          <div
+                            className={cn(
+                              "rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.2em]",
+                              isSelected
+                                ? "border-primary-foreground/15 text-primary-foreground/80"
+                                : "border-border text-muted-foreground"
+                            )}
+                          >
+                            {preset.eyebrow}
+                          </div>
+                        </div>
+                        <h3 className="mt-3 text-sm font-semibold tracking-tight sm:text-base">
+                          {preset.title}
+                        </h3>
+                        <p
+                          className={cn(
+                            "mt-1.5 text-xs leading-5 sm:mt-2 sm:text-sm sm:leading-6",
+                            isSelected
+                              ? "text-primary-foreground/75"
+                              : "text-muted-foreground"
+                          )}
+                        >
+                          {preset.description}
+                        </p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
 
-          <Card className="hidden overflow-hidden rounded-[2rem] border-border bg-primary text-primary-foreground shadow-sm lg:block">
-            <div className="h-full p-6">
-              <div className="rounded-[1.6rem] border border-primary-foreground/20 bg-primary p-5">
-                <div className="flex items-center justify-between gap-3">
-                  <Badge variant="secondary" className="gap-2 rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em]">
-                    <Radio className="h-3.5 w-3.5" />
-                    Sunday Edition
-                  </Badge>
-                  <div className="text-xs font-medium text-primary-foreground/70">
-                    {runStatusLabel}
-                  </div>
-                </div>
-
-                <div className="mt-5 rounded-[1.4rem] border border-primary-foreground/15 bg-primary p-4">
-                  <div className="flex items-start gap-3">
-                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-primary-foreground/15 bg-primary-foreground text-primary">
-                      <HeroIcon className="h-6 w-6" />
-                    </div>
-                    <div>
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-primary-foreground/60">
-                        Featured prompt
-                      </p>
-                      <h2 className="mt-2 text-2xl font-semibold tracking-tight">
-                        {heroPreset.title}
-                      </h2>
-                      <p className="mt-2 text-sm leading-6 text-primary-foreground/80">
-                        {heroPreset.description}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-5 space-y-3">
-                  {DEMO_STEPS.map((step) => (
-                    <div
-                      key={step.step}
-                      className="grid grid-cols-[3rem_minmax(0,1fr)] gap-3 rounded-[1.2rem] border border-primary-foreground/15 bg-primary p-3"
-                    >
-                      <div className="text-lg font-semibold text-primary-foreground/60">{step.step}</div>
-                      <div>
-                        <p className="text-sm font-semibold text-primary-foreground">{step.title}</p>
-                        <p className="mt-1 text-sm leading-6 text-primary-foreground/75">
-                          {step.description}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </Card>
-        </section>
-
-        <div className="grid gap-5 lg:min-h-0 lg:flex-1 lg:grid-cols-[24rem_minmax(0,1fr)]">
-          <Card className="order-2 h-fit rounded-[1.6rem] border-border bg-card p-4 shadow-sm lg:order-1 lg:sticky lg:top-6 lg:rounded-[2rem] lg:p-5">
-            <div className="flex items-start gap-3">
-              <div className="rounded-2xl border border-border bg-muted p-3 text-foreground">
-                <ShieldCheck className="h-5 w-5" />
-              </div>
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">
-                  Demo menu
-                </p>
-                <h2 className="mt-2 text-xl font-semibold tracking-tight text-foreground lg:text-2xl">
-                  Pick a live scenario
-                </h2>
-                <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                  Each prompt is intentionally curated to show a different slice of
-                  Flaim using my actual leagues.
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-4 -mx-4 overflow-x-auto px-4 pb-2 lg:mx-0 lg:overflow-visible lg:px-0 lg:pb-0">
-              <div className="flex snap-x snap-mandatory gap-3 lg:grid lg:gap-3">
-              {PUBLIC_CHAT_PRESETS.map((preset) => {
-                const isSelected = preset.id === selectedPresetId;
-                const Icon = PRESET_ICONS[preset.id];
-
-                return (
-                  <button
-                    key={preset.id}
-                    type="button"
-                    onClick={() => void handleRunPreset(preset)}
-                    disabled={runStatus === "running"}
-                    aria-pressed={isSelected}
-                    className={cn(
-                      "group relative min-w-[17rem] snap-start overflow-hidden rounded-[1.35rem] border p-4 text-left transition-all duration-200 lg:min-w-0 lg:rounded-[1.6rem]",
-                      isSelected
-                        ? "border-primary bg-primary text-primary-foreground shadow-sm"
-                        : "border-border bg-background text-foreground hover:-translate-y-0.5 hover:bg-muted",
-                      runStatus === "running" && !isSelected
-                        ? "cursor-not-allowed opacity-70"
-                        : ""
-                    )}
-                  >
-                    <div className="relative">
-                      <div className="flex items-start justify-between gap-3">
-                        <div
-                          className={cn(
-                            "flex h-11 w-11 items-center justify-center rounded-2xl",
-                            isSelected
-                              ? "border border-primary-foreground/15 bg-primary text-primary-foreground"
-                              : "border border-border bg-muted text-foreground"
-                          )}
-                        >
-                          <Icon className="h-5 w-5" />
-                        </div>
-                        <div className={cn(
-                          "rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.2em]",
-                          isSelected
-                            ? "border-primary-foreground/15 text-primary-foreground/80"
-                            : "border-border text-muted-foreground"
-                        )}>
-                          {preset.eyebrow}
-                        </div>
-                      </div>
-                      <h3 className="mt-4 text-lg font-semibold tracking-tight">
-                        {preset.title}
-                      </h3>
-                      <p
-                        className={cn(
-                          "mt-2 text-sm leading-6",
-                          isSelected
-                            ? "text-primary-foreground/75"
-                            : "text-muted-foreground"
-                        )}
-                      >
-                        {preset.description}
-                      </p>
-                    </div>
-                  </button>
-                );
-              })}
-              </div>
-            </div>
-
-            <div className="mt-3 rounded-[1.35rem] border border-dashed border-border bg-muted p-4 text-sm leading-6 text-muted-foreground lg:mt-5 lg:rounded-[1.6rem]">
-              <span className="font-semibold text-foreground">Data source:</span>{" "}
-              Gerry&apos;s leagues and teams
-              <br />
-              <span className="font-semibold text-foreground">Scope:</span> read-only
-              fantasy data with no visitor sign-in required.
-            </div>
-          </Card>
-
-          <Card className="order-1 flex min-h-[30rem] flex-col overflow-hidden rounded-[1.6rem] border-border bg-card p-0 shadow-sm lg:order-2 lg:min-h-0 lg:rounded-[2rem]">
-            <div className="border-b border-border bg-card px-4 py-4 lg:px-5 lg:py-5">
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">
-                    Live run
-                  </p>
-                  <h2 className="mt-2 text-xl font-semibold tracking-tight text-foreground lg:text-2xl">
-                    Watch the answer get assembled
-                  </h2>
-                  <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                    Tool activity and response generation stream in real time from my
-                    actual leagues.
-                  </p>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge
-                    variant={
-                      runStatus === "completed"
-                        ? "default"
-                        : runStatus === "running"
-                          ? "secondary"
-                          : runStatus === "error"
-                            ? "destructive"
-                            : "outline"
-                    }
-                    className="px-3 py-1 text-xs font-semibold"
-                  >
-                    {runStatusLabel}
-                  </Badge>
-                  {selectedPreset ? (
-                    <Badge variant="outline" className="px-3 py-1 text-xs font-medium">
-                      {selectedPreset.title}
-                    </Badge>
-                  ) : null}
-                </div>
-              </div>
-            </div>
-
-            <div className="flex-1 bg-muted/40 p-3 lg:p-5">
-              <div className="h-full rounded-[1.35rem] border border-border bg-background p-3 lg:rounded-[1.7rem] lg:p-4 lg:overflow-hidden">
-                <div className="flex h-full flex-col gap-4 pr-1 lg:overflow-y-auto">
+          <div className="flex-1 bg-muted/40 p-3 lg:p-4">
+            <div className="h-full rounded-[1.35rem] border border-border bg-background p-3 lg:rounded-[1.7rem] lg:p-4 lg:overflow-hidden">
+              <div className="flex h-full flex-col gap-4 pr-1 lg:overflow-y-auto">
                   {selectedPreset ? (
                     <PublicMessage role="user" text={selectedPreset.userMessage} />
                   ) : (
-                    <div className="flex h-full min-h-[20rem] items-center justify-center lg:min-h-[26rem]">
+                    <div className="flex h-full min-h-[18rem] items-center justify-center lg:min-h-[22rem]">
                       <div className="max-w-xl text-center">
-                        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-[1.5rem] border border-border bg-primary text-primary-foreground lg:h-20 lg:w-20 lg:rounded-[2rem]">
+                        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-[1.5rem] border border-border bg-primary text-primary-foreground">
                           <Image
                             src="/flaim-mark-hero-dark.png"
                             alt="Flaim"
@@ -706,12 +501,11 @@ export function PublicChatExperience() {
                             height={32}
                           />
                         </div>
-                        <h3 className="mt-5 text-2xl font-semibold tracking-tight text-foreground lg:mt-6 lg:text-3xl">
-                          Pick a prompt and watch Flaim think out loud
+                        <h3 className="mt-5 text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
+                          Pick a prompt to start the live demo
                         </h3>
-                        <p className="mt-3 text-sm leading-6 text-muted-foreground lg:text-base lg:leading-7">
-                          This is a public-facing proof point: my actual leagues, live
-                          MCP reads, and an answer assembled in front of you.
+                        <p className="mt-3 text-sm leading-6 text-muted-foreground">
+                          Choose one above and Flaim will run on Gerry&apos;s actual leagues live.
                         </p>
                       </div>
                     </div>
@@ -728,19 +522,6 @@ export function PublicChatExperience() {
                           ? "Pulling together the answer."
                           : liveStatusCopy}
                       </p>
-                    </div>
-                  ) : null}
-
-                  {toolCalls.length > 0 ? (
-                    <div className="space-y-3">
-                      {toolCalls.map((toolCall) => (
-                        <PublicToolCall
-                          key={toolCall.id}
-                          name={toolCall.name}
-                          status={toolCall.status}
-                          parsedArguments={toolCall.parsedArguments}
-                        />
-                      ))}
                     </div>
                   ) : null}
 
@@ -776,11 +557,10 @@ export function PublicChatExperience() {
                   ) : null}
 
                   <div ref={transcriptEndRef} />
-                </div>
               </div>
             </div>
-          </Card>
-        </div>
+          </div>
+        </Card>
       </div>
     </div>
   );
