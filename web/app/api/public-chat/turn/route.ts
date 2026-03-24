@@ -1,7 +1,7 @@
 import {
-  PUBLIC_CHAT_ALLOWED_TOOLS,
   PUBLIC_CHAT_MODEL,
   PUBLIC_CHAT_SYSTEM_PROMPT,
+  type PublicChatAllowedTool,
   getPublicChatPreset,
 } from "@/lib/public-chat";
 import { isAllowedUrl } from "@/lib/mcp-url-allowlist";
@@ -65,7 +65,7 @@ function normalizeMcpUrl(url: string): string {
   return trimmed.endsWith("/mcp") ? trimmed : `${trimmed}/mcp`;
 }
 
-function getPublicChatMcpTool() {
+function getPublicChatMcpTool(allowedTools: readonly PublicChatAllowedTool[]) {
   const serverUrl = normalizeMcpUrl(
     process.env.FANTASY_MCP_URL || "https://api.flaim.app/mcp"
   );
@@ -83,7 +83,7 @@ function getPublicChatMcpTool() {
     type: "mcp" as const,
     server_label: "fantasy",
     server_url: serverUrl,
-    allowed_tools: [...PUBLIC_CHAT_ALLOWED_TOOLS],
+    allowed_tools: [...allowedTools],
     headers: {
       Authorization: `Bearer ${demoApiKey}`,
       "Content-Type": "application/json",
@@ -218,14 +218,23 @@ export async function POST(request: NextRequest) {
             ],
           },
           {
+            role: "developer",
+            content: [
+              {
+                type: "input_text",
+                text: `Execution hint for speed: ${preset.executionHint}`,
+              },
+            ],
+          },
+          {
             role: "user",
             content: [{ type: "input_text", text: preset.prompt }],
           },
         ],
-        tools: [getPublicChatWebSearchTool(), getPublicChatMcpTool()],
+        tools: [getPublicChatWebSearchTool(), getPublicChatMcpTool(preset.allowedTools)],
         stream: true,
         store: false,
-        parallel_tool_calls: true,
+        parallel_tool_calls: false,
         tool_choice: "auto",
         reasoning: { summary: "auto" },
       }, {
