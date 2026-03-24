@@ -119,6 +119,7 @@ const ALLOWED_ORIGINS = [
   'https://flaim-*.vercel.app',
   'https://flaim.vercel.app',
   'https://flaim.app',
+  'https://preview.flaim.app',
   'https://www.flaim.app',
   'http://localhost:8787',
   'https://localhost:8787',

@@ -108,7 +108,8 @@
       // Note: SUPABASE_URL and SUPABASE_SERVICE_KEY set via Cloudflare secrets
       "vars": {
         "NODE_ENV": "production",
-        "ENVIRONMENT": "preview"
+        "ENVIRONMENT": "preview",
+        "FRONTEND_URL": "https://preview.flaim.app"
       }
     },
     // Development environment (local)

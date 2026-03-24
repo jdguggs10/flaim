@@ -7,6 +7,7 @@ const CSRF_EXEMPT_PATH_PREFIXES = ['/api/extension/'];
 
 const ALLOWED_ORIGINS = [
   'https://flaim.app',
+  'https://preview.flaim.app',
   'https://www.flaim.app',
   'https://flaim.vercel.app',
   'https://flaim-*.vercel.app',

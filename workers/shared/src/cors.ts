@@ -13,6 +13,7 @@ const MCP_ALLOWED_ORIGINS = [
   'https://flaim-*.vercel.app', // Flaim preview deployments
   'https://flaim.vercel.app',   // Vercel production domain (fallback)
   'https://flaim.app',          // Production
+  'https://preview.flaim.app',  // Stable preview branch domain
   'http://localhost:8787',      // Wrangler dev server (HTTP)
   'https://localhost:8787',     // Wrangler dev server (HTTPS)
   'http://localhost:3000',      // Next.js dev server

@@ -31,9 +31,10 @@ export default defineConfig(({ mode }) => {
     isDev ? 'http://localhost:3000/*' : 'https://flaim.app/*',
   ];
 
-  // For preview mode, allow all Vercel preview domains
+  // For preview mode, allow Vercel preview domains and stable preview subdomain
   if (isPreview) {
     hostPermissions.push('https://*.vercel.app/*');
+    hostPermissions.push('https://preview.flaim.app/*');
   }
 
   // Add Clerk sync host to host_permissions if defined
@@ -59,7 +60,7 @@ export default defineConfig(({ mode }) => {
     externally_connectable: {
       ...baseManifest.externally_connectable,
       matches: isPreview
-        ? ['https://*.vercel.app/*'] // Preview: only Vercel domains
+        ? ['https://*.vercel.app/*', 'https://preview.flaim.app/*'] // Preview: Vercel + stable preview domain
         : baseManifest.externally_connectable.matches.filter(
             (pattern: string) => isDev || !pattern.includes('localhost')
           ),
