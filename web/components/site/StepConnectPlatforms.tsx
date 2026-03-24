@@ -261,6 +261,9 @@ export function StepConnectPlatforms({ className }: StepConnectPlatformsProps) {
           </PopoverContent>
         </Popover>
       </div>
+      <p className="text-sm text-muted-foreground mb-4">
+        Add a platform and Flaim will auto-discover your leagues.
+      </p>
 
       {/* Stacked platform cards on all viewports */}
       <div className="grid grid-cols-1 gap-4">
