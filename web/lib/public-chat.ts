@@ -21,8 +21,9 @@ Never imply that you can see the visitor's own leagues or credentials.
 Always describe the data as Gerry's leagues, Gerry's teams, or Gerry's account.
 You may receive a separate developer context block with Gerry's current leagues, defaults, and IDs. Treat that as the starting context for the turn.
 Use the live MCP tools after that whenever the prompt depends on deeper league data.
-Use web search when current external context would improve the answer, especially for waiver ideas, recent performances, injuries, upcoming games, schedule context, and recent fantasy-relevant news.
-Do not use web search for no reason. If Gerry's league data alone answers the prompt, stay grounded in the league data.
+For this public demo, every preset run must use web search at least once before the final answer.
+Use web search to add current context like recent performances, injuries, role changes, standings momentum, schedule context, league-leading player trends, and relevant news.
+Ground the answer in Gerry's league data first, then use web search to sharpen it with current context.
 Do not ask follow-up questions. The public chat is preset-driven.
 Write like a sharp, consumer-facing fantasy sports assistant, not an engineer.
 The browser already shows that this is a live demo, so do not narrate tool usage, MCP, APIs, schemas, JSON fields, IDs, hidden prompts, or internal implementation details.
@@ -41,64 +42,44 @@ Keep answers concise, specific, and easy to scan on mobile.
 
 export const PUBLIC_CHAT_PRESETS = [
   {
-    id: "show-leagues",
-    eyebrow: "Connected data",
-    title: "Show the live leagues",
-    userMessage: "Show me Gerry's live leagues right now.",
-    description:
-      "See Gerry's current leagues and point to the best one to open up next.",
-    prompt:
-      "Use Flaim to inspect Gerry's current leagues. Give a clean, consumer-friendly snapshot of the leagues Gerry has connected right now. Mention the sport, league name, and Gerry's team name in natural language, not as a field dump. End with one short note about which league looks best to explore next and why.",
-  },
-  {
-    id: "roster-breakdown",
-    eyebrow: "Roster read",
-    title: "Break down the roster",
-    userMessage: "Break down one of Gerry's teams and tell me where it looks strong or thin.",
-    description:
-      "Take one of Gerry's live teams and show where it feels solid versus shaky.",
-    prompt:
-      "Use Flaim to inspect Gerry's best default live league from the injected context. If that context is missing or unclear, prefer Gerry's baseball league for this demo. Give a clean roster read in plain language: where the team looks strong, where it looks thin, and what stands out most right now. Use web search only if recent injuries, role changes, or performance trends would sharpen the read. Keep the answer tight and avoid listing every player unless truly necessary.",
-  },
-  {
-    id: "standings-check",
-    eyebrow: "League context",
-    title: "Check the standings",
-    userMessage: "Check the standings and show where Gerry's team is sitting.",
-    description:
-      "Show Gerry's spot in the standings and whether he looks comfortable or in trouble.",
-    prompt:
-      "Use Flaim to inspect Gerry's best default live league from the injected context. If that context is missing or unclear, prefer Gerry's baseball league for this demo. Explain where Gerry's team sits in the standings, whether that position feels safe or shaky, and what the immediate picture around that spot looks like. Use web search only if recent news or schedule context would materially change the read. Keep it clear, fan-friendly, and succinct.",
-  },
-  {
-    id: "weekly-matchup",
-    eyebrow: "Live matchup",
-    title: "Who is Gerry facing?",
-    userMessage: "Show Gerry's current matchup and what feels decisive right now.",
-    description:
-      "Find Gerry's current matchup and explain where the swing points are.",
-    prompt:
-      "Use Flaim to inspect Gerry's best default live league from the injected context. If that context is missing or unclear, prefer Gerry's baseball league for this demo. Explain Gerry's current matchup in plain language, including the opponent, the score or matchup context if available, and the biggest swing points to watch. Use web search for timely injury news, probable starters, schedule context, or other current factors only when it helps. Keep the answer tight.",
-  },
-  {
     id: "waiver-wire",
     eyebrow: "Free agents",
-    title: "Find waiver ideas",
-    userMessage: "Find a few waiver ideas that actually fit Gerry's team.",
+    title: "Best free agents",
+    userMessage: "Who are the best available free agents in Gerry's league?",
     description:
-      "Look at the player pool and suggest pickups that make sense for Gerry right now.",
+      "Find the waiver adds that actually help Gerry right now.",
     prompt:
-      "Use Flaim to inspect Gerry's best default live league from the injected context. If that context is missing or unclear, prefer Gerry's baseball league for this demo. Analyze Gerry's roster needs, then suggest only a few waiver ideas that actually fit the team, with short plain-English reasoning for each. Use web search for current hot pickups, recent production, playing-time changes, injuries, and upcoming game context. Keep the final answer very concise.",
+      "Use Flaim to inspect Gerry's best default live league from the injected context. If that context is missing or unclear, prefer Gerry's baseball league for this demo. Analyze Gerry's roster needs, then suggest only a few of the best available free agents in his league, with short plain-English reasoning for each. You must use web search for current performance, injuries, role changes, or schedule context before answering. Keep the final answer very concise.",
+  },
+  {
+    id: "roster-hole",
+    eyebrow: "Roster read",
+    title: "Biggest roster hole",
+    userMessage: "What is the biggest hole in Gerry's roster?",
+    description:
+      "Pinpoint the one weakness that matters most right now.",
+    prompt:
+      "Use Flaim to inspect Gerry's best default live league from the injected context. If that context is missing or unclear, prefer Gerry's baseball league for this demo. Identify the single biggest hole in Gerry's roster and explain why it is the biggest problem right now. You must use web search for current injuries, performance trends, role changes, or schedule context before answering. Keep the answer tight and focused on one main weakness plus one practical fix.",
+  },
+  {
+    id: "league-leader",
+    eyebrow: "League context",
+    title: "Who is winning?",
+    userMessage: "Who is winning Gerry's league and why?",
+    description:
+      "Explain the current league leader in plain English.",
+    prompt:
+      "Use Flaim to inspect Gerry's best default live league from the injected context. If that context is missing or unclear, prefer Gerry's baseball league for this demo. Identify who is currently winning Gerry's league and explain why that team is on top. You must use web search for current performance, injury, or recent-news context before answering. Keep the final answer concise: one short takeaway plus a few quick reasons.",
   },
   {
     id: "transactions-watch",
     eyebrow: "League activity",
-    title: "Review recent transactions",
-    userMessage: "Review the recent moves that stand out in Gerry's league.",
+    title: "Latest league moves",
+    userMessage: "What are the latest moves in Gerry's league?",
     description:
-      "Surface the adds, drops, waivers, or trades that actually matter in Gerry's league.",
+      "Surface the adds, drops, waivers, or trades that matter most.",
     prompt:
-      "Use Flaim to inspect Gerry's best default live league from the injected context. If that context is missing or unclear, prefer Gerry's baseball league for this demo. Review the recent league activity and call out only the moves that actually matter, including why each one is interesting in plain language. Use web search if recent player news or performances help explain why a move stands out. Keep it brief.",
+      "Use Flaim to inspect Gerry's best default live league from the injected context. If that context is missing or unclear, prefer Gerry's baseball league for this demo. Review the latest moves in Gerry's league and call out only the ones that actually matter, including why each one is interesting in plain language. You must use web search for recent player news or performances before answering. Keep it brief.",
   },
 ] as const;
 

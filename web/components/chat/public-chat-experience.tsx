@@ -14,12 +14,10 @@ import { parse } from "partial-json";
 import {
   BarChart3,
   ArrowRight,
-  Database,
   Eye,
   LoaderCircle,
   RefreshCw,
   Search,
-  ShieldCheck,
   Sparkles,
   type LucideIcon,
 } from "lucide-react";
@@ -39,11 +37,9 @@ interface PublicToolCallState {
 }
 
 const PRESET_ICONS: Record<PublicChatPresetId, LucideIcon> = {
-  "show-leagues": Database,
-  "roster-breakdown": BarChart3,
-  "standings-check": Sparkles,
-  "weekly-matchup": Search,
-  "waiver-wire": ShieldCheck,
+  "waiver-wire": Search,
+  "roster-hole": BarChart3,
+  "league-leader": Sparkles,
   "transactions-watch": Eye,
 };
 
