@@ -67,6 +67,7 @@ import {
   type SleeperConnectEnv,
 } from './sleeper-connect-handlers';
 import { logEvalEvent } from './logging';
+import { PublicChatStorage } from './public-chat-storage';
 
 // =============================================================================
 // TYPES
@@ -86,13 +87,16 @@ export interface Env {
   // Yahoo OAuth
   YAHOO_CLIENT_ID?: string;
   YAHOO_CLIENT_SECRET?: string;
-  // Eval/CI API key auth (Cloudflare secrets)
+  // Static API key auth (Cloudflare secrets)
   EVAL_API_KEY?: string;   // Static API key for eval/CI
-  EVAL_USER_ID?: string;   // Clerk user ID that the API key resolves to
+  EVAL_USER_ID?: string;   // Clerk user ID that the eval API key resolves to
+  DEMO_API_KEY?: string;   // Static API key for public demo chat
+  DEMO_USER_ID?: string;   // Clerk user ID that the demo API key resolves to
   INTERNAL_SERVICE_TOKEN?: string;
   // Rate limiting (Cloudflare Workers native)
   TOKEN_RATE_LIMITER: RateLimit;
   CREDENTIALS_RATE_LIMITER: RateLimit;
+  PUBLIC_CHAT_RATE_LIMITER: RateLimit;
 }
 
 type Jwk = {
@@ -301,7 +305,7 @@ function debugLog(env: Env, message: string): void {
 interface AuthResult {
   userId: string | null;
   error?: string;
-  authType?: 'clerk' | 'oauth' | 'eval-api-key';
+  authType?: 'clerk' | 'oauth' | 'eval-api-key' | 'demo-api-key';
   scope?: string;
 }
 
@@ -324,7 +328,7 @@ async function getVerifiedUserId(
   request: Request,
   env: Env,
   expectedResource?: string,
-  options?: { allowEvalApiKey?: boolean }
+  options?: { allowStaticApiKey?: boolean }
 ): Promise<AuthResult> {
   const authz = request.headers.get('Authorization');
   const requestUrl = new URL(request.url);
@@ -344,29 +348,45 @@ async function getVerifiedUserId(
     debugLog(env, `⚠️ [auth-worker] Clerk JWT verification failed: ${e instanceof Error ? e.message : 'unknown error'}`);
   }
 
-  // 2. Try eval API key (only if route opts in)
-  if (options?.allowEvalApiKey && authz && authz.toLowerCase().startsWith('bearer ')) {
+  // 2. Try fixed-user static API keys (only if route opts in)
+  if (options?.allowStaticApiKey && authz && authz.toLowerCase().startsWith('bearer ')) {
     const token = authz.slice(7).trim();
-    const { EVAL_API_KEY, EVAL_USER_ID } = env;
+    const allowedResources = [
+      'https://api.flaim.app/mcp',
+      'https://api.flaim.app/fantasy/mcp',
+    ];
 
-    if (EVAL_API_KEY && EVAL_USER_ID) {
-      if (await constantTimeEqual(token, EVAL_API_KEY)) {
-        // Enforce resource allowlist when expectedResource is provided
-        if (expectedResource) {
-          const allowedResources = [
-            'https://api.flaim.app/mcp',
-            'https://api.flaim.app/fantasy/mcp',
-          ];
-          if (!allowedResources.includes(expectedResource)) {
-            return { userId: null, error: 'Resource not allowed for API key' };
-          }
-        }
+    const staticKeys = [
+      {
+        key: env.EVAL_API_KEY,
+        userId: env.EVAL_USER_ID,
+        authType: 'eval-api-key' as const,
+        label: 'EVAL_API_KEY',
+      },
+      {
+        key: env.DEMO_API_KEY,
+        userId: env.DEMO_USER_ID,
+        authType: 'demo-api-key' as const,
+        label: 'DEMO_API_KEY',
+      },
+    ];
 
-        debugLog(env, `✅ [auth-worker] Eval API key validated, userId: ${maskUserId(EVAL_USER_ID)}`);
-        return { userId: EVAL_USER_ID, authType: 'eval-api-key', scope: 'mcp:read' };
+    for (const staticKey of staticKeys) {
+      if (!staticKey.key) continue;
+      if (!staticKey.userId) {
+        console.error(`[auth-worker] ${staticKey.label} set but corresponding user ID missing — skipping static API key auth`);
+        continue;
       }
-    } else if (EVAL_API_KEY && !EVAL_USER_ID) {
-      console.error('[auth-worker] EVAL_API_KEY set but EVAL_USER_ID missing — skipping API key auth');
+      if (!(await constantTimeEqual(token, staticKey.key))) {
+        continue;
+      }
+
+      if (expectedResource && !allowedResources.includes(expectedResource)) {
+        return { userId: null, error: 'Resource not allowed for API key' };
+      }
+
+      debugLog(env, `✅ [auth-worker] ${staticKey.label} validated, userId: ${maskUserId(staticKey.userId)}`);
+      return { userId: staticKey.userId, authType: staticKey.authType, scope: 'mcp:read' };
     }
   }
 
@@ -425,7 +445,7 @@ async function getInternalUserId(
   request: Request,
   env: Env,
   expectedResource?: string,
-  options?: { allowEvalApiKey?: boolean }
+  options?: { allowStaticApiKey?: boolean }
 ): Promise<AuthResult> {
   const internalError = await requireInternalService(request, env);
   if (internalError) {
@@ -438,6 +458,15 @@ async function getInternalUserId(
 function maskUserId(userId: string): string {
   if (!userId || userId.length <= 8) return '***';
   return `${userId.substring(0, 8)}...`;
+}
+
+async function hashPublicChatVisitorKey(env: Env, visitorIp: string): Promise<string> {
+  const salt = env.INTERNAL_SERVICE_TOKEN || env.DEMO_API_KEY || 'flaim-public-chat';
+  const payload = new TextEncoder().encode(`${salt}:${visitorIp}`);
+  const digest = await crypto.subtle.digest('SHA-256', payload);
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
 }
 
 // =============================================================================
@@ -665,13 +694,116 @@ api.post('/revoke', (c) => {
 // Token introspection (internal — called by fantasy-mcp gateway via service binding)
 api.get('/internal/introspect', async (c) => {
   const expectedResource = c.req.header('X-Flaim-Expected-Resource') || undefined;
-  const { userId, error: authError, scope } = await getInternalUserId(c.req.raw, c.env, expectedResource, { allowEvalApiKey: true });
+  const { userId, error: authError, scope } = await getInternalUserId(c.req.raw, c.env, expectedResource, { allowStaticApiKey: true });
 
   if (!userId) {
     return c.json({ valid: false, error: authError || 'Invalid token' }, authError?.includes(INTERNAL_SERVICE_TOKEN_HEADER) || authError?.includes('Internal service authentication') ? 403 : 401);
   }
 
   return c.json({ valid: true, userId, scope: scope || 'mcp:read' });
+});
+
+api.post('/internal/public-chat/runs/acquire', async (c) => {
+  const internalError = await requireInternalService(c.req.raw, c.env);
+  if (internalError) {
+    return c.json({
+      error: 'unauthorized',
+      error_description: internalError,
+    }, 403);
+  }
+
+  const body = await c.req.json().catch(() => null) as {
+    visitorIp?: string;
+    presetId?: string;
+    model?: string;
+  } | null;
+
+  if (!body?.visitorIp || !body.presetId || !body.model) {
+    return c.json({
+      error: 'invalid_request',
+      error_description: 'visitorIp, presetId, and model are required',
+    }, 400);
+  }
+
+  const visitorKey = await hashPublicChatVisitorKey(c.env, body.visitorIp);
+  const storage = PublicChatStorage.fromEnvironment(c.env);
+  const { success } = await c.env.PUBLIC_CHAT_RATE_LIMITER.limit({
+    key: `public-chat:${visitorKey}`,
+  });
+
+  if (!success) {
+    await storage.recordRejectedRun({
+      visitorKey,
+      presetId: body.presetId,
+      model: body.model,
+      status: 'rate_limited',
+      errorCode: 'rate_limit_exceeded',
+    });
+
+    return c.json({
+      error: 'rate_limit_exceeded',
+      error_description: 'Public chat is temporarily rate limited.',
+    }, 429, { 'Retry-After': '60' });
+  }
+
+  const reservation = await storage.acquireRun({
+    visitorKey,
+    presetId: body.presetId,
+    model: body.model,
+    maxConcurrent: 1,
+  });
+
+  if (!reservation.allowed) {
+    return c.json({
+      error: reservation.rejectionReason || 'concurrency_limited',
+      error_description: 'A public chat run is already in progress for this visitor.',
+    }, 409);
+  }
+
+  return c.json({
+    runId: reservation.runId,
+  });
+});
+
+api.post('/internal/public-chat/runs/:id/complete', async (c) => {
+  const internalError = await requireInternalService(c.req.raw, c.env);
+  if (internalError) {
+    return c.json({
+      error: 'unauthorized',
+      error_description: internalError,
+    }, 403);
+  }
+
+  const runId = c.req.param('id');
+  if (!runId) {
+    return c.json({
+      error: 'invalid_request',
+      error_description: 'Run ID is required',
+    }, 400);
+  }
+
+  const body = await c.req.json().catch(() => null) as {
+    status?: 'completed' | 'error' | 'aborted';
+    durationMs?: number | null;
+    errorCode?: string | null;
+  } | null;
+
+  if (!body?.status || !['completed', 'error', 'aborted'].includes(body.status)) {
+    return c.json({
+      error: 'invalid_request',
+      error_description: 'A valid completion status is required',
+    }, 400);
+  }
+
+  const storage = PublicChatStorage.fromEnvironment(c.env);
+  await storage.completeRun({
+    runId,
+    status: body.status,
+    durationMs: typeof body.durationMs === 'number' ? body.durationMs : null,
+    errorCode: body.errorCode ?? null,
+  });
+
+  return c.body(null, 204);
 });
 
 // =============================================================================
@@ -893,7 +1025,7 @@ api.get('/connect/yahoo/callback', async (c) => {
 
 // Get Yahoo credentials (internal use - requires auth)
 api.get('/internal/connect/yahoo/credentials', async (c) => {
-  const { userId, error: authError } = await getInternalUserId(c.req.raw, c.env, undefined, { allowEvalApiKey: true });
+  const { userId, error: authError } = await getInternalUserId(c.req.raw, c.env, undefined, { allowStaticApiKey: true });
   if (!userId) {
     return c.json({
       error: 'unauthorized',
@@ -956,7 +1088,7 @@ api.get('/leagues/yahoo', async (c) => {
 });
 
 api.get('/internal/leagues/yahoo', async (c) => {
-  const { userId, error: authError } = await getInternalUserId(c.req.raw, c.env, undefined, { allowEvalApiKey: true });
+  const { userId, error: authError } = await getInternalUserId(c.req.raw, c.env, undefined, { allowStaticApiKey: true });
   if (!userId) {
     const status = authError?.includes(INTERNAL_SERVICE_TOKEN_HEADER) || authError?.includes('Internal service authentication') ? 403 : 401;
     return c.json({
@@ -1046,7 +1178,7 @@ api.get('/leagues/sleeper', async (c) => {
 });
 
 api.get('/internal/leagues/sleeper', async (c) => {
-  const { userId, error: authError } = await getInternalUserId(c.req.raw, c.env, undefined, { allowEvalApiKey: true });
+  const { userId, error: authError } = await getInternalUserId(c.req.raw, c.env, undefined, { allowStaticApiKey: true });
   if (!userId) {
     const status = authError?.includes(INTERNAL_SERVICE_TOKEN_HEADER) || authError?.includes('Internal service authentication') ? 403 : 401;
     return c.json({
@@ -1095,7 +1227,7 @@ api.get('/user/preferences', async (c) => {
 });
 
 api.get('/internal/user/preferences', async (c) => {
-  const { userId, error: authError } = await getInternalUserId(c.req.raw, c.env, undefined, { allowEvalApiKey: true });
+  const { userId, error: authError } = await getInternalUserId(c.req.raw, c.env, undefined, { allowStaticApiKey: true });
   if (!userId) {
     const status = authError?.includes(INTERNAL_SERVICE_TOKEN_HEADER) || authError?.includes('Internal service authentication') ? 403 : 401;
     return c.json({ error: 'unauthorized', error_description: authError || 'Authentication required' }, status);
@@ -1155,7 +1287,7 @@ api.delete('/credentials/espn', async (c) => {
 });
 
 api.get('/internal/credentials/espn/raw', async (c) => {
-  const { userId, error: authError, authType } = await getInternalUserId(c.req.raw, c.env, undefined, { allowEvalApiKey: true });
+  const { userId, error: authError, authType } = await getInternalUserId(c.req.raw, c.env, undefined, { allowStaticApiKey: true });
   debugLog(c.env, `🔐 [auth-worker] /internal/credentials/espn/raw - Verified user: ${userId ? maskUserId(userId) : 'null'}, authType: ${authType || 'none'}, authError: ${authError || 'none'}`);
 
   if (!userId) {
@@ -1324,7 +1456,7 @@ api.delete('/leagues', async (c) => {
 });
 
 api.get('/internal/leagues', async (c) => {
-  const { userId: clerkUserId, error: authError } = await getInternalUserId(c.req.raw, c.env, undefined, { allowEvalApiKey: true });
+  const { userId: clerkUserId, error: authError } = await getInternalUserId(c.req.raw, c.env, undefined, { allowStaticApiKey: true });
   if (!clerkUserId) {
     const status = authError?.includes(INTERNAL_SERVICE_TOKEN_HEADER) || authError?.includes('Internal service authentication') ? 403 : 401;
     return c.json({

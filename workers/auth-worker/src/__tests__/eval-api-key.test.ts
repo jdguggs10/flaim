@@ -6,9 +6,23 @@ vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('no network in test')
 
 const EVAL_API_KEY = 'flaim_eval_abc123testkey';
 const EVAL_USER_ID = 'user_eval_test_12345';
+const DEMO_API_KEY = 'flaim_demo_abc123testkey';
+const DEMO_USER_ID = 'user_demo_test_54321';
 const INTERNAL_SERVICE_TOKEN = 'internal-service-secret';
 
 const mockRateLimiter = { limit: async () => ({ success: true }) };
+const { mockPublicChatStorage } = vi.hoisted(() => ({
+  mockPublicChatStorage: {
+    acquireRun: vi.fn().mockResolvedValue({
+      allowed: true,
+      runId: 'run_test_public_chat',
+      rejectionReason: null,
+      concurrentCount: 0,
+    }),
+    completeRun: vi.fn().mockResolvedValue(undefined),
+    recordRejectedRun: vi.fn().mockResolvedValue(undefined),
+  },
+}));
 
 const baseEnv = {
   SUPABASE_URL: 'https://example.supabase.co',
@@ -17,9 +31,12 @@ const baseEnv = {
   ENVIRONMENT: 'test',
   EVAL_API_KEY,
   EVAL_USER_ID,
+  DEMO_API_KEY,
+  DEMO_USER_ID,
   INTERNAL_SERVICE_TOKEN,
   TOKEN_RATE_LIMITER: mockRateLimiter,
   CREDENTIALS_RATE_LIMITER: mockRateLimiter,
+  PUBLIC_CHAT_RATE_LIMITER: mockRateLimiter,
 };
 
 function makeRequest(path: string, options?: RequestInit): Request {
@@ -75,6 +92,14 @@ vi.mock('../oauth-storage', () => {
   };
 });
 
+vi.mock('../public-chat-storage', () => {
+  return {
+    PublicChatStorage: {
+      fromEnvironment: vi.fn().mockReturnValue(mockPublicChatStorage),
+    },
+  };
+});
+
 vi.mock('../yahoo-storage', () => {
   const mockYahooStorage = {
     getYahooLeagues: vi.fn().mockResolvedValue([]),
@@ -113,9 +138,17 @@ vi.mock('../oauth-handlers', () => ({
   OAuthEnv: {},
 }));
 
-describe('eval API key auth', () => {
+describe('static API key auth', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockPublicChatStorage.acquireRun.mockResolvedValue({
+      allowed: true,
+      runId: 'run_test_public_chat',
+      rejectionReason: null,
+      concurrentCount: 0,
+    });
+    mockPublicChatStorage.completeRun.mockResolvedValue(undefined);
+    mockPublicChatStorage.recordRejectedRun.mockResolvedValue(undefined);
   });
 
   // =========================================================================
@@ -135,6 +168,22 @@ describe('eval API key auth', () => {
     const body = await res.json() as { valid: boolean; userId: string; scope: string };
     expect(body.valid).toBe(true);
     expect(body.userId).toBe(EVAL_USER_ID);
+    expect(body.scope).toBe('mcp:read');
+  });
+
+  it('GET /auth/internal/introspect with valid demo API key returns demo user', async () => {
+    const res = await appFetch(
+      makeRequest('/auth/internal/introspect', {
+        headers: {
+          ...internalHeaders(DEMO_API_KEY),
+          'X-Flaim-Expected-Resource': 'https://api.flaim.app/mcp',
+        },
+      })
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json() as { valid: boolean; userId: string; scope: string };
+    expect(body.valid).toBe(true);
+    expect(body.userId).toBe(DEMO_USER_ID);
     expect(body.scope).toBe('mcp:read');
   });
 
@@ -297,7 +346,7 @@ describe('eval API key auth', () => {
     );
     expect(res.status).toBe(401);
     expect(consoleSpy).toHaveBeenCalledWith(
-      expect.stringContaining('EVAL_API_KEY set but EVAL_USER_ID missing')
+      expect.stringContaining('EVAL_API_KEY set but corresponding user ID missing')
     );
     consoleSpy.mockRestore();
   });
@@ -433,5 +482,123 @@ describe('eval API key auth', () => {
     expect(res.headers.get('Retry-After')).toBe('60');
     const body = await res.json() as { error?: string };
     expect(body.error).toBe('rate_limit_exceeded');
+  });
+
+  it('POST /auth/internal/public-chat/runs/acquire rejects missing internal token', async () => {
+    const res = await appFetch(
+      makeRequest('/auth/internal/public-chat/runs/acquire', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          visitorIp: '1.2.3.4',
+          presetId: 'show-leagues',
+          model: 'gpt-5-mini-2025-08-07',
+        }),
+      })
+    );
+
+    expect(res.status).toBe(403);
+  });
+
+  it('POST /auth/internal/public-chat/runs/acquire returns 429 when public chat is rate limited', async () => {
+    const rateLimitedEnv = {
+      ...baseEnv,
+      PUBLIC_CHAT_RATE_LIMITER: { limit: async () => ({ success: false }) },
+    };
+
+    const res = await appFetch(
+      makeRequest('/auth/internal/public-chat/runs/acquire', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Flaim-Internal-Token': INTERNAL_SERVICE_TOKEN,
+        },
+        body: JSON.stringify({
+          visitorIp: '1.2.3.4',
+          presetId: 'show-leagues',
+          model: 'gpt-5-mini-2025-08-07',
+        }),
+      }),
+      rateLimitedEnv as any
+    );
+
+    expect(res.status).toBe(429);
+    expect(res.headers.get('Retry-After')).toBe('60');
+    const body = await res.json() as { error?: string };
+    expect(body.error).toBe('rate_limit_exceeded');
+    expect(mockPublicChatStorage.recordRejectedRun).toHaveBeenCalled();
+  });
+
+  it('POST /auth/internal/public-chat/runs/acquire returns 409 when a run is already in flight', async () => {
+    mockPublicChatStorage.acquireRun.mockResolvedValueOnce({
+      allowed: false,
+      runId: 'run_test_public_chat_rejected',
+      rejectionReason: 'concurrency_limited',
+      concurrentCount: 1,
+    });
+
+    const res = await appFetch(
+      makeRequest('/auth/internal/public-chat/runs/acquire', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Flaim-Internal-Token': INTERNAL_SERVICE_TOKEN,
+        },
+        body: JSON.stringify({
+          visitorIp: '1.2.3.4',
+          presetId: 'show-leagues',
+          model: 'gpt-5-mini-2025-08-07',
+        }),
+      })
+    );
+
+    expect(res.status).toBe(409);
+    const body = await res.json() as { error?: string };
+    expect(body.error).toBe('concurrency_limited');
+  });
+
+  it('public chat internal helper acquires and completes a run', async () => {
+    const acquireRes = await appFetch(
+      makeRequest('/auth/internal/public-chat/runs/acquire', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Flaim-Internal-Token': INTERNAL_SERVICE_TOKEN,
+        },
+        body: JSON.stringify({
+          visitorIp: '1.2.3.4',
+          presetId: 'show-leagues',
+          model: 'gpt-5-mini-2025-08-07',
+        }),
+      })
+    );
+
+    expect(acquireRes.status).toBe(200);
+    const acquireBody = await acquireRes.json() as { runId?: string };
+    expect(acquireBody.runId).toBe('run_test_public_chat');
+
+    const completeRes = await appFetch(
+      makeRequest('/auth/internal/public-chat/runs/run_test_public_chat/complete', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Flaim-Internal-Token': INTERNAL_SERVICE_TOKEN,
+        },
+        body: JSON.stringify({
+          status: 'completed',
+          durationMs: 1234,
+        }),
+      })
+    );
+
+    expect(completeRes.status).toBe(204);
+    expect(mockPublicChatStorage.completeRun).toHaveBeenCalledWith({
+      runId: 'run_test_public_chat',
+      status: 'completed',
+      durationMs: 1234,
+      errorCode: null,
+    });
   });
 });

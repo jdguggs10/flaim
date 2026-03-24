@@ -33,7 +33,7 @@ function detectEnvironment(): Environment {
 }
 
 /**
- * Minimal header for the chat page.
+ * Minimal header for the internal dev chat surface.
  * Shows logo, environment badge, and user avatar.
  */
 export function ChatHeader() {

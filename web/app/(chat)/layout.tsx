@@ -1,6 +1,6 @@
 /**
- * Chat layout - no site header, full-height container.
- * The ChatInterface component handles its own header and sidebar.
+ * Dedicated layout for the chat surfaces (`/chat` public, `/dev` internal).
+ * These routes do not use the standard site header/footer shell.
  */
 export default function ChatLayout({
   children,

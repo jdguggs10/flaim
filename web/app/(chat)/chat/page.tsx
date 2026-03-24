@@ -1,15 +1,12 @@
-import { redirect } from "next/navigation";
-import { requireChatAccess } from "@/lib/chat/auth";
-import { NextResponse } from "next/server";
-import ChatInterface from "./_components/ChatInterface";
+import { PublicChatExperience } from "@/components/chat/public-chat-experience";
+import type { Metadata } from "next";
 
-export default async function ChatPage() {
-  const result = await requireChatAccess();
+export const metadata: Metadata = {
+  title: "Live Chat Demo | Flaim",
+  description:
+    "Run Flaim against a real demo account and watch the live MCP tool activity.",
+};
 
-  if (result instanceof NextResponse) {
-    const status = result.status;
-    redirect(status === 401 ? "/sign-in" : "/");
-  }
-
-  return <ChatInterface />;
+export default function ChatPage() {
+  return <PublicChatExperience />;
 }

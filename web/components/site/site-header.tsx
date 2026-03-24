@@ -11,7 +11,7 @@ const NAV_LINKS = [
 
 /**
  * Site header with full navigation.
- * Used on all pages except /chat which has its own minimal header.
+ * Used on all pages except the dedicated chat surfaces (`/chat`, `/dev`).
  */
 export function SiteHeader() {
   return (

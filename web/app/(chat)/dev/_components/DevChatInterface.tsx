@@ -4,13 +4,11 @@ import DevConsole from "@/components/chat/dev-console";
 import { ChatHeader } from "@/components/chat/chat-header";
 import { useState, useEffect } from "react";
 
-// Import icons directly instead of using dynamic imports
 import { Menu as MenuIcon, X as XIcon } from "lucide-react";
 
-export default function ChatInterface() {
+export default function DevChatInterface() {
   const [isToolsPanelOpen, setIsToolsPanelOpen] = useState(false);
 
-  // Handle escape key to close mobile panel
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isToolsPanelOpen) {
@@ -22,7 +20,6 @@ export default function ChatInterface() {
     return () => document.removeEventListener('keydown', handleEscape);
   }, [isToolsPanelOpen]);
 
-  // Prevent body scroll when mobile panel is open
   useEffect(() => {
     if (isToolsPanelOpen) {
       document.body.style.overflow = 'hidden';
@@ -40,17 +37,14 @@ export default function ChatInterface() {
       <ChatHeader />
 
       <div className="flex flex-1 min-h-0 relative">
-        {/* Main chat area */}
         <div className="flex-1 lg:flex-none lg:w-[70%]">
           <Assistant />
         </div>
 
-        {/* Desktop tools panel */}
         <div className="hidden lg:flex lg:w-[30%] border-l border-border min-h-0">
           <DevConsole />
         </div>
 
-        {/* Mobile hamburger menu button */}
         <button
           onClick={() => setIsToolsPanelOpen(true)}
           className="lg:hidden fixed bottom-4 right-4 z-40 bg-primary text-primary-foreground p-3 rounded-full shadow-lg hover:bg-primary/90 transition-colors"
@@ -59,20 +53,16 @@ export default function ChatInterface() {
           <MenuIcon size={20} />
         </button>
 
-        {/* Mobile overlay */}
         {isToolsPanelOpen && (
           <>
-            {/* Backdrop */}
             <div
               className="fixed inset-0 z-50 bg-foreground/50 lg:hidden"
               onClick={() => setIsToolsPanelOpen(false)}
             />
 
-            {/* Slide-out panel */}
             <div className={`fixed top-0 right-0 z-50 h-full w-full max-w-sm bg-background border-l border-border transform transition-transform duration-300 ease-in-out lg:hidden ${
               isToolsPanelOpen ? 'translate-x-0' : 'translate-x-full'
             }`}>
-              {/* Panel header */}
               <div className="flex items-center justify-between p-4 border-b border-border">
                 <h2 className="text-lg font-semibold text-foreground">Tools & Settings</h2>
                 <button
@@ -84,7 +74,6 @@ export default function ChatInterface() {
                 </button>
               </div>
 
-              {/* Panel content */}
               <div className="h-full overflow-y-auto">
                 <DevConsole />
               </div>
