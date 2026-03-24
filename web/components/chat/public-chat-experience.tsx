@@ -363,61 +363,54 @@ export function PublicChatExperience() {
   };
 
   return (
-    <div className="relative h-full overflow-y-auto bg-background">
+    <div className="relative min-h-[100dvh] bg-background">
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_bottom,transparent_0,transparent_23px,var(--border)_24px)] bg-[length:100%_24px] opacity-25" />
 
-      <div className="relative mx-auto flex min-h-full w-full max-w-5xl flex-col px-4 py-4 sm:px-6 lg:px-8 lg:py-6">
-        <section className="pb-3">
+      <div className="relative mx-auto flex min-h-[100dvh] w-full max-w-5xl flex-col px-4 py-4 sm:px-6 lg:px-8 lg:py-6">
+        <section className="pb-3 sm:pb-4">
           <div className="flex items-start justify-between gap-3">
-            <div>
+            <div className="min-w-0 flex-1">
               <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">
                 Live on real league data
               </p>
-              <h1 className="mt-3 max-w-4xl text-3xl font-semibold leading-[0.96] tracking-[-0.05em] text-foreground sm:text-5xl">
+              <h1 className="mt-2 max-w-4xl text-[2rem] font-semibold leading-[0.96] tracking-[-0.05em] text-foreground sm:mt-3 sm:text-5xl">
                 Watch Flaim work on my actual leagues right now.
               </h1>
             </div>
-            <Button
-              asChild
-              variant="ghost"
-              size="sm"
-              className="hidden rounded-full px-0 text-muted-foreground sm:inline-flex"
-            >
-              <Link href="/">
-                Back home
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </Link>
-            </Button>
+            <div className="flex shrink-0 items-center gap-2 self-start">
+              <Badge
+                variant={
+                  runStatus === "completed"
+                    ? "default"
+                    : runStatus === "running"
+                      ? "secondary"
+                      : runStatus === "error"
+                        ? "destructive"
+                        : "outline"
+                }
+                className="px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] sm:px-3 sm:text-xs"
+              >
+                {runStatusLabel}
+              </Badge>
+              <Button
+                asChild
+                variant="ghost"
+                size="sm"
+                className="h-8 rounded-full px-2 text-muted-foreground sm:px-3"
+              >
+                <Link href="/">
+                  <span className="sm:hidden">Home</span>
+                  <span className="hidden sm:inline">Back home</span>
+                  <ArrowRight className="ml-1 h-4 w-4 sm:ml-2" />
+                </Link>
+              </Button>
+            </div>
           </div>
         </section>
 
-        <Card className="flex min-h-[32rem] flex-col overflow-hidden rounded-[1.6rem] border-border bg-card p-0 shadow-sm lg:min-h-[38rem] lg:rounded-[2rem]">
+        <Card className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.45rem] border-border bg-card p-0 shadow-sm sm:rounded-[1.6rem] lg:rounded-[2rem]">
           <div className="border-b border-border bg-card px-3 py-3 sm:px-4">
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge
-                  variant={
-                    runStatus === "completed"
-                      ? "default"
-                      : runStatus === "running"
-                        ? "secondary"
-                        : runStatus === "error"
-                          ? "destructive"
-                          : "outline"
-                  }
-                  className="px-3 py-1 text-xs font-semibold"
-                >
-                  {runStatusLabel}
-                </Badge>
-                {selectedPreset ? (
-                  <Badge variant="outline" className="hidden px-3 py-1 text-xs font-medium sm:inline-flex">
-                    {selectedPreset.title}
-                  </Badge>
-                ) : null}
-              </div>
-            </div>
-
-            <div className="-mx-3 overflow-x-auto px-3 pb-1 pt-3 sm:mx-0 sm:px-0">
+            <div className="-mx-3 overflow-x-auto px-3 pb-1 sm:mx-0 sm:px-0">
               <div className="flex snap-x snap-mandatory gap-3">
                 {PUBLIC_CHAT_PRESETS.map((preset) => {
                   const isSelected = preset.id === selectedPresetId;
@@ -484,9 +477,9 @@ export function PublicChatExperience() {
             </div>
           </div>
 
-          <div className="flex-1 bg-muted/40 p-3 lg:p-4">
-            <div className="h-full rounded-[1.35rem] border border-border bg-background p-3 lg:rounded-[1.7rem] lg:p-4 lg:overflow-hidden">
-              <div className="flex h-full flex-col gap-4 pr-1 lg:overflow-y-auto">
+          <div className="min-h-0 flex-1 bg-muted/40 p-2.5 sm:p-3 lg:p-4">
+            <div className="flex h-full min-h-0 flex-col rounded-[1.2rem] border border-border bg-background p-3 sm:rounded-[1.35rem] lg:rounded-[1.7rem] lg:p-4 lg:overflow-hidden">
+              <div className="flex h-full min-h-0 flex-col gap-4 pr-1 lg:overflow-y-auto">
                   {selectedPreset ? (
                     <PublicMessage role="user" text={selectedPreset.userMessage} />
                   ) : (
@@ -554,15 +547,6 @@ export function PublicChatExperience() {
                       </Button>
                     </div>
                   ) : null}
-
-                  <div className="pt-1 sm:hidden">
-                    <Button asChild variant="ghost" size="sm" className="rounded-full px-0 text-muted-foreground">
-                      <Link href="/">
-                        Back home
-                        <ArrowRight className="ml-2 h-4 w-4" />
-                      </Link>
-                    </Button>
-                  </div>
 
                   <div ref={transcriptEndRef} />
               </div>
