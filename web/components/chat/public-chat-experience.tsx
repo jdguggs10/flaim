@@ -12,14 +12,9 @@ import type { PublicChatTurnRequest } from "@/types/api-responses";
 import { cn } from "@/lib/utils";
 import { parse } from "partial-json";
 import {
-  BarChart3,
   ArrowRight,
-  Eye,
   LoaderCircle,
   RefreshCw,
-  Search,
-  Sparkles,
-  type LucideIcon,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -35,13 +30,6 @@ interface PublicToolCallState {
   arguments: string;
   parsedArguments?: Record<string, unknown>;
 }
-
-const PRESET_ICONS: Record<PublicChatPresetId, LucideIcon> = {
-  "waiver-wire": Search,
-  "roster-hole": BarChart3,
-  "league-leader": Sparkles,
-  "transactions-watch": Eye,
-};
 
 function safeParseArguments(rawArguments: string) {
   if (!rawArguments.trim()) {
@@ -173,6 +161,8 @@ export function PublicChatExperience() {
   const transcriptEndRef = useRef<HTMLDivElement | null>(null);
   const hasStreamedAssistantTextRef = useRef(false);
   const activeRunAbortControllerRef = useRef<AbortController | null>(null);
+  const promptRailRef = useRef<HTMLDivElement | null>(null);
+  const promptRailPauseUntilRef = useRef(0);
 
   const selectedPreset = useMemo(
     () =>
@@ -200,6 +190,70 @@ export function PublicChatExperience() {
       activeRunAbortControllerRef.current?.abort();
     };
   }, []);
+
+  useEffect(() => {
+    const rail = promptRailRef.current;
+    if (!rail) {
+      return;
+    }
+
+    const mediaQuery =
+      typeof window !== "undefined"
+        ? window.matchMedia("(prefers-reduced-motion: reduce)")
+        : null;
+    if (mediaQuery?.matches) {
+      return;
+    }
+
+    let frameId = 0;
+    let direction = 1;
+    let lastTimestamp = 0;
+    const speed = 22;
+
+    const step = (timestamp: number) => {
+      const element = promptRailRef.current;
+      if (!element) {
+        return;
+      }
+
+      if (!lastTimestamp) {
+        lastTimestamp = timestamp;
+      }
+
+      const delta = (timestamp - lastTimestamp) / 1000;
+      lastTimestamp = timestamp;
+
+      const canScroll = element.scrollWidth > element.clientWidth + 8;
+      const shouldPause =
+        runStatus === "running" || Date.now() < promptRailPauseUntilRef.current;
+
+      if (canScroll && !shouldPause) {
+        const nextScrollLeft = element.scrollLeft + direction * speed * delta;
+        const maxScrollLeft = element.scrollWidth - element.clientWidth;
+
+        if (nextScrollLeft >= maxScrollLeft) {
+          element.scrollLeft = maxScrollLeft;
+          direction = -1;
+          promptRailPauseUntilRef.current = Date.now() + 1200;
+        } else if (nextScrollLeft <= 0) {
+          element.scrollLeft = 0;
+          direction = 1;
+          promptRailPauseUntilRef.current = Date.now() + 1200;
+        } else {
+          element.scrollLeft = nextScrollLeft;
+        }
+      }
+
+      frameId = window.requestAnimationFrame(step);
+    };
+
+    frameId = window.requestAnimationFrame(step);
+    return () => window.cancelAnimationFrame(frameId);
+  }, [runStatus]);
+
+  const pausePromptRail = () => {
+    promptRailPauseUntilRef.current = Date.now() + 6000;
+  };
 
   const handleRunPreset = async (preset: PublicChatPreset) => {
     if (runStatus === "running") {
@@ -403,11 +457,17 @@ export function PublicChatExperience() {
 
         <Card className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.45rem] border-border bg-card p-0 shadow-sm sm:rounded-[1.6rem] lg:rounded-[2rem]">
           <div className="border-b border-border bg-card px-3 py-3 sm:px-4">
-            <div className="-mx-3 overflow-x-auto px-3 pb-1 sm:mx-0 sm:px-0">
-              <div className="flex snap-x snap-mandatory gap-3">
+            <div
+              ref={promptRailRef}
+              className="-mx-3 overflow-x-auto px-3 pb-1 sm:mx-0 sm:px-0"
+              onPointerDown={pausePromptRail}
+              onTouchStart={pausePromptRail}
+              onMouseEnter={pausePromptRail}
+              onWheel={pausePromptRail}
+            >
+              <div className="flex snap-x snap-mandatory gap-2.5 sm:gap-3">
                 {PUBLIC_CHAT_PRESETS.map((preset) => {
                   const isSelected = preset.id === selectedPresetId;
-                  const Icon = PRESET_ICONS[preset.id];
 
                   return (
                     <button
@@ -417,7 +477,7 @@ export function PublicChatExperience() {
                       disabled={runStatus === "running"}
                       aria-pressed={isSelected}
                       className={cn(
-                        "group relative min-w-[13rem] snap-start overflow-hidden rounded-[1.1rem] border p-3 text-left transition-all duration-200 sm:min-w-[18rem] sm:p-4",
+                        "group relative min-w-[12.5rem] snap-start overflow-hidden rounded-full border px-4 py-3 text-left transition-all duration-200 sm:min-w-[14rem] sm:px-5 sm:py-3.5",
                         isSelected
                           ? "border-primary bg-primary text-primary-foreground shadow-sm"
                           : "border-border bg-background text-foreground hover:bg-muted",
@@ -427,41 +487,16 @@ export function PublicChatExperience() {
                       )}
                       >
                         <div className="relative">
-                          <div className="flex items-center justify-between gap-3">
-                          <div
+                          <h3
                             className={cn(
-                              "flex h-9 w-9 items-center justify-center rounded-xl",
-                              isSelected
-                                ? "border border-primary-foreground/15 bg-primary text-primary-foreground"
-                                : "border border-border bg-muted text-foreground"
-                            )}
-                          >
-                            <Icon className="h-4.5 w-4.5" />
-                          </div>
-                          <div
-                            className={cn(
-                              "rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.2em]",
-                              isSelected
-                                ? "border-primary-foreground/15 text-primary-foreground/80"
-                                : "border-border text-muted-foreground"
-                            )}
-                          >
-                            {preset.eyebrow}
-                          </div>
-                        </div>
-                        <h3 className="mt-3 text-sm font-semibold tracking-tight sm:text-base">
-                          {preset.title}
-                        </h3>
-                        <p
-                          className={cn(
-                            "mt-1.5 hidden text-xs leading-5 sm:block sm:text-sm sm:leading-6",
+                            "line-clamp-2 min-h-[2.5rem] text-sm font-semibold leading-[1.15] tracking-tight sm:min-h-[2.65rem] sm:text-[0.95rem]",
                             isSelected
-                              ? "text-primary-foreground/75"
-                              : "text-muted-foreground"
+                              ? "text-primary-foreground"
+                              : "text-foreground"
                           )}
                         >
-                          {preset.description}
-                        </p>
+                          {preset.title}
+                        </h3>
                       </div>
                     </button>
                   );
