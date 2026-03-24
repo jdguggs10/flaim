@@ -100,6 +100,10 @@ function getLiveStatusCopy(toolCalls: PublicToolCallState[]) {
     .find((toolCall) => toolCall.status === "in_progress") ?? null;
   const latestTool = activeTool ?? toolCalls[toolCalls.length - 1] ?? null;
 
+  if (!latestTool) {
+    return "Getting the live answer started.";
+  }
+
   switch (latestTool?.name) {
     case "web_search_call":
     case "web_search":
@@ -121,7 +125,7 @@ function getLiveStatusCopy(toolCalls: PublicToolCallState[]) {
     case "get_players":
       return "Looking up player details to sharpen the answer.";
     default:
-      return "Checking Gerry's leagues and pulling the live details together.";
+      return "Pulling the live details together.";
   }
 }
 
