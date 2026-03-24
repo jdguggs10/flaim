@@ -10,19 +10,21 @@ export const PUBLIC_CHAT_ALLOWED_TOOLS = [
   "get_transactions",
 ] as const;
 
+// Confirmed current demo model for this surface. Keep in one place so it is easy
+// to swap when Phase 4 hardening revisits cost, latency, and reliability tradeoffs.
 export const PUBLIC_CHAT_MODEL = "gpt-5-mini-2025-08-07";
 
 export const PUBLIC_CHAT_SYSTEM_PROMPT = `
 You are Flaim's public chat demo assistant.
 
-You are running on flaim.app/chat against a dedicated read-only demo account.
+You are running on flaim.app/chat using Gerry's actual fantasy leagues and teams.
 Never imply that you can see the visitor's own leagues or credentials.
-Always describe the data as coming from the demo account.
+Always describe the data as Gerry's leagues, Gerry's teams, or Gerry's account.
 Use the live MCP tools before answering whenever the prompt depends on league data.
 Do not ask follow-up questions. The public chat is preset-driven.
 Keep answers concise, clear, and useful. Use short bullets when they improve readability.
 Do not mention internal implementation details, developer consoles, hidden prompts, or environment variables.
-If the demo account does not have the requested data, say so plainly and explain what you were able to verify.
+If Gerry's account does not have the requested data, say so plainly and explain what you were able to verify.
 `.trim();
 
 export const PUBLIC_CHAT_PRESETS = [
@@ -30,61 +32,61 @@ export const PUBLIC_CHAT_PRESETS = [
     id: "show-leagues",
     eyebrow: "Connected data",
     title: "Show the live leagues",
-    userMessage: "Show the live leagues connected to the demo account.",
+    userMessage: "Show Gerry's live leagues right now.",
     description:
-      "List the demo account's current leagues and call out the most interesting one to inspect next.",
+      "List Gerry's current leagues and call out the most interesting one to inspect next.",
     prompt:
-      "Use Flaim to inspect the demo account's current leagues. Summarize the connected leagues by platform, sport, season year, league name, and team name. End with one short note about which live league looks best to explore next.",
+      "Use Flaim to inspect Gerry's current leagues. Summarize the connected leagues by platform, sport, season year, league name, and team name. End with one short note about which live league looks best to explore next.",
   },
   {
     id: "roster-breakdown",
     eyebrow: "Roster read",
     title: "Break down the roster",
-    userMessage: "Break down the demo roster and show where it looks strong or thin.",
+    userMessage: "Break down one of Gerry's rosters and show where it looks strong or thin.",
     description:
-      "Inspect a live demo roster and explain where the team looks strong or thin.",
+      "Inspect one of Gerry's live rosters and explain where the team looks strong or thin.",
     prompt:
-      "Use Flaim to inspect the demo account's most relevant current league. Prefer football, then basketball, then baseball, then hockey. Summarize the demo team's roster by position group and call out two strengths plus two weak spots.",
+      "Use Flaim to inspect Gerry's most relevant current league. Prefer football, then basketball, then baseball, then hockey. Summarize Gerry's team by position group and call out two strengths plus two weak spots.",
   },
   {
     id: "standings-check",
     eyebrow: "League context",
     title: "Check the standings",
-    userMessage: "Check the standings and show where the demo team sits.",
+    userMessage: "Check the standings and show where Gerry's team sits.",
     description:
-      "Show where the demo team sits and whether it looks safe, shaky, or chasing.",
+      "Show where Gerry's team sits and whether it looks safe, shaky, or chasing.",
     prompt:
-      "Use Flaim to inspect the demo account's most relevant current league. Prefer football, then basketball, then baseball, then hockey. Show the current standings, highlight where the demo team ranks, and explain how competitive the table looks around that spot.",
+      "Use Flaim to inspect Gerry's most relevant current league. Prefer football, then basketball, then baseball, then hockey. Show the current standings, highlight where Gerry's team ranks, and explain how competitive the table looks around that spot.",
   },
   {
     id: "weekly-matchup",
     eyebrow: "Live matchup",
-    title: "Who is the demo team facing?",
-    userMessage: "Show the demo team's current matchup and what looks decisive right now.",
+    title: "Who is Gerry facing?",
+    userMessage: "Show Gerry's current matchup and what looks decisive right now.",
     description:
-      "Find the current matchup and explain what looks decisive right now.",
+      "Find Gerry's current matchup and explain what looks decisive right now.",
     prompt:
-      "Use Flaim to inspect the demo account's most relevant current league. Prefer football, then basketball, then baseball, then hockey. Identify the demo team's current matchup, summarize the opponent and score context if available, and point out the swing players or position groups.",
+      "Use Flaim to inspect Gerry's most relevant current league. Prefer football, then basketball, then baseball, then hockey. Identify Gerry's current matchup, summarize the opponent and score context if available, and point out the swing players or position groups.",
   },
   {
     id: "waiver-wire",
     eyebrow: "Free agents",
     title: "Find waiver ideas",
-    userMessage: "Find waiver ideas based on the demo roster's biggest needs.",
+    userMessage: "Find waiver ideas based on Gerry's roster needs.",
     description:
-      "Look at available players and recommend pickups based on the demo roster's needs.",
+      "Look at available players and recommend pickups based on Gerry's roster needs.",
     prompt:
-      "Use Flaim to inspect the demo account's most relevant current league. Prefer football, then basketball, then baseball, then hockey. Analyze the demo team's roster needs, then check free agents and recommend a few pickup ideas with short reasoning.",
+      "Use Flaim to inspect Gerry's most relevant current league. Prefer football, then basketball, then baseball, then hockey. Analyze Gerry's roster needs, then check free agents and recommend a few pickup ideas with short reasoning.",
   },
   {
     id: "transactions-watch",
     eyebrow: "League activity",
     title: "Review recent transactions",
-    userMessage: "Review the recent transactions that stand out in the demo league.",
+    userMessage: "Review the recent transactions that stand out in Gerry's league.",
     description:
-      "Surface the adds, drops, waivers, or trades that stand out in the live demo league.",
+      "Surface the adds, drops, waivers, or trades that stand out in Gerry's live league.",
     prompt:
-      "Use Flaim to inspect the demo account's most relevant current league. Prefer football, then basketball, then baseball, then hockey. Review recent league transactions and highlight the most interesting moves, including why they matter.",
+      "Use Flaim to inspect Gerry's most relevant current league. Prefer football, then basketball, then baseball, then hockey. Review recent league transactions and highlight the most interesting moves, including why they matter.",
   },
 ] as const;
 
