@@ -174,6 +174,10 @@ export async function POST(request: NextRequest) {
     };
 
     const publicChatContext = await buildPublicChatContext();
+    const todayInEastern = new Intl.DateTimeFormat("en-US", {
+      dateStyle: "full",
+      timeZone: "America/New_York",
+    }).format(new Date());
     const openai = new OpenAI();
     let events: Awaited<ReturnType<typeof openai.responses.create>>;
 
@@ -195,6 +199,15 @@ export async function POST(request: NextRequest) {
                 },
               ]
             : []),
+          {
+            role: "developer",
+            content: [
+              {
+                type: "input_text",
+                text: `Today in Gerry's timezone is ${todayInEastern}. Use this as the reference date for "today" when deciding what current sports context to mention from web search.`,
+              },
+            ],
+          },
           {
             role: "user",
             content: [{ type: "input_text", text: preset.prompt }],

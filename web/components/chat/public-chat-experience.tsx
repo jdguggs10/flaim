@@ -223,7 +223,7 @@ export function PublicChatExperience() {
                 disabled={runStatus === "running"}
                 aria-pressed={isSelected}
                 className={cn(
-                  "group relative min-w-[10.75rem] max-w-[10.75rem] overflow-hidden rounded-full border px-3.5 py-2.5 text-left transition-all duration-200 sm:min-w-[12rem] sm:max-w-[12rem] sm:px-4 sm:py-3",
+                  "group relative w-max max-w-none overflow-hidden rounded-full border px-3 py-2 text-left transition-all duration-200 sm:px-4 sm:py-2.5",
                   isSelected
                     ? "border-primary bg-primary text-primary-foreground shadow-sm"
                     : "border-border bg-background text-foreground hover:bg-muted",
@@ -235,7 +235,7 @@ export function PublicChatExperience() {
                 <div className="relative">
                   <h3
                     className={cn(
-                      "line-clamp-2 min-h-[2rem] text-[0.82rem] font-semibold leading-[1.1] tracking-tight sm:min-h-[2.2rem] sm:text-[0.9rem]",
+                      "whitespace-nowrap text-[0.8rem] font-semibold leading-none tracking-tight sm:text-[0.9rem]",
                       isSelected ? "text-primary-foreground" : "text-foreground"
                     )}
                   >
