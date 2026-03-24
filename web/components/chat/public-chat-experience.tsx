@@ -101,6 +101,9 @@ function getLiveStatusCopy(toolCalls: PublicToolCallState[]) {
   const latestTool = activeTool ?? toolCalls[toolCalls.length - 1] ?? null;
 
   switch (latestTool?.name) {
+    case "web_search_call":
+    case "web_search":
+      return "Checking current news, performances, and schedule context.";
     case "get_user_session":
       return "Checking Gerry's connected leagues.";
     case "get_roster":

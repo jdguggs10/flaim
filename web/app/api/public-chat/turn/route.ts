@@ -87,6 +87,18 @@ function getPublicChatMcpTool() {
   };
 }
 
+function getPublicChatWebSearchTool() {
+  return {
+    type: "web_search_preview" as const,
+    user_location: {
+      type: "approximate" as const,
+      country: "US",
+      region: "New York",
+      city: "Rochester",
+    },
+  };
+}
+
 export async function POST(request: NextRequest) {
   try {
     const { presetId } = (await request.json()) as PublicChatTurnRequest;
@@ -178,10 +190,11 @@ export async function POST(request: NextRequest) {
             content: [{ type: "input_text", text: preset.prompt }],
           },
         ],
-        tools: [getPublicChatMcpTool()],
+        tools: [getPublicChatWebSearchTool(), getPublicChatMcpTool()],
         stream: true,
         store: false,
         parallel_tool_calls: false,
+        tool_choice: "auto",
         reasoning: { summary: "auto" },
       }, {
         signal: request.signal,
@@ -229,12 +242,16 @@ export async function POST(request: NextRequest) {
                 break;
               case "response.output_item.added":
                 if (
-                  eventWithOptionalItem.item?.type === "mcp_call" &&
+                  (eventWithOptionalItem.item?.type === "mcp_call" ||
+                    eventWithOptionalItem.item?.type === "web_search_call") &&
                   eventWithOptionalItem.item.id
                 ) {
                   enqueueSse(controller, encoder, "tool_start", {
                     itemId: eventWithOptionalItem.item.id,
-                    name: eventWithOptionalItem.item.name ?? null,
+                    name:
+                      eventWithOptionalItem.item.name ??
+                      eventWithOptionalItem.item.type ??
+                      null,
                     arguments:
                       typeof eventWithOptionalItem.item.arguments === "string"
                         ? eventWithOptionalItem.item.arguments
@@ -276,7 +293,8 @@ export async function POST(request: NextRequest) {
                 break;
               case "response.output_item.done":
                 if (
-                  eventWithOptionalItem.item?.type === "mcp_call" &&
+                  (eventWithOptionalItem.item?.type === "mcp_call" ||
+                    eventWithOptionalItem.item?.type === "web_search_call") &&
                   eventWithOptionalItem.item.id
                 ) {
                   enqueueSse(controller, encoder, "tool_done", {
@@ -291,6 +309,13 @@ export async function POST(request: NextRequest) {
                       text,
                     });
                   }
+                }
+                break;
+              case "response.web_search_call.completed":
+                if (typeof eventWithStringFields.item_id === "string") {
+                  enqueueSse(controller, encoder, "tool_done", {
+                    itemId: eventWithStringFields.item_id,
+                  });
                 }
                 break;
               case "response.completed":
