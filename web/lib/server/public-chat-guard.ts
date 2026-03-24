@@ -3,7 +3,7 @@ const INTERNAL_SERVICE_TOKEN_HEADER = "X-Flaim-Internal-Token";
 export type PublicChatRunCompletionStatus = "completed" | "error" | "aborted";
 
 function getAuthWorkerUrl(): string {
-  const authWorkerUrl = process.env.NEXT_PUBLIC_AUTH_WORKER_URL;
+  const authWorkerUrl = process.env.NEXT_PUBLIC_AUTH_WORKER_URL?.trim();
   if (!authWorkerUrl) {
     throw new Error("NEXT_PUBLIC_AUTH_WORKER_URL is not configured");
   }
@@ -12,7 +12,7 @@ function getAuthWorkerUrl(): string {
 }
 
 function getInternalServiceToken(): string {
-  const token = process.env.INTERNAL_SERVICE_TOKEN;
+  const token = process.env.INTERNAL_SERVICE_TOKEN?.trim();
   if (!token) {
     throw new Error("INTERNAL_SERVICE_TOKEN is not configured");
   }

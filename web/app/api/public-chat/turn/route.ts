@@ -69,7 +69,7 @@ function getPublicChatMcpTool() {
     throw new PublicChatConfigError("Configured MCP server URL is not allowed");
   }
 
-  const demoApiKey = process.env.DEMO_API_KEY;
+  const demoApiKey = process.env.DEMO_API_KEY?.trim();
   if (!demoApiKey) {
     throw new PublicChatConfigError("DEMO_API_KEY is not configured");
   }
