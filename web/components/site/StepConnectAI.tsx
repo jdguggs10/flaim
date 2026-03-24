@@ -47,7 +47,7 @@ export function StepConnectAI() {
       </p>
 
       {/* Platform badges */}
-      <div className="grid grid-cols-2 gap-2 mb-4">
+      <div className="grid grid-cols-3 gap-2 mb-2">
         <Link
           href="/guide/claude"
           className="flex items-center justify-between rounded-md border border-border px-3 py-2 hover:bg-muted transition-colors"
@@ -63,17 +63,19 @@ export function StepConnectAI() {
           <ExternalLink className="h-3 w-3 text-muted-foreground" />
         </Link>
         <Link
-          href="/guide/gemini"
-          className="flex items-center justify-between rounded-md border border-border px-3 py-2 hover:bg-muted transition-colors"
-        >
-          <div className="text-xs font-medium">Gemini</div>
-          <ExternalLink className="h-3 w-3 text-muted-foreground" />
-        </Link>
-        <Link
           href="/guide/perplexity"
           className="flex items-center justify-between rounded-md border border-border px-3 py-2 hover:bg-muted transition-colors"
         >
           <div className="text-xs font-medium">Perplexity</div>
+          <ExternalLink className="h-3 w-3 text-muted-foreground" />
+        </Link>
+      </div>
+      <div className="mb-4">
+        <Link
+          href="/guide/gemini"
+          className="flex items-center justify-between rounded-md border border-border/50 px-3 py-1.5 hover:bg-muted transition-colors"
+        >
+          <div className="text-xs text-muted-foreground">Gemini CLI (no web app support yet)</div>
           <ExternalLink className="h-3 w-3 text-muted-foreground" />
         </Link>
       </div>

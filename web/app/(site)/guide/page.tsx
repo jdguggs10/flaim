@@ -113,25 +113,25 @@ export default function GuidePage() {
             <Link href="/guide/claude" className="block rounded-lg border bg-background p-4 hover:border-foreground/20 transition-colors">
               <h3 className="font-semibold">Claude</h3>
               <p className="text-sm text-muted-foreground mt-1">
-                Add Flaim as a custom connector. Requires a Pro, Max, Team, or Enterprise plan.
+                Add Flaim as a custom connector in Settings. Requires a Pro, Max, Team, or Enterprise plan.
               </p>
             </Link>
             <Link href="/guide/chatgpt" className="block rounded-lg border bg-background p-4 hover:border-foreground/20 transition-colors">
               <h3 className="font-semibold">ChatGPT</h3>
               <p className="text-sm text-muted-foreground mt-1">
-                Add Flaim as a custom MCP connector. Requires a paid plan (Plus, Pro, Team, Enterprise, or Edu).
-              </p>
-            </Link>
-            <Link href="/guide/gemini" className="block rounded-lg border bg-background p-4 hover:border-foreground/20 transition-colors">
-              <h3 className="font-semibold">Gemini CLI</h3>
-              <p className="text-sm text-muted-foreground mt-1">
-                Add Flaim via the command line. Two commands and you&apos;re connected.
+                Add Flaim as a custom MCP connector. Requires a paid plan and Developer Mode enabled.
               </p>
             </Link>
             <Link href="/guide/perplexity" className="block rounded-lg border bg-background p-4 hover:border-foreground/20 transition-colors">
               <h3 className="font-semibold">Perplexity</h3>
               <p className="text-sm text-muted-foreground mt-1">
                 Add Flaim as a custom remote connector. Requires a Pro, Max, or Enterprise plan.
+              </p>
+            </Link>
+            <Link href="/guide/gemini" className="block rounded-lg border bg-background p-4 hover:border-foreground/20 transition-colors">
+              <h3 className="font-semibold">Gemini CLI</h3>
+              <p className="text-sm text-muted-foreground mt-1">
+                CLI only. The Gemini web app does not support custom connectors yet.
               </p>
             </Link>
           </div>
