@@ -3,7 +3,7 @@ import Link from 'next/link';
 
 export const metadata: Metadata = {
   title: 'Inspirations | Flaim',
-  description: 'Projects that shaped how Flaim was built — focused scope, honest design, and respect for the user.',
+  description: 'Projects that shaped how Flaim was built. Focused scope, honest design, and respect for the user.',
   alternates: {
     canonical: 'https://flaim.app/inspirations',
   },
@@ -46,7 +46,7 @@ export default function InspirationsPage() {
           <h1 className="text-3xl font-bold mb-4">Inspirations</h1>
           <div className="text-muted-foreground space-y-3">
             <p>
-              Flaim is a side project — built in spare time, maintained for the long haul.
+              Flaim is a side project, built in spare time, maintained for the long haul.
               The goal is simple: connect fantasy sports data to AI tools, and do it reliably.
             </p>
             <p>

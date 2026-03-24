@@ -4,7 +4,8 @@ import { useState } from 'react';
 import { useAuth } from '@clerk/nextjs';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Copy, Check } from 'lucide-react';
+import { Copy, Check, ExternalLink } from 'lucide-react';
+import Link from 'next/link';
 
 const fantasyMcpUrl =
   process.env.NEXT_PUBLIC_FANTASY_MCP_URL || 'https://api.flaim.app/mcp';
@@ -46,23 +47,35 @@ export function StepConnectAI() {
       </p>
 
       {/* Platform badges */}
-      <div className="grid grid-cols-3 gap-2 mb-4">
-        <a
-          href="https://claude.ai/settings/connectors"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex flex-col items-center justify-center rounded-md border border-border px-3 py-2 hover:bg-muted transition-colors"
+      <div className="grid grid-cols-2 gap-2 mb-4">
+        <Link
+          href="/guide/claude"
+          className="flex items-center justify-between rounded-md border border-border px-3 py-2 hover:bg-muted transition-colors"
         >
           <div className="text-xs font-medium">Claude</div>
-        </a>
-        <div className="flex flex-col items-center justify-center rounded-md border border-border px-3 py-2">
+          <ExternalLink className="h-3 w-3 text-muted-foreground" />
+        </Link>
+        <Link
+          href="/guide/chatgpt"
+          className="flex items-center justify-between rounded-md border border-border px-3 py-2 hover:bg-muted transition-colors"
+        >
           <div className="text-xs font-medium">ChatGPT</div>
-          <div className="text-xs text-muted-foreground">Use MCP settings</div>
-        </div>
-        <div className="flex flex-col items-center justify-center rounded-md border border-border px-3 py-2">
+          <ExternalLink className="h-3 w-3 text-muted-foreground" />
+        </Link>
+        <Link
+          href="/guide/gemini"
+          className="flex items-center justify-between rounded-md border border-border px-3 py-2 hover:bg-muted transition-colors"
+        >
           <div className="text-xs font-medium">Gemini</div>
-          <div className="text-xs text-muted-foreground">Use MCP settings</div>
-        </div>
+          <ExternalLink className="h-3 w-3 text-muted-foreground" />
+        </Link>
+        <Link
+          href="/guide/perplexity"
+          className="flex items-center justify-between rounded-md border border-border px-3 py-2 hover:bg-muted transition-colors"
+        >
+          <div className="text-xs font-medium">Perplexity</div>
+          <ExternalLink className="h-3 w-3 text-muted-foreground" />
+        </Link>
       </div>
 
       {!isLoaded && (

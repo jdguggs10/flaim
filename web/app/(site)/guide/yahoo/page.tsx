@@ -4,7 +4,7 @@ import Link from 'next/link';
 export const metadata: Metadata = {
   title: 'Connect Yahoo Fantasy to ChatGPT, Claude, or Gemini | Flaim',
   description:
-    'Step-by-step guide to connecting your Yahoo fantasy leagues to AI assistants using Flaim. No extension needed — just sign in with Yahoo.',
+    'Step-by-step guide to connecting your Yahoo fantasy leagues to AI assistants using Flaim. No extension needed. Just sign in with Yahoo.',
   alternates: {
     canonical: 'https://flaim.app/guide/yahoo',
   },
@@ -36,7 +36,7 @@ export default function YahooGuidePage() {
       <div className="container max-w-2xl mx-auto py-12 px-4">
         <h1 className="text-3xl font-bold mb-4">Connect Yahoo Fantasy to ChatGPT, Claude, or Gemini</h1>
         <p className="text-muted-foreground mb-8">
-          Flaim connects your Yahoo fantasy leagues to AI assistants for read-only analysis. No extension needed — just sign in with your Yahoo account and Flaim handles the rest. Setup takes about 5 minutes.
+          Flaim connects your Yahoo fantasy leagues to AI assistants for read-only analysis. No extension needed. Just sign in with your Yahoo account and Flaim handles the rest. Setup takes about 5 minutes.
         </p>
 
         <section className="mb-10">
@@ -71,8 +71,8 @@ export default function YahooGuidePage() {
         <section className="mb-10">
           <h2 className="text-xl font-semibold mb-3">Other platforms</h2>
           <ul className="text-sm text-muted-foreground space-y-1">
-            <li><Link href="/guide/espn" className="text-primary hover:underline">Connect ESPN Fantasy to AI</Link> — requires Chrome extension</li>
-            <li><Link href="/guide/sleeper" className="text-primary hover:underline">Connect Sleeper Fantasy to AI</Link> — just your username</li>
+            <li><Link href="/guide/espn" className="text-primary hover:underline">Connect ESPN Fantasy to AI</Link> (requires Chrome extension)</li>
+            <li><Link href="/guide/sleeper" className="text-primary hover:underline">Connect Sleeper Fantasy to AI</Link> (just your username)</li>
           </ul>
         </section>
 

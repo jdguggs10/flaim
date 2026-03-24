@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { User, Check, ChevronDown } from 'lucide-react';
+import { User, Check, ChevronDown, Brain, Search, Zap } from 'lucide-react';
 import { StepConnectPlatforms } from '@/components/site/StepConnectPlatforms';
 import { StepConnectAI } from '@/components/site/StepConnectAI';
 
@@ -68,7 +68,7 @@ export default function LandingPage() {
           Connect ESPN, Yahoo, and Sleeper leagues to Claude, ChatGPT, and Gemini.
         </p>
         <p className="sr-only">
-          Flaim is a free, open-source MCP server that gives Claude, ChatGPT, and Gemini read-only access to your actual fantasy league data — rosters, standings, matchups, free agents, and transactions across football, baseball, basketball, and hockey. It works with ESPN, Yahoo, and Sleeper. Setup takes about 5 minutes, and nothing in your league can be changed.
+          Flaim is a free, open-source MCP server that gives Claude, ChatGPT, and Gemini read-only access to your actual fantasy league data: rosters, standings, matchups, free agents, and transactions across football, baseball, basketball, and hockey. It works with ESPN, Yahoo, and Sleeper. Setup takes about 5 minutes, and nothing in your league can be changed.
         </p>
       </section>
 
@@ -114,6 +114,142 @@ export default function LandingPage() {
               Boom, you&apos;re done. Chat as normal and Flaim will activate automatically based on context. Edit and manage defaults in Your Leagues above. Flaim is read-only, so nothing in your league can automatically change.
             </p>
           </div>
+        </div>
+      </section>
+
+      {/* The Skill */}
+      <section className="py-10 px-4">
+        <div className="container max-w-2xl mx-auto">
+          <h2 className="text-2xl font-bold text-center mb-2">The Flaim Skill</h2>
+          <p className="text-center text-muted-foreground mb-8">
+            More than a data connection. Flaim teaches your AI how to think about fantasy sports.
+          </p>
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div className="flex flex-col items-center text-center p-4">
+              <Brain className="h-8 w-8 text-primary mb-3" />
+              <h3 className="font-semibold mb-1">Fantasy analyst reasoning</h3>
+              <p className="text-sm text-muted-foreground">
+                Knows how to evaluate rosters, spot weaknesses, and give advice grounded in your league&apos;s format and scoring.
+              </p>
+            </div>
+            <div className="flex flex-col items-center text-center p-4">
+              <Search className="h-8 w-8 text-primary mb-3" />
+              <h3 className="font-semibold mb-1">Web search when it matters</h3>
+              <p className="text-sm text-muted-foreground">
+                Knows when to search the web for injury news, schedules, and real-time stats instead of relying on league data alone.
+              </p>
+            </div>
+            <div className="flex flex-col items-center text-center p-4">
+              <Zap className="h-8 w-8 text-primary mb-3" />
+              <h3 className="font-semibold mb-1">Smart tool orchestration</h3>
+              <p className="text-sm text-muted-foreground">
+                Decides which tools to call and in what order based on your question. One prompt can pull from multiple sources.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* What You Can Ask */}
+      <section className="py-10 px-4 bg-muted">
+        <div className="container max-w-2xl mx-auto">
+          <h2 className="text-2xl font-bold text-center mb-2">What you can ask</h2>
+          <p className="text-center text-muted-foreground mb-8">
+            Each example maps to a single tool. One question, one answer.
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-lg border bg-background p-4">
+              <p className="font-medium">&ldquo;What fantasy leagues do I have?&rdquo;</p>
+              <p className="text-xs text-muted-foreground mt-1">Your connected leagues across platforms</p>
+            </div>
+            <div className="rounded-lg border bg-background p-4">
+              <p className="font-medium">&ldquo;Show me my roster&rdquo;</p>
+              <p className="text-xs text-muted-foreground mt-1">Team roster with player stats</p>
+            </div>
+            <div className="rounded-lg border bg-background p-4">
+              <p className="font-medium">&ldquo;Who am I playing this week?&rdquo;</p>
+              <p className="text-xs text-muted-foreground mt-1">Weekly matchup and scores</p>
+            </div>
+            <div className="rounded-lg border bg-background p-4">
+              <p className="font-medium">&ldquo;What are the standings?&rdquo;</p>
+              <p className="text-xs text-muted-foreground mt-1">League rankings</p>
+            </div>
+            <div className="rounded-lg border bg-background p-4">
+              <p className="font-medium">&ldquo;Who&rsquo;s on the waiver wire?&rdquo;</p>
+              <p className="text-xs text-muted-foreground mt-1">Available free agents by ownership</p>
+            </div>
+            <div className="rounded-lg border bg-background p-4">
+              <p className="font-medium">&ldquo;Look up Ja&rsquo;Marr Chase&rdquo;</p>
+              <p className="text-xs text-muted-foreground mt-1">Player search with ownership context</p>
+            </div>
+            <div className="rounded-lg border bg-background p-4">
+              <p className="font-medium">&ldquo;What trades happened this week?&rdquo;</p>
+              <p className="text-xs text-muted-foreground mt-1">Recent transactions in your league</p>
+            </div>
+            <div className="rounded-lg border bg-background p-4">
+              <p className="font-medium">&ldquo;Show me my league settings&rdquo;</p>
+              <p className="text-xs text-muted-foreground mt-1">Scoring format, roster slots, and members</p>
+            </div>
+            <div className="rounded-lg border bg-background p-4 sm:col-span-2 sm:max-w-sm sm:mx-auto">
+              <p className="font-medium">&ldquo;How did my team do in 2023?&rdquo;</p>
+              <p className="text-xs text-muted-foreground mt-1">Historical leagues and past seasons</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Go Deeper */}
+      <section className="py-10 px-4">
+        <div className="container max-w-2xl mx-auto">
+          <h2 className="text-2xl font-bold text-center mb-2">Go deeper</h2>
+          <p className="text-center text-muted-foreground mb-8">
+            The skill combines tools and web search to answer complex questions.
+          </p>
+          <div className="flex flex-col gap-3">
+            <div className="rounded-lg border bg-background p-4">
+              <p className="font-medium">&ldquo;Who are the best available players for my biggest roster weakness?&rdquo;</p>
+              <p className="text-xs text-muted-foreground mt-1">Roster analysis + free agent search</p>
+            </div>
+            <div className="rounded-lg border bg-background p-4">
+              <p className="font-medium">&ldquo;Should I start Ja&rsquo;Marr Chase this week?&rdquo;</p>
+              <p className="text-xs text-muted-foreground mt-1">Roster + web search for injury and matchup news</p>
+            </div>
+            <div className="rounded-lg border bg-background p-4">
+              <p className="font-medium">&ldquo;Compare my team to my opponent&rsquo;s. Where do I have an edge?&rdquo;</p>
+              <p className="text-xs text-muted-foreground mt-1">Matchup + roster + web search for player outlooks</p>
+            </div>
+            <div className="rounded-lg border bg-background p-4">
+              <p className="font-medium">&ldquo;Should I drop anyone for a waiver pickup?&rdquo;</p>
+              <p className="text-xs text-muted-foreground mt-1">Roster + free agents + standings context</p>
+            </div>
+            <div className="rounded-lg border bg-background p-4">
+              <p className="font-medium">&ldquo;Is it worth trading for Saquon Barkley?&rdquo;</p>
+              <p className="text-xs text-muted-foreground mt-1">Player search + roster fit + web search for trade value</p>
+            </div>
+            <div className="rounded-lg border bg-background p-4">
+              <p className="font-medium">&ldquo;What moves have my rivals made recently?&rdquo;</p>
+              <p className="text-xs text-muted-foreground mt-1">Transactions + standings</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Share */}
+      <section className="py-10 px-4 bg-muted">
+        <div className="container max-w-2xl mx-auto text-center">
+          <h2 className="text-2xl font-bold mb-2">Using Flaim for something amazing?</h2>
+          <p className="text-muted-foreground">
+            I&apos;d love to hear about it.{' '}
+            <a
+              href="https://www.threads.com/@jdguggs10"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary hover:underline"
+            >
+              Share it with me on Threads
+            </a>
+            .
+          </p>
         </div>
       </section>
 

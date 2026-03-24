@@ -36,7 +36,7 @@ export default function EspnGuidePage() {
       <div className="container max-w-2xl mx-auto py-12 px-4">
         <h1 className="text-3xl font-bold mb-4">Connect ESPN Fantasy to ChatGPT, Claude, or Gemini</h1>
         <p className="text-muted-foreground mb-8">
-          Flaim connects your ESPN fantasy leagues to AI assistants for read-only analysis. ESPN requires a Chrome extension to sync your league credentials — setup takes about 5 minutes.
+          Flaim connects your ESPN fantasy leagues to AI assistants for read-only analysis. ESPN requires a Chrome extension to sync your league credentials. Setup takes about 5 minutes.
         </p>
 
         <section className="mb-10">
@@ -65,7 +65,7 @@ export default function EspnGuidePage() {
         <section className="mb-10">
           <h2 className="text-xl font-semibold mb-3">Why a Chrome extension?</h2>
           <p className="text-muted-foreground">
-            ESPN doesn&apos;t offer a public API for fantasy data. The extension piggybacks on your active ESPN session to grab read-only league data. Your ESPN credentials are encrypted and stored securely — they are never shared with AI providers.
+            ESPN doesn&apos;t offer a public API for fantasy data. The extension piggybacks on your active ESPN session to grab read-only league data. Your ESPN credentials are encrypted and stored securely. They are never shared with AI providers.
           </p>
         </section>
 
@@ -79,8 +79,8 @@ export default function EspnGuidePage() {
         <section className="mb-10">
           <h2 className="text-xl font-semibold mb-3">Other platforms</h2>
           <ul className="text-sm text-muted-foreground space-y-1">
-            <li><Link href="/guide/yahoo" className="text-primary hover:underline">Connect Yahoo Fantasy to AI</Link> — no extension needed</li>
-            <li><Link href="/guide/sleeper" className="text-primary hover:underline">Connect Sleeper Fantasy to AI</Link> — just your username</li>
+            <li><Link href="/guide/yahoo" className="text-primary hover:underline">Connect Yahoo Fantasy to AI</Link> (no extension needed)</li>
+            <li><Link href="/guide/sleeper" className="text-primary hover:underline">Connect Sleeper Fantasy to AI</Link> (just your username)</li>
           </ul>
         </section>
 
