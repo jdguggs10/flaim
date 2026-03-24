@@ -61,6 +61,21 @@ function extractAssistantText(item: unknown) {
     .join("");
 }
 
+function extractToolStart(data: Record<string, unknown>) {
+  const itemId = typeof data.itemId === "string" ? data.itemId : undefined;
+  if (!itemId) {
+    return null;
+  }
+
+  const argumentsText = typeof data.arguments === "string" ? data.arguments : "";
+  return {
+    id: itemId,
+    name: typeof data.name === "string" ? data.name : null,
+    arguments: argumentsText,
+    parsedArguments: safeParseArguments(argumentsText),
+  };
+}
+
 function parseSseChunk(chunk: string) {
   const dataLine = chunk
     .split("\n")
@@ -181,42 +196,33 @@ export function PublicChatExperience() {
         const { event, data } = payload;
 
         switch (event) {
-          case "response.reasoning_summary_text.delta": {
+          case "reasoning_delta": {
             const delta = typeof data.delta === "string" ? data.delta : "";
             if (delta) {
               setThinkingText((current) => current + delta);
             }
             break;
           }
-          case "response.output_item.added": {
-            const item = data.item as
-              | {
-                  id?: string;
-                  type?: string;
-                  name?: string | null;
-                  arguments?: string;
-                }
-              | undefined;
-
-            if (item?.type === "mcp_call" && item.id) {
-              const itemId = item.id;
+          case "tool_start": {
+            const toolStart = extractToolStart(data);
+            if (toolStart) {
               setToolCalls((current) => [
                 ...current,
                 {
-                  id: itemId,
-                  name: item.name,
+                  id: toolStart.id,
+                  name: toolStart.name,
                   status: "in_progress",
-                  arguments: item.arguments || "",
-                  parsedArguments: safeParseArguments(item.arguments || ""),
+                  arguments: toolStart.arguments,
+                  parsedArguments: toolStart.parsedArguments,
                 },
               ]);
             }
             break;
           }
-          case "response.mcp_call_arguments.delta":
-          case "response.mcp_call_arguments.done": {
+          case "tool_args_delta":
+          case "tool_args_done": {
             const itemId =
-              typeof data.item_id === "string" ? data.item_id : undefined;
+              typeof data.itemId === "string" ? data.itemId : undefined;
             const nextArguments =
               typeof data.arguments === "string"
                 ? data.arguments
@@ -235,7 +241,7 @@ export function PublicChatExperience() {
                 }
 
                 const mergedArguments =
-                  event === "response.mcp_call_arguments.delta"
+                  event === "tool_args_delta"
                     ? toolCall.arguments + nextArguments
                     : nextArguments;
 
@@ -248,11 +254,33 @@ export function PublicChatExperience() {
             );
             break;
           }
-          case "response.output_text.delta": {
+          case "assistant_delta": {
             const delta = typeof data.delta === "string" ? data.delta : "";
             if (delta) {
               hasStreamedAssistantTextRef.current = true;
               setAssistantText((current) => current + delta);
+            }
+            break;
+          }
+          case "tool_done": {
+            const itemId =
+              typeof data.itemId === "string" ? data.itemId : undefined;
+            if (itemId) {
+              setToolCalls((current) =>
+                current.map((toolCall) =>
+                  toolCall.id === itemId
+                    ? { ...toolCall, status: "completed" }
+                    : toolCall
+                )
+              );
+            }
+            break;
+          }
+          case "assistant_message": {
+            const text = typeof data.text === "string" ? data.text : "";
+            if (text && !hasStreamedAssistantTextRef.current) {
+              hasStreamedAssistantTextRef.current = true;
+              setAssistantText(text);
             }
             break;
           }
@@ -264,16 +292,6 @@ export function PublicChatExperience() {
                 }
               | undefined;
 
-            if (item?.type === "mcp_call" && item.id) {
-              setToolCalls((current) =>
-                current.map((toolCall) =>
-                  toolCall.id === item.id
-                    ? { ...toolCall, status: "completed" }
-                    : toolCall
-                )
-              );
-            }
-
             if (item?.type === "message" && !hasStreamedAssistantTextRef.current) {
               const fallbackText = extractAssistantText(item);
               if (fallbackText) {
@@ -283,6 +301,7 @@ export function PublicChatExperience() {
             }
             break;
           }
+          case "completed":
           case "response.completed": {
             setRunStatus("completed");
             break;
@@ -402,7 +421,7 @@ export function PublicChatExperience() {
 
             <div className="mt-4 flex-1 space-y-4 pr-1 lg:overflow-y-auto">
               {selectedPreset ? (
-                <PublicMessage role="user" text={selectedPreset.prompt} />
+                <PublicMessage role="user" text={selectedPreset.userMessage} />
               ) : (
                 <div className="flex h-full min-h-[26rem] items-center justify-center">
                   <div className="max-w-md text-center">

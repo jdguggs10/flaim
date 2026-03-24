@@ -15,6 +15,35 @@ const publicChatRequestLog = new Map<string, number[]>();
 
 class PublicChatConfigError extends Error {}
 
+function extractAssistantText(item: unknown) {
+  if (!item || typeof item !== "object" || !("content" in item)) {
+    return "";
+  }
+
+  const content = (
+    item as { content?: Array<{ type?: string; text?: string }> }
+  ).content;
+  if (!Array.isArray(content)) {
+    return "";
+  }
+
+  return content
+    .filter((entry) => entry?.type === "output_text" && typeof entry.text === "string")
+    .map((entry) => entry.text)
+    .join("");
+}
+
+function enqueueSse(
+  controller: ReadableStreamDefaultController<Uint8Array>,
+  encoder: TextEncoder,
+  event: string,
+  data: Record<string, unknown> = {}
+) {
+  controller.enqueue(
+    encoder.encode(`data: ${JSON.stringify({ event, data })}\n\n`)
+  );
+}
+
 function getPublicChatIpAddress(request: NextRequest) {
   const forwardedFor = request.headers.get("x-forwarded-for");
   if (forwardedFor) {
@@ -129,11 +158,104 @@ export async function POST(request: NextRequest) {
       async start(controller) {
         try {
           for await (const event of events) {
-            const data = JSON.stringify({
-              event: event.type,
-              data: event,
-            });
-            controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+            const eventType = event.type as string;
+            const eventWithOptionalItem = event as {
+              item?: {
+                type?: string;
+                id?: string;
+                name?: string | null;
+                arguments?: string;
+              };
+            };
+            const eventWithStringFields = event as {
+              delta?: string;
+              item_id?: string;
+              arguments?: string;
+            };
+
+            switch (eventType) {
+              case "response.reasoning_summary_text.delta":
+                if (
+                  typeof eventWithStringFields.delta === "string" &&
+                  eventWithStringFields.delta
+                ) {
+                  enqueueSse(controller, encoder, "reasoning_delta", {
+                    delta: eventWithStringFields.delta,
+                  });
+                }
+                break;
+              case "response.output_item.added":
+                if (
+                  eventWithOptionalItem.item?.type === "mcp_call" &&
+                  eventWithOptionalItem.item.id
+                ) {
+                  enqueueSse(controller, encoder, "tool_start", {
+                    itemId: eventWithOptionalItem.item.id,
+                    name: eventWithOptionalItem.item.name ?? null,
+                    arguments:
+                      typeof eventWithOptionalItem.item.arguments === "string"
+                        ? eventWithOptionalItem.item.arguments
+                        : "",
+                  });
+                }
+                break;
+              case "response.mcp_call_arguments.delta":
+                if (
+                  typeof eventWithStringFields.item_id === "string" &&
+                  typeof eventWithStringFields.delta === "string"
+                ) {
+                  enqueueSse(controller, encoder, "tool_args_delta", {
+                    itemId: eventWithStringFields.item_id,
+                    delta: eventWithStringFields.delta,
+                  });
+                }
+                break;
+              case "response.mcp_call_arguments.done":
+                if (
+                  typeof eventWithStringFields.item_id === "string" &&
+                  typeof eventWithStringFields.arguments === "string"
+                ) {
+                  enqueueSse(controller, encoder, "tool_args_done", {
+                    itemId: eventWithStringFields.item_id,
+                    arguments: eventWithStringFields.arguments,
+                  });
+                }
+                break;
+              case "response.output_text.delta":
+                if (
+                  typeof eventWithStringFields.delta === "string" &&
+                  eventWithStringFields.delta
+                ) {
+                  enqueueSse(controller, encoder, "assistant_delta", {
+                    delta: eventWithStringFields.delta,
+                  });
+                }
+                break;
+              case "response.output_item.done":
+                if (
+                  eventWithOptionalItem.item?.type === "mcp_call" &&
+                  eventWithOptionalItem.item.id
+                ) {
+                  enqueueSse(controller, encoder, "tool_done", {
+                    itemId: eventWithOptionalItem.item.id,
+                  });
+                }
+
+                if (eventWithOptionalItem.item?.type === "message") {
+                  const text = extractAssistantText(eventWithOptionalItem.item);
+                  if (text) {
+                    enqueueSse(controller, encoder, "assistant_message", {
+                      text,
+                    });
+                  }
+                }
+                break;
+              case "response.completed":
+                enqueueSse(controller, encoder, "completed");
+                break;
+              default:
+                break;
+            }
           }
           controller.close();
         } catch (error) {

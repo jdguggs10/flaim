@@ -30,6 +30,7 @@ export const PUBLIC_CHAT_PRESETS = [
     id: "show-leagues",
     eyebrow: "Connected data",
     title: "Show the live leagues",
+    userMessage: "Show the live leagues connected to the demo account.",
     description:
       "List the demo account's current leagues and call out the most interesting one to inspect next.",
     prompt:
@@ -39,6 +40,7 @@ export const PUBLIC_CHAT_PRESETS = [
     id: "roster-breakdown",
     eyebrow: "Roster read",
     title: "Break down the roster",
+    userMessage: "Break down the demo roster and show where it looks strong or thin.",
     description:
       "Inspect a live demo roster and explain where the team looks strong or thin.",
     prompt:
@@ -48,6 +50,7 @@ export const PUBLIC_CHAT_PRESETS = [
     id: "standings-check",
     eyebrow: "League context",
     title: "Check the standings",
+    userMessage: "Check the standings and show where the demo team sits.",
     description:
       "Show where the demo team sits and whether it looks safe, shaky, or chasing.",
     prompt:
@@ -57,6 +60,7 @@ export const PUBLIC_CHAT_PRESETS = [
     id: "weekly-matchup",
     eyebrow: "Live matchup",
     title: "Who is the demo team facing?",
+    userMessage: "Show the demo team's current matchup and what looks decisive right now.",
     description:
       "Find the current matchup and explain what looks decisive right now.",
     prompt:
@@ -66,6 +70,7 @@ export const PUBLIC_CHAT_PRESETS = [
     id: "waiver-wire",
     eyebrow: "Free agents",
     title: "Find waiver ideas",
+    userMessage: "Find waiver ideas based on the demo roster's biggest needs.",
     description:
       "Look at available players and recommend pickups based on the demo roster's needs.",
     prompt:
@@ -75,6 +80,7 @@ export const PUBLIC_CHAT_PRESETS = [
     id: "transactions-watch",
     eyebrow: "League activity",
     title: "Review recent transactions",
+    userMessage: "Review the recent transactions that stand out in the demo league.",
     description:
       "Surface the adds, drops, waivers, or trades that stand out in the live demo league.",
     prompt:
