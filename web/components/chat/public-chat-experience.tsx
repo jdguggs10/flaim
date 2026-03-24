@@ -178,6 +178,7 @@ export function PublicChatExperience() {
           ? "Needs retry"
           : "Ready";
   const liveStatusCopy = getLiveStatusCopy(toolCalls);
+  const showFocusedPromptStage = runStatus === "running" && selectedPreset;
   const topRailPresets = useMemo(() => {
     const presets = PUBLIC_CHAT_PRESETS.filter((preset) => preset.rail === "top");
     return presets.length ? presets : PUBLIC_CHAT_PRESETS;
@@ -461,10 +462,23 @@ export function PublicChatExperience() {
 
         <Card className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.45rem] border-border bg-card p-0 shadow-sm sm:rounded-[1.6rem] lg:rounded-[2rem]">
           <div className="border-b border-border bg-card px-3 py-3 sm:px-4">
-            <div className="space-y-2">
-              {renderPromptTicker(topRailPresets, "public-chat-ticker-track--top")}
-              {renderPromptTicker(bottomRailPresets, "public-chat-ticker-track--bottom")}
-            </div>
+            {showFocusedPromptStage && selectedPreset ? (
+              <div className="flex min-h-[5.75rem] items-center justify-center sm:min-h-[6.5rem]">
+                <div className="public-chat-selected-prompt group relative max-w-full overflow-hidden rounded-full border border-primary bg-primary px-5 py-3 text-center text-primary-foreground shadow-sm sm:px-7 sm:py-3.5">
+                  <div className="absolute inset-0 bg-[linear-gradient(110deg,transparent_0%,rgba(255,255,255,0.06)_35%,rgba(255,255,255,0.22)_50%,rgba(255,255,255,0.06)_65%,transparent_100%)]" />
+                  <div className="relative">
+                    <p className="truncate text-[0.92rem] font-semibold tracking-tight sm:text-base">
+                      {selectedPreset.title}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {renderPromptTicker(topRailPresets, "public-chat-ticker-track--top")}
+                {renderPromptTicker(bottomRailPresets, "public-chat-ticker-track--bottom")}
+              </div>
+            )}
           </div>
 
           <div className="min-h-0 flex-1 bg-muted/40 p-2.5 sm:p-3 lg:p-4">

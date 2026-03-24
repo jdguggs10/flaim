@@ -126,6 +126,28 @@
   }
 }
 
+@keyframes public-chat-selected-prompt {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 16px, 0) scale(0.94);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes public-chat-selected-prompt-sheen {
+  0% {
+    transform: translate3d(-120%, 0, 0);
+  }
+
+  100% {
+    transform: translate3d(120%, 0, 0);
+  }
+}
+
 @layer utilities {
   .public-chat-ticker-track {
     animation-name: public-chat-ticker-marquee;
@@ -147,10 +169,33 @@
     animation-play-state: paused;
   }
 
+  .public-chat-selected-prompt {
+    animation: public-chat-selected-prompt 280ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .public-chat-selected-prompt::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      110deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.02) 36%,
+      rgba(255, 255, 255, 0.26) 50%,
+      rgba(255, 255, 255, 0.02) 64%,
+      transparent 100%
+    );
+    transform: translate3d(-120%, 0, 0);
+    animation: public-chat-selected-prompt-sheen 1.9s ease-out 120ms 1;
+    pointer-events: none;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .public-chat-ticker-track,
     .public-chat-ticker-track--top,
-    .public-chat-ticker-track--bottom {
+    .public-chat-ticker-track--bottom,
+    .public-chat-selected-prompt,
+    .public-chat-selected-prompt::after {
       animation: none;
       transform: none;
     }
