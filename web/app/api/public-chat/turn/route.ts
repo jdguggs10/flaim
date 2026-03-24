@@ -11,6 +11,9 @@ import OpenAI from "openai";
 
 const PUBLIC_CHAT_RATE_LIMIT_WINDOW_MS = 5 * 60 * 1000;
 const PUBLIC_CHAT_RATE_LIMIT_MAX_REQUESTS = 5;
+// Temporary per-instance limiter for the public demo.
+// The March 24 plan's Phase 4 hardening work calls for durable controls:
+// per-IP caps, cooldowns, and a predictable cost ceiling.
 const publicChatRequestLog = new Map<string, number[]>();
 
 class PublicChatConfigError extends Error {}
@@ -45,6 +48,8 @@ function enqueueSse(
 }
 
 function getPublicChatIpAddress(request: NextRequest) {
+  // Safe here because Vercel terminates the request and sets x-forwarded-for.
+  // If this route ever moves behind a different proxy layer, revisit the trust model.
   const forwardedFor = request.headers.get("x-forwarded-for");
   if (forwardedFor) {
     return forwardedFor.split(",")[0]?.trim() || "unknown";
@@ -76,9 +81,7 @@ function normalizeMcpUrl(url: string): string {
 
 function getPublicChatMcpTool() {
   const serverUrl = normalizeMcpUrl(
-    process.env.FANTASY_MCP_URL ||
-      process.env.NEXT_PUBLIC_FANTASY_MCP_URL ||
-      "https://api.flaim.app/mcp"
+    process.env.FANTASY_MCP_URL || "https://api.flaim.app/mcp"
   );
 
   if (!isAllowedUrl(serverUrl)) {
@@ -135,6 +138,8 @@ export async function POST(request: NextRequest) {
 
     const openai = new OpenAI();
     const events = await openai.responses.create({
+      // Keep the public demo on the same model/reasoning pairing as the internal chat
+      // surface until Phase 4 hardening deliberately revisits cost and latency tradeoffs.
       model: PUBLIC_CHAT_MODEL,
       input: [
         {
@@ -151,6 +156,8 @@ export async function POST(request: NextRequest) {
       store: false,
       parallel_tool_calls: false,
       reasoning: { summary: "auto" },
+    }, {
+      signal: request.signal,
     });
 
     const encoder = new TextEncoder();
