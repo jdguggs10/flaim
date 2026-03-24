@@ -1,0 +1,17 @@
+{
+  "schema_version": "v1",
+  "name_for_human": "Flaim Fantasy",
+  "name_for_model": "flaim_fantasy",
+  "description_for_human": "Connect your ESPN, Yahoo, and Sleeper fantasy leagues to AI for read-only analysis of rosters, matchups, standings, free agents, and transactions.",
+  "description_for_model": "Flaim provides read-only access to fantasy sports league data from ESPN, Yahoo, and Sleeper. Use it to answer questions about a user's real fantasy roster, matchups, standings, waiver wire, and transactions across football, baseball, basketball, and hockey.",
+  "auth": {
+    "type": "oauth"
+  },
+  "api": {
+    "type": "mcp",
+    "url": "https://api.flaim.app/mcp"
+  },
+  "logo_url": "https://flaim.app/icon-light.png",
+  "contact_email": "gerry@flaim.app",
+  "legal_info_url": "https://flaim.app/terms"
+}

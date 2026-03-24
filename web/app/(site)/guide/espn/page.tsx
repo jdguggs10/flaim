@@ -76,6 +76,14 @@ export default function EspnGuidePage() {
           </p>
         </section>
 
+        <section className="mb-10">
+          <h2 className="text-xl font-semibold mb-3">Other platforms</h2>
+          <ul className="text-sm text-muted-foreground space-y-1">
+            <li><Link href="/guide/yahoo" className="text-primary hover:underline">Connect Yahoo Fantasy to AI</Link> — no extension needed</li>
+            <li><Link href="/guide/sleeper" className="text-primary hover:underline">Connect Sleeper Fantasy to AI</Link> — just your username</li>
+          </ul>
+        </section>
+
         <div className="pt-4 border-t">
           <Link href="/guide" className="text-sm text-primary hover:underline">
             &larr; Back to guide overview

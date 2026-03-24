@@ -1,0 +1,81 @@
+# Flaim Fantasy
+
+> Flaim connects your ESPN, Yahoo, and Sleeper fantasy leagues to Claude, ChatGPT, and Gemini for read-only, league-specific analysis using the Model Context Protocol (MCP).
+
+## What Flaim Is
+
+Flaim is a free, open-source MCP server that gives AI assistants read-only access to your real fantasy sports data. It combines live league data with built-in fantasy analyst guidance so the AI answers are grounded in your league — not generic rankings.
+
+Single MCP endpoint: https://api.flaim.app/mcp
+
+## MCP Tools (9 total)
+
+| Tool | What it does |
+|------|-------------|
+| get_user_session | Lists all connected leagues across all platforms |
+| get_ancient_history | Historical leagues and seasons (2+ years old) |
+| get_league_info | League settings, scoring format, and members |
+| get_roster | Team roster with player stats and lineup slots |
+| get_matchups | Weekly matchups and scores |
+| get_standings | League standings and rankings |
+| get_free_agents | Available free agents sorted by ownership percentage |
+| get_players | Player lookup with ownership context |
+| get_transactions | Recent adds, drops, waivers, and trades |
+
+## Supported Platforms and Sports
+
+| Platform | Sports | Auth Method |
+|----------|--------|-------------|
+| ESPN | Football, Baseball, Basketball, Hockey | Chrome extension (syncs ESPN session) |
+| Yahoo | Football, Baseball, Basketball, Hockey | OAuth 2.0 (sign in with Yahoo) |
+| Sleeper | Football, Basketball | Username only (public API) |
+
+## How to Connect
+
+1. Create a Flaim account at https://flaim.app
+2. Connect your fantasy platforms:
+   - ESPN: Install the Flaim Chrome extension, log in to fantasy.espn.com, click Sync
+   - Yahoo: Click "Authenticate Yahoo" and sign in with your Yahoo account
+   - Sleeper: Enter your Sleeper username — no extension or OAuth needed
+3. Add the MCP server URL to your AI assistant: https://api.flaim.app/mcp
+4. Authorize Flaim when prompted
+5. Start asking about your leagues
+
+## Example Prompts
+
+- "Who should I start this week?"
+- "Who's on the waiver wire?"
+- "Show me the standings"
+- "What trades happened this week?"
+- "Who are the best available QBs?"
+- "Compare my roster to my opponent's"
+- "What fantasy leagues do I have?"
+- "How has my team done over the last 3 weeks?"
+
+## FAQs
+
+### What does Flaim do?
+Flaim is a skill that turns your AI into a fantasy sports expert, and a connector to data from your actual fantasy leagues. It lets you ask Claude, ChatGPT, or Gemini about your actual roster, matchup, standings, transactions, available free agents, waiver wire, and more.
+
+### Is my data safe?
+Flaim is read-only. It cannot trade, drop, or modify anything in your league. ESPN credentials are encrypted and stored securely — they are never shared with AI providers.
+
+### Why does ESPN need a Chrome extension?
+ESPN doesn't offer a public API for fantasy data. The extension piggybacks on your active ESPN session to grab read-only league data.
+
+### How does Flaim connect to AI clients?
+Flaim uses MCP (Model Context Protocol), an open standard for connecting AI assistants to external data. You add a single server URL and Flaim handles authentication and data retrieval.
+
+### What AI assistants work with Flaim?
+Claude (via integrations), ChatGPT (via connectors), and Gemini CLI (via MCP). Any MCP-compatible client can connect.
+
+## Links
+
+- Website: https://flaim.app
+- Setup guide: https://flaim.app/guide
+- ESPN guide: https://flaim.app/guide/espn
+- Yahoo guide: https://flaim.app/guide/yahoo
+- Sleeper guide: https://flaim.app/guide/sleeper
+- GitHub: https://github.com/jdguggs10/flaim
+- Privacy policy: https://flaim.app/privacy
+- Terms of service: https://flaim.app/terms

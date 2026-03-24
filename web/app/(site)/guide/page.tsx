@@ -13,6 +13,37 @@ export const metadata: Metadata = {
 export default function GuidePage() {
   return (
     <div className="min-h-screen bg-background">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            '@context': 'https://schema.org',
+            '@type': 'ItemList',
+            name: 'Fantasy League Setup Guides',
+            description: 'Step-by-step guides to connect ESPN, Yahoo, or Sleeper fantasy leagues to AI assistants using Flaim.',
+            itemListElement: [
+              {
+                '@type': 'ListItem',
+                position: 1,
+                name: 'Connect ESPN Fantasy to AI',
+                url: 'https://flaim.app/guide/espn',
+              },
+              {
+                '@type': 'ListItem',
+                position: 2,
+                name: 'Connect Yahoo Fantasy to AI',
+                url: 'https://flaim.app/guide/yahoo',
+              },
+              {
+                '@type': 'ListItem',
+                position: 3,
+                name: 'Connect Sleeper Fantasy to AI',
+                url: 'https://flaim.app/guide/sleeper',
+              },
+            ],
+          }),
+        }}
+      />
       <div className="container max-w-2xl mx-auto py-12 px-4">
         <h1 className="text-3xl font-bold mb-4">How to Connect Your Fantasy League to AI</h1>
         <p className="text-muted-foreground mb-8">

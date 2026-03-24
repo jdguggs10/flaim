@@ -23,3 +23,4 @@
 - Setup guide: https://flaim.app/guide
 - GitHub: https://github.com/jdguggs10/flaim
 - Privacy: https://flaim.app/privacy
+- Full details: https://flaim.app/llms-full.txt

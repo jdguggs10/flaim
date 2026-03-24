@@ -2,6 +2,8 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 
 export const metadata: Metadata = {
+  title: 'Inspirations | Flaim',
+  description: 'Projects that shaped how Flaim was built — focused scope, honest design, and respect for the user.',
   alternates: {
     canonical: 'https://flaim.app/inspirations',
   },
