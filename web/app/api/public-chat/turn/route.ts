@@ -5,16 +5,13 @@ import {
   getPublicChatPreset,
 } from "@/lib/public-chat";
 import { isAllowedUrl } from "@/lib/mcp-url-allowlist";
+import {
+  acquirePublicChatRun,
+  completePublicChatRun,
+} from "@/lib/server/public-chat-guard";
 import type { PublicChatTurnRequest } from "@/types/api-responses";
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
-
-const PUBLIC_CHAT_RATE_LIMIT_WINDOW_MS = 5 * 60 * 1000;
-const PUBLIC_CHAT_RATE_LIMIT_MAX_REQUESTS = 5;
-// Temporary per-instance limiter for the public demo.
-// The March 24 plan's Phase 4 hardening work calls for durable controls:
-// per-IP caps, cooldowns, and a predictable cost ceiling.
-const publicChatRequestLog = new Map<string, number[]>();
 
 class PublicChatConfigError extends Error {}
 
@@ -56,22 +53,6 @@ function getPublicChatIpAddress(request: NextRequest) {
   }
 
   return request.headers.get("x-real-ip")?.trim() || "unknown";
-}
-
-function isPublicChatRateLimited(ipAddress: string, now: number) {
-  const requestTimestamps = publicChatRequestLog.get(ipAddress) ?? [];
-  const activeWindow = requestTimestamps.filter(
-    (timestamp) => now - timestamp < PUBLIC_CHAT_RATE_LIMIT_WINDOW_MS
-  );
-
-  if (activeWindow.length >= PUBLIC_CHAT_RATE_LIMIT_MAX_REQUESTS) {
-    publicChatRequestLog.set(ipAddress, activeWindow);
-    return true;
-  }
-
-  activeWindow.push(now);
-  publicChatRequestLog.set(ipAddress, activeWindow);
-  return false;
 }
 
 function normalizeMcpUrl(url: string): string {
@@ -117,17 +98,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const ipAddress = getPublicChatIpAddress(request);
-    if (isPublicChatRateLimited(ipAddress, Date.now())) {
-      return NextResponse.json(
-        {
-          error:
-            "Public chat is temporarily rate limited. Please wait a minute and try again.",
-        },
-        { status: 429 }
-      );
-    }
-
     const preset = getPublicChatPreset(presetId);
     if (!preset) {
       return NextResponse.json(
@@ -136,29 +106,95 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const openai = new OpenAI();
-    const events = await openai.responses.create({
-      // Keep the public demo on the same model/reasoning pairing as the internal chat
-      // surface until Phase 4 hardening deliberately revisits cost and latency tradeoffs.
+    const startedAt = Date.now();
+    const { runId } = await acquirePublicChatRun({
+      visitorIp: getPublicChatIpAddress(request),
+      presetId,
       model: PUBLIC_CHAT_MODEL,
-      input: [
-        {
-          role: "system",
-          content: [{ type: "input_text", text: PUBLIC_CHAT_SYSTEM_PROMPT }],
-        },
-        {
-          role: "user",
-          content: [{ type: "input_text", text: preset.prompt }],
-        },
-      ],
-      tools: [getPublicChatMcpTool()],
-      stream: true,
-      store: false,
-      parallel_tool_calls: false,
-      reasoning: { summary: "auto" },
-    }, {
       signal: request.signal,
+    }).catch((error: Error & { status?: number; code?: string }) => {
+      if (error.status === 429 || error.code === "rate_limit_exceeded") {
+        throw new Response(
+          JSON.stringify({
+            error:
+              "Public chat is temporarily rate limited. Please wait a few minutes and try again.",
+          }),
+          {
+            status: 429,
+            headers: { "Content-Type": "application/json" },
+          }
+        );
+      }
+
+      if (error.status === 409 || error.code === "concurrency_limited") {
+        throw new Response(
+          JSON.stringify({
+            error:
+              "A public chat run is already in progress for this visitor. Please wait for it to finish and try again.",
+          }),
+          {
+            status: 409,
+            headers: { "Content-Type": "application/json" },
+          }
+        );
+      }
+
+      throw error;
     });
+
+    let finalized = false;
+    const finalizeRun = async (
+      status: "completed" | "error" | "aborted",
+      errorCode?: string
+    ) => {
+      if (finalized) {
+        return;
+      }
+
+      finalized = true;
+      await completePublicChatRun({
+        runId,
+        status,
+        durationMs: Date.now() - startedAt,
+        errorCode: errorCode ?? null,
+      });
+    };
+
+    const openai = new OpenAI();
+    let events: Awaited<ReturnType<typeof openai.responses.create>>;
+
+    try {
+      events = await openai.responses.create({
+        // Keep the public demo on the same model/reasoning pairing as the internal chat
+        // surface until Phase 4 hardening deliberately revisits cost and latency tradeoffs.
+        model: PUBLIC_CHAT_MODEL,
+        input: [
+          {
+            role: "system",
+            content: [{ type: "input_text", text: PUBLIC_CHAT_SYSTEM_PROMPT }],
+          },
+          {
+            role: "user",
+            content: [{ type: "input_text", text: preset.prompt }],
+          },
+        ],
+        tools: [getPublicChatMcpTool()],
+        stream: true,
+        store: false,
+        parallel_tool_calls: false,
+        reasoning: { summary: "auto" },
+      }, {
+        signal: request.signal,
+      });
+    } catch (error) {
+      await finalizeRun(
+        request.signal.aborted ? "aborted" : "error",
+        request.signal.aborted ? "request_aborted" : "openai_create_failed"
+      ).catch((finalizeError) => {
+        console.error("Failed to finalize public chat run after create error:", finalizeError);
+      });
+      throw error;
+    }
 
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
@@ -264,8 +300,17 @@ export async function POST(request: NextRequest) {
                 break;
             }
           }
+          await finalizeRun("completed").catch((finalizeError) => {
+            console.error("Failed to finalize completed public chat run:", finalizeError);
+          });
           controller.close();
         } catch (error) {
+          await finalizeRun(
+            request.signal.aborted ? "aborted" : "error",
+            request.signal.aborted ? "request_aborted" : "stream_error"
+          ).catch((finalizeError) => {
+            console.error("Failed to finalize errored public chat run:", finalizeError);
+          });
           console.error("Error in public chat streaming loop:", error);
           controller.error(error);
         }
@@ -279,6 +324,10 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
+    if (error instanceof Response) {
+      return error;
+    }
+
     console.error("Error in public chat POST handler:", error);
 
     if (error instanceof PublicChatConfigError) {

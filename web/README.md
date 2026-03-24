@@ -130,6 +130,7 @@ The `/chat` route is a public-facing live demo. It is intentionally constrained 
 - Runs against a dedicated demo account (`demo@flaim.app`)
 - Uses server-owned auth with `DEMO_API_KEY`
 - Accepts preset prompt IDs only
+- Is rate-limited server-side and allows only one in-flight run per visitor
 - Streams live MCP tool activity and assistant output back to the browser
 
 This is separate from the internal `/dev` surface. The browser never receives reusable demo-account credentials.
