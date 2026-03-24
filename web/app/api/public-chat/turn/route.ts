@@ -9,7 +9,8 @@ import {
   acquirePublicChatRun,
   completePublicChatRun,
 } from "@/lib/server/public-chat-guard";
-import { buildPublicChatContext } from "@/lib/server/public-chat-context";
+import { getCachedPublicChatContext } from "@/lib/server/public-chat-context";
+import { getCachedSportsTodayPulse } from "@/lib/server/public-chat-sports-pulse";
 import type { PublicChatTurnRequest } from "@/types/api-responses";
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
@@ -173,7 +174,10 @@ export async function POST(request: NextRequest) {
       });
     };
 
-    const publicChatContext = await buildPublicChatContext();
+    const [publicChatContext, sportsTodayPulse] = await Promise.all([
+      getCachedPublicChatContext(),
+      getCachedSportsTodayPulse(),
+    ]);
     const todayInEastern = new Intl.DateTimeFormat("en-US", {
       dateStyle: "full",
       timeZone: "America/New_York",
@@ -196,6 +200,14 @@ export async function POST(request: NextRequest) {
                 {
                   role: "developer" as const,
                   content: [{ type: "input_text" as const, text: publicChatContext }],
+                },
+              ]
+            : []),
+          ...(sportsTodayPulse
+            ? [
+                {
+                  role: "developer" as const,
+                  content: [{ type: "input_text" as const, text: sportsTodayPulse }],
                 },
               ]
             : []),

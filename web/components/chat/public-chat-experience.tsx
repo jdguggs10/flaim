@@ -197,6 +197,15 @@ export function PublicChatExperience() {
     };
   }, []);
 
+  useEffect(() => {
+    void fetch("/api/public-chat/bootstrap", {
+      method: "GET",
+      cache: "no-store",
+    }).catch(() => {
+      // Prewarm is opportunistic. The live turn route still works without it.
+    });
+  }, []);
+
   const renderPromptTicker = (
     presets: readonly PublicChatPreset[],
     speedClassName: string

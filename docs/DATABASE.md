@@ -186,6 +186,17 @@ Server-owned log for the public `/chat` demo. Used for per-visitor concurrency c
 | created_at | timestamptz | Created timestamp |
 | updated_at | timestamptz | Updated timestamp |
 
+### public_chat_context_cache
+Server-owned cache for public `/chat` warm context. Used to avoid rebuilding the same demo session context and sports-news pulse on every visitor request.
+
+| Column | Type | Notes |
+|---|---|---|
+| cache_key | text | Primary key (`gerry_session_v1`, `sports_today_v1`, etc.) |
+| context_text | text | Cached developer-context text injected into the public demo route |
+| expires_at | timestamptz | Freshness boundary for the cached entry |
+| created_at | timestamptz | Created timestamp |
+| updated_at | timestamptz | Updated timestamp |
+
 ## Legacy/Deprecated Tables
 
 ### rate_limits (inert)

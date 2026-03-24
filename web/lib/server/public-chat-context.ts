@@ -1,4 +1,5 @@
 import { isAllowedUrl } from "@/lib/mcp-url-allowlist";
+import { getOrRefreshPublicChatCache } from "./public-chat-cache";
 
 interface PublicChatLeague {
   platform?: string | null;
@@ -176,4 +177,13 @@ export async function buildPublicChatContext(): Promise<string | null> {
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+export async function getCachedPublicChatContext(): Promise<string | null> {
+  return getOrRefreshPublicChatCache({
+    cacheKey: "gerry_session_v1",
+    ttlMs: 10 * 60 * 1000,
+    label: "public chat session context",
+    build: buildPublicChatContext,
+  });
 }
