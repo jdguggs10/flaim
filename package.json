@@ -30,9 +30,7 @@
     "ui:check": "bash scripts/ui-consistency-check.sh"
   },
   "devDependencies": {
-    "@playwright/test": "^1.57.0",
     "@types/node": "^24.0.3",
-    "concurrently": "^9.2.0",
-    "eslint": "^9.13.0"
+    "concurrently": "^9.2.0"
   }
 }

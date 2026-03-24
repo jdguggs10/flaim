@@ -81,9 +81,7 @@ extension/*.zip
 .worktrees/
 
 # Project-specific
-tests/config/.env.test
 workers/auth-worker/.env
-docs/submissions/openai-screenshots/
 
 # Keys
 *.pem
