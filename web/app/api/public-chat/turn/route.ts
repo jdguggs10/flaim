@@ -10,7 +10,6 @@ import {
   completePublicChatRun,
 } from "@/lib/server/public-chat-guard";
 import { getCachedPublicChatContext } from "@/lib/server/public-chat-context";
-import { getCachedSportsTodayPulse } from "@/lib/server/public-chat-sports-pulse";
 import type { PublicChatTurnRequest } from "@/types/api-responses";
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
@@ -44,6 +43,10 @@ function enqueueSse(
   controller.enqueue(
     encoder.encode(`data: ${JSON.stringify({ event, data })}\n\n`)
   );
+}
+
+function getElapsedMs(startedAt: number) {
+  return Date.now() - startedAt;
 }
 
 function getPublicChatIpAddress(request: NextRequest) {
@@ -121,6 +124,7 @@ export async function POST(request: NextRequest) {
     }
 
     const startedAt = Date.now();
+    const requestId = crypto.randomUUID();
     const { runId } = await acquirePublicChatRun({
       visitorIp: getPublicChatIpAddress(request),
       presetId,
@@ -155,6 +159,7 @@ export async function POST(request: NextRequest) {
 
       throw error;
     });
+    const guardAcquireMs = getElapsedMs(startedAt);
 
     let finalized = false;
     const finalizeRun = async (
@@ -174,16 +179,16 @@ export async function POST(request: NextRequest) {
       });
     };
 
-    const [publicChatContext, sportsTodayPulse] = await Promise.all([
-      getCachedPublicChatContext(),
-      getCachedSportsTodayPulse(),
-    ]);
+    const contextStartedAt = Date.now();
+    const publicChatContext = await getCachedPublicChatContext();
+    const contextLoadMs = getElapsedMs(contextStartedAt);
     const todayInEastern = new Intl.DateTimeFormat("en-US", {
       dateStyle: "full",
       timeZone: "America/New_York",
     }).format(new Date());
     const openai = new OpenAI();
     let events: Awaited<ReturnType<typeof openai.responses.create>>;
+    const openaiCreateStartedAt = Date.now();
 
     try {
       events = await openai.responses.create({
@@ -200,14 +205,6 @@ export async function POST(request: NextRequest) {
                 {
                   role: "developer" as const,
                   content: [{ type: "input_text" as const, text: publicChatContext }],
-                },
-              ]
-            : []),
-          ...(sportsTodayPulse
-            ? [
-                {
-                  role: "developer" as const,
-                  content: [{ type: "input_text" as const, text: sportsTodayPulse }],
                 },
               ]
             : []),
@@ -235,6 +232,14 @@ export async function POST(request: NextRequest) {
         signal: request.signal,
       });
     } catch (error) {
+      console.error("public-chat-create-error", {
+        requestId,
+        presetId,
+        runId,
+        guardAcquireMs,
+        contextLoadMs,
+        openaiCreateMs: getElapsedMs(openaiCreateStartedAt),
+      });
       await finalizeRun(
         request.signal.aborted ? "aborted" : "error",
         request.signal.aborted ? "request_aborted" : "openai_create_failed"
@@ -247,9 +252,18 @@ export async function POST(request: NextRequest) {
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {
+        const streamStartedAt = Date.now();
+        let firstEventMs: number | null = null;
+        let firstToolStartMs: number | null = null;
+        let firstAssistantTextMs: number | null = null;
+        let sawAssistantText = false;
+
         try {
           for await (const event of events) {
             const eventType = event.type as string;
+            if (firstEventMs === null) {
+              firstEventMs = getElapsedMs(streamStartedAt);
+            }
             const eventWithOptionalItem = event as {
               item?: {
                 type?: string;
@@ -281,6 +295,9 @@ export async function POST(request: NextRequest) {
                     eventWithOptionalItem.item?.type === "web_search_call") &&
                   eventWithOptionalItem.item.id
                 ) {
+                  if (firstToolStartMs === null) {
+                    firstToolStartMs = getElapsedMs(streamStartedAt);
+                  }
                   enqueueSse(controller, encoder, "tool_start", {
                     itemId: eventWithOptionalItem.item.id,
                     name:
@@ -321,6 +338,10 @@ export async function POST(request: NextRequest) {
                   typeof eventWithStringFields.delta === "string" &&
                   eventWithStringFields.delta
                 ) {
+                  if (firstAssistantTextMs === null) {
+                    firstAssistantTextMs = getElapsedMs(streamStartedAt);
+                  }
+                  sawAssistantText = true;
                   enqueueSse(controller, encoder, "assistant_delta", {
                     delta: eventWithStringFields.delta,
                   });
@@ -340,6 +361,10 @@ export async function POST(request: NextRequest) {
                 if (eventWithOptionalItem.item?.type === "message") {
                   const text = extractAssistantText(eventWithOptionalItem.item);
                   if (text) {
+                    if (firstAssistantTextMs === null) {
+                      firstAssistantTextMs = getElapsedMs(streamStartedAt);
+                    }
+                    sawAssistantText = true;
                     enqueueSse(controller, encoder, "assistant_message", {
                       text,
                     });
@@ -360,6 +385,44 @@ export async function POST(request: NextRequest) {
                 break;
             }
           }
+
+          if (!sawAssistantText) {
+            enqueueSse(controller, encoder, "error", {
+              message:
+                "The live run finished without producing an answer. Please try another prompt.",
+            });
+            console.error("public-chat-empty-answer", {
+              requestId,
+              presetId,
+              runId,
+              guardAcquireMs,
+              contextLoadMs,
+              openaiCreateMs: getElapsedMs(openaiCreateStartedAt),
+              firstEventMs,
+              firstToolStartMs,
+              firstAssistantTextMs,
+              totalMs: getElapsedMs(startedAt),
+            });
+            await finalizeRun("error", "empty_assistant_output").catch((finalizeError) => {
+              console.error("Failed to finalize empty public chat run:", finalizeError);
+            });
+            controller.close();
+            return;
+          }
+
+          console.info("public-chat-timing", {
+            requestId,
+            presetId,
+            runId,
+            guardAcquireMs,
+            contextLoadMs,
+            openaiCreateMs: getElapsedMs(openaiCreateStartedAt),
+            firstEventMs,
+            firstToolStartMs,
+            firstAssistantTextMs,
+            totalMs: getElapsedMs(startedAt),
+            hadContext: Boolean(publicChatContext),
+          });
           await finalizeRun("completed").catch((finalizeError) => {
             console.error("Failed to finalize completed public chat run:", finalizeError);
           });

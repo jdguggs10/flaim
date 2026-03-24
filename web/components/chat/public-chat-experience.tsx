@@ -396,12 +396,32 @@ export function PublicChatExperience() {
             setRunStatus("completed");
             break;
           }
+          case "error": {
+            const message =
+              typeof data.message === "string"
+                ? data.message
+                : "Public chat is temporarily unavailable.";
+            setError(message);
+            setRunStatus("error");
+            break;
+          }
           default:
             break;
         }
       }
 
-      setRunStatus((current) => (current === "running" ? "completed" : current));
+      setRunStatus((current) => {
+        if (current !== "running") {
+          return current;
+        }
+
+        return hasStreamedAssistantTextRef.current ? "completed" : "error";
+      });
+      setError((current) =>
+        current || hasStreamedAssistantTextRef.current
+          ? current
+          : "The live run finished without producing an answer. Please try again."
+      );
     } catch (runError) {
       if (abortController.signal.aborted) {
         setRunStatus((current) => (current === "running" ? "idle" : current));

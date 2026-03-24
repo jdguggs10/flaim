@@ -169,9 +169,8 @@ sensitive data—share with care.
 
 The public `/chat` demo opportunistically hits `/api/public-chat/bootstrap` on page load. That route prewarms:
 - cached Gerry session/default-league context (short TTL)
-- a cached "sports today" pulse built from web search (hourly TTL)
 
-The live `/api/public-chat/turn` route still works without bootstrap, but warm cache hits make the demo feel faster.
+The live `/api/public-chat/turn` route still works without bootstrap, but a warm session-context cache hit makes the demo feel faster without doing hidden extra model work before the real turn starts.
 
 ## Build Notes
 

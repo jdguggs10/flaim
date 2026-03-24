@@ -1,18 +1,14 @@
 import { getCachedPublicChatContext } from "@/lib/server/public-chat-context";
-import { getCachedSportsTodayPulse } from "@/lib/server/public-chat-sports-pulse";
 import { NextResponse } from "next/server";
 
 export async function GET() {
-  const [sessionContext, sportsTodayPulse] = await Promise.all([
-    getCachedPublicChatContext(),
-    getCachedSportsTodayPulse(),
-  ]);
+  const sessionContext = await getCachedPublicChatContext();
 
   return NextResponse.json(
     {
-      warmed: Boolean(sessionContext || sportsTodayPulse),
+      warmed: Boolean(sessionContext),
       hasSessionContext: Boolean(sessionContext),
-      hasSportsPulse: Boolean(sportsTodayPulse),
+      hasSportsPulse: false,
     },
     {
       headers: {

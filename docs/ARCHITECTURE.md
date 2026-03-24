@@ -186,7 +186,7 @@ Claude/ChatGPT/Gemini CLI → fantasy-mcp (gateway) → espn-client    → ESPN 
 - Per-user isolation via verified `sub`; credentials never sent back to client after setup.
 - Rate limiting: Cloudflare Workers native `rate_limits` bindings — 10 req/60s per IP on token endpoint, 15 req/60s per user on credentials endpoint, and 5 req/60s per visitor on the public `/chat` demo.
 - Public chat concurrency/logging: auth-worker reserves demo runs in Supabase (`public_chat_runs`) so one visitor cannot stack overlapping runs and failures remain visible after the request finishes.
-- Public chat warm context: the web app caches Gerry session context and a short "sports today" pulse in Supabase (`public_chat_context_cache`) so the public demo can prewarm context on page load and reduce repeat per-turn latency.
+- Public chat warm context: the web app caches Gerry session context in Supabase (`public_chat_context_cache`) so the public demo can prewarm the default-league context on page load without doing hidden extra model work before the live turn.
 - OAuth tokens stored in Supabase with expiration tracking.
 - ESPN credentials: AES-256 encrypted at rest (Supabase default).
 
