@@ -9,6 +9,7 @@ import {
   acquirePublicChatRun,
   completePublicChatRun,
 } from "@/lib/server/public-chat-guard";
+import { buildPublicChatContext } from "@/lib/server/public-chat-context";
 import type { PublicChatTurnRequest } from "@/types/api-responses";
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
@@ -172,6 +173,7 @@ export async function POST(request: NextRequest) {
       });
     };
 
+    const publicChatContext = await buildPublicChatContext();
     const openai = new OpenAI();
     let events: Awaited<ReturnType<typeof openai.responses.create>>;
 
@@ -185,6 +187,14 @@ export async function POST(request: NextRequest) {
             role: "system",
             content: [{ type: "input_text", text: PUBLIC_CHAT_SYSTEM_PROMPT }],
           },
+          ...(publicChatContext
+            ? [
+                {
+                  role: "developer" as const,
+                  content: [{ type: "input_text" as const, text: publicChatContext }],
+                },
+              ]
+            : []),
           {
             role: "user",
             content: [{ type: "input_text", text: preset.prompt }],
