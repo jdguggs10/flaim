@@ -422,26 +422,26 @@ export function PublicChatExperience() {
           </div>
         </div>
 
-        <section className="grid gap-6 pb-8 pt-6 lg:grid-cols-[minmax(0,1.2fr)_24rem] lg:items-start">
+        <section className="grid gap-5 pb-6 pt-5 lg:grid-cols-[minmax(0,1.2fr)_24rem] lg:items-start lg:pb-8 lg:pt-6">
           <div>
             <Badge variant="outline" className="gap-2 rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">
               <Sparkles className="h-3.5 w-3.5" />
               Live on real league data
             </Badge>
 
-            <h1 className="mt-5 max-w-4xl text-4xl font-semibold leading-[0.95] tracking-[-0.04em] text-foreground sm:text-5xl lg:text-7xl">
+            <h1 className="mt-4 max-w-4xl text-3xl font-semibold leading-[0.96] tracking-[-0.05em] text-foreground sm:mt-5 sm:text-5xl lg:text-7xl">
               Watch Flaim work
               <span className="block text-muted-foreground">on my actual leagues</span>
               <span className="block">right now.</span>
             </h1>
 
-            <p className="mt-5 max-w-2xl text-base leading-7 text-muted-foreground sm:text-lg">
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground sm:mt-5 sm:text-lg sm:leading-7">
               This page runs against my actual leagues and streams the actual tool
               chain in public. Pick a scenario, watch the MCP reads happen, and see
               the answer come together in real time.
             </p>
 
-            <div className="mt-6 flex flex-wrap gap-3">
+            <div className="mt-4 flex flex-wrap gap-2 sm:mt-6 sm:gap-3">
               <div className="rounded-full border border-border bg-card px-4 py-2 text-sm font-medium text-foreground">
                 My real league data
               </div>
@@ -453,7 +453,7 @@ export function PublicChatExperience() {
               </div>
             </div>
 
-            <div className="mt-8 grid gap-3 sm:grid-cols-3">
+            <div className="mt-8 hidden gap-3 sm:grid sm:grid-cols-3">
               {DEMO_SIGNALS.map((signal) => {
                 const Icon = signal.icon;
                 return (
@@ -476,7 +476,7 @@ export function PublicChatExperience() {
             </div>
           </div>
 
-          <Card className="overflow-hidden rounded-[2rem] border-border bg-primary text-primary-foreground shadow-sm">
+          <Card className="hidden overflow-hidden rounded-[2rem] border-border bg-primary text-primary-foreground shadow-sm lg:block">
             <div className="h-full p-6">
               <div className="rounded-[1.6rem] border border-primary-foreground/20 bg-primary p-5">
                 <div className="flex items-center justify-between gap-3">
@@ -529,8 +529,8 @@ export function PublicChatExperience() {
           </Card>
         </section>
 
-        <div className="grid gap-6 lg:min-h-0 lg:flex-1 lg:grid-cols-[24rem_minmax(0,1fr)]">
-          <Card className="h-fit rounded-[2rem] border-border bg-card p-5 shadow-sm lg:sticky lg:top-6">
+        <div className="grid gap-5 lg:min-h-0 lg:flex-1 lg:grid-cols-[24rem_minmax(0,1fr)]">
+          <Card className="order-2 h-fit rounded-[1.6rem] border-border bg-card p-4 shadow-sm lg:order-1 lg:sticky lg:top-6 lg:rounded-[2rem] lg:p-5">
             <div className="flex items-start gap-3">
               <div className="rounded-2xl border border-border bg-muted p-3 text-foreground">
                 <ShieldCheck className="h-5 w-5" />
@@ -539,7 +539,7 @@ export function PublicChatExperience() {
                 <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">
                   Demo menu
                 </p>
-                <h2 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">
+                <h2 className="mt-2 text-xl font-semibold tracking-tight text-foreground lg:text-2xl">
                   Pick a live scenario
                 </h2>
                 <p className="mt-2 text-sm leading-6 text-muted-foreground">
@@ -549,7 +549,8 @@ export function PublicChatExperience() {
               </div>
             </div>
 
-            <div className="mt-5 grid gap-3">
+            <div className="mt-4 -mx-4 overflow-x-auto px-4 pb-2 lg:mx-0 lg:overflow-visible lg:px-0 lg:pb-0">
+              <div className="flex snap-x snap-mandatory gap-3 lg:grid lg:gap-3">
               {PUBLIC_CHAT_PRESETS.map((preset) => {
                 const isSelected = preset.id === selectedPresetId;
                 const Icon = PRESET_ICONS[preset.id];
@@ -562,7 +563,7 @@ export function PublicChatExperience() {
                     disabled={runStatus === "running"}
                     aria-pressed={isSelected}
                     className={cn(
-                      "group relative overflow-hidden rounded-[1.6rem] border p-4 text-left transition-all duration-200",
+                      "group relative min-w-[17rem] snap-start overflow-hidden rounded-[1.35rem] border p-4 text-left transition-all duration-200 lg:min-w-0 lg:rounded-[1.6rem]",
                       isSelected
                         ? "border-primary bg-primary text-primary-foreground shadow-sm"
                         : "border-border bg-background text-foreground hover:-translate-y-0.5 hover:bg-muted",
@@ -609,9 +610,10 @@ export function PublicChatExperience() {
                   </button>
                 );
               })}
+              </div>
             </div>
 
-            <div className="mt-5 rounded-[1.6rem] border border-dashed border-border bg-muted p-4 text-sm leading-6 text-muted-foreground">
+            <div className="mt-3 rounded-[1.35rem] border border-dashed border-border bg-muted p-4 text-sm leading-6 text-muted-foreground lg:mt-5 lg:rounded-[1.6rem]">
               <span className="font-semibold text-foreground">Data source:</span>{" "}
               Gerry&apos;s leagues and teams
               <br />
@@ -620,14 +622,14 @@ export function PublicChatExperience() {
             </div>
           </Card>
 
-          <Card className="flex min-h-[42rem] flex-col overflow-hidden rounded-[2rem] border-border bg-card p-0 shadow-sm lg:min-h-0">
-            <div className="border-b border-border bg-card px-5 py-5">
+          <Card className="order-1 flex min-h-[30rem] flex-col overflow-hidden rounded-[1.6rem] border-border bg-card p-0 shadow-sm lg:order-2 lg:min-h-0 lg:rounded-[2rem]">
+            <div className="border-b border-border bg-card px-4 py-4 lg:px-5 lg:py-5">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">
                     Live run
                   </p>
-                  <h2 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">
+                  <h2 className="mt-2 text-xl font-semibold tracking-tight text-foreground lg:text-2xl">
                     Watch the answer get assembled
                   </h2>
                   <p className="mt-2 text-sm leading-6 text-muted-foreground">
@@ -659,26 +661,26 @@ export function PublicChatExperience() {
               </div>
             </div>
 
-            <div className="flex-1 bg-muted/40 p-5">
-              <div className="h-full rounded-[1.7rem] border border-border bg-background p-4 lg:overflow-hidden">
+            <div className="flex-1 bg-muted/40 p-3 lg:p-5">
+              <div className="h-full rounded-[1.35rem] border border-border bg-background p-3 lg:rounded-[1.7rem] lg:p-4 lg:overflow-hidden">
                 <div className="flex h-full flex-col gap-4 pr-1 lg:overflow-y-auto">
                   {selectedPreset ? (
                     <PublicMessage role="user" text={selectedPreset.userMessage} />
                   ) : (
-                    <div className="flex h-full min-h-[26rem] items-center justify-center">
+                    <div className="flex h-full min-h-[20rem] items-center justify-center lg:min-h-[26rem]">
                       <div className="max-w-xl text-center">
-                        <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-[2rem] border border-border bg-primary text-primary-foreground">
+                        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-[1.5rem] border border-border bg-primary text-primary-foreground lg:h-20 lg:w-20 lg:rounded-[2rem]">
                           <Image
                             src="/flaim-mark-hero-dark.png"
                             alt="Flaim"
-                            width={40}
-                            height={40}
+                            width={32}
+                            height={32}
                           />
                         </div>
-                        <h3 className="mt-6 text-3xl font-semibold tracking-tight text-foreground">
+                        <h3 className="mt-5 text-2xl font-semibold tracking-tight text-foreground lg:mt-6 lg:text-3xl">
                           Pick a prompt and watch Flaim think out loud
                         </h3>
-                        <p className="mt-3 text-base leading-7 text-muted-foreground">
+                        <p className="mt-3 text-sm leading-6 text-muted-foreground lg:text-base lg:leading-7">
                           This is a public-facing proof point: my actual leagues, live
                           MCP reads, and an answer assembled in front of you.
                         </p>
