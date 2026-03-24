@@ -1014,7 +1014,7 @@ export function getUnifiedTools(): UnifiedTool[] {
           .describe('Sport type (e.g., "football", "baseball")'),
         league_id: z.string().describe('League ID (get from get_user_session)'),
         season_year: z.number().describe('Season start year (e.g., 2025 for MLB 2025, 2024 for NBA 2024-25)'),
-        week: z.number().int().min(1).optional().describe('Week number (optional, must be ≥ 1). ESPN/Sleeper support explicit week; Yahoo ignores week and uses a recent 14-day timestamp window'),
+        week: z.number().int().min(0).optional().describe('Week/scoring-period number (optional, 0 = preseason). ESPN/Sleeper support explicit week; Yahoo ignores week and uses a recent 14-day timestamp window'),
         type: z
           .enum(['add', 'drop', 'trade', 'waiver', 'pending_trade', 'trade_proposal', 'trade_decline', 'trade_veto', 'trade_uphold', 'failed_bid'])
           .optional()

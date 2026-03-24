@@ -514,9 +514,13 @@ async function handleGetTransactions(
 
     const ctx = await getEspnLeagueContext(GAME_ID, league_id, season_year, credentials);
     const currentWeek = ctx.scoringPeriodId;
-    const weeks = week
-      ? [Math.max(1, week)]
-      : Array.from(new Set([currentWeek, Math.max(1, currentWeek - 1)]));
+    const weeks = week != null
+      ? [Math.max(0, week)]
+      : Array.from(new Set([
+          currentWeek,
+          Math.max(0, currentWeek - 1),
+          ...(currentWeek <= 2 ? [0] : []),
+        ]));
 
     const maxCount = count ?? 25;
 
