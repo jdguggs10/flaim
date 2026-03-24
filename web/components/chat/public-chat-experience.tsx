@@ -61,6 +61,21 @@ function extractAssistantText(item: unknown) {
     .join("");
 }
 
+function parseSseChunk(chunk: string) {
+  const dataLine = chunk
+    .split("\n")
+    .find((line) => line.startsWith("data: "));
+
+  if (!dataLine) {
+    return null;
+  }
+
+  return JSON.parse(dataLine.slice(6)) as {
+    event: string;
+    data: Record<string, unknown>;
+  };
+}
+
 async function* readSse(
   response: Response
 ): AsyncGenerator<{ event: string; data: Record<string, unknown> }> {
@@ -80,23 +95,21 @@ async function* readSse(
     buffer = chunks.pop() ?? "";
 
     for (const chunk of chunks) {
-      const dataLine = chunk
-        .split("\n")
-        .find((line) => line.startsWith("data: "));
-
-      if (!dataLine) {
-        continue;
+      const payload = parseSseChunk(chunk);
+      if (payload) {
+        yield payload;
       }
-
-      const payload = JSON.parse(dataLine.slice(6)) as {
-        event: string;
-        data: Record<string, unknown>;
-      };
-      yield payload;
     }
 
     if (done) {
       break;
+    }
+  }
+
+  if (buffer.trim()) {
+    const payload = parseSseChunk(buffer);
+    if (payload) {
+      yield payload;
     }
   }
 }
@@ -110,6 +123,7 @@ export function PublicChatExperience() {
   const [toolCalls, setToolCalls] = useState<PublicToolCallState[]>([]);
   const [error, setError] = useState<string | null>(null);
   const transcriptEndRef = useRef<HTMLDivElement | null>(null);
+  const hasStreamedAssistantTextRef = useRef(false);
 
   const selectedPreset = useMemo(
     () =>
@@ -134,6 +148,7 @@ export function PublicChatExperience() {
     setThinkingText("");
     setToolCalls([]);
     setError(null);
+    hasStreamedAssistantTextRef.current = false;
 
     try {
       const requestBody: PublicChatTurnRequest = {
@@ -155,7 +170,8 @@ export function PublicChatExperience() {
           if (payload.error) {
             message = payload.error;
           }
-        } catch {
+        } catch (jsonError) {
+          console.error("Failed to parse error response JSON:", jsonError);
           // Keep the HTTP status fallback.
         }
         throw new Error(message);
@@ -235,6 +251,7 @@ export function PublicChatExperience() {
           case "response.output_text.delta": {
             const delta = typeof data.delta === "string" ? data.delta : "";
             if (delta) {
+              hasStreamedAssistantTextRef.current = true;
               setAssistantText((current) => current + delta);
             }
             break;
@@ -257,9 +274,10 @@ export function PublicChatExperience() {
               );
             }
 
-            if (item?.type === "message" && !assistantText) {
+            if (item?.type === "message" && !hasStreamedAssistantTextRef.current) {
               const fallbackText = extractAssistantText(item);
               if (fallbackText) {
+                hasStreamedAssistantTextRef.current = true;
                 setAssistantText(fallbackText);
               }
             }
@@ -333,6 +351,7 @@ export function PublicChatExperience() {
                     type="button"
                     onClick={() => void handleRunPreset(preset)}
                     disabled={runStatus === "running"}
+                    aria-pressed={isSelected}
                     className={cn(
                       "rounded-2xl border p-4 text-left transition-colors",
                       isSelected

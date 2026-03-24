@@ -10,6 +10,8 @@ export const PUBLIC_CHAT_ALLOWED_TOOLS = [
   "get_transactions",
 ] as const;
 
+export const PUBLIC_CHAT_MODEL = "gpt-5-mini-2025-08-07";
+
 export const PUBLIC_CHAT_SYSTEM_PROMPT = `
 You are Flaim's public chat demo assistant.
 

@@ -47,7 +47,7 @@ export interface TurnResponseRequest {
 }
 
 export interface PublicChatTurnRequest {
-  presetId?: string;
+  presetId: string;
 }
 
 export interface WorkerErrorResponse {

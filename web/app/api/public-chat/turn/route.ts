@@ -1,5 +1,6 @@
 import {
   PUBLIC_CHAT_ALLOWED_TOOLS,
+  PUBLIC_CHAT_MODEL,
   PUBLIC_CHAT_SYSTEM_PROMPT,
   getPublicChatPreset,
 } from "@/lib/public-chat";
@@ -8,7 +9,36 @@ import type { PublicChatTurnRequest } from "@/types/api-responses";
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 
-const PUBLIC_CHAT_MODEL = "gpt-5-mini-2025-08-07";
+const PUBLIC_CHAT_RATE_LIMIT_WINDOW_MS = 5 * 60 * 1000;
+const PUBLIC_CHAT_RATE_LIMIT_MAX_REQUESTS = 5;
+const publicChatRequestLog = new Map<string, number[]>();
+
+class PublicChatConfigError extends Error {}
+
+function getPublicChatIpAddress(request: NextRequest) {
+  const forwardedFor = request.headers.get("x-forwarded-for");
+  if (forwardedFor) {
+    return forwardedFor.split(",")[0]?.trim() || "unknown";
+  }
+
+  return request.headers.get("x-real-ip")?.trim() || "unknown";
+}
+
+function isPublicChatRateLimited(ipAddress: string, now: number) {
+  const requestTimestamps = publicChatRequestLog.get(ipAddress) ?? [];
+  const activeWindow = requestTimestamps.filter(
+    (timestamp) => now - timestamp < PUBLIC_CHAT_RATE_LIMIT_WINDOW_MS
+  );
+
+  if (activeWindow.length >= PUBLIC_CHAT_RATE_LIMIT_MAX_REQUESTS) {
+    publicChatRequestLog.set(ipAddress, activeWindow);
+    return true;
+  }
+
+  activeWindow.push(now);
+  publicChatRequestLog.set(ipAddress, activeWindow);
+  return false;
+}
 
 function normalizeMcpUrl(url: string): string {
   const trimmed = url.trim().replace(/\/+$/, "");
@@ -17,16 +47,18 @@ function normalizeMcpUrl(url: string): string {
 
 function getPublicChatMcpTool() {
   const serverUrl = normalizeMcpUrl(
-    process.env.NEXT_PUBLIC_FANTASY_MCP_URL || "https://api.flaim.app/mcp"
+    process.env.FANTASY_MCP_URL ||
+      process.env.NEXT_PUBLIC_FANTASY_MCP_URL ||
+      "https://api.flaim.app/mcp"
   );
 
   if (!isAllowedUrl(serverUrl)) {
-    throw new Error("Configured MCP server URL is not allowed");
+    throw new PublicChatConfigError("Configured MCP server URL is not allowed");
   }
 
   const demoApiKey = process.env.DEMO_API_KEY;
   if (!demoApiKey) {
-    throw new Error("DEMO_API_KEY is not configured");
+    throw new PublicChatConfigError("DEMO_API_KEY is not configured");
   }
 
   return {
@@ -53,6 +85,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const ipAddress = getPublicChatIpAddress(request);
+    if (isPublicChatRateLimited(ipAddress, Date.now())) {
+      return NextResponse.json(
+        {
+          error:
+            "Public chat is temporarily rate limited. Please wait a minute and try again.",
+        },
+        { status: 429 }
+      );
+    }
+
     const preset = getPublicChatPreset(presetId);
     if (!preset) {
       return NextResponse.json(
@@ -76,7 +119,7 @@ export async function POST(request: NextRequest) {
       ],
       tools: [getPublicChatMcpTool()],
       stream: true,
-      store: true,
+      store: false,
       parallel_tool_calls: false,
       reasoning: { summary: "auto" },
     });
@@ -107,15 +150,18 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Unknown public chat error";
     console.error("Error in public chat POST handler:", error);
 
-    const status =
-      message.includes("DEMO_API_KEY") || message.includes("MCP server URL")
-        ? 503
-        : 500;
+    if (error instanceof PublicChatConfigError) {
+      return NextResponse.json(
+        { error: "Demo service is temporarily unavailable." },
+        { status: 503 }
+      );
+    }
 
-    return NextResponse.json({ error: message }, { status });
+    return NextResponse.json(
+      { error: "Public chat is temporarily unavailable." },
+      { status: 500 }
+    );
   }
 }
