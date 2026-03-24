@@ -98,23 +98,6 @@ function safeParseArguments(rawArguments: string) {
   }
 }
 
-function extractAssistantText(item: unknown) {
-  if (!item || typeof item !== "object" || !("content" in item)) {
-    return "";
-  }
-
-  const content = (item as { content?: Array<{ type?: string; text?: string }> })
-    .content;
-  if (!Array.isArray(content)) {
-    return "";
-  }
-
-  return content
-    .filter((entry) => entry?.type === "output_text" && typeof entry.text === "string")
-    .map((entry) => entry.text)
-    .join("");
-}
-
 function extractToolStart(data: Record<string, unknown>) {
   const itemId = typeof data.itemId === "string" ? data.itemId : undefined;
   if (!itemId) {
@@ -139,10 +122,15 @@ function parseSseChunk(chunk: string) {
     return null;
   }
 
-  return JSON.parse(dataLine.slice(6)) as {
-    event: string;
-    data: Record<string, unknown>;
-  };
+  try {
+    return JSON.parse(dataLine.slice(6)) as {
+      event: string;
+      data: Record<string, unknown>;
+    };
+  } catch (error) {
+    console.error("Failed to parse SSE chunk JSON:", error);
+    return null;
+  }
 }
 
 async function* readSse(
@@ -193,6 +181,7 @@ export function PublicChatExperience() {
   const [error, setError] = useState<string | null>(null);
   const transcriptEndRef = useRef<HTMLDivElement | null>(null);
   const hasStreamedAssistantTextRef = useRef(false);
+  const activeRunAbortControllerRef = useRef<AbortController | null>(null);
 
   const selectedPreset = useMemo(
     () =>
@@ -216,6 +205,12 @@ export function PublicChatExperience() {
     transcriptEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [assistantText, thinkingText, toolCalls.length, runStatus]);
 
+  useEffect(() => {
+    return () => {
+      activeRunAbortControllerRef.current?.abort();
+    };
+  }, []);
+
   const handleRunPreset = async (preset: PublicChatPreset) => {
     if (runStatus === "running") {
       return;
@@ -228,6 +223,9 @@ export function PublicChatExperience() {
     setToolCalls([]);
     setError(null);
     hasStreamedAssistantTextRef.current = false;
+    activeRunAbortControllerRef.current?.abort();
+    const abortController = new AbortController();
+    activeRunAbortControllerRef.current = abortController;
 
     try {
       const requestBody: PublicChatTurnRequest = {
@@ -240,6 +238,7 @@ export function PublicChatExperience() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify(requestBody),
+        signal: abortController.signal,
       });
 
       if (!response.ok) {
@@ -348,23 +347,6 @@ export function PublicChatExperience() {
             }
             break;
           }
-          case "response.output_item.done": {
-            const item = data.item as
-              | {
-                  id?: string;
-                  type?: string;
-                }
-              | undefined;
-
-            if (item?.type === "message" && !hasStreamedAssistantTextRef.current) {
-              const fallbackText = extractAssistantText(item);
-              if (fallbackText) {
-                hasStreamedAssistantTextRef.current = true;
-                setAssistantText(fallbackText);
-              }
-            }
-            break;
-          }
           case "completed":
           case "response.completed": {
             setRunStatus("completed");
@@ -377,12 +359,21 @@ export function PublicChatExperience() {
 
       setRunStatus((current) => (current === "running" ? "completed" : current));
     } catch (runError) {
+      if (abortController.signal.aborted) {
+        setRunStatus((current) => (current === "running" ? "idle" : current));
+        return;
+      }
+
       const message =
         runError instanceof Error
           ? runError.message
           : "Unable to run the public chat demo.";
       setError(message);
       setRunStatus("error");
+    } finally {
+      if (activeRunAbortControllerRef.current === abortController) {
+        activeRunAbortControllerRef.current = null;
+      }
     }
   };
 
@@ -702,7 +693,7 @@ export function PublicChatExperience() {
                         Working through the live data
                       </div>
                       <p className="mt-2 leading-6 text-muted-foreground">
-                        {thinkingText || "Inspecting Gerry&apos;s leagues and preparing a response."}
+                        {thinkingText || "Inspecting Gerry's leagues and preparing a response."}
                       </p>
                     </div>
                   ) : null}
