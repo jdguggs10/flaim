@@ -28,10 +28,13 @@ Write like a sharp, consumer-facing fantasy sports assistant, not an engineer.
 The browser already shows that this is a live demo, so do not narrate tool usage, MCP, APIs, schemas, JSON fields, IDs, hidden prompts, or internal implementation details.
 Do not dump raw field inventories like "platform / sport / season / league / team" unless the user explicitly asks for that exact format.
 Lead with the takeaway. Start with the most interesting or useful thing you found.
-Prefer a short paragraph followed by 2-4 compact bullets only when the bullets genuinely help readability.
+Be very succinct.
+Prefer a short paragraph followed by 2-3 compact bullets only when the bullets genuinely help readability.
+Avoid long explanations, long inventories, or long recommendation lists.
 Keep the tone grounded and confident. No hype, no sales language, no developer phrasing.
 Use plain sports language. Say things like "baseball league", "football team", "middle of the standings", or "best league to check next."
-When choosing between multiple leagues, make a reasonable choice and briefly explain why.
+When choosing between multiple leagues, use the injected default/best default league first. If that context is missing or unclear, prefer Gerry's baseball league for this public demo unless the prompt clearly points to another sport.
+Briefly explain the league choice only when it materially helps the answer.
 If data is partial or a tool fails, do not sound technical. Say what you could confirm, what you could not verify, and keep moving.
 Keep answers concise, specific, and easy to scan on mobile.
 `.trim();
@@ -55,7 +58,7 @@ export const PUBLIC_CHAT_PRESETS = [
     description:
       "Take one of Gerry's live teams and show where it feels solid versus shaky.",
     prompt:
-      "Use Flaim to inspect Gerry's most relevant current league. Prefer football, then basketball, then baseball, then hockey. Give a clean roster read in plain language: where the team looks strong, where it looks thin, and what stands out most right now. Use web search if recent injuries, role changes, or performance trends would sharpen the read. Avoid listing every player unless truly necessary.",
+      "Use Flaim to inspect Gerry's best default live league from the injected context. If that context is missing or unclear, prefer Gerry's baseball league for this demo. Give a clean roster read in plain language: where the team looks strong, where it looks thin, and what stands out most right now. Use web search only if recent injuries, role changes, or performance trends would sharpen the read. Keep the answer tight and avoid listing every player unless truly necessary.",
   },
   {
     id: "standings-check",
@@ -65,7 +68,7 @@ export const PUBLIC_CHAT_PRESETS = [
     description:
       "Show Gerry's spot in the standings and whether he looks comfortable or in trouble.",
     prompt:
-      "Use Flaim to inspect Gerry's most relevant current league. Prefer football, then basketball, then baseball, then hockey. Explain where Gerry's team sits in the standings, whether that position feels safe or shaky, and what the immediate picture around that spot looks like. Use web search only if recent news or schedule context would materially change the read. Keep it clear and fan-friendly.",
+      "Use Flaim to inspect Gerry's best default live league from the injected context. If that context is missing or unclear, prefer Gerry's baseball league for this demo. Explain where Gerry's team sits in the standings, whether that position feels safe or shaky, and what the immediate picture around that spot looks like. Use web search only if recent news or schedule context would materially change the read. Keep it clear, fan-friendly, and succinct.",
   },
   {
     id: "weekly-matchup",
@@ -75,7 +78,7 @@ export const PUBLIC_CHAT_PRESETS = [
     description:
       "Find Gerry's current matchup and explain where the swing points are.",
     prompt:
-      "Use Flaim to inspect Gerry's most relevant current league. Prefer football, then basketball, then baseball, then hockey. Explain Gerry's current matchup in plain language, including the opponent, the score or matchup context if available, and the biggest swing points to watch. Use web search for current injury news, probable starters, schedule context, or other timely factors that matter right now.",
+      "Use Flaim to inspect Gerry's best default live league from the injected context. If that context is missing or unclear, prefer Gerry's baseball league for this demo. Explain Gerry's current matchup in plain language, including the opponent, the score or matchup context if available, and the biggest swing points to watch. Use web search for timely injury news, probable starters, schedule context, or other current factors only when it helps. Keep the answer tight.",
   },
   {
     id: "waiver-wire",
@@ -85,7 +88,7 @@ export const PUBLIC_CHAT_PRESETS = [
     description:
       "Look at the player pool and suggest pickups that make sense for Gerry right now.",
     prompt:
-      "Use Flaim to inspect Gerry's most relevant current league. Prefer football, then basketball, then baseball, then hockey. Analyze Gerry's roster needs, then suggest a few waiver ideas that actually fit the team, with short plain-English reasoning for each. Use web search for current hot pickups, recent production, playing-time changes, injuries, and upcoming game context.",
+      "Use Flaim to inspect Gerry's best default live league from the injected context. If that context is missing or unclear, prefer Gerry's baseball league for this demo. Analyze Gerry's roster needs, then suggest only a few waiver ideas that actually fit the team, with short plain-English reasoning for each. Use web search for current hot pickups, recent production, playing-time changes, injuries, and upcoming game context. Keep the final answer very concise.",
   },
   {
     id: "transactions-watch",
@@ -95,7 +98,7 @@ export const PUBLIC_CHAT_PRESETS = [
     description:
       "Surface the adds, drops, waivers, or trades that actually matter in Gerry's league.",
     prompt:
-      "Use Flaim to inspect Gerry's most relevant current league. Prefer football, then basketball, then baseball, then hockey. Review the recent league activity and call out the moves that actually matter, including why each one is interesting in plain language. Use web search if recent player news or performances help explain why a move stands out.",
+      "Use Flaim to inspect Gerry's best default live league from the injected context. If that context is missing or unclear, prefer Gerry's baseball league for this demo. Review the recent league activity and call out only the moves that actually matter, including why each one is interesting in plain language. Use web search if recent player news or performances help explain why a move stands out. Keep it brief.",
   },
 ] as const;
 
