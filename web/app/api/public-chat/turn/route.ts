@@ -62,7 +62,9 @@ function normalizeMcpUrl(url: string): string {
 
 function getPublicChatMcpTool() {
   const serverUrl = normalizeMcpUrl(
-    process.env.FANTASY_MCP_URL || "https://api.flaim.app/mcp"
+    process.env.FANTASY_MCP_URL ||
+      process.env.NEXT_PUBLIC_FANTASY_MCP_URL ||
+      "https://api.flaim.app/mcp"
   );
 
   if (!isAllowedUrl(serverUrl)) {
@@ -81,6 +83,7 @@ function getPublicChatMcpTool() {
     allowed_tools: [...PUBLIC_CHAT_ALLOWED_TOOLS],
     headers: {
       Authorization: `Bearer ${demoApiKey}`,
+      Accept: "application/json, text/event-stream",
       "Content-Type": "application/json",
     },
     require_approval: "never" as const,
