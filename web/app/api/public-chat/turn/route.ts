@@ -117,7 +117,7 @@ export async function POST(request: NextRequest) {
         throw new Response(
           JSON.stringify({
             error:
-              "Public chat is temporarily rate limited. Please wait a few minutes and try again.",
+              "Public chat is temporarily rate limited. Please wait about a minute and try again.",
           }),
           {
             status: 429,

@@ -525,7 +525,7 @@ describe('static API key auth', () => {
     );
 
     expect(res.status).toBe(429);
-    expect(res.headers.get('Retry-After')).toBe('300');
+    expect(res.headers.get('Retry-After')).toBe('60');
     const body = await res.json() as { error?: string };
     expect(body.error).toBe('rate_limit_exceeded');
     expect(mockPublicChatStorage.recordRejectedRun).toHaveBeenCalled();

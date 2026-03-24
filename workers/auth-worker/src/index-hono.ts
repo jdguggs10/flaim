@@ -743,7 +743,7 @@ api.post('/internal/public-chat/runs/acquire', async (c) => {
     return c.json({
       error: 'rate_limit_exceeded',
       error_description: 'Public chat is temporarily rate limited.',
-    }, 429, { 'Retry-After': '300' });
+    }, 429, { 'Retry-After': '60' });
   }
 
   const reservation = await storage.acquireRun({

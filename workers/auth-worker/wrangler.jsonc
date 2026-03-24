@@ -45,7 +45,7 @@
         {
           "name": "PUBLIC_CHAT_RATE_LIMITER",
           "namespace_id": "1003",
-          "simple": { "limit": 5, "period": 300 }
+          "simple": { "limit": 5, "period": 60 }
         }
       ],
       // Custom domain routes for production (external clients)
@@ -102,7 +102,7 @@
         {
           "name": "PUBLIC_CHAT_RATE_LIMITER",
           "namespace_id": "1003",
-          "simple": { "limit": 5, "period": 300 }
+          "simple": { "limit": 5, "period": 60 }
         }
       ],
       // Custom domain routes for preview (needed for worker-to-worker calls)
@@ -139,7 +139,7 @@
         {
           "name": "PUBLIC_CHAT_RATE_LIMITER",
           "namespace_id": "1003",
-          "simple": { "limit": 5, "period": 300 }
+          "simple": { "limit": 5, "period": 60 }
         }
       ],
       // Environment variables for dev  
