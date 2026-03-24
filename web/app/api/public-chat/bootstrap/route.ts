@@ -8,7 +8,6 @@ export async function GET() {
     {
       warmed: Boolean(sessionContext),
       hasSessionContext: Boolean(sessionContext),
-      hasSportsPulse: false,
     },
     {
       headers: {
