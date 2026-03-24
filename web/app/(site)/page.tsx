@@ -60,14 +60,14 @@ export default function LandingPage() {
         }}
       />
       {/* Hero */}
-      <section className="py-8 px-4 text-center">
-        <h1 className="text-4xl md:text-5xl font-bold mb-2">
-          Your Fantasy Leagues + Your AI
+      <section className="py-10 px-4 text-center">
+        <h1 className="text-4xl md:text-5xl font-bold mb-4">
+          AI for Your Fantasy Leagues
         </h1>
-        <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-          Connect ESPN, Yahoo, and Sleeper leagues to Claude, ChatGPT, and Gemini. Get real advice based on your league, your team, your waiver wire, and more.
+        <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto">
+          Connect ESPN, Yahoo, and Sleeper leagues to Claude, ChatGPT, and Gemini.
         </p>
-        <p className="text-sm text-muted-foreground max-w-2xl mx-auto mt-4">
+        <p className="sr-only">
           Flaim is a free, open-source MCP server that gives Claude, ChatGPT, and Gemini read-only access to your actual fantasy league data — rosters, standings, matchups, free agents, and transactions across football, baseball, basketball, and hockey. It works with ESPN, Yahoo, and Sleeper. Setup takes about 5 minutes, and nothing in your league can be changed.
         </p>
       </section>

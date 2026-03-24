@@ -16,11 +16,11 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Flaim Fantasy",
+  title: "Flaim Fantasy — Connect Your Fantasy Leagues to AI",
   description: "Flaim connects your ESPN, Yahoo, and Sleeper fantasy leagues to Claude, ChatGPT, and Gemini. Get AI analysis based on your real roster, matchups, standings, and waiver wire — read-only.",
   metadataBase: new URL('https://flaim.app'),
   openGraph: {
-    title: "Flaim Fantasy",
+    title: "Flaim Fantasy — Connect Your Fantasy Leagues to AI",
     description: "Flaim connects your ESPN, Yahoo, and Sleeper fantasy leagues to Claude, ChatGPT, and Gemini. Get AI analysis based on your real roster, matchups, standings, and waiver wire — read-only.",
     url: "https://flaim.app",
     siteName: "Flaim",
@@ -29,7 +29,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Flaim Fantasy",
+    title: "Flaim Fantasy — Connect Your Fantasy Leagues to AI",
     description: "Flaim connects your ESPN, Yahoo, and Sleeper fantasy leagues to Claude, ChatGPT, and Gemini. Get AI analysis based on your real roster, matchups, standings, and waiver wire — read-only.",
   },
   icons: {
