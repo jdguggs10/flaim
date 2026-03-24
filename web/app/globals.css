@@ -115,3 +115,45 @@
     @apply bg-background text-foreground;
   }
 }
+
+@keyframes public-chat-ticker-marquee {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+@layer utilities {
+  .public-chat-ticker-track {
+    animation-name: public-chat-ticker-marquee;
+    animation-duration: 34s;
+    animation-timing-function: linear;
+    animation-iteration-count: infinite;
+    will-change: transform;
+  }
+
+  .public-chat-ticker-track--top {
+    animation-duration: 34s;
+  }
+
+  .public-chat-ticker-track--bottom {
+    animation-duration: 42s;
+    animation-direction: reverse;
+  }
+
+  .public-chat-ticker-track--paused {
+    animation-play-state: paused;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .public-chat-ticker-track,
+    .public-chat-ticker-track--top,
+    .public-chat-ticker-track--bottom {
+      animation: none;
+      transform: none;
+    }
+  }
+}

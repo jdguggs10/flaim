@@ -161,9 +161,6 @@ export function PublicChatExperience() {
   const transcriptEndRef = useRef<HTMLDivElement | null>(null);
   const hasStreamedAssistantTextRef = useRef(false);
   const activeRunAbortControllerRef = useRef<AbortController | null>(null);
-  const topPromptRailRef = useRef<HTMLDivElement | null>(null);
-  const bottomPromptRailRef = useRef<HTMLDivElement | null>(null);
-  const promptRailPauseUntilRef = useRef(0);
 
   const selectedPreset = useMemo(
     () =>
@@ -182,11 +179,11 @@ export function PublicChatExperience() {
           : "Ready";
   const liveStatusCopy = getLiveStatusCopy(toolCalls);
   const topRailPresets = useMemo(() => {
-    const presets = PUBLIC_CHAT_PRESETS.filter((_, index) => index % 2 === 0);
+    const presets = PUBLIC_CHAT_PRESETS.filter((preset) => preset.rail === "top");
     return presets.length ? presets : PUBLIC_CHAT_PRESETS;
   }, []);
   const bottomRailPresets = useMemo(() => {
-    const presets = PUBLIC_CHAT_PRESETS.filter((_, index) => index % 2 === 1);
+    const presets = PUBLIC_CHAT_PRESETS.filter((preset) => preset.rail === "bottom");
     return presets.length ? presets : PUBLIC_CHAT_PRESETS;
   }, []);
 
@@ -200,89 +197,21 @@ export function PublicChatExperience() {
     };
   }, []);
 
-  useEffect(() => {
-    const mediaQuery =
-      typeof window !== "undefined"
-        ? window.matchMedia("(prefers-reduced-motion: reduce)")
-        : null;
-    if (mediaQuery?.matches) {
-      return;
-    }
-
-    let frameId = 0;
-    let lastTimestamp = 0;
-
-    const step = (timestamp: number) => {
-      if (!lastTimestamp) {
-        lastTimestamp = timestamp;
-      }
-
-      const delta = (timestamp - lastTimestamp) / 1000;
-      lastTimestamp = timestamp;
-      const shouldPause =
-        runStatus === "running" || Date.now() < promptRailPauseUntilRef.current;
-
-      const syncTicker = (
-        element: HTMLDivElement | null,
-        speed: number,
-        direction: 1 | -1
-      ) => {
-        if (!element) {
-          return;
-        }
-
-        const wrapWidth = element.scrollWidth / 2;
-        const canScroll = wrapWidth > element.clientWidth + 8;
-        if (!canScroll || shouldPause) {
-          return;
-        }
-
-        const nextScrollLeft = element.scrollLeft + direction * speed * delta;
-
-        if (direction === 1) {
-          element.scrollLeft =
-            nextScrollLeft >= wrapWidth ? nextScrollLeft - wrapWidth : nextScrollLeft;
-        } else {
-          element.scrollLeft =
-            nextScrollLeft <= 0 ? nextScrollLeft + wrapWidth : nextScrollLeft;
-        }
-      };
-
-      syncTicker(topPromptRailRef.current, 18, 1);
-      syncTicker(bottomPromptRailRef.current, 26, -1);
-
-      if (bottomPromptRailRef.current && bottomPromptRailRef.current.scrollLeft === 0) {
-        bottomPromptRailRef.current.scrollLeft =
-          bottomPromptRailRef.current.scrollWidth / 2;
-      }
-
-      frameId = window.requestAnimationFrame(step);
-    };
-
-    frameId = window.requestAnimationFrame(step);
-    return () => window.cancelAnimationFrame(frameId);
-  }, [runStatus]);
-
-  const pausePromptRail = () => {
-    promptRailPauseUntilRef.current = Date.now() + 6000;
-  };
-
   const renderPromptTicker = (
     presets: readonly PublicChatPreset[],
-    railRef: React.RefObject<HTMLDivElement | null>
+    speedClassName: string
   ) => {
     const repeatedPresets = [...presets, ...presets];
 
     return (
-      <div
-        ref={railRef}
-        className="-mx-3 overflow-x-auto px-3 sm:mx-0 sm:px-0"
-        onPointerDown={pausePromptRail}
-        onTouchStart={pausePromptRail}
-        onMouseEnter={pausePromptRail}
-        onWheel={pausePromptRail}
-      >
-        <div className="flex w-max gap-2.5 pb-1 sm:gap-3">
+      <div className="-mx-3 overflow-hidden px-3 sm:mx-0 sm:px-0">
+        <div
+          className={cn(
+            "public-chat-ticker-track flex w-max gap-2.5 pb-1 sm:gap-3",
+            speedClassName,
+            runStatus === "running" ? "public-chat-ticker-track--paused" : ""
+          )}
+        >
           {repeatedPresets.map((preset, index) => {
             const isSelected = preset.id === selectedPresetId;
 
@@ -524,8 +453,8 @@ export function PublicChatExperience() {
         <Card className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.45rem] border-border bg-card p-0 shadow-sm sm:rounded-[1.6rem] lg:rounded-[2rem]">
           <div className="border-b border-border bg-card px-3 py-3 sm:px-4">
             <div className="space-y-2">
-              {renderPromptTicker(topRailPresets, topPromptRailRef)}
-              {renderPromptTicker(bottomRailPresets, bottomPromptRailRef)}
+              {renderPromptTicker(topRailPresets, "public-chat-ticker-track--top")}
+              {renderPromptTicker(bottomRailPresets, "public-chat-ticker-track--bottom")}
             </div>
           </div>
 

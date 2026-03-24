@@ -43,43 +43,67 @@ Keep answers concise, specific, and easy to scan on mobile.
 export const PUBLIC_CHAT_PRESETS = [
   {
     id: "waiver-wire",
-    eyebrow: "Free agents",
-    title: "Best free agents",
+    rail: "top",
+    title: "Who are the best available free agents in Gerry's league?",
     userMessage: "Who are the best available free agents in Gerry's league?",
-    description:
-      "Find the waiver adds that actually help Gerry right now.",
     prompt:
       "Use Flaim to inspect Gerry's best default live league from the injected context. If that context is missing or unclear, prefer Gerry's baseball league for this demo. Analyze Gerry's roster needs, then suggest only a few of the best available free agents in his league, with short plain-English reasoning for each. You must use web search for current performance, injuries, role changes, or schedule context before answering. Keep the final answer very concise.",
   },
   {
-    id: "roster-hole",
-    eyebrow: "Roster read",
-    title: "Biggest roster hole",
-    userMessage: "What is the biggest hole in Gerry's roster?",
-    description:
-      "Pinpoint the one weakness that matters most right now.",
+    id: "transactions-watch",
+    rail: "top",
+    title: "What are the latest moves in his league?",
+    userMessage: "What are the latest moves in Gerry's league?",
     prompt:
-      "Use Flaim to inspect Gerry's best default live league from the injected context. If that context is missing or unclear, prefer Gerry's baseball league for this demo. Identify the single biggest hole in Gerry's roster and explain why it is the biggest problem right now. You must use web search for current injuries, performance trends, role changes, or schedule context before answering. Keep the answer tight and focused on one main weakness plus one practical fix.",
+      "Use Flaim to inspect Gerry's best default live league from the injected context. If that context is missing or unclear, prefer Gerry's baseball league for this demo. Review the latest moves in Gerry's league and call out only the ones that actually matter, including why each one is interesting in plain language. You must use web search for recent player news or performances before answering. Keep it brief.",
   },
   {
     id: "league-leader",
-    eyebrow: "League context",
-    title: "Who is winning?",
+    rail: "top",
+    title: "Who is winning Gerry's league and why?",
     userMessage: "Who is winning Gerry's league and why?",
-    description:
-      "Explain the current league leader in plain English.",
     prompt:
       "Use Flaim to inspect Gerry's best default live league from the injected context. If that context is missing or unclear, prefer Gerry's baseball league for this demo. Identify who is currently winning Gerry's league and explain why that team is on top. You must use web search for current performance, injury, or recent-news context before answering. Keep the final answer concise: one short takeaway plus a few quick reasons.",
   },
   {
-    id: "transactions-watch",
-    eyebrow: "League activity",
-    title: "Latest league moves",
-    userMessage: "What are the latest moves in Gerry's league?",
-    description:
-      "Surface the adds, drops, waivers, or trades that matter most.",
+    id: "give-up-player",
+    rail: "top",
+    title: "What player does he need to give up on?",
+    userMessage: "What player does he need to give up on?",
     prompt:
-      "Use Flaim to inspect Gerry's best default live league from the injected context. If that context is missing or unclear, prefer Gerry's baseball league for this demo. Review the latest moves in Gerry's league and call out only the ones that actually matter, including why each one is interesting in plain language. You must use web search for recent player news or performances before answering. Keep it brief.",
+      "Use Flaim to inspect Gerry's best default live league from the injected context. If that context is missing or unclear, prefer Gerry's baseball league for this demo. Identify the one player on Gerry's roster he most needs to give up on right now, and explain why in plain language. You must use web search for recent performance, role, injury, and trend context before answering. Keep it short and decisive.",
+  },
+  {
+    id: "roster-hole",
+    rail: "bottom",
+    title: "What is the biggest hole in his roster?",
+    userMessage: "What is the biggest hole in Gerry's roster?",
+    prompt:
+      "Use Flaim to inspect Gerry's best default live league from the injected context. If that context is missing or unclear, prefer Gerry's baseball league for this demo. Identify the single biggest hole in Gerry's roster and explain why it is the biggest problem right now. You must use web search for current injuries, performance trends, role changes, or schedule context before answering. Keep the answer tight and focused on one main weakness plus one practical fix.",
+  },
+  {
+    id: "sell-high",
+    rail: "bottom",
+    title: "Who should Gerry be selling high on?",
+    userMessage: "Who should Gerry be selling high on?",
+    prompt:
+      "Use Flaim to inspect Gerry's best default live league from the injected context. If that context is missing or unclear, prefer Gerry's baseball league for this demo. Identify the best sell-high candidate on Gerry's roster right now and explain why this might be the right time to move that player. You must use web search for current performance, news, schedule, and role context before answering. Keep it concise and practical.",
+  },
+  {
+    id: "last-season",
+    rail: "bottom",
+    title: "How did he do last season?",
+    userMessage: "How did he do last season?",
+    prompt:
+      "Use Flaim to inspect Gerry's best default live league from the injected context. If that context is missing or unclear, prefer Gerry's baseball league for this demo. Review Gerry's result from last season in the most relevant league and summarize how he did in plain English. You must use web search at least once for season context or any useful league/player background before answering, even if the answer is mostly based on Gerry's league data. Keep it short.",
+  },
+  {
+    id: "playoff-start",
+    rail: "bottom",
+    title: "When does his fantasy playoffs start?",
+    userMessage: "When does his fantasy playoffs start?",
+    prompt:
+      "Use Flaim to inspect Gerry's best default live league from the injected context. If that context is missing or unclear, prefer Gerry's baseball league for this demo. Figure out when Gerry's fantasy playoffs start in his current league and explain what that means for his planning right now. You must use web search for current schedule or platform-season context before answering. Keep the answer brief and clear.",
   },
 ] as const;
 
