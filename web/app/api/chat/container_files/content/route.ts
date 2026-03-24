@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireChatAccess } from '@/lib/chat/auth';
 
 export async function GET(request: NextRequest) {
+  // Internal dev chat only
   const authResult = await requireChatAccess();
   if (authResult instanceof NextResponse) {
     return authResult;
