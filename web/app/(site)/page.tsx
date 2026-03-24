@@ -203,7 +203,7 @@ export default function LandingPage() {
         <div className="container max-w-2xl mx-auto">
           <h2 className="text-2xl font-bold text-center mb-2">Go deeper</h2>
           <p className="text-center text-muted-foreground mb-8">
-            The skill combines tools and web search to answer complex questions.
+            Ask and you shall receive... skill + tools + web search = magic.
           </p>
           <div className="flex flex-col gap-3">
             <div className="rounded-lg border bg-background p-4">
