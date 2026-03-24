@@ -491,14 +491,14 @@ export function PublicChatExperience() {
                       <div className="max-w-xl text-center">
                         <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-[1.2rem] border border-border bg-primary text-primary-foreground sm:h-16 sm:w-16 sm:rounded-[1.5rem]">
                           <Image
-                            src="/icon-light.png"
+                            src="/icon-dark.png"
                             alt="Flaim"
                             width={28}
                             height={28}
                             className="dark:hidden"
                           />
                           <Image
-                            src="/icon-dark.png"
+                            src="/icon-light.png"
                             alt="Flaim"
                             width={28}
                             height={28}
