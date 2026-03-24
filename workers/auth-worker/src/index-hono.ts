@@ -883,7 +883,7 @@ api.get('/connect/yahoo/authorize', async (c) => {
       error_description: authError || 'Authentication required',
     }, 401);
   }
-  return handleYahooAuthorize(c.env as YahooConnectEnv, userId, getCorsHeaders(c.req.raw));
+  return handleYahooAuthorize(c.env as YahooConnectEnv, userId, getCorsHeaders(c.req.raw), c.req.raw);
 });
 
 // Yahoo OAuth callback (public - Yahoo redirects here)

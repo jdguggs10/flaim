@@ -18,6 +18,7 @@
  */
 
 import { YahooStorage } from './yahoo-storage';
+import { getFrontendUrl, resolvePreviewOrigin } from './preview-url';
 
 // =============================================================================
 // TYPES
@@ -64,18 +65,7 @@ function getCallbackUrl(env: YahooConnectEnv): string {
   return 'https://api.flaim.app/auth/connect/yahoo/callback';
 }
 
-/**
- * Get the frontend URL for redirects after OAuth flow
- */
-function getFrontendUrl(env: YahooConnectEnv): string {
-  if (env.FRONTEND_URL) {
-    return env.FRONTEND_URL.replace(/\/$/, '');
-  }
-  if (env.ENVIRONMENT === 'dev' || env.NODE_ENV === 'development') {
-    return 'http://localhost:3000';
-  }
-  return 'https://flaim.app';
-}
+// getFrontendUrl imported from ./preview-url
 
 /**
  * Generate a random nonce for CSRF protection
@@ -105,7 +95,8 @@ function maskUserId(userId: string): string {
 export async function handleYahooAuthorize(
   env: YahooConnectEnv,
   userId: string,
-  corsHeaders: Record<string, string>
+  corsHeaders: Record<string, string>,
+  request?: Request
 ): Promise<Response> {
   try {
     const storage = YahooStorage.fromEnvironment(env);
@@ -114,12 +105,18 @@ export async function handleYahooAuthorize(
     const nonce = generateNonce();
     const state = `${userId}:${nonce}`;
 
+    // In preview, store the frontend origin so the callback can redirect back
+    const redirectAfter = (env.ENVIRONMENT === 'preview' && request)
+      ? resolvePreviewOrigin(request)
+      : undefined;
+
     // Store state for validation in callback
     await storage.createPlatformOAuthState({
       state,
       clerkUserId: userId,
       platform: 'yahoo',
       expiresInSeconds: 600, // 10 minutes
+      redirectAfter,
     });
 
     // Build Yahoo OAuth URL
@@ -170,7 +167,7 @@ export async function handleYahooCallback(
   const state = url.searchParams.get('state');
   const errorParam = url.searchParams.get('error');
 
-  const frontendUrl = getFrontendUrl(env);
+  let frontendUrl = getFrontendUrl(env);
 
   // Helper for error redirects
   const errorRedirect = (error: string, description?: string) => {
@@ -213,6 +210,11 @@ export async function handleYahooCallback(
     }
 
     const { clerkUserId } = stateData;
+
+    // Use stored redirect origin for preview deployments
+    if (stateData.redirectAfter) {
+      frontendUrl = stateData.redirectAfter;
+    }
 
     // Exchange code for tokens
     const tokenResponse = await exchangeCodeForTokens(code, env);

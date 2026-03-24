@@ -88,3 +88,5 @@ docs/submissions/openai-screenshots/
 # Keys
 *.pem
 *.tgz
+.vercel
+.env*.local

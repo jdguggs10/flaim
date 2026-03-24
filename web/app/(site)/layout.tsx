@@ -20,6 +20,8 @@ export default function SiteLayout({
             <div className="text-sm text-muted-foreground flex items-center justify-center gap-2">
               <a href="https://www.threads.com/@jdguggs10" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">Built by Gerry</a>
               <span aria-hidden="true">·</span>
+              <Link href="/guide" className="underline hover:text-foreground">Guide</Link>
+              <span aria-hidden="true">·</span>
               <Link href="/privacy" className="underline hover:text-foreground">
                 Privacy
               </Link>

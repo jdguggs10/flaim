@@ -18,6 +18,7 @@
  */
 
 import { OAuthStorage } from './oauth-storage';
+import { getFrontendUrl } from './preview-url';
 
 // =============================================================================
 // TYPES
@@ -106,16 +107,6 @@ function isLoopbackRedirectUri(uri: string): boolean {
 // OAuth client ID (static for now, no DCR)
 const OAUTH_CLIENT_ID = 'flaim-mcp';
 
-// Frontend URL for consent page
-const getFrontendUrl = (env: OAuthEnv): string => {
-  if (env.FRONTEND_URL) {
-    return env.FRONTEND_URL.replace(/\/$/, '');
-  }
-  if (env.ENVIRONMENT === 'dev' || env.NODE_ENV === 'development') {
-    return 'http://localhost:3000';
-  }
-  return 'https://flaim.app';
-};
 
 // Base URL for OAuth endpoints (used in metadata)
 const getBaseUrl = (env: OAuthEnv): string => {
@@ -442,7 +433,7 @@ export async function handleAuthorize(request: Request, env: OAuthEnv): Promise<
   }
 
   // Build frontend consent URL
-  const frontendUrl = getFrontendUrl(env);
+  const frontendUrl = getFrontendUrl(env, request);
   const consentUrl = new URL(`${frontendUrl}/oauth/consent`);
 
   // Pass all OAuth params to frontend

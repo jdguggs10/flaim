@@ -17,11 +17,11 @@ const geistMono = localFont({
 
 export const metadata: Metadata = {
   title: "Flaim Fantasy",
-  description: "Read-only fantasy analysis for ESPN, Yahoo, and Sleeper with unified league context for standings, rosters, matchups, and free agents",
+  description: "Flaim connects your ESPN, Yahoo, and Sleeper fantasy leagues to Claude, ChatGPT, and Gemini. Get AI analysis based on your real roster, matchups, standings, and waiver wire — read-only.",
   metadataBase: new URL('https://flaim.app'),
   openGraph: {
     title: "Flaim Fantasy",
-    description: "Read-only fantasy analysis for ESPN, Yahoo, and Sleeper with unified league context for standings, rosters, matchups, and free agents",
+    description: "Flaim connects your ESPN, Yahoo, and Sleeper fantasy leagues to Claude, ChatGPT, and Gemini. Get AI analysis based on your real roster, matchups, standings, and waiver wire — read-only.",
     url: "https://flaim.app",
     siteName: "Flaim",
     type: "website",
@@ -30,7 +30,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "Flaim Fantasy",
-    description: "Read-only fantasy analysis for ESPN, Yahoo, and Sleeper with unified league context for standings, rosters, matchups, and free agents",
+    description: "Flaim connects your ESPN, Yahoo, and Sleeper fantasy leagues to Claude, ChatGPT, and Gemini. Get AI analysis based on your real roster, matchups, standings, and waiver wire — read-only.",
   },
   icons: {
     icon: [
@@ -55,6 +55,21 @@ export default function RootLayout({
   return (
       <html lang="en" suppressHydrationWarning>
         <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+          <script
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{
+              __html: JSON.stringify({
+                '@context': 'https://schema.org',
+                '@type': 'SoftwareApplication',
+                name: 'Flaim Fantasy',
+                description: 'Flaim connects your ESPN, Yahoo, and Sleeper fantasy leagues to Claude, ChatGPT, and Gemini for read-only, league-specific analysis.',
+                applicationCategory: 'SportsApplication',
+                operatingSystem: 'Web',
+                url: 'https://flaim.app',
+                author: { '@type': 'Person', name: 'Gerry' },
+              }),
+            }}
+          />
           <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange storageKey="flaim-theme">
             <ClerkThemeWrapper>
               {children}
