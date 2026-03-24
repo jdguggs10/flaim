@@ -32,9 +32,9 @@ export const PUBLIC_CHAT_PRESETS = [
     id: "show-leagues",
     eyebrow: "Connected data",
     title: "Show the live leagues",
-    userMessage: "Show Gerry's live leagues right now.",
+    userMessage: "Show me Gerry's live leagues right now.",
     description:
-      "List Gerry's current leagues and call out the most interesting one to inspect next.",
+      "See Gerry's current leagues and point to the best one to open up next.",
     prompt:
       "Use Flaim to inspect Gerry's current leagues. Summarize the connected leagues by platform, sport, season year, league name, and team name. End with one short note about which live league looks best to explore next.",
   },
@@ -42,9 +42,9 @@ export const PUBLIC_CHAT_PRESETS = [
     id: "roster-breakdown",
     eyebrow: "Roster read",
     title: "Break down the roster",
-    userMessage: "Break down one of Gerry's rosters and show where it looks strong or thin.",
+    userMessage: "Break down one of Gerry's teams and tell me where it looks strong or thin.",
     description:
-      "Inspect one of Gerry's live rosters and explain where the team looks strong or thin.",
+      "Take one of Gerry's live teams and show where it feels solid versus shaky.",
     prompt:
       "Use Flaim to inspect Gerry's most relevant current league. Prefer football, then basketball, then baseball, then hockey. Summarize Gerry's team by position group and call out two strengths plus two weak spots.",
   },
@@ -52,9 +52,9 @@ export const PUBLIC_CHAT_PRESETS = [
     id: "standings-check",
     eyebrow: "League context",
     title: "Check the standings",
-    userMessage: "Check the standings and show where Gerry's team sits.",
+    userMessage: "Check the standings and show where Gerry's team is sitting.",
     description:
-      "Show where Gerry's team sits and whether it looks safe, shaky, or chasing.",
+      "Show Gerry's spot in the standings and whether he looks comfortable or in trouble.",
     prompt:
       "Use Flaim to inspect Gerry's most relevant current league. Prefer football, then basketball, then baseball, then hockey. Show the current standings, highlight where Gerry's team ranks, and explain how competitive the table looks around that spot.",
   },
@@ -62,9 +62,9 @@ export const PUBLIC_CHAT_PRESETS = [
     id: "weekly-matchup",
     eyebrow: "Live matchup",
     title: "Who is Gerry facing?",
-    userMessage: "Show Gerry's current matchup and what looks decisive right now.",
+    userMessage: "Show Gerry's current matchup and what feels decisive right now.",
     description:
-      "Find Gerry's current matchup and explain what looks decisive right now.",
+      "Find Gerry's current matchup and explain where the swing points are.",
     prompt:
       "Use Flaim to inspect Gerry's most relevant current league. Prefer football, then basketball, then baseball, then hockey. Identify Gerry's current matchup, summarize the opponent and score context if available, and point out the swing players or position groups.",
   },
@@ -72,9 +72,9 @@ export const PUBLIC_CHAT_PRESETS = [
     id: "waiver-wire",
     eyebrow: "Free agents",
     title: "Find waiver ideas",
-    userMessage: "Find waiver ideas based on Gerry's roster needs.",
+    userMessage: "Find a few waiver ideas that actually fit Gerry's team.",
     description:
-      "Look at available players and recommend pickups based on Gerry's roster needs.",
+      "Look at the player pool and suggest pickups that make sense for Gerry right now.",
     prompt:
       "Use Flaim to inspect Gerry's most relevant current league. Prefer football, then basketball, then baseball, then hockey. Analyze Gerry's roster needs, then check free agents and recommend a few pickup ideas with short reasoning.",
   },
@@ -82,9 +82,9 @@ export const PUBLIC_CHAT_PRESETS = [
     id: "transactions-watch",
     eyebrow: "League activity",
     title: "Review recent transactions",
-    userMessage: "Review the recent transactions that stand out in Gerry's league.",
+    userMessage: "Review the recent moves that stand out in Gerry's league.",
     description:
-      "Surface the adds, drops, waivers, or trades that stand out in Gerry's live league.",
+      "Surface the adds, drops, waivers, or trades that actually matter in Gerry's league.",
     prompt:
       "Use Flaim to inspect Gerry's most relevant current league. Prefer football, then basketball, then baseball, then hockey. Review recent league transactions and highlight the most interesting moves, including why they matter.",
   },

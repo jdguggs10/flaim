@@ -133,6 +133,34 @@ function parseSseChunk(chunk: string) {
   }
 }
 
+function getLiveStatusCopy(toolCalls: PublicToolCallState[]) {
+  const activeTool = [...toolCalls]
+    .reverse()
+    .find((toolCall) => toolCall.status === "in_progress") ?? null;
+  const latestTool = activeTool ?? toolCalls[toolCalls.length - 1] ?? null;
+
+  switch (latestTool?.name) {
+    case "get_user_session":
+      return "Checking Gerry's connected leagues.";
+    case "get_roster":
+      return "Reviewing Gerry's team to find the strong spots and weak links.";
+    case "get_standings":
+      return "Checking where Gerry sits in the standings right now.";
+    case "get_matchups":
+      return "Looking at Gerry's current matchup and where it could swing.";
+    case "get_free_agents":
+      return "Scanning the waiver pool for options that fit Gerry's team.";
+    case "get_transactions":
+      return "Reviewing the recent league moves that stand out.";
+    case "get_league_info":
+      return "Pulling league context so the answer has the right frame.";
+    case "get_players":
+      return "Looking up player details to sharpen the answer.";
+    default:
+      return "Checking Gerry's leagues and pulling the live details together.";
+  }
+}
+
 async function* readSse(
   response: Response
 ): AsyncGenerator<{ event: string; data: Record<string, unknown> }> {
@@ -200,6 +228,7 @@ export function PublicChatExperience() {
         : runStatus === "error"
           ? "Needs retry"
           : "Ready";
+  const liveStatusCopy = getLiveStatusCopy(toolCalls);
 
   useEffect(() => {
     transcriptEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -689,13 +718,15 @@ export function PublicChatExperience() {
                   )}
 
                   {runStatus === "running" ? (
-                    <div className="overflow-hidden rounded-[1.75rem] border border-border bg-muted px-5 py-4 text-sm text-foreground">
+                    <div className="overflow-hidden rounded-[1.35rem] border border-border bg-muted px-4 py-4 text-sm text-foreground lg:rounded-[1.75rem] lg:px-5">
                       <div className="flex items-center gap-2 font-semibold">
                         <LoaderCircle className="h-4 w-4 animate-spin" />
-                        Working through the live data
+                        Checking the live data
                       </div>
                       <p className="mt-2 leading-6 text-muted-foreground">
-                        {thinkingText || "Inspecting Gerry's leagues and preparing a response."}
+                        {assistantText
+                          ? "Pulling together the answer."
+                          : liveStatusCopy}
                       </p>
                     </div>
                   ) : null}
