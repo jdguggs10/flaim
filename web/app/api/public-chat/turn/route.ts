@@ -410,7 +410,7 @@ export async function POST(request: NextRequest) {
             return;
           }
 
-          console.info("public-chat-timing", {
+          console.log("public-chat-timing", {
             requestId,
             presetId,
             runId,
