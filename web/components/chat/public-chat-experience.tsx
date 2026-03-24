@@ -161,7 +161,8 @@ export function PublicChatExperience() {
   const transcriptEndRef = useRef<HTMLDivElement | null>(null);
   const hasStreamedAssistantTextRef = useRef(false);
   const activeRunAbortControllerRef = useRef<AbortController | null>(null);
-  const promptRailRef = useRef<HTMLDivElement | null>(null);
+  const topPromptRailRef = useRef<HTMLDivElement | null>(null);
+  const bottomPromptRailRef = useRef<HTMLDivElement | null>(null);
   const promptRailPauseUntilRef = useRef(0);
 
   const selectedPreset = useMemo(
@@ -180,6 +181,14 @@ export function PublicChatExperience() {
           ? "Needs retry"
           : "Ready";
   const liveStatusCopy = getLiveStatusCopy(toolCalls);
+  const topRailPresets = useMemo(() => {
+    const presets = PUBLIC_CHAT_PRESETS.filter((_, index) => index % 2 === 0);
+    return presets.length ? presets : PUBLIC_CHAT_PRESETS;
+  }, []);
+  const bottomRailPresets = useMemo(() => {
+    const presets = PUBLIC_CHAT_PRESETS.filter((_, index) => index % 2 === 1);
+    return presets.length ? presets : PUBLIC_CHAT_PRESETS;
+  }, []);
 
   useEffect(() => {
     transcriptEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -192,11 +201,6 @@ export function PublicChatExperience() {
   }, []);
 
   useEffect(() => {
-    const rail = promptRailRef.current;
-    if (!rail) {
-      return;
-    }
-
     const mediaQuery =
       typeof window !== "undefined"
         ? window.matchMedia("(prefers-reduced-motion: reduce)")
@@ -206,42 +210,50 @@ export function PublicChatExperience() {
     }
 
     let frameId = 0;
-    let direction = 1;
     let lastTimestamp = 0;
-    const speed = 22;
 
     const step = (timestamp: number) => {
-      const element = promptRailRef.current;
-      if (!element) {
-        return;
-      }
-
       if (!lastTimestamp) {
         lastTimestamp = timestamp;
       }
 
       const delta = (timestamp - lastTimestamp) / 1000;
       lastTimestamp = timestamp;
-
-      const canScroll = element.scrollWidth > element.clientWidth + 8;
       const shouldPause =
         runStatus === "running" || Date.now() < promptRailPauseUntilRef.current;
 
-      if (canScroll && !shouldPause) {
-        const nextScrollLeft = element.scrollLeft + direction * speed * delta;
-        const maxScrollLeft = element.scrollWidth - element.clientWidth;
-
-        if (nextScrollLeft >= maxScrollLeft) {
-          element.scrollLeft = maxScrollLeft;
-          direction = -1;
-          promptRailPauseUntilRef.current = Date.now() + 1200;
-        } else if (nextScrollLeft <= 0) {
-          element.scrollLeft = 0;
-          direction = 1;
-          promptRailPauseUntilRef.current = Date.now() + 1200;
-        } else {
-          element.scrollLeft = nextScrollLeft;
+      const syncTicker = (
+        element: HTMLDivElement | null,
+        speed: number,
+        direction: 1 | -1
+      ) => {
+        if (!element) {
+          return;
         }
+
+        const wrapWidth = element.scrollWidth / 2;
+        const canScroll = wrapWidth > element.clientWidth + 8;
+        if (!canScroll || shouldPause) {
+          return;
+        }
+
+        const nextScrollLeft = element.scrollLeft + direction * speed * delta;
+
+        if (direction === 1) {
+          element.scrollLeft =
+            nextScrollLeft >= wrapWidth ? nextScrollLeft - wrapWidth : nextScrollLeft;
+        } else {
+          element.scrollLeft =
+            nextScrollLeft <= 0 ? nextScrollLeft + wrapWidth : nextScrollLeft;
+        }
+      };
+
+      syncTicker(topPromptRailRef.current, 18, 1);
+      syncTicker(bottomPromptRailRef.current, 26, -1);
+
+      if (bottomPromptRailRef.current && bottomPromptRailRef.current.scrollLeft === 0) {
+        bottomPromptRailRef.current.scrollLeft =
+          bottomPromptRailRef.current.scrollWidth / 2;
       }
 
       frameId = window.requestAnimationFrame(step);
@@ -253,6 +265,60 @@ export function PublicChatExperience() {
 
   const pausePromptRail = () => {
     promptRailPauseUntilRef.current = Date.now() + 6000;
+  };
+
+  const renderPromptTicker = (
+    presets: readonly PublicChatPreset[],
+    railRef: React.RefObject<HTMLDivElement | null>
+  ) => {
+    const repeatedPresets = [...presets, ...presets];
+
+    return (
+      <div
+        ref={railRef}
+        className="-mx-3 overflow-x-auto px-3 sm:mx-0 sm:px-0"
+        onPointerDown={pausePromptRail}
+        onTouchStart={pausePromptRail}
+        onMouseEnter={pausePromptRail}
+        onWheel={pausePromptRail}
+      >
+        <div className="flex w-max gap-2.5 pb-1 sm:gap-3">
+          {repeatedPresets.map((preset, index) => {
+            const isSelected = preset.id === selectedPresetId;
+
+            return (
+              <button
+                key={`${preset.id}-${index}`}
+                type="button"
+                onClick={() => void handleRunPreset(preset)}
+                disabled={runStatus === "running"}
+                aria-pressed={isSelected}
+                className={cn(
+                  "group relative min-w-[12.5rem] overflow-hidden rounded-full border px-4 py-3 text-left transition-all duration-200 sm:min-w-[14rem] sm:px-5 sm:py-3.5",
+                  isSelected
+                    ? "border-primary bg-primary text-primary-foreground shadow-sm"
+                    : "border-border bg-background text-foreground hover:bg-muted",
+                  runStatus === "running" && !isSelected
+                    ? "cursor-not-allowed opacity-70"
+                    : ""
+                )}
+              >
+                <div className="relative">
+                  <h3
+                    className={cn(
+                      "line-clamp-2 min-h-[2.5rem] text-sm font-semibold leading-[1.15] tracking-tight sm:min-h-[2.65rem] sm:text-[0.95rem]",
+                      isSelected ? "text-primary-foreground" : "text-foreground"
+                    )}
+                  >
+                    {preset.title}
+                  </h3>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
   };
 
   const handleRunPreset = async (preset: PublicChatPreset) => {
@@ -457,51 +523,9 @@ export function PublicChatExperience() {
 
         <Card className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.45rem] border-border bg-card p-0 shadow-sm sm:rounded-[1.6rem] lg:rounded-[2rem]">
           <div className="border-b border-border bg-card px-3 py-3 sm:px-4">
-            <div
-              ref={promptRailRef}
-              className="-mx-3 overflow-x-auto px-3 pb-1 sm:mx-0 sm:px-0"
-              onPointerDown={pausePromptRail}
-              onTouchStart={pausePromptRail}
-              onMouseEnter={pausePromptRail}
-              onWheel={pausePromptRail}
-            >
-              <div className="flex snap-x snap-mandatory gap-2.5 sm:gap-3">
-                {PUBLIC_CHAT_PRESETS.map((preset) => {
-                  const isSelected = preset.id === selectedPresetId;
-
-                  return (
-                    <button
-                      key={preset.id}
-                      type="button"
-                      onClick={() => void handleRunPreset(preset)}
-                      disabled={runStatus === "running"}
-                      aria-pressed={isSelected}
-                      className={cn(
-                        "group relative min-w-[12.5rem] snap-start overflow-hidden rounded-full border px-4 py-3 text-left transition-all duration-200 sm:min-w-[14rem] sm:px-5 sm:py-3.5",
-                        isSelected
-                          ? "border-primary bg-primary text-primary-foreground shadow-sm"
-                          : "border-border bg-background text-foreground hover:bg-muted",
-                        runStatus === "running" && !isSelected
-                          ? "cursor-not-allowed opacity-70"
-                          : ""
-                      )}
-                      >
-                        <div className="relative">
-                          <h3
-                            className={cn(
-                            "line-clamp-2 min-h-[2.5rem] text-sm font-semibold leading-[1.15] tracking-tight sm:min-h-[2.65rem] sm:text-[0.95rem]",
-                            isSelected
-                              ? "text-primary-foreground"
-                              : "text-foreground"
-                          )}
-                        >
-                          {preset.title}
-                        </h3>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
+            <div className="space-y-2">
+              {renderPromptTicker(topRailPresets, topPromptRailRef)}
+              {renderPromptTicker(bottomRailPresets, bottomPromptRailRef)}
             </div>
           </div>
 
