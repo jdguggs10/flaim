@@ -69,7 +69,7 @@ Chrome Extension → flaim.app → Auth Worker → Supabase
 Claude/ChatGPT/Gemini CLI → Fantasy MCP Gateway → ESPN/Yahoo/Sleeper Clients → Platform APIs
 ```
 
-- **Web App (Next.js on Vercel)** — dashboard, OAuth, league management
+- **Web App (Next.js on Vercel)** — landing/site pages, public `/chat` live demo, internal `/dev` lab, OAuth, league management
 - **MCP Gateway (Cloudflare Workers)** — unified endpoint for all platforms and sports
 - **Platform Clients (Cloudflare Workers)** — ESPN, Yahoo, Sleeper API normalization
 - **Auth Worker (Cloudflare)** — token validation, rate limiting, credential storage

@@ -140,6 +140,13 @@ The Developer Console includes an LLM Trace panel that captures prompt payloads,
 for each turn. Exporting a session includes a redacted copy of these trace entries, but exports can still contain
 sensitive data—share with care.
 
+### Public Chat Warmup
+
+The public `/chat` demo opportunistically hits `/api/public-chat/bootstrap` on page load. That route prewarms:
+- cached Gerry session/default-league context (short TTL)
+
+The live `/api/public-chat/turn` route still works without bootstrap, but a warm session-context cache hit makes the demo feel faster without doing hidden extra model work before the real turn starts.
+
 ## Build Notes
 
 ### Webpack cache warning (big strings)
