@@ -1,6 +1,6 @@
 # Flaim Web App
 
-Next.js 15 app with App Router, Tailwind CSS v4, and shadcn/ui. Handles site pages, OAuth consent, API routes, the public `/chat` live demo, and the internal `/dev` chat surface.
+Next.js 15 app with App Router, Tailwind CSS v4, and shadcn/ui. Handles site pages, OAuth consent, API routes, and optional built-in chat.
 
 ## Quick Start
 
@@ -22,8 +22,7 @@ web/
 │   │   ├── privacy/         # Privacy policy (/privacy)
 │   │   └── oauth/consent/   # OAuth consent screen
 │   │
-│   ├── (chat)/chat/         # Public chat route (/chat)
-│   ├── (chat)/dev/          # Internal dev chat surface (/dev)
+│   ├── (chat)/chat/         # Built-in chat UI (/chat)
 │   │
 │   └── api/
 │       ├── auth/            # Platform auth APIs
@@ -49,7 +48,7 @@ web/
 | Directory | Can import from |
 |-----------|-----------------|
 | `components/site/` | `components/ui/`, `lib/` |
-| `components/chat/` | `components/ui/`, `lib/`, `lib/chat/` |
+| `components/chat/` | `components/ui/`, `lib/chat/` |
 | `components/ui/` | Nothing else in components |
 
 Both site and chat can use shared `components/ui/` (shadcn).
@@ -67,13 +66,6 @@ Both site and chat can use shared `components/ui/` (shadcn).
 | `/robots.txt` | Crawl rules + sitemap location for search engines |
 | `/oauth/consent` | OAuth authorization screen |
 
-### Chat Surfaces (`/(chat)/`)
-
-| Path | Purpose |
-|------|---------|
-| `/chat` | Public live chat demo powered by the dedicated demo account |
-| `/dev` | Internal dev/debug chat surface |
-
 ### API Routes (`/api/`)
 
 | Path | Purpose |
@@ -82,8 +74,7 @@ Both site and chat can use shared `components/ui/` (shadcn).
 | `/api/espn/*` | League management, seasons, discovery, credentials |
 | `/api/extension/*` | Extension APIs (Clerk JWT) |
 | `/api/oauth/*` | OAuth status, revoke |
-| `/api/chat/*` | Internal dev chat turn responses |
-| `/api/public-chat/*` | Public chat server routes (preset-driven demo-account execution) |
+| `/api/chat/*` | Chat turn responses |
 
 Most API routes proxy to auth-worker. See `docs/ARCHITECTURE.md` for the full flow.
 
@@ -111,38 +102,22 @@ CLERK_SECRET_KEY=sk_...
 # Worker URLs (unified gateway is primary)
 NEXT_PUBLIC_AUTH_WORKER_URL=https://api.flaim.app/auth
 NEXT_PUBLIC_FANTASY_MCP_URL=https://api.flaim.app/mcp
-# Preferred server-only MCP URL for public chat/demo routes
-FANTASY_MCP_URL=https://api.flaim.app/mcp
 # Shared internal token for server-to-worker helper calls
 INTERNAL_SERVICE_TOKEN=...
-# Public chat demo account auth (server-side only)
-DEMO_API_KEY=...
 # Yahoo MCP client (not called by web directly; useful for local debugging)
 NEXT_PUBLIC_YAHOO_CLIENT_URL=https://yahoo-client.gerrygugger.workers.dev
 ```
 
 For local development with workers, point to `http://localhost:8786` etc.
 
-## Public Chat Demo
+## Built-in Chat (Dev Only)
 
-The `/chat` route is a public-facing live demo. It is intentionally constrained in v1:
-
-- Runs against a dedicated demo account (`demo@flaim.app`)
-- Uses server-owned auth with `DEMO_API_KEY`
-- Accepts preset prompt IDs only
-- Is rate-limited server-side and allows only one in-flight run per visitor
-- Streams live MCP tool activity and assistant output back to the browser
-
-This is separate from the internal `/dev` surface. The browser never receives reusable demo-account credentials.
-
-## Internal Dev Chat
-
-The `/dev` page is the internal dev/debug surface for manual MCP tool testing and exploratory debugging. It is not the public product chat experience. For structured, repeatable testing, use the eval harness (`flaim-eval/`). The two are complementary — `/dev` is the visual scratchpad, eval is the structured test bench.
+The `/chat` page is **not a product feature**. It's an internal dev/debug surface for manual MCP tool testing and exploratory debugging. For structured, repeatable testing, use the eval harness (`flaim-eval/`). The two are complementary — chat is the visual scratchpad, eval is the structured test bench.
 
 ### Access Control
 
-Both the `/dev` page and all `/api/chat/*` routes require `publicMetadata.chatAccess: true` in Clerk. Without it:
-- `/dev` page → redirects to home
+Both the page and all `/api/chat/*` routes require `publicMetadata.chatAccess: true` in Clerk. Without it:
+- `/chat` page → redirects to home
 - API routes → 403 Forbidden
 
 Set in Clerk Dashboard → Users → [user] → Public metadata:

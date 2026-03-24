@@ -7,7 +7,7 @@ import { isAllowedUrl } from '@/lib/mcp-url-allowlist';
 
 export async function POST(request: NextRequest) {
   try {
-    // Internal dev chat only
+    // Check auth
     const authResult = await requireChatAccess();
     if (authResult instanceof NextResponse) {
       return authResult;

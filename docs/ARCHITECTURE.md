@@ -19,14 +19,14 @@ npm run dev
 ## Core Pieces
 
 - **Chrome Extension (`/extension`)**: Captures ESPN cookies (SWID, espn_s2) and syncs them to Flaim using Clerk Sync Host (no pairing codes).
-- **Next.js web app (`/web`)**: Site pages (landing with setup flow, leagues, privacy policy), OAuth consent screens, public live chat demo, and internal dev chat surface.
+- **Next.js web app (`/web`)**: Site pages (landing with setup flow, leagues, privacy policy), OAuth consent screens, optional chat UI.
 - **Auth worker (`/workers/auth-worker`)**: Supabase credential + league storage, JWT verification, OAuth token management, extension APIs. Uses Hono for routing.
 - **Unified Gateway (`/workers/fantasy-mcp`)**: Single MCP endpoint exposing unified tools for all platforms and sports. Routes to platform-specific workers via service bindings.
 - **ESPN Client (`/workers/espn-client`)**: Internal worker handling all ESPN API calls for all sports (football, baseball, basketball, hockey). Called by fantasy-mcp gateway.
 - **Yahoo Client (`/workers/yahoo-client`)**: Internal worker handling all Yahoo Fantasy API calls for all sports (football, baseball, basketball, hockey). Called by fantasy-mcp gateway.
 - **Sleeper Client (`/workers/sleeper-client`)**: Internal worker handling all Sleeper API calls for NFL and NBA (public API, no auth required). Called by fantasy-mcp gateway.
 - **Shared package (`/workers/shared`)**: Common utilities (CORS middleware, auth-fetch helper, types) used by all workers.
-- **Supabase Postgres**: `espn_credentials`, `espn_leagues`, `yahoo_leagues`, `sleeper_connections`, `sleeper_leagues`, `user_preferences` (defaults), `oauth_tokens`, `oauth_codes`, `public_chat_runs` (public demo guardrail + run log), plus legacy `rate_limits` (inert — replaced by CF Workers native rate limiting), `extension_tokens`/`extension_pairing_codes` (deprecated).
+- **Supabase Postgres**: `espn_credentials`, `espn_leagues`, `yahoo_leagues`, `sleeper_connections`, `sleeper_leagues`, `user_preferences` (defaults), `oauth_tokens`, `oauth_codes`, plus legacy `rate_limits` (inert — replaced by CF Workers native rate limiting), `extension_tokens`/`extension_pairing_codes` (deprecated).
 
 ## Runtime Choices (Next.js)
 
@@ -57,7 +57,7 @@ Flaim is an **authentication and data service**, not a chatbot:
 - **OAuth Provider**: Handles secure authentication between AI clients and ESPN data
 - **Credential Manager**: Securely stores ESPN session cookies (via extension or manual entry)
 
-The built-in `/dev` surface is an internal dev/debug lab, not a product feature. It is gated behind Clerk metadata (`chatAccess: true`) at both the page and API level. It exists for manual tool testing and exploratory debugging alongside the structured eval harness (`flaim-eval/`). The public `/chat` route is a separate preset-driven live showcase backed by a dedicated demo account and server-owned auth. See `web/README.md` for access setup.
+The built-in `/chat` is an internal dev/debug surface, not a product feature. It is gated behind Clerk metadata (`chatAccess: true`) at both the page and API level. It exists for manual tool testing and exploratory debugging alongside the structured eval harness (`flaim-eval/`). See `web/README.md` for access setup.
 
 ## Primary User Flow
 
@@ -184,8 +184,7 @@ Claude/ChatGPT/Gemini CLI → fantasy-mcp (gateway) → espn-client    → ESPN 
 - JWKS-based Clerk JWT verification in auth-worker (5m cache). Prod rejects spoofed headers.
 - MCP workers forward `Authorization`; auth-worker alone validates tokens.
 - Per-user isolation via verified `sub`; credentials never sent back to client after setup.
-- Rate limiting: Cloudflare Workers native `rate_limits` bindings — 10 req/60s per IP on token endpoint, 15 req/60s per user on credentials endpoint, and 5 req/60s per visitor on the public `/chat` demo.
-- Public chat concurrency/logging: auth-worker reserves demo runs in Supabase (`public_chat_runs`) so one visitor cannot stack overlapping runs and failures remain visible after the request finishes.
+- Rate limiting: Cloudflare Workers native `rate_limits` bindings — 10 req/60s per IP on token endpoint, 15 req/60s per user on credentials endpoint.
 - OAuth tokens stored in Supabase with expiration tracking.
 - ESPN credentials: AES-256 encrypted at rest (Supabase default).
 

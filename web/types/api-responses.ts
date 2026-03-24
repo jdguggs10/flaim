@@ -46,10 +46,6 @@ export interface TurnResponseRequest {
   previous_response_id?: string;
 }
 
-export interface PublicChatTurnRequest {
-  presetId: string;
-}
-
 export interface WorkerErrorResponse {
   error?: string;
 }

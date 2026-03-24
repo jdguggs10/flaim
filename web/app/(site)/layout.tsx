@@ -3,7 +3,7 @@ import { SiteHeader } from "@/components/site/site-header";
 
 /**
  * Site layout - includes full header with navigation.
- * Used for all pages except the dedicated chat surfaces (`/chat`, `/dev`).
+ * Used for all pages except /chat which has its own minimal header.
  */
 export default function SiteLayout({
   children,

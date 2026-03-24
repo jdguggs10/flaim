@@ -48,12 +48,12 @@ These endpoints manage the OAuth 2.0 client flow with Yahoo Fantasy.
 |----------|------|---------|
 | `GET /connect/yahoo/authorize` | Clerk JWT | Start Yahoo OAuth flow |
 | `GET /connect/yahoo/callback` | None (state param) | Handle Yahoo redirect |
-| `GET /internal/connect/yahoo/credentials` | Internal + Clerk JWT / OAuth / static API key | Get Yahoo tokens (auto-refreshes) for internal workers |
+| `GET /internal/connect/yahoo/credentials` | Internal + Clerk JWT / OAuth / Eval key | Get Yahoo tokens (auto-refreshes) for internal workers |
 | `GET /connect/yahoo/status` | Clerk JWT | Check Yahoo connection status |
 | `DELETE /connect/yahoo/disconnect` | Clerk JWT | Remove Yahoo connection |
 | `POST /connect/yahoo/discover` | Clerk JWT | Discover Yahoo leagues |
 | `GET /leagues/yahoo` | Clerk JWT | Get stored Yahoo leagues |
-| `GET /internal/leagues/yahoo` | Internal + Clerk JWT / OAuth / static API key | Get stored Yahoo leagues for internal workers |
+| `GET /internal/leagues/yahoo` | Internal + Clerk JWT / OAuth / Eval key | Get stored Yahoo leagues for internal workers |
 | `DELETE /leagues/yahoo/:id` | Clerk JWT | Delete a Yahoo league |
 
 ### Extension APIs
@@ -71,10 +71,10 @@ These endpoints manage the OAuth 2.0 client flow with Yahoo Fantasy.
 |----------|------|---------|
 | `POST /credentials/espn` | Clerk JWT | Store ESPN credentials |
 | `GET /credentials/espn` | Clerk JWT | Get ESPN credential metadata |
-| `GET /internal/credentials/espn/raw` | Internal + Clerk JWT / OAuth / static API key | Get raw ESPN credentials for internal workers |
+| `GET /internal/credentials/espn/raw` | Internal + Clerk JWT / OAuth / Eval key | Get raw ESPN credentials for internal workers |
 | `DELETE /credentials/espn` | Clerk JWT | Delete ESPN credentials |
 | `GET /leagues` | Clerk JWT | Get ESPN leagues |
-| `GET /internal/leagues` | Internal + Clerk JWT / OAuth / static API key | Get ESPN leagues for internal workers |
+| `GET /internal/leagues` | Internal + Clerk JWT / OAuth / Eval key | Get ESPN leagues for internal workers |
 | `POST /leagues` | Clerk JWT | Store ESPN leagues |
 | `POST /leagues/add` | Clerk JWT | Add a single ESPN league (season-aware) |
 | `DELETE /leagues` | Clerk JWT | Remove all seasons for a league |
@@ -87,7 +87,7 @@ These endpoints manage the OAuth 2.0 client flow with Yahoo Fantasy.
 | Endpoint | Auth | Purpose |
 |----------|------|---------|
 | `GET /user/preferences` | Clerk JWT | Get user preferences |
-| `GET /internal/user/preferences` | Internal + Clerk JWT / OAuth / static API key | Get user preferences for internal workers |
+| `GET /internal/user/preferences` | Internal + Clerk JWT / OAuth / Eval key | Get user preferences for internal workers |
 | `POST /user/preferences/default-sport` | Clerk JWT | Set default sport |
 
 ## Authentication
@@ -96,22 +96,19 @@ Three user auth mechanisms, depending on caller:
 
 - **Clerk JWT** — used by the web app, extension, and frontend OAuth consent flow.
 - **OAuth access token** — used by AI clients (Claude, ChatGPT, Gemini) after completing the OAuth 2.1 flow.
-- **Static API keys** — fixed-user keys for eval/CI and the public demo account. These bypass browser-based OAuth.
+- **Eval API key** — static key for eval/CI/agent use. Bypasses OAuth browser flow entirely.
 
-Public app routes are Clerk-only. Internal helper routes additionally require `X-Flaim-Internal-Token` and can resolve Clerk, OAuth, or static API key auth to a user ID.
+Public app routes are Clerk-only. Internal helper routes additionally require `X-Flaim-Internal-Token` and can resolve Clerk, OAuth, or eval auth to a user ID.
 
-### Static API Keys
+### Eval API Key
 
-A static Bearer token resolves to a specific Clerk user ID with `mcp:read` scope. Flaim currently uses two:
-
-- `EVAL_API_KEY` / `EVAL_USER_ID` for headless eval and CI
-- `DEMO_API_KEY` / `DEMO_USER_ID` for the public `/chat` demo account
+A static Bearer token that resolves to a specific Clerk user ID with `mcp:read` scope. Designed for headless eval/CI where browser-based OAuth is impractical.
 
 **Security model:**
-- **Default-deny:** Only routes that explicitly opt in via `{ allowStaticApiKey: true }` accept these keys. New routes reject them by default.
+- **Default-deny:** Only routes that explicitly opt in via `{ allowEvalApiKey: true }` accept the key. New routes reject it by default.
 - **Fixed scope:** Always `mcp:read` — no write/admin access.
 - **Constant-time comparison:** Uses SHA-256 digest comparison to prevent timing attacks.
-- **Both secrets required:** each key requires its matching user ID. If a key is set without its user ID, that auth path is skipped (logged) and falls through to OAuth.
+- **Both secrets required:** `EVAL_API_KEY` + `EVAL_USER_ID` must both be set. If only `EVAL_API_KEY` is set, API key auth is skipped (logged) and falls through to OAuth.
 
 **Allowlisted internal routes (MCP-read path only):**
 - `GET /auth/internal/introspect`
@@ -121,14 +118,14 @@ A static Bearer token resolves to a specific Clerk user ID with `mcp:read` scope
 - `GET /auth/internal/leagues/yahoo`
 - `GET /auth/internal/user/preferences`
 
+**Current mapping:** `EVAL_USER_ID` → `user_36UBCM4x2hK1aJYY1F7iV1svNw6` (test email on Clerk prod).
+
 **Setup:**
 ```bash
 openssl rand -hex 32   # generate key
 cd workers/auth-worker
 wrangler secret put EVAL_API_KEY --env prod    # paste key with flaim_eval_ prefix
 wrangler secret put EVAL_USER_ID --env prod    # paste Clerk user ID
-wrangler secret put DEMO_API_KEY --env prod    # paste key with flaim_demo_ prefix
-wrangler secret put DEMO_USER_ID --env prod    # paste Clerk user ID for demo@flaim.app
 ```
 
 ## Key Source Files
@@ -159,9 +156,6 @@ wrangler secret put YAHOO_CLIENT_SECRET --env preview
 # Eval API key (optional — for headless eval/CI)
 wrangler secret put EVAL_API_KEY --env preview
 wrangler secret put EVAL_USER_ID --env preview
-# Public demo API key (optional — for /chat)
-wrangler secret put DEMO_API_KEY --env preview
-wrangler secret put DEMO_USER_ID --env preview
 ```
 
 ### 3. Local Development
@@ -172,10 +166,6 @@ SUPABASE_URL=https://your-project-ref.supabase.co
 SUPABASE_SERVICE_KEY=your-service-role-key
 YAHOO_CLIENT_ID=your-yahoo-client-id
 YAHOO_CLIENT_SECRET=your-yahoo-client-secret
-EVAL_API_KEY=flaim_eval_local
-EVAL_USER_ID=user_eval_local
-DEMO_API_KEY=flaim_demo_local
-DEMO_USER_ID=user_demo_local
 ```
 
 ## Development
@@ -190,5 +180,4 @@ npm run deploy       # Deploy
 
 - Leagues are stored per season year; `(user, sport, leagueId, seasonYear)` is unique.
 - Deleting a league removes all seasons for that league.
-- OAuth/token and credential helper routes use Cloudflare native rate limiters.
-- The public `/chat` demo uses a dedicated 5 requests / 60 seconds per-visitor limiter plus a single in-flight run cap backed by `public_chat_runs`.
+- Rate limit: 200 MCP calls/day per user (via `rate_limits` table).
