@@ -368,44 +368,37 @@ export function PublicChatExperience() {
 
       <div className="relative mx-auto flex min-h-[100dvh] w-full max-w-5xl flex-col px-4 py-4 sm:px-6 lg:px-8 lg:py-6">
         <section className="pb-3 sm:pb-4">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0 flex-1">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">
-                Live on real league data
-              </p>
-              <h1 className="mt-2 max-w-4xl text-[2rem] font-semibold leading-[0.96] tracking-[-0.05em] text-foreground sm:mt-3 sm:text-5xl">
-                Watch Flaim work on my actual leagues right now.
-              </h1>
-            </div>
-            <div className="flex shrink-0 items-center gap-2 self-start">
-              <Badge
-                variant={
-                  runStatus === "completed"
-                    ? "default"
-                    : runStatus === "running"
-                      ? "secondary"
-                      : runStatus === "error"
-                        ? "destructive"
-                        : "outline"
-                }
-                className="px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] sm:px-3 sm:text-xs"
-              >
-                {runStatusLabel}
-              </Badge>
-              <Button
-                asChild
-                variant="ghost"
-                size="sm"
-                className="h-8 rounded-full px-2 text-muted-foreground sm:px-3"
-              >
-                <Link href="/">
-                  <span className="sm:hidden">Home</span>
-                  <span className="hidden sm:inline">Back home</span>
-                  <ArrowRight className="ml-1 h-4 w-4 sm:ml-2" />
-                </Link>
-              </Button>
-            </div>
+          <div className="flex items-center justify-between gap-3">
+            <Button
+              asChild
+              variant="ghost"
+              size="sm"
+              className="h-8 rounded-full px-2 text-muted-foreground sm:px-3"
+            >
+              <Link href="/">
+                <ArrowRight className="mr-1 h-4 w-4 rotate-180 sm:mr-2" />
+                <span className="sm:hidden">Home</span>
+                <span className="hidden sm:inline">Back home</span>
+              </Link>
+            </Button>
+            <Badge
+              variant={
+                runStatus === "completed"
+                  ? "default"
+                  : runStatus === "running"
+                    ? "secondary"
+                    : runStatus === "error"
+                      ? "destructive"
+                      : "outline"
+              }
+              className="px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] sm:px-3 sm:text-xs"
+            >
+              {runStatusLabel}
+            </Badge>
           </div>
+          <h1 className="mt-3 w-full text-[2rem] font-semibold leading-[0.96] tracking-[-0.05em] text-foreground sm:mt-4 sm:text-5xl">
+            Watch Flaim work on my actual leagues right now.
+          </h1>
         </section>
 
         <Card className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.45rem] border-border bg-card p-0 shadow-sm sm:rounded-[1.6rem] lg:rounded-[2rem]">
