@@ -236,7 +236,7 @@ export async function POST(request: NextRequest) {
         store: false,
         parallel_tool_calls: false,
         tool_choice: "auto",
-        reasoning: { summary: "auto" },
+        reasoning: { effort: "low" },
       }, {
         signal: request.signal,
       });
