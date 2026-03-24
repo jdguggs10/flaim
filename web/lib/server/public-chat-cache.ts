@@ -12,6 +12,15 @@ interface PublicChatCacheConfig {
   build: () => Promise<string | null>;
 }
 
+const inMemoryCache = new Map<string, PublicChatCacheEntry>();
+
+function hasSupabaseConfig() {
+  return Boolean(
+    process.env.SUPABASE_URL?.trim() &&
+      process.env.SUPABASE_SERVICE_KEY?.trim()
+  );
+}
+
 function getSupabaseConfig() {
   const supabaseUrl = process.env.SUPABASE_URL?.trim().replace(/\/+$/, "");
   const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY?.trim();
@@ -23,7 +32,28 @@ function getSupabaseConfig() {
   return { supabaseUrl, supabaseServiceKey };
 }
 
+function readInMemoryCacheEntry(cacheKey: string): PublicChatCacheEntry | null {
+  return inMemoryCache.get(cacheKey) ?? null;
+}
+
+function writeInMemoryCacheEntry(input: {
+  cacheKey: string;
+  contextText: string;
+  expiresAt: string;
+}): void {
+  inMemoryCache.set(input.cacheKey, {
+    cache_key: input.cacheKey,
+    context_text: input.contextText,
+    expires_at: input.expiresAt,
+    updated_at: new Date().toISOString(),
+  });
+}
+
 async function readCacheEntry(cacheKey: string): Promise<PublicChatCacheEntry | null> {
+  if (!hasSupabaseConfig()) {
+    return readInMemoryCacheEntry(cacheKey);
+  }
+
   const { supabaseUrl, supabaseServiceKey } = getSupabaseConfig();
   const url = new URL(`${supabaseUrl}/rest/v1/public_chat_context_cache`);
   url.searchParams.set("cache_key", `eq.${cacheKey}`);
@@ -53,6 +83,11 @@ async function writeCacheEntry(input: {
   contextText: string;
   expiresAt: string;
 }): Promise<void> {
+  if (!hasSupabaseConfig()) {
+    writeInMemoryCacheEntry(input);
+    return;
+  }
+
   const { supabaseUrl, supabaseServiceKey } = getSupabaseConfig();
   const response = await fetch(`${supabaseUrl}/rest/v1/public_chat_context_cache`, {
     method: "POST",
