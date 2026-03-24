@@ -216,7 +216,7 @@ export async function POST(request: NextRequest) {
         tools: [getPublicChatWebSearchTool(), getPublicChatMcpTool()],
         stream: true,
         store: false,
-        parallel_tool_calls: false,
+        parallel_tool_calls: true,
         tool_choice: "auto",
         reasoning: { summary: "auto" },
       }, {
