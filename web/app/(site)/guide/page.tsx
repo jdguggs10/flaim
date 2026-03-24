@@ -113,13 +113,13 @@ export default function GuidePage() {
             <Link href="/guide/claude" className="block rounded-lg border bg-background p-4 hover:border-foreground/20 transition-colors">
               <h3 className="font-semibold">Claude</h3>
               <p className="text-sm text-muted-foreground mt-1">
-                Add Flaim as an integration in your Claude settings. Requires a Pro, Team, or Enterprise plan.
+                Add Flaim as a custom connector. Requires a Pro, Max, Team, or Enterprise plan.
               </p>
             </Link>
             <Link href="/guide/chatgpt" className="block rounded-lg border bg-background p-4 hover:border-foreground/20 transition-colors">
               <h3 className="font-semibold">ChatGPT</h3>
               <p className="text-sm text-muted-foreground mt-1">
-                Add Flaim as a connector. Requires a Plus, Team, or Enterprise plan.
+                Add Flaim as a custom MCP connector. Requires a paid plan (Plus, Pro, Team, Enterprise, or Edu).
               </p>
             </Link>
             <Link href="/guide/gemini" className="block rounded-lg border bg-background p-4 hover:border-foreground/20 transition-colors">
@@ -131,7 +131,7 @@ export default function GuidePage() {
             <Link href="/guide/perplexity" className="block rounded-lg border bg-background p-4 hover:border-foreground/20 transition-colors">
               <h3 className="font-semibold">Perplexity</h3>
               <p className="text-sm text-muted-foreground mt-1">
-                Add Flaim as an MCP connector. Combines league data with Perplexity&apos;s real-time web search.
+                Add Flaim as a custom remote connector. Requires a Pro, Max, or Enterprise plan.
               </p>
             </Link>
           </div>

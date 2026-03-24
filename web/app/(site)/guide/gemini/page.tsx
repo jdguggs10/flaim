@@ -22,7 +22,7 @@ export default function GeminiGuidePage() {
             name: 'Use Flaim with Gemini',
             description: 'How to add Flaim to Gemini CLI for fantasy sports analysis.',
             step: [
-              { '@type': 'HowToStep', name: 'Add Flaim to Gemini CLI', text: 'Run: gemini mcp add flaim https://api.flaim.app/mcp --transport http' },
+              { '@type': 'HowToStep', name: 'Add Flaim to Gemini CLI', text: 'Run: gemini mcp add --transport http flaim https://api.flaim.app/mcp' },
               { '@type': 'HowToStep', name: 'Authorize Flaim', text: 'Run: /mcp auth flaim, then sign in to your Flaim account and approve the connection.' },
               { '@type': 'HowToStep', name: 'Start chatting', text: 'Ask Gemini about your fantasy leagues. It now has access to your real league data.' },
             ],
@@ -48,7 +48,7 @@ export default function GeminiGuidePage() {
           <ol className="list-decimal list-inside text-muted-foreground space-y-2">
             <li>Add Flaim as an MCP server:
               <div className="mt-1">
-                <code className="text-xs bg-muted px-2 py-1 rounded block">gemini mcp add flaim https://api.flaim.app/mcp --transport http</code>
+                <code className="text-xs bg-muted px-2 py-1 rounded block">gemini mcp add --transport http flaim https://api.flaim.app/mcp</code>
               </div>
             </li>
             <li>Authenticate with Flaim:

@@ -4,7 +4,7 @@ import Link from 'next/link';
 export const metadata: Metadata = {
   title: 'Use Flaim with Perplexity | Flaim',
   description:
-    'How to add Flaim as a Perplexity connector so you can ask about your ESPN, Yahoo, or Sleeper fantasy leagues directly in Perplexity.',
+    'How to add Flaim as a Perplexity custom connector so you can ask about your ESPN, Yahoo, or Sleeper fantasy leagues directly in Perplexity.',
   alternates: {
     canonical: 'https://flaim.app/guide/perplexity',
   },
@@ -20,10 +20,10 @@ export default function PerplexityGuidePage() {
             '@context': 'https://schema.org',
             '@type': 'HowTo',
             name: 'Use Flaim with Perplexity',
-            description: 'How to add Flaim as a Perplexity connector for fantasy sports analysis.',
+            description: 'How to add Flaim as a Perplexity custom connector for fantasy sports analysis.',
             step: [
-              { '@type': 'HowToStep', name: 'Open Perplexity settings', text: 'Go to Perplexity and open Settings > MCP Connectors.' },
-              { '@type': 'HowToStep', name: 'Add connector', text: 'Add a new MCP connector and enter the Flaim server URL: https://api.flaim.app/mcp' },
+              { '@type': 'HowToStep', name: 'Open custom connectors', text: 'In Perplexity, click "+ Custom connector" and select Remote.' },
+              { '@type': 'HowToStep', name: 'Configure Flaim', text: 'Enter a name, the Flaim MCP server URL (https://api.flaim.app/mcp), select OAuth for authentication, and Streamable HTTP for transport.' },
               { '@type': 'HowToStep', name: 'Authorize Flaim', text: 'Sign in to your Flaim account and approve the connection.' },
               { '@type': 'HowToStep', name: 'Start chatting', text: 'Ask Perplexity about your fantasy leagues. It now has access to your real league data.' },
             ],
@@ -40,21 +40,23 @@ export default function PerplexityGuidePage() {
           <h2 className="text-xl font-semibold mb-3">What you need</h2>
           <ul className="list-disc list-inside text-muted-foreground space-y-1">
             <li>A Flaim account with at least one connected league (<Link href="/" className="text-primary hover:underline">flaim.app</Link>)</li>
-            <li>A Perplexity Pro subscription (MCP connectors require Pro)</li>
+            <li>A Perplexity Pro, Max, or Enterprise plan</li>
           </ul>
         </section>
 
         <section className="mb-10">
           <h2 className="text-xl font-semibold mb-3">Step by step</h2>
           <ol className="list-decimal list-inside text-muted-foreground space-y-2">
-            <li>Open Perplexity and go to Settings</li>
-            <li>Find the MCP Connectors section</li>
-            <li>Add a new connector with the Flaim server URL: <code className="text-xs bg-muted px-1 py-0.5 rounded">https://api.flaim.app/mcp</code></li>
+            <li>In Perplexity, click &ldquo;+ Custom connector&rdquo; and select &ldquo;Remote&rdquo;</li>
+            <li>Enter a name (e.g. &ldquo;Flaim Fantasy&rdquo;)</li>
+            <li>Enter the MCP server URL: <code className="text-xs bg-muted px-1 py-0.5 rounded">https://api.flaim.app/mcp</code></li>
+            <li>Set authentication to &ldquo;OAuth&rdquo; and transport to &ldquo;Streamable HTTP&rdquo;</li>
             <li>Sign in to Flaim and approve the connection</li>
             <li>Start a new thread and ask about your leagues</li>
           </ol>
           <p className="text-sm text-muted-foreground mt-3">
-            Perplexity&apos;s MCP connector support is relatively new, so the setup flow may evolve. Check Perplexity&apos;s help docs for the latest steps.
+            For the latest details, see{' '}
+            <a href="https://www.perplexity.ai/help-center/en/articles/13915507-adding-custom-remote-connectors" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Perplexity&apos;s custom connector docs</a>.
           </p>
         </section>
 
