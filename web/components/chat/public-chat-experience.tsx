@@ -304,10 +304,10 @@ export function PublicChatExperience() {
   };
 
   return (
-    <div className="relative min-h-full overflow-hidden bg-background">
+    <div className="relative h-full overflow-y-auto bg-background">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.12),_transparent_32%),radial-gradient(circle_at_bottom_right,_rgba(16,185,129,0.12),_transparent_28%)]" />
 
-      <div className="relative mx-auto flex h-full w-full max-w-7xl flex-col px-4 py-6 sm:px-6 lg:px-8">
+      <div className="relative mx-auto flex min-h-full w-full max-w-7xl flex-col px-4 py-6 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between gap-3 border-b border-border/70 pb-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.24em] text-muted-foreground">
@@ -325,7 +325,7 @@ export function PublicChatExperience() {
           </Button>
         </div>
 
-        <div className="mt-5 grid flex-1 gap-5 lg:grid-cols-[22rem_minmax(0,1fr)]">
+        <div className="mt-5 grid gap-5 lg:min-h-0 lg:flex-1 lg:grid-cols-[22rem_minmax(0,1fr)]">
           <Card className="border-border/70 bg-background/85 p-4 backdrop-blur">
             <div className="flex items-start gap-3">
               <div className="rounded-2xl bg-primary/10 p-2 text-primary">
@@ -383,7 +383,7 @@ export function PublicChatExperience() {
             </div>
           </Card>
 
-          <Card className="flex min-h-[38rem] flex-col border-border/70 bg-background/85 p-4 backdrop-blur">
+          <Card className="flex min-h-[38rem] flex-col border-border/70 bg-background/85 p-4 backdrop-blur lg:min-h-0">
             <div className="flex items-center justify-between gap-3 border-b border-border/70 pb-4">
               <div>
                 <h2 className="text-lg font-semibold text-foreground">
@@ -400,7 +400,7 @@ export function PublicChatExperience() {
               ) : null}
             </div>
 
-            <div className="mt-4 flex-1 space-y-4 overflow-y-auto pr-1">
+            <div className="mt-4 flex-1 space-y-4 pr-1 lg:overflow-y-auto">
               {selectedPreset ? (
                 <PublicMessage role="user" text={selectedPreset.prompt} />
               ) : (
