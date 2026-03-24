@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 
 export const metadata: Metadata = {
-  title: 'Connect ESPN Fantasy to ChatGPT, Claude, or Gemini | Flaim',
+  title: 'Connect ESPN | Flaim',
   description:
     'Step-by-step guide to connecting your ESPN fantasy leagues to AI assistants using Flaim. Works with football, baseball, basketball, and hockey.',
   alternates: {
@@ -19,7 +19,7 @@ export default function EspnGuidePage() {
           __html: JSON.stringify({
             '@context': 'https://schema.org',
             '@type': 'HowTo',
-            name: 'Connect ESPN Fantasy to ChatGPT, Claude, or Gemini',
+            name: 'Connect ESPN',
             description: 'Step-by-step guide to connecting your ESPN fantasy leagues to AI assistants using Flaim.',
             step: [
               { '@type': 'HowToStep', name: 'Create a Flaim account', text: 'Create a Flaim account at flaim.app.' },
@@ -34,7 +34,7 @@ export default function EspnGuidePage() {
         }}
       />
       <div className="container max-w-2xl mx-auto py-12 px-4">
-        <h1 className="text-3xl font-bold mb-4">Connect ESPN Fantasy to ChatGPT, Claude, or Gemini</h1>
+        <h1 className="text-3xl font-bold mb-4">Connect ESPN</h1>
         <p className="text-muted-foreground mb-8">
           Flaim connects your ESPN fantasy leagues to AI assistants for read-only analysis. ESPN requires a Chrome extension to sync your league credentials. Setup takes about 5 minutes.
         </p>
@@ -79,8 +79,18 @@ export default function EspnGuidePage() {
         <section className="mb-10">
           <h2 className="text-xl font-semibold mb-3">Other platforms</h2>
           <ul className="text-sm text-muted-foreground space-y-1">
-            <li><Link href="/guide/yahoo" className="text-primary hover:underline">Connect Yahoo Fantasy to AI</Link> (no extension needed)</li>
-            <li><Link href="/guide/sleeper" className="text-primary hover:underline">Connect Sleeper Fantasy to AI</Link> (just your username)</li>
+            <li><Link href="/guide/yahoo" className="text-primary hover:underline">Connect Yahoo</Link> (no extension needed)</li>
+            <li><Link href="/guide/sleeper" className="text-primary hover:underline">Connect Sleeper</Link> (just your username)</li>
+          </ul>
+        </section>
+
+        <section className="mb-10">
+          <h2 className="text-xl font-semibold mb-3">Connect your AI</h2>
+          <ul className="text-sm text-muted-foreground space-y-1">
+            <li><Link href="/guide/claude" className="text-primary hover:underline">Claude</Link></li>
+            <li><Link href="/guide/chatgpt" className="text-primary hover:underline">ChatGPT</Link></li>
+            <li><Link href="/guide/perplexity" className="text-primary hover:underline">Perplexity</Link></li>
+            <li><Link href="/guide/gemini" className="text-primary hover:underline">Gemini</Link></li>
           </ul>
         </section>
 

@@ -43,41 +43,33 @@ export function StepConnectAI() {
       </div>
 
       <p className="text-sm text-muted-foreground mb-4">
-        Click below to connect Flaim Fantasy to your AI. Copy and add the name and URL below.
+        Copy the name and URL below, then add them in your AI.
       </p>
 
-      {/* Platform badges */}
-      <div className="grid grid-cols-3 gap-2 mb-2">
-        <Link
-          href="/guide/claude"
-          className="flex items-center justify-between rounded-md border border-border px-3 py-2 hover:bg-muted transition-colors"
-        >
-          <div className="text-xs font-medium">Claude</div>
-          <ExternalLink className="h-3 w-3 text-muted-foreground" />
-        </Link>
-        <Link
-          href="/guide/chatgpt"
-          className="flex items-center justify-between rounded-md border border-border px-3 py-2 hover:bg-muted transition-colors"
-        >
-          <div className="text-xs font-medium">ChatGPT</div>
-          <ExternalLink className="h-3 w-3 text-muted-foreground" />
-        </Link>
-        <Link
-          href="/guide/perplexity"
-          className="flex items-center justify-between rounded-md border border-border px-3 py-2 hover:bg-muted transition-colors"
-        >
-          <div className="text-xs font-medium">Perplexity</div>
-          <ExternalLink className="h-3 w-3 text-muted-foreground" />
-        </Link>
-      </div>
-      <div className="mb-4">
-        <Link
-          href="/guide/gemini"
-          className="flex items-center justify-between rounded-md border border-border/50 px-3 py-1.5 hover:bg-muted transition-colors"
-        >
-          <div className="text-xs text-muted-foreground">Gemini CLI (no web app support yet)</div>
-          <ExternalLink className="h-3 w-3 text-muted-foreground" />
-        </Link>
+      {/* Platform boxes: name links to our guide, icon links to setup page */}
+      <div className="grid grid-cols-2 gap-2 mb-4">
+        <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
+          <Link href="/guide/claude" className="text-xs font-medium text-primary hover:underline">Claude</Link>
+          <a href="https://claude.ai/settings/connectors" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground transition-colors" title="Open Claude connectors">
+            <ExternalLink className="h-3 w-3" />
+          </a>
+        </div>
+        <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
+          <Link href="/guide/chatgpt" className="text-xs font-medium text-primary hover:underline">ChatGPT <span className="text-muted-foreground">(dev only)</span></Link>
+          <a href="https://chatgpt.com/settings#settings/Connectors" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground transition-colors" title="Open ChatGPT settings">
+            <ExternalLink className="h-3 w-3" />
+          </a>
+        </div>
+        <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
+          <Link href="/guide/perplexity" className="text-xs font-medium text-primary hover:underline">Perplexity</Link>
+          <a href="https://www.perplexity.ai/account/connectors" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground transition-colors" title="Open Perplexity connectors">
+            <ExternalLink className="h-3 w-3" />
+          </a>
+        </div>
+        <div className="flex items-center justify-between rounded-md border border-border/50 px-3 py-2">
+          <Link href="/guide/gemini" className="text-xs text-muted-foreground hover:underline">Gemini</Link>
+          <ExternalLink className="h-3 w-3 text-muted-foreground/50" />
+        </div>
       </div>
 
       {!isLoaded && (

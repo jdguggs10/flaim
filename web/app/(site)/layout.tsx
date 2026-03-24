@@ -22,6 +22,8 @@ export default function SiteLayout({
               <span aria-hidden="true">·</span>
               <Link href="/guide" className="underline hover:text-foreground">Guide</Link>
               <span aria-hidden="true">·</span>
+              <Link href="/stack" className="underline hover:text-foreground">Stack</Link>
+              <span aria-hidden="true">·</span>
               <Link href="/privacy" className="underline hover:text-foreground">
                 Privacy
               </Link>

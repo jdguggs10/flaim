@@ -25,19 +25,19 @@ export default function GuidePage() {
               {
                 '@type': 'ListItem',
                 position: 1,
-                name: 'Connect ESPN Fantasy to AI',
+                name: 'Connect ESPN',
                 url: 'https://flaim.app/guide/espn',
               },
               {
                 '@type': 'ListItem',
                 position: 2,
-                name: 'Connect Yahoo Fantasy to AI',
+                name: 'Connect Yahoo',
                 url: 'https://flaim.app/guide/yahoo',
               },
               {
                 '@type': 'ListItem',
                 position: 3,
-                name: 'Connect Sleeper Fantasy to AI',
+                name: 'Connect Sleeper',
                 url: 'https://flaim.app/guide/sleeper',
               },
               {
@@ -71,7 +71,7 @@ export default function GuidePage() {
       <div className="container max-w-2xl mx-auto py-12 px-4">
         <h1 className="text-3xl font-bold mb-4">How to Connect Your Fantasy League to AI</h1>
         <p className="text-muted-foreground mb-8">
-          You can connect your ESPN, Yahoo, or Sleeper fantasy leagues to Claude, ChatGPT, or Gemini using Flaim. Setup takes about 5 minutes. Once connected, your AI assistant can access your real league data: rosters, standings, matchups, free agents, and transactions. All read-only.
+          You can connect your ESPN, Yahoo, or Sleeper fantasy leagues to Claude, ChatGPT, Perplexity, or Gemini using Flaim. Setup takes about 5 minutes. Once connected, your AI assistant can access your real league data: rosters, standings, matchups, free agents, and transactions. All read-only.
         </p>
 
         <section className="mb-10">
@@ -129,7 +129,7 @@ export default function GuidePage() {
               </p>
             </Link>
             <Link href="/guide/gemini" className="block rounded-lg border bg-background p-4 hover:border-foreground/20 transition-colors">
-              <h3 className="font-semibold">Gemini CLI</h3>
+              <h3 className="font-semibold">Gemini</h3>
               <p className="text-sm text-muted-foreground mt-1">
                 CLI only. The Gemini web app does not support custom connectors yet.
               </p>
@@ -138,41 +138,36 @@ export default function GuidePage() {
         </section>
 
         <section className="mb-10">
-          <h2 className="text-xl font-semibold mb-3">What you can ask</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <div className="rounded-lg border bg-background p-3">
-              <p className="text-sm font-medium">&ldquo;Who should I start this week?&rdquo;</p>
-              <p className="text-xs text-muted-foreground mt-1">Pulls your real matchup and roster</p>
-            </div>
-            <div className="rounded-lg border bg-background p-3">
-              <p className="text-sm font-medium">&ldquo;Who&rsquo;s on the waiver wire?&rdquo;</p>
-              <p className="text-xs text-muted-foreground mt-1">Scans available free agents in your league</p>
-            </div>
-            <div className="rounded-lg border bg-background p-3">
-              <p className="text-sm font-medium">&ldquo;Show me the standings&rdquo;</p>
-              <p className="text-xs text-muted-foreground mt-1">Current standings across any of your leagues</p>
-            </div>
-            <div className="rounded-lg border bg-background p-3">
-              <p className="text-sm font-medium">&ldquo;What trades happened this week?&rdquo;</p>
-              <p className="text-xs text-muted-foreground mt-1">Recent transactions in your league</p>
-            </div>
-            <div className="rounded-lg border bg-background p-3">
-              <p className="text-sm font-medium">&ldquo;Who are the best available QBs?&rdquo;</p>
-              <p className="text-xs text-muted-foreground mt-1">Top free agents by position</p>
-            </div>
-            <div className="rounded-lg border bg-background p-3">
-              <p className="text-sm font-medium">&ldquo;What fantasy leagues do I have?&rdquo;</p>
-              <p className="text-xs text-muted-foreground mt-1">Lists all connected leagues across platforms</p>
-            </div>
-          </div>
+          <h2 className="text-xl font-semibold mb-3">What Flaim gives your AI</h2>
+          <p className="text-muted-foreground mb-4">
+            <strong>1 skill</strong> that teaches your AI how to think like a fantasy analyst:
+          </p>
+          <ul className="list-disc list-inside text-sm text-muted-foreground space-y-1 mb-6">
+            <li><code className="text-xs bg-muted px-1 py-0.5 rounded">flaim-fantasy</code> — System prompt with league context, analysis patterns, and best practices</li>
+          </ul>
+          <p className="text-muted-foreground mb-4">
+            <strong>9 tools</strong> for pulling your league data:
+          </p>
+          <ol className="list-decimal list-inside text-sm text-muted-foreground space-y-1 mb-6">
+            <li><code className="text-xs bg-muted px-1 py-0.5 rounded">get_user_session</code> — Your leagues, default league, and platform context</li>
+            <li><code className="text-xs bg-muted px-1 py-0.5 rounded">get_league_info</code> — Settings, scoring, roster slots, schedule, and teams</li>
+            <li><code className="text-xs bg-muted px-1 py-0.5 rounded">get_standings</code> — Records, rankings, and playoff seeds</li>
+            <li><code className="text-xs bg-muted px-1 py-0.5 rounded">get_matchups</code> — Scoreboard for any week</li>
+            <li><code className="text-xs bg-muted px-1 py-0.5 rounded">get_roster</code> — Players, positions, and stats for any team</li>
+            <li><code className="text-xs bg-muted px-1 py-0.5 rounded">get_free_agents</code> — Available players, optionally filtered by position</li>
+            <li><code className="text-xs bg-muted px-1 py-0.5 rounded">get_players</code> — Search for any player by name</li>
+            <li><code className="text-xs bg-muted px-1 py-0.5 rounded">get_transactions</code> — Recent adds, drops, waivers, and trades</li>
+            <li><code className="text-xs bg-muted px-1 py-0.5 rounded">get_ancient_history</code> — Past seasons and historical leagues</li>
+          </ol>
+          <p className="text-muted-foreground mb-4">
+            <strong>2 commands</strong> available in Claude:
+          </p>
+          <ul className="list-disc list-inside text-sm text-muted-foreground space-y-1">
+            <li><code className="text-xs bg-muted px-1 py-0.5 rounded">/activity-brief</code> — Summarize recent league transactions and explain what happened</li>
+            <li><code className="text-xs bg-muted px-1 py-0.5 rounded">/analyze-matchup</code> — Break down your current matchup with scores and forecast</li>
+          </ul>
         </section>
 
-        <section>
-          <h2 className="text-xl font-semibold mb-3">How it works</h2>
-          <p className="text-muted-foreground">
-            Flaim sits between your fantasy platform and your AI assistant. It gives your AI read-only tools to pull your league data: rosters, standings, matchups, free agents, and transactions. Nothing is changed in your league. Flaim cannot trade, drop, or modify anything on your behalf.
-          </p>
-        </section>
       </div>
     </div>
   );

@@ -2,9 +2,9 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 
 export const metadata: Metadata = {
-  title: 'Use Flaim with Gemini CLI | Flaim',
+  title: 'Use Flaim with Gemini | Flaim',
   description:
-    'How to add Flaim to Gemini CLI so you can ask about your ESPN, Yahoo, or Sleeper fantasy leagues. The Gemini web app does not support custom connectors yet.',
+    'How to use Flaim with Gemini for fantasy sports analysis. The Gemini web app does not support custom connectors yet. CLI users can connect via MCP.',
   alternates: {
     canonical: 'https://flaim.app/guide/gemini',
   },
@@ -30,24 +30,13 @@ export default function GeminiGuidePage() {
         }}
       />
       <div className="container max-w-2xl mx-auto py-12 px-4">
-        <h1 className="text-3xl font-bold mb-4">Use Flaim with Gemini CLI</h1>
-        <p className="text-muted-foreground mb-4">
-          Flaim connects to Gemini CLI via MCP, giving it read-only access to your ESPN, Yahoo, and Sleeper fantasy leagues. Once connected, you can ask Gemini about your roster, matchups, standings, and more, all grounded in your actual league data.
-        </p>
-        <p className="text-sm text-muted-foreground mb-8 p-3 rounded-lg border bg-muted">
-          <strong>Note:</strong> The Gemini web app (gemini.google.com) does not support custom MCP connectors yet. This guide is for the <a href="https://github.com/google-gemini/gemini-cli" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Gemini CLI</a>, a command-line tool for developers.
+        <h1 className="text-3xl font-bold mb-4">Use Flaim with Gemini</h1>
+        <p className="text-muted-foreground mb-8">
+          The Gemini web app (gemini.google.com) does not support custom MCP connectors yet. If you use the <a href="https://github.com/google-gemini/gemini-cli" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Gemini CLI</a>, you can connect Flaim for read-only access to your ESPN, Yahoo, and Sleeper fantasy leagues.
         </p>
 
         <section className="mb-10">
-          <h2 className="text-xl font-semibold mb-3">What you need</h2>
-          <ul className="list-disc list-inside text-muted-foreground space-y-1">
-            <li>A Flaim account with at least one connected league (<Link href="/" className="text-primary hover:underline">flaim.app</Link>)</li>
-            <li><a href="https://github.com/google-gemini/gemini-cli" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Gemini CLI</a> installed</li>
-          </ul>
-        </section>
-
-        <section className="mb-10">
-          <h2 className="text-xl font-semibold mb-3">Step by step</h2>
+          <h2 className="text-xl font-semibold mb-3">Gemini CLI setup</h2>
           <ol className="list-decimal list-inside text-muted-foreground space-y-2">
             <li>Add Flaim as an MCP server:
               <div className="mt-1">

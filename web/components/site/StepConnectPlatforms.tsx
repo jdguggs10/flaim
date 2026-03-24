@@ -14,7 +14,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Card } from '@/components/ui/card';
-import { Chrome, Check, Loader2, Shield, Eye, EyeOff, Wrench, ExternalLink } from 'lucide-react';
+import { Chrome, Check, Loader2, Shield, Eye, EyeOff, Wrench } from 'lucide-react';
 import Link from 'next/link';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { pingExtension, isChromeBrowser, type ExtensionPingResult } from '@/lib/extension-ping';
@@ -269,9 +269,8 @@ export function StepConnectPlatforms({ className }: StepConnectPlatformsProps) {
       <div className="grid grid-cols-1 gap-4">
         {/* ESPN Column */}
         <div className="p-4 border rounded-lg space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="font-medium text-sm">ESPN</div>
-            <Link href="/guide/espn" className="text-xs text-primary hover:underline flex items-center gap-1">Guide <ExternalLink className="h-3 w-3" /></Link>
+          <div className="font-medium text-sm">
+            <Link href="/guide/espn" className="text-primary hover:underline">ESPN</Link>
           </div>
           <p className="text-xs text-muted-foreground">Chrome extension grabs credentials automatically.</p>
 
@@ -360,9 +359,8 @@ export function StepConnectPlatforms({ className }: StepConnectPlatformsProps) {
 
         {/* Yahoo Column */}
         <div className="p-4 border rounded-lg space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="font-medium text-sm">Yahoo</div>
-            <Link href="/guide/yahoo" className="text-xs text-primary hover:underline flex items-center gap-1">Guide <ExternalLink className="h-3 w-3" /></Link>
+          <div className="font-medium text-sm">
+            <Link href="/guide/yahoo" className="text-primary hover:underline">Yahoo</Link>
           </div>
           <p className="text-xs text-muted-foreground">Sign in with Yahoo to auto-discover leagues.</p>
 
@@ -392,9 +390,8 @@ export function StepConnectPlatforms({ className }: StepConnectPlatformsProps) {
 
         {/* Sleeper Column */}
         <div className="p-4 border rounded-lg space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="font-medium text-sm">Sleeper</div>
-            <Link href="/guide/sleeper" className="text-xs text-primary hover:underline flex items-center gap-1">Guide <ExternalLink className="h-3 w-3" /></Link>
+          <div className="font-medium text-sm">
+            <Link href="/guide/sleeper" className="text-primary hover:underline">Sleeper</Link>
           </div>
           <p className="text-xs text-muted-foreground">Enter your Sleeper username to auto-discover leagues.</p>
 
