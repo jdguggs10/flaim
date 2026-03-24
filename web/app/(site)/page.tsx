@@ -155,7 +155,7 @@ export default function LandingPage() {
         <div className="container max-w-2xl mx-auto">
           <h2 className="text-2xl font-bold text-center mb-2">What you can ask</h2>
           <p className="text-center text-muted-foreground mb-8">
-            Each example maps to a single tool. One question, one answer.
+            Flaim gives your AI nine fantasy league tools.
           </p>
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="rounded-lg border bg-background p-4">
