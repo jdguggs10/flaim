@@ -364,37 +364,33 @@ export function PublicChatExperience() {
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_bottom,transparent_0,transparent_23px,var(--border)_24px)] bg-[length:100%_24px] opacity-25" />
 
       <div className="relative mx-auto flex min-h-full w-full max-w-5xl flex-col px-4 py-4 sm:px-6 lg:px-8 lg:py-6">
-        <section className="pb-4">
-          <div className="flex items-center justify-between gap-3">
-            <Badge
-              variant="outline"
-              className="gap-2 rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-muted-foreground"
+        <section className="pb-3">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">
+                Live on real league data
+              </p>
+              <h1 className="mt-3 max-w-4xl text-3xl font-semibold leading-[0.96] tracking-[-0.05em] text-foreground sm:text-5xl">
+                Watch Flaim work on my actual leagues right now.
+              </h1>
+            </div>
+            <Button
+              asChild
+              variant="ghost"
+              size="sm"
+              className="hidden rounded-full px-0 text-muted-foreground sm:inline-flex"
             >
-              <Sparkles className="h-3.5 w-3.5" />
-              Live on real league data
-            </Badge>
-            <Button asChild variant="ghost" size="sm" className="rounded-full px-0 text-muted-foreground">
               <Link href="/">
                 Back home
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
             </Button>
           </div>
-
-          <h1 className="mt-4 max-w-4xl text-3xl font-semibold leading-[0.96] tracking-[-0.05em] text-foreground sm:text-5xl">
-            Watch Flaim work on my actual leagues right now.
-          </h1>
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
-            Pick a prompt and jump straight into the live run.
-          </p>
         </section>
 
         <Card className="flex min-h-[32rem] flex-col overflow-hidden rounded-[1.6rem] border-border bg-card p-0 shadow-sm lg:min-h-[38rem] lg:rounded-[2rem]">
           <div className="border-b border-border bg-card px-3 py-3 sm:px-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">
-                Choose a live scenario
-              </p>
+            <div className="flex flex-wrap items-center justify-end gap-2">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge
                   variant={
@@ -432,7 +428,7 @@ export function PublicChatExperience() {
                       disabled={runStatus === "running"}
                       aria-pressed={isSelected}
                       className={cn(
-                        "group relative min-w-[15rem] snap-start overflow-hidden rounded-[1.1rem] border p-3 text-left transition-all duration-200 sm:min-w-[18rem] sm:p-4",
+                        "group relative min-w-[13rem] snap-start overflow-hidden rounded-[1.1rem] border p-3 text-left transition-all duration-200 sm:min-w-[18rem] sm:p-4",
                         isSelected
                           ? "border-primary bg-primary text-primary-foreground shadow-sm"
                           : "border-border bg-background text-foreground hover:bg-muted",
@@ -440,9 +436,9 @@ export function PublicChatExperience() {
                           ? "cursor-not-allowed opacity-70"
                           : ""
                       )}
-                    >
-                      <div className="relative">
-                        <div className="flex items-center justify-between gap-3">
+                      >
+                        <div className="relative">
+                          <div className="flex items-center justify-between gap-3">
                           <div
                             className={cn(
                               "flex h-9 w-9 items-center justify-center rounded-xl",
@@ -469,7 +465,7 @@ export function PublicChatExperience() {
                         </h3>
                         <p
                           className={cn(
-                            "mt-1.5 text-xs leading-5 sm:mt-2 sm:text-sm sm:leading-6",
+                            "mt-1.5 hidden text-xs leading-5 sm:block sm:text-sm sm:leading-6",
                             isSelected
                               ? "text-primary-foreground/75"
                               : "text-muted-foreground"
@@ -491,20 +487,20 @@ export function PublicChatExperience() {
                   {selectedPreset ? (
                     <PublicMessage role="user" text={selectedPreset.userMessage} />
                   ) : (
-                    <div className="flex h-full min-h-[18rem] items-center justify-center lg:min-h-[22rem]">
+                    <div className="flex h-full min-h-[12rem] items-center justify-center lg:min-h-[18rem]">
                       <div className="max-w-xl text-center">
-                        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-[1.5rem] border border-border bg-primary text-primary-foreground">
+                        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-[1.2rem] border border-border bg-primary text-primary-foreground sm:h-16 sm:w-16 sm:rounded-[1.5rem]">
                           <Image
                             src="/flaim-mark-hero-dark.png"
                             alt="Flaim"
-                            width={32}
-                            height={32}
+                            width={28}
+                            height={28}
                           />
                         </div>
-                        <h3 className="mt-5 text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
-                          Pick a prompt to start the live demo
+                        <h3 className="mt-4 text-lg font-semibold tracking-tight text-foreground sm:mt-5 sm:text-2xl">
+                          Pick a prompt to start
                         </h3>
-                        <p className="mt-3 text-sm leading-6 text-muted-foreground">
+                        <p className="mt-2 text-sm leading-6 text-muted-foreground">
                           Choose one above and Flaim will run on Gerry&apos;s actual leagues live.
                         </p>
                       </div>
@@ -555,6 +551,15 @@ export function PublicChatExperience() {
                       </Button>
                     </div>
                   ) : null}
+
+                  <div className="pt-1 sm:hidden">
+                    <Button asChild variant="ghost" size="sm" className="rounded-full px-0 text-muted-foreground">
+                      <Link href="/">
+                        Back home
+                        <ArrowRight className="ml-2 h-4 w-4" />
+                      </Link>
+                    </Button>
+                  </div>
 
                   <div ref={transcriptEndRef} />
               </div>
