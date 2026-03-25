@@ -973,49 +973,6 @@ function LeaguesPageContent() {
   const isDiscoveringSelected = selectedDiscoverLeague
     ? discoveringLeagueKey === selectedDiscoverLeague.key
     : false;
-  const connectedPlatformCount = Number(hasCredentials) + Number(isYahooConnected) + Number(isSleeperConnected);
-  const totalLeagueGroupCount =
-    leaguesBySport.active.reduce((total, [, sportLeagues]) => total + sportLeagues.length, 0) +
-    leaguesBySport.old.length;
-  const hasAnyLeagueDefault = leaguesBySport.active.some(([, sportLeagues]) =>
-    sportLeagues.some((group) => group.seasons.some((season) => season.isDefault))
-  );
-  const isSetupComplete = connectedPlatformCount > 0 && totalLeagueGroupCount > 0;
-  const setupSummary = !isSetupComplete
-    ? connectedPlatformCount === 0
-      ? 'Start by connecting a platform below. ESPN, Yahoo, and Sleeper all flow through this page now.'
-      : 'Your account is connected. Add or refresh leagues below, then copy the AI connector details once you are ready.'
-    : hasAnyLeagueDefault || !!defaultSport
-      ? 'Setup is in good shape. Use this page to refresh connections, manage seasons, and adjust your defaults.'
-      : 'Your leagues are connected. Optional next step: set a default sport and default league to reduce repeated context in chat.';
-  const setupSteps = [
-    {
-      title: 'Connect a platform',
-      status:
-        connectedPlatformCount === 0
-          ? 'Not started'
-          : connectedPlatformCount === 3
-            ? 'Complete'
-            : 'In progress',
-      detail:
-        connectedPlatformCount === 0
-          ? 'Connect ESPN, Yahoo, or Sleeper below.'
-          : `${connectedPlatformCount} of 3 platform${connectedPlatformCount === 1 ? '' : 's'} connected.`,
-    },
-    {
-      title: 'Add your leagues',
-      status: totalLeagueGroupCount === 0 ? 'Not started' : 'Complete',
-      detail:
-        totalLeagueGroupCount === 0
-          ? 'No leagues linked yet.'
-          : `${totalLeagueGroupCount} league group${totalLeagueGroupCount === 1 ? '' : 's'} linked.`,
-    },
-    {
-      title: 'Connect your AI',
-      status: 'Ready',
-      detail: 'Copy the MCP name and URL from the section below when you are ready to use Flaim in Claude, ChatGPT, or Gemini.',
-    },
-  ] as const;
 
   // Loading state
   if (!isLoaded) {
@@ -1093,48 +1050,6 @@ function LeaguesPageContent() {
             <AlertDescription>{leagueNotice}</AlertDescription>
           </Alert>
         )}
-
-        <div className="order-1 space-y-4">
-          <div className="space-y-2">
-            <h2 className="text-2xl font-semibold">Setup</h2>
-            <p className="text-muted-foreground">{setupSummary}</p>
-          </div>
-          <Card>
-            <CardContent className="space-y-4 p-6">
-              <div className="grid gap-3 md:grid-cols-3">
-                {setupSteps.map((step) => (
-                  <div key={step.title} className="rounded-lg border bg-muted/40 p-4">
-                    <div className="flex items-center justify-between gap-2">
-                      <h3 className="font-medium">{step.title}</h3>
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
-                          step.status === 'Complete'
-                            ? 'bg-success/20 text-success'
-                            : step.status === 'Ready'
-                              ? 'bg-info/10 text-info'
-                              : step.status === 'In progress'
-                                ? 'bg-warning/20 text-warning'
-                                : 'bg-muted text-muted-foreground'
-                        }`}
-                      >
-                        {step.status}
-                      </span>
-                    </div>
-                    <p className="mt-2 text-sm text-muted-foreground">{step.detail}</p>
-                  </div>
-                ))}
-              </div>
-              <div className="flex flex-col gap-3 sm:flex-row">
-                <Button asChild variant="outline">
-                  <a href="#platforms">Connect platforms</a>
-                </Button>
-                <Button asChild variant="outline">
-                  <a href="#connect-ai">Connect your AI</a>
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
 
         <div id="connect-ai" className="order-4 space-y-4">
           <div className="space-y-2">
