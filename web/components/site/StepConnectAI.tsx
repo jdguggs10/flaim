@@ -20,11 +20,13 @@ const mcpServers = [
 interface StepConnectAIProps {
   showStepNumber?: boolean;
   renderCard?: boolean;
+  showHeader?: boolean;
 }
 
 export function StepConnectAI({
   showStepNumber = true,
   renderCard = true,
+  showHeader = true,
 }: StepConnectAIProps) {
   const { isLoaded, isSignedIn } = useAuth();
   const [copiedValue, setCopiedValue] = useState<string | null>(null);
@@ -43,18 +45,22 @@ export function StepConnectAI({
 
   const content = (
     <div className="flex flex-col">
-      <div className="flex items-center gap-3 mb-4">
-        {showStepNumber ? (
-          <div className="w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold">
-            3
+      {showHeader ? (
+        <>
+          <div className="mb-4 flex items-center gap-3">
+            {showStepNumber ? (
+              <div className="w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold">
+                3
+              </div>
+            ) : null}
+            <h3 className="font-semibold text-lg">Connect your AI</h3>
           </div>
-        ) : null}
-        <h3 className="font-semibold text-lg">Connect your AI</h3>
-      </div>
 
-      <p className="text-sm text-muted-foreground mb-4">
-        Copy the name and URL below, then add them in your AI.
-      </p>
+          <p className="mb-4 text-sm text-muted-foreground">
+            Copy the name and URL below, then add them in your AI.
+          </p>
+        </>
+      ) : null}
 
       {/* Platform boxes: name links to our guide, icon links to setup page */}
       <div className="grid grid-cols-2 gap-2 mb-4">

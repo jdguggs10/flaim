@@ -3,6 +3,7 @@
 import React, { Suspense, useEffect, useState, useMemo } from 'react';
 import { useAuth, SignInButton, SignUpButton } from '@clerk/nextjs';
 import { useSearchParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -1084,10 +1085,19 @@ function LeaguesPageContent() {
                 }`}
               />
             </button>
+            <div className="pt-2">
+              <Link href="/guide" className="text-sm text-primary hover:underline">
+                See all setup guides
+              </Link>
+            </div>
           </CardHeader>
           {isAiSectionOpen ? (
             <CardContent id="ai-card-content" className="pt-0">
-              <StepConnectAI showStepNumber={false} renderCard={false} />
+              <StepConnectAI
+                showStepNumber={false}
+                renderCard={false}
+                showHeader={false}
+              />
             </CardContent>
           ) : null}
         </Card>
@@ -1101,7 +1111,7 @@ function LeaguesPageContent() {
                 onClick={() => setIsLeaguesSectionOpen((prev) => !prev)}
                 aria-expanded={isLeaguesSectionOpen}
                 aria-controls="leagues-card-content"
-                className="flex flex-1 items-start justify-between gap-4 text-left"
+                className="flex flex-1 items-start gap-4 text-left"
               >
                 <div className="min-w-0 space-y-2">
                   <div className="flex flex-wrap items-center gap-2">
@@ -1114,28 +1124,39 @@ function LeaguesPageContent() {
                     Once a platform is connected, your linked teams and seasons appear here.
                   </CardDescription>
                 </div>
-                <ChevronDown
-                  className={`mt-0.5 h-5 w-5 shrink-0 text-muted-foreground transition-transform ${
-                    isLeaguesSectionOpen ? 'rotate-180' : ''
-                  }`}
-                />
               </button>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <button
-                    type="button"
-                    className="rounded-md border border-muted bg-muted/60 p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-warning"
-                    aria-label="Star defaults info"
-                  >
-                    <Star className="h-4 w-4" />
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent className="w-72 text-sm">
-                  <p className="text-muted-foreground">
-                    <strong className="text-foreground">Stars mark your defaults.</strong> Set a default sport, and also set a default team per sport. This is optional, but it can be helpful with many leagues.
-                  </p>
-                </PopoverContent>
-              </Popover>
+              <div className="flex items-center gap-2">
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className="rounded-md border border-muted bg-muted/60 p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-warning"
+                      aria-label="Star defaults info"
+                    >
+                      <Star className="h-4 w-4" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-72 text-sm">
+                    <p className="text-muted-foreground">
+                      <strong className="text-foreground">Stars mark your defaults.</strong> Set a default sport, and also set a default team per sport. This is optional, but it can be helpful with many leagues.
+                    </p>
+                  </PopoverContent>
+                </Popover>
+                <button
+                  type="button"
+                  onClick={() => setIsLeaguesSectionOpen((prev) => !prev)}
+                  aria-expanded={isLeaguesSectionOpen}
+                  aria-controls="leagues-card-content"
+                  className="rounded-md border border-muted bg-muted/60 p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  aria-label={isLeaguesSectionOpen ? 'Collapse leagues section' : 'Expand leagues section'}
+                >
+                  <ChevronDown
+                    className={`h-4 w-4 transition-transform ${
+                      isLeaguesSectionOpen ? 'rotate-180' : ''
+                    }`}
+                  />
+                </button>
+              </div>
             </div>
           </CardHeader>
           {isLeaguesSectionOpen ? (
@@ -1434,6 +1455,18 @@ function LeaguesPageContent() {
           </CardHeader>
           {isPlatformsSectionOpen ? (
           <CardContent id="platforms-card-content" className="pt-0">
+          <div className="mb-4 flex flex-wrap gap-x-3 gap-y-1 text-sm text-muted-foreground">
+            <span>Platform guides:</span>
+            <Link href="/guide/espn" className="text-primary hover:underline">
+              ESPN
+            </Link>
+            <Link href="/guide/yahoo" className="text-primary hover:underline">
+              Yahoo
+            </Link>
+            <Link href="/guide/sleeper" className="text-primary hover:underline">
+              Sleeper
+            </Link>
+          </div>
           <div className="grid gap-4">
             <div className="border rounded-lg bg-background">
               <button
