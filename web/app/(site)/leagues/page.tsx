@@ -977,10 +977,6 @@ function LeaguesPageContent() {
   const isDiscoveringSelected = selectedDiscoverLeague
     ? discoveringLeagueKey === selectedDiscoverLeague.key
     : false;
-  const connectedPlatformCount = Number(hasCredentials) + Number(isYahooConnected) + Number(isSleeperConnected);
-  const linkedLeagueCount =
-    leaguesBySport.active.reduce((total, [, sportLeagues]) => total + sportLeagues.length, 0) +
-    leaguesBySport.old.length;
 
   // Loading state
   if (!isLoaded) {
@@ -1069,12 +1065,7 @@ function LeaguesPageContent() {
               className="flex w-full items-start justify-between gap-4 text-left"
             >
               <div className="min-w-0 space-y-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  <CardTitle className="text-lg">3. Connect Your AI</CardTitle>
-                  <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-                    MCP setup
-                  </span>
-                </div>
+                <CardTitle className="text-lg">3. Connect Your AI</CardTitle>
                 <CardDescription>
                   Copy the MCP details you need for Claude, ChatGPT, Perplexity, or Gemini CLI.
                 </CardDescription>
@@ -1114,12 +1105,7 @@ function LeaguesPageContent() {
                 className="flex flex-1 items-start gap-4 text-left"
               >
                 <div className="min-w-0 space-y-2">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <CardTitle className="text-lg">2. Your Leagues</CardTitle>
-                    <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-                      {linkedLeagueCount} linked
-                    </span>
-                  </div>
+                  <CardTitle className="text-lg">2. Your Leagues</CardTitle>
                   <CardDescription>
                     Once a platform is connected, your linked teams and seasons appear here.
                   </CardDescription>
@@ -1436,12 +1422,7 @@ function LeaguesPageContent() {
               className="flex w-full items-start justify-between gap-4 text-left"
             >
               <div className="min-w-0 space-y-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  <CardTitle className="text-lg">1. Connect Platforms</CardTitle>
-                  <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-                    {connectedPlatformCount}/3 connected
-                  </span>
-                </div>
+                <CardTitle className="text-lg">1. Connect Platforms</CardTitle>
                 <CardDescription>
                   Connect, refresh, or manually add leagues from ESPN, Yahoo, and Sleeper here.
                 </CardDescription>
