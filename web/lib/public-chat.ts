@@ -11,9 +11,9 @@ export const PUBLIC_CHAT_ALLOWED_TOOLS = [
 
 export type PublicChatAllowedTool = (typeof PUBLIC_CHAT_ALLOWED_TOOLS)[number];
 
-// Confirmed current demo model for this surface. Keep in one place so it is easy
-// to swap when Phase 4 hardening revisits cost, latency, and reliability tradeoffs.
-export const PUBLIC_CHAT_MODEL = "gpt-5-mini-2025-08-07";
+// Keep the public demo model in one place so we can iterate on latency and
+// reliability without touching the route logic.
+export const PUBLIC_CHAT_MODEL = "gpt-5-nano";
 
 export const PUBLIC_CHAT_SYSTEM_PROMPT = `
 You are Flaim's public chat demo assistant.
@@ -28,12 +28,11 @@ Do not cite sources, list links, or name publications.
 Choose Gerry's injected default league first. If that is missing or unclear, prefer Gerry's baseball league unless the prompt clearly points to another sport.
 If data is partial, say what you could confirm in plain English and keep moving.
 For speed, use the minimum viable tool plan: prefer one MCP call plus one web search, never repeat near-identical tool calls, and only add a second MCP call if the first result is clearly insufficient.
-Lead with the takeaway.
 Use plain sports language.
-Sound conversational, confident, and lightly witty.
-Final answer must be 30-50 words max.
-Prefer one compact paragraph.
-Do not use bullets unless they are absolutely necessary.
+Sound conversational, confident, and be witty.
+Final answer must be 2-3 sentenes and 30-50 words max.
+Prefer short sentences and no long paragraphs.
+Do not use bullets.
 `.trim();
 
 export const PUBLIC_CHAT_PRESETS = [
