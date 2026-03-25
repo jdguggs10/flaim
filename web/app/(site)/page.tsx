@@ -26,7 +26,7 @@ export default function LandingPage() {
                 name: 'Do I need a Chrome extension?',
                 acceptedAnswer: {
                   '@type': 'Answer',
-                  text: 'Only for ESPN. Yahoo uses OAuth, Sleeper uses your username, and Gemini CLI or other AI assistants connect through Flaim after your leagues are linked.',
+                  text: 'Only for ESPN. Yahoo uses OAuth, Sleeper uses your username, and your AI assistant connects through Flaim after your leagues are linked.',
                 },
               },
               {
@@ -34,7 +34,7 @@ export default function LandingPage() {
                 name: 'Which AI apps work with Flaim?',
                 acceptedAnswer: {
                   '@type': 'Answer',
-                  text: 'Flaim works with Claude, ChatGPT, Perplexity, and Gemini CLI. The Gemini web app does not support custom MCP connectors yet.',
+                  text: 'Flaim works with Claude, ChatGPT, and Perplexity today. Gemini and Grok are not available yet.',
                 },
               },
               {
@@ -68,7 +68,7 @@ export default function LandingPage() {
             <span className="block text-muted-foreground">inside the AI you already use.</span>
           </h1>
           <p className="mx-auto max-w-2xl text-lg text-muted-foreground md:text-xl">
-            Flaim connects ESPN, Yahoo, and Sleeper to Claude, ChatGPT, Perplexity, and Gemini CLI so the advice is based on your real roster, matchups, standings, waiver wire, and recent moves.
+            Flaim connects ESPN, Yahoo, and Sleeper to Claude, ChatGPT, and Perplexity so the advice is based on your real roster, matchups, standings, waiver wire, and recent moves.
           </p>
           <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
             <Button asChild size="lg">
@@ -95,11 +95,10 @@ export default function LandingPage() {
             <span className="rounded-full border bg-background px-3 py-1">Claude</span>
             <span className="rounded-full border bg-background px-3 py-1">ChatGPT</span>
             <span className="rounded-full border bg-background px-3 py-1">Perplexity</span>
-            <span className="rounded-full border bg-background px-3 py-1">Gemini CLI</span>
           </div>
         </div>
         <p className="sr-only">
-          Flaim is a free, open-source MCP server that gives Claude, ChatGPT, Perplexity, and Gemini CLI read-only access to your actual fantasy league data: rosters, standings, matchups, free agents, and transactions across football, baseball, basketball, and hockey. It works with ESPN, Yahoo, and Sleeper. Setup takes about 5 minutes, and nothing in your league can be changed.
+          Flaim is a free, open-source MCP server that gives Claude, ChatGPT, and Perplexity read-only access to your actual fantasy league data: rosters, standings, matchups, free agents, and transactions across football, baseball, basketball, and hockey. It works with ESPN, Yahoo, and Sleeper. Setup takes about 5 minutes, and nothing in your league can be changed.
         </p>
       </section>
 
@@ -128,7 +127,7 @@ export default function LandingPage() {
               </div>
               <h3 className="text-lg font-semibold">Connect your AI</h3>
               <p className="mt-2 text-sm text-muted-foreground">
-                Add Flaim to Claude, ChatGPT, Perplexity, or Gemini CLI using the MCP details from your account and authorize the connection once.
+                Add Flaim to Claude, ChatGPT, or Perplexity using the MCP details from your account and authorize the connection once.
               </p>
             </Card>
             <Card className="p-5">
@@ -296,7 +295,7 @@ export default function LandingPage() {
                 <ChevronDown className="ml-2 h-5 w-5 transition-transform group-open:rotate-180" />
               </summary>
               <div className="px-4 pb-4 text-sm text-muted-foreground space-y-2">
-                <p>Claude, ChatGPT, Perplexity, and Gemini CLI. The Gemini web app does not support custom MCP connectors yet.</p>
+                <p>Claude, ChatGPT, and Perplexity today. Gemini and Grok are not available yet.</p>
               </div>
             </details>
 

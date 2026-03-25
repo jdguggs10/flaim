@@ -1,6 +1,6 @@
 # Flaim Fantasy
 
-> Flaim connects your ESPN, Yahoo, and Sleeper fantasy leagues to Claude, ChatGPT, and Gemini for read-only, league-specific analysis using the Model Context Protocol (MCP).
+> Flaim connects your ESPN, Yahoo, and Sleeper fantasy leagues to Claude, ChatGPT, and Perplexity for read-only, league-specific analysis using the Model Context Protocol (MCP).
 
 ## What Flaim Is
 
@@ -55,7 +55,7 @@ Single MCP endpoint: https://api.flaim.app/mcp
 ## FAQs
 
 ### What does Flaim do?
-Flaim is a skill that turns your AI into a fantasy sports expert, and a connector to data from your actual fantasy leagues. It lets you ask Claude, ChatGPT, or Gemini about your actual roster, matchup, standings, transactions, available free agents, waiver wire, and more.
+Flaim is a skill that turns your AI into a fantasy sports expert, and a connector to data from your actual fantasy leagues. It lets you ask Claude, ChatGPT, or Perplexity about your actual roster, matchup, standings, transactions, available free agents, waiver wire, and more.
 
 ### Is my data safe?
 Flaim is read-only. It cannot trade, drop, or modify anything in your league. ESPN credentials are encrypted and stored securely — they are never shared with AI providers.
@@ -67,7 +67,7 @@ ESPN doesn't offer a public API for fantasy data. The extension piggybacks on yo
 Flaim uses MCP (Model Context Protocol), an open standard for connecting AI assistants to external data. You add a single server URL and Flaim handles authentication and data retrieval.
 
 ### What AI assistants work with Flaim?
-Claude (via integrations), ChatGPT (via connectors), and Gemini CLI (via MCP). Any MCP-compatible client can connect.
+Claude (via integrations), ChatGPT (via connectors), and Perplexity (via remote connectors). Gemini and Grok are not available yet.
 
 ## Links
 

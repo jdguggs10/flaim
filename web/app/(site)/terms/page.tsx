@@ -22,7 +22,7 @@ export default function TermsPage() {
             <p className="text-muted-foreground">
               Flaim is a read-only fantasy analysis service. It retrieves your ESPN, Yahoo, and Sleeper
               fantasy league data and makes it available to AI assistants (such as Claude, ChatGPT, and
-              Gemini CLI) via the Model Context Protocol (MCP). Flaim does not place trades, add or drop
+              Perplexity) via the Model Context Protocol (MCP). Flaim does not place trades, add or drop
               players, or modify your league in any way.
             </p>
             <p className="text-muted-foreground mt-2">

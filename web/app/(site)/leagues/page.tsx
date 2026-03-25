@@ -35,6 +35,7 @@ import {
   Info,
 } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   Dialog,
   DialogContent,
@@ -256,7 +257,7 @@ function LeaguesPageContent() {
   const [discoveringLeagueKey, setDiscoveringLeagueKey] = useState<string | null>(null);
   const [isPlatformsSectionOpen, setIsPlatformsSectionOpen] = useState(true);
   const [isLeaguesSectionOpen, setIsLeaguesSectionOpen] = useState(true);
-  const [isAiSectionOpen, setIsAiSectionOpen] = useState(false);
+  const [isAiSectionOpen, setIsAiSectionOpen] = useState(true);
   const [isEspnSetupOpen, setIsEspnSetupOpen] = useState(false);
   const [isYahooSetupOpen, setIsYahooSetupOpen] = useState(false);
   const [isYahooConnected, setIsYahooConnected] = useState(false);
@@ -1007,7 +1008,7 @@ function LeaguesPageContent() {
                 <h2 className="font-medium">What happens here</h2>
                 <ul className="space-y-2 text-sm text-muted-foreground">
                   <li>Connect your fantasy platforms and refresh league data</li>
-                  <li>Copy the Flaim MCP name and URL for Claude, ChatGPT, Perplexity, or Gemini CLI</li>
+                  <li>Copy the Flaim MCP name and URL for Claude, ChatGPT, or Perplexity</li>
                   <li>Choose defaults and manage seasons once your account is linked</li>
                 </ul>
               </div>
@@ -1067,7 +1068,7 @@ function LeaguesPageContent() {
               <div className="min-w-0 space-y-2">
                 <CardTitle className="text-lg">3. Connect Your AI</CardTitle>
                 <CardDescription>
-                  Copy the MCP details you need for Claude, ChatGPT, Perplexity, or Gemini CLI.
+                  Copy the MCP details you need for Claude, ChatGPT, or Perplexity.
                 </CardDescription>
               </div>
               <ChevronDown
@@ -1093,6 +1094,22 @@ function LeaguesPageContent() {
           ) : null}
         </Card>
 
+        <section className="order-5 space-y-3 rounded-xl border border-dashed border-border bg-muted/30 p-4">
+          <div className="space-y-1">
+            <h2 className="text-sm font-semibold">Tips for activating Flaim in your AI assistant</h2>
+            <p className="text-sm text-muted-foreground">
+              After you add and authenticate Flaim, most assistants still need one more click before they use it.
+            </p>
+          </div>
+          <ol className="space-y-2 text-sm text-muted-foreground">
+            <li>Start a fresh chat after the connection is approved.</li>
+            <li>Open the assistant menu where apps, connectors, tools, or integrations live, then select Flaim if it is not already active.</li>
+            <li>Ask a concrete league question like “Show me my roster” or “Who am I playing this week?” instead of a vague prompt.</li>
+            <li>If the assistant still ignores Flaim, say “Use Flaim” and mention your league, team, or sport.</li>
+            <li>Set a default sport or league above so Flaim can pick the right context faster.</li>
+          </ol>
+        </section>
+
         {/* Your Leagues Card */}
         <Card className="order-3">
           <CardHeader>
@@ -1112,22 +1129,22 @@ function LeaguesPageContent() {
                 </div>
               </button>
               <div className="flex items-center gap-2">
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <button
-                      type="button"
-                      className="rounded-md border border-muted bg-muted/60 p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-warning"
-                      aria-label="Star defaults info"
-                    >
-                      <Star className="h-4 w-4" />
-                    </button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-72 text-sm">
-                    <p className="text-muted-foreground">
-                      <strong className="text-foreground">Stars mark your defaults.</strong> Set a default sport, and also set a default team per sport. This is optional, but it can be helpful with many leagues.
-                    </p>
-                  </PopoverContent>
-                </Popover>
+                <TooltipProvider delayDuration={150}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        className="rounded-md border border-muted bg-muted/60 p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-warning"
+                        aria-label="Star defaults info"
+                      >
+                        <Star className="h-4 w-4" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="max-w-xs whitespace-normal">
+                      Stars mark your defaults. Set a default sport, and also set a default team per sport.
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
                 <button
                   type="button"
                   onClick={() => setIsLeaguesSectionOpen((prev) => !prev)}

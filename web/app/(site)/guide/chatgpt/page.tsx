@@ -74,7 +74,6 @@ export default function ChatGptGuidePage() {
           <h2 className="text-xl font-semibold mb-3">Other AI assistants</h2>
           <ul className="text-sm text-muted-foreground space-y-1">
             <li><Link href="/guide/claude" className="text-primary hover:underline">Use Flaim with Claude</Link></li>
-            <li><Link href="/guide/gemini" className="text-primary hover:underline">Use Flaim with Gemini</Link></li>
             <li><Link href="/guide/perplexity" className="text-primary hover:underline">Use Flaim with Perplexity</Link></li>
           </ul>
         </section>

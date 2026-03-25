@@ -4,7 +4,7 @@ import Link from 'next/link';
 export const metadata: Metadata = {
   title: 'How to Connect Your Fantasy League to AI | Flaim',
   description:
-    'Connect your ESPN, Yahoo, or Sleeper fantasy leagues to Claude, ChatGPT, Gemini, or Perplexity using Flaim. Setup takes about 5 minutes.',
+    'Connect your ESPN, Yahoo, or Sleeper fantasy leagues to Claude, ChatGPT, or Perplexity using Flaim. Setup takes about 5 minutes.',
   alternates: {
     canonical: 'https://flaim.app/guide',
   },
@@ -55,12 +55,6 @@ export default function GuidePage() {
               {
                 '@type': 'ListItem',
                 position: 6,
-                name: 'Use Flaim with Gemini',
-                url: 'https://flaim.app/guide/gemini',
-              },
-              {
-                '@type': 'ListItem',
-                position: 7,
                 name: 'Use Flaim with Perplexity',
                 url: 'https://flaim.app/guide/perplexity',
               },
@@ -71,7 +65,7 @@ export default function GuidePage() {
       <div className="container max-w-2xl mx-auto py-12 px-4">
         <h1 className="text-3xl font-bold mb-4">How to Connect Your Fantasy League to AI</h1>
         <p className="text-muted-foreground mb-8">
-          You can connect your ESPN, Yahoo, or Sleeper fantasy leagues to Claude, ChatGPT, Perplexity, or Gemini using Flaim. Setup takes about 5 minutes. Once connected, your AI assistant can access your real league data: rosters, standings, matchups, free agents, and transactions. All read-only.
+          You can connect your ESPN, Yahoo, or Sleeper fantasy leagues to Claude, ChatGPT, or Perplexity using Flaim. Setup takes about 5 minutes. Once connected, your AI assistant can access your real league data: rosters, standings, matchups, free agents, and transactions. All read-only.
         </p>
 
         <section className="mb-10">
@@ -128,13 +122,10 @@ export default function GuidePage() {
                 Add Flaim as a custom remote connector. Requires a Pro, Max, or Enterprise plan.
               </p>
             </Link>
-            <Link href="/guide/gemini" className="block rounded-lg border bg-background p-4 hover:border-foreground/20 transition-colors">
-              <h3 className="font-semibold">Gemini</h3>
-              <p className="text-sm text-muted-foreground mt-1">
-                CLI only. The Gemini web app does not support custom connectors yet.
-              </p>
-            </Link>
           </div>
+          <p className="mt-4 text-sm text-muted-foreground">
+            Not available yet: Gemini, Grok.
+          </p>
         </section>
 
         <section className="mb-10">

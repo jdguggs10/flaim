@@ -66,7 +66,7 @@ export function StepConnectAI({
         Pick your assistant for step-by-step instructions.
       </p>
 
-      <div className="grid grid-cols-2 gap-2 mb-4">
+      <div className="mb-4 grid grid-cols-2 gap-2">
         <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
           <Link href="/guide/claude" className="text-xs font-medium text-primary hover:underline">Claude</Link>
           <a href="https://claude.ai/settings/connectors" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground transition-colors" title="Open Claude connectors">
@@ -85,11 +85,19 @@ export function StepConnectAI({
             <ExternalLink className="h-3 w-3" />
           </a>
         </div>
-        <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
-          <Link href="/guide/gemini" className="text-xs font-medium text-primary hover:underline">Gemini CLI</Link>
-          <span className="text-[11px] text-muted-foreground">CLI only</span>
+        <div className="flex items-center justify-between rounded-md border border-dashed border-border px-3 py-2 text-muted-foreground">
+          <span className="text-xs font-medium">Gemini</span>
+          <span className="text-[11px]">Unavailable</span>
+        </div>
+        <div className="flex items-center justify-between rounded-md border border-dashed border-border px-3 py-2 text-muted-foreground">
+          <span className="text-xs font-medium">Grok</span>
+          <span className="text-[11px]">Unavailable</span>
         </div>
       </div>
+
+      <p className="mb-4 text-xs text-muted-foreground">
+        Claude, ChatGPT, and Perplexity are live today. Gemini and Grok are not available yet.
+      </p>
 
       {!isLoaded && (
         <div className="rounded-lg border bg-muted p-3 text-xs text-muted-foreground">

@@ -72,7 +72,6 @@ export default function PerplexityGuidePage() {
           <ul className="text-sm text-muted-foreground space-y-1">
             <li><Link href="/guide/claude" className="text-primary hover:underline">Use Flaim with Claude</Link></li>
             <li><Link href="/guide/chatgpt" className="text-primary hover:underline">Use Flaim with ChatGPT</Link></li>
-            <li><Link href="/guide/gemini" className="text-primary hover:underline">Use Flaim with Gemini</Link></li>
           </ul>
         </section>
 

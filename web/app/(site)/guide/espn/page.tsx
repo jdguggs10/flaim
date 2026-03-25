@@ -90,7 +90,6 @@ export default function EspnGuidePage() {
             <li><Link href="/guide/claude" className="text-primary hover:underline">Claude</Link></li>
             <li><Link href="/guide/chatgpt" className="text-primary hover:underline">ChatGPT</Link></li>
             <li><Link href="/guide/perplexity" className="text-primary hover:underline">Perplexity</Link></li>
-            <li><Link href="/guide/gemini" className="text-primary hover:underline">Gemini</Link></li>
           </ul>
         </section>
 
