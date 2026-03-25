@@ -1067,7 +1067,7 @@ function LeaguesPageContent() {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="container max-w-2xl mx-auto py-8 px-4 space-y-6">
+      <div className="container mx-auto flex max-w-2xl flex-col gap-6 px-4 py-8">
         {/* Header */}
         <div className="space-y-2">
           <div className="flex items-center gap-2">
@@ -1094,9 +1094,9 @@ function LeaguesPageContent() {
           </Alert>
         )}
 
-        <div className="space-y-4">
+        <div className="order-1 space-y-4">
           <div className="space-y-2">
-            <h2 className="text-2xl font-semibold">Get Started</h2>
+            <h2 className="text-2xl font-semibold">Setup</h2>
             <p className="text-muted-foreground">{setupSummary}</p>
           </div>
           <Card>
@@ -1136,9 +1136,9 @@ function LeaguesPageContent() {
           </Card>
         </div>
 
-        <div id="connect-ai" className="space-y-4">
+        <div id="connect-ai" className="order-4 space-y-4">
           <div className="space-y-2">
-            <h2 className="text-2xl font-semibold">Connect Your AI</h2>
+            <h2 className="text-2xl font-semibold">3. Connect Your AI</h2>
             <p className="text-muted-foreground">
               Once your account is signed in, Flaim can show the MCP name and URL you need for Claude, ChatGPT, or Gemini.
             </p>
@@ -1147,10 +1147,10 @@ function LeaguesPageContent() {
         </div>
 
         {/* Your Leagues Card */}
-        <Card>
+        <Card className="order-3">
           <CardHeader>
             <div className="flex items-center justify-between">
-              <CardTitle className="text-lg">Active Leagues</CardTitle>
+              <CardTitle className="text-lg">2. Your Leagues</CardTitle>
               <Popover>
                 <PopoverTrigger asChild>
                   <button
@@ -1169,7 +1169,7 @@ function LeaguesPageContent() {
               </Popover>
             </div>
             <CardDescription>
-              These are your teams and seasons that are already linked.
+              Once a platform is connected, your linked teams and seasons appear here.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -1438,11 +1438,11 @@ function LeaguesPageContent() {
         </Card>
 
         {/* Platform setup and maintenance */}
-        <div id="platforms" className="space-y-4">
+        <div id="platforms" className="order-2 space-y-4">
           <div className="space-y-2">
-            <h2 className="text-2xl font-semibold">Platforms</h2>
+            <h2 className="text-2xl font-semibold">1. Connect Platforms</h2>
             <p className="text-muted-foreground">
-              Manage platform connections, credentials, and refresh flows here.
+              This is the main setup step. Connect, refresh, or manually add leagues from ESPN, Yahoo, and Sleeper here.
             </p>
           </div>
 
