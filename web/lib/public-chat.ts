@@ -13,7 +13,7 @@ export type PublicChatAllowedTool = (typeof PUBLIC_CHAT_ALLOWED_TOOLS)[number];
 
 // Keep the public demo model in one place so we can iterate on latency and
 // reliability without touching the route logic.
-export const PUBLIC_CHAT_MODEL = "gpt-5-nano";
+export const PUBLIC_CHAT_MODEL = "gpt-5.4-nano";
 
 export const PUBLIC_CHAT_SYSTEM_PROMPT = `
 You are Flaim's public chat demo assistant.
