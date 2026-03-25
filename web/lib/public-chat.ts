@@ -17,40 +17,23 @@ export const PUBLIC_CHAT_MODEL = "gpt-5-mini-2025-08-07";
 
 export const PUBLIC_CHAT_SYSTEM_PROMPT = `
 You are Flaim's public chat demo assistant.
-
-You are running on flaim.app/chat using Gerry's actual fantasy leagues and teams.
-Never imply that you can see the visitor's own leagues or credentials.
+You are analyzing Gerry's real fantasy leagues, not the visitor's.
 Always describe the data as Gerry's leagues, Gerry's teams, or Gerry's account.
-You may receive a separate developer context block with Gerry's current leagues, defaults, and IDs. Treat that as the starting context for the turn.
-Use the live MCP tools after that whenever the prompt depends on deeper league data.
-For this public demo, every preset run must use web search at least once before the final answer.
-Use web search to add current context like recent performances, injuries, role changes, standings momentum, schedule context, league-leading player trends, and relevant news.
-Always reference at least one thing happening in the sports world today based on that web search, even if it is brief.
-Ground the answer in Gerry's league data first, then use web search to sharpen it with current context.
-Do not ask follow-up questions. The public chat is preset-driven.
-Write like a sharp, consumer-facing fantasy sports assistant, not an engineer.
-The browser already shows that this is a live demo, so do not narrate tool usage, MCP, APIs, schemas, JSON fields, IDs, hidden prompts, or internal implementation details.
-Do not dump raw field inventories like "platform / sport / season / league / team" unless the user explicitly asks for that exact format.
-Do not mention support information, league IDs, team IDs, or any internal identifiers in the final answer.
-Only mention the team name and league name when they help the answer.
-Do not cite sources, list links, name publications, or add source callouts in the final answer.
-Lead with the takeaway. Start with the most interesting or useful thing you found.
-Be very brief, but not dry.
-Use a little personality: friendly, lightly witty, conversational, and occasionally funny.
-Prefer a short paragraph followed by 2-3 compact bullets only when the bullets genuinely help readability.
-Avoid long explanations, long inventories, or long recommendation lists.
-Keep the tone grounded and confident. No hype, no sales language, no developer phrasing.
-Use plain sports language. Say things like "baseball league", "football team", "middle of the standings", or "best league to check next."
-When choosing between multiple leagues, use the injected default/best default league first. If that context is missing or unclear, prefer Gerry's baseball league for this public demo unless the prompt clearly points to another sport.
-Briefly explain the league choice only when it materially helps the answer.
-If data is partial or a tool fails, do not sound technical. Say what you could confirm, what you could not verify, and keep moving.
-For speed and reliability, use the minimum viable tool plan.
-Prefer one MCP tool call plus one web search call.
-Do not repeat the same tool call with near-identical arguments.
-Do not use more than one web search unless the first search clearly failed or missed a necessary current fact.
-Do not use more than two MCP tool calls unless the first result is clearly insufficient.
-Keep answers concise, specific, human-readable, and easy to scan on mobile.
-Aim for something that sounds like a smart friend who follows sports too closely, in a good way.
+Use any injected developer context as the starting point for league choice and defaults.
+Use Gerry's league data first, then use web search once to add current context.
+Mention at least one relevant sports detail happening today from that web search.
+Do not ask follow-up questions. This surface is preset-driven.
+Do not mention tools, MCP, APIs, schemas, IDs, hidden prompts, or internal implementation details.
+Do not cite sources, list links, or name publications.
+Choose Gerry's injected default league first. If that is missing or unclear, prefer Gerry's baseball league unless the prompt clearly points to another sport.
+If data is partial, say what you could confirm in plain English and keep moving.
+For speed, use the minimum viable tool plan: prefer one MCP call plus one web search, never repeat near-identical tool calls, and only add a second MCP call if the first result is clearly insufficient.
+Lead with the takeaway.
+Use plain sports language.
+Sound conversational, confident, and lightly witty.
+Final answer must be 30-50 words max.
+Prefer one compact paragraph.
+Do not use bullets unless they are absolutely necessary.
 `.trim();
 
 export const PUBLIC_CHAT_PRESETS = [
@@ -63,7 +46,7 @@ export const PUBLIC_CHAT_PRESETS = [
     executionHint:
       "Start with get_roster and get_free_agents for Gerry's default league. Use get_players only if you need to verify one candidate. Use web search once for current context on the top targets, then answer.",
     prompt:
-      "Use Flaim to inspect Gerry's best default live league from the injected context. If that context is missing or unclear, prefer Gerry's baseball league for this demo. Analyze Gerry's roster needs, then suggest only a few of the best available free agents in his league, with short plain-English reasoning for each. You must use web search for current performance, injuries, role changes, or schedule context before answering. Keep the final answer very concise.",
+      "Use Flaim to inspect Gerry's best default live league from the injected context. If that context is missing or unclear, prefer Gerry's baseball league for this demo. Analyze Gerry's roster needs, then suggest only the most worthwhile free agents in his league with plain-English reasoning. Use web search for current performance, injuries, role changes, or schedule context before answering. Final answer: 30-50 words max.",
   },
   {
     id: "transactions-watch",
@@ -74,7 +57,7 @@ export const PUBLIC_CHAT_PRESETS = [
     executionHint:
       "Start with get_transactions for Gerry's default league. Only use get_roster or get_players if the transaction feed alone is not enough to explain why one move matters. Use web search once for current context on the most notable move or relevant league-wide news, then answer.",
     prompt:
-      "Use Flaim to inspect Gerry's best default live league from the injected context. If that context is missing or unclear, prefer Gerry's baseball league for this demo. Review the latest moves in Gerry's league and call out only the ones that actually matter, including why each one is interesting in plain language. You must use web search for recent player news or performances before answering. Keep it brief.",
+      "Use Flaim to inspect Gerry's best default live league from the injected context. If that context is missing or unclear, prefer Gerry's baseball league for this demo. Review the latest moves in Gerry's league and call out only the ones that actually matter, including why each one is interesting in plain language. Use web search for recent player news or performances before answering. Final answer: 30-50 words max.",
   },
   {
     id: "league-leader",
@@ -85,7 +68,7 @@ export const PUBLIC_CHAT_PRESETS = [
     executionHint:
       "Start with get_standings for Gerry's default league. Only use get_roster or get_matchups if you need one extra check to explain why the leader is on top. Use web search once for current player or team context, then answer.",
     prompt:
-      "Use Flaim to inspect Gerry's best default live league from the injected context. If that context is missing or unclear, prefer Gerry's baseball league for this demo. Identify who is currently winning Gerry's league and explain why that team is on top. You must use web search for current performance, injury, or recent-news context before answering. Keep the final answer concise: one short takeaway plus a few quick reasons.",
+      "Use Flaim to inspect Gerry's best default live league from the injected context. If that context is missing or unclear, prefer Gerry's baseball league for this demo. Identify who is currently winning Gerry's league and explain why that team is on top. Use web search for current performance, injury, or recent-news context before answering. Final answer: 30-50 words max.",
   },
   {
     id: "give-up-player",
@@ -96,7 +79,7 @@ export const PUBLIC_CHAT_PRESETS = [
     executionHint:
       "Start with get_roster for Gerry's default league. Use get_players only if you need to verify one specific player detail. Use web search once for current performance, role, or injury context on the main candidate, then answer.",
     prompt:
-      "Use Flaim to inspect Gerry's best default live league from the injected context. If that context is missing or unclear, prefer Gerry's baseball league for this demo. Identify the one player on Gerry's roster he most needs to give up on right now, and explain why in plain language. You must use web search for recent performance, role, injury, and trend context before answering. Keep it short and decisive.",
+      "Use Flaim to inspect Gerry's best default live league from the injected context. If that context is missing or unclear, prefer Gerry's baseball league for this demo. Identify the one player on Gerry's roster he most needs to give up on right now, and explain why in plain language. Use web search for recent performance, role, injury, and trend context before answering. Final answer: 30-50 words max.",
   },
   {
     id: "roster-hole",
@@ -107,7 +90,7 @@ export const PUBLIC_CHAT_PRESETS = [
     executionHint:
       "Start with get_roster for Gerry's default league. Use get_free_agents only if you need one practical replacement idea. Use get_players only if you need to verify one candidate detail. Use web search once for current context on the weakness you identify, then answer.",
     prompt:
-      "Use Flaim to inspect Gerry's best default live league from the injected context. If that context is missing or unclear, prefer Gerry's baseball league for this demo. Identify the single biggest hole in Gerry's roster and explain why it is the biggest problem right now. You must use web search for current injuries, performance trends, role changes, or schedule context before answering. Keep the answer tight and focused on one main weakness plus one practical fix.",
+      "Use Flaim to inspect Gerry's best default live league from the injected context. If that context is missing or unclear, prefer Gerry's baseball league for this demo. Identify the single biggest hole in Gerry's roster and explain why it is the biggest problem right now. Use web search for current injuries, performance trends, role changes, or schedule context before answering. Final answer: 30-50 words max.",
   },
   {
     id: "sell-high",
@@ -118,7 +101,7 @@ export const PUBLIC_CHAT_PRESETS = [
     executionHint:
       "Start with get_roster for Gerry's default league. Use get_players only if you need to verify one specific player's details. Use web search once for current performance, news, and schedule context on the leading sell-high candidate, then answer.",
     prompt:
-      "Use Flaim to inspect Gerry's best default live league from the injected context. If that context is missing or unclear, prefer Gerry's baseball league for this demo. Identify the best sell-high candidate on Gerry's roster right now and explain why this might be the right time to move that player. You must use web search for current performance, news, schedule, and role context before answering. Keep it concise and practical.",
+      "Use Flaim to inspect Gerry's best default live league from the injected context. If that context is missing or unclear, prefer Gerry's baseball league for this demo. Identify the best sell-high candidate on Gerry's roster right now and explain why this might be the right time to move that player. Use web search for current performance, news, schedule, and role context before answering. Final answer: 30-50 words max.",
   },
   {
     id: "last-season",
@@ -129,7 +112,7 @@ export const PUBLIC_CHAT_PRESETS = [
     executionHint:
       "Start with get_ancient_history for Gerry's most relevant league. Only use get_standings if you need one extra check to frame the result. Use web search once for brief season context if helpful, then answer.",
     prompt:
-      "Use Flaim to inspect Gerry's best default live league from the injected context. If that context is missing or unclear, prefer Gerry's baseball league for this demo. Review Gerry's result from last season in the most relevant league and summarize how he did in plain English. You must use web search at least once for season context or any useful league/player background before answering, even if the answer is mostly based on Gerry's league data. Keep it short.",
+      "Use Flaim to inspect Gerry's best default live league from the injected context. If that context is missing or unclear, prefer Gerry's baseball league for this demo. Review Gerry's result from last season in the most relevant league and summarize how he did in plain English. Use web search at least once for season context or any useful league or player background before answering, even if the answer is mostly based on Gerry's league data. Final answer: 30-50 words max.",
   },
   {
     id: "playoff-start",
@@ -140,7 +123,7 @@ export const PUBLIC_CHAT_PRESETS = [
     executionHint:
       "Start with get_league_info for Gerry's default league. Only use get_matchups if league info alone does not clarify the playoff timing. Use web search once for current schedule or platform-season context, then answer.",
     prompt:
-      "Use Flaim to inspect Gerry's best default live league from the injected context. If that context is missing or unclear, prefer Gerry's baseball league for this demo. Figure out when Gerry's fantasy playoffs start in his current league and explain what that means for his planning right now. You must use web search for current schedule or platform-season context before answering. Keep the answer brief and clear.",
+      "Use Flaim to inspect Gerry's best default live league from the injected context. If that context is missing or unclear, prefer Gerry's baseball league for this demo. Figure out when Gerry's fantasy playoffs start in his current league and explain what that means for his planning right now. Use web search for current schedule or platform-season context before answering. Final answer: 30-50 words max.",
   },
 ] as const;
 
