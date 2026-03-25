@@ -4,6 +4,10 @@ import {
   type PublicChatAllowedTool,
   getPublicChatPreset,
 } from "@/lib/public-chat";
+import {
+  formatPublicChatAnswerForPreset,
+  getPublicChatAnswerWordCount,
+} from "@/lib/public-chat-output";
 import { isAllowedUrl } from "@/lib/mcp-url-allowlist";
 import {
   acquirePublicChatRun,
@@ -192,8 +196,6 @@ export async function POST(request: NextRequest) {
 
     try {
       events = await openai.responses.create({
-        // Keep the public demo on the same model/reasoning pairing as the internal chat
-        // surface until Phase 4 hardening deliberately revisits cost and latency tradeoffs.
         model: PUBLIC_CHAT_MODEL,
         input: [
           {
@@ -237,6 +239,7 @@ export async function POST(request: NextRequest) {
         parallel_tool_calls: false,
         tool_choice: "auto",
         reasoning: { effort: "low" },
+        text: { verbosity: "low" },
       }, {
         signal: request.signal,
       });
@@ -266,6 +269,10 @@ export async function POST(request: NextRequest) {
         let firstToolStartMs: number | null = null;
         let firstAssistantTextMs: number | null = null;
         let sawAssistantText = false;
+        let assistantTextBuffer = "";
+        let emittedAssistantMessage = false;
+        const toolCallNames: string[] = [];
+        const completedToolIds = new Set<string>();
 
         try {
           for await (const event of events) {
@@ -307,6 +314,11 @@ export async function POST(request: NextRequest) {
                   if (firstToolStartMs === null) {
                     firstToolStartMs = getElapsedMs(streamStartedAt);
                   }
+                  toolCallNames.push(
+                    eventWithOptionalItem.item.name ??
+                      eventWithOptionalItem.item.type ??
+                      "unknown_tool"
+                  );
                   enqueueSse(controller, encoder, "tool_start", {
                     itemId: eventWithOptionalItem.item.id,
                     name:
@@ -347,21 +359,20 @@ export async function POST(request: NextRequest) {
                   typeof eventWithStringFields.delta === "string" &&
                   eventWithStringFields.delta
                 ) {
+                  assistantTextBuffer += eventWithStringFields.delta;
                   if (firstAssistantTextMs === null) {
                     firstAssistantTextMs = getElapsedMs(streamStartedAt);
                   }
-                  sawAssistantText = true;
-                  enqueueSse(controller, encoder, "assistant_delta", {
-                    delta: eventWithStringFields.delta,
-                  });
                 }
                 break;
               case "response.output_item.done":
                 if (
                   (eventWithOptionalItem.item?.type === "mcp_call" ||
                     eventWithOptionalItem.item?.type === "web_search_call") &&
-                  eventWithOptionalItem.item.id
+                  eventWithOptionalItem.item.id &&
+                  !completedToolIds.has(eventWithOptionalItem.item.id)
                 ) {
+                  completedToolIds.add(eventWithOptionalItem.item.id);
                   enqueueSse(controller, encoder, "tool_done", {
                     itemId: eventWithOptionalItem.item.id,
                   });
@@ -370,24 +381,48 @@ export async function POST(request: NextRequest) {
                 if (eventWithOptionalItem.item?.type === "message") {
                   const text = extractAssistantText(eventWithOptionalItem.item);
                   if (text) {
+                    assistantTextBuffer = text;
                     if (firstAssistantTextMs === null) {
                       firstAssistantTextMs = getElapsedMs(streamStartedAt);
                     }
-                    sawAssistantText = true;
-                    enqueueSse(controller, encoder, "assistant_message", {
+                    const formattedText = formatPublicChatAnswerForPreset(
                       text,
-                    });
+                      presetId
+                    );
+                    if (formattedText) {
+                      sawAssistantText = true;
+                      emittedAssistantMessage = true;
+                      enqueueSse(controller, encoder, "assistant_message", {
+                        text: formattedText,
+                      });
+                    }
                   }
                 }
                 break;
               case "response.web_search_call.completed":
-                if (typeof eventWithStringFields.item_id === "string") {
+                if (
+                  typeof eventWithStringFields.item_id === "string" &&
+                  !completedToolIds.has(eventWithStringFields.item_id)
+                ) {
+                  completedToolIds.add(eventWithStringFields.item_id);
                   enqueueSse(controller, encoder, "tool_done", {
                     itemId: eventWithStringFields.item_id,
                   });
                 }
                 break;
               case "response.completed":
+                if (!emittedAssistantMessage && assistantTextBuffer) {
+                  const formattedText = formatPublicChatAnswerForPreset(
+                    assistantTextBuffer,
+                    presetId
+                  );
+                  if (formattedText) {
+                    sawAssistantText = true;
+                    enqueueSse(controller, encoder, "assistant_message", {
+                      text: formattedText,
+                    });
+                  }
+                }
                 enqueueSse(controller, encoder, "completed");
                 break;
               default:
@@ -410,6 +445,13 @@ export async function POST(request: NextRequest) {
               firstEventMs,
               firstToolStartMs,
               firstAssistantTextMs,
+              toolCallNames,
+              getTransactionsCallCount: toolCallNames.filter(
+                (name) => name === "get_transactions"
+              ).length,
+              finalWordCount: getPublicChatAnswerWordCount(
+                formatPublicChatAnswerForPreset(assistantTextBuffer, presetId)
+              ),
               totalMs: getElapsedMs(startedAt),
             });
             await finalizeRun("error", "empty_assistant_output").catch((finalizeError) => {
@@ -429,6 +471,13 @@ export async function POST(request: NextRequest) {
             firstEventMs,
             firstToolStartMs,
             firstAssistantTextMs,
+            toolCallNames,
+            getTransactionsCallCount: toolCallNames.filter(
+              (name) => name === "get_transactions"
+            ).length,
+            finalWordCount: getPublicChatAnswerWordCount(
+              formatPublicChatAnswerForPreset(assistantTextBuffer, presetId)
+            ),
             totalMs: getElapsedMs(startedAt),
             hadContext: Boolean(publicChatContext),
           });
