@@ -9,9 +9,7 @@ export const metadata: Metadata = {
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { User, Check, ChevronDown, Brain, Search, Zap } from 'lucide-react';
-import { StepConnectPlatforms } from '@/components/site/StepConnectPlatforms';
-import { StepConnectAI } from '@/components/site/StepConnectAI';
+import { ArrowRight, ChevronDown, Brain, Search, ShieldCheck, Sparkles, Zap } from 'lucide-react';
 
 export default function LandingPage() {
   return (
@@ -60,59 +58,116 @@ export default function LandingPage() {
         }}
       />
       {/* Hero */}
-      <section className="py-10 px-4 text-center">
-        <h1 className="text-4xl md:text-5xl font-bold mb-4">
-          AI for Your Fantasy Leagues
-        </h1>
-        <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto">
-          Connect your ESPN, Yahoo, and Sleeper leagues to Claude, ChatGPT, and Gemini.
-        </p>
+      <section className="px-4 py-12 text-center md:py-16">
+        <div className="mx-auto max-w-3xl">
+          <p className="mb-4 text-xs font-semibold uppercase tracking-[0.28em] text-muted-foreground">
+            Read-only fantasy analysis
+          </p>
+          <h1 className="mb-4 text-4xl font-bold md:text-6xl">
+            Your real fantasy leagues,
+            <span className="block text-muted-foreground">inside the AI you already use.</span>
+          </h1>
+          <p className="mx-auto max-w-2xl text-lg text-muted-foreground md:text-xl">
+            Flaim connects ESPN, Yahoo, and Sleeper to Claude, ChatGPT, and Gemini so the advice is based on your real roster, matchups, standings, waiver wire, and recent moves.
+          </p>
+          <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
+            <Button asChild size="lg">
+              <Link href="/chat">
+                See it live
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Link>
+            </Button>
+            <SignedOut>
+              <Button asChild size="lg" variant="outline">
+                <Link href="/leagues">Set up Flaim</Link>
+              </Button>
+            </SignedOut>
+            <SignedIn>
+              <Button asChild size="lg" variant="outline">
+                <Link href="/leagues">Go to Leagues</Link>
+              </Button>
+            </SignedIn>
+          </div>
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-2 text-sm text-muted-foreground">
+            <span className="rounded-full border bg-background px-3 py-1">ESPN</span>
+            <span className="rounded-full border bg-background px-3 py-1">Yahoo</span>
+            <span className="rounded-full border bg-background px-3 py-1">Sleeper</span>
+            <span className="rounded-full border bg-background px-3 py-1">Claude</span>
+            <span className="rounded-full border bg-background px-3 py-1">ChatGPT</span>
+            <span className="rounded-full border bg-background px-3 py-1">Gemini</span>
+          </div>
+        </div>
         <p className="sr-only">
           Flaim is a free, open-source MCP server that gives Claude, ChatGPT, and Gemini read-only access to your actual fantasy league data: rosters, standings, matchups, free agents, and transactions across football, baseball, basketball, and hockey. It works with ESPN, Yahoo, and Sleeper. Setup takes about 5 minutes, and nothing in your league can be changed.
         </p>
       </section>
 
       {/* How It Works */}
-      <section className="py-8 bg-muted">
-        <div className="container max-w-xl mx-auto px-4">
-          <div className="flex flex-col gap-4">
-            {/* Step 1: Create Account */}
-            <Card className="p-5 flex flex-col">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold">
-                  1
-                </div>
-                <h3 className="font-semibold text-lg">Make an account</h3>
-              </div>
-              <p className="text-sm text-muted-foreground mb-4">
-                First create a Flaim account. This is the glue.
-              </p>
-              <SignedOut>
-                <Link href="/sign-up">
-                  <Button className="w-full">
-                    <User className="h-4 w-4 mr-2" />
-                    Create Account
-                  </Button>
-                </Link>
-              </SignedOut>
-              <SignedIn>
-                <div className="flex items-center justify-center gap-2 h-8 rounded-md px-3 text-xs font-medium w-full bg-muted text-muted-foreground">
-                  <Check className="h-3.5 w-3.5" />
-                  Signed in
-                </div>
-              </SignedIn>
-            </Card>
-
-            {/* Step 2: Connect Platforms */}
-            <StepConnectPlatforms />
-
-            {/* Step 3: Connect AI */}
-            <StepConnectAI />
-
-            {/* Completion message */}
-            <p className="text-center text-sm text-muted-foreground pt-2">
-              Boom, you&apos;re done. Chat as normal and Flaim will activate automatically based on context. Edit and manage defaults in Your Leagues above. Flaim is read-only, so nothing in your league can automatically change.
+      <section className="bg-muted px-4 py-10">
+        <div className="container mx-auto max-w-5xl">
+          <div className="mx-auto max-w-2xl text-center">
+            <h2 className="text-2xl font-bold md:text-3xl">How it works</h2>
+            <p className="mt-2 text-muted-foreground">
+              Flaim stays simple: connect your leagues, connect your AI, and ask questions as normal.
             </p>
+          </div>
+          <div className="mt-8 grid gap-4 md:grid-cols-3">
+            <Card className="p-5">
+              <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-full bg-primary text-primary-foreground font-bold">
+                1
+              </div>
+              <h3 className="text-lg font-semibold">Connect your platforms</h3>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Sync ESPN with the Chrome extension, sign in with Yahoo, or enter your Sleeper username. Flaim pulls in your leagues and seasons from there.
+              </p>
+            </Card>
+            <Card className="p-5">
+              <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-full bg-primary text-primary-foreground font-bold">
+                2
+              </div>
+              <h3 className="text-lg font-semibold">Connect your AI</h3>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Add Flaim to Claude, ChatGPT, or Gemini using the MCP URL from your account and authorize the connection once.
+              </p>
+            </Card>
+            <Card className="p-5">
+              <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-full bg-primary text-primary-foreground font-bold">
+                3
+              </div>
+              <h3 className="text-lg font-semibold">Ask league-specific questions</h3>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Flaim gives your AI grounded context from your real leagues, then combines it with fantasy-analysis behavior and web search when needed.
+              </p>
+            </Card>
+          </div>
+          <div className="mt-6 grid gap-4 md:grid-cols-3">
+            <div className="rounded-xl border bg-background p-4">
+              <div className="flex items-center gap-2 font-medium">
+                <ShieldCheck className="h-4 w-4 text-primary" />
+                Read-only by design
+              </div>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Flaim can inspect your data, but it cannot make trades, drop players, or change anything in your leagues.
+              </p>
+            </div>
+            <div className="rounded-xl border bg-background p-4">
+              <div className="flex items-center gap-2 font-medium">
+                <Sparkles className="h-4 w-4 text-primary" />
+                Works across platforms
+              </div>
+              <p className="mt-2 text-sm text-muted-foreground">
+                One account can pull from ESPN, Yahoo, and Sleeper instead of forcing you to copy stats and standings around by hand.
+              </p>
+            </div>
+            <div className="rounded-xl border bg-background p-4">
+              <div className="flex items-center gap-2 font-medium">
+                <ArrowRight className="h-4 w-4 text-primary" />
+                Setup lives in one place
+              </div>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Use <Link href="/leagues" className="text-primary hover:underline">Your Leagues</Link> to connect platforms, copy your AI setup info, and manage defaults.
+              </p>
+            </div>
           </div>
         </div>
       </section>

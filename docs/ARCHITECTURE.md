@@ -19,7 +19,7 @@ npm run dev
 ## Core Pieces
 
 - **Chrome Extension (`/extension`)**: Captures ESPN cookies (SWID, espn_s2) and syncs them to Flaim using Clerk Sync Host (no pairing codes).
-- **Next.js web app (`/web`)**: Site pages (landing with setup flow, leagues, privacy policy), OAuth consent screens, optional chat UI.
+- **Next.js web app (`/web`)**: Site pages (discovery-first landing page, setup + management hub at `/leagues`, privacy policy), OAuth consent screens, public live chat demo, and internal dev chat surface.
 - **Auth worker (`/workers/auth-worker`)**: Supabase credential + league storage, JWT verification, OAuth token management, extension APIs. Uses Hono for routing.
 - **Unified Gateway (`/workers/fantasy-mcp`)**: Single MCP endpoint exposing unified tools for all platforms and sports. Routes to platform-specific workers via service bindings.
 - **ESPN Client (`/workers/espn-client`)**: Internal worker handling all ESPN API calls for all sports (football, baseball, basketball, hockey). Called by fantasy-mcp gateway.
@@ -57,7 +57,7 @@ Flaim is an **authentication and data service**, not a chatbot:
 - **OAuth Provider**: Handles secure authentication between AI clients and ESPN data
 - **Credential Manager**: Securely stores ESPN session cookies (via extension or manual entry)
 
-The built-in `/chat` is an internal dev/debug surface, not a product feature. It is gated behind Clerk metadata (`chatAccess: true`) at both the page and API level. It exists for manual tool testing and exploratory debugging alongside the structured eval harness (`flaim-eval/`). See `web/README.md` for access setup.
+The built-in `/dev` surface is an internal dev/debug lab, not a product feature. It is gated behind Clerk metadata (`chatAccess: true`) at both the page and API level. It exists for manual tool testing and exploratory debugging alongside the structured eval harness (`flaim-eval/`). The public `/chat` route is a separate preset-driven live showcase backed by a dedicated demo account and server-owned auth. See `web/README.md` for access setup.
 
 ## Primary User Flow
 
@@ -69,7 +69,7 @@ The built-in `/chat` is an internal dev/debug surface, not a product feature. It
 
 **Manual site path (independent):**
 1. **Sign in** — Create an account at `flaim.app`
-2. **Add credentials manually** — Use the manual credentials dialog on the landing page
+2. **Add credentials manually** — Use the manual credentials dialog in `/leagues`
 3. **Add leagues** at `/leagues` — Enter league ID + season
 4. **Discover seasons (optional)** — Manual per-league action
 5. **Pick a default** — `/leagues` default toggle
@@ -77,7 +77,7 @@ The built-in `/chat` is an internal dev/debug surface, not a product feature. It
 Both paths write to the same `espn_leagues` storage.
 
 **Connect AI (both paths):**
-- Copy the MCP URL from the landing page and add it in Claude, ChatGPT, or Gemini CLI MCP settings.
+- Copy the MCP URL from `/leagues` and add it in Claude, ChatGPT, or Gemini CLI MCP settings.
 
 ## Season Year Defaults
 

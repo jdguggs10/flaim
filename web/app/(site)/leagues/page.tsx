@@ -1,7 +1,7 @@
 "use client";
 
 import React, { Suspense, useEffect, useState, useMemo } from 'react';
-import { useAuth, SignIn } from '@clerk/nextjs';
+import { useAuth, SignInButton, SignUpButton } from '@clerk/nextjs';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -45,6 +45,7 @@ import {
 import { useEspnCredentials } from '@/lib/use-espn-credentials';
 import { getDefaultSeasonYear } from '@/lib/season-utils';
 import { CHROME_EXTENSION_URL } from '@/config/constants';
+import { StepConnectAI } from '@/components/site/StepConnectAI';
 
 interface League {
   leagueId: string;
@@ -972,6 +973,49 @@ function LeaguesPageContent() {
   const isDiscoveringSelected = selectedDiscoverLeague
     ? discoveringLeagueKey === selectedDiscoverLeague.key
     : false;
+  const connectedPlatformCount = Number(hasCredentials) + Number(isYahooConnected) + Number(isSleeperConnected);
+  const totalLeagueGroupCount =
+    leaguesBySport.active.reduce((total, [, sportLeagues]) => total + sportLeagues.length, 0) +
+    leaguesBySport.old.length;
+  const hasAnyLeagueDefault = leaguesBySport.active.some(([, sportLeagues]) =>
+    sportLeagues.some((group) => group.seasons.some((season) => season.isDefault))
+  );
+  const isSetupComplete = connectedPlatformCount > 0 && totalLeagueGroupCount > 0;
+  const setupSummary = !isSetupComplete
+    ? connectedPlatformCount === 0
+      ? 'Start by connecting a platform below. ESPN, Yahoo, and Sleeper all flow through this page now.'
+      : 'Your account is connected. Add or refresh leagues below, then copy the AI connector details once you are ready.'
+    : hasAnyLeagueDefault || !!defaultSport
+      ? 'Setup is in good shape. Use this page to refresh connections, manage seasons, and adjust your defaults.'
+      : 'Your leagues are connected. Optional next step: set a default sport and default league to reduce repeated context in chat.';
+  const setupSteps = [
+    {
+      title: 'Connect a platform',
+      status:
+        connectedPlatformCount === 0
+          ? 'Not started'
+          : connectedPlatformCount === 3
+            ? 'Complete'
+            : 'In progress',
+      detail:
+        connectedPlatformCount === 0
+          ? 'Connect ESPN, Yahoo, or Sleeper below.'
+          : `${connectedPlatformCount} of 3 platform${connectedPlatformCount === 1 ? '' : 's'} connected.`,
+    },
+    {
+      title: 'Add your leagues',
+      status: totalLeagueGroupCount === 0 ? 'Not started' : 'Complete',
+      detail:
+        totalLeagueGroupCount === 0
+          ? 'No leagues linked yet.'
+          : `${totalLeagueGroupCount} league group${totalLeagueGroupCount === 1 ? '' : 's'} linked.`,
+    },
+    {
+      title: 'Connect your AI',
+      status: 'Ready',
+      detail: 'Copy the MCP name and URL from the section below when you are ready to use Flaim in Claude, ChatGPT, or Gemini.',
+    },
+  ] as const;
 
   // Loading state
   if (!isLoaded) {
@@ -986,17 +1030,36 @@ function LeaguesPageContent() {
   if (!isSignedIn) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <div className="w-full max-w-md space-y-6">
-          <div className="text-center space-y-3">
-            <div className="w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold mx-auto">
+        <div className="w-full max-w-xl space-y-6">
+          <div className="space-y-3 text-center">
+            <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground font-bold">
               1
             </div>
-            <h1 className="text-2xl font-semibold">Sign in to manage leagues</h1>
+            <h1 className="text-3xl font-semibold">Your Leagues is the setup hub</h1>
             <p className="text-muted-foreground">
-              Create an account or sign in to connect your ESPN fantasy leagues.
+              Sign in to connect ESPN, Yahoo, and Sleeper, copy your AI connector details, and manage your leagues and defaults in one place.
             </p>
           </div>
-          <SignIn routing="hash" fallbackRedirectUrl="/leagues" />
+          <Card>
+            <CardContent className="space-y-4 p-6">
+              <div className="space-y-2">
+                <h2 className="font-medium">What happens here</h2>
+                <ul className="space-y-2 text-sm text-muted-foreground">
+                  <li>Connect your fantasy platforms and refresh league data</li>
+                  <li>Copy the Flaim MCP name and URL for Claude, ChatGPT, or Gemini</li>
+                  <li>Choose defaults and manage seasons once your account is linked</li>
+                </ul>
+              </div>
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <SignUpButton mode="modal" forceRedirectUrl="/leagues">
+                  <Button className="w-full sm:flex-1">Create Account</Button>
+                </SignUpButton>
+                <SignInButton mode="modal" forceRedirectUrl="/leagues">
+                  <Button variant="outline" className="w-full sm:flex-1">Sign In</Button>
+                </SignInButton>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
     );
@@ -1012,7 +1075,7 @@ function LeaguesPageContent() {
             <h1 className="text-2xl font-semibold">Your Leagues</h1>
           </div>
           <p className="text-muted-foreground">
-            Manage your connected leagues and seasons, and set your sport and team defaults here.
+            Connect platforms, copy your AI setup details, manage league seasons, and set your defaults here.
           </p>
         </div>
 
@@ -1030,6 +1093,58 @@ function LeaguesPageContent() {
             <AlertDescription>{leagueNotice}</AlertDescription>
           </Alert>
         )}
+
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <h2 className="text-2xl font-semibold">Get Started</h2>
+            <p className="text-muted-foreground">{setupSummary}</p>
+          </div>
+          <Card>
+            <CardContent className="space-y-4 p-6">
+              <div className="grid gap-3 md:grid-cols-3">
+                {setupSteps.map((step) => (
+                  <div key={step.title} className="rounded-lg border bg-muted/40 p-4">
+                    <div className="flex items-center justify-between gap-2">
+                      <h3 className="font-medium">{step.title}</h3>
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                          step.status === 'Complete'
+                            ? 'bg-success/20 text-success'
+                            : step.status === 'Ready'
+                              ? 'bg-info/10 text-info'
+                              : step.status === 'In progress'
+                                ? 'bg-warning/20 text-warning'
+                                : 'bg-muted text-muted-foreground'
+                        }`}
+                      >
+                        {step.status}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-sm text-muted-foreground">{step.detail}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <Button asChild variant="outline">
+                  <a href="#platforms">Connect platforms</a>
+                </Button>
+                <Button asChild variant="outline">
+                  <a href="#connect-ai">Connect your AI</a>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        <div id="connect-ai" className="space-y-4">
+          <div className="space-y-2">
+            <h2 className="text-2xl font-semibold">Connect Your AI</h2>
+            <p className="text-muted-foreground">
+              Once your account is signed in, Flaim can show the MCP name and URL you need for Claude, ChatGPT, or Gemini.
+            </p>
+          </div>
+          <StepConnectAI showStepNumber={false} />
+        </div>
 
         {/* Your Leagues Card */}
         <Card>
@@ -1322,12 +1437,12 @@ function LeaguesPageContent() {
           </CardContent>
         </Card>
 
-        {/* League Maintenance */}
-        <div className="space-y-4">
+        {/* Platform setup and maintenance */}
+        <div id="platforms" className="space-y-4">
           <div className="space-y-2">
-            <h2 className="text-2xl font-semibold">League Maintenance</h2>
+            <h2 className="text-2xl font-semibold">Platforms</h2>
             <p className="text-muted-foreground">
-              Manage platform connections and credentials.
+              Manage platform connections, credentials, and refresh flows here.
             </p>
           </div>
 
