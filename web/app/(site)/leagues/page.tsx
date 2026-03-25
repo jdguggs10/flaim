@@ -1000,9 +1000,9 @@ function LeaguesPageContent() {
             <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground font-bold">
               1
             </div>
-            <h1 className="text-3xl font-semibold">Your Leagues is the setup hub</h1>
+            <h1 className="text-3xl font-semibold">Set up Your Leagues</h1>
             <p className="text-muted-foreground">
-              Sign in to connect ESPN, Yahoo, and Sleeper, copy your AI connector details, and manage your leagues and defaults in one place.
+              Sign in to connect ESPN, Yahoo, and Sleeper, copy your Flaim connector details, and manage your defaults in one place.
             </p>
           </div>
           <Card>
@@ -1011,7 +1011,7 @@ function LeaguesPageContent() {
                 <h2 className="font-medium">What happens here</h2>
                 <ul className="space-y-2 text-sm text-muted-foreground">
                   <li>Connect your fantasy platforms and refresh league data</li>
-                  <li>Copy the Flaim MCP name and URL for Claude, ChatGPT, or Gemini</li>
+                  <li>Copy the Flaim MCP name and URL for Claude, ChatGPT, Perplexity, or Gemini CLI</li>
                   <li>Choose defaults and manage seasons once your account is linked</li>
                 </ul>
               </div>
@@ -1040,7 +1040,7 @@ function LeaguesPageContent() {
             <h1 className="text-2xl font-semibold">Your Leagues</h1>
           </div>
           <p className="text-muted-foreground">
-            Connect platforms, copy your AI setup details, manage league seasons, and set your defaults here.
+            Connect platforms, manage league seasons, copy your AI setup details, and set your defaults here.
           </p>
         </div>
 
@@ -1072,11 +1072,11 @@ function LeaguesPageContent() {
                 <div className="flex flex-wrap items-center gap-2">
                   <CardTitle className="text-lg">3. Connect Your AI</CardTitle>
                   <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-                    Ready
+                    MCP setup
                   </span>
                 </div>
                 <CardDescription>
-                  Copy the MCP name and URL you need for Claude, ChatGPT, or Gemini.
+                  Copy the MCP details you need for Claude, ChatGPT, Perplexity, or Gemini CLI.
                 </CardDescription>
               </div>
               <ChevronDown
@@ -1443,7 +1443,7 @@ function LeaguesPageContent() {
                   </span>
                 </div>
                 <CardDescription>
-                  This is the main setup step. Connect, refresh, or manually add leagues from ESPN, Yahoo, and Sleeper here.
+                  Connect, refresh, or manually add leagues from ESPN, Yahoo, and Sleeper here.
                 </CardDescription>
               </div>
               <ChevronDown

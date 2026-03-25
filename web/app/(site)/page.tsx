@@ -23,34 +23,34 @@ export default function LandingPage() {
             mainEntity: [
               {
                 '@type': 'Question',
-                name: 'What does Flaim do?',
+                name: 'Do I need a Chrome extension?',
                 acceptedAnswer: {
                   '@type': 'Answer',
-                  text: 'Flaim is a skill that turns your AI into a fantasy sports expert, and a connector to data from your actual fantasy leagues. It lets you ask Claude, ChatGPT, or Gemini about your actual roster, matchup, standings, transactions, available free agents, waiver wire, and more.',
+                  text: 'Only for ESPN. Yahoo uses OAuth, Sleeper uses your username, and Gemini CLI or other AI assistants connect through Flaim after your leagues are linked.',
                 },
               },
               {
                 '@type': 'Question',
-                name: 'Why a Chrome extension?',
+                name: 'Which AI apps work with Flaim?',
                 acceptedAnswer: {
                   '@type': 'Answer',
-                  text: 'You only need it if you have leagues at ESPN. Log in to fantasy.espn.com and the extension will piggyback on that session to auto-sync your leagues.',
+                  text: 'Flaim works with Claude, ChatGPT, Perplexity, and Gemini CLI. The Gemini web app does not support custom MCP connectors yet.',
                 },
               },
               {
                 '@type': 'Question',
-                name: 'How does Flaim connect to AI clients?',
+                name: 'Can Flaim change anything in my leagues?',
                 acceptedAnswer: {
                   '@type': 'Answer',
-                  text: 'Sync your league data to Flaim, and then Flaim connects that data to Claude, ChatGPT, or Gemini. Your Flaim account tells your AI about your leagues, team name, and season year, while also giving the AI dedicated tools to pull out league data.',
+                  text: 'No. Flaim is read-only. It can inspect your leagues, rosters, standings, transactions, and free agents, but it cannot make trades, add players, or change league settings.',
                 },
               },
               {
                 '@type': 'Question',
-                name: 'Any other tips or tricks?',
+                name: 'Where do I finish setup?',
                 acceptedAnswer: {
                   '@type': 'Answer',
-                  text: 'Set a default sport and default leagues at flaim.app/leagues to save yourself some repeated explanation. If the AI needs a nudge, just say "Use Flaim."',
+                  text: 'Use flaim.app/leagues to connect platforms, copy your MCP setup details, and set defaults for your favorite sport or team.',
                 },
               },
             ],
@@ -68,7 +68,7 @@ export default function LandingPage() {
             <span className="block text-muted-foreground">inside the AI you already use.</span>
           </h1>
           <p className="mx-auto max-w-2xl text-lg text-muted-foreground md:text-xl">
-            Flaim connects ESPN, Yahoo, and Sleeper to Claude, ChatGPT, and Gemini so the advice is based on your real roster, matchups, standings, waiver wire, and recent moves.
+            Flaim connects ESPN, Yahoo, and Sleeper to Claude, ChatGPT, Perplexity, and Gemini CLI so the advice is based on your real roster, matchups, standings, waiver wire, and recent moves.
           </p>
           <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
             <Button asChild size="lg">
@@ -94,11 +94,12 @@ export default function LandingPage() {
             <span className="rounded-full border bg-background px-3 py-1">Sleeper</span>
             <span className="rounded-full border bg-background px-3 py-1">Claude</span>
             <span className="rounded-full border bg-background px-3 py-1">ChatGPT</span>
-            <span className="rounded-full border bg-background px-3 py-1">Gemini</span>
+            <span className="rounded-full border bg-background px-3 py-1">Perplexity</span>
+            <span className="rounded-full border bg-background px-3 py-1">Gemini CLI</span>
           </div>
         </div>
         <p className="sr-only">
-          Flaim is a free, open-source MCP server that gives Claude, ChatGPT, and Gemini read-only access to your actual fantasy league data: rosters, standings, matchups, free agents, and transactions across football, baseball, basketball, and hockey. It works with ESPN, Yahoo, and Sleeper. Setup takes about 5 minutes, and nothing in your league can be changed.
+          Flaim is a free, open-source MCP server that gives Claude, ChatGPT, Perplexity, and Gemini CLI read-only access to your actual fantasy league data: rosters, standings, matchups, free agents, and transactions across football, baseball, basketball, and hockey. It works with ESPN, Yahoo, and Sleeper. Setup takes about 5 minutes, and nothing in your league can be changed.
         </p>
       </section>
 
@@ -127,7 +128,7 @@ export default function LandingPage() {
               </div>
               <h3 className="text-lg font-semibold">Connect your AI</h3>
               <p className="mt-2 text-sm text-muted-foreground">
-                Add Flaim to Claude, ChatGPT, or Gemini using the MCP URL from your account and authorize the connection once.
+                Add Flaim to Claude, ChatGPT, Perplexity, or Gemini CLI using the MCP details from your account and authorize the connection once.
               </p>
             </Card>
             <Card className="p-5">
@@ -136,7 +137,7 @@ export default function LandingPage() {
               </div>
               <h3 className="text-lg font-semibold">Ask league-specific questions</h3>
               <p className="mt-2 text-sm text-muted-foreground">
-                Flaim gives your AI grounded context from your real leagues, then combines it with fantasy-analysis behavior and web search when needed.
+                Ask about your roster, waiver wire, matchups, or rivals. Flaim grounds the answer in your actual leagues and adds web context when needed.
               </p>
             </Card>
           </div>
@@ -162,10 +163,10 @@ export default function LandingPage() {
             <div className="rounded-xl border bg-background p-4">
               <div className="flex items-center gap-2 font-medium">
                 <ArrowRight className="h-4 w-4 text-primary" />
-                Setup lives in one place
+                Set defaults once
               </div>
               <p className="mt-2 text-sm text-muted-foreground">
-                Use <Link href="/leagues" className="text-primary hover:underline">Your Leagues</Link> to connect platforms, copy your AI setup info, and manage defaults.
+                Use <Link href="/leagues" className="text-primary hover:underline">Your Leagues</Link> to save a default sport and favorite league so your AI needs less hand-holding.
               </p>
             </div>
           </div>
@@ -210,7 +211,7 @@ export default function LandingPage() {
         <div className="container max-w-2xl mx-auto">
           <h2 className="text-2xl font-bold text-center mb-2">What you can ask</h2>
           <p className="text-center text-muted-foreground mb-8">
-            Flaim gives your AI nine fantasy league tools.
+            Start with quick lookups, then push into actual roster decisions.
           </p>
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="rounded-lg border bg-background p-4">
@@ -234,56 +235,20 @@ export default function LandingPage() {
               <p className="text-xs text-muted-foreground mt-1">Available free agents by ownership</p>
             </div>
             <div className="rounded-lg border bg-background p-4">
-              <p className="font-medium">&ldquo;Look up Ja&rsquo;Marr Chase&rdquo;</p>
-              <p className="text-xs text-muted-foreground mt-1">Player search with ownership context</p>
-            </div>
-            <div className="rounded-lg border bg-background p-4">
-              <p className="font-medium">&ldquo;What trades happened this week?&rdquo;</p>
-              <p className="text-xs text-muted-foreground mt-1">Recent transactions in your league</p>
-            </div>
-            <div className="rounded-lg border bg-background p-4">
-              <p className="font-medium">&ldquo;Show me my league settings&rdquo;</p>
-              <p className="text-xs text-muted-foreground mt-1">Scoring format, roster slots, and members</p>
-            </div>
-            <div className="rounded-lg border bg-background p-4 sm:col-span-2 sm:max-w-sm sm:mx-auto">
-              <p className="font-medium">&ldquo;How did my team do in 2023?&rdquo;</p>
-              <p className="text-xs text-muted-foreground mt-1">Historical leagues and past seasons</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Go Deeper */}
-      <section className="py-10 px-4">
-        <div className="container max-w-2xl mx-auto">
-          <h2 className="text-2xl font-bold text-center mb-2">Go deeper</h2>
-          <p className="text-center text-muted-foreground mb-8">
-            Ask and you shall receive... skill + tools + web search = magic.
-          </p>
-          <div className="flex flex-col gap-3">
-            <div className="rounded-lg border bg-background p-4">
               <p className="font-medium">&ldquo;Who are the best available players for my biggest roster weakness?&rdquo;</p>
-              <p className="text-xs text-muted-foreground mt-1">Roster analysis + free agent search</p>
+              <p className="text-xs text-muted-foreground mt-1">Roster analysis plus free agent search</p>
             </div>
             <div className="rounded-lg border bg-background p-4">
               <p className="font-medium">&ldquo;Should I start Ja&rsquo;Marr Chase this week?&rdquo;</p>
-              <p className="text-xs text-muted-foreground mt-1">Roster + web search for injury and matchup news</p>
+              <p className="text-xs text-muted-foreground mt-1">Roster plus web search for injury and matchup news</p>
             </div>
             <div className="rounded-lg border bg-background p-4">
               <p className="font-medium">&ldquo;Compare my team to my opponent&rsquo;s. Where do I have an edge?&rdquo;</p>
-              <p className="text-xs text-muted-foreground mt-1">Matchup + roster + web search for player outlooks</p>
+              <p className="text-xs text-muted-foreground mt-1">Matchup, roster, and player outlook context</p>
             </div>
-            <div className="rounded-lg border bg-background p-4">
-              <p className="font-medium">&ldquo;Should I drop anyone for a waiver pickup?&rdquo;</p>
-              <p className="text-xs text-muted-foreground mt-1">Roster + free agents + standings context</p>
-            </div>
-            <div className="rounded-lg border bg-background p-4">
-              <p className="font-medium">&ldquo;Is it worth trading for Saquon Barkley?&rdquo;</p>
-              <p className="text-xs text-muted-foreground mt-1">Player search + roster fit + web search for trade value</p>
-            </div>
-            <div className="rounded-lg border bg-background p-4">
+            <div className="rounded-lg border bg-background p-4 sm:col-span-2 sm:max-w-sm sm:mx-auto">
               <p className="font-medium">&ldquo;What moves have my rivals made recently?&rdquo;</p>
-              <p className="text-xs text-muted-foreground mt-1">Transactions + standings</p>
+              <p className="text-xs text-muted-foreground mt-1">Transactions, standings, and league activity</p>
             </div>
           </div>
         </div>
@@ -316,44 +281,44 @@ export default function LandingPage() {
             {/* What does Flaim do */}
             <details className="group border rounded-lg bg-background">
               <summary className="flex cursor-pointer items-center justify-between p-4 font-medium">
-                What does Flaim do?
+                Do I need a Chrome extension?
                 <ChevronDown className="ml-2 h-5 w-5 transition-transform group-open:rotate-180" />
               </summary>
               <div className="px-4 pb-4 text-sm text-muted-foreground space-y-2">
-                <p>Flaim is a skill that turns your AI into a fantasy sports expert, and a connector to data from your actual fantasy leagues. It lets you ask Claude, ChatGPT, or Gemini about your actual roster, matchup, standings, transactions, available free agents, waiver wire, and more.</p>
+                <p>Only for ESPN. Yahoo uses OAuth, Sleeper uses your username, and your AI assistant connects through Flaim after your leagues are linked.</p>
               </div>
             </details>
 
-            {/* Why a Chrome extension */}
+            {/* Supported AI apps */}
             <details className="group border rounded-lg bg-background">
               <summary className="flex cursor-pointer items-center justify-between p-4 font-medium">
-                Why a Chrome extension?
+                Which AI apps work with Flaim?
                 <ChevronDown className="ml-2 h-5 w-5 transition-transform group-open:rotate-180" />
               </summary>
               <div className="px-4 pb-4 text-sm text-muted-foreground space-y-2">
-                <p>You only need it if you have leagues at ESPN. Log in to fantasy.espn.com and the extension will piggyback on that session to auto-sync your leagues.</p>
+                <p>Claude, ChatGPT, Perplexity, and Gemini CLI. The Gemini web app does not support custom MCP connectors yet.</p>
               </div>
             </details>
 
-            {/* How does AI connection work */}
+            {/* Read-only trust */}
             <details className="group border rounded-lg bg-background">
               <summary className="flex cursor-pointer items-center justify-between p-4 font-medium">
-                How does Flaim connect to AI clients?
+                Can Flaim change anything in my leagues?
                 <ChevronDown className="ml-2 h-5 w-5 transition-transform group-open:rotate-180" />
               </summary>
               <div className="px-4 pb-4 text-sm text-muted-foreground space-y-2">
-                <p>Sync your league data to Flaim, and then Flaim connects that data to Claude, ChatGPT, or Gemini. In other words, your Flaim account tells your AI about your leagues, team name, and season year, while also giving the AI dedicated tools to pull out league data.</p>
+                <p>No. Flaim is read-only. It can inspect your leagues, rosters, standings, transactions, and free agents, but it cannot make trades, add players, or change league settings.</p>
               </div>
             </details>
 
-            {/* Tips and tricks */}
+            {/* Setup location */}
             <details className="group border rounded-lg bg-background">
               <summary className="flex cursor-pointer items-center justify-between p-4 font-medium">
-                Any other tips or tricks?
+                Where do I finish setup?
                 <ChevronDown className="ml-2 h-5 w-5 transition-transform group-open:rotate-180" />
               </summary>
               <div className="px-4 pb-4 text-sm text-muted-foreground space-y-2">
-                <p>Set a default sport and default leagues at flaim.app/leagues to save yourself some repeated explanation. If the AI needs a nudge, just say &ldquo;Use Flaim.&rdquo;</p>
+                <p>Use <Link href="/leagues" className="text-primary hover:underline">Your Leagues</Link> to connect platforms, copy your MCP setup details, and set defaults for your favorite sport or team.</p>
               </div>
             </details>
 

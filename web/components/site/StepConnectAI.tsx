@@ -57,12 +57,15 @@ export function StepConnectAI({
           </div>
 
           <p className="mb-4 text-sm text-muted-foreground">
-            Copy the name and URL below, then add them in your AI.
+            Copy the name and URL below, then add Flaim in your AI assistant.
           </p>
         </>
       ) : null}
 
-      {/* Platform boxes: name links to our guide, icon links to setup page */}
+      <p className="mb-3 text-xs text-muted-foreground">
+        Pick your assistant for step-by-step instructions.
+      </p>
+
       <div className="grid grid-cols-2 gap-2 mb-4">
         <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
           <Link href="/guide/claude" className="text-xs font-medium text-primary hover:underline">Claude</Link>
@@ -71,7 +74,7 @@ export function StepConnectAI({
           </a>
         </div>
         <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
-          <Link href="/guide/chatgpt" className="text-xs font-medium text-primary hover:underline">ChatGPT <span className="text-muted-foreground">(dev only)</span></Link>
+          <Link href="/guide/chatgpt" className="text-xs font-medium text-primary hover:underline">ChatGPT</Link>
           <a href="https://chatgpt.com/settings#settings/Connectors" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground transition-colors" title="Open ChatGPT settings">
             <ExternalLink className="h-3 w-3" />
           </a>
@@ -82,9 +85,9 @@ export function StepConnectAI({
             <ExternalLink className="h-3 w-3" />
           </a>
         </div>
-        <div className="flex items-center justify-between rounded-md border border-border/50 px-3 py-2">
-          <Link href="/guide/gemini" className="text-xs text-muted-foreground hover:underline">Gemini</Link>
-          <ExternalLink className="h-3 w-3 text-muted-foreground/50" />
+        <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
+          <Link href="/guide/gemini" className="text-xs font-medium text-primary hover:underline">Gemini CLI</Link>
+          <span className="text-[11px] text-muted-foreground">CLI only</span>
         </div>
       </div>
 
@@ -96,7 +99,7 @@ export function StepConnectAI({
 
       {isLoaded && !isSignedIn && (
         <div className="rounded-lg border bg-muted p-3 text-xs text-muted-foreground">
-          Sign in to unlock the MCP server name and URL.
+          Sign in to unlock the MCP server name and URL for your account.
         </div>
       )}
 
