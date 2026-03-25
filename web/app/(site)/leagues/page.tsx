@@ -253,6 +253,9 @@ function LeaguesPageContent() {
   const [deletingLeagueKey, setDeletingLeagueKey] = useState<string | null>(null);
   const [settingDefaultKey, setSettingDefaultKey] = useState<string | null>(null);
   const [discoveringLeagueKey, setDiscoveringLeagueKey] = useState<string | null>(null);
+  const [isPlatformsSectionOpen, setIsPlatformsSectionOpen] = useState(true);
+  const [isLeaguesSectionOpen, setIsLeaguesSectionOpen] = useState(true);
+  const [isAiSectionOpen, setIsAiSectionOpen] = useState(false);
   const [isEspnSetupOpen, setIsEspnSetupOpen] = useState(false);
   const [isYahooSetupOpen, setIsYahooSetupOpen] = useState(false);
   const [isYahooConnected, setIsYahooConnected] = useState(false);
@@ -973,6 +976,10 @@ function LeaguesPageContent() {
   const isDiscoveringSelected = selectedDiscoverLeague
     ? discoveringLeagueKey === selectedDiscoverLeague.key
     : false;
+  const connectedPlatformCount = Number(hasCredentials) + Number(isYahooConnected) + Number(isSleeperConnected);
+  const linkedLeagueCount =
+    leaguesBySport.active.reduce((total, [, sportLeagues]) => total + sportLeagues.length, 0) +
+    leaguesBySport.old.length;
 
   // Loading state
   if (!isLoaded) {
@@ -1051,21 +1058,68 @@ function LeaguesPageContent() {
           </Alert>
         )}
 
-        <div id="connect-ai" className="order-4 space-y-4">
-          <div className="space-y-2">
-            <h2 className="text-2xl font-semibold">3. Connect Your AI</h2>
-            <p className="text-muted-foreground">
-              Once your account is signed in, Flaim can show the MCP name and URL you need for Claude, ChatGPT, or Gemini.
-            </p>
-          </div>
-          <StepConnectAI showStepNumber={false} />
-        </div>
+        <Card id="connect-ai" className="order-4">
+          <CardHeader className="pb-4">
+            <button
+              type="button"
+              onClick={() => setIsAiSectionOpen((prev) => !prev)}
+              aria-expanded={isAiSectionOpen}
+              aria-controls="ai-card-content"
+              className="flex w-full items-start justify-between gap-4 text-left"
+            >
+              <div className="min-w-0 space-y-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <CardTitle className="text-lg">3. Connect Your AI</CardTitle>
+                  <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                    Ready
+                  </span>
+                </div>
+                <CardDescription>
+                  Copy the MCP name and URL you need for Claude, ChatGPT, or Gemini.
+                </CardDescription>
+              </div>
+              <ChevronDown
+                className={`mt-0.5 h-5 w-5 shrink-0 text-muted-foreground transition-transform ${
+                  isAiSectionOpen ? 'rotate-180' : ''
+                }`}
+              />
+            </button>
+          </CardHeader>
+          {isAiSectionOpen ? (
+            <CardContent id="ai-card-content" className="pt-0">
+              <StepConnectAI showStepNumber={false} renderCard={false} />
+            </CardContent>
+          ) : null}
+        </Card>
 
         {/* Your Leagues Card */}
         <Card className="order-3">
           <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-lg">2. Your Leagues</CardTitle>
+            <div className="flex items-start justify-between gap-4">
+              <button
+                type="button"
+                onClick={() => setIsLeaguesSectionOpen((prev) => !prev)}
+                aria-expanded={isLeaguesSectionOpen}
+                aria-controls="leagues-card-content"
+                className="flex flex-1 items-start justify-between gap-4 text-left"
+              >
+                <div className="min-w-0 space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <CardTitle className="text-lg">2. Your Leagues</CardTitle>
+                    <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                      {linkedLeagueCount} linked
+                    </span>
+                  </div>
+                  <CardDescription>
+                    Once a platform is connected, your linked teams and seasons appear here.
+                  </CardDescription>
+                </div>
+                <ChevronDown
+                  className={`mt-0.5 h-5 w-5 shrink-0 text-muted-foreground transition-transform ${
+                    isLeaguesSectionOpen ? 'rotate-180' : ''
+                  }`}
+                />
+              </button>
               <Popover>
                 <PopoverTrigger asChild>
                   <button
@@ -1083,11 +1137,9 @@ function LeaguesPageContent() {
                 </PopoverContent>
               </Popover>
             </div>
-            <CardDescription>
-              Once a platform is connected, your linked teams and seasons appear here.
-            </CardDescription>
           </CardHeader>
-          <CardContent>
+          {isLeaguesSectionOpen ? (
+          <CardContent id="leagues-card-content" className="pt-0">
             {isLoadingLeagues ? (
               <div className="flex items-center justify-center gap-2 py-8 text-muted-foreground">
                 <Loader2 className="h-5 w-5 animate-spin" />
@@ -1350,18 +1402,38 @@ function LeaguesPageContent() {
               </div>
             )}
           </CardContent>
+          ) : null}
         </Card>
 
-        {/* Platform setup and maintenance */}
-        <div id="platforms" className="order-2 space-y-4">
-          <div className="space-y-2">
-            <h2 className="text-2xl font-semibold">1. Connect Platforms</h2>
-            <p className="text-muted-foreground">
-              This is the main setup step. Connect, refresh, or manually add leagues from ESPN, Yahoo, and Sleeper here.
-            </p>
-          </div>
-
-          {/* Platform cards */}
+        <Card id="platforms" className="order-2">
+          <CardHeader className="pb-4">
+            <button
+              type="button"
+              onClick={() => setIsPlatformsSectionOpen((prev) => !prev)}
+              aria-expanded={isPlatformsSectionOpen}
+              aria-controls="platforms-card-content"
+              className="flex w-full items-start justify-between gap-4 text-left"
+            >
+              <div className="min-w-0 space-y-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <CardTitle className="text-lg">1. Connect Platforms</CardTitle>
+                  <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                    {connectedPlatformCount}/3 connected
+                  </span>
+                </div>
+                <CardDescription>
+                  This is the main setup step. Connect, refresh, or manually add leagues from ESPN, Yahoo, and Sleeper here.
+                </CardDescription>
+              </div>
+              <ChevronDown
+                className={`mt-0.5 h-5 w-5 shrink-0 text-muted-foreground transition-transform ${
+                  isPlatformsSectionOpen ? 'rotate-180' : ''
+                }`}
+              />
+            </button>
+          </CardHeader>
+          {isPlatformsSectionOpen ? (
+          <CardContent id="platforms-card-content" className="pt-0">
           <div className="grid gap-4">
             <div className="border rounded-lg bg-background">
               <button
@@ -2011,7 +2083,9 @@ function LeaguesPageContent() {
               )}
             </div>
           </div>
-        </div>
+          </CardContent>
+          ) : null}
+        </Card>
       </div>
     </div>
   );

@@ -19,9 +19,13 @@ const mcpServers = [
 
 interface StepConnectAIProps {
   showStepNumber?: boolean;
+  renderCard?: boolean;
 }
 
-export function StepConnectAI({ showStepNumber = true }: StepConnectAIProps) {
+export function StepConnectAI({
+  showStepNumber = true,
+  renderCard = true,
+}: StepConnectAIProps) {
   const { isLoaded, isSignedIn } = useAuth();
   const [copiedValue, setCopiedValue] = useState<string | null>(null);
 
@@ -37,8 +41,8 @@ export function StepConnectAI({ showStepNumber = true }: StepConnectAIProps) {
 
   const canShowServers = isLoaded && isSignedIn;
 
-  return (
-    <Card className="p-5 flex flex-col">
+  const content = (
+    <div className="flex flex-col">
       <div className="flex items-center gap-3 mb-4">
         {showStepNumber ? (
           <div className="w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold">
@@ -142,6 +146,8 @@ export function StepConnectAI({ showStepNumber = true }: StepConnectAIProps) {
           ))}
         </div>
       )}
-    </Card>
+    </div>
   );
+
+  return renderCard ? <Card className="p-5">{content}</Card> : content;
 }
