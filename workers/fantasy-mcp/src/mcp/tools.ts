@@ -909,7 +909,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       requiredScope: 'mcp:read',
       securitySchemes: buildSecuritySchemes('mcp:read'),
       openaiMeta: { invoking: 'Searching free agents\u2026', invoked: 'Free agents ready' },
-      description: `Get available free agents, optionally filtered by position. Sorted by ownership percentage. Use this for waiver-wire availability only. Do not use percentOwned to infer who owns a player in the user's league; for ownership questions, use get_league_info (returns teams with ownerName) and get_roster. Requires authentication. Use values from get_user_session. Read-only and safe to retry. Current date is ${currentDate}.`,
+      description: `Get available players (free agents and waiver wire), optionally filtered by position. Sorted by ownership percentage. Use this for player availability only. Do not use percentOwned to infer who owns a player in the user's league; for ownership questions, use get_league_info (returns teams with ownerName) and get_roster. Requires authentication. Use values from get_user_session. Read-only and safe to retry. Current date is ${currentDate}.`,
       inputSchema: {
         platform: z
           .enum(['espn', 'yahoo', 'sleeper'])
