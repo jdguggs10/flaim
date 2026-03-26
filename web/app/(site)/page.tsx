@@ -9,11 +9,12 @@ export const metadata: Metadata = {
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { PUBLIC_CHAT_PRESETS } from '@/lib/public-chat';
+import { PUBLIC_CHAT_DEEP_PRESETS, PUBLIC_CHAT_SIMPLE_PRESETS } from '@/lib/public-chat';
 import { ArrowRight, ChevronDown, Brain, Search, ShieldCheck, Sparkles, Zap } from 'lucide-react';
 
 export default function LandingPage() {
-  const homepageDemoPresets = PUBLIC_CHAT_PRESETS;
+  const homepageSimplePresets = PUBLIC_CHAT_SIMPLE_PRESETS;
+  const homepageDeepPresets = PUBLIC_CHAT_DEEP_PRESETS;
 
   return (
     <div className="min-h-screen bg-background">
@@ -213,10 +214,40 @@ export default function LandingPage() {
         <div className="container max-w-2xl mx-auto">
           <h2 className="text-2xl font-bold text-center mb-2">What you can ask</h2>
           <p className="text-center text-muted-foreground mb-8">
-            Click any prompt to launch the live demo and run it on Gerry&apos;s real leagues.
+            Start simple. These quick prompts each show off one core Flaim capability.
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {homepageSimplePresets.map((preset) => (
+              <Link
+                key={preset.id}
+                href={`/chat?preset=${preset.id}`}
+                className="group rounded-lg border bg-background p-4 transition-colors hover:border-foreground/20"
+              >
+                {preset.toolLabel ? (
+                  <div className="mb-3 inline-flex rounded-full border px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                    {preset.toolLabel}
+                  </div>
+                ) : null}
+                <p className="font-medium">&ldquo;{preset.userMessage}&rdquo;</p>
+                <div className="mt-3 flex items-center gap-2 text-xs font-medium text-primary">
+                  <span>Run this live in the demo</span>
+                  <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Go Deeper */}
+      <section className="py-10 px-4">
+        <div className="container max-w-2xl mx-auto">
+          <h2 className="text-2xl font-bold text-center mb-2">Go deeper</h2>
+          <p className="text-center text-muted-foreground mb-8">
+            These are the sharper demo questions that show how Flaim goes beyond raw lookups.
           </p>
           <div className="grid gap-3 sm:grid-cols-2">
-            {homepageDemoPresets.map((preset) => (
+            {homepageDeepPresets.map((preset) => (
               <Link
                 key={preset.id}
                 href={`/chat?preset=${preset.id}`}
