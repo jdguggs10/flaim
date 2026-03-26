@@ -414,6 +414,9 @@ export async function POST(request: NextRequest) {
                   if (firstAssistantTextMs === null) {
                     firstAssistantTextMs = getElapsedMs(streamStartedAt);
                   }
+                  enqueueSse(controller, encoder, "assistant_delta", {
+                    delta: eventWithStringFields.delta,
+                  });
                 }
                 break;
               case "response.output_item.done":

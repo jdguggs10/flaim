@@ -401,7 +401,7 @@ export function PublicChatExperience({
           }
           case "assistant_message": {
             const text = typeof data.text === "string" ? data.text : "";
-            if (text && !hasStreamedAssistantTextRef.current) {
+            if (text) {
               hasStreamedAssistantTextRef.current = true;
               setAssistantText(text);
             }
