@@ -108,13 +108,55 @@ function getPublicChatWebSearchTool() {
   };
 }
 
+type PublicChatDemoSport = "football" | "baseball";
+
+function isPublicChatDemoSport(value: unknown): value is PublicChatDemoSport {
+  return value === "football" || value === "baseball";
+}
+
+function getDefaultPublicChatDemoSport(now = new Date()): PublicChatDemoSport {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+
+  const month = Number(parts.find((part) => part.type === "month")?.value);
+  const day = Number(parts.find((part) => part.type === "day")?.value);
+
+  if (month > 2 && month < 10) {
+    return "baseball";
+  }
+
+  if (month === 2) {
+    return day >= 1 ? "baseball" : "football";
+  }
+
+  if (month === 10) {
+    return "football";
+  }
+
+  if (month === 1) {
+    return "football";
+  }
+
+  return "football";
+}
+
 export async function POST(request: NextRequest) {
   try {
-    const { presetId } = (await request.json()) as PublicChatTurnRequest;
+    const { presetId, sport: requestedSport } = (await request.json()) as PublicChatTurnRequest;
 
     if (!presetId || typeof presetId !== "string") {
       return NextResponse.json(
         { error: "A preset prompt is required" },
+        { status: 400 }
+      );
+    }
+
+    if (requestedSport !== undefined && !isPublicChatDemoSport(requestedSport)) {
+      return NextResponse.json(
+        { error: "Sport must be football or baseball" },
         { status: 400 }
       );
     }
@@ -164,6 +206,7 @@ export async function POST(request: NextRequest) {
       throw error;
     });
     const guardAcquireMs = getElapsedMs(startedAt);
+    const selectedSport = requestedSport ?? getDefaultPublicChatDemoSport();
 
     let finalized = false;
     const finalizeRun = async (
@@ -216,6 +259,15 @@ export async function POST(request: NextRequest) {
               {
                 type: "input_text",
                 text: `Today in Gerry's timezone is ${todayInEastern}. Use this as the reference date for "today" when deciding what current sports context to mention from web search.`,
+              },
+            ],
+          },
+          {
+            role: "developer",
+            content: [
+              {
+                type: "input_text",
+                text: `Selected demo sport for this run: ${selectedSport}. Treat this as authoritative when choosing Gerry's league context and sport-specific tool arguments. Do not call get_user_session just to rediscover the sport or default league.`,
               },
             ],
           },

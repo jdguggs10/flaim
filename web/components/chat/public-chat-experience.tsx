@@ -1,27 +1,35 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   PUBLIC_CHAT_PRESETS,
   type PublicChatPreset,
   type PublicChatPresetId,
 } from "@/lib/public-chat";
-import type { PublicChatTurnRequest } from "@/types/api-responses";
 import { cn } from "@/lib/utils";
 import { parse } from "partial-json";
-import {
-  ArrowRight,
-  LoaderCircle,
-  RefreshCw,
-} from "lucide-react";
+import { ArrowRight, LoaderCircle } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { PublicToolCall } from "./public-tool-call";
 import { PublicMessage } from "./public-message";
 
 type PublicRunStatus = "idle" | "running" | "completed" | "error";
+type PublicSport = "football" | "baseball";
+
+const PUBLIC_SPORT_OPTIONS: Array<{ value: PublicSport; label: string }> = [
+  { value: "football", label: "Football" },
+  { value: "baseball", label: "Baseball" },
+];
 
 interface PublicToolCallState {
   id: string;
@@ -29,6 +37,23 @@ interface PublicToolCallState {
   status: "in_progress" | "completed";
   arguments: string;
   parsedArguments?: Record<string, unknown>;
+}
+
+function getEasternMonth(now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "numeric",
+  }).formatToParts(now);
+
+  const month = Number(parts.find((part) => part.type === "month")?.value);
+
+  return { month };
+}
+
+function getDefaultPublicSport(now = new Date()): PublicSport {
+  const { month } = getEasternMonth(now);
+  return month >= 2 && month <= 9 ? "baseball" : "football";
 }
 
 function safeParseArguments(rawArguments: string) {
@@ -156,6 +181,9 @@ export function PublicChatExperience({
 }: {
   initialPresetId?: string | null;
 }) {
+  const [selectedSport, setSelectedSport] = useState<PublicSport>(() =>
+    getDefaultPublicSport()
+  );
   const [runStatus, setRunStatus] = useState<PublicRunStatus>("idle");
   const [selectedPresetId, setSelectedPresetId] =
     useState<PublicChatPresetId | null>(null);
@@ -174,16 +202,9 @@ export function PublicChatExperience({
         : null,
     [selectedPresetId]
   );
-  const runStatusLabel =
-    runStatus === "running"
-      ? "Running live"
-      : runStatus === "completed"
-        ? "Completed"
-        : runStatus === "error"
-          ? "Needs retry"
-          : "Ready";
   const liveStatusCopy = getLiveStatusCopy(toolCalls);
   const showFocusedPromptStage = runStatus === "running" && selectedPreset;
+  const hasToolCalls = toolCalls.length > 0;
   const topRailPresets = useMemo(() => {
     const presets = PUBLIC_CHAT_PRESETS.filter((preset) => preset.rail === "top");
     return presets.length ? presets : PUBLIC_CHAT_PRESETS;
@@ -288,8 +309,9 @@ export function PublicChatExperience({
     activeRunAbortControllerRef.current = abortController;
 
     try {
-      const requestBody: PublicChatTurnRequest = {
+      const requestBody = {
         presetId: preset.id,
+        sport: selectedSport,
       };
 
       const response = await fetch("/api/public-chat/turn", {
@@ -451,7 +473,7 @@ export function PublicChatExperience({
         activeRunAbortControllerRef.current = null;
       }
     }
-  }, [runStatus]);
+  }, [runStatus, selectedSport]);
 
   useEffect(() => {
     if (!initialQueryPreset) {
@@ -485,20 +507,30 @@ export function PublicChatExperience({
                 <span className="hidden sm:inline">Back home</span>
               </Link>
             </Button>
-            <Badge
-              variant={
-                runStatus === "completed"
-                  ? "default"
-                  : runStatus === "running"
-                    ? "secondary"
-                    : runStatus === "error"
-                      ? "destructive"
-                      : "outline"
-              }
-              className="px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] sm:px-3 sm:text-xs"
-            >
-              {runStatusLabel}
-            </Badge>
+            <div className="flex items-center gap-2">
+              <span className="hidden text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground sm:inline">
+                Sport
+              </span>
+              <Select
+                value={selectedSport}
+                onValueChange={(value) => setSelectedSport(value as PublicSport)}
+                disabled={runStatus === "running"}
+              >
+                <SelectTrigger
+                  aria-label="Select sport"
+                  className="h-8 w-[8.75rem] rounded-full border-border bg-background px-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-foreground shadow-sm"
+                >
+                  <SelectValue placeholder="Select sport" />
+                </SelectTrigger>
+                <SelectContent>
+                  {PUBLIC_SPORT_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           <h1 className="mt-3 w-full text-[2rem] font-semibold leading-[0.96] tracking-[-0.05em] text-foreground sm:mt-4 sm:text-5xl">
             Watch Flaim work on my actual leagues right now.
@@ -574,6 +606,29 @@ export function PublicChatExperience({
                     </div>
                   ) : null}
 
+                  {hasToolCalls ? (
+                    <section className="space-y-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                          Tools in play
+                        </div>
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                          {toolCalls.length} call{toolCalls.length === 1 ? "" : "s"}
+                        </div>
+                      </div>
+                      <div className="space-y-3">
+                        {toolCalls.map((toolCall) => (
+                          <PublicToolCall
+                            key={toolCall.id}
+                            name={toolCall.name}
+                            status={toolCall.status}
+                            parsedArguments={toolCall.parsedArguments}
+                          />
+                        ))}
+                      </div>
+                    </section>
+                  ) : null}
+
                   {assistantText ? (
                     <PublicMessage role="assistant" text={assistantText} />
                   ) : null}
@@ -592,21 +647,6 @@ export function PublicChatExperience({
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                         <span>
                           That run used live data from Gerry&apos;s actual leagues.
-                        </span>
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => void handleRunPreset(selectedPreset)}
-                          className="rounded-full"
-                        >
-                          <RefreshCw className="mr-2 h-4 w-4" />
-                          Run again
-                        </Button>
-                      </div>
-                      <div className="flex flex-col gap-2 text-primary-foreground/90 sm:flex-row sm:items-center sm:justify-between">
-                        <span>
-                          Want this on your own leagues instead? Finish setup in Flaim.
                         </span>
                         <Button asChild type="button" variant="secondary" size="sm" className="rounded-full">
                           <Link href="/leagues">

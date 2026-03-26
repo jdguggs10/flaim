@@ -48,6 +48,7 @@ export interface TurnResponseRequest {
 
 export interface PublicChatTurnRequest {
   presetId: string;
+  sport?: "football" | "baseball";
 }
 
 export interface WorkerErrorResponse {
