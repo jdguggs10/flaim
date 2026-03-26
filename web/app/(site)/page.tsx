@@ -111,6 +111,7 @@ export default function LandingPage() {
 
       <PublicChatExperience
         id="live-demo"
+        followTranscript={false}
         leadingSlot={
           <div className="flex min-h-8 items-center text-xs font-medium text-muted-foreground sm:text-sm">
             This demo runs on a live version of ChatGPT.

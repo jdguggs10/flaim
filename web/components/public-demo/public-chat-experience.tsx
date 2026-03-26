@@ -144,10 +144,12 @@ export function PublicChatExperience({
   initialPresetId = null,
   id,
   leadingSlot,
+  followTranscript = true,
 }: {
   initialPresetId?: string | null;
   id?: string;
   leadingSlot?: ReactNode;
+  followTranscript?: boolean;
 }) {
   const [runStatus, setRunStatus] = useState<PublicRunStatus>("idle");
   const [selectedPresetId, setSelectedPresetId] =
@@ -199,8 +201,12 @@ export function PublicChatExperience({
   );
 
   useEffect(() => {
+    if (!followTranscript) {
+      return;
+    }
+
     transcriptEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [assistantText, toolCalls.length, runStatus]);
+  }, [assistantText, followTranscript, toolCalls.length, runStatus]);
 
   useEffect(() => {
     return () => {
