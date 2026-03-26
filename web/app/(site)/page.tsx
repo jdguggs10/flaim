@@ -70,40 +70,38 @@ export default function LandingPage() {
       <section className="px-4 py-12 text-center md:py-16">
         <div className="mx-auto max-w-3xl">
           <p className="mb-4 text-xs font-semibold uppercase tracking-[0.28em] text-muted-foreground">
-            Read-only fantasy analysis
+            Read-only Fantasy Analysis
           </p>
           <h1 className="mb-4 text-4xl font-bold md:text-6xl">
             Your real fantasy leagues,
-            <span className="block text-muted-foreground">inside the AI you already use.</span>
+            <span className="block text-muted-foreground">connected to the AI you already use.</span>
           </h1>
           <p className="mx-auto max-w-2xl text-lg text-muted-foreground md:text-xl">
-            Flaim connects ESPN, Yahoo, and Sleeper to Claude, ChatGPT, and Perplexity so the advice is based on your real roster, matchups, standings, waiver wire, and recent moves.
+            Flaim connects ESPN, Yahoo, and Sleeper to Claude, ChatGPT, and Perplexity, giving your AI your real roster, matchups, standings, waiver wire, and league activity.
           </p>
           <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-            <Button asChild size="lg">
-              <Link href="/chat">
-                See it live
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </Link>
-            </Button>
             <SignedOut>
-              <Button asChild size="lg" variant="outline">
+              <Button asChild size="lg">
                 <Link href="/leagues">Set up Flaim</Link>
               </Button>
             </SignedOut>
             <SignedIn>
-              <Button asChild size="lg" variant="outline">
+              <Button asChild size="lg">
                 <Link href="/leagues">Go to Leagues</Link>
               </Button>
             </SignedIn>
           </div>
-          <div className="mt-8 flex flex-wrap items-center justify-center gap-2 text-sm text-muted-foreground">
-            <span className="rounded-full border bg-background px-3 py-1">ESPN</span>
-            <span className="rounded-full border bg-background px-3 py-1">Yahoo</span>
-            <span className="rounded-full border bg-background px-3 py-1">Sleeper</span>
-            <span className="rounded-full border bg-background px-3 py-1">Claude</span>
-            <span className="rounded-full border bg-background px-3 py-1">ChatGPT</span>
-            <span className="rounded-full border bg-background px-3 py-1">Perplexity</span>
+          <div className="mt-8 space-y-2 text-sm text-muted-foreground">
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <span className="rounded-full border bg-background px-3 py-1">ESPN</span>
+              <span className="rounded-full border bg-background px-3 py-1">Yahoo</span>
+              <span className="rounded-full border bg-background px-3 py-1">Sleeper</span>
+            </div>
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <span className="rounded-full border bg-background px-3 py-1">Claude</span>
+              <span className="rounded-full border bg-background px-3 py-1">ChatGPT</span>
+              <span className="rounded-full border bg-background px-3 py-1">Perplexity</span>
+            </div>
           </div>
         </div>
         <p className="sr-only">
