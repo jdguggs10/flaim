@@ -25,6 +25,7 @@ export interface PublicChatPreset {
   showInChat: boolean;
   rail?: PublicChatPresetRail;
   toolLabel?: string;
+  homepageExplanation?: string;
 }
 
 // Keep the public demo model in one place so we can iterate on latency and
@@ -186,6 +187,8 @@ export const PUBLIC_CHAT_DEEP_PRESETS: readonly PublicChatPreset[] = [
       "Use Flaim to inspect Gerry's best default live league from the injected context. If that context is missing or unclear, prefer Gerry's baseball league for this demo. Analyze Gerry's roster needs, then suggest only the most worthwhile free agents in his league with plain-English reasoning. Use web search for current performance, injuries, role changes, or schedule context before answering. Final answer: 30-50 words max.",
     homepageSection: "deep",
     showInChat: true,
+    homepageExplanation:
+      "Checks Gerry's roster, scans the waiver wire, and validates the best targets with current player context.",
   },
   {
     id: "transactions-watch",
@@ -199,6 +202,8 @@ export const PUBLIC_CHAT_DEEP_PRESETS: readonly PublicChatPreset[] = [
       "Use Flaim to inspect Gerry's best default live league from the injected context. If that context is missing or unclear, prefer Gerry's baseball league for this demo. Review the latest moves in Gerry's league and call out only the ones that actually matter, including why each one is interesting in plain language. Use web search for recent player news or performances before answering. Final answer: 30-50 words max.",
     homepageSection: "deep",
     showInChat: true,
+    homepageExplanation:
+      "Starts with the transaction feed, checks the affected rosters when needed, and adds live context on why those moves matter.",
   },
   {
     id: "league-leader",
@@ -212,6 +217,8 @@ export const PUBLIC_CHAT_DEEP_PRESETS: readonly PublicChatPreset[] = [
       "Use Flaim to inspect Gerry's best default live league from the injected context. If that context is missing or unclear, prefer Gerry's baseball league for this demo. Identify who is currently winning Gerry's league and explain why that team is on top. Use web search for current performance, injury, or recent-news context before answering. Final answer: 30-50 words max.",
     homepageSection: "deep",
     showInChat: true,
+    homepageExplanation:
+      "Combines the standings with roster and matchup context to explain why the leader is actually on top.",
   },
   {
     id: "give-up-player",
@@ -225,6 +232,8 @@ export const PUBLIC_CHAT_DEEP_PRESETS: readonly PublicChatPreset[] = [
       "Use Flaim to inspect Gerry's best default live league from the injected context. If that context is missing or unclear, prefer Gerry's baseball league for this demo. Identify the one player on Gerry's roster he most needs to give up on right now, and explain why in plain language. Use web search for recent performance, role, injury, and trend context before answering. Final answer: 30-50 words max.",
     homepageSection: "deep",
     showInChat: true,
+    homepageExplanation:
+      "Looks at Gerry's roster, zeroes in on the weakest hold, and adds current trend or injury context before making the call.",
   },
   {
     id: "roster-hole",
@@ -238,6 +247,8 @@ export const PUBLIC_CHAT_DEEP_PRESETS: readonly PublicChatPreset[] = [
       "Use Flaim to inspect Gerry's best default live league from the injected context. If that context is missing or unclear, prefer Gerry's baseball league for this demo. Identify the single biggest hole in Gerry's roster and explain why it is the biggest problem right now. Use web search for current injuries, performance trends, role changes, or schedule context before answering. Final answer: 30-50 words max.",
     homepageSection: "deep",
     showInChat: true,
+    homepageExplanation:
+      "Finds Gerry's weakest spot, checks the best replacement paths, and layers in live player context to prioritize the problem.",
   },
   {
     id: "sell-high",
@@ -251,6 +262,8 @@ export const PUBLIC_CHAT_DEEP_PRESETS: readonly PublicChatPreset[] = [
       "Use Flaim to inspect Gerry's best default live league from the injected context. If that context is missing or unclear, prefer Gerry's baseball league for this demo. Identify the best sell-high candidate on Gerry's roster right now and explain why this might be the right time to move that player. Use web search for current performance, news, schedule, and role context before answering. Final answer: 30-50 words max.",
     homepageSection: "deep",
     showInChat: true,
+    homepageExplanation:
+      "Starts from Gerry's roster, checks the most tradable candidate in context, and adds live news to test whether the window is real.",
   },
   {
     id: "last-season",
@@ -264,6 +277,8 @@ export const PUBLIC_CHAT_DEEP_PRESETS: readonly PublicChatPreset[] = [
       "Use Flaim to inspect Gerry's best default live league from the injected context. If that context is missing or unclear, prefer Gerry's baseball league for this demo. Review Gerry's result from last season in the most relevant league and summarize how he did in plain English. Use web search at least once for season context or any useful league or player background before answering, even if the answer is mostly based on Gerry's league data. Final answer: 30-50 words max.",
     homepageSection: "deep",
     showInChat: true,
+    homepageExplanation:
+      "Pulls the past season, adds league context, and gives the answer enough background to feel like analysis instead of a raw recap.",
   },
   {
     id: "playoff-start",
@@ -277,6 +292,8 @@ export const PUBLIC_CHAT_DEEP_PRESETS: readonly PublicChatPreset[] = [
       "Use Flaim to inspect Gerry's best default live league from the injected context. If that context is missing or unclear, prefer Gerry's baseball league for this demo. Figure out when Gerry's fantasy playoffs start in his current league and explain what that means for his planning right now. Use web search for current schedule or platform-season context before answering. Final answer: 30-50 words max.",
     homepageSection: "deep",
     showInChat: true,
+    homepageExplanation:
+      "Checks league settings, confirms the timing in context, and adds current schedule context so the answer is actually actionable.",
   },
 ] as const;
 
@@ -292,3 +309,18 @@ export function getPublicChatPreset(
 ): PublicChatPreset | undefined {
   return PUBLIC_CHAT_PRESETS.find((preset) => preset.id === presetId);
 }
+
+export const PUBLIC_CHAT_TOOL_DISPLAY_LABELS: Record<
+  PublicChatAllowedTool,
+  string
+> = {
+  get_user_session: "Leagues",
+  get_ancient_history: "League History",
+  get_league_info: "League Info",
+  get_standings: "Standings",
+  get_matchups: "Matchups",
+  get_roster: "Roster",
+  get_free_agents: "Free Agents",
+  get_players: "Player Lookup",
+  get_transactions: "Transactions",
+};

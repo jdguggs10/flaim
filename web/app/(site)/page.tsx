@@ -9,7 +9,11 @@ export const metadata: Metadata = {
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { PUBLIC_CHAT_DEEP_PRESETS, PUBLIC_CHAT_SIMPLE_PRESETS } from '@/lib/public-chat';
+import {
+  PUBLIC_CHAT_DEEP_PRESETS,
+  PUBLIC_CHAT_SIMPLE_PRESETS,
+  PUBLIC_CHAT_TOOL_DISPLAY_LABELS,
+} from '@/lib/public-chat';
 import { ArrowRight, ChevronDown, Brain, Search, ShieldCheck, Sparkles, Zap } from 'lucide-react';
 
 export default function LandingPage() {
@@ -244,7 +248,7 @@ export default function LandingPage() {
         <div className="container max-w-2xl mx-auto">
           <h2 className="text-2xl font-bold text-center mb-2">Go deeper</h2>
           <p className="text-center text-muted-foreground mb-8">
-            These are the sharper demo questions that show how Flaim goes beyond raw lookups.
+            Start with the basic tools above. These deeper prompts combine multiple Flaim tools and live web context to produce stronger answers.
           </p>
           <div className="grid gap-3 sm:grid-cols-2">
             {homepageDeepPresets.map((preset) => (
@@ -254,6 +258,22 @@ export default function LandingPage() {
                 className="group rounded-lg border bg-background p-4 transition-colors hover:border-foreground/20"
               >
                 <p className="font-medium">&ldquo;{preset.userMessage}&rdquo;</p>
+                <p className="mt-3 text-sm leading-6 text-muted-foreground">
+                  {preset.homepageExplanation}
+                </p>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {preset.allowedTools.map((tool) => (
+                    <span
+                      key={tool}
+                      className="inline-flex rounded-full border bg-muted px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground"
+                    >
+                      {PUBLIC_CHAT_TOOL_DISPLAY_LABELS[tool]}
+                    </span>
+                  ))}
+                  <span className="inline-flex rounded-full border border-primary/25 bg-primary/5 px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.12em] text-primary">
+                    Web Search
+                  </span>
+                </div>
                 <div className="mt-3 flex items-center gap-2 text-xs font-medium text-primary">
                   <span>Run this live in the demo</span>
                   <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
