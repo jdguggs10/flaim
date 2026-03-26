@@ -104,14 +104,14 @@ export function PublicToolCall({
   const copy = getToolCopy(name);
 
   return (
-    <div className="overflow-hidden rounded-[1.35rem] border border-border bg-card px-4 py-4 shadow-sm lg:rounded-[1.75rem]">
-      <div className="mb-2 flex items-start justify-between gap-3">
-        <div className="min-w-0 pr-2 text-sm font-semibold text-foreground">
+    <div className="overflow-hidden rounded-[1.35rem] border border-border bg-card px-4 py-3.5 shadow-sm lg:rounded-[1.75rem]">
+      <div className="mb-1.5 flex items-start justify-between gap-2.5">
+        <div className="min-w-0 pr-2 text-[0.95rem] font-semibold leading-6 text-foreground">
           {copy.title}
         </div>
         <div
           className={cn(
-            "mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border",
+            "mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border",
             status === "completed"
               ? "border-border bg-primary text-primary-foreground"
               : "border-border bg-muted text-foreground"
@@ -119,9 +119,9 @@ export function PublicToolCall({
           aria-label={status === "completed" ? "Complete" : "Running"}
         >
           {status === "completed" ? (
-            <CheckCircle2 className="h-4 w-4" />
+            <CheckCircle2 className="h-3.5 w-3.5" />
           ) : (
-            <LoaderCircle className="h-4 w-4 animate-spin" />
+            <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
           )}
         </div>
       </div>
@@ -130,7 +130,7 @@ export function PublicToolCall({
         {copy.description}
       </p>
       {argumentSummary.length > 0 ? (
-        <div className="mt-3 flex flex-wrap gap-2">
+        <div className="mt-2.5 flex flex-wrap gap-2">
           {argumentSummary.map((item) => (
             <span
               key={item}

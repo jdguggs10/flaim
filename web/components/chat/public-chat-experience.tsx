@@ -101,41 +101,6 @@ function parseSseChunk(chunk: string) {
   }
 }
 
-function getLiveStatusCopy(toolCalls: PublicToolCallState[]) {
-  const activeTool = [...toolCalls]
-    .reverse()
-    .find((toolCall) => toolCall.status === "in_progress") ?? null;
-  const latestTool = activeTool ?? toolCalls[toolCalls.length - 1] ?? null;
-
-  if (!latestTool) {
-    return "Getting the live answer started.";
-  }
-
-  switch (latestTool?.name) {
-    case "web_search_call":
-    case "web_search":
-      return "Checking current news, performances, and schedule context.";
-    case "get_user_session":
-      return "Checking Gerry's connected leagues.";
-    case "get_roster":
-      return "Reviewing Gerry's team to find the strong spots and weak links.";
-    case "get_standings":
-      return "Checking where Gerry sits in the standings right now.";
-    case "get_matchups":
-      return "Looking at Gerry's current matchup and where it could swing.";
-    case "get_free_agents":
-      return "Scanning the waiver pool for options that fit Gerry's team.";
-    case "get_transactions":
-      return "Reviewing the recent league moves that stand out.";
-    case "get_league_info":
-      return "Pulling league context so the answer has the right frame.";
-    case "get_players":
-      return "Looking up player details to sharpen the answer.";
-    default:
-      return "Pulling the live details together.";
-  }
-}
-
 async function* readSse(
   response: Response
 ): AsyncGenerator<{ event: string; data: Record<string, unknown> }> {
@@ -190,6 +155,7 @@ export function PublicChatExperience({
   const activeRunAbortControllerRef = useRef<AbortController | null>(null);
   const autoRunPresetIdRef = useRef<PublicChatPresetId | null>(null);
   const demoSport = useMemo<PublicSport>(() => getDefaultPublicSport(), []);
+  const [preToolStatusIndex, setPreToolStatusIndex] = useState(0);
 
   const selectedPreset = useMemo(
     () =>
@@ -198,9 +164,13 @@ export function PublicChatExperience({
         : null,
     [selectedPresetId]
   );
-  const liveStatusCopy = getLiveStatusCopy(toolCalls);
   const showFocusedPromptStage = runStatus === "running" && selectedPreset;
   const hasToolCalls = toolCalls.length > 0;
+  const preToolStatusCopy = [
+    "Thinking...",
+    "Using Flaim Fantasy plugin...",
+    "Calling Flaim Fantasy tools...",
+  ][preToolStatusIndex];
   const topRailPresets = useMemo(() => {
     const presets = PUBLIC_CHAT_PRESETS.filter((preset) => preset.rail === "top");
     return presets.length ? presets : PUBLIC_CHAT_PRESETS;
@@ -226,6 +196,22 @@ export function PublicChatExperience({
       activeRunAbortControllerRef.current?.abort();
     };
   }, []);
+
+  useEffect(() => {
+    if (runStatus !== "running" || toolCalls.length > 0) {
+      setPreToolStatusIndex(0);
+      return;
+    }
+
+    setPreToolStatusIndex(0);
+    const pluginTimer = window.setTimeout(() => setPreToolStatusIndex(1), 750);
+    const toolsTimer = window.setTimeout(() => setPreToolStatusIndex(2), 1500);
+
+    return () => {
+      window.clearTimeout(pluginTimer);
+      window.clearTimeout(toolsTimer);
+    };
+  }, [runStatus, toolCalls.length]);
 
   useEffect(() => {
     void fetch("/api/public-chat/bootstrap", {
@@ -594,17 +580,12 @@ export function PublicChatExperience({
                     </div>
                   )}
 
-                  {runStatus === "running" ? (
-                    <div className="overflow-hidden rounded-[1.35rem] border border-border bg-muted px-4 py-4 text-sm text-foreground lg:rounded-[1.75rem] lg:px-5">
-                      <div className="flex items-center gap-2 font-semibold">
-                        <LoaderCircle className="h-4 w-4 animate-spin" />
-                        Checking the live data
-                      </div>
-                      <p className="mt-2 leading-6 text-muted-foreground">
-                        {assistantText
-                          ? "Pulling together the answer."
-                          : liveStatusCopy}
-                      </p>
+                  {runStatus === "running" && !hasToolCalls ? (
+                    <div className="flex items-center gap-2 px-1 text-sm text-muted-foreground">
+                      <LoaderCircle className="h-4 w-4 animate-spin" />
+                      <span>
+                        {assistantText ? "Pulling together the answer." : preToolStatusCopy}
+                      </span>
                     </div>
                   ) : null}
 

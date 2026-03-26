@@ -17,7 +17,7 @@ export default function SiteLayout({
         <div className="flex w-full flex-col min-h-full">
           <div className="flex-1">{children}</div>
           <footer className="w-full py-6 px-4 text-center border-t bg-background">
-            <div className="mx-auto flex max-w-full items-center justify-center gap-2 overflow-x-auto whitespace-nowrap text-xs text-muted-foreground sm:text-sm">
+            <div className="mx-auto flex max-w-full items-center justify-center gap-2 overflow-x-auto whitespace-nowrap text-sm text-muted-foreground">
               <a
                 href="https://www.threads.com/@jdguggs10"
                 target="_blank"
