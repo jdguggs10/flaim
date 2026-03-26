@@ -4,7 +4,7 @@ import Link from 'next/link';
 export const metadata: Metadata = {
   title: 'Connect ESPN | Flaim',
   description:
-    'Step-by-step guide to connecting your ESPN fantasy leagues to AI assistants using Flaim. Works with football, baseball, basketball, and hockey.',
+    'Connect ESPN to Flaim from /leagues, confirm your leagues synced, and use the manual fallback when the Chrome extension is not enough.',
   alternates: {
     canonical: 'https://flaim.app/guide/espn',
   },
@@ -20,80 +20,116 @@ export default function EspnGuidePage() {
             '@context': 'https://schema.org',
             '@type': 'HowTo',
             name: 'Connect ESPN',
-            description: 'Step-by-step guide to connecting your ESPN fantasy leagues to AI assistants using Flaim.',
+            description:
+              'Connect your ESPN leagues from /leagues, sync with the Chrome extension, and verify the leagues show up before adding Flaim to your AI assistant.',
             step: [
-              { '@type': 'HowToStep', name: 'Create a Flaim account', text: 'Create a Flaim account at flaim.app.' },
-              { '@type': 'HowToStep', name: 'Install the Chrome extension', text: 'Install the Flaim Chrome extension from the Chrome Web Store.' },
-              { '@type': 'HowToStep', name: 'Log in to ESPN', text: 'Log in to fantasy.espn.com in Chrome.' },
-              { '@type': 'HowToStep', name: 'Sync your leagues', text: 'Click the Flaim extension icon and hit Sync.' },
-              { '@type': 'HowToStep', name: 'Add Flaim to your AI assistant', text: 'Add the Flaim MCP server URL (https://api.flaim.app/mcp) to your AI assistant.' },
-              { '@type': 'HowToStep', name: 'Authorize', text: 'Sign in to Flaim and approve the connection.' },
-              { '@type': 'HowToStep', name: 'Start chatting', text: 'Start chatting about your league.' },
+              {
+                '@type': 'HowToStep',
+                name: 'Open leagues',
+                text: 'Sign in to Flaim and open https://flaim.app/leagues.',
+              },
+              {
+                '@type': 'HowToStep',
+                name: 'Connect ESPN',
+                text: 'Use the ESPN card to sync from the Flaim Chrome extension or use the manual credential fallback.',
+              },
+              {
+                '@type': 'HowToStep',
+                name: 'Verify leagues',
+                text: 'Confirm that your ESPN leagues appear in /leagues.',
+              },
+              {
+                '@type': 'HowToStep',
+                name: 'Add Flaim to your AI assistant',
+                text: 'Use the Flaim MCP server URL https://api.flaim.app/mcp in your AI connector flow.',
+              },
             ],
           }),
         }}
       />
-      <div className="container max-w-2xl mx-auto py-12 px-4">
-        <h1 className="text-3xl font-bold mb-4">Connect ESPN</h1>
-        <p className="text-muted-foreground mb-8">
-          Flaim connects your ESPN fantasy leagues to AI assistants for read-only analysis. ESPN requires a Chrome extension to sync your league credentials. Setup takes about 5 minutes.
+      <div className="container mx-auto max-w-2xl px-4 py-12">
+        <h1 className="mb-4 text-3xl font-bold">Connect ESPN</h1>
+        <p className="mb-8 text-muted-foreground">
+          ESPN is the highest-friction Flaim setup, so the goal is simple: get your ESPN leagues visible in
+          <Link href="/leagues" className="text-primary hover:underline"> /leagues</Link> before you bother with AI
+          setup. The Chrome extension is the preferred path. Manual cookie entry exists as a fallback when extension sync
+          does not work for you.
         </p>
 
         <section className="mb-10">
-          <h2 className="text-xl font-semibold mb-3">What you need</h2>
-          <ul className="list-disc list-inside text-muted-foreground space-y-1">
-            <li>A Flaim account (<Link href="/" className="text-primary hover:underline">flaim.app</Link>)</li>
-            <li>Google Chrome browser</li>
-            <li>An active ESPN fantasy league</li>
+          <h2 className="mb-3 text-xl font-semibold">Before you start</h2>
+          <ul className="list-disc list-inside space-y-2 text-muted-foreground">
+            <li>Sign in to Flaim.</li>
+            <li>Use the ESPN account that actually owns or participates in the leagues you want.</li>
+            <li>Supported sports are football, baseball, basketball, and hockey.</li>
+            <li>Chrome is recommended for the extension path. If you cannot use Chrome, keep reading for the manual fallback.</li>
           </ul>
         </section>
 
         <section className="mb-10">
-          <h2 className="text-xl font-semibold mb-3">Step by step</h2>
-          <ol className="list-decimal list-inside text-muted-foreground space-y-2">
-            <li>Create a Flaim account at <Link href="/" className="text-primary hover:underline">flaim.app</Link></li>
-            <li>Install the Flaim Chrome extension from the Chrome Web Store</li>
-            <li>Log in to fantasy.espn.com in Chrome</li>
-            <li>Click the Flaim extension icon and hit Sync</li>
-            <li>Add the Flaim MCP server URL to your AI assistant: <code className="text-xs bg-muted px-1 py-0.5 rounded">https://api.flaim.app/mcp</code>{' '}
-              (<Link href="/guide" className="text-primary hover:underline">AI setup details</Link>)</li>
-            <li>Sign in to Flaim and approve the connection</li>
-            <li>Start chatting about your league</li>
+          <h2 className="mb-3 text-xl font-semibold">Do this in /leagues</h2>
+          <ol className="list-decimal list-inside space-y-2 text-muted-foreground">
+            <li>Open <Link href="/leagues" className="text-primary hover:underline">/leagues</Link> and choose ESPN.</li>
+            <li>Preferred path: install the Flaim Chrome extension, sign in to fantasy.espn.com in that same browser profile, then trigger Sync from the extension.</li>
+            <li>If extension sync is unavailable or fails repeatedly, use the manual credential path in the ESPN card and paste your <code className="rounded bg-muted px-1 py-0.5 text-xs">SWID</code> and <code className="rounded bg-muted px-1 py-0.5 text-xs">ESPN_S2</code> values.</li>
+            <li>If Flaim asks for league IDs, add the private leagues you care about and run verification again.</li>
+            <li>Wait until your ESPN leagues show up in the page before moving on to AI setup.</li>
+            <li>Then add Flaim to Claude, ChatGPT, or Perplexity with <code className="rounded bg-muted px-1 py-0.5 text-xs">https://api.flaim.app/mcp</code>. Start at the <Link href="/guide" className="text-primary hover:underline">guide overview</Link> if you need the AI-specific steps.</li>
           </ol>
         </section>
 
         <section className="mb-10">
-          <h2 className="text-xl font-semibold mb-3">Why a Chrome extension?</h2>
-          <p className="text-muted-foreground">
-            ESPN doesn&apos;t offer a public API for fantasy data. The extension piggybacks on your active ESPN session to grab read-only league data. Your ESPN credentials are encrypted and stored securely. They are never shared with AI providers.
-          </p>
-        </section>
-
-        <section className="mb-10">
-          <h2 className="text-xl font-semibold mb-3">Supported sports</h2>
-          <p className="text-muted-foreground">
-            Football, baseball, basketball, and hockey.
-          </p>
-        </section>
-
-        <section className="mb-10">
-          <h2 className="text-xl font-semibold mb-3">Other platforms</h2>
-          <ul className="text-sm text-muted-foreground space-y-1">
-            <li><Link href="/guide/yahoo" className="text-primary hover:underline">Connect Yahoo</Link> (no extension needed)</li>
-            <li><Link href="/guide/sleeper" className="text-primary hover:underline">Connect Sleeper</Link> (just your username)</li>
+          <h2 className="mb-3 text-xl font-semibold">How to know it worked</h2>
+          <ul className="list-disc list-inside space-y-2 text-muted-foreground">
+            <li>The ESPN section in <Link href="/leagues" className="text-primary hover:underline">/leagues</Link> shows connected leagues, not just a pending state.</li>
+            <li>You can identify the league you want to use most often, even if you do not set a default yet.</li>
+            <li>A fresh AI chat can answer &ldquo;What leagues do I have?&rdquo; or &ldquo;Show my ESPN leagues&rdquo; without an auth error.</li>
           </ul>
         </section>
 
         <section className="mb-10">
-          <h2 className="text-xl font-semibold mb-3">Connect your AI</h2>
-          <ul className="text-sm text-muted-foreground space-y-1">
-            <li><Link href="/guide/claude" className="text-primary hover:underline">Claude</Link></li>
-            <li><Link href="/guide/chatgpt" className="text-primary hover:underline">ChatGPT</Link></li>
-            <li><Link href="/guide/perplexity" className="text-primary hover:underline">Perplexity</Link></li>
+          <h2 className="mb-3 text-xl font-semibold">Why the extension is recommended</h2>
+          <p className="text-muted-foreground">
+            ESPN does not offer a normal public fantasy API for this use case. The extension is the cleanest way for
+            Flaim to capture the session details it needs for read-only access. Your ESPN credentials are never shared
+            with AI providers.
+          </p>
+        </section>
+
+        <section className="mb-10">
+          <h2 className="mb-3 text-xl font-semibold">If something goes wrong</h2>
+          <ul className="list-disc list-inside space-y-2 text-muted-foreground">
+            <li>Sync succeeds but no leagues show up: make sure you are logged into the correct ESPN account and try the sync again.</li>
+            <li>Private league still missing: add the league ID manually from the ESPN flow in <Link href="/leagues" className="text-primary hover:underline">/leagues</Link>.</li>
+            <li>Credentials expire or become invalid later: rerun extension sync or replace the manual cookies.</li>
+            <li>You authorized an AI connector before ESPN was linked: finish ESPN first, then start a fresh AI conversation.</li>
           </ul>
         </section>
 
-        <div className="pt-4 border-t">
+        <section className="mb-10">
+          <h2 className="mb-3 text-xl font-semibold">What happens next</h2>
+          <p className="mb-3 text-muted-foreground">
+            Once ESPN is visible in Flaim, the rest is just AI setup and a quick smoke test.
+          </p>
+          <ul className="list-disc list-inside space-y-2 text-muted-foreground">
+            <li>Add Flaim to your AI assistant.</li>
+            <li>Start a new chat and ask about your roster, matchup, or standings.</li>
+            <li>If you use more than one league, narrow your first prompt by league name until you are comfortable with the flow.</li>
+          </ul>
+        </section>
+
+        <section className="mb-10">
+          <h2 className="mb-3 text-xl font-semibold">Related guides</h2>
+          <ul className="space-y-1 text-sm text-muted-foreground">
+            <li><Link href="/guide/yahoo" className="text-primary hover:underline">Connect Yahoo</Link></li>
+            <li><Link href="/guide/sleeper" className="text-primary hover:underline">Connect Sleeper</Link></li>
+            <li><Link href="/guide/claude" className="text-primary hover:underline">Use Flaim with Claude</Link></li>
+            <li><Link href="/guide/chatgpt" className="text-primary hover:underline">Use Flaim with ChatGPT</Link></li>
+            <li><Link href="/guide/perplexity" className="text-primary hover:underline">Use Flaim with Perplexity</Link></li>
+          </ul>
+        </section>
+
+        <div className="border-t pt-4">
           <Link href="/guide" className="text-sm text-primary hover:underline">
             &larr; Back to guide overview
           </Link>

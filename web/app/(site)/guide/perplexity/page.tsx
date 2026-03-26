@@ -4,7 +4,7 @@ import Link from 'next/link';
 export const metadata: Metadata = {
   title: 'Use Flaim with Perplexity | Flaim',
   description:
-    'How to add Flaim as a Perplexity custom connector so you can ask about your ESPN, Yahoo, or Sleeper fantasy leagues directly in Perplexity.',
+    'Add Flaim to Perplexity as a remote connector, use the right auth and transport settings, and verify it can see your linked leagues.',
   alternates: {
     canonical: 'https://flaim.app/guide/perplexity',
   },
@@ -20,62 +20,107 @@ export default function PerplexityGuidePage() {
             '@context': 'https://schema.org',
             '@type': 'HowTo',
             name: 'Use Flaim with Perplexity',
-            description: 'How to add Flaim as a Perplexity custom connector for fantasy sports analysis.',
+            description: 'Add Flaim as a Perplexity connector for read-only fantasy league analysis.',
             step: [
-              { '@type': 'HowToStep', name: 'Open custom connectors', text: 'In Perplexity, click "+ Custom connector" and select Remote.' },
-              { '@type': 'HowToStep', name: 'Configure Flaim', text: 'Enter a name, the Flaim MCP server URL (https://api.flaim.app/mcp), select OAuth for authentication, and Streamable HTTP for transport.' },
-              { '@type': 'HowToStep', name: 'Authorize Flaim', text: 'Sign in to your Flaim account and approve the connection.' },
-              { '@type': 'HowToStep', name: 'Start chatting', text: 'Ask Perplexity about your fantasy leagues. It now has access to your real league data.' },
+              {
+                '@type': 'HowToStep',
+                name: 'Connect a league first',
+                text: 'Use https://flaim.app/leagues to connect ESPN, Yahoo, or Sleeper before setting up Perplexity.',
+              },
+              {
+                '@type': 'HowToStep',
+                name: 'Create the remote connector',
+                text: 'In Perplexity, add a remote connector with https://api.flaim.app/mcp, OAuth auth, and Streamable HTTP transport.',
+              },
+              {
+                '@type': 'HowToStep',
+                name: 'Authorize Flaim',
+                text: 'Sign in to Flaim and approve access.',
+              },
+              {
+                '@type': 'HowToStep',
+                name: 'Test it',
+                text: 'Start a fresh thread and ask what leagues you have.',
+              },
             ],
           }),
         }}
       />
-      <div className="container max-w-2xl mx-auto py-12 px-4">
-        <h1 className="text-3xl font-bold mb-4">Use Flaim with Perplexity</h1>
-        <p className="text-muted-foreground mb-8">
-          Perplexity supports custom remote connectors via MCP. Once connected, you can ask Perplexity about your ESPN, Yahoo, and Sleeper fantasy leagues, combining its web search capabilities with your real league data.
+      <div className="container mx-auto max-w-2xl px-4 py-12">
+        <h1 className="mb-4 text-3xl font-bold">Use Flaim with Perplexity</h1>
+        <p className="mb-8 text-muted-foreground">
+          Perplexity supports Flaim through a remote MCP connector. Connect your leagues first in
+          <Link href="/leagues" className="text-primary hover:underline"> /leagues</Link>, then configure the connector
+          with the correct URL, auth method, and transport settings.
         </p>
 
         <section className="mb-10">
-          <h2 className="text-xl font-semibold mb-3">What you need</h2>
-          <ul className="list-disc list-inside text-muted-foreground space-y-1">
-            <li>A Flaim account with at least one connected league (<Link href="/" className="text-primary hover:underline">flaim.app</Link>)</li>
-            <li>A Perplexity Pro, Max, or Enterprise plan</li>
+          <h2 className="mb-3 text-xl font-semibold">Before you start</h2>
+          <ul className="list-disc list-inside space-y-2 text-muted-foreground">
+            <li>Connect at least one ESPN, Yahoo, or Sleeper league in <Link href="/leagues" className="text-primary hover:underline">/leagues</Link>.</li>
+            <li>Use a Perplexity plan that supports custom connectors.</li>
           </ul>
         </section>
 
         <section className="mb-10">
-          <h2 className="text-xl font-semibold mb-3">Step by step</h2>
-          <ol className="list-decimal list-inside text-muted-foreground space-y-2">
-            <li>In Perplexity, click &ldquo;+ Custom connector&rdquo; and select &ldquo;Remote&rdquo;</li>
-            <li>Enter a name (e.g. &ldquo;Flaim Fantasy&rdquo;)</li>
-            <li>Enter the MCP server URL: <code className="text-xs bg-muted px-1 py-0.5 rounded">https://api.flaim.app/mcp</code></li>
-            <li>Set authentication to &ldquo;OAuth&rdquo; and transport to &ldquo;Streamable HTTP&rdquo;</li>
-            <li>Sign in to Flaim and approve the connection</li>
-            <li>Start a new thread and ask about your leagues</li>
+          <h2 className="mb-3 text-xl font-semibold">Add Flaim in Perplexity</h2>
+          <ol className="list-decimal list-inside space-y-2 text-muted-foreground">
+            <li>Open Perplexity&apos;s connector settings and choose to add a remote connector.</li>
+            <li>Use <code className="rounded bg-muted px-1 py-0.5 text-xs">https://api.flaim.app/mcp</code> as the URL.</li>
+            <li>Set authentication to OAuth.</li>
+            <li>Set transport to Streamable HTTP.</li>
+            <li>Authorize Flaim and start a fresh thread.</li>
           </ol>
-          <p className="text-sm text-muted-foreground mt-3">
-            For the latest details, see{' '}
-            <a href="https://www.perplexity.ai/help-center/en/articles/13915507-adding-custom-remote-connectors" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Perplexity&apos;s custom connector docs</a>.
+          <p className="mt-3 text-sm text-muted-foreground">
+            If you want Perplexity&apos;s current UI details, check{' '}
+            <a
+              href="https://www.perplexity.ai/help-center/en/articles/13915507-adding-custom-remote-connectors"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary hover:underline"
+            >
+              Perplexity&apos;s connector docs
+            </a>
+            .
           </p>
         </section>
 
         <section className="mb-10">
-          <h2 className="text-xl font-semibold mb-3">Why Perplexity + Flaim?</h2>
-          <p className="text-muted-foreground">
-            Perplexity excels at real-time web search. Combined with Flaim&apos;s league data, it can pull your roster and matchup context while simultaneously searching for the latest injury reports, trade rumors, and expert analysis, all in one answer.
-          </p>
+          <h2 className="mb-3 text-xl font-semibold">How to know it worked</h2>
+          <ul className="list-disc list-inside space-y-2 text-muted-foreground">
+            <li>Perplexity shows Flaim as a connected remote connector.</li>
+            <li>A fresh thread can answer &ldquo;What leagues do I have?&rdquo;</li>
+            <li>Follow-up questions about roster or waiver options work without another auth loop.</li>
+          </ul>
         </section>
 
         <section className="mb-10">
-          <h2 className="text-xl font-semibold mb-3">Other AI assistants</h2>
-          <ul className="text-sm text-muted-foreground space-y-1">
+          <h2 className="mb-3 text-xl font-semibold">If something goes wrong</h2>
+          <ul className="list-disc list-inside space-y-2 text-muted-foreground">
+            <li>The connector exists but returns auth or transport errors: confirm you used OAuth and Streamable HTTP.</li>
+            <li>Perplexity connects but sees no leagues: finish platform setup in <Link href="/leagues" className="text-primary hover:underline">/leagues</Link> first, then start a fresh thread.</li>
+            <li>You created multiple stale connectors while testing: delete the extras and keep one clean Flaim connector.</li>
+          </ul>
+        </section>
+
+        <section className="mb-10">
+          <h2 className="mb-3 text-xl font-semibold">What happens next</h2>
+          <ul className="list-disc list-inside space-y-2 text-muted-foreground">
+            <li>Use Perplexity when you want league context plus current web context in the same answer.</li>
+            <li>Start with one league-specific question before you branch into research-heavy prompts.</li>
+          </ul>
+        </section>
+
+        <section className="mb-10">
+          <h2 className="mb-3 text-xl font-semibold">Other AI guides</h2>
+          <ul className="space-y-1 text-sm text-muted-foreground">
             <li><Link href="/guide/claude" className="text-primary hover:underline">Use Flaim with Claude</Link></li>
             <li><Link href="/guide/chatgpt" className="text-primary hover:underline">Use Flaim with ChatGPT</Link></li>
+            <li><Link href="/guide/gemini" className="text-primary hover:underline">Gemini status</Link></li>
           </ul>
         </section>
 
-        <div className="pt-4 border-t">
+        <div className="border-t pt-4">
           <Link href="/guide" className="text-sm text-primary hover:underline">
             &larr; Back to guide overview
           </Link>

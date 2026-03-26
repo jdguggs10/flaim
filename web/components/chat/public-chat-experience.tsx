@@ -563,20 +563,33 @@ export function PublicChatExperience() {
                   ) : null}
 
                   {runStatus === "completed" && selectedPreset ? (
-                    <div className="flex flex-col gap-3 rounded-[1.75rem] border border-border bg-primary px-5 py-4 text-sm text-primary-foreground sm:flex-row sm:items-center sm:justify-between">
-                      <span>
-                        That run used live data from Gerry&apos;s actual leagues.
-                      </span>
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => void handleRunPreset(selectedPreset)}
-                        className="rounded-full"
-                      >
-                        <RefreshCw className="mr-2 h-4 w-4" />
-                        Run again
-                      </Button>
+                    <div className="flex flex-col gap-3 rounded-[1.75rem] border border-border bg-primary px-5 py-4 text-sm text-primary-foreground">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <span>
+                          That run used live data from Gerry&apos;s actual leagues.
+                        </span>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => void handleRunPreset(selectedPreset)}
+                          className="rounded-full"
+                        >
+                          <RefreshCw className="mr-2 h-4 w-4" />
+                          Run again
+                        </Button>
+                      </div>
+                      <div className="flex flex-col gap-2 text-primary-foreground/90 sm:flex-row sm:items-center sm:justify-between">
+                        <span>
+                          Want this on your own leagues instead? Finish setup in Flaim.
+                        </span>
+                        <Button asChild type="button" variant="secondary" size="sm" className="rounded-full">
+                          <Link href="/leagues">
+                            Set up your leagues
+                            <ArrowRight className="ml-2 h-4 w-4" />
+                          </Link>
+                        </Button>
+                      </div>
                     </div>
                   ) : null}
 
