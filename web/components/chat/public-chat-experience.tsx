@@ -537,9 +537,6 @@ export function PublicChatExperience({
           <h1 className="mt-3 w-full text-[2rem] font-semibold leading-[0.96] tracking-[-0.05em] text-foreground sm:mt-4 sm:text-5xl">
             Watch Flaim work on my actual leagues right now.
           </h1>
-          <p className="mt-3 text-sm text-muted-foreground sm:text-base">
-            Powered by GPT-5.4. Claude and Perplexity are also supported.
-          </p>
         </section>
 
         <Card className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.45rem] border-border bg-card p-0 shadow-sm sm:rounded-[1.6rem] lg:rounded-[2rem]">
@@ -615,7 +612,7 @@ export function PublicChatExperience({
                     <section className="space-y-3">
                       <div className="flex items-center justify-between gap-3">
                         <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
-                          Tools in play
+                          What Flaim checked
                         </div>
                         <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                           {toolCalls.length} call{toolCalls.length === 1 ? "" : "s"}
@@ -660,6 +657,9 @@ export function PublicChatExperience({
                           </Link>
                         </Button>
                       </div>
+                      <p className="text-xs text-primary-foreground/80">
+                        Powered by GPT-5.4. Claude and Perplexity are also supported.
+                      </p>
                     </div>
                   ) : null}
 

@@ -21,12 +21,14 @@ const ARGUMENT_LABELS: Array<[string, string]> = [
   ["type", "Type"],
 ];
 
-function getToolName(name?: string | null) {
-  return name?.trim() || "unknown_tool";
-}
-
 function getToolCopy(name?: string | null) {
   switch (name) {
+    case "web_search_call":
+    case "web_search":
+      return {
+        title: "Web search for latest news",
+        description: "Checking current news, injuries, and performance context before answering.",
+      };
     case "get_user_session":
       return {
         title: "Checking Gerry's connected leagues",
@@ -101,7 +103,6 @@ export function PublicToolCall({
 }: PublicToolCallProps) {
   const argumentSummary = summarizeArguments(parsedArguments);
   const copy = getToolCopy(name);
-  const toolName = getToolName(name);
 
   return (
     <div className="overflow-hidden rounded-[1.35rem] border border-border bg-card px-4 py-4 shadow-sm lg:rounded-[1.75rem]">
@@ -109,9 +110,6 @@ export function PublicToolCall({
         <div className="inline-flex min-w-0 items-center gap-2 rounded-full border border-border bg-muted px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-foreground">
           <Sparkles className="h-3.5 w-3.5" />
           <span>Live step</span>
-          <span className="max-w-[12rem] truncate rounded-full border border-border bg-background px-2 py-0.5 font-mono text-[10px] normal-case tracking-normal text-foreground">
-            {toolName}
-          </span>
         </div>
         <div
           className={cn(
