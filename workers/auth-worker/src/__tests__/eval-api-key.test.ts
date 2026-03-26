@@ -6,6 +6,8 @@ vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('no network in test')
 
 const EVAL_API_KEY = 'flaim_eval_abc123testkey';
 const EVAL_USER_ID = 'user_eval_test_12345';
+const DEMO_API_KEY = 'flaim_demo_abc123testkey';
+const DEMO_USER_ID = 'user_demo_test_54321';
 const INTERNAL_SERVICE_TOKEN = 'internal-service-secret';
 
 const mockRateLimiter = { limit: async () => ({ success: true }) };
@@ -17,9 +19,12 @@ const baseEnv = {
   ENVIRONMENT: 'test',
   EVAL_API_KEY,
   EVAL_USER_ID,
+  DEMO_API_KEY,
+  DEMO_USER_ID,
   INTERNAL_SERVICE_TOKEN,
   TOKEN_RATE_LIMITER: mockRateLimiter,
   CREDENTIALS_RATE_LIMITER: mockRateLimiter,
+  PUBLIC_CHAT_RATE_LIMITER: mockRateLimiter,
 };
 
 function makeRequest(path: string, options?: RequestInit): Request {
@@ -113,6 +118,25 @@ vi.mock('../oauth-handlers', () => ({
   OAuthEnv: {},
 }));
 
+const { mockPublicChatStorage } = vi.hoisted(() => ({
+  mockPublicChatStorage: {
+    acquireRun: vi.fn().mockResolvedValue({
+      allowed: true,
+      runId: 'run_123',
+      rejectionReason: null,
+      concurrentCount: 0,
+    }),
+    completeRun: vi.fn().mockResolvedValue(undefined),
+    recordRejectedRun: vi.fn().mockResolvedValue(undefined),
+  },
+}));
+
+vi.mock('../public-chat-storage', () => ({
+  PublicChatStorage: {
+    fromEnvironment: vi.fn().mockReturnValue(mockPublicChatStorage),
+  },
+}));
+
 describe('eval API key auth', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -138,6 +162,22 @@ describe('eval API key auth', () => {
     expect(body.scope).toBe('mcp:read');
   });
 
+  it('GET /auth/internal/introspect with valid demo API key returns demo user', async () => {
+    const res = await appFetch(
+      makeRequest('/auth/internal/introspect', {
+        headers: {
+          ...internalHeaders(DEMO_API_KEY),
+          'X-Flaim-Expected-Resource': 'https://api.flaim.app/mcp',
+        },
+      })
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json() as { valid: boolean; userId: string; scope: string };
+    expect(body.valid).toBe(true);
+    expect(body.userId).toBe(DEMO_USER_ID);
+    expect(body.scope).toBe('mcp:read');
+  });
+
   it('GET /auth/internal/credentials/espn/raw with valid API key returns credentials', async () => {
     const res = await appFetch(
       makeRequest('/auth/internal/credentials/espn/raw', {
@@ -159,6 +199,52 @@ describe('eval API key auth', () => {
     expect(res.status).toBe(200);
     const body = await res.json() as { success: boolean };
     expect(body.success).toBe(true);
+  });
+
+  it('POST /auth/internal/public-chat/runs/acquire reserves a run with the internal token', async () => {
+    const res = await appFetch(
+      makeRequest('/auth/internal/public-chat/runs/acquire', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Flaim-Internal-Token': INTERNAL_SERVICE_TOKEN,
+        },
+        body: JSON.stringify({
+          visitorIp: '127.0.0.1',
+          presetId: 'league-leader',
+          model: 'gpt-5.4-nano',
+        }),
+      })
+    );
+
+    expect(res.status).toBe(200);
+    const body = await res.json() as { runId: string };
+    expect(body.runId).toBe('run_123');
+    expect(mockPublicChatStorage.acquireRun).toHaveBeenCalled();
+  });
+
+  it('POST /auth/internal/public-chat/runs/:id/complete finalizes a run with the internal token', async () => {
+    const res = await appFetch(
+      makeRequest('/auth/internal/public-chat/runs/run_123/complete', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Flaim-Internal-Token': INTERNAL_SERVICE_TOKEN,
+        },
+        body: JSON.stringify({
+          status: 'completed',
+          durationMs: 1234,
+        }),
+      })
+    );
+
+    expect(res.status).toBe(204);
+    expect(mockPublicChatStorage.completeRun).toHaveBeenCalledWith({
+      runId: 'run_123',
+      status: 'completed',
+      durationMs: 1234,
+      errorCode: null,
+    });
   });
 
   it('GET /auth/internal/leagues/yahoo with valid API key returns leagues', async () => {
@@ -297,7 +383,7 @@ describe('eval API key auth', () => {
     );
     expect(res.status).toBe(401);
     expect(consoleSpy).toHaveBeenCalledWith(
-      expect.stringContaining('EVAL_API_KEY set but EVAL_USER_ID missing')
+      expect.stringContaining('EVAL_API_KEY set but corresponding user ID missing')
     );
     consoleSpy.mockRestore();
   });
