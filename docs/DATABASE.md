@@ -169,6 +169,34 @@ Short-lived OAuth state values used for server-side validation.
 | expires_at | timestamptz | State expiry |
 | created_at | timestamptz | Created timestamp |
 
+### public_chat_runs
+Server-owned log for the public `/chat` demo. Used for per-visitor concurrency control and lightweight operational visibility.
+
+| Column | Type | Notes |
+|---|---|---|
+| id | uuid | Primary key |
+| visitor_key | text | SHA-256 hash of the visitor IP with a server-side salt |
+| preset_id | text | Public preset identifier (`show-leagues`, etc.) |
+| model | text | OpenAI model used for the run |
+| status | text | `running`, `completed`, `error`, `aborted`, `rate_limited`, or `concurrency_rejected` |
+| error_code | text | Short internal failure code for troubleshooting |
+| duration_ms | int | Run duration when known |
+| started_at | timestamptz | Run start time |
+| completed_at | timestamptz | Run end time |
+| created_at | timestamptz | Created timestamp |
+| updated_at | timestamptz | Updated timestamp |
+
+### public_chat_context_cache
+Server-owned cache for public `/chat` warm context. Used to avoid rebuilding the same demo session context on every visitor request.
+
+| Column | Type | Notes |
+|---|---|---|
+| cache_key | text | Primary key (`gerry_session_v1`, etc.) |
+| context_text | text | Cached developer-context text injected into the public demo route |
+| expires_at | timestamptz | Freshness boundary for the cached entry |
+| created_at | timestamptz | Created timestamp |
+| updated_at | timestamptz | Updated timestamp |
+
 ## Legacy/Deprecated Tables
 
 ### rate_limits (inert)

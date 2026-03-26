@@ -4,7 +4,7 @@ import Link from 'next/link';
 export const metadata: Metadata = {
   title: 'Connect Yahoo | Flaim',
   description:
-    'Step-by-step guide to connecting your Yahoo fantasy leagues to AI assistants using Flaim. No extension needed. Just sign in with Yahoo.',
+    'Connect Yahoo to Flaim from /leagues, verify your leagues were discovered, and fix the most common auth and refresh problems.',
   alternates: {
     canonical: 'https://flaim.app/guide/yahoo',
   },
@@ -20,73 +20,101 @@ export default function YahooGuidePage() {
             '@context': 'https://schema.org',
             '@type': 'HowTo',
             name: 'Connect Yahoo',
-            description: 'Step-by-step guide to connecting your Yahoo fantasy leagues to AI assistants using Flaim.',
+            description:
+              'Start Yahoo auth from /leagues, wait for league discovery, and verify the leagues appear before moving to AI setup.',
             step: [
-              { '@type': 'HowToStep', name: 'Create a Flaim account', text: 'Create a Flaim account at flaim.app.' },
-              { '@type': 'HowToStep', name: 'Authenticate Yahoo', text: 'Click "Authenticate Yahoo" on the Flaim homepage.' },
-              { '@type': 'HowToStep', name: 'Sign in with Yahoo', text: 'Sign in with your Yahoo account and authorize Flaim.' },
-              { '@type': 'HowToStep', name: 'Leagues auto-discovered', text: 'Yahoo auto-discovers all your active leagues.' },
-              { '@type': 'HowToStep', name: 'Add Flaim to your AI assistant', text: 'Add the Flaim MCP server URL (https://api.flaim.app/mcp) to your AI assistant.' },
-              { '@type': 'HowToStep', name: 'Authorize', text: 'Sign in to Flaim and approve the connection.' },
-              { '@type': 'HowToStep', name: 'Start chatting', text: 'Start chatting about your league.' },
+              {
+                '@type': 'HowToStep',
+                name: 'Open leagues',
+                text: 'Sign in to Flaim and open https://flaim.app/leagues.',
+              },
+              {
+                '@type': 'HowToStep',
+                name: 'Authenticate Yahoo',
+                text: 'Use the Yahoo card in /leagues to sign in with Yahoo and approve access.',
+              },
+              {
+                '@type': 'HowToStep',
+                name: 'Verify leagues',
+                text: 'Confirm that your Yahoo leagues appear in /leagues after discovery finishes.',
+              },
+              {
+                '@type': 'HowToStep',
+                name: 'Add Flaim to your AI assistant',
+                text: 'Use the Flaim MCP server URL https://api.flaim.app/mcp in your AI connector flow.',
+              },
             ],
           }),
         }}
       />
-      <div className="container max-w-2xl mx-auto py-12 px-4">
-        <h1 className="text-3xl font-bold mb-4">Connect Yahoo</h1>
-        <p className="text-muted-foreground mb-8">
-          Flaim connects your Yahoo fantasy leagues to AI assistants for read-only analysis. No extension needed. Just sign in with your Yahoo account and Flaim handles the rest. Setup takes about 5 minutes.
+      <div className="container mx-auto max-w-2xl px-4 py-12">
+        <h1 className="mb-4 text-3xl font-bold">Connect Yahoo</h1>
+        <p className="mb-8 text-muted-foreground">
+          Yahoo is the simplest private-platform setup in Flaim. Start auth from
+          <Link href="/leagues" className="text-primary hover:underline"> /leagues</Link>, approve access, and wait for
+          league discovery to finish before you move on to your AI client.
         </p>
 
         <section className="mb-10">
-          <h2 className="text-xl font-semibold mb-3">What you need</h2>
-          <ul className="list-disc list-inside text-muted-foreground space-y-1">
-            <li>A Flaim account (<Link href="/" className="text-primary hover:underline">flaim.app</Link>)</li>
-            <li>A Yahoo account with an active fantasy league</li>
+          <h2 className="mb-3 text-xl font-semibold">Before you start</h2>
+          <ul className="list-disc list-inside space-y-2 text-muted-foreground">
+            <li>Sign in to Flaim.</li>
+            <li>Use the Yahoo account that actually has the fantasy leagues you want.</li>
+            <li>Supported sports are football, baseball, basketball, and hockey.</li>
           </ul>
         </section>
 
         <section className="mb-10">
-          <h2 className="text-xl font-semibold mb-3">Step by step</h2>
-          <ol className="list-decimal list-inside text-muted-foreground space-y-2">
-            <li>Create a Flaim account at <Link href="/" className="text-primary hover:underline">flaim.app</Link></li>
-            <li>Click &ldquo;Authenticate Yahoo&rdquo; on the Flaim homepage</li>
-            <li>Sign in with your Yahoo account and authorize Flaim</li>
-            <li>Yahoo auto-discovers all your active leagues</li>
-            <li>Add the Flaim MCP server URL to your AI assistant: <code className="text-xs bg-muted px-1 py-0.5 rounded">https://api.flaim.app/mcp</code>{' '}
-              (<Link href="/guide" className="text-primary hover:underline">AI setup details</Link>)</li>
-            <li>Sign in to Flaim and approve the connection</li>
-            <li>Start chatting about your league</li>
+          <h2 className="mb-3 text-xl font-semibold">Do this in /leagues</h2>
+          <ol className="list-decimal list-inside space-y-2 text-muted-foreground">
+            <li>Open <Link href="/leagues" className="text-primary hover:underline">/leagues</Link> and choose Yahoo.</li>
+            <li>Start Yahoo authentication and approve Flaim&apos;s access request.</li>
+            <li>Return to Flaim and wait for discovery to finish. Do not assume auth success means your leagues are ready yet.</li>
+            <li>Confirm that the Yahoo section shows leagues you can use.</li>
+            <li>Then add Flaim to Claude, ChatGPT, or Perplexity with <code className="rounded bg-muted px-1 py-0.5 text-xs">https://api.flaim.app/mcp</code>.</li>
           </ol>
         </section>
 
         <section className="mb-10">
-          <h2 className="text-xl font-semibold mb-3">Supported sports</h2>
-          <p className="text-muted-foreground">
-            Football, baseball, basketball, and hockey.
-          </p>
-        </section>
-
-        <section className="mb-10">
-          <h2 className="text-xl font-semibold mb-3">Other platforms</h2>
-          <ul className="text-sm text-muted-foreground space-y-1">
-            <li><Link href="/guide/espn" className="text-primary hover:underline">Connect ESPN</Link> (requires Chrome extension)</li>
-            <li><Link href="/guide/sleeper" className="text-primary hover:underline">Connect Sleeper</Link> (just your username)</li>
+          <h2 className="mb-3 text-xl font-semibold">How to know it worked</h2>
+          <ul className="list-disc list-inside space-y-2 text-muted-foreground">
+            <li>The Yahoo section in <Link href="/leagues" className="text-primary hover:underline">/leagues</Link> shows connected leagues, not just a successful login.</li>
+            <li>You can tell which league you want to analyze first.</li>
+            <li>A fresh AI chat can answer &ldquo;What Yahoo leagues do I have?&rdquo; without asking you to reconnect.</li>
           </ul>
         </section>
 
         <section className="mb-10">
-          <h2 className="text-xl font-semibold mb-3">Connect your AI</h2>
-          <ul className="text-sm text-muted-foreground space-y-1">
-            <li><Link href="/guide/claude" className="text-primary hover:underline">Claude</Link></li>
-            <li><Link href="/guide/chatgpt" className="text-primary hover:underline">ChatGPT</Link></li>
-            <li><Link href="/guide/perplexity" className="text-primary hover:underline">Perplexity</Link></li>
-            <li><Link href="/guide/gemini" className="text-primary hover:underline">Gemini</Link></li>
+          <h2 className="mb-3 text-xl font-semibold">If something goes wrong</h2>
+          <ul className="list-disc list-inside space-y-2 text-muted-foreground">
+            <li>Yahoo auth completed but Flaim still looks disconnected: retry the auth flow from <Link href="/leagues" className="text-primary hover:underline">/leagues</Link> and make sure the popup or redirect fully finishes.</li>
+            <li>Auth worked but you see zero leagues: confirm the Yahoo account has supported active leagues and reconnect.</li>
+            <li>Yahoo worked before and stopped later: reconnect to refresh access.</li>
+            <li>Your AI connector was authorized before Yahoo finished linking: complete Yahoo setup first, then start a fresh conversation.</li>
           </ul>
         </section>
 
-        <div className="pt-4 border-t">
+        <section className="mb-10">
+          <h2 className="mb-3 text-xl font-semibold">What happens next</h2>
+          <ul className="list-disc list-inside space-y-2 text-muted-foreground">
+            <li>Add Flaim to your AI assistant.</li>
+            <li>Start a new chat and ask about your roster, standings, or recent moves.</li>
+            <li>If you have multiple Yahoo leagues, mention the league name in your first prompt.</li>
+          </ul>
+        </section>
+
+        <section className="mb-10">
+          <h2 className="mb-3 text-xl font-semibold">Related guides</h2>
+          <ul className="space-y-1 text-sm text-muted-foreground">
+            <li><Link href="/guide/espn" className="text-primary hover:underline">Connect ESPN</Link></li>
+            <li><Link href="/guide/sleeper" className="text-primary hover:underline">Connect Sleeper</Link></li>
+            <li><Link href="/guide/claude" className="text-primary hover:underline">Use Flaim with Claude</Link></li>
+            <li><Link href="/guide/chatgpt" className="text-primary hover:underline">Use Flaim with ChatGPT</Link></li>
+            <li><Link href="/guide/perplexity" className="text-primary hover:underline">Use Flaim with Perplexity</Link></li>
+          </ul>
+        </section>
+
+        <div className="border-t pt-4">
           <Link href="/guide" className="text-sm text-primary hover:underline">
             &larr; Back to guide overview
           </Link>

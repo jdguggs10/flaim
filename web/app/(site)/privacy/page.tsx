@@ -35,7 +35,7 @@ export default function PrivacyPage() {
                 </div>
                 <h3 className="font-semibold mb-1">Your AI, Your Account</h3>
                 <p className="text-sm text-muted-foreground">
-                  You use your own Claude, ChatGPT, or Gemini subscription. Flaim provides read-only league analysis context.
+                  You use your own Claude, ChatGPT, or Perplexity subscription. Flaim provides read-only league analysis context.
                 </p>
               </div>
               <div className="text-center">

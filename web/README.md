@@ -59,12 +59,19 @@ Both site and chat can use shared `components/ui/` (shadcn).
 
 | Path | Purpose |
 |------|---------|
-| `/` | Landing page + onboarding flow (sign-in, sync credentials, MCP URLs) |
-| `/leagues` | Manage ESPN, Yahoo, and Sleeper leagues and seasons |
+| `/` | Discovery-first landing page with product explanation and CTAs to setup + live demo |
+| `/leagues` | Signed-in setup + management hub for platforms, AI connection details, leagues, and defaults |
 | `/privacy` | Privacy policy (CWS compliance) |
 | `/sitemap.xml` | XML sitemap for search engine discovery |
 | `/robots.txt` | Crawl rules + sitemap location for search engines |
 | `/oauth/consent` | OAuth authorization screen |
+
+### Chat Surfaces (`/(chat)/`)
+
+| Path | Purpose |
+|------|---------|
+| `/chat` | Public live chat demo powered by the dedicated demo account |
+| `/dev` | Internal dev/debug chat surface |
 
 ### API Routes (`/api/`)
 
@@ -74,7 +81,8 @@ Both site and chat can use shared `components/ui/` (shadcn).
 | `/api/espn/*` | League management, seasons, discovery, credentials |
 | `/api/extension/*` | Extension APIs (Clerk JWT) |
 | `/api/oauth/*` | OAuth status, revoke |
-| `/api/chat/*` | Chat turn responses |
+| `/api/chat/*` | Internal dev chat turn responses |
+| `/api/public-chat/*` | Public chat server routes (preset-driven demo-account execution) |
 
 Most API routes proxy to auth-worker. See `docs/ARCHITECTURE.md` for the full flow.
 
@@ -110,14 +118,26 @@ NEXT_PUBLIC_YAHOO_CLIENT_URL=https://yahoo-client.gerrygugger.workers.dev
 
 For local development with workers, point to `http://localhost:8786` etc.
 
-## Built-in Chat (Dev Only)
+## Public Chat Demo
 
-The `/chat` page is **not a product feature**. It's an internal dev/debug surface for manual MCP tool testing and exploratory debugging. For structured, repeatable testing, use the eval harness (`flaim-eval/`). The two are complementary — chat is the visual scratchpad, eval is the structured test bench.
+The `/chat` route is a public-facing live demo. It is intentionally constrained in v1:
+
+- Runs against a dedicated demo account (`demo@flaim.app`)
+- Uses server-owned auth with `DEMO_API_KEY`
+- Accepts preset prompt IDs only
+- Is rate-limited server-side and allows only one in-flight run per visitor
+- Streams live MCP tool activity and assistant output back to the browser
+
+This is separate from the internal `/dev` surface. The browser never receives reusable demo-account credentials.
+
+## Internal Dev Chat
+
+The `/dev` page is the internal dev/debug surface for manual MCP tool testing and exploratory debugging. It is not the public product chat experience. For structured, repeatable testing, use the eval harness (`flaim-eval/`). The two are complementary — `/dev` is the visual scratchpad, eval is the structured test bench.
 
 ### Access Control
 
-Both the page and all `/api/chat/*` routes require `publicMetadata.chatAccess: true` in Clerk. Without it:
-- `/chat` page → redirects to home
+Both the `/dev` page and all `/api/chat/*` routes require `publicMetadata.chatAccess: true` in Clerk. Without it:
+- `/dev` page → redirects to home
 - API routes → 403 Forbidden
 
 Set in Clerk Dashboard → Users → [user] → Public metadata:
@@ -139,6 +159,13 @@ Keyboard shortcut: `Cmd+D` / `Ctrl+D`
 The Developer Console includes an LLM Trace panel that captures prompt payloads, tool calls, and assistant output
 for each turn. Exporting a session includes a redacted copy of these trace entries, but exports can still contain
 sensitive data—share with care.
+
+### Public Chat Warmup
+
+The public `/chat` demo opportunistically hits `/api/public-chat/bootstrap` on page load. That route prewarms:
+- cached Gerry session/default-league context (short TTL)
+
+The live `/api/public-chat/turn` route still works without bootstrap, but a warm session-context cache hit makes the demo feel faster without doing hidden extra model work before the real turn starts.
 
 ## Build Notes
 

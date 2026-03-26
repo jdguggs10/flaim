@@ -1,8 +1,9 @@
 "use client";
 
 import React, { Suspense, useEffect, useState, useMemo } from 'react';
-import { useAuth, SignIn } from '@clerk/nextjs';
+import { useAuth, SignInButton, SignUpButton } from '@clerk/nextjs';
 import { useSearchParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -34,6 +35,7 @@ import {
   Info,
 } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   Dialog,
   DialogContent,
@@ -45,6 +47,7 @@ import {
 import { useEspnCredentials } from '@/lib/use-espn-credentials';
 import { getDefaultSeasonYear } from '@/lib/season-utils';
 import { CHROME_EXTENSION_URL } from '@/config/constants';
+import { StepConnectAI } from '@/components/site/StepConnectAI';
 
 interface League {
   leagueId: string;
@@ -252,6 +255,9 @@ function LeaguesPageContent() {
   const [deletingLeagueKey, setDeletingLeagueKey] = useState<string | null>(null);
   const [settingDefaultKey, setSettingDefaultKey] = useState<string | null>(null);
   const [discoveringLeagueKey, setDiscoveringLeagueKey] = useState<string | null>(null);
+  const [isPlatformsSectionOpen, setIsPlatformsSectionOpen] = useState(true);
+  const [isLeaguesSectionOpen, setIsLeaguesSectionOpen] = useState(true);
+  const [isAiSectionOpen, setIsAiSectionOpen] = useState(true);
   const [isEspnSetupOpen, setIsEspnSetupOpen] = useState(false);
   const [isYahooSetupOpen, setIsYahooSetupOpen] = useState(false);
   const [isYahooConnected, setIsYahooConnected] = useState(false);
@@ -986,17 +992,36 @@ function LeaguesPageContent() {
   if (!isSignedIn) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <div className="w-full max-w-md space-y-6">
-          <div className="text-center space-y-3">
-            <div className="w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold mx-auto">
+        <div className="w-full max-w-xl space-y-6">
+          <div className="space-y-3 text-center">
+            <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground font-bold">
               1
             </div>
-            <h1 className="text-2xl font-semibold">Sign in to manage leagues</h1>
+            <h1 className="text-3xl font-semibold">Set up Your Leagues</h1>
             <p className="text-muted-foreground">
-              Create an account or sign in to connect your ESPN fantasy leagues.
+              Sign in to connect ESPN, Yahoo, and Sleeper, copy your Flaim connector details, and manage your defaults in one place.
             </p>
           </div>
-          <SignIn routing="hash" fallbackRedirectUrl="/leagues" />
+          <Card>
+            <CardContent className="space-y-4 p-6">
+              <div className="space-y-2">
+                <h2 className="font-medium">What happens here</h2>
+                <ul className="space-y-2 text-sm text-muted-foreground">
+                  <li>Connect your fantasy platforms and refresh league data</li>
+                  <li>Copy the Flaim MCP name and URL for Claude, ChatGPT, or Perplexity</li>
+                  <li>Choose defaults and manage seasons once your account is linked</li>
+                </ul>
+              </div>
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <SignUpButton mode="modal" forceRedirectUrl="/leagues">
+                  <Button className="w-full sm:flex-1">Create Account</Button>
+                </SignUpButton>
+                <SignInButton mode="modal" forceRedirectUrl="/leagues">
+                  <Button variant="outline" className="w-full sm:flex-1">Sign In</Button>
+                </SignInButton>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
     );
@@ -1004,7 +1029,7 @@ function LeaguesPageContent() {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="container max-w-2xl mx-auto py-8 px-4 space-y-6">
+      <div className="container mx-auto flex max-w-2xl flex-col gap-6 px-4 py-8">
         {/* Header */}
         <div className="space-y-2">
           <div className="flex items-center gap-2">
@@ -1012,7 +1037,7 @@ function LeaguesPageContent() {
             <h1 className="text-2xl font-semibold">Your Leagues</h1>
           </div>
           <p className="text-muted-foreground">
-            Manage your connected leagues and seasons, and set your sport and team defaults here.
+            Connect platforms, manage league seasons, copy your AI setup details, and set your defaults here.
           </p>
         </div>
 
@@ -1031,33 +1056,114 @@ function LeaguesPageContent() {
           </Alert>
         )}
 
-        {/* Your Leagues Card */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-lg">Active Leagues</CardTitle>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <button
-                    type="button"
-                    className="rounded-md border border-muted bg-muted/60 p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-warning"
-                    aria-label="Star defaults info"
-                  >
-                    <Star className="h-4 w-4" />
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent className="w-72 text-sm">
-                  <p className="text-muted-foreground">
-                    <strong className="text-foreground">Stars mark your defaults.</strong> Set a default sport, and also set a default team per sport. This is optional, but it can be helpful with many leagues.
-                  </p>
-                </PopoverContent>
-              </Popover>
+        <Card id="connect-ai" className="order-4">
+          <CardHeader className="pb-4">
+            <button
+              type="button"
+              onClick={() => setIsAiSectionOpen((prev) => !prev)}
+              aria-expanded={isAiSectionOpen}
+              aria-controls="ai-card-content"
+              className="flex w-full items-start justify-between gap-4 text-left"
+            >
+              <div className="min-w-0 space-y-2">
+                <CardTitle className="text-lg">3. Connect Your AI</CardTitle>
+                <CardDescription>
+                  Copy the MCP details you need for Claude, ChatGPT, or Perplexity.
+                </CardDescription>
+              </div>
+              <ChevronDown
+                className={`mt-0.5 h-5 w-5 shrink-0 text-muted-foreground transition-transform ${
+                  isAiSectionOpen ? 'rotate-180' : ''
+                }`}
+              />
+            </button>
+            <div className="pt-2">
+              <Link href="/guide" className="text-sm text-primary hover:underline">
+                See all setup guides
+              </Link>
             </div>
-            <CardDescription>
-              These are your teams and seasons that are already linked.
-            </CardDescription>
           </CardHeader>
-          <CardContent>
+          {isAiSectionOpen ? (
+            <CardContent id="ai-card-content" className="pt-0">
+              <StepConnectAI
+                showStepNumber={false}
+                renderCard={false}
+                showHeader={false}
+              />
+            </CardContent>
+          ) : null}
+        </Card>
+
+        <section className="order-5 space-y-3 rounded-xl border border-dashed border-border bg-muted/30 p-4">
+          <div className="space-y-1">
+            <h2 className="text-sm font-semibold">Tips for activating Flaim in your AI assistant</h2>
+            <p className="text-sm text-muted-foreground">
+              After you add and authenticate Flaim, most assistants still need one more click before they use it.
+            </p>
+          </div>
+          <ol className="space-y-2 text-sm text-muted-foreground">
+            <li>Start a fresh chat after the connection is approved.</li>
+            <li>Open the assistant menu where apps, connectors, tools, or integrations live, then select Flaim if it is not already active.</li>
+            <li>Ask a concrete league question like “Show me my roster” or “Who am I playing this week?” instead of a vague prompt.</li>
+            <li>If the assistant still ignores Flaim, say “Use Flaim” and mention your league, team, or sport.</li>
+            <li>Set a default sport or league above so Flaim can pick the right context faster.</li>
+          </ol>
+        </section>
+
+        {/* Your Leagues Card */}
+        <Card className="order-3">
+          <CardHeader>
+            <div className="flex items-start justify-between gap-4">
+              <button
+                type="button"
+                onClick={() => setIsLeaguesSectionOpen((prev) => !prev)}
+                aria-expanded={isLeaguesSectionOpen}
+                aria-controls="leagues-card-content"
+                className="flex flex-1 items-start gap-4 text-left"
+              >
+                <div className="min-w-0 space-y-2">
+                  <CardTitle className="text-lg">2. Your Leagues</CardTitle>
+                  <CardDescription>
+                    Once a platform is connected, your linked teams and seasons appear here.
+                  </CardDescription>
+                </div>
+              </button>
+              <div className="flex items-center gap-2">
+                <TooltipProvider delayDuration={150}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        className="rounded-md border border-muted bg-muted/60 p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-warning"
+                        aria-label="Star defaults info"
+                      >
+                        <Star className="h-4 w-4" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="max-w-xs whitespace-normal">
+                      Stars mark your defaults. Set a default sport, and also set a default team per sport.
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+                <button
+                  type="button"
+                  onClick={() => setIsLeaguesSectionOpen((prev) => !prev)}
+                  aria-expanded={isLeaguesSectionOpen}
+                  aria-controls="leagues-card-content"
+                  className="rounded-md border border-muted bg-muted/60 p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  aria-label={isLeaguesSectionOpen ? 'Collapse leagues section' : 'Expand leagues section'}
+                >
+                  <ChevronDown
+                    className={`h-4 w-4 transition-transform ${
+                      isLeaguesSectionOpen ? 'rotate-180' : ''
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+          </CardHeader>
+          {isLeaguesSectionOpen ? (
+          <CardContent id="leagues-card-content" className="pt-0">
             {isLoadingLeagues ? (
               <div className="flex items-center justify-center gap-2 py-8 text-muted-foreground">
                 <Loader2 className="h-5 w-5 animate-spin" />
@@ -1320,18 +1426,45 @@ function LeaguesPageContent() {
               </div>
             )}
           </CardContent>
+          ) : null}
         </Card>
 
-        {/* League Maintenance */}
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <h2 className="text-2xl font-semibold">League Maintenance</h2>
-            <p className="text-muted-foreground">
-              Manage platform connections and credentials.
-            </p>
+        <Card id="platforms" className="order-2">
+          <CardHeader className="pb-4">
+            <button
+              type="button"
+              onClick={() => setIsPlatformsSectionOpen((prev) => !prev)}
+              aria-expanded={isPlatformsSectionOpen}
+              aria-controls="platforms-card-content"
+              className="flex w-full items-start justify-between gap-4 text-left"
+            >
+              <div className="min-w-0 space-y-2">
+                <CardTitle className="text-lg">1. Connect Platforms</CardTitle>
+                <CardDescription>
+                  Connect, refresh, or manually add leagues from ESPN, Yahoo, and Sleeper here.
+                </CardDescription>
+              </div>
+              <ChevronDown
+                className={`mt-0.5 h-5 w-5 shrink-0 text-muted-foreground transition-transform ${
+                  isPlatformsSectionOpen ? 'rotate-180' : ''
+                }`}
+              />
+            </button>
+          </CardHeader>
+          {isPlatformsSectionOpen ? (
+          <CardContent id="platforms-card-content" className="pt-0">
+          <div className="mb-4 flex flex-wrap gap-x-3 gap-y-1 text-sm text-muted-foreground">
+            <span>Platform guides:</span>
+            <Link href="/guide/espn" className="text-primary hover:underline">
+              ESPN
+            </Link>
+            <Link href="/guide/yahoo" className="text-primary hover:underline">
+              Yahoo
+            </Link>
+            <Link href="/guide/sleeper" className="text-primary hover:underline">
+              Sleeper
+            </Link>
           </div>
-
-          {/* Platform cards */}
           <div className="grid gap-4">
             <div className="border rounded-lg bg-background">
               <button
@@ -1981,7 +2114,9 @@ function LeaguesPageContent() {
               )}
             </div>
           </div>
-        </div>
+          </CardContent>
+          ) : null}
+        </Card>
       </div>
     </div>
   );

@@ -4,7 +4,7 @@ import Link from 'next/link';
 export const metadata: Metadata = {
   title: 'Use Flaim with ChatGPT | Flaim',
   description:
-    'How to add Flaim as a ChatGPT connector so you can ask about your ESPN, Yahoo, or Sleeper fantasy leagues directly in ChatGPT.',
+    'Add Flaim to ChatGPT, verify the connector is authorized, and handle the common issue where ChatGPT setup succeeds before any leagues are actually linked.',
   alternates: {
     canonical: 'https://flaim.app/guide/chatgpt',
   },
@@ -20,66 +20,107 @@ export default function ChatGptGuidePage() {
             '@context': 'https://schema.org',
             '@type': 'HowTo',
             name: 'Use Flaim with ChatGPT',
-            description: 'How to add Flaim as a ChatGPT connector for fantasy sports analysis.',
+            description: 'Add Flaim as a ChatGPT connector for read-only fantasy league analysis.',
             step: [
-              { '@type': 'HowToStep', name: 'Enable Developer Mode', text: 'Go to ChatGPT Settings > Advanced and enable Developer Mode.' },
-              { '@type': 'HowToStep', name: 'Open Connectors', text: 'Go to the Connectors tab and click Create.' },
-              { '@type': 'HowToStep', name: 'Add Flaim', text: 'Enter a name and the Flaim MCP server URL: https://api.flaim.app/mcp' },
-              { '@type': 'HowToStep', name: 'Authorize Flaim', text: 'Sign in to your Flaim account and approve the connection.' },
-              { '@type': 'HowToStep', name: 'Start chatting', text: 'Ask ChatGPT about your fantasy leagues. It now has access to your real league data.' },
+              {
+                '@type': 'HowToStep',
+                name: 'Connect a league first',
+                text: 'Use https://flaim.app/leagues to connect ESPN, Yahoo, or Sleeper before setting up ChatGPT.',
+              },
+              {
+                '@type': 'HowToStep',
+                name: 'Create the connector',
+                text: 'In ChatGPT settings, create a connector using https://api.flaim.app/mcp.',
+              },
+              {
+                '@type': 'HowToStep',
+                name: 'Authorize Flaim',
+                text: 'Sign in to Flaim and approve access.',
+              },
+              {
+                '@type': 'HowToStep',
+                name: 'Test it',
+                text: 'Start a fresh conversation and ask what leagues you have.',
+              },
             ],
           }),
         }}
       />
-      <div className="container max-w-2xl mx-auto py-12 px-4">
-        <h1 className="text-3xl font-bold mb-4">Use Flaim with ChatGPT</h1>
-        <p className="text-muted-foreground mb-8">
-          Flaim connects to ChatGPT as a custom MCP connector, giving it read-only access to your ESPN, Yahoo, and Sleeper fantasy leagues. Once connected, you can ask ChatGPT about your roster, matchups, standings, and more, all grounded in your actual league data.
+      <div className="container mx-auto max-w-2xl px-4 py-12">
+        <h1 className="mb-4 text-3xl font-bold">Use Flaim with ChatGPT</h1>
+        <p className="mb-8 text-muted-foreground">
+          ChatGPT works with Flaim today, but OpenAI changes the connector UI often. The stable part is the same: link
+          your leagues first in <Link href="/leagues" className="text-primary hover:underline">/leagues</Link>, use the
+          Flaim MCP URL, then verify the connector in a fresh chat before you rely on it.
         </p>
 
         <section className="mb-10">
-          <h2 className="text-xl font-semibold mb-3">What you need</h2>
-          <ul className="list-disc list-inside text-muted-foreground space-y-1">
-            <li>A Flaim account with at least one connected league (<Link href="/" className="text-primary hover:underline">flaim.app</Link>)</li>
-            <li>A paid ChatGPT plan (Plus, Pro, Team, Enterprise, or Edu)</li>
+          <h2 className="mb-3 text-xl font-semibold">Before you start</h2>
+          <ul className="list-disc list-inside space-y-2 text-muted-foreground">
+            <li>Connect at least one ESPN, Yahoo, or Sleeper league in <Link href="/leagues" className="text-primary hover:underline">/leagues</Link>.</li>
+            <li>Use a ChatGPT plan and settings flow that supports connectors.</li>
           </ul>
         </section>
 
         <section className="mb-10">
-          <h2 className="text-xl font-semibold mb-3">Step by step</h2>
-          <ol className="list-decimal list-inside text-muted-foreground space-y-2">
-            <li>Open ChatGPT and go to Settings &gt; Advanced</li>
-            <li>Enable &ldquo;Developer Mode&rdquo;</li>
-            <li>Go to the Connectors tab and click &ldquo;Create&rdquo;</li>
-            <li>Enter a name (e.g. &ldquo;Flaim Fantasy&rdquo;) and the MCP server URL: <code className="text-xs bg-muted px-1 py-0.5 rounded">https://api.flaim.app/mcp</code></li>
-            <li>Sign in to Flaim and approve the connection</li>
-            <li>Start a new conversation and ask about your leagues</li>
+          <h2 className="mb-3 text-xl font-semibold">Add Flaim in ChatGPT</h2>
+          <ol className="list-decimal list-inside space-y-2 text-muted-foreground">
+            <li>Open ChatGPT settings and find the connector setup flow.</li>
+            <li>Create a connector and use <code className="rounded bg-muted px-1 py-0.5 text-xs">https://api.flaim.app/mcp</code> as the server URL.</li>
+            <li>Authorize Flaim when prompted.</li>
+            <li>Start a fresh chat for the first test.</li>
           </ol>
-          <p className="text-sm text-muted-foreground mt-3">
-            The ChatGPT connector setup flow changes occasionally. Check{' '}
-            <a href="https://help.openai.com/en/articles/12584461-developer-mode-apps-and-full-mcp-connectors-in-chatgpt-beta" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">OpenAI&apos;s developer mode docs</a>{' '}
-            for the latest steps.
+          <p className="mt-3 text-sm text-muted-foreground">
+            If the menus moved, use{' '}
+            <a
+              href="https://help.openai.com/en/articles/12584461-developer-mode-apps-and-full-mcp-connectors-in-chatgpt-beta"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary hover:underline"
+            >
+              OpenAI&apos;s latest connector docs
+            </a>
+            .
           </p>
         </section>
 
         <section className="mb-10">
-          <h2 className="text-xl font-semibold mb-3">Tips</h2>
-          <ul className="list-disc list-inside text-muted-foreground space-y-1">
-            <li>Set a default league at <Link href="/leagues" className="text-primary hover:underline">flaim.app/leagues</Link> so ChatGPT knows which league to use without asking</li>
-            <li>If ChatGPT doesn&apos;t activate Flaim automatically, just say &ldquo;Use Flaim&rdquo;</li>
+          <h2 className="mb-3 text-xl font-semibold">How to know it worked</h2>
+          <ul className="list-disc list-inside space-y-2 text-muted-foreground">
+            <li>ChatGPT shows Flaim as an authorized connector.</li>
+            <li>A fresh chat can answer &ldquo;What leagues do I have?&rdquo;</li>
+            <li>Follow-up questions about rosters or standings work without another auth prompt.</li>
           </ul>
         </section>
 
         <section className="mb-10">
-          <h2 className="text-xl font-semibold mb-3">Other AI assistants</h2>
-          <ul className="text-sm text-muted-foreground space-y-1">
-            <li><Link href="/guide/claude" className="text-primary hover:underline">Use Flaim with Claude</Link></li>
-            <li><Link href="/guide/gemini" className="text-primary hover:underline">Use Flaim with Gemini</Link></li>
-            <li><Link href="/guide/perplexity" className="text-primary hover:underline">Use Flaim with Perplexity</Link></li>
+          <h2 className="mb-3 text-xl font-semibold">If something goes wrong</h2>
+          <ul className="list-disc list-inside space-y-2 text-muted-foreground">
+            <li>The connector was created but ChatGPT cannot see any leagues: finish platform setup in <Link href="/leagues" className="text-primary hover:underline">/leagues</Link> first, then start a fresh chat.</li>
+            <li>ChatGPT does not call Flaim automatically: be explicit that you want it to use your connected fantasy league data.</li>
+            <li>The settings UI no longer matches this page: follow OpenAI&apos;s current connector docs, but keep the same Flaim MCP URL.</li>
           </ul>
         </section>
 
-        <div className="pt-4 border-t">
+        <section className="mb-10">
+          <h2 className="mb-3 text-xl font-semibold">What happens next</h2>
+          <ul className="list-disc list-inside space-y-2 text-muted-foreground">
+            <li>Start with one grounding question, then move into deeper lineup or trade analysis.</li>
+            <li>If you use multiple leagues, mention the platform or league name in your prompt.</li>
+            <li>Reconnect or refresh in <Link href="/leagues" className="text-primary hover:underline">/leagues</Link> if the league list changes later.</li>
+          </ul>
+        </section>
+
+        <section className="mb-10">
+          <h2 className="mb-3 text-xl font-semibold">Other AI guides</h2>
+          <ul className="space-y-1 text-sm text-muted-foreground">
+            <li><Link href="/guide/claude" className="text-primary hover:underline">Use Flaim with Claude</Link></li>
+            <li><Link href="/guide/perplexity" className="text-primary hover:underline">Use Flaim with Perplexity</Link></li>
+            <li><Link href="/guide/gemini" className="text-primary hover:underline">Gemini status</Link></li>
+          </ul>
+        </section>
+
+        <div className="border-t pt-4">
           <Link href="/guide" className="text-sm text-primary hover:underline">
             &larr; Back to guide overview
           </Link>

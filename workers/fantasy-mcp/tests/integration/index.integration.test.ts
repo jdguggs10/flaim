@@ -129,18 +129,17 @@ function buildEnv(authFetch: (request: Request) => Promise<Response>): Env {
 }
 
 describe('fantasy-mcp gateway integration', () => {
-  it('returns 405 for GET on MCP transport endpoints in stateless mode', async () => {
+  it('accepts GET on MCP transport endpoints for SSE streaming', async () => {
     const authFetch = vi.fn(async () => new Response('unexpected', { status: 500 }));
     const env = buildEnv(authFetch);
 
     const mcpResponse = await app.fetch(buildMcpGetRequest('/mcp'), env, mockExecutionContext());
-    expect(mcpResponse.status).toBe(405);
-    expect(mcpResponse.headers.get('Allow')).toBe('POST');
+    expect(mcpResponse.status).toBe(200);
 
     const fantasyResponse = await app.fetch(buildMcpGetRequest('/fantasy/mcp'), env, mockExecutionContext());
-    expect(fantasyResponse.status).toBe(405);
-    expect(fantasyResponse.headers.get('Allow')).toBe('POST');
+    expect(fantasyResponse.status).toBe(200);
 
+    // Auth should not be called for unauthenticated GET (public handshake)
     expect(authFetch).not.toHaveBeenCalled();
   });
 

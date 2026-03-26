@@ -17,7 +17,17 @@ const mcpServers = [
   },
 ];
 
-export function StepConnectAI() {
+interface StepConnectAIProps {
+  showStepNumber?: boolean;
+  renderCard?: boolean;
+  showHeader?: boolean;
+}
+
+export function StepConnectAI({
+  showStepNumber = true,
+  renderCard = true,
+  showHeader = true,
+}: StepConnectAIProps) {
   const { isLoaded, isSignedIn } = useAuth();
   const [copiedValue, setCopiedValue] = useState<string | null>(null);
 
@@ -33,21 +43,30 @@ export function StepConnectAI() {
 
   const canShowServers = isLoaded && isSignedIn;
 
-  return (
-    <Card className="p-5 flex flex-col">
-      <div className="flex items-center gap-3 mb-4">
-        <div className="w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold">
-          3
-        </div>
-        <h3 className="font-semibold text-lg">Connect your AI</h3>
-      </div>
+  const content = (
+    <div className="flex flex-col">
+      {showHeader ? (
+        <>
+          <div className="mb-4 flex items-center gap-3">
+            {showStepNumber ? (
+              <div className="w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold">
+                3
+              </div>
+            ) : null}
+            <h3 className="font-semibold text-lg">Connect your AI</h3>
+          </div>
 
-      <p className="text-sm text-muted-foreground mb-4">
-        Copy the name and URL below, then add them in your AI.
+          <p className="mb-4 text-sm text-muted-foreground">
+            Copy the name and URL below, then add Flaim in your AI assistant.
+          </p>
+        </>
+      ) : null}
+
+      <p className="mb-3 text-xs text-muted-foreground">
+        Pick your assistant for step-by-step instructions.
       </p>
 
-      {/* Platform boxes: name links to our guide, icon links to setup page */}
-      <div className="grid grid-cols-2 gap-2 mb-4">
+      <div className="mb-4 grid grid-cols-2 gap-2">
         <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
           <Link href="/guide/claude" className="text-xs font-medium text-primary hover:underline">Claude</Link>
           <a href="https://claude.ai/settings/connectors" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground transition-colors" title="Open Claude connectors">
@@ -55,7 +74,7 @@ export function StepConnectAI() {
           </a>
         </div>
         <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
-          <Link href="/guide/chatgpt" className="text-xs font-medium text-primary hover:underline">ChatGPT <span className="text-muted-foreground">(dev only)</span></Link>
+          <Link href="/guide/chatgpt" className="text-xs font-medium text-primary hover:underline">ChatGPT</Link>
           <a href="https://chatgpt.com/settings#settings/Connectors" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground transition-colors" title="Open ChatGPT settings">
             <ExternalLink className="h-3 w-3" />
           </a>
@@ -66,11 +85,19 @@ export function StepConnectAI() {
             <ExternalLink className="h-3 w-3" />
           </a>
         </div>
-        <div className="flex items-center justify-between rounded-md border border-border/50 px-3 py-2">
-          <Link href="/guide/gemini" className="text-xs text-muted-foreground hover:underline">Gemini</Link>
-          <ExternalLink className="h-3 w-3 text-muted-foreground/50" />
+        <div className="flex items-center justify-between rounded-md border border-dashed border-border px-3 py-2 text-muted-foreground">
+          <span className="text-xs font-medium">Gemini</span>
+          <span className="text-[11px]">Unavailable</span>
+        </div>
+        <div className="flex items-center justify-between rounded-md border border-dashed border-border px-3 py-2 text-muted-foreground">
+          <span className="text-xs font-medium">Grok</span>
+          <span className="text-[11px]">Unavailable</span>
         </div>
       </div>
+
+      <p className="mb-4 text-xs text-muted-foreground">
+        Claude, ChatGPT, and Perplexity are live today. Gemini and Grok are not available yet.
+      </p>
 
       {!isLoaded && (
         <div className="rounded-lg border bg-muted p-3 text-xs text-muted-foreground">
@@ -80,7 +107,7 @@ export function StepConnectAI() {
 
       {isLoaded && !isSignedIn && (
         <div className="rounded-lg border bg-muted p-3 text-xs text-muted-foreground">
-          Sign in to unlock the MCP server name and URL.
+          Sign in to unlock the MCP server name and URL for your account.
         </div>
       )}
 
@@ -136,6 +163,8 @@ export function StepConnectAI() {
           ))}
         </div>
       )}
-    </Card>
+    </div>
   );
+
+  return renderCard ? <Card className="p-5">{content}</Card> : content;
 }

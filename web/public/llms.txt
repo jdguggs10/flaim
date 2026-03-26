@@ -1,6 +1,6 @@
 # Flaim Fantasy
 
-> Flaim connects your ESPN, Yahoo, and Sleeper fantasy leagues to Claude, ChatGPT, and Gemini for read-only, league-specific analysis.
+> Flaim connects your ESPN, Yahoo, and Sleeper fantasy leagues to Claude, ChatGPT, and Perplexity for read-only, league-specific analysis.
 
 ## What Flaim does
 
@@ -8,18 +8,21 @@
 - Supports ESPN and Yahoo across football, baseball, basketball, hockey
 - Supports Sleeper for football and basketball
 - 9 tools: roster, standings, matchups, free agents, transactions, league info, player search, league history, session info
-- Works with Claude, ChatGPT, and Gemini via MCP (Model Context Protocol)
+- Works with Claude, ChatGPT, and Perplexity via MCP (Model Context Protocol)
 - Read-only — Flaim cannot trade, drop, or modify anything in your league
 
 ## How to connect
 
-1. Create account at https://flaim.app
-2. Connect fantasy platforms (ESPN via Chrome extension, Yahoo via OAuth, Sleeper via username)
-3. Add MCP server URL https://api.flaim.app/mcp to your AI assistant
+1. Create an account at https://flaim.app
+2. Open https://flaim.app/leagues
+3. Connect fantasy platforms there (ESPN via Chrome extension or manual fallback, Yahoo via OAuth, Sleeper via username)
+4. Add MCP server URL https://api.flaim.app/mcp to your AI assistant
+5. Start a fresh chat and ask what leagues you have to confirm setup
 
 ## Links
 
 - Website: https://flaim.app
+- Leagues setup: https://flaim.app/leagues
 - Setup guide: https://flaim.app/guide
 - GitHub: https://github.com/jdguggs10/flaim
 - Privacy: https://flaim.app/privacy
