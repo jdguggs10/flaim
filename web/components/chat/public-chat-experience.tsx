@@ -657,6 +657,9 @@ export function PublicChatExperience({
                           </Link>
                         </Button>
                       </div>
+                      <p className="text-sm text-primary-foreground/90">
+                        This demo runs on my personal OpenAI account. Want Flaim on your own leagues? Connect your own account and give my token budget a break.
+                      </p>
                       <p className="text-xs text-primary-foreground/80">
                         Powered by GPT-5.4. Claude and Perplexity are also supported.
                       </p>
