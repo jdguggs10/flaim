@@ -9,16 +9,7 @@ import {
 interface PublicToolCallProps {
   name?: string | null;
   status: "in_progress" | "completed";
-  parsedArguments?: Record<string, unknown>;
 }
-
-const ARGUMENT_LABELS: Array<[string, string]> = [
-  ["platform", ""],
-  ["sport", ""],
-  ["week", "Week"],
-  ["query", "Search"],
-  ["type", "Type"],
-];
 
 function getToolCopy(name?: string | null) {
   switch (name) {
@@ -76,31 +67,10 @@ function getToolCopy(name?: string | null) {
   }
 }
 
-function summarizeArguments(parsedArguments?: Record<string, unknown>) {
-  if (!parsedArguments) {
-    return [];
-  }
-
-  return ARGUMENT_LABELS.flatMap(([key, label]) => {
-    const value = parsedArguments[key];
-    if (value === undefined || value === null || value === "") {
-      return [];
-    }
-
-    if (!label) {
-      return String(value);
-    }
-
-    return `${label}: ${String(value)}`;
-  });
-}
-
 export function PublicToolCall({
   name,
   status,
-  parsedArguments,
 }: PublicToolCallProps) {
-  const argumentSummary = summarizeArguments(parsedArguments);
   const copy = getToolCopy(name);
 
   return (
@@ -129,18 +99,6 @@ export function PublicToolCall({
       <p className="text-sm leading-6 text-muted-foreground">
         {copy.description}
       </p>
-      {argumentSummary.length > 0 ? (
-        <div className="mt-2.5 flex flex-wrap gap-2">
-          {argumentSummary.map((item) => (
-            <span
-              key={item}
-              className="rounded-full border border-border bg-muted px-2.5 py-1 text-xs text-muted-foreground"
-            >
-              {item}
-            </span>
-          ))}
-        </div>
-      ) : null}
     </div>
   );
 }

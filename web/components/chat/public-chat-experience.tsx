@@ -204,8 +204,8 @@ export function PublicChatExperience({
     }
 
     setPreToolStatusIndex(0);
-    const pluginTimer = window.setTimeout(() => setPreToolStatusIndex(1), 750);
-    const toolsTimer = window.setTimeout(() => setPreToolStatusIndex(2), 1500);
+    const pluginTimer = window.setTimeout(() => setPreToolStatusIndex(1), 950);
+    const toolsTimer = window.setTimeout(() => setPreToolStatusIndex(2), 1350);
 
     return () => {
       window.clearTimeout(pluginTimer);
@@ -605,7 +605,6 @@ export function PublicChatExperience({
                             key={toolCall.id}
                             name={toolCall.name}
                             status={toolCall.status}
-                            parsedArguments={toolCall.parsedArguments}
                           />
                         ))}
                       </div>
