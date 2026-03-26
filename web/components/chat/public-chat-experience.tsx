@@ -3,12 +3,10 @@
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   PUBLIC_CHAT_PRESETS,
   type PublicChatPreset,
@@ -26,10 +24,10 @@ import { PublicMessage } from "./public-message";
 type PublicRunStatus = "idle" | "running" | "completed" | "error";
 type PublicSport = "football" | "baseball";
 
-const PUBLIC_SPORT_OPTIONS: Array<{ value: PublicSport; label: string }> = [
-  { value: "football", label: "Football" },
-  { value: "baseball", label: "Baseball" },
-];
+const PUBLIC_SPORT_COPY: Record<PublicSport, { emoji: string; label: string }> = {
+  baseball: { emoji: "⚾", label: "baseball" },
+  football: { emoji: "🏈", label: "football" },
+};
 
 interface PublicToolCallState {
   id: string;
@@ -181,9 +179,6 @@ export function PublicChatExperience({
 }: {
   initialPresetId?: string | null;
 }) {
-  const [selectedSport, setSelectedSport] = useState<PublicSport>(() =>
-    getDefaultPublicSport()
-  );
   const [runStatus, setRunStatus] = useState<PublicRunStatus>("idle");
   const [selectedPresetId, setSelectedPresetId] =
     useState<PublicChatPresetId | null>(null);
@@ -194,6 +189,7 @@ export function PublicChatExperience({
   const hasStreamedAssistantTextRef = useRef(false);
   const activeRunAbortControllerRef = useRef<AbortController | null>(null);
   const autoRunPresetIdRef = useRef<PublicChatPresetId | null>(null);
+  const demoSport = useMemo<PublicSport>(() => getDefaultPublicSport(), []);
 
   const selectedPreset = useMemo(
     () =>
@@ -311,7 +307,7 @@ export function PublicChatExperience({
     try {
       const requestBody = {
         presetId: preset.id,
-        sport: selectedSport,
+        sport: demoSport,
       };
 
       const response = await fetch("/api/public-chat/turn", {
@@ -473,7 +469,7 @@ export function PublicChatExperience({
         activeRunAbortControllerRef.current = null;
       }
     }
-  }, [runStatus, selectedSport]);
+  }, [demoSport, runStatus]);
 
   useEffect(() => {
     if (!initialQueryPreset) {
@@ -507,34 +503,43 @@ export function PublicChatExperience({
                 <span className="hidden sm:inline">Back home</span>
               </Link>
             </Button>
-            <div className="flex items-center gap-2">
-              <span className="hidden text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground sm:inline">
-                Sport
-              </span>
-              <Select
-                value={selectedSport}
-                onValueChange={(value) => setSelectedSport(value as PublicSport)}
-                disabled={runStatus === "running"}
-              >
-                <SelectTrigger
-                  aria-label="Select sport"
-                  className="h-8 w-[8.75rem] rounded-full border-border bg-background px-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-foreground shadow-sm"
+            <Popover>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="Show demo context"
+                  className="inline-flex h-8 items-center gap-2 rounded-full border border-border bg-background px-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-foreground shadow-sm transition-colors hover:bg-muted"
                 >
-                  <SelectValue placeholder="Select sport" />
-                </SelectTrigger>
-                <SelectContent>
-                  {PUBLIC_SPORT_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+                  <span className="text-sm leading-none" aria-hidden="true">
+                    {PUBLIC_SPORT_COPY[demoSport].emoji}
+                  </span>
+                  <span>ESPN</span>
+                </button>
+              </PopoverTrigger>
+              <PopoverContent
+                align="end"
+                className="w-[18.5rem] rounded-2xl border-border p-4 text-sm leading-6"
+              >
+                <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                  Demo context
+                </div>
+                <p className="mt-2 text-foreground">
+                  This demo is currently running on Gerry&apos;s ESPN{" "}
+                  {PUBLIC_SPORT_COPY[demoSport].label} league.
+                </p>
+                <p className="mt-2 text-muted-foreground">
+                  Flaim also supports Yahoo and Sleeper, plus football, baseball,
+                  basketball, and hockey.
+                </p>
+              </PopoverContent>
+            </Popover>
           </div>
           <h1 className="mt-3 w-full text-[2rem] font-semibold leading-[0.96] tracking-[-0.05em] text-foreground sm:mt-4 sm:text-5xl">
             Watch Flaim work on my actual leagues right now.
           </h1>
+          <p className="mt-3 text-sm text-muted-foreground sm:text-base">
+            Powered by GPT-5.4. Claude and Perplexity are also supported.
+          </p>
         </section>
 
         <Card className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.45rem] border-border bg-card p-0 shadow-sm sm:rounded-[1.6rem] lg:rounded-[2rem]">
