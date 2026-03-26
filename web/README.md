@@ -1,6 +1,6 @@
 # Flaim Web App
 
-Next.js 15 app with App Router, Tailwind CSS v4, and shadcn/ui. Handles site pages, OAuth consent, API routes, and optional built-in chat.
+Next.js 15 app with App Router, Tailwind CSS v4, and shadcn/ui. Handles site pages, OAuth consent, API routes, the public `/chat` live demo, and the internal `/dev` lab.
 
 ## Quick Start
 
@@ -22,7 +22,8 @@ web/
 │   │   ├── privacy/         # Privacy policy (/privacy)
 │   │   └── oauth/consent/   # OAuth consent screen
 │   │
-│   ├── (chat)/chat/         # Built-in chat UI (/chat)
+│   ├── (chat)/chat/         # Public live demo UI (/chat)
+│   ├── (chat)/dev/          # Internal dev/debug lab (/dev)
 │   │
 │   └── api/
 │       ├── auth/            # Platform auth APIs
@@ -100,7 +101,7 @@ Deleting a league removes all seasons for that league.
 Create `web/.env.local` from `.env.example`:
 
 ```bash
-# OpenAI (for built-in chat)
+# OpenAI (for public /chat demo and internal /dev lab)
 OPENAI_API_KEY=sk-...
 
 # Clerk Auth

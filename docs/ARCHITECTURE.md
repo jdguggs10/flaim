@@ -2,7 +2,7 @@
 
 Doc routing: see `docs/INDEX.md`.
 
-Flaim is an MCP (Model Context Protocol) service that connects ESPN, Yahoo, and Sleeper fantasy leagues to AI assistants like Claude, ChatGPT, and Gemini CLI. It handles authentication, credential management, and real-time data fetching — the built-in chat is a secondary feature for testing.
+Flaim is an MCP (Model Context Protocol) service that connects ESPN, Yahoo, and Sleeper fantasy leagues to AI assistants like Claude, ChatGPT, and Gemini CLI. It handles authentication, credential management, and real-time data fetching. The web app also includes two secondary chat surfaces: a public `/chat` live demo and an internal `/dev` lab.
 
 ## Quick Start
 
@@ -184,15 +184,9 @@ Claude/ChatGPT/Gemini CLI → fantasy-mcp (gateway) → espn-client    → ESPN 
 - JWKS-based Clerk JWT verification in auth-worker (5m cache). Prod rejects spoofed headers.
 - MCP workers forward `Authorization`; auth-worker alone validates tokens.
 - Per-user isolation via verified `sub`; credentials never sent back to client after setup.
-<<<<<<< HEAD
 - Rate limiting: Cloudflare Workers native `rate_limits` bindings — 10 req/60s per IP on token endpoint, 15 req/60s per user on credentials endpoint, and 5 req/60s per visitor on the public `/chat` demo.
 - Public chat concurrency/logging: auth-worker reserves demo runs in Supabase (`public_chat_runs`) so one visitor cannot stack overlapping runs and failures remain visible after the request finishes.
 - Public chat warm context: the web app caches Gerry session context in Supabase (`public_chat_context_cache`) so the public demo can prewarm the default-league context on page load without doing hidden extra model work before the live turn.
-=======
-- Rate limiting: Cloudflare Workers native `rate_limits` bindings — 10 req/60s per IP on token endpoint, 15 req/60s per user on credentials endpoint, and 5 req/60s per visitor on the public `/chat` demo.
-- Public chat concurrency/logging: auth-worker reserves demo runs in Supabase (`public_chat_runs`) so one visitor cannot stack overlapping runs and failures remain visible after the request finishes.
-- Public chat warm context: the web app caches Gerry session context in Supabase (`public_chat_context_cache`) so the public demo can prewarm the default-league context on page load without doing hidden extra model work before the live turn.
->>>>>>> codex/public-chat-cache-warmup
 - OAuth tokens stored in Supabase with expiration tracking.
 - ESPN credentials: AES-256 encrypted at rest (Supabase default).
 

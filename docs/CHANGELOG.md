@@ -4,6 +4,10 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Documentation
+- **Changed**: Updated repo docs to reflect the current chat split: public `/chat` live demo and internal `/dev` lab.
+- **Fixed**: Removed stale dev-only chat framing and cleaned unresolved merge-conflict markers from `docs/ARCHITECTURE.md`.
+
 ### Security Hardening
 - **Fixed**: OAuth authorization code race condition — atomic `UPDATE...WHERE used_at IS NULL` prevents double-exchange attacks.
 - **Fixed**: PKCE `code_verifier` validation — enforces 43-128 char length and unreserved charset per RFC 7636, with constant-time challenge comparison.
