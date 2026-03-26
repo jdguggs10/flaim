@@ -528,7 +528,7 @@ export function PublicChatExperience({
                   {PUBLIC_SPORT_COPY[demoSport].label} league.
                 </p>
                 <p className="mt-2 text-muted-foreground">
-                  Flaim also supports Yahoo and Sleeper, plus football, baseball,
+                  Flaim supports ESPN, Yahoo, and Sleeper for football, baseball,
                   basketball, and hockey.
                 </p>
               </PopoverContent>
@@ -646,11 +646,17 @@ export function PublicChatExperience({
 
                   {runStatus === "completed" && selectedPreset ? (
                     <div className="flex flex-col gap-3 rounded-[1.75rem] border border-border bg-primary px-5 py-4 text-sm text-primary-foreground">
-                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                        <span>
-                          That run used live data from Gerry&apos;s actual leagues.
+                      <div className="flex flex-col gap-3">
+                        <span className="text-primary-foreground">
+                          That run used live data from Gerry&apos;s actual league.
                         </span>
-                        <Button asChild type="button" variant="secondary" size="sm" className="rounded-full">
+                        <Button
+                          asChild
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          className="w-full justify-center rounded-full sm:w-fit"
+                        >
                           <Link href="/leagues">
                             Set up your leagues
                             <ArrowRight className="ml-2 h-4 w-4" />
@@ -674,8 +680,8 @@ export function PublicChatExperience({
                             One more thing
                           </div>
                           <p className="mt-2 text-foreground">
-                            This demo runs on my personal OpenAI account. Want Flaim on your own leagues?
-                            Connect your own account and give my token budget a break.
+                            I&apos;m running this custom demo on my personal OpenAI account. Want
+                            Flaim for your own leagues? Connect your Flaim account to your own AI app.
                           </p>
                         </PopoverContent>
                       </Popover>
