@@ -166,6 +166,12 @@ export function PublicChatExperience({
   );
   const showFocusedPromptStage = runStatus === "running" && selectedPreset;
   const hasToolCalls = toolCalls.length > 0;
+  const hasAssistantText = assistantText.trim().length > 0;
+  const allToolCallsCompleted =
+    hasToolCalls && toolCalls.every((toolCall) => toolCall.status === "completed");
+  const showPreToolStatus = runStatus === "running" && !hasToolCalls;
+  const showRespondingStatus =
+    runStatus === "running" && allToolCallsCompleted && !hasAssistantText;
   const preToolStatusCopy = [
     "Thinking...",
     "Using Flaim Fantasy plugin...",
@@ -204,8 +210,8 @@ export function PublicChatExperience({
     }
 
     setPreToolStatusIndex(0);
-    const pluginTimer = window.setTimeout(() => setPreToolStatusIndex(1), 950);
-    const toolsTimer = window.setTimeout(() => setPreToolStatusIndex(2), 1350);
+    const pluginTimer = window.setTimeout(() => setPreToolStatusIndex(1), 1000);
+    const toolsTimer = window.setTimeout(() => setPreToolStatusIndex(2), 1750);
 
     return () => {
       window.clearTimeout(pluginTimer);
@@ -580,12 +586,10 @@ export function PublicChatExperience({
                     </div>
                   )}
 
-                  {runStatus === "running" && !hasToolCalls ? (
+                  {showPreToolStatus ? (
                     <div className="flex items-center gap-2 px-1 text-sm text-muted-foreground">
                       <LoaderCircle className="h-4 w-4 animate-spin" />
-                      <span>
-                        {assistantText ? "Pulling together the answer." : preToolStatusCopy}
-                      </span>
+                      <span>{preToolStatusCopy}</span>
                     </div>
                   ) : null}
 
@@ -609,6 +613,13 @@ export function PublicChatExperience({
                         ))}
                       </div>
                     </section>
+                  ) : null}
+
+                  {showRespondingStatus ? (
+                    <div className="flex items-center gap-2 px-1 text-sm text-muted-foreground">
+                      <LoaderCircle className="h-4 w-4 animate-spin" />
+                      <span>Responding...</span>
+                    </div>
                   ) : null}
 
                   {assistantText ? (
