@@ -1,6 +1,6 @@
 import type { ExecuteResponse } from '../../types';
 import { extractErrorCode } from '@flaim/worker-shared';
-import { asArray } from '../normalizers';
+import { asArray, parseYahooPercentOwned } from '../normalizers';
 
 export function toExecuteErrorResponse(error: unknown): ExecuteResponse {
   return {
@@ -21,6 +21,12 @@ export function extractPlayerMeta(playerData: unknown[]): Record<string, unknown
     }
   }
   return playerMeta;
+}
+
+export function extractPlayerPercentOwned(playerData: unknown[]): number | null {
+  const ownershipData = playerData?.[1] as Record<string, unknown> | undefined;
+  const ownership = ownershipData?.ownership as Record<string, unknown> | undefined;
+  return parseYahooPercentOwned(ownership?.percent_owned);
 }
 
 export function withLogLabel(baseLabel: string, suffix: string): string {

@@ -1,9 +1,9 @@
 import type { HandlerFn, YahooHandlerContext } from './types';
 import { getYahooCredentials } from '../auth';
 import { yahooFetch, handleYahooError, requireCredentials } from '../yahoo-api';
-import { asArray, getPath, unwrapLeague, parseYahooPercentOwned } from '../normalizers';
+import { asArray, getPath, unwrapLeague } from '../normalizers';
 import { ErrorCode } from '@flaim/worker-shared';
-import { extractPlayerMeta, toExecuteErrorResponse } from './utils';
+import { extractPlayerMeta, extractPlayerPercentOwned, toExecuteErrorResponse } from './utils';
 
 export function createSearchPlayersHandler(config: YahooHandlerContext): HandlerFn {
   return async (env, params, authHeader, correlationId) => {
@@ -25,7 +25,7 @@ export function createSearchPlayersHandler(config: YahooHandlerContext): Handler
         queryParams += `;position=${posFilter}`;
       }
 
-      const response = await yahooFetch(`/league/${league_id}/players${queryParams}`, { credentials });
+      const response = await yahooFetch(`/league/${league_id}/players${queryParams}/ownership`, { credentials });
       if (!response.ok) {
         handleYahooError(response);
       }
@@ -40,15 +40,12 @@ export function createSearchPlayersHandler(config: YahooHandlerContext): Handler
         const playerData = getPath(playerWrapper, ['player']) as unknown[];
         const playerMeta = extractPlayerMeta(playerData);
 
-        const ownershipData = playerData?.[1] as Record<string, unknown> | undefined;
-        const ownership = ownershipData?.ownership as Record<string, unknown> | undefined;
-
         return {
           id: playerMeta.player_id as string,
           name: (playerMeta.name as Record<string, unknown>)?.full as string,
           team: playerMeta.editorial_team_abbr as string,
           position: playerMeta.display_position as string,
-          market_percent_owned: parseYahooPercentOwned(ownership?.percent_owned),
+          market_percent_owned: extractPlayerPercentOwned(playerData),
           ownership_scope: 'platform_global' as const,
         };
       });

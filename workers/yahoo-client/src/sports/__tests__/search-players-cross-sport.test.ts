@@ -26,6 +26,13 @@ const scenarios = [
   { label: 'hockey', sport: 'hockey', handlers: hockeyHandlers },
 ] as const;
 
+const SEARCH_POSITION_FILTER: Record<(typeof scenarios)[number]['sport'], string> = {
+  football: 'QB',
+  baseball: '1B',
+  basketball: 'PG',
+  hockey: 'C',
+};
+
 function buildSearchResponse(): unknown {
   return {
     fantasy_content: {
@@ -132,5 +139,29 @@ describe('yahoo cross-sport get_players handlers', () => {
     });
     expect(data.players[0].playerKey).toBeUndefined();
     expect(data.players[0].playerId).toBeUndefined();
+  });
+
+  it.each(scenarios)('$label requests Yahoo ownership sub-resource for player search', async ({ sport, handlers }) => {
+    getCredsMock.mockResolvedValue({ accessToken: 'token' });
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify(buildSearchResponse()), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    );
+
+    const params: ToolParams = {
+      sport,
+      league_id: '449.l.123',
+      season_year: 2025,
+      query: 'rice',
+      count: 10,
+      position: SEARCH_POSITION_FILTER[sport],
+    };
+
+    const result = await handlers.get_players({} as never, params, 'Bearer x', `cid-${sport}`);
+    expect(result.success).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0]?.[0]).toContain(`/league/449.l.123/players;search=rice;count=10;position=${SEARCH_POSITION_FILTER[sport]}/ownership`);
   });
 });

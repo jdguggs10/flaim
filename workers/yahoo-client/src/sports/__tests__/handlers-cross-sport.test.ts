@@ -27,6 +27,13 @@ const scenarios = [
   { label: 'hockey', sport: 'hockey', handlers: hockeyHandlers },
 ] as const;
 
+const FREE_AGENT_POSITION_FILTER: Record<(typeof scenarios)[number]['sport'], string> = {
+  football: 'WR',
+  baseball: 'OF',
+  basketball: 'PG',
+  hockey: 'C',
+};
+
 function jsonResponse(payload: unknown): Response {
   return new Response(JSON.stringify(payload), {
     status: 200,
@@ -199,6 +206,43 @@ function buildFreeAgentsResponse(): unknown {
             count: 1,
           },
         },
+      ],
+    },
+  };
+}
+
+function buildFreeAgentsPageResponse(players: Array<{
+  player_key: string;
+  player_id: string;
+  full_name: string;
+  team: string;
+  position: string;
+  percent_owned?: string;
+}>): unknown {
+  const playersObj: Record<string, unknown> = {};
+
+  players.forEach((player, index) => {
+    playersObj[String(index)] = {
+      player: [
+        [{
+          player_key: player.player_key,
+          player_id: player.player_id,
+          name: { full: player.full_name },
+          editorial_team_abbr: player.team,
+          display_position: player.position,
+        }],
+        player.percent_owned == null ? {} : { ownership: { percent_owned: player.percent_owned } },
+      ],
+    };
+  });
+
+  playersObj.count = players.length;
+
+  return {
+    fantasy_content: {
+      league: [
+        { league_key: '449.l.123', name: 'Test League' },
+        { players: playersObj },
       ],
     },
   };
@@ -405,6 +449,58 @@ describe('yahoo cross-sport handler characterization tests', () => {
       const data = result.data as { freeAgents: Array<{ percentOwned: number | null | undefined }> };
       // percent_owned: "0" must not be dropped as undefined
       expect(data.freeAgents[0].percentOwned).toBe(0);
+    });
+
+    it.each(scenarios)('$label paginates available players, requests ownership, and returns globally ownership-sorted results', async ({ sport, handlers }) => {
+      const firstPagePlayers = Array.from({ length: 100 }, (_unused, index) => ({
+        player_key: `fa${index + 1}`,
+        player_id: String(index + 1),
+        full_name: `Player ${String(index + 1).padStart(3, '0')}`,
+        team: 'BOS',
+        position: 'OF',
+        percent_owned: String(index % 5),
+      }));
+
+      const secondPagePlayers = [
+        { player_key: 'fa201', player_id: '201', full_name: 'Aaron Ace', team: 'NYY', position: 'OF', percent_owned: '99' },
+        { player_key: 'fa202', player_id: '202', full_name: 'Ben Bat', team: 'LAD', position: 'OF', percent_owned: '99' },
+        { player_key: 'fa203', player_id: '203', full_name: 'Carl Curve', team: 'ATL', position: 'OF', percent_owned: '88.5' },
+        { player_key: 'fa204', player_id: '204', full_name: 'Null Guy', team: 'SEA', position: 'OF' },
+      ];
+
+      fetchMock
+        .mockResolvedValueOnce(jsonResponse(buildFreeAgentsPageResponse(firstPagePlayers)))
+        .mockResolvedValueOnce(jsonResponse(buildFreeAgentsPageResponse(secondPagePlayers)));
+
+      const params: ToolParams = {
+        sport,
+        league_id: '449.l.123',
+        season_year: 2025,
+        count: 3,
+        position: FREE_AGENT_POSITION_FILTER[sport],
+      };
+      const result = await handlers.get_free_agents({} as never, params, 'Bearer x', `cid-${sport}`);
+
+      expect(result.success).toBe(true);
+      const data = result.data as {
+        count: number;
+        freeAgents: Array<{ playerId: string; name: string; percentOwned: number | null }>;
+      };
+
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(fetchMock.mock.calls[0]?.[0]).toContain(
+        `/league/449.l.123/players;status=A;count=100;sort=OR;start=0;position=${FREE_AGENT_POSITION_FILTER[sport]}/ownership`
+      );
+      expect(fetchMock.mock.calls[1]?.[0]).toContain(
+        `/league/449.l.123/players;status=A;count=100;sort=OR;start=100;position=${FREE_AGENT_POSITION_FILTER[sport]}/ownership`
+      );
+
+      expect(data.count).toBe(3);
+      expect(data.freeAgents).toEqual([
+        expect.objectContaining({ playerId: '201', name: 'Aaron Ace', percentOwned: 99 }),
+        expect.objectContaining({ playerId: '202', name: 'Ben Bat', percentOwned: 99 }),
+        expect.objectContaining({ playerId: '203', name: 'Carl Curve', percentOwned: 88.5 }),
+      ]);
     });
   });
 });
