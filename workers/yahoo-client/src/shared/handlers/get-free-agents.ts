@@ -22,7 +22,7 @@ export function createGetFreeAgentsHandler(config: YahooHandlerContext): Handler
       requireCredentials(credentials, 'get_free_agents');
 
       const limit = Math.min(Math.max(1, count || 25), 100);
-      let queryParams = `;status=FA;count=${limit}`;
+      let queryParams = `;status=A;count=${limit}`;
 
       const posFilter = config.getPositionFilter(position);
       if (posFilter) {
