@@ -249,8 +249,8 @@ async function handleMcpRequest(c: Context<{ Bindings: Env }>): Promise<Response
 }
 
 async function handleMcpEndpoint(c: Context<{ Bindings: Env }>): Promise<Response> {
-  if (c.req.method !== 'POST') {
-    return buildMethodNotAllowedResponse('POST');
+  if (c.req.method !== 'POST' && c.req.method !== 'GET') {
+    return buildMethodNotAllowedResponse('GET, POST');
   }
 
   return handleMcpRequest(c);
