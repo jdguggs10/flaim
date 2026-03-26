@@ -1,4 +1,4 @@
-import { PublicChatExperience } from "@/components/chat/public-chat-experience";
+import { PublicChatExperience } from "@/components/public-demo/public-chat-experience";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {

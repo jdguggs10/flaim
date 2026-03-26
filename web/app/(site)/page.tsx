@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { SignedIn, SignedOut } from '@clerk/nextjs';
+import { PublicChatExperience } from '@/components/public-demo/public-chat-experience';
 
 export const metadata: Metadata = {
   alternates: {
@@ -109,6 +110,15 @@ export default function LandingPage() {
           Flaim is a free, open-source MCP server that gives Claude, ChatGPT, and Perplexity read-only access to your actual fantasy league data: rosters, standings, matchups, free agents, and transactions across football, baseball, basketball, and hockey. It works with ESPN, Yahoo, and Sleeper. Setup takes about 5 minutes, and nothing in your league can be changed.
         </p>
       </section>
+
+      <PublicChatExperience
+        id="live-demo"
+        leadingSlot={
+          <div className="flex min-h-8 items-center text-xs font-medium text-muted-foreground sm:text-sm">
+            This demo runs on a live version of ChatGPT.
+          </div>
+        }
+      />
 
       {/* How It Works */}
       <section className="bg-muted px-4 py-10">
