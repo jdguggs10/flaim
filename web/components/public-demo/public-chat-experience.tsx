@@ -15,9 +15,13 @@ import {
 } from "@/lib/public-chat";
 import { cn } from "@/lib/utils";
 import { parse } from "partial-json";
-import { ArrowRight, LoaderCircle } from "lucide-react";
+import {
+  ArrowUp,
+  LoaderCircle,
+  Mic,
+  Plus,
+} from "lucide-react";
 import Image from "next/image";
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PublicToolCall } from "./public-tool-call";
 import { PublicMessage } from "./public-message";
@@ -157,7 +161,7 @@ export function PublicChatExperience({
   const [assistantText, setAssistantText] = useState("");
   const [toolCalls, setToolCalls] = useState<PublicToolCallState[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const transcriptEndRef = useRef<HTMLDivElement | null>(null);
+  const transcriptScrollRef = useRef<HTMLDivElement | null>(null);
   const hasStreamedAssistantTextRef = useRef(false);
   const activeRunAbortControllerRef = useRef<AbortController | null>(null);
   const autoRunPresetIdRef = useRef<PublicChatPresetId | null>(null);
@@ -171,7 +175,6 @@ export function PublicChatExperience({
         : null,
     [selectedPresetId]
   );
-  const showFocusedPromptStage = runStatus === "running" && selectedPreset;
   const hasToolCalls = toolCalls.length > 0;
   const hasAssistantText = assistantText.trim().length > 0;
   const allToolCallsCompleted =
@@ -181,8 +184,8 @@ export function PublicChatExperience({
     runStatus === "running" && allToolCallsCompleted && !hasAssistantText;
   const preToolStatusCopy = [
     "Thinking...",
-    "Using Flaim Fantasy plugin...",
-    "Calling Flaim Fantasy tools...",
+    "Using Flaim Fantasy...",
+    "Running live league tools...",
   ][preToolStatusIndex];
   const topRailPresets = useMemo(() => {
     const presets = PUBLIC_CHAT_PRESETS.filter((preset) => preset.rail === "top");
@@ -201,11 +204,23 @@ export function PublicChatExperience({
   );
 
   useEffect(() => {
-    if (!followTranscript) {
+    if (!followTranscript || !transcriptScrollRef.current) {
       return;
     }
 
-    transcriptEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    const scrollContainer = transcriptScrollRef.current;
+    const nextBehavior: ScrollBehavior =
+      assistantText.trim().length > 0 || toolCalls.length > 0 ? "smooth" : "auto";
+    const frame = window.requestAnimationFrame(() => {
+      scrollContainer.scrollTo({
+        top: scrollContainer.scrollHeight,
+        behavior: nextBehavior,
+      });
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+    };
   }, [assistantText, followTranscript, toolCalls.length, runStatus]);
 
   useEffect(() => {
@@ -221,8 +236,8 @@ export function PublicChatExperience({
     }
 
     setPreToolStatusIndex(0);
-    const pluginTimer = window.setTimeout(() => setPreToolStatusIndex(1), 1000);
-    const toolsTimer = window.setTimeout(() => setPreToolStatusIndex(2), 1750);
+    const pluginTimer = window.setTimeout(() => setPreToolStatusIndex(1), 800);
+    const toolsTimer = window.setTimeout(() => setPreToolStatusIndex(2), 1500);
 
     return () => {
       window.clearTimeout(pluginTimer);
@@ -238,59 +253,6 @@ export function PublicChatExperience({
       // Prewarm is opportunistic. The live turn route still works without it.
     });
   }, []);
-
-  const renderPromptTicker = (
-    presets: readonly PublicChatPreset[],
-    speedClassName: string
-  ) => {
-    const repeatedPresets = [...presets, ...presets];
-
-    return (
-      <div className="-mx-3 overflow-hidden px-3 sm:mx-0 sm:px-0">
-        <div
-          className={cn(
-            "public-chat-ticker-track flex w-max gap-2.5 pb-1 sm:gap-3",
-            speedClassName,
-            runStatus === "running" ? "public-chat-ticker-track--paused" : ""
-          )}
-        >
-          {repeatedPresets.map((preset, index) => {
-            const isSelected = preset.id === selectedPresetId;
-
-            return (
-              <button
-                key={`${preset.id}-${index}`}
-                type="button"
-                onClick={() => void handleRunPreset(preset)}
-                disabled={runStatus === "running"}
-                aria-pressed={isSelected}
-                className={cn(
-                  "group relative w-max max-w-none overflow-hidden rounded-full border px-3 py-2 text-left transition-all duration-200 sm:px-4 sm:py-2.5",
-                  isSelected
-                    ? "border-primary bg-primary text-primary-foreground shadow-sm"
-                    : "border-border bg-background text-foreground hover:bg-muted",
-                  runStatus === "running" && !isSelected
-                    ? "cursor-not-allowed opacity-70"
-                    : ""
-                )}
-              >
-                <div className="relative">
-                  <h3
-                    className={cn(
-                      "whitespace-nowrap text-[0.8rem] font-semibold leading-none tracking-tight sm:text-[0.9rem]",
-                      isSelected ? "text-primary-foreground" : "text-foreground"
-                    )}
-                  >
-                    {preset.title}
-                  </h3>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    );
-  };
 
   const handleRunPreset = useCallback(async (preset: PublicChatPreset) => {
     if (runStatus === "running") {
@@ -331,7 +293,6 @@ export function PublicChatExperience({
           }
         } catch (jsonError) {
           console.error("Failed to parse error response JSON:", jsonError);
-          // Keep the HTTP status fallback.
         }
         throw new Error(message);
       }
@@ -485,31 +446,77 @@ export function PublicChatExperience({
 
     autoRunPresetIdRef.current = initialQueryPreset.id;
     void handleRunPreset(initialQueryPreset);
-  }, [initialQueryPreset, handleRunPreset]);
+  }, [handleRunPreset, initialQueryPreset]);
 
-  const resolvedLeadingSlot = leadingSlot ?? (
-    <Button
-      asChild
-      variant="ghost"
-      size="sm"
-      className="h-8 rounded-full px-2 text-muted-foreground sm:px-3"
-    >
-      <Link href="/">
-        <ArrowRight className="mr-1 h-4 w-4 rotate-180 sm:mr-2" />
-        <span className="sm:hidden">Home</span>
-        <span className="hidden sm:inline">Back home</span>
-      </Link>
-    </Button>
-  );
+  const renderPromptTicker = (
+    presets: readonly PublicChatPreset[],
+    speedClassName: string
+  ) => {
+    const repeatedPresets = [...presets, ...presets];
+
+    return (
+      <div className="-mx-1 overflow-hidden px-1">
+        <div
+          className={cn(
+            "public-chat-ticker-track flex w-max gap-2 py-0.5 sm:gap-2.5",
+            speedClassName,
+            runStatus === "running" ? "public-chat-ticker-track--paused" : ""
+          )}
+        >
+          {repeatedPresets.map((preset, index) => {
+            const isSelected = preset.id === selectedPresetId;
+
+            return (
+              <button
+                key={`${preset.id}-${index}`}
+                type="button"
+                onClick={() => void handleRunPreset(preset)}
+                disabled={runStatus === "running"}
+                aria-pressed={isSelected}
+                className={cn(
+                  "group relative w-max max-w-none overflow-hidden rounded-full border px-3 py-2 text-left transition-all duration-200 sm:px-4",
+                  isSelected
+                    ? "border-primary/40 bg-primary/10 text-primary"
+                    : "border-border/70 bg-background text-foreground hover:bg-muted",
+                  runStatus === "running" && !isSelected
+                    ? "cursor-not-allowed opacity-65"
+                    : ""
+                )}
+              >
+                <div className="relative">
+                  <h3
+                    className={cn(
+                      "whitespace-nowrap text-[0.76rem] font-medium leading-none tracking-tight sm:text-[0.84rem]",
+                      isSelected ? "text-primary" : "text-foreground"
+                    )}
+                  >
+                    {preset.title}
+                  </h3>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  const chipActive = runStatus === "running" || runStatus === "completed" || Boolean(selectedPreset);
 
   return (
-    <div id={id} className="relative min-h-[100dvh] bg-background">
-      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_bottom,transparent_0,transparent_23px,var(--border)_24px)] bg-[length:100%_24px] opacity-25" />
+    <section id={id} className="relative bg-background px-4 pb-12 sm:px-6 lg:px-8 lg:pb-16">
+      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_bottom,transparent_0,transparent_23px,var(--border)_24px)] bg-[length:100%_24px] opacity-20" />
 
-      <div className="relative mx-auto flex min-h-[100dvh] w-full max-w-5xl flex-col px-4 py-4 sm:px-6 lg:px-8 lg:py-6">
-        <section className="pb-3 sm:pb-4">
+      <div className="relative mx-auto max-w-5xl">
+        <section className="pb-4 sm:pb-6">
           <div className="flex items-center justify-between gap-3">
-            {resolvedLeadingSlot}
+            {leadingSlot ? (
+              leadingSlot
+            ) : (
+              <div className="flex min-h-8 items-center text-xs font-medium text-muted-foreground sm:text-sm">
+                Live demo
+              </div>
+            )}
             <Popover>
               <PopoverTrigger asChild>
                 <button
@@ -541,165 +548,258 @@ export function PublicChatExperience({
               </PopoverContent>
             </Popover>
           </div>
-          <h1 className="mt-3 w-full text-[2rem] font-semibold leading-[0.96] tracking-[-0.05em] text-foreground sm:mt-4 sm:text-5xl">
+          <h1 className="mt-3 w-full max-w-3xl text-[2rem] font-semibold leading-[0.96] tracking-[-0.05em] text-foreground sm:mt-4 sm:text-5xl">
             Watch Flaim work on my actual leagues right now.
           </h1>
         </section>
 
-        <Card className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.45rem] border-border bg-card p-0 shadow-sm sm:rounded-[1.6rem] lg:rounded-[2rem]">
-          <div className="border-b border-border bg-card px-3 py-3 sm:px-4">
-            {showFocusedPromptStage && selectedPreset ? (
-              <div className="flex min-h-[5.75rem] items-center justify-center sm:min-h-[6.5rem]">
-                <div className="public-chat-selected-prompt group relative max-w-full overflow-hidden rounded-full border border-primary bg-primary px-5 py-3 text-center text-primary-foreground shadow-sm sm:px-7 sm:py-3.5">
-                  <div className="absolute inset-0 bg-[linear-gradient(110deg,transparent_0%,rgba(255,255,255,0.06)_35%,rgba(255,255,255,0.22)_50%,rgba(255,255,255,0.06)_65%,transparent_100%)]" />
-                  <div className="relative">
-                    <p className="truncate text-[0.92rem] font-semibold tracking-tight sm:text-base">
-                      {selectedPreset.title}
-                    </p>
-                  </div>
+        <Card className="overflow-hidden rounded-[2rem] border-border/70 bg-card/95 p-0 shadow-[0_30px_90px_-42px_rgba(15,23,42,0.45)] backdrop-blur sm:rounded-[2.3rem]">
+          <div className="border-b border-border/70 bg-card px-4 py-3 sm:px-5">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                  Live app demo
                 </div>
+                <p className="mt-1 text-sm text-foreground">
+                  Pick a prompt below and watch the live run stream inside the shell.
+                </p>
               </div>
-            ) : (
-              <div className="space-y-2">
-                {renderPromptTicker(topRailPresets, "public-chat-ticker-track--top")}
-                {renderPromptTicker(bottomRailPresets, "public-chat-ticker-track--bottom")}
+              <div className="rounded-full border border-border/70 bg-background px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                {runStatus === "running"
+                  ? "Running"
+                  : runStatus === "completed"
+                    ? "Ready again"
+                    : runStatus === "error"
+                      ? "Retry"
+                      : "Live"}
               </div>
-            )}
+            </div>
           </div>
 
-          <div className="min-h-0 flex-1 bg-muted/40 p-2.5 sm:p-3 lg:p-4">
-            <div className="flex h-full min-h-0 flex-col rounded-[1.2rem] border border-border bg-background p-3 sm:rounded-[1.35rem] lg:rounded-[1.7rem] lg:p-4 lg:overflow-hidden">
-              <div className="flex h-full min-h-0 flex-col gap-4 pr-1 lg:overflow-y-auto">
-                  {selectedPreset ? (
-                    <PublicMessage role="user" text={selectedPreset.userMessage} />
-                  ) : (
-                    <div className="flex h-full min-h-[12rem] items-center justify-center lg:min-h-[18rem]">
-                      <div className="max-w-xl text-center">
-                        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-[1.2rem] border border-border bg-primary text-primary-foreground sm:h-16 sm:w-16 sm:rounded-[1.5rem]">
-                          <Image
-                            src="/icon-dark.png"
-                            alt="Flaim"
-                            width={28}
-                            height={28}
-                            className="dark:hidden"
-                          />
-                          <Image
-                            src="/icon-light.png"
-                            alt="Flaim"
-                            width={28}
-                            height={28}
-                            className="hidden dark:block"
-                          />
-                        </div>
-                        <h3 className="mt-4 text-lg font-semibold tracking-tight text-foreground sm:mt-5 sm:text-2xl">
-                          Pick a prompt to start
-                        </h3>
-                        <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                          Choose one above and Flaim will run on Gerry&apos;s actual leagues live.
-                        </p>
+          <div className="bg-[radial-gradient(circle_at_top,rgba(59,130,246,0.08),transparent_40%),linear-gradient(to_bottom,rgba(248,250,252,0.98),rgba(241,245,249,0.78))]">
+            <div
+              ref={transcriptScrollRef}
+              className="h-[25rem] overflow-y-auto overscroll-contain px-3 py-4 sm:h-[31rem] sm:px-4 sm:py-5"
+            >
+              <div className="mx-auto flex max-w-3xl flex-col gap-4">
+                {selectedPreset ? (
+                  <PublicMessage role="user" text={selectedPreset.userMessage} />
+                ) : (
+                  <div className="flex min-h-[15rem] flex-1 items-center justify-center">
+                    <div className="max-w-md text-center">
+                      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-[1.5rem] border border-border bg-background shadow-sm">
+                        <Image
+                          src="/icon-dark.png"
+                          alt="Flaim"
+                          width={28}
+                          height={28}
+                          className="dark:hidden"
+                        />
+                        <Image
+                          src="/icon-light.png"
+                          alt="Flaim"
+                          width={28}
+                          height={28}
+                          className="hidden dark:block"
+                        />
                       </div>
-                    </div>
-                  )}
-
-                  {showPreToolStatus ? (
-                    <div className="flex items-center gap-2 px-1 text-sm text-muted-foreground">
-                      <LoaderCircle className="h-4 w-4 animate-spin" />
-                      <span>{preToolStatusCopy}</span>
-                    </div>
-                  ) : null}
-
-                  {hasToolCalls ? (
-                    <section className="space-y-3">
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
-                          What Flaim checked
-                        </div>
-                        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                          {toolCalls.length} call{toolCalls.length === 1 ? "" : "s"}
-                        </div>
-                      </div>
-                      <div className="space-y-3">
-                        {toolCalls.map((toolCall) => (
-                          <PublicToolCall
-                            key={toolCall.id}
-                            name={toolCall.name}
-                            status={toolCall.status}
-                          />
-                        ))}
-                      </div>
-                    </section>
-                  ) : null}
-
-                  {showRespondingStatus ? (
-                    <div className="flex items-center gap-2 px-1 text-sm text-muted-foreground">
-                      <LoaderCircle className="h-4 w-4 animate-spin" />
-                      <span>Responding...</span>
-                    </div>
-                  ) : null}
-
-                  {assistantText ? (
-                    <PublicMessage role="assistant" text={assistantText} />
-                  ) : null}
-
-                  {runStatus === "error" ? (
-                    <div className="rounded-[1.75rem] border border-destructive/30 bg-destructive/5 px-5 py-4 text-sm text-destructive">
-                      <div className="font-semibold">Public chat run failed</div>
-                      <p className="mt-2 leading-6">
-                        {error || "Unknown public chat error."}
+                      <h3 className="mt-4 text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
+                        Pick a live prompt
+                      </h3>
+                      <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                        The input below behaves like a guided AI app composer. Choose
+                        a prompt and Flaim runs it live on Gerry&apos;s demo leagues.
                       </p>
                     </div>
-                  ) : null}
+                  </div>
+                )}
 
-                  {runStatus === "completed" && selectedPreset ? (
-                    <div className="flex flex-col gap-3 rounded-[1.75rem] border border-border bg-primary px-5 py-4 text-sm text-primary-foreground">
-                      <div className="flex flex-col gap-3">
-                        <span className="text-primary-foreground">
-                          That run used live data from Gerry&apos;s actual league.
-                        </span>
-                        <Button
-                          asChild
-                          type="button"
-                          variant="secondary"
-                          size="sm"
-                          className="w-full justify-center rounded-full sm:w-fit"
-                        >
-                          <Link href="/leagues">
-                            Set up your leagues
-                            <ArrowRight className="ml-2 h-4 w-4" />
-                          </Link>
-                        </Button>
+                {showPreToolStatus ? (
+                  <div className="flex items-center gap-2 px-1 text-sm text-muted-foreground">
+                    <LoaderCircle className="h-4 w-4 animate-spin" />
+                    <span>{preToolStatusCopy}</span>
+                  </div>
+                ) : null}
+
+                {hasToolCalls ? (
+                  <section className="space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                        What Flaim checked
                       </div>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <button
-                            type="button"
-                            className="w-fit text-left text-xs text-primary-foreground/80 underline decoration-primary-foreground/35 underline-offset-4 transition-colors hover:text-primary-foreground"
-                          >
-                            Powered by GPT-5.4. Claude and Perplexity are also supported.
-                          </button>
-                        </PopoverTrigger>
-                        <PopoverContent
-                          align="start"
-                          className="w-[19rem] rounded-2xl border-border p-4 text-sm leading-6"
-                        >
-                          <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
-                            One more thing
-                          </div>
-                          <p className="mt-2 text-foreground">
-                            I&apos;m running this custom demo on my personal OpenAI account. Want
-                            Flaim for your own leagues? Connect your Flaim account to your own AI app.
-                          </p>
-                        </PopoverContent>
-                      </Popover>
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                        {toolCalls.length} call{toolCalls.length === 1 ? "" : "s"}
+                      </div>
                     </div>
-                  ) : null}
+                    <div className="space-y-3">
+                      {toolCalls.map((toolCall) => (
+                        <PublicToolCall
+                          key={toolCall.id}
+                          name={toolCall.name}
+                          status={toolCall.status}
+                        />
+                      ))}
+                    </div>
+                  </section>
+                ) : null}
 
-                  <div ref={transcriptEndRef} />
+                {showRespondingStatus ? (
+                  <div className="flex items-center gap-2 px-1 text-sm text-muted-foreground">
+                    <LoaderCircle className="h-4 w-4 animate-spin" />
+                    <span>Responding...</span>
+                  </div>
+                ) : null}
+
+                {assistantText ? (
+                  <PublicMessage role="assistant" text={assistantText} />
+                ) : null}
+
+                {runStatus === "error" ? (
+                  <div className="rounded-[1.75rem] border border-destructive/30 bg-destructive/5 px-5 py-4 text-sm text-destructive">
+                    <div className="font-semibold">Public chat run failed</div>
+                    <p className="mt-2 leading-6">
+                      {error || "Unknown public chat error."}
+                    </p>
+                  </div>
+                ) : null}
+
+                {runStatus === "completed" && selectedPreset ? (
+                  <div className="flex flex-col gap-3 rounded-[1.75rem] border border-border bg-primary px-5 py-4 text-sm text-primary-foreground">
+                    <div className="flex flex-col gap-3">
+                      <span className="text-primary-foreground">
+                        That run used live data from Gerry&apos;s actual league.
+                      </span>
+                      <Button
+                        asChild
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        className="w-full justify-center rounded-full sm:w-fit"
+                      >
+                        <a href="/leagues">
+                          Set up your leagues
+                          <ArrowUp className="ml-2 h-4 w-4 rotate-45" />
+                        </a>
+                      </Button>
+                    </div>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <button
+                          type="button"
+                          className="w-fit text-left text-xs text-primary-foreground/80 underline decoration-primary-foreground/35 underline-offset-4 transition-colors hover:text-primary-foreground"
+                        >
+                          Powered by GPT-5.4. Claude and Perplexity are also supported.
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent
+                        align="start"
+                        className="w-[19rem] rounded-2xl border-border p-4 text-sm leading-6"
+                      >
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                          One more thing
+                        </div>
+                        <p className="mt-2 text-foreground">
+                          This is a real run on a dedicated demo account. Want Flaim
+                          for your own leagues? Connect your Flaim account to your own AI app.
+                        </p>
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="border-t border-border/70 bg-card/95 p-3 sm:p-4">
+              <div className="mx-auto max-w-3xl">
+                <div className="rounded-[1.9rem] border border-border bg-background p-3 shadow-[0_12px_30px_-24px_rgba(15,23,42,0.5)] sm:rounded-[2.2rem] sm:p-4">
+                  <div className="min-h-[4.5rem] rounded-[1.45rem] bg-muted/55 p-4 sm:min-h-[5.25rem]">
+                    {selectedPreset ? (
+                      <div className="public-chat-selected-prompt relative h-full overflow-hidden rounded-[1.2rem] border border-primary/25 bg-primary/8 px-4 py-3 text-left text-sm font-medium leading-6 text-foreground sm:text-[0.95rem]">
+                        {selectedPreset.userMessage}
+                      </div>
+                    ) : (
+                      <div className="flex h-full flex-col justify-center">
+                        <div className="text-[1.05rem] text-muted-foreground sm:text-[1.2rem]">
+                          Ask anything
+                        </div>
+                        <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                          Pick one of the scrolling prompts below to run the live demo.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="mt-3 space-y-2">
+                    {renderPromptTicker(topRailPresets, "public-chat-ticker-track--top")}
+                    {renderPromptTicker(bottomRailPresets, "public-chat-ticker-track--bottom")}
+                  </div>
+
+                  <div className="mt-3 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5">
+                      <button
+                        type="button"
+                        disabled
+                        aria-hidden="true"
+                        className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-border bg-background text-muted-foreground"
+                      >
+                        <Plus className="h-4.5 w-4.5" />
+                      </button>
+                      <div
+                        className={cn(
+                          "inline-flex h-10 items-center gap-2 rounded-full border px-3.5 text-sm font-medium transition-colors",
+                          chipActive
+                            ? "public-chat-chip-active border-primary/30 bg-primary/10 text-primary"
+                            : "border-border bg-background text-foreground"
+                        )}
+                      >
+                        <Image
+                          src="/icon-dark.png"
+                          alt=""
+                          width={16}
+                          height={16}
+                          className="dark:hidden"
+                        />
+                        <Image
+                          src="/icon-light.png"
+                          alt=""
+                          width={16}
+                          height={16}
+                          className="hidden dark:block"
+                        />
+                        <span>Flaim Fantasy</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2.5">
+                      <button
+                        type="button"
+                        disabled
+                        aria-hidden="true"
+                        className="inline-flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground"
+                      >
+                        <Mic className="h-4.5 w-4.5" />
+                      </button>
+                      <div
+                        className={cn(
+                          "inline-flex h-11 w-11 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm transition-transform",
+                          runStatus === "running" ? "public-chat-send-running" : ""
+                        )}
+                        aria-label="Run selected prompt"
+                      >
+                        {runStatus === "running" ? (
+                          <LoaderCircle className="h-4.5 w-4.5 animate-spin" />
+                        ) : (
+                          <ArrowUp className="h-4.5 w-4.5" />
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
         </Card>
       </div>
-    </div>
+    </section>
   );
 }

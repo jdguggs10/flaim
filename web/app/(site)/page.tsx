@@ -17,7 +17,20 @@ import {
 } from '@/lib/public-chat';
 import { ArrowRight, ChevronDown, Brain, Search, ShieldCheck, Sparkles, Zap } from 'lucide-react';
 
-export default function LandingPage() {
+interface LandingPageProps {
+  searchParams?: Promise<{
+    preset?: string | string[];
+  }>;
+}
+
+function getDemoHref(presetId: string) {
+  return `/?preset=${presetId}#live-demo`;
+}
+
+export default async function LandingPage({ searchParams }: LandingPageProps) {
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
+  const preset = resolvedSearchParams?.preset;
+  const initialPresetId = Array.isArray(preset) ? preset[0] : preset;
   const homepageSimplePresets = PUBLIC_CHAT_SIMPLE_PRESETS;
   const homepageDeepPresets = PUBLIC_CHAT_DEEP_PRESETS;
 
@@ -111,7 +124,7 @@ export default function LandingPage() {
 
       <PublicChatExperience
         id="live-demo"
-        followTranscript={false}
+        initialPresetId={initialPresetId ?? null}
         leadingSlot={
           <div className="flex min-h-8 items-center text-xs font-medium text-muted-foreground sm:text-sm">
             This demo runs on a live version of ChatGPT.
@@ -233,7 +246,7 @@ export default function LandingPage() {
             {homepageSimplePresets.map((preset) => (
               <Link
                 key={preset.id}
-                href={`/chat?preset=${preset.id}`}
+                href={getDemoHref(preset.id)}
                 className="group rounded-lg border bg-background p-4 transition-colors hover:border-foreground/20"
               >
                 {preset.toolLabel ? (
@@ -263,7 +276,7 @@ export default function LandingPage() {
             {homepageDeepPresets.map((preset) => (
               <Link
                 key={preset.id}
-                href={`/chat?preset=${preset.id}`}
+                href={getDemoHref(preset.id)}
                 className="group rounded-lg border bg-background p-4 transition-colors hover:border-foreground/20"
               >
                 <p className="font-medium">&ldquo;{preset.userMessage}&rdquo;</p>

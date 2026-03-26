@@ -148,6 +148,29 @@
   }
 }
 
+@keyframes public-chat-chip-activate {
+  0% {
+    transform: translate3d(0, 8px, 0) scale(0.96);
+    opacity: 0.4;
+  }
+
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes public-chat-send-running {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(1.04);
+  }
+}
+
 @layer utilities {
   .public-chat-ticker-track {
     animation-name: public-chat-ticker-marquee;
@@ -190,12 +213,22 @@
     pointer-events: none;
   }
 
+  .public-chat-chip-active {
+    animation: public-chat-chip-activate 220ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .public-chat-send-running {
+    animation: public-chat-send-running 1.2s ease-in-out infinite;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .public-chat-ticker-track,
     .public-chat-ticker-track--top,
     .public-chat-ticker-track--bottom,
     .public-chat-selected-prompt,
-    .public-chat-selected-prompt::after {
+    .public-chat-selected-prompt::after,
+    .public-chat-chip-active,
+    .public-chat-send-running {
       animation: none;
       transform: none;
     }
