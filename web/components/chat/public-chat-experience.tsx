@@ -657,12 +657,28 @@ export function PublicChatExperience({
                           </Link>
                         </Button>
                       </div>
-                      <p className="text-sm text-primary-foreground/90">
-                        This demo runs on my personal OpenAI account. Want Flaim on your own leagues? Connect your own account and give my token budget a break.
-                      </p>
-                      <p className="text-xs text-primary-foreground/80">
-                        Powered by GPT-5.4. Claude and Perplexity are also supported.
-                      </p>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <button
+                            type="button"
+                            className="w-fit text-left text-xs text-primary-foreground/80 underline decoration-primary-foreground/35 underline-offset-4 transition-colors hover:text-primary-foreground"
+                          >
+                            Powered by GPT-5.4. Claude and Perplexity are also supported.
+                          </button>
+                        </PopoverTrigger>
+                        <PopoverContent
+                          align="start"
+                          className="w-[19rem] rounded-2xl border-border p-4 text-sm leading-6"
+                        >
+                          <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                            One more thing
+                          </div>
+                          <p className="mt-2 text-foreground">
+                            This demo runs on my personal OpenAI account. Want Flaim on your own leagues?
+                            Connect your own account and give my token budget a break.
+                          </p>
+                        </PopoverContent>
+                      </Popover>
                     </div>
                   ) : null}
 

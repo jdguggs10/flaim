@@ -37,6 +37,54 @@ const inspirations = [
   },
 ];
 
+const stack = [
+  {
+    name: 'MCP',
+    description: 'Model Context Protocol. The open standard that connects Flaim to AI assistants.',
+    url: 'https://modelcontextprotocol.io',
+  },
+  {
+    name: 'OAuth 2.1',
+    description: 'Authentication between your AI client and Flaim.',
+    url: 'https://oauth.net/2.1/',
+  },
+  {
+    name: 'Cloudflare Workers',
+    description: 'Runs the MCP server and all platform API clients at the edge.',
+    url: 'https://workers.cloudflare.com',
+  },
+  {
+    name: 'Hono',
+    description: 'Lightweight web framework powering the Workers.',
+    url: 'https://hono.dev',
+  },
+  {
+    name: 'Next.js',
+    description: 'App Router powers the web app.',
+    url: 'https://nextjs.org',
+  },
+  {
+    name: 'Vercel',
+    description: 'Hosts and deploys the web app.',
+    url: 'https://vercel.com',
+  },
+  {
+    name: 'Supabase',
+    description: 'PostgreSQL database for credentials, leagues, and OAuth tokens.',
+    url: 'https://supabase.com',
+  },
+  {
+    name: 'Clerk',
+    description: 'User authentication and session management.',
+    url: 'https://clerk.com',
+  },
+  {
+    name: 'TypeScript',
+    description: 'Everything is TypeScript, end to end.',
+    url: 'https://www.typescriptlang.org',
+  },
+];
+
 export default function InspirationsPage() {
   return (
     <div className="min-h-screen bg-background">
@@ -72,6 +120,31 @@ export default function InspirationsPage() {
               <p className="text-sm text-muted-foreground mt-2">{item.description}</p>
             </div>
           ))}
+        </section>
+
+        <section className="mt-14 border-t pt-10">
+          <h2 className="text-2xl font-bold mb-3">Built with</h2>
+          <p className="text-muted-foreground mb-6">
+            The stack is intentionally boring in the best way. Open standards, edge workers,
+            and tools that let a solo builder ship without turning every change into a project.
+          </p>
+          <div className="grid gap-3">
+            {stack.map(({ name, description, url }) => (
+              <a
+                key={name}
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block rounded-lg border bg-background p-4 hover:border-foreground/20 transition-colors"
+              >
+                <div className="inline-flex items-center gap-2 font-semibold">
+                  {name}
+                  <ExternalLink className="h-4 w-4" />
+                </div>
+                <p className="text-sm text-muted-foreground mt-1">{description}</p>
+              </a>
+            ))}
+          </div>
         </section>
 
         {/* Back link */}
