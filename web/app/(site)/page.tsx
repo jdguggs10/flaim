@@ -9,9 +9,12 @@ export const metadata: Metadata = {
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { PUBLIC_CHAT_PRESETS } from '@/lib/public-chat';
 import { ArrowRight, ChevronDown, Brain, Search, ShieldCheck, Sparkles, Zap } from 'lucide-react';
 
 export default function LandingPage() {
+  const homepageDemoPresets = PUBLIC_CHAT_PRESETS;
+
   return (
     <div className="min-h-screen bg-background">
       <script
@@ -210,45 +213,22 @@ export default function LandingPage() {
         <div className="container max-w-2xl mx-auto">
           <h2 className="text-2xl font-bold text-center mb-2">What you can ask</h2>
           <p className="text-center text-muted-foreground mb-8">
-            Start with quick lookups, then push into actual roster decisions.
+            Click any prompt to launch the live demo and run it on Gerry&apos;s real leagues.
           </p>
           <div className="grid gap-3 sm:grid-cols-2">
-            <div className="rounded-lg border bg-background p-4">
-              <p className="font-medium">&ldquo;What fantasy leagues do I have?&rdquo;</p>
-              <p className="text-xs text-muted-foreground mt-1">Your connected leagues across platforms</p>
-            </div>
-            <div className="rounded-lg border bg-background p-4">
-              <p className="font-medium">&ldquo;Show me my roster&rdquo;</p>
-              <p className="text-xs text-muted-foreground mt-1">Team roster with player stats</p>
-            </div>
-            <div className="rounded-lg border bg-background p-4">
-              <p className="font-medium">&ldquo;Who am I playing this week?&rdquo;</p>
-              <p className="text-xs text-muted-foreground mt-1">Weekly matchup and scores</p>
-            </div>
-            <div className="rounded-lg border bg-background p-4">
-              <p className="font-medium">&ldquo;What are the standings?&rdquo;</p>
-              <p className="text-xs text-muted-foreground mt-1">League rankings</p>
-            </div>
-            <div className="rounded-lg border bg-background p-4">
-              <p className="font-medium">&ldquo;Who&rsquo;s on the waiver wire?&rdquo;</p>
-              <p className="text-xs text-muted-foreground mt-1">Available free agents by ownership</p>
-            </div>
-            <div className="rounded-lg border bg-background p-4">
-              <p className="font-medium">&ldquo;Who are the best available players for my biggest roster weakness?&rdquo;</p>
-              <p className="text-xs text-muted-foreground mt-1">Roster analysis plus free agent search</p>
-            </div>
-            <div className="rounded-lg border bg-background p-4">
-              <p className="font-medium">&ldquo;Should I start Ja&rsquo;Marr Chase this week?&rdquo;</p>
-              <p className="text-xs text-muted-foreground mt-1">Roster plus web search for injury and matchup news</p>
-            </div>
-            <div className="rounded-lg border bg-background p-4">
-              <p className="font-medium">&ldquo;Compare my team to my opponent&rsquo;s. Where do I have an edge?&rdquo;</p>
-              <p className="text-xs text-muted-foreground mt-1">Matchup, roster, and player outlook context</p>
-            </div>
-            <div className="rounded-lg border bg-background p-4 sm:col-span-2 sm:max-w-sm sm:mx-auto">
-              <p className="font-medium">&ldquo;What moves have my rivals made recently?&rdquo;</p>
-              <p className="text-xs text-muted-foreground mt-1">Transactions, standings, and league activity</p>
-            </div>
+            {homepageDemoPresets.map((preset) => (
+              <Link
+                key={preset.id}
+                href={`/chat?preset=${preset.id}`}
+                className="group rounded-lg border bg-background p-4 transition-colors hover:border-foreground/20"
+              >
+                <p className="font-medium">&ldquo;{preset.userMessage}&rdquo;</p>
+                <div className="mt-3 flex items-center gap-2 text-xs font-medium text-primary">
+                  <span>Run this live in the demo</span>
+                  <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+                </div>
+              </Link>
+            ))}
           </div>
         </div>
       </section>

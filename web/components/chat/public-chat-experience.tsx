@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PublicMessage } from "./public-message";
 
 type PublicRunStatus = "idle" | "running" | "completed" | "error";
@@ -151,7 +151,11 @@ async function* readSse(
   }
 }
 
-export function PublicChatExperience() {
+export function PublicChatExperience({
+  initialPresetId = null,
+}: {
+  initialPresetId?: string | null;
+}) {
   const [runStatus, setRunStatus] = useState<PublicRunStatus>("idle");
   const [selectedPresetId, setSelectedPresetId] =
     useState<PublicChatPresetId | null>(null);
@@ -161,6 +165,7 @@ export function PublicChatExperience() {
   const transcriptEndRef = useRef<HTMLDivElement | null>(null);
   const hasStreamedAssistantTextRef = useRef(false);
   const activeRunAbortControllerRef = useRef<AbortController | null>(null);
+  const autoRunPresetIdRef = useRef<PublicChatPresetId | null>(null);
 
   const selectedPreset = useMemo(
     () =>
@@ -187,6 +192,13 @@ export function PublicChatExperience() {
     const presets = PUBLIC_CHAT_PRESETS.filter((preset) => preset.rail === "bottom");
     return presets.length ? presets : PUBLIC_CHAT_PRESETS;
   }, []);
+  const initialQueryPreset = useMemo(
+    () =>
+      initialPresetId
+        ? PUBLIC_CHAT_PRESETS.find((preset) => preset.id === initialPresetId) ?? null
+        : null,
+    [initialPresetId]
+  );
 
   useEffect(() => {
     transcriptEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -260,7 +272,7 @@ export function PublicChatExperience() {
     );
   };
 
-  const handleRunPreset = async (preset: PublicChatPreset) => {
+  const handleRunPreset = useCallback(async (preset: PublicChatPreset) => {
     if (runStatus === "running") {
       return;
     }
@@ -439,7 +451,20 @@ export function PublicChatExperience() {
         activeRunAbortControllerRef.current = null;
       }
     }
-  };
+  }, [runStatus]);
+
+  useEffect(() => {
+    if (!initialQueryPreset) {
+      return;
+    }
+
+    if (autoRunPresetIdRef.current === initialQueryPreset.id) {
+      return;
+    }
+
+    autoRunPresetIdRef.current = initialQueryPreset.id;
+    void handleRunPreset(initialQueryPreset);
+  }, [initialQueryPreset, handleRunPreset]);
 
   return (
     <div className="relative min-h-[100dvh] bg-background">

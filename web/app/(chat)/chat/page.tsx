@@ -7,6 +7,16 @@ export const metadata: Metadata = {
     "Run Flaim against a real demo account and watch the live MCP tool activity.",
 };
 
-export default function ChatPage() {
-  return <PublicChatExperience />;
+interface ChatPageProps {
+  searchParams?: Promise<{
+    preset?: string | string[];
+  }>;
+}
+
+export default async function ChatPage({ searchParams }: ChatPageProps) {
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
+  const preset = resolvedSearchParams?.preset;
+  const initialPresetId = Array.isArray(preset) ? preset[0] : preset;
+
+  return <PublicChatExperience initialPresetId={initialPresetId ?? null} />;
 }
