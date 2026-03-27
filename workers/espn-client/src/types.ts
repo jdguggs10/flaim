@@ -108,6 +108,7 @@ export interface EspnMatchup {
 
 export interface EspnMatchupTeam {
   teamId?: number;
+  teamName?: string;
   totalPoints?: number;
   totalProjectedPoints?: number;
   totalProjectedPointsLive?: number;

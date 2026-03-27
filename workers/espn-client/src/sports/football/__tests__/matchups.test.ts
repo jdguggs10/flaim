@@ -76,4 +76,45 @@ describe('football get_matchups handler', () => {
     expect(data.matchups).toHaveLength(1);
     expect(data.matchupPeriod).toBe(3);
   });
+
+  it('includes human-readable team names in matchup sides', async () => {
+    getCredentialsMock.mockResolvedValue({ s2: 'token', swid: '{swid}' });
+    espnFetchMock.mockResolvedValue(
+      new Response(JSON.stringify({
+        scoringPeriodId: 1,
+        teams: [
+          { id: 1, location: 'The', nickname: 'Champs' },
+          { id: 2, name: 'Commissioner Squad' },
+        ],
+        schedule: [
+          {
+            matchupPeriodId: 1,
+            home: { teamId: 1, totalPoints: 100 },
+            away: { teamId: 2, totalPoints: 90 },
+            winner: 'HOME',
+          },
+        ],
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    );
+
+    const params: ToolParams = { sport: 'football', league_id: '123', season_year: 2025 };
+    const result = await footballHandlers.get_matchups({} as never, params, 'Bearer x', 'cid');
+
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    const data = result.data as {
+      matchups: Array<{
+        home: { teamId?: number; teamName?: string } | null;
+        away: { teamId?: number; teamName?: string } | null;
+      }>;
+    };
+    expect(data.matchups[0]?.home).toEqual(expect.objectContaining({
+      teamId: 1,
+      teamName: 'The Champs',
+    }));
+    expect(data.matchups[0]?.away).toEqual(expect.objectContaining({
+      teamId: 2,
+      teamName: 'Commissioner Squad',
+    }));
+  });
 });
