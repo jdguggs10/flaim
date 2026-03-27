@@ -664,18 +664,7 @@ export function PublicChatExperience({
             <div className="border-t border-border/70 bg-card/95 p-3 sm:p-4">
               <div className="mx-auto max-w-2xl">
                 <div className="rounded-[1.9rem] border border-border bg-background p-3 shadow-[0_12px_30px_-24px_rgba(15,23,42,0.5)] sm:rounded-[2.2rem] sm:p-4">
-                  <div className="min-h-[4.5rem] rounded-[1.45rem] bg-muted/55 p-4 sm:min-h-[5.25rem]">
-                    <div className="flex h-full flex-col justify-center">
-                      <div className="text-[1.05rem] text-muted-foreground sm:text-[1.2rem]">
-                        Ask anything
-                      </div>
-                      <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                        Pick one of the scrolling prompts below to run the live demo.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="mt-3 space-y-2">
+                  <div className="space-y-2">
                     {renderPromptTicker(topRailPresets, "public-chat-ticker-track--top")}
                     {renderPromptTicker(bottomRailPresets, "public-chat-ticker-track--bottom")}
                   </div>
