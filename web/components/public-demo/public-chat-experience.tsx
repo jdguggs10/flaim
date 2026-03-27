@@ -671,14 +671,35 @@ export function PublicChatExperience({
 
                   <div className="mt-3 flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2.5">
-                      <button
-                        type="button"
-                        disabled
-                        aria-hidden="true"
-                        className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-border bg-background text-muted-foreground"
-                      >
-                        <Plus className="h-4.5 w-4.5" />
-                      </button>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <button
+                            type="button"
+                            aria-label="Show how Flaim appears in AI app drawers"
+                            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-border bg-background text-muted-foreground transition-colors hover:bg-muted"
+                          >
+                            <Plus className="h-4.5 w-4.5" />
+                          </button>
+                        </PopoverTrigger>
+                        <PopoverContent
+                          align="start"
+                          side="top"
+                          className="w-[18rem] rounded-2xl border-border p-4 text-sm leading-6"
+                        >
+                          <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                            How Flaim appears
+                          </div>
+                          <p className="mt-2 text-foreground">
+                            Adding Flaim to your chatbot usually puts it in this
+                            plus drawer.
+                          </p>
+                          <p className="mt-2 text-muted-foreground">
+                            Sometimes it activates automatically. Other times, you
+                            open the drawer and turn Flaim on manually before you
+                            send the prompt.
+                          </p>
+                        </PopoverContent>
+                      </Popover>
                       <div
                         className={cn(
                           "inline-flex h-10 items-center gap-2 rounded-full border px-3.5 text-sm font-medium transition-colors",
