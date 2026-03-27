@@ -168,6 +168,8 @@ The public `/chat` demo opportunistically hits `/api/public-chat/bootstrap` on p
 
 The live `/api/public-chat/turn` route still works without bootstrap, but a warm session-context cache hit makes the demo feel faster without doing hidden extra model work before the real turn starts.
 
+Important: this warmup cache does not include sports news. The live public-chat turn uses a fresh Responses API `web_search` tool call for current-context sports details.
+
 ## Build Notes
 
 ### Webpack cache warning (big strings)

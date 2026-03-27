@@ -5,7 +5,8 @@ const CITATION_PARENS_PATTERN =
   /\s*\((?:[^)]*\b(?:https?:\/\/|www\.|(?:[a-z0-9-]+\.)+(?:com|org|net|io|gov|edu|app|ai|co|us|uk|ca))\b[^)]*)\)/gi;
 
 const MIN_WORDS = 30;
-const MAX_WORDS = 50;
+const MAX_WORDS = 70;
+const MAX_SENTENCES = 5;
 const SHORT_ANSWER_FALLBACKS: Partial<Record<string, string>> = {
   "transactions-watch":
     "The next meaningful change will probably come from today’s injury, lineup, or role news rather than a league transaction.",
@@ -58,7 +59,7 @@ export function formatPublicChatAnswer(text: string) {
 
   const candidate =
     sentences.length > 0
-      ? normalizeWhitespace(sentences.slice(0, 2).join(" "))
+      ? normalizeWhitespace(sentences.slice(0, MAX_SENTENCES).join(" "))
       : cleaned;
 
   return trimToWordLimit(candidate, MAX_WORDS);
@@ -76,7 +77,7 @@ export function formatPublicChatAnswerForPreset(text: string, presetId: string) 
   }
 
   const sentenceCount = splitSentences(formatted).filter(Boolean).length;
-  if (countWords(formatted) >= MIN_WORDS && sentenceCount >= 2) {
+  if (countWords(formatted) >= MIN_WORDS && sentenceCount >= 3) {
     return formatted;
   }
 

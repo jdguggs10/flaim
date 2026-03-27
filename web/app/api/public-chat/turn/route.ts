@@ -234,16 +234,18 @@ async function callPublicChatMcpTool<T>(
   return extractMcpToolPayload<T>(payload);
 }
 
-function getPublicChatWebSearchTool() {
+function getPublicChatWebSearchTool(): OpenAI.Responses.Tool {
+  // The current Responses API docs use `web_search`, but the installed SDK types
+  // still lag on the preview enum. Cast narrowly so runtime behavior matches docs.
   return {
-    type: "web_search_preview" as const,
+    type: "web_search" as const,
     user_location: {
       type: "approximate" as const,
       country: "US",
       region: "New York",
       city: "Rochester",
     },
-  };
+  } as unknown as OpenAI.Responses.Tool;
 }
 
 type PublicChatDemoSport = "football" | "baseball";
@@ -520,7 +522,7 @@ export async function POST(request: NextRequest) {
                       type: "input_text" as const,
                       text: [
                         "Server-prefetched transaction feed for this run. Treat it as authoritative and do not call get_transactions again.",
-                        `League context: platform=${prefetchedTransactions.league.platform}, sport=${prefetchedTransactions.league.sport}, leagueId=${prefetchedTransactions.league.leagueId}, seasonYear=${prefetchedTransactions.league.seasonYear}, Gerry's team="${prefetchedTransactions.league.teamName || "Unknown team"}".`,
+                        `League context: platform=${prefetchedTransactions.league.platform}, sport=${prefetchedTransactions.league.sport}, seasonYear=${prefetchedTransactions.league.seasonYear}, Gerry's team="${prefetchedTransactions.league.teamName || "Unknown team"}".`,
                         `Transaction feed JSON: ${JSON.stringify(prefetchedTransactions.result)}`,
                       ].join("\n"),
                     },
@@ -572,8 +574,40 @@ export async function POST(request: NextRequest) {
         let emittedAssistantMessage = false;
         const toolCallNames: string[] = [];
         const completedToolIds = new Set<string>();
+        const prefetchedTransactionsToolId = `${requestId}-prefetched-transactions`;
 
         try {
+          if (prefetchedTransactions) {
+            if (firstToolStartMs === null) {
+              firstToolStartMs = getElapsedMs(streamStartedAt);
+            }
+            toolCallNames.push("get_transactions");
+            const prefetchedArguments = JSON.stringify(
+              {
+                platform: prefetchedTransactions.league.platform,
+                sport: prefetchedTransactions.league.sport,
+                league_id: prefetchedTransactions.league.leagueId,
+                season_year: prefetchedTransactions.league.seasonYear,
+                count: 25,
+              },
+              null,
+              2
+            );
+            enqueueSse(controller, encoder, "tool_start", {
+              itemId: prefetchedTransactionsToolId,
+              name: "get_transactions",
+              arguments: prefetchedArguments,
+            });
+            enqueueSse(controller, encoder, "tool_args_done", {
+              itemId: prefetchedTransactionsToolId,
+              arguments: prefetchedArguments,
+            });
+            completedToolIds.add(prefetchedTransactionsToolId);
+            enqueueSse(controller, encoder, "tool_done", {
+              itemId: prefetchedTransactionsToolId,
+            });
+          }
+
           for await (const event of events) {
             const eventType = event.type as string;
             if (firstEventMs === null) {

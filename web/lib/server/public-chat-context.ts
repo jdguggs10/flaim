@@ -373,14 +373,14 @@ export async function buildPublicChatContext(): Promise<string | null> {
     const leagueId = league.leagueId || "missing";
     const teamId = league.teamId || "missing";
 
-    return `- ${sport} on ${platform}: "${leagueName}" (${seasonYear}), Gerry's team "${teamName}", leagueId="${leagueId}", teamId="${teamId}"`;
+    return `- ${sport} on ${platform}: "${leagueName}" (${seasonYear}), Gerry's team "${teamName}" [internal ids for tool use only: leagueId="${leagueId}", teamId="${teamId}"]`;
   });
 
   const perSportDefaults = sessionData.defaultLeagues
     ? Object.entries(sessionData.defaultLeagues).map(([sport, league]) => {
         const leagueId = league.leagueId || "missing";
         const teamId = league.teamId || "missing";
-        return `- ${sport}: "${league.leagueName || "Unnamed league"}" on ${league.platform || "unknown"} with Gerry's team "${league.teamName || "Unknown team"}" (leagueId="${leagueId}", teamId="${teamId}", seasonYear=${league.seasonYear || "current"})`;
+        return `- ${sport}: "${league.leagueName || "Unnamed league"}" on ${league.platform || "unknown"} with Gerry's team "${league.teamName || "Unknown team"}" (seasonYear=${league.seasonYear || "current"}, internal ids for tool use only: leagueId="${leagueId}", teamId="${teamId}")`;
       })
     : [];
 
@@ -392,6 +392,7 @@ export async function buildPublicChatContext(): Promise<string | null> {
   return [
     "Public demo session context for Gerry. This was prefetched on the server before your turn.",
     "Treat it as the current starting context and do not call get_user_session unless this context is clearly insufficient.",
+    "Any internal identifiers in this context are for tool use only. Never repeat leagueId or teamId in the final answer.",
     `Default sport: ${defaultSport}`,
     defaultLeague ? `Best default league right now: ${defaultLeague}` : null,
     perSportDefaults.length > 0 ? "Default league by sport:" : null,
