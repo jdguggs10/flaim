@@ -2,6 +2,7 @@ import {
   PUBLIC_CHAT_MODEL,
   PUBLIC_CHAT_SYSTEM_PROMPT,
   type PublicChatAllowedTool,
+  type PublicChatPreset,
   getPublicChatPreset,
 } from "@/lib/public-chat";
 import {
@@ -13,12 +14,34 @@ import {
   acquirePublicChatRun,
   completePublicChatRun,
 } from "@/lib/server/public-chat-guard";
-import { getCachedPublicChatContext } from "@/lib/server/public-chat-context";
+import {
+  getCachedPublicChatContext,
+  getCachedPublicChatSessionData,
+  type PublicChatLeague,
+} from "@/lib/server/public-chat-context";
 import type { PublicChatTurnRequest } from "@/types/api-responses";
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 
 class PublicChatConfigError extends Error {}
+
+interface PublicChatTransactionsResult {
+  success?: boolean;
+  data?: {
+    platform?: string;
+    sport?: string;
+    league_id?: string;
+    season_year?: number;
+    window?: {
+      mode?: string;
+      weeks?: number[];
+    };
+    count?: number;
+    truncated?: boolean;
+    transactions?: unknown[];
+    teams?: Record<string, string>;
+  };
+}
 
 function extractAssistantText(item: unknown) {
   if (!item || typeof item !== "object" || !("content" in item)) {
@@ -96,6 +119,121 @@ function getPublicChatMcpTool(allowedTools: readonly PublicChatAllowedTool[]) {
   };
 }
 
+function getPublicChatMcpConfig() {
+  const serverUrl = normalizeMcpUrl(
+    process.env.FANTASY_MCP_URL || "https://api.flaim.app/mcp"
+  );
+
+  if (!isAllowedUrl(serverUrl)) {
+    throw new PublicChatConfigError("Configured MCP server URL is not allowed");
+  }
+
+  const demoApiKey = process.env.DEMO_API_KEY?.trim();
+  if (!demoApiKey) {
+    throw new PublicChatConfigError("DEMO_API_KEY is not configured");
+  }
+
+  return {
+    serverUrl,
+    headers: {
+      Authorization: `Bearer ${demoApiKey}`,
+      "Content-Type": "application/json",
+      Accept: "application/json, text/event-stream",
+    },
+  };
+}
+
+function extractJsonFromSse(text: string): unknown {
+  const data = text
+    .split(/\r?\n/)
+    .filter((line) => line.startsWith("data:"))
+    .map((line) => line.slice(5).trim())
+    .join("\n")
+    .trim();
+
+  if (!data) {
+    return null;
+  }
+
+  return JSON.parse(data);
+}
+
+function extractMcpToolPayload<T>(payload: unknown): T | null {
+  if (!payload || typeof payload !== "object" || !("result" in payload)) {
+    return null;
+  }
+
+  const result = payload.result;
+  if (!result || typeof result !== "object") {
+    return null;
+  }
+
+  const structuredContent =
+    "structuredContent" in result ? result.structuredContent : null;
+  if (structuredContent && typeof structuredContent === "object") {
+    return structuredContent as T;
+  }
+
+  const content =
+    "content" in result && Array.isArray(result.content) ? result.content : [];
+  const text = content
+    .filter(
+      (entry): entry is { type?: string; text?: string } =>
+        Boolean(
+          entry &&
+            typeof entry === "object" &&
+            "type" in entry &&
+            "text" in entry &&
+            entry.type === "text" &&
+            typeof entry.text === "string"
+        )
+    )
+    .map((entry) => entry.text)
+    .join("\n")
+    .trim();
+
+  if (!text) {
+    return null;
+  }
+
+  return JSON.parse(text) as T;
+}
+
+async function callPublicChatMcpTool<T>(
+  toolName: string,
+  args: Record<string, unknown>,
+  requestId: string,
+  signal?: AbortSignal
+): Promise<T | null> {
+  const { serverUrl, headers } = getPublicChatMcpConfig();
+  const response = await fetch(serverUrl, {
+    method: "POST",
+    headers,
+    signal,
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: requestId,
+      method: "tools/call",
+      params: {
+        name: toolName,
+        arguments: args,
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to call ${toolName} (${response.status})`);
+  }
+
+  const contentType = response.headers.get("content-type") || "";
+  const rawText = await response.text();
+  const payload = contentType.includes("text/event-stream")
+    ? extractJsonFromSse(rawText)
+    : JSON.parse(rawText);
+
+  return extractMcpToolPayload<T>(payload);
+}
+
 function getPublicChatWebSearchTool() {
   return {
     type: "web_search_preview" as const,
@@ -141,6 +279,91 @@ function getDefaultPublicChatDemoSport(now = new Date()): PublicChatDemoSport {
   }
 
   return "football";
+}
+
+function resolveLeagueForSport(
+  selectedSport: PublicChatDemoSport,
+  defaultLeague: PublicChatLeague | null | undefined,
+  defaultLeagues: Record<string, PublicChatLeague> | undefined
+) {
+  const sportLeague = defaultLeagues?.[selectedSport];
+  if (sportLeague) {
+    return sportLeague;
+  }
+
+  if (defaultLeague?.sport === selectedSport) {
+    return defaultLeague;
+  }
+
+  return defaultLeague ?? null;
+}
+
+async function prefetchPublicChatTransactions(input: {
+  requestId: string;
+  selectedSport: PublicChatDemoSport;
+  signal?: AbortSignal;
+}) {
+  const sessionData = await getCachedPublicChatSessionData();
+  const league = resolveLeagueForSport(
+    input.selectedSport,
+    sessionData?.defaultLeague,
+    sessionData?.defaultLeagues
+  );
+
+  if (
+    !league?.platform ||
+    !league.sport ||
+    !league.leagueId ||
+    typeof league.seasonYear !== "number"
+  ) {
+    return null;
+  }
+
+  const result = await callPublicChatMcpTool<PublicChatTransactionsResult>(
+    "get_transactions",
+    {
+      platform: league.platform,
+      sport: league.sport,
+      league_id: league.leagueId,
+      season_year: league.seasonYear,
+      count: 25,
+    },
+    `${input.requestId}-prefetch-transactions`,
+    input.signal
+  ).catch((error) => {
+    console.error("Failed to prefetch public chat transactions:", error);
+    return null;
+  });
+
+  if (!result?.success || !result.data) {
+    return null;
+  }
+
+  return {
+    league,
+    result: result.data,
+  };
+}
+
+function getPublicChatToolsForRun(
+  preset: PublicChatPreset,
+  prefetchedTransactions:
+    | Awaited<ReturnType<typeof prefetchPublicChatTransactions>>
+    | null
+) {
+  const allowedTools = prefetchedTransactions
+    ? preset.allowedTools.filter((tool) => tool !== "get_transactions")
+    : preset.allowedTools;
+
+  const tools: Array<
+    ReturnType<typeof getPublicChatWebSearchTool> | ReturnType<typeof getPublicChatMcpTool>
+  > = [getPublicChatWebSearchTool()];
+
+  if (allowedTools.length > 0) {
+    tools.push(getPublicChatMcpTool(allowedTools));
+  }
+
+  return tools;
 }
 
 export async function POST(request: NextRequest) {
@@ -229,6 +452,14 @@ export async function POST(request: NextRequest) {
     const contextStartedAt = Date.now();
     const publicChatContext = await getCachedPublicChatContext();
     const contextLoadMs = getElapsedMs(contextStartedAt);
+    const prefetchedTransactions =
+      preset.serverPrefetch === "transactions"
+        ? await prefetchPublicChatTransactions({
+            requestId,
+            selectedSport,
+            signal: request.signal,
+          })
+        : null;
     const todayInEastern = new Intl.DateTimeFormat("en-US", {
       dateStyle: "full",
       timeZone: "America/New_York",
@@ -280,12 +511,29 @@ export async function POST(request: NextRequest) {
               },
             ],
           },
+          ...(prefetchedTransactions
+            ? [
+                {
+                  role: "developer" as const,
+                  content: [
+                    {
+                      type: "input_text" as const,
+                      text: [
+                        "Server-prefetched transaction feed for this run. Treat it as authoritative and do not call get_transactions again.",
+                        `League context: platform=${prefetchedTransactions.league.platform}, sport=${prefetchedTransactions.league.sport}, leagueId=${prefetchedTransactions.league.leagueId}, seasonYear=${prefetchedTransactions.league.seasonYear}, Gerry's team="${prefetchedTransactions.league.teamName || "Unknown team"}".`,
+                        `Transaction feed JSON: ${JSON.stringify(prefetchedTransactions.result)}`,
+                      ].join("\n"),
+                    },
+                  ],
+                },
+              ]
+            : []),
           {
             role: "user",
             content: [{ type: "input_text", text: preset.prompt }],
           },
         ],
-        tools: [getPublicChatWebSearchTool(), getPublicChatMcpTool(preset.allowedTools)],
+        tools: getPublicChatToolsForRun(preset, prefetchedTransactions),
         stream: true,
         store: false,
         parallel_tool_calls: false,
