@@ -572,8 +572,40 @@ export async function POST(request: NextRequest) {
         let emittedAssistantMessage = false;
         const toolCallNames: string[] = [];
         const completedToolIds = new Set<string>();
+        const prefetchedTransactionsToolId = `${requestId}-prefetched-transactions`;
 
         try {
+          if (prefetchedTransactions) {
+            if (firstToolStartMs === null) {
+              firstToolStartMs = getElapsedMs(streamStartedAt);
+            }
+            toolCallNames.push("get_transactions");
+            const prefetchedArguments = JSON.stringify(
+              {
+                platform: prefetchedTransactions.league.platform,
+                sport: prefetchedTransactions.league.sport,
+                league_id: prefetchedTransactions.league.leagueId,
+                season_year: prefetchedTransactions.league.seasonYear,
+                count: 25,
+              },
+              null,
+              2
+            );
+            enqueueSse(controller, encoder, "tool_start", {
+              itemId: prefetchedTransactionsToolId,
+              name: "get_transactions",
+              arguments: prefetchedArguments,
+            });
+            enqueueSse(controller, encoder, "tool_args_done", {
+              itemId: prefetchedTransactionsToolId,
+              arguments: prefetchedArguments,
+            });
+            completedToolIds.add(prefetchedTransactionsToolId);
+            enqueueSse(controller, encoder, "tool_done", {
+              itemId: prefetchedTransactionsToolId,
+            });
+          }
+
           for await (const event of events) {
             const eventType = event.type as string;
             if (firstEventMs === null) {
