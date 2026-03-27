@@ -180,8 +180,8 @@ export function PublicChatExperience({
     runStatus === "running" && allToolCallsCompleted && !hasAssistantText;
   const preToolStatusCopy = [
     "Thinking...",
-    "Using Flaim Fantasy...",
-    "Running live league tools...",
+    "Using Flaim Fantasy plugin...",
+    "Calling Flaim tools...",
   ][preToolStatusIndex];
   const topRailPresets = useMemo(() => {
     const presets = PUBLIC_CHAT_PRESETS.filter((preset) => preset.rail === "top");
@@ -232,8 +232,8 @@ export function PublicChatExperience({
     }
 
     setPreToolStatusIndex(0);
-    const pluginTimer = window.setTimeout(() => setPreToolStatusIndex(1), 800);
-    const toolsTimer = window.setTimeout(() => setPreToolStatusIndex(2), 1500);
+    const pluginTimer = window.setTimeout(() => setPreToolStatusIndex(1), 1000);
+    const toolsTimer = window.setTimeout(() => setPreToolStatusIndex(2), 1750);
 
     return () => {
       window.clearTimeout(pluginTimer);
@@ -503,7 +503,7 @@ export function PublicChatExperience({
     <section id={id} className="relative bg-background px-4 pb-12 sm:px-6 lg:px-8 lg:pb-16">
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_bottom,transparent_0,transparent_23px,var(--border)_24px)] bg-[length:100%_24px] opacity-20" />
 
-      <div className="relative mx-auto max-w-5xl">
+      <div className="relative mx-auto max-w-4xl">
         <section className="pb-4 sm:pb-6">
           <h1 className="w-full max-w-3xl text-[2rem] font-semibold leading-[0.96] tracking-[-0.05em] text-foreground sm:text-5xl">
             Watch Flaim work on my actual leagues right now.
@@ -535,7 +535,7 @@ export function PublicChatExperience({
               ref={transcriptScrollRef}
               className="h-[25rem] overflow-y-auto overscroll-contain px-3 py-4 sm:h-[31rem] sm:px-4 sm:py-5"
             >
-              <div className="mx-auto flex max-w-3xl flex-col gap-4">
+              <div className="mx-auto flex max-w-2xl flex-col gap-4">
                 {!selectedPreset && runStatus === "idle" ? (
                   <div className="flex min-h-[15rem] flex-1 items-center justify-center">
                     <div className="max-w-md text-center">
@@ -662,7 +662,7 @@ export function PublicChatExperience({
             </div>
 
             <div className="border-t border-border/70 bg-card/95 p-3 sm:p-4">
-              <div className="mx-auto max-w-3xl">
+              <div className="mx-auto max-w-2xl">
                 <div className="rounded-[1.9rem] border border-border bg-background p-3 shadow-[0_12px_30px_-24px_rgba(15,23,42,0.5)] sm:rounded-[2.2rem] sm:p-4">
                   <div className="min-h-[4.5rem] rounded-[1.45rem] bg-muted/55 p-4 sm:min-h-[5.25rem]">
                     <div className="flex h-full flex-col justify-center">
