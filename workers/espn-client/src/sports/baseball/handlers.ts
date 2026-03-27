@@ -259,7 +259,7 @@ async function handleGetMatchups(
   try {
     const credentials = await getCredentials(env, authHeader, correlationId);
 
-    let path = `/seasons/${season_year}/segments/0/leagues/${league_id}?view=mMatchupScore&view=mScoreboard`;
+    let path = `/seasons/${season_year}/segments/0/leagues/${league_id}?view=mMatchupScore&view=mScoreboard&view=mTeam`;
     if (week) {
       path += `&scoringPeriodId=${week}&matchupPeriodId=${week}`;
     }
@@ -272,6 +272,14 @@ async function handleGetMatchups(
 
     const data = await response.json() as EspnLeagueResponse;
     const schedule = data.schedule || [];
+    const teamsById = Object.fromEntries(
+      (data.teams || []).map((team) => [
+        team.id,
+        team.location && team.nickname
+          ? `${team.location} ${team.nickname}`
+          : team.name || `Team ${team.id}`,
+      ])
+    );
 
     // Transform matchups
     const matchupPeriod = week ?? data.scoringPeriodId ?? data.currentMatchupPeriod;
@@ -281,12 +289,14 @@ async function handleGetMatchups(
         matchupPeriodId: matchup.matchupPeriodId,
         home: matchup.home ? {
           teamId: matchup.home.teamId,
+          teamName: matchup.home.teamId ? teamsById[matchup.home.teamId] : undefined,
           totalPoints: matchup.home.totalPoints || 0,
           totalProjectedPoints: matchup.home.totalProjectedPointsLive || matchup.home.totalProjectedPoints,
           pointsByScoringPeriod: matchup.home.pointsByScoringPeriod
         } : null,
         away: matchup.away ? {
           teamId: matchup.away.teamId,
+          teamName: matchup.away.teamId ? teamsById[matchup.away.teamId] : undefined,
           totalPoints: matchup.away.totalPoints || 0,
           totalProjectedPoints: matchup.away.totalProjectedPointsLive || matchup.away.totalProjectedPoints,
           pointsByScoringPeriod: matchup.away.pointsByScoringPeriod
