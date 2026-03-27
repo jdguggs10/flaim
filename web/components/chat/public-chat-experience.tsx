@@ -164,7 +164,6 @@ export function PublicChatExperience({
         : null,
     [selectedPresetId]
   );
-  const showFocusedPromptStage = runStatus === "running" && selectedPreset;
   const hasToolCalls = toolCalls.length > 0;
   const hasAssistantText = assistantText.trim().length > 0;
   const allToolCallsCompleted =
@@ -533,23 +532,10 @@ export function PublicChatExperience({
 
         <Card className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.45rem] border-border bg-card p-0 shadow-sm sm:rounded-[1.6rem] lg:rounded-[2rem]">
           <div className="border-b border-border bg-card px-3 py-3 sm:px-4">
-            {showFocusedPromptStage && selectedPreset ? (
-              <div className="flex min-h-[5.75rem] items-center justify-center sm:min-h-[6.5rem]">
-                <div className="public-chat-selected-prompt group relative max-w-full overflow-hidden rounded-full border border-primary bg-primary px-5 py-3 text-center text-primary-foreground shadow-sm sm:px-7 sm:py-3.5">
-                  <div className="absolute inset-0 bg-[linear-gradient(110deg,transparent_0%,rgba(255,255,255,0.06)_35%,rgba(255,255,255,0.22)_50%,rgba(255,255,255,0.06)_65%,transparent_100%)]" />
-                  <div className="relative">
-                    <p className="truncate text-[0.92rem] font-semibold tracking-tight sm:text-base">
-                      {selectedPreset.title}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {renderPromptTicker(topRailPresets, "public-chat-ticker-track--top")}
-                {renderPromptTicker(bottomRailPresets, "public-chat-ticker-track--bottom")}
-              </div>
-            )}
+            <div className="space-y-2">
+              {renderPromptTicker(topRailPresets, "public-chat-ticker-track--top")}
+              {renderPromptTicker(bottomRailPresets, "public-chat-ticker-track--bottom")}
+            </div>
           </div>
 
           <div className="min-h-0 flex-1 bg-muted/40 p-2.5 sm:p-3 lg:p-4">
@@ -594,25 +580,15 @@ export function PublicChatExperience({
                   ) : null}
 
                   {hasToolCalls ? (
-                    <section className="space-y-3">
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
-                          What Flaim checked
-                        </div>
-                        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                          {toolCalls.length} call{toolCalls.length === 1 ? "" : "s"}
-                        </div>
-                      </div>
-                      <div className="space-y-3">
-                        {toolCalls.map((toolCall) => (
-                          <PublicToolCall
-                            key={toolCall.id}
-                            name={toolCall.name}
-                            status={toolCall.status}
-                          />
-                        ))}
-                      </div>
-                    </section>
+                    <div className="space-y-2">
+                      {toolCalls.map((toolCall) => (
+                        <PublicToolCall
+                          key={toolCall.id}
+                          name={toolCall.name}
+                          status={toolCall.status}
+                        />
+                      ))}
+                    </div>
                   ) : null}
 
                   {showRespondingStatus ? (
