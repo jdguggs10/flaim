@@ -536,21 +536,19 @@ export function PublicChatExperience({
               className="h-[25rem] overflow-y-auto overscroll-contain px-3 py-4 sm:h-[31rem] sm:px-4 sm:py-5"
             >
               <div className="mx-auto flex max-w-3xl flex-col gap-4">
-                {selectedPreset ? (
-                  <PublicMessage role="user" text={selectedPreset.userMessage} />
-                ) : (
+                {!selectedPreset && runStatus === "idle" ? (
                   <div className="flex min-h-[15rem] flex-1 items-center justify-center">
                     <div className="max-w-md text-center">
                       <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-[1.5rem] border border-border bg-background shadow-sm">
                         <Image
-                          src="/icon-dark.png"
+                          src="/flaim-mark-hero.png"
                           alt="Flaim"
                           width={28}
                           height={28}
                           className="dark:hidden"
                         />
                         <Image
-                          src="/icon-light.png"
+                          src="/flaim-mark-hero-dark.png"
                           alt="Flaim"
                           width={28}
                           height={28}
@@ -566,7 +564,7 @@ export function PublicChatExperience({
                       </p>
                     </div>
                   </div>
-                )}
+                ) : null}
 
                 {showPreToolStatus ? (
                   <div className="flex items-center gap-2 px-1 text-sm text-muted-foreground">
@@ -701,14 +699,14 @@ export function PublicChatExperience({
                         )}
                       >
                         <Image
-                          src="/icon-dark.png"
+                          src="/flaim-mark-hero.png"
                           alt=""
                           width={16}
                           height={16}
                           className="dark:hidden"
                         />
                         <Image
-                          src="/icon-light.png"
+                          src="/flaim-mark-hero-dark.png"
                           alt=""
                           width={16}
                           height={16}
