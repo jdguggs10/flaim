@@ -234,16 +234,18 @@ async function callPublicChatMcpTool<T>(
   return extractMcpToolPayload<T>(payload);
 }
 
-function getPublicChatWebSearchTool() {
+function getPublicChatWebSearchTool(): OpenAI.Responses.Tool {
+  // The current Responses API docs use `web_search`, but the installed SDK types
+  // still lag on the preview enum. Cast narrowly so runtime behavior matches docs.
   return {
-    type: "web_search_preview" as const,
+    type: "web_search" as const,
     user_location: {
       type: "approximate" as const,
       country: "US",
       region: "New York",
       city: "Rochester",
     },
-  };
+  } as unknown as OpenAI.Responses.Tool;
 }
 
 type PublicChatDemoSport = "football" | "baseball";
