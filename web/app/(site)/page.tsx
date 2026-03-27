@@ -145,39 +145,6 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
         </div>
       </section>
 
-      {/* Trust badges */}
-      <section className="px-4 pb-10 sm:px-6 lg:px-8">
-        <div className="mx-auto grid max-w-5xl gap-4 md:grid-cols-3">
-          <div className="rounded-xl border bg-background p-4">
-            <div className="flex items-center gap-2 font-medium">
-              <ShieldCheck className="h-4 w-4 text-primary" />
-              Read-only by design
-            </div>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Flaim can inspect your data, but it cannot make trades, drop players, or change anything in your leagues.
-            </p>
-          </div>
-          <div className="rounded-xl border bg-background p-4">
-            <div className="flex items-center gap-2 font-medium">
-              <Sparkles className="h-4 w-4 text-primary" />
-              Works across platforms
-            </div>
-            <p className="mt-2 text-sm text-muted-foreground">
-              One account can pull from ESPN, Yahoo, and Sleeper instead of forcing you to copy stats and standings around by hand.
-            </p>
-          </div>
-          <div className="rounded-xl border bg-background p-4">
-            <div className="flex items-center gap-2 font-medium">
-              <ArrowRight className="h-4 w-4 text-primary" />
-              Set defaults once
-            </div>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Use <Link href="/leagues" className="text-primary hover:underline">Your Leagues</Link> to save a default sport and favorite league so your AI needs less hand-holding.
-            </p>
-          </div>
-        </div>
-      </section>
-
       {/* What You Can Ask */}
       <section className="py-10 px-4 bg-muted">
         <div className="container max-w-2xl mx-auto">
@@ -245,6 +212,39 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
                 </div>
               </Link>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Trust badges */}
+      <section className="px-4 py-10 sm:px-6 lg:px-8 bg-muted">
+        <div className="mx-auto grid max-w-5xl gap-4 md:grid-cols-3">
+          <div className="rounded-xl border bg-background p-4">
+            <div className="flex items-center gap-2 font-medium">
+              <ShieldCheck className="h-4 w-4 text-primary" />
+              Read-only by design
+            </div>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Flaim can inspect your data, but it cannot make trades, drop players, or change anything in your leagues.
+            </p>
+          </div>
+          <div className="rounded-xl border bg-background p-4">
+            <div className="flex items-center gap-2 font-medium">
+              <Sparkles className="h-4 w-4 text-primary" />
+              Works across platforms
+            </div>
+            <p className="mt-2 text-sm text-muted-foreground">
+              One account can pull from ESPN, Yahoo, and Sleeper instead of forcing you to copy stats and standings around by hand.
+            </p>
+          </div>
+          <div className="rounded-xl border bg-background p-4">
+            <div className="flex items-center gap-2 font-medium">
+              <ArrowRight className="h-4 w-4 text-primary" />
+              Set defaults once
+            </div>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Use <Link href="/leagues" className="text-primary hover:underline">Your Leagues</Link> to save a default sport and favorite league so your AI needs less hand-holding.
+            </p>
           </div>
         </div>
       </section>
