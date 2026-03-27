@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { SignedIn, SignedOut } from '@clerk/nextjs';
+import { SignedOut } from '@clerk/nextjs';
 import { PublicChatExperience } from '@/components/public-demo/public-chat-experience';
 
 export const metadata: Metadata = {
@@ -87,10 +87,10 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
           </p>
           <h1 className="mb-4 text-4xl font-bold md:text-6xl">
             Your real fantasy leagues,
-            <span className="block text-muted-foreground">connected to the AI you already use.</span>
+            <span className="block text-muted-foreground">connected to your AI.</span>
           </h1>
           <p className="mx-auto max-w-2xl text-lg text-muted-foreground md:text-xl">
-            Flaim connects ESPN, Yahoo, and Sleeper to Claude, ChatGPT, and Perplexity, giving your AI your real roster, matchups, standings, waiver wire, and league activity.
+            Flaim connects ESPN, Yahoo, and Sleeper to Claude, ChatGPT, and Perplexity, giving the AI you already use your real roster, matchups, standings, waiver wire, and league activity.
           </p>
           <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
             <SignedOut>
@@ -98,23 +98,6 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
                 <Link href="/leagues">Set up Flaim</Link>
               </Button>
             </SignedOut>
-            <SignedIn>
-              <Button asChild size="lg">
-                <Link href="/leagues">Go to Leagues</Link>
-              </Button>
-            </SignedIn>
-          </div>
-          <div className="mt-8 space-y-2 text-sm text-muted-foreground">
-            <div className="flex flex-wrap items-center justify-center gap-2">
-              <span className="rounded-full border bg-background px-3 py-1">ESPN</span>
-              <span className="rounded-full border bg-background px-3 py-1">Yahoo</span>
-              <span className="rounded-full border bg-background px-3 py-1">Sleeper</span>
-            </div>
-            <div className="flex flex-wrap items-center justify-center gap-2">
-              <span className="rounded-full border bg-background px-3 py-1">Claude</span>
-              <span className="rounded-full border bg-background px-3 py-1">ChatGPT</span>
-              <span className="rounded-full border bg-background px-3 py-1">Perplexity</span>
-            </div>
           </div>
         </div>
         <p className="sr-only">
@@ -125,12 +108,43 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
       <PublicChatExperience
         id="live-demo"
         initialPresetId={initialPresetId ?? null}
-        leadingSlot={
-          <div className="flex min-h-8 items-center text-xs font-medium text-muted-foreground sm:text-sm">
-            This demo runs on a live version of ChatGPT.
-          </div>
-        }
       />
+
+      <section className="px-4 pb-10 pt-2 sm:px-6 lg:px-8">
+        <div className="mx-auto grid max-w-5xl gap-4 text-sm text-muted-foreground md:grid-cols-3">
+          <div className="rounded-2xl border bg-background/70 p-4">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-foreground/70">
+              Platforms supported
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <span className="rounded-full border bg-background px-3 py-1">ESPN</span>
+              <span className="rounded-full border bg-background px-3 py-1">Yahoo</span>
+              <span className="rounded-full border bg-background px-3 py-1">Sleeper</span>
+            </div>
+          </div>
+          <div className="rounded-2xl border bg-background/70 p-4">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-foreground/70">
+              Sports supported
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <span className="rounded-full border bg-background px-3 py-1">Football</span>
+              <span className="rounded-full border bg-background px-3 py-1">Baseball</span>
+              <span className="rounded-full border bg-background px-3 py-1">Basketball</span>
+              <span className="rounded-full border bg-background px-3 py-1">Hockey</span>
+            </div>
+          </div>
+          <div className="rounded-2xl border bg-background/70 p-4">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-foreground/70">
+              AI supported
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <span className="rounded-full border bg-background px-3 py-1">Claude</span>
+              <span className="rounded-full border bg-background px-3 py-1">ChatGPT</span>
+              <span className="rounded-full border bg-background px-3 py-1">Perplexity</span>
+            </div>
+          </div>
+        </div>
+      </section>
 
       {/* How It Works */}
       <section className="bg-muted px-4 py-10">

@@ -513,9 +513,7 @@ export function PublicChatExperience({
             {leadingSlot ? (
               leadingSlot
             ) : (
-              <div className="flex min-h-8 items-center text-xs font-medium text-muted-foreground sm:text-sm">
-                Live demo
-              </div>
+              <div className="min-h-8" aria-hidden="true" />
             )}
             <Popover>
               <PopoverTrigger asChild>
