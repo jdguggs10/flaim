@@ -1,6 +1,4 @@
 "use client";
-
-import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -147,12 +145,10 @@ async function* readSse(
 export function PublicChatExperience({
   initialPresetId = null,
   id,
-  leadingSlot,
   followTranscript = true,
 }: {
   initialPresetId?: string | null;
   id?: string;
-  leadingSlot?: ReactNode;
   followTranscript?: boolean;
 }) {
   const [runStatus, setRunStatus] = useState<PublicRunStatus>("idle");
@@ -509,44 +505,7 @@ export function PublicChatExperience({
 
       <div className="relative mx-auto max-w-5xl">
         <section className="pb-4 sm:pb-6">
-          <div className="flex items-center justify-between gap-3">
-            {leadingSlot ? (
-              leadingSlot
-            ) : (
-              <div className="min-h-8" aria-hidden="true" />
-            )}
-            <Popover>
-              <PopoverTrigger asChild>
-                <button
-                  type="button"
-                  aria-label="Show demo context"
-                  className="inline-flex h-8 items-center gap-2 rounded-full border border-border bg-background px-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-foreground shadow-sm transition-colors hover:bg-muted"
-                >
-                  <span className="text-sm leading-none" aria-hidden="true">
-                    {PUBLIC_SPORT_COPY[demoSport].emoji}
-                  </span>
-                  <span>ESPN</span>
-                </button>
-              </PopoverTrigger>
-              <PopoverContent
-                align="end"
-                className="w-[18.5rem] rounded-2xl border-border p-4 text-sm leading-6"
-              >
-                <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
-                  Demo context
-                </div>
-                <p className="mt-2 text-foreground">
-                  This demo is currently running on Gerry&apos;s ESPN{" "}
-                  {PUBLIC_SPORT_COPY[demoSport].label} league.
-                </p>
-                <p className="mt-2 text-muted-foreground">
-                  Flaim supports ESPN, Yahoo, and Sleeper for football, baseball,
-                  basketball, and hockey.
-                </p>
-              </PopoverContent>
-            </Popover>
-          </div>
-          <h1 className="mt-3 w-full max-w-3xl text-[2rem] font-semibold leading-[0.96] tracking-[-0.05em] text-foreground sm:mt-4 sm:text-5xl">
+          <h1 className="w-full max-w-3xl text-[2rem] font-semibold leading-[0.96] tracking-[-0.05em] text-foreground sm:text-5xl">
             Watch Flaim work on my actual leagues right now.
           </h1>
         </section>
@@ -708,20 +667,14 @@ export function PublicChatExperience({
               <div className="mx-auto max-w-3xl">
                 <div className="rounded-[1.9rem] border border-border bg-background p-3 shadow-[0_12px_30px_-24px_rgba(15,23,42,0.5)] sm:rounded-[2.2rem] sm:p-4">
                   <div className="min-h-[4.5rem] rounded-[1.45rem] bg-muted/55 p-4 sm:min-h-[5.25rem]">
-                    {selectedPreset ? (
-                      <div className="public-chat-selected-prompt relative h-full overflow-hidden rounded-[1.2rem] border border-primary/25 bg-primary/8 px-4 py-3 text-left text-sm font-medium leading-6 text-foreground sm:text-[0.95rem]">
-                        {selectedPreset.userMessage}
+                    <div className="flex h-full flex-col justify-center">
+                      <div className="text-[1.05rem] text-muted-foreground sm:text-[1.2rem]">
+                        Ask anything
                       </div>
-                    ) : (
-                      <div className="flex h-full flex-col justify-center">
-                        <div className="text-[1.05rem] text-muted-foreground sm:text-[1.2rem]">
-                          Ask anything
-                        </div>
-                        <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                          Pick one of the scrolling prompts below to run the live demo.
-                        </p>
-                      </div>
-                    )}
+                      <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                        Pick one of the scrolling prompts below to run the live demo.
+                      </p>
+                    </div>
                   </div>
 
                   <div className="mt-3 space-y-2">
