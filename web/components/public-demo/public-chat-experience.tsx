@@ -579,6 +579,10 @@ export function PublicChatExperience({
                   </div>
                 ) : null}
 
+                {selectedPreset ? (
+                  <PublicMessage role="user" text={selectedPreset.userMessage} />
+                ) : null}
+
                 {showPreToolStatus ? (
                   <div className="flex items-center gap-2 px-1 text-sm text-muted-foreground">
                     <LoaderCircle className="h-4 w-4 animate-spin" />
@@ -587,25 +591,15 @@ export function PublicChatExperience({
                 ) : null}
 
                 {hasToolCalls ? (
-                  <section className="space-y-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
-                        What Flaim checked
-                      </div>
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                        {toolCalls.length} call{toolCalls.length === 1 ? "" : "s"}
-                      </div>
-                    </div>
-                    <div className="space-y-3">
-                      {toolCalls.map((toolCall) => (
-                        <PublicToolCall
-                          key={toolCall.id}
-                          name={toolCall.name}
-                          status={toolCall.status}
-                        />
-                      ))}
-                    </div>
-                  </section>
+                  <div className="space-y-2">
+                    {toolCalls.map((toolCall) => (
+                      <PublicToolCall
+                        key={toolCall.id}
+                        name={toolCall.name}
+                        status={toolCall.status}
+                      />
+                    ))}
+                  </div>
                 ) : null}
 
                 {showRespondingStatus ? (
