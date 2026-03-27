@@ -31,7 +31,7 @@ export interface PublicChatPreset {
 
 // Keep the public demo model in one place so we can iterate on latency and
 // reliability without touching the route logic.
-export const PUBLIC_CHAT_MODEL = "gpt-5.4-nano";
+export const PUBLIC_CHAT_MODEL = "gpt-5.4-mini";
 
 export const PUBLIC_CHAT_SYSTEM_PROMPT = `
 You are Flaim's public chat demo assistant.
@@ -53,6 +53,7 @@ If the preset uses get_transactions, call get_transactions exactly once with its
 Use plain sports language.
 Sound conversational, confident, and witty.
 Work in at least one relevant sports-world detail happening today after you check web search.
+Prefer the freshest concrete game, injury, lineup, role, or performance development from today. Avoid generic TV, broadcast, or schedule notes unless there is no better current sports detail.
 Final answer should usually be 3-5 short sentences and about 30-70 words total, depending on the prompt.
 Prefer short sentences and no long paragraphs.
 Do not use bullets.

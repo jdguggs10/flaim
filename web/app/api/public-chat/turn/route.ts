@@ -520,7 +520,7 @@ export async function POST(request: NextRequest) {
                       type: "input_text" as const,
                       text: [
                         "Server-prefetched transaction feed for this run. Treat it as authoritative and do not call get_transactions again.",
-                        `League context: platform=${prefetchedTransactions.league.platform}, sport=${prefetchedTransactions.league.sport}, leagueId=${prefetchedTransactions.league.leagueId}, seasonYear=${prefetchedTransactions.league.seasonYear}, Gerry's team="${prefetchedTransactions.league.teamName || "Unknown team"}".`,
+                        `League context: platform=${prefetchedTransactions.league.platform}, sport=${prefetchedTransactions.league.sport}, seasonYear=${prefetchedTransactions.league.seasonYear}, Gerry's team="${prefetchedTransactions.league.teamName || "Unknown team"}".`,
                         `Transaction feed JSON: ${JSON.stringify(prefetchedTransactions.result)}`,
                       ].join("\n"),
                     },
