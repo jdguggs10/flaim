@@ -1,5 +1,4 @@
 "use client";
-import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
   Popover,
@@ -551,7 +550,7 @@ export function PublicChatExperience({
           <div className="bg-[radial-gradient(circle_at_top,rgba(59,130,246,0.08),transparent_40%),linear-gradient(to_bottom,rgba(248,250,252,0.98),rgba(241,245,249,0.78))] dark:bg-[radial-gradient(circle_at_top,rgba(96,165,250,0.16),transparent_42%),linear-gradient(to_bottom,rgba(17,24,39,0.98),rgba(3,7,18,0.94))]">
             <div
               ref={transcriptScrollRef}
-              className="h-[25rem] overflow-y-auto overscroll-contain px-3 py-4 sm:h-[31rem] sm:px-4 sm:py-5"
+              className="h-[30rem] overflow-y-auto overscroll-contain px-3 py-4 sm:h-[36rem] sm:px-4 sm:py-5"
             >
               <div className="mx-auto flex max-w-2xl flex-col gap-4">
                 {!selectedPreset && runStatus === "idle" ? (
@@ -574,12 +573,8 @@ export function PublicChatExperience({
                         />
                       </div>
                       <h3 className="mt-4 text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
-                        Pick a live prompt
+                        Ask something
                       </h3>
-                      <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                        The input below behaves like a guided AI app composer. Choose
-                        a prompt and Flaim runs it live on Gerry&apos;s demo leagues.
-                      </p>
                     </div>
                   </div>
                 ) : null}
@@ -633,49 +628,6 @@ export function PublicChatExperience({
                   </div>
                 ) : null}
 
-                {runStatus === "completed" && selectedPreset ? (
-                  <div className="flex flex-col gap-3 rounded-[1.75rem] border border-border bg-primary px-5 py-4 text-sm text-primary-foreground dark:bg-card dark:text-card-foreground">
-                    <div className="flex flex-col gap-3">
-                      <span className="text-primary-foreground dark:text-card-foreground">
-                        That run used live data from Gerry&apos;s actual league.
-                      </span>
-                      <Button
-                        asChild
-                        type="button"
-                        variant="secondary"
-                        size="sm"
-                        className="w-full justify-center rounded-full sm:w-fit"
-                      >
-                        <a href="/leagues">
-                          Set up your leagues
-                          <ArrowUp className="ml-2 h-4 w-4 rotate-45" />
-                        </a>
-                      </Button>
-                    </div>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <button
-                          type="button"
-                          className="w-fit text-left text-xs text-primary-foreground/80 underline decoration-primary-foreground/35 underline-offset-4 transition-colors hover:text-primary-foreground dark:text-muted-foreground dark:decoration-muted-foreground/35 dark:hover:text-foreground"
-                        >
-                          Powered by GPT-5.4. Claude and Perplexity are also supported.
-                        </button>
-                      </PopoverTrigger>
-                      <PopoverContent
-                        align="start"
-                        className="w-[19rem] rounded-2xl border-border p-4 text-sm leading-6"
-                      >
-                        <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
-                          One more thing
-                        </div>
-                        <p className="mt-2 text-foreground">
-                          This is a real run on a dedicated demo account. Want Flaim
-                          for your own leagues? Connect your Flaim account to your own AI app.
-                        </p>
-                      </PopoverContent>
-                    </Popover>
-                  </div>
-                ) : null}
               </div>
             </div>
 
@@ -704,60 +656,79 @@ export function PublicChatExperience({
                           side="top"
                           className="w-[18rem] rounded-2xl border-border p-4 text-sm leading-6"
                         >
-                          <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
-                            How Flaim appears
-                          </div>
-                          <p className="mt-2 text-foreground">
-                            Adding Flaim to your chatbot usually puts it in this
-                            plus drawer.
-                          </p>
-                          <p className="mt-2 text-muted-foreground">
-                            Sometimes it activates automatically. Other times, you
-                            open the drawer and turn Flaim on manually before you
-                            send the prompt.
+                          <p className="text-foreground">
+                            Adding and authenticating Flaim to your chatbot puts it in this drawer.
                           </p>
                         </PopoverContent>
                       </Popover>
-                      <div
-                        className={cn(
-                          "inline-flex h-10 items-center gap-2 rounded-full border px-3.5 text-sm font-medium transition-colors",
-                          chipActive
-                            ? "public-chat-chip-active border-primary/30 bg-primary/10 text-primary"
-                            : "border-border bg-background text-foreground"
-                        )}
-                      >
-                        <Image
-                          src="/flaim-mark-hero.png"
-                          alt=""
-                          width={16}
-                          height={16}
-                          className="dark:hidden"
-                        />
-                        <Image
-                          src="/flaim-mark-hero-dark.png"
-                          alt=""
-                          width={16}
-                          height={16}
-                          className="hidden dark:block"
-                        />
-                        <span>Flaim Fantasy</span>
-                      </div>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <button
+                            type="button"
+                            className={cn(
+                              "inline-flex h-10 items-center gap-2 rounded-full border px-3.5 text-sm font-medium transition-colors",
+                              chipActive
+                                ? "public-chat-chip-active border-primary/30 bg-primary/10 text-primary"
+                                : "border-border bg-background text-foreground"
+                            )}
+                          >
+                            <Image
+                              src="/flaim-mark-hero.png"
+                              alt=""
+                              width={16}
+                              height={16}
+                              className="dark:hidden"
+                            />
+                            <Image
+                              src="/flaim-mark-hero-dark.png"
+                              alt=""
+                              width={16}
+                              height={16}
+                              className="hidden dark:block"
+                            />
+                            <span>Flaim Fantasy</span>
+                          </button>
+                        </PopoverTrigger>
+                        <PopoverContent
+                          align="start"
+                          side="top"
+                          className="w-[19rem] rounded-2xl border-border p-4 text-sm leading-6"
+                        >
+                          <p className="text-foreground">
+                            Some AIs activate Flaim automatically. For others, activate Flaim manually in your drawer and you&apos;ll see a badge here.
+                          </p>
+                        </PopoverContent>
+                      </Popover>
                     </div>
 
                     <div className="flex items-center">
-                      <div
-                        className={cn(
-                          "inline-flex h-11 w-11 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm transition-transform",
-                          runStatus === "running" ? "public-chat-send-running" : ""
-                        )}
-                        aria-label="Run selected prompt"
-                      >
-                        {runStatus === "running" ? (
-                          <LoaderCircle className="h-4.5 w-4.5 animate-spin" />
-                        ) : (
-                          <ArrowUp className="h-4.5 w-4.5" />
-                        )}
-                      </div>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <button
+                            type="button"
+                            className={cn(
+                              "inline-flex h-11 w-11 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm transition-transform",
+                              runStatus === "running" ? "public-chat-send-running" : ""
+                            )}
+                            aria-label="Run selected prompt"
+                          >
+                            {runStatus === "running" ? (
+                              <LoaderCircle className="h-4.5 w-4.5 animate-spin" />
+                            ) : (
+                              <ArrowUp className="h-4.5 w-4.5" />
+                            )}
+                          </button>
+                        </PopoverTrigger>
+                        <PopoverContent
+                          align="end"
+                          side="top"
+                          className="w-[19rem] rounded-2xl border-border p-4 text-sm leading-6"
+                        >
+                          <p className="text-foreground">
+                            This demo is powered live by GPT-5.4 on Gerry&apos;s actual leagues. Set up Flaim to ask your AI about your leagues.
+                          </p>
+                        </PopoverContent>
+                      </Popover>
                     </div>
                   </div>
                 </div>
