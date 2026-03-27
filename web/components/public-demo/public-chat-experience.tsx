@@ -502,9 +502,9 @@ export function PublicChatExperience({
     <section id={id} className="relative bg-background px-4 pb-12 sm:px-6 lg:px-8 lg:pb-16">
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_bottom,transparent_0,transparent_23px,var(--border)_24px)] bg-[length:100%_24px] opacity-20" />
 
-      <div className="relative mx-auto max-w-4xl">
+      <div className="relative mx-auto max-w-2xl">
         <section className="pb-4 sm:pb-6">
-          <h1 className="w-full max-w-3xl text-[2rem] font-semibold leading-[0.96] tracking-[-0.05em] text-foreground sm:text-5xl">
+          <h1 className="w-full text-[2rem] font-semibold leading-[0.96] tracking-[-0.05em] text-foreground sm:text-5xl">
             Watch Flaim work on my actual leagues right now.
           </h1>
         </section>
