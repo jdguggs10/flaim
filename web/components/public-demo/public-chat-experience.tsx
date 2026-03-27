@@ -510,7 +510,7 @@ export function PublicChatExperience({
           </h1>
         </section>
 
-        <Card className="overflow-hidden rounded-[2rem] border-border/70 bg-card/95 p-0 shadow-[0_30px_90px_-42px_rgba(15,23,42,0.45)] backdrop-blur sm:rounded-[2.3rem]">
+        <Card className="overflow-hidden rounded-[2rem] border-border/70 bg-card/95 p-0 shadow-[0_30px_90px_-42px_rgba(15,23,42,0.45)] backdrop-blur dark:shadow-[0_30px_90px_-42px_rgba(0,0,0,0.82)] sm:rounded-[2.3rem]">
           <div className="border-b border-border/70 bg-card px-4 py-3 sm:px-5">
             <div className="flex items-center justify-between gap-3">
               <div>
@@ -530,7 +530,7 @@ export function PublicChatExperience({
             </div>
           </div>
 
-          <div className="bg-[radial-gradient(circle_at_top,rgba(59,130,246,0.08),transparent_40%),linear-gradient(to_bottom,rgba(248,250,252,0.98),rgba(241,245,249,0.78))]">
+          <div className="bg-[radial-gradient(circle_at_top,rgba(59,130,246,0.08),transparent_40%),linear-gradient(to_bottom,rgba(248,250,252,0.98),rgba(241,245,249,0.78))] dark:bg-[radial-gradient(circle_at_top,rgba(96,165,250,0.16),transparent_42%),linear-gradient(to_bottom,rgba(17,24,39,0.98),rgba(3,7,18,0.94))]">
             <div
               ref={transcriptScrollRef}
               className="h-[25rem] overflow-y-auto overscroll-contain px-3 py-4 sm:h-[31rem] sm:px-4 sm:py-5"
@@ -616,9 +616,9 @@ export function PublicChatExperience({
                 ) : null}
 
                 {runStatus === "completed" && selectedPreset ? (
-                  <div className="flex flex-col gap-3 rounded-[1.75rem] border border-border bg-primary px-5 py-4 text-sm text-primary-foreground">
+                  <div className="flex flex-col gap-3 rounded-[1.75rem] border border-border bg-primary px-5 py-4 text-sm text-primary-foreground dark:bg-card dark:text-card-foreground">
                     <div className="flex flex-col gap-3">
-                      <span className="text-primary-foreground">
+                      <span className="text-primary-foreground dark:text-card-foreground">
                         That run used live data from Gerry&apos;s actual league.
                       </span>
                       <Button
@@ -638,7 +638,7 @@ export function PublicChatExperience({
                       <PopoverTrigger asChild>
                         <button
                           type="button"
-                          className="w-fit text-left text-xs text-primary-foreground/80 underline decoration-primary-foreground/35 underline-offset-4 transition-colors hover:text-primary-foreground"
+                          className="w-fit text-left text-xs text-primary-foreground/80 underline decoration-primary-foreground/35 underline-offset-4 transition-colors hover:text-primary-foreground dark:text-muted-foreground dark:decoration-muted-foreground/35 dark:hover:text-foreground"
                         >
                           Powered by GPT-5.4. Claude and Perplexity are also supported.
                         </button>
