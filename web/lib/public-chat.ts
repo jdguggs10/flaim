@@ -67,6 +67,7 @@ export const PUBLIC_CHAT_SIMPLE_PRESETS: readonly PublicChatPreset[] = [
       "Use Flaim to inspect Gerry's connected leagues. Summarize what leagues Gerry has connected across platforms, keeping the answer quick and basic. Use web search once only if it helps anchor the current sports context before answering. Final answer: 30-50 words max.",
     homepageSection: "simple",
     showInChat: false,
+    rail: "top",
     toolLabel: "Leagues",
   },
   {
@@ -80,6 +81,7 @@ export const PUBLIC_CHAT_SIMPLE_PRESETS: readonly PublicChatPreset[] = [
       "Use Flaim to inspect Gerry's default live league and summarize the key settings in plain English, like format, roster shape, or scoring style. Keep it quick and basic. Use web search once only if it helps frame the current season context. Final answer: 30-50 words max.",
     homepageSection: "simple",
     showInChat: false,
+    rail: "top",
     toolLabel: "League Info",
   },
   {
@@ -93,6 +95,7 @@ export const PUBLIC_CHAT_SIMPLE_PRESETS: readonly PublicChatPreset[] = [
       "Use Flaim to inspect Gerry's default live league standings and summarize who is near the top and where Gerry stands. Keep it quick and basic. Use web search once for one relevant current sports detail before answering. Final answer: 30-50 words max.",
     homepageSection: "simple",
     showInChat: false,
+    rail: "top",
     toolLabel: "Standings",
   },
   {
@@ -106,6 +109,7 @@ export const PUBLIC_CHAT_SIMPLE_PRESETS: readonly PublicChatPreset[] = [
       "Use Flaim to inspect Gerry's default live league matchup and say who Gerry is playing right now plus the most important current context around that matchup. Keep it quick and basic. Use web search once before answering. Final answer: 30-50 words max.",
     homepageSection: "simple",
     showInChat: false,
+    rail: "top",
     toolLabel: "Matchups",
   },
   {
@@ -119,6 +123,7 @@ export const PUBLIC_CHAT_SIMPLE_PRESETS: readonly PublicChatPreset[] = [
       "Use Flaim to inspect Gerry's default live league roster and summarize the shape of his team in plain English. Keep it quick and basic. Use web search once for one relevant current player or injury detail before answering. Final answer: 30-50 words max.",
     homepageSection: "simple",
     showInChat: false,
+    rail: "top",
     toolLabel: "Roster",
   },
   {
@@ -132,6 +137,7 @@ export const PUBLIC_CHAT_SIMPLE_PRESETS: readonly PublicChatPreset[] = [
       "Use Flaim to inspect Gerry's default live league and identify the most interesting available players on the waiver wire. Keep it quick and basic. Use web search once for one relevant current performance or injury detail before answering. Final answer: 30-50 words max.",
     homepageSection: "simple",
     showInChat: false,
+    rail: "top",
     toolLabel: "Free Agents",
   },
   {
@@ -145,6 +151,7 @@ export const PUBLIC_CHAT_SIMPLE_PRESETS: readonly PublicChatPreset[] = [
       "Use Flaim to look up Aaron Judge in Gerry's league context and summarize what matters about him right now in plain English. Keep it quick and basic. Use web search once for one current performance or news detail before answering. Final answer: 30-50 words max.",
     homepageSection: "simple",
     showInChat: false,
+    rail: "top",
     toolLabel: "Player Lookup",
   },
   {
@@ -158,6 +165,7 @@ export const PUBLIC_CHAT_SIMPLE_PRESETS: readonly PublicChatPreset[] = [
       "Use Flaim to inspect Gerry's default live league transactions and summarize the most recent moves that stand out. Keep it quick and basic. Use web search once for one relevant current detail before answering. Final answer: 30-50 words max.",
     homepageSection: "simple",
     showInChat: false,
+    rail: "top",
     toolLabel: "Transactions",
   },
   {
@@ -171,6 +179,7 @@ export const PUBLIC_CHAT_SIMPLE_PRESETS: readonly PublicChatPreset[] = [
       "Use Flaim to inspect Gerry's most relevant prior season and summarize how he did last season in plain English. Keep it quick and basic. Use web search once only if it helps frame the season context before answering. Final answer: 30-50 words max.",
     homepageSection: "simple",
     showInChat: false,
+    rail: "top",
     toolLabel: "League History",
   },
 ] as const;
@@ -178,7 +187,7 @@ export const PUBLIC_CHAT_SIMPLE_PRESETS: readonly PublicChatPreset[] = [
 export const PUBLIC_CHAT_DEEP_PRESETS: readonly PublicChatPreset[] = [
   {
     id: "waiver-wire",
-    rail: "top",
+    rail: "bottom",
     title: "Who are the best available free agents in Gerry's league?",
     userMessage: "Who are the best available free agents in Gerry's league?",
     allowedTools: ["get_roster", "get_free_agents", "get_players"] as const,
@@ -193,7 +202,7 @@ export const PUBLIC_CHAT_DEEP_PRESETS: readonly PublicChatPreset[] = [
   },
   {
     id: "transactions-watch",
-    rail: "top",
+    rail: "bottom",
     title: "What are the latest moves in his league?",
     userMessage: "What are the latest moves in Gerry's league?",
     allowedTools: ["get_transactions", "get_roster", "get_players"] as const,
@@ -208,7 +217,7 @@ export const PUBLIC_CHAT_DEEP_PRESETS: readonly PublicChatPreset[] = [
   },
   {
     id: "league-leader",
-    rail: "top",
+    rail: "bottom",
     title: "Who is winning Gerry's league and why?",
     userMessage: "Who is winning Gerry's league and why?",
     allowedTools: ["get_standings", "get_roster", "get_matchups"] as const,
@@ -223,7 +232,7 @@ export const PUBLIC_CHAT_DEEP_PRESETS: readonly PublicChatPreset[] = [
   },
   {
     id: "give-up-player",
-    rail: "top",
+    rail: "bottom",
     title: "What player does he need to give up on?",
     userMessage: "What player does he need to give up on?",
     allowedTools: ["get_roster", "get_players"] as const,

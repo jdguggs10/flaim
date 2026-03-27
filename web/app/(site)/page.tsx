@@ -152,23 +152,15 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
           <p className="text-center text-muted-foreground mb-8">
             Start simple. These quick prompts each show off one core Flaim capability.
           </p>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {homepageSimplePresets.map((preset) => (
               <Link
                 key={preset.id}
                 href={getDemoHref(preset.id)}
-                className="group rounded-lg border bg-background p-4 transition-colors hover:border-foreground/20"
+                className="group flex items-center gap-3 rounded-lg border bg-background px-4 py-3 transition-colors hover:border-foreground/20"
               >
-                {preset.toolLabel ? (
-                  <div className="mb-3 inline-flex rounded-full border px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                    {preset.toolLabel}
-                  </div>
-                ) : null}
-                <p className="font-medium">&ldquo;{preset.userMessage}&rdquo;</p>
-                <div className="mt-3 flex items-center gap-2 text-xs font-medium text-primary">
-                  <span>Run this live in the demo</span>
-                  <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
-                </div>
+                <p className="flex-1 text-sm font-medium">&ldquo;{preset.userMessage}&rdquo;</p>
+                <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground transition-all group-hover:text-primary group-hover:translate-x-0.5" />
               </Link>
             ))}
           </div>
@@ -180,35 +172,31 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
         <div className="container max-w-2xl mx-auto">
           <h2 className="text-2xl font-bold text-center mb-2">Go deeper</h2>
           <p className="text-center text-muted-foreground mb-8">
-            Start with the basic tools above. These deeper prompts combine multiple Flaim tools and live web context to produce stronger answers.
+            These prompts combine multiple Flaim tools and live web context.
           </p>
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-2 sm:grid-cols-2">
             {homepageDeepPresets.map((preset) => (
               <Link
                 key={preset.id}
                 href={getDemoHref(preset.id)}
-                className="group rounded-lg border bg-background p-4 transition-colors hover:border-foreground/20"
+                className="group flex flex-col rounded-lg border bg-background px-4 py-3 transition-colors hover:border-foreground/20"
               >
-                <p className="font-medium">&ldquo;{preset.userMessage}&rdquo;</p>
-                <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                  {preset.homepageExplanation}
-                </p>
-                <div className="mt-4 flex flex-wrap gap-2">
+                <div className="flex items-center gap-3">
+                  <p className="flex-1 text-sm font-medium">&ldquo;{preset.userMessage}&rdquo;</p>
+                  <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground transition-all group-hover:text-primary group-hover:translate-x-0.5" />
+                </div>
+                <div className="mt-2 flex flex-wrap gap-1.5">
                   {preset.allowedTools.map((tool) => (
                     <span
                       key={tool}
-                      className="inline-flex rounded-full border bg-muted px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground"
+                      className="inline-flex rounded-full border bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground"
                     >
                       {PUBLIC_CHAT_TOOL_DISPLAY_LABELS[tool]}
                     </span>
                   ))}
-                  <span className="inline-flex rounded-full border border-primary/25 bg-primary/5 px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.12em] text-primary">
+                  <span className="inline-flex rounded-full border border-primary/25 bg-primary/5 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.12em] text-primary">
                     Web Search
                   </span>
-                </div>
-                <div className="mt-3 flex items-center gap-2 text-xs font-medium text-primary">
-                  <span>Run this live in the demo</span>
-                  <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
                 </div>
               </Link>
             ))}
