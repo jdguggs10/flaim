@@ -512,13 +512,8 @@ export function PublicChatExperience({
         <Card className="overflow-hidden rounded-[2rem] border-border/70 bg-card/95 p-0 shadow-[0_30px_90px_-42px_rgba(15,23,42,0.45)] backdrop-blur dark:shadow-[0_30px_90px_-42px_rgba(0,0,0,0.82)] sm:rounded-[2.3rem]">
           <div className="border-b border-border/70 bg-card px-4 py-3 sm:px-5">
             <div className="flex items-center justify-between gap-3">
-              <div>
-                <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
-                  Live app demo
-                </div>
-                <p className="mt-1 text-sm text-foreground">
-                  Pick a prompt below and watch the live run stream inside the shell.
-                </p>
+              <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                Live app demo
               </div>
               <Popover>
                 <PopoverTrigger asChild>
