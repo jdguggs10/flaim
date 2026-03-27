@@ -564,14 +564,11 @@ export function PublicChatExperience({
                   Pick a prompt below and watch the live run stream inside the shell.
                 </p>
               </div>
-              <div className="rounded-full border border-border/70 bg-background px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                {runStatus === "running"
-                  ? "Running"
-                  : runStatus === "completed"
-                    ? "Ready again"
-                    : runStatus === "error"
-                      ? "Retry"
-                      : "Live"}
+              <div className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-background px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-foreground">
+                <span className="text-sm leading-none" aria-hidden="true">
+                  {PUBLIC_SPORT_COPY[demoSport].emoji}
+                </span>
+                <span>ESPN</span>
               </div>
             </div>
           </div>
