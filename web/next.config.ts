@@ -2,6 +2,17 @@ import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
   devIndicators: false,
+  async redirects() {
+    return [
+      { source: '/guide/espn', destination: '/guide/platforms', permanent: true },
+      { source: '/guide/yahoo', destination: '/guide/platforms', permanent: true },
+      { source: '/guide/sleeper', destination: '/guide/platforms', permanent: true },
+      { source: '/guide/claude', destination: '/guide/ai', permanent: true },
+      { source: '/guide/chatgpt', destination: '/guide/ai', permanent: true },
+      { source: '/guide/perplexity', destination: '/guide/ai', permanent: true },
+      { source: '/guide/gemini', destination: '/guide/ai', permanent: true },
+    ];
+  },
   async headers() {
     return [
       {

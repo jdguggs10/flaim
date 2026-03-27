@@ -9,13 +9,12 @@ export const metadata: Metadata = {
 };
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import {
   PUBLIC_CHAT_DEEP_PRESETS,
   PUBLIC_CHAT_SIMPLE_PRESETS,
   PUBLIC_CHAT_TOOL_DISPLAY_LABELS,
 } from '@/lib/public-chat';
-import { ArrowRight, ChevronDown, Brain, Search, ShieldCheck, Sparkles, Zap } from 'lucide-react';
+import { ArrowRight, ChevronDown, ShieldCheck, Sparkles } from 'lucide-react';
 
 interface LandingPageProps {
   searchParams?: Promise<{
@@ -113,138 +112,68 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
       <section className="px-4 pb-10 pt-2 sm:px-6 lg:px-8">
         <div className="mx-auto grid max-w-5xl gap-4 text-sm text-muted-foreground md:grid-cols-3">
           <div className="rounded-2xl border bg-background/70 p-4">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-foreground/70">
+            <Link href="/guide/platforms" className="text-[11px] font-semibold uppercase tracking-[0.18em] text-foreground/70 hover:text-primary transition-colors">
               Platforms supported
-            </div>
+            </Link>
             <div className="mt-3 flex flex-wrap gap-2">
-              <span className="rounded-full border bg-background px-3 py-1">ESPN</span>
-              <span className="rounded-full border bg-background px-3 py-1">Yahoo</span>
-              <span className="rounded-full border bg-background px-3 py-1">Sleeper</span>
+              <Link href="/guide/platforms#espn" className="rounded-full border bg-background px-3 py-1 transition-colors hover:border-foreground/30">ESPN</Link>
+              <Link href="/guide/platforms#yahoo" className="rounded-full border bg-background px-3 py-1 transition-colors hover:border-foreground/30">Yahoo</Link>
+              <Link href="/guide/platforms#sleeper" className="rounded-full border bg-background px-3 py-1 transition-colors hover:border-foreground/30">Sleeper</Link>
             </div>
           </div>
           <div className="rounded-2xl border bg-background/70 p-4">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-foreground/70">
+            <Link href="/guide/sports" className="text-[11px] font-semibold uppercase tracking-[0.18em] text-foreground/70 hover:text-primary transition-colors">
               Sports supported
-            </div>
+            </Link>
             <div className="mt-3 flex flex-wrap gap-2">
-              <span className="rounded-full border bg-background px-3 py-1">Football</span>
-              <span className="rounded-full border bg-background px-3 py-1">Baseball</span>
-              <span className="rounded-full border bg-background px-3 py-1">Basketball</span>
-              <span className="rounded-full border bg-background px-3 py-1">Hockey</span>
+              <Link href="/guide/sports#football" className="rounded-full border bg-background px-3 py-1 transition-colors hover:border-foreground/30">Football</Link>
+              <Link href="/guide/sports#baseball" className="rounded-full border bg-background px-3 py-1 transition-colors hover:border-foreground/30">Baseball</Link>
+              <Link href="/guide/sports#basketball" className="rounded-full border bg-background px-3 py-1 transition-colors hover:border-foreground/30">Basketball</Link>
+              <Link href="/guide/sports#hockey" className="rounded-full border bg-background px-3 py-1 transition-colors hover:border-foreground/30">Hockey</Link>
             </div>
           </div>
           <div className="rounded-2xl border bg-background/70 p-4">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-foreground/70">
+            <Link href="/guide/ai" className="text-[11px] font-semibold uppercase tracking-[0.18em] text-foreground/70 hover:text-primary transition-colors">
               AI supported
-            </div>
+            </Link>
             <div className="mt-3 flex flex-wrap gap-2">
-              <span className="rounded-full border bg-background px-3 py-1">Claude</span>
-              <span className="rounded-full border bg-background px-3 py-1">ChatGPT</span>
-              <span className="rounded-full border bg-background px-3 py-1">Perplexity</span>
+              <Link href="/guide/ai#claude" className="rounded-full border bg-background px-3 py-1 transition-colors hover:border-foreground/30">Claude</Link>
+              <Link href="/guide/ai#chatgpt" className="rounded-full border bg-background px-3 py-1 transition-colors hover:border-foreground/30">ChatGPT</Link>
+              <Link href="/guide/ai#perplexity" className="rounded-full border bg-background px-3 py-1 transition-colors hover:border-foreground/30">Perplexity</Link>
             </div>
           </div>
         </div>
       </section>
 
-      {/* How It Works */}
-      <section className="bg-muted px-4 py-10">
-        <div className="container mx-auto max-w-5xl">
-          <div className="mx-auto max-w-2xl text-center">
-            <h2 className="text-2xl font-bold md:text-3xl">How it works</h2>
-            <p className="mt-2 text-muted-foreground">
-              Flaim stays simple: connect your leagues, connect your AI, and ask questions as normal.
+      {/* Trust badges */}
+      <section className="px-4 pb-10 sm:px-6 lg:px-8">
+        <div className="mx-auto grid max-w-5xl gap-4 md:grid-cols-3">
+          <div className="rounded-xl border bg-background p-4">
+            <div className="flex items-center gap-2 font-medium">
+              <ShieldCheck className="h-4 w-4 text-primary" />
+              Read-only by design
+            </div>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Flaim can inspect your data, but it cannot make trades, drop players, or change anything in your leagues.
             </p>
           </div>
-          <div className="mt-8 grid gap-4 md:grid-cols-3">
-            <Card className="p-5">
-              <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-full bg-primary text-primary-foreground font-bold">
-                1
-              </div>
-              <h3 className="text-lg font-semibold">Connect your platforms</h3>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Sync ESPN with the Chrome extension, sign in with Yahoo, or enter your Sleeper username. Flaim pulls in your leagues and seasons from there.
-              </p>
-            </Card>
-            <Card className="p-5">
-              <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-full bg-primary text-primary-foreground font-bold">
-                2
-              </div>
-              <h3 className="text-lg font-semibold">Connect your AI</h3>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Add Flaim to Claude, ChatGPT, or Perplexity using the MCP details from your account and authorize the connection once.
-              </p>
-            </Card>
-            <Card className="p-5">
-              <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-full bg-primary text-primary-foreground font-bold">
-                3
-              </div>
-              <h3 className="text-lg font-semibold">Ask league-specific questions</h3>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Ask about your roster, waiver wire, matchups, or rivals. Flaim grounds the answer in your actual leagues and adds web context when needed.
-              </p>
-            </Card>
+          <div className="rounded-xl border bg-background p-4">
+            <div className="flex items-center gap-2 font-medium">
+              <Sparkles className="h-4 w-4 text-primary" />
+              Works across platforms
+            </div>
+            <p className="mt-2 text-sm text-muted-foreground">
+              One account can pull from ESPN, Yahoo, and Sleeper instead of forcing you to copy stats and standings around by hand.
+            </p>
           </div>
-          <div className="mt-6 grid gap-4 md:grid-cols-3">
-            <div className="rounded-xl border bg-background p-4">
-              <div className="flex items-center gap-2 font-medium">
-                <ShieldCheck className="h-4 w-4 text-primary" />
-                Read-only by design
-              </div>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Flaim can inspect your data, but it cannot make trades, drop players, or change anything in your leagues.
-              </p>
+          <div className="rounded-xl border bg-background p-4">
+            <div className="flex items-center gap-2 font-medium">
+              <ArrowRight className="h-4 w-4 text-primary" />
+              Set defaults once
             </div>
-            <div className="rounded-xl border bg-background p-4">
-              <div className="flex items-center gap-2 font-medium">
-                <Sparkles className="h-4 w-4 text-primary" />
-                Works across platforms
-              </div>
-              <p className="mt-2 text-sm text-muted-foreground">
-                One account can pull from ESPN, Yahoo, and Sleeper instead of forcing you to copy stats and standings around by hand.
-              </p>
-            </div>
-            <div className="rounded-xl border bg-background p-4">
-              <div className="flex items-center gap-2 font-medium">
-                <ArrowRight className="h-4 w-4 text-primary" />
-                Set defaults once
-              </div>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Use <Link href="/leagues" className="text-primary hover:underline">Your Leagues</Link> to save a default sport and favorite league so your AI needs less hand-holding.
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* The Skill */}
-      <section className="py-10 px-4">
-        <div className="container max-w-2xl mx-auto">
-          <h2 className="text-2xl font-bold text-center mb-2">The Flaim Skill</h2>
-          <p className="text-center text-muted-foreground mb-8">
-            More than a data connection. Flaim teaches your AI how to think about fantasy sports.
-          </p>
-          <div className="grid gap-4 sm:grid-cols-3">
-            <div className="flex flex-col items-center text-center p-4">
-              <Brain className="h-8 w-8 text-primary mb-3" />
-              <h3 className="font-semibold mb-1">Fantasy analyst reasoning</h3>
-              <p className="text-sm text-muted-foreground">
-                Knows how to evaluate rosters, spot weaknesses, and give advice grounded in your league&apos;s format and scoring.
-              </p>
-            </div>
-            <div className="flex flex-col items-center text-center p-4">
-              <Search className="h-8 w-8 text-primary mb-3" />
-              <h3 className="font-semibold mb-1">Web search when it matters</h3>
-              <p className="text-sm text-muted-foreground">
-                Knows when to search the web for injury news, schedules, and real-time stats instead of relying on league data alone.
-              </p>
-            </div>
-            <div className="flex flex-col items-center text-center p-4">
-              <Zap className="h-8 w-8 text-primary mb-3" />
-              <h3 className="font-semibold mb-1">Smart tool orchestration</h3>
-              <p className="text-sm text-muted-foreground">
-                Decides which tools to call and in what order based on your question. One prompt can pull from multiple sources.
-              </p>
-            </div>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Use <Link href="/leagues" className="text-primary hover:underline">Your Leagues</Link> to save a default sport and favorite league so your AI needs less hand-holding.
+            </p>
           </div>
         </div>
       </section>
@@ -339,6 +268,26 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
         </div>
       </section>
 
+      {/* Setup CTA */}
+      <section className="py-10 px-4">
+        <div className="container max-w-2xl mx-auto text-center">
+          <h2 className="text-2xl font-bold mb-2">Ready to connect your leagues?</h2>
+          <p className="text-muted-foreground mb-6">
+            Setup takes about 5 minutes. Connect a platform, add Flaim to your AI, and start asking.
+          </p>
+          <div className="flex flex-col items-center justify-center gap-3 sm:flex-row">
+            <SignedOut>
+              <Button asChild size="lg">
+                <Link href="/leagues">Set up Flaim</Link>
+              </Button>
+            </SignedOut>
+            <Button asChild variant="outline" size="lg">
+              <Link href="/guide/platforms">Setup guides</Link>
+            </Button>
+          </div>
+        </div>
+      </section>
+
       {/* FAQs */}
       <section className="py-8 px-4">
         <div className="container max-w-2xl mx-auto">
@@ -362,7 +311,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
                 <ChevronDown className="ml-2 h-5 w-5 transition-transform group-open:rotate-180" />
               </summary>
               <div className="px-4 pb-4 text-sm text-muted-foreground space-y-2">
-                <p>Claude, ChatGPT, and Perplexity today. Gemini and Grok are not available yet.</p>
+                <p>Claude, ChatGPT, and Perplexity today. Gemini and Grok are not available yet. See the <Link href="/guide/ai#gemini" className="text-primary hover:underline">AI setup guide</Link> for current status.</p>
               </div>
             </details>
 
