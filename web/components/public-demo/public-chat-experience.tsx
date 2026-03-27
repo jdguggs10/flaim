@@ -16,7 +16,6 @@ import { parse } from "partial-json";
 import {
   ArrowUp,
   LoaderCircle,
-  Mic,
   Plus,
 } from "lucide-react";
 import Image from "next/image";
@@ -726,15 +725,7 @@ export function PublicChatExperience({
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2.5">
-                      <button
-                        type="button"
-                        disabled
-                        aria-hidden="true"
-                        className="inline-flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground"
-                      >
-                        <Mic className="h-4.5 w-4.5" />
-                      </button>
+                    <div className="flex items-center">
                       <div
                         className={cn(
                           "inline-flex h-11 w-11 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm transition-transform",
