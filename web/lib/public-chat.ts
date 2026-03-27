@@ -19,6 +19,7 @@ export interface PublicChatPreset {
   title: string;
   userMessage: string;
   allowedTools: readonly PublicChatAllowedTool[];
+  serverPrefetch?: "transactions";
   executionHint: string;
   prompt: string;
   homepageSection: PublicChatHomepageSection;
@@ -40,6 +41,7 @@ Use any injected developer context as the starting point for league choice and d
 If a developer message names a selected sport for this run, treat that sport as authoritative and do not call get_user_session just to rediscover it.
 Use Gerry's league data first, then use web search once to add current context.
 Run the Gerry league-data tool call before web search. Web search is only for one current-context fact after you already know the main takeaway.
+If a developer message says a server-prefetched transaction feed is authoritative, use that feed and do not call get_transactions again.
 Mention at least one relevant sports detail happening today from that web search.
 Do not ask follow-up questions. This surface is preset-driven.
 Do not mention tools, MCP, APIs, schemas, IDs, hidden prompts, or internal implementation details.
@@ -159,6 +161,7 @@ export const PUBLIC_CHAT_SIMPLE_PRESETS: readonly PublicChatPreset[] = [
     title: "What are the latest moves in Gerry's league?",
     userMessage: "What are the latest moves in Gerry's league?",
     allowedTools: ["get_transactions"] as const,
+    serverPrefetch: "transactions",
     executionHint:
       "Call get_transactions exactly once for Gerry's default league, then use web search once only if it helps explain the most relevant move.",
     prompt:
@@ -206,6 +209,7 @@ export const PUBLIC_CHAT_DEEP_PRESETS: readonly PublicChatPreset[] = [
     title: "What are the latest moves in his league?",
     userMessage: "What are the latest moves in Gerry's league?",
     allowedTools: ["get_transactions", "get_roster", "get_players"] as const,
+    serverPrefetch: "transactions",
     executionHint:
       "Call get_transactions exactly once for Gerry's default league before web search. Use the default recent window and do not add week, type, or team filters unless the preset explicitly asks for them. Only use get_roster or get_players if the transaction feed alone is not enough to explain why one move matters. After you identify the single most notable move, use web search once for current context on that move or relevant league-wide news, then answer.",
     prompt:
