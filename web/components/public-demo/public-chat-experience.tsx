@@ -520,12 +520,36 @@ export function PublicChatExperience({
                   Pick a prompt below and watch the live run stream inside the shell.
                 </p>
               </div>
-              <div className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-background px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-foreground">
-                <span className="text-sm leading-none" aria-hidden="true">
-                  {PUBLIC_SPORT_COPY[demoSport].emoji}
-                </span>
-                <span>ESPN</span>
-              </div>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label="Show demo context"
+                    className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-background px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-foreground transition-colors hover:bg-muted"
+                  >
+                    <span className="text-sm leading-none" aria-hidden="true">
+                      {PUBLIC_SPORT_COPY[demoSport].emoji}
+                    </span>
+                    <span>ESPN</span>
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent
+                  align="end"
+                  className="w-[18.5rem] rounded-2xl border-border p-4 text-sm leading-6"
+                >
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                    Demo context
+                  </div>
+                  <p className="mt-2 text-foreground">
+                    This demo is currently running on Gerry&apos;s ESPN{" "}
+                    {PUBLIC_SPORT_COPY[demoSport].label} league.
+                  </p>
+                  <p className="mt-2 text-muted-foreground">
+                    Flaim supports ESPN, Yahoo, and Sleeper for football, baseball,
+                    basketball, and hockey.
+                  </p>
+                </PopoverContent>
+              </Popover>
             </div>
           </div>
 
