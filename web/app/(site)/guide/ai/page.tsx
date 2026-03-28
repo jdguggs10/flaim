@@ -21,6 +21,7 @@ export default function AiGuidePage() {
               '@context': 'https://schema.org',
               '@type': 'HowTo',
               name: 'Use Flaim with Claude for fantasy sports analysis',
+              dateModified: '2026-03-28',
               description: 'Add Flaim as a Claude connector and authorize it for read-only fantasy league access.',
               step: [
                 { '@type': 'HowToStep', name: 'Connect leagues first', text: 'Use https://flaim.app/leagues to connect ESPN, Yahoo, or Sleeper.' },
@@ -33,6 +34,7 @@ export default function AiGuidePage() {
               '@context': 'https://schema.org',
               '@type': 'HowTo',
               name: 'Use Flaim with ChatGPT for fantasy sports analysis',
+              dateModified: '2026-03-28',
               description: 'Add Flaim as a ChatGPT connector for read-only fantasy league analysis.',
               step: [
                 { '@type': 'HowToStep', name: 'Connect leagues first', text: 'Use https://flaim.app/leagues to connect ESPN, Yahoo, or Sleeper.' },
@@ -45,6 +47,7 @@ export default function AiGuidePage() {
               '@context': 'https://schema.org',
               '@type': 'HowTo',
               name: 'Use Flaim with Perplexity for fantasy sports analysis',
+              dateModified: '2026-03-28',
               description: 'Add Flaim as a Perplexity remote connector with OAuth auth and Streamable HTTP transport.',
               step: [
                 { '@type': 'HowToStep', name: 'Connect leagues first', text: 'Use https://flaim.app/leagues to connect ESPN, Yahoo, or Sleeper.' },
@@ -58,7 +61,11 @@ export default function AiGuidePage() {
       />
       <div className="container mx-auto max-w-2xl px-4 py-12">
         <h1 className="mb-4 text-3xl font-bold">AI Assistant Setup</h1>
-        <p className="mb-8 text-muted-foreground">
+        <p className="mb-4 text-lg font-medium text-foreground">
+          Add <code className="rounded bg-muted px-1 py-0.5 text-sm">https://api.flaim.app/mcp</code> as a connector in Claude, ChatGPT, or Perplexity, authorize once, and start asking about your leagues.
+        </p>
+        <p className="text-xs text-muted-foreground">Last updated March 2026</p>
+        <p className="mt-4 mb-8 text-muted-foreground">
           Flaim works with Claude, ChatGPT, and Perplexity today. The setup is similar across all
           three: connect your leagues first in{' '}
           <Link href="/leagues" className="text-primary hover:underline">/leagues</Link>, then
@@ -119,7 +126,9 @@ export default function AiGuidePage() {
               as the server URL.
             </li>
             <li>Authorize Flaim when the browser flow opens.</li>
-            <li>Start a fresh Claude conversation for your first test.</li>
+            <li>Start a fresh Claude conversation for your first test. See the{' '}
+              <Link href="/guide/sports" className="text-primary hover:underline">sports guide</Link>{' '}
+              for example prompts.</li>
           </ol>
           <div className="mt-4 rounded-lg border bg-muted/50 p-4">
             <h3 className="mb-2 font-medium">Claude troubleshooting</h3>

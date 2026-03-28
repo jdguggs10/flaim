@@ -21,6 +21,7 @@ export default function PlatformsGuidePage() {
               '@context': 'https://schema.org',
               '@type': 'HowTo',
               name: 'Connect ESPN fantasy leagues to Flaim',
+              dateModified: '2026-03-28',
               description:
                 'Sync your ESPN fantasy leagues using the Chrome extension or manual credentials, then verify they appear in Flaim.',
               step: [
@@ -33,6 +34,7 @@ export default function PlatformsGuidePage() {
               '@context': 'https://schema.org',
               '@type': 'HowTo',
               name: 'Connect Yahoo fantasy leagues to Flaim',
+              dateModified: '2026-03-28',
               description:
                 'Start Yahoo OAuth from /leagues, approve access, and wait for league discovery to finish.',
               step: [
@@ -45,6 +47,7 @@ export default function PlatformsGuidePage() {
               '@context': 'https://schema.org',
               '@type': 'HowTo',
               name: 'Connect Sleeper fantasy leagues to Flaim',
+              dateModified: '2026-03-28',
               description:
                 'Enter your exact Sleeper username in /leagues and wait for league discovery.',
               step: [
@@ -58,7 +61,12 @@ export default function PlatformsGuidePage() {
       />
       <div className="container mx-auto max-w-2xl px-4 py-12">
         <h1 className="mb-4 text-3xl font-bold">Fantasy Platform Setup</h1>
-        <p className="mb-8 text-muted-foreground">
+        <p className="mb-4 text-lg font-medium text-foreground">
+          Flaim connects to ESPN via Chrome extension, Yahoo via OAuth, and Sleeper via username — all from{' '}
+          <Link href="/leagues" className="text-primary hover:underline">/leagues</Link>.
+        </p>
+        <p className="text-xs text-muted-foreground">Last updated March 2026</p>
+        <p className="mt-4 mb-8 text-muted-foreground">
           Connect your fantasy platforms in{' '}
           <Link href="/leagues" className="text-primary hover:underline">/leagues</Link> before
           adding Flaim to your AI assistant. Each platform connects differently, but the goal is
@@ -107,7 +115,8 @@ export default function PlatformsGuidePage() {
               If Flaim asks for league IDs, add the private leagues you care about and run
               verification again.
             </li>
-            <li>Wait until your ESPN leagues show up before moving on to AI setup.</li>
+            <li>Wait until your ESPN leagues show up before moving on to{' '}
+              <Link href="/guide/ai" className="text-primary hover:underline">AI setup</Link>.</li>
           </ol>
           <div className="mt-4 rounded-lg border bg-muted/50 p-4">
             <h3 className="mb-2 font-medium">ESPN troubleshooting</h3>

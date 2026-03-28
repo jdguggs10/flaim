@@ -16,7 +16,10 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Flaim Fantasy — Connect Your Fantasy Leagues to AI",
+  title: {
+    default: 'Flaim Fantasy — Connect Your Fantasy Leagues to AI',
+    template: '%s | Flaim',
+  },
   description: "Flaim connects your ESPN, Yahoo, and Sleeper fantasy leagues to Claude, ChatGPT, and Perplexity. Get AI analysis based on your real roster, matchups, standings, and waiver wire — read-only.",
   metadataBase: new URL('https://flaim.app'),
   openGraph: {
@@ -58,27 +61,41 @@ export default function RootLayout({
           <script
             type="application/ld+json"
             dangerouslySetInnerHTML={{
-              __html: JSON.stringify({
-                '@context': 'https://schema.org',
-                '@type': 'SoftwareApplication',
-                name: 'Flaim Fantasy',
-                description: 'Flaim connects your ESPN, Yahoo, and Sleeper fantasy leagues to Claude, ChatGPT, and Perplexity for read-only, league-specific analysis.',
-                applicationCategory: 'SportsApplication',
-                applicationSubCategory: 'Fantasy Sports AI Tool',
-                operatingSystem: 'Web',
-                url: 'https://flaim.app',
-                offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
-                featureList: [
-                  'ESPN fantasy league integration',
-                  'Yahoo fantasy league integration',
-                  'Sleeper fantasy league integration',
-                  'MCP (Model Context Protocol) server',
-                  'Works with Claude, ChatGPT, and Perplexity',
-                  'Read-only access — no trades, drops, or roster changes',
-                  '9 MCP tools: roster, standings, matchups, free agents, transactions, league info, player search, league history, session',
-                ],
-                author: { '@type': 'Person', name: 'Gerry' },
-              }),
+              __html: JSON.stringify([
+                {
+                  '@context': 'https://schema.org',
+                  '@type': 'SoftwareApplication',
+                  name: 'Flaim Fantasy',
+                  description: 'Flaim connects your ESPN, Yahoo, and Sleeper fantasy leagues to Claude, ChatGPT, and Perplexity for read-only, league-specific analysis.',
+                  applicationCategory: 'SportsApplication',
+                  applicationSubCategory: 'Fantasy Sports AI Tool',
+                  operatingSystem: 'Web',
+                  url: 'https://flaim.app',
+                  offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+                  featureList: [
+                    'ESPN fantasy league integration',
+                    'Yahoo fantasy league integration',
+                    'Sleeper fantasy league integration',
+                    'MCP (Model Context Protocol) server',
+                    'Works with Claude, ChatGPT, and Perplexity',
+                    'Read-only access — no trades, drops, or roster changes',
+                    '9 MCP tools: roster, standings, matchups, free agents, transactions, league info, player search, league history, session',
+                  ],
+                  author: { '@type': 'Person', name: 'Gerry' },
+                },
+                {
+                  '@context': 'https://schema.org',
+                  '@type': 'Organization',
+                  name: 'Flaim',
+                  url: 'https://flaim.app',
+                  logo: 'https://flaim.app/flaim-mark-hero.png',
+                  founder: { '@type': 'Person', name: 'Gerry' },
+                  sameAs: [
+                    'https://github.com/jdguggs10/flaim',
+                    'https://www.threads.com/@jdguggs10',
+                  ],
+                },
+              ]),
             }}
           />
           <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange storageKey="flaim-theme">

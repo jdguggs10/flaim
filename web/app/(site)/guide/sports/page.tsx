@@ -19,6 +19,7 @@ export default function SportsGuidePage() {
           __html: JSON.stringify({
             '@context': 'https://schema.org',
             '@type': 'FAQPage',
+            dateModified: '2026-03-28',
             mainEntity: [
               {
                 '@type': 'Question',
@@ -50,7 +51,11 @@ export default function SportsGuidePage() {
       />
       <div className="container mx-auto max-w-2xl px-4 py-12">
         <h1 className="mb-4 text-3xl font-bold">Fantasy Sports Analysis</h1>
-        <p className="mb-8 text-muted-foreground">
+        <p className="mb-4 text-lg font-medium text-foreground">
+          Flaim supports football, baseball, basketball, and hockey on ESPN and Yahoo, plus football and basketball on Sleeper — all read-only.
+        </p>
+        <p className="text-xs text-muted-foreground">Last updated March 2026</p>
+        <p className="mt-4 mb-8 text-muted-foreground">
           Flaim is more than a data connection. It teaches your AI how to think about fantasy
           sports through the Flaim Skill and a set of read-only tools that work across ESPN,
           Yahoo, and Sleeper.
@@ -130,7 +135,7 @@ export default function SportsGuidePage() {
         <section id="football" className="mb-10 scroll-mt-20">
           <h2 className="mb-3 text-xl font-semibold">Football</h2>
           <p className="mb-4 text-muted-foreground">
-            Football is available on ESPN, Yahoo, and Sleeper. Head-to-head matchups, waiver
+            Football is available on <Link href="/guide/platforms#espn" className="text-primary hover:underline">ESPN</Link>, <Link href="/guide/platforms#yahoo" className="text-primary hover:underline">Yahoo</Link>, and <Link href="/guide/platforms#sleeper" className="text-primary hover:underline">Sleeper</Link>. Head-to-head matchups, waiver
             wire strategy, and bye week management are where Flaim shines most. The weekly
             cadence of football makes roster decisions high-stakes, and Flaim helps your AI
             reason through them with your actual lineup and scoring context.
@@ -151,7 +156,7 @@ export default function SportsGuidePage() {
         <section id="baseball" className="mb-10 scroll-mt-20">
           <h2 className="mb-3 text-xl font-semibold">Baseball</h2>
           <p className="mb-4 text-muted-foreground">
-            Baseball is available on ESPN and Yahoo. The daily roster churn, streaming pitchers,
+            Baseball is available on <Link href="/guide/platforms#espn" className="text-primary hover:underline">ESPN</Link> and <Link href="/guide/platforms#yahoo" className="text-primary hover:underline">Yahoo</Link>. The daily roster churn, streaming pitchers,
             and category-based scoring make baseball leagues information-dense. Flaim helps your
             AI cut through the noise by focusing on your league&apos;s specific categories and
             your roster&apos;s actual strengths and weaknesses.
@@ -172,7 +177,7 @@ export default function SportsGuidePage() {
         <section id="basketball" className="mb-10 scroll-mt-20">
           <h2 className="mb-3 text-xl font-semibold">Basketball</h2>
           <p className="mb-4 text-muted-foreground">
-            Basketball is available on ESPN, Yahoo, and Sleeper. The long season and multi-game
+            Basketball is available on <Link href="/guide/platforms#espn" className="text-primary hover:underline">ESPN</Link>, <Link href="/guide/platforms#yahoo" className="text-primary hover:underline">Yahoo</Link>, and <Link href="/guide/platforms#sleeper" className="text-primary hover:underline">Sleeper</Link>. The long season and multi-game
             weeks create a steady stream of roster decisions. Flaim helps your AI track
             standings, evaluate trades, and find waiver targets based on your league&apos;s
             format.
@@ -192,7 +197,7 @@ export default function SportsGuidePage() {
         <section id="hockey" className="mb-10 scroll-mt-20">
           <h2 className="mb-3 text-xl font-semibold">Hockey</h2>
           <p className="mb-4 text-muted-foreground">
-            Hockey is available on ESPN and Yahoo. Flaim gives your AI access to rosters,
+            Hockey is available on <Link href="/guide/platforms#espn" className="text-primary hover:underline">ESPN</Link> and <Link href="/guide/platforms#yahoo" className="text-primary hover:underline">Yahoo</Link>. Flaim gives your AI access to rosters,
             standings, matchups, and transactions for hockey leagues. The same tools and skill
             that power football and baseball analysis work here, grounded in your league&apos;s
             scoring and format.
@@ -211,6 +216,9 @@ export default function SportsGuidePage() {
         {/* Platform coverage matrix */}
         <section className="mb-10">
           <h2 className="mb-3 text-xl font-semibold">Platform coverage</h2>
+          <p className="mb-4 text-sm text-muted-foreground">
+            See the <Link href="/guide/platforms" className="text-primary hover:underline">platform setup guide</Link> for connection instructions.
+          </p>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>

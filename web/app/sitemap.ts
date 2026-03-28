@@ -7,48 +7,40 @@ function getBaseUrl(): string {
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const baseUrl = getBaseUrl();
-  const lastModified = new Date();
 
   return [
     {
       url: baseUrl,
-      lastModified,
       changeFrequency: 'weekly',
       priority: 1,
     },
     {
       url: `${baseUrl}/privacy`,
-      lastModified,
       changeFrequency: 'yearly',
       priority: 0.7,
     },
     {
       url: `${baseUrl}/terms`,
-      lastModified,
       changeFrequency: 'yearly',
       priority: 0.7,
     },
     {
       url: `${baseUrl}/guide/platforms`,
-      lastModified,
       changeFrequency: 'monthly',
       priority: 0.9,
     },
     {
       url: `${baseUrl}/guide/sports`,
-      lastModified,
       changeFrequency: 'monthly',
       priority: 0.8,
     },
     {
       url: `${baseUrl}/guide/ai`,
-      lastModified,
       changeFrequency: 'monthly',
       priority: 0.9,
     },
     {
       url: `${baseUrl}/inspirations`,
-      lastModified,
       changeFrequency: 'monthly',
       priority: 0.6,
     },

@@ -50,7 +50,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
                 name: 'Do I need a Chrome extension?',
                 acceptedAnswer: {
                   '@type': 'Answer',
-                  text: 'Only for ESPN. Yahoo uses OAuth, Sleeper uses your username, and your AI assistant connects through Flaim after your leagues are linked.',
+                  text: 'Only for ESPN. The Flaim Chrome extension syncs your ESPN cookies automatically so Flaim can read your private leagues. Yahoo connects through OAuth, Sleeper just needs your username, and your AI assistant connects to Flaim separately using a single MCP URL — no extension required for the AI side.',
                 },
               },
               {
@@ -58,7 +58,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
                 name: 'Which AI apps work with Flaim?',
                 acceptedAnswer: {
                   '@type': 'Answer',
-                  text: 'Flaim works with Claude, ChatGPT, and Perplexity today. Gemini and Grok are not available yet.',
+                  text: 'Flaim works with Claude, ChatGPT, and Perplexity today using the Model Context Protocol (MCP). You add one URL — https://api.flaim.app/mcp — as a connector in any of these AI apps, authorize once, and Flaim handles the rest. Gemini and Grok do not support MCP connectors yet.',
                 },
               },
               {
@@ -66,7 +66,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
                 name: 'Can Flaim change anything in my leagues?',
                 acceptedAnswer: {
                   '@type': 'Answer',
-                  text: 'No. Flaim is read-only. It can inspect your leagues, rosters, standings, transactions, and free agents, but it cannot make trades, add players, or change league settings.',
+                  text: 'No. Flaim is read-only by design. It can inspect your rosters, standings, matchups, transactions, free agents, player details, league settings, and league history across ESPN, Yahoo, and Sleeper — but it cannot make trades, drop players, change lineups, or modify any league settings. This applies to all platforms and all sports.',
                 },
               },
               {
@@ -74,7 +74,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
                 name: 'Where do I finish setup?',
                 acceptedAnswer: {
                   '@type': 'Answer',
-                  text: 'Use flaim.app/leagues to connect platforms, copy your MCP setup details, and set defaults for your favorite sport or team.',
+                  text: 'Use flaim.app/leagues to connect your fantasy platforms, then add Flaim to your AI assistant using the MCP URL shown on that page. Setup takes about 5 minutes. The setup guides at flaim.app/guide/platforms and flaim.app/guide/ai walk through each step with troubleshooting tips.',
                 },
               },
             ],
@@ -298,7 +298,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
                 <ChevronDown className="ml-2 h-5 w-5 transition-transform group-open:rotate-180" />
               </summary>
               <div className="px-4 pb-4 text-sm text-muted-foreground space-y-2">
-                <p>Only for ESPN. Yahoo uses OAuth, Sleeper uses your username, and your AI assistant connects through Flaim after your leagues are linked.</p>
+                <p>Only for ESPN. The Flaim Chrome extension syncs your ESPN cookies automatically so Flaim can read your private leagues. Yahoo connects through OAuth, Sleeper just needs your username, and your AI assistant connects to Flaim separately using a single MCP URL — no extension required for the AI side.</p>
               </div>
             </details>
 
@@ -309,7 +309,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
                 <ChevronDown className="ml-2 h-5 w-5 transition-transform group-open:rotate-180" />
               </summary>
               <div className="px-4 pb-4 text-sm text-muted-foreground space-y-2">
-                <p>Claude, ChatGPT, and Perplexity today. Gemini and Grok are not available yet. See the <Link href="/guide/ai#gemini" className="text-primary hover:underline">AI setup guide</Link> for current status.</p>
+                <p>Claude, ChatGPT, and Perplexity today using the Model Context Protocol (MCP). You add one URL — <code className="rounded bg-muted px-1 py-0.5 text-xs">https://api.flaim.app/mcp</code> — as a connector in any of these AI apps, authorize once, and Flaim handles the rest. Gemini and Grok do not support MCP connectors yet. See the <Link href="/guide/ai#gemini" className="text-primary hover:underline">AI setup guide</Link> for current status.</p>
               </div>
             </details>
 
@@ -320,7 +320,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
                 <ChevronDown className="ml-2 h-5 w-5 transition-transform group-open:rotate-180" />
               </summary>
               <div className="px-4 pb-4 text-sm text-muted-foreground space-y-2">
-                <p>No. Flaim is read-only. It can inspect your leagues, rosters, standings, transactions, and free agents, but it cannot make trades, add players, or change league settings.</p>
+                <p>No. Flaim is read-only by design. It can inspect your rosters, standings, matchups, transactions, free agents, player details, league settings, and league history across ESPN, Yahoo, and Sleeper — but it cannot make trades, drop players, change lineups, or modify any league settings. This applies to all platforms and all sports.</p>
               </div>
             </details>
 
@@ -331,7 +331,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
                 <ChevronDown className="ml-2 h-5 w-5 transition-transform group-open:rotate-180" />
               </summary>
               <div className="px-4 pb-4 text-sm text-muted-foreground space-y-2">
-                <p>Use <Link href="/leagues" className="text-primary hover:underline">Your Leagues</Link> to connect platforms, copy your MCP setup details, and set defaults for your favorite sport or team.</p>
+                <p>Use <Link href="/leagues" className="text-primary hover:underline">Your Leagues</Link> to connect your fantasy platforms, then add Flaim to your AI assistant using the MCP URL shown on that page. Setup takes about 5 minutes. The <Link href="/guide/platforms" className="text-primary hover:underline">platform setup guide</Link> and <Link href="/guide/ai" className="text-primary hover:underline">AI setup guide</Link> walk through each step with troubleshooting tips.</p>
               </div>
             </details>
 
