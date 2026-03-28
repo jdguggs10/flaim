@@ -82,7 +82,7 @@ export async function getEspnPlayersIndex(
 
   const gameId = GAME_ID_MAP[sport];
   const limit = PLAYER_LIMITS[sport];
-  const path = `/seasons/${year}/players?view=players_wl`;
+  const path = `/seasons/${year}/players?scoringPeriodId=0&view=players_wl`;
   const filterHeader = JSON.stringify({
     limit,
     sortPercOwned: { sortPriority: 1, sortAsc: false },

@@ -61,7 +61,7 @@ describe('espn-transactions', () => {
       expect(map.get('4362887')?.fullName).toBe('Geno Smith');
 
       const url = mockFetch.mock.calls[0]?.[0] as string;
-      expect(url).toContain('/players?view=players_wl');
+      expect(url).toContain('/players?scoringPeriodId=0&view=players_wl');
       expect(url).not.toContain('/leagues/');
 
       const init = mockFetch.mock.calls[0]?.[1] as RequestInit;

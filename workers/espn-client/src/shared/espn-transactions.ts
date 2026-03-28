@@ -460,7 +460,7 @@ export async function fetchEspnPlayersByIds(
   if (playerIds.length === 0) return map;
 
   const numericIds = playerIds.map(Number).filter(Number.isFinite);
-  const path = `/seasons/${seasonYear}/players?view=players_wl`;
+  const path = `/seasons/${seasonYear}/players?scoringPeriodId=0&view=players_wl`;
   const filterHeader = JSON.stringify({ filterIds: { value: numericIds } });
 
   const res = await espnFetch(path, gameId, {
