@@ -1,6 +1,6 @@
 # Database Schema (Supabase)
 
-This is a lightweight map of the current Supabase tables used by Flaim. The authoritative source of truth is the migrations in `docs/migrations/`.
+This is a lightweight map of the current Supabase tables used by Flaim. The authoritative SQL migrations live in the private `flaim-docs` repository under `migrations/` (numbered `*.sql` files), not in this repo.
 
 ## Core Tables
 
@@ -222,4 +222,4 @@ These tables remain for historical data but are no longer used in current flows.
 ## Notes
 - Supabase service role is used in workers; RLS is enabled on all public tables but bypassed by service role. No RLS policies are needed since there is no direct client access — all queries go through workers using the service role key.
 - ESPN credentials are encrypted at rest by Supabase.
-- Migrations live in `docs/migrations/` and should be treated as the canonical schema reference.
+- Run those migrations in order when provisioning or updating the database; they are the canonical schema reference.

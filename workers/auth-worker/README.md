@@ -144,7 +144,7 @@ wrangler secret put EVAL_USER_ID --env prod    # paste Clerk user ID
 
 ### 1. Supabase
 
-Run migrations from `docs/migrations/` in order.
+Run SQL migrations from the private `flaim-docs` repository (`migrations/` directory, numbered files) in order.
 
 ### 2. Cloudflare Secrets
 

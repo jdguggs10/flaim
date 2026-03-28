@@ -5,7 +5,7 @@
  * Handles platform OAuth state (CSRF protection), Yahoo OAuth credentials,
  * and discovered Yahoo Fantasy leagues.
  *
- * Tables required (see docs/migrations/009_yahoo_platform.sql):
+ * Tables required (see flaim-docs/migrations/009_yahoo_platform.sql):
  * - platform_oauth_states: CSRF protection for platform OAuth flows
  * - yahoo_credentials: OAuth tokens for Yahoo Fantasy API access
  * - yahoo_leagues: Discovered Yahoo Fantasy leagues
