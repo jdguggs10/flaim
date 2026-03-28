@@ -104,6 +104,9 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
             Perplexity, giving the AI you already use your real roster,
             matchups, standings, waiver wire, and league activity.
           </p>
+          <p className="mx-auto mt-4 max-w-2xl text-sm leading-6 text-muted-foreground">
+            Stop copying stats into ChatGPT. Just connect your leagues.
+          </p>
           <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
             <SignedOut>
               <Button asChild size="lg">
@@ -125,6 +128,12 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
         </div>
       </section>
 
+      <section className="px-4 text-center">
+        <p className="text-xs text-muted-foreground">
+          This is Gerry&apos;s actual league data, live.
+        </p>
+      </section>
+
       <PublicChatExperience
         id="live-demo"
         initialPresetId={initialPresetId ?? null}
@@ -137,7 +146,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
               href="/guide/platforms"
               className="text-[11px] font-semibold uppercase tracking-[0.18em] text-foreground/70 hover:text-primary transition-colors"
             >
-              Platforms supported
+              Platforms
             </Link>
             <div className="mt-3 flex flex-wrap gap-2">
               <Link
@@ -165,7 +174,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
               href="/guide/sports"
               className="text-[11px] font-semibold uppercase tracking-[0.18em] text-foreground/70 hover:text-primary transition-colors"
             >
-              Sports supported
+              Sports
             </Link>
             <div className="mt-3 flex flex-wrap gap-2">
               <Link
@@ -199,7 +208,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
               href="/guide/ai"
               className="text-[11px] font-semibold uppercase tracking-[0.18em] text-foreground/70 hover:text-primary transition-colors"
             >
-              AI supported
+              Works with
             </Link>
             <div className="mt-3 flex flex-wrap gap-2">
               <Link
@@ -355,7 +364,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
       </section>
 
       {/* Setup CTA */}
-      <section className="py-10 px-4">
+      <section className="py-10 px-4 bg-muted">
         <div className="container max-w-2xl mx-auto text-center">
           <h2 className="text-2xl font-bold mb-2">
             Ready to connect your leagues?
