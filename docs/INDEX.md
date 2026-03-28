@@ -8,7 +8,7 @@ Canonical map for docs that live inside this repository.
 |---|---|---|
 | Product/tool overview | `README.md`, `docs/CONNECTOR-DOCS.md` | User-facing capabilities and setup.
 | Runtime topology | `docs/ARCHITECTURE.md` | Deploy and service interaction model.
-| Data model summary | `docs/DATABASE.md` | Schema overview; migrations in `docs/migrations/`.
+| Data model summary | `docs/DATABASE.md` | Schema overview; SQL migrations are maintained in the private `flaim-docs` repo (`migrations/`).
 | Testing approach | `docs/TESTING.md` | Practical test scope and commands.
 | Release history | `docs/CHANGELOG.md` | Condensed release notes.
 | Worker behavior | `workers/*/README.md` | Service-specific implementation notes.

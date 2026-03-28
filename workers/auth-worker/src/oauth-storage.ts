@@ -5,7 +5,7 @@
  * Handles OAuth 2.1 authorization codes and access tokens for Claude
  * direct access via MCP connectors.
  *
- * Tables required (see docs/migrations/001_oauth_tables.sql):
+ * Tables required (see flaim-docs/migrations/001_oauth_tables.sql):
  * - oauth_codes: Authorization codes (short-lived, one-time use)
  * - oauth_tokens: Access tokens (longer-lived, revocable)
  *
