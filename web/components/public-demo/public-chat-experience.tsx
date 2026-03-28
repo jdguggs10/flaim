@@ -518,20 +518,6 @@ export function PublicChatExperience({
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_bottom,transparent_0,transparent_23px,var(--border)_24px)] bg-[length:100%_24px] opacity-20" />
 
       <div className="relative mx-auto max-w-2xl">
-        <section className="pb-4 sm:pb-6">
-          <div className="mb-3 text-[10px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">
-            Live Proof
-          </div>
-          <h2 className="w-full text-[2rem] font-semibold leading-[0.96] tracking-[-0.05em] text-foreground sm:text-5xl">
-            Watch Flaim work on Gerry&apos;s real league.
-          </h2>
-          <p className="mt-3 max-w-xl text-sm leading-6 text-muted-foreground sm:text-base">
-            The demo is intentionally personal so you can watch Flaim reason
-            over live data in a real league. The product itself connects your
-            own ESPN, Yahoo, and Sleeper leagues to the AI you already use.
-          </p>
-        </section>
-
         <Card className="overflow-hidden rounded-[2rem] border-border/70 bg-card/95 p-0 shadow-[0_30px_90px_-42px_rgba(15,23,42,0.45)] backdrop-blur dark:shadow-[0_30px_90px_-42px_rgba(0,0,0,0.82)] sm:rounded-[2.3rem]">
           <div className="border-b border-border/70 bg-card px-4 py-3 sm:px-5">
             <div className="flex items-center justify-between gap-3">
