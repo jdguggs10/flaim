@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 import { parse } from "partial-json";
 import { ArrowUp, LoaderCircle, Plus } from "lucide-react";
 import Image from "next/image";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PublicToolCall } from "./public-tool-call";
 import { PublicMessage } from "./public-message";
@@ -629,6 +630,18 @@ export function PublicChatExperience({
 
                 {assistantText ? (
                   <PublicMessage role="assistant" text={assistantText} />
+                ) : null}
+
+                {runStatus === "completed" ? (
+                  <div className="px-1 pt-2 text-center text-sm text-muted-foreground">
+                    That&apos;s Gerry&apos;s league.{" "}
+                    <Link
+                      href="/leagues"
+                      className="text-primary hover:underline"
+                    >
+                      Want to connect yours?
+                    </Link>
+                  </div>
                 ) : null}
 
                 {runStatus === "error" ? (

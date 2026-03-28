@@ -107,18 +107,6 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
           <p className="mx-auto mt-4 max-w-2xl text-sm leading-6 text-muted-foreground">
             Stop copying stats into ChatGPT. Just connect your leagues.
           </p>
-          <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-            <SignedOut>
-              <Button asChild size="lg">
-                <Link href="/leagues">Set up Flaim</Link>
-              </Button>
-            </SignedOut>
-            <SignedIn>
-              <Button asChild size="lg">
-                <Link href="/leagues">Your Leagues</Link>
-              </Button>
-            </SignedIn>
-          </div>
         </div>
       </section>
 
@@ -220,6 +208,20 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
             </div>
           </div>
         </div>
+      </section>
+
+      {/* Primary CTA */}
+      <section className="px-4 pb-10 text-center">
+        <SignedOut>
+          <Button asChild size="lg">
+            <Link href="/leagues">Set up Flaim</Link>
+          </Button>
+        </SignedOut>
+        <SignedIn>
+          <Button asChild size="lg">
+            <Link href="/leagues">Your Leagues</Link>
+          </Button>
+        </SignedIn>
       </section>
 
       {/* What You Can Ask */}
