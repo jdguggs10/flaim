@@ -112,16 +112,10 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
               <Button asChild size="lg">
                 <Link href="/leagues">Set up Flaim</Link>
               </Button>
-              <Button asChild variant="outline" size="lg">
-                <Link href="/#live-demo">Watch live demo</Link>
-              </Button>
             </SignedOut>
             <SignedIn>
               <Button asChild size="lg">
                 <Link href="/leagues">Your Leagues</Link>
-              </Button>
-              <Button asChild size="lg" variant="outline">
-                <Link href="/#live-demo">Watch live demo</Link>
               </Button>
             </SignedIn>
           </div>
