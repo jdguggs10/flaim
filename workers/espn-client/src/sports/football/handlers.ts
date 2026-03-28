@@ -474,11 +474,12 @@ async function handleSearchPlayers(
     // Normalize common D/ST alias so "DST" matches ESPN's "D/ST" label
     const rawPosition = position?.trim().toUpperCase();
     const normalizedPosition = rawPosition === 'DST' ? 'D/ST' : rawPosition;
+    const filterByPosition = normalizedPosition && normalizedPosition !== 'ALL';
 
     const players = Array.from(playersIndex.values())
       .filter((p) => p.fullName.toLowerCase().includes(normalizedQuery))
       .filter((p) => {
-        if (!normalizedPosition) return true;
+        if (!filterByPosition) return true;
         return getPositionName(p.defaultPositionId).toUpperCase() === normalizedPosition;
       })
       .slice(0, limit)
