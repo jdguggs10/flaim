@@ -11,6 +11,7 @@ const nextConfig: NextConfig = {
       { source: '/guide/chatgpt', destination: '/guide/ai', permanent: true },
       { source: '/guide/perplexity', destination: '/guide/ai', permanent: true },
       { source: '/guide/gemini', destination: '/guide/ai', permanent: true },
+      { source: '/chat', destination: '/#live-demo', permanent: true },
     ];
   },
   async headers() {

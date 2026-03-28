@@ -1,8 +1,11 @@
 import type { Metadata } from 'next';
-import { SignedOut } from '@clerk/nextjs';
+import { SignedIn, SignedOut } from '@clerk/nextjs';
 import { PublicChatExperience } from '@/components/public-demo/public-chat-experience';
 
 export const metadata: Metadata = {
+  title: 'Flaim — Connect ESPN, Yahoo & Sleeper Fantasy Leagues to AI',
+  description:
+    'Flaim gives Claude, ChatGPT, and Perplexity read-only access to your real fantasy league data — rosters, standings, matchups, waiver wire, and transactions across football, baseball, basketball, and hockey.',
   alternates: {
     canonical: 'https://flaim.app',
   },
@@ -14,7 +17,7 @@ import {
   PUBLIC_CHAT_SIMPLE_PRESETS,
   PUBLIC_CHAT_TOOL_DISPLAY_LABELS,
 } from '@/lib/public-chat';
-import { ArrowRight, ChevronDown, ShieldCheck, Sparkles } from 'lucide-react';
+import { ArrowRight, ChevronDown, ShieldCheck, SlidersHorizontal, Sparkles } from 'lucide-react';
 
 interface LandingPageProps {
   searchParams?: Promise<{
@@ -97,11 +100,13 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
                 <Link href="/leagues">Set up Flaim</Link>
               </Button>
             </SignedOut>
+            <SignedIn>
+              <Button asChild size="lg" variant="outline">
+                <Link href="/leagues">Your Leagues</Link>
+              </Button>
+            </SignedIn>
           </div>
         </div>
-        <p className="sr-only">
-          Flaim is a free, open-source MCP server that gives Claude, ChatGPT, and Perplexity read-only access to your actual fantasy league data: rosters, standings, matchups, free agents, and transactions across football, baseball, basketball, and hockey. It works with ESPN, Yahoo, and Sleeper. Setup takes about 5 minutes, and nothing in your league can be changed.
-        </p>
       </section>
 
       <PublicChatExperience
@@ -227,7 +232,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
           </div>
           <div className="rounded-xl border bg-background p-4">
             <div className="flex items-center gap-2 font-medium">
-              <ArrowRight className="h-4 w-4 text-primary" />
+              <SlidersHorizontal className="h-4 w-4 text-primary" />
               Set defaults once
             </div>
             <p className="mt-2 text-sm text-muted-foreground">
@@ -238,7 +243,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
       </section>
 
       {/* Share */}
-      <section className="py-10 px-4 bg-muted">
+      <section className="py-10 px-4">
         <div className="container max-w-2xl mx-auto text-center">
           <h2 className="text-2xl font-bold mb-2">Using Flaim for something amazing?</h2>
           <p className="text-muted-foreground">
@@ -269,6 +274,11 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
                 <Link href="/leagues">Set up Flaim</Link>
               </Button>
             </SignedOut>
+            <SignedIn>
+              <Button asChild size="lg">
+                <Link href="/leagues">Your Leagues</Link>
+              </Button>
+            </SignedIn>
             <Button asChild variant="outline" size="lg">
               <Link href="/guide/platforms">Setup guides</Link>
             </Button>

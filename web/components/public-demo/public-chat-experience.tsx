@@ -503,9 +503,9 @@ export function PublicChatExperience({
 
       <div className="relative mx-auto max-w-2xl">
         <section className="pb-4 sm:pb-6">
-          <h1 className="w-full text-[2rem] font-semibold leading-[0.96] tracking-[-0.05em] text-foreground sm:text-5xl">
-            Watch Flaim work on my actual leagues right now.
-          </h1>
+          <h2 className="w-full text-[2rem] font-semibold leading-[0.96] tracking-[-0.05em] text-foreground sm:text-5xl">
+            Watch Flaim work on a real league right now.
+          </h2>
         </section>
 
         <Card className="overflow-hidden rounded-[2rem] border-border/70 bg-card/95 p-0 shadow-[0_30px_90px_-42px_rgba(15,23,42,0.45)] backdrop-blur dark:shadow-[0_30px_90px_-42px_rgba(0,0,0,0.82)] sm:rounded-[2.3rem]">
@@ -575,6 +575,9 @@ export function PublicChatExperience({
                       <h3 className="mt-4 text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
                         Ask something
                       </h3>
+                      <p className="mt-2 text-sm text-muted-foreground">
+                        Pick a prompt below — this runs live on a real ESPN league.
+                      </p>
                     </div>
                   </div>
                 ) : null}
