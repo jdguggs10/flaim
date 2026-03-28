@@ -50,11 +50,12 @@ async function handleSearchPlayers(
     const playersIndex = await getEspnPlayersIndex(env, 'basketball', season_year);
     const normalizedQuery = query.toLowerCase();
     const normalizedPosition = position?.trim().toUpperCase();
+    const filterByPosition = normalizedPosition && normalizedPosition !== 'ALL';
 
     const players = Array.from(playersIndex.values())
       .filter((p) => p.fullName.toLowerCase().includes(normalizedQuery))
       .filter((p) => {
-        if (!normalizedPosition) return true;
+        if (!filterByPosition) return true;
         return getPositionName(p.defaultPositionId).toUpperCase() === normalizedPosition;
       })
       .slice(0, limit)
