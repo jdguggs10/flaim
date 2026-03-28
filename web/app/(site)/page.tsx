@@ -3,9 +3,9 @@ import { SignedIn, SignedOut } from "@clerk/nextjs";
 import { PublicChatExperience } from "@/components/public-demo/public-chat-experience";
 
 export const metadata: Metadata = {
-  title: "Connect Fantasy Leagues to Claude, ChatGPT & Perplexity",
+  title: "Flaim — Connect ESPN, Yahoo & Sleeper Fantasy Leagues to AI",
   description:
-    "Flaim connects ESPN, Yahoo, and Sleeper league data to Claude, ChatGPT, and Perplexity for read-only roster, matchup, standings, waiver wire, and transaction analysis.",
+    "Flaim gives Claude, ChatGPT, and Perplexity read-only access to your real fantasy league data — rosters, standings, matchups, waiver wire, and transactions across football, baseball, basketball, and hockey.",
   alternates: {
     canonical: "https://flaim.app",
   },
@@ -91,23 +91,18 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
       <section className="px-4 py-12 text-center md:py-16">
         <div className="mx-auto max-w-3xl">
           <p className="mb-4 text-xs font-semibold uppercase tracking-[0.28em] text-muted-foreground">
-            Read-only Fantasy Analysis Layer
+            Read-only Fantasy Analysis
           </p>
           <h1 className="mb-4 text-4xl font-bold md:text-6xl">
-            Fantasy league context
+            Your real fantasy leagues,
             <span className="block text-muted-foreground">
-              for the AI you already use.
+              connected to your AI.
             </span>
           </h1>
           <p className="mx-auto max-w-2xl text-lg text-muted-foreground md:text-xl">
-            Flaim connects ESPN, Yahoo, and Sleeper league data to Claude,
-            ChatGPT, and Perplexity so your answers can use your real roster,
-            matchups, standings, waiver wire, and league activity instead of
-            generic fantasy advice.
-          </p>
-          <p className="mx-auto mt-4 max-w-2xl text-sm leading-6 text-muted-foreground">
-            It is not a new chatbot. It is the read-only connector layer that
-            makes the AI you already pay for better at fantasy sports.
+            Flaim connects ESPN, Yahoo, and Sleeper to Claude, ChatGPT, and
+            Perplexity, giving the AI you already use your real roster,
+            matchups, standings, waiver wire, and league activity.
           </p>
           <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
             <SignedOut>
@@ -234,11 +229,11 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
       <section className="py-10 px-4 bg-muted">
         <div className="container max-w-2xl mx-auto">
           <h2 className="text-2xl font-bold text-center mb-2">
-            What Flaim can answer quickly
+            What you can ask
           </h2>
           <p className="text-center text-muted-foreground mb-8">
-            Start simple. These prompts highlight the core league data Flaim can
-            bring into your AI workflow.
+            Start simple. These quick prompts each show off one core Flaim
+            capability.
           </p>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {homepageSimplePresets.map((preset) => (
@@ -261,11 +256,10 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
       <section className="py-10 px-4">
         <div className="container max-w-2xl mx-auto">
           <h2 className="text-2xl font-bold text-center mb-2">
-            Where Flaim gets interesting
+            Go deeper
           </h2>
           <p className="text-center text-muted-foreground mb-8">
-            These prompts combine multiple Flaim tools with live web context to
-            produce actual analysis instead of a raw data dump.
+            These prompts combine multiple Flaim tools and live web context.
           </p>
           <div className="grid gap-2 sm:grid-cols-2">
             {homepageDeepPresets.map((preset) => (
@@ -339,6 +333,27 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
         </div>
       </section>
 
+      {/* Share */}
+      <section className="py-10 px-4">
+        <div className="container max-w-2xl mx-auto text-center">
+          <h2 className="text-2xl font-bold mb-2">
+            Using Flaim for something amazing?
+          </h2>
+          <p className="text-muted-foreground">
+            I&apos;d love to hear about it.{" "}
+            <a
+              href="https://www.threads.com/@jdguggs10"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary hover:underline"
+            >
+              Share it with me on Threads
+            </a>
+            .
+          </p>
+        </div>
+      </section>
+
       {/* Setup CTA */}
       <section className="py-10 px-4">
         <div className="container max-w-2xl mx-auto text-center">
@@ -346,9 +361,8 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
             Ready to connect your leagues?
           </h2>
           <p className="text-muted-foreground mb-6">
-            Setup takes about 5 minutes. Connect a platform in /leagues, add
-            Flaim to your AI, and start asking questions with your real league
-            context attached.
+            Setup takes about 5 minutes. Connect a platform, add Flaim to your
+            AI, and start asking.
           </p>
           <div className="flex flex-col items-center justify-center gap-3 sm:flex-row">
             <SignedOut>

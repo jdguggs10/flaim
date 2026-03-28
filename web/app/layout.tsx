@@ -17,16 +17,16 @@ const geistMono = localFont({
 
 export const metadata: Metadata = {
   title: {
-    default: "Flaim — Fantasy League Context for AI",
+    default: "Flaim — Connect Your Fantasy Leagues to AI",
     template: "%s | Flaim",
   },
   description:
-    "Flaim connects ESPN, Yahoo, and Sleeper fantasy league data to Claude, ChatGPT, and Perplexity for read-only roster, matchup, standings, waiver wire, and transaction analysis.",
+    "Flaim gives Claude, ChatGPT, and Perplexity read-only access to your real ESPN, Yahoo, and Sleeper fantasy leagues — rosters, standings, matchups, waiver wire, and transactions across football, baseball, basketball, and hockey.",
   metadataBase: new URL("https://flaim.app"),
   openGraph: {
-    title: "Flaim — Fantasy League Context for AI",
+    title: "Flaim — Connect Your Fantasy Leagues to AI",
     description:
-      "Flaim connects ESPN, Yahoo, and Sleeper fantasy league data to Claude, ChatGPT, and Perplexity for read-only roster, matchup, standings, waiver wire, and transaction analysis.",
+      "Flaim gives Claude, ChatGPT, and Perplexity read-only access to your real ESPN, Yahoo, and Sleeper fantasy leagues — rosters, standings, matchups, waiver wire, and transactions.",
     url: "https://flaim.app",
     siteName: "Flaim",
     type: "website",
@@ -34,9 +34,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Flaim — Fantasy League Context for AI",
+    title: "Flaim — Connect Your Fantasy Leagues to AI",
     description:
-      "Flaim connects ESPN, Yahoo, and Sleeper fantasy league data to Claude, ChatGPT, and Perplexity for read-only roster, matchup, standings, waiver wire, and transaction analysis.",
+      "Flaim gives Claude, ChatGPT, and Perplexity read-only access to your real ESPN, Yahoo, and Sleeper fantasy leagues — rosters, standings, matchups, waiver wire, and transactions.",
   },
   icons: {
     icon: [
