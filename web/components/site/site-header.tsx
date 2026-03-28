@@ -1,17 +1,23 @@
 "use client";
 
 import Link from "next/link";
-import { SignedIn, SignedOut, SignInButton, SignUpButton, UserButton } from '@clerk/nextjs';
-import { Button } from '@/components/ui/button';
-import Image from 'next/image';
+import {
+  SignedIn,
+  SignedOut,
+  SignInButton,
+  SignUpButton,
+  UserButton,
+} from "@clerk/nextjs";
+import { Button } from "@/components/ui/button";
+import Image from "next/image";
 
 const NAV_LINKS = [
-  { href: '/leagues', label: 'Your Leagues', labelShort: 'Leagues' },
+  { href: "/leagues", label: "Your Leagues", labelShort: "Leagues" },
 ] as const;
 
 /**
  * Site header with full navigation.
- * Used on all pages except /chat which has its own minimal header.
+ * Used on all public site pages outside the internal /dev surface.
  */
 export function SiteHeader() {
   return (
@@ -21,22 +27,30 @@ export function SiteHeader() {
           href="/"
           className="inline-flex items-center gap-2 text-xl font-bold transition-opacity hover:opacity-80"
         >
-          <Image src="/flaim-mark-hero.png" alt="Flaim" width={32} height={32} className="dark:hidden" />
-          <Image src="/flaim-mark-hero-dark.png" alt="Flaim" width={32} height={32} className="hidden dark:block" />
+          <Image
+            src="/flaim-mark-hero.png"
+            alt="Flaim"
+            width={32}
+            height={32}
+            className="dark:hidden"
+          />
+          <Image
+            src="/flaim-mark-hero-dark.png"
+            alt="Flaim"
+            width={32}
+            height={32}
+            className="hidden dark:block"
+          />
           <span>Flaim</span>
         </Link>
         <div className="flex items-center gap-2 sm:gap-4">
           <SignedOut>
             <div className="flex flex-row gap-2">
               <SignInButton>
-                <Button variant="outline">
-                  Sign In
-                </Button>
+                <Button variant="outline">Sign In</Button>
               </SignInButton>
               <SignUpButton>
-                <Button>
-                  Sign Up
-                </Button>
+                <Button>Sign Up</Button>
               </SignUpButton>
             </div>
           </SignedOut>
@@ -44,7 +58,12 @@ export function SiteHeader() {
             <div className="flex items-center gap-2 sm:gap-3">
               <nav className="flex items-center gap-1 sm:gap-2">
                 {NAV_LINKS.map((link) => (
-                  <Button key={link.href} asChild variant="ghost" className="text-sm">
+                  <Button
+                    key={link.href}
+                    asChild
+                    variant="ghost"
+                    className="text-sm"
+                  >
                     <Link href={link.href}>
                       <span className="sm:hidden">{link.labelShort}</span>
                       <span className="hidden sm:inline">{link.label}</span>

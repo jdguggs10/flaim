@@ -1,6 +1,6 @@
 # Flaim Web App
 
-Next.js 15 app with App Router, Tailwind CSS v4, and shadcn/ui. Handles site pages, OAuth consent, API routes, the public `/chat` live demo, and the internal `/dev` lab.
+Next.js 15 app with App Router, Tailwind CSS v4, and shadcn/ui. Handles site pages, OAuth consent, API routes, the homepage live demo, and the internal `/dev` lab.
 
 ## Quick Start
 
@@ -22,7 +22,6 @@ web/
 │   │   ├── privacy/         # Privacy policy (/privacy)
 │   │   └── oauth/consent/   # OAuth consent screen
 │   │
-│   ├── (chat)/chat/         # Public live demo UI (/chat)
 │   ├── (chat)/dev/          # Internal dev/debug lab (/dev)
 │   │
 │   └── api/
@@ -46,11 +45,11 @@ web/
 
 **Critical rule:** Site and chat code are isolated. No cross-imports.
 
-| Directory | Can import from |
-|-----------|-----------------|
-| `components/site/` | `components/ui/`, `lib/` |
+| Directory          | Can import from               |
+| ------------------ | ----------------------------- |
+| `components/site/` | `components/ui/`, `lib/`      |
 | `components/chat/` | `components/ui/`, `lib/chat/` |
-| `components/ui/` | Nothing else in components |
+| `components/ui/`   | Nothing else in components    |
 
 Both site and chat can use shared `components/ui/` (shadcn).
 
@@ -58,31 +57,31 @@ Both site and chat can use shared `components/ui/` (shadcn).
 
 ### Site Pages (`/(site)/`)
 
-| Path | Purpose |
-|------|---------|
-| `/` | Discovery-first landing page with product explanation and CTAs to setup + live demo |
-| `/leagues` | Signed-in setup + management hub for platforms, AI connection details, leagues, and defaults |
-| `/privacy` | Privacy policy (CWS compliance) |
-| `/sitemap.xml` | XML sitemap for search engine discovery |
-| `/robots.txt` | Crawl rules + sitemap location for search engines |
-| `/oauth/consent` | OAuth authorization screen |
+| Path             | Purpose                                                                                      |
+| ---------------- | -------------------------------------------------------------------------------------------- |
+| `/`              | Discovery-first landing page with product explanation, setup CTA, and live demo              |
+| `/leagues`       | Signed-in setup + management hub for platforms, AI connection details, leagues, and defaults |
+| `/privacy`       | Privacy policy (CWS compliance)                                                              |
+| `/sitemap.xml`   | XML sitemap for search engine discovery                                                      |
+| `/robots.txt`    | Crawl rules + sitemap location for search engines                                            |
+| `/oauth/consent` | OAuth authorization screen                                                                   |
 
 ### Chat Surfaces (`/(chat)/`)
 
-| Path | Purpose |
-|------|---------|
-| `/chat` | Public live chat demo powered by the dedicated demo account |
-| `/dev` | Internal dev/debug chat surface |
+| Path    | Purpose                          |
+| ------- | -------------------------------- |
+| `/chat` | Legacy redirect to `/#live-demo` |
+| `/dev`  | Internal dev/debug chat surface  |
 
 ### API Routes (`/api/`)
 
-| Path | Purpose |
-|------|---------|
-| `/api/auth/*` | Platform auth (Clerk) |
-| `/api/espn/*` | League management, seasons, discovery, credentials |
-| `/api/extension/*` | Extension APIs (Clerk JWT) |
-| `/api/oauth/*` | OAuth status, revoke |
-| `/api/chat/*` | Internal dev chat turn responses |
+| Path                 | Purpose                                                          |
+| -------------------- | ---------------------------------------------------------------- |
+| `/api/auth/*`        | Platform auth (Clerk)                                            |
+| `/api/espn/*`        | League management, seasons, discovery, credentials               |
+| `/api/extension/*`   | Extension APIs (Clerk JWT)                                       |
+| `/api/oauth/*`       | OAuth status, revoke                                             |
+| `/api/chat/*`        | Internal dev chat turn responses                                 |
 | `/api/public-chat/*` | Public chat server routes (preset-driven demo-account execution) |
 
 Most API routes proxy to auth-worker. See `docs/ARCHITECTURE.md` for the full flow.
@@ -101,7 +100,7 @@ Deleting a league removes all seasons for that league.
 Create `web/.env.local` from `.env.example`:
 
 ```bash
-# OpenAI (for public /chat demo and internal /dev lab)
+# OpenAI (for homepage live demo and internal /dev lab)
 OPENAI_API_KEY=sk-...
 
 # Clerk Auth
@@ -121,7 +120,7 @@ For local development with workers, point to `http://localhost:8786` etc.
 
 ## Public Chat Demo
 
-The `/chat` route is a public-facing live demo. It is intentionally constrained in v1:
+The homepage live demo, reachable at `/#live-demo` and via the legacy `/chat` redirect, is intentionally constrained in v1:
 
 - Runs against a dedicated demo account (`demo@flaim.app`)
 - Uses server-owned auth with `DEMO_API_KEY`
@@ -138,10 +137,12 @@ The `/dev` page is the internal dev/debug surface for manual MCP tool testing an
 ### Access Control
 
 Both the `/dev` page and all `/api/chat/*` routes require `publicMetadata.chatAccess: true` in Clerk. Without it:
+
 - `/dev` page → redirects to home
 - API routes → 403 Forbidden
 
 Set in Clerk Dashboard → Users → [user] → Public metadata:
+
 ```json
 { "chatAccess": true }
 ```
@@ -149,6 +150,7 @@ Set in Clerk Dashboard → Users → [user] → Public metadata:
 ### Debug Mode
 
 Toggle in the Developer Console to show:
+
 - Raw JSON request/response for each tool call
 - Execution timing (ms)
 - MCP payload + tools list visibility for debugging
@@ -163,7 +165,8 @@ sensitive data—share with care.
 
 ### Public Chat Warmup
 
-The public `/chat` demo opportunistically hits `/api/public-chat/bootstrap` on page load. That route prewarms:
+The public live demo opportunistically hits `/api/public-chat/bootstrap` on page load. That route prewarms:
+
 - cached Gerry session/default-league context (short TTL)
 
 The live `/api/public-chat/turn` route still works without bootstrap, but a warm session-context cache hit makes the demo feel faster without doing hidden extra model work before the real turn starts.

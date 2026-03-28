@@ -3,7 +3,7 @@ import { SiteHeader } from "@/components/site/site-header";
 
 /**
  * Site layout - includes full header with navigation.
- * Used for all pages except /chat which has its own minimal header.
+ * Used for all public site pages outside the internal /dev surface.
  */
 export default function SiteLayout({
   children,
@@ -35,7 +35,10 @@ export default function SiteLayout({
                 Terms
               </Link>
               <span aria-hidden="true">·</span>
-              <Link href="/inspirations" className="underline hover:text-foreground">
+              <Link
+                href="/inspirations"
+                className="underline hover:text-foreground"
+              >
                 Inspirations
               </Link>
             </div>

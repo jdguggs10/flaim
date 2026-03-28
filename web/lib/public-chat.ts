@@ -18,6 +18,7 @@ export interface PublicChatPreset {
   id: string;
   title: string;
   userMessage: string;
+  homepageLabel?: string;
   allowedTools: readonly PublicChatAllowedTool[];
   serverPrefetch?: "transactions";
   executionHint: string;
@@ -64,6 +65,7 @@ export const PUBLIC_CHAT_SIMPLE_PRESETS: readonly PublicChatPreset[] = [
     id: "simple-leagues",
     title: "What fantasy leagues does Gerry have?",
     userMessage: "What fantasy leagues does Gerry have?",
+    homepageLabel: "What fantasy leagues are connected to this demo?",
     allowedTools: ["get_user_session"] as const,
     executionHint:
       "Call get_user_session exactly once, then use web search once only for one small current-context detail if it helps frame the answer.",
@@ -78,6 +80,7 @@ export const PUBLIC_CHAT_SIMPLE_PRESETS: readonly PublicChatPreset[] = [
     id: "simple-league-info",
     title: "Show me Gerry's league settings.",
     userMessage: "Show me Gerry's league settings.",
+    homepageLabel: "Show me this league's settings.",
     allowedTools: ["get_league_info"] as const,
     executionHint:
       "Call get_league_info exactly once for Gerry's default league, then use web search once only if it helps frame the current part of the season.",
@@ -92,6 +95,7 @@ export const PUBLIC_CHAT_SIMPLE_PRESETS: readonly PublicChatPreset[] = [
     id: "simple-standings",
     title: "What are the standings in Gerry's league?",
     userMessage: "What are the standings in Gerry's league?",
+    homepageLabel: "What are the standings in this league?",
     allowedTools: ["get_standings"] as const,
     executionHint:
       "Call get_standings exactly once for Gerry's default league, then use web search once for one current-context detail.",
@@ -106,6 +110,7 @@ export const PUBLIC_CHAT_SIMPLE_PRESETS: readonly PublicChatPreset[] = [
     id: "simple-matchup",
     title: "Who is Gerry playing this week?",
     userMessage: "Who is Gerry playing this week?",
+    homepageLabel: "Who is this team playing this week?",
     allowedTools: ["get_matchups"] as const,
     executionHint:
       "Call get_matchups exactly once for Gerry's default league, then use web search once for one current matchup-related detail.",
@@ -120,6 +125,7 @@ export const PUBLIC_CHAT_SIMPLE_PRESETS: readonly PublicChatPreset[] = [
     id: "simple-roster",
     title: "Show me Gerry's roster.",
     userMessage: "Show me Gerry's roster.",
+    homepageLabel: "Show me this roster.",
     allowedTools: ["get_roster"] as const,
     executionHint:
       "Call get_roster exactly once for Gerry's default league, then use web search once for one current-context detail on the roster.",
@@ -134,6 +140,7 @@ export const PUBLIC_CHAT_SIMPLE_PRESETS: readonly PublicChatPreset[] = [
     id: "simple-free-agents",
     title: "Who's on Gerry's waiver wire?",
     userMessage: "Who's on Gerry's waiver wire?",
+    homepageLabel: "Who's on this waiver wire?",
     allowedTools: ["get_free_agents"] as const,
     executionHint:
       "Call get_free_agents exactly once for Gerry's default league, then use web search once for one current-context detail on the best option.",
@@ -148,6 +155,7 @@ export const PUBLIC_CHAT_SIMPLE_PRESETS: readonly PublicChatPreset[] = [
     id: "simple-player-lookup",
     title: "Look up Aaron Judge for Gerry's league.",
     userMessage: "Look up Aaron Judge for Gerry's league.",
+    homepageLabel: "Look up Aaron Judge in this league.",
     allowedTools: ["get_players"] as const,
     executionHint:
       "Call get_players exactly once for Aaron Judge in Gerry's default league context, then use web search once for one current-context detail.",
@@ -162,6 +170,7 @@ export const PUBLIC_CHAT_SIMPLE_PRESETS: readonly PublicChatPreset[] = [
     id: "simple-transactions",
     title: "What are the latest moves in Gerry's league?",
     userMessage: "What are the latest moves in Gerry's league?",
+    homepageLabel: "What are the latest moves in this league?",
     allowedTools: ["get_transactions"] as const,
     serverPrefetch: "transactions",
     executionHint:
@@ -177,6 +186,7 @@ export const PUBLIC_CHAT_SIMPLE_PRESETS: readonly PublicChatPreset[] = [
     id: "simple-history",
     title: "How did Gerry do last season?",
     userMessage: "How did Gerry do last season?",
+    homepageLabel: "How did this team do last season?",
     allowedTools: ["get_ancient_history"] as const,
     executionHint:
       "Call get_ancient_history exactly once for Gerry's most relevant league, then use web search once only if it helps frame the season context.",
@@ -195,6 +205,7 @@ export const PUBLIC_CHAT_DEEP_PRESETS: readonly PublicChatPreset[] = [
     rail: "bottom",
     title: "Who are the best available free agents in Gerry's league?",
     userMessage: "Who are the best available free agents in Gerry's league?",
+    homepageLabel: "Who are the best available free agents in this league?",
     allowedTools: ["get_roster", "get_free_agents", "get_players"] as const,
     executionHint:
       "Start with get_roster and get_free_agents for Gerry's default league. Use get_players only if you need to verify one candidate. Use web search once for current context on the top targets, then answer.",
@@ -210,6 +221,7 @@ export const PUBLIC_CHAT_DEEP_PRESETS: readonly PublicChatPreset[] = [
     rail: "bottom",
     title: "What are the latest moves in his league?",
     userMessage: "What are the latest moves in Gerry's league?",
+    homepageLabel: "What are the latest moves in this league?",
     allowedTools: ["get_transactions", "get_roster", "get_players"] as const,
     serverPrefetch: "transactions",
     executionHint:
@@ -226,6 +238,7 @@ export const PUBLIC_CHAT_DEEP_PRESETS: readonly PublicChatPreset[] = [
     rail: "bottom",
     title: "Who is winning Gerry's league and why?",
     userMessage: "Who is winning Gerry's league and why?",
+    homepageLabel: "Who is winning this league and why?",
     allowedTools: ["get_standings", "get_roster", "get_matchups"] as const,
     executionHint:
       "Start with get_standings for Gerry's default league. Only use get_roster or get_matchups if you need one extra check to explain why the leader is on top. Use web search once for current player or team context, then answer.",
@@ -241,6 +254,7 @@ export const PUBLIC_CHAT_DEEP_PRESETS: readonly PublicChatPreset[] = [
     rail: "bottom",
     title: "What player does he need to give up on?",
     userMessage: "What player does he need to give up on?",
+    homepageLabel: "What player does this team need to give up on?",
     allowedTools: ["get_roster", "get_players"] as const,
     executionHint:
       "Start with get_roster for Gerry's default league. Use get_players only if you need to verify one specific player detail. Use web search once for current performance, role, or injury context on the main candidate, then answer.",
@@ -256,6 +270,7 @@ export const PUBLIC_CHAT_DEEP_PRESETS: readonly PublicChatPreset[] = [
     rail: "bottom",
     title: "What is the biggest hole in his roster?",
     userMessage: "What is the biggest hole in Gerry's roster?",
+    homepageLabel: "What is the biggest hole in this roster?",
     allowedTools: ["get_roster", "get_free_agents", "get_players"] as const,
     executionHint:
       "Start with get_roster for Gerry's default league. Use get_free_agents only if you need one practical replacement idea. Use get_players only if you need to verify one candidate detail. Use web search once for current context on the weakness you identify, then answer.",
@@ -271,6 +286,7 @@ export const PUBLIC_CHAT_DEEP_PRESETS: readonly PublicChatPreset[] = [
     rail: "bottom",
     title: "Who should Gerry be selling high on?",
     userMessage: "Who should Gerry be selling high on?",
+    homepageLabel: "Who should this team be selling high on?",
     allowedTools: ["get_roster", "get_players"] as const,
     executionHint:
       "Start with get_roster for Gerry's default league. Use get_players only if you need to verify one specific player's details. Use web search once for current performance, news, and schedule context on the leading sell-high candidate, then answer.",
@@ -286,6 +302,7 @@ export const PUBLIC_CHAT_DEEP_PRESETS: readonly PublicChatPreset[] = [
     rail: "bottom",
     title: "How did he do last season?",
     userMessage: "How did he do last season?",
+    homepageLabel: "How did this team do last season?",
     allowedTools: ["get_ancient_history", "get_standings"] as const,
     executionHint:
       "Start with get_ancient_history for Gerry's most relevant league. Only use get_standings if you need one extra check to frame the result. Use web search once for brief season context if helpful, then answer.",
@@ -301,6 +318,7 @@ export const PUBLIC_CHAT_DEEP_PRESETS: readonly PublicChatPreset[] = [
     rail: "bottom",
     title: "When does his fantasy playoffs start?",
     userMessage: "When does his fantasy playoffs start?",
+    homepageLabel: "When do this league's fantasy playoffs start?",
     allowedTools: ["get_league_info", "get_matchups"] as const,
     executionHint:
       "Start with get_league_info for Gerry's default league. Only use get_matchups if league info alone does not clarify the playoff timing. Use web search once for current schedule or platform-season context, then answer.",
@@ -321,7 +339,7 @@ export const PUBLIC_CHAT_PRESETS: readonly PublicChatPreset[] = [
 export type PublicChatPresetId = PublicChatPreset["id"];
 
 export function getPublicChatPreset(
-  presetId: string
+  presetId: string,
 ): PublicChatPreset | undefined {
   return PUBLIC_CHAT_PRESETS.find((preset) => preset.id === presetId);
 }

@@ -12,11 +12,7 @@ import {
 } from "@/lib/public-chat";
 import { cn } from "@/lib/utils";
 import { parse } from "partial-json";
-import {
-  ArrowUp,
-  LoaderCircle,
-  Plus,
-} from "lucide-react";
+import { ArrowUp, LoaderCircle, Plus } from "lucide-react";
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PublicToolCall } from "./public-tool-call";
@@ -25,10 +21,11 @@ import { PublicMessage } from "./public-message";
 type PublicRunStatus = "idle" | "running" | "completed" | "error";
 type PublicSport = "football" | "baseball";
 
-const PUBLIC_SPORT_COPY: Record<PublicSport, { emoji: string; label: string }> = {
-  baseball: { emoji: "⚾", label: "baseball" },
-  football: { emoji: "🏈", label: "football" },
-};
+const PUBLIC_SPORT_COPY: Record<PublicSport, { emoji: string; label: string }> =
+  {
+    baseball: { emoji: "⚾", label: "baseball" },
+    football: { emoji: "🏈", label: "football" },
+  };
 
 interface PublicToolCallState {
   id: string;
@@ -73,7 +70,8 @@ function extractToolStart(data: Record<string, unknown>) {
     return null;
   }
 
-  const argumentsText = typeof data.arguments === "string" ? data.arguments : "";
+  const argumentsText =
+    typeof data.arguments === "string" ? data.arguments : "";
   return {
     id: itemId,
     name: typeof data.name === "string" ? data.name : null,
@@ -83,9 +81,7 @@ function extractToolStart(data: Record<string, unknown>) {
 }
 
 function parseSseChunk(chunk: string) {
-  const dataLine = chunk
-    .split("\n")
-    .find((line) => line.startsWith("data: "));
+  const dataLine = chunk.split("\n").find((line) => line.startsWith("data: "));
 
   if (!dataLine) {
     return null;
@@ -103,7 +99,7 @@ function parseSseChunk(chunk: string) {
 }
 
 async function* readSse(
-  response: Response
+  response: Response,
 ): AsyncGenerator<{ event: string; data: Record<string, unknown> }> {
   const reader = response.body?.getReader();
   if (!reader) {
@@ -165,14 +161,17 @@ export function PublicChatExperience({
   const selectedPreset = useMemo(
     () =>
       selectedPresetId
-        ? PUBLIC_CHAT_PRESETS.find((preset) => preset.id === selectedPresetId) ?? null
+        ? (PUBLIC_CHAT_PRESETS.find(
+            (preset) => preset.id === selectedPresetId,
+          ) ?? null)
         : null,
-    [selectedPresetId]
+    [selectedPresetId],
   );
   const hasToolCalls = toolCalls.length > 0;
   const hasAssistantText = assistantText.trim().length > 0;
   const allToolCallsCompleted =
-    hasToolCalls && toolCalls.every((toolCall) => toolCall.status === "completed");
+    hasToolCalls &&
+    toolCalls.every((toolCall) => toolCall.status === "completed");
   const showPreToolStatus = runStatus === "running" && !hasToolCalls;
   const showRespondingStatus =
     runStatus === "running" && allToolCallsCompleted && !hasAssistantText;
@@ -182,19 +181,25 @@ export function PublicChatExperience({
     "Calling Flaim tools...",
   ][preToolStatusIndex];
   const topRailPresets = useMemo(() => {
-    const presets = PUBLIC_CHAT_PRESETS.filter((preset) => preset.rail === "top");
+    const presets = PUBLIC_CHAT_PRESETS.filter(
+      (preset) => preset.rail === "top",
+    );
     return presets.length ? presets : PUBLIC_CHAT_PRESETS;
   }, []);
   const bottomRailPresets = useMemo(() => {
-    const presets = PUBLIC_CHAT_PRESETS.filter((preset) => preset.rail === "bottom");
+    const presets = PUBLIC_CHAT_PRESETS.filter(
+      (preset) => preset.rail === "bottom",
+    );
     return presets.length ? presets : PUBLIC_CHAT_PRESETS;
   }, []);
   const initialQueryPreset = useMemo(
     () =>
       initialPresetId
-        ? PUBLIC_CHAT_PRESETS.find((preset) => preset.id === initialPresetId) ?? null
+        ? (PUBLIC_CHAT_PRESETS.find(
+            (preset) => preset.id === initialPresetId,
+          ) ?? null)
         : null,
-    [initialPresetId]
+    [initialPresetId],
   );
 
   useEffect(() => {
@@ -204,7 +209,9 @@ export function PublicChatExperience({
 
     const scrollContainer = transcriptScrollRef.current;
     const nextBehavior: ScrollBehavior =
-      assistantText.trim().length > 0 || toolCalls.length > 0 ? "smooth" : "auto";
+      assistantText.trim().length > 0 || toolCalls.length > 0
+        ? "smooth"
+        : "auto";
     const frame = window.requestAnimationFrame(() => {
       scrollContainer.scrollTo({
         top: scrollContainer.scrollHeight,
@@ -248,186 +255,189 @@ export function PublicChatExperience({
     });
   }, []);
 
-  const handleRunPreset = useCallback(async (preset: PublicChatPreset) => {
-    if (runStatus === "running") {
-      return;
-    }
-
-    setSelectedPresetId(preset.id);
-    setRunStatus("running");
-    setAssistantText("");
-    setToolCalls([]);
-    setError(null);
-    hasStreamedAssistantTextRef.current = false;
-    activeRunAbortControllerRef.current?.abort();
-    const abortController = new AbortController();
-    activeRunAbortControllerRef.current = abortController;
-
-    try {
-      const requestBody = {
-        presetId: preset.id,
-        sport: demoSport,
-      };
-
-      const response = await fetch("/api/public-chat/turn", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(requestBody),
-        signal: abortController.signal,
-      });
-
-      if (!response.ok) {
-        let message = `${response.status} ${response.statusText}`;
-        try {
-          const payload = (await response.json()) as { error?: string };
-          if (payload.error) {
-            message = payload.error;
-          }
-        } catch (jsonError) {
-          console.error("Failed to parse error response JSON:", jsonError);
-        }
-        throw new Error(message);
-      }
-
-      for await (const payload of readSse(response)) {
-        const { event, data } = payload;
-
-        switch (event) {
-          case "reasoning_delta": {
-            break;
-          }
-          case "tool_start": {
-            const toolStart = extractToolStart(data);
-            if (toolStart) {
-              setToolCalls((current) => [
-                ...current,
-                {
-                  id: toolStart.id,
-                  name: toolStart.name,
-                  status: "in_progress",
-                  arguments: toolStart.arguments,
-                  parsedArguments: toolStart.parsedArguments,
-                },
-              ]);
-            }
-            break;
-          }
-          case "tool_args_delta":
-          case "tool_args_done": {
-            const itemId =
-              typeof data.itemId === "string" ? data.itemId : undefined;
-            const nextArguments =
-              typeof data.arguments === "string"
-                ? data.arguments
-                : typeof data.delta === "string"
-                  ? data.delta
-                  : "";
-
-            if (!itemId) {
-              break;
-            }
-
-            setToolCalls((current) =>
-              current.map((toolCall) => {
-                if (toolCall.id !== itemId) {
-                  return toolCall;
-                }
-
-                const mergedArguments =
-                  event === "tool_args_delta"
-                    ? toolCall.arguments + nextArguments
-                    : nextArguments;
-
-                return {
-                  ...toolCall,
-                  arguments: mergedArguments,
-                  parsedArguments: safeParseArguments(mergedArguments),
-                };
-              })
-            );
-            break;
-          }
-          case "assistant_delta": {
-            const delta = typeof data.delta === "string" ? data.delta : "";
-            if (delta) {
-              hasStreamedAssistantTextRef.current = true;
-              setAssistantText((current) => current + delta);
-            }
-            break;
-          }
-          case "tool_done": {
-            const itemId =
-              typeof data.itemId === "string" ? data.itemId : undefined;
-            if (itemId) {
-              setToolCalls((current) =>
-                current.map((toolCall) =>
-                  toolCall.id === itemId
-                    ? { ...toolCall, status: "completed" }
-                    : toolCall
-                )
-              );
-            }
-            break;
-          }
-          case "assistant_message": {
-            const text = typeof data.text === "string" ? data.text : "";
-            if (text) {
-              hasStreamedAssistantTextRef.current = true;
-              setAssistantText(text);
-            }
-            break;
-          }
-          case "completed":
-          case "response.completed": {
-            setRunStatus("completed");
-            break;
-          }
-          case "error": {
-            const message =
-              typeof data.message === "string"
-                ? data.message
-                : "Public chat is temporarily unavailable.";
-            setError(message);
-            setRunStatus("error");
-            break;
-          }
-          default:
-            break;
-        }
-      }
-
-      setRunStatus((current) => {
-        if (current !== "running") {
-          return current;
-        }
-
-        return hasStreamedAssistantTextRef.current ? "completed" : "error";
-      });
-      setError((current) =>
-        current || hasStreamedAssistantTextRef.current
-          ? current
-          : "The live run finished without producing an answer. Please try again."
-      );
-    } catch (runError) {
-      if (abortController.signal.aborted) {
-        setRunStatus((current) => (current === "running" ? "idle" : current));
+  const handleRunPreset = useCallback(
+    async (preset: PublicChatPreset) => {
+      if (runStatus === "running") {
         return;
       }
 
-      const message =
-        runError instanceof Error
-          ? runError.message
-          : "Unable to run the public chat demo.";
-      setError(message);
-      setRunStatus("error");
-    } finally {
-      if (activeRunAbortControllerRef.current === abortController) {
-        activeRunAbortControllerRef.current = null;
+      setSelectedPresetId(preset.id);
+      setRunStatus("running");
+      setAssistantText("");
+      setToolCalls([]);
+      setError(null);
+      hasStreamedAssistantTextRef.current = false;
+      activeRunAbortControllerRef.current?.abort();
+      const abortController = new AbortController();
+      activeRunAbortControllerRef.current = abortController;
+
+      try {
+        const requestBody = {
+          presetId: preset.id,
+          sport: demoSport,
+        };
+
+        const response = await fetch("/api/public-chat/turn", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(requestBody),
+          signal: abortController.signal,
+        });
+
+        if (!response.ok) {
+          let message = `${response.status} ${response.statusText}`;
+          try {
+            const payload = (await response.json()) as { error?: string };
+            if (payload.error) {
+              message = payload.error;
+            }
+          } catch (jsonError) {
+            console.error("Failed to parse error response JSON:", jsonError);
+          }
+          throw new Error(message);
+        }
+
+        for await (const payload of readSse(response)) {
+          const { event, data } = payload;
+
+          switch (event) {
+            case "reasoning_delta": {
+              break;
+            }
+            case "tool_start": {
+              const toolStart = extractToolStart(data);
+              if (toolStart) {
+                setToolCalls((current) => [
+                  ...current,
+                  {
+                    id: toolStart.id,
+                    name: toolStart.name,
+                    status: "in_progress",
+                    arguments: toolStart.arguments,
+                    parsedArguments: toolStart.parsedArguments,
+                  },
+                ]);
+              }
+              break;
+            }
+            case "tool_args_delta":
+            case "tool_args_done": {
+              const itemId =
+                typeof data.itemId === "string" ? data.itemId : undefined;
+              const nextArguments =
+                typeof data.arguments === "string"
+                  ? data.arguments
+                  : typeof data.delta === "string"
+                    ? data.delta
+                    : "";
+
+              if (!itemId) {
+                break;
+              }
+
+              setToolCalls((current) =>
+                current.map((toolCall) => {
+                  if (toolCall.id !== itemId) {
+                    return toolCall;
+                  }
+
+                  const mergedArguments =
+                    event === "tool_args_delta"
+                      ? toolCall.arguments + nextArguments
+                      : nextArguments;
+
+                  return {
+                    ...toolCall,
+                    arguments: mergedArguments,
+                    parsedArguments: safeParseArguments(mergedArguments),
+                  };
+                }),
+              );
+              break;
+            }
+            case "assistant_delta": {
+              const delta = typeof data.delta === "string" ? data.delta : "";
+              if (delta) {
+                hasStreamedAssistantTextRef.current = true;
+                setAssistantText((current) => current + delta);
+              }
+              break;
+            }
+            case "tool_done": {
+              const itemId =
+                typeof data.itemId === "string" ? data.itemId : undefined;
+              if (itemId) {
+                setToolCalls((current) =>
+                  current.map((toolCall) =>
+                    toolCall.id === itemId
+                      ? { ...toolCall, status: "completed" }
+                      : toolCall,
+                  ),
+                );
+              }
+              break;
+            }
+            case "assistant_message": {
+              const text = typeof data.text === "string" ? data.text : "";
+              if (text) {
+                hasStreamedAssistantTextRef.current = true;
+                setAssistantText(text);
+              }
+              break;
+            }
+            case "completed":
+            case "response.completed": {
+              setRunStatus("completed");
+              break;
+            }
+            case "error": {
+              const message =
+                typeof data.message === "string"
+                  ? data.message
+                  : "Public chat is temporarily unavailable.";
+              setError(message);
+              setRunStatus("error");
+              break;
+            }
+            default:
+              break;
+          }
+        }
+
+        setRunStatus((current) => {
+          if (current !== "running") {
+            return current;
+          }
+
+          return hasStreamedAssistantTextRef.current ? "completed" : "error";
+        });
+        setError((current) =>
+          current || hasStreamedAssistantTextRef.current
+            ? current
+            : "The live run finished without producing an answer. Please try again.",
+        );
+      } catch (runError) {
+        if (abortController.signal.aborted) {
+          setRunStatus((current) => (current === "running" ? "idle" : current));
+          return;
+        }
+
+        const message =
+          runError instanceof Error
+            ? runError.message
+            : "Unable to run the public chat demo.";
+        setError(message);
+        setRunStatus("error");
+      } finally {
+        if (activeRunAbortControllerRef.current === abortController) {
+          activeRunAbortControllerRef.current = null;
+        }
       }
-    }
-  }, [demoSport, runStatus]);
+    },
+    [demoSport, runStatus],
+  );
 
   useEffect(() => {
     if (!initialQueryPreset) {
@@ -444,7 +454,7 @@ export function PublicChatExperience({
 
   const renderPromptTicker = (
     presets: readonly PublicChatPreset[],
-    speedClassName: string
+    speedClassName: string,
   ) => {
     const repeatedPresets = [...presets, ...presets];
 
@@ -454,7 +464,7 @@ export function PublicChatExperience({
           className={cn(
             "public-chat-ticker-track flex w-max gap-2 py-0.5 sm:gap-2.5",
             speedClassName,
-            runStatus === "running" ? "public-chat-ticker-track--paused" : ""
+            runStatus === "running" ? "public-chat-ticker-track--paused" : "",
           )}
         >
           {repeatedPresets.map((preset, index) => {
@@ -474,14 +484,14 @@ export function PublicChatExperience({
                     : "border-border/70 bg-background text-foreground hover:bg-muted",
                   runStatus === "running" && !isSelected
                     ? "cursor-not-allowed opacity-65"
-                    : ""
+                    : "",
                 )}
               >
                 <div className="relative">
                   <h3
                     className={cn(
                       "whitespace-nowrap text-[0.76rem] font-medium leading-none tracking-tight sm:text-[0.84rem]",
-                      isSelected ? "text-primary" : "text-foreground"
+                      isSelected ? "text-primary" : "text-foreground",
                     )}
                   >
                     {preset.title}
@@ -495,17 +505,31 @@ export function PublicChatExperience({
     );
   };
 
-  const chipActive = runStatus === "running" || runStatus === "completed" || Boolean(selectedPreset);
+  const chipActive =
+    runStatus === "running" ||
+    runStatus === "completed" ||
+    Boolean(selectedPreset);
 
   return (
-    <section id={id} className="relative bg-background px-4 pb-12 sm:px-6 lg:px-8 lg:pb-16">
+    <section
+      id={id}
+      className="relative bg-background px-4 pb-12 sm:px-6 lg:px-8 lg:pb-16"
+    >
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_bottom,transparent_0,transparent_23px,var(--border)_24px)] bg-[length:100%_24px] opacity-20" />
 
       <div className="relative mx-auto max-w-2xl">
         <section className="pb-4 sm:pb-6">
+          <div className="mb-3 text-[10px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">
+            Live Proof
+          </div>
           <h2 className="w-full text-[2rem] font-semibold leading-[0.96] tracking-[-0.05em] text-foreground sm:text-5xl">
-            Watch Flaim work on a real league right now.
+            Watch Flaim work on Gerry&apos;s real league.
           </h2>
+          <p className="mt-3 max-w-xl text-sm leading-6 text-muted-foreground sm:text-base">
+            The demo is intentionally personal so you can watch Flaim reason
+            over live data in a real league. The product itself connects your
+            own ESPN, Yahoo, and Sleeper leagues to the AI you already use.
+          </p>
         </section>
 
         <Card className="overflow-hidden rounded-[2rem] border-border/70 bg-card/95 p-0 shadow-[0_30px_90px_-42px_rgba(15,23,42,0.45)] backdrop-blur dark:shadow-[0_30px_90px_-42px_rgba(0,0,0,0.82)] sm:rounded-[2.3rem]">
@@ -535,12 +559,13 @@ export function PublicChatExperience({
                     Demo context
                   </div>
                   <p className="mt-2 text-foreground">
-                    This demo is currently running on Gerry&apos;s ESPN{" "}
+                    This live run is using Gerry&apos;s real ESPN{" "}
                     {PUBLIC_SPORT_COPY[demoSport].label} league.
                   </p>
                   <p className="mt-2 text-muted-foreground">
-                    Flaim supports ESPN, Yahoo, and Sleeper for football, baseball,
-                    basketball, and hockey.
+                    Flaim supports ESPN and Yahoo across football, baseball,
+                    basketball, and hockey, plus Sleeper for football and
+                    basketball.
                   </p>
                 </PopoverContent>
               </Popover>
@@ -576,14 +601,18 @@ export function PublicChatExperience({
                         Ask something
                       </h3>
                       <p className="mt-2 text-sm text-muted-foreground">
-                        Pick a prompt below — this runs live on a real ESPN league.
+                        Pick a prompt below. This demo runs live on Gerry&apos;s
+                        real ESPN league.
                       </p>
                     </div>
                   </div>
                 ) : null}
 
                 {selectedPreset ? (
-                  <PublicMessage role="user" text={selectedPreset.userMessage} />
+                  <PublicMessage
+                    role="user"
+                    text={selectedPreset.userMessage}
+                  />
                 ) : null}
 
                 {showPreToolStatus ? (
@@ -624,7 +653,6 @@ export function PublicChatExperience({
                     </p>
                   </div>
                 ) : null}
-
               </div>
             </div>
 
@@ -632,8 +660,14 @@ export function PublicChatExperience({
               <div className="mx-auto max-w-2xl">
                 <div className="rounded-[1.9rem] border border-border bg-background p-3 shadow-[0_12px_30px_-24px_rgba(15,23,42,0.5)] sm:rounded-[2.2rem] sm:p-4">
                   <div className="space-y-2">
-                    {renderPromptTicker(topRailPresets, "public-chat-ticker-track--top")}
-                    {renderPromptTicker(bottomRailPresets, "public-chat-ticker-track--bottom")}
+                    {renderPromptTicker(
+                      topRailPresets,
+                      "public-chat-ticker-track--top",
+                    )}
+                    {renderPromptTicker(
+                      bottomRailPresets,
+                      "public-chat-ticker-track--bottom",
+                    )}
                   </div>
 
                   <div className="mt-3 flex items-center justify-between gap-3">
@@ -654,7 +688,8 @@ export function PublicChatExperience({
                           className="w-[18rem] rounded-2xl border-border p-4 text-sm leading-6"
                         >
                           <p className="text-foreground">
-                            Adding and authenticating Flaim to your chatbot puts it in this drawer.
+                            Adding and authenticating Flaim to your chatbot puts
+                            it in this drawer.
                           </p>
                         </PopoverContent>
                       </Popover>
@@ -666,7 +701,7 @@ export function PublicChatExperience({
                               "inline-flex h-10 items-center gap-2 rounded-full border px-3.5 text-sm font-medium transition-colors",
                               chipActive
                                 ? "public-chat-chip-active border-primary/30 bg-primary/10 text-primary"
-                                : "border-border bg-background text-foreground"
+                                : "border-border bg-background text-foreground",
                             )}
                           >
                             <Image
@@ -692,7 +727,9 @@ export function PublicChatExperience({
                           className="w-[19rem] rounded-2xl border-border p-4 text-sm leading-6"
                         >
                           <p className="text-foreground">
-                            Some AIs activate Flaim automatically. For others, activate Flaim manually in your drawer and you&apos;ll see a badge here.
+                            Some AIs activate Flaim automatically. For others,
+                            activate Flaim manually in your drawer and
+                            you&apos;ll see a badge here.
                           </p>
                         </PopoverContent>
                       </Popover>
@@ -705,7 +742,9 @@ export function PublicChatExperience({
                             type="button"
                             className={cn(
                               "inline-flex h-11 w-11 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm transition-transform",
-                              runStatus === "running" ? "public-chat-send-running" : ""
+                              runStatus === "running"
+                                ? "public-chat-send-running"
+                                : "",
                             )}
                             aria-label="Run selected prompt"
                           >
@@ -722,7 +761,9 @@ export function PublicChatExperience({
                           className="w-[19rem] rounded-2xl border-border p-4 text-sm leading-6"
                         >
                           <p className="text-foreground">
-                            This demo is powered live by GPT-5.4 on Gerry&apos;s actual leagues. Set up Flaim to ask your AI about your leagues.
+                            This demo runs live on Gerry&apos;s actual league.
+                            Set up Flaim to ask Claude, ChatGPT, or Perplexity
+                            about your own leagues.
                           </p>
                         </PopoverContent>
                       </Popover>

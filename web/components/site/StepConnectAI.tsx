@@ -1,18 +1,18 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { useAuth } from '@clerk/nextjs';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import { Copy, Check, ExternalLink } from 'lucide-react';
-import Link from 'next/link';
+import { useState } from "react";
+import { useAuth } from "@clerk/nextjs";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Copy, Check, ExternalLink } from "lucide-react";
+import Link from "next/link";
 
 const fantasyMcpUrl =
-  process.env.NEXT_PUBLIC_FANTASY_MCP_URL || 'https://api.flaim.app/mcp';
+  process.env.NEXT_PUBLIC_FANTASY_MCP_URL || "https://api.flaim.app/mcp";
 
 const mcpServers = [
   {
-    name: 'Flaim Fantasy',
+    name: "Flaim Fantasy",
     url: fantasyMcpUrl,
   },
 ];
@@ -37,7 +37,7 @@ export function StepConnectAI({
       setCopiedValue(value);
       setTimeout(() => setCopiedValue(null), 2000);
     } catch (err) {
-      console.error('Failed to copy:', err);
+      console.error("Failed to copy:", err);
     }
   };
 
@@ -66,37 +66,62 @@ export function StepConnectAI({
         Pick your assistant for step-by-step instructions.
       </p>
 
-      <div className="mb-4 grid grid-cols-2 gap-2">
+      <div className="mb-4 grid gap-2 sm:grid-cols-3">
         <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
-          <Link href="/guide/claude" className="text-xs font-medium text-primary hover:underline">Claude</Link>
-          <a href="https://claude.ai/settings/connectors" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground transition-colors" title="Open Claude connectors">
+          <Link
+            href="/guide/ai#claude"
+            className="text-xs font-medium text-primary hover:underline"
+          >
+            Claude
+          </Link>
+          <a
+            href="https://claude.ai/settings/connectors"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-muted-foreground hover:text-foreground transition-colors"
+            title="Open Claude connectors"
+          >
             <ExternalLink className="h-3 w-3" />
           </a>
         </div>
         <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
-          <Link href="/guide/chatgpt" className="text-xs font-medium text-primary hover:underline">ChatGPT</Link>
-          <a href="https://chatgpt.com/settings#settings/Connectors" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground transition-colors" title="Open ChatGPT settings">
+          <Link
+            href="/guide/ai#chatgpt"
+            className="text-xs font-medium text-primary hover:underline"
+          >
+            ChatGPT
+          </Link>
+          <a
+            href="https://chatgpt.com/settings#settings/Connectors"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-muted-foreground hover:text-foreground transition-colors"
+            title="Open ChatGPT settings"
+          >
             <ExternalLink className="h-3 w-3" />
           </a>
         </div>
         <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
-          <Link href="/guide/perplexity" className="text-xs font-medium text-primary hover:underline">Perplexity</Link>
-          <a href="https://www.perplexity.ai/account/connectors" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground transition-colors" title="Open Perplexity connectors">
+          <Link
+            href="/guide/ai#perplexity"
+            className="text-xs font-medium text-primary hover:underline"
+          >
+            Perplexity
+          </Link>
+          <a
+            href="https://www.perplexity.ai/account/connectors"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-muted-foreground hover:text-foreground transition-colors"
+            title="Open Perplexity connectors"
+          >
             <ExternalLink className="h-3 w-3" />
           </a>
-        </div>
-        <div className="flex items-center justify-between rounded-md border border-dashed border-border px-3 py-2 text-muted-foreground">
-          <span className="text-xs font-medium">Gemini</span>
-          <span className="text-[11px]">Unavailable</span>
-        </div>
-        <div className="flex items-center justify-between rounded-md border border-dashed border-border px-3 py-2 text-muted-foreground">
-          <span className="text-xs font-medium">Grok</span>
-          <span className="text-[11px]">Unavailable</span>
         </div>
       </div>
 
       <p className="mb-4 text-xs text-muted-foreground">
-        Claude, ChatGPT, and Perplexity are live today. Gemini and Grok are not available yet.
+        Claude, ChatGPT, and Perplexity are live today.
       </p>
 
       {!isLoaded && (

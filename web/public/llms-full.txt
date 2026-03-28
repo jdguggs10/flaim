@@ -68,20 +68,18 @@ ESPN doesn't offer a public API for fantasy data. The extension is the preferred
 Flaim uses MCP (Model Context Protocol), an open standard for connecting AI assistants to external data. You add a single server URL and Flaim handles authentication and data retrieval after your leagues are linked in /leagues.
 
 ### What AI assistants work with Flaim?
-Claude (via integrations), ChatGPT (via connectors), and Perplexity (via remote connectors). Gemini and Grok are not available yet.
+Claude (via integrations), ChatGPT (via connectors), and Perplexity (via remote connectors).
 
 ## Links
 
 - Website: https://flaim.app
 - Leagues setup: https://flaim.app/leagues
-- Setup guide: https://flaim.app/guide
-- ESPN guide: https://flaim.app/guide/espn
-- Yahoo guide: https://flaim.app/guide/yahoo
-- Sleeper guide: https://flaim.app/guide/sleeper
-- Claude guide: https://flaim.app/guide/claude
-- ChatGPT guide: https://flaim.app/guide/chatgpt
-- Perplexity guide: https://flaim.app/guide/perplexity
-- Gemini status: https://flaim.app/guide/gemini
+- Setup guide: https://flaim.app/guide/platforms
+- AI setup guide: https://flaim.app/guide/ai
+- Sports guide: https://flaim.app/guide/sports
+- Claude guide: https://flaim.app/guide/ai#claude
+- ChatGPT guide: https://flaim.app/guide/ai#chatgpt
+- Perplexity guide: https://flaim.app/guide/ai#perplexity
 - GitHub: https://github.com/jdguggs10/flaim
 - Privacy policy: https://flaim.app/privacy
 - Terms of service: https://flaim.app/terms

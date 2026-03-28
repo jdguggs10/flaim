@@ -1,23 +1,29 @@
-import type { Metadata } from 'next';
-import { SignedIn, SignedOut } from '@clerk/nextjs';
-import { PublicChatExperience } from '@/components/public-demo/public-chat-experience';
+import type { Metadata } from "next";
+import { SignedIn, SignedOut } from "@clerk/nextjs";
+import { PublicChatExperience } from "@/components/public-demo/public-chat-experience";
 
 export const metadata: Metadata = {
-  title: 'Flaim — Connect ESPN, Yahoo & Sleeper Fantasy Leagues to AI',
+  title: "Connect Fantasy Leagues to Claude, ChatGPT & Perplexity",
   description:
-    'Flaim gives Claude, ChatGPT, and Perplexity read-only access to your real fantasy league data — rosters, standings, matchups, waiver wire, and transactions across football, baseball, basketball, and hockey.',
+    "Flaim connects ESPN, Yahoo, and Sleeper league data to Claude, ChatGPT, and Perplexity for read-only roster, matchup, standings, waiver wire, and transaction analysis.",
   alternates: {
-    canonical: 'https://flaim.app',
+    canonical: "https://flaim.app",
   },
 };
-import Link from 'next/link';
-import { Button } from '@/components/ui/button';
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
 import {
   PUBLIC_CHAT_DEEP_PRESETS,
   PUBLIC_CHAT_SIMPLE_PRESETS,
   PUBLIC_CHAT_TOOL_DISPLAY_LABELS,
-} from '@/lib/public-chat';
-import { ArrowRight, ChevronDown, ShieldCheck, SlidersHorizontal, Sparkles } from 'lucide-react';
+} from "@/lib/public-chat";
+import {
+  ArrowRight,
+  ChevronDown,
+  ShieldCheck,
+  SlidersHorizontal,
+  Sparkles,
+} from "lucide-react";
 
 interface LandingPageProps {
   searchParams?: Promise<{
@@ -42,39 +48,39 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
         type="application/ld+json"
         dangerouslySetInnerHTML={{
           __html: JSON.stringify({
-            '@context': 'https://schema.org',
-            '@type': 'FAQPage',
+            "@context": "https://schema.org",
+            "@type": "FAQPage",
             mainEntity: [
               {
-                '@type': 'Question',
-                name: 'Do I need a Chrome extension?',
+                "@type": "Question",
+                name: "Do I need a Chrome extension?",
                 acceptedAnswer: {
-                  '@type': 'Answer',
-                  text: 'Only for ESPN. The Flaim Chrome extension syncs your ESPN cookies automatically so Flaim can read your private leagues. Yahoo connects through OAuth, Sleeper just needs your username, and your AI assistant connects to Flaim separately using a single MCP URL — no extension required for the AI side.',
+                  "@type": "Answer",
+                  text: "Only for ESPN. The Flaim Chrome extension syncs your ESPN cookies automatically so Flaim can read your private leagues. Yahoo connects through OAuth, Sleeper just needs your username, and your AI assistant connects to Flaim separately using a single MCP URL — no extension required for the AI side.",
                 },
               },
               {
-                '@type': 'Question',
-                name: 'Which AI apps work with Flaim?',
+                "@type": "Question",
+                name: "Which AI apps work with Flaim?",
                 acceptedAnswer: {
-                  '@type': 'Answer',
-                  text: 'Flaim works with Claude, ChatGPT, and Perplexity today using the Model Context Protocol (MCP). You add one URL — https://api.flaim.app/mcp — as a connector in any of these AI apps, authorize once, and Flaim handles the rest. Gemini and Grok do not support MCP connectors yet.',
+                  "@type": "Answer",
+                  text: "Flaim works with Claude, ChatGPT, and Perplexity today using the Model Context Protocol (MCP). You add one URL — https://api.flaim.app/mcp — as a connector in any of these AI apps, authorize once, and Flaim handles the rest.",
                 },
               },
               {
-                '@type': 'Question',
-                name: 'Can Flaim change anything in my leagues?',
+                "@type": "Question",
+                name: "Can Flaim change anything in my leagues?",
                 acceptedAnswer: {
-                  '@type': 'Answer',
-                  text: 'No. Flaim is read-only by design. It can inspect your rosters, standings, matchups, transactions, free agents, player details, league settings, and league history across ESPN, Yahoo, and Sleeper — but it cannot make trades, drop players, change lineups, or modify any league settings. This applies to all platforms and all sports.',
+                  "@type": "Answer",
+                  text: "No. Flaim is read-only by design. It can inspect your rosters, standings, matchups, transactions, free agents, player details, league settings, and league history across ESPN, Yahoo, and Sleeper — but it cannot make trades, drop players, change lineups, or modify any league settings. This applies to all platforms and all sports.",
                 },
               },
               {
-                '@type': 'Question',
-                name: 'Where do I finish setup?',
+                "@type": "Question",
+                name: "Where do I finish setup?",
                 acceptedAnswer: {
-                  '@type': 'Answer',
-                  text: 'Use flaim.app/leagues to connect your fantasy platforms, then add Flaim to your AI assistant using the MCP URL shown on that page. Setup takes about 5 minutes. The setup guides at flaim.app/guide/platforms and flaim.app/guide/ai walk through each step with troubleshooting tips.',
+                  "@type": "Answer",
+                  text: "Use flaim.app/leagues to connect your fantasy platforms, then add Flaim to your AI assistant using the MCP URL shown on that page. Setup takes about 5 minutes. The setup guides at flaim.app/guide/platforms and flaim.app/guide/ai walk through each step with troubleshooting tips.",
                 },
               },
             ],
@@ -85,24 +91,39 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
       <section className="px-4 py-12 text-center md:py-16">
         <div className="mx-auto max-w-3xl">
           <p className="mb-4 text-xs font-semibold uppercase tracking-[0.28em] text-muted-foreground">
-            Read-only Fantasy Analysis
+            Read-only Fantasy Analysis Layer
           </p>
           <h1 className="mb-4 text-4xl font-bold md:text-6xl">
-            Your real fantasy leagues,
-            <span className="block text-muted-foreground">connected to your AI.</span>
+            Fantasy league context
+            <span className="block text-muted-foreground">
+              for the AI you already use.
+            </span>
           </h1>
           <p className="mx-auto max-w-2xl text-lg text-muted-foreground md:text-xl">
-            Flaim connects ESPN, Yahoo, and Sleeper to Claude, ChatGPT, and Perplexity, giving the AI you already use your real roster, matchups, standings, waiver wire, and league activity.
+            Flaim connects ESPN, Yahoo, and Sleeper league data to Claude,
+            ChatGPT, and Perplexity so your answers can use your real roster,
+            matchups, standings, waiver wire, and league activity instead of
+            generic fantasy advice.
+          </p>
+          <p className="mx-auto mt-4 max-w-2xl text-sm leading-6 text-muted-foreground">
+            It is not a new chatbot. It is the read-only connector layer that
+            makes the AI you already pay for better at fantasy sports.
           </p>
           <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
             <SignedOut>
               <Button asChild size="lg">
                 <Link href="/leagues">Set up Flaim</Link>
               </Button>
+              <Button asChild variant="outline" size="lg">
+                <Link href="/#live-demo">Watch live demo</Link>
+              </Button>
             </SignedOut>
             <SignedIn>
-              <Button asChild size="lg" variant="outline">
+              <Button asChild size="lg">
                 <Link href="/leagues">Your Leagues</Link>
+              </Button>
+              <Button asChild size="lg" variant="outline">
+                <Link href="/#live-demo">Watch live demo</Link>
               </Button>
             </SignedIn>
           </div>
@@ -117,34 +138,93 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
       <section className="px-4 pb-10 pt-2 sm:px-6 lg:px-8">
         <div className="mx-auto grid max-w-5xl gap-4 text-sm text-muted-foreground md:grid-cols-3">
           <div className="rounded-2xl border bg-background/70 p-4">
-            <Link href="/guide/platforms" className="text-[11px] font-semibold uppercase tracking-[0.18em] text-foreground/70 hover:text-primary transition-colors">
+            <Link
+              href="/guide/platforms"
+              className="text-[11px] font-semibold uppercase tracking-[0.18em] text-foreground/70 hover:text-primary transition-colors"
+            >
               Platforms supported
             </Link>
             <div className="mt-3 flex flex-wrap gap-2">
-              <Link href="/guide/platforms#espn" className="rounded-full border bg-background px-3 py-1 transition-colors hover:border-foreground/30">ESPN</Link>
-              <Link href="/guide/platforms#yahoo" className="rounded-full border bg-background px-3 py-1 transition-colors hover:border-foreground/30">Yahoo</Link>
-              <Link href="/guide/platforms#sleeper" className="rounded-full border bg-background px-3 py-1 transition-colors hover:border-foreground/30">Sleeper</Link>
+              <Link
+                href="/guide/platforms#espn"
+                className="rounded-full border bg-background px-3 py-1 transition-colors hover:border-foreground/30"
+              >
+                ESPN
+              </Link>
+              <Link
+                href="/guide/platforms#yahoo"
+                className="rounded-full border bg-background px-3 py-1 transition-colors hover:border-foreground/30"
+              >
+                Yahoo
+              </Link>
+              <Link
+                href="/guide/platforms#sleeper"
+                className="rounded-full border bg-background px-3 py-1 transition-colors hover:border-foreground/30"
+              >
+                Sleeper
+              </Link>
             </div>
           </div>
           <div className="rounded-2xl border bg-background/70 p-4">
-            <Link href="/guide/sports" className="text-[11px] font-semibold uppercase tracking-[0.18em] text-foreground/70 hover:text-primary transition-colors">
+            <Link
+              href="/guide/sports"
+              className="text-[11px] font-semibold uppercase tracking-[0.18em] text-foreground/70 hover:text-primary transition-colors"
+            >
               Sports supported
             </Link>
             <div className="mt-3 flex flex-wrap gap-2">
-              <Link href="/guide/sports#football" className="rounded-full border bg-background px-3 py-1 transition-colors hover:border-foreground/30">Football</Link>
-              <Link href="/guide/sports#baseball" className="rounded-full border bg-background px-3 py-1 transition-colors hover:border-foreground/30">Baseball</Link>
-              <Link href="/guide/sports#basketball" className="rounded-full border bg-background px-3 py-1 transition-colors hover:border-foreground/30">Basketball</Link>
-              <Link href="/guide/sports#hockey" className="rounded-full border bg-background px-3 py-1 transition-colors hover:border-foreground/30">Hockey</Link>
+              <Link
+                href="/guide/sports#football"
+                className="rounded-full border bg-background px-3 py-1 transition-colors hover:border-foreground/30"
+              >
+                Football
+              </Link>
+              <Link
+                href="/guide/sports#baseball"
+                className="rounded-full border bg-background px-3 py-1 transition-colors hover:border-foreground/30"
+              >
+                Baseball
+              </Link>
+              <Link
+                href="/guide/sports#basketball"
+                className="rounded-full border bg-background px-3 py-1 transition-colors hover:border-foreground/30"
+              >
+                Basketball
+              </Link>
+              <Link
+                href="/guide/sports#hockey"
+                className="rounded-full border bg-background px-3 py-1 transition-colors hover:border-foreground/30"
+              >
+                Hockey
+              </Link>
             </div>
           </div>
           <div className="rounded-2xl border bg-background/70 p-4">
-            <Link href="/guide/ai" className="text-[11px] font-semibold uppercase tracking-[0.18em] text-foreground/70 hover:text-primary transition-colors">
+            <Link
+              href="/guide/ai"
+              className="text-[11px] font-semibold uppercase tracking-[0.18em] text-foreground/70 hover:text-primary transition-colors"
+            >
               AI supported
             </Link>
             <div className="mt-3 flex flex-wrap gap-2">
-              <Link href="/guide/ai#claude" className="rounded-full border bg-background px-3 py-1 transition-colors hover:border-foreground/30">Claude</Link>
-              <Link href="/guide/ai#chatgpt" className="rounded-full border bg-background px-3 py-1 transition-colors hover:border-foreground/30">ChatGPT</Link>
-              <Link href="/guide/ai#perplexity" className="rounded-full border bg-background px-3 py-1 transition-colors hover:border-foreground/30">Perplexity</Link>
+              <Link
+                href="/guide/ai#claude"
+                className="rounded-full border bg-background px-3 py-1 transition-colors hover:border-foreground/30"
+              >
+                Claude
+              </Link>
+              <Link
+                href="/guide/ai#chatgpt"
+                className="rounded-full border bg-background px-3 py-1 transition-colors hover:border-foreground/30"
+              >
+                ChatGPT
+              </Link>
+              <Link
+                href="/guide/ai#perplexity"
+                className="rounded-full border bg-background px-3 py-1 transition-colors hover:border-foreground/30"
+              >
+                Perplexity
+              </Link>
             </div>
           </div>
         </div>
@@ -153,9 +233,12 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
       {/* What You Can Ask */}
       <section className="py-10 px-4 bg-muted">
         <div className="container max-w-2xl mx-auto">
-          <h2 className="text-2xl font-bold text-center mb-2">What you can ask</h2>
+          <h2 className="text-2xl font-bold text-center mb-2">
+            What Flaim can answer quickly
+          </h2>
           <p className="text-center text-muted-foreground mb-8">
-            Start simple. These quick prompts each show off one core Flaim capability.
+            Start simple. These prompts highlight the core league data Flaim can
+            bring into your AI workflow.
           </p>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {homepageSimplePresets.map((preset) => (
@@ -164,7 +247,9 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
                 href={getDemoHref(preset.id)}
                 className="group flex items-center gap-3 rounded-lg border bg-background px-4 py-3 transition-colors hover:border-foreground/20"
               >
-                <p className="flex-1 text-sm font-medium">&ldquo;{preset.userMessage}&rdquo;</p>
+                <p className="flex-1 text-sm font-medium">
+                  &ldquo;{preset.homepageLabel ?? preset.userMessage}&rdquo;
+                </p>
                 <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground transition-all group-hover:text-primary group-hover:translate-x-0.5" />
               </Link>
             ))}
@@ -175,9 +260,12 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
       {/* Go Deeper */}
       <section className="py-10 px-4">
         <div className="container max-w-2xl mx-auto">
-          <h2 className="text-2xl font-bold text-center mb-2">Go deeper</h2>
+          <h2 className="text-2xl font-bold text-center mb-2">
+            Where Flaim gets interesting
+          </h2>
           <p className="text-center text-muted-foreground mb-8">
-            These prompts combine multiple Flaim tools and live web context.
+            These prompts combine multiple Flaim tools with live web context to
+            produce actual analysis instead of a raw data dump.
           </p>
           <div className="grid gap-2 sm:grid-cols-2">
             {homepageDeepPresets.map((preset) => (
@@ -187,7 +275,9 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
                 className="group flex flex-col rounded-lg border bg-background px-4 py-3 transition-colors hover:border-foreground/20"
               >
                 <div className="flex items-center gap-3">
-                  <p className="flex-1 text-sm font-medium">&ldquo;{preset.userMessage}&rdquo;</p>
+                  <p className="flex-1 text-sm font-medium">
+                    &ldquo;{preset.homepageLabel ?? preset.userMessage}&rdquo;
+                  </p>
                   <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground transition-all group-hover:text-primary group-hover:translate-x-0.5" />
                 </div>
                 <div className="mt-2 flex flex-wrap gap-1.5">
@@ -218,7 +308,8 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
               Read-only by design
             </div>
             <p className="mt-2 text-sm text-muted-foreground">
-              Flaim can inspect your data, but it cannot make trades, drop players, or change anything in your leagues.
+              Flaim can inspect your data, but it cannot make trades, drop
+              players, or change anything in your leagues.
             </p>
           </div>
           <div className="rounded-xl border bg-background p-4">
@@ -227,7 +318,8 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
               Works across platforms
             </div>
             <p className="mt-2 text-sm text-muted-foreground">
-              One account can pull from ESPN, Yahoo, and Sleeper instead of forcing you to copy stats and standings around by hand.
+              One account can pull from ESPN, Yahoo, and Sleeper instead of
+              forcing you to copy stats and standings around by hand.
             </p>
           </div>
           <div className="rounded-xl border bg-background p-4">
@@ -236,37 +328,27 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
               Set defaults once
             </div>
             <p className="mt-2 text-sm text-muted-foreground">
-              Use <Link href="/leagues" className="text-primary hover:underline">Your Leagues</Link> to save a default sport and favorite league so your AI needs less hand-holding.
+              Use{" "}
+              <Link href="/leagues" className="text-primary hover:underline">
+                Your Leagues
+              </Link>{" "}
+              to save a default sport and favorite league so your AI needs less
+              hand-holding.
             </p>
           </div>
-        </div>
-      </section>
-
-      {/* Share */}
-      <section className="py-10 px-4">
-        <div className="container max-w-2xl mx-auto text-center">
-          <h2 className="text-2xl font-bold mb-2">Using Flaim for something amazing?</h2>
-          <p className="text-muted-foreground">
-            I&apos;d love to hear about it.{' '}
-            <a
-              href="https://www.threads.com/@jdguggs10"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-primary hover:underline"
-            >
-              Share it with me on Threads
-            </a>
-            .
-          </p>
         </div>
       </section>
 
       {/* Setup CTA */}
       <section className="py-10 px-4">
         <div className="container max-w-2xl mx-auto text-center">
-          <h2 className="text-2xl font-bold mb-2">Ready to connect your leagues?</h2>
+          <h2 className="text-2xl font-bold mb-2">
+            Ready to connect your leagues?
+          </h2>
           <p className="text-muted-foreground mb-6">
-            Setup takes about 5 minutes. Connect a platform, add Flaim to your AI, and start asking.
+            Setup takes about 5 minutes. Connect a platform in /leagues, add
+            Flaim to your AI, and start asking questions with your real league
+            context attached.
           </p>
           <div className="flex flex-col items-center justify-center gap-3 sm:flex-row">
             <SignedOut>
@@ -298,7 +380,14 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
                 <ChevronDown className="ml-2 h-5 w-5 transition-transform group-open:rotate-180" />
               </summary>
               <div className="px-4 pb-4 text-sm text-muted-foreground space-y-2">
-                <p>Only for ESPN. The Flaim Chrome extension syncs your ESPN cookies automatically so Flaim can read your private leagues. Yahoo connects through OAuth, Sleeper just needs your username, and your AI assistant connects to Flaim separately using a single MCP URL — no extension required for the AI side.</p>
+                <p>
+                  Only for ESPN. The Flaim Chrome extension syncs your ESPN
+                  cookies automatically so Flaim can read your private leagues.
+                  Yahoo connects through OAuth, Sleeper just needs your
+                  username, and your AI assistant connects to Flaim separately
+                  using a single MCP URL — no extension required for the AI
+                  side.
+                </p>
               </div>
             </details>
 
@@ -309,7 +398,15 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
                 <ChevronDown className="ml-2 h-5 w-5 transition-transform group-open:rotate-180" />
               </summary>
               <div className="px-4 pb-4 text-sm text-muted-foreground space-y-2">
-                <p>Claude, ChatGPT, and Perplexity today using the Model Context Protocol (MCP). You add one URL — <code className="rounded bg-muted px-1 py-0.5 text-xs">https://api.flaim.app/mcp</code> — as a connector in any of these AI apps, authorize once, and Flaim handles the rest. Gemini and Grok do not support MCP connectors yet. See the <Link href="/guide/ai#gemini" className="text-primary hover:underline">AI setup guide</Link> for current status.</p>
+                <p>
+                  Claude, ChatGPT, and Perplexity today using the Model Context
+                  Protocol (MCP). You add one URL —{" "}
+                  <code className="rounded bg-muted px-1 py-0.5 text-xs">
+                    https://api.flaim.app/mcp
+                  </code>{" "}
+                  — as a connector in any of these AI apps, authorize once, and
+                  Flaim handles the rest.
+                </p>
               </div>
             </details>
 
@@ -320,7 +417,14 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
                 <ChevronDown className="ml-2 h-5 w-5 transition-transform group-open:rotate-180" />
               </summary>
               <div className="px-4 pb-4 text-sm text-muted-foreground space-y-2">
-                <p>No. Flaim is read-only by design. It can inspect your rosters, standings, matchups, transactions, free agents, player details, league settings, and league history across ESPN, Yahoo, and Sleeper — but it cannot make trades, drop players, change lineups, or modify any league settings. This applies to all platforms and all sports.</p>
+                <p>
+                  No. Flaim is read-only by design. It can inspect your rosters,
+                  standings, matchups, transactions, free agents, player
+                  details, league settings, and league history across ESPN,
+                  Yahoo, and Sleeper — but it cannot make trades, drop players,
+                  change lineups, or modify any league settings. This applies to
+                  all platforms and all sports.
+                </p>
               </div>
             </details>
 
@@ -331,14 +435,37 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
                 <ChevronDown className="ml-2 h-5 w-5 transition-transform group-open:rotate-180" />
               </summary>
               <div className="px-4 pb-4 text-sm text-muted-foreground space-y-2">
-                <p>Use <Link href="/leagues" className="text-primary hover:underline">Your Leagues</Link> to connect your fantasy platforms, then add Flaim to your AI assistant using the MCP URL shown on that page. Setup takes about 5 minutes. The <Link href="/guide/platforms" className="text-primary hover:underline">platform setup guide</Link> and <Link href="/guide/ai" className="text-primary hover:underline">AI setup guide</Link> walk through each step with troubleshooting tips.</p>
+                <p>
+                  Use{" "}
+                  <Link
+                    href="/leagues"
+                    className="text-primary hover:underline"
+                  >
+                    Your Leagues
+                  </Link>{" "}
+                  to connect your fantasy platforms, then add Flaim to your AI
+                  assistant using the MCP URL shown on that page. Setup takes
+                  about 5 minutes. The{" "}
+                  <Link
+                    href="/guide/platforms"
+                    className="text-primary hover:underline"
+                  >
+                    platform setup guide
+                  </Link>{" "}
+                  and{" "}
+                  <Link
+                    href="/guide/ai"
+                    className="text-primary hover:underline"
+                  >
+                    AI setup guide
+                  </Link>{" "}
+                  walk through each step with troubleshooting tips.
+                </p>
               </div>
             </details>
-
           </div>
         </div>
       </section>
-
     </div>
   );
 }
