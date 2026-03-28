@@ -128,12 +128,6 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
         </div>
       </section>
 
-      <section className="px-4 text-center">
-        <p className="text-xs text-muted-foreground">
-          This is Gerry&apos;s actual league data, live.
-        </p>
-      </section>
-
       <PublicChatExperience
         id="live-demo"
         initialPresetId={initialPresetId ?? null}
