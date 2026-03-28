@@ -88,23 +88,19 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
         }}
       />
       {/* Hero */}
-      <section className="px-4 py-12 text-center md:py-16">
+      <section className="px-4 py-10 text-center md:py-16">
         <div className="mx-auto max-w-3xl">
-          <p className="mb-4 text-xs font-semibold uppercase tracking-[0.28em] text-muted-foreground">
-            Read-only Fantasy Analysis
-          </p>
           <h1 className="mb-4 text-4xl font-bold md:text-6xl">
             Your real fantasy leagues,
             <span className="block text-muted-foreground">
               connected to your AI.
             </span>
           </h1>
-          <p className="mx-auto max-w-2xl text-lg text-muted-foreground md:text-xl">
-            Flaim connects ESPN, Yahoo, and Sleeper to Claude, ChatGPT, and
-            Perplexity, giving the AI you already use your real roster,
-            matchups, standings, waiver wire, and league activity.
+          <p className="mx-auto max-w-2xl text-base text-muted-foreground md:text-xl">
+            Flaim gives Claude, ChatGPT, and Perplexity your real league data
+            from ESPN, Yahoo, and Sleeper.
           </p>
-          <p className="mx-auto mt-4 max-w-2xl text-sm leading-6 text-muted-foreground">
+          <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
             Stop copying stats into ChatGPT. Just connect your leagues.
           </p>
         </div>

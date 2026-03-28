@@ -562,11 +562,11 @@ export function PublicChatExperience({
           <div className="bg-[radial-gradient(circle_at_top,rgba(59,130,246,0.08),transparent_40%),linear-gradient(to_bottom,rgba(248,250,252,0.98),rgba(241,245,249,0.78))] dark:bg-[radial-gradient(circle_at_top,rgba(96,165,250,0.16),transparent_42%),linear-gradient(to_bottom,rgba(17,24,39,0.98),rgba(3,7,18,0.94))]">
             <div
               ref={transcriptScrollRef}
-              className="h-[30rem] overflow-y-auto overscroll-contain px-3 py-4 sm:h-[36rem] sm:px-4 sm:py-5"
+              className="h-[24rem] overflow-y-auto overscroll-contain px-3 py-4 sm:h-[32rem] sm:px-4 sm:py-5"
             >
               <div className="mx-auto flex max-w-2xl flex-col gap-4">
                 {!selectedPreset && runStatus === "idle" ? (
-                  <div className="flex min-h-[15rem] flex-1 items-center justify-center">
+                  <div className="flex min-h-[12rem] flex-1 items-center justify-center">
                     <div className="max-w-md text-center">
                       <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-[1.5rem] border border-border bg-background shadow-sm">
                         <Image
