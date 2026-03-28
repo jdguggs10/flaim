@@ -1,85 +1,86 @@
-# Flaim Fantasy
+# Flaim
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![MCP Tools](https://img.shields.io/badge/MCP_Tools-9-green.svg)](https://api.flaim.app/mcp)
 [![Chrome Web Store](https://img.shields.io/badge/Chrome_Extension-v1.5.1-yellow.svg)](https://chromewebstore.google.com/detail/flaim-espn-fantasy-connec/mbnokejgglkfgkeeenolgdpcnfakpbkn)
 
-Connect your ESPN, Yahoo, and Sleeper leagues to ChatGPT, Claude, and Gemini CLI so you can ask about your actual team, matchup, standings, and waiver wire. Flaim combines live league data with built-in fantasy analyst guidance, so the answers are grounded in your league instead of generic rankings.
+Flaim connects your fantasy sports leagues (ESPN, Yahoo, Sleeper) to modern AI assistants like ChatGPT, Claude, and Gemini CLI.
 
-Read-only by design. No trades, no drops, no roster changes — just advice.
+Rather than building another walled-garden chatbot, Flaim provides the **data infrastructure and context** needed for general-purpose AIs to act as expert fantasy sports analysts for your specific team and matchup.
+
+Read-only by design. No trades, no drops, no roster changes — just context and advice.
+
+---
+
+## What is Flaim?
+
+To understand Flaim, it helps to break it into three core pieces:
+
+1. **The Data Infrastructure (MCP Servers)**
+   - Flaim provides a single, unified gateway for AI models to query real-time fantasy data across different platforms (ESPN, Yahoo, Sleeper) and sports (Football, Baseball, Basketball, Hockey).
+   - It leverages the **Model Context Protocol (MCP)**, allowing an AI assistant to dynamically fetch rosters, standings, matchups, and waiver wires exactly when it needs them to answer a user's question.
+
+2. **The "Analyst" Skill**
+   - Raw data isn't enough; the AI needs to know *how* to use it.
+   - Flaim includes an open-source "Skill" (instructions) that teaches the AI how to behave like a fantasy analyst. It tells the AI which MCP tools to call, how to interpret the numbers, and how to formulate actionable advice grounded in the user's specific league rules and roster constraints.
+
+3. **The Web Hub & Authentication (BYOAI)**
+   - Flaim uses a "Bring Your Own AI" (BYOAI) approach. The web app (flaim.app) acts as a secure configuration hub where users connect their fantasy platforms and select their default leagues.
+   - We handle the complex authentication (ESPN cookies via an extension, Yahoo OAuth, Sleeper public APIs) and provide a standard OAuth 2.1 flow. Users simply connect their preferred AI (e.g., ChatGPT or Claude) to their Flaim account, granting the AI secure, scoped access to their fantasy data.
 
 ## How It Works
 
-The **Flaim skill** teaches your AI assistant how to behave like a fantasy analyst — which data to pull, how to interpret it, and how to turn it into useful advice. The **MCP tools** feed it your actual league data. Together, they give a general-purpose AI enough structure to answer like it knows your specific league.
+Flaim bridges the gap between private fantasy league data and external AI models.
 
-## Get Started
+### System Architecture
 
-1. **Sign up** at [flaim.app](https://flaim.app)
-2. **Connect your platforms** — ESPN via [Chrome extension](https://chromewebstore.google.com/detail/flaim-espn-fantasy-connec/mbnokejgglkfgkeeenolgdpcnfakpbkn), Yahoo via OAuth, Sleeper by username
-3. **Leagues auto-discovered** — all your leagues and past seasons are found automatically
-4. **Pick a default league** for AI conversations
-5. **Install the skill** — recommended for agent-skill tools; copy `.agents/skills/flaim-fantasy/` into your project or home directory (see [The Skill](#the-skill) below)
-6. **Add Flaim to your AI** — use the MCP URL in Claude, ChatGPT, or Gemini CLI
-7. **Ask questions** — "Who should I start this week?", "What's on the waiver wire?", etc.
+The project is built on a stable, "boring is better" tech stack emphasizing edge compute and low-maintenance infrastructure:
 
-## The Skill
+* **Web App (Next.js on Vercel):** Handles user onboarding, OAuth consent, league management, and provides specialized internal chat interfaces for debugging (`/dev`) and public demos (`/chat`).
+* **Authentication Worker (Cloudflare Workers):** Manages user sessions, JWT verification, and securely stores/retrieves credentials via a Supabase Postgres database.
+* **Unified MCP Gateway (Cloudflare Workers):** Acts as the single entry point for AI clients. It receives MCP tool requests and dynamically routes them to the correct platform-specific worker using internal service bindings.
+* **Platform Clients (Cloudflare Workers):** Dedicated workers (`espn-client`, `yahoo-client`, `sleeper-client`) that handle the specific API quirks, data normalization, and request logic for each fantasy platform.
 
-The Flaim skill teaches your AI assistant how to behave like a fantasy analyst — when to use which tools, how to interpret league data, and how to turn that context into useful advice.
+```mermaid
+flowchart LR
+    AI[Claude / ChatGPT / Gemini CLI] -->|OAuth Token| Gateway(Unified MCP Gateway)
 
-**Install for Claude Code (or any Agent Skills-compatible tool):**
+    subgraph Flaim Cloudflare Workers
+        Gateway --> ESPN(ESPN Client)
+        Gateway --> Yahoo(Yahoo Client)
+        Gateway --> Sleeper(Sleeper Client)
+    end
 
-Place the skill in your project's `.agents/skills/` directory (cross-platform convention) or in `~/.agents/skills/` for global use:
+    ESPN --> ESPN_API[ESPN API]
+    Yahoo --> Yahoo_API[Yahoo API]
+    Sleeper --> Sleeper_API[Sleeper API]
 
-```bash
-# Clone or copy the skill directory
-cp -r flaim/.agents/skills/flaim-fantasy ~/.agents/skills/flaim-fantasy
+    Gateway --> Auth(Auth Worker)
+    Auth --> DB[(Supabase Postgres)]
 ```
 
-The AI will detect and activate the skill automatically when you ask fantasy questions.
+### The User Flow
 
-## MCP Tools
+1. **Onboarding:** A user signs up at [flaim.app](https://flaim.app).
+2. **Connection:** They connect their leagues:
+   - **ESPN:** Managed via a specialized Chrome Extension that seamlessly syncs session cookies.
+   - **Yahoo:** Connected via standard OAuth.
+   - **Sleeper:** Connected instantly via public username.
+3. **Integration:** The user copies their Flaim MCP URL and adds it to their AI assistant's configuration.
+4. **Execution:** When the user asks "Who should I start at Flex this week?", the AI queries Flaim via MCP, retrieves the user's live roster and matchup data, and generates a personalized recommendation.
 
-| Tool | What it does |
-|------|-------------|
-| `get_user_session` | Your leagues across all platforms |
-| `get_ancient_history` | Historical leagues and seasons (2+ years old) |
-| `get_league_info` | League settings and members |
-| `get_roster` | Team roster with player stats |
-| `get_matchups` | Weekly matchups and scores |
-| `get_standings` | League standings and rankings |
-| `get_free_agents` | Available free agents sorted by ownership |
-| `get_players` | Player lookup with ownership context |
-| `get_transactions` | Recent adds, drops, waivers, and trades |
+## Why We Built It This Way
 
-All tools connect through a single MCP endpoint: `https://api.flaim.app/mcp`
+* **Decoupled AI Frontend:** By acting as a data provider (MCP) rather than a chat interface, Flaim remains agnostic to the rapid evolution of AI models. Users can bring their favorite, most capable model to the table.
+* **Edge Performance:** Utilizing Cloudflare Workers ensures fast, distributed data fetching and reduces latency when the AI is making multiple tool calls in a single conversational turn.
+* **Security & Isolation:** The architecture strictly separates the authentication layer from the data fetching layer, ensuring that sensitive credentials (like ESPN cookies) are securely stored and only accessed internally by the platform clients.
+* **Modularity:** The unified gateway and separate platform clients make it straightforward to add support for new fantasy platforms or sports in the future.
 
-## Supported Platforms
+---
 
-| Platform | Sports | Auth |
-|----------|--------|------|
-| **ESPN** | Football, Baseball, Basketball, Hockey | Chrome extension or manual cookies |
-| **Yahoo** | Football, Baseball, Basketball, Hockey | OAuth 2.0 |
-| **Sleeper** | Football, Basketball | Username (public API) |
+## Development & Documentation
 
-## Architecture
-
-```
-Chrome Extension → flaim.app → Auth Worker → Supabase
-                      ↓
-Claude/ChatGPT/Gemini CLI → Fantasy MCP Gateway → ESPN/Yahoo/Sleeper Clients → Platform APIs
-```
-
-- **Web App (Next.js on Vercel)** — landing/site pages, public `/chat` live demo, internal `/dev` lab, OAuth, league management
-- **MCP Gateway (Cloudflare Workers)** — unified endpoint for all platforms and sports
-- **Platform Clients (Cloudflare Workers)** — ESPN, Yahoo, Sleeper API normalization
-- **Auth Worker (Cloudflare)** — token validation, rate limiting, credential storage
-- **Supabase** — user data, OAuth tokens, credentials
-
-## About
-
-Solo indie project — built with care, maintained for the long term. No VC funding, no growth pressure, just a useful tool for fantasy sports fans who use AI.
-
-## Development
+Flaim is a solo indie project built for long-term stability and utility.
 
 ```bash
 git clone https://github.com/jdguggs10/flaim.git
@@ -88,17 +89,17 @@ cp web/.env.example web/.env.local  # add keys
 npm run dev
 ```
 
+### Key Resources
+
 | Document | Description |
 |----------|-------------|
-| [Architecture](docs/ARCHITECTURE.md) | System design, deployment, troubleshooting |
+| [Architecture](docs/ARCHITECTURE.md) | Deep dive into system design, OAuth flows, and infrastructure |
+| [Web App](web/README.md) | Next.js routes, UI components, and chat surfaces |
+| [Workers](workers/README.md) | Cloudflare Workers setup, unified gateway, and MCP tools |
+| [Extension](extension/README.md) | Chrome extension build and sync mechanisms |
 | [Changelog](docs/CHANGELOG.md) | Release history |
-| [Web App](web/README.md) | Next.js routes, components, environment |
-| [Workers](workers/README.md) | Cloudflare Workers, MCP tools, ESPN API |
-| [Extension](extension/README.md) | Chrome extension build, Sync Host, CWS |
 
-## Getting Help
-
-Best-effort support — I'll respond when I can.
+### Getting Help
 
 - [GitHub Issues](https://github.com/jdguggs10/flaim/issues)
 - [GitHub Discussions](https://github.com/jdguggs10/flaim/discussions)
