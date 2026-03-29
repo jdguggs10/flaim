@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { SignedIn, SignedOut } from "@clerk/nextjs";
 import { PublicChatExperience } from "@/components/public-demo/public-chat-experience";
+import { HeroChat } from "@/components/site/hero-chat";
 
 export const metadata: Metadata = {
   title: "Flaim — Connect ESPN, Yahoo & Sleeper Fantasy Leagues to AI",
@@ -87,22 +88,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
           }),
         }}
       />
-      {/* Hero */}
-      <section className="px-4 py-10 text-center md:py-16">
-        <div className="mx-auto max-w-[42rem]">
-          <h1 className="mb-4 text-4xl font-bold leading-[0.95] tracking-tight md:text-6xl">
-            <span className="block text-foreground/65">
-              Can you see my fantasy leagues?
-            </span>
-            <span className="block text-[1.08em] text-foreground">Yes.</span>
-          </h1>
-          <p className="mx-auto max-w-2xl text-lg leading-7 text-foreground/70 md:text-[1.4rem] md:leading-8">
-            Flaim connects ChatGPT, Claude, and Perplexity to ESPN, Yahoo, and
-            Sleeper.
-          </p>
-          <div className="mx-auto mt-8 h-px w-24 bg-border/60" />
-        </div>
-      </section>
+      <HeroChat />
 
       <PublicChatExperience
         id="live-demo"
