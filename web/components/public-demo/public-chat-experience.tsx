@@ -12,6 +12,7 @@ import {
   type PublicChatPresetId,
 } from "@/lib/public-chat";
 import { cn } from "@/lib/utils";
+import { IconBallBaseball, IconBallAmericanFootball } from "@tabler/icons-react";
 import { ArrowUp, LoaderCircle, Plus } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -65,11 +66,11 @@ const PUBLIC_TOOL_CARD_COMPLETED_PAUSE_MS = 220;
 
 const PUBLIC_SPORT_COPY: Record<
   PublicChatDemoSport,
-  { emoji: string; label: string }
+  { icon: React.ReactNode; label: string }
 > =
   {
-    baseball: { emoji: "⚾", label: "baseball" },
-    football: { emoji: "🏈", label: "football" },
+    baseball: { icon: <IconBallBaseball className="h-4 w-4" stroke={1.5} />, label: "baseball" },
+    football: { icon: <IconBallAmericanFootball className="h-4 w-4" stroke={1.5} />, label: "football" },
   };
 
 function getEasternMonth(now = new Date()) {
@@ -508,8 +509,8 @@ export function PublicChatExperience({
                     aria-label="Show demo context"
                     className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-background px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-foreground transition-colors hover:bg-muted"
                   >
-                    <span className="text-sm leading-none" aria-hidden="true">
-                      {PUBLIC_SPORT_COPY[demoSport].emoji}
+                    <span className="leading-none" aria-hidden="true">
+                      {PUBLIC_SPORT_COPY[demoSport].icon}
                     </span>
                     <span>ESPN</span>
                   </button>
@@ -560,9 +561,7 @@ export function PublicChatExperience({
                         </div>
                       </div>
                       {/* Baseball */}
-                      <span className="text-2xl" aria-hidden>
-                        ⚾
-                      </span>
+                      <IconBallBaseball className="h-7 w-7 text-foreground/70" stroke={1.5} aria-hidden />
                     </div>
                     <span
                       className="public-chat-arrow-fade mt-1 text-lg text-muted-foreground/60"
