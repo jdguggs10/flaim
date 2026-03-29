@@ -550,21 +550,9 @@ export function PublicChatExperience({
                       Real answers from Gerry&apos;s ESPN league
                     </p>
                     {/* Baseball drop animation */}
-                    <div
-                      className="relative mt-4"
-                      style={{
-                        animation:
-                          "public-chat-ball-drop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) both",
-                      }}
-                    >
+                    <div className="public-chat-ball-drop relative mt-4">
                       {/* Speed lines */}
-                      <div
-                        className="absolute -top-6 left-1/2 -translate-x-1/2"
-                        style={{
-                          animation:
-                            "public-chat-speed-lines 0.6s ease-out both",
-                        }}
-                      >
+                      <div className="public-chat-speed-lines absolute -top-6 left-1/2 -translate-x-1/2">
                         <div className="flex gap-1.5">
                           <div className="h-5 w-[2px] rounded-full bg-orange-400/60 dark:bg-orange-500/50" />
                           <div className="h-7 w-[2px] rounded-full bg-orange-500/80 dark:bg-orange-400/60" />
@@ -577,12 +565,8 @@ export function PublicChatExperience({
                       </span>
                     </div>
                     <span
-                      className="mt-1 text-lg text-muted-foreground/60"
+                      className="public-chat-arrow-fade mt-1 text-lg text-muted-foreground/60"
                       aria-hidden
-                      style={{
-                        animation:
-                          "public-chat-arrow-fade 0.4s ease-out 0.5s both",
-                      }}
                     >
                       ↓
                     </span>
