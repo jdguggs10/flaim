@@ -94,11 +94,14 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
             <span className="block text-foreground/65">
               Can you see my fantasy leagues?
             </span>
-            <span className="block text-[1.08em] text-foreground">Yes.</span>
+            <span className="mt-3 block text-[1.08em] text-foreground md:mt-4">
+              Yes.
+            </span>
           </h1>
           <p className="mx-auto max-w-2xl text-lg leading-7 text-foreground/70 md:text-[1.4rem] md:leading-8">
             Flaim connects ChatGPT, Claude, and Perplexity to ESPN, Yahoo, and
-            Sleeper.
+            Sleeper. Ask about start/sit decisions, waiver wire targets, and
+            what matters in your league right now.
           </p>
           <div className="mx-auto mt-8 h-px w-24 bg-border/60" />
         </div>
