@@ -15,8 +15,6 @@ const SHOWCASE_ITEMS = [
   "waiver wire",
 ];
 
-const PLATFORMS = ["ESPN", "Yahoo", "Sleeper"];
-const AI_APPS = ["ChatGPT", "Claude", "Perplexity"];
 const SHOWCASE_VISIBLE_COUNT = 2;
 const SHOWCASE_PILL_WIDTH_REM = 9.25;
 const SHOWCASE_PILL_GAP_REM = 0.5;
@@ -134,8 +132,10 @@ export function HeroChat() {
           className="flex justify-end"
           style={{
             opacity: isPast("question") ? 1 : 0,
-            transform: isPast("question") ? "translateY(0)" : "translateY(8px)",
-            transition: prefersReducedMotion ? undefined : "all 0.4s ease",
+            transform: isPast("question") ? "translateY(0)" : "translateY(10px)",
+            transition: prefersReducedMotion
+              ? undefined
+              : "all 0.55s cubic-bezier(0.22,1,0.36,1)",
           }}
         >
           <div className="rounded-2xl rounded-br-md bg-primary px-5 py-3 text-base font-medium text-primary-foreground md:text-lg">
@@ -151,8 +151,10 @@ export function HeroChat() {
               opacity: isPast("dots") ? 1 : 0,
               transform: isPast("dots")
                 ? "translateY(0)"
-                : "translateY(8px)",
-              transition: prefersReducedMotion ? undefined : "all 0.3s ease",
+                : "translateY(10px)",
+              transition: prefersReducedMotion
+                ? undefined
+                : "all 0.48s cubic-bezier(0.22,1,0.36,1)",
             }}
           >
             {phase === "dots" ? (
@@ -203,7 +205,7 @@ export function HeroChat() {
                           transition:
                             prefersReducedMotion || !animateShowcaseTrack
                               ? undefined
-                              : "transform 420ms cubic-bezier(0.16,1,0.3,1)",
+                              : "transform 620ms cubic-bezier(0.22,1,0.36,1)",
                         }}
                       >
                         {showcaseTrackItems.map((item, i) => (
@@ -227,40 +229,30 @@ export function HeroChat() {
           </div>
         </div>
 
-        {/* Body: platform → Flaim → AI row */}
+        {/* Body copy */}
         <div
           style={{
             opacity: isPast("body") ? 1 : 0,
-            transform: isPast("body") ? "translateY(0)" : "translateY(10px)",
+            transform: isPast("body") ? "translateY(0)" : "translateY(14px)",
             transition: prefersReducedMotion
               ? undefined
-              : "all 0.5s ease 0.2s",
+              : "all 0.68s cubic-bezier(0.22,1,0.36,1) 0.24s",
           }}
         >
-          <div className="flex flex-col items-center gap-1.5 pt-2 text-sm">
-            <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1">
-              {PLATFORMS.map((platform, i) => (
-                <span key={platform}>
-                  <span className="font-medium text-foreground/70">
-                    {platform}
-                  </span>
-                  {i < PLATFORMS.length - 1 && (
-                    <span className="ml-2 text-foreground/20">/</span>
-                  )}
-                </span>
-              ))}
-            </div>
-            <span className="text-base text-foreground/30">↓</span>
-            <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1">
-              {AI_APPS.map((app, i) => (
-                <span key={app}>
-                  <span className="font-medium text-foreground/70">{app}</span>
-                  {i < AI_APPS.length - 1 && (
-                    <span className="ml-2 text-foreground/20">/</span>
-                  )}
-                </span>
-              ))}
-            </div>
+          <div className="mx-auto max-w-lg space-y-3 px-2 pt-3 text-center">
+            <p className="text-sm leading-6 text-foreground/78 md:text-base">
+              Flaim connects{" "}
+              <span className="font-medium text-foreground">ChatGPT</span>,{" "}
+              <span className="font-medium text-foreground">Claude</span>, and{" "}
+              <span className="font-medium text-foreground">Perplexity</span> to{" "}
+              <span className="font-medium text-foreground">ESPN</span>,{" "}
+              <span className="font-medium text-foreground">Yahoo</span>, and{" "}
+              <span className="font-medium text-foreground">Sleeper</span>.
+            </p>
+            <p className="text-sm leading-6 text-muted-foreground md:text-[0.95rem]">
+              Give your AI access to your fantasy leagues. Manage start/sit,
+              find waiver wire gems, and more.
+            </p>
           </div>
         </div>
       </div>
