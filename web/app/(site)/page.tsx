@@ -99,7 +99,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
             Sleeper.
           </p>
           <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
-            It also does a bunch of other cool things too...
+            Stop copying your stats and players. Just add your leagues.
           </p>
         </div>
       </section>
