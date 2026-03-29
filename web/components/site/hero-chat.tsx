@@ -83,7 +83,7 @@ function HiddenStylePicker({
       />
 
       {open && (
-        <div className="absolute top-full mt-2 right-0 w-48 rounded-lg border border-border bg-card p-1.5 shadow-lg">
+        <div className="absolute top-full mt-2 right-0 w-48 max-h-[70vh] overflow-y-auto overscroll-contain rounded-lg border border-border bg-card p-1.5 shadow-lg">
           <div className="mb-1.5 px-2 py-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
             Hero style
           </div>
