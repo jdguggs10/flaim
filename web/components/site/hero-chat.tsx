@@ -28,6 +28,74 @@ const VARIANT_LABELS: Record<Variant, string> = {
   J: "J: Glow",
 };
 
+const ALL_VARIANTS = Object.keys(VARIANT_LABELS) as Variant[];
+
+/* ------------------------------------------------------------------ */
+/*  Hidden style picker — invisible button in header whitespace       */
+/* ------------------------------------------------------------------ */
+
+function HiddenStylePicker({
+  variant,
+  onSelect,
+}: {
+  variant: Variant;
+  onSelect: (v: Variant) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  return (
+    <div ref={ref} className="fixed top-3 right-[50%] z-[60]">
+      {/* Invisible trigger — 24x24 transparent hit area in header whitespace */}
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="h-6 w-6 cursor-default rounded-full opacity-0 hover:opacity-[0.04] transition-opacity"
+        aria-label="Style picker"
+      />
+
+      {open && (
+        <div className="absolute top-full mt-2 right-0 w-48 rounded-lg border border-border bg-card p-1.5 shadow-lg">
+          <div className="mb-1.5 px-2 py-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+            Hero style
+          </div>
+          {ALL_VARIANTS.map((v) => (
+            <button
+              key={v}
+              onClick={() => {
+                onSelect(v);
+                setOpen(false);
+              }}
+              className={`flex w-full items-center rounded-md px-2 py-1.5 text-left text-xs transition-colors ${
+                variant === v
+                  ? "bg-primary/10 font-medium text-primary"
+                  : "text-foreground hover:bg-muted"
+              }`}
+            >
+              {VARIANT_LABELS[v]}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Hooks                                                             */
+/* ------------------------------------------------------------------ */
+
 function usePrefersReducedMotion() {
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
 
@@ -48,12 +116,10 @@ function useRotatingWord(
 ) {
   const [index, setIndex] = useState(0);
   const [isAnimating, setIsAnimating] = useState(false);
-  // Typewriter state
   const [displayedChars, setDisplayedChars] = useState(
     ROTATING_WORDS[0].length,
   );
   const [isDeleting, setIsDeleting] = useState(false);
-  // Scramble state
   const [scrambleText, setScrambleText] = useState(ROTATING_WORDS[0]);
   const scrambleRef = useRef<number | null>(null);
 
@@ -137,7 +203,6 @@ function useRotatingWord(
           return;
         }
 
-        // Progressively reveal correct characters
         const revealed = Math.floor((tick / totalTicks) * target.length);
         let result = "";
         for (let i = 0; i < target.length; i++) {
@@ -166,6 +231,10 @@ function useRotatingWord(
     scrambleText,
   };
 }
+
+/* ------------------------------------------------------------------ */
+/*  Rotating word renderer                                            */
+/* ------------------------------------------------------------------ */
 
 function RotatingWord({
   variant,
@@ -271,7 +340,6 @@ function RotatingWord({
   }
 
   if (variant === "G") {
-    // Highlighter — yellow marker stroke behind the word
     return (
       <span className="relative inline-flex items-baseline overflow-hidden align-baseline">
         <span className="relative inline-block" style={slideStyle}>
@@ -286,7 +354,6 @@ function RotatingWord({
   }
 
   if (variant === "H") {
-    // Scramble — letters randomize then settle
     return (
       <span className="inline-block font-mono text-primary">
         {scrambleText}
@@ -295,7 +362,6 @@ function RotatingWord({
   }
 
   if (variant === "I") {
-    // Flip card — 3D Y-axis rotation
     return (
       <span
         className="inline-block text-primary"
@@ -316,7 +382,7 @@ function RotatingWord({
     );
   }
 
-  // J: Glow — soft text shadow pulse
+  // J: Glow
   return (
     <span
       className="inline-block text-primary"
@@ -334,6 +400,10 @@ function RotatingWord({
   );
 }
 
+/* ------------------------------------------------------------------ */
+/*  Main component                                                    */
+/* ------------------------------------------------------------------ */
+
 export function HeroChat() {
   const prefersReducedMotion = usePrefersReducedMotion();
   const [variant, setVariant] = useState<Variant>("A");
@@ -350,27 +420,7 @@ export function HeroChat() {
 
   return (
     <>
-      {/* Variant switcher — sticky bar */}
-      <div className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur-sm">
-        <div className="mx-auto flex max-w-4xl items-center gap-1.5 overflow-x-auto px-4 py-2">
-          <span className="shrink-0 text-xs font-medium text-muted-foreground">
-            Style:
-          </span>
-          {(Object.keys(VARIANT_LABELS) as Variant[]).map((v) => (
-            <button
-              key={v}
-              onClick={() => setVariant(v)}
-              className={`shrink-0 rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-                variant === v
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted text-muted-foreground hover:bg-accent hover:text-foreground"
-              }`}
-            >
-              {VARIANT_LABELS[v]}
-            </button>
-          ))}
-        </div>
-      </div>
+      <HiddenStylePicker variant={variant} onSelect={setVariant} />
 
       <section className="px-4 py-10 md:py-16">
         <div className="mx-auto max-w-2xl">
