@@ -542,32 +542,16 @@ export function PublicChatExperience({
             >
               <div className="mx-auto flex max-w-2xl flex-col gap-4">
                 {!selectedPreset && runStatus === "idle" ? (
-                  <div className="flex min-h-[12rem] flex-1 items-center justify-center">
-                    <div className="max-w-md text-center">
-                      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-[1.5rem] border border-border bg-background shadow-sm">
-                        <Image
-                          src="/flaim-mark-hero.png"
-                          alt="Flaim"
-                          width={28}
-                          height={28}
-                          className="dark:hidden"
-                        />
-                        <Image
-                          src="/flaim-mark-hero-dark.png"
-                          alt="Flaim"
-                          width={28}
-                          height={28}
-                          className="hidden dark:block"
-                        />
-                      </div>
-                      <h3 className="mt-4 text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
-                        Ask something
-                      </h3>
-                      <p className="mt-2 text-sm text-muted-foreground">
-                        Pick a prompt below. These demo answers refresh
-                        regularly from Gerry&apos;s real ESPN league.
-                      </p>
-                    </div>
+                  <div className="flex min-h-[12rem] flex-1 flex-col items-center justify-end pb-4">
+                    <p className="text-3xl font-bold tracking-tight text-foreground/80 sm:text-4xl">
+                      Pick something
+                    </p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Real answers from Gerry&apos;s ESPN league
+                    </p>
+                    <span className="mt-3 text-2xl" aria-hidden>
+                      ↓
+                    </span>
                   </div>
                 ) : null}
 
