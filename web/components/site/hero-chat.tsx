@@ -13,7 +13,9 @@ const ROTATING_WORDS = [
   "waiver wire",
 ];
 
-type Variant = "A" | "B" | "C" | "D" | "E" | "F" | "G" | "H" | "I" | "J";
+type Variant =
+  | "A" | "B" | "C" | "D" | "E" | "F" | "G" | "H" | "I" | "J"
+  | "K" | "L" | "M" | "N";
 
 const VARIANT_LABELS: Record<Variant, string> = {
   A: "A: Soft pill",
@@ -26,7 +28,22 @@ const VARIANT_LABELS: Record<Variant, string> = {
   H: "H: Scramble",
   I: "I: Flip card",
   J: "J: Glow",
+  K: "K: Color cycle",
+  L: "L: Gradient pill",
+  M: "M: Neon",
+  N: "N: Rainbow sweep",
 };
+
+const COLOR_CYCLE = [
+  "text-blue-500 dark:text-blue-400",
+  "text-emerald-500 dark:text-emerald-400",
+  "text-orange-500 dark:text-orange-400",
+  "text-violet-500 dark:text-violet-400",
+  "text-rose-500 dark:text-rose-400",
+  "text-cyan-500 dark:text-cyan-400",
+  "text-amber-500 dark:text-amber-400",
+  "text-fuchsia-500 dark:text-fuchsia-400",
+];
 
 const ALL_VARIANTS = Object.keys(VARIANT_LABELS) as Variant[];
 
@@ -226,6 +243,7 @@ function useRotatingWord(
 
   return {
     currentWord: ROTATING_WORDS[index],
+    wordIndex: index,
     isAnimating,
     displayedChars,
     scrambleText,
@@ -239,6 +257,7 @@ function useRotatingWord(
 function RotatingWord({
   variant,
   currentWord,
+  wordIndex,
   isAnimating,
   displayedChars,
   scrambleText,
@@ -246,6 +265,7 @@ function RotatingWord({
 }: {
   variant: Variant;
   currentWord: string;
+  wordIndex: number;
   isAnimating: boolean;
   displayedChars: number;
   scrambleText: string;
@@ -377,20 +397,94 @@ function RotatingWord({
     );
   }
 
-  // J: Glow
+  if (variant === "J") {
+    return (
+      <span
+        className="inline-block text-primary"
+        style={
+          prefersReducedMotion
+            ? undefined
+            : {
+                animation: "hero-glow-pulse 2.4s ease-in-out infinite",
+                ...slideStyle,
+              }
+        }
+      >
+        {currentWord}
+      </span>
+    );
+  }
+
+  if (variant === "K") {
+    // Color cycle — each word gets a different color
+    const colorClass = COLOR_CYCLE[wordIndex % COLOR_CYCLE.length];
+    return (
+      <span className="relative inline-flex items-baseline overflow-hidden align-baseline">
+        <span
+          className={`inline-block transition-colors duration-500 ${colorClass}`}
+          style={slideStyle}
+        >
+          {currentWord}
+        </span>
+      </span>
+    );
+  }
+
+  if (variant === "L") {
+    // Gradient pill — gradient background, white text
+    return (
+      <span className="inline-flex items-baseline overflow-hidden rounded-lg bg-gradient-to-r from-blue-500 via-violet-500 to-purple-500 px-3 py-0.5 align-baseline dark:from-blue-600 dark:via-violet-600 dark:to-purple-600">
+        <span
+          className="inline-block text-white"
+          style={slideStyle}
+        >
+          {currentWord}
+        </span>
+      </span>
+    );
+  }
+
+  if (variant === "M") {
+    // Neon — bright color with intense glow
+    return (
+      <span className="relative inline-flex items-baseline overflow-hidden align-baseline">
+        <span
+          className="inline-block text-emerald-400"
+          style={
+            prefersReducedMotion
+              ? undefined
+              : {
+                  textShadow:
+                    "0 0 7px rgb(52 211 153 / 0.7), 0 0 20px rgb(52 211 153 / 0.4), 0 0 40px rgb(52 211 153 / 0.2)",
+                  ...slideStyle,
+                }
+          }
+        >
+          {currentWord}
+        </span>
+      </span>
+    );
+  }
+
+  // N: Rainbow sweep — gradient animates across text
   return (
-    <span
-      className="inline-block text-primary"
-      style={
-        prefersReducedMotion
-          ? undefined
-          : {
-              animation: "hero-glow-pulse 2.4s ease-in-out infinite",
-              ...slideStyle,
-            }
-      }
-    >
-      {currentWord}
+    <span className="relative inline-flex items-baseline overflow-hidden align-baseline">
+      <span
+        className="inline-block bg-clip-text text-transparent"
+        style={
+          prefersReducedMotion
+            ? { color: "var(--primary)" }
+            : {
+                backgroundImage:
+                  "linear-gradient(90deg, #3b82f6, #8b5cf6, #ec4899, #f97316, #3b82f6)",
+                backgroundSize: "200% 100%",
+                animation: "hero-rainbow-sweep 3s linear infinite",
+                ...slideStyle,
+              }
+        }
+      >
+        {currentWord}
+      </span>
     </span>
   );
 }
@@ -410,7 +504,7 @@ export function HeroChat() {
         ? ("scramble" as const)
         : ("slide" as const);
 
-  const { currentWord, isAnimating, displayedChars, scrambleText } =
+  const { currentWord, wordIndex, isAnimating, displayedChars, scrambleText } =
     useRotatingWord(prefersReducedMotion, mode);
 
   return (
@@ -428,6 +522,7 @@ export function HeroChat() {
               <RotatingWord
                 variant={variant}
                 currentWord={currentWord}
+                wordIndex={wordIndex}
                 isAnimating={isAnimating}
                 displayedChars={displayedChars}
                 scrambleText={scrambleText}
