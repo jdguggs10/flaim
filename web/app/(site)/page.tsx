@@ -91,17 +91,15 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
       <section className="px-4 py-10 text-center md:py-16">
         <div className="mx-auto max-w-3xl">
           <h1 className="mb-4 text-4xl font-bold md:text-6xl">
-            Your real fantasy leagues,
-            <span className="block text-muted-foreground">
-              connected to your AI.
-            </span>
+            Can you see my fantasy league?
+            <span className="block text-primary">Yes.</span>
           </h1>
           <p className="mx-auto max-w-2xl text-base text-muted-foreground md:text-xl">
-            Flaim gives Claude, ChatGPT, and Perplexity your real league data
-            from ESPN, Yahoo, and Sleeper.
+            Flaim connects ChatGPT, Claude, and Perplexity to ESPN, Yahoo, and
+            Sleeper.
           </p>
           <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
-            Stop copying stats into ChatGPT. Just connect your leagues.
+            It also does a bunch of other cool things too...
           </p>
         </div>
       </section>
