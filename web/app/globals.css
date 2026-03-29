@@ -116,6 +116,17 @@
   }
 }
 
+@keyframes hero-cursor-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0;
+  }
+}
+
 @keyframes hero-dot-bounce {
   0%,
   80%,

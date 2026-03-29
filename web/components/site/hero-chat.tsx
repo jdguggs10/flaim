@@ -38,7 +38,6 @@ export function HeroChat() {
     const interval = window.setInterval(() => {
       setIsAnimating(true);
 
-      // After exit animation, swap word and enter
       const exitTimer = window.setTimeout(() => {
         setIndex((i) => (i + 1) % ROTATING_WORDS.length);
         setIsAnimating(false);
@@ -53,28 +52,25 @@ export function HeroChat() {
   const currentWord = ROTATING_WORDS[index];
 
   return (
-    <section className="px-4 py-10 text-center md:py-16">
-      <div className="mx-auto max-w-[42rem]">
-        <h1 className="mb-4 text-4xl font-bold leading-[0.95] tracking-tight md:text-6xl">
-          <span className="block text-foreground/65">
+    <section className="px-4 py-10 md:py-16">
+      <div className="mx-auto max-w-2xl">
+        <h1 className="mb-5 text-4xl font-bold leading-[1.1] tracking-tight md:text-6xl">
+          <span className="block text-foreground/55">
             Can you see my fantasy leagues?
           </span>
-          <span className="mt-3 block text-[1.08em] text-foreground md:mt-4">
+          <span className="mt-2 block text-foreground md:mt-3">
             Yes, your{" "}
-            <span
-              className="inline-block overflow-hidden align-bottom"
-              style={{ minWidth: "5ch" }}
-            >
+            <span className="relative inline-flex items-baseline overflow-hidden align-baseline">
               <span
-                className="inline-block text-primary"
+                className="inline-block rounded-lg bg-primary/10 px-2.5 py-0.5 text-primary dark:bg-primary/15"
                 style={
                   prefersReducedMotion
                     ? undefined
                     : {
                         transition:
-                          "transform 0.3s cubic-bezier(0.16,1,0.3,1), opacity 0.3s ease",
+                          "transform 0.3s cubic-bezier(0.16,1,0.3,1), opacity 0.25s ease",
                         transform: isAnimating
-                          ? "translateY(-100%)"
+                          ? "translateY(-110%)"
                           : "translateY(0)",
                         opacity: isAnimating ? 0 : 1,
                       }
@@ -83,15 +79,24 @@ export function HeroChat() {
                 {currentWord}
               </span>
             </span>
-            .
+            <span
+              className="ml-0.5 inline-block h-[0.9em] w-[3px] translate-y-[0.08em] rounded-full bg-primary/60"
+              style={
+                prefersReducedMotion
+                  ? undefined
+                  : {
+                      animation: "hero-cursor-blink 1s step-end infinite",
+                    }
+              }
+            />
           </span>
         </h1>
-        <p className="mx-auto max-w-2xl text-lg leading-7 text-foreground/70 md:text-[1.4rem] md:leading-8">
+        <p className="max-w-xl text-lg leading-7 text-foreground/70 md:text-xl md:leading-8">
           Flaim connects ChatGPT, Claude, and Perplexity to ESPN, Yahoo, and
           Sleeper. Ask about start/sit decisions, waiver wire targets, and what
           matters in your league right now.
         </p>
-        <div className="mx-auto mt-8 h-px w-24 bg-border/60" />
+        <div className="mt-8 h-px w-24 bg-border/60" />
       </div>
     </section>
   );
