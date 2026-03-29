@@ -100,9 +100,6 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
             Flaim connects ChatGPT, Claude, and Perplexity to ESPN, Yahoo, and
             Sleeper.
           </p>
-          <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
-            Stop copying your stats and players. Just add your leagues.
-          </p>
         </div>
       </section>
 
