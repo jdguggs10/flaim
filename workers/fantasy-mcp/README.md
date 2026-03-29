@@ -37,22 +37,23 @@ fantasy-mcp (this worker)
 
 ## MCP Tools
 
-All tools take explicit parameters. Call `get_user_session` first to get league IDs.
+All tools take explicit parameters. Call `get_user_session` first in a normal chat to get league IDs and defaults. `get_league_info` is usually the second call for the selected league so team names, owner/team mapping, scoring, and roster-slot context are established before downstream league tools.
 
 | Tool | Description |
 |------|-------------|
 | `get_user_session` | User's leagues across all platforms (call first) |
-| `get_ancient_history` | Historical leagues and seasons (2+ years old) |
-| `get_league_info` | League settings, scoring, roster config |
+| `get_ancient_history` | Past seasons and historical leagues outside the current season |
+| `get_league_info` | Baseline league context: settings, scoring, roster config, teams/owners |
 | `get_standings` | League standings with records |
 | `get_matchups` | Weekly matchups/scoreboard |
 | `get_roster` | Team roster with player stats |
-| `get_free_agents` | Available free agents |
-| `get_players` | Player lookup with market/global ownership context |
+| `get_free_agents` | Available players; ESPN/Yahoo include ownership percentages, Sleeper returns identities without ownership percentages |
+| `get_players` | Player lookup; ESPN can add league ownership, Yahoo is market/global only, Sleeper ownership is unavailable |
 | `get_transactions` | Recent transactions (adds, drops, waivers, trades) |
 
 `get_transactions` uses platform-specific week semantics in v1: ESPN/Sleeper support explicit `week`, while Yahoo ignores explicit `week` and uses a recent 14-day timestamp window. Yahoo `type=waiver` filtering is intentionally unsupported in v1. ESPN responses include a `teams` map (team ID → display name) so the LLM can resolve numeric `team_ids` on each transaction to human-readable names. Player entries are enriched with name, position, and pro team.
-`get_players` ownership fields are market/global context only (`market_percent_owned`, `ownership_scope`) and must not be used to infer league ownership.
+`get_free_agents` returns platform-specific availability context: ESPN/Yahoo include ownership percentages and sort by ownership, while Sleeper returns available-player identities from the public player index without ownership percentages.
+`get_players` always returns identity, but ownership context is platform-specific: ESPN includes market/global ownership and may also include league ownership fields (`league_status`, `league_team_name`, `league_owner_name`); Yahoo returns market/global ownership only; Sleeper returns identity with unavailable ownership context. If league ownership fields are absent, null, or unavailable, fall back to `get_league_info` + `get_roster`.
 
 ### Tool Parameters
 
@@ -62,9 +63,9 @@ All tools take explicit parameters. Call `get_user_session` first to get league 
   sport: 'football' | 'baseball' | 'basketball' | 'hockey';
   league_id: string;             // From get_user_session
   season_year: number;           // e.g., 2024
-  team_id?: string;              // For roster queries
+  team_id?: string;              // Strongly recommended for roster queries; required on Yahoo
   week?: number;                 // For matchups; and transactions on ESPN/Sleeper (ignored by Yahoo transactions)
-  type?: 'add' | 'drop' | 'trade' | 'waiver'; // For transactions (Yahoo "waiver" unsupported in v1)
+  type?: 'add' | 'drop' | 'trade' | 'waiver'; // Base transaction types; live tool metadata also supports ESPN lifecycle types and Yahoo pending_trade
   query?: string;                // For get_players (required when calling that tool)
   position?: string;             // For free agents filter
   count?: number;                // For free agents / get_players limits

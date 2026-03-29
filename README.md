@@ -42,13 +42,13 @@ The AI will detect and activate the skill automatically when you ask fantasy que
 | Tool | What it does |
 |------|-------------|
 | `get_user_session` | Your leagues across all platforms |
-| `get_ancient_history` | Historical leagues and seasons (2+ years old) |
-| `get_league_info` | League settings and members |
+| `get_ancient_history` | Past seasons and historical leagues outside the current season |
+| `get_league_info` | Baseline league context: settings, scoring, roster config, teams/owners |
 | `get_roster` | Team roster with player stats |
 | `get_matchups` | Weekly matchups and scores |
 | `get_standings` | League standings and rankings |
-| `get_free_agents` | Available free agents sorted by ownership |
-| `get_players` | Player lookup with ownership context |
+| `get_free_agents` | Available players; ESPN/Yahoo include ownership percentages, Sleeper returns identities only |
+| `get_players` | Player lookup; ESPN can add league ownership, Yahoo is market/global only, Sleeper ownership is unavailable |
 | `get_transactions` | Recent adds, drops, waivers, and trades |
 
 All tools connect through a single MCP endpoint: `https://api.flaim.app/mcp`

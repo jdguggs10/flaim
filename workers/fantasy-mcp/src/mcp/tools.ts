@@ -446,7 +446,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       openaiMeta: { invoking: 'Loading your leagues\u2026', invoked: 'Leagues loaded' },
       widgetUri: 'ui://widget/user-session.html',
       description:
-        "Returns the user's configured fantasy leagues with current season info. Use the returned platform, sport, leagueId, teamId, and seasonYear values for all subsequent tool calls. season_year always represents the start year of the season. Read-only and safe to retry.",
+        "Call this exactly once at the start of each chat before any other Flaim tool. It establishes the chat's working league context by discovering the user's available leagues and defaults, and returns the platform, sport, leagueId, teamId, and seasonYear values needed for subsequent tool calls. In normal chat flows, do not skip this first step. After this, strongly consider calling get_league_info as the second call for the selected league. season_year always represents the start year of the season. Read-only and safe to retry.",
       inputSchema: {},
       handler: async (_args, env, authHeader, correlationId, evalRunId, evalTraceId) => {
         return withToolLogging(correlationId, 'get_user_session', 'session', async () => {
@@ -671,7 +671,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       securitySchemes: buildSecuritySchemes('mcp:read'),
       openaiMeta: { invoking: 'Searching old seasons\u2026', invoked: 'History loaded' },
       description:
-        'Past seasons and historical leagues — everything not in the current season. Use when user asks about last season, inactive leagues, past seasons, or historical performance. Read-only and safe to retry.',
+        'Use this only after get_user_session, and only when the user is clearly asking about a non-current season or an inactive league. This is the historical branch: it returns past seasons and historical leagues outside the current season view. Use for last season, older seasons, inactive leagues, or historical performance. Read-only and safe to retry.',
       inputSchema: {
         platform: z
           .enum(['espn', 'yahoo', 'sleeper'])
@@ -759,11 +759,11 @@ export function getUnifiedTools(): UnifiedTool[] {
     // -------------------------------------------------------------------------
     {
       name: 'get_league_info',
-      title: 'League Information',
+      title: 'League Context',
       requiredScope: 'mcp:read',
       securitySchemes: buildSecuritySchemes('mcp:read'),
       openaiMeta: { invoking: 'Fetching league info\u2026', invoked: 'League info ready' },
-      description: `Get fantasy league information including settings, scoring type, roster configuration, schedule, and a teams array listing each team with its owner name. Use this to enumerate teams and resolve team ownership before calling get_roster. The exact team fields vary by platform but all include ownerName. Use values from get_user_session. Read-only and safe to retry. Current date is ${currentDate}.`,
+      description: `Strongly encouraged as the second call after get_user_session for the selected league. This provides the baseline league context for analysis: league name, settings, scoring type, roster configuration, and team/owner context, plus schedule or season-window metadata when the platform provides it. Use it liberally before standings, matchups, roster, free-agent, player, or transaction analysis so team names are resolved and the model has league-type, scoring, and roster context. The exact team fields vary by platform but all include ownerName. Use values from get_user_session. Read-only and safe to retry. Current date is ${currentDate}.`,
       inputSchema: {
         platform: z
           .enum(['espn', 'yahoo', 'sleeper'])
@@ -798,7 +798,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       requiredScope: 'mcp:read',
       securitySchemes: buildSecuritySchemes('mcp:read'),
       openaiMeta: { invoking: 'Fetching standings\u2026', invoked: 'Standings ready' },
-      description: `Get current league standings with team records, rankings, and playoff seeds. Use values from get_user_session. Read-only and safe to retry. Current date is ${currentDate}.`,
+      description: `Get current league standings with team records, rankings, and points summaries. ESPN may also include playoffSeed and projected-rank fields; Yahoo and Sleeper focus on ranking plus record/points data. Best used after get_user_session and, in most league-specific chats, after get_league_info so team names and league context are already established. Read-only and safe to retry. Current date is ${currentDate}.`,
       inputSchema: {
         platform: z
           .enum(['espn', 'yahoo', 'sleeper'])
@@ -833,7 +833,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       requiredScope: 'mcp:read',
       securitySchemes: buildSecuritySchemes('mcp:read'),
       openaiMeta: { invoking: 'Fetching matchups\u2026', invoked: 'Matchups ready' },
-      description: `Get matchups/scoreboard for a specific week or the current week. Use values from get_user_session. Read-only and safe to retry. Current date is ${currentDate}.`,
+      description: `Get matchups/scoreboard for a specific week or the current week. Best used after get_user_session and, in most league-specific chats, after get_league_info so the model already knows the league's team names, owner/team mapping, and league context before interpreting the matchup. Read-only and safe to retry. Current date is ${currentDate}.`,
       inputSchema: {
         platform: z
           .enum(['espn', 'yahoo', 'sleeper'])
@@ -870,7 +870,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       requiredScope: 'mcp:read',
       securitySchemes: buildSecuritySchemes('mcp:read'),
       openaiMeta: { invoking: 'Fetching roster\u2026', invoked: 'Roster ready' },
-      description: `Get detailed roster for a specific team including players, positions, stats, and ownerName. Requires authentication. Use values from get_user_session. Read-only and safe to retry. Current date is ${currentDate}.`,
+      description: `Get roster details for a specific team. Exact payload varies by platform: ESPN and Yahoo return player entries with lineup/position context, while Sleeper returns starters, bench, reserve, and record metadata for the selected roster. Best used after get_user_session and, in most league-specific chats, after get_league_info so the model already knows the league's team names, owner/team mapping, league settings, and roster context before interpreting this roster. Requires authentication except on Sleeper's public API. Read-only and safe to retry. Current date is ${currentDate}.`,
       inputSchema: {
         platform: z
           .enum(['espn', 'yahoo', 'sleeper'])
@@ -880,7 +880,7 @@ export function getUnifiedTools(): UnifiedTool[] {
           .describe('Sport type (e.g., "football", "baseball")'),
         league_id: z.string().describe('League ID (get from get_user_session)'),
         season_year: z.number().describe('Season start year (e.g., 2025 for MLB 2025, 2024 for NBA 2024-25)'),
-        team_id: z.string().optional().describe('Team ID (optional, defaults to user\'s team)'),
+        team_id: z.string().optional().describe('Team ID for the target roster. Recommended for all platforms; required on Yahoo. If omitted, platform behavior varies and may not resolve to the user\'s team.'),
         week: z.number().int().min(1).optional().describe('Week number (optional, must be ≥ 1, defaults to current week)'),
       },
       handler: async (args, env, authHeader, correlationId, evalRunId, evalTraceId) => {
@@ -909,7 +909,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       requiredScope: 'mcp:read',
       securitySchemes: buildSecuritySchemes('mcp:read'),
       openaiMeta: { invoking: 'Searching free agents\u2026', invoked: 'Free agents ready' },
-      description: `Get available players (free agents and waiver wire), optionally filtered by position. Sorted by ownership percentage. Use this for player availability only. Do not use percentOwned to infer who owns a player in the user's league; for ownership questions, use get_league_info (returns teams with ownerName) and get_roster. Requires authentication. Use values from get_user_session. Read-only and safe to retry. Current date is ${currentDate}.`,
+      description: `Get currently available players for the selected league, optionally filtered by position. Exact payload varies by platform: ESPN and Yahoo include ownership percentages and sort by ownership, while Sleeper returns available-player identities from the public player index without ownership percentages. Best used after get_user_session and usually after get_league_info so team names, owner/team mapping, scoring context, and roster-slot context are already established before giving pickup advice. Use this for player availability only. Do not use percentOwned or market ownership to infer who owns a player in the user's league; for ownership questions, use get_league_info (returns teams with ownerName) and get_roster. Requires authentication on ESPN and Yahoo; Sleeper uses the public API. Use values from get_user_session. Read-only and safe to retry. Current date is ${currentDate}.`,
       inputSchema: {
         platform: z
           .enum(['espn', 'yahoo', 'sleeper'])
@@ -954,7 +954,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       requiredScope: 'mcp:read',
       securitySchemes: buildSecuritySchemes('mcp:read'),
       openaiMeta: { invoking: 'Searching players\u2026', invoked: 'Players ready' },
-      description: `Search for player identity by name. Returns identity fields, market/global ownership (market_percent_owned), and league-specific ownership when credentials are available. League ownership fields: league_status ("ROSTERED" = on a team, "FREE_AGENT" = available, null = no credentials/unavailable), league_team_name (fantasy team name if rostered), league_owner_name (team owner if rostered). When league_status is null, ownership could not be determined — fall back to get_league_info + get_roster to check manually. Use values from get_user_session. Read-only and safe to retry. Current date is ${currentDate}.`,
+      description: `Search for player identity by name. Always returns identity fields, but ownership context varies by platform. ESPN returns market/global ownership and can also populate league ownership fields when credentials and league context are available. Yahoo returns market/global ownership only. Sleeper returns identity plus ownership_scope="unavailable" with market_percent_owned=null. Best used after get_user_session and often after get_league_info when the user cares about league-specific ownership or team-name resolution. League ownership fields: league_status ("ROSTERED" = on a team, "FREE_AGENT" = available, null = unavailable), league_team_name (fantasy team name if rostered), league_owner_name (team owner if rostered). When those league fields are absent, null, or unavailable, fall back to get_league_info + get_roster to verify manually. Use values from get_user_session. Read-only and safe to retry. Current date is ${currentDate}.`,
       inputSchema: {
         query: z
           .string()
@@ -1004,7 +1004,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       requiredScope: 'mcp:read',
       securitySchemes: buildSecuritySchemes('mcp:read'),
       openaiMeta: { invoking: 'Fetching transactions\u2026', invoked: 'Transactions ready' },
-      description: `Get recent league transactions including adds, drops, waivers, and trades. Each transaction has a "date" field (YYYY-MM-DD) and "team_ids". When presenting results, organize by time period (today, yesterday, this week, older) AND by team within each period so the user can see both when moves happened and what each team did. Week handling is platform-specific: ESPN/Sleeper use week windows (default current + previous week), while Yahoo uses a recent 14-day timestamp window and ignores explicit week. ESPN uses mTransactions2 for structured transaction data including FAAB bids, failed bids (type=failed_bid), and trade lifecycle (trade_proposal, trade_decline, trade_veto, trade_uphold). Accepted trade player details are supplemented from the activity feed. Yahoo type=waiver and type=pending_trade fetch the authenticated user's own pending claims/trades. ESPN responses include a "teams" map (team ID → display name) to resolve the numeric team_ids on each transaction, and player entries include name, position, and pro team. Use values from get_user_session. Read-only and safe to retry. Current date is ${currentDate}.`,
+      description: `Get recent league transactions including adds, drops, waivers, and trades. Best used after get_user_session and usually after get_league_info so the model already knows the league's team names and owner/team mapping before summarizing activity. Each normalized transaction includes a date field (YYYY-MM-DD), type, status, week, and optional team_ids. When presenting results, organize by time period (today, yesterday, this week, older) AND by team within each period so the user can see both when moves happened and what each team did. Week handling is platform-specific: ESPN/Sleeper use week windows (default current + previous week), while Yahoo uses a recent 14-day timestamp window and ignores explicit week. Type support is also platform-specific: Sleeper supports add/drop/trade/waiver; Yahoo supports add/drop/trade plus pending waiver/pending_trade views for the authenticated user's own items; ESPN also supports failed_bid and trade lifecycle types (trade_proposal, trade_decline, trade_veto, trade_uphold). ESPN uses mTransactions2 for structured transaction data, and accepted trade player details are supplemented from the activity feed. ESPN responses include a "teams" map (team ID → display name) to resolve the numeric team_ids on each transaction, while Yahoo and Sleeper generally rely on get_league_info for team-name resolution. Use values from get_user_session. Read-only and safe to retry. Current date is ${currentDate}.`,
       inputSchema: {
         platform: z
           .enum(['espn', 'yahoo', 'sleeper'])
@@ -1018,7 +1018,7 @@ export function getUnifiedTools(): UnifiedTool[] {
         type: z
           .enum(['add', 'drop', 'trade', 'waiver', 'pending_trade', 'trade_proposal', 'trade_decline', 'trade_veto', 'trade_uphold', 'failed_bid'])
           .optional()
-          .describe('Optional transaction type filter. Yahoo waiver/pending_trade return user\'s own pending items. ESPN trade_proposal/trade_decline/trade_veto/trade_uphold/failed_bid provide trade lifecycle and losing FAAB bids.'),
+          .describe('Optional transaction type filter. Platform support varies: Sleeper supports add/drop/trade/waiver; Yahoo supports add/drop/trade plus waiver/pending_trade for the authenticated user\'s own pending items; ESPN also supports trade_proposal/trade_decline/trade_veto/trade_uphold/failed_bid.'),
         count: z
           .number()
           .optional()

@@ -49,20 +49,21 @@ Flaim cannot place trades, add/drop players, or modify league settings.
 
 All tools take explicit parameters: `platform`, `sport`, `league_id`, `season_year` (plus optional fields where applicable).
 
-- `get_user_session` (start here): your leagues and defaults
+- `get_user_session` (required first call in a normal chat): your leagues and defaults
+- `get_league_info` (usually second): baseline league context for team-name resolution, owner/team mapping, scoring, and roster-slot context before downstream league tools
 - `get_roster`
 - `get_standings`
 - `get_matchups`
-- `get_league_info`
 - `get_free_agents`
 - `get_players`
 - `get_transactions`
-- `get_ancient_history`
+- `get_ancient_history` (historical branch for non-current seasons or inactive leagues)
 
 Supported today: ESPN, Yahoo, and Sleeper.
 Sleeper support is currently football + basketball (Phase 1).
 `get_transactions` note: ESPN/Sleeper support week filtering; Yahoo ignores explicit `week` and uses a recent 14-day timestamp window. Yahoo `type=waiver` filtering is not supported in v1.
-`get_players` note: `market_percent_owned` is market/platform-wide context only, not league ownership. For "who owns X in my league," enumerate rosters.
+`get_free_agents` note: ESPN and Yahoo include ownership percentages and sort by ownership. Sleeper returns available-player identities without ownership percentages.
+`get_players` note: ESPN may return league ownership fields (`league_status`, `league_team_name`, `league_owner_name`) when available. Yahoo returns market/platform-wide ownership only. Sleeper returns identity with unavailable ownership context. If league ownership fields are absent, null, or unavailable, verify with `get_league_info` plus `get_roster`.
 
 ## Working Examples (Copy/Paste)
 

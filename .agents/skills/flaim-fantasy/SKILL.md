@@ -49,9 +49,9 @@ Determine if the question is general sports knowledge (use web search) or specif
 
 ### Step 2: Do you already have the parameters you need?
 
-If the prompt provides explicit `platform`, `sport`, `league_id`, and `season_year` values, skip straight to step 5 and call the target tool directly. Do not call `get_user_session` when the user has already told you exactly what to query. (This is rare in real conversations — most users speak naturally and you'll need session data.)
+In normal chat flows, call `get_user_session` exactly once first and wait for the response before doing anything else. Treat this as the required chat bootstrap step for league-aware Flaim analysis.
 
-If you need to discover the user's leagues, teams, defaults, etc., call `get_user_session` and wait for the response before proceeding.
+Only skip `get_user_session` if trusted system context has already injected the exact active league parameters for this turn. A user's natural-language prompt alone is not enough reason to skip it.
 
 ### Step 3: Identify the sport
 
@@ -63,7 +63,7 @@ Check if the user hints at a specific league, team, or platform. If not, use tha
 
 ### Step 5: Select and call one tool
 
-Now that you know the four main parameters (sport, platform, league, and season), think through what the user is actually asking and pick the single most appropriate tool. Only make additional calls if the question genuinely requires data from multiple tools.
+Now that you know the four main parameters (sport, platform, league, and season), strongly consider calling `get_league_info` next for the selected league before most other league-specific tools. It provides team-name resolution plus league-type, scoring, roster-slot, and owner/team context that improves downstream analysis. Then call the target tool. Only make additional calls if the question genuinely requires them.
 
 ### Step 6: If the question is vague
 
@@ -74,31 +74,31 @@ If the user's question is too broad to map to a specific tool (e.g., "What shoul
 All tools are read-only and safe to retry. All data-fetching tools require `platform`, `sport`, `league_id`, and `season_year`.
 
 ### `get_user_session`
-Returns the user's configured leagues across all platforms with IDs, team names, and defaults. Always start here unless you already have explicit parameters. No parameters required.
+Returns the user's configured leagues across all platforms with IDs, team names, and defaults. This is the required first call at the start of a normal chat. Call it exactly once before any other Flaim tool unless trusted system context has already supplied the exact league parameters for this turn. After this, strongly consider `get_league_info` for the selected league. No parameters required.
 
 ### `get_standings`
-Current league standings with team records, rankings, points for/against, and playoff seeds. Use for "how is my team doing?", "who is in first?", "playoff picture" questions.
+Current league standings with team records, rankings, and points summaries. ESPN may also include playoff-seed and projected-rank fields; Yahoo and Sleeper focus on rank plus record/points data. Best used after `get_user_session` and usually after `get_league_info` so team names and owner/team mapping are already established. Use for "how is my team doing?", "who is in first?", "playoff picture" questions.
 
 ### `get_roster`
-Detailed roster for a specific team: players, positions, lineup slots, NFL/MLB/NBA/NHL team, injury status. Optionally specify `team_id` (defaults to user's team) and `week`. Use for "who is on my team?", "show my lineup", start/sit analysis.
+Roster details for a specific team. Exact payload varies by platform: ESPN and Yahoo return player entries with lineup/position context, while Sleeper returns starters, bench, reserve, and record metadata for the selected roster. Always prefer passing `team_id`; Yahoo requires it, and omitting it on other platforms may not resolve to the user's team. Best used after `get_user_session` and usually after `get_league_info` so team names, owner/team mapping, and league settings are already established. Use for "who is on my team?", "show my lineup", start/sit analysis.
 
 ### `get_matchups`
-Scoreboard for a specific week or current week. Shows head-to-head matchups, scores, and projections. Optionally specify `week`. Use for "who am I playing this week?", "what's the score?".
+Scoreboard for a specific week or current week. Shows head-to-head matchups, scores, and projections. Optionally specify `week`. Best used after `get_user_session` and usually after `get_league_info` so team names and owner/team mapping are already established. Use for "who am I playing this week?", "what's the score?".
 
 ### `get_free_agents`
-Available free agents sorted by ownership percentage. Optionally filter by `position` (e.g., "QB", "RB", "SP") and `count` (default 25, max 100). Use for waiver wire advice, "who should I pick up?".
+Available players for the selected league. Optionally filter by `position` (e.g., "QB", "RB", "SP") and `count` (default 25, max 100). ESPN and Yahoo include ownership percentages and sort by ownership; Sleeper returns available-player identities without ownership percentages. Best used after `get_user_session` and usually after `get_league_info` so team names, owner/team mapping, scoring context, and roster-slot context are already established before giving pickup advice. Use for waiver wire advice, "who should I pick up?".
 
 ### `get_players`
-Search player identity across roster statuses (rostered, free agent, waived). Returns identity fields plus market/global ownership context (`market_percent_owned`, `ownership_scope`). This is not league ownership data. Never infer league ownership or free-agent status in the user's league from these fields. For "who owns X in my league", enumerate teams with `get_league_info` and call `get_roster` per team.
+Search player identity across roster statuses (rostered, free agent, waived). Always returns identity fields, but ownership context varies by platform. ESPN returns market/global ownership and can also populate league ownership fields. Yahoo returns market/global ownership only. Sleeper returns identity plus unavailable ownership context (`market_percent_owned: null`, `ownership_scope: "unavailable"`). Best used after `get_user_session`, and often after `get_league_info` when the user cares about league-specific ownership or team-name resolution. If league ownership fields are absent, null, or unavailable, do not guess — fall back to `get_league_info` and `get_roster`.
 
 ### `get_transactions`
-Recent league transactions: adds, drops, waivers, and trades. Each transaction has a date and team IDs. Optionally filter by `week` and `type` (add, drop, trade, waiver). When presenting results, organize by time period and by team. ESPN responses include a teams map for resolving team IDs to names.
+Recent league transactions: adds, drops, waivers, and trades. Each normalized transaction has a date, type, status, week, and optional team IDs. Optionally filter by `week` and `type`, but support varies by platform: Sleeper supports add/drop/trade/waiver, Yahoo supports add/drop/trade plus pending waiver/pending_trade views for the authenticated user's own items, and ESPN also supports failed bids plus trade lifecycle types. Best used after `get_user_session` and usually after `get_league_info` so team names and owner/team mapping are already established before summarizing activity. When presenting results, organize by time period and by team. ESPN responses include a teams map for resolving team IDs to names.
 
 ### `get_league_info`
-League settings: scoring type, roster configuration, schedule, number of teams, playoff format. Use for "how does scoring work?", "how many teams make playoffs?".
+Baseline league context: league name, scoring type, roster configuration, team/owner context, and schedule or season-window metadata when the platform provides it. Strongly encouraged as the second call after `get_user_session` for the selected league. Use it liberally before other league-specific tools so team names are resolved and the model has league-type, scoring, and roster context. Use for "how does scoring work?", "how many teams make playoffs?", and "which team/owner is this?".
 
 ### `get_ancient_history`
-Archived leagues and old seasons beyond the 2-year window. Returns league names, IDs, platforms, and season years for seasons older than what `get_user_session` shows (which only covers the most recent ~2 seasons). Use when the user asks about past seasons ("how did I do in 2022?"), historical league performance, or leagues they no longer actively play in. Optionally filter by `platform`. No other parameters required.
+Archived leagues and past seasons outside the current season view. Use this only after `get_user_session`, and only when the user is clearly asking about last season, older seasons, historical league performance, or leagues they no longer actively play in. Optionally filter by `platform`. No other parameters required.
 
 ## Platform details
 
@@ -138,15 +138,15 @@ If a tool returns an error, explain it clearly to the user. Do not retry the sam
 ## Example prompts and workflows
 
 ### Single-tool questions (most common)
-- "What are the standings in my league?" → `get_user_session` → `get_standings`
-- "Who should I pick up at RB?" → `get_user_session` → `get_free_agents` (with position filter)
+- "What are the standings in my league?" → `get_user_session` → `get_league_info` → `get_standings`
+- "Who should I pick up at RB?" → `get_user_session` → `get_league_info` → `get_free_agents` (with position filter)
 - "Find the right Ben Rice and show market ownership context" → `get_user_session` → `get_players`
-- "Show me this week's matchup" → `get_user_session` → `get_matchups`
+- "Show me this week's matchup" → `get_user_session` → `get_league_info` → `get_matchups`
 
 ### Multi-tool questions (use judgment)
-- "Should I start Player X or Player Y?" → `get_user_session` → `get_roster` (to confirm both are on the team) + web search (for injury/matchup context)
-- "How does my team compare to my opponent this week?" → `get_user_session` → `get_matchups` + `get_roster` (for both teams)
-- "What moves should I make to improve my roster?" → `get_user_session` → `get_roster` + `get_free_agents` + web search (for player values)
+- "Should I start Player X or Player Y?" → `get_user_session` → `get_league_info` → `get_roster` (to confirm both are on the team) + web search (for injury/matchup context)
+- "How does my team compare to my opponent this week?" → `get_user_session` → `get_league_info` → `get_matchups` + `get_roster` (for both teams)
+- "What moves should I make to improve my roster?" → `get_user_session` → `get_league_info` → `get_roster` + `get_free_agents` + web search (for player values)
 - "Who owns Player X in my league?" → `get_user_session` → `get_league_info` + `get_roster` per team (do not use `get_players` market ownership as league ownership)
 
 ### Web-search-only questions

@@ -106,19 +106,20 @@ Ensure `wrangler.jsonc` has `"workers_dev": true` so the `.workers.dev` URL exis
 All tools take explicit parameters: `platform`, `sport`, `league_id`, `season_year`
 
 - `get_user_session` — All leagues across platforms with IDs (call first to get params)
-- `get_ancient_history` — Historical leagues and seasons (2+ years old)
-- `get_league_info` — League settings and members
+- `get_ancient_history` — Past seasons and historical leagues outside the current season
+- `get_league_info` — Baseline league context: settings, members, teams/owners
 - `get_standings` — League standings
 - `get_matchups` — Current/specified week matchups
 - `get_roster` — Team roster with player details
-- `get_free_agents` — Available free agents
-- `get_players` — Player lookup with market/global ownership context (not league ownership)
+- `get_free_agents` — Available players; ESPN/Yahoo include ownership percentages, Sleeper returns identities without ownership percentages
+- `get_players` — Player lookup; ESPN can add league ownership, Yahoo is market/global only, Sleeper ownership is unavailable
 - `get_transactions` — Recent transactions (adds, drops, waivers, trades)
 
 `get_transactions` v1 semantics are platform-specific:
 - ESPN/Sleeper: explicit `week` supported; default window is current+previous week.
 - Yahoo: explicit `week` ignored; uses a recent 14-day timestamp window.
 - Yahoo: `type=waiver` filter is intentionally unsupported in v1.
+- `get_user_session` should be the first call in a normal chat, and `get_league_info` is usually the second call before most league-specific analysis so team names, owner/team mapping, and league rules are established.
 
 ## ESPN API Reference
 
