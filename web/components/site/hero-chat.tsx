@@ -17,6 +17,9 @@ const SHOWCASE_ITEMS = [
 
 const PLATFORMS = ["ESPN", "Yahoo", "Sleeper"];
 const AI_APPS = ["ChatGPT", "Claude", "Perplexity"];
+const SHOWCASE_VISIBLE_COUNT = 2;
+const SHOWCASE_PILL_WIDTH_REM = 9.25;
+const SHOWCASE_PILL_GAP_REM = 0.5;
 
 type Phase = "question" | "dots" | "yes" | "showcase" | "body";
 
@@ -39,6 +42,7 @@ function usePrefersReducedMotion() {
 function useHeroTimeline(prefersReducedMotion: boolean) {
   const [phase, setPhase] = useState<Phase>("question");
   const [showcaseIndex, setShowcaseIndex] = useState(0);
+  const [animateShowcaseTrack, setAnimateShowcaseTrack] = useState(true);
 
   useEffect(() => {
     if (prefersReducedMotion) {
@@ -70,10 +74,36 @@ function useHeroTimeline(prefersReducedMotion: boolean) {
     }
 
     const interval = window.setInterval(() => {
-      setShowcaseIndex((i) => (i + 1) % SHOWCASE_ITEMS.length);
+      setAnimateShowcaseTrack(true);
+      setShowcaseIndex((i) => i + 1);
     }, 1600);
     return () => window.clearInterval(interval);
   }, [phase, prefersReducedMotion]);
+
+  useEffect(() => {
+    if (prefersReducedMotion) {
+      setShowcaseIndex(0);
+      setAnimateShowcaseTrack(false);
+      return;
+    }
+
+    if (showcaseIndex < SHOWCASE_ITEMS.length) {
+      return;
+    }
+
+    const resetTimeout = window.setTimeout(() => {
+      setAnimateShowcaseTrack(false);
+      setShowcaseIndex(0);
+
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
+          setAnimateShowcaseTrack(true);
+        });
+      });
+    }, 420);
+
+    return () => window.clearTimeout(resetTimeout);
+  }, [showcaseIndex, prefersReducedMotion]);
 
   const isPast = useCallback(
     (target: Phase) => {
@@ -83,19 +113,18 @@ function useHeroTimeline(prefersReducedMotion: boolean) {
     [phase],
   );
 
-  return { phase, isPast, showcaseIndex };
+  return { phase, isPast, showcaseIndex, animateShowcaseTrack };
 }
 
 export function HeroChat() {
   const prefersReducedMotion = usePrefersReducedMotion();
-  const { phase, isPast, showcaseIndex } = useHeroTimeline(prefersReducedMotion);
-
-  const visiblePills = isPast("showcase")
-    ? Array.from({ length: 3 }, (_, offset) => {
-        const itemIndex = (showcaseIndex + offset) % SHOWCASE_ITEMS.length;
-        return SHOWCASE_ITEMS[itemIndex];
-      })
-    : [];
+  const { phase, isPast, showcaseIndex, animateShowcaseTrack } =
+    useHeroTimeline(prefersReducedMotion);
+  const showcaseTrackItems = [
+    ...SHOWCASE_ITEMS,
+    ...SHOWCASE_ITEMS.slice(0, SHOWCASE_VISIBLE_COUNT),
+  ];
+  const showcaseTranslate = `translateX(calc(-${showcaseIndex} * (${SHOWCASE_PILL_WIDTH_REM}rem + ${SHOWCASE_PILL_GAP_REM}rem)))`;
 
   return (
     <section className="px-4 py-10 md:py-16">
@@ -159,23 +188,38 @@ export function HeroChat() {
                   </span>
                 </h1>
                 {isPast("showcase") && (
-                  <div className="mt-3 flex flex-wrap gap-1.5">
-                    {visiblePills.map((item, i) => (
-                      <span
-                        key={item}
-                        className="inline-block rounded-full border border-border bg-muted px-3 py-1 text-xs font-medium text-foreground md:text-sm"
+                  <div className="mt-3 space-y-2">
+                    <div
+                      className="overflow-hidden"
+                      style={{
+                        width: `calc(${SHOWCASE_VISIBLE_COUNT * SHOWCASE_PILL_WIDTH_REM}rem + ${(SHOWCASE_VISIBLE_COUNT - 1) * SHOWCASE_PILL_GAP_REM}rem)`,
+                        maxWidth: "100%",
+                      }}
+                    >
+                      <div
+                        className="flex gap-2"
                         style={{
-                          animation: prefersReducedMotion
-                            ? undefined
-                            : `hero-fade-swap 0.3s cubic-bezier(0.16,1,0.3,1) ${i * 0.05}s both`,
+                          transform: showcaseTranslate,
+                          transition:
+                            prefersReducedMotion || !animateShowcaseTrack
+                              ? undefined
+                              : "transform 420ms cubic-bezier(0.16,1,0.3,1)",
                         }}
                       >
-                        {item}
-                      </span>
-                    ))}
-                    <span className="inline-block rounded-full border border-border/50 bg-transparent px-3 py-1 text-xs text-muted-foreground md:text-sm">
-                      + more
-                    </span>
+                        {showcaseTrackItems.map((item, i) => (
+                          <span
+                            key={`${item}-${i}`}
+                            className="inline-flex shrink-0 items-center justify-center rounded-full border border-border bg-muted px-3 py-1 text-xs font-medium text-foreground md:text-sm"
+                            style={{
+                              width: `${SHOWCASE_PILL_WIDTH_REM}rem`,
+                            }}
+                          >
+                            {item}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="text-xs text-muted-foreground">and more</div>
                   </div>
                 )}
               </div>
@@ -193,28 +237,30 @@ export function HeroChat() {
               : "all 0.5s ease 0.2s",
           }}
         >
-          <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 pt-2 text-sm">
-            {PLATFORMS.map((p, i) => (
-              <span key={p}>
-                <span className="font-medium text-foreground/70">{p}</span>
-                {i < PLATFORMS.length - 1 && (
-                  <span className="ml-2 text-foreground/20">/</span>
-                )}
-              </span>
-            ))}
-            <span className="mx-1.5 text-base text-foreground/30">→</span>
-            <span className="rounded-md bg-primary/10 px-2 py-0.5 text-xs font-bold uppercase tracking-widest text-primary">
-              Flaim
-            </span>
-            <span className="mx-1.5 text-base text-foreground/30">→</span>
-            {AI_APPS.map((app, i) => (
-              <span key={app}>
-                <span className="font-medium text-foreground/70">{app}</span>
-                {i < AI_APPS.length - 1 && (
-                  <span className="ml-2 text-foreground/20">/</span>
-                )}
-              </span>
-            ))}
+          <div className="flex flex-col items-center gap-1.5 pt-2 text-sm">
+            <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1">
+              {PLATFORMS.map((platform, i) => (
+                <span key={platform}>
+                  <span className="font-medium text-foreground/70">
+                    {platform}
+                  </span>
+                  {i < PLATFORMS.length - 1 && (
+                    <span className="ml-2 text-foreground/20">/</span>
+                  )}
+                </span>
+              ))}
+            </div>
+            <span className="text-base text-foreground/30">↓</span>
+            <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1">
+              {AI_APPS.map((app, i) => (
+                <span key={app}>
+                  <span className="font-medium text-foreground/70">{app}</span>
+                  {i < AI_APPS.length - 1 && (
+                    <span className="ml-2 text-foreground/20">/</span>
+                  )}
+                </span>
+              ))}
+            </div>
           </div>
         </div>
       </div>
