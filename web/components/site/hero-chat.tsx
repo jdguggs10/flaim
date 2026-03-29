@@ -14,24 +14,20 @@ const ROTATING_WORDS = [
 ];
 
 type Variant =
-  | "A" | "B" | "C" | "D" | "E" | "F" | "G" | "H" | "I" | "J"
+  | "A" | "B" | "C" | "D" | "F" | "G"
   | "K" | "L" | "M" | "N";
 
 const VARIANT_LABELS: Record<Variant, string> = {
-  A: "A: Soft pill",
-  B: "B: Underline",
-  C: "C: Gradient text",
-  D: "D: Outline pill",
-  E: "E: No decoration",
-  F: "F: Typewriter",
-  G: "G: Highlighter",
-  H: "H: Scramble",
-  I: "I: Flip card",
-  J: "J: Glow",
-  K: "K: Color cycle",
-  L: "L: Gradient pill",
-  M: "M: Neon",
-  N: "N: Rainbow sweep",
+  A: "Soft pill",
+  B: "Underline",
+  C: "Gradient text",
+  D: "Outline pill",
+  F: "Typewriter",
+  G: "Highlighter",
+  K: "Color cycle",
+  L: "Gradient pill",
+  M: "Neon",
+  N: "Rainbow sweep",
 };
 
 const COLOR_CYCLE = [
@@ -129,7 +125,7 @@ function usePrefersReducedMotion() {
 
 function useRotatingWord(
   prefersReducedMotion: boolean,
-  mode: "slide" | "typewriter" | "scramble",
+  mode: "slide" | "typewriter",
 ) {
   const [index, setIndex] = useState(0);
   const [isAnimating, setIsAnimating] = useState(false);
@@ -137,8 +133,6 @@ function useRotatingWord(
     ROTATING_WORDS[0].length,
   );
   const [isDeleting, setIsDeleting] = useState(false);
-  const [scrambleText, setScrambleText] = useState(ROTATING_WORDS[0]);
-  const scrambleRef = useRef<number | null>(null);
 
   // Slide animation
   useEffect(() => {
@@ -195,58 +189,11 @@ function useRotatingWord(
     }
   }, [index, mode, isDeleting]);
 
-  // Scramble animation
-  useEffect(() => {
-    if (prefersReducedMotion || mode !== "scramble") return;
-
-    const interval = window.setInterval(() => {
-      setIsAnimating(true);
-
-      const nextIndex = (index + 1) % ROTATING_WORDS.length;
-      const target = ROTATING_WORDS[nextIndex];
-      const chars = "abcdefghijklmnopqrstuvwxyz";
-      let tick = 0;
-      const totalTicks = 8;
-
-      if (scrambleRef.current) window.clearInterval(scrambleRef.current);
-
-      scrambleRef.current = window.setInterval(() => {
-        tick++;
-        if (tick >= totalTicks) {
-          setScrambleText(target);
-          setIndex(nextIndex);
-          setIsAnimating(false);
-          if (scrambleRef.current) window.clearInterval(scrambleRef.current);
-          return;
-        }
-
-        const revealed = Math.floor((tick / totalTicks) * target.length);
-        let result = "";
-        for (let i = 0; i < target.length; i++) {
-          if (i < revealed) {
-            result += target[i];
-          } else if (target[i] === " ") {
-            result += " ";
-          } else {
-            result += chars[Math.floor(Math.random() * chars.length)];
-          }
-        }
-        setScrambleText(result);
-      }, 50);
-    }, 2400);
-
-    return () => {
-      window.clearInterval(interval);
-      if (scrambleRef.current) window.clearInterval(scrambleRef.current);
-    };
-  }, [prefersReducedMotion, mode, index]);
-
   return {
     currentWord: ROTATING_WORDS[index],
     wordIndex: index,
     isAnimating,
     displayedChars,
-    scrambleText,
   };
 }
 
@@ -260,7 +207,6 @@ function RotatingWord({
   wordIndex,
   isAnimating,
   displayedChars,
-  scrambleText,
   prefersReducedMotion,
 }: {
   variant: Variant;
@@ -268,7 +214,6 @@ function RotatingWord({
   wordIndex: number;
   isAnimating: boolean;
   displayedChars: number;
-  scrambleText: string;
   prefersReducedMotion: boolean;
 }) {
   const slideStyle = prefersReducedMotion
@@ -343,16 +288,6 @@ function RotatingWord({
     );
   }
 
-  if (variant === "E") {
-    return (
-      <span className="relative inline-flex items-baseline overflow-hidden align-baseline">
-        <span className="inline-block text-primary" style={slideStyle}>
-          {currentWord}
-        </span>
-      </span>
-    );
-  }
-
   if (variant === "G") {
     // Highlighter — yellow stroke stays, text slides
     return (
@@ -364,53 +299,6 @@ function RotatingWord({
         <span className="relative inline-block text-foreground" style={slideStyle}>
           {currentWord}
         </span>
-      </span>
-    );
-  }
-
-  if (variant === "H") {
-    return (
-      <span className="inline-block font-mono text-primary">
-        {scrambleText}
-      </span>
-    );
-  }
-
-  if (variant === "I") {
-    return (
-      <span
-        className="inline-block text-primary"
-        style={
-          prefersReducedMotion
-            ? undefined
-            : {
-                transition:
-                  "transform 0.5s cubic-bezier(0.16,1,0.3,1), opacity 0.3s ease",
-                transform: isAnimating ? "rotateX(90deg)" : "rotateX(0deg)",
-                opacity: isAnimating ? 0 : 1,
-                transformOrigin: "bottom",
-              }
-        }
-      >
-        {currentWord}
-      </span>
-    );
-  }
-
-  if (variant === "J") {
-    return (
-      <span
-        className="inline-block text-primary"
-        style={
-          prefersReducedMotion
-            ? undefined
-            : {
-                animation: "hero-glow-pulse 2.4s ease-in-out infinite",
-                ...slideStyle,
-              }
-        }
-      >
-        {currentWord}
       </span>
     );
   }
@@ -497,14 +385,9 @@ export function HeroChat() {
   const prefersReducedMotion = usePrefersReducedMotion();
   const [variant, setVariant] = useState<Variant>("A");
 
-  const mode =
-    variant === "F"
-      ? ("typewriter" as const)
-      : variant === "H"
-        ? ("scramble" as const)
-        : ("slide" as const);
+  const mode = variant === "F" ? ("typewriter" as const) : ("slide" as const);
 
-  const { currentWord, wordIndex, isAnimating, displayedChars, scrambleText } =
+  const { currentWord, wordIndex, isAnimating, displayedChars } =
     useRotatingWord(prefersReducedMotion, mode);
 
   return (
@@ -525,7 +408,6 @@ export function HeroChat() {
                 wordIndex={wordIndex}
                 isAnimating={isAnimating}
                 displayedChars={displayedChars}
-                scrambleText={scrambleText}
                 prefersReducedMotion={prefersReducedMotion}
               />
               {variant !== "F" && "."}
