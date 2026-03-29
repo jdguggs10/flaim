@@ -5,6 +5,7 @@ import { espnFetch, handleEspnError, requireCredentials } from '../../shared/esp
 import { fetchEspnTransactionsByWeeks, fetchEspnMTransactions2, mergeTradePlayerDetails, getEspnLeagueContext, fetchEspnPlayersByIds, enrichTransactions } from '../../shared/espn-transactions';
 import type { NormalizedTransaction } from '../../shared/espn-transactions';
 import { getEspnPlayersIndex } from '../../shared/espn-players-cache';
+import { fetchLeagueOwnershipMap, enrichPlayerWithOwnership } from '../../shared/league-ownership';
 import { extractErrorCode } from '@flaim/worker-shared';
 import {
   getPositionName,
@@ -38,8 +39,10 @@ export const hockeyHandlers: Record<string, HandlerFn> = {
 async function handleSearchPlayers(
   env: Env,
   params: ToolParams,
+  authHeader?: string,
+  correlationId?: string,
 ): Promise<ExecuteResponse> {
-  const { query, position, count, season_year } = params;
+  const { query, position, count, season_year, league_id } = params;
 
   if (!query) {
     return { success: false, error: 'query is required for get_players', code: 'MISSING_PARAM' };
@@ -52,21 +55,28 @@ async function handleSearchPlayers(
     const normalizedPosition = position?.trim().toUpperCase();
     const filterByPosition = normalizedPosition && normalizedPosition !== 'ALL';
 
-    const players = Array.from(playersIndex.values())
+    const matched = Array.from(playersIndex.values())
       .filter((p) => p.fullName.toLowerCase().includes(normalizedQuery))
       .filter((p) => {
         if (!filterByPosition) return true;
         return getPositionName(p.defaultPositionId).toUpperCase() === normalizedPosition;
       })
-      .slice(0, limit)
-      .map((p) => ({
-        id: String(p.id),
-        name: p.fullName,
-        position: getPositionName(p.defaultPositionId),
-        team: getProTeamAbbrev(p.proTeamId),
-        market_percent_owned: p.percentOwned ?? null,
-        ownership_scope: 'platform_global' as const,
-      }));
+      .slice(0, limit);
+
+    // League ownership enrichment (null if no credentials or league_id)
+    const ownerMap = league_id
+      ? await fetchLeagueOwnershipMap(env, GAME_ID, league_id, season_year, authHeader, correlationId)
+      : null;
+
+    const players = matched.map((p) => ({
+      id: String(p.id),
+      name: p.fullName,
+      position: getPositionName(p.defaultPositionId),
+      team: getProTeamAbbrev(p.proTeamId),
+      market_percent_owned: p.percentOwned ?? null,
+      ownership_scope: 'platform_global' as const,
+      ...enrichPlayerWithOwnership(p.id, ownerMap),
+    }));
 
     return {
       success: true,
