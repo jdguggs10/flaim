@@ -441,7 +441,6 @@ export function HeroChat() {
             Sleeper. Ask about start/sit decisions, waiver wire targets, and
             what matters in your league right now.
           </p>
-          <div className="mt-8 h-px w-24 bg-border/60" />
         </div>
       </section>
     </>
