@@ -91,10 +91,10 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
       <section className="px-4 py-10 text-center md:py-16">
         <div className="mx-auto max-w-3xl">
           <h1 className="mb-4 text-4xl font-bold tracking-tight md:text-6xl">
-            <span className="block text-muted-foreground">
+            <span className="text-muted-foreground">
               Can you see my fantasy leagues?
             </span>
-            <span className="block text-foreground">Yes.</span>
+            <span className="ml-3 text-foreground">Yes.</span>
           </h1>
           <p className="mx-auto max-w-xl text-lg leading-7 text-muted-foreground md:text-[1.35rem]">
             Flaim connects ChatGPT, Claude, and Perplexity to ESPN, Yahoo, and
