@@ -954,7 +954,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       requiredScope: 'mcp:read',
       securitySchemes: buildSecuritySchemes('mcp:read'),
       openaiMeta: { invoking: 'Searching players\u2026', invoked: 'Players ready' },
-      description: `Search for player identity by name across all roster statuses (rostered, free agent, waived). Returns identity fields plus market/global ownership context when available (market_percent_owned + ownership_scope). This is NOT league ownership data. Do not infer free-agent status or who owns a player in the user's league from market ownership values. To answer who owns a player in a league: call get_league_info (which returns a teams array with ownerName for each team), then call get_roster for specific teams to find the player. Use values from get_user_session. Read-only and safe to retry. Current date is ${currentDate}.`,
+      description: `Search for player identity by name. Returns identity fields, market/global ownership (market_percent_owned), and league-specific ownership when credentials are available. League ownership fields: league_status ("ROSTERED" = on a team, "FREE_AGENT" = available, null = no credentials/unavailable), league_team_name (fantasy team name if rostered), league_owner_name (team owner if rostered). When league_status is null, ownership could not be determined — fall back to get_league_info + get_roster to check manually. Use values from get_user_session. Read-only and safe to retry. Current date is ${currentDate}.`,
       inputSchema: {
         query: z
           .string()

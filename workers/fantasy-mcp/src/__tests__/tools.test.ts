@@ -373,9 +373,10 @@ describe('fantasy-mcp tools', () => {
     expect(asZod(schema.position).parse('OF')).toBe('OF');
     expect(asZod(schema.count).parse(25)).toBe(25);
 
-    expect(tool!.description).toContain('market/global ownership context');
-    expect(tool!.description).toContain('NOT league ownership data');
-    expect(tool!.description).toContain('Do not infer free-agent status or who owns a player');
+    expect(tool!.description).toContain('market/global ownership');
+    expect(tool!.description).toContain('league_status');
+    expect(tool!.description).toContain('league_team_name');
+    expect(tool!.description).toContain('league_owner_name');
     expect(tool!.description).toContain('get_league_info');
     expect(tool!.description).toContain('get_roster');
   });
