@@ -92,7 +92,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
         <div className="mx-auto max-w-3xl">
           <h1 className="mb-4 text-4xl font-bold md:text-6xl">
             <span className="block text-muted-foreground">
-              Can you see my fantasy league?
+              Can you see my fantasy leagues?
             </span>
             <span className="block text-foreground">Yes.</span>
           </h1>
