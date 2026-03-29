@@ -214,6 +214,8 @@ Notes:
 - `public-demo:health` reports per-preset cache state plus the latest failure context from `public_demo_refresh_runs`
 - `public-demo:refresh-next -- --select-only --sport baseball` is the cheapest way to inspect which preset the queue would choose next without spending provider tokens
 
+Important: this warmup cache does not include sports news. The live public-chat turn uses a fresh Responses API `web_search` tool call for current-context sports details.
+
 ## Build Notes
 
 ### Webpack cache warning (big strings)
