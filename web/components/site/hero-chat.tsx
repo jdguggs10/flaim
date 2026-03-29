@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 
 const ROTATING_WORDS = [
   "rosters",
@@ -13,7 +13,7 @@ const ROTATING_WORDS = [
   "waiver wire",
 ];
 
-type Variant = "A" | "B" | "C" | "D" | "E" | "F";
+type Variant = "A" | "B" | "C" | "D" | "E" | "F" | "G" | "H" | "I" | "J";
 
 const VARIANT_LABELS: Record<Variant, string> = {
   A: "A: Soft pill",
@@ -22,6 +22,10 @@ const VARIANT_LABELS: Record<Variant, string> = {
   D: "D: Outline pill",
   E: "E: No decoration",
   F: "F: Typewriter",
+  G: "G: Highlighter",
+  H: "H: Scramble",
+  I: "I: Flip card",
+  J: "J: Glow",
 };
 
 function usePrefersReducedMotion() {
@@ -38,16 +42,24 @@ function usePrefersReducedMotion() {
   return prefersReducedMotion;
 }
 
-function useRotatingWord(prefersReducedMotion: boolean, isTypewriter: boolean) {
+function useRotatingWord(
+  prefersReducedMotion: boolean,
+  mode: "slide" | "typewriter" | "scramble",
+) {
   const [index, setIndex] = useState(0);
   const [isAnimating, setIsAnimating] = useState(false);
   // Typewriter state
-  const [displayedChars, setDisplayedChars] = useState(ROTATING_WORDS[0].length);
+  const [displayedChars, setDisplayedChars] = useState(
+    ROTATING_WORDS[0].length,
+  );
   const [isDeleting, setIsDeleting] = useState(false);
+  // Scramble state
+  const [scrambleText, setScrambleText] = useState(ROTATING_WORDS[0]);
+  const scrambleRef = useRef<number | null>(null);
 
   // Slide animation
   useEffect(() => {
-    if (prefersReducedMotion || isTypewriter) return;
+    if (prefersReducedMotion || mode !== "slide") return;
 
     const interval = window.setInterval(() => {
       setIsAnimating(true);
@@ -59,11 +71,11 @@ function useRotatingWord(prefersReducedMotion: boolean, isTypewriter: boolean) {
     }, 2400);
 
     return () => window.clearInterval(interval);
-  }, [prefersReducedMotion, isTypewriter]);
+  }, [prefersReducedMotion, mode]);
 
   // Typewriter animation
   useEffect(() => {
-    if (prefersReducedMotion || !isTypewriter) return;
+    if (prefersReducedMotion || mode !== "typewriter") return;
 
     const word = ROTATING_WORDS[index];
 
@@ -92,20 +104,66 @@ function useRotatingWord(prefersReducedMotion: boolean, isTypewriter: boolean) {
       setIsDeleting(false);
       setIndex((i) => (i + 1) % ROTATING_WORDS.length);
     }
-  }, [prefersReducedMotion, isTypewriter, index, displayedChars, isDeleting]);
+  }, [prefersReducedMotion, mode, index, displayedChars, isDeleting]);
 
-  // Reset typewriter chars when index changes
   useEffect(() => {
-    if (isTypewriter && !isDeleting) {
+    if (mode === "typewriter" && !isDeleting) {
       setDisplayedChars(0);
     }
-  }, [index, isTypewriter, isDeleting]);
+  }, [index, mode, isDeleting]);
+
+  // Scramble animation
+  useEffect(() => {
+    if (prefersReducedMotion || mode !== "scramble") return;
+
+    const interval = window.setInterval(() => {
+      setIsAnimating(true);
+
+      const nextIndex = (index + 1) % ROTATING_WORDS.length;
+      const target = ROTATING_WORDS[nextIndex];
+      const chars = "abcdefghijklmnopqrstuvwxyz";
+      let tick = 0;
+      const totalTicks = 8;
+
+      if (scrambleRef.current) window.clearInterval(scrambleRef.current);
+
+      scrambleRef.current = window.setInterval(() => {
+        tick++;
+        if (tick >= totalTicks) {
+          setScrambleText(target);
+          setIndex(nextIndex);
+          setIsAnimating(false);
+          if (scrambleRef.current) window.clearInterval(scrambleRef.current);
+          return;
+        }
+
+        // Progressively reveal correct characters
+        const revealed = Math.floor((tick / totalTicks) * target.length);
+        let result = "";
+        for (let i = 0; i < target.length; i++) {
+          if (i < revealed) {
+            result += target[i];
+          } else if (target[i] === " ") {
+            result += " ";
+          } else {
+            result += chars[Math.floor(Math.random() * chars.length)];
+          }
+        }
+        setScrambleText(result);
+      }, 50);
+    }, 2400);
+
+    return () => {
+      window.clearInterval(interval);
+      if (scrambleRef.current) window.clearInterval(scrambleRef.current);
+    };
+  }, [prefersReducedMotion, mode, index]);
 
   return {
     currentWord: ROTATING_WORDS[index],
     isAnimating,
     displayedChars,
-    isDeleting,
+    scrambleText,
   };
 }
 
@@ -114,12 +172,14 @@ function RotatingWord({
   currentWord,
   isAnimating,
   displayedChars,
+  scrambleText,
   prefersReducedMotion,
 }: {
   variant: Variant;
   currentWord: string;
   isAnimating: boolean;
   displayedChars: number;
+  scrambleText: string;
   prefersReducedMotion: boolean;
 }) {
   const slideStyle = prefersReducedMotion
@@ -132,7 +192,6 @@ function RotatingWord({
       };
 
   if (variant === "F") {
-    // Typewriter
     const partial = currentWord.slice(0, displayedChars);
     return (
       <>
@@ -150,7 +209,6 @@ function RotatingWord({
   }
 
   if (variant === "A") {
-    // Soft filled pill
     return (
       <span className="relative inline-flex items-baseline overflow-hidden align-baseline">
         <span
@@ -164,7 +222,6 @@ function RotatingWord({
   }
 
   if (variant === "B") {
-    // Underline accent
     return (
       <span className="relative inline-flex items-baseline overflow-hidden align-baseline">
         <span
@@ -178,7 +235,6 @@ function RotatingWord({
   }
 
   if (variant === "C") {
-    // Gradient text
     return (
       <span className="relative inline-flex items-baseline overflow-hidden align-baseline">
         <span
@@ -192,7 +248,6 @@ function RotatingWord({
   }
 
   if (variant === "D") {
-    // Outline/bordered pill
     return (
       <span className="relative inline-flex items-baseline overflow-hidden align-baseline">
         <span
@@ -205,12 +260,76 @@ function RotatingWord({
     );
   }
 
-  // E: No decoration — just color
-  return (
-    <span className="relative inline-flex items-baseline overflow-hidden align-baseline">
-      <span className="inline-block text-primary" style={slideStyle}>
+  if (variant === "E") {
+    return (
+      <span className="relative inline-flex items-baseline overflow-hidden align-baseline">
+        <span className="inline-block text-primary" style={slideStyle}>
+          {currentWord}
+        </span>
+      </span>
+    );
+  }
+
+  if (variant === "G") {
+    // Highlighter — yellow marker stroke behind the word
+    return (
+      <span className="relative inline-flex items-baseline overflow-hidden align-baseline">
+        <span className="relative inline-block" style={slideStyle}>
+          <span
+            className="absolute inset-x-[-4px] bottom-[0.05em] top-[0.35em] -skew-x-2 rounded-sm bg-yellow-300/50 dark:bg-yellow-400/30"
+            aria-hidden
+          />
+          <span className="relative text-foreground">{currentWord}</span>
+        </span>
+      </span>
+    );
+  }
+
+  if (variant === "H") {
+    // Scramble — letters randomize then settle
+    return (
+      <span className="inline-block font-mono text-primary">
+        {scrambleText}
+      </span>
+    );
+  }
+
+  if (variant === "I") {
+    // Flip card — 3D Y-axis rotation
+    return (
+      <span
+        className="inline-block text-primary"
+        style={
+          prefersReducedMotion
+            ? undefined
+            : {
+                transition:
+                  "transform 0.5s cubic-bezier(0.16,1,0.3,1), opacity 0.3s ease",
+                transform: isAnimating ? "rotateX(90deg)" : "rotateX(0deg)",
+                opacity: isAnimating ? 0 : 1,
+                transformOrigin: "bottom",
+              }
+        }
+      >
         {currentWord}
       </span>
+    );
+  }
+
+  // J: Glow — soft text shadow pulse
+  return (
+    <span
+      className="inline-block text-primary"
+      style={
+        prefersReducedMotion
+          ? undefined
+          : {
+              animation: "hero-glow-pulse 2.4s ease-in-out infinite",
+              ...slideStyle,
+            }
+      }
+    >
+      {currentWord}
     </span>
   );
 }
@@ -219,16 +338,21 @@ export function HeroChat() {
   const prefersReducedMotion = usePrefersReducedMotion();
   const [variant, setVariant] = useState<Variant>("A");
 
-  const { currentWord, isAnimating, displayedChars } = useRotatingWord(
-    prefersReducedMotion,
-    variant === "F",
-  );
+  const mode =
+    variant === "F"
+      ? ("typewriter" as const)
+      : variant === "H"
+        ? ("scramble" as const)
+        : ("slide" as const);
+
+  const { currentWord, isAnimating, displayedChars, scrambleText } =
+    useRotatingWord(prefersReducedMotion, mode);
 
   return (
     <>
       {/* Variant switcher — sticky bar */}
       <div className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur-sm">
-        <div className="mx-auto flex max-w-3xl items-center gap-1.5 overflow-x-auto px-4 py-2">
+        <div className="mx-auto flex max-w-4xl items-center gap-1.5 overflow-x-auto px-4 py-2">
           <span className="shrink-0 text-xs font-medium text-muted-foreground">
             Style:
           </span>
@@ -261,6 +385,7 @@ export function HeroChat() {
                 currentWord={currentWord}
                 isAnimating={isAnimating}
                 displayedChars={displayedChars}
+                scrambleText={scrambleText}
                 prefersReducedMotion={prefersReducedMotion}
               />
               {variant !== "F" && "."}
