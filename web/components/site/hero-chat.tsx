@@ -20,11 +20,32 @@ const AI_APPS = ["ChatGPT", "Claude", "Perplexity"];
 
 type Phase = "question" | "dots" | "yes" | "showcase" | "body";
 
-function useHeroTimeline() {
+function usePrefersReducedMotion() {
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const updatePreference = () => setPrefersReducedMotion(mediaQuery.matches);
+
+    updatePreference();
+    mediaQuery.addEventListener("change", updatePreference);
+
+    return () => mediaQuery.removeEventListener("change", updatePreference);
+  }, []);
+
+  return prefersReducedMotion;
+}
+
+function useHeroTimeline(prefersReducedMotion: boolean) {
   const [phase, setPhase] = useState<Phase>("question");
   const [showcaseIndex, setShowcaseIndex] = useState(0);
 
   useEffect(() => {
+    if (prefersReducedMotion) {
+      setPhase("body");
+      return;
+    }
+
     if (phase === "question") {
       const t = window.setTimeout(() => setPhase("dots"), 600);
       return () => window.clearTimeout(t);
@@ -41,15 +62,18 @@ function useHeroTimeline() {
       const t = window.setTimeout(() => setPhase("body"), 400);
       return () => window.clearTimeout(t);
     }
-  }, [phase]);
+  }, [phase, prefersReducedMotion]);
 
   useEffect(() => {
-    if (phase !== "body" && phase !== "showcase") return;
+    if (prefersReducedMotion || (phase !== "body" && phase !== "showcase")) {
+      return;
+    }
+
     const interval = window.setInterval(() => {
       setShowcaseIndex((i) => (i + 1) % SHOWCASE_ITEMS.length);
     }, 1600);
     return () => window.clearInterval(interval);
-  }, [phase]);
+  }, [phase, prefersReducedMotion]);
 
   const isPast = useCallback(
     (target: Phase) => {
@@ -63,13 +87,14 @@ function useHeroTimeline() {
 }
 
 export function HeroChat() {
-  const { phase, isPast, showcaseIndex } = useHeroTimeline();
+  const prefersReducedMotion = usePrefersReducedMotion();
+  const { phase, isPast, showcaseIndex } = useHeroTimeline(prefersReducedMotion);
 
   const visiblePills = isPast("showcase")
-    ? SHOWCASE_ITEMS.slice(
-        0,
-        Math.min(showcaseIndex + 3, SHOWCASE_ITEMS.length),
-      )
+    ? Array.from({ length: 3 }, (_, offset) => {
+        const itemIndex = (showcaseIndex + offset) % SHOWCASE_ITEMS.length;
+        return SHOWCASE_ITEMS[itemIndex];
+      })
     : [];
 
   return (
@@ -81,7 +106,7 @@ export function HeroChat() {
           style={{
             opacity: isPast("question") ? 1 : 0,
             transform: isPast("question") ? "translateY(0)" : "translateY(8px)",
-            transition: "all 0.4s ease",
+            transition: prefersReducedMotion ? undefined : "all 0.4s ease",
           }}
         >
           <div className="rounded-2xl rounded-br-md bg-primary px-5 py-3 text-base font-medium text-primary-foreground md:text-lg">
@@ -98,7 +123,7 @@ export function HeroChat() {
               transform: isPast("dots")
                 ? "translateY(0)"
                 : "translateY(8px)",
-              transition: "all 0.3s ease",
+              transition: prefersReducedMotion ? undefined : "all 0.3s ease",
             }}
           >
             {phase === "dots" ? (
@@ -109,7 +134,9 @@ export function HeroChat() {
                       key={delay}
                       className="inline-block h-3 w-3 rounded-full bg-foreground/30 md:h-3.5 md:w-3.5"
                       style={{
-                        animation: `hero-dot-bounce 1.4s ease-in-out ${delay}s infinite`,
+                        animation: prefersReducedMotion
+                          ? undefined
+                          : `hero-dot-bounce 1.4s ease-in-out ${delay}s infinite`,
                       }}
                     />
                   ))}
@@ -119,13 +146,16 @@ export function HeroChat() {
               <div>
                 <h1>
                   <span
-                    className="block text-4xl font-bold tracking-tight text-foreground md:text-5xl"
+                    className="block text-3xl font-bold tracking-tight text-foreground md:text-5xl"
                     style={{
-                      animation:
-                        "hero-pop-in 0.3s cubic-bezier(0.16,1,0.3,1)",
+                      animation: prefersReducedMotion
+                        ? undefined
+                        : "hero-pop-in 0.3s cubic-bezier(0.16,1,0.3,1)",
                     }}
                   >
-                    Yes.
+                    Yes,{" "}
+                    <span className="text-foreground/65">Flaim</span> can get
+                    you:
                   </span>
                 </h1>
                 {isPast("showcase") && (
@@ -135,7 +165,9 @@ export function HeroChat() {
                         key={item}
                         className="inline-block rounded-full border border-border bg-muted px-3 py-1 text-xs font-medium text-foreground md:text-sm"
                         style={{
-                          animation: `hero-fade-swap 0.3s cubic-bezier(0.16,1,0.3,1) ${i * 0.05}s both`,
+                          animation: prefersReducedMotion
+                            ? undefined
+                            : `hero-fade-swap 0.3s cubic-bezier(0.16,1,0.3,1) ${i * 0.05}s both`,
                         }}
                       >
                         {item}
@@ -156,7 +188,9 @@ export function HeroChat() {
           style={{
             opacity: isPast("body") ? 1 : 0,
             transform: isPast("body") ? "translateY(0)" : "translateY(10px)",
-            transition: "all 0.5s ease 0.2s",
+            transition: prefersReducedMotion
+              ? undefined
+              : "all 0.5s ease 0.2s",
           }}
         >
           <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 pt-2 text-sm">
