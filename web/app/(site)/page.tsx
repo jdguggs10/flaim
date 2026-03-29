@@ -65,6 +65,11 @@ export default function LandingPage() {
           }),
         }}
       />
+      {/* Public Beta Notice */}
+      <div className="bg-yellow-50 border-b border-yellow-200 px-4 py-2 text-center text-sm text-yellow-800">
+        Flaim is in public beta — not all tools are working quite right yet. Thanks for your patience!
+      </div>
+
       {/* Hero */}
       <section className="px-4 py-12 text-center md:py-16">
         <div className="mx-auto max-w-3xl">
