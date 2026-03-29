@@ -58,10 +58,10 @@ function HiddenStylePicker({
 
   return (
     <div ref={ref} className="fixed top-1 right-[50%] translate-x-1/2 z-[60]">
-      {/* Invisible trigger — 44x44 transparent hit area in header whitespace */}
+      {/* Invisible trigger — wide bar in header whitespace */}
       <button
         onClick={() => setOpen((o) => !o)}
-        className="h-11 w-11 cursor-default rounded-full opacity-0 hover:opacity-[0.04] transition-opacity"
+        className="h-11 w-40 cursor-default rounded-full opacity-0 hover:opacity-[0.04] transition-opacity"
         aria-label="Style picker"
       />
 
@@ -419,11 +419,11 @@ export function HeroChat() {
 
       <section className="px-4 py-10 md:py-16">
         <div className="mx-auto max-w-2xl">
-          <h1 className="mb-5 text-4xl font-bold leading-[1.1] tracking-tight md:text-6xl">
+          <h1 className="mb-6 text-4xl font-bold leading-[1.1] tracking-tight md:text-6xl">
             <span className="block text-foreground/55">
               Can you see my fantasy leagues?
             </span>
-            <span className="mt-2 block text-foreground md:mt-3">
+            <span className="mt-4 block text-foreground md:mt-5">
               Yes, your{" "}
               <RotatingWord
                 variant={variant}
