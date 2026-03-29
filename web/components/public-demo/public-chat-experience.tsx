@@ -17,6 +17,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PublicMessage } from "./public-message";
+import { PublicToolCall } from "./public-tool-call";
 
 type PublicRunStatus = "idle" | "running" | "completed" | "error";
 type PublicDemoAnswerMeta = {
@@ -32,11 +33,35 @@ type PublicDemoAnswerMeta = {
   failureMessage: string | null;
 };
 
+interface PublicToolCallState {
+  id: string;
+  name?: string | null;
+  status: "in_progress" | "completed";
+}
+
+type PublicDemoToolTraceSummary = {
+  byName?: Record<
+    string,
+    {
+      count?: number;
+    }
+  >;
+};
+
 type PublicDemoRefreshFailure = {
   status?: string;
   errorCode?: string | null;
   errorMessage?: string | null;
 };
+
+const PUBLIC_PRE_TOOL_STEPS = [
+  { label: "Thinking...", durationMs: 1500 },
+  { label: "Reading Flaim Fantasy...", durationMs: 1000 },
+  { label: "Using Flaim tools...", durationMs: 1000 },
+] as const;
+
+const PUBLIC_TOOL_CARD_IN_PROGRESS_MS = 650;
+const PUBLIC_TOOL_CARD_COMPLETED_PAUSE_MS = 220;
 
 const PUBLIC_SPORT_COPY: Record<
   PublicChatDemoSport,
@@ -113,6 +138,67 @@ function getPublicDemoFailureCopy(
   }
 }
 
+function normalizeTraceToolName(name: string) {
+  if (name.startsWith("mcp_fantasy_")) {
+    return name.slice("mcp_fantasy_".length);
+  }
+
+  if (
+    name === "google_web_search" ||
+    name === "web_search" ||
+    name === "web_search_call"
+  ) {
+    return "web_search";
+  }
+
+  return name;
+}
+
+function buildSimulatedToolNames(
+  preset: PublicChatPreset,
+  toolTraceSummary: PublicDemoToolTraceSummary | null | undefined,
+) {
+  const byName = toolTraceSummary?.byName ?? {};
+  const tracedNames = Object.keys(byName)
+    .map(normalizeTraceToolName)
+    .filter((value, index, array) => array.indexOf(value) === index);
+
+  if (tracedNames.length === 0) {
+    return [...preset.allowedTools];
+  }
+
+  const tracedNameSet = new Set(tracedNames);
+  const ordered = preset.allowedTools.filter((name) => tracedNameSet.has(name));
+  const extras = tracedNames.filter((name) => !preset.allowedTools.includes(name));
+
+  return [...ordered, ...extras];
+}
+
+async function waitFor(ms: number, signal: AbortSignal) {
+  if (signal.aborted) {
+    throw new DOMException("Aborted", "AbortError");
+  }
+
+  await new Promise<void>((resolve, reject) => {
+    const timeoutId = window.setTimeout(() => {
+      cleanup();
+      resolve();
+    }, ms);
+
+    const handleAbort = () => {
+      window.clearTimeout(timeoutId);
+      cleanup();
+      reject(new DOMException("Aborted", "AbortError"));
+    };
+
+    const cleanup = () => {
+      signal.removeEventListener("abort", handleAbort);
+    };
+
+    signal.addEventListener("abort", handleAbort, { once: true });
+  });
+}
+
 export function PublicChatExperience({
   initialPresetId = null,
   id,
@@ -126,6 +212,7 @@ export function PublicChatExperience({
   const [selectedPresetId, setSelectedPresetId] =
     useState<PublicChatPresetId | null>(null);
   const [assistantText, setAssistantText] = useState("");
+  const [toolCalls, setToolCalls] = useState<PublicToolCallState[]>([]);
   const [answerMeta, setAnswerMeta] = useState<PublicDemoAnswerMeta | null>(
     null,
   );
@@ -146,12 +233,10 @@ export function PublicChatExperience({
     [selectedPresetId],
   );
   const hasAssistantText = assistantText.trim().length > 0;
-  const showPreToolStatus = runStatus === "running" && !hasAssistantText;
-  const preToolStatusCopy = [
-    "Loading cached answer...",
-    "Checking latest refresh...",
-    "Preparing demo reply...",
-  ][preToolStatusIndex];
+  const showPreToolStatus =
+    runStatus === "running" && !hasAssistantText && toolCalls.length === 0;
+  const preToolStatusCopy =
+    PUBLIC_PRE_TOOL_STEPS[preToolStatusIndex]?.label ?? "Thinking...";
   const topRailPresets = useMemo(() => {
     const presets = PUBLIC_CHAT_PRESETS.filter(
       (preset) => preset.rail === "top",
@@ -181,7 +266,7 @@ export function PublicChatExperience({
 
     const scrollContainer = transcriptScrollRef.current;
     const nextBehavior: ScrollBehavior =
-      assistantText.trim().length > 0 ? "smooth" : "auto";
+      assistantText.trim().length > 0 || toolCalls.length > 0 ? "smooth" : "auto";
     const frame = window.requestAnimationFrame(() => {
       scrollContainer.scrollTo({
         top: scrollContainer.scrollHeight,
@@ -192,29 +277,13 @@ export function PublicChatExperience({
     return () => {
       window.cancelAnimationFrame(frame);
     };
-  }, [assistantText, followTranscript, runStatus]);
+  }, [assistantText, followTranscript, runStatus, toolCalls.length]);
 
   useEffect(() => {
     return () => {
       activeRunAbortControllerRef.current?.abort();
     };
   }, []);
-
-  useEffect(() => {
-    if (runStatus !== "running" || hasAssistantText) {
-      setPreToolStatusIndex(0);
-      return;
-    }
-
-    setPreToolStatusIndex(0);
-    const pluginTimer = window.setTimeout(() => setPreToolStatusIndex(1), 1000);
-    const toolsTimer = window.setTimeout(() => setPreToolStatusIndex(2), 1750);
-
-    return () => {
-      window.clearTimeout(pluginTimer);
-      window.clearTimeout(toolsTimer);
-    };
-  }, [hasAssistantText, runStatus]);
 
   const handleRunPreset = useCallback(
     async (preset: PublicChatPreset) => {
@@ -225,8 +294,10 @@ export function PublicChatExperience({
       setSelectedPresetId(preset.id);
       setRunStatus("running");
       setAssistantText("");
+      setToolCalls([]);
       setAnswerMeta(null);
       setError(null);
+      setPreToolStatusIndex(0);
       activeRunAbortControllerRef.current?.abort();
       const abortController = new AbortController();
       activeRunAbortControllerRef.current = abortController;
@@ -268,6 +339,7 @@ export function PublicChatExperience({
             isStale?: boolean;
             status?: string;
             failure?: PublicDemoRefreshFailure | null;
+            toolTraceSummary?: PublicDemoToolTraceSummary | null;
           } | null;
           failure?: PublicDemoRefreshFailure | null;
         };
@@ -280,8 +352,7 @@ export function PublicChatExperience({
           );
         }
 
-        setAssistantText(payload.answer.text);
-        setAnswerMeta({
+        const nextAnswerMeta: PublicDemoAnswerMeta = {
           generatedAt: payload.answer.generatedAt || new Date().toISOString(),
           expiresAt: payload.answer.expiresAt || new Date().toISOString(),
           staleAfter: payload.answer.staleAfter || new Date().toISOString(),
@@ -292,7 +363,42 @@ export function PublicChatExperience({
           status: payload.answer.status || "ready",
           failureCode: payload.answer.failure?.errorCode || null,
           failureMessage: payload.answer.failure?.errorMessage || null,
-        });
+        };
+        const simulatedToolNames = buildSimulatedToolNames(
+          preset,
+          payload.answer.toolTraceSummary,
+        );
+
+        for (let index = 0; index < PUBLIC_PRE_TOOL_STEPS.length; index += 1) {
+          setPreToolStatusIndex(index);
+          await waitFor(PUBLIC_PRE_TOOL_STEPS[index].durationMs, abortController.signal);
+        }
+
+        for (let index = 0; index < simulatedToolNames.length; index += 1) {
+          const toolName = simulatedToolNames[index];
+          const toolCallId = `${toolName}-${index}`;
+
+          setToolCalls((current) => [
+            ...current,
+            {
+              id: toolCallId,
+              name: toolName,
+              status: "in_progress",
+            },
+          ]);
+          await waitFor(PUBLIC_TOOL_CARD_IN_PROGRESS_MS, abortController.signal);
+          setToolCalls((current) =>
+            current.map((toolCall) =>
+              toolCall.id === toolCallId
+                ? { ...toolCall, status: "completed" }
+                : toolCall,
+            ),
+          );
+          await waitFor(PUBLIC_TOOL_CARD_COMPLETED_PAUSE_MS, abortController.signal);
+        }
+
+        setAnswerMeta(nextAnswerMeta);
+        setAssistantText(payload.answer.text);
         setRunStatus("completed");
       } catch (runError) {
         if (abortController.signal.aborted) {
@@ -481,6 +587,18 @@ export function PublicChatExperience({
                   <div className="flex items-center gap-2 px-1 text-sm text-muted-foreground">
                     <LoaderCircle className="h-4 w-4 animate-spin" />
                     <span>{preToolStatusCopy}</span>
+                  </div>
+                ) : null}
+
+                {toolCalls.length > 0 ? (
+                  <div className="space-y-2">
+                    {toolCalls.map((toolCall) => (
+                      <PublicToolCall
+                        key={toolCall.id}
+                        name={toolCall.name}
+                        status={toolCall.status}
+                      />
+                    ))}
                   </div>
                 ) : null}
 
