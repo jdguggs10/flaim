@@ -7,34 +7,45 @@ import {
 } from "@/components/ui/popover";
 import {
   PUBLIC_CHAT_PRESETS,
+  type PublicChatDemoSport,
   type PublicChatPreset,
   type PublicChatPresetId,
 } from "@/lib/public-chat";
 import { cn } from "@/lib/utils";
-import { parse } from "partial-json";
 import { ArrowUp, LoaderCircle, Plus } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { PublicToolCall } from "./public-tool-call";
 import { PublicMessage } from "./public-message";
 
 type PublicRunStatus = "idle" | "running" | "completed" | "error";
-type PublicSport = "football" | "baseball";
+type PublicDemoAnswerMeta = {
+  generatedAt: string;
+  expiresAt: string;
+  staleAfter: string;
+  provider: string;
+  providerModel: string;
+  isExpired: boolean;
+  isStale: boolean;
+  status: string;
+  failureCode: string | null;
+  failureMessage: string | null;
+};
 
-const PUBLIC_SPORT_COPY: Record<PublicSport, { emoji: string; label: string }> =
+type PublicDemoRefreshFailure = {
+  status?: string;
+  errorCode?: string | null;
+  errorMessage?: string | null;
+};
+
+const PUBLIC_SPORT_COPY: Record<
+  PublicChatDemoSport,
+  { emoji: string; label: string }
+> =
   {
     baseball: { emoji: "⚾", label: "baseball" },
     football: { emoji: "🏈", label: "football" },
   };
-
-interface PublicToolCallState {
-  id: string;
-  name?: string | null;
-  status: "in_progress" | "completed";
-  arguments: string;
-  parsedArguments?: Record<string, unknown>;
-}
 
 function getEasternMonth(now = new Date()) {
   const parts = new Intl.DateTimeFormat("en-US", {
@@ -48,92 +59,57 @@ function getEasternMonth(now = new Date()) {
   return { month };
 }
 
-function getDefaultPublicSport(now = new Date()): PublicSport {
+function getDefaultPublicSport(now = new Date()): PublicChatDemoSport {
   const { month } = getEasternMonth(now);
   return month >= 2 && month <= 9 ? "baseball" : "football";
 }
 
-function safeParseArguments(rawArguments: string) {
-  if (!rawArguments.trim()) {
-    return undefined;
+function formatRelativeUpdateTime(value: string) {
+  const timestamp = new Date(value).getTime();
+  if (!Number.isFinite(timestamp)) {
+    return "Updated recently";
   }
 
-  try {
-    return parse(rawArguments) as Record<string, unknown>;
-  } catch {
-    return undefined;
+  const deltaMs = Date.now() - timestamp;
+  if (deltaMs < 60_000) {
+    return "Updated just now";
   }
+
+  const minutes = Math.round(deltaMs / 60_000);
+  if (minutes < 60) {
+    return `Updated ${minutes}m ago`;
+  }
+
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) {
+    return `Updated ${hours}h ago`;
+  }
+
+  const days = Math.round(hours / 24);
+  return `Updated ${days}d ago`;
 }
 
-function extractToolStart(data: Record<string, unknown>) {
-  const itemId = typeof data.itemId === "string" ? data.itemId : undefined;
-  if (!itemId) {
-    return null;
+function getPublicDemoFailureCopy(
+  failure: PublicDemoRefreshFailure | null | undefined,
+) {
+  if (!failure) {
+    return "The latest refresh failed before a new answer could be stored.";
   }
 
-  const argumentsText =
-    typeof data.arguments === "string" ? data.arguments : "";
-  return {
-    id: itemId,
-    name: typeof data.name === "string" ? data.name : null,
-    arguments: argumentsText,
-    parsedArguments: safeParseArguments(argumentsText),
-  };
-}
-
-function parseSseChunk(chunk: string) {
-  const dataLine = chunk.split("\n").find((line) => line.startsWith("data: "));
-
-  if (!dataLine) {
-    return null;
-  }
-
-  try {
-    return JSON.parse(dataLine.slice(6)) as {
-      event: string;
-      data: Record<string, unknown>;
-    };
-  } catch (error) {
-    console.error("Failed to parse SSE chunk JSON:", error);
-    return null;
-  }
-}
-
-async function* readSse(
-  response: Response,
-): AsyncGenerator<{ event: string; data: Record<string, unknown> }> {
-  const reader = response.body?.getReader();
-  if (!reader) {
-    throw new Error("Streaming response body is missing");
-  }
-
-  const decoder = new TextDecoder();
-  let buffer = "";
-
-  while (true) {
-    const { done, value } = await reader.read();
-    buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
-
-    const chunks = buffer.split("\n\n");
-    buffer = chunks.pop() ?? "";
-
-    for (const chunk of chunks) {
-      const payload = parseSseChunk(chunk);
-      if (payload) {
-        yield payload;
-      }
-    }
-
-    if (done) {
-      break;
-    }
-  }
-
-  if (buffer.trim()) {
-    const payload = parseSseChunk(buffer);
-    if (payload) {
-      yield payload;
-    }
+  switch (failure.errorCode) {
+    case "missing_mcp_grounding":
+      return "The latest refresh did not successfully use Gerry's league data, so the answer was rejected.";
+    case "empty_answer":
+      return "The latest refresh returned an empty answer, so nothing new was stored.";
+    case "provider_failed":
+      return "The latest refresh failed while talking to the AI provider.";
+    case "cache_write_failed":
+      return "The latest refresh generated an answer but failed while writing it to cache.";
+    default:
+      return (
+        failure.errorMessage ||
+        "The latest refresh failed before a new answer could be stored."
+      );
   }
 }
 
@@ -150,13 +126,14 @@ export function PublicChatExperience({
   const [selectedPresetId, setSelectedPresetId] =
     useState<PublicChatPresetId | null>(null);
   const [assistantText, setAssistantText] = useState("");
-  const [toolCalls, setToolCalls] = useState<PublicToolCallState[]>([]);
+  const [answerMeta, setAnswerMeta] = useState<PublicDemoAnswerMeta | null>(
+    null,
+  );
   const [error, setError] = useState<string | null>(null);
   const transcriptScrollRef = useRef<HTMLDivElement | null>(null);
-  const hasStreamedAssistantTextRef = useRef(false);
   const activeRunAbortControllerRef = useRef<AbortController | null>(null);
   const autoRunPresetIdRef = useRef<PublicChatPresetId | null>(null);
-  const demoSport = useMemo<PublicSport>(() => getDefaultPublicSport(), []);
+  const demoSport = useMemo<PublicChatDemoSport>(() => getDefaultPublicSport(), []);
   const [preToolStatusIndex, setPreToolStatusIndex] = useState(0);
 
   const selectedPreset = useMemo(
@@ -168,18 +145,12 @@ export function PublicChatExperience({
         : null,
     [selectedPresetId],
   );
-  const hasToolCalls = toolCalls.length > 0;
   const hasAssistantText = assistantText.trim().length > 0;
-  const allToolCallsCompleted =
-    hasToolCalls &&
-    toolCalls.every((toolCall) => toolCall.status === "completed");
-  const showPreToolStatus = runStatus === "running" && !hasToolCalls;
-  const showRespondingStatus =
-    runStatus === "running" && allToolCallsCompleted && !hasAssistantText;
+  const showPreToolStatus = runStatus === "running" && !hasAssistantText;
   const preToolStatusCopy = [
-    "Thinking...",
-    "Using Flaim Fantasy plugin...",
-    "Calling Flaim tools...",
+    "Loading cached answer...",
+    "Checking latest refresh...",
+    "Preparing demo reply...",
   ][preToolStatusIndex];
   const topRailPresets = useMemo(() => {
     const presets = PUBLIC_CHAT_PRESETS.filter(
@@ -210,9 +181,7 @@ export function PublicChatExperience({
 
     const scrollContainer = transcriptScrollRef.current;
     const nextBehavior: ScrollBehavior =
-      assistantText.trim().length > 0 || toolCalls.length > 0
-        ? "smooth"
-        : "auto";
+      assistantText.trim().length > 0 ? "smooth" : "auto";
     const frame = window.requestAnimationFrame(() => {
       scrollContainer.scrollTo({
         top: scrollContainer.scrollHeight,
@@ -223,7 +192,7 @@ export function PublicChatExperience({
     return () => {
       window.cancelAnimationFrame(frame);
     };
-  }, [assistantText, followTranscript, toolCalls.length, runStatus]);
+  }, [assistantText, followTranscript, runStatus]);
 
   useEffect(() => {
     return () => {
@@ -232,7 +201,7 @@ export function PublicChatExperience({
   }, []);
 
   useEffect(() => {
-    if (runStatus !== "running" || toolCalls.length > 0) {
+    if (runStatus !== "running" || hasAssistantText) {
       setPreToolStatusIndex(0);
       return;
     }
@@ -245,16 +214,7 @@ export function PublicChatExperience({
       window.clearTimeout(pluginTimer);
       window.clearTimeout(toolsTimer);
     };
-  }, [runStatus, toolCalls.length]);
-
-  useEffect(() => {
-    void fetch("/api/public-chat/bootstrap", {
-      method: "GET",
-      cache: "no-store",
-    }).catch(() => {
-      // Prewarm is opportunistic. The live turn route still works without it.
-    });
-  }, []);
+  }, [hasAssistantText, runStatus]);
 
   const handleRunPreset = useCallback(
     async (preset: PublicChatPreset) => {
@@ -265,25 +225,20 @@ export function PublicChatExperience({
       setSelectedPresetId(preset.id);
       setRunStatus("running");
       setAssistantText("");
-      setToolCalls([]);
+      setAnswerMeta(null);
       setError(null);
-      hasStreamedAssistantTextRef.current = false;
       activeRunAbortControllerRef.current?.abort();
       const abortController = new AbortController();
       activeRunAbortControllerRef.current = abortController;
 
       try {
-        const requestBody = {
+        const query = new URLSearchParams({
           presetId: preset.id,
           sport: demoSport,
-        };
-
-        const response = await fetch("/api/public-chat/turn", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(requestBody),
+        });
+        const response = await fetch(`/api/public-chat/cache?${query.toString()}`, {
+          method: "GET",
+          cache: "no-store",
           signal: abortController.signal,
         });
 
@@ -300,125 +255,45 @@ export function PublicChatExperience({
           throw new Error(message);
         }
 
-        for await (const payload of readSse(response)) {
-          const { event, data } = payload;
+        const payload = (await response.json()) as {
+          hit?: boolean;
+          answer?: {
+            text?: string;
+            generatedAt?: string;
+            expiresAt?: string;
+            staleAfter?: string;
+            provider?: string;
+            providerModel?: string;
+            isExpired?: boolean;
+            isStale?: boolean;
+            status?: string;
+            failure?: PublicDemoRefreshFailure | null;
+          } | null;
+          failure?: PublicDemoRefreshFailure | null;
+        };
 
-          switch (event) {
-            case "reasoning_delta": {
-              break;
-            }
-            case "tool_start": {
-              const toolStart = extractToolStart(data);
-              if (toolStart) {
-                setToolCalls((current) => [
-                  ...current,
-                  {
-                    id: toolStart.id,
-                    name: toolStart.name,
-                    status: "in_progress",
-                    arguments: toolStart.arguments,
-                    parsedArguments: toolStart.parsedArguments,
-                  },
-                ]);
-              }
-              break;
-            }
-            case "tool_args_delta":
-            case "tool_args_done": {
-              const itemId =
-                typeof data.itemId === "string" ? data.itemId : undefined;
-              const nextArguments =
-                typeof data.arguments === "string"
-                  ? data.arguments
-                  : typeof data.delta === "string"
-                    ? data.delta
-                    : "";
-
-              if (!itemId) {
-                break;
-              }
-
-              setToolCalls((current) =>
-                current.map((toolCall) => {
-                  if (toolCall.id !== itemId) {
-                    return toolCall;
-                  }
-
-                  const mergedArguments =
-                    event === "tool_args_delta"
-                      ? toolCall.arguments + nextArguments
-                      : nextArguments;
-
-                  return {
-                    ...toolCall,
-                    arguments: mergedArguments,
-                    parsedArguments: safeParseArguments(mergedArguments),
-                  };
-                }),
-              );
-              break;
-            }
-            case "assistant_delta": {
-              const delta = typeof data.delta === "string" ? data.delta : "";
-              if (delta) {
-                hasStreamedAssistantTextRef.current = true;
-                setAssistantText((current) => current + delta);
-              }
-              break;
-            }
-            case "tool_done": {
-              const itemId =
-                typeof data.itemId === "string" ? data.itemId : undefined;
-              if (itemId) {
-                setToolCalls((current) =>
-                  current.map((toolCall) =>
-                    toolCall.id === itemId
-                      ? { ...toolCall, status: "completed" }
-                      : toolCall,
-                  ),
-                );
-              }
-              break;
-            }
-            case "assistant_message": {
-              const text = typeof data.text === "string" ? data.text : "";
-              if (text) {
-                hasStreamedAssistantTextRef.current = true;
-                setAssistantText(text);
-              }
-              break;
-            }
-            case "completed":
-            case "response.completed": {
-              setRunStatus("completed");
-              break;
-            }
-            case "error": {
-              const message =
-                typeof data.message === "string"
-                  ? data.message
-                  : "Public chat is temporarily unavailable.";
-              setError(message);
-              setRunStatus("error");
-              break;
-            }
-            default:
-              break;
-          }
+        if (!payload.hit || !payload.answer?.text) {
+          throw new Error(
+            payload.failure
+              ? getPublicDemoFailureCopy(payload.failure)
+              : "This prompt does not have a cached answer yet. Try another preset or check back soon.",
+          );
         }
 
-        setRunStatus((current) => {
-          if (current !== "running") {
-            return current;
-          }
-
-          return hasStreamedAssistantTextRef.current ? "completed" : "error";
+        setAssistantText(payload.answer.text);
+        setAnswerMeta({
+          generatedAt: payload.answer.generatedAt || new Date().toISOString(),
+          expiresAt: payload.answer.expiresAt || new Date().toISOString(),
+          staleAfter: payload.answer.staleAfter || new Date().toISOString(),
+          provider: payload.answer.provider || "unknown",
+          providerModel: payload.answer.providerModel || "unknown",
+          isExpired: Boolean(payload.answer.isExpired),
+          isStale: Boolean(payload.answer.isStale),
+          status: payload.answer.status || "ready",
+          failureCode: payload.answer.failure?.errorCode || null,
+          failureMessage: payload.answer.failure?.errorMessage || null,
         });
-        setError((current) =>
-          current || hasStreamedAssistantTextRef.current
-            ? current
-            : "The live run finished without producing an answer. Please try again.",
-        );
+        setRunStatus("completed");
       } catch (runError) {
         if (abortController.signal.aborted) {
           setRunStatus((current) => (current === "running" ? "idle" : current));
@@ -523,7 +398,7 @@ export function PublicChatExperience({
           <div className="border-b border-border/70 bg-card px-4 py-3 sm:px-5">
             <div className="flex items-center justify-between gap-3">
               <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
-                Live app demo
+                App demo
               </div>
               <Popover>
                 <PopoverTrigger asChild>
@@ -546,7 +421,7 @@ export function PublicChatExperience({
                     Demo context
                   </div>
                   <p className="mt-2 text-foreground">
-                    This live run is using Gerry&apos;s real ESPN{" "}
+                    These answers refresh from Gerry&apos;s real ESPN{" "}
                     {PUBLIC_SPORT_COPY[demoSport].label} league.
                   </p>
                   <p className="mt-2 text-muted-foreground">
@@ -588,8 +463,8 @@ export function PublicChatExperience({
                         Ask something
                       </h3>
                       <p className="mt-2 text-sm text-muted-foreground">
-                        Pick a prompt below. This demo runs live on Gerry&apos;s
-                        real ESPN league.
+                        Pick a prompt below. These demo answers refresh
+                        regularly from Gerry&apos;s real ESPN league.
                       </p>
                     </div>
                   </div>
@@ -609,44 +484,48 @@ export function PublicChatExperience({
                   </div>
                 ) : null}
 
-                {hasToolCalls ? (
-                  <div className="space-y-2">
-                    {toolCalls.map((toolCall) => (
-                      <PublicToolCall
-                        key={toolCall.id}
-                        name={toolCall.name}
-                        status={toolCall.status}
-                      />
-                    ))}
-                  </div>
-                ) : null}
-
-                {showRespondingStatus ? (
-                  <div className="flex items-center gap-2 px-1 text-sm text-muted-foreground">
-                    <LoaderCircle className="h-4 w-4 animate-spin" />
-                    <span>Responding...</span>
-                  </div>
-                ) : null}
-
                 {assistantText ? (
                   <PublicMessage role="assistant" text={assistantText} />
                 ) : null}
 
                 {runStatus === "completed" ? (
-                  <div className="px-1 pt-2 text-center text-sm text-muted-foreground">
-                    That&apos;s Gerry&apos;s league.{" "}
-                    <Link
-                      href="/leagues"
-                      className="text-primary hover:underline"
-                    >
-                      Want to connect yours?
-                    </Link>
+                  <div className="space-y-2 px-1 pt-2 text-center text-sm text-muted-foreground">
+                    {answerMeta ? (
+                      <div>
+                        {formatRelativeUpdateTime(answerMeta.generatedAt)}
+                        {answerMeta.status === "degraded"
+                          ? " • showing last good answer"
+                          : answerMeta.isStale
+                            ? " • refresh overdue"
+                            : answerMeta.isExpired
+                              ? " • refreshing soon"
+                              : ""}
+                      </div>
+                    ) : null}
+                    {answerMeta?.status === "degraded" ? (
+                      <div className="text-destructive">
+                        Latest refresh failed.{" "}
+                        {getPublicDemoFailureCopy({
+                          errorCode: answerMeta.failureCode,
+                          errorMessage: answerMeta.failureMessage,
+                        })}
+                      </div>
+                    ) : null}
+                    <div>
+                      That&apos;s Gerry&apos;s league.{" "}
+                      <Link
+                        href="/leagues"
+                        className="text-primary hover:underline"
+                      >
+                        Want to connect yours?
+                      </Link>
+                    </div>
                   </div>
                 ) : null}
 
                 {runStatus === "error" ? (
                   <div className="rounded-[1.75rem] border border-destructive/30 bg-destructive/5 px-5 py-4 text-sm text-destructive">
-                    <div className="font-semibold">Public chat run failed</div>
+                    <div className="font-semibold">Demo answer unavailable</div>
                     <p className="mt-2 leading-6">
                       {error || "Unknown public chat error."}
                     </p>
@@ -760,9 +639,10 @@ export function PublicChatExperience({
                           className="w-[19rem] rounded-2xl border-border p-4 text-sm leading-6"
                         >
                           <p className="text-foreground">
-                            This demo runs live on Gerry&apos;s actual league.
-                            Set up Flaim to ask Claude, ChatGPT, or Perplexity
-                            about your own leagues.
+                            This demo shows recently refreshed answers from
+                            Gerry&apos;s actual league. Set up Flaim to ask
+                            Claude, ChatGPT, or Perplexity about your own
+                            leagues.
                           </p>
                         </PopoverContent>
                       </Popover>

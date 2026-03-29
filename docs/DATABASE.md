@@ -197,6 +197,54 @@ Server-owned cache for public `/chat` warm context. Used to avoid rebuilding the
 | created_at | timestamptz | Created timestamp |
 | updated_at | timestamptz | Updated timestamp |
 
+### public_demo_answer_cache
+Server-owned cache for homepage public-demo answers. Stores the most recent precomputed answer for a preset/sport/version combination so visitors can read cached demo output instead of triggering live provider inference.
+
+| Column | Type | Notes |
+|---|---|---|
+| cache_key | text | Primary key (`public-demo-answer:<preset>:<sport>:<promptVersion>:<contextVersion>`) |
+| preset_id | text | Public preset identifier (`simple-roster`, etc.) |
+| sport | text | Demo sport (`baseball` or `football`) |
+| provider | text | Provider that generated the cached answer (`gemini`, `openai`, etc.) |
+| provider_model | text | Model identifier used for the refresh |
+| context_version | text | Session-context contract version |
+| prompt_version | text | Prompt contract version |
+| answer_text | text | Final cleaned cached answer shown to visitors |
+| answer_word_count | int | Optional stored word count |
+| news_snippet_id | uuid | Optional link to cached sports-news snippet used during refresh |
+| generated_at | timestamptz | When the answer was generated |
+| expires_at | timestamptz | Preferred refresh boundary |
+| stale_after | timestamptz | Threshold for surfacing stale/degraded UI |
+| status | text | `ready`, `refreshing`, `degraded`, `failed`, or `disabled` |
+| generation_ms | int | Refresh duration when known |
+| source_meta | jsonb | Provider-specific metadata, including refresh diagnostics like grounding flags and last failure summary |
+| tool_trace_summary | jsonb | Optional compact trace summary for UI/debugging |
+| created_at | timestamptz | Created timestamp |
+| updated_at | timestamptz | Updated timestamp |
+
+### public_demo_refresh_runs
+Operational log for public-demo refresh attempts. Used to understand refresh cadence, provider failures, and degraded/stale periods during the cache-backed rollout.
+
+| Column | Type | Notes |
+|---|---|---|
+| id | uuid | Primary key |
+| job_type | text | Refresh job category (`answer`, `news`, etc.) |
+| preset_id | text | Optional preset identifier for answer jobs |
+| sport | text | Optional sport for the refresh |
+| provider_attempted | text | Provider used for the attempt |
+| provider_model | text | Model identifier when known |
+| status | text | `completed`, `failed`, `skipped`, etc. |
+| error_code | text | Short internal failure code |
+| error_message | text | Optional captured error message |
+| started_at | timestamptz | Refresh start time |
+| completed_at | timestamptz | Refresh completion time |
+| duration_ms | int | Duration when known |
+| news_snippet_id | uuid | Optional linked news snippet used during the run |
+| source_meta | jsonb | Additional provider/runtime metadata |
+| created_at | timestamptz | Created timestamp |
+
+The Phase 2 manual runner (`npm run public-demo:refresh`) writes one `completed`, `dry_run`, or `failed` row here for each attempted preset refresh.
+
 ## Legacy/Deprecated Tables
 
 ### rate_limits (inert)

@@ -166,12 +166,12 @@ Claude/ChatGPT/Gemini CLI → fantasy-mcp (gateway) → espn-client    → ESPN 
 **Unified tools:**
 - `get_user_session` — Current-season leagues only with `structuredContent` for ChatGPT widget rendering
 - `get_ancient_history` — Past seasons and historical leagues (everything not in the current season)
-- `get_league_info` — League settings (requires platform, sport, league_id, season_year)
+- `get_league_info` — Baseline league context: settings, roster config, teams/owners (requires platform, sport, league_id, season_year)
 - `get_standings` — League standings
 - `get_matchups` — Current/specified week matchups
 - `get_roster` — Team roster with player details
 - `get_free_agents` — Available free agents (platform/sport dependent)
-- `get_players` — Player lookup across roster statuses with market/global ownership context (`market_percent_owned`, `ownership_scope`); not league ownership
+- `get_players` — Player lookup across roster statuses with market/global ownership context (`market_percent_owned`, `ownership_scope`) and league ownership when available
 - `get_transactions` — Recent transactions (adds, drops, waivers, trades)
   - Week semantics are platform-specific in v1: ESPN/Sleeper support explicit week windows; Yahoo uses a recent 14-day timestamp window and ignores explicit week.
   - Yahoo `type=waiver` filter is intentionally unsupported in v1 (waiver enrichment is a separate phase).
@@ -184,9 +184,10 @@ Claude/ChatGPT/Gemini CLI → fantasy-mcp (gateway) → espn-client    → ESPN 
 - JWKS-based Clerk JWT verification in auth-worker (5m cache). Prod rejects spoofed headers.
 - MCP workers forward `Authorization`; auth-worker alone validates tokens.
 - Per-user isolation via verified `sub`; credentials never sent back to client after setup.
-- Rate limiting: Cloudflare Workers native `rate_limits` bindings — 10 req/60s per IP on token endpoint, 15 req/60s per user on credentials endpoint, and 5 req/60s per visitor on the public live demo.
+- Rate limiting: Cloudflare Workers native `rate_limits` bindings — 10 req/60s per IP on token endpoint, 15 req/60s per user on credentials endpoint, and 5 req/60s per visitor on the legacy public live-turn route.
 - Public chat concurrency/logging: auth-worker reserves demo runs in Supabase (`public_chat_runs`) so one visitor cannot stack overlapping runs and failures remain visible after the request finishes.
-- Public chat warm context: the web app caches Gerry session context in Supabase (`public_chat_context_cache`) so the public demo can prewarm the default-league context on page load without doing hidden extra model work before the live turn.
+- Public chat warm context: the web app caches Gerry session context in Supabase (`public_chat_context_cache`) as groundwork from the original live-turn public demo. The homepage preset flow is now moving toward cache-backed answers (`public_demo_answer_cache`) so visitors can read recently refreshed outputs without triggering live provider inference on every click.
+- Public demo refresh pipeline: the manual runner lives in `web/scripts/public-demo-refresh.mjs`, the queue selector lives in `web/scripts/public-demo-refresh-next.mjs`, and the ops check lives in `web/scripts/public-demo-health.mjs`. Together they use Gemini CLI headless mode from an isolated temp workspace, plus static MCP bearer auth, to populate and inspect `public_demo_answer_cache` out of band.
 - OAuth tokens stored in Supabase with expiration tracking.
 - ESPN credentials: AES-256 encrypted at rest (Supabase default).
 

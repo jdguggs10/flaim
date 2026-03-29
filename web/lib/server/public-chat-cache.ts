@@ -14,14 +14,14 @@ interface PublicChatCacheConfig {
 
 const inMemoryCache = new Map<string, PublicChatCacheEntry>();
 
-function hasSupabaseConfig() {
+export function hasSupabaseConfig() {
   return Boolean(
     process.env.SUPABASE_URL?.trim() &&
       process.env.SUPABASE_SERVICE_KEY?.trim()
   );
 }
 
-function getSupabaseConfig() {
+export function getSupabaseConfig() {
   const supabaseUrl = process.env.SUPABASE_URL?.trim().replace(/\/+$/, "");
   const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY?.trim();
 
