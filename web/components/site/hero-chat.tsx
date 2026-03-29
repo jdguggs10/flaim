@@ -57,11 +57,11 @@ function HiddenStylePicker({
   }, [open]);
 
   return (
-    <div ref={ref} className="fixed top-3 right-[50%] z-[60]">
-      {/* Invisible trigger — 24x24 transparent hit area in header whitespace */}
+    <div ref={ref} className="fixed top-1 right-[50%] translate-x-1/2 z-[60]">
+      {/* Invisible trigger — 44x44 transparent hit area in header whitespace */}
       <button
         onClick={() => setOpen((o) => !o)}
-        className="h-6 w-6 cursor-default rounded-full opacity-0 hover:opacity-[0.04] transition-opacity"
+        className="h-11 w-11 cursor-default rounded-full opacity-0 hover:opacity-[0.04] transition-opacity"
         aria-label="Style picker"
       />
 
@@ -278,12 +278,10 @@ function RotatingWord({
   }
 
   if (variant === "A") {
+    // Soft pill — background stays, text slides
     return (
-      <span className="relative inline-flex items-baseline overflow-hidden align-baseline">
-        <span
-          className="inline-block rounded-lg bg-primary/10 px-2.5 py-0.5 text-primary dark:bg-primary/15"
-          style={slideStyle}
-        >
+      <span className="inline-flex items-baseline overflow-hidden rounded-lg bg-primary/10 px-2.5 py-0.5 align-baseline dark:bg-primary/15">
+        <span className="inline-block text-primary" style={slideStyle}>
           {currentWord}
         </span>
       </span>
@@ -291,12 +289,10 @@ function RotatingWord({
   }
 
   if (variant === "B") {
+    // Underline — border stays, text slides
     return (
-      <span className="relative inline-flex items-baseline overflow-hidden align-baseline">
-        <span
-          className="inline-block border-b-[3px] border-primary/50 pb-0.5 text-foreground"
-          style={slideStyle}
-        >
+      <span className="inline-flex items-baseline overflow-hidden border-b-[3px] border-primary/50 pb-0.5 align-baseline">
+        <span className="inline-block text-foreground" style={slideStyle}>
           {currentWord}
         </span>
       </span>
@@ -317,12 +313,10 @@ function RotatingWord({
   }
 
   if (variant === "D") {
+    // Outline pill — border stays, text slides
     return (
-      <span className="relative inline-flex items-baseline overflow-hidden align-baseline">
-        <span
-          className="inline-block rounded-lg border-2 border-primary/30 px-2.5 py-0.5 text-primary"
-          style={slideStyle}
-        >
+      <span className="inline-flex items-baseline overflow-hidden rounded-lg border-2 border-primary/30 px-2.5 py-0.5 align-baseline">
+        <span className="inline-block text-primary" style={slideStyle}>
           {currentWord}
         </span>
       </span>
@@ -340,14 +334,15 @@ function RotatingWord({
   }
 
   if (variant === "G") {
+    // Highlighter — yellow stroke stays, text slides
     return (
       <span className="relative inline-flex items-baseline overflow-hidden align-baseline">
-        <span className="relative inline-block" style={slideStyle}>
-          <span
-            className="absolute inset-x-[-4px] bottom-[0.05em] top-[0.35em] -skew-x-2 rounded-sm bg-yellow-300/50 dark:bg-yellow-400/30"
-            aria-hidden
-          />
-          <span className="relative text-foreground">{currentWord}</span>
+        <span
+          className="absolute inset-x-[-4px] bottom-[0.05em] top-[0.35em] -skew-x-2 rounded-sm bg-yellow-300/50 dark:bg-yellow-400/30"
+          aria-hidden
+        />
+        <span className="relative inline-block text-foreground" style={slideStyle}>
+          {currentWord}
         </span>
       </span>
     );
