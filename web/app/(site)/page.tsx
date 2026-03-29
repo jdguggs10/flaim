@@ -31,6 +31,14 @@ export default function LandingPage() {
             mainEntity: [
               {
                 '@type': 'Question',
+                name: 'Can my AI see my fantasy league?',
+                acceptedAnswer: {
+                  '@type': 'Answer',
+                  text: 'Not by default — but Flaim fixes that. Flaim connects your ESPN, Yahoo, or Sleeper leagues to AI assistants like Claude, ChatGPT, and Perplexity via the Model Context Protocol (MCP). Once set up, your AI can see your rosters, standings, matchups, and waiver wire in real time.',
+                },
+              },
+              {
+                '@type': 'Question',
                 name: 'Do I need a Chrome extension?',
                 acceptedAnswer: {
                   '@type': 'Answer',
@@ -73,15 +81,13 @@ export default function LandingPage() {
       {/* Hero */}
       <section className="px-4 py-12 text-center md:py-16">
         <div className="mx-auto max-w-3xl">
-          <p className="mb-4 text-xs font-semibold uppercase tracking-[0.28em] text-muted-foreground">
-            Read-only fantasy analysis
-          </p>
           <h1 className="mb-4 text-4xl font-bold md:text-6xl">
-            Your real fantasy leagues,
-            <span className="block text-muted-foreground">inside the AI you already use.</span>
+            Can you see my fantasy league?
+            <span className="block text-primary">Yes.</span>
           </h1>
           <p className="mx-auto max-w-2xl text-lg text-muted-foreground md:text-xl">
-            Flaim connects ESPN, Yahoo, and Sleeper to Claude, ChatGPT, and Perplexity so the advice is based on your real roster, matchups, standings, waiver wire, and recent moves.
+            Flaim connects ChatGPT, Claude, and Perplexity to ESPN, Yahoo, and Sleeper so
+            {' '}your AI sees your real roster, matchups, standings, and waiver wire.
           </p>
           <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
             <Button asChild size="lg">
@@ -313,6 +319,20 @@ export default function LandingPage() {
         <div className="container max-w-2xl mx-auto">
           <h2 className="text-2xl font-bold text-center mb-5">FAQs</h2>
           <div className="space-y-3">
+            <details className="group border rounded-lg bg-background">
+              <summary className="flex cursor-pointer items-center justify-between p-4 font-medium">
+                Can my AI see my fantasy league?
+                <ChevronDown className="ml-2 h-5 w-5 transition-transform group-open:rotate-180" />
+              </summary>
+              <div className="px-4 pb-4 text-sm text-muted-foreground space-y-2">
+                <p>
+                  Not by default — but Flaim fixes that. Connect your ESPN, Yahoo, or Sleeper
+                  {' '}leagues once, and your AI gets real-time access to your rosters, standings,
+                  {' '}matchups, and waiver wire.
+                </p>
+              </div>
+            </details>
+
             {/* What does Flaim do */}
             <details className="group border rounded-lg bg-background">
               <summary className="flex cursor-pointer items-center justify-between p-4 font-medium">
