@@ -55,8 +55,8 @@ type PublicDemoRefreshFailure = {
 };
 
 const PUBLIC_PRE_TOOL_STEPS = [
-  { label: "Thinking...", durationMs: 1500 },
-  { label: "Reading Flaim Fantasy...", durationMs: 1000 },
+  { label: "Thinking...", durationMs: 1250 },
+  { label: "Reading Flaim Fantasy...", durationMs: 1250 },
   { label: "Using Flaim tools...", durationMs: 1000 },
 ] as const;
 
@@ -163,16 +163,10 @@ function buildSimulatedToolNames(
     .map(normalizeTraceToolName)
     .filter((value, index, array) => array.indexOf(value) === index);
 
-  if (tracedNames.length === 0) {
-    return [...preset.allowedTools];
-  }
+  const plannedTools = [...preset.allowedTools];
+  const usedWebSearch = tracedNames.includes("web_search");
 
-  const tracedNameSet = new Set(tracedNames);
-  const allowedToolNameSet = new Set<string>(preset.allowedTools);
-  const ordered = preset.allowedTools.filter((name) => tracedNameSet.has(name));
-  const extras = tracedNames.filter((name) => !allowedToolNameSet.has(name));
-
-  return [...ordered, ...extras];
+  return usedWebSearch ? [...plannedTools, "web_search"] : plannedTools;
 }
 
 async function waitFor(ms: number, signal: AbortSignal) {
