@@ -99,7 +99,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
       <section className="px-4 py-12 text-center md:py-16">
         <div className="mx-auto max-w-3xl">
           <h1 className="mb-4 text-4xl font-bold md:text-6xl">
-            Can you see my fantasy league?
+            Can you see my fantasy leagues?
             <span className="block text-primary">Yes.</span>
           </h1>
           <p className="mx-auto max-w-2xl text-lg text-muted-foreground md:text-xl">
