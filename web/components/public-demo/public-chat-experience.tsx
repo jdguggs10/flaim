@@ -168,8 +168,9 @@ function buildSimulatedToolNames(
   }
 
   const tracedNameSet = new Set(tracedNames);
+  const allowedToolNameSet = new Set<string>(preset.allowedTools);
   const ordered = preset.allowedTools.filter((name) => tracedNameSet.has(name));
-  const extras = tracedNames.filter((name) => !preset.allowedTools.includes(name));
+  const extras = tracedNames.filter((name) => !allowedToolNameSet.has(name));
 
   return [...ordered, ...extras];
 }
