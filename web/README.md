@@ -210,9 +210,10 @@ Notes:
 - `public-demo:refresh-next` selects exactly one preset for the requested sport each time it runs
 - Missing or degraded rows are prioritized first
 - If nothing is degraded or expired, the script keeps moving by selecting the oldest ready row
-- This keeps the first rollout conservative and predictable at a `15m` cron cadence
+- This keeps the first rollout conservative and predictable at a `12m` cron cadence
 - `public-demo:health` reports per-preset cache state plus the latest failure context from `public_demo_refresh_runs`
 - `public-demo:refresh-next -- --select-only --sport baseball` is the cheapest way to inspect which preset the queue would choose next without spending provider tokens
+- The production refresh worker now runs the same queue/health logic from a dedicated standalone runner repo on the Pi, with the scripts in this repo retained as the implementation reference and local/manual path
 
 Important: this warmup cache does not include sports news. The live public-chat turn uses a fresh Responses API `web_search` tool call for current-context sports details.
 

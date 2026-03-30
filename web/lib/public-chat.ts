@@ -99,7 +99,7 @@ export const PUBLIC_CHAT_SIMPLE_PRESETS: readonly PublicChatPreset[] = [
     executionHint:
       "Call get_standings exactly once for Gerry's default league. Skip web search unless one brief current note materially sharpens the read.",
     prompt:
-      "Answer whether Gerry is off to a good start in his league. Ground it in the current standings, mention where he sits, and briefly note who is setting the pace. Final answer: 45-80 words.",
+      "Answer whether Gerry is off to a good start in his league. Ground it in the current standings, mention where he sits, and briefly note who is setting the pace. If the season is just opening and everyone is effectively tied, say that directly instead of forcing a strong verdict. Final answer: 45-80 words.",
     homepageSection: "simple",
     showInChat: false,
     rail: "top",
@@ -139,9 +139,9 @@ export const PUBLIC_CHAT_SIMPLE_PRESETS: readonly PublicChatPreset[] = [
     userMessage: "What's the smartest waiver move right now?",
     allowedTools: ["get_free_agents"] as const,
     executionHint:
-      "Call get_free_agents exactly once for Gerry's default league. If needed, use web search only on the best available target, not the whole list.",
+      "Call get_free_agents exactly once for Gerry's default fantasy league. If needed, use web search only on the best available fantasy target, not the whole list.",
     prompt:
-      "Identify the smartest waiver move Gerry could make right now. Focus on the single best available add, with one fallback only if it is genuinely close. Use public context only on the top name if it materially helps. Final answer: 45-80 words.",
+      "Identify the smartest waiver move Gerry could make right now in his fantasy league. This question is about the fantasy waiver wire and the players who are actually available in Gerry's league right now, not MLB free agency or general player value in the abstract. Base the answer on Gerry's currently available fantasy free agents before you answer. Focus on the single best available add, with one fallback only if it is genuinely close. Use public context only on the top name if it materially helps. Final answer: 45-80 words.",
     homepageSection: "simple",
     showInChat: false,
     rail: "top",
@@ -153,9 +153,9 @@ export const PUBLIC_CHAT_SIMPLE_PRESETS: readonly PublicChatPreset[] = [
     userMessage: "Who on Gerry's team is trending the wrong way?",
     allowedTools: ["get_roster", "get_players"] as const,
     executionHint:
-      "Start with get_roster for Gerry's default league. Use get_players only if you need to verify one specific player detail. Use web search only if current performance, injury, or role materially changes the verdict.",
+      "Start with get_roster for Gerry's default fantasy league. Use get_players only if you need to verify one specific fantasy-relevant player detail. Use web search only if current performance, injury, or role materially changes the verdict.",
     prompt:
-      "Identify the one player on Gerry's roster whose trend looks the most worrying right now. Explain why that player is the biggest concern in plain English. Use public context only if it materially changes the takeaway. Final answer: 45-80 words.",
+      "Identify the one player on Gerry's current fantasy roster whose trend looks the most worrying right now. This question is about Gerry's fantasy roster, not general MLB disappointment or the biggest name underperforming league-wide. Explain why that player is the biggest concern in plain English. Use public context only if it materially changes the takeaway. Final answer: 45-80 words.",
     homepageSection: "simple",
     showInChat: false,
     rail: "top",
@@ -170,7 +170,7 @@ export const PUBLIC_CHAT_SIMPLE_PRESETS: readonly PublicChatPreset[] = [
     executionHint:
       "Use the prefetched transaction feed or call get_transactions exactly once. Skip web search unless it helps explain why the single most relevant move matters.",
     prompt:
-      "Call out the single league move that matters most right now and explain why it matters. Prioritize actual impact over pure recency. Only use web search if it materially explains the key move. Final answer: 45-80 words.",
+      "Call out the single league move that matters most right now and explain why it matters. Prioritize actual impact over pure recency. Do not narrate your search or research process. If you use web search, fold it into the analysis naturally. End with a complete sentence. Final answer: 45-80 words.",
     homepageSection: "simple",
     showInChat: false,
     rail: "top",
@@ -182,9 +182,9 @@ export const PUBLIC_CHAT_SIMPLE_PRESETS: readonly PublicChatPreset[] = [
     userMessage: "Has Gerry ever won this thing?",
     allowedTools: ["get_ancient_history"] as const,
     executionHint:
-      "Call get_ancient_history exactly once for Gerry's most relevant league. Skip web search unless one brief season anchor genuinely helps.",
+      "Call get_ancient_history exactly once for Gerry's most relevant fantasy league. Do not use current-season tools for this preset. Skip web search unless one brief season anchor genuinely helps.",
     prompt:
-      "Use Gerry's most relevant league history to answer whether he has actually won before, and what the clearest historical takeaway is. Keep it fun, but grounded in the available history. Skip web search unless one brief season anchor genuinely helps. Final answer: 45-80 words.",
+      "Use Gerry's fantasy league history to answer whether he has actually won before, and what the clearest historical takeaway is. This question is about Gerry's actual fantasy league history, not a guess based on team names, current-season standings, or general sports history. Base the answer on Gerry's available fantasy league history before you answer, and do not substitute current-season context. Keep it fun, but grounded in the available fantasy history. Skip web search unless one brief season anchor genuinely helps. Final answer: 45-80 words.",
     homepageSection: "simple",
     showInChat: false,
     rail: "top",
@@ -231,9 +231,9 @@ export const PUBLIC_CHAT_DEEP_PRESETS: readonly PublicChatPreset[] = [
     userMessage: "Who is winning Gerry's league and why?",
     allowedTools: ["get_standings", "get_roster", "get_matchups"] as const,
     executionHint:
-      "Start with get_league_info if needed, then get_standings for Gerry's default league. Only use get_roster or get_matchups if you need one extra check to explain why the leader is on top. Use web search only if current player availability or performance materially explains the lead.",
+      "Start with get_league_info if needed to anchor the fantasy league context, then use get_standings for Gerry's default league. Only use get_roster or get_matchups if you need one extra fantasy check to explain the early edge. Use web search only if current player context materially explains the fantasy lead.",
     prompt:
-      "Use Flaim to inspect Gerry's best default live league from the injected context. If that context is missing or unclear, prefer Gerry's baseball league for this demo. Identify who is currently winning Gerry's league and explain the real reason that team is on top, not just the record. Use public context only if it materially strengthens the explanation. Final answer: 90-150 words.",
+      "Use Flaim to inspect Gerry's best default live fantasy league from the injected context. If that context is missing or unclear, prefer Gerry's baseball league for this demo. This question is about Gerry's fantasy league standings, not MLB standings or general baseball news. Identify who is currently on top in Gerry's fantasy league and explain the real fantasy reason that team is there, not just the record. If the standings are still in the opening tied state, explain who has the strongest early fantasy edge instead of pretending the race is settled. Use at most one standout stat and end with a complete sentence, not a dangling number fragment. Use public context only if it materially strengthens the fantasy explanation. Final answer: 90-150 words.",
     homepageSection: "deep",
     showInChat: true,
     homepageExplanation:
@@ -246,9 +246,9 @@ export const PUBLIC_CHAT_DEEP_PRESETS: readonly PublicChatPreset[] = [
     userMessage: "What player does he need to give up on?",
     allowedTools: ["get_roster", "get_players"] as const,
     executionHint:
-      "Start with get_league_info if needed, then get_roster for Gerry's default league. Use get_players only if you need to verify one specific player detail. Use web search only if current performance, role, or injury context materially changes the verdict.",
+      "Start with get_league_info if needed, then get_roster for Gerry's default fantasy league. Use get_players only if you need to verify one specific fantasy-relevant player detail. Use web search only if current performance, role, or injury context materially changes the verdict.",
     prompt:
-      "Use Flaim to inspect Gerry's best default live league from the injected context. If that context is missing or unclear, prefer Gerry's baseball league for this demo. Identify the one player on Gerry's roster he should be most worried about keeping, explain why the hold is weak, and say what would make you change your mind. Use public context only if it materially changes the call. Final answer: 90-150 words.",
+      "Use Flaim to inspect Gerry's best default live fantasy league from the injected context. If that context is missing or unclear, prefer Gerry's baseball league for this demo. This question is about the weakest hold on Gerry's fantasy roster, not a general MLB disappointment list or a player you personally dislike. Identify the one player on Gerry's roster he should be most worried about keeping, explain why the fantasy hold is weak, and say what would make you change your mind. Use public context only if it materially changes the call. Final answer: 90-150 words.",
     homepageSection: "deep",
     showInChat: true,
     homepageExplanation:
@@ -306,9 +306,9 @@ export const PUBLIC_CHAT_DEEP_PRESETS: readonly PublicChatPreset[] = [
     userMessage: "When does his fantasy playoffs start?",
     allowedTools: ["get_league_info", "get_matchups"] as const,
     executionHint:
-      "Start with get_league_info for Gerry's default league. Only use get_matchups if league info alone does not clarify the playoff timing. Skip web search unless current schedule timing materially affects the planning angle.",
+      "Start with get_league_info for Gerry's default fantasy league to anchor the league settings. Only use get_matchups if league info alone does not clarify the fantasy playoff timing. Skip web search unless current fantasy schedule timing materially affects the planning angle.",
     prompt:
-      "Use Flaim to inspect Gerry's best default live league from the injected context. If that context is missing or unclear, prefer Gerry's baseball league for this demo. Figure out when Gerry's fantasy playoffs start in his current league and explain what that timing means for his roster planning right now. Focus on timing and strategy, not generic schedule filler. Final answer: 80-130 words.",
+      "Use Flaim to inspect Gerry's best default live fantasy league from the injected context. If that context is missing or unclear, prefer Gerry's baseball league for this demo. This question is about Gerry's fantasy league playoff settings, not the MLB playoff race or postseason calendar. Figure out when Gerry's fantasy playoffs start in his current fantasy league and explain what that timing means for his roster planning right now. Focus on the fantasy playoff date and one or two specific planning implications. Avoid generic schedule filler or broad season-long advice. Final answer: 80-120 words.",
     homepageSection: "deep",
     showInChat: true,
     homepageExplanation:
