@@ -576,7 +576,7 @@ export function PublicChatExperience({
           <div className="border-b border-border/70 bg-card px-4 py-3 sm:px-5">
             <div className="flex items-center justify-between gap-3">
               <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
-                App demo
+                {process.env.NEXT_PUBLIC_VERCEL_ENV === "preview" ? "Preview" : "Live demo"}
               </div>
               <Popover>
                 <PopoverTrigger asChild>
