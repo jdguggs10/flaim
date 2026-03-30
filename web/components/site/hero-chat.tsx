@@ -70,16 +70,16 @@ function HiddenStylePicker({
   }, [open]);
 
   return (
-    <div ref={ref} className="fixed top-1 right-[50%] translate-x-1/2 z-[60]">
-      {/* Invisible trigger — wide bar in header whitespace */}
+    <div ref={ref} className="fixed top-3 left-1/2 -translate-x-1/2 z-[60]">
       <button
         onClick={() => setOpen((o) => !o)}
-        className="h-11 w-40 cursor-default rounded-full opacity-0 hover:opacity-[0.04] transition-opacity"
-        aria-label="Style picker"
-      />
+        className="rounded-full border border-yellow-500/40 bg-yellow-500/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-widest text-yellow-600 transition-colors hover:bg-yellow-500/20 dark:text-yellow-400"
+      >
+        Preview
+      </button>
 
       {open && (
-        <div className="absolute top-full mt-2 right-0 w-48 max-h-[70vh] overflow-y-auto overscroll-contain rounded-lg border border-border bg-card p-1.5 shadow-lg">
+        <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 w-48 max-h-[70vh] overflow-y-auto overscroll-contain rounded-lg border border-border bg-card p-1.5 shadow-lg">
           <div className="mb-1.5 px-2 py-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
             Hero style
           </div>
