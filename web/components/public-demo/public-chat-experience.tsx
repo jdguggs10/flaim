@@ -196,15 +196,13 @@ async function waitFor(ms: number, signal: AbortSignal) {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Idle state — Flaim mark with periodic animation                   */
+/*  Idle state — easter egg: auto-cycling logo animations              */
 /* ------------------------------------------------------------------ */
 
 const IDLE_ANIM_STYLES = ["rock", "bounce", "spin"] as const;
-type IdleAnimStyle = (typeof IDLE_ANIM_STYLES)[number];
 
 function IdleState() {
   const [styleIndex, setStyleIndex] = useState(0);
-  const [cycleKey, setCycleKey] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const animStyle = IDLE_ANIM_STYLES[styleIndex % IDLE_ANIM_STYLES.length];
@@ -218,7 +216,6 @@ function IdleState() {
   useEffect(() => {
     timerRef.current = setInterval(() => {
       setStyleIndex((i) => i + 1);
-      setCycleKey((k) => k + 1);
     }, 6000);
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
@@ -228,11 +225,9 @@ function IdleState() {
   // Tap to advance + restart timer
   const handleTap = useCallback(() => {
     setStyleIndex((i) => i + 1);
-    setCycleKey((k) => k + 1);
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = setInterval(() => {
       setStyleIndex((i) => i + 1);
-      setCycleKey((k) => k + 1);
     }, 6000);
   }, []);
 
@@ -251,7 +246,7 @@ function IdleState() {
         aria-label="Toggle animation"
       >
         <Image
-          key={`light-${cycleKey}`}
+          key={`light-${styleIndex}`}
           src="/flaim-mark-hero.png"
           alt=""
           width={32}
@@ -260,7 +255,7 @@ function IdleState() {
           aria-hidden
         />
         <Image
-          key={`dark-${cycleKey}`}
+          key={`dark-${styleIndex}`}
           src="/flaim-mark-hero-dark.png"
           alt=""
           width={32}
@@ -581,7 +576,7 @@ export function PublicChatExperience({
           <div className="border-b border-border/70 bg-card px-4 py-3 sm:px-5">
             <div className="flex items-center justify-between gap-3">
               <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
-                App demo
+                {process.env.NEXT_PUBLIC_VERCEL_ENV === "preview" ? "Preview" : "Live demo"}
               </div>
               <Popover>
                 <PopoverTrigger asChild>

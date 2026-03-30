@@ -116,40 +116,6 @@
   }
 }
 
-@keyframes hero-cursor-blink {
-  0%,
-  100% {
-    opacity: 1;
-  }
-
-  50% {
-    opacity: 0;
-  }
-}
-
-@keyframes hero-glow-pulse {
-  0%,
-  100% {
-    text-shadow: 0 0 8px hsl(var(--primary) / 0.3),
-      0 0 20px hsl(var(--primary) / 0.1);
-  }
-
-  50% {
-    text-shadow: 0 0 16px hsl(var(--primary) / 0.5),
-      0 0 40px hsl(var(--primary) / 0.2);
-  }
-}
-
-@keyframes hero-rainbow-sweep {
-  0% {
-    background-position: 0% 50%;
-  }
-
-  100% {
-    background-position: 200% 50%;
-  }
-}
-
 @keyframes hero-dot-bounce {
   0%,
   80%,
@@ -185,61 +151,6 @@
   to {
     opacity: 1;
     transform: translateY(0);
-  }
-}
-
-/* A: Gentle pendulum rock — tilts left then right, then rests */
-@keyframes public-chat-idle-rock {
-  0%,
-  16%,
-  100% {
-    transform: rotate(0deg);
-  }
-
-  4% {
-    transform: rotate(-12deg);
-  }
-
-  8% {
-    transform: rotate(10deg);
-  }
-
-  12% {
-    transform: rotate(-4deg);
-  }
-}
-
-/* B: Bounce + squash — drops down, squashes, springs up */
-@keyframes public-chat-idle-bounce {
-  0%,
-  20%,
-  100% {
-    transform: translateY(0) scaleX(1) scaleY(1);
-  }
-
-  5% {
-    transform: translateY(6px) scaleX(1.15) scaleY(0.85);
-  }
-
-  10% {
-    transform: translateY(-8px) scaleX(0.95) scaleY(1.05);
-  }
-
-  15% {
-    transform: translateY(2px) scaleX(1.02) scaleY(0.98);
-  }
-}
-
-/* C: Quick 360 spin that decelerates */
-@keyframes public-chat-idle-spin {
-  0%,
-  18%,
-  100% {
-    transform: rotate(0deg);
-  }
-
-  14% {
-    transform: rotate(360deg);
   }
 }
 
@@ -298,6 +209,61 @@
   }
 }
 
+/* A: Gentle pendulum rock — tilts left then right, then rests */
+@keyframes public-chat-idle-rock {
+  0%,
+  16%,
+  100% {
+    transform: rotate(0deg);
+  }
+
+  4% {
+    transform: rotate(-12deg);
+  }
+
+  8% {
+    transform: rotate(10deg);
+  }
+
+  12% {
+    transform: rotate(-4deg);
+  }
+}
+
+/* B: Bounce + squash — drops down, squashes, springs up */
+@keyframes public-chat-idle-bounce {
+  0%,
+  20%,
+  100% {
+    transform: translateY(0) scaleX(1) scaleY(1);
+  }
+
+  5% {
+    transform: translateY(6px) scaleX(1.15) scaleY(0.85);
+  }
+
+  10% {
+    transform: translateY(-8px) scaleX(0.95) scaleY(1.05);
+  }
+
+  15% {
+    transform: translateY(2px) scaleX(1.02) scaleY(0.98);
+  }
+}
+
+/* C: Quick 360 spin that decelerates */
+@keyframes public-chat-idle-spin {
+  0%,
+  18%,
+  100% {
+    transform: rotate(0deg);
+  }
+
+  14% {
+    transform: rotate(360deg);
+  }
+}
+
 @layer utilities {
   .public-chat-ticker-track {
     animation-name: public-chat-ticker-marquee;
@@ -349,15 +315,15 @@
   }
 
   .public-chat-idle-rock {
-    animation: public-chat-idle-rock 5s ease-in-out infinite;
+    animation: public-chat-idle-rock 5s ease-in-out 1;
   }
 
   .public-chat-idle-bounce {
-    animation: public-chat-idle-bounce 5s ease-in-out infinite;
+    animation: public-chat-idle-bounce 5s ease-in-out 1;
   }
 
   .public-chat-idle-spin {
-    animation: public-chat-idle-spin 6s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+    animation: public-chat-idle-spin 6s cubic-bezier(0.16, 1, 0.3, 1) 1;
   }
 
   @media (prefers-reduced-motion: reduce) {

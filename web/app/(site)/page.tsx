@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { SignedIn, SignedOut } from "@clerk/nextjs";
 import { PublicChatExperience } from "@/components/public-demo/public-chat-experience";
+import { HeroChat } from "@/components/site/hero-chat";
 
 export const metadata: Metadata = {
   title: "Flaim — Connect ESPN, Yahoo & Sleeper Fantasy Leagues to AI",
