@@ -70,16 +70,16 @@ function HiddenStylePicker({
   }, [open]);
 
   return (
-    <div ref={ref} className="absolute right-4 top-2 z-10">
+    <div ref={ref} className="fixed top-2 left-24 z-[60]">
+      {/* Invisible trigger — click the blank space right of the logo */}
       <button
         onClick={() => setOpen((o) => !o)}
-        className="rounded-full border border-yellow-500/40 bg-yellow-500/10 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-widest text-yellow-600 transition-colors hover:bg-yellow-500/20 dark:text-yellow-400"
-      >
-        Preview
-      </button>
+        className="h-8 w-10 cursor-default"
+        aria-label="Style picker"
+      />
 
       {open && (
-        <div className="absolute top-full mt-2 right-0 w-48 max-h-[70vh] overflow-y-auto overscroll-contain rounded-lg border border-border bg-card p-1.5 shadow-lg">
+        <div className="absolute top-full mt-1 left-0 w-48 max-h-[70vh] overflow-y-auto overscroll-contain rounded-lg border border-border bg-card p-1.5 shadow-lg">
           <div className="mb-1.5 px-2 py-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
             Hero style
           </div>
@@ -391,8 +391,9 @@ export function HeroChat() {
     useRotatingWord(prefersReducedMotion, mode);
 
   return (
-      <section className="relative px-4 py-10 md:py-16">
-        <HiddenStylePicker variant={variant} onSelect={setVariant} />
+    <>
+      <HiddenStylePicker variant={variant} onSelect={setVariant} />
+      <section className="px-4 py-10 md:py-16">
         <div className="mx-auto max-w-2xl">
           <h1 className="mb-6 text-4xl font-bold leading-[1.1] tracking-tight md:text-6xl">
             <span className="block text-foreground/55">
@@ -418,5 +419,6 @@ export function HeroChat() {
           </p>
         </div>
       </section>
+    </>
   );
 }
