@@ -203,13 +203,38 @@ const IDLE_ANIM_STYLES = ["rock", "bounce", "spin"] as const;
 type IdleAnimStyle = (typeof IDLE_ANIM_STYLES)[number];
 
 function IdleState() {
-  const [animStyle, setAnimStyle] = useState<IdleAnimStyle>("rock");
+  const [styleIndex, setStyleIndex] = useState(0);
+  const [cycleKey, setCycleKey] = useState(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const animStyle = IDLE_ANIM_STYLES[styleIndex % IDLE_ANIM_STYLES.length];
   const animClass = {
     rock: "public-chat-idle-rock",
     bounce: "public-chat-idle-bounce",
     spin: "public-chat-idle-spin",
   }[animStyle];
+
+  // Auto-cycle every 6s
+  useEffect(() => {
+    timerRef.current = setInterval(() => {
+      setStyleIndex((i) => i + 1);
+      setCycleKey((k) => k + 1);
+    }, 6000);
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, []);
+
+  // Tap to advance + restart timer
+  const handleTap = useCallback(() => {
+    setStyleIndex((i) => i + 1);
+    setCycleKey((k) => k + 1);
+    if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = setInterval(() => {
+      setStyleIndex((i) => i + 1);
+      setCycleKey((k) => k + 1);
+    }, 6000);
+  }, []);
 
   return (
     <div className="flex min-h-[12rem] flex-1 flex-col items-center justify-end pb-4">
@@ -219,18 +244,14 @@ function IdleState() {
       <p className="mt-1 text-sm text-muted-foreground">
         Real answers from Gerry&apos;s ESPN league
       </p>
-      {/* Tap logo to cycle animation style (hidden interaction) */}
+      {/* Tap logo to cycle animation — easter egg */}
       <button
-        onClick={() =>
-          setAnimStyle((s) => {
-            const i = IDLE_ANIM_STYLES.indexOf(s);
-            return IDLE_ANIM_STYLES[(i + 1) % IDLE_ANIM_STYLES.length];
-          })
-        }
+        onClick={handleTap}
         className="mt-4 cursor-default"
         aria-label="Toggle animation"
       >
         <Image
+          key={`light-${cycleKey}`}
           src="/flaim-mark-hero.png"
           alt=""
           width={32}
@@ -239,6 +260,7 @@ function IdleState() {
           aria-hidden
         />
         <Image
+          key={`dark-${cycleKey}`}
           src="/flaim-mark-hero-dark.png"
           alt=""
           width={32}
