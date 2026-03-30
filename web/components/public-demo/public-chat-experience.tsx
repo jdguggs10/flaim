@@ -195,6 +195,65 @@ async function waitFor(ms: number, signal: AbortSignal) {
   });
 }
 
+/* ------------------------------------------------------------------ */
+/*  Idle state — Flaim mark with periodic animation                   */
+/* ------------------------------------------------------------------ */
+
+const IDLE_ANIM_STYLES = ["rock", "bounce", "spin"] as const;
+type IdleAnimStyle = (typeof IDLE_ANIM_STYLES)[number];
+
+function IdleState() {
+  const [animStyle, setAnimStyle] = useState<IdleAnimStyle>("rock");
+
+  const animClass = {
+    rock: "public-chat-idle-rock",
+    bounce: "public-chat-idle-bounce",
+    spin: "public-chat-idle-spin",
+  }[animStyle];
+
+  return (
+    <div className="flex min-h-[12rem] flex-1 flex-col items-center justify-end pb-4">
+      <p className="text-3xl font-bold tracking-tight text-foreground/80 sm:text-4xl">
+        Pick something
+      </p>
+      <p className="mt-1 text-sm text-muted-foreground">
+        Real answers from Gerry&apos;s ESPN league
+      </p>
+      {/* Tap logo to cycle animation style (hidden interaction) */}
+      <button
+        onClick={() =>
+          setAnimStyle((s) => {
+            const i = IDLE_ANIM_STYLES.indexOf(s);
+            return IDLE_ANIM_STYLES[(i + 1) % IDLE_ANIM_STYLES.length];
+          })
+        }
+        className="mt-4 cursor-default"
+        aria-label="Toggle animation"
+      >
+        <Image
+          src="/flaim-mark-hero.png"
+          alt=""
+          width={32}
+          height={32}
+          className={`dark:hidden ${animClass}`}
+          aria-hidden
+        />
+        <Image
+          src="/flaim-mark-hero-dark.png"
+          alt=""
+          width={32}
+          height={32}
+          className={`hidden dark:block ${animClass}`}
+          aria-hidden
+        />
+      </button>
+      <span className="mt-1 text-lg text-muted-foreground/60" aria-hidden>
+        ↓
+      </span>
+    </div>
+  );
+}
+
 export function PublicChatExperience({
   initialPresetId = null,
   id,
@@ -543,18 +602,7 @@ export function PublicChatExperience({
             >
               <div className="mx-auto flex max-w-2xl flex-col gap-4">
                 {!selectedPreset && runStatus === "idle" ? (
-                  <div className="flex min-h-[12rem] flex-1 flex-col items-center justify-end pb-4">
-                    <p className="text-3xl font-bold tracking-tight text-foreground/80 sm:text-4xl">
-                      Pick something
-                    </p>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      Real answers from Gerry&apos;s ESPN league
-                    </p>
-                    <IconBallBaseball className="mt-4 h-7 w-7 text-foreground/70" stroke={1.5} aria-hidden />
-                    <span className="mt-1 text-lg text-muted-foreground/60" aria-hidden>
-                      ↓
-                    </span>
-                  </div>
+                  <IdleState />
                 ) : null}
 
                 {selectedPreset ? (

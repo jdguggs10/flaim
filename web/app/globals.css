@@ -188,48 +188,58 @@
   }
 }
 
-@keyframes public-chat-ball-drop {
-  0% {
-    opacity: 0;
-    transform: translateY(-40px) scale(0.7);
-  }
-
-  60% {
-    opacity: 1;
-    transform: translateY(2px) scale(1.05);
-  }
-
+/* A: Gentle pendulum rock — tilts left then right, then rests */
+@keyframes public-chat-idle-rock {
+  0%,
+  16%,
   100% {
-    opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: rotate(0deg);
+  }
+
+  4% {
+    transform: rotate(-12deg);
+  }
+
+  8% {
+    transform: rotate(10deg);
+  }
+
+  12% {
+    transform: rotate(-4deg);
   }
 }
 
-@keyframes public-chat-speed-lines {
-  0% {
-    opacity: 0.9;
-    transform: translateX(-50%) translateY(-8px) scaleY(1.2);
-  }
-
-  50% {
-    opacity: 0.6;
-  }
-
+/* B: Bounce + squash — drops down, squashes, springs up */
+@keyframes public-chat-idle-bounce {
+  0%,
+  20%,
   100% {
-    opacity: 0;
-    transform: translateX(-50%) translateY(6px) scaleY(0.3);
+    transform: translateY(0) scaleX(1) scaleY(1);
+  }
+
+  5% {
+    transform: translateY(6px) scaleX(1.15) scaleY(0.85);
+  }
+
+  10% {
+    transform: translateY(-8px) scaleX(0.95) scaleY(1.05);
+  }
+
+  15% {
+    transform: translateY(2px) scaleX(1.02) scaleY(0.98);
   }
 }
 
-@keyframes public-chat-arrow-fade {
-  from {
-    opacity: 0;
-    transform: translateY(-4px);
+/* C: Quick 360 spin that decelerates */
+@keyframes public-chat-idle-spin {
+  0%,
+  18%,
+  100% {
+    transform: rotate(0deg);
   }
 
-  to {
-    opacity: 1;
-    transform: translateY(0);
+  14% {
+    transform: rotate(360deg);
   }
 }
 
@@ -338,16 +348,16 @@
     animation: public-chat-send-running 1.2s ease-in-out infinite;
   }
 
-  .public-chat-ball-drop {
-    animation: public-chat-ball-drop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  .public-chat-idle-rock {
+    animation: public-chat-idle-rock 5s ease-in-out infinite;
   }
 
-  .public-chat-speed-lines {
-    animation: public-chat-speed-lines 0.6s ease-out both;
+  .public-chat-idle-bounce {
+    animation: public-chat-idle-bounce 5s ease-in-out infinite;
   }
 
-  .public-chat-arrow-fade {
-    animation: public-chat-arrow-fade 0.4s ease-out 0.5s both;
+  .public-chat-idle-spin {
+    animation: public-chat-idle-spin 6s cubic-bezier(0.16, 1, 0.3, 1) infinite;
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -358,9 +368,9 @@
     .public-chat-selected-prompt::after,
     .public-chat-chip-active,
     .public-chat-send-running,
-    .public-chat-ball-drop,
-    .public-chat-speed-lines,
-    .public-chat-arrow-fade {
+    .public-chat-idle-rock,
+    .public-chat-idle-bounce,
+    .public-chat-idle-spin {
       animation: none !important;
       transform: none;
       opacity: 1;
