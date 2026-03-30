@@ -11,7 +11,6 @@ export const metadata: Metadata = {
     canonical: "https://flaim.app",
   },
 };
-import { HeroChat } from "@/components/site/hero-chat";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
