@@ -209,6 +209,61 @@
   }
 }
 
+/* A: Gentle pendulum rock — tilts left then right, then rests */
+@keyframes public-chat-idle-rock {
+  0%,
+  16%,
+  100% {
+    transform: rotate(0deg);
+  }
+
+  4% {
+    transform: rotate(-12deg);
+  }
+
+  8% {
+    transform: rotate(10deg);
+  }
+
+  12% {
+    transform: rotate(-4deg);
+  }
+}
+
+/* B: Bounce + squash — drops down, squashes, springs up */
+@keyframes public-chat-idle-bounce {
+  0%,
+  20%,
+  100% {
+    transform: translateY(0) scaleX(1) scaleY(1);
+  }
+
+  5% {
+    transform: translateY(6px) scaleX(1.15) scaleY(0.85);
+  }
+
+  10% {
+    transform: translateY(-8px) scaleX(0.95) scaleY(1.05);
+  }
+
+  15% {
+    transform: translateY(2px) scaleX(1.02) scaleY(0.98);
+  }
+}
+
+/* C: Quick 360 spin that decelerates */
+@keyframes public-chat-idle-spin {
+  0%,
+  18%,
+  100% {
+    transform: rotate(0deg);
+  }
+
+  14% {
+    transform: rotate(360deg);
+  }
+}
+
 @layer utilities {
   .public-chat-ticker-track {
     animation-name: public-chat-ticker-marquee;
@@ -259,6 +314,18 @@
     animation: public-chat-send-running 1.2s ease-in-out infinite;
   }
 
+  .public-chat-idle-rock {
+    animation: public-chat-idle-rock 5s ease-in-out infinite;
+  }
+
+  .public-chat-idle-bounce {
+    animation: public-chat-idle-bounce 5s ease-in-out infinite;
+  }
+
+  .public-chat-idle-spin {
+    animation: public-chat-idle-spin 6s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .public-chat-ticker-track,
     .public-chat-ticker-track--top,
@@ -266,9 +333,13 @@
     .public-chat-selected-prompt,
     .public-chat-selected-prompt::after,
     .public-chat-chip-active,
-    .public-chat-send-running {
-      animation: none;
+    .public-chat-send-running,
+    .public-chat-idle-rock,
+    .public-chat-idle-bounce,
+    .public-chat-idle-spin {
+      animation: none !important;
       transform: none;
+      opacity: 1;
     }
   }
 }

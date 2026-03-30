@@ -195,6 +195,86 @@ async function waitFor(ms: number, signal: AbortSignal) {
   });
 }
 
+/* ------------------------------------------------------------------ */
+/*  Idle state — easter egg: auto-cycling logo animations              */
+/* ------------------------------------------------------------------ */
+
+const IDLE_ANIM_STYLES = ["rock", "bounce", "spin"] as const;
+
+function IdleState() {
+  const [styleIndex, setStyleIndex] = useState(0);
+  const [cycleKey, setCycleKey] = useState(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const animStyle = IDLE_ANIM_STYLES[styleIndex % IDLE_ANIM_STYLES.length];
+  const animClass = {
+    rock: "public-chat-idle-rock",
+    bounce: "public-chat-idle-bounce",
+    spin: "public-chat-idle-spin",
+  }[animStyle];
+
+  // Auto-cycle every 6s
+  useEffect(() => {
+    timerRef.current = setInterval(() => {
+      setStyleIndex((i) => i + 1);
+      setCycleKey((k) => k + 1);
+    }, 6000);
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, []);
+
+  // Tap to advance + restart timer
+  const handleTap = useCallback(() => {
+    setStyleIndex((i) => i + 1);
+    setCycleKey((k) => k + 1);
+    if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = setInterval(() => {
+      setStyleIndex((i) => i + 1);
+      setCycleKey((k) => k + 1);
+    }, 6000);
+  }, []);
+
+  return (
+    <div className="flex min-h-[12rem] flex-1 flex-col items-center justify-end pb-4">
+      <p className="text-3xl font-bold tracking-tight text-foreground/80 sm:text-4xl">
+        Pick something
+      </p>
+      <p className="mt-1 text-sm text-muted-foreground">
+        Real answers from Gerry&apos;s ESPN league
+      </p>
+      {/* Tap logo to cycle animation — easter egg */}
+      <button
+        onClick={handleTap}
+        className="mt-4 cursor-default"
+        aria-label="Toggle animation"
+      >
+        <Image
+          key={`light-${cycleKey}`}
+          src="/flaim-mark-hero.png"
+          alt=""
+          width={32}
+          height={32}
+          className={`dark:hidden ${animClass}`}
+          aria-hidden
+        />
+        <Image
+          key={`dark-${cycleKey}`}
+          src="/flaim-mark-hero-dark.png"
+          alt=""
+          width={32}
+          height={32}
+          className={`hidden dark:block ${animClass}`}
+          aria-hidden
+        />
+      </button>
+      <span className="mt-1 text-lg text-muted-foreground/60" aria-hidden>
+        ↓
+      </span>
+    </div>
+  );
+}
+
 export function PublicChatExperience({
   initialPresetId = null,
   id,
@@ -543,18 +623,7 @@ export function PublicChatExperience({
             >
               <div className="mx-auto flex max-w-2xl flex-col gap-4">
                 {!selectedPreset && runStatus === "idle" ? (
-                  <div className="flex min-h-[12rem] flex-1 flex-col items-center justify-end pb-4">
-                    <p className="text-3xl font-bold tracking-tight text-foreground/80 sm:text-4xl">
-                      Pick something
-                    </p>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      Real answers from Gerry&apos;s ESPN league
-                    </p>
-                    <IconBallBaseball className="mt-4 h-7 w-7 text-foreground/70" stroke={1.5} aria-hidden />
-                    <span className="mt-1 text-lg text-muted-foreground/60" aria-hidden>
-                      ↓
-                    </span>
-                  </div>
+                  <IdleState />
                 ) : null}
 
                 {selectedPreset ? (
