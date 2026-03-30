@@ -315,15 +315,15 @@
   }
 
   .public-chat-idle-rock {
-    animation: public-chat-idle-rock 5s ease-in-out infinite;
+    animation: public-chat-idle-rock 5s ease-in-out 1;
   }
 
   .public-chat-idle-bounce {
-    animation: public-chat-idle-bounce 5s ease-in-out infinite;
+    animation: public-chat-idle-bounce 5s ease-in-out 1;
   }
 
   .public-chat-idle-spin {
-    animation: public-chat-idle-spin 6s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+    animation: public-chat-idle-spin 6s cubic-bezier(0.16, 1, 0.3, 1) 1;
   }
 
   @media (prefers-reduced-motion: reduce) {

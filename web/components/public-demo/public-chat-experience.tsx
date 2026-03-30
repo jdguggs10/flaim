@@ -203,7 +203,6 @@ const IDLE_ANIM_STYLES = ["rock", "bounce", "spin"] as const;
 
 function IdleState() {
   const [styleIndex, setStyleIndex] = useState(0);
-  const [cycleKey, setCycleKey] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const animStyle = IDLE_ANIM_STYLES[styleIndex % IDLE_ANIM_STYLES.length];
@@ -217,7 +216,6 @@ function IdleState() {
   useEffect(() => {
     timerRef.current = setInterval(() => {
       setStyleIndex((i) => i + 1);
-      setCycleKey((k) => k + 1);
     }, 6000);
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
@@ -227,11 +225,9 @@ function IdleState() {
   // Tap to advance + restart timer
   const handleTap = useCallback(() => {
     setStyleIndex((i) => i + 1);
-    setCycleKey((k) => k + 1);
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = setInterval(() => {
       setStyleIndex((i) => i + 1);
-      setCycleKey((k) => k + 1);
     }, 6000);
   }, []);
 
@@ -250,7 +246,7 @@ function IdleState() {
         aria-label="Toggle animation"
       >
         <Image
-          key={`light-${cycleKey}`}
+          key={`light-${styleIndex}`}
           src="/flaim-mark-hero.png"
           alt=""
           width={32}
@@ -259,7 +255,7 @@ function IdleState() {
           aria-hidden
         />
         <Image
-          key={`dark-${cycleKey}`}
+          key={`dark-${styleIndex}`}
           src="/flaim-mark-hero-dark.png"
           alt=""
           width={32}
