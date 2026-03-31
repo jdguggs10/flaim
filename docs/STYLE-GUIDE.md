@@ -6,7 +6,6 @@ Lightweight in-repo frontend standards.
 
 - Use semantic design tokens (`text-foreground`, `bg-card`, `border-border`) instead of hard-coded palette classes.
 - Preserve clear focus states and keyboard accessibility for interactive elements.
-- Keep site/chat boundaries intact (`components/site` and `components/chat` do not cross-import).
 - Prefer existing shared UI primitives before introducing custom one-off patterns.
 
 ## Component Baseline

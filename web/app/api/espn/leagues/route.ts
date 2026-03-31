@@ -7,7 +7,21 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
-import type { WorkerErrorResponse, WorkerLeaguesResponse } from '@/types/api-responses';
+
+interface WorkerErrorResponse {
+  error?: string;
+}
+
+interface WorkerLeaguesResponse extends WorkerErrorResponse {
+  leagues?: Array<{
+    leagueId: string;
+    sport: string;
+    leagueName?: string;
+    teamId?: string;
+    seasonYear?: number;
+  }>;
+  deleted?: boolean;
+}
 
 export async function GET() {
   try {
