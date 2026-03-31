@@ -2,7 +2,7 @@
 
 Doc routing: see `docs/INDEX.md`.
 
-Flaim is an MCP (Model Context Protocol) service that connects ESPN, Yahoo, and Sleeper fantasy leagues to AI assistants like Claude, ChatGPT, and Gemini CLI. It handles authentication, credential management, and real-time data fetching. The web app also includes a homepage live demo plus an internal `/dev` lab.
+Flaim is an MCP (Model Context Protocol) service that connects ESPN, Yahoo, and Sleeper fantasy leagues to AI assistants like Claude, ChatGPT, and Gemini CLI. It handles authentication, credential management, and real-time data fetching. The web app also includes a homepage live demo.
 
 ## Quick Start
 
@@ -19,7 +19,7 @@ npm run dev
 ## Core Pieces
 
 - **Chrome Extension (`/extension`)**: Captures ESPN cookies (SWID, espn_s2) and syncs them to Flaim using Clerk Sync Host (no pairing codes).
-- **Next.js web app (`/web`)**: Site pages (discovery-first landing page, setup + management hub at `/leagues`, privacy policy), OAuth consent screens, homepage live demo, and internal dev chat surface.
+- **Next.js web app (`/web`)**: Site pages (discovery-first landing page, setup + management hub at `/leagues`, privacy policy), OAuth consent screens, and homepage live demo.
 - **Auth worker (`/workers/auth-worker`)**: Supabase credential + league storage, JWT verification, OAuth token management, extension APIs. Uses Hono for routing.
 - **Unified Gateway (`/workers/fantasy-mcp`)**: Single MCP endpoint exposing unified tools for all platforms and sports. Routes to platform-specific workers via service bindings.
 - **ESPN Client (`/workers/espn-client`)**: Internal worker handling all ESPN API calls for all sports (football, baseball, basketball, hockey). Called by fantasy-mcp gateway.
@@ -57,7 +57,7 @@ Flaim is an **authentication and data service**, not a chatbot:
 - **OAuth Provider**: Handles secure authentication between AI clients and ESPN data
 - **Credential Manager**: Securely stores ESPN session cookies (via extension or manual entry)
 
-The built-in `/dev` surface is an internal dev/debug lab, not a product feature. It is gated behind Clerk metadata (`chatAccess: true`) at both the page and API level. It exists for manual tool testing and exploratory debugging alongside the structured eval harness (`flaim-eval/`). The public live showcase now lives on the homepage, with `/chat` retained only as a redirect to `/#live-demo`. The live demo is backed by a dedicated demo account and server-owned auth. See `web/README.md` for access setup.
+The public live showcase lives on the homepage, with `/chat` retained as a redirect to `/#live-demo`. The live demo is backed by a dedicated demo account and server-owned auth. The interactive dev console has been extracted to a separate `flaim-chat` repo (`chat.flaim.app`).
 
 ## Primary User Flow
 
@@ -186,8 +186,9 @@ Claude/ChatGPT/Gemini CLI → fantasy-mcp (gateway) → espn-client    → ESPN 
 - Per-user isolation via verified `sub`; credentials never sent back to client after setup.
 - Rate limiting: Cloudflare Workers native `rate_limits` bindings — 10 req/60s per IP on token endpoint, 15 req/60s per user on credentials endpoint, and 5 req/60s per visitor on the legacy public live-turn route.
 - Public chat concurrency/logging: auth-worker reserves demo runs in Supabase (`public_chat_runs`) so one visitor cannot stack overlapping runs and failures remain visible after the request finishes.
-- Public chat warm context: the web app caches Gerry session context in Supabase (`public_chat_context_cache`) as groundwork from the original live-turn public demo. The homepage preset flow is now moving toward cache-backed answers (`public_demo_answer_cache`) so visitors can read recently refreshed outputs without triggering live provider inference on every click.
+- Public chat warm context: the web app still caches Gerry session context in Supabase (`public_chat_context_cache`) as groundwork from the original live-turn public demo. The homepage preset flow now reads cache-backed answers from `public_demo_answer_cache`, so visitors can read recently refreshed outputs without triggering live provider inference on every click.
 - Public demo refresh pipeline: the manual runner lives in `web/scripts/public-demo-refresh.mjs`, the queue selector lives in `web/scripts/public-demo-refresh-next.mjs`, and the ops check lives in `web/scripts/public-demo-health.mjs`. Together they use Gemini CLI headless mode from an isolated temp workspace, plus static MCP bearer auth, to populate and inspect `public_demo_answer_cache` out of band.
+- Public demo refresh hardening: the refresh path validates MCP grounding, retries the known `missing_mcp_grounding` failure class with a stricter prompt, and uses a dedicated parser layer so Gemini CLI banner/log noise is less likely to break headless refresh runs.
 - OAuth tokens stored in Supabase with expiration tracking.
 - ESPN credentials: AES-256 encrypted at rest (Supabase default).
 
@@ -306,7 +307,7 @@ Verify: `curl https://api.flaim.app/auth/health`
 | Double slashes in URLs | Trailing slash in env vars | Remove trailing slashes |
 | Extension "Failed to fetch" | Production build loaded locally | Rebuild with `NODE_ENV=development npm run build` |
 | Extension not signed in | Clerk session not syncing | Close/reopen extension popup, confirm flaim.app sign-in |
-| Chat MCP error 424 "Failed Dependency" | OpenAI can't reach localhost MCP URLs | Deploy workers to preview, update `.env.local` with preview URLs |
+| MCP error 424 "Failed Dependency" | AI client can't reach localhost MCP URLs | Deploy workers to preview, update `.env.local` with preview URLs |
 | Node.js v25 localStorage warning | Known Node v25 regression | Harmless; suppressed via `--no-webstorage` in dev script |
 
 See `workers/README.md` for worker-specific troubleshooting (522s, 404s, 500s).

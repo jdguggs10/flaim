@@ -1,6 +1,6 @@
 # Flaim Web App
 
-Next.js 15 app with App Router, Tailwind CSS v4, and shadcn/ui. Handles site pages, OAuth consent, API routes, the homepage live demo, and the internal `/dev` lab.
+Next.js 15 app with App Router, Tailwind CSS v4, and shadcn/ui. Handles site pages, OAuth consent, API routes, and the homepage live demo.
 
 ## Quick Start
 
@@ -22,36 +22,18 @@ web/
 │   │   ├── privacy/         # Privacy policy (/privacy)
 │   │   └── oauth/consent/   # OAuth consent screen
 │   │
-│   ├── (chat)/dev/          # Internal dev/debug lab (/dev)
-│   │
 │   └── api/
 │       ├── auth/            # Platform auth APIs
 │       ├── espn/            # League management APIs
 │       ├── extension/       # Extension APIs
-│       ├── oauth/           # OAuth APIs (status, revoke)
-│       └── chat/            # Chat-only APIs
+│       └── oauth/           # OAuth APIs (status, revoke)
 │
 ├── components/
 │   ├── site/                # Site-only components
-│   ├── chat/                # Chat-only components
 │   └── ui/                  # Shared shadcn components
 │
-└── lib/
-    ├── chat/                # Chat utilities
-    └── ...                  # Shared utilities
+└── lib/                     # Shared utilities
 ```
-
-## Component Boundaries
-
-**Critical rule:** Site and chat code are isolated. No cross-imports.
-
-| Directory          | Can import from               |
-| ------------------ | ----------------------------- |
-| `components/site/` | `components/ui/`, `lib/`      |
-| `components/chat/` | `components/ui/`, `lib/chat/` |
-| `components/ui/`   | Nothing else in components    |
-
-Both site and chat can use shared `components/ui/` (shadcn).
 
 ## Routes
 
@@ -66,13 +48,6 @@ Both site and chat can use shared `components/ui/` (shadcn).
 | `/robots.txt`    | Crawl rules + sitemap location for search engines                                            |
 | `/oauth/consent` | OAuth authorization screen                                                                   |
 
-### Chat Surfaces (`/(chat)/`)
-
-| Path    | Purpose                          |
-| ------- | -------------------------------- |
-| `/chat` | Legacy redirect to `/#live-demo` |
-| `/dev`  | Internal dev/debug chat surface  |
-
 ### API Routes (`/api/`)
 
 | Path                 | Purpose                                                          |
@@ -81,8 +56,9 @@ Both site and chat can use shared `components/ui/` (shadcn).
 | `/api/espn/*`        | League management, seasons, discovery, credentials               |
 | `/api/extension/*`   | Extension APIs (Clerk JWT)                                       |
 | `/api/oauth/*`       | OAuth status, revoke                                             |
-| `/api/chat/*`        | Internal dev chat turn responses                                 |
 | `/api/public-chat/*` | Public chat server routes (preset-driven demo-account execution) |
+
+Note: `/chat` redirects to `/#live-demo` (legacy URL support).
 
 Most API routes proxy to auth-worker. See `docs/ARCHITECTURE.md` for the full flow.
 
@@ -100,9 +76,6 @@ Deleting a league removes all seasons for that league.
 Create `web/.env.local` from `.env.example`:
 
 ```bash
-# OpenAI (still used by /dev and reserved fallback paths)
-OPENAI_API_KEY=sk-...
-
 # Public homepage demo refresh
 DEMO_API_KEY=flaim_demo_...
 FANTASY_MCP_URL=https://api.flaim.app/mcp
@@ -135,40 +108,7 @@ The homepage demo, reachable at `/#live-demo` and via the legacy `/chat` redirec
 - Surfaces freshness state instead of doing live provider inference on every visitor click
 - Retains the older live turn route as implementation plumbing while the cache-refresh pipeline is being built out
 
-This is separate from the internal `/dev` surface. The browser never receives reusable demo-account credentials.
-
-## Internal Dev Chat
-
-The `/dev` page is the internal dev/debug surface for manual MCP tool testing and exploratory debugging. It is not the public product chat experience. For structured, repeatable testing, use the eval harness (`flaim-eval/`). The two are complementary — `/dev` is the visual scratchpad, eval is the structured test bench.
-
-### Access Control
-
-Both the `/dev` page and all `/api/chat/*` routes require `publicMetadata.chatAccess: true` in Clerk. Without it:
-
-- `/dev` page → redirects to home
-- API routes → 403 Forbidden
-
-Set in Clerk Dashboard → Users → [user] → Public metadata:
-
-```json
-{ "chatAccess": true }
-```
-
-### Debug Mode
-
-Toggle in the Developer Console to show:
-
-- Raw JSON request/response for each tool call
-- Execution timing (ms)
-- MCP payload + tools list visibility for debugging
-
-Keyboard shortcut: `Cmd+D` / `Ctrl+D`
-
-### LLM Trace
-
-The Developer Console includes an LLM Trace panel that captures prompt payloads, tool calls, and assistant output
-for each turn. Exporting a session includes a redacted copy of these trace entries, but exports can still contain
-sensitive data—share with care.
+The browser never receives reusable demo-account credentials. The interactive dev console has been extracted to a separate repo (`flaim-chat` / `chat.flaim.app`).
 
 ### Public Chat Warmup
 
@@ -210,19 +150,12 @@ Notes:
 - `public-demo:refresh-next` selects exactly one preset for the requested sport each time it runs
 - Missing or degraded rows are prioritized first
 - If nothing is degraded or expired, the script keeps moving by selecting the oldest ready row
-- This keeps the first rollout conservative and predictable at a `15m` cron cadence
+- This keeps the first rollout conservative and predictable at a `12m` cron cadence
 - `public-demo:health` reports per-preset cache state plus the latest failure context from `public_demo_refresh_runs`
 - `public-demo:refresh-next -- --select-only --sport baseball` is the cheapest way to inspect which preset the queue would choose next without spending provider tokens
+- The production refresh worker now runs the same queue/health logic from a dedicated standalone runner repo on the Pi, with the scripts in this repo retained as the implementation reference and local/manual path
 
 Important: this warmup cache does not include sports news. The live public-chat turn uses a fresh Responses API `web_search` tool call for current-context sports details.
-
-## Build Notes
-
-### Webpack cache warning (big strings)
-
-- During `npm run build`, webpack may warn: `Serializing big strings (181kiB) impacts deserialization performance`.
-- Likely cause: the client bundle includes `react-syntax-highlighter` (used in `web/components/chat/tool-call.tsx`), which pulls in large Prism language definitions and produces large module source strings for the cache.
-- This is a filesystem cache performance warning (not a runtime error). If it ever becomes a problem, consider lazy-loading the syntax highlighter or using a lighter alternative.
 
 ## Conventions
 

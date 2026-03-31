@@ -9,7 +9,7 @@ const ROTATING_WORDS = [
   "free agents",
   "transactions",
   "player stats",
-  "league history",
+  "history",
   "waiver wire",
 ];
 
