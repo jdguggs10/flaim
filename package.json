@@ -27,9 +27,6 @@
     "deploy:espn-client:prod": "cd workers/espn-client && npm run deploy:prod",
     "deploy:fantasy-mcp:preview": "cd workers/fantasy-mcp && npm run deploy:preview",
     "deploy:fantasy-mcp:prod": "cd workers/fantasy-mcp && npm run deploy:prod",
-    "public-demo:health": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types web/scripts/public-demo-health.mjs",
-    "public-demo:refresh": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types web/scripts/public-demo-refresh.mjs",
-    "public-demo:refresh-next": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types web/scripts/public-demo-refresh-next.mjs",
     "ui:check": "bash scripts/ui-consistency-check.sh"
   },
   "devDependencies": {
