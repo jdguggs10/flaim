@@ -34,7 +34,7 @@ export interface PublicChatPreset {
 // Keep the public demo model in one place so we can iterate on latency and
 // reliability without touching the route logic.
 export const PUBLIC_CHAT_MODEL = "gpt-5.4-mini";
-export const PUBLIC_DEMO_PROMPT_VERSION = "v2";
+export const PUBLIC_DEMO_PROMPT_VERSION = "v3";
 export const PUBLIC_DEMO_CONTEXT_VERSION = "v1";
 
 export const PUBLIC_CHAT_SYSTEM_PROMPT = `
