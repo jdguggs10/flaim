@@ -66,7 +66,7 @@ Do not use bullets.
 
 export const PUBLIC_CHAT_SIMPLE_PRESETS: readonly PublicChatPreset[] = [
   {
-    id: "simple-leagues",
+    id: "lite-leagues",
     title: "What's Gerry actually playing this season?",
     userMessage: "What's Gerry actually playing this season?",
     allowedTools: ["get_user_session"] as const,
@@ -80,7 +80,7 @@ export const PUBLIC_CHAT_SIMPLE_PRESETS: readonly PublicChatPreset[] = [
     toolLabel: "This Season",
   },
   {
-    id: "simple-league-info",
+    id: "lite-league-info",
     title: "What kind of league is this?",
     userMessage: "What kind of league is this?",
     allowedTools: ["get_league_info"] as const,
@@ -94,7 +94,7 @@ export const PUBLIC_CHAT_SIMPLE_PRESETS: readonly PublicChatPreset[] = [
     toolLabel: "League Setup",
   },
   {
-    id: "simple-standings",
+    id: "lite-standings",
     title: "Is Gerry off to a good start?",
     userMessage: "Is Gerry off to a good start?",
     allowedTools: ["get_standings"] as const,
@@ -108,7 +108,7 @@ export const PUBLIC_CHAT_SIMPLE_PRESETS: readonly PublicChatPreset[] = [
     toolLabel: "Fast Start?",
   },
   {
-    id: "simple-matchup",
+    id: "flash-matchup",
     title: "Who is Gerry facing, and what matters most?",
     userMessage: "Who is Gerry facing, and what matters most?",
     allowedTools: ["get_matchups"] as const,
@@ -122,7 +122,7 @@ export const PUBLIC_CHAT_SIMPLE_PRESETS: readonly PublicChatPreset[] = [
     toolLabel: "This Matchup",
   },
   {
-    id: "simple-roster",
+    id: "flash-roster",
     title: "Who's carrying Gerry's team right now?",
     userMessage: "Who's carrying Gerry's team right now?",
     allowedTools: ["get_roster"] as const,
@@ -136,7 +136,7 @@ export const PUBLIC_CHAT_SIMPLE_PRESETS: readonly PublicChatPreset[] = [
     toolLabel: "Carrying Team",
   },
   {
-    id: "simple-free-agents",
+    id: "pro-free-agents",
     title: "What's the smartest waiver move right now?",
     userMessage: "What's the smartest waiver move right now?",
     allowedTools: ["get_free_agents"] as const,
@@ -150,7 +150,7 @@ export const PUBLIC_CHAT_SIMPLE_PRESETS: readonly PublicChatPreset[] = [
     toolLabel: "Waiver Move",
   },
   {
-    id: "simple-player-lookup",
+    id: "flash-player-lookup",
     title: "Who on Gerry's team is trending the wrong way?",
     userMessage: "Who on Gerry's team is trending the wrong way?",
     allowedTools: ["get_roster", "get_players"] as const,
@@ -164,7 +164,7 @@ export const PUBLIC_CHAT_SIMPLE_PRESETS: readonly PublicChatPreset[] = [
     toolLabel: "Bad Trend",
   },
   {
-    id: "simple-transactions",
+    id: "flash-transactions",
     title: "Which league move actually matters?",
     userMessage: "Which league move actually matters?",
     allowedTools: ["get_transactions"] as const,
@@ -179,7 +179,7 @@ export const PUBLIC_CHAT_SIMPLE_PRESETS: readonly PublicChatPreset[] = [
     toolLabel: "Move That Matters",
   },
   {
-    id: "simple-history",
+    id: "lite-history",
     title: "Has Gerry ever won this thing?",
     userMessage: "Has Gerry ever won this thing?",
     allowedTools: ["get_ancient_history"] as const,
@@ -196,7 +196,7 @@ export const PUBLIC_CHAT_SIMPLE_PRESETS: readonly PublicChatPreset[] = [
 
 export const PUBLIC_CHAT_DEEP_PRESETS: readonly PublicChatPreset[] = [
   {
-    id: "waiver-wire",
+    id: "pro-waiver-wire",
     rail: "bottom",
     title: "Who are the best available free agents in Gerry's league?",
     userMessage: "Who are the best available free agents in Gerry's league?",
@@ -211,7 +211,7 @@ export const PUBLIC_CHAT_DEEP_PRESETS: readonly PublicChatPreset[] = [
       "Checks Gerry's roster, scans the waiver wire, and validates the best targets with current player context.",
   },
   {
-    id: "transactions-watch",
+    id: "flash-transactions-watch",
     rail: "bottom",
     title: "What are the latest moves in his league?",
     userMessage: "What are the latest moves in Gerry's league?",
@@ -227,7 +227,7 @@ export const PUBLIC_CHAT_DEEP_PRESETS: readonly PublicChatPreset[] = [
       "Starts with the transaction feed, checks the affected rosters when needed, and adds live context on why those moves matter.",
   },
   {
-    id: "league-leader",
+    id: "flash-league-leader",
     rail: "bottom",
     title: "Who is winning Gerry's league and why?",
     userMessage: "Who is winning Gerry's league and why?",
@@ -242,7 +242,7 @@ export const PUBLIC_CHAT_DEEP_PRESETS: readonly PublicChatPreset[] = [
       "Combines the standings with roster and matchup context to explain why the leader is actually on top.",
   },
   {
-    id: "give-up-player",
+    id: "flash-give-up-player",
     rail: "bottom",
     title: "What player does he need to give up on?",
     userMessage: "What player does he need to give up on?",
@@ -257,7 +257,7 @@ export const PUBLIC_CHAT_DEEP_PRESETS: readonly PublicChatPreset[] = [
       "Looks at Gerry's roster, zeroes in on the weakest hold, and adds current trend or injury context before making the call.",
   },
   {
-    id: "roster-hole",
+    id: "flash-roster-hole",
     rail: "bottom",
     title: "What is the biggest hole in his roster?",
     userMessage: "What is the biggest hole in Gerry's roster?",
@@ -272,7 +272,7 @@ export const PUBLIC_CHAT_DEEP_PRESETS: readonly PublicChatPreset[] = [
       "Finds Gerry's weakest spot, checks the best replacement paths, and layers in live player context to prioritize the problem.",
   },
   {
-    id: "sell-high",
+    id: "flash-sell-high",
     rail: "bottom",
     title: "Who should Gerry be selling high on?",
     userMessage: "Who should Gerry be selling high on?",
@@ -287,7 +287,7 @@ export const PUBLIC_CHAT_DEEP_PRESETS: readonly PublicChatPreset[] = [
       "Starts from Gerry's roster, checks the most tradable candidate in context, and adds live news to test whether the window is real.",
   },
   {
-    id: "last-season",
+    id: "flash-last-season",
     rail: "bottom",
     title: "How did he do last season?",
     userMessage: "How did he do last season?",
@@ -302,7 +302,7 @@ export const PUBLIC_CHAT_DEEP_PRESETS: readonly PublicChatPreset[] = [
       "Pulls the past season, adds league context, and gives the answer enough background to feel like analysis instead of a raw recap.",
   },
   {
-    id: "playoff-start",
+    id: "flash-playoff-start",
     rail: "bottom",
     title: "When does his fantasy playoffs start?",
     userMessage: "When does his fantasy playoffs start?",

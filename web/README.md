@@ -121,7 +121,7 @@ Current homepage behavior no longer depends on this warmup path for preset click
 Phase 2 adds a standalone manual cache-refresh command that runs outside the visitor request path:
 
 ```bash
-npm run public-demo:refresh -- --preset simple-standings --sport baseball
+npm run public-demo:refresh -- --preset lite-standings --sport baseball
 ```
 
 Notes:

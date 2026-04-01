@@ -203,7 +203,7 @@ Server-owned cache for homepage public-demo answers. Stores the most recent prec
 | Column | Type | Notes |
 |---|---|---|
 | cache_key | text | Primary key (`public-demo-answer:<preset>:<sport>:<promptVersion>:<contextVersion>`) |
-| preset_id | text | Public preset identifier (`simple-roster`, etc.) |
+| preset_id | text | Public preset identifier (`flash-roster`, etc.) |
 | sport | text | Demo sport (`baseball` or `football`) |
 | provider | text | Provider that generated the cached answer (`gemini`, `openai`, etc.) |
 | provider_model | text | Model identifier used for the refresh |
