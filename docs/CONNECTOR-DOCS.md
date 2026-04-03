@@ -63,7 +63,7 @@ Supported today: ESPN, Yahoo, and Sleeper.
 Sleeper support is currently football + basketball (Phase 1).
 `get_transactions` note: ESPN/Sleeper support week filtering; Yahoo ignores explicit `week` and uses a recent 14-day timestamp window. Yahoo `type=waiver` filtering is not supported in v1.
 `get_free_agents` note: ESPN and Yahoo include ownership percentages and sort by ownership. Sleeper returns available-player identities without ownership percentages.
-`get_players` note: ESPN may return league ownership fields (`league_status`, `league_team_name`, `league_owner_name`) when available. Yahoo returns market/platform-wide ownership only. Sleeper returns identity with unavailable ownership context. If league ownership fields are absent, null, or unavailable, verify with `get_league_info` plus `get_roster`.
+`get_players` note: ESPN and Yahoo may return league ownership fields (`league_status`, `league_team_name`, `league_owner_name`) when available. Sleeper returns identity with unavailable ownership context. If league ownership fields are absent, null, or unavailable, verify with `get_league_info` plus `get_roster`.
 
 ## Working Examples (Copy/Paste)
 

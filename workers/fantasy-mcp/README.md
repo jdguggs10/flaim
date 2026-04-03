@@ -48,12 +48,12 @@ All tools take explicit parameters. Call `get_user_session` first in a normal ch
 | `get_matchups` | Weekly matchups/scoreboard |
 | `get_roster` | Team roster with player stats |
 | `get_free_agents` | Available players; ESPN/Yahoo include ownership percentages, Sleeper returns identities without ownership percentages |
-| `get_players` | Player lookup; ESPN can add league ownership, Yahoo is market/global only, Sleeper ownership is unavailable |
+| `get_players` | Player lookup; ESPN and Yahoo can add league ownership, Sleeper ownership is unavailable |
 | `get_transactions` | Recent transactions (adds, drops, waivers, trades) |
 
 `get_transactions` uses platform-specific week semantics in v1: ESPN/Sleeper support explicit `week`, while Yahoo ignores explicit `week` and uses a recent 14-day timestamp window. Yahoo `type=waiver` filtering is intentionally unsupported in v1. ESPN responses include a `teams` map (team ID → display name) so the LLM can resolve numeric `team_ids` on each transaction to human-readable names. Player entries are enriched with name, position, and pro team.
 `get_free_agents` returns platform-specific availability context: ESPN/Yahoo include ownership percentages and sort by ownership, while Sleeper returns available-player identities from the public player index without ownership percentages.
-`get_players` always returns identity, but ownership context is platform-specific: ESPN includes market/global ownership and may also include league ownership fields (`league_status`, `league_team_name`, `league_owner_name`); Yahoo returns market/global ownership only; Sleeper returns identity with unavailable ownership context. If league ownership fields are absent, null, or unavailable, fall back to `get_league_info` + `get_roster`.
+`get_players` always returns identity, but ownership context is platform-specific: ESPN and Yahoo include market/global ownership and may also include league ownership fields (`league_status`, `league_team_name`, `league_owner_name`); Sleeper returns identity with unavailable ownership context. If league ownership fields are absent, null, or unavailable, fall back to `get_league_info` + `get_roster`.
 
 ### Tool Parameters
 

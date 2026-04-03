@@ -4,10 +4,15 @@ import { yahooFetch, handleYahooError, requireCredentials } from '../yahoo-api';
 import { asArray, getPath, unwrapLeague } from '../normalizers';
 import { ErrorCode } from '@flaim/worker-shared';
 import { extractPlayerMeta, extractPlayerPercentOwned, toExecuteErrorResponse } from './utils';
+import { enrichPlayerWithOwnership, fetchLeagueOwnershipMap } from './league-ownership';
 
 export function createSearchPlayersHandler(config: YahooHandlerContext): HandlerFn {
   return async (env, params, authHeader, correlationId) => {
     const { league_id, query, position, count } = params;
+
+    if (!league_id) {
+      return { success: false, error: 'league_id is required for get_players', code: ErrorCode.MISSING_PARAM };
+    }
 
     if (!query) {
       return { success: false, error: 'query is required for get_players', code: ErrorCode.MISSING_PARAM };
@@ -35,18 +40,24 @@ export function createSearchPlayersHandler(config: YahooHandlerContext): Handler
       const league = unwrapLeague(leagueArray);
       const playersObj = league.players as Record<string, unknown> | undefined;
       const playersArray = asArray(playersObj);
+      const ownerMap = await fetchLeagueOwnershipMap(credentials, league_id);
 
       const players = playersArray.map((playerWrapper: unknown) => {
         const playerData = getPath(playerWrapper, ['player']) as unknown[];
         const playerMeta = extractPlayerMeta(playerData);
+        const playerId = playerMeta.player_id as string | number | undefined;
+        const normalizedPlayerId = typeof playerId === 'string' || typeof playerId === 'number'
+          ? String(playerId)
+          : undefined;
 
         return {
-          id: playerMeta.player_id as string,
+          id: normalizedPlayerId as string,
           name: (playerMeta.name as Record<string, unknown>)?.full as string,
           team: playerMeta.editorial_team_abbr as string,
           position: playerMeta.display_position as string,
           market_percent_owned: extractPlayerPercentOwned(playerData),
           ownership_scope: 'platform_global' as const,
+          ...enrichPlayerWithOwnership(playerId, ownerMap),
         };
       });
 
