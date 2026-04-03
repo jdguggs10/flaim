@@ -211,7 +211,6 @@ Server-owned cache for homepage public-demo answers. Stores the most recent prec
 | prompt_version | text | Prompt contract version |
 | answer_text | text | Final cleaned cached answer shown to visitors |
 | answer_word_count | int | Optional stored word count |
-| news_snippet_id | uuid | Optional link to cached sports-news snippet used during refresh |
 | generated_at | timestamptz | When the answer was generated |
 | expires_at | timestamptz | Preferred refresh boundary |
 | stale_after | timestamptz | Threshold for surfacing stale/degraded UI |
@@ -239,11 +238,18 @@ Operational log for public-demo refresh attempts. Used to understand refresh cad
 | started_at | timestamptz | Refresh start time |
 | completed_at | timestamptz | Refresh completion time |
 | duration_ms | int | Duration when known |
-| news_snippet_id | uuid | Optional linked news snippet used during the run |
 | source_meta | jsonb | Additional provider/runtime metadata |
 | created_at | timestamptz | Created timestamp |
 
-The Phase 2 manual runner (`npm run public-demo:refresh`) writes one `completed`, `dry_run`, or `failed` row here for each attempted preset refresh.
+The standalone demo runner (`npm run refresh`) writes one `completed`, `dry_run`, or `failed` row here for each attempted preset refresh.
+
+Current read patterns:
+- `flaim-demo` runner queries recent rows by `sport` ordered by `created_at desc`
+- `flaim/web` queries the latest row for a single `preset_id + sport` pair ordered by `created_at desc`
+
+Recommended indexes:
+- `public_demo_refresh_runs_sport_created_at_idx` on `(sport, created_at desc)` for runner health/scheduler reads
+- `public_demo_refresh_runs_preset_sport_created_at_idx` on `(preset_id, sport, created_at desc)` for website latest-failure lookups
 
 ## Legacy/Deprecated Tables
 
