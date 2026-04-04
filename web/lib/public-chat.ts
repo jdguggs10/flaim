@@ -31,7 +31,7 @@ export interface PublicChatPreset {
 }
 
 export const PUBLIC_DEMO_PROMPT_VERSION = "v3";
-export const PUBLIC_DEMO_CONTEXT_VERSION = "v1";
+export const PUBLIC_DEMO_CONTEXT_VERSION = "v2";
 
 export const PUBLIC_CHAT_SIMPLE_PRESETS: readonly PublicChatPreset[] = [
   {
