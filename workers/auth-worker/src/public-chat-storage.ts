@@ -92,7 +92,7 @@ export class PublicChatStorage {
 
   async recordRejectedRun(input: RecordRejectedPublicChatRunInput): Promise<void> {
     const { error } = await this.supabase
-      .from('public_chat_runs')
+      .from('chat_runs')
       .insert({
         visitor_key: input.visitorKey,
         preset_id: input.presetId,

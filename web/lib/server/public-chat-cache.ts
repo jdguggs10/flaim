@@ -55,7 +55,7 @@ async function readCacheEntry(cacheKey: string): Promise<PublicChatCacheEntry | 
   }
 
   const { supabaseUrl, supabaseServiceKey } = getSupabaseConfig();
-  const url = new URL(`${supabaseUrl}/rest/v1/public_chat_context_cache`);
+  const url = new URL(`${supabaseUrl}/rest/v1/chat_context_cache`);
   url.searchParams.set("cache_key", `eq.${cacheKey}`);
   url.searchParams.set("select", "cache_key,context_text,expires_at,updated_at");
   url.searchParams.set("limit", "1");
@@ -89,7 +89,7 @@ async function writeCacheEntry(input: {
   }
 
   const { supabaseUrl, supabaseServiceKey } = getSupabaseConfig();
-  const response = await fetch(`${supabaseUrl}/rest/v1/public_chat_context_cache`, {
+  const response = await fetch(`${supabaseUrl}/rest/v1/chat_context_cache`, {
     method: "POST",
     headers: {
       apikey: supabaseServiceKey,

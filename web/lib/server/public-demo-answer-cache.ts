@@ -192,7 +192,7 @@ export async function getCachedPublicDemoAnswer(input: {
 
   const { supabaseUrl, supabaseServiceKey } = getSupabaseConfig();
   const cacheKey = buildPublicDemoAnswerCacheKey(input.presetId, input.sport);
-  const url = new URL(`${supabaseUrl}/rest/v1/public_demo_answer_cache`);
+  const url = new URL(`${supabaseUrl}/rest/v1/demo_answer_cache`);
   url.searchParams.set("cache_key", `eq.${cacheKey}`);
   url.searchParams.set(
     "select",
@@ -252,7 +252,7 @@ export async function getLatestPublicDemoRefreshFailure(input: {
   }
 
   const { supabaseUrl, supabaseServiceKey } = getSupabaseConfig();
-  const url = new URL(`${supabaseUrl}/rest/v1/public_demo_refresh_runs`);
+  const url = new URL(`${supabaseUrl}/rest/v1/demo_refresh_runs`);
   url.searchParams.set("preset_id", `eq.${input.presetId}`);
   url.searchParams.set("sport", `eq.${input.sport}`);
   url.searchParams.set(
