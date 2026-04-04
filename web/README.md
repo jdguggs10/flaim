@@ -112,7 +112,7 @@ The browser never receives reusable demo-account credentials. The interactive de
 
 ### Public Chat Warmup
 
-The existing `chat_context_cache` table and `/api/public-chat/bootstrap` route still exist as legacy groundwork from the live-turn version of the public demo.
+The existing `demo_context_cache` table and `/api/public-chat/bootstrap` route still exist as legacy groundwork from the live-turn version of the public demo.
 
 Current homepage behavior no longer depends on this warmup path for preset clicks. The cache-backed visitor flow reads stored answers from `/api/public-chat/cache`, while the older `/api/public-chat/turn` route remains in place as migration-era plumbing until the refresh pipeline fully replaces it.
 

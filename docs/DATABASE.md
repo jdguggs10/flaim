@@ -186,7 +186,7 @@ Server-owned log for the public `/chat` demo. Used for per-visitor concurrency c
 | created_at | timestamptz | Created timestamp |
 | updated_at | timestamptz | Updated timestamp |
 
-### chat_context_cache
+### demo_context_cache
 Server-owned cache for public `/chat` warm context. Used to avoid rebuilding the same demo session context on every visitor request.
 
 | Column | Type | Notes |
