@@ -169,7 +169,7 @@ Short-lived OAuth state values used for server-side validation.
 | expires_at | timestamptz | State expiry |
 | created_at | timestamptz | Created timestamp |
 
-### public_chat_runs
+### chat_runs
 Server-owned log for the public `/chat` demo. Used for per-visitor concurrency control and lightweight operational visibility.
 
 | Column | Type | Notes |
@@ -186,7 +186,7 @@ Server-owned log for the public `/chat` demo. Used for per-visitor concurrency c
 | created_at | timestamptz | Created timestamp |
 | updated_at | timestamptz | Updated timestamp |
 
-### public_chat_context_cache
+### chat_context_cache
 Server-owned cache for public `/chat` warm context. Used to avoid rebuilding the same demo session context on every visitor request.
 
 | Column | Type | Notes |
@@ -197,7 +197,7 @@ Server-owned cache for public `/chat` warm context. Used to avoid rebuilding the
 | created_at | timestamptz | Created timestamp |
 | updated_at | timestamptz | Updated timestamp |
 
-### public_demo_answer_cache
+### demo_answer_cache
 Server-owned cache for homepage public-demo answers. Stores the most recent precomputed answer for a preset/sport/version combination so visitors can read cached demo output instead of triggering live provider inference.
 
 | Column | Type | Notes |
@@ -221,7 +221,7 @@ Server-owned cache for homepage public-demo answers. Stores the most recent prec
 | created_at | timestamptz | Created timestamp |
 | updated_at | timestamptz | Updated timestamp |
 
-### public_demo_refresh_runs
+### demo_refresh_runs
 Operational log for public-demo refresh attempts. Used to understand refresh cadence, provider failures, and degraded/stale periods during the cache-backed rollout.
 
 | Column | Type | Notes |
@@ -248,8 +248,8 @@ Current read patterns:
 - `flaim/web` queries the latest row for a single `preset_id + sport` pair ordered by `created_at desc`
 
 Recommended indexes:
-- `public_demo_refresh_runs_sport_created_at_idx` on `(sport, created_at desc)` for runner health/scheduler reads
-- `public_demo_refresh_runs_preset_sport_created_at_idx` on `(preset_id, sport, created_at desc)` for website latest-failure lookups
+- `demo_refresh_runs_sport_created_at_idx` on `(sport, created_at desc)` for runner health/scheduler reads
+- `demo_refresh_runs_preset_sport_created_at_idx` on `(preset_id, sport, created_at desc)` for website latest-failure lookups
 
 ## Legacy/Deprecated Tables
 

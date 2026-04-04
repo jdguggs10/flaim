@@ -112,7 +112,7 @@ The browser never receives reusable demo-account credentials. The interactive de
 
 ### Public Chat Warmup
 
-The existing `public_chat_context_cache` and `/api/public-chat/bootstrap` route still exist as legacy groundwork from the live-turn version of the public demo.
+The existing `chat_context_cache` table and `/api/public-chat/bootstrap` route still exist as legacy groundwork from the live-turn version of the public demo.
 
 Current homepage behavior no longer depends on this warmup path for preset clicks. The cache-backed visitor flow reads stored answers from `/api/public-chat/cache`, while the older `/api/public-chat/turn` route remains in place as migration-era plumbing until the refresh pipeline fully replaces it.
 
@@ -121,15 +121,15 @@ Current homepage behavior no longer depends on this warmup path for preset click
 Phase 2 adds a standalone manual cache-refresh command that runs outside the visitor request path:
 
 ```bash
-npm run public-demo:refresh -- --preset lite-standings --sport baseball
+npm run refresh -- --preset lite-standings --sport baseball
 ```
 
 Notes:
 
 - Runs Gemini CLI headlessly from an isolated temp workspace
 - Injects the same cached Gerry session context used by the web app
-- Writes one row into `public_demo_answer_cache`
-- Logs the attempt in `public_demo_refresh_runs`
+- Writes one row into `demo_answer_cache`
+- Logs the attempt in `demo_refresh_runs`
 - Rejects answers that fail to use Flaim league data when the preset requires MCP grounding
 - Preserves the last good answer and marks the cache row degraded if a later refresh fails
 - Supports `--dry-run`, `--print-prompt`, `--model`, `--expires-minutes`, and `--stale-minutes`
@@ -141,18 +141,18 @@ This command is the bridge to Pi automation. For now it is intentionally manual 
 Phase 3 adds the first Pi-facing automation layer:
 
 ```bash
-npm run public-demo:refresh-next -- --sport baseball
-npm run public-demo:health -- --sport baseball
+npm run refresh-next -- --sport baseball
+npm run health -- --sport baseball
 ```
 
 Notes:
 
-- `public-demo:refresh-next` selects exactly one preset for the requested sport each time it runs
+- `refresh-next` selects exactly one preset for the requested sport each time it runs
 - Missing or degraded rows are prioritized first
 - If nothing is degraded or expired, the script keeps moving by selecting the oldest ready row
 - This keeps the first rollout conservative and predictable at a `12m` cron cadence
-- `public-demo:health` reports per-preset cache state plus the latest failure context from `public_demo_refresh_runs`
-- `public-demo:refresh-next -- --select-only --sport baseball` is the cheapest way to inspect which preset the queue would choose next without spending provider tokens
+- `health` reports per-preset cache state plus the latest failure context from `demo_refresh_runs`
+- `refresh-next -- --select-only --sport baseball` is the cheapest way to inspect which preset the queue would choose next without spending provider tokens
 - The production refresh worker now runs the same queue/health logic from a dedicated standalone runner repo on the Pi, with the scripts in this repo retained as the implementation reference and local/manual path
 
 Important: this warmup cache does not include sports news. The live public-chat turn uses a fresh Responses API `web_search` tool call for current-context sports details.
