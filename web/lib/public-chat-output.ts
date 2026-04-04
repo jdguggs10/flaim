@@ -8,7 +8,7 @@ const MIN_WORDS = 30;
 const MAX_WORDS = 70;
 const MAX_SENTENCES = 5;
 const SHORT_ANSWER_FALLBACKS: Partial<Record<string, string>> = {
-  "flash-transactions-watch":
+  "league-moves":
     "The next meaningful change will probably come from today’s injury, lineup, or role news rather than a league transaction.",
 };
 
