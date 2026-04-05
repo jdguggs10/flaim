@@ -149,13 +149,6 @@ export const PUBLIC_CHAT_DEEP_PRESETS: readonly PublicChatPreset[] = [
     userMessage: "How did he do last season?",
     allowedTools: ["get_ancient_history", "get_standings"] as const,
   },
-  {
-    id: "playoff-start",
-    rail: "bottom",
-    title: "When does his fantasy playoffs start?",
-    userMessage: "When does his fantasy playoffs start?",
-    allowedTools: ["get_league_info", "get_matchups"] as const,
-  },
 ] as const;
 
 export const PUBLIC_CHAT_PRESETS: readonly PublicChatPreset[] = [

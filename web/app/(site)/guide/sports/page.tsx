@@ -292,7 +292,6 @@ export default function SportsGuidePage() {
               <li>
                 &ldquo;What player on my roster should I give up on?&rdquo;
               </li>
-              <li>&ldquo;When do my fantasy playoffs start?&rdquo;</li>
             </ul>
           </div>
         </section>
