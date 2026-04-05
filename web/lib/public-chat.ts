@@ -63,24 +63,10 @@ export const PUBLIC_CHAT_SIMPLE_PRESETS: readonly PublicChatPreset[] = [
     rail: "top",
   },
   {
-    id: "team-leaders",
-    title: "Who's carrying Gerry's team right now?",
-    userMessage: "Who's carrying Gerry's team right now?",
-    allowedTools: ["get_roster"] as const,
-    rail: "top",
-  },
-  {
     id: "best-add",
     title: "What's the smartest waiver move right now?",
     userMessage: "What's the smartest waiver move right now?",
     allowedTools: ["get_free_agents"] as const,
-    rail: "top",
-  },
-  {
-    id: "bad-trend",
-    title: "Who on Gerry's team is trending the wrong way?",
-    userMessage: "Who on Gerry's team is trending the wrong way?",
-    allowedTools: ["get_roster", "get_players"] as const,
     rail: "top",
   },
   {
@@ -95,6 +81,20 @@ export const PUBLIC_CHAT_SIMPLE_PRESETS: readonly PublicChatPreset[] = [
     title: "Has Gerry ever won this thing?",
     userMessage: "Has Gerry ever won this thing?",
     allowedTools: ["get_ancient_history"] as const,
+    rail: "top",
+  },
+  {
+    id: "start-sit",
+    title: "Should Gerry start or sit any of his bench hitters?",
+    userMessage: "Should Gerry start or sit any of his bench hitters?",
+    allowedTools: ["get_roster"] as const,
+    rail: "top",
+  },
+  {
+    id: "trade-grades",
+    title: "How did Gerry's last trade grade out?",
+    userMessage: "How did Gerry's last trade grade out?",
+    allowedTools: ["get_transactions"] as const,
     rail: "top",
   },
 ] as const;
