@@ -35,10 +35,10 @@ export const PUBLIC_DEMO_CONTEXT_VERSION = "v2";
 
 export const PUBLIC_CHAT_SIMPLE_PRESETS: readonly PublicChatPreset[] = [
   {
-    id: "season-overview",
-    title: "What's Gerry actually playing this season?",
-    userMessage: "What's Gerry actually playing this season?",
-    allowedTools: ["get_user_session"] as const,
+    id: "hot-hands",
+    title: "Who is the hottest hitter and pitcher on Gerry's team?",
+    userMessage: "Who is the hottest hitter and pitcher on Gerry's team?",
+    allowedTools: ["get_roster"] as const,
     rail: "top",
   },
   {
