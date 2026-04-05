@@ -110,9 +110,9 @@ export const PUBLIC_CHAT_DEEP_PRESETS: readonly PublicChatPreset[] = [
   {
     id: "league-moves",
     rail: "bottom",
-    title: "What are the latest moves in his league?",
-    userMessage: "What are the latest moves in Gerry's league?",
-    allowedTools: ["get_transactions", "get_roster", "get_players"] as const,
+    title: "What moves were made in Gerry's league last night?",
+    userMessage: "What moves were made in Gerry's league last night?",
+    allowedTools: ["get_transactions", "get_players"] as const,
   },
   {
     id: "league-leader",
