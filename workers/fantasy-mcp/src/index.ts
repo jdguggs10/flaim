@@ -224,6 +224,9 @@ async function handleMcpRequest(c: Context<{ Bindings: Env }>): Promise<Response
         console.warn('[fantasy-mcp] introspect returned valid=true but authType is absent — rate limiting will apply');
       }
       const isExempt = tokenInfo.authType === 'eval-api-key' || tokenInfo.authType === 'demo-api-key';
+      if (!tokenInfo.userId) {
+        console.warn('[fantasy-mcp] introspect returned valid=true but userId is absent — rate limiting skipped');
+      }
       if (!isExempt && tokenInfo.userId) {
         const { success } = await c.env.MCP_RATE_LIMITER.limit({ key: `user:${tokenInfo.userId}` });
         if (!success) {
@@ -231,6 +234,8 @@ async function handleMcpRequest(c: Context<{ Bindings: Env }>): Promise<Response
           // The rate limit check fires before the request body is dispatched to the
           // MCP handler, so the id is not available here without re-parsing the body.
           // null is spec-legal for cases where the id cannot be determined.
+          // Error code -32029 is an implementation-defined server error in the
+          // JSON-RPC 2.0 reserved range (-32000 to -32099).
           return new Response(
             JSON.stringify({
               jsonrpc: '2.0',

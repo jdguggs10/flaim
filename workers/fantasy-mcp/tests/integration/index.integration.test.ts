@@ -401,6 +401,22 @@ describe('fantasy-mcp gateway integration', () => {
     expect(payloadText).toContain('"name": "Sleeper FA"');
   });
 
+  it('rate-limits when authType is absent (safe default)', async () => {
+    const authFetch = vi.fn(async () =>
+      new Response(JSON.stringify({ valid: true, userId: 'user-789', scope: 'mcp:read' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    );
+    const env = {
+      ...buildEnv(authFetch),
+      MCP_RATE_LIMITER: { limit: async () => ({ success: false }) },
+    };
+
+    const response = await app.fetch(buildMcpRequest('/mcp'), env, mockExecutionContext());
+    expect(response.status).toBe(429);
+  });
+
   it('returns 429 with Retry-After when rate limiter rejects an oauth request', async () => {
     const authFetch = vi.fn(async () =>
       new Response(JSON.stringify({ valid: true, userId: 'user-123', scope: 'mcp:read', authType: 'oauth' }), {
