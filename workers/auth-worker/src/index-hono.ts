@@ -632,7 +632,7 @@ api.get('/.well-known/oauth-protected-resource', (c) => {
     resource: 'https://api.flaim.app/mcp',
     authorization_servers: ['https://api.flaim.app'],
     bearer_methods_supported: ['header'],
-    scopes_supported: ['mcp:read', 'mcp:write'],
+    scopes_supported: ['mcp:read'],
   }, 200, {
     'Cache-Control': 'public, max-age=3600',
   });
@@ -649,7 +649,7 @@ api.get('/.well-known/oauth-protected-resource/*', (c) => {
     resource: `https://api.flaim.app${resourcePath}`,
     authorization_servers: ['https://api.flaim.app'],
     bearer_methods_supported: ['header'],
-    scopes_supported: ['mcp:read', 'mcp:write'],
+    scopes_supported: ['mcp:read'],
   }, 200, {
     'Cache-Control': 'public, max-age=3600',
   });

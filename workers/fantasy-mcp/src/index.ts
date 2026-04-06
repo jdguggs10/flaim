@@ -98,7 +98,7 @@ function buildOauthMetadata(resource: string) {
     resource,
     authorization_servers: ['https://api.flaim.app'],
     bearer_methods_supported: ['header'],
-    scopes_supported: ['mcp:read', 'mcp:write'],
+    scopes_supported: ['mcp:read'],
   };
 }
 
