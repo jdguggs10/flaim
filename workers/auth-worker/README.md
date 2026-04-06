@@ -180,4 +180,3 @@ npm run deploy       # Deploy
 
 - Leagues are stored per season year; `(user, sport, leagueId, seasonYear)` is unique.
 - Deleting a league removes all seasons for that league.
-- Rate limit: 200 MCP calls/day per user (via `rate_limits` table).

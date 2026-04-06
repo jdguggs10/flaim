@@ -125,6 +125,7 @@ function buildEnv(authFetch: (request: Request) => Promise<Response>): Env {
     ESPN: { fetch: vi.fn() } as unknown as Fetcher,
     YAHOO: { fetch: vi.fn() } as unknown as Fetcher,
     SLEEPER: { fetch: vi.fn() } as unknown as Fetcher,
+    MCP_RATE_LIMITER: { limit: async () => ({ success: true }) },
   } as unknown as Env;
 }
 
@@ -196,7 +197,7 @@ describe('fantasy-mcp gateway integration', () => {
 
   it('emits _meta.securitySchemes in tools/list wire response', async () => {
     const authFetch = vi.fn(async () =>
-      new Response(JSON.stringify({ valid: true, userId: 'user-123', scope: 'mcp:read mcp:write' }), {
+      new Response(JSON.stringify({ valid: true, userId: 'user-123', scope: 'mcp:read mcp:write', authType: 'oauth' }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       })
@@ -398,5 +399,25 @@ describe('fantasy-mcp gateway integration', () => {
     const payloadText = result.content?.[0]?.text ?? '';
     expect(payloadText).toContain('"platform": "sleeper"');
     expect(payloadText).toContain('"name": "Sleeper FA"');
+  });
+
+  it('returns 429 with Retry-After when rate limiter rejects an oauth request', async () => {
+    const authFetch = vi.fn(async () =>
+      new Response(JSON.stringify({ valid: true, userId: 'user-123', scope: 'mcp:read', authType: 'oauth' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    );
+    const env = {
+      ...buildEnv(authFetch),
+      MCP_RATE_LIMITER: { limit: async () => ({ success: false }) },
+    };
+
+    const response = await app.fetch(buildMcpRequest('/mcp'), env, mockExecutionContext());
+    expect(response.status).toBe(429);
+    expect(response.headers.get('Retry-After')).toBe('60');
+    const body = await response.json() as { jsonrpc: string; error: { code: number; message: string } };
+    expect(body.jsonrpc).toBe('2.0');
+    expect(body.error.code).toBe(-32029);
   });
 });

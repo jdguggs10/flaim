@@ -201,13 +201,45 @@ async function handleMcpRequest(c: Context<{ Bindings: Env }>): Promise<Response
       if (!introspectRes.ok) {
         return buildMcpAuthErrorResponse(c.req.raw);
       }
-      const tokenInfo = await introspectRes.json() as { valid: boolean; scope?: string };
+      const tokenInfo = await introspectRes.json() as {
+        valid: boolean;
+        scope?: string;
+        userId?: string;
+        authType?: 'clerk' | 'oauth' | 'eval-api-key' | 'demo-api-key';
+      };
       if (!tokenInfo.valid) {
         return buildMcpAuthErrorResponse(c.req.raw);
       }
       tokenScope = typeof tokenInfo.scope === 'string' ? tokenInfo.scope.trim() : undefined;
       if (!tokenScope) {
         return buildMcpAuthErrorResponse(c.req.raw);
+      }
+
+      // Rate limit authenticated MCP requests.
+      // Applies to real user traffic (oauth + clerk).
+      // Explicitly exempts internal API key paths (eval-api-key, demo-api-key).
+      const shouldRateLimit = tokenInfo.authType === 'oauth' || tokenInfo.authType === 'clerk';
+      if (shouldRateLimit && tokenInfo.userId) {
+        const { success } = await c.env.MCP_RATE_LIMITER.limit({ key: `user:${tokenInfo.userId}` });
+        if (!success) {
+          return new Response(
+            JSON.stringify({
+              jsonrpc: '2.0',
+              error: {
+                code: -32029,
+                message: 'Too many requests. Please wait 60 seconds and try again.',
+              },
+              id: null,
+            }),
+            {
+              status: 429,
+              headers: {
+                'Content-Type': 'application/json',
+                'Retry-After': '60',
+              },
+            }
+          );
+        }
       }
     } catch {
       return buildMcpAuthErrorResponse(c.req.raw);

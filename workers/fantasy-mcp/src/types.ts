@@ -1,12 +1,17 @@
 // workers/fantasy-mcp/src/types.ts
 import type { BaseEnvWithAuth } from '@flaim/worker-shared';
 
+interface RateLimit {
+  limit(options: { key: string }): Promise<{ success: boolean }>;
+}
+
 export interface Env extends BaseEnvWithAuth {
   ESPN: Fetcher;        // Service binding to espn-client
   YAHOO: Fetcher;       // Service binding to yahoo-client
   SLEEPER: Fetcher;     // Service binding to sleeper-client
   AUTH_WORKER: Fetcher; // Service binding to auth-worker
   OPENAI_APPS_VERIFICATION_TOKEN?: string; // Wrangler secret for OpenAI domain verification
+  MCP_RATE_LIMITER: RateLimit;
 }
 
 export type Platform = 'espn' | 'yahoo' | 'sleeper';

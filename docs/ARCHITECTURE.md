@@ -26,7 +26,7 @@ npm run dev
 - **Yahoo Client (`/workers/yahoo-client`)**: Internal worker handling all Yahoo Fantasy API calls for all sports (football, baseball, basketball, hockey). Called by fantasy-mcp gateway.
 - **Sleeper Client (`/workers/sleeper-client`)**: Internal worker handling all Sleeper API calls for NFL and NBA (public API, no auth required). Called by fantasy-mcp gateway.
 - **Shared package (`/workers/shared`)**: Common utilities (CORS middleware, auth-fetch helper, types) used by all workers.
-- **Supabase Postgres**: `espn_credentials`, `espn_leagues`, `yahoo_leagues`, `sleeper_connections`, `sleeper_leagues`, `user_preferences` (defaults), `oauth_tokens`, `oauth_codes`, plus legacy `rate_limits` (inert — replaced by CF Workers native rate limiting), `extension_tokens`/`extension_pairing_codes` (deprecated).
+- **Supabase Postgres**: `espn_credentials`, `espn_leagues`, `yahoo_leagues`, `sleeper_connections`, `sleeper_leagues`, `user_preferences` (defaults), `oauth_tokens`, `oauth_codes`, plus deprecated `extension_tokens`/`extension_pairing_codes`.
 
 ## Runtime Choices (Next.js)
 
@@ -184,9 +184,8 @@ Claude/ChatGPT/Gemini CLI → fantasy-mcp (gateway) → espn-client    → ESPN 
 - JWKS-based Clerk JWT verification in auth-worker (5m cache). Prod rejects spoofed headers.
 - MCP workers forward `Authorization`; auth-worker alone validates tokens.
 - Per-user isolation via verified `sub`; credentials never sent back to client after setup.
-- Rate limiting: Cloudflare Workers native `rate_limits` bindings — 10 req/60s per IP on token endpoint, 15 req/60s per user on credentials endpoint, and 5 req/60s per visitor on the legacy public live-turn route.
-- Public chat concurrency/logging: auth-worker reserves demo runs in Supabase (`chat_runs`) so one visitor cannot stack overlapping runs and failures remain visible after the request finishes.
-- Public chat warm context: the web app still caches Gerry session context in Supabase (`demo_context_cache`) as groundwork from the original live-turn public demo. The homepage preset flow now reads cache-backed answers from `demo_answer_cache`, so visitors can read recently refreshed outputs without triggering live provider inference on every click.
+- Rate limiting: Cloudflare Workers native `rate_limits` bindings — 10 req/60s per IP on token endpoint, 15 req/60s per user on credentials endpoint, and 60 req/60s per user on OAuth/Clerk-authenticated MCP requests (internal eval and demo API keys are exempt).
+- Public demo cache: the homepage reads precomputed answers from `demo_answer_cache`. The live-turn public-chat path has been removed.
 - Public demo refresh pipeline: an external private runner uses Gemini CLI in headless mode with static MCP bearer auth to populate `demo_answer_cache` out of band on a scheduled cadence. The website only reads cached answers — it never triggers refresh runs. The shared contract between the website and the runner is the cache key format `{presetId}:{sport}:{promptVersion}:{contextVersion}` plus matching preset IDs; version tags and homepage preset metadata live in `web/lib/public-chat.ts`, while LLM system prompts and per-preset generation instructions live only in the runner codebase.
 - Public demo prompt lifecycle: add or remove homepage demo prompts in both repos. Update `web/lib/public-chat.ts` here for site metadata and `flaim-demo/lib/demo-chat.ts` for runner generation behavior, then keep the shared preset IDs and version tags aligned. If a prompt is removed from the site, remove it from the runner too so the Pi stops refreshing an unreachable cache key.
 - OAuth tokens stored in Supabase with expiration tracking.
