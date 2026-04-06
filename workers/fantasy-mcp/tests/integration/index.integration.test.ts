@@ -454,6 +454,22 @@ describe('fantasy-mcp gateway integration', () => {
     };
 
     const response = await app.fetch(buildMcpRequest('/mcp'), env, mockExecutionContext());
-    expect(response.status).not.toBe(429);
+    expect(response.status).toBe(200);
+  });
+
+  it('does not rate-limit demo-api-key requests even when limiter rejects', async () => {
+    const authFetch = vi.fn(async () =>
+      new Response(JSON.stringify({ valid: true, userId: 'demo-user', scope: 'mcp:read', authType: 'demo-api-key' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    );
+    const env = {
+      ...buildEnv(authFetch),
+      MCP_RATE_LIMITER: { limit: async () => ({ success: false }) },
+    };
+
+    const response = await app.fetch(buildMcpRequest('/mcp'), env, mockExecutionContext());
+    expect(response.status).toBe(200);
   });
 });

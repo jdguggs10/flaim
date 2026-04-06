@@ -216,15 +216,21 @@ async function handleMcpRequest(c: Context<{ Bindings: Env }>): Promise<Response
       }
 
       // Rate limit authenticated MCP requests.
-      // Applies to real user traffic (oauth + clerk).
-      // Explicitly exempts internal API key paths (eval-api-key, demo-api-key).
+      // Opt-out: all auth types are rate-limited unless explicitly exempted.
+      // Internal API key paths (eval-api-key, demo-api-key) are exempt so the
+      // eval pipeline and demo runner are never throttled by user-facing limits.
+      // Unknown future auth types are rate-limited by default (safe fallback).
       if (!tokenInfo.authType) {
-        console.warn('[fantasy-mcp] introspect returned valid=true but authType is absent — rate limiting skipped');
+        console.warn('[fantasy-mcp] introspect returned valid=true but authType is absent — rate limiting will apply');
       }
-      const shouldRateLimit = tokenInfo.authType === 'oauth' || tokenInfo.authType === 'clerk';
-      if (shouldRateLimit && tokenInfo.userId) {
+      const isExempt = tokenInfo.authType === 'eval-api-key' || tokenInfo.authType === 'demo-api-key';
+      if (!isExempt && tokenInfo.userId) {
         const { success } = await c.env.MCP_RATE_LIMITER.limit({ key: `user:${tokenInfo.userId}` });
         if (!success) {
+          // JSON-RPC 2.0 specifies that id should mirror the request id when known.
+          // The rate limit check fires before the request body is dispatched to the
+          // MCP handler, so the id is not available here without re-parsing the body.
+          // null is spec-legal for cases where the id cannot be determined.
           return new Response(
             JSON.stringify({
               jsonrpc: '2.0',
