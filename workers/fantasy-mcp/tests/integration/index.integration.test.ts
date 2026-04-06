@@ -420,4 +420,40 @@ describe('fantasy-mcp gateway integration', () => {
     expect(body.jsonrpc).toBe('2.0');
     expect(body.error.code).toBe(-32029);
   });
+
+  it('returns 429 with Retry-After when rate limiter rejects a clerk request', async () => {
+    const authFetch = vi.fn(async () =>
+      new Response(JSON.stringify({ valid: true, userId: 'user-456', scope: 'mcp:read', authType: 'clerk' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    );
+    const env = {
+      ...buildEnv(authFetch),
+      MCP_RATE_LIMITER: { limit: async () => ({ success: false }) },
+    };
+
+    const response = await app.fetch(buildMcpRequest('/mcp'), env, mockExecutionContext());
+    expect(response.status).toBe(429);
+    expect(response.headers.get('Retry-After')).toBe('60');
+    const body = await response.json() as { jsonrpc: string; error: { code: number; message: string } };
+    expect(body.jsonrpc).toBe('2.0');
+    expect(body.error.code).toBe(-32029);
+  });
+
+  it('does not rate-limit eval-api-key requests even when limiter rejects', async () => {
+    const authFetch = vi.fn(async () =>
+      new Response(JSON.stringify({ valid: true, userId: 'eval-user', scope: 'mcp:read', authType: 'eval-api-key' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    );
+    const env = {
+      ...buildEnv(authFetch),
+      MCP_RATE_LIMITER: { limit: async () => ({ success: false }) },
+    };
+
+    const response = await app.fetch(buildMcpRequest('/mcp'), env, mockExecutionContext());
+    expect(response.status).not.toBe(429);
+  });
 });

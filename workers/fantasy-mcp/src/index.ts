@@ -218,6 +218,9 @@ async function handleMcpRequest(c: Context<{ Bindings: Env }>): Promise<Response
       // Rate limit authenticated MCP requests.
       // Applies to real user traffic (oauth + clerk).
       // Explicitly exempts internal API key paths (eval-api-key, demo-api-key).
+      if (!tokenInfo.authType) {
+        console.warn('[fantasy-mcp] introspect returned valid=true but authType is absent — rate limiting skipped');
+      }
       const shouldRateLimit = tokenInfo.authType === 'oauth' || tokenInfo.authType === 'clerk';
       if (shouldRateLimit && tokenInfo.userId) {
         const { success } = await c.env.MCP_RATE_LIMITER.limit({ key: `user:${tokenInfo.userId}` });
