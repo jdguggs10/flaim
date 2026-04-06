@@ -260,7 +260,7 @@ describe('fantasy-mcp gateway integration', () => {
 
   it('fails closed with 401 when introspection scope is empty and uses fantasy resource routing', async () => {
     const authFetch = vi.fn(async () =>
-      new Response(JSON.stringify({ valid: true, userId: 'user-123', scope: '   ' }), {
+      new Response(JSON.stringify({ valid: true, userId: 'user-123', scope: '   ', authType: 'oauth' }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       })
@@ -279,7 +279,7 @@ describe('fantasy-mcp gateway integration', () => {
 
   it('routes tools/call through to platform worker and returns shaped MCP response', async () => {
     const authFetch = vi.fn(async () =>
-      new Response(JSON.stringify({ valid: true, userId: 'user-123', scope: 'mcp:read mcp:write' }), {
+      new Response(JSON.stringify({ valid: true, userId: 'user-123', scope: 'mcp:read mcp:write', authType: 'oauth' }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       })
@@ -333,7 +333,7 @@ describe('fantasy-mcp gateway integration', () => {
 
   it('routes get_free_agents tools/call to sleeper worker when platform is sleeper', async () => {
     const authFetch = vi.fn(async () =>
-      new Response(JSON.stringify({ valid: true, userId: 'user-123', scope: 'mcp:read mcp:write' }), {
+      new Response(JSON.stringify({ valid: true, userId: 'user-123', scope: 'mcp:read mcp:write', authType: 'oauth' }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       })
