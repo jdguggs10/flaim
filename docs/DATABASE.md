@@ -169,23 +169,6 @@ Short-lived OAuth state values used for server-side validation.
 | expires_at | timestamptz | State expiry |
 | created_at | timestamptz | Created timestamp |
 
-### chat_runs
-Server-owned log for the public `/chat` demo. Used for per-visitor concurrency control and lightweight operational visibility.
-
-| Column | Type | Notes |
-|---|---|---|
-| id | uuid | Primary key |
-| visitor_key | text | SHA-256 hash of the visitor IP with a server-side salt |
-| preset_id | text | Public preset identifier (`show-leagues`, etc.) |
-| model | text | OpenAI model used for the run |
-| status | text | `running`, `completed`, `error`, `aborted`, `rate_limited`, or `concurrency_rejected` |
-| error_code | text | Short internal failure code for troubleshooting |
-| duration_ms | int | Run duration when known |
-| started_at | timestamptz | Run start time |
-| completed_at | timestamptz | Run end time |
-| created_at | timestamptz | Created timestamp |
-| updated_at | timestamptz | Updated timestamp |
-
 ### demo_context_cache
 Server-owned cache for public `/chat` warm context. Used to avoid rebuilding the same demo session context on every visitor request.
 
@@ -252,18 +235,6 @@ Recommended indexes:
 - `demo_refresh_runs_preset_sport_created_at_idx` on `(preset_id, sport, created_at desc)` for website latest-failure lookups
 
 ## Legacy/Deprecated Tables
-
-### rate_limits (inert)
-Formerly used for per-user daily request counters. Replaced by Cloudflare Workers native `rate_limits` bindings (March 2026). Table and `increment_rate_limit` RPC remain in Supabase but nothing reads or writes to them. Safe to drop in a future cleanup.
-
-| Column | Type | Notes |
-|---|---|---|
-| id | uuid | Primary key |
-| user_id | text | Clerk user ID |
-| window_date | date | Daily window (UTC) |
-| request_count | int | Requests in window |
-| created_at | timestamptz | Created timestamp |
-| updated_at | timestamptz | Updated timestamp |
 
 ### extension_pairing_codes (deprecated)
 Used by pre‑v1.3.0 extension pairing flow (replaced by Clerk Sync Host).

@@ -201,13 +201,59 @@ async function handleMcpRequest(c: Context<{ Bindings: Env }>): Promise<Response
       if (!introspectRes.ok) {
         return buildMcpAuthErrorResponse(c.req.raw);
       }
-      const tokenInfo = await introspectRes.json() as { valid: boolean; scope?: string };
+      const tokenInfo = await introspectRes.json() as {
+        valid: boolean;
+        scope?: string;
+        userId?: string;
+        authType?: 'clerk' | 'oauth' | 'eval-api-key' | 'demo-api-key';
+      };
       if (!tokenInfo.valid) {
         return buildMcpAuthErrorResponse(c.req.raw);
       }
       tokenScope = typeof tokenInfo.scope === 'string' ? tokenInfo.scope.trim() : undefined;
       if (!tokenScope) {
         return buildMcpAuthErrorResponse(c.req.raw);
+      }
+
+      // Rate limit authenticated MCP requests.
+      // Opt-out: all auth types are rate-limited unless explicitly exempted.
+      // Internal API key paths (eval-api-key, demo-api-key) are exempt so the
+      // eval pipeline and demo runner are never throttled by user-facing limits.
+      // Unknown future auth types are rate-limited by default (safe fallback).
+      if (!tokenInfo.authType) {
+        console.warn('[fantasy-mcp] introspect returned valid=true but authType is absent — rate limiting will apply');
+      }
+      const isExempt = tokenInfo.authType === 'eval-api-key' || tokenInfo.authType === 'demo-api-key';
+      if (!tokenInfo.userId) {
+        console.warn('[fantasy-mcp] introspect returned valid=true but userId is absent — rate limiting skipped');
+      }
+      if (!isExempt && tokenInfo.userId) {
+        const { success } = await c.env.MCP_RATE_LIMITER.limit({ key: `user:${tokenInfo.userId}` });
+        if (!success) {
+          // JSON-RPC 2.0 specifies that id should mirror the request id when known.
+          // The rate limit check fires before the request body is dispatched to the
+          // MCP handler, so the id is not available here without re-parsing the body.
+          // null is spec-legal for cases where the id cannot be determined.
+          // Error code -32029 is an implementation-defined server error in the
+          // JSON-RPC 2.0 reserved range (-32000 to -32099).
+          return new Response(
+            JSON.stringify({
+              jsonrpc: '2.0',
+              error: {
+                code: -32029,
+                message: 'Too many requests. Please wait 60 seconds and try again.',
+              },
+              id: null,
+            }),
+            {
+              status: 429,
+              headers: {
+                'Content-Type': 'application/json',
+                'Retry-After': '60',
+              },
+            }
+          );
+        }
       }
     } catch {
       return buildMcpAuthErrorResponse(c.req.raw);

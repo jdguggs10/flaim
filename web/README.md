@@ -106,7 +106,6 @@ The homepage demo, reachable at `/#live-demo` and via the legacy `/chat` redirec
 - Accepts preset prompt IDs only
 - Reads from server-owned cached answers when available
 - Surfaces freshness state instead of doing live provider inference on every visitor click
-- Retains the older live turn route as implementation plumbing while the cache-refresh pipeline is being built out
 
 The browser never receives reusable demo-account credentials. The interactive dev console has been extracted to a separate repo (`flaim-chat` / `chat.flaim.app`).
 
@@ -114,7 +113,7 @@ The browser never receives reusable demo-account credentials. The interactive de
 
 The existing `demo_context_cache` table and `/api/public-chat/bootstrap` route still exist as legacy groundwork from the live-turn version of the public demo.
 
-Current homepage behavior no longer depends on this warmup path for preset clicks. The cache-backed visitor flow reads stored answers from `/api/public-chat/cache`, while the older `/api/public-chat/turn` route remains in place as migration-era plumbing until the refresh pipeline fully replaces it.
+Current homepage behavior reads stored answers from `/api/public-chat/cache` only. The live-turn path (`/api/public-chat/turn`) has been removed.
 
 ### Manual Refresh Runner
 

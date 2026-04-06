@@ -125,6 +125,7 @@ function buildEnv(authFetch: (request: Request) => Promise<Response>): Env {
     ESPN: { fetch: vi.fn() } as unknown as Fetcher,
     YAHOO: { fetch: vi.fn() } as unknown as Fetcher,
     SLEEPER: { fetch: vi.fn() } as unknown as Fetcher,
+    MCP_RATE_LIMITER: { limit: async () => ({ success: true }) },
   } as unknown as Env;
 }
 
@@ -196,7 +197,7 @@ describe('fantasy-mcp gateway integration', () => {
 
   it('emits _meta.securitySchemes in tools/list wire response', async () => {
     const authFetch = vi.fn(async () =>
-      new Response(JSON.stringify({ valid: true, userId: 'user-123', scope: 'mcp:read mcp:write' }), {
+      new Response(JSON.stringify({ valid: true, userId: 'user-123', scope: 'mcp:read mcp:write', authType: 'oauth' }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       })
@@ -259,7 +260,7 @@ describe('fantasy-mcp gateway integration', () => {
 
   it('fails closed with 401 when introspection scope is empty and uses fantasy resource routing', async () => {
     const authFetch = vi.fn(async () =>
-      new Response(JSON.stringify({ valid: true, userId: 'user-123', scope: '   ' }), {
+      new Response(JSON.stringify({ valid: true, userId: 'user-123', scope: '   ', authType: 'oauth' }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       })
@@ -278,7 +279,7 @@ describe('fantasy-mcp gateway integration', () => {
 
   it('routes tools/call through to platform worker and returns shaped MCP response', async () => {
     const authFetch = vi.fn(async () =>
-      new Response(JSON.stringify({ valid: true, userId: 'user-123', scope: 'mcp:read mcp:write' }), {
+      new Response(JSON.stringify({ valid: true, userId: 'user-123', scope: 'mcp:read mcp:write', authType: 'oauth' }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       })
@@ -332,7 +333,7 @@ describe('fantasy-mcp gateway integration', () => {
 
   it('routes get_free_agents tools/call to sleeper worker when platform is sleeper', async () => {
     const authFetch = vi.fn(async () =>
-      new Response(JSON.stringify({ valid: true, userId: 'user-123', scope: 'mcp:read mcp:write' }), {
+      new Response(JSON.stringify({ valid: true, userId: 'user-123', scope: 'mcp:read mcp:write', authType: 'oauth' }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       })
@@ -398,5 +399,93 @@ describe('fantasy-mcp gateway integration', () => {
     const payloadText = result.content?.[0]?.text ?? '';
     expect(payloadText).toContain('"platform": "sleeper"');
     expect(payloadText).toContain('"name": "Sleeper FA"');
+  });
+
+  it('rate-limits when authType is absent (safe default)', async () => {
+    const authFetch = vi.fn(async () =>
+      new Response(JSON.stringify({ valid: true, userId: 'user-789', scope: 'mcp:read' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    );
+    const env = {
+      ...buildEnv(authFetch),
+      MCP_RATE_LIMITER: { limit: async () => ({ success: false }) },
+    };
+
+    const response = await app.fetch(buildMcpRequest('/mcp'), env, mockExecutionContext());
+    expect(response.status).toBe(429);
+  });
+
+  it('returns 429 with Retry-After when rate limiter rejects an oauth request', async () => {
+    const authFetch = vi.fn(async () =>
+      new Response(JSON.stringify({ valid: true, userId: 'user-123', scope: 'mcp:read', authType: 'oauth' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    );
+    const env = {
+      ...buildEnv(authFetch),
+      MCP_RATE_LIMITER: { limit: async () => ({ success: false }) },
+    };
+
+    const response = await app.fetch(buildMcpRequest('/mcp'), env, mockExecutionContext());
+    expect(response.status).toBe(429);
+    expect(response.headers.get('Retry-After')).toBe('60');
+    const body = await response.json() as { jsonrpc: string; error: { code: number; message: string } };
+    expect(body.jsonrpc).toBe('2.0');
+    expect(body.error.code).toBe(-32029);
+  });
+
+  it('returns 429 with Retry-After when rate limiter rejects a clerk request', async () => {
+    const authFetch = vi.fn(async () =>
+      new Response(JSON.stringify({ valid: true, userId: 'user-456', scope: 'mcp:read', authType: 'clerk' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    );
+    const env = {
+      ...buildEnv(authFetch),
+      MCP_RATE_LIMITER: { limit: async () => ({ success: false }) },
+    };
+
+    const response = await app.fetch(buildMcpRequest('/mcp'), env, mockExecutionContext());
+    expect(response.status).toBe(429);
+    expect(response.headers.get('Retry-After')).toBe('60');
+    const body = await response.json() as { jsonrpc: string; error: { code: number; message: string } };
+    expect(body.jsonrpc).toBe('2.0');
+    expect(body.error.code).toBe(-32029);
+  });
+
+  it('does not rate-limit eval-api-key requests even when limiter rejects', async () => {
+    const authFetch = vi.fn(async () =>
+      new Response(JSON.stringify({ valid: true, userId: 'eval-user', scope: 'mcp:read', authType: 'eval-api-key' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    );
+    const env = {
+      ...buildEnv(authFetch),
+      MCP_RATE_LIMITER: { limit: async () => ({ success: false }) },
+    };
+
+    const response = await app.fetch(buildMcpRequest('/mcp'), env, mockExecutionContext());
+    expect(response.status).toBe(200);
+  });
+
+  it('does not rate-limit demo-api-key requests even when limiter rejects', async () => {
+    const authFetch = vi.fn(async () =>
+      new Response(JSON.stringify({ valid: true, userId: 'demo-user', scope: 'mcp:read', authType: 'demo-api-key' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    );
+    const env = {
+      ...buildEnv(authFetch),
+      MCP_RATE_LIMITER: { limit: async () => ({ success: false }) },
+    };
+
+    const response = await app.fetch(buildMcpRequest('/mcp'), env, mockExecutionContext());
+    expect(response.status).toBe(200);
   });
 });

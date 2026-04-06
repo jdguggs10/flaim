@@ -67,7 +67,6 @@ import {
   type SleeperConnectEnv,
 } from './sleeper-connect-handlers';
 import { logEvalEvent } from './logging';
-import { PublicChatStorage } from './public-chat-storage';
 
 // =============================================================================
 // TYPES
@@ -96,7 +95,6 @@ export interface Env {
   // Rate limiting (Cloudflare Workers native)
   TOKEN_RATE_LIMITER: RateLimit;
   CREDENTIALS_RATE_LIMITER: RateLimit;
-  PUBLIC_CHAT_RATE_LIMITER: RateLimit;
 }
 
 type Jwk = {
@@ -460,15 +458,6 @@ function maskUserId(userId: string): string {
   return `${userId.substring(0, 8)}...`;
 }
 
-async function hashPublicChatVisitorKey(env: Env, visitorIp: string): Promise<string> {
-  const salt = env.INTERNAL_SERVICE_TOKEN || env.DEMO_API_KEY || 'flaim-public-chat';
-  const payload = new TextEncoder().encode(`${salt}:${visitorIp}`);
-  const digest = await crypto.subtle.digest('SHA-256', payload);
-  return Array.from(new Uint8Array(digest))
-    .map((byte) => byte.toString(16).padStart(2, '0'))
-    .join('');
-}
-
 // =============================================================================
 // CORS HELPERS
 // =============================================================================
@@ -694,116 +683,13 @@ api.post('/revoke', (c) => {
 // Token introspection (internal — called by fantasy-mcp gateway via service binding)
 api.get('/internal/introspect', async (c) => {
   const expectedResource = c.req.header('X-Flaim-Expected-Resource') || undefined;
-  const { userId, error: authError, scope } = await getInternalUserId(c.req.raw, c.env, expectedResource, { allowStaticApiKey: true });
+  const { userId, error: authError, scope, authType } = await getInternalUserId(c.req.raw, c.env, expectedResource, { allowStaticApiKey: true });
 
   if (!userId) {
     return c.json({ valid: false, error: authError || 'Invalid token' }, authError?.includes(INTERNAL_SERVICE_TOKEN_HEADER) || authError?.includes('Internal service authentication') ? 403 : 401);
   }
 
-  return c.json({ valid: true, userId, scope: scope || 'mcp:read' });
-});
-
-api.post('/internal/public-chat/runs/acquire', async (c) => {
-  const internalError = await requireInternalService(c.req.raw, c.env);
-  if (internalError) {
-    return c.json({
-      error: 'unauthorized',
-      error_description: internalError,
-    }, 403);
-  }
-
-  const body = await c.req.json().catch(() => null) as {
-    visitorIp?: string;
-    presetId?: string;
-    model?: string;
-  } | null;
-
-  if (!body?.visitorIp || !body.presetId || !body.model) {
-    return c.json({
-      error: 'invalid_request',
-      error_description: 'visitorIp, presetId, and model are required',
-    }, 400);
-  }
-
-  const visitorKey = await hashPublicChatVisitorKey(c.env, body.visitorIp);
-  const storage = PublicChatStorage.fromEnvironment(c.env);
-  const { success } = await c.env.PUBLIC_CHAT_RATE_LIMITER.limit({
-    key: `public-chat:${visitorKey}`,
-  });
-
-  if (!success) {
-    await storage.recordRejectedRun({
-      visitorKey,
-      presetId: body.presetId,
-      model: body.model,
-      status: 'rate_limited',
-      errorCode: 'rate_limit_exceeded',
-    });
-
-    return c.json({
-      error: 'rate_limit_exceeded',
-      error_description: 'Public chat is temporarily rate limited.',
-    }, 429, { 'Retry-After': '60' });
-  }
-
-  const reservation = await storage.acquireRun({
-    visitorKey,
-    presetId: body.presetId,
-    model: body.model,
-    maxConcurrent: 1,
-  });
-
-  if (!reservation.allowed) {
-    return c.json({
-      error: reservation.rejectionReason || 'concurrency_limited',
-      error_description: 'A public chat run is already in progress for this visitor.',
-    }, 409);
-  }
-
-  return c.json({
-    runId: reservation.runId,
-  });
-});
-
-api.post('/internal/public-chat/runs/:id/complete', async (c) => {
-  const internalError = await requireInternalService(c.req.raw, c.env);
-  if (internalError) {
-    return c.json({
-      error: 'unauthorized',
-      error_description: internalError,
-    }, 403);
-  }
-
-  const runId = c.req.param('id');
-  if (!runId) {
-    return c.json({
-      error: 'invalid_request',
-      error_description: 'Run ID is required',
-    }, 400);
-  }
-
-  const body = await c.req.json().catch(() => null) as {
-    status?: 'completed' | 'error' | 'aborted';
-    durationMs?: number | null;
-    errorCode?: string | null;
-  } | null;
-
-  if (!body?.status || !['completed', 'error', 'aborted'].includes(body.status)) {
-    return c.json({
-      error: 'invalid_request',
-      error_description: 'A valid completion status is required',
-    }, 400);
-  }
-
-  const storage = PublicChatStorage.fromEnvironment(c.env);
-  await storage.completeRun({
-    runId,
-    status: body.status,
-    durationMs: typeof body.durationMs === 'number' ? body.durationMs : null,
-    errorCode: body.errorCode ?? null,
-  });
-
-  return c.body(null, 204);
+  return c.json({ valid: true, userId, scope: scope || 'mcp:read', authType });
 });
 
 // =============================================================================

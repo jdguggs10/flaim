@@ -57,6 +57,18 @@ jobs:
           printf '%s\n' "$output" | grep -q 'env.TOKEN_RATE_LIMITER'
           printf '%s\n' "$output" | grep -q 'env.CREDENTIALS_RATE_LIMITER'
 
+      - name: Validate fantasy-mcp Wrangler bindings
+        if: matrix.worker == 'fantasy-mcp'
+        working-directory: workers/fantasy-mcp
+        run: |
+          output="$(npx wrangler deploy --dry-run --env dev 2>&1)"
+          printf '%s\n' "$output"
+          if printf '%s\n' "$output" | grep -q 'Unexpected fields'; then
+            echo "Wrangler config contains unexpected fields"
+            exit 1
+          fi
+          printf '%s\n' "$output" | grep -q 'env.MCP_RATE_LIMITER'
+
       - name: Deploy ${{ matrix.worker }}
         if: github.ref == 'refs/heads/main' || github.event_name == 'pull_request'
         run: npx wrangler deploy --env ${{ github.ref == 'refs/heads/main' && 'prod' || 'preview' }}

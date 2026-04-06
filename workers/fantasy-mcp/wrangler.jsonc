@@ -53,6 +53,9 @@
         { "binding": "SLEEPER", "service": "sleeper-client" },
         { "binding": "AUTH_WORKER", "service": "auth-worker" }
       ],
+      "ratelimits": [
+        { "name": "MCP_RATE_LIMITER", "namespace_id": "2001", "simple": { "limit": 60, "period": 60 } }
+      ],
       // Environment variables for production
       "vars": {
         "NODE_ENV": "production",
@@ -71,6 +74,9 @@
         { "binding": "SLEEPER", "service": "sleeper-client-preview" },
         { "binding": "AUTH_WORKER", "service": "auth-worker-preview" }
       ],
+      "ratelimits": [
+        { "name": "MCP_RATE_LIMITER", "namespace_id": "2011", "simple": { "limit": 60, "period": 60 } }
+      ],
       // Environment variables for preview
       "vars": {
         "NODE_ENV": "production",
@@ -88,6 +94,9 @@
         { "binding": "YAHOO", "service": "yahoo-client-dev" },
         { "binding": "SLEEPER", "service": "sleeper-client-dev" },
         { "binding": "AUTH_WORKER", "service": "auth-worker-dev" }
+      ],
+      "ratelimits": [
+        { "name": "MCP_RATE_LIMITER", "namespace_id": "2021", "simple": { "limit": 60, "period": 60 } }
       ],
       // Environment variables for dev
       "vars": {
