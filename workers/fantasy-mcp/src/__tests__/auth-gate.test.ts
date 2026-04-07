@@ -2,30 +2,16 @@ import { describe, expect, it } from 'vitest';
 import { isPublicMcpHandshakeRequest, normalizeMcpAcceptHeader } from '../mcp/auth-gate';
 
 describe('mcp auth gate helpers', () => {
-  it('allows unauthenticated GET handshake stream requests', async () => {
-    const getReq = new Request('https://api.flaim.app/mcp', {
-      method: 'GET',
-      headers: { Accept: 'text/event-stream' },
-    });
+  it('rejects GET as not a public handshake', async () => {
+    const variants = [
+      new Request('https://api.flaim.app/mcp', { method: 'GET', headers: { Accept: 'text/event-stream' } }),
+      new Request('https://api.flaim.app/mcp', { method: 'GET', headers: { Accept: 'application/json' } }),
+      new Request('https://api.flaim.app/mcp', { method: 'GET' }),
+    ];
 
-    await expect(isPublicMcpHandshakeRequest(getReq)).resolves.toBe(true);
-  });
-
-  it('allows unauthenticated GET handshake json requests', async () => {
-    const getReq = new Request('https://api.flaim.app/mcp', {
-      method: 'GET',
-      headers: { Accept: 'application/json' },
-    });
-
-    await expect(isPublicMcpHandshakeRequest(getReq)).resolves.toBe(true);
-  });
-
-  it('allows unauthenticated GET handshake requests without accept header', async () => {
-    const getReq = new Request('https://api.flaim.app/mcp', {
-      method: 'GET',
-    });
-
-    await expect(isPublicMcpHandshakeRequest(getReq)).resolves.toBe(true);
+    for (const req of variants) {
+      await expect(isPublicMcpHandshakeRequest(req)).resolves.toBe(false);
+    }
   });
 
   it('recognizes public handshake/list methods', async () => {

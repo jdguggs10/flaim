@@ -13,10 +13,6 @@ export function normalizeMcpAcceptHeader(request: Request): Request {
 }
 
 export async function isPublicMcpHandshakeRequest(request: Request): Promise<boolean> {
-  if (request.method === 'GET') {
-    return true;
-  }
-
   if (request.method !== 'POST') {
     return false;
   }
