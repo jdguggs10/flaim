@@ -203,6 +203,19 @@ async function handleGetStandings(
     const data = await response.json() as EspnLeagueResponse;
     const teams = data.teams || [];
 
+    // Determine seasonPhase
+    const currentYear = new Date().getFullYear();
+    const isHistoricalSeason = season_year < currentYear;
+    let seasonPhase: 'regular_season' | 'playoffs_in_progress' | 'season_complete';
+    if (isHistoricalSeason) {
+      seasonPhase = 'season_complete';
+    } else {
+      const regularPeriods = data.settings?.regularSeasonMatchupPeriods ?? 0;
+      const scoringPeriod = data.scoringPeriodId ?? 0;
+      seasonPhase = scoringPeriod > regularPeriods ? 'playoffs_in_progress' : 'regular_season';
+    }
+    const seasonComplete = seasonPhase === 'season_complete';
+
     // Transform and sort teams by standings
     const standings = teams.map((team) => {
       const record = team.record?.overall;
@@ -211,6 +224,18 @@ async function handleGetStandings(
       const ties = record?.ties || 0;
       const totalGames = wins + losses + ties;
       const winPercentage = totalGames > 0 ? wins / totalGames : 0;
+
+      // Season outcome fields — only populated for completed seasons with explicit ESPN data
+      const rf = team.rankFinal ?? team.rankCalculatedFinal ?? null;
+      const hasExplicitRank = team.rankFinal != null || team.rankCalculatedFinal != null;
+
+      const finalRank = seasonComplete && rf !== null ? rf : null;
+      const championshipWon = finalRank !== null ? finalRank === 1 : null;
+      const playoffOutcome = finalRank !== null
+        ? (finalRank === 1 ? 'champion' : finalRank === 2 ? 'runner_up' : 'eliminated') as const
+        : null;
+      const outcomeConfidence = finalRank !== null && hasExplicitRank ? 'explicit' as const : null;
+      const madePlayoffs = team.playoffSeed != null ? true : null;
 
       return {
         teamId: team.id,
@@ -224,9 +249,14 @@ async function handleGetStandings(
         winPercentage: Math.round(winPercentage * 1000) / 1000,
         pointsFor: record?.pointsFor || 0,
         pointsAgainst: record?.pointsAgainst || 0,
-        playoffSeed: team.playoffSeed,
+        playoffSeed: team.playoffSeed ?? null,
         draftDayProjectedRank: team.draftDayProjectedRank,
-        currentProjectedRank: team.currentProjectedRank
+        currentProjectedRank: team.currentProjectedRank,
+        madePlayoffs,
+        finalRank,
+        championshipWon,
+        playoffOutcome,
+        outcomeConfidence,
       };
     }).sort((a, b) => {
       // Sort by win percentage descending, then by wins descending
@@ -244,6 +274,8 @@ async function handleGetStandings(
       data: {
         leagueId: league_id,
         seasonYear: season_year,
+        seasonPhase,
+        seasonComplete,
         standings
       }
     };

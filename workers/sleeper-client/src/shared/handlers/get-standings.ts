@@ -1,5 +1,5 @@
 import type { HandlerFn } from './types';
-import type { SleeperLeagueUser, SleeperRoster } from '../../types';
+import type { SleeperLeague, SleeperLeagueUser, SleeperRoster, SleeperBracketMatch } from '../../types';
 import { ErrorCode } from '@flaim/worker-shared';
 import { sleeperFetch, handleSleeperError } from '../sleeper-api';
 import { toExecuteErrorResponse } from './utils';
@@ -12,6 +12,11 @@ export function createGetStandingsHandler(): HandlerFn {
     }
 
     try {
+      // Fetch league meta first to determine status
+      const leagueRes = await sleeperFetch(`/league/${league_id}`);
+      if (!leagueRes.ok) handleSleeperError(leagueRes);
+      const league: SleeperLeague = await leagueRes.json();
+
       const [rostersRes, usersRes] = await Promise.all([
         sleeperFetch(`/league/${league_id}/rosters`),
         sleeperFetch(`/league/${league_id}/users`),
@@ -22,6 +27,46 @@ export function createGetStandingsHandler(): HandlerFn {
 
       const rosters: SleeperRoster[] = await rostersRes.json();
       const users: SleeperLeagueUser[] = await usersRes.json();
+
+      // Determine seasonPhase and fetch bracket when needed
+      let seasonPhase: 'regular_season' | 'playoffs_in_progress' | 'season_complete';
+      let bracket: SleeperBracketMatch[] = [];
+
+      if (league.status === 'complete') {
+        seasonPhase = 'season_complete';
+        const bracketRes = await sleeperFetch(`/league/${league_id}/winners_bracket`);
+        if (bracketRes.ok) {
+          bracket = await bracketRes.json();
+        }
+      } else if (league.status === 'in_season') {
+        const bracketRes = await sleeperFetch(`/league/${league_id}/winners_bracket`);
+        if (bracketRes.ok) {
+          bracket = await bracketRes.json();
+        }
+        seasonPhase = bracket.length > 0 ? 'playoffs_in_progress' : 'regular_season';
+      } else {
+        seasonPhase = 'regular_season';
+      }
+
+      const seasonComplete = seasonPhase === 'season_complete';
+
+      // Build outcome maps from bracket when season is complete
+      const finalRankMap = new Map<number, number>();
+      const championRosterId = (() => {
+        if (bracket.length === 0) return null;
+        const maxRound = Math.max(...bracket.map((m) => m.r));
+        const championship = bracket.find((m) => m.r === maxRound && m.w != null);
+        return championship?.w ?? null;
+      })();
+
+      if (seasonComplete) {
+        for (const match of bracket) {
+          if (match.p != null) {
+            if (match.w != null) finalRankMap.set(match.w, match.p);
+            if (match.l != null) finalRankMap.set(match.l, match.p + 1);
+          }
+        }
+      }
 
       const userMap = new Map<string, string>();
       for (const user of users) {
@@ -43,6 +88,27 @@ export function createGetStandingsHandler(): HandlerFn {
           const totalGames = wins + losses + ties;
           const winPct = totalGames > 0 ? wins / totalGames : 0;
 
+          // Outcome fields from bracket
+          const finalRank = seasonComplete ? (finalRankMap.get(roster.roster_id) ?? null) : null;
+          const isChampion = seasonComplete && roster.roster_id === championRosterId;
+          const championshipWon = seasonComplete && championRosterId !== null ? isChampion : null;
+
+          let playoffOutcome: 'champion' | 'runner_up' | 'semifinal_loss' | 'quarterfinal_loss' |
+            'consolation_champion' | 'consolation_runner_up' |
+            'missed_playoffs' | 'eliminated' | 'in_progress' | null = null;
+          if (seasonComplete && championRosterId !== null) {
+            if (finalRank === 1) playoffOutcome = 'champion';
+            else if (finalRank === 2) playoffOutcome = 'runner_up';
+            else if (finalRank !== null) playoffOutcome = 'eliminated';
+          } else if (seasonPhase === 'playoffs_in_progress') {
+            const inBracket = bracket.some((m) => m.t1 === roster.roster_id || m.t2 === roster.roster_id);
+            if (inBracket) playoffOutcome = 'in_progress';
+          }
+
+          const outcomeConfidence = (seasonComplete && championRosterId !== null) ? 'explicit' as const : null;
+          const inWinnersBracket = bracket.some((m) => m.t1 === roster.roster_id || m.t2 === roster.roster_id);
+          const madePlayoffs = bracket.length > 0 ? inWinnersBracket : null;
+
           return {
             rosterId: roster.roster_id,
             ownerId: roster.owner_id,
@@ -53,6 +119,12 @@ export function createGetStandingsHandler(): HandlerFn {
             winPercentage: Math.round(winPct * 1000) / 1000,
             pointsFor: Math.round(pointsFor * 100) / 100,
             pointsAgainst: Math.round(pointsAgainst * 100) / 100,
+            playoffSeed: null,
+            madePlayoffs,
+            finalRank,
+            championshipWon,
+            playoffOutcome,
+            outcomeConfidence,
           };
         })
         .sort((a, b) => {
@@ -65,6 +137,8 @@ export function createGetStandingsHandler(): HandlerFn {
         success: true,
         data: {
           leagueId: league_id,
+          seasonPhase,
+          seasonComplete,
           standings,
         },
       };

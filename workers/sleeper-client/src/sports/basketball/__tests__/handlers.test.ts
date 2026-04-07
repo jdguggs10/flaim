@@ -32,6 +32,10 @@ describe('basketball handlers', () => {
   it('computes standings from roster settings and ranks by wins then points', async () => {
     mockFetch
       .mockResolvedValueOnce(
+        // /league/{id} meta
+        jsonResponse({ league_id: 'league_nba_1', name: 'NBA Test', sport: 'nba', season: '2025', status: 'in_season', total_rosters: 3, roster_positions: [], scoring_settings: {}, settings: {}, previous_league_id: null, draft_id: 'd1', avatar: null }),
+      )
+      .mockResolvedValueOnce(
         jsonResponse([
           {
             roster_id: 11,
@@ -89,6 +93,10 @@ describe('basketball handlers', () => {
           { user_id: 'owner_b', display_name: 'Bravo Hoops', avatar: null },
           { user_id: 'owner_c', display_name: 'Charlie Hoops', avatar: null },
         ]),
+      )
+      .mockResolvedValueOnce(
+        // winners_bracket — empty = regular season
+        jsonResponse([]),
       );
 
     const params: ToolParams = {

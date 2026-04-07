@@ -32,6 +32,10 @@ describe('football handlers', () => {
   it('computes standings from roster settings and applies deterministic ranking', async () => {
     mockFetch
       .mockResolvedValueOnce(
+        // /league/{id} meta — status triggers bracket fetch too
+        jsonResponse({ league_id: 'league_1', name: 'Test', sport: 'nfl', season: '2025', status: 'in_season', total_rosters: 3, roster_positions: [], scoring_settings: {}, settings: {}, previous_league_id: null, draft_id: 'd1', avatar: null }),
+      )
+      .mockResolvedValueOnce(
         jsonResponse([
           {
             roster_id: 1,
@@ -89,6 +93,10 @@ describe('football handlers', () => {
           { user_id: 'owner_2', display_name: 'Bravo', avatar: null },
           { user_id: 'owner_3', display_name: 'Charlie', avatar: null },
         ]),
+      )
+      .mockResolvedValueOnce(
+        // winners_bracket — empty = regular season (status was in_season)
+        jsonResponse([]),
       );
 
     const params: ToolParams = {

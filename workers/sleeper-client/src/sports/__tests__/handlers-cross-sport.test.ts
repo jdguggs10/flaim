@@ -101,6 +101,10 @@ describe('sleeper cross-sport handler characterization tests', () => {
   describe('get_standings', () => {
     it.each(scenarios)('$label computes standings with ranking', async ({ sport, handlers }) => {
       mockFetch
+        .mockResolvedValueOnce(
+          // /league/{id} meta — status must come first
+          jsonResponse({ league_id: '12345', name: 'Test League', sport: 'nfl', season: '2025', status: 'in_season', total_rosters: 2, roster_positions: [], scoring_settings: {}, settings: {}, previous_league_id: null, draft_id: 'd1', avatar: null }),
+        )
         .mockResolvedValueOnce(jsonResponse([
           {
             roster_id: 1, owner_id: 'u1', players: [], starters: [], reserve: [],
@@ -114,7 +118,11 @@ describe('sleeper cross-sport handler characterization tests', () => {
         .mockResolvedValueOnce(jsonResponse([
           { user_id: 'u1', display_name: 'Alice', avatar: null },
           { user_id: 'u2', display_name: 'Bob', avatar: null },
-        ]));
+        ]))
+        .mockResolvedValueOnce(
+          // winners_bracket — empty = regular season
+          jsonResponse([]),
+        );
 
       const params: ToolParams = { sport, league_id: '12345', season_year: 2025 };
       const result = await handlers.get_standings({} as never, params);

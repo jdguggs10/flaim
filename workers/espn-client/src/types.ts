@@ -47,6 +47,8 @@ export interface EspnTeam {
   abbrev?: string;
   playoffSeed?: number;
   rank?: number;
+  rankFinal?: number;
+  rankCalculatedFinal?: number;
   draftDayProjectedRank?: number;
   currentProjectedRank?: number;
   owners?: Array<{

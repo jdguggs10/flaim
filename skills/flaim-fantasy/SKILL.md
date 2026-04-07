@@ -77,7 +77,7 @@ All tools are read-only and safe to retry. All data-fetching tools require `plat
 Returns the user's configured leagues across all platforms with IDs, team names, and defaults. This is the required first call at the start of a normal chat. Call it exactly once before any other Flaim tool unless trusted system context has already supplied the exact league parameters for this turn. After this, strongly consider `get_league_info` for the selected league. No parameters required.
 
 ### `get_standings`
-Current league standings with team records, rankings, and points summaries. ESPN may also include playoff-seed and projected-rank fields; Yahoo and Sleeper focus on rank plus record/points data. Best used after `get_user_session` and usually after `get_league_info` so team names and owner/team mapping are already established. Use for "how is my team doing?", "who is in first?", "playoff picture" questions.
+Season standings and outcome snapshot. Returns team records, rankings, and points summaries. Also returns `seasonPhase` (`regular_season`, `playoffs_in_progress`, or `season_complete`) and `seasonComplete`, plus per-team outcome fields when verifiable: `finalRank`, `championshipWon`, `playoffOutcome`, `outcomeConfidence`, `madePlayoffs`, and `playoffSeed`. Outcome fields are `null` when not verifiable — **never infer a championship from `rank` or team name**. ESPN may also include projected-rank fields. For historical finish questions, always call `get_ancient_history` first to discover seasons, then call `get_standings` per season to get verified outcomes. Use for "how is my team doing?", "who is in first?", "playoff picture", and "did I win this league?" questions.
 
 ### `get_roster`
 Roster details for a specific team. Exact payload varies by platform: ESPN and Yahoo return player entries with lineup/position context, while Sleeper returns starters, bench, reserve, and record metadata for the selected roster. Always prefer passing `team_id`; Yahoo requires it, and omitting it on other platforms may not resolve to the user's team. Best used after `get_user_session` and usually after `get_league_info` so team names, owner/team mapping, and league settings are already established. Use for "who is on my team?", "show my lineup", start/sit analysis.
@@ -148,6 +148,7 @@ If a tool returns an error, explain it clearly to the user. Do not retry the sam
 - "How does my team compare to my opponent this week?" → `get_user_session` → `get_league_info` → `get_matchups` + `get_roster` (for both teams)
 - "What moves should I make to improve my roster?" → `get_user_session` → `get_league_info` → `get_roster` + `get_free_agents` + web search (for player values)
 - "Who owns Player X in my league?" → `get_user_session` → `get_league_info` + `get_roster` per team (do not use `get_players` market ownership as league ownership)
+- "Did I win this league? / What place did I finish?" → `get_user_session` → `get_ancient_history` (discover seasons) → `get_standings` per season (check `championshipWon`, `finalRank`, `outcomeConfidence`). Never infer the outcome from `rank` or team name — only trust outcome fields when `outcomeConfidence` is not null.
 
 ### Web-search-only questions
 - "Is Patrick Mahomes injured?" → web search only, no Flaim tools needed

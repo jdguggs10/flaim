@@ -94,3 +94,13 @@ export interface SleeperState {
   display_week: number;
   league_season: string;
 }
+
+export interface SleeperBracketMatch {
+  r: number;          // round
+  m: number;          // matchup id
+  t1: number | null;  // roster_id team 1
+  t2: number | null;  // roster_id team 2
+  w: number | null;   // winner roster_id
+  l: number | null;   // loser roster_id
+  p?: number;         // placement
+}

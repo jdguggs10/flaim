@@ -80,7 +80,7 @@ export const PUBLIC_CHAT_SIMPLE_PRESETS: readonly PublicChatPreset[] = [
     id: "win-history",
     title: "Has Gerry ever won this thing?",
     userMessage: "Has Gerry ever won this thing?",
-    allowedTools: ["get_ancient_history"] as const,
+    allowedTools: ["get_ancient_history", "get_standings"] as const,
     rail: "top",
   },
   {
