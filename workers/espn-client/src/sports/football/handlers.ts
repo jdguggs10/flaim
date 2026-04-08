@@ -170,10 +170,10 @@ async function handleGetStandings(
 
       const finalRank = seasonComplete && rf !== null ? rf : null;
       const championshipWon = finalRank !== null ? finalRank === 1 : null;
-      const playoffOutcome = finalRank !== null
-        ? (finalRank === 1 ? 'champion' : finalRank === 2 ? 'runner_up' : 'eliminated') as const
+      const playoffOutcome: 'champion' | 'runner_up' | 'eliminated' | null = finalRank !== null
+        ? (finalRank === 1 ? 'champion' : finalRank === 2 ? 'runner_up' : 'eliminated')
         : null;
-      const outcomeConfidence = finalRank !== null && hasExplicitRank ? 'explicit' as const : null;
+      const outcomeConfidence: 'explicit' | null = finalRank !== null && hasExplicitRank ? 'explicit' : null;
       const madePlayoffs = team.playoffSeed != null ? true : null;
 
       return {
