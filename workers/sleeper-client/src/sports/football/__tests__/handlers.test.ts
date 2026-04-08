@@ -200,7 +200,7 @@ describe('football handlers', () => {
     expect(r3?.championshipWon).toBe(false);
     expect(r3?.playoffOutcome).toBe('eliminated');
 
-    // Non-playoff team — not in bracket at all
+    // r4 lost in round 1 — in bracket, so madePlayoffs is true
     const r4 = standings.find((s) => s.rosterId === 4);
     expect(r4?.championshipWon).toBe(false);
     expect(r4?.madePlayoffs).toBe(true); // was in round 1 bracket
