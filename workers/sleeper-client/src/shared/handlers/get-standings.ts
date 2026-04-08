@@ -89,6 +89,7 @@ export function createGetStandingsHandler(): HandlerFn {
           const winPct = totalGames > 0 ? wins / totalGames : 0;
 
           // Outcome fields from bracket
+          const inWinnersBracket = bracket.some((m) => m.t1 === roster.roster_id || m.t2 === roster.roster_id);
           const finalRank = seasonComplete ? (finalRankMap.get(roster.roster_id) ?? null) : null;
           const isChampion = seasonComplete && roster.roster_id === championRosterId;
           const championshipWon = seasonComplete && championRosterId !== null ? isChampion : null;
@@ -97,16 +98,15 @@ export function createGetStandingsHandler(): HandlerFn {
             'consolation_champion' | 'consolation_runner_up' |
             'missed_playoffs' | 'eliminated' | 'in_progress' | null = null;
           if (seasonComplete && championRosterId !== null) {
-            if (finalRank === 1) playoffOutcome = 'champion';
+            if (finalRank === 1 || isChampion) playoffOutcome = 'champion';
             else if (finalRank === 2) playoffOutcome = 'runner_up';
             else if (finalRank !== null) playoffOutcome = 'eliminated';
+            else if (inWinnersBracket) playoffOutcome = 'eliminated'; // in bracket but no p field
           } else if (seasonPhase === 'playoffs_in_progress') {
-            const inBracket = bracket.some((m) => m.t1 === roster.roster_id || m.t2 === roster.roster_id);
-            if (inBracket) playoffOutcome = 'in_progress';
+            if (inWinnersBracket) playoffOutcome = 'in_progress';
           }
 
           const outcomeConfidence = (seasonComplete && championRosterId !== null) ? 'explicit' as const : null;
-          const inWinnersBracket = bracket.some((m) => m.t1 === roster.roster_id || m.t2 === roster.roster_id);
           const madePlayoffs = bracket.length > 0 ? inWinnersBracket : null;
 
           return {
