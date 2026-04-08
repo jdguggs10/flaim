@@ -91,8 +91,10 @@ export function createGetStandingsHandler(): HandlerFn {
 
           // Outcome fields from bracket
           const inWinnersBracket = bracket.some((m) => m.t1 === roster.roster_id || m.t2 === roster.roster_id);
-          const finalRank = seasonComplete ? (finalRankMap.get(roster.roster_id) ?? null) : null;
+          const finalRankFromBracket = seasonComplete ? (finalRankMap.get(roster.roster_id) ?? null) : null;
           const isChampion = seasonComplete && roster.roster_id === championRosterId;
+          // Champion is unambiguously rank 1 even when the championship match lacks a p field
+          const finalRank = finalRankFromBracket ?? (isChampion ? 1 : null);
           const championshipWon = seasonComplete && championRosterId !== null ? isChampion : null;
 
           // Note: 'in_progress' is Sleeper-specific — ESPN and Yahoo return null for teams in active playoffs

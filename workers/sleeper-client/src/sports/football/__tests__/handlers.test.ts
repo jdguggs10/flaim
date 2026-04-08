@@ -261,7 +261,7 @@ describe('football handlers', () => {
 
     const champion = standings.find((s) => s.rosterId === 1);
     expect(champion?.championshipWon).toBe(true);
-    expect(champion?.finalRank).toBeNull(); // p field absent
+    expect(champion?.finalRank).toBe(1); // inferred from isChampion even when p field absent
     expect(champion?.playoffOutcome).toBe('champion'); // isChampion path
     expect(champion?.outcomeConfidence).toBe('explicit');
   });
