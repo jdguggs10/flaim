@@ -32,6 +32,23 @@ export function createGetStandingsHandler(config: YahooHandlerContext): HandlerF
       const leagueArray = getPath(raw, ['fantasy_content', 'league']);
       const league = unwrapLeague(leagueArray);
 
+      // seasonPhase detection
+      // Yahoo sets is_finished=1 when the season is over; playoff_start_week=0 means no playoffs configured.
+      const isFinished = league.is_finished === 1;
+      // Guard against NaN if Yahoo returns non-numeric strings or missing fields
+      const currentWeek = Number.isFinite(Number(league.current_week)) ? Number(league.current_week) : 0;
+      const playoffStartWeek = Number.isFinite(Number(league.playoff_start_week)) ? Number(league.playoff_start_week) : 0;
+
+      let seasonPhase: 'regular_season' | 'playoffs_in_progress' | 'season_complete';
+      if (isFinished) {
+        seasonPhase = 'season_complete';
+      } else if (playoffStartWeek > 0 && currentWeek >= playoffStartWeek) {
+        seasonPhase = 'playoffs_in_progress';
+      } else {
+        seasonPhase = 'regular_season';
+      }
+      const seasonComplete = seasonPhase === 'season_complete';
+
       const teamsObj = getPath(league, ['standings', 0, 'teams']) as Record<string, unknown> | undefined;
       const teamsArray = asArray(teamsObj);
 
@@ -40,6 +57,10 @@ export function createGetStandingsHandler(config: YahooHandlerContext): HandlerF
         const team = unwrapTeam(teamData);
         const teamStandings = team.team_standings as Record<string, unknown> | undefined;
         const outcomeTotals = teamStandings?.outcome_totals as Record<string, unknown> | undefined;
+
+        const playoffSeed = teamStandings?.playoff_seed != null
+          ? Number(teamStandings.playoff_seed)
+          : null;
 
         return {
           rank: teamStandings?.rank,
@@ -52,6 +73,14 @@ export function createGetStandingsHandler(config: YahooHandlerContext): HandlerF
           percentage: outcomeTotals?.percentage,
           pointsFor: teamStandings?.points_for,
           pointsAgainst: teamStandings?.points_against,
+          playoffSeed,
+          madePlayoffs: playoffSeed != null ? true : null,
+          // Yahoo's API doesn't expose reliable postseason final rankings.
+          // All outcome fields are intentionally null; populate if/when Yahoo API improves.
+          finalRank: null,
+          championshipWon: null,
+          playoffOutcome: null,
+          outcomeConfidence: null,
         };
       });
 
@@ -60,6 +89,8 @@ export function createGetStandingsHandler(config: YahooHandlerContext): HandlerF
         data: {
           leagueKey: league.league_key,
           leagueName: league.name,
+          seasonPhase,
+          seasonComplete,
           standings: standings.sort((a, b) => Number(a.rank) - Number(b.rank)),
         },
       };

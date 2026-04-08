@@ -16,6 +16,7 @@ import {
   transformStats,
   POSITION_SLOTS,
 } from './mappings';
+import { getCurrentSeasonYear } from '../../shared/season';
 
 const GAME_ID = 'flb'; // ESPN's game ID for fantasy baseball
 
@@ -203,6 +204,26 @@ async function handleGetStandings(
     const data = await response.json() as EspnLeagueResponse;
     const teams = data.teams || [];
 
+    // Determine seasonPhase using sport-aware season year to handle cross-calendar sports correctly.
+    // getCurrentSeasonYear('baseball') returns 2024 in Jan 2025 (before Feb rollover).
+    // Primary signal: explicit rankFinal/rankCalculatedFinal → ESPN has finalized the season.
+    const currentSeasonYear = getCurrentSeasonYear('baseball');
+    const hasExplicitCompletionData = teams.some(
+      (t) => t.rankFinal != null || t.rankCalculatedFinal != null
+    );
+    let seasonPhase: 'regular_season' | 'playoffs_in_progress' | 'season_complete';
+    if (hasExplicitCompletionData || season_year < currentSeasonYear) {
+      seasonPhase = 'season_complete';
+    } else if (season_year === currentSeasonYear) {
+      const regularPeriods = data.settings?.regularSeasonMatchupPeriods ?? 0;
+      const scoringPeriod = data.scoringPeriodId ?? 0;
+      seasonPhase = scoringPeriod > regularPeriods ? 'playoffs_in_progress' : 'regular_season';
+    } else {
+      // season_year > currentSeasonYear — future season, treat as not yet started
+      seasonPhase = 'regular_season';
+    }
+    const seasonComplete = seasonPhase === 'season_complete';
+
     // Transform and sort teams by standings
     const standings = teams.map((team) => {
       const record = team.record?.overall;
@@ -211,6 +232,24 @@ async function handleGetStandings(
       const ties = record?.ties || 0;
       const totalGames = wins + losses + ties;
       const winPercentage = totalGames > 0 ? wins / totalGames : 0;
+
+      // Season outcome fields — only populated for completed seasons with explicit ESPN data
+      const rf = team.rankFinal ?? team.rankCalculatedFinal ?? null;
+
+      const finalRank = seasonComplete && rf !== null ? rf : null;
+      const championshipWon = finalRank !== null ? finalRank === 1 : null;
+      const playoffOutcome: 'champion' | 'runner_up' | 'eliminated' | 'missed_playoffs' | null =
+        finalRank !== null
+          ? finalRank === 1 ? 'champion'
+          : finalRank === 2 ? 'runner_up'
+          : team.playoffSeed != null ? 'eliminated'
+          : 'missed_playoffs'
+        : null;
+      const outcomeConfidence: 'explicit' | null = finalRank !== null ? 'explicit' : null;
+      // madePlayoffs: true if playoff seed present; false if season is complete with explicit ranks
+      // but no playoff seed (team missed playoffs); null if unknown
+      const madePlayoffs: boolean | null =
+        team.playoffSeed != null ? true : (seasonComplete && rf !== null ? false : null);
 
       return {
         teamId: team.id,
@@ -224,9 +263,14 @@ async function handleGetStandings(
         winPercentage: Math.round(winPercentage * 1000) / 1000,
         pointsFor: record?.pointsFor || 0,
         pointsAgainst: record?.pointsAgainst || 0,
-        playoffSeed: team.playoffSeed,
+        playoffSeed: team.playoffSeed ?? null,
         draftDayProjectedRank: team.draftDayProjectedRank,
-        currentProjectedRank: team.currentProjectedRank
+        currentProjectedRank: team.currentProjectedRank,
+        madePlayoffs,
+        finalRank,
+        championshipWon,
+        playoffOutcome,
+        outcomeConfidence,
       };
     }).sort((a, b) => {
       // Sort by win percentage descending, then by wins descending
@@ -244,6 +288,8 @@ async function handleGetStandings(
       data: {
         leagueId: league_id,
         seasonYear: season_year,
+        seasonPhase,
+        seasonComplete,
         standings
       }
     };
