@@ -206,6 +206,33 @@ describe('football handlers', () => {
     expect(r4?.madePlayoffs).toBe(true); // was in round 1 bracket
   });
 
+  it('degrades to regular_season when bracket fetch fails during active season', async () => {
+    const league = { league_id: 'league_1', name: 'Test', sport: 'nfl', season: '2025', status: 'in_season', total_rosters: 2, roster_positions: [], scoring_settings: {}, settings: {}, previous_league_id: null, draft_id: 'd1', avatar: null };
+    const rosters = [
+      { roster_id: 1, owner_id: 'u1', players: [], starters: [], reserve: [], settings: { wins: 5, losses: 2, ties: 0, fpts: 800, fpts_decimal: 0, fpts_against: 700, fpts_against_decimal: 0 } },
+    ];
+    const users = [{ user_id: 'u1', display_name: 'Alpha', avatar: null }];
+
+    mockFetch
+      .mockResolvedValueOnce(jsonResponse(league))
+      .mockResolvedValueOnce(jsonResponse(rosters))
+      .mockResolvedValueOnce(jsonResponse(users))
+      .mockResolvedValueOnce(new Response(null, { status: 503 })); // bracket fetch fails
+
+    const params: ToolParams = { sport: 'football', league_id: 'league_1', season_year: 2025 };
+    const result = await footballHandlers.get_standings({} as never, params);
+
+    // Graceful degradation: bracket failure during active season → regular_season, not an error
+    expect(result.success).toBe(true);
+    const data = result.data as Record<string, unknown>;
+    expect(data.seasonPhase).toBe('regular_season');
+    expect(data.seasonComplete).toBe(false);
+
+    const standings = data.standings as Array<Record<string, unknown>>;
+    expect(standings[0]?.madePlayoffs).toBeNull();
+    expect(standings[0]?.playoffOutcome).toBeNull();
+  });
+
   it('identifies champion when bracket championship match has w but no p field', async () => {
     const league = { league_id: 'league_1', name: 'Test', sport: 'nfl', season: '2024', status: 'complete', total_rosters: 2, roster_positions: [], scoring_settings: {}, settings: {}, previous_league_id: null, draft_id: 'd1', avatar: null };
     const rosters = [

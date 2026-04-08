@@ -206,8 +206,12 @@ async function handleGetStandings(
     // Determine seasonPhase.
     // Primary signal: explicit rankFinal/rankCalculatedFinal on any team means ESPN has finalized the season.
     // Secondary: seasons 2+ years old are safely complete.
-    // Fallback: use scoringPeriodId vs regularSeasonMatchupPeriods for the current and previous year,
-    // which handles cross-calendar sports (e.g. NFL playoffs in January of the following year).
+    // Fallback: use scoringPeriodId vs regularSeasonMatchupPeriods for the current and previous year.
+    // Known limitation: season labels and calendar years diverge for cross-calendar sports.
+    //   - NFL: "2024 season" playoffs run into January 2025 — handled by the scoringPeriod fallback.
+    //   - NBA/NHL: "2025 season" ends in June 2026 — a mid-season request in Jan 2026 where
+    //     rankFinal is absent will incorrectly return season_complete. Acceptable for now since
+    //     ESPN typically populates rankFinal by season end; revisit if false positives appear.
     const currentYear = new Date().getFullYear();
     const hasExplicitCompletionData = teams.some(
       (t) => t.rankFinal != null || t.rankCalculatedFinal != null

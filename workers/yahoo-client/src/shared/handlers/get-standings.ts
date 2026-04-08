@@ -77,6 +77,8 @@ export function createGetStandingsHandler(config: YahooHandlerContext): HandlerF
           pointsAgainst: teamStandings?.points_against,
           playoffSeed,
           madePlayoffs: playoffSeed != null ? true : null,
+          // Yahoo's API doesn't expose reliable postseason final rankings.
+          // All outcome fields are intentionally null; populate if/when Yahoo API improves.
           finalRank: null,
           championshipWon: null,
           playoffOutcome: null,
