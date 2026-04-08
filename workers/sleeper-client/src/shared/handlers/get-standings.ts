@@ -95,6 +95,7 @@ export function createGetStandingsHandler(): HandlerFn {
           const isChampion = seasonComplete && roster.roster_id === championRosterId;
           const championshipWon = seasonComplete && championRosterId !== null ? isChampion : null;
 
+          // Note: 'in_progress' is Sleeper-specific — ESPN and Yahoo return null for teams in active playoffs
           let playoffOutcome: 'champion' | 'runner_up' | 'eliminated' | 'in_progress' | null = null;
           if (seasonComplete && championRosterId !== null) {
             if (finalRank === 1 || isChampion) playoffOutcome = 'champion';
