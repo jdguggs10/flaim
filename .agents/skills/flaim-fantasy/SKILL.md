@@ -148,7 +148,7 @@ If a tool returns an error, explain it clearly to the user. Do not retry the sam
 - "How does my team compare to my opponent this week?" → `get_user_session` → `get_league_info` → `get_matchups` + `get_roster` (for both teams)
 - "What moves should I make to improve my roster?" → `get_user_session` → `get_league_info` → `get_roster` + `get_free_agents` + web search (for player values)
 - "Who owns Player X in my league?" → `get_user_session` → `get_league_info` + `get_roster` per team (do not use `get_players` market ownership as league ownership)
-- "Did I win this league? / What place did I finish?" → `get_user_session` → `get_ancient_history` (discover seasons) → `get_standings` per season (check `championshipWon`, `finalRank`, `outcomeConfidence`). Never infer the outcome from `rank` or team name — only trust outcome fields when `outcomeConfidence` is not null.
+- "Did I win this league? / What place did I finish?" → `get_user_session` → `get_ancient_history` (returns past seasons with `league_id` and `season_year` per season) → `get_standings(platform, sport, league_id, season_year)` per season (check `championshipWon`, `finalRank`, `outcomeConfidence`). Extract `league_id` and `season_year` from the `get_ancient_history` response and pass them into each `get_standings` call. Never infer the outcome from `rank` or team name — only trust outcome fields when `outcomeConfidence` is not null.
 
 ### Web-search-only questions
 - "Is Patrick Mahomes injured?" → web search only, no Flaim tools needed

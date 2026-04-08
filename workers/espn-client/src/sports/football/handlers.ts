@@ -142,16 +142,27 @@ async function handleGetStandings(
     const data = await response.json() as EspnLeagueResponse;
     const teams = data.teams || [];
 
-    // Determine seasonPhase
+    // Determine seasonPhase.
+    // Primary signal: explicit rankFinal/rankCalculatedFinal on any team means ESPN has finalized the season.
+    // Secondary: seasons 2+ years old are safely complete.
+    // Fallback: use scoringPeriodId vs regularSeasonMatchupPeriods for the current and previous year,
+    // which handles cross-calendar sports (e.g. NFL playoffs in January of the following year).
     const currentYear = new Date().getFullYear();
-    const isHistoricalSeason = season_year < currentYear;
+    const hasExplicitCompletionData = teams.some(
+      (t) => t.rankFinal != null || t.rankCalculatedFinal != null
+    );
     let seasonPhase: 'regular_season' | 'playoffs_in_progress' | 'season_complete';
-    if (isHistoricalSeason) {
+    if (hasExplicitCompletionData || season_year <= currentYear - 2) {
       seasonPhase = 'season_complete';
     } else {
       const regularPeriods = data.settings?.regularSeasonMatchupPeriods ?? 0;
       const scoringPeriod = data.scoringPeriodId ?? 0;
-      seasonPhase = scoringPeriod > regularPeriods ? 'playoffs_in_progress' : 'regular_season';
+      if (scoringPeriod > regularPeriods) {
+        // Previous year with scoring past regular season → likely complete (cross-year sport edge case)
+        seasonPhase = season_year < currentYear ? 'season_complete' : 'playoffs_in_progress';
+      } else {
+        seasonPhase = season_year < currentYear ? 'season_complete' : 'regular_season';
+      }
     }
     const seasonComplete = seasonPhase === 'season_complete';
 
@@ -166,15 +177,21 @@ async function handleGetStandings(
 
       // Season outcome fields — only populated for completed seasons with explicit ESPN data
       const rf = team.rankFinal ?? team.rankCalculatedFinal ?? null;
-      const hasExplicitRank = team.rankFinal != null || team.rankCalculatedFinal != null;
 
       const finalRank = seasonComplete && rf !== null ? rf : null;
       const championshipWon = finalRank !== null ? finalRank === 1 : null;
-      const playoffOutcome: 'champion' | 'runner_up' | 'eliminated' | null = finalRank !== null
-        ? (finalRank === 1 ? 'champion' : finalRank === 2 ? 'runner_up' : 'eliminated')
+      const playoffOutcome: 'champion' | 'runner_up' | 'eliminated' | 'missed_playoffs' | null =
+        finalRank !== null
+          ? finalRank === 1 ? 'champion'
+          : finalRank === 2 ? 'runner_up'
+          : team.playoffSeed != null ? 'eliminated'
+          : 'missed_playoffs'
         : null;
-      const outcomeConfidence: 'explicit' | null = finalRank !== null && hasExplicitRank ? 'explicit' : null;
-      const madePlayoffs = team.playoffSeed != null ? true : null;
+      const outcomeConfidence: 'explicit' | null = finalRank !== null ? 'explicit' : null;
+      // madePlayoffs: true if playoff seed present; false if season is complete with explicit ranks
+      // but no playoff seed (team missed playoffs); null if unknown
+      const madePlayoffs: boolean | null =
+        team.playoffSeed != null ? true : (seasonComplete && rf !== null ? false : null);
 
       return {
         teamId: team.id,

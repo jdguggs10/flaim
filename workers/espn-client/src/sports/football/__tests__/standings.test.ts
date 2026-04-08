@@ -88,11 +88,12 @@ describe('football get_standings handler — outcome fields', () => {
     expect(runnerUp?.playoffOutcome).toBe('runner_up');
     expect(runnerUp?.outcomeConfidence).toBe('explicit');
 
+    // Team 3 has rankFinal=5 but no playoffSeed — they missed playoffs
     const nonPlayoff = standings.find((s) => s.teamId === 3);
     expect(nonPlayoff?.finalRank).toBe(5);
     expect(nonPlayoff?.championshipWon).toBe(false);
-    expect(nonPlayoff?.playoffOutcome).toBe('eliminated');
-    expect(nonPlayoff?.madePlayoffs).toBeNull();
+    expect(nonPlayoff?.playoffOutcome).toBe('missed_playoffs');
+    expect(nonPlayoff?.madePlayoffs).toBe(false); // season complete + explicit rank + no playoffSeed
   });
 
   it('returns season_complete but all outcome fields null when no rankFinal present', async () => {

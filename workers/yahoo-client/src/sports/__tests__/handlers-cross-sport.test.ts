@@ -329,6 +329,126 @@ describe('yahoo cross-sport handler characterization tests', () => {
       expect(data.standings[1]).toMatchObject({ rank: 2, name: 'Team B', wins: 6, losses: 4 });
     });
 
+    it.each(scenarios)('$label returns regular_season phase and null outcome fields during active season', async ({ sport, handlers }) => {
+      fetchMock.mockResolvedValue(jsonResponse(buildStandingsResponse())); // is_finished: 0, no playoff_start_week
+
+      const params: ToolParams = { sport, league_id: '449.l.123', season_year: 2025 };
+      const result = await handlers.get_standings({} as never, params, 'Bearer x', `cid-${sport}`);
+
+      expect(result.success).toBe(true);
+      const data = result.data as Record<string, unknown>;
+      expect(data.seasonPhase).toBe('regular_season');
+      expect(data.seasonComplete).toBe(false);
+
+      // Yahoo always returns null for unverifiable outcome fields
+      const standings = data.standings as Array<Record<string, unknown>>;
+      expect(standings[0]).toMatchObject({
+        finalRank: null,
+        championshipWon: null,
+        outcomeConfidence: null,
+      });
+    });
+
+    it.each(scenarios)('$label returns season_complete when is_finished is 1', async ({ sport, handlers }) => {
+      const finishedResponse = {
+        fantasy_content: {
+          league: [
+            {
+              league_key: '449.l.123',
+              name: 'Test League',
+              is_finished: 1,
+              current_week: 17,
+              playoff_start_week: 14,
+            },
+            {
+              standings: [
+                {
+                  teams: {
+                    '0': {
+                      team: [
+                        [{ team_key: '449.l.123.t.1', team_id: '1', name: 'Team A' }],
+                        { team_standings: { rank: 1, playoff_seed: 1, outcome_totals: { wins: 10, losses: 3, ties: 0, percentage: '.769' }, points_for: '1500', points_against: '1200' } },
+                      ],
+                    },
+                    '1': {
+                      team: [
+                        [{ team_key: '449.l.123.t.2', team_id: '2', name: 'Team B' }],
+                        { team_standings: { rank: 2, outcome_totals: { wins: 9, losses: 4, ties: 0, percentage: '.692' }, points_for: '1400', points_against: '1300' } },
+                      ],
+                    },
+                    count: 2,
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      };
+      fetchMock.mockResolvedValue(jsonResponse(finishedResponse));
+
+      const params: ToolParams = { sport, league_id: '449.l.123', season_year: 2024 };
+      const result = await handlers.get_standings({} as never, params, 'Bearer x', `cid-${sport}`);
+
+      expect(result.success).toBe(true);
+      const data = result.data as Record<string, unknown>;
+      expect(data.seasonPhase).toBe('season_complete');
+      expect(data.seasonComplete).toBe(true);
+
+      // Team with playoff_seed → madePlayoffs true; without → null
+      const standings = data.standings as Array<Record<string, unknown>>;
+      const teamA = standings.find((s) => s.name === 'Team A');
+      const teamB = standings.find((s) => s.name === 'Team B');
+      expect(teamA?.madePlayoffs).toBe(true);
+      expect(teamA?.playoffSeed).toBe(1);
+      expect(teamB?.madePlayoffs).toBeNull();
+      expect(teamB?.playoffSeed).toBeNull();
+
+      // Yahoo cannot verify championship outcome — always null
+      expect(teamA?.finalRank).toBeNull();
+      expect(teamA?.championshipWon).toBeNull();
+      expect(teamA?.outcomeConfidence).toBeNull();
+    });
+
+    it.each(scenarios)('$label returns playoffs_in_progress when current_week >= playoff_start_week', async ({ sport, handlers }) => {
+      const playoffResponse = {
+        fantasy_content: {
+          league: [
+            {
+              league_key: '449.l.123',
+              name: 'Test League',
+              is_finished: 0,
+              current_week: 15,
+              playoff_start_week: 14,
+            },
+            {
+              standings: [
+                {
+                  teams: {
+                    '0': {
+                      team: [
+                        [{ team_key: '449.l.123.t.1', team_id: '1', name: 'Team A' }],
+                        { team_standings: { rank: 1, outcome_totals: { wins: 8, losses: 5, ties: 0, percentage: '.615' }, points_for: '1200', points_against: '1100' } },
+                      ],
+                    },
+                    count: 1,
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      };
+      fetchMock.mockResolvedValue(jsonResponse(playoffResponse));
+
+      const params: ToolParams = { sport, league_id: '449.l.123', season_year: 2025 };
+      const result = await handlers.get_standings({} as never, params, 'Bearer x', `cid-${sport}`);
+
+      expect(result.success).toBe(true);
+      const data = result.data as Record<string, unknown>;
+      expect(data.seasonPhase).toBe('playoffs_in_progress');
+      expect(data.seasonComplete).toBe(false);
+    });
+
     it.each(scenarios)('$label returns error when league_id is missing', async ({ sport, handlers }) => {
       const params: ToolParams = { sport, league_id: '', season_year: 2025 };
       const result = await handlers.get_standings({} as never, params, 'Bearer x', 'cid');

@@ -33,9 +33,13 @@ export function createGetStandingsHandler(config: YahooHandlerContext): HandlerF
       const league = unwrapLeague(leagueArray);
 
       // seasonPhase detection
+      // Yahoo sets is_finished=1 when the season is over; playoff_start_week=0 means no playoffs configured.
       const isFinished = league.is_finished === 1;
-      const currentWeek = Number(league.current_week ?? 0);
-      const playoffStartWeek = Number(league.playoff_start_week ?? 0);
+      const rawCurrentWeek = Number(league.current_week ?? 0);
+      const rawPlayoffStart = Number(league.playoff_start_week ?? 0);
+      // Guard against NaN if Yahoo returns non-numeric strings for these fields
+      const currentWeek = Number.isFinite(rawCurrentWeek) ? rawCurrentWeek : 0;
+      const playoffStartWeek = Number.isFinite(rawPlayoffStart) ? rawPlayoffStart : 0;
 
       let seasonPhase: 'regular_season' | 'playoffs_in_progress' | 'season_complete';
       if (isFinished) {

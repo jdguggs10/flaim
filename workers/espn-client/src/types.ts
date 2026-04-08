@@ -47,7 +47,9 @@ export interface EspnTeam {
   abbrev?: string;
   playoffSeed?: number;
   rank?: number;
+  /** ESPN's explicit postseason final rank (1 = champion). Only present in completed historical seasons. Prefer over rankCalculatedFinal. */
   rankFinal?: number;
+  /** ESPN's computed postseason rank when rankFinal is unavailable. Only present in completed historical seasons. */
   rankCalculatedFinal?: number;
   draftDayProjectedRank?: number;
   currentProjectedRank?: number;

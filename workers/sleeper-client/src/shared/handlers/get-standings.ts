@@ -34,15 +34,16 @@ export function createGetStandingsHandler(): HandlerFn {
 
       if (league.status === 'complete') {
         seasonPhase = 'season_complete';
+        // Bracket is the only source of outcome data for completed seasons — propagate errors
         const bracketRes = await sleeperFetch(`/league/${league_id}/winners_bracket`);
-        if (bracketRes.ok) {
-          bracket = await bracketRes.json();
-        }
+        if (!bracketRes.ok) return handleSleeperError(bracketRes);
+        bracket = await bracketRes.json();
       } else if (league.status === 'in_season') {
         const bracketRes = await sleeperFetch(`/league/${league_id}/winners_bracket`);
         if (bracketRes.ok) {
           bracket = await bracketRes.json();
         }
+        // If bracket fetch fails during active season, degrade gracefully to regular_season
         seasonPhase = bracket.length > 0 ? 'playoffs_in_progress' : 'regular_season';
       } else {
         seasonPhase = 'regular_season';
@@ -94,9 +95,7 @@ export function createGetStandingsHandler(): HandlerFn {
           const isChampion = seasonComplete && roster.roster_id === championRosterId;
           const championshipWon = seasonComplete && championRosterId !== null ? isChampion : null;
 
-          let playoffOutcome: 'champion' | 'runner_up' | 'semifinal_loss' | 'quarterfinal_loss' |
-            'consolation_champion' | 'consolation_runner_up' |
-            'missed_playoffs' | 'eliminated' | 'in_progress' | null = null;
+          let playoffOutcome: 'champion' | 'runner_up' | 'eliminated' | 'in_progress' | null = null;
           if (seasonComplete && championRosterId !== null) {
             if (finalRank === 1 || isChampion) playoffOutcome = 'champion';
             else if (finalRank === 2) playoffOutcome = 'runner_up';
