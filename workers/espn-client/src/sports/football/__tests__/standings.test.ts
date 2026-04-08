@@ -3,6 +3,7 @@ import { footballHandlers } from '../handlers';
 import type { ToolParams } from '../../../types';
 import { getCredentials } from '../../../shared/auth';
 import { espnFetch } from '../../../shared/espn-api';
+import { getCurrentSeasonYear } from '../../../shared/season';
 
 vi.mock('../../../shared/auth', () => ({
   getCredentials: vi.fn(),
@@ -17,7 +18,8 @@ vi.mock('../../../shared/espn-api', async () => {
 });
 
 const HISTORICAL_YEAR = 2022;
-const CURRENT_YEAR = new Date().getFullYear();
+// Use sport-aware current season year — matches what the handler uses internally
+const CURRENT_SEASON_YEAR = getCurrentSeasonYear('football');
 
 function makeParams(season_year: number): ToolParams {
   return { sport: 'football', league_id: '123', season_year };
@@ -137,7 +139,7 @@ describe('football get_standings handler — outcome fields', () => {
       ],
     }));
 
-    const result = await footballHandlers.get_standings({} as never, makeParams(CURRENT_YEAR), 'Bearer x', 'cid');
+    const result = await footballHandlers.get_standings({} as never, makeParams(CURRENT_SEASON_YEAR), 'Bearer x', 'cid');
 
     expect(result.success).toBe(true);
     const data = result.data as Record<string, unknown>;
@@ -164,7 +166,7 @@ describe('football get_standings handler — outcome fields', () => {
       ],
     }));
 
-    const result = await footballHandlers.get_standings({} as never, makeParams(CURRENT_YEAR), 'Bearer x', 'cid');
+    const result = await footballHandlers.get_standings({} as never, makeParams(CURRENT_SEASON_YEAR), 'Bearer x', 'cid');
 
     expect(result.success).toBe(true);
     const data = result.data as Record<string, unknown>;

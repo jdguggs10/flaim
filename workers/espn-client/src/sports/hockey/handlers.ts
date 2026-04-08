@@ -16,6 +16,7 @@ import {
   transformStats,
   POSITION_SLOTS,
 } from './mappings';
+import { getCurrentSeasonYear } from '../../shared/season';
 
 const GAME_ID = 'fhl'; // ESPN's game ID for fantasy hockey
 
@@ -203,31 +204,24 @@ async function handleGetStandings(
     const data = await response.json() as EspnLeagueResponse;
     const teams = data.teams || [];
 
-    // Determine seasonPhase.
-    // Primary signal: explicit rankFinal/rankCalculatedFinal on any team means ESPN has finalized the season.
-    // Secondary: seasons 2+ years old are safely complete.
-    // Fallback: use scoringPeriodId vs regularSeasonMatchupPeriods for the current and previous year.
-    // Known limitation: season labels and calendar years diverge for cross-calendar sports.
-    //   - NFL: "2024 season" playoffs run into January 2025 — handled by the scoringPeriod fallback.
-    //   - NBA/NHL: "2025 season" ends in June 2026 — a mid-season request in Jan 2026 where
-    //     rankFinal is absent will incorrectly return season_complete. Acceptable for now since
-    //     ESPN typically populates rankFinal by season end; revisit if false positives appear.
-    const currentYear = new Date().getFullYear();
+    // Determine seasonPhase using sport-aware season year to handle cross-calendar sports correctly.
+    // getCurrentSeasonYear('hockey') returns 2025 in Jan 2026 (before Aug rollover), so an
+    // NHL 2025 season mid-playoff request in Jan 2026 is not incorrectly marked season_complete.
+    // Primary signal: explicit rankFinal/rankCalculatedFinal → ESPN has finalized the season.
+    const currentSeasonYear = getCurrentSeasonYear('hockey');
     const hasExplicitCompletionData = teams.some(
       (t) => t.rankFinal != null || t.rankCalculatedFinal != null
     );
     let seasonPhase: 'regular_season' | 'playoffs_in_progress' | 'season_complete';
-    if (hasExplicitCompletionData || season_year <= currentYear - 2) {
+    if (hasExplicitCompletionData || season_year < currentSeasonYear) {
       seasonPhase = 'season_complete';
-    } else {
+    } else if (season_year === currentSeasonYear) {
       const regularPeriods = data.settings?.regularSeasonMatchupPeriods ?? 0;
       const scoringPeriod = data.scoringPeriodId ?? 0;
-      if (scoringPeriod > regularPeriods) {
-        // Previous year with scoring past regular season → likely complete (cross-year sport edge case)
-        seasonPhase = season_year < currentYear ? 'season_complete' : 'playoffs_in_progress';
-      } else {
-        seasonPhase = season_year < currentYear ? 'season_complete' : 'regular_season';
-      }
+      seasonPhase = scoringPeriod > regularPeriods ? 'playoffs_in_progress' : 'regular_season';
+    } else {
+      // season_year > currentSeasonYear — future season, treat as not yet started
+      seasonPhase = 'regular_season';
     }
     const seasonComplete = seasonPhase === 'season_complete';
 
