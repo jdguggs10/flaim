@@ -12,19 +12,18 @@ export function createGetStandingsHandler(): HandlerFn {
     }
 
     try {
-      // Fetch league meta first to determine status
-      const leagueRes = await sleeperFetch(`/league/${league_id}`);
-      if (!leagueRes.ok) handleSleeperError(leagueRes);
-      const league: SleeperLeague = await leagueRes.json();
-
-      const [rostersRes, usersRes] = await Promise.all([
+      // Fetch league meta, rosters, and users in parallel — all independent
+      const [leagueRes, rostersRes, usersRes] = await Promise.all([
+        sleeperFetch(`/league/${league_id}`),
         sleeperFetch(`/league/${league_id}/rosters`),
         sleeperFetch(`/league/${league_id}/users`),
       ]);
 
+      if (!leagueRes.ok) return handleSleeperError(leagueRes);
       if (!rostersRes.ok) handleSleeperError(rostersRes);
       if (!usersRes.ok) handleSleeperError(usersRes);
 
+      const league: SleeperLeague = await leagueRes.json();
       const rosters: SleeperRoster[] = await rostersRes.json();
       const users: SleeperLeagueUser[] = await usersRes.json();
 
