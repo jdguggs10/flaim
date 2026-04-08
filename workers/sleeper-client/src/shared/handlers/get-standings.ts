@@ -42,6 +42,8 @@ export function createGetStandingsHandler(): HandlerFn {
         const bracketRes = await sleeperFetch(`/league/${league_id}/winners_bracket`);
         if (bracketRes.ok) {
           bracket = await bracketRes.json();
+        } else {
+          console.warn(`[get-standings] Bracket fetch failed for league ${league_id} (status ${bracketRes.status}); degrading seasonPhase to regular_season`);
         }
         // If bracket fetch fails during active season, degrade gracefully to regular_season
         seasonPhase = bracket.length > 0 ? 'playoffs_in_progress' : 'regular_season';

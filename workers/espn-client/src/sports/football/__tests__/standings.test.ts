@@ -123,6 +123,7 @@ describe('football get_standings handler — outcome fields', () => {
     expect(standings[0].championshipWon).toBeNull();
     expect(standings[0].playoffOutcome).toBeNull();
     expect(standings[0].outcomeConfidence).toBeNull();
+    expect(standings[0].madePlayoffs).toBeNull(); // no rankFinal → can't determine
   });
 
   it('returns playoffs_in_progress for current season past regular season periods', async () => {

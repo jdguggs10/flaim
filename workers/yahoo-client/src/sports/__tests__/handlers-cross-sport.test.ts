@@ -447,6 +447,54 @@ describe('yahoo cross-sport handler characterization tests', () => {
       const data = result.data as Record<string, unknown>;
       expect(data.seasonPhase).toBe('playoffs_in_progress');
       expect(data.seasonComplete).toBe(false);
+
+      // Outcome fields always null on Yahoo regardless of season phase
+      const standings = data.standings as Array<Record<string, unknown>>;
+      expect(standings[0]?.finalRank).toBeNull();
+      expect(standings[0]?.championshipWon).toBeNull();
+      expect(standings[0]?.playoffOutcome).toBeNull();
+      expect(standings[0]?.outcomeConfidence).toBeNull();
+    });
+
+    it.each(scenarios)('$label falls back to regular_season when current_week or playoff_start_week is non-numeric', async ({ sport, handlers }) => {
+      const nanResponse = {
+        fantasy_content: {
+          league: [
+            {
+              league_key: '449.l.123',
+              name: 'Test League',
+              is_finished: 0,
+              current_week: 'N/A',   // non-numeric
+              playoff_start_week: null, // missing
+            },
+            {
+              standings: [
+                {
+                  teams: {
+                    '0': {
+                      team: [
+                        [{ team_key: '449.l.123.t.1', team_id: '1', name: 'Team A' }],
+                        { team_standings: { rank: 1, outcome_totals: { wins: 8, losses: 5, ties: 0, percentage: '.615' }, points_for: '1200', points_against: '1100' } },
+                      ],
+                    },
+                    count: 1,
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      };
+      fetchMock.mockResolvedValue(jsonResponse(nanResponse));
+
+      const params: ToolParams = { sport, league_id: '449.l.123', season_year: 2025 };
+      const result = await handlers.get_standings({} as never, params, 'Bearer x', `cid-${sport}`);
+
+      expect(result.success).toBe(true);
+      const data = result.data as Record<string, unknown>;
+      // Non-numeric fields safely default to 0 — no playoffs configured → regular_season
+      expect(data.seasonPhase).toBe('regular_season');
+      expect(data.seasonComplete).toBe(false);
     });
 
     it.each(scenarios)('$label returns error when league_id is missing', async ({ sport, handlers }) => {

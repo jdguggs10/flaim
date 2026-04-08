@@ -200,10 +200,66 @@ describe('football handlers', () => {
     expect(r3?.championshipWon).toBe(false);
     expect(r3?.playoffOutcome).toBe('eliminated');
 
-    // r4 lost in round 1 — in bracket, so madePlayoffs is true
+    // r4 lost in round 1 — in bracket, no p field → eliminated via inWinnersBracket fallback
     const r4 = standings.find((s) => s.rosterId === 4);
     expect(r4?.championshipWon).toBe(false);
-    expect(r4?.madePlayoffs).toBe(true); // was in round 1 bracket
+    expect(r4?.madePlayoffs).toBe(true);
+    expect(r4?.playoffOutcome).toBe('eliminated'); // inWinnersBracket fallback (no p field)
+  });
+
+  it('propagates error when bracket fetch fails for a completed season', async () => {
+    const league = { league_id: 'league_1', name: 'Test', sport: 'nfl', season: '2024', status: 'complete', total_rosters: 2, roster_positions: [], scoring_settings: {}, settings: {}, previous_league_id: null, draft_id: 'd1', avatar: null };
+    const rosters = [
+      { roster_id: 1, owner_id: 'u1', players: [], starters: [], reserve: [], settings: { wins: 8, losses: 2, ties: 0, fpts: 1200, fpts_decimal: 0, fpts_against: 1000, fpts_against_decimal: 0 } },
+    ];
+    const users = [{ user_id: 'u1', display_name: 'Alpha', avatar: null }];
+
+    mockFetch
+      .mockResolvedValueOnce(jsonResponse(league))
+      .mockResolvedValueOnce(jsonResponse(rosters))
+      .mockResolvedValueOnce(jsonResponse(users))
+      .mockResolvedValueOnce(new Response(null, { status: 503 })); // bracket fetch fails
+
+    const params: ToolParams = { sport: 'football', league_id: 'league_1', season_year: 2024 };
+    const result = await footballHandlers.get_standings({} as never, params);
+
+    // Bracket is the only outcome source for completed seasons — must surface the error
+    expect(result.success).toBe(false);
+  });
+
+  it('returns playoffs_in_progress and in_progress outcome for teams in active bracket', async () => {
+    const league = { league_id: 'league_1', name: 'Test', sport: 'nfl', season: '2025', status: 'in_season', total_rosters: 2, roster_positions: [], scoring_settings: {}, settings: {}, previous_league_id: null, draft_id: 'd1', avatar: null };
+    const rosters = [
+      { roster_id: 1, owner_id: 'u1', players: [], starters: [], reserve: [], settings: { wins: 8, losses: 5, ties: 0, fpts: 1100, fpts_decimal: 0, fpts_against: 1000, fpts_against_decimal: 0 } },
+      { roster_id: 2, owner_id: 'u2', players: [], starters: [], reserve: [], settings: { wins: 6, losses: 7, ties: 0, fpts: 900, fpts_decimal: 0, fpts_against: 950, fpts_against_decimal: 0 } },
+    ];
+    const users = [
+      { user_id: 'u1', display_name: 'Alpha', avatar: null },
+      { user_id: 'u2', display_name: 'Bravo', avatar: null },
+    ];
+    // Active championship match — no w/l fields yet (game in progress)
+    const bracket = [{ r: 1, m: 1, t1: 1, t2: 2 }];
+
+    mockFetch
+      .mockResolvedValueOnce(jsonResponse(league))
+      .mockResolvedValueOnce(jsonResponse(rosters))
+      .mockResolvedValueOnce(jsonResponse(users))
+      .mockResolvedValueOnce(jsonResponse(bracket));
+
+    const params: ToolParams = { sport: 'football', league_id: 'league_1', season_year: 2025 };
+    const result = await footballHandlers.get_standings({} as never, params);
+
+    expect(result.success).toBe(true);
+    const data = result.data as Record<string, unknown>;
+    expect(data.seasonPhase).toBe('playoffs_in_progress');
+    expect(data.seasonComplete).toBe(false);
+
+    const standings = data.standings as Array<Record<string, unknown>>;
+    const r1 = standings.find((s) => s.rosterId === 1);
+    const r2 = standings.find((s) => s.rosterId === 2);
+    expect(r1?.playoffOutcome).toBe('in_progress');
+    expect(r2?.playoffOutcome).toBe('in_progress');
+    expect(r1?.madePlayoffs).toBe(true);
   });
 
   it('degrades to regular_season when bracket fetch fails during active season', async () => {
