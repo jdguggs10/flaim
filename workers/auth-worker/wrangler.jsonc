@@ -5,7 +5,11 @@
   // Enable Cloudflare Workers Logs/Observability
   "observability": {
     "enabled": true,
-    "head_sampling_rate": 1
+    "head_sampling_rate": 1,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1
+    }
   },
   // Required secrets (set via `wrangler secret put` or Cloudflare dashboard):
   // - SUPABASE_URL
