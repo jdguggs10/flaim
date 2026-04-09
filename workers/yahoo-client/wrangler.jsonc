@@ -2,20 +2,19 @@
   "name": "yahoo-client",
   "main": "src/index.ts",
   "compatibility_date": "2024-12-01",
+  // Enable Cloudflare Workers Logs/Observability
   "observability": {
     "enabled": true,
-    "head_sampling_rate": 1,
-    "logs": {
-      "enabled": true,
-      "head_sampling_rate": 1,
-      "persist": true,
-      "invocation_logs": true
-    }
+    "head_sampling_rate": 1
   },
   "env": {
     "prod": {
       "name": "yahoo-client",
       "workers_dev": false,
+      "observability": {
+        "enabled": true,
+        "head_sampling_rate": 1
+      },
       "services": [
         { "binding": "AUTH_WORKER", "service": "auth-worker" }
       ],
@@ -28,6 +27,10 @@
     "preview": {
       "name": "yahoo-client-preview",
       "workers_dev": false,
+      "observability": {
+        "enabled": true,
+        "head_sampling_rate": 1
+      },
       "services": [
         { "binding": "AUTH_WORKER", "service": "auth-worker-preview" }
       ],

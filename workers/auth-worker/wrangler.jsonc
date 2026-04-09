@@ -5,18 +5,7 @@
   // Enable Cloudflare Workers Logs/Observability
   "observability": {
     "enabled": true,
-    "head_sampling_rate": 1,
-    "logs": {
-      "enabled": true,
-      "head_sampling_rate": 1,
-      "persist": true,
-      "invocation_logs": true
-    },
-    "traces": {
-      "enabled": true,
-      "persist": true,
-      "head_sampling_rate": 1
-    }
+    "head_sampling_rate": 1
   },
   // Required secrets (set via `wrangler secret put` or Cloudflare dashboard):
   // - SUPABASE_URL
@@ -30,6 +19,10 @@
     "prod": {
       "name": "auth-worker",
       "workers_dev": true, // Enable .workers.dev URL for worker-to-worker calls
+      "observability": {
+        "enabled": true,
+        "head_sampling_rate": 1
+      },
       // Cloudflare native rate limiting is configured per-environment.
       "ratelimits": [
         {
@@ -83,6 +76,10 @@
     "preview": {
       "name": "auth-worker-preview",
       "workers_dev": true, // Also keep workers.dev URL available
+      "observability": {
+        "enabled": true,
+        "head_sampling_rate": 1
+      },
       "ratelimits": [
         {
           "name": "TOKEN_RATE_LIMITER",
