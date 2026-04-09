@@ -14,7 +14,7 @@ import type { Env } from './types';
 import { createFantasyMcpServer } from './mcp/server';
 import { createMcpHandler } from './mcp/create-mcp-handler';
 import { isPublicMcpHandshakeRequest, normalizeMcpAcceptHeader } from './mcp/auth-gate';
-import { logEvalEvent } from './logging';
+import { logRequestBoundary } from './logging';
 import { buildMcpAuthErrorResponse } from './auth-response';
 import { USER_SESSION_WIDGET_HTML } from './widgets/user-session-widget';
 
@@ -166,13 +166,13 @@ async function handleMcpRequest(c: Context<{ Bindings: Env }>): Promise<Response
   const { evalRunId, evalTraceId } = getEvalContext(c.req.raw);
   const startTime = Date.now();
 
-  logEvalEvent({
+  logRequestBoundary({
     service: 'fantasy-mcp',
     phase: 'request_start',
     correlation_id: correlationId,
     run_id: evalRunId,
     trace_id: evalTraceId,
-    message: c.req.path,
+    message: evalRunId ? `${c.req.path} eval=${evalRunId}` : c.req.path,
   });
 
   const authHeader = c.req.header('Authorization');
@@ -280,7 +280,7 @@ async function handleMcpRequest(c: Context<{ Bindings: Env }>): Promise<Response
     response.headers.set(EVAL_TRACE_HEADER, evalTraceId);
   }
 
-  logEvalEvent({
+  logRequestBoundary({
     service: 'fantasy-mcp',
     phase: 'request_end',
     correlation_id: correlationId,
@@ -288,7 +288,7 @@ async function handleMcpRequest(c: Context<{ Bindings: Env }>): Promise<Response
     trace_id: evalTraceId,
     duration_ms: Date.now() - startTime,
     status: String(response.status),
-    message: c.req.path,
+    message: evalRunId ? `${c.req.path} eval=${evalRunId}` : c.req.path,
   });
 
   return response;
