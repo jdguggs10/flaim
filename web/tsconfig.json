@@ -24,7 +24,8 @@
     ],
     "paths": {
       "@/*": ["./*"],
-      "@/components/ui": ["components/ui"]
+      "@/components/ui": ["components/ui"],
+      "@flaim/worker-shared": ["../workers/shared/src/oauth-redirect"]
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],

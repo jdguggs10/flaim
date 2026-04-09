@@ -61,3 +61,6 @@ export {
   withCorrelationId,
   withEvalHeaders,
 } from './tracing.js';
+
+// OAuth redirect URI validation
+export { isValidRedirectUri } from './oauth-redirect.js';
