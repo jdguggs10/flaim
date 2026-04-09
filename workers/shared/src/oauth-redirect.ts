@@ -83,21 +83,14 @@ function isPerplexityRedirectUri(uri: string): boolean {
 
 // Cursor IDE uses cursor:// custom URI scheme for MCP OAuth
 // Pattern: cursor://anysphere.cursor-mcp/oauth/{id}/callback
+// Uses string operations only — URL constructor does not handle custom schemes.
 function isCursorRedirectUri(uri: string): boolean {
-  try {
-    // URL constructor doesn't handle custom schemes well, so parse manually
-    if (!uri.startsWith('cursor://')) return false;
-    const withoutScheme = uri.slice('cursor://'.length);
-    // Must start with known Cursor host prefix
-    if (!withoutScheme.startsWith('anysphere.cursor-')) return false;
-    // Must end with /callback and contain /oauth/
-    if (!withoutScheme.includes('/oauth/') || !withoutScheme.endsWith('/callback')) return false;
-    // Reject query strings or fragments
-    if (uri.includes('?') || uri.includes('#')) return false;
-    return true;
-  } catch {
-    return false;
-  }
+  if (!uri.startsWith('cursor://')) return false;
+  const withoutScheme = uri.slice('cursor://'.length);
+  if (!withoutScheme.startsWith('anysphere.cursor-')) return false;
+  if (!withoutScheme.includes('/oauth/') || !withoutScheme.endsWith('/callback')) return false;
+  if (uri.includes('?') || uri.includes('#')) return false;
+  return true;
 }
 
 export function isValidRedirectUri(uri: string): boolean {

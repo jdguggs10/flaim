@@ -86,13 +86,19 @@ function OAuthConsentContent() {
   // Handle "Deny" - redirect to Claude with error
   const handleDeny = () => {
     if (oauthParams.redirectUri && isValidRedirectUri(oauthParams.redirectUri)) {
-      const url = new URL(oauthParams.redirectUri);
-      url.searchParams.set('error', 'access_denied');
-      url.searchParams.set('error_description', 'User denied the authorization request');
-      if (oauthParams.state) {
-        url.searchParams.set('state', oauthParams.state);
+      try {
+        const url = new URL(oauthParams.redirectUri);
+        url.searchParams.set('error', 'access_denied');
+        url.searchParams.set('error_description', 'User denied the authorization request');
+        if (oauthParams.state) {
+          url.searchParams.set('state', oauthParams.state);
+        }
+        window.location.href = url.toString();
+      } catch {
+        // URI passed validation but browser URL API can't parse it (e.g. cursor://).
+        // Custom-scheme clients handle the error on their end via timeout.
+        router.push('/');
       }
-      window.location.href = url.toString();
     } else {
       router.push('/');
     }
