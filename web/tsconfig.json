@@ -25,6 +25,10 @@
     "paths": {
       "@/*": ["./*"],
       "@/components/ui": ["components/ui"],
+      // Intentionally points at the single browser-safe file, not the package root.
+      // workers/shared/src/index.ts pulls in types.ts which uses Cloudflare's Fetcher
+      // type — not available in the web environment. If you add more web imports from
+      // @flaim/worker-shared, extend this alias rather than switching to the package root.
       "@flaim/worker-shared": ["../workers/shared/src/oauth-redirect"]
     }
   },
