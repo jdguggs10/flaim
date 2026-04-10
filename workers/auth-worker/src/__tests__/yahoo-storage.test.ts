@@ -366,6 +366,7 @@ describe('YahooStorage', () => {
         })
       );
       expect(mockOr).toHaveBeenCalledTimes(1);
+      expect(mockOr).toHaveBeenCalledWith(expect.stringContaining('refresh_lease_expires_at.is.null'));
     });
 
     it('returns false when another owner already holds the lease', async () => {

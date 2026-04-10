@@ -305,7 +305,7 @@ export class YahooStorage {
         refresh_lease_expires_at: expiresAt,
       })
       .eq('clerk_user_id', clerkUserId)
-      .or(`refresh_lease_owner.is.null,refresh_lease_expires_at.lt.${now}`)
+      .or(`refresh_lease_owner.is.null,refresh_lease_expires_at.lt.${now},refresh_lease_expires_at.is.null`)
       .select('clerk_user_id');
 
     if (error) {
