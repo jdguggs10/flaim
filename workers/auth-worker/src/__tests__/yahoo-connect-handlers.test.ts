@@ -520,7 +520,7 @@ describe('yahoo-connect-handlers', () => {
       expect(mockFetch).not.toHaveBeenCalled();
     });
 
-    it('loser: lease expires before winner writes, token still stale → refresh_failed', async () => {
+    it('loser: lease expires before winner writes, then reacquires and refreshes', async () => {
       const stale = {
         clerkUserId: 'user_123',
         accessToken: 'old-token',
@@ -531,15 +531,131 @@ describe('yahoo-connect-handlers', () => {
         refreshLeaseExpiresAt: new Date(Date.now() - 1), // already expired — skips loop
       };
 
-      mockStorage.getYahooCredentials.mockResolvedValue(stale);
+      mockStorage.getYahooCredentials
+        .mockResolvedValueOnce(stale)
+        .mockResolvedValueOnce(stale);
+      mockStorage.acquireRefreshLease
+        .mockResolvedValueOnce(false)
+        .mockResolvedValueOnce(true);
+      mockStorage.updateYahooCredentials.mockResolvedValue(true);
+      mockFetch.mockResolvedValue(
+        new Response(
+          JSON.stringify({ access_token: 'recovered-token', refresh_token: 'new-refresh', expires_in: 3600 }),
+          { status: 200 }
+        )
+      );
+
+      const response = await handleYahooCredentials(env, 'user_123', corsHeaders);
+
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as Record<string, unknown>;
+      expect(body.access_token).toBe('recovered-token');
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('loser: stale pre-race lease rereads current winner lease before waiting', async () => {
+      const stalePreRaceLease = {
+        clerkUserId: 'user_123',
+        accessToken: 'old-token',
+        refreshToken: 'old-refresh',
+        expiresAt: new Date(Date.now() + 2 * 60 * 1000),
+        needsRefresh: true,
+        refreshLeaseOwner: 'expired-owner',
+        refreshLeaseExpiresAt: new Date(Date.now() - 1),
+      };
+      const currentWinnerLease = {
+        clerkUserId: 'user_123',
+        accessToken: 'old-token',
+        refreshToken: 'old-refresh',
+        expiresAt: new Date(Date.now() + 2 * 60 * 1000),
+        needsRefresh: true,
+        refreshLeaseOwner: 'new-owner',
+        refreshLeaseExpiresAt: new Date(Date.now() + 30_000),
+      };
+      const fresh = {
+        clerkUserId: 'user_123',
+        accessToken: 'fresh-from-winner',
+        refreshToken: 'fresh-refresh',
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+        needsRefresh: false,
+      };
+
+      mockStorage.getYahooCredentials
+        .mockResolvedValueOnce(stalePreRaceLease)
+        .mockResolvedValueOnce(currentWinnerLease)
+        .mockResolvedValueOnce(fresh);
       mockStorage.acquireRefreshLease.mockResolvedValue(false);
 
       const response = await handleYahooCredentials(env, 'user_123', corsHeaders);
 
-      expect(response.status).toBe(401);
+      expect(response.status).toBe(200);
       const body = (await response.json()) as Record<string, unknown>;
-      expect(body.error).toBe('refresh_failed');
+      expect(body.access_token).toBe('fresh-from-winner');
       expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it('winner: owner-guarded write fails, stale reread retries safely instead of writing unguarded', async () => {
+      const leaseHeldByOther = {
+        clerkUserId: 'user_123',
+        accessToken: 'old-token',
+        refreshToken: 'old-refresh',
+        expiresAt: new Date(Date.now() + 2 * 60 * 1000),
+        needsRefresh: true,
+        refreshLeaseOwner: 'other-owner',
+        refreshLeaseExpiresAt: new Date(Date.now() + 30_000),
+      };
+      const fresh = {
+        clerkUserId: 'user_123',
+        accessToken: 'fresh-token',
+        refreshToken: 'fresh-refresh',
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+        needsRefresh: false,
+      };
+
+      mockStorage.getYahooCredentials
+        .mockResolvedValueOnce({
+          clerkUserId: 'user_123',
+          accessToken: 'old-token',
+          refreshToken: 'old-refresh',
+          expiresAt: new Date(Date.now() + 2 * 60 * 1000),
+          needsRefresh: true,
+        })
+        .mockResolvedValueOnce(leaseHeldByOther)
+        .mockResolvedValueOnce(fresh);
+      mockStorage.acquireRefreshLease
+        .mockResolvedValueOnce(true)
+        .mockResolvedValueOnce(false);
+      mockStorage.updateYahooCredentials.mockResolvedValue(false);
+      mockFetch.mockResolvedValue(
+        new Response(
+          JSON.stringify({ access_token: 'winner-token', refresh_token: 'new-refresh', expires_in: 3600 }),
+          { status: 200 }
+        )
+      );
+
+      const response = await handleYahooCredentials(env, 'user_123', corsHeaders);
+
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as Record<string, unknown>;
+      expect(body.access_token).toBe('fresh-token');
+      expect(mockStorage.updateYahooCredentials).toHaveBeenCalledTimes(1);
+    });
+
+    it('returns server_error when lease acquisition storage call fails', async () => {
+      mockStorage.getYahooCredentials.mockResolvedValue({
+        clerkUserId: 'user_123',
+        accessToken: 'old-access-token',
+        refreshToken: 'refresh-token',
+        expiresAt: new Date(Date.now() + 2 * 60 * 1000),
+        needsRefresh: true,
+      });
+      mockStorage.acquireRefreshLease.mockRejectedValue(new Error('db unavailable'));
+
+      const response = await handleYahooCredentials(env, 'user_123', corsHeaders);
+
+      expect(response.status).toBe(500);
+      const body = (await response.json()) as Record<string, unknown>;
+      expect(body.error).toBe('server_error');
     });
   });
 

@@ -307,7 +307,13 @@ export class YahooStorage {
       .eq('clerk_user_id', clerkUserId)
       .or(`refresh_lease_owner.is.null,refresh_lease_expires_at.lt.${now}`)
       .select('clerk_user_id');
-    return !error && (data?.length ?? 0) > 0;
+
+    if (error) {
+      console.error('[yahoo-storage] Failed to acquire Yahoo refresh lease:', error);
+      throw new Error('Failed to acquire Yahoo refresh lease');
+    }
+
+    return (data?.length ?? 0) > 0;
   }
 
   /**
@@ -315,11 +321,16 @@ export class YahooStorage {
    * Only clears the lease if this caller still owns it.
    */
   async releaseRefreshLease(clerkUserId: string, ownerId: string): Promise<void> {
-    await this.supabase
+    const { error } = await this.supabase
       .from('yahoo_credentials')
       .update({ refresh_lease_owner: null, refresh_lease_expires_at: null })
       .eq('clerk_user_id', clerkUserId)
       .eq('refresh_lease_owner', ownerId);
+
+    if (error) {
+      console.error('[yahoo-storage] Failed to release Yahoo refresh lease:', error);
+      throw new Error('Failed to release Yahoo refresh lease');
+    }
   }
 
   /**

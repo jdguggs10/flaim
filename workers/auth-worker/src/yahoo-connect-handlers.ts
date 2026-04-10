@@ -17,7 +17,7 @@
  * For the PROVIDER side (issuing tokens TO AI clients), see oauth-handlers.ts.
  */
 
-import { YahooStorage } from './yahoo-storage';
+import { YahooStorage, type YahooCredentials } from './yahoo-storage';
 import { getFrontendUrl, resolvePreviewOrigin } from './preview-url';
 
 // =============================================================================
@@ -55,6 +55,7 @@ const YAHOO_SCOPE = 'fspt-r'; // Fantasy Sports read access
 const LEASE_TTL_MS       = 30_000;
 const REFRESH_TIMEOUT_MS = 20_000; // must be < LEASE_TTL_MS
 const POLL_INTERVAL_MS   =    300;
+const MAX_REFRESH_ATTEMPTS = 3;
 
 /**
  * Get the OAuth callback URL based on environment
@@ -111,6 +112,62 @@ type GetTokenResult =
   | { accessToken: string; expiresIn: number }
   | { error: string };
 
+type RetryTokenResult =
+  | GetTokenResult
+  | { retry: true; credentials: YahooCredentials };
+
+function toTokenResult(credentials: { accessToken: string; expiresAt: Date }): GetTokenResult {
+  return {
+    accessToken: credentials.accessToken,
+    expiresIn: Math.floor((credentials.expiresAt.getTime() - Date.now()) / 1000),
+  };
+}
+
+function leaseExpired(credentials: { refreshLeaseOwner?: string; refreshLeaseExpiresAt?: Date } | null): boolean {
+  if (!credentials?.refreshLeaseOwner) {
+    return true;
+  }
+  return credentials.refreshLeaseExpiresAt
+    ? credentials.refreshLeaseExpiresAt.getTime() <= Date.now()
+    : false;
+}
+
+async function waitForFreshCredentialsOrLeaseClear(
+  storage: YahooStorage,
+  userId: string,
+  credentials: YahooCredentials
+): Promise<RetryTokenResult> {
+  let latest: YahooCredentials | null = credentials;
+
+  while (latest && !leaseExpired(latest)) {
+    const deadline = latest.refreshLeaseExpiresAt?.getTime() ?? (Date.now() + LEASE_TTL_MS);
+    if (Date.now() >= deadline) {
+      return { retry: true, credentials: latest };
+    }
+
+    await sleep(POLL_INTERVAL_MS + Math.floor(Math.random() * 100));
+    latest = await storage.getYahooCredentials(userId);
+
+    if (!latest) {
+      return { error: 'not_connected' };
+    }
+    if (!latest.needsRefresh) {
+      return toTokenResult(latest);
+    }
+    if (leaseExpired(latest)) {
+      return { retry: true, credentials: latest };
+    }
+  }
+
+  if (!latest) {
+    return { error: 'not_connected' };
+  }
+  if (!latest.needsRefresh) {
+    return toTokenResult(latest);
+  }
+  return { retry: true, credentials: latest };
+}
+
 /**
  * Get a valid Yahoo access token for the given user, refreshing if needed.
  *
@@ -123,97 +180,94 @@ async function getValidYahooAccessToken(
   userId: string,
   env: YahooConnectEnv
 ): Promise<GetTokenResult> {
-  const credentials = await storage.getYahooCredentials(userId);
+  let credentials = await storage.getYahooCredentials(userId);
   if (!credentials) {
     return { error: 'not_connected' };
   }
-  if (!credentials.needsRefresh) {
-    const expiresIn = Math.floor((credentials.expiresAt.getTime() - Date.now()) / 1000);
-    return { accessToken: credentials.accessToken, expiresIn };
-  }
 
-  const ownerId = crypto.randomUUID();
-  const won = await storage.acquireRefreshLease(userId, ownerId, LEASE_TTL_MS);
+  for (let attempt = 0; attempt < MAX_REFRESH_ATTEMPTS; attempt++) {
+    if (!credentials.needsRefresh) {
+      return toTokenResult(credentials);
+    }
 
-  if (!won) {
-    // LOSER PATH: poll until winner writes fresh credentials or lease expires
-    const deadline =
-      credentials.refreshLeaseExpiresAt?.getTime() ?? (Date.now() + LEASE_TTL_MS);
-    while (Date.now() < deadline) {
-      await sleep(POLL_INTERVAL_MS + Math.floor(Math.random() * 100));
+    const ownerId = crypto.randomUUID();
+    const won = await storage.acquireRefreshLease(userId, ownerId, LEASE_TTL_MS);
+
+    if (!won) {
       const latest = await storage.getYahooCredentials(userId);
-      if (latest && !latest.needsRefresh) {
-        const expiresIn = Math.floor((latest.expiresAt.getTime() - Date.now()) / 1000);
-        return { accessToken: latest.accessToken, expiresIn };
+      if (!latest) {
+        return { error: 'not_connected' };
       }
-      if (
-        !latest?.refreshLeaseOwner ||
-        (latest.refreshLeaseExpiresAt && latest.refreshLeaseExpiresAt.getTime() < Date.now())
-      ) {
-        break;
+      if (!latest.needsRefresh) {
+        return toTokenResult(latest);
       }
-    }
-    const final = await storage.getYahooCredentials(userId);
-    if (final && !final.needsRefresh) {
-      const expiresIn = Math.floor((final.expiresAt.getTime() - Date.now()) / 1000);
-      return { accessToken: final.accessToken, expiresIn };
-    }
-    return { error: 'refresh_failed' };
-  }
+      if (leaseExpired(latest)) {
+        credentials = latest;
+        continue;
+      }
 
-  // WINNER PATH: call Yahoo and write the result
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REFRESH_TIMEOUT_MS);
-  let result: YahooTokenResponse;
-  try {
-    result = await refreshAccessToken(credentials.refreshToken, env, controller.signal);
-    clearTimeout(timer);
-  } catch {
-    clearTimeout(timer);
-    await storage.releaseRefreshLease(userId, ownerId);
-    return { error: 'refresh_failed' };
-  }
+      const loserResult = await waitForFreshCredentialsOrLeaseClear(
+        storage,
+        userId,
+        latest
+      );
 
-  if (result.error) {
+      if ('retry' in loserResult) {
+        credentials = loserResult.credentials;
+        continue;
+      }
+      return loserResult;
+    }
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), REFRESH_TIMEOUT_MS);
+    let result: YahooTokenResponse;
+    try {
+      result = await refreshAccessToken(credentials.refreshToken, env, controller.signal);
+    } catch {
+      clearTimeout(timer);
+      await storage.releaseRefreshLease(userId, ownerId);
+      return { error: 'refresh_failed' };
+    }
     clearTimeout(timer);
-    await storage.releaseRefreshLease(userId, ownerId);
-    // Reread fallback: another isolate may have already refreshed successfully
+
+    if (result.error) {
+      await storage.releaseRefreshLease(userId, ownerId);
+      const latest = await storage.getYahooCredentials(userId);
+      if (latest && !latest.needsRefresh && looksLikeNewerCredentials(credentials, latest)) {
+        console.log(`[yahoo-connect] Using concurrently refreshed token for user ${maskUserId(userId)}`);
+        return toTokenResult(latest);
+      }
+      return { error: 'refresh_failed' };
+    }
+
+    const expiresAt = new Date(Date.now() + result.expires_in * 1000);
+    const wrote = await storage.updateYahooCredentials(
+      userId,
+      { accessToken: result.access_token, refreshToken: result.refresh_token, expiresAt },
+      ownerId
+    );
+
+    if (wrote) {
+      console.log(`[yahoo-connect] Token refreshed for user ${maskUserId(userId)}`);
+      return { accessToken: result.access_token, expiresIn: result.expires_in };
+    }
+
     const latest = await storage.getYahooCredentials(userId);
-    if (latest && !latest.needsRefresh && looksLikeNewerCredentials(credentials, latest)) {
-      console.log(`[yahoo-connect] Using concurrently refreshed token for user ${maskUserId(userId)}`);
-      const expiresIn = Math.floor((latest.expiresAt.getTime() - Date.now()) / 1000);
-      return { accessToken: latest.accessToken, expiresIn };
+    if (!latest) {
+      return { error: 'not_connected' };
     }
-    return { error: 'refresh_failed' };
+    if (!latest.needsRefresh) {
+      return toTokenResult(latest);
+    }
+    credentials = latest;
   }
 
-  const expiresAt = new Date(Date.now() + result.expires_in * 1000);
-  const wrote = await storage.updateYahooCredentials(
-    userId,
-    { accessToken: result.access_token, refreshToken: result.refresh_token, expiresAt },
-    ownerId
-  );
-
-  if (wrote) {
-    console.log(`[yahoo-connect] Token refreshed for user ${maskUserId(userId)}`);
-    return { accessToken: result.access_token, expiresIn: result.expires_in };
-  }
-
-  // Owner guard failed — lease expired mid-write; check if another winner wrote fresh creds
   const latest = await storage.getYahooCredentials(userId);
   if (latest && !latest.needsRefresh) {
-    const expiresIn = Math.floor((latest.expiresAt.getTime() - Date.now()) / 1000);
-    return { accessToken: latest.accessToken, expiresIn };
+    return toTokenResult(latest);
   }
-
-  // Still stale — write unconditionally as last resort
-  await storage.updateYahooCredentials(userId, {
-    accessToken: result.access_token,
-    refreshToken: result.refresh_token,
-    expiresAt,
-  });
-  console.warn(`[yahoo-connect] Lease expired mid-write for user ${maskUserId(userId)} — wrote unconditionally`);
-  return { accessToken: result.access_token, expiresIn: result.expires_in };
+  return { error: 'refresh_failed' };
 }
 
 // =============================================================================

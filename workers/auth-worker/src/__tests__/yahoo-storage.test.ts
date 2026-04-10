@@ -11,6 +11,7 @@ const mockEq = vi.fn();
 const mockSingle = vi.fn();
 const mockUpsert = vi.fn();
 const mockIs = vi.fn();
+const mockOr = vi.fn();
 
 vi.mock('@supabase/supabase-js', () => ({
   createClient: () => ({
@@ -42,6 +43,7 @@ describe('YahooStorage', () => {
     });
     mockEq.mockReturnValue({
       eq: mockEq,
+      or: mockOr,
       single: mockSingle,
       select: mockSelect,
       delete: mockDelete,
@@ -62,6 +64,9 @@ describe('YahooStorage', () => {
     mockIs.mockReturnValue({
       eq: mockEq,
       single: mockSingle,
+    });
+    mockOr.mockReturnValue({
+      select: mockSelect,
     });
   });
 
@@ -345,6 +350,68 @@ describe('YahooStorage', () => {
       );
 
       expect(result).toBe(false);
+    });
+  });
+
+  describe('acquireRefreshLease', () => {
+    it('returns true when the lease update succeeds', async () => {
+      mockSelect.mockResolvedValue({ data: [{ clerk_user_id: 'user_123' }], error: null });
+
+      const result = await storage.acquireRefreshLease('user_123', 'owner-1', 30_000);
+
+      expect(result).toBe(true);
+      expect(mockUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          refresh_lease_owner: 'owner-1',
+        })
+      );
+      expect(mockOr).toHaveBeenCalledTimes(1);
+    });
+
+    it('returns false when another owner already holds the lease', async () => {
+      mockSelect.mockResolvedValue({ data: [], error: null });
+
+      const result = await storage.acquireRefreshLease('user_123', 'owner-1', 30_000);
+
+      expect(result).toBe(false);
+    });
+
+    it('throws when lease acquisition hits a storage error', async () => {
+      mockSelect.mockResolvedValue({ data: null, error: { message: 'DB down' } });
+
+      await expect(
+        storage.acquireRefreshLease('user_123', 'owner-1', 30_000)
+      ).rejects.toThrow('Failed to acquire Yahoo refresh lease');
+    });
+  });
+
+  describe('releaseRefreshLease', () => {
+    it('clears the lease only for the current owner', async () => {
+      await storage.releaseRefreshLease('user_123', 'owner-1');
+
+      expect(mockUpdate).toHaveBeenCalledWith({
+        refresh_lease_owner: null,
+        refresh_lease_expires_at: null,
+      });
+      expect(mockEq).toHaveBeenNthCalledWith(1, 'clerk_user_id', 'user_123');
+      expect(mockEq).toHaveBeenNthCalledWith(2, 'refresh_lease_owner', 'owner-1');
+    });
+
+    it('throws when lease release hits a storage error', async () => {
+      mockEq
+        .mockReturnValueOnce({
+          eq: mockEq,
+          or: mockOr,
+          single: mockSingle,
+          select: mockSelect,
+          delete: mockDelete,
+          is: mockIs,
+        })
+        .mockReturnValueOnce({ error: { message: 'release failed' } });
+
+      await expect(
+        storage.releaseRefreshLease('user_123', 'owner-1')
+      ).rejects.toThrow('Failed to release Yahoo refresh lease');
     });
   });
 
