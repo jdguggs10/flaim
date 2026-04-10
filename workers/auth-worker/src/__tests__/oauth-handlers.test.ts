@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { handleAuthorize, handleClientRegistration, handleMetadataDiscovery, isValidRedirectUri, validateOAuthToken } from '../oauth-handlers';
+import { handleAuthorize, handleClientRegistration, handleMetadataDiscovery, validateOAuthToken } from '../oauth-handlers';
+import { isValidRedirectUri } from '@flaim/worker-shared';
 import { handleToken } from '../oauth-handlers';
 import { OAuthStorage } from '../oauth-storage';
 import type { OAuthEnv } from '../oauth-handlers';

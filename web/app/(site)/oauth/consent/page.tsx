@@ -5,59 +5,10 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { useAuth, SignIn } from '@clerk/nextjs';
 import ConsentScreen from '@/components/site/connectors/ConsentScreen';
 import { Loader2 } from 'lucide-react';
+import { isValidRedirectUri } from '@flaim/worker-shared';
 
 // League checking removed - OAuth consent should work regardless of fantasy setup
 // Tools handle missing configuration gracefully when called
-
-// Must stay in sync with workers/auth-worker/src/oauth-handlers.ts isValidRedirectUri()
-const ALLOWED_REDIRECT_HOSTS = [
-  'claude.ai',
-  'claude.com',
-  'cdn.claude.ai',
-  'chatgpt.com',
-  'platform.openai.com',
-  'gemini.google.com',
-  'perplexity.ai',
-  'perplexity.com',
-  'vscode.dev',
-];
-
-const ALLOWED_LOOPBACK_PATHS = new Set([
-  '/callback',
-  '/oauth/callback',
-  '/oauth2callback',
-  '/windsurf-auth-callback',
-]);
-
-function isAllowedRedirectUri(uri: string): boolean {
-  try {
-    const url = new URL(uri);
-
-    // HTTPS host allowlist (covers Claude, ChatGPT, OpenAI, Gemini, Perplexity, VS Code)
-    if (url.protocol === 'https:') {
-      return ALLOWED_REDIRECT_HOSTS.some(
-        host => url.hostname === host || url.hostname.endsWith('.' + host)
-      );
-    }
-
-    // Loopback callbacks for desktop/CLI apps (RFC 8252)
-    if (url.protocol === 'http:') {
-      const isLoopback = url.hostname === 'localhost' || url.hostname === '127.0.0.1';
-      const isCallback = ALLOWED_LOOPBACK_PATHS.has(url.pathname);
-      const isClean = !url.search && !url.hash;
-      return isLoopback && isCallback && isClean;
-    }
-
-    // Cursor IDE custom URI scheme
-    if (uri.startsWith('cursor://anysphere.cursor-')) {
-      return uri.includes('/oauth/') && uri.endsWith('/callback') && !uri.includes('?') && !uri.includes('#');
-    }
-
-    return false;
-  } catch {
-    return false;
-  }
-}
 
 function LoadingFallback() {
   return (
@@ -92,7 +43,7 @@ function OAuthConsentContent() {
   // Validate required params
   const isValidRequest = oauthParams.redirectUri
     && oauthParams.codeChallenge
-    && isAllowedRedirectUri(oauthParams.redirectUri);
+    && isValidRedirectUri(oauthParams.redirectUri);
 
   // League checking removed - tools handle missing configuration when called
 
@@ -134,14 +85,20 @@ function OAuthConsentContent() {
 
   // Handle "Deny" - redirect to Claude with error
   const handleDeny = () => {
-    if (oauthParams.redirectUri && isAllowedRedirectUri(oauthParams.redirectUri)) {
-      const url = new URL(oauthParams.redirectUri);
-      url.searchParams.set('error', 'access_denied');
-      url.searchParams.set('error_description', 'User denied the authorization request');
-      if (oauthParams.state) {
-        url.searchParams.set('state', oauthParams.state);
+    if (oauthParams.redirectUri && isValidRedirectUri(oauthParams.redirectUri)) {
+      try {
+        const url = new URL(oauthParams.redirectUri);
+        url.searchParams.set('error', 'access_denied');
+        url.searchParams.set('error_description', 'User denied the authorization request');
+        if (oauthParams.state) {
+          url.searchParams.set('state', oauthParams.state);
+        }
+        window.location.href = url.toString();
+      } catch {
+        // URI passed validation but browser URL API can't parse it (e.g. cursor://).
+        // Custom-scheme clients handle the error on their end via timeout.
+        router.push('/');
       }
-      window.location.href = url.toString();
     } else {
       router.push('/');
     }

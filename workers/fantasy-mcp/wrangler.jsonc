@@ -8,13 +8,6 @@
     "head_sampling_rate": 1,
     "logs": {
       "enabled": true,
-      "head_sampling_rate": 1,
-      "persist": true,
-      "invocation_logs": true
-    },
-    "traces": {
-      "enabled": true,
-      "persist": true,
       "head_sampling_rate": 1
     }
   },
@@ -24,6 +17,10 @@
     "prod": {
       "name": "fantasy-mcp",
       "workers_dev": true,
+      "observability": {
+        "enabled": true,
+        "head_sampling_rate": 1
+      },
       "routes": [
         {
           "pattern": "api.flaim.app/fantasy/*",
@@ -67,6 +64,10 @@
     "preview": {
       "name": "fantasy-mcp-preview",
       "workers_dev": true,
+      "observability": {
+        "enabled": true,
+        "head_sampling_rate": 1
+      },
       // Service bindings for platform workers
       "services": [
         { "binding": "ESPN", "service": "espn-client-preview" },

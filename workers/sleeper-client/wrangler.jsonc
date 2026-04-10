@@ -2,20 +2,23 @@
   "name": "sleeper-client",
   "main": "src/index.ts",
   "compatibility_date": "2024-12-01",
+  // Enable Cloudflare Workers Logs/Observability
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1,
     "logs": {
       "enabled": true,
-      "head_sampling_rate": 1,
-      "persist": true,
-      "invocation_logs": true
+      "head_sampling_rate": 1
     }
   },
   "env": {
     "prod": {
       "name": "sleeper-client",
       "workers_dev": false,
+      "observability": {
+        "enabled": true,
+        "head_sampling_rate": 1
+      },
       "kv_namespaces": [
         { "binding": "SLEEPER_PLAYERS_CACHE", "id": "b34c0c797b7b4e1285458361694b8d5e", "preview_id": "81df4492a52c456c9f6362a5cc5a5816" }
       ],
@@ -31,6 +34,10 @@
     "preview": {
       "name": "sleeper-client-preview",
       "workers_dev": false,
+      "observability": {
+        "enabled": true,
+        "head_sampling_rate": 1
+      },
       "kv_namespaces": [
         { "binding": "SLEEPER_PLAYERS_CACHE", "id": "81df4492a52c456c9f6362a5cc5a5816", "preview_id": "81df4492a52c456c9f6362a5cc5a5816" }
       ],
