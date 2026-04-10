@@ -310,22 +310,41 @@ describe('YahooStorage', () => {
   });
 
   describe('updateYahooCredentials', () => {
-    it('updates tokens after refresh', async () => {
-      mockEq.mockReturnValue({ error: null });
+    it('updates tokens after refresh and returns true when a row is updated', async () => {
+      mockSelect.mockResolvedValue({ data: [{ clerk_user_id: 'user_123' }], error: null });
 
-      await storage.updateYahooCredentials('user_123', {
+      const result = await storage.updateYahooCredentials('user_123', {
         accessToken: 'new-access-token',
         refreshToken: 'new-refresh-token',
         expiresAt: new Date('2026-01-24T14:00:00Z'),
       });
 
+      expect(result).toBe(true);
       expect(mockFrom).toHaveBeenCalledWith('yahoo_credentials');
       expect(mockUpdate).toHaveBeenCalledWith(
         expect.objectContaining({
           access_token: 'new-access-token',
           refresh_token: 'new-refresh-token',
+          refresh_lease_owner: null,
+          refresh_lease_expires_at: null,
         })
       );
+    });
+
+    it('returns false when owner guard rejects the write (0 rows updated)', async () => {
+      mockSelect.mockResolvedValue({ data: [], error: null });
+
+      const result = await storage.updateYahooCredentials(
+        'user_123',
+        {
+          accessToken: 'new-token',
+          refreshToken: 'new-refresh',
+          expiresAt: new Date('2026-01-24T14:00:00Z'),
+        },
+        'some-owner-id'
+      );
+
+      expect(result).toBe(false);
     });
   });
 

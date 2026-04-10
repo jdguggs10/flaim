@@ -44,6 +44,8 @@ export interface YahooCredentials {
   yahooGuid?: string;
   needsRefresh: boolean;
   updatedAt?: Date;
+  refreshLeaseOwner?: string;
+  refreshLeaseExpiresAt?: Date;
 }
 
 export interface SaveCredentialsParams {
@@ -208,7 +210,7 @@ export class YahooStorage {
   async getYahooCredentials(clerkUserId: string): Promise<YahooCredentials | null> {
     const { data, error } = await this.supabase
       .from('yahoo_credentials')
-      .select('clerk_user_id, access_token, refresh_token, expires_at, yahoo_guid, updated_at')
+      .select('clerk_user_id, access_token, refresh_token, expires_at, yahoo_guid, updated_at, refresh_lease_owner, refresh_lease_expires_at')
       .eq('clerk_user_id', clerkUserId)
       .single();
 
@@ -227,37 +229,97 @@ export class YahooStorage {
       yahooGuid: data.yahoo_guid || undefined,
       needsRefresh,
       updatedAt: data.updated_at ? new Date(data.updated_at) : undefined,
+      refreshLeaseOwner: data.refresh_lease_owner ?? undefined,
+      refreshLeaseExpiresAt: data.refresh_lease_expires_at
+        ? new Date(data.refresh_lease_expires_at)
+        : undefined,
     };
   }
 
   /**
-   * Update Yahoo credentials after token refresh
+   * Update Yahoo credentials after token refresh.
+   *
+   * When ownerId is provided the update is guarded: only rows where
+   * refresh_lease_owner matches ownerId are updated (prevents a stale winner
+   * from overwriting a newer refresh). Returns true if a row was updated,
+   * false if the owner guard rejected the write.
    */
   async updateYahooCredentials(
     clerkUserId: string,
-    params: UpdateCredentialsParams
-  ): Promise<void> {
-    const updateData: Record<string, string> = {
+    params: UpdateCredentialsParams,
+    ownerId?: string
+  ): Promise<boolean> {
+    const updateData: Record<string, string | null> = {
       access_token: params.accessToken,
       expires_at: params.expiresAt.toISOString(),
       updated_at: new Date().toISOString(),
+      refresh_lease_owner: null,
+      refresh_lease_expires_at: null,
     };
 
     if (params.refreshToken) {
       updateData.refresh_token = params.refreshToken;
     }
 
-    const { error } = await this.supabase
+    let query = this.supabase
       .from('yahoo_credentials')
       .update(updateData)
       .eq('clerk_user_id', clerkUserId);
+
+    if (ownerId) {
+      query = query.eq('refresh_lease_owner', ownerId);
+    }
+
+    const { data, error } = await query.select('clerk_user_id');
 
     if (error) {
       console.error('[yahoo-storage] Failed to update Yahoo credentials:', error);
       throw new Error('Failed to update Yahoo credentials');
     }
 
-    console.log(`[yahoo-storage] Updated Yahoo credentials for user ${maskUserId(clerkUserId)}`);
+    const updated = (data?.length ?? 0) > 0;
+    if (updated) {
+      console.log(`[yahoo-storage] Updated Yahoo credentials for user ${maskUserId(clerkUserId)}`);
+    }
+    return updated;
+  }
+
+  /**
+   * Atomically acquire the refresh lease for a user.
+   *
+   * The update only succeeds if no other owner holds an unexpired lease
+   * (refresh_lease_owner IS NULL OR refresh_lease_expires_at < now).
+   * Returns true if this caller won the lease, false if another holder beat them.
+   */
+  async acquireRefreshLease(
+    clerkUserId: string,
+    ownerId: string,
+    ttlMs: number
+  ): Promise<boolean> {
+    const expiresAt = new Date(Date.now() + ttlMs).toISOString();
+    const now = new Date().toISOString();
+    const { data, error } = await this.supabase
+      .from('yahoo_credentials')
+      .update({
+        refresh_lease_owner: ownerId,
+        refresh_lease_expires_at: expiresAt,
+      })
+      .eq('clerk_user_id', clerkUserId)
+      .or(`refresh_lease_owner.is.null,refresh_lease_expires_at.lt.${now}`)
+      .select('clerk_user_id');
+    return !error && (data?.length ?? 0) > 0;
+  }
+
+  /**
+   * Release the refresh lease for a user.
+   * Only clears the lease if this caller still owns it.
+   */
+  async releaseRefreshLease(clerkUserId: string, ownerId: string): Promise<void> {
+    await this.supabase
+      .from('yahoo_credentials')
+      .update({ refresh_lease_owner: null, refresh_lease_expires_at: null })
+      .eq('clerk_user_id', clerkUserId)
+      .eq('refresh_lease_owner', ownerId);
   }
 
   /**

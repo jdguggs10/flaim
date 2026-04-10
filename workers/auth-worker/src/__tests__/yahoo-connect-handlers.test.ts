@@ -4,6 +4,7 @@ import {
   handleYahooCallback,
   handleYahooCredentials,
   handleYahooDisconnect,
+  handleYahooDiscover,
   handleYahooStatus,
   type YahooConnectEnv,
 } from '../yahoo-connect-handlers';
@@ -40,10 +41,13 @@ describe('yahoo-connect-handlers', () => {
     saveYahooCredentials: ReturnType<typeof vi.fn>;
     getYahooCredentials: ReturnType<typeof vi.fn>;
     updateYahooCredentials: ReturnType<typeof vi.fn>;
+    acquireRefreshLease: ReturnType<typeof vi.fn>;
+    releaseRefreshLease: ReturnType<typeof vi.fn>;
     deleteYahooCredentials: ReturnType<typeof vi.fn>;
     deleteAllYahooLeagues: ReturnType<typeof vi.fn>;
     hasYahooCredentials: ReturnType<typeof vi.fn>;
     getYahooLeagues: ReturnType<typeof vi.fn>;
+    upsertYahooLeague: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(() => {
@@ -54,11 +58,14 @@ describe('yahoo-connect-handlers', () => {
       consumePlatformOAuthState: vi.fn(),
       saveYahooCredentials: vi.fn().mockResolvedValue(undefined),
       getYahooCredentials: vi.fn(),
-      updateYahooCredentials: vi.fn().mockResolvedValue(undefined),
+      updateYahooCredentials: vi.fn().mockResolvedValue(true),
+      acquireRefreshLease: vi.fn().mockResolvedValue(true),
+      releaseRefreshLease: vi.fn().mockResolvedValue(undefined),
       deleteYahooCredentials: vi.fn().mockResolvedValue(undefined),
       deleteAllYahooLeagues: vi.fn().mockResolvedValue(undefined),
       hasYahooCredentials: vi.fn(),
       getYahooLeagues: vi.fn(),
+      upsertYahooLeague: vi.fn().mockResolvedValue('league-id'),
     };
 
     vi.mocked(YahooStorage.fromEnvironment).mockReturnValue(mockStorage as unknown as YahooStorage);
@@ -307,13 +314,14 @@ describe('yahoo-connect-handlers', () => {
       const body = (await response.json()) as Record<string, unknown>;
       expect(body.access_token).toBe('new-access-token');
 
-      // Verify credentials were updated
+      // Verify credentials were updated (3rd arg is the lease ownerId)
       expect(mockStorage.updateYahooCredentials).toHaveBeenCalledWith(
         'user_123',
         expect.objectContaining({
           accessToken: 'new-access-token',
           refreshToken: 'new-refresh-token',
-        })
+        }),
+        expect.any(String)
       );
     });
 
@@ -393,6 +401,146 @@ describe('yahoo-connect-handlers', () => {
       expect(body.access_token).toBe('fresh-access-token');
       expect(mockStorage.updateYahooCredentials).not.toHaveBeenCalled();
     });
+
+    it('winner: lease acquired, refresh succeeds, write lands', async () => {
+      mockStorage.getYahooCredentials.mockResolvedValue({
+        clerkUserId: 'user_123',
+        accessToken: 'old-access-token',
+        refreshToken: 'refresh-token',
+        expiresAt: new Date(Date.now() + 2 * 60 * 1000),
+        needsRefresh: true,
+      });
+      mockStorage.acquireRefreshLease.mockResolvedValue(true);
+      mockStorage.updateYahooCredentials.mockResolvedValue(true);
+      mockFetch.mockResolvedValue(
+        new Response(
+          JSON.stringify({ access_token: 'winner-token', refresh_token: 'new-refresh', expires_in: 3600 }),
+          { status: 200 }
+        )
+      );
+
+      const response = await handleYahooCredentials(env, 'user_123', corsHeaders);
+
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as Record<string, unknown>;
+      expect(body.access_token).toBe('winner-token');
+      expect(mockStorage.acquireRefreshLease).toHaveBeenCalledTimes(1);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('winner: Yahoo timeout (AbortError) releases lease and returns refresh_failed', async () => {
+      mockStorage.getYahooCredentials.mockResolvedValue({
+        clerkUserId: 'user_123',
+        accessToken: 'old-access-token',
+        refreshToken: 'refresh-token',
+        expiresAt: new Date(Date.now() + 2 * 60 * 1000),
+        needsRefresh: true,
+      });
+      mockStorage.acquireRefreshLease.mockResolvedValue(true);
+
+      const abortError = new DOMException('The operation was aborted', 'AbortError');
+      mockFetch.mockRejectedValue(abortError);
+
+      let capturedOwnerId: string | undefined;
+      mockStorage.acquireRefreshLease.mockImplementation(
+        (_userId: string, ownerId: string) => {
+          capturedOwnerId = ownerId;
+          return Promise.resolve(true);
+        }
+      );
+
+      const response = await handleYahooCredentials(env, 'user_123', corsHeaders);
+
+      expect(response.status).toBe(401);
+      const body = (await response.json()) as Record<string, unknown>;
+      expect(body.error).toBe('refresh_failed');
+      expect(mockStorage.releaseRefreshLease).toHaveBeenCalledWith('user_123', capturedOwnerId);
+    });
+
+    it('winner: owner-guarded write returns false, reread shows fresh token', async () => {
+      mockStorage.getYahooCredentials
+        .mockResolvedValueOnce({
+          clerkUserId: 'user_123',
+          accessToken: 'old-access-token',
+          refreshToken: 'refresh-token',
+          expiresAt: new Date(Date.now() + 2 * 60 * 1000),
+          needsRefresh: true,
+        })
+        .mockResolvedValueOnce({
+          clerkUserId: 'user_123',
+          accessToken: 'concurrent-fresh-token',
+          refreshToken: 'concurrent-refresh',
+          expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+          needsRefresh: false,
+        });
+      mockStorage.acquireRefreshLease.mockResolvedValue(true);
+      mockStorage.updateYahooCredentials.mockResolvedValue(false); // owner guard failed
+      mockFetch.mockResolvedValue(
+        new Response(
+          JSON.stringify({ access_token: 'winner-token', refresh_token: 'new-refresh', expires_in: 3600 }),
+          { status: 200 }
+        )
+      );
+
+      const response = await handleYahooCredentials(env, 'user_123', corsHeaders);
+
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as Record<string, unknown>;
+      expect(body.access_token).toBe('concurrent-fresh-token');
+    });
+
+    it('loser: lease not acquired, winner finishes before deadline', async () => {
+      const stale = {
+        clerkUserId: 'user_123',
+        accessToken: 'old-token',
+        refreshToken: 'old-refresh',
+        expiresAt: new Date(Date.now() + 2 * 60 * 1000),
+        needsRefresh: true,
+        refreshLeaseOwner: 'other-owner',
+        refreshLeaseExpiresAt: new Date(Date.now() + 30_000),
+      };
+      const fresh = {
+        clerkUserId: 'user_123',
+        accessToken: 'fresh-token',
+        refreshToken: 'fresh-refresh',
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+        needsRefresh: false,
+      };
+
+      mockStorage.getYahooCredentials
+        .mockResolvedValueOnce(stale)  // initial read
+        .mockResolvedValueOnce(fresh); // first poll
+      mockStorage.acquireRefreshLease.mockResolvedValue(false);
+
+      const response = await handleYahooCredentials(env, 'user_123', corsHeaders);
+
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as Record<string, unknown>;
+      expect(body.access_token).toBe('fresh-token');
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it('loser: lease expires before winner writes, token still stale → refresh_failed', async () => {
+      const stale = {
+        clerkUserId: 'user_123',
+        accessToken: 'old-token',
+        refreshToken: 'old-refresh',
+        expiresAt: new Date(Date.now() + 2 * 60 * 1000),
+        needsRefresh: true,
+        refreshLeaseOwner: 'other-owner',
+        refreshLeaseExpiresAt: new Date(Date.now() - 1), // already expired — skips loop
+      };
+
+      mockStorage.getYahooCredentials.mockResolvedValue(stale);
+      mockStorage.acquireRefreshLease.mockResolvedValue(false);
+
+      const response = await handleYahooCredentials(env, 'user_123', corsHeaders);
+
+      expect(response.status).toBe(401);
+      const body = (await response.json()) as Record<string, unknown>;
+      expect(body.error).toBe('refresh_failed');
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
   });
 
   // ===========================================================================
@@ -463,6 +611,54 @@ describe('yahoo-connect-handlers', () => {
       expect(body.connected).toBe(false);
       expect(body.leagueCount).toBe(0);
       expect(body.lastUpdated).toBeUndefined();
+    });
+  });
+
+  // ===========================================================================
+  // handleYahooDiscover Tests (refresh lease)
+  // ===========================================================================
+
+  describe('handleYahooDiscover (refresh lease)', () => {
+    it('loser waits and proceeds with fresh token after winner finishes', async () => {
+      const stale = {
+        clerkUserId: 'user_123',
+        accessToken: 'old-token',
+        refreshToken: 'old-refresh',
+        expiresAt: new Date(Date.now() + 2 * 60 * 1000),
+        needsRefresh: true,
+        refreshLeaseOwner: 'other-owner',
+        refreshLeaseExpiresAt: new Date(Date.now() + 30_000),
+      };
+      const fresh = {
+        clerkUserId: 'user_123',
+        accessToken: 'fresh-token',
+        refreshToken: 'fresh-refresh',
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+        needsRefresh: false,
+      };
+
+      // discover handler reads credentials once; getValidYahooAccessToken reads again then polls
+      mockStorage.getYahooCredentials
+        .mockResolvedValueOnce(stale)  // initial check in handler
+        .mockResolvedValueOnce(stale)  // initial read inside getValidYahooAccessToken
+        .mockResolvedValueOnce(fresh); // first poll in loser loop
+      mockStorage.acquireRefreshLease.mockResolvedValue(false);
+
+      // Mock Yahoo API discovery response
+      mockFetch.mockResolvedValue(
+        new Response(
+          JSON.stringify({ fantasy_content: { users: { count: 0 } } }),
+          { status: 200 }
+        )
+      );
+
+      const response = await handleYahooDiscover(env, 'user_123', corsHeaders);
+
+      expect(response.status).toBe(200);
+      // Discovery succeeded with the fresh token; Yahoo API fetch was called once (for discovery)
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      const body = (await response.json()) as Record<string, unknown>;
+      expect(body.success).toBe(true);
     });
   });
 });

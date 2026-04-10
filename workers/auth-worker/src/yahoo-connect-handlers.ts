@@ -52,6 +52,10 @@ const YAHOO_AUTH_URL = 'https://api.login.yahoo.com/oauth2/request_auth';
 const YAHOO_TOKEN_URL = 'https://api.login.yahoo.com/oauth2/get_token';
 const YAHOO_SCOPE = 'fspt-r'; // Fantasy Sports read access
 
+const LEASE_TTL_MS       = 30_000;
+const REFRESH_TIMEOUT_MS = 20_000; // must be < LEASE_TTL_MS
+const POLL_INTERVAL_MS   =    300;
+
 /**
  * Get the OAuth callback URL based on environment
  */
@@ -95,6 +99,121 @@ function looksLikeNewerCredentials(
   }
 
   return false;
+}
+
+const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
+
+// =============================================================================
+// TOKEN ACQUISITION
+// =============================================================================
+
+type GetTokenResult =
+  | { accessToken: string; expiresIn: number }
+  | { error: string };
+
+/**
+ * Get a valid Yahoo access token for the given user, refreshing if needed.
+ *
+ * Uses a DB lease to ensure only one Worker calls Yahoo's token endpoint at a
+ * time for a given user. Other concurrent callers wait and pick up the freshly
+ * written token when the winner finishes.
+ */
+async function getValidYahooAccessToken(
+  storage: YahooStorage,
+  userId: string,
+  env: YahooConnectEnv
+): Promise<GetTokenResult> {
+  const credentials = await storage.getYahooCredentials(userId);
+  if (!credentials) {
+    return { error: 'not_connected' };
+  }
+  if (!credentials.needsRefresh) {
+    const expiresIn = Math.floor((credentials.expiresAt.getTime() - Date.now()) / 1000);
+    return { accessToken: credentials.accessToken, expiresIn };
+  }
+
+  const ownerId = crypto.randomUUID();
+  const won = await storage.acquireRefreshLease(userId, ownerId, LEASE_TTL_MS);
+
+  if (!won) {
+    // LOSER PATH: poll until winner writes fresh credentials or lease expires
+    const deadline =
+      credentials.refreshLeaseExpiresAt?.getTime() ?? (Date.now() + LEASE_TTL_MS);
+    while (Date.now() < deadline) {
+      await sleep(POLL_INTERVAL_MS + Math.floor(Math.random() * 100));
+      const latest = await storage.getYahooCredentials(userId);
+      if (latest && !latest.needsRefresh) {
+        const expiresIn = Math.floor((latest.expiresAt.getTime() - Date.now()) / 1000);
+        return { accessToken: latest.accessToken, expiresIn };
+      }
+      if (
+        !latest?.refreshLeaseOwner ||
+        (latest.refreshLeaseExpiresAt && latest.refreshLeaseExpiresAt.getTime() < Date.now())
+      ) {
+        break;
+      }
+    }
+    const final = await storage.getYahooCredentials(userId);
+    if (final && !final.needsRefresh) {
+      const expiresIn = Math.floor((final.expiresAt.getTime() - Date.now()) / 1000);
+      return { accessToken: final.accessToken, expiresIn };
+    }
+    return { error: 'refresh_failed' };
+  }
+
+  // WINNER PATH: call Yahoo and write the result
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REFRESH_TIMEOUT_MS);
+  let result: YahooTokenResponse;
+  try {
+    result = await refreshAccessToken(credentials.refreshToken, env, controller.signal);
+    clearTimeout(timer);
+  } catch {
+    clearTimeout(timer);
+    await storage.releaseRefreshLease(userId, ownerId);
+    return { error: 'refresh_failed' };
+  }
+
+  if (result.error) {
+    clearTimeout(timer);
+    await storage.releaseRefreshLease(userId, ownerId);
+    // Reread fallback: another isolate may have already refreshed successfully
+    const latest = await storage.getYahooCredentials(userId);
+    if (latest && !latest.needsRefresh && looksLikeNewerCredentials(credentials, latest)) {
+      console.log(`[yahoo-connect] Using concurrently refreshed token for user ${maskUserId(userId)}`);
+      const expiresIn = Math.floor((latest.expiresAt.getTime() - Date.now()) / 1000);
+      return { accessToken: latest.accessToken, expiresIn };
+    }
+    return { error: 'refresh_failed' };
+  }
+
+  const expiresAt = new Date(Date.now() + result.expires_in * 1000);
+  const wrote = await storage.updateYahooCredentials(
+    userId,
+    { accessToken: result.access_token, refreshToken: result.refresh_token, expiresAt },
+    ownerId
+  );
+
+  if (wrote) {
+    console.log(`[yahoo-connect] Token refreshed for user ${maskUserId(userId)}`);
+    return { accessToken: result.access_token, expiresIn: result.expires_in };
+  }
+
+  // Owner guard failed — lease expired mid-write; check if another winner wrote fresh creds
+  const latest = await storage.getYahooCredentials(userId);
+  if (latest && !latest.needsRefresh) {
+    const expiresIn = Math.floor((latest.expiresAt.getTime() - Date.now()) / 1000);
+    return { accessToken: latest.accessToken, expiresIn };
+  }
+
+  // Still stale — write unconditionally as last resort
+  await storage.updateYahooCredentials(userId, {
+    accessToken: result.access_token,
+    refreshToken: result.refresh_token,
+    expiresAt,
+  });
+  console.warn(`[yahoo-connect] Lease expired mid-write for user ${maskUserId(userId)} — wrote unconditionally`);
+  return { accessToken: result.access_token, expiresIn: result.expires_in };
 }
 
 // =============================================================================
@@ -286,105 +405,37 @@ export async function handleYahooCredentials(
 ): Promise<Response> {
   try {
     const storage = YahooStorage.fromEnvironment(env);
+    const result = await getValidYahooAccessToken(storage, userId, env);
 
-    // Get current credentials
-    const credentials = await storage.getYahooCredentials(userId);
-
-    if (!credentials) {
+    if ('error' in result) {
+      if (result.error === 'not_connected') {
+        return new Response(
+          JSON.stringify({
+            error: 'not_connected',
+            error_description: 'User is not connected to Yahoo',
+          }),
+          {
+            status: 404,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders },
+          }
+        );
+      }
       return new Response(
         JSON.stringify({
-          error: 'not_connected',
-          error_description: 'User is not connected to Yahoo',
+          error: 'refresh_failed',
+          error_description: 'Failed to refresh access token',
         }),
         {
-          status: 404,
+          status: 401,
           headers: { 'Content-Type': 'application/json', ...corsHeaders },
         }
       );
     }
 
-    // If token needs refresh, attempt to refresh it
-    if (credentials.needsRefresh) {
-      console.log(`[yahoo-connect] Token needs refresh for user ${maskUserId(userId)}`);
-
-      const refreshResult = await refreshAccessToken(credentials.refreshToken, env);
-
-      if (refreshResult.error) {
-        console.error(`[yahoo-connect] Token refresh failed: ${refreshResult.error}`);
-
-        // Yahoo refresh tokens appear to be single-use. Concurrent requests can race:
-        // one request refreshes and stores new credentials while a sibling request
-        // tries to reuse the old refresh token and gets an error. Re-read storage and
-        // use the newer token if another request already refreshed successfully.
-        const latestCredentials = await storage.getYahooCredentials(userId);
-        if (
-          latestCredentials &&
-          !latestCredentials.needsRefresh &&
-          looksLikeNewerCredentials(credentials, latestCredentials)
-        ) {
-          console.log(`[yahoo-connect] Using concurrently refreshed token for user ${maskUserId(userId)}`);
-          const latestExpiresIn = Math.floor((latestCredentials.expiresAt.getTime() - Date.now()) / 1000);
-          return new Response(
-            JSON.stringify({
-              access_token: latestCredentials.accessToken,
-              expires_in: latestExpiresIn,
-            }),
-            {
-              status: 200,
-              headers: {
-                'Content-Type': 'application/json',
-                'Cache-Control': 'no-store',
-                ...corsHeaders,
-              },
-            }
-          );
-        }
-
-        return new Response(
-          JSON.stringify({
-            error: 'refresh_failed',
-            error_description: refreshResult.error_description || 'Failed to refresh access token',
-          }),
-          {
-            status: 401,
-            headers: { 'Content-Type': 'application/json', ...corsHeaders },
-          }
-        );
-      }
-
-      // Update stored credentials
-      const expiresAt = new Date(Date.now() + refreshResult.expires_in * 1000);
-      await storage.updateYahooCredentials(userId, {
-        accessToken: refreshResult.access_token,
-        refreshToken: refreshResult.refresh_token,
-        expiresAt,
-      });
-
-      console.log(`[yahoo-connect] Token refreshed for user ${maskUserId(userId)}`);
-
-      return new Response(
-        JSON.stringify({
-          access_token: refreshResult.access_token,
-          expires_in: refreshResult.expires_in,
-        }),
-        {
-          status: 200,
-          headers: {
-            'Content-Type': 'application/json',
-            'Cache-Control': 'no-store',
-            ...corsHeaders,
-          },
-        }
-      );
-    }
-
-    // Return current token
-    const expiresIn = Math.floor((credentials.expiresAt.getTime() - Date.now()) / 1000);
-
     return new Response(
       JSON.stringify({
-        access_token: credentials.accessToken,
-        expires_in: expiresIn,
+        access_token: result.accessToken,
+        expires_in: result.expiresIn,
       }),
       {
         status: 200,
@@ -546,7 +597,8 @@ async function exchangeCodeForTokens(
  */
 async function refreshAccessToken(
   refreshToken: string,
-  env: YahooConnectEnv
+  env: YahooConnectEnv,
+  signal?: AbortSignal
 ): Promise<YahooTokenResponse> {
   const credentials = btoa(`${env.YAHOO_CLIENT_ID}:${env.YAHOO_CLIENT_SECRET}`);
 
@@ -560,6 +612,7 @@ async function refreshAccessToken(
       grant_type: 'refresh_token',
       refresh_token: refreshToken,
     }).toString(),
+    signal,
   });
 
   const data = (await response.json()) as YahooTokenResponse;
@@ -636,14 +689,12 @@ export async function handleYahooDiscover(
     let accessToken = credentials.accessToken;
     if (credentials.needsRefresh) {
       console.log(`[yahoo-connect] Refreshing token before discovery for user ${maskUserId(userId)}`);
-      const refreshResult = await refreshAccessToken(credentials.refreshToken, env);
-
-      if (refreshResult.error) {
-        console.error(`[yahoo-connect] Token refresh failed: ${refreshResult.error}`);
+      const tokenResult = await getValidYahooAccessToken(storage, userId, env);
+      if ('error' in tokenResult) {
         return new Response(
           JSON.stringify({
             error: 'refresh_failed',
-            error_description: refreshResult.error_description || 'Failed to refresh access token',
+            error_description: 'Failed to refresh access token',
           }),
           {
             status: 401,
@@ -651,16 +702,7 @@ export async function handleYahooDiscover(
           }
         );
       }
-
-      // Update stored credentials
-      const expiresAt = new Date(Date.now() + refreshResult.expires_in * 1000);
-      await storage.updateYahooCredentials(userId, {
-        accessToken: refreshResult.access_token,
-        refreshToken: refreshResult.refresh_token,
-        expiresAt,
-      });
-
-      accessToken = refreshResult.access_token;
+      accessToken = tokenResult.accessToken;
     }
 
     // Call Yahoo API to discover leagues
