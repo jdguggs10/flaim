@@ -82,6 +82,21 @@ function maskUserId(userId: string): string {
   return `${userId.substring(0, 8)}...`;
 }
 
+function looksLikeNewerCredentials(
+  original: { accessToken: string; refreshToken: string; updatedAt?: Date },
+  latest: { accessToken: string; refreshToken: string; updatedAt?: Date }
+): boolean {
+  if (latest.accessToken !== original.accessToken || latest.refreshToken !== original.refreshToken) {
+    return true;
+  }
+
+  if (latest.updatedAt && original.updatedAt) {
+    return latest.updatedAt.getTime() > original.updatedAt.getTime();
+  }
+
+  return false;
+}
+
 // =============================================================================
 // HANDLERS
 // =============================================================================
@@ -296,6 +311,35 @@ export async function handleYahooCredentials(
 
       if (refreshResult.error) {
         console.error(`[yahoo-connect] Token refresh failed: ${refreshResult.error}`);
+
+        // Yahoo refresh tokens appear to be single-use. Concurrent requests can race:
+        // one request refreshes and stores new credentials while a sibling request
+        // tries to reuse the old refresh token and gets an error. Re-read storage and
+        // use the newer token if another request already refreshed successfully.
+        const latestCredentials = await storage.getYahooCredentials(userId);
+        if (
+          latestCredentials &&
+          !latestCredentials.needsRefresh &&
+          looksLikeNewerCredentials(credentials, latestCredentials)
+        ) {
+          console.log(`[yahoo-connect] Using concurrently refreshed token for user ${maskUserId(userId)}`);
+          const latestExpiresIn = Math.floor((latestCredentials.expiresAt.getTime() - Date.now()) / 1000);
+          return new Response(
+            JSON.stringify({
+              access_token: latestCredentials.accessToken,
+              expires_in: latestExpiresIn,
+            }),
+            {
+              status: 200,
+              headers: {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-store',
+                ...corsHeaders,
+              },
+            }
+          );
+        }
+
         return new Response(
           JSON.stringify({
             error: 'refresh_failed',

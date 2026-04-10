@@ -353,6 +353,46 @@ describe('yahoo-connect-handlers', () => {
       const body = (await response.json()) as Record<string, unknown>;
       expect(body.error).toBe('refresh_failed');
     });
+
+    it('uses newer stored credentials when a concurrent refresh already succeeded', async () => {
+      const originalUpdatedAt = new Date('2026-04-10T13:50:00Z');
+      const refreshedUpdatedAt = new Date('2026-04-10T13:50:05Z');
+
+      mockStorage.getYahooCredentials
+        .mockResolvedValueOnce({
+          clerkUserId: 'user_123',
+          accessToken: 'old-access-token',
+          refreshToken: 'stale-refresh-token',
+          expiresAt: new Date(Date.now() + 2 * 60 * 1000),
+          needsRefresh: true,
+          updatedAt: originalUpdatedAt,
+        })
+        .mockResolvedValueOnce({
+          clerkUserId: 'user_123',
+          accessToken: 'fresh-access-token',
+          refreshToken: 'fresh-refresh-token',
+          expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+          needsRefresh: false,
+          updatedAt: refreshedUpdatedAt,
+        });
+
+      mockFetch.mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            error: 'invalid_grant',
+            error_description: 'Refresh token already used',
+          }),
+          { status: 400 }
+        )
+      );
+
+      const response = await handleYahooCredentials(env, 'user_123', corsHeaders);
+
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as Record<string, unknown>;
+      expect(body.access_token).toBe('fresh-access-token');
+      expect(mockStorage.updateYahooCredentials).not.toHaveBeenCalled();
+    });
   });
 
   // ===========================================================================
