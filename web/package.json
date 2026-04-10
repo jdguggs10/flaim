@@ -12,7 +12,7 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@flaim/worker-shared": "*",
+    "@flaim/worker-shared": "workspace:*",
     "@clerk/nextjs": "^6.36.7",
     "@clerk/themes": "^2.4.51",
     "@radix-ui/react-dialog": "^1.1.14",

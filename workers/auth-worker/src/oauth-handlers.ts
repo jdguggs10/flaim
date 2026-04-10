@@ -20,7 +20,6 @@
 import { OAuthStorage } from './oauth-storage';
 import { getFrontendUrl } from './preview-url';
 import { isValidRedirectUri } from '@flaim/worker-shared';
-export { isValidRedirectUri };
 
 // =============================================================================
 // TYPES
