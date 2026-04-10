@@ -360,6 +360,7 @@ describe('yahoo-connect-handlers', () => {
       expect(response.status).toBe(401);
       const body = (await response.json()) as Record<string, unknown>;
       expect(body.error).toBe('refresh_failed');
+      expect(body.error_description).toBe('Refresh token expired');
     });
 
     it('uses newer stored credentials when a concurrent refresh already succeeded', async () => {
@@ -455,6 +456,28 @@ describe('yahoo-connect-handlers', () => {
       const body = (await response.json()) as Record<string, unknown>;
       expect(body.error).toBe('refresh_failed');
       expect(mockStorage.releaseRefreshLease).toHaveBeenCalledWith('user_123', capturedOwnerId);
+    });
+
+    it('winner: lease release failure after timeout still returns refresh_failed', async () => {
+      mockStorage.getYahooCredentials.mockResolvedValue({
+        clerkUserId: 'user_123',
+        accessToken: 'old-access-token',
+        refreshToken: 'refresh-token',
+        expiresAt: new Date(Date.now() + 2 * 60 * 1000),
+        needsRefresh: true,
+      });
+      mockStorage.acquireRefreshLease.mockResolvedValue(true);
+      mockStorage.releaseRefreshLease.mockRejectedValue(new Error('release failed'));
+
+      const abortError = new DOMException('The operation was aborted', 'AbortError');
+      mockFetch.mockRejectedValue(abortError);
+
+      const response = await handleYahooCredentials(env, 'user_123', corsHeaders);
+
+      expect(response.status).toBe(401);
+      const body = (await response.json()) as Record<string, unknown>;
+      expect(body.error).toBe('refresh_failed');
+      expect(body.error_description).toBe('Failed to refresh access token');
     });
 
     it('winner: owner-guarded write returns false, reread shows fresh token', async () => {
@@ -753,10 +776,9 @@ describe('yahoo-connect-handlers', () => {
         needsRefresh: false,
       };
 
-      // discover handler reads credentials once; getValidYahooAccessToken reads again then polls
+      // discover handler reads credentials once, then the helper polls from the live lease state
       mockStorage.getYahooCredentials
         .mockResolvedValueOnce(stale)  // initial check in handler
-        .mockResolvedValueOnce(stale)  // initial read inside getValidYahooAccessToken
         .mockResolvedValueOnce(fresh); // first poll in loser loop
       mockStorage.acquireRefreshLease.mockResolvedValue(false);
 
@@ -773,8 +795,36 @@ describe('yahoo-connect-handlers', () => {
       expect(response.status).toBe(200);
       // Discovery succeeded with the fresh token; Yahoo API fetch was called once (for discovery)
       expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(mockStorage.getYahooCredentials).toHaveBeenCalledTimes(2);
       const body = (await response.json()) as Record<string, unknown>;
       expect(body.success).toBe(true);
+    });
+
+    it('returns Yahoo refresh error description from discovery path', async () => {
+      mockStorage.getYahooCredentials.mockResolvedValue({
+        clerkUserId: 'user_123',
+        accessToken: 'old-token',
+        refreshToken: 'bad-refresh',
+        expiresAt: new Date(Date.now() + 2 * 60 * 1000),
+        needsRefresh: true,
+      });
+      mockStorage.acquireRefreshLease.mockResolvedValue(true);
+      mockFetch.mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            error: 'invalid_grant',
+            error_description: 'Refresh token already used',
+          }),
+          { status: 400 }
+        )
+      );
+
+      const response = await handleYahooDiscover(env, 'user_123', corsHeaders);
+
+      expect(response.status).toBe(401);
+      const body = (await response.json()) as Record<string, unknown>;
+      expect(body.error).toBe('refresh_failed');
+      expect(body.error_description).toBe('Refresh token already used');
     });
   });
 });

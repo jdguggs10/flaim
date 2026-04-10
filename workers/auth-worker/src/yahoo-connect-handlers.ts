@@ -110,7 +110,7 @@ const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, m
 
 type GetTokenResult =
   | { accessToken: string; expiresIn: number }
-  | { error: string };
+  | { error: string; errorDescription?: string };
 
 type RetryTokenResult =
   | GetTokenResult
@@ -129,7 +129,7 @@ function leaseExpired(credentials: { refreshLeaseOwner?: string; refreshLeaseExp
   }
   return credentials.refreshLeaseExpiresAt
     ? credentials.refreshLeaseExpiresAt.getTime() <= Date.now()
-    : false;
+    : true;
 }
 
 async function waitForFreshCredentialsOrLeaseClear(
@@ -140,11 +140,6 @@ async function waitForFreshCredentialsOrLeaseClear(
   let latest: YahooCredentials | null = credentials;
 
   while (latest && !leaseExpired(latest)) {
-    const deadline = latest.refreshLeaseExpiresAt?.getTime() ?? (Date.now() + LEASE_TTL_MS);
-    if (Date.now() >= deadline) {
-      return { retry: true, credentials: latest };
-    }
-
     await sleep(POLL_INTERVAL_MS + Math.floor(Math.random() * 100));
     latest = await storage.getYahooCredentials(userId);
 
@@ -178,9 +173,10 @@ async function waitForFreshCredentialsOrLeaseClear(
 async function getValidYahooAccessToken(
   storage: YahooStorage,
   userId: string,
-  env: YahooConnectEnv
+  env: YahooConnectEnv,
+  initialCredentials?: YahooCredentials
 ): Promise<GetTokenResult> {
-  let credentials = await storage.getYahooCredentials(userId);
+  let credentials = initialCredentials ?? await storage.getYahooCredentials(userId);
   if (!credentials) {
     return { error: 'not_connected' };
   }
@@ -226,19 +222,30 @@ async function getValidYahooAccessToken(
       result = await refreshAccessToken(credentials.refreshToken, env, controller.signal);
     } catch {
       clearTimeout(timer);
-      await storage.releaseRefreshLease(userId, ownerId);
-      return { error: 'refresh_failed' };
+      try {
+        await storage.releaseRefreshLease(userId, ownerId);
+      } catch (releaseError) {
+        console.warn('[yahoo-connect] Failed to release Yahoo refresh lease after refresh exception:', releaseError);
+      }
+      return { error: 'refresh_failed', errorDescription: 'Failed to refresh access token' };
     }
     clearTimeout(timer);
 
     if (result.error) {
-      await storage.releaseRefreshLease(userId, ownerId);
+      try {
+        await storage.releaseRefreshLease(userId, ownerId);
+      } catch (releaseError) {
+        console.warn('[yahoo-connect] Failed to release Yahoo refresh lease after Yahoo refresh error:', releaseError);
+      }
       const latest = await storage.getYahooCredentials(userId);
       if (latest && !latest.needsRefresh && looksLikeNewerCredentials(credentials, latest)) {
         console.log(`[yahoo-connect] Using concurrently refreshed token for user ${maskUserId(userId)}`);
         return toTokenResult(latest);
       }
-      return { error: 'refresh_failed' };
+      return {
+        error: 'refresh_failed',
+        errorDescription: result.error_description || 'Failed to refresh access token',
+      };
     }
 
     const expiresAt = new Date(Date.now() + result.expires_in * 1000);
@@ -477,7 +484,7 @@ export async function handleYahooCredentials(
       return new Response(
         JSON.stringify({
           error: 'refresh_failed',
-          error_description: 'Failed to refresh access token',
+          error_description: result.errorDescription || 'Failed to refresh access token',
         }),
         {
           status: 401,
@@ -743,12 +750,12 @@ export async function handleYahooDiscover(
     let accessToken = credentials.accessToken;
     if (credentials.needsRefresh) {
       console.log(`[yahoo-connect] Refreshing token before discovery for user ${maskUserId(userId)}`);
-      const tokenResult = await getValidYahooAccessToken(storage, userId, env);
+      const tokenResult = await getValidYahooAccessToken(storage, userId, env, credentials);
       if ('error' in tokenResult) {
         return new Response(
           JSON.stringify({
             error: 'refresh_failed',
-            error_description: 'Failed to refresh access token',
+            error_description: tokenResult.errorDescription || 'Failed to refresh access token',
           }),
           {
             status: 401,
