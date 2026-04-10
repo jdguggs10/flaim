@@ -490,4 +490,101 @@ describe('fantasy-mcp gateway integration', () => {
     const response = await app.fetch(buildMcpRequest('/mcp'), env, mockExecutionContext());
     expect(response.status).toBe(200);
   });
+
+  it('routes get_user_session and returns leagues from all platforms', async () => {
+    const espnLeague = {
+      platform: 'espn',
+      sport: 'football',
+      leagueId: '336777',
+      leagueName: 'Test ESPN League',
+      teamId: '1',
+      teamName: 'My Team',
+      seasonYear: 2025,
+    };
+    const yahooLeague = {
+      sport: 'football',
+      leagueKey: '449.l.12345',
+      leagueName: 'Test Yahoo League',
+      teamId: '1',
+      teamName: 'My Yahoo Team',
+      seasonYear: 2025,
+    };
+    const sleeperLeague = {
+      platform: 'sleeper',
+      sport: 'football',
+      leagueId: 'sleeper-league-1',
+      leagueName: 'Test Sleeper League',
+      teamId: 'sl-1',
+      teamName: 'My Sleeper Team',
+      seasonYear: 2025,
+    };
+
+    const authFetch = vi.fn(async (request: Request) => {
+      const url = new URL(request.url);
+      if (url.pathname === '/internal/introspect') {
+        return new Response(
+          JSON.stringify({ valid: true, userId: 'user-123', scope: 'mcp:read mcp:write', authType: 'oauth' }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+      if (url.pathname === '/internal/leagues') {
+        return new Response(
+          JSON.stringify({ success: true, leagues: [espnLeague] }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+      if (url.pathname === '/internal/leagues/yahoo') {
+        return new Response(
+          JSON.stringify({ leagues: [yahooLeague] }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+      if (url.pathname === '/internal/leagues/sleeper') {
+        return new Response(
+          JSON.stringify({ leagues: [sleeperLeague] }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+      return new Response('not found', { status: 404 });
+    });
+
+    const env = buildEnv(authFetch);
+
+    const request = new Request('https://api.flaim.app/mcp', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer test-token',
+        'Content-Type': 'application/json',
+        Accept: 'application/json, text/event-stream',
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 'session-test-1',
+        method: 'tools/call',
+        params: { name: 'get_user_session', arguments: {} },
+      }),
+    });
+
+    const response = await app.fetch(request, env, mockExecutionContext());
+    expect(response.status).toBe(200);
+
+    const contentType = response.headers.get('Content-Type') || '';
+    let result: { isError?: boolean; content?: Array<{ text?: string }> };
+    if (contentType.includes('text/event-stream')) {
+      const text = await response.text();
+      const data = text.split(/\r?\n/).filter((l) => l.startsWith('data:')).map((l) => l.slice(5).trim()).join('\n').trim();
+      const parsed = JSON.parse(data) as { result?: { isError?: boolean; content?: Array<{ text?: string }> } };
+      result = parsed.result ?? {};
+    } else {
+      const parsed = await response.json() as { result?: { isError?: boolean; content?: Array<{ text?: string }> } };
+      result = parsed.result ?? {};
+    }
+
+    expect(result.isError).not.toBe(true);
+    expect(Array.isArray(result.content)).toBe(true);
+    const payloadText = result.content?.[0]?.text ?? '';
+    expect(payloadText).toContain('Test ESPN League');
+    expect(payloadText).toContain('Test Yahoo League');
+    expect(payloadText).toContain('Test Sleeper League');
+  });
 });

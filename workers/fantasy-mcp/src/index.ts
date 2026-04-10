@@ -295,6 +295,11 @@ async function handleMcpRequest(c: Context<{ Bindings: Env }>): Promise<Response
 }
 
 async function handleMcpEndpoint(c: Context<{ Bindings: Env }>): Promise<Response> {
+  // Diagnostic probe: fires synchronously at invocation entry, before auth or streaming.
+  // Used to distinguish CF invocation-recording gaps from log-buffering gaps.
+  // Remove once CF partial-capture issue (FLA-86) is resolved.
+  console.log(`[fantasy-mcp] probe method=${c.req.method} path=${c.req.path}`);
+
   if (c.req.method !== 'POST') {
     return buildMethodNotAllowedResponse('POST');
   }
