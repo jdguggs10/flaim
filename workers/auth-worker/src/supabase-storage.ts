@@ -15,6 +15,7 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { EspnCredentials, EspnCredentialsWithMetadata, EspnLeague, EspnUserData } from './espn-types';
 import { isCurrentSeason, type SeasonSport } from './season-utils';
+import { clearDefaultsForLeague as _clearDefaultsForLeague, clearDefaultsForPlatform as _clearDefaultsForPlatform } from './preference-defaults';
 
 /**
  * Mask user ID for logging to avoid PII exposure
@@ -679,47 +680,7 @@ export class EspnSupabaseStorage {
     leagueId: string,
     seasonYear?: number
   ): Promise<void> {
-    const sportColumns = ['football', 'baseball', 'basketball', 'hockey'] as const;
-    const { data, error } = await this.supabase
-      .from('user_preferences')
-      .select('default_football, default_baseball, default_basketball, default_hockey')
-      .eq('clerk_user_id', clerkUserId)
-      .maybeSingle();
-
-    if (error) {
-      console.error('[supabase-storage] clearDefaultsForLeague: failed to read preferences:', error);
-      return;
-    }
-    if (!data) return;
-
-    const updates: Record<string, LeagueDefault | null> = {};
-    for (const sport of sportColumns) {
-      const col = `default_${sport}` as keyof typeof data;
-      const stored = data[col] as LeagueDefault | null;
-      if (
-        stored &&
-        stored.platform === platform &&
-        stored.leagueId === leagueId &&
-        (seasonYear === undefined || stored.seasonYear === seasonYear)
-      ) {
-        updates[col] = null;
-      }
-    }
-
-    if (Object.keys(updates).length === 0) return;
-
-    const { error: upsertError } = await this.supabase
-      .from('user_preferences')
-      .upsert(
-        { clerk_user_id: clerkUserId, ...updates, updated_at: new Date().toISOString() },
-        { onConflict: 'clerk_user_id' }
-      );
-
-    if (upsertError) {
-      console.error('[supabase-storage] clearDefaultsForLeague: failed to clear stale defaults:', upsertError);
-    } else {
-      console.log(`[supabase-storage] clearDefaultsForLeague: cleared stale ${platform}:${leagueId} defaults for user ${maskUserId(clerkUserId)}`);
-    }
+    return _clearDefaultsForLeague(this.supabase, clerkUserId, platform, leagueId, seasonYear);
   }
 
   /**
@@ -729,42 +690,7 @@ export class EspnSupabaseStorage {
     clerkUserId: string,
     platform: 'espn' | 'yahoo' | 'sleeper'
   ): Promise<void> {
-    const sportColumns = ['football', 'baseball', 'basketball', 'hockey'] as const;
-    const { data, error } = await this.supabase
-      .from('user_preferences')
-      .select('default_football, default_baseball, default_basketball, default_hockey')
-      .eq('clerk_user_id', clerkUserId)
-      .maybeSingle();
-
-    if (error) {
-      console.error('[supabase-storage] clearDefaultsForPlatform: failed to read preferences:', error);
-      return;
-    }
-    if (!data) return;
-
-    const updates: Record<string, LeagueDefault | null> = {};
-    for (const sport of sportColumns) {
-      const col = `default_${sport}` as keyof typeof data;
-      const stored = data[col] as LeagueDefault | null;
-      if (stored && stored.platform === platform) {
-        updates[col] = null;
-      }
-    }
-
-    if (Object.keys(updates).length === 0) return;
-
-    const { error: upsertError } = await this.supabase
-      .from('user_preferences')
-      .upsert(
-        { clerk_user_id: clerkUserId, ...updates, updated_at: new Date().toISOString() },
-        { onConflict: 'clerk_user_id' }
-      );
-
-    if (upsertError) {
-      console.error('[supabase-storage] clearDefaultsForPlatform: failed to clear platform defaults:', upsertError);
-    } else {
-      console.log(`[supabase-storage] clearDefaultsForPlatform: cleared ${platform} defaults for user ${maskUserId(clerkUserId)}`);
-    }
+    return _clearDefaultsForPlatform(this.supabase, clerkUserId, platform);
   }
 
   /**

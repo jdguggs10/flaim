@@ -14,6 +14,7 @@
  */
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { clearDefaultsForLeague as _clearDefaultsForLeague, clearDefaultsForPlatform as _clearDefaultsForPlatform } from './preference-defaults';
 
 // =============================================================================
 // TYPES
@@ -483,70 +484,12 @@ export class YahooStorage {
   // INTERNAL DEFAULT CLEANUP HELPERS
   // ---------------------------------------------------------------------------
 
-  private async _clearDefaultsForLeague(
-    clerkUserId: string,
-    platform: 'yahoo',
-    leagueId: string,
-    seasonYear: number
-  ): Promise<void> {
-    const sportColumns = ['football', 'baseball', 'basketball', 'hockey'] as const;
-    const { data, error } = await this.supabase
-      .from('user_preferences')
-      .select('default_football, default_baseball, default_basketball, default_hockey')
-      .eq('clerk_user_id', clerkUserId)
-      .maybeSingle();
-
-    if (error || !data) return;
-
-    const updates: Record<string, null> = {};
-    for (const sport of sportColumns) {
-      const col = `default_${sport}` as keyof typeof data;
-      const stored = data[col] as { platform: string; leagueId: string; seasonYear: number } | null;
-      if (stored && stored.platform === platform && stored.leagueId === leagueId && stored.seasonYear === seasonYear) {
-        updates[col] = null;
-      }
-    }
-
-    if (Object.keys(updates).length === 0) return;
-
-    await this.supabase
-      .from('user_preferences')
-      .upsert(
-        { clerk_user_id: clerkUserId, ...updates, updated_at: new Date().toISOString() },
-        { onConflict: 'clerk_user_id' }
-      );
+  private async _clearDefaultsForLeague(clerkUserId: string, platform: 'yahoo', leagueId: string, seasonYear: number): Promise<void> {
+    return _clearDefaultsForLeague(this.supabase, clerkUserId, platform, leagueId, seasonYear);
   }
 
-  private async _clearDefaultsForPlatform(
-    clerkUserId: string,
-    platform: 'yahoo'
-  ): Promise<void> {
-    const sportColumns = ['football', 'baseball', 'basketball', 'hockey'] as const;
-    const { data, error } = await this.supabase
-      .from('user_preferences')
-      .select('default_football, default_baseball, default_basketball, default_hockey')
-      .eq('clerk_user_id', clerkUserId)
-      .maybeSingle();
-
-    if (error || !data) return;
-
-    const updates: Record<string, null> = {};
-    for (const sport of sportColumns) {
-      const col = `default_${sport}` as keyof typeof data;
-      const stored = data[col] as { platform: string } | null;
-      if (stored && stored.platform === platform) {
-        updates[col] = null;
-      }
-    }
-
-    if (Object.keys(updates).length === 0) return;
-
-    await this.supabase
-      .from('user_preferences')
-      .upsert(
-        { clerk_user_id: clerkUserId, ...updates, updated_at: new Date().toISOString() },
-        { onConflict: 'clerk_user_id' }
-      );
+  private async _clearDefaultsForPlatform(clerkUserId: string, platform: 'yahoo'): Promise<void> {
+    return _clearDefaultsForPlatform(this.supabase, clerkUserId, platform);
   }
 
   // ---------------------------------------------------------------------------

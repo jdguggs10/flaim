@@ -591,6 +591,7 @@ export function getUnifiedTools(): UnifiedTool[] {
               } else {
                 // Stale default — no matching active league. Fire a best-effort clear
                 // so future reads don't repeat this lookup, then surface a warning.
+                let cleared = false;
                 try {
                   const staleHeaders: Record<string, string> = {
                     'Content-Type': 'application/json',
@@ -599,13 +600,21 @@ export function getUnifiedTools(): UnifiedTool[] {
                   const withStaleCorrelation = correlationId ? withCorrelationId(staleHeaders, correlationId) : new Headers(staleHeaders);
                   const withStaleInternal = withInternalServiceToken(withStaleCorrelation, env, `auth-worker /internal/leagues/default/${sport}`);
                   const staleHeaders2 = withEvalHeaders(withStaleInternal, evalRunId, evalTraceId);
-                  await env.AUTH_WORKER.fetch(
+                  const clearResp = await env.AUTH_WORKER.fetch(
                     new Request(`https://internal/internal/leagues/default/${sport}`, { method: 'DELETE', headers: staleHeaders2 })
                   );
+                  cleared = clearResp.ok;
+                  if (!clearResp.ok) {
+                    console.error(`[get_user_session] Stale ${sport} default DELETE returned ${clearResp.status}`);
+                  }
                 } catch (e) {
                   console.error(`[get_user_session] Failed to clear stale ${sport} default:`, e);
                 }
-                warnings.push(`Cleared stale ${sport} default: league ${defaultInfo.leagueId} is no longer in your active leagues.`);
+                warnings.push(
+                  cleared
+                    ? `Cleared stale ${sport} default: league ${defaultInfo.leagueId} is no longer in your active leagues.`
+                    : `Stale ${sport} default detected (league ${defaultInfo.leagueId} is no longer active) — automatic cleanup failed, will retry next session.`
+                );
               }
             }
           }
