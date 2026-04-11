@@ -489,6 +489,9 @@ export class EspnSupabaseStorage {
         return false;
       }
 
+      // Clear any stale defaults pointing to this ESPN league (all seasons deleted at once)
+      await this.clearDefaultsForLeague(clerkUserId, 'espn', leagueId);
+
       return true;
     } catch (error) {
       console.error('[removeLeague] Failed to remove ESPN league:', error);
@@ -555,7 +558,7 @@ export class EspnSupabaseStorage {
     seasonYear: number
   ): Promise<{ success: boolean; error?: string }> {
     try {
-      // Validate the league exists and has a team_id (ESPN only for now)
+      // Validate the league exists before writing the default
       if (platform === 'espn') {
         const { data: targetLeague, error: checkError } = await this.supabase
           .from('espn_leagues')
@@ -574,8 +577,33 @@ export class EspnSupabaseStorage {
         if (!targetLeague.team_id) {
           return { success: false, error: 'Cannot set default: no team selected for this league' };
         }
+      } else if (platform === 'yahoo') {
+        const { data: targetLeague, error: checkError } = await this.supabase
+          .from('yahoo_leagues')
+          .select('league_key')
+          .eq('clerk_user_id', clerkUserId)
+          .eq('league_key', leagueId)
+          .eq('season_year', seasonYear)
+          .single();
+
+        if (checkError || !targetLeague) {
+          console.error('Yahoo league not found for default:', checkError);
+          return { success: false, error: 'League not found' };
+        }
+      } else if (platform === 'sleeper') {
+        const { data: targetLeague, error: checkError } = await this.supabase
+          .from('sleeper_leagues')
+          .select('league_id')
+          .eq('clerk_user_id', clerkUserId)
+          .eq('league_id', leagueId)
+          .eq('season_year', seasonYear)
+          .single();
+
+        if (checkError || !targetLeague) {
+          console.error('Sleeper league not found for default:', checkError);
+          return { success: false, error: 'League not found' };
+        }
       }
-      // Note: Yahoo validation could be added here if needed
 
       // Build the default object
       const defaultValue: LeagueDefault = { platform, leagueId, seasonYear };
@@ -637,6 +665,105 @@ export class EspnSupabaseStorage {
     } catch (error) {
       console.error('Failed to clear default league:', error);
       return { success: false, error: 'Internal error' };
+    }
+  }
+
+  /**
+   * Clear any sport default that matches the given platform + leagueId.
+   * When seasonYear is provided, only clears an exact match (platform, leagueId, seasonYear).
+   * When omitted (ESPN all-seasons delete), clears any matching (platform, leagueId) regardless of year.
+   */
+  async clearDefaultsForLeague(
+    clerkUserId: string,
+    platform: 'espn' | 'yahoo' | 'sleeper',
+    leagueId: string,
+    seasonYear?: number
+  ): Promise<void> {
+    const sportColumns = ['football', 'baseball', 'basketball', 'hockey'] as const;
+    const { data, error } = await this.supabase
+      .from('user_preferences')
+      .select('default_football, default_baseball, default_basketball, default_hockey')
+      .eq('clerk_user_id', clerkUserId)
+      .maybeSingle();
+
+    if (error) {
+      console.error('[supabase-storage] clearDefaultsForLeague: failed to read preferences:', error);
+      return;
+    }
+    if (!data) return;
+
+    const updates: Record<string, LeagueDefault | null> = {};
+    for (const sport of sportColumns) {
+      const col = `default_${sport}` as keyof typeof data;
+      const stored = data[col] as LeagueDefault | null;
+      if (
+        stored &&
+        stored.platform === platform &&
+        stored.leagueId === leagueId &&
+        (seasonYear === undefined || stored.seasonYear === seasonYear)
+      ) {
+        updates[col] = null;
+      }
+    }
+
+    if (Object.keys(updates).length === 0) return;
+
+    const { error: upsertError } = await this.supabase
+      .from('user_preferences')
+      .upsert(
+        { clerk_user_id: clerkUserId, ...updates, updated_at: new Date().toISOString() },
+        { onConflict: 'clerk_user_id' }
+      );
+
+    if (upsertError) {
+      console.error('[supabase-storage] clearDefaultsForLeague: failed to clear stale defaults:', upsertError);
+    } else {
+      console.log(`[supabase-storage] clearDefaultsForLeague: cleared stale ${platform}:${leagueId} defaults for user ${maskUserId(clerkUserId)}`);
+    }
+  }
+
+  /**
+   * Clear all sport defaults for a given platform (used on full-platform disconnect).
+   */
+  async clearDefaultsForPlatform(
+    clerkUserId: string,
+    platform: 'espn' | 'yahoo' | 'sleeper'
+  ): Promise<void> {
+    const sportColumns = ['football', 'baseball', 'basketball', 'hockey'] as const;
+    const { data, error } = await this.supabase
+      .from('user_preferences')
+      .select('default_football, default_baseball, default_basketball, default_hockey')
+      .eq('clerk_user_id', clerkUserId)
+      .maybeSingle();
+
+    if (error) {
+      console.error('[supabase-storage] clearDefaultsForPlatform: failed to read preferences:', error);
+      return;
+    }
+    if (!data) return;
+
+    const updates: Record<string, LeagueDefault | null> = {};
+    for (const sport of sportColumns) {
+      const col = `default_${sport}` as keyof typeof data;
+      const stored = data[col] as LeagueDefault | null;
+      if (stored && stored.platform === platform) {
+        updates[col] = null;
+      }
+    }
+
+    if (Object.keys(updates).length === 0) return;
+
+    const { error: upsertError } = await this.supabase
+      .from('user_preferences')
+      .upsert(
+        { clerk_user_id: clerkUserId, ...updates, updated_at: new Date().toISOString() },
+        { onConflict: 'clerk_user_id' }
+      );
+
+    if (upsertError) {
+      console.error('[supabase-storage] clearDefaultsForPlatform: failed to clear platform defaults:', upsertError);
+    } else {
+      console.log(`[supabase-storage] clearDefaultsForPlatform: cleared ${platform} defaults for user ${maskUserId(clerkUserId)}`);
     }
   }
 

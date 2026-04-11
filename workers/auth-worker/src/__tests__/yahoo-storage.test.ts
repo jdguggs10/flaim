@@ -9,6 +9,7 @@ const mockUpdate = vi.fn();
 const mockDelete = vi.fn();
 const mockEq = vi.fn();
 const mockSingle = vi.fn();
+const mockMaybeSingle = vi.fn();
 const mockUpsert = vi.fn();
 const mockIs = vi.fn();
 const mockOr = vi.fn();
@@ -40,11 +41,14 @@ describe('YahooStorage', () => {
     mockSelect.mockReturnValue({
       eq: mockEq,
       single: mockSingle,
+      maybeSingle: mockMaybeSingle,
     });
+    mockMaybeSingle.mockResolvedValue({ data: null, error: null });
     mockEq.mockReturnValue({
       eq: mockEq,
       or: mockOr,
       single: mockSingle,
+      maybeSingle: mockMaybeSingle,
       select: mockSelect,
       delete: mockDelete,
       is: mockIs,
@@ -547,9 +551,17 @@ describe('YahooStorage', () => {
 
   describe('deleteYahooLeague', () => {
     it('deletes a specific league', async () => {
+      // Lookup returns null (no matching row) — cleanup skipped
+      mockMaybeSingle.mockResolvedValue({ data: null, error: null });
       mockEq.mockReturnValue({
-        eq: vi.fn().mockReturnValue({ error: null }),
+        eq: mockEq,
+        single: mockSingle,
+        maybeSingle: mockMaybeSingle,
+        select: mockSelect,
+        delete: mockDelete,
+        error: null,
       });
+      mockDelete.mockReturnValue({ eq: mockEq, error: null });
 
       await storage.deleteYahooLeague('user_123', 'league-uuid');
 
@@ -560,7 +572,9 @@ describe('YahooStorage', () => {
 
   describe('deleteAllYahooLeagues', () => {
     it('deletes all leagues for a user', async () => {
-      mockEq.mockReturnValue({ error: null });
+      // user_preferences lookup returns null — no defaults to clear
+      mockMaybeSingle.mockResolvedValue({ data: null, error: null });
+      mockEq.mockReturnValue({ eq: mockEq, error: null, maybeSingle: mockMaybeSingle });
 
       await storage.deleteAllYahooLeagues('user_123');
 

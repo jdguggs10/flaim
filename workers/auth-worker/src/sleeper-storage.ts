@@ -135,6 +135,14 @@ export class SleeperStorage {
   }
 
   async deleteSleeperLeague(clerkUserId: string, leagueId: string): Promise<void> {
+    // Resolve platform identifiers before deleting (route arg is DB row UUID)
+    const { data: row } = await this.supabase
+      .from('sleeper_leagues')
+      .select('league_id, season_year')
+      .eq('clerk_user_id', clerkUserId)
+      .eq('id', leagueId)
+      .maybeSingle();
+
     const { error } = await this.supabase
       .from('sleeper_leagues')
       .delete()
@@ -142,6 +150,11 @@ export class SleeperStorage {
       .eq('id', leagueId);
 
     if (error) throw new Error(`Failed to delete Sleeper league: ${error.message}`);
+
+    // Clear any sport default pointing to this league (keyed by platform league_id + season)
+    if (row) {
+      await this._clearDefaultsForLeague(clerkUserId, 'sleeper', row.league_id, row.season_year);
+    }
   }
 
   async deleteAllSleeperLeagues(clerkUserId: string): Promise<void> {
@@ -151,5 +164,74 @@ export class SleeperStorage {
       .eq('clerk_user_id', clerkUserId);
 
     if (error) throw new Error(`Failed to delete Sleeper leagues: ${error.message}`);
+
+    // Clear all Sleeper sport defaults for this user
+    await this._clearDefaultsForPlatform(clerkUserId, 'sleeper');
+  }
+
+  private async _clearDefaultsForLeague(
+    clerkUserId: string,
+    platform: 'sleeper',
+    leagueId: string,
+    seasonYear: number
+  ): Promise<void> {
+    const sportColumns = ['football', 'baseball', 'basketball', 'hockey'] as const;
+    const { data, error } = await this.supabase
+      .from('user_preferences')
+      .select('default_football, default_baseball, default_basketball, default_hockey')
+      .eq('clerk_user_id', clerkUserId)
+      .maybeSingle();
+
+    if (error || !data) return;
+
+    const updates: Record<string, null> = {};
+    for (const sport of sportColumns) {
+      const col = `default_${sport}` as keyof typeof data;
+      const stored = data[col] as { platform: string; leagueId: string; seasonYear: number } | null;
+      if (stored && stored.platform === platform && stored.leagueId === leagueId && stored.seasonYear === seasonYear) {
+        updates[col] = null;
+      }
+    }
+
+    if (Object.keys(updates).length === 0) return;
+
+    await this.supabase
+      .from('user_preferences')
+      .upsert(
+        { clerk_user_id: clerkUserId, ...updates, updated_at: new Date().toISOString() },
+        { onConflict: 'clerk_user_id' }
+      );
+  }
+
+  private async _clearDefaultsForPlatform(
+    clerkUserId: string,
+    platform: 'sleeper'
+  ): Promise<void> {
+    const sportColumns = ['football', 'baseball', 'basketball', 'hockey'] as const;
+    const { data, error } = await this.supabase
+      .from('user_preferences')
+      .select('default_football, default_baseball, default_basketball, default_hockey')
+      .eq('clerk_user_id', clerkUserId)
+      .maybeSingle();
+
+    if (error || !data) return;
+
+    const updates: Record<string, null> = {};
+    for (const sport of sportColumns) {
+      const col = `default_${sport}` as keyof typeof data;
+      const stored = data[col] as { platform: string } | null;
+      if (stored && stored.platform === platform) {
+        updates[col] = null;
+      }
+    }
+
+    if (Object.keys(updates).length === 0) return;
+
+    await this.supabase
+      .from('user_preferences')
+      .upsert(
+        { clerk_user_id: clerkUserId, ...updates, updated_at: new Date().toISOString() },
+        { onConflict: 'clerk_user_id' }
+      );
   }
 }

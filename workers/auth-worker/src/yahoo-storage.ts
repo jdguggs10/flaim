@@ -427,9 +427,19 @@ export class YahooStorage {
   }
 
   /**
-   * Delete a specific Yahoo league
+   * Delete a specific Yahoo league.
+   * Resolves the platform league_key and season_year before deleting so that any
+   * matching sport default in user_preferences can be cleared correctly.
    */
   async deleteYahooLeague(clerkUserId: string, leagueId: string): Promise<void> {
+    // Resolve platform identifiers before deleting (route arg is DB row UUID)
+    const { data: row } = await this.supabase
+      .from('yahoo_leagues')
+      .select('league_key, season_year')
+      .eq('clerk_user_id', clerkUserId)
+      .eq('id', leagueId)
+      .maybeSingle();
+
     const { error } = await this.supabase
       .from('yahoo_leagues')
       .delete()
@@ -442,6 +452,11 @@ export class YahooStorage {
     }
 
     console.log(`[yahoo-storage] Deleted Yahoo league ${leagueId} for user ${maskUserId(clerkUserId)}`);
+
+    // Clear any sport default pointing to this league (keyed by platform league_key + season)
+    if (row) {
+      await this._clearDefaultsForLeague(clerkUserId, 'yahoo', row.league_key, row.season_year);
+    }
   }
 
   /**
@@ -459,6 +474,79 @@ export class YahooStorage {
     }
 
     console.log(`[yahoo-storage] Deleted all Yahoo leagues for user ${maskUserId(clerkUserId)}`);
+
+    // Clear all Yahoo sport defaults for this user
+    await this._clearDefaultsForPlatform(clerkUserId, 'yahoo');
+  }
+
+  // ---------------------------------------------------------------------------
+  // INTERNAL DEFAULT CLEANUP HELPERS
+  // ---------------------------------------------------------------------------
+
+  private async _clearDefaultsForLeague(
+    clerkUserId: string,
+    platform: 'yahoo',
+    leagueId: string,
+    seasonYear: number
+  ): Promise<void> {
+    const sportColumns = ['football', 'baseball', 'basketball', 'hockey'] as const;
+    const { data, error } = await this.supabase
+      .from('user_preferences')
+      .select('default_football, default_baseball, default_basketball, default_hockey')
+      .eq('clerk_user_id', clerkUserId)
+      .maybeSingle();
+
+    if (error || !data) return;
+
+    const updates: Record<string, null> = {};
+    for (const sport of sportColumns) {
+      const col = `default_${sport}` as keyof typeof data;
+      const stored = data[col] as { platform: string; leagueId: string; seasonYear: number } | null;
+      if (stored && stored.platform === platform && stored.leagueId === leagueId && stored.seasonYear === seasonYear) {
+        updates[col] = null;
+      }
+    }
+
+    if (Object.keys(updates).length === 0) return;
+
+    await this.supabase
+      .from('user_preferences')
+      .upsert(
+        { clerk_user_id: clerkUserId, ...updates, updated_at: new Date().toISOString() },
+        { onConflict: 'clerk_user_id' }
+      );
+  }
+
+  private async _clearDefaultsForPlatform(
+    clerkUserId: string,
+    platform: 'yahoo'
+  ): Promise<void> {
+    const sportColumns = ['football', 'baseball', 'basketball', 'hockey'] as const;
+    const { data, error } = await this.supabase
+      .from('user_preferences')
+      .select('default_football, default_baseball, default_basketball, default_hockey')
+      .eq('clerk_user_id', clerkUserId)
+      .maybeSingle();
+
+    if (error || !data) return;
+
+    const updates: Record<string, null> = {};
+    for (const sport of sportColumns) {
+      const col = `default_${sport}` as keyof typeof data;
+      const stored = data[col] as { platform: string } | null;
+      if (stored && stored.platform === platform) {
+        updates[col] = null;
+      }
+    }
+
+    if (Object.keys(updates).length === 0) return;
+
+    await this.supabase
+      .from('user_preferences')
+      .upsert(
+        { clerk_user_id: clerkUserId, ...updates, updated_at: new Date().toISOString() },
+        { onConflict: 'clerk_user_id' }
+      );
   }
 
   // ---------------------------------------------------------------------------
