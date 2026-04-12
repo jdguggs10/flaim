@@ -1145,7 +1145,22 @@ api.delete('/internal/leagues/default/:sport', async (c) => {
     return c.json({ error: 'Invalid sport' }, 400);
   }
 
+  const platform = c.req.query('platform');
+  const leagueId = c.req.query('leagueId');
+
   const storage = EspnSupabaseStorage.fromEnvironment(c.env);
+
+  // If platform + leagueId are provided, do a conditional (TOCTOU-safe) clear —
+  // only removes the default if it still points to this specific league.
+  if (platform && leagueId) {
+    await storage.clearStaleDefaultForLeague(
+      userId,
+      platform as 'espn' | 'yahoo' | 'sleeper',
+      leagueId
+    );
+    return c.json({ success: true });
+  }
+
   const result = await storage.clearDefaultLeague(
     userId,
     sport as 'football' | 'baseball' | 'basketball' | 'hockey'

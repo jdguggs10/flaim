@@ -1,6 +1,11 @@
 import { createClient } from '@supabase/supabase-js';
 import { clearDefaultsForLeague as _clearDefaultsForLeague, clearDefaultsForPlatform as _clearDefaultsForPlatform } from './preference-defaults';
 
+function maskUserId(userId: string): string {
+  if (!userId || userId.length <= 8) return '***';
+  return `${userId.substring(0, 8)}...`;
+}
+
 interface SleeperStorageEnv {
   SUPABASE_URL: string;
   SUPABASE_SERVICE_KEY: string;
@@ -137,12 +142,16 @@ export class SleeperStorage {
 
   async deleteSleeperLeague(clerkUserId: string, leagueId: string): Promise<void> {
     // Resolve platform identifiers before deleting (route arg is DB row UUID)
-    const { data: row } = await this.supabase
+    const { data: row, error: lookupError } = await this.supabase
       .from('sleeper_leagues')
       .select('league_id, season_year')
       .eq('clerk_user_id', clerkUserId)
       .eq('id', leagueId)
       .maybeSingle();
+
+    if (lookupError) {
+      console.warn(`[sleeper-storage] Failed to look up Sleeper league ${leagueId} before delete:`, lookupError);
+    }
 
     const { error } = await this.supabase
       .from('sleeper_leagues')
@@ -171,10 +180,16 @@ export class SleeperStorage {
   }
 
   private async _clearDefaultsForLeague(clerkUserId: string, platform: 'sleeper', leagueId: string, seasonYear: number): Promise<void> {
-    return _clearDefaultsForLeague(this.supabase, clerkUserId, platform, leagueId, seasonYear);
+    const result = await _clearDefaultsForLeague(this.supabase, clerkUserId, platform, leagueId, seasonYear);
+    if (result.skipped) {
+      console.warn(`[sleeper-storage] clearDefaultsForLeague skipped for user ${maskUserId(clerkUserId)}: ${result.error ?? 'unknown reason'}`);
+    }
   }
 
   private async _clearDefaultsForPlatform(clerkUserId: string, platform: 'sleeper'): Promise<void> {
-    return _clearDefaultsForPlatform(this.supabase, clerkUserId, platform);
+    const result = await _clearDefaultsForPlatform(this.supabase, clerkUserId, platform);
+    if (result.skipped) {
+      console.warn(`[sleeper-storage] clearDefaultsForPlatform skipped for user ${maskUserId(clerkUserId)}: ${result.error ?? 'unknown reason'}`);
+    }
   }
 }

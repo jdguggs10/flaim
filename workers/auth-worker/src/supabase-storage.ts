@@ -491,7 +491,7 @@ export class EspnSupabaseStorage {
       }
 
       // Clear any stale defaults pointing to this ESPN league (all seasons deleted at once)
-      await this.clearDefaultsForLeague(clerkUserId, 'espn', leagueId);
+      await this.clearStaleDefaultForLeague(clerkUserId, 'espn', leagueId);
 
       return true;
     } catch (error) {
@@ -674,23 +674,29 @@ export class EspnSupabaseStorage {
    * When seasonYear is provided, only clears an exact match (platform, leagueId, seasonYear).
    * When omitted (ESPN all-seasons delete), clears any matching (platform, leagueId) regardless of year.
    */
-  async clearDefaultsForLeague(
+  async clearStaleDefaultForLeague(
     clerkUserId: string,
     platform: 'espn' | 'yahoo' | 'sleeper',
     leagueId: string,
     seasonYear?: number
   ): Promise<void> {
-    return _clearDefaultsForLeague(this.supabase, clerkUserId, platform, leagueId, seasonYear);
+    const result = await _clearDefaultsForLeague(this.supabase, clerkUserId, platform, leagueId, seasonYear);
+    if (result.skipped) {
+      console.warn(`[supabase-storage] clearStaleDefaultForLeague skipped for user ${maskUserId(clerkUserId)}: ${result.error ?? 'unknown reason'}`);
+    }
   }
 
   /**
    * Clear all sport defaults for a given platform (used on full-platform disconnect).
    */
-  async clearDefaultsForPlatform(
+  async clearStaleDefaultsForPlatform(
     clerkUserId: string,
     platform: 'espn' | 'yahoo' | 'sleeper'
   ): Promise<void> {
-    return _clearDefaultsForPlatform(this.supabase, clerkUserId, platform);
+    const result = await _clearDefaultsForPlatform(this.supabase, clerkUserId, platform);
+    if (result.skipped) {
+      console.warn(`[supabase-storage] clearStaleDefaultsForPlatform skipped for user ${maskUserId(clerkUserId)}: ${result.error ?? 'unknown reason'}`);
+    }
   }
 
   /**

@@ -20,6 +20,9 @@ function maskUserId(userId: string): string {
  * Clear any sport default that matches the given platform + leagueId.
  * When seasonYear is provided, only clears an exact {platform, leagueId, seasonYear} match.
  * When omitted (ESPN all-seasons delete), clears any matching {platform, leagueId}.
+ *
+ * Returns { skipped: true, error } if a database error prevented the clear,
+ * or { skipped: false } if the operation completed (even if no columns matched).
  */
 export async function clearDefaultsForLeague(
   supabase: SupabaseClient,
@@ -27,7 +30,7 @@ export async function clearDefaultsForLeague(
   platform: Platform,
   leagueId: string,
   seasonYear?: number
-): Promise<void> {
+): Promise<{ skipped: boolean; error?: string }> {
   const { data, error } = await supabase
     .from('user_preferences')
     .select('default_football, default_baseball, default_basketball, default_hockey')
@@ -36,9 +39,9 @@ export async function clearDefaultsForLeague(
 
   if (error) {
     console.error('[preference-defaults] clearDefaultsForLeague: failed to read preferences:', error);
-    return;
+    return { skipped: true, error: error.message };
   }
-  if (!data) return;
+  if (!data) return { skipped: false };
 
   const updates: Record<string, null> = {};
   for (const sport of SPORT_COLUMNS) {
@@ -54,7 +57,7 @@ export async function clearDefaultsForLeague(
     }
   }
 
-  if (Object.keys(updates).length === 0) return;
+  if (Object.keys(updates).length === 0) return { skipped: false };
 
   const { error: upsertError } = await supabase
     .from('user_preferences')
@@ -65,19 +68,24 @@ export async function clearDefaultsForLeague(
 
   if (upsertError) {
     console.error('[preference-defaults] clearDefaultsForLeague: failed to clear stale defaults:', upsertError);
-  } else {
-    console.log(`[preference-defaults] clearDefaultsForLeague: cleared stale ${platform}:${leagueId} default for user ${maskUserId(clerkUserId)}`);
+    return { skipped: true, error: upsertError.message };
   }
+
+  console.log(`[preference-defaults] clearDefaultsForLeague: cleared stale ${platform}:${leagueId} default for user ${maskUserId(clerkUserId)}`);
+  return { skipped: false };
 }
 
 /**
  * Clear all sport defaults for a given platform (used on full-platform disconnect).
+ *
+ * Returns { skipped: true, error } if a database error prevented the clear,
+ * or { skipped: false } if the operation completed (even if no columns matched).
  */
 export async function clearDefaultsForPlatform(
   supabase: SupabaseClient,
   clerkUserId: string,
   platform: Platform
-): Promise<void> {
+): Promise<{ skipped: boolean; error?: string }> {
   const { data, error } = await supabase
     .from('user_preferences')
     .select('default_football, default_baseball, default_basketball, default_hockey')
@@ -86,9 +94,9 @@ export async function clearDefaultsForPlatform(
 
   if (error) {
     console.error('[preference-defaults] clearDefaultsForPlatform: failed to read preferences:', error);
-    return;
+    return { skipped: true, error: error.message };
   }
-  if (!data) return;
+  if (!data) return { skipped: false };
 
   const updates: Record<string, null> = {};
   for (const sport of SPORT_COLUMNS) {
@@ -99,7 +107,7 @@ export async function clearDefaultsForPlatform(
     }
   }
 
-  if (Object.keys(updates).length === 0) return;
+  if (Object.keys(updates).length === 0) return { skipped: false };
 
   const { error: upsertError } = await supabase
     .from('user_preferences')
@@ -110,7 +118,9 @@ export async function clearDefaultsForPlatform(
 
   if (upsertError) {
     console.error('[preference-defaults] clearDefaultsForPlatform: failed to clear platform defaults:', upsertError);
-  } else {
-    console.log(`[preference-defaults] clearDefaultsForPlatform: cleared ${platform} defaults for user ${maskUserId(clerkUserId)}`);
+    return { skipped: true, error: upsertError.message };
   }
+
+  console.log(`[preference-defaults] clearDefaultsForPlatform: cleared ${platform} defaults for user ${maskUserId(clerkUserId)}`);
+  return { skipped: false };
 }

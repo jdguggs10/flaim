@@ -434,12 +434,16 @@ export class YahooStorage {
    */
   async deleteYahooLeague(clerkUserId: string, leagueId: string): Promise<void> {
     // Resolve platform identifiers before deleting (route arg is DB row UUID)
-    const { data: row } = await this.supabase
+    const { data: row, error: lookupError } = await this.supabase
       .from('yahoo_leagues')
       .select('league_key, season_year')
       .eq('clerk_user_id', clerkUserId)
       .eq('id', leagueId)
       .maybeSingle();
+
+    if (lookupError) {
+      console.warn(`[yahoo-storage] Failed to look up Yahoo league ${leagueId} before delete:`, lookupError);
+    }
 
     const { error } = await this.supabase
       .from('yahoo_leagues')
@@ -485,11 +489,17 @@ export class YahooStorage {
   // ---------------------------------------------------------------------------
 
   private async _clearDefaultsForLeague(clerkUserId: string, platform: 'yahoo', leagueId: string, seasonYear: number): Promise<void> {
-    return _clearDefaultsForLeague(this.supabase, clerkUserId, platform, leagueId, seasonYear);
+    const result = await _clearDefaultsForLeague(this.supabase, clerkUserId, platform, leagueId, seasonYear);
+    if (result.skipped) {
+      console.warn(`[yahoo-storage] clearDefaultsForLeague skipped for user ${maskUserId(clerkUserId)}: ${result.error ?? 'unknown reason'}`);
+    }
   }
 
   private async _clearDefaultsForPlatform(clerkUserId: string, platform: 'yahoo'): Promise<void> {
-    return _clearDefaultsForPlatform(this.supabase, clerkUserId, platform);
+    const result = await _clearDefaultsForPlatform(this.supabase, clerkUserId, platform);
+    if (result.skipped) {
+      console.warn(`[yahoo-storage] clearDefaultsForPlatform skipped for user ${maskUserId(clerkUserId)}: ${result.error ?? 'unknown reason'}`);
+    }
   }
 
   // ---------------------------------------------------------------------------

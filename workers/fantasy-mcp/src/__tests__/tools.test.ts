@@ -381,6 +381,161 @@ describe('fantasy-mcp tools', () => {
     expect(tool!.description).toContain('get_roster');
   });
 
+  // Test A: multi-league, no defaultSport pref → defaultLeague should be null
+  it('get_user_session: multiple leagues with no defaultSport → defaultLeague is null', async () => {
+    const tool = getUnifiedTools().find((t) => t.name === 'get_user_session');
+    expect(tool).toBeTruthy();
+
+    const twoLeagues = [
+      { platform: 'espn', sport: 'football', leagueId: 'fb1', leagueName: 'Gridiron', teamId: 't1', seasonYear: 2025 },
+      { platform: 'espn', sport: 'baseball', leagueId: 'bb1', leagueName: 'Diamond', teamId: 't2', seasonYear: 2026 },
+    ];
+
+    const env = {
+      INTERNAL_SERVICE_TOKEN: 'internal-secret',
+      AUTH_WORKER: {
+        fetch: async (req: Request) => {
+          const url = new URL(req.url);
+          if (url.pathname === '/internal/leagues') {
+            return new Response(JSON.stringify({ leagues: twoLeagues }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          if (url.pathname === '/internal/user/preferences') {
+            return new Response(JSON.stringify({ defaultSport: null }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          return new Response(JSON.stringify({ leagues: [] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        },
+      },
+    } as unknown as Env;
+
+    const result = await tool!.handler({}, env, 'Bearer test-token');
+    const payload = JSON.parse(result.content[0].text) as {
+      defaultLeague: unknown;
+      totalLeaguesFound: number;
+    };
+    expect(payload.totalLeaguesFound).toBe(2);
+    expect(payload.defaultLeague).toBeNull();
+  });
+
+  // Test B: single league, no prefs → defaultLeague auto-populated
+  it('get_user_session: single league with no prefs → defaultLeague is auto-populated', async () => {
+    const tool = getUnifiedTools().find((t) => t.name === 'get_user_session');
+    expect(tool).toBeTruthy();
+
+    // Yahoo leagues API uses leagueKey (not leagueId) — fetchYahooLeagues maps leagueKey → leagueId
+    const oneYahooLeague = [
+      { sport: 'football', leagueKey: '449.l.123', leagueName: 'My Yahoo League', teamId: 't5', seasonYear: 2025 },
+    ];
+
+    const env = {
+      INTERNAL_SERVICE_TOKEN: 'internal-secret',
+      AUTH_WORKER: {
+        fetch: async (req: Request) => {
+          const url = new URL(req.url);
+          if (url.pathname === '/internal/leagues') {
+            return new Response(JSON.stringify({ leagues: [] }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          if (url.pathname === '/internal/leagues/yahoo') {
+            return new Response(JSON.stringify({ leagues: oneYahooLeague }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          return new Response(JSON.stringify({ leagues: [] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        },
+      },
+    } as unknown as Env;
+
+    const result = await tool!.handler({}, env, 'Bearer test-token');
+    const payload = JSON.parse(result.content[0].text) as {
+      defaultLeague: { leagueId: string; platform: string; sport: string } | null;
+      totalLeaguesFound: number;
+    };
+    expect(payload.totalLeaguesFound).toBe(1);
+    expect(payload.defaultLeague).not.toBeNull();
+    expect(payload.defaultLeague?.leagueId).toBe('449.l.123');
+    expect(payload.defaultLeague?.platform).toBe('yahoo');
+    expect(payload.defaultLeague?.sport).toBe('football');
+  });
+
+  // Test C: stale default → DELETE fires with platform+leagueId params, warning appended
+  it('get_user_session: stale default fires conditional DELETE and appends warning', async () => {
+    const tool = getUnifiedTools().find((t) => t.name === 'get_user_session');
+    expect(tool).toBeTruthy();
+
+    const activeLeague = { platform: 'espn', sport: 'baseball', leagueId: 'bb1', leagueName: 'Diamond', teamId: 't2', seasonYear: 2026 };
+    // Football default points to a league that is no longer active
+    const stalePrefs = {
+      defaultSport: 'football',
+      defaultFootball: { platform: 'espn', leagueId: 'old-fb', seasonYear: 2024 },
+    };
+
+    let deleteCalled = false;
+    let deleteUrl: URL | null = null;
+
+    const env = {
+      INTERNAL_SERVICE_TOKEN: 'internal-secret',
+      AUTH_WORKER: {
+        fetch: async (req: Request) => {
+          const url = new URL(req.url);
+          if (url.pathname === '/internal/leagues') {
+            return new Response(JSON.stringify({ leagues: [activeLeague] }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          if (url.pathname === '/internal/user/preferences') {
+            return new Response(JSON.stringify(stalePrefs), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          if (req.method === 'DELETE' && url.pathname.startsWith('/internal/leagues/default/')) {
+            deleteCalled = true;
+            deleteUrl = url;
+            return new Response(JSON.stringify({ success: true }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          return new Response(JSON.stringify({ leagues: [] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        },
+      },
+    } as unknown as Env;
+
+    const result = await tool!.handler({}, env, 'Bearer test-token');
+    const payload = JSON.parse(result.content[0].text) as {
+      warnings?: string[];
+    };
+
+    // DELETE should have been called with platform + leagueId query params
+    expect(deleteCalled).toBe(true);
+    expect(deleteUrl!.searchParams.get('platform')).toBe('espn');
+    expect(deleteUrl!.searchParams.get('leagueId')).toBe('old-fb');
+
+    // Warning should mention the stale league
+    expect(payload.warnings).toBeDefined();
+    expect(payload.warnings!.length).toBeGreaterThan(0);
+    expect(payload.warnings![0]).toContain('old-fb');
+  });
+
   it('get_players routes unchanged to client', async () => {
     const tool = getUnifiedTools().find((t) => t.name === 'get_players');
     expect(tool).toBeTruthy();
