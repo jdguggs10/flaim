@@ -673,14 +673,16 @@ export class EspnSupabaseStorage {
    * Clear any sport default that matches the given platform + leagueId.
    * When seasonYear is provided, only clears an exact match (platform, leagueId, seasonYear).
    * When omitted (ESPN all-seasons delete), clears any matching (platform, leagueId) regardless of year.
+   * When sport is provided, scopes the clear to only that column.
    */
   async clearStaleDefaultForLeague(
     clerkUserId: string,
     platform: 'espn' | 'yahoo' | 'sleeper',
     leagueId: string,
-    seasonYear?: number
+    seasonYear?: number,
+    sport?: string
   ): Promise<void> {
-    const result = await _clearDefaultsForLeague(this.supabase, clerkUserId, platform, leagueId, seasonYear);
+    const result = await _clearDefaultsForLeague(this.supabase, clerkUserId, platform, leagueId, seasonYear, sport);
     if (result.skipped) {
       console.warn(`[supabase-storage] clearStaleDefaultForLeague skipped for user ${maskUserId(clerkUserId)}: ${result.error ?? 'unknown reason'}`);
     }

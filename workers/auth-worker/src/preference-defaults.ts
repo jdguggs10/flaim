@@ -20,6 +20,8 @@ function maskUserId(userId: string): string {
  * Clear any sport default that matches the given platform + leagueId.
  * When seasonYear is provided, only clears an exact {platform, leagueId, seasonYear} match.
  * When omitted (ESPN all-seasons delete), clears any matching {platform, leagueId}.
+ * When sport is provided, scopes the clear to only that column — prevents a shared leagueId
+ * from accidentally clearing an unrelated sport's default.
  *
  * Returns { skipped: true, error } if a database error prevented the clear,
  * or { skipped: false } if the operation completed (even if no columns matched).
@@ -29,7 +31,8 @@ export async function clearDefaultsForLeague(
   clerkUserId: string,
   platform: Platform,
   leagueId: string,
-  seasonYear?: number
+  seasonYear?: number,
+  sport?: string
 ): Promise<{ skipped: boolean; error?: string }> {
   const { data, error } = await supabase
     .from('user_preferences')
@@ -43,9 +46,13 @@ export async function clearDefaultsForLeague(
   }
   if (!data) return { skipped: false };
 
+  const columnsToCheck = sport
+    ? SPORT_COLUMNS.filter(s => s === sport)
+    : SPORT_COLUMNS;
+
   const updates: Record<string, null> = {};
-  for (const sport of SPORT_COLUMNS) {
-    const col = `default_${sport}` as keyof typeof data;
+  for (const s of columnsToCheck) {
+    const col = `default_${s}` as keyof typeof data;
     const stored = data[col] as StoredDefault;
     if (
       stored &&

@@ -536,6 +536,105 @@ describe('fantasy-mcp tools', () => {
     expect(payload.warnings![0]).toContain('old-fb');
   });
 
+  it('get_user_session: stale default skips DELETE when platform fetch failed', async () => {
+    const tool = getUnifiedTools().find((t) => t.name === 'get_user_session');
+    expect(tool).toBeTruthy();
+
+    const stalePrefs = {
+      defaultSport: 'football',
+      defaultFootball: { platform: 'yahoo', leagueId: 'nfl.l.123', seasonYear: 2025 },
+    };
+
+    let deleteCalled = false;
+
+    const env = {
+      INTERNAL_SERVICE_TOKEN: 'internal-secret',
+      AUTH_WORKER: {
+        fetch: async (req: Request) => {
+          const url = new URL(req.url);
+          if (url.pathname === '/internal/leagues') {
+            return new Response(JSON.stringify({ leagues: [] }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          if (url.pathname === '/internal/leagues/yahoo') {
+            // Simulate Yahoo fetch failure
+            return new Response(JSON.stringify({ error: 'Yahoo API unavailable' }), {
+              status: 502,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          if (url.pathname === '/internal/user/preferences') {
+            return new Response(JSON.stringify(stalePrefs), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          if (req.method === 'DELETE' && url.pathname.startsWith('/internal/leagues/default/')) {
+            deleteCalled = true;
+            return new Response(JSON.stringify({ success: true }), { status: 200 });
+          }
+          return new Response(JSON.stringify({ leagues: [] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        },
+      },
+    } as unknown as Env;
+
+    const result = await tool!.handler({}, env, 'Bearer test-token');
+    const payload = JSON.parse(result.content[0].text) as { warnings?: string[] };
+
+    // DELETE must NOT fire when the platform fetch failed
+    expect(deleteCalled).toBe(false);
+    // A warning should appear mentioning the unavailability (not clearing)
+    expect(payload.warnings?.some((w) => w.includes('temporarily unavailable'))).toBe(true);
+  });
+
+  it('get_user_session: recurring Yahoo leagues dedup to current season only', async () => {
+    const tool = getUnifiedTools().find((t) => t.name === 'get_user_session');
+    expect(tool).toBeTruthy();
+
+    // Same Yahoo league renewed across two seasons — should surface only 2025
+    const yahooLeagues = [
+      { sport: 'football', leagueKey: 'nfl.l.1000', leagueName: 'Touchdown League', teamId: 't1', seasonYear: 2024 },
+      { sport: 'football', leagueKey: 'nfl.l.2000', leagueName: 'Touchdown League', teamId: 't2', seasonYear: 2025 },
+    ];
+
+    const env = {
+      INTERNAL_SERVICE_TOKEN: 'internal-secret',
+      AUTH_WORKER: {
+        fetch: async (req: Request) => {
+          const url = new URL(req.url);
+          if (url.pathname === '/internal/leagues/yahoo') {
+            return new Response(JSON.stringify({ leagues: yahooLeagues }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          return new Response(JSON.stringify({ leagues: [] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        },
+      },
+    } as unknown as Env;
+
+    const result = await tool!.handler({}, env, 'Bearer test-token');
+    const payload = JSON.parse(result.content[0].text) as {
+      allLeagues: Array<{ platform: string; sport: string; leagueId: string; seasonYear: number }>;
+      totalLeaguesFound: number;
+    };
+
+    // Only the 2025 season should appear — 2024 is superseded
+    const yahooFootball = payload.allLeagues.filter(
+      (l) => l.platform === 'yahoo' && l.sport === 'football'
+    );
+    expect(yahooFootball).toHaveLength(1);
+    expect(yahooFootball[0].seasonYear).toBe(2025);
+  });
+
   it('get_players routes unchanged to client', async () => {
     const tool = getUnifiedTools().find((t) => t.name === 'get_players');
     expect(tool).toBeTruthy();

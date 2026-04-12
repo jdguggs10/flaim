@@ -480,10 +480,23 @@ export function getUnifiedTools(): UnifiedTool[] {
           // Filter to active leagues (have a season within 2 years) and limit to 2 most recent seasons
           const thresholdYear = getActiveThresholdYear();
 
-          // Group leagues by unique league identifier
+          // Track which platforms failed to fetch — used to avoid clearing valid defaults
+          // when a platform was temporarily unavailable.
+          const failedPlatforms = new Set<string>();
+          if (espnData.error) failedPlatforms.add('espn');
+          if (yahooData.error) failedPlatforms.add('yahoo');
+          if (sleeperData.error) failedPlatforms.add('sleeper');
+
+          // Group leagues by unique league identifier.
+          // Yahoo: group by sport+name because Yahoo assigns a new leagueKey each season;
+          // without name-based grouping, recurring leagues surface every past season
+          // as a separate active entry. ESPN/Sleeper reuse the same leagueId across
+          // seasons, so platform:leagueId is the correct stable key for those.
           const leagueGroups = new Map<string, typeof allLeagues>();
           for (const league of allLeagues) {
-            const key = `${league.platform}:${league.leagueId}`;
+            const key = league.platform === 'yahoo'
+              ? `${league.platform}:${(league.sport || '').toLowerCase()}:${league.leagueName}`
+              : `${league.platform}:${league.leagueId}`;
             if (!leagueGroups.has(key)) {
               leagueGroups.set(key, []);
             }
@@ -589,8 +602,14 @@ export function getUnifiedTools(): UnifiedTool[] {
               if (matchingLeague) {
                 defaultLeagues[sport] = matchingLeague;
               } else {
-                // Stale default — no matching active league. Fire a best-effort clear
-                // so future reads don't repeat this lookup, then surface a warning.
+                // Default doesn't match any active league.
+                if (failedPlatforms.has(defaultInfo.platform)) {
+                  // Platform fetch failed — the league may still be valid. Preserve
+                  // the default and surface a transient warning instead of clearing.
+                  warnings.push(`Could not verify ${sport} default: ${defaultInfo.platform} data is temporarily unavailable. Default preserved.`);
+                } else {
+                // Platform fetch succeeded but league is missing — it's genuinely stale.
+                // Fire a best-effort clear so future reads don't repeat this lookup.
                 const staleBaseHeaders: Record<string, string> = {
                   'Content-Type': 'application/json',
                   ...(authHeader ? { Authorization: authHeader } : {}),
@@ -618,6 +637,7 @@ export function getUnifiedTools(): UnifiedTool[] {
                     ? `Cleared stale ${sport} default: league ${defaultInfo.leagueId} is no longer in your active leagues.`
                     : `Stale ${sport} default detected (league ${defaultInfo.leagueId} is no longer active) — automatic cleanup failed, will retry next session.`
                 );
+                } // end: platform fetch succeeded (stale default)
               }
             }
           }

@@ -1156,7 +1156,9 @@ api.delete('/internal/leagues/default/:sport', async (c) => {
     await storage.clearStaleDefaultForLeague(
       userId,
       platform as 'espn' | 'yahoo' | 'sleeper',
-      leagueId
+      leagueId,
+      undefined,
+      sport
     );
     return c.json({ success: true });
   }
