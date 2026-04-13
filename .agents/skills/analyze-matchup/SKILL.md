@@ -1,7 +1,7 @@
 ---
 name: analyze-matchup
 description: Analyze the current fantasy matchup with scores, remaining players or games, and a fact-based forecast. Use when the user explicitly wants a matchup-state breakdown or invokes /analyze-matchup.
-argument-hint: "[week-number]"
+argument-hint: "[week-number, default current week]"
 license: Proprietary
 ---
 
@@ -36,11 +36,11 @@ Use `get_league_info` to identify scoring format:
 - **H2H Points**: proceed
 - **H2H Categories**: proceed
 - **Roto**: explain that this skill is not the right fit for roto and offer standings or roster analysis instead
-- For any non-H2H format, stop and explain that matchup analysis is only supported for head-to-head leagues.
+- Any other non-H2H format: stop and explain that matchup analysis is only supported for head-to-head leagues.
 
 ### 3. Pull matchup and roster context
 
-- Call `get_matchups` for the requested week or current week
+- Call `get_matchups` using `$ARGUMENTS` as the requested week, or the current week if no argument was provided
 - Identify the opponent's `team_id` from the matchup data before fetching their roster
 - Call `get_roster` for the user's team
 - Call `get_roster` for the opponent using that `team_id`
