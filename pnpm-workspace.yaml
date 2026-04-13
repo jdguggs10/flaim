@@ -1,0 +1,8 @@
+packages:
+  - "web"
+  - "workers/auth-worker"
+  - "workers/espn-client"
+  - "workers/fantasy-mcp"
+  - "workers/shared"
+  - "workers/sleeper-client"
+  - "workers/yahoo-client"
