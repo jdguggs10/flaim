@@ -12,7 +12,7 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@flaim/worker-shared": "*",
+    "@flaim/worker-shared": "workspace:*",
     "hono": "^4.7.0",
     "zod": "^3.24.0"
   },
