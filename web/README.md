@@ -76,12 +76,6 @@ Deleting a league removes all seasons for that league.
 Create `web/.env.local` from `.env.example`:
 
 ```bash
-# Public homepage demo refresh
-DEMO_API_KEY=flaim_demo_...
-FANTASY_MCP_URL=https://api.flaim.app/mcp
-PUBLIC_DEMO_GEMINI_MODEL=
-PUBLIC_DEMO_GEMINI_BIN=gemini
-
 # Clerk Auth
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_...
 CLERK_SECRET_KEY=sk_...
@@ -91,18 +85,18 @@ NEXT_PUBLIC_AUTH_WORKER_URL=https://api.flaim.app/auth
 NEXT_PUBLIC_FANTASY_MCP_URL=https://api.flaim.app/mcp
 # Shared internal token for server-to-worker helper calls
 INTERNAL_SERVICE_TOKEN=...
-# Yahoo MCP client (not called by web directly; useful for local debugging)
-NEXT_PUBLIC_YAHOO_CLIENT_URL=https://yahoo-client.gerrygugger.workers.dev
 ```
 
 For local development with workers, point to `http://localhost:8786` etc.
+
+`NEXT_PUBLIC_FANTASY_MCP_URL` is the current web-app env for the unified `fantasy-mcp` gateway. The older `FANTASY_MCP_URL` name was a legacy server-side alias for the same endpoint and is no longer read by `web/`. `DEMO_API_KEY` still exists, but it now belongs to `workers/auth-worker`, not the Vercel web project.
 
 ## Public Chat Demo
 
 The homepage demo, reachable at `/#live-demo` and via the legacy `/chat` redirect, is intentionally constrained in v1:
 
 - Runs against a dedicated demo account (`demo@flaim.app`)
-- Uses server-owned auth with `DEMO_API_KEY`
+- Uses server-owned auth via `auth-worker` (`DEMO_API_KEY` lives there, not in `web`)
 - Accepts preset prompt IDs only
 - Reads from server-owned cached answers when available
 - Surfaces freshness state instead of doing live provider inference on every visitor click
