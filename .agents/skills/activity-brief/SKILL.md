@@ -42,7 +42,7 @@ Produce a clean recent-activity briefing for the user's current or specified fan
 
 Bucket the transactions by time period relative to now:
 
-- **Overnight**: since midnight today
+- **Overnight**: since the most recent midnight in the user's inferred timezone, or UTC if their timezone is unclear
 - **Yesterday**: the prior calendar day
 - **Prior day(s)**: older moves still within the requested window
 

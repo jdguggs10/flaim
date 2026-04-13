@@ -35,8 +35,7 @@ Use `get_league_info` to identify scoring format:
 
 - **H2H Points**: proceed
 - **H2H Categories**: proceed
-- **Roto**: explain that this skill is not the right fit for roto and offer standings or roster analysis instead
-- Any other non-H2H format: stop and explain that matchup analysis is only supported for head-to-head leagues.
+- **Roto or any other non-H2H format**: explain that this skill only applies to head-to-head leagues and offer standings or roster analysis instead.
 
 ### 3. Pull matchup and roster context
 
