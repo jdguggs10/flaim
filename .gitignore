@@ -45,11 +45,13 @@ next-env.d.ts
 .agent/
 .codex/
 .github/skills/
-# .agents/ contains personal config but also the published flaim-fantasy skill
+# .agents/ contains personal config but also the published Flaim plugin skills
 .agents/*
 !.agents/skills
 .agents/skills/*
 !.agents/skills/flaim-fantasy
+!.agents/skills/activity-brief
+!.agents/skills/analyze-matchup
 
 # AI agent documentation files (personal notes)
 *CLAUDE*.md
