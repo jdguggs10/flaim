@@ -91,14 +91,16 @@ describe('SleeperStorage', () => {
 
     // Test E: clears matching sport default when lookup resolves the league_id
     it('clears matching sport default when lookup resolves the league_id', async () => {
+      const mockPrefsUpsert = vi.fn().mockReturnValue({ error: null });
+
       mockFrom.mockImplementation((table: string) => {
         if (table === 'sleeper_leagues') {
-          const maybySingle = vi.fn().mockResolvedValue({
+          const maybeSingle = vi.fn().mockResolvedValue({
             data: { league_id: 'sleeper-league-abc', season_year: 2025 },
             error: null,
           });
           const eqFn = vi.fn();
-          eqFn.mockReturnValue({ eq: eqFn, maybeSingle: maybySingle, error: null });
+          eqFn.mockReturnValue({ eq: eqFn, maybeSingle, error: null });
           return {
             select: vi.fn().mockReturnValue({ eq: eqFn }),
             delete: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ error: null }) }) }),
@@ -118,7 +120,7 @@ describe('SleeperStorage', () => {
           });
           return {
             select: vi.fn().mockReturnValue({ eq: prefEq }),
-            upsert: vi.fn().mockReturnValue({ error: null }),
+            upsert: mockPrefsUpsert,
           };
         }
         return {};
@@ -126,9 +128,10 @@ describe('SleeperStorage', () => {
 
       await storage.deleteSleeperLeague('user_123', 'league-uuid');
 
-      // user_preferences should have been accessed for cleanup
-      const prefsCalls = mockFrom.mock.calls.filter((c: string[]) => c[0] === 'user_preferences');
-      expect(prefsCalls.length).toBeGreaterThan(0);
+      expect(mockPrefsUpsert).toHaveBeenCalledOnce();
+      const upsertArg = mockPrefsUpsert.mock.calls[0][0];
+      expect(upsertArg.default_football).toBeNull();
+      expect(upsertArg).not.toHaveProperty('default_baseball');
     });
 
     // Test F: does not clear default when season year does not match

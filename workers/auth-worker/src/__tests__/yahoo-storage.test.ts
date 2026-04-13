@@ -579,20 +579,18 @@ describe('YahooStorage', () => {
     });
 
     it('clears matching sport default when lookup resolves the league_key', async () => {
-      const mockUpsertResult = vi.fn().mockResolvedValue({ error: null });
-      const mockPrefsUpsert = vi.fn().mockReturnValue({ then: mockUpsertResult, error: null });
+      const mockPrefsUpsert = vi.fn().mockReturnValue({ error: null });
 
       mockFrom.mockImplementation((table: string) => {
         if (table === 'yahoo_leagues') {
-          const eqChain: Record<string, unknown> = {};
-          const maybySingle = vi.fn().mockResolvedValue({
+          const maybeSingle = vi.fn().mockResolvedValue({
             data: { league_key: 'nfl.l.123', season_year: 2025 },
             error: null,
           });
-          eqChain.eq = vi.fn().mockReturnValue({ ...eqChain, maybySingle, maybeSingle: maybySingle });
-          (eqChain.eq as ReturnType<typeof vi.fn>).mockReturnValue({ eq: eqChain.eq, maybeSingle: maybySingle, error: null });
+          const eqFn = vi.fn();
+          eqFn.mockReturnValue({ eq: eqFn, maybeSingle, error: null });
           return {
-            select: vi.fn().mockReturnValue({ eq: eqChain.eq }),
+            select: vi.fn().mockReturnValue({ eq: eqFn }),
             delete: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ error: null }) }) }),
           };
         }
@@ -610,7 +608,7 @@ describe('YahooStorage', () => {
           });
           return {
             select: vi.fn().mockReturnValue({ eq: prefEq }),
-            upsert: vi.fn().mockReturnValue({ error: null }),
+            upsert: mockPrefsUpsert,
           };
         }
         return {};
@@ -618,9 +616,10 @@ describe('YahooStorage', () => {
 
       await storage.deleteYahooLeague('user_123', 'league-uuid');
 
-      // user_preferences upsert was called (the cleanup ran)
-      const prefsCalls = mockFrom.mock.calls.filter((c) => c[0] === 'user_preferences');
-      expect(prefsCalls.length).toBeGreaterThan(0);
+      expect(mockPrefsUpsert).toHaveBeenCalledOnce();
+      const upsertArg = mockPrefsUpsert.mock.calls[0][0];
+      expect(upsertArg.default_football).toBeNull();
+      expect(upsertArg).not.toHaveProperty('default_baseball');
     });
 
     it('does not clear default when season year does not match', async () => {

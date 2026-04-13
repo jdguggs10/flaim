@@ -8,6 +8,14 @@ const mockEq = vi.fn();
 const mockMaybeSingle = vi.fn();
 const mockUpsert = vi.fn();
 
+function makeMaybeSingleChain(result: { data: unknown; error: unknown }) {
+  const maybeSingle = vi.fn().mockResolvedValue(result);
+  const eq = vi.fn();
+  const chain = { eq, maybeSingle };
+  eq.mockReturnValue(chain);
+  return chain;
+}
+
 vi.mock('@supabase/supabase-js', () => ({
   createClient: () => ({
     from: mockFrom,
@@ -71,5 +79,55 @@ describe('EspnSupabaseStorage', () => {
     const upsertArg = mockPrefsUpsert.mock.calls[0][0];
     expect(upsertArg.default_football).toBeNull();
     expect(upsertArg).not.toHaveProperty('default_baseball');
+  });
+
+  it('setDefaultLeague returns not found when Yahoo league validation misses', async () => {
+    const mockPrefsUpsert = vi.fn();
+
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'yahoo_leagues') {
+        return {
+          select: vi.fn().mockReturnValue(makeMaybeSingleChain({ data: null, error: null })),
+        };
+      }
+
+      if (table === 'user_preferences') {
+        return {
+          upsert: mockPrefsUpsert,
+        };
+      }
+
+      return {};
+    });
+
+    const result = await storage.setDefaultLeague('user_123', 'yahoo', 'football', 'nfl.l.123', 2025);
+
+    expect(result).toEqual({ success: false, error: 'League not found' });
+    expect(mockPrefsUpsert).not.toHaveBeenCalled();
+  });
+
+  it('setDefaultLeague returns not found when Sleeper league validation misses', async () => {
+    const mockPrefsUpsert = vi.fn();
+
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'sleeper_leagues') {
+        return {
+          select: vi.fn().mockReturnValue(makeMaybeSingleChain({ data: null, error: null })),
+        };
+      }
+
+      if (table === 'user_preferences') {
+        return {
+          upsert: mockPrefsUpsert,
+        };
+      }
+
+      return {};
+    });
+
+    const result = await storage.setDefaultLeague('user_123', 'sleeper', 'football', 'league-123', 2025);
+
+    expect(result).toEqual({ success: false, error: 'League not found' });
+    expect(mockPrefsUpsert).not.toHaveBeenCalled();
   });
 });

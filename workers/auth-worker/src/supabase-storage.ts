@@ -585,7 +585,7 @@ export class EspnSupabaseStorage {
           .eq('clerk_user_id', clerkUserId)
           .eq('league_key', leagueId)
           .eq('season_year', seasonYear)
-          .single();
+          .maybeSingle();
 
         if (checkError || !targetLeague) {
           console.error('Yahoo league not found for default:', checkError);
@@ -598,7 +598,7 @@ export class EspnSupabaseStorage {
           .eq('clerk_user_id', clerkUserId)
           .eq('league_id', leagueId)
           .eq('season_year', seasonYear)
-          .single();
+          .maybeSingle();
 
         if (checkError || !targetLeague) {
           console.error('Sleeper league not found for default:', checkError);
