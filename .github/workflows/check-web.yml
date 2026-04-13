@@ -8,12 +8,14 @@ on:
       - 'web/**'
       - 'package.json'
       - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
       - '.github/workflows/check-web.yml'
   pull_request:
     paths:
       - 'web/**'
       - 'package.json'
       - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
       - '.github/workflows/check-web.yml'
   workflow_dispatch:
 
