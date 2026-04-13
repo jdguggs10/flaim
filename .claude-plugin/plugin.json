@@ -1,6 +1,6 @@
 {
   "name": "flaim-fantasy",
-  "version": "1.0.3",
+  "version": "1.0.2",
   "description": "Fantasy sports analysis across ESPN, Yahoo, and Sleeper. Get roster advice, standings, matchups, waiver wire picks, and start/sit decisions for football, baseball, basketball, and hockey.",
   "skills": [
     "./.agents/skills/flaim-fantasy/",
