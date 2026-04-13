@@ -33,6 +33,8 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ### Plugin Distribution
 - **Changed**: Claude/Cowork plugin now loads skills from `.agents/skills/` directly via `plugin.json`, removing the duplicated top-level `skills/` copy and making `.agents/skills/` the single source of truth.
+- **Changed**: Migrated legacy plugin `commands/` workflows into dedicated skills (`activity-brief`, `analyze-matchup`) and explicitly bundled all Flaim plugin skills in `plugin.json`.
+- **Changed**: `activity-brief` and `analyze-matchup` now allow model invocation in Cowork after runtime testing showed `disable-model-invocation: true` still surfaced auto-selection attempts but failed at execution time.
 
 ### Season Year Defaults
 - **Fixed**: Manual "Add League" dialog now defaults to the sport-aware current season year instead of the calendar year. Football/basketball/hockey now correctly default to 2025 in March 2026 (rollover not yet hit). Baseball correctly shows 2026 (Feb 1 rollover passed). Affects initial state, "This season" button, and sport-change reset.
