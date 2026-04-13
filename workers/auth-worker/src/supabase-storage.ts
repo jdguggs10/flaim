@@ -490,8 +490,8 @@ export class EspnSupabaseStorage {
         return false;
       }
 
-      // Clear any stale defaults pointing to this ESPN league (all seasons deleted at once)
-      await this.clearStaleDefaultForLeague(clerkUserId, 'espn', leagueId);
+      // Clear any stale defaults pointing to this ESPN league for the deleted sport only
+      await this.clearStaleDefaultForLeague(clerkUserId, 'espn', leagueId, undefined, sport);
 
       return true;
     } catch (error) {

@@ -86,6 +86,18 @@ interface UserLeague {
   teamName?: string;
 }
 
+function getYahooStableLeagueId(leagueId: string): string {
+  const stableId = leagueId.match(/^[^.]+\.l\.(.+)$/)?.[1];
+  return stableId || leagueId;
+}
+
+function getActiveLeagueGroupKey(league: UserLeague): string {
+  if (league.platform === 'yahoo') {
+    return `${league.platform}:${(league.sport || '').toLowerCase()}:${getYahooStableLeagueId(league.leagueId)}`;
+  }
+  return `${league.platform}:${league.leagueId}`;
+}
+
 async function fetchUserLeagues(
   env: Env,
   authHeader?: string,
@@ -487,16 +499,13 @@ export function getUnifiedTools(): UnifiedTool[] {
           if (yahooData.error) failedPlatforms.add('yahoo');
           if (sleeperData.error) failedPlatforms.add('sleeper');
 
-          // Group leagues by unique league identifier.
-          // Yahoo: group by sport+name because Yahoo assigns a new leagueKey each season;
-          // without name-based grouping, recurring leagues surface every past season
-          // as a separate active entry. ESPN/Sleeper reuse the same leagueId across
-          // seasons, so platform:leagueId is the correct stable key for those.
+          // Group leagues by stable identity.
+          // Yahoo league_key is season-scoped (`<game_key>.l.<league_id>`), so strip the
+          // changing game prefix and group on the stable league_id portion instead.
+          // That keeps recurring seasons together without collapsing two same-name leagues.
           const leagueGroups = new Map<string, typeof allLeagues>();
           for (const league of allLeagues) {
-            const key = league.platform === 'yahoo'
-              ? `${league.platform}:${(league.sport || '').toLowerCase()}:${league.leagueName}`
-              : `${league.platform}:${league.leagueId}`;
+            const key = getActiveLeagueGroupKey(league);
             if (!leagueGroups.has(key)) {
               leagueGroups.set(key, []);
             }
@@ -620,6 +629,7 @@ export function getUnifiedTools(): UnifiedTool[] {
                 const staleUrl = new URL(`https://internal/internal/leagues/default/${sport}`);
                 staleUrl.searchParams.set('platform', defaultInfo.platform);
                 staleUrl.searchParams.set('leagueId', defaultInfo.leagueId);
+                staleUrl.searchParams.set('seasonYear', String(defaultInfo.seasonYear));
                 let cleared = false;
                 try {
                   const clearResp = await env.AUTH_WORKER.fetch(
@@ -754,10 +764,12 @@ export function getUnifiedTools(): UnifiedTool[] {
 
           const thresholdYear = getActiveThresholdYear();
 
-          // Group by league
+          // Group by stable league identity.
+          // For Yahoo, collapse recurring seasons by stripping the season-specific
+          // game prefix from league_key, while still keeping distinct active leagues separate.
           const leagueGroups = new Map<string, typeof allLeagues>();
           for (const league of allLeagues) {
-            const key = `${league.platform}:${league.leagueId}`;
+            const key = getActiveLeagueGroupKey(league);
             if (!leagueGroups.has(key)) {
               leagueGroups.set(key, []);
             }

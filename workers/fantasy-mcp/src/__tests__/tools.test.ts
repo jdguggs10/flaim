@@ -172,6 +172,53 @@ describe('fantasy-mcp tools', () => {
     expect(bbOld?.seasonYear).toBe(2025);
   });
 
+  it('get_ancient_history keeps recurring Yahoo seasons under active leagues', async () => {
+    const tool = getUnifiedTools().find((t) => t.name === 'get_ancient_history');
+    expect(tool).toBeTruthy();
+
+    const yahooLeagues = [
+      { sport: 'football', leagueKey: '449.l.1000', leagueName: 'Touchdown League', teamId: 't1', seasonYear: 2024 },
+      { sport: 'football', leagueKey: '461.l.1000', leagueName: 'Touchdown League', teamId: 't2', seasonYear: 2025 },
+    ];
+
+    const env = {
+      INTERNAL_SERVICE_TOKEN: 'internal-secret',
+      AUTH_WORKER: {
+        fetch: async (req: Request) => {
+          const url = new URL(req.url);
+          if (url.pathname === '/internal/leagues/yahoo') {
+            return new Response(JSON.stringify({ leagues: yahooLeagues }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          return new Response(JSON.stringify({ leagues: [] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        },
+      },
+    } as unknown as Env;
+
+    const result = await tool!.handler({}, env, 'Bearer test-token');
+    const payload = JSON.parse(result.content[0].text) as {
+      oldLeagues: Array<{ platform: string; leagueId: string; seasonYear: number }>;
+      oldSeasonsFromActiveLeagues: Record<string, Array<{ platform: string; leagueId: string; seasonYear: number }>>;
+      totalOldLeagues: number;
+      totalOldSeasons: number;
+    };
+
+    expect(payload.totalOldLeagues).toBe(0);
+    expect(payload.totalOldSeasons).toBe(1);
+    const allOldSeasons = Object.values(payload.oldSeasonsFromActiveLeagues).flat();
+    expect(allOldSeasons).toHaveLength(1);
+    expect(allOldSeasons[0]).toMatchObject({
+      platform: 'yahoo',
+      leagueId: '449.l.1000',
+      seasonYear: 2024,
+    });
+  });
+
   it('get_league_info routes to client and formats a success payload', async () => {
     const tool = getUnifiedTools().find((t) => t.name === 'get_league_info');
     expect(tool).toBeTruthy();
@@ -525,10 +572,11 @@ describe('fantasy-mcp tools', () => {
       warnings?: string[];
     };
 
-    // DELETE should have been called with platform + leagueId query params
+    // DELETE should have been called with platform + leagueId + seasonYear query params
     expect(deleteCalled).toBe(true);
     expect(deleteUrl!.searchParams.get('platform')).toBe('espn');
     expect(deleteUrl!.searchParams.get('leagueId')).toBe('old-fb');
+    expect(deleteUrl!.searchParams.get('seasonYear')).toBe('2024');
 
     // Warning should mention the stale league
     expect(payload.warnings).toBeDefined();
@@ -596,10 +644,10 @@ describe('fantasy-mcp tools', () => {
     const tool = getUnifiedTools().find((t) => t.name === 'get_user_session');
     expect(tool).toBeTruthy();
 
-    // Same Yahoo league renewed across two seasons — should surface only 2025
+    // Same Yahoo league renewed across two seasons — game_key changes, stable league_id does not.
     const yahooLeagues = [
-      { sport: 'football', leagueKey: 'nfl.l.1000', leagueName: 'Touchdown League', teamId: 't1', seasonYear: 2024 },
-      { sport: 'football', leagueKey: 'nfl.l.2000', leagueName: 'Touchdown League', teamId: 't2', seasonYear: 2025 },
+      { sport: 'football', leagueKey: '449.l.1000', leagueName: 'Touchdown League', teamId: 't1', seasonYear: 2024 },
+      { sport: 'football', leagueKey: '461.l.1000', leagueName: 'Touchdown League', teamId: 't2', seasonYear: 2025 },
     ];
 
     const env = {
@@ -633,6 +681,49 @@ describe('fantasy-mcp tools', () => {
     );
     expect(yahooFootball).toHaveLength(1);
     expect(yahooFootball[0].seasonYear).toBe(2025);
+    expect(yahooFootball[0].leagueId).toBe('461.l.1000');
+  });
+
+  it('get_user_session: distinct Yahoo leagues with the same name remain separate', async () => {
+    const tool = getUnifiedTools().find((t) => t.name === 'get_user_session');
+    expect(tool).toBeTruthy();
+
+    const yahooLeagues = [
+      { sport: 'football', leagueKey: '461.l.1000', leagueName: 'Touchdown League', teamId: 't1', seasonYear: 2025 },
+      { sport: 'football', leagueKey: '461.l.2000', leagueName: 'Touchdown League', teamId: 't2', seasonYear: 2025 },
+    ];
+
+    const env = {
+      INTERNAL_SERVICE_TOKEN: 'internal-secret',
+      AUTH_WORKER: {
+        fetch: async (req: Request) => {
+          const url = new URL(req.url);
+          if (url.pathname === '/internal/leagues/yahoo') {
+            return new Response(JSON.stringify({ leagues: yahooLeagues }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          return new Response(JSON.stringify({ leagues: [] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        },
+      },
+    } as unknown as Env;
+
+    const result = await tool!.handler({}, env, 'Bearer test-token');
+    const payload = JSON.parse(result.content[0].text) as {
+      allLeagues: Array<{ platform: string; sport: string; leagueId: string; leagueName: string }>;
+      totalLeaguesFound: number;
+    };
+
+    const yahooFootball = payload.allLeagues.filter(
+      (l) => l.platform === 'yahoo' && l.sport === 'football'
+    );
+    expect(payload.totalLeaguesFound).toBe(2);
+    expect(yahooFootball).toHaveLength(2);
+    expect(yahooFootball.map((l) => l.leagueId).sort()).toEqual(['461.l.1000', '461.l.2000']);
   });
 
   it('get_players routes unchanged to client', async () => {

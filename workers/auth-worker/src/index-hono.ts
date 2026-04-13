@@ -1147,17 +1147,23 @@ api.delete('/internal/leagues/default/:sport', async (c) => {
 
   const platform = c.req.query('platform');
   const leagueId = c.req.query('leagueId');
+  const seasonYearParam = c.req.query('seasonYear');
+  const seasonYear =
+    seasonYearParam === undefined ? undefined : Number.parseInt(seasonYearParam, 10);
+  if (seasonYearParam !== undefined && Number.isNaN(seasonYear)) {
+    return c.json({ error: 'Invalid seasonYear' }, 400);
+  }
 
   const storage = EspnSupabaseStorage.fromEnvironment(c.env);
 
-  // If platform + leagueId are provided, do a conditional (TOCTOU-safe) clear —
-  // only removes the default if it still points to this specific league.
+  // If platform + leagueId are provided, do an exact conditional clear — only
+  // removes the default if it still points to this specific league + season.
   if (platform && leagueId) {
     await storage.clearStaleDefaultForLeague(
       userId,
       platform as 'espn' | 'yahoo' | 'sleeper',
       leagueId,
-      undefined,
+      seasonYear,
       sport
     );
     return c.json({ success: true });
