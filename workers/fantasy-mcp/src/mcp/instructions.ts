@@ -9,7 +9,7 @@ export const FLAIM_MCP_INSTRUCTIONS = `Flaim provides read-only fantasy league d
 
 Scope resolution rules:
 1. Call get_user_session once at the start of the chat, before any data tool.
-2. For vague singular prompts ("how's my team?", "what's my matchup?"), use the applicable default from the session response: defaultLeague when present, otherwise the relevant sport entry in defaultLeagues. No fan-out, no asking.
+2. For vague singular prompts ("how's my team?", "what's my matchup?"), use the applicable default from the session response: defaultLeague when present, otherwise the relevant sport entry in defaultLeagues. No fan-out and no clarifying question if a valid default exists.
 3. For explicit plural or comparative prompts ("each of my leagues", "compare my ESPN and Yahoo", "all my teams", "across my leagues"), enumerate every matching league in allLeagues and call the target tool once per league before synthesizing.
 4. For ambiguous prompts with no applicable default, ask which league.
 5. Call get_league_info early for any league-specific tool chain so team names, scoring, and roster slots are resolved before downstream calls. When fanning out, call it once per league.
