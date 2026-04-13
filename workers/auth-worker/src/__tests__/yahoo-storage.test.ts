@@ -9,6 +9,7 @@ const mockUpdate = vi.fn();
 const mockDelete = vi.fn();
 const mockEq = vi.fn();
 const mockSingle = vi.fn();
+const mockMaybeSingle = vi.fn();
 const mockUpsert = vi.fn();
 const mockIs = vi.fn();
 const mockOr = vi.fn();
@@ -40,11 +41,14 @@ describe('YahooStorage', () => {
     mockSelect.mockReturnValue({
       eq: mockEq,
       single: mockSingle,
+      maybeSingle: mockMaybeSingle,
     });
+    mockMaybeSingle.mockResolvedValue({ data: null, error: null });
     mockEq.mockReturnValue({
       eq: mockEq,
       or: mockOr,
       single: mockSingle,
+      maybeSingle: mockMaybeSingle,
       select: mockSelect,
       delete: mockDelete,
       is: mockIs,
@@ -546,27 +550,169 @@ describe('YahooStorage', () => {
   });
 
   describe('deleteYahooLeague', () => {
-    it('deletes a specific league', async () => {
-      mockEq.mockReturnValue({
-        eq: vi.fn().mockReturnValue({ error: null }),
+    it('deletes a specific league when row lookup returns null (no cleanup needed)', async () => {
+      // Separate per-table mocks
+      const mockYahooEq = vi.fn();
+      const mockPrefsEq = vi.fn();
+
+      mockYahooEq.mockReturnValue({
+        eq: mockYahooEq,
+        maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+        error: null,
+      });
+      mockPrefsEq.mockReturnValue({ eq: mockPrefsEq, maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }) });
+
+      const mockYahooDelete = vi.fn().mockReturnValue({ eq: mockYahooEq, error: null });
+      const mockYahooSelect = vi.fn().mockReturnValue({ eq: mockYahooEq });
+
+      mockFrom.mockImplementation((table: string) => {
+        if (table === 'yahoo_leagues') {
+          return { select: mockYahooSelect, delete: mockYahooDelete };
+        }
+        return { select: vi.fn().mockReturnValue({ eq: mockPrefsEq }) };
       });
 
       await storage.deleteYahooLeague('user_123', 'league-uuid');
 
       expect(mockFrom).toHaveBeenCalledWith('yahoo_leagues');
-      expect(mockDelete).toHaveBeenCalled();
+      expect(mockYahooDelete).toHaveBeenCalled();
+    });
+
+    it('clears matching sport default when lookup resolves the league_key', async () => {
+      const mockPrefsUpsert = vi.fn().mockReturnValue({ error: null });
+
+      mockFrom.mockImplementation((table: string) => {
+        if (table === 'yahoo_leagues') {
+          const maybeSingle = vi.fn().mockResolvedValue({
+            data: { league_key: 'nfl.l.123', season_year: 2025 },
+            error: null,
+          });
+          const eqFn = vi.fn();
+          eqFn.mockReturnValue({ eq: eqFn, maybeSingle, error: null });
+          return {
+            select: vi.fn().mockReturnValue({ eq: eqFn }),
+            delete: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ error: null }) }) }),
+          };
+        }
+        if (table === 'user_preferences') {
+          const prefEq = vi.fn().mockReturnValue({
+            maybeSingle: vi.fn().mockResolvedValue({
+              data: {
+                default_football: { platform: 'yahoo', leagueId: 'nfl.l.123', seasonYear: 2025 },
+                default_baseball: null,
+                default_basketball: null,
+                default_hockey: null,
+              },
+              error: null,
+            }),
+          });
+          return {
+            select: vi.fn().mockReturnValue({ eq: prefEq }),
+            upsert: mockPrefsUpsert,
+          };
+        }
+        return {};
+      });
+
+      await storage.deleteYahooLeague('user_123', 'league-uuid');
+
+      expect(mockPrefsUpsert).toHaveBeenCalledOnce();
+      const upsertArg = mockPrefsUpsert.mock.calls[0][0];
+      expect(upsertArg.default_football).toBeNull();
+      expect(upsertArg).not.toHaveProperty('default_baseball');
+    });
+
+    it('does not clear default when season year does not match', async () => {
+      const mockPrefsUpsert = vi.fn();
+
+      mockFrom.mockImplementation((table: string) => {
+        if (table === 'yahoo_leagues') {
+          const maybeSingleFn = vi.fn().mockResolvedValue({
+            data: { league_key: 'nfl.l.123', season_year: 2025 }, // row is 2025
+            error: null,
+          });
+          const eqFn = vi.fn();
+          eqFn.mockReturnValue({ eq: eqFn, maybeSingle: maybeSingleFn, error: null });
+          return {
+            select: vi.fn().mockReturnValue({ eq: eqFn }),
+            delete: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ error: null }) }) }),
+          };
+        }
+        if (table === 'user_preferences') {
+          const prefEq = vi.fn().mockReturnValue({
+            maybeSingle: vi.fn().mockResolvedValue({
+              data: {
+                default_football: { platform: 'yahoo', leagueId: 'nfl.l.123', seasonYear: 2024 }, // default is 2024
+                default_baseball: null,
+                default_basketball: null,
+                default_hockey: null,
+              },
+              error: null,
+            }),
+          });
+          return {
+            select: vi.fn().mockReturnValue({ eq: prefEq }),
+            upsert: mockPrefsUpsert,
+          };
+        }
+        return {};
+      });
+
+      await storage.deleteYahooLeague('user_123', 'league-uuid');
+
+      // upsert should NOT be called — 2025 row deleted but 2024 default is untouched
+      expect(mockPrefsUpsert).not.toHaveBeenCalled();
     });
   });
 
   describe('deleteAllYahooLeagues', () => {
     it('deletes all leagues for a user', async () => {
-      mockEq.mockReturnValue({ error: null });
+      // user_preferences lookup returns null — no defaults to clear
+      mockMaybeSingle.mockResolvedValue({ data: null, error: null });
+      mockEq.mockReturnValue({ eq: mockEq, error: null, maybeSingle: mockMaybeSingle });
 
       await storage.deleteAllYahooLeagues('user_123');
 
       expect(mockFrom).toHaveBeenCalledWith('yahoo_leagues');
       expect(mockDelete).toHaveBeenCalled();
       expect(mockEq).toHaveBeenCalledWith('clerk_user_id', 'user_123');
+    });
+
+    it('clears all Yahoo defaults on full disconnect', async () => {
+      const mockPrefsUpsert = vi.fn().mockReturnValue({ error: null });
+
+      mockFrom.mockImplementation((table: string) => {
+        if (table === 'yahoo_leagues') {
+          return { delete: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ error: null }) }) };
+        }
+        if (table === 'user_preferences') {
+          const prefEq = vi.fn().mockReturnValue({
+            maybeSingle: vi.fn().mockResolvedValue({
+              data: {
+                default_football: { platform: 'yahoo', leagueId: 'nfl.l.123', seasonYear: 2025 },
+                default_baseball: { platform: 'yahoo', leagueId: 'mlb.l.456', seasonYear: 2025 },
+                default_basketball: { platform: 'espn', leagueId: '999', seasonYear: 2024 }, // different platform — should NOT be cleared
+                default_hockey: null,
+              },
+              error: null,
+            }),
+          });
+          return {
+            select: vi.fn().mockReturnValue({ eq: prefEq }),
+            upsert: mockPrefsUpsert,
+          };
+        }
+        return {};
+      });
+
+      await storage.deleteAllYahooLeagues('user_123');
+
+      expect(mockPrefsUpsert).toHaveBeenCalledOnce();
+      const upsertArg = mockPrefsUpsert.mock.calls[0][0];
+      expect(upsertArg.default_football).toBeNull();
+      expect(upsertArg.default_baseball).toBeNull();
+      // ESPN default should be untouched (not in the upsert payload)
+      expect(upsertArg).not.toHaveProperty('default_basketball');
     });
   });
 

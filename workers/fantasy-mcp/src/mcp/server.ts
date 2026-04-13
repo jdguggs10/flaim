@@ -3,6 +3,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { Env } from '../types';
 import { getUnifiedTools, hasRequiredScope, mcpAuthError } from './tools';
 import { USER_SESSION_WIDGET_HTML } from '../widgets/user-session-widget';
+import { FLAIM_MCP_INSTRUCTIONS } from './instructions';
 
 export interface McpContext {
   env: Env;
@@ -20,16 +21,19 @@ export interface McpContext {
 export function createFantasyMcpServer(ctx: McpContext): McpServer {
   const { env, authHeader, tokenScope, correlationId, evalRunId, evalTraceId } = ctx;
 
-  const server = new McpServer({
-    name: 'fantasy-mcp',
-    version: '1.0.0',
-    icons: [
-      {
-        src: 'https://flaim.app/icon-light.png',
-        mimeType: 'image/png',
-      },
-    ],
-  });
+  const server = new McpServer(
+    {
+      name: 'fantasy-mcp',
+      version: '1.0.0',
+      icons: [
+        {
+          src: 'https://flaim.app/icon-light.png',
+          mimeType: 'image/png',
+        },
+      ],
+    },
+    { instructions: FLAIM_MCP_INSTRUCTIONS }
+  );
 
   // Register widget resources
   server.registerResource(

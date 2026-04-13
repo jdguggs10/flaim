@@ -86,6 +86,18 @@ interface UserLeague {
   teamName?: string;
 }
 
+function getYahooStableLeagueId(leagueId: string): string {
+  const stableId = leagueId.match(/^[^.]+\.l\.(.+)$/)?.[1];
+  return stableId || leagueId;
+}
+
+function getActiveLeagueGroupKey(league: UserLeague): string {
+  if (league.platform === 'yahoo') {
+    return `${league.platform}:${(league.sport || '').toLowerCase()}:${getYahooStableLeagueId(league.leagueId)}`;
+  }
+  return `${league.platform}:${league.leagueId}`;
+}
+
 async function fetchUserLeagues(
   env: Env,
   authHeader?: string,
@@ -446,7 +458,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       openaiMeta: { invoking: 'Loading your leagues\u2026', invoked: 'Leagues loaded' },
       widgetUri: 'ui://widget/user-session.html',
       description:
-        "Call this exactly once at the start of each chat before any other Flaim tool. It establishes the chat's working league context by discovering the user's available leagues and defaults, and returns the platform, sport, leagueId, teamId, and seasonYear values needed for subsequent tool calls. In normal chat flows, do not skip this first step. After this, strongly consider calling get_league_info as the second call for the selected league. season_year always represents the start year of the season. Read-only and safe to retry.",
+        "Call this exactly once at the start of each chat before any other Flaim tool. Returns the user's full league landscape: allLeagues (all active leagues), defaultLeagues (per-sport defaults), and defaultLeague (populated only when a single league exists or defaultSport matches). Use defaultLeague for vague singular prompts. For explicit plural or comparative prompts (each, all, compare, across leagues/platforms), enumerate every matching league in allLeagues and call the target tool once per league. In normal chat flows, do not skip this first step. After this, strongly consider calling get_league_info for the target league. season_year always represents the start year of the season. Read-only and safe to retry.",
       inputSchema: {},
       handler: async (_args, env, authHeader, correlationId, evalRunId, evalTraceId) => {
         return withToolLogging(correlationId, 'get_user_session', 'session', async () => {
@@ -480,12 +492,20 @@ export function getUnifiedTools(): UnifiedTool[] {
           // Filter to active leagues (have a season within 2 years) and limit to 2 most recent seasons
           const thresholdYear = getActiveThresholdYear();
 
-          // Group leagues by unique league identifier
+          // Track which platforms failed to fetch — used to avoid clearing valid defaults
+          // when a platform was temporarily unavailable.
+          const failedPlatforms = new Set<string>();
+          if (espnData.error) failedPlatforms.add('espn');
+          if (yahooData.error) failedPlatforms.add('yahoo');
+          if (sleeperData.error) failedPlatforms.add('sleeper');
+
+          // Group leagues by stable identity.
+          // Yahoo league_key is season-scoped (`<game_key>.l.<league_id>`), so strip the
+          // changing game prefix and group on the stable league_id portion instead.
+          // That keeps recurring seasons together without collapsing two same-name leagues.
           const leagueGroups = new Map<string, typeof allLeagues>();
           for (const league of allLeagues) {
-            const key = league.platform === 'yahoo'
-              ? `${league.platform}:${league.leagueName}`
-              : `${league.platform}:${league.leagueId}`;
+            const key = getActiveLeagueGroupKey(league);
             if (!leagueGroups.has(key)) {
               leagueGroups.set(key, []);
             }
@@ -533,9 +553,10 @@ export function getUnifiedTools(): UnifiedTool[] {
             const league = leagues[0];
             sessionMessage = `Use platform="${league.platform}", sport="${league.sport}", leagueId="${league.leagueId}", teamId="${league.teamId || 'none'}", seasonYear=${league.seasonYear} for all tool calls.`;
           } else {
-            sessionMessage = `User has ${leagues.length} leagues configured across: ${Object.entries(sportCounts)
+            const sportSummary = Object.entries(sportCounts)
               .map(([sport, count]) => `${count} ${sport}`)
-              .join(', ')}. Only current-season leagues are shown. For past seasons or historical data, use get_ancient_history. Infer sport from context (e.g., "tight ends" → football) and use that sport's default league. If sport is unclear, use the default sport and its default league. Only ask when no default applies.`;
+              .join(', ');
+            sessionMessage = `User has ${leagues.length} active leagues across ${sportSummary}. Scope rules: (1) For vague singular prompts ("how's my team?", "what's my matchup?"), use preferences.defaultSport and that sport's defaultLeagues entry — no fan-out, no asking. (2) For explicit plural or comparative prompts ("each of my leagues", "compare my ESPN and Yahoo", "all my teams"), enumerate every matching league in allLeagues and call the target tool once per league before synthesizing. (3) For ambiguous prompts with no applicable default, ask which league. For past seasons or historical data, use get_ancient_history.`;
           }
 
           // Fetch user preferences for defaults
@@ -589,16 +610,56 @@ export function getUnifiedTools(): UnifiedTool[] {
               );
               if (matchingLeague) {
                 defaultLeagues[sport] = matchingLeague;
+              } else {
+                // Default doesn't match any active league.
+                if (failedPlatforms.has(defaultInfo.platform)) {
+                  // Platform fetch failed — the league may still be valid. Preserve
+                  // the default and surface a transient warning instead of clearing.
+                  warnings.push(`Could not verify ${sport} default: ${defaultInfo.platform} data is temporarily unavailable. Default preserved.`);
+                } else {
+                // Platform fetch succeeded but league is missing — it's genuinely stale.
+                // Fire a best-effort clear so future reads don't repeat this lookup.
+                const staleBaseHeaders: Record<string, string> = {
+                  'Content-Type': 'application/json',
+                  ...(authHeader ? { Authorization: authHeader } : {}),
+                };
+                const withStaleCorrelation = correlationId ? withCorrelationId(staleBaseHeaders, correlationId) : new Headers(staleBaseHeaders);
+                const withStaleInternal = withInternalServiceToken(withStaleCorrelation, env, `auth-worker /internal/leagues/default/${sport}`);
+                const staleHeaders = withEvalHeaders(withStaleInternal, evalRunId, evalTraceId);
+                const staleUrl = new URL(`https://internal/internal/leagues/default/${sport}`);
+                staleUrl.searchParams.set('platform', defaultInfo.platform);
+                staleUrl.searchParams.set('leagueId', defaultInfo.leagueId);
+                staleUrl.searchParams.set('seasonYear', String(defaultInfo.seasonYear));
+                let cleared = false;
+                try {
+                  const clearResp = await env.AUTH_WORKER.fetch(
+                    new Request(staleUrl.toString(), { method: 'DELETE', headers: staleHeaders })
+                  );
+                  cleared = clearResp.ok;
+                  if (!clearResp.ok) {
+                    console.error(`[get_user_session] Stale ${sport} default DELETE returned ${clearResp.status}`);
+                  }
+                } catch (e) {
+                  console.error(`[get_user_session] Network error clearing stale ${sport} default:`, e);
+                }
+                warnings.push(
+                  cleared
+                    ? `Cleared stale ${sport} default: league ${defaultInfo.leagueId} is no longer in your active leagues.`
+                    : `Stale ${sport} default detected (league ${defaultInfo.leagueId} is no longer active) — automatic cleanup failed, will retry next session.`
+                );
+                } // end: platform fetch succeeded (stale default)
               }
             }
           }
 
-          // Compute primary default from preferences
+          // Compute primary default — three deterministic branches only:
+          // 1. defaultSport is set AND that sport has a validated default in defaultLeagues
+          // 2. Exactly one active league (single-user shortcut, no prefs needed)
+          // 3. null — no arbitrary fallback; model should fan out or ask
           const primarySport = preferences.defaultSport as string | undefined;
           const defaultLeague =
             (primarySport && defaultLeagues[primarySport]) ||
-            Object.values(defaultLeagues)[0] ||
-            leagues[0];
+            (leagues.length === 1 ? leagues[0] : null);
 
           const sessionData = {
             success: true,
@@ -703,12 +764,12 @@ export function getUnifiedTools(): UnifiedTool[] {
 
           const thresholdYear = getActiveThresholdYear();
 
-          // Group by league
+          // Group by stable league identity.
+          // For Yahoo, collapse recurring seasons by stripping the season-specific
+          // game prefix from league_key, while still keeping distinct active leagues separate.
           const leagueGroups = new Map<string, typeof allLeagues>();
           for (const league of allLeagues) {
-            const key = league.platform === 'yahoo'
-              ? `${league.platform}:${league.leagueName}`
-              : `${league.platform}:${league.leagueId}`;
+            const key = getActiveLeagueGroupKey(league);
             if (!leagueGroups.has(key)) {
               leagueGroups.set(key, []);
             }
@@ -763,7 +824,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       requiredScope: 'mcp:read',
       securitySchemes: buildSecuritySchemes('mcp:read'),
       openaiMeta: { invoking: 'Fetching league info\u2026', invoked: 'League info ready' },
-      description: `Strongly encouraged as the second call after get_user_session for the selected league. This provides the baseline league context for analysis: league name, settings, scoring type, roster configuration, and team/owner context, plus schedule or season-window metadata when the platform provides it. Use it liberally before standings, matchups, roster, free-agent, player, or transaction analysis so team names are resolved and the model has league-type, scoring, and roster context. The exact team fields vary by platform but all include ownerName. Use values from get_user_session. Read-only and safe to retry. Current date is ${currentDate}.`,
+      description: `Strongly encouraged as the second call after get_user_session for the specified league. This provides the baseline league context for analysis: league name, settings, scoring type, roster configuration, and team/owner context, plus schedule or season-window metadata when the platform provides it. Use it liberally before standings, matchups, roster, free-agent, player, or transaction analysis so team names are resolved and the model has league-type, scoring, and roster context. When fanning out across multiple leagues, call this once per league. The exact team fields vary by platform but all include ownerName. Use values from get_user_session. Read-only and safe to retry. Current date is ${currentDate}.`,
       inputSchema: {
         platform: z
           .enum(['espn', 'yahoo', 'sleeper'])
@@ -798,7 +859,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       requiredScope: 'mcp:read',
       securitySchemes: buildSecuritySchemes('mcp:read'),
       openaiMeta: { invoking: 'Fetching standings\u2026', invoked: 'Standings ready' },
-      description: `Get season standings and outcome snapshot; includes verified season-outcome fields when available. Returns team records, rankings, and points summaries. The rank field is a standings sort position (1 = best): on ESPN and Sleeper it is computed by Flaim from win percentage; on Yahoo it is passed through from Yahoo's own standings API. It is NOT a verified postseason finish. For verified postseason outcome, use finalRank and championshipWon instead. Also returns seasonPhase (regular_season/playoffs_in_progress/season_complete), seasonComplete, and per-team outcome fields: finalRank, championshipWon, playoffOutcome, outcomeConfidence, madePlayoffs, playoffSeed. Outcome fields are null when not verifiable — do not infer championship from rank or team name. Note: playoffOutcome returns 'in_progress' on Sleeper for teams in active playoffs; ESPN and Yahoo return null for that state. ESPN may also include projected-rank fields. Best used after get_user_session and, in most league-specific chats, after get_league_info so team names and league context are already established. For historical finish questions, call get_ancient_history first to discover seasons, then call this tool per season for verified outcomes. Read-only and safe to retry. Current date is ${currentDate}.`,
+      description: `Get season standings and outcome snapshot; includes verified season-outcome fields when available. Returns team records, rankings, and points summaries. The rank field is a standings sort position (1 = best): on ESPN and Sleeper it is computed by Flaim from win percentage; on Yahoo it is passed through from Yahoo's own standings API. It is NOT a verified postseason finish. For verified postseason outcome, use finalRank and championshipWon instead. Also returns seasonPhase (regular_season/playoffs_in_progress/season_complete), seasonComplete, and per-team outcome fields: finalRank, championshipWon, playoffOutcome, outcomeConfidence, madePlayoffs, playoffSeed. Outcome fields are null when not verifiable — do not infer championship from rank or team name. Note: playoffOutcome returns 'in_progress' on Sleeper for teams in active playoffs; ESPN and Yahoo return null for that state. ESPN may also include projected-rank fields. Best used after get_user_session and after get_league_info for the specified league so team names and league context are already established. For multi-league comparisons, call once per league. For historical finish questions, call get_ancient_history first to discover seasons, then call this tool per season for verified outcomes. Read-only and safe to retry. Current date is ${currentDate}.`,
       inputSchema: {
         platform: z
           .enum(['espn', 'yahoo', 'sleeper'])
@@ -833,7 +894,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       requiredScope: 'mcp:read',
       securitySchemes: buildSecuritySchemes('mcp:read'),
       openaiMeta: { invoking: 'Fetching matchups\u2026', invoked: 'Matchups ready' },
-      description: `Get matchups/scoreboard for a specific week or the current week. Best used after get_user_session and, in most league-specific chats, after get_league_info so the model already knows the league's team names, owner/team mapping, and league context before interpreting the matchup. Read-only and safe to retry. Current date is ${currentDate}.`,
+      description: `Get matchups/scoreboard for a specific week or the current week. Best used after get_user_session and after get_league_info for the specified league so the model already knows the league's team names, owner/team mapping, and league context before interpreting the matchup. For multi-league comparisons, call once per league. Read-only and safe to retry. Current date is ${currentDate}.`,
       inputSchema: {
         platform: z
           .enum(['espn', 'yahoo', 'sleeper'])
@@ -870,7 +931,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       requiredScope: 'mcp:read',
       securitySchemes: buildSecuritySchemes('mcp:read'),
       openaiMeta: { invoking: 'Fetching roster\u2026', invoked: 'Roster ready' },
-      description: `Get roster details for a specific team. Exact payload varies by platform: ESPN and Yahoo return player entries with lineup/position context, while Sleeper returns starters, bench, reserve, and record metadata for the selected roster. Best used after get_user_session and, in most league-specific chats, after get_league_info so the model already knows the league's team names, owner/team mapping, league settings, and roster context before interpreting this roster. Requires authentication except on Sleeper's public API. Read-only and safe to retry. Current date is ${currentDate}.`,
+      description: `Get roster details for a specific team. Exact payload varies by platform: ESPN and Yahoo return player entries with lineup/position context, while Sleeper returns starters, bench, reserve, and record metadata for the selected roster. Best used after get_user_session and after get_league_info for the specified league so the model already knows the league's team names, owner/team mapping, league settings, and roster context before interpreting this roster. Requires authentication except on Sleeper's public API. Read-only and safe to retry. Current date is ${currentDate}.`,
       inputSchema: {
         platform: z
           .enum(['espn', 'yahoo', 'sleeper'])
@@ -909,7 +970,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       requiredScope: 'mcp:read',
       securitySchemes: buildSecuritySchemes('mcp:read'),
       openaiMeta: { invoking: 'Searching free agents\u2026', invoked: 'Free agents ready' },
-      description: `Get currently available players for the selected league, optionally filtered by position. Exact payload varies by platform: ESPN and Yahoo include ownership percentages and sort by ownership, while Sleeper returns available-player identities from the public player index without ownership percentages. Best used after get_user_session and usually after get_league_info so team names, owner/team mapping, scoring context, and roster-slot context are already established before giving pickup advice. Use this for player availability only. Do not use percentOwned or market ownership to infer who owns a player in the user's league; for ownership questions, use get_league_info (returns teams with ownerName) and get_roster. Requires authentication on ESPN and Yahoo; Sleeper uses the public API. Use values from get_user_session. Read-only and safe to retry. Current date is ${currentDate}.`,
+      description: `Get currently available players for the specified league, optionally filtered by position. Exact payload varies by platform: ESPN and Yahoo include ownership percentages and sort by ownership, while Sleeper returns available-player identities from the public player index without ownership percentages. Best used after get_user_session and usually after get_league_info for the specified league so team names, owner/team mapping, scoring context, and roster-slot context are already established before giving pickup advice. For multi-league comparisons, call once per league. Use this for player availability only. Do not use percentOwned or market ownership to infer who owns a player in the user's league; for ownership questions, use get_league_info (returns teams with ownerName) and get_roster. Requires authentication on ESPN and Yahoo; Sleeper uses the public API. Use values from get_user_session. Read-only and safe to retry. Current date is ${currentDate}.`,
       inputSchema: {
         platform: z
           .enum(['espn', 'yahoo', 'sleeper'])

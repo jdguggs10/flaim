@@ -172,6 +172,53 @@ describe('fantasy-mcp tools', () => {
     expect(bbOld?.seasonYear).toBe(2025);
   });
 
+  it('get_ancient_history keeps recurring Yahoo seasons under active leagues', async () => {
+    const tool = getUnifiedTools().find((t) => t.name === 'get_ancient_history');
+    expect(tool).toBeTruthy();
+
+    const yahooLeagues = [
+      { sport: 'football', leagueKey: '449.l.1000', leagueName: 'Touchdown League', teamId: 't1', seasonYear: 2024 },
+      { sport: 'football', leagueKey: '461.l.1000', leagueName: 'Touchdown League', teamId: 't2', seasonYear: 2025 },
+    ];
+
+    const env = {
+      INTERNAL_SERVICE_TOKEN: 'internal-secret',
+      AUTH_WORKER: {
+        fetch: async (req: Request) => {
+          const url = new URL(req.url);
+          if (url.pathname === '/internal/leagues/yahoo') {
+            return new Response(JSON.stringify({ leagues: yahooLeagues }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          return new Response(JSON.stringify({ leagues: [] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        },
+      },
+    } as unknown as Env;
+
+    const result = await tool!.handler({}, env, 'Bearer test-token');
+    const payload = JSON.parse(result.content[0].text) as {
+      oldLeagues: Array<{ platform: string; leagueId: string; seasonYear: number }>;
+      oldSeasonsFromActiveLeagues: Record<string, Array<{ platform: string; leagueId: string; seasonYear: number }>>;
+      totalOldLeagues: number;
+      totalOldSeasons: number;
+    };
+
+    expect(payload.totalOldLeagues).toBe(0);
+    expect(payload.totalOldSeasons).toBe(1);
+    const allOldSeasons = Object.values(payload.oldSeasonsFromActiveLeagues).flat();
+    expect(allOldSeasons).toHaveLength(1);
+    expect(allOldSeasons[0]).toMatchObject({
+      platform: 'yahoo',
+      leagueId: '449.l.1000',
+      seasonYear: 2024,
+    });
+  });
+
   it('get_league_info routes to client and formats a success payload', async () => {
     const tool = getUnifiedTools().find((t) => t.name === 'get_league_info');
     expect(tool).toBeTruthy();
@@ -379,6 +426,304 @@ describe('fantasy-mcp tools', () => {
     expect(tool!.description).toContain('league_owner_name');
     expect(tool!.description).toContain('get_league_info');
     expect(tool!.description).toContain('get_roster');
+  });
+
+  // Test A: multi-league, no defaultSport pref → defaultLeague should be null
+  it('get_user_session: multiple leagues with no defaultSport → defaultLeague is null', async () => {
+    const tool = getUnifiedTools().find((t) => t.name === 'get_user_session');
+    expect(tool).toBeTruthy();
+
+    const twoLeagues = [
+      { platform: 'espn', sport: 'football', leagueId: 'fb1', leagueName: 'Gridiron', teamId: 't1', seasonYear: 2025 },
+      { platform: 'espn', sport: 'baseball', leagueId: 'bb1', leagueName: 'Diamond', teamId: 't2', seasonYear: 2026 },
+    ];
+
+    const env = {
+      INTERNAL_SERVICE_TOKEN: 'internal-secret',
+      AUTH_WORKER: {
+        fetch: async (req: Request) => {
+          const url = new URL(req.url);
+          if (url.pathname === '/internal/leagues') {
+            return new Response(JSON.stringify({ leagues: twoLeagues }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          if (url.pathname === '/internal/user/preferences') {
+            return new Response(JSON.stringify({ defaultSport: null }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          return new Response(JSON.stringify({ leagues: [] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        },
+      },
+    } as unknown as Env;
+
+    const result = await tool!.handler({}, env, 'Bearer test-token');
+    const payload = JSON.parse(result.content[0].text) as {
+      defaultLeague: unknown;
+      totalLeaguesFound: number;
+    };
+    expect(payload.totalLeaguesFound).toBe(2);
+    expect(payload.defaultLeague).toBeNull();
+  });
+
+  // Test B: single league, no prefs → defaultLeague auto-populated
+  it('get_user_session: single league with no prefs → defaultLeague is auto-populated', async () => {
+    const tool = getUnifiedTools().find((t) => t.name === 'get_user_session');
+    expect(tool).toBeTruthy();
+
+    // Yahoo leagues API uses leagueKey (not leagueId) — fetchYahooLeagues maps leagueKey → leagueId
+    const oneYahooLeague = [
+      { sport: 'football', leagueKey: '449.l.123', leagueName: 'My Yahoo League', teamId: 't5', seasonYear: 2025 },
+    ];
+
+    const env = {
+      INTERNAL_SERVICE_TOKEN: 'internal-secret',
+      AUTH_WORKER: {
+        fetch: async (req: Request) => {
+          const url = new URL(req.url);
+          if (url.pathname === '/internal/leagues') {
+            return new Response(JSON.stringify({ leagues: [] }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          if (url.pathname === '/internal/leagues/yahoo') {
+            return new Response(JSON.stringify({ leagues: oneYahooLeague }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          return new Response(JSON.stringify({ leagues: [] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        },
+      },
+    } as unknown as Env;
+
+    const result = await tool!.handler({}, env, 'Bearer test-token');
+    const payload = JSON.parse(result.content[0].text) as {
+      defaultLeague: { leagueId: string; platform: string; sport: string } | null;
+      totalLeaguesFound: number;
+    };
+    expect(payload.totalLeaguesFound).toBe(1);
+    expect(payload.defaultLeague).not.toBeNull();
+    expect(payload.defaultLeague?.leagueId).toBe('449.l.123');
+    expect(payload.defaultLeague?.platform).toBe('yahoo');
+    expect(payload.defaultLeague?.sport).toBe('football');
+  });
+
+  // Test C: stale default → DELETE fires with platform+leagueId params, warning appended
+  it('get_user_session: stale default fires conditional DELETE and appends warning', async () => {
+    const tool = getUnifiedTools().find((t) => t.name === 'get_user_session');
+    expect(tool).toBeTruthy();
+
+    const activeLeague = { platform: 'espn', sport: 'baseball', leagueId: 'bb1', leagueName: 'Diamond', teamId: 't2', seasonYear: 2026 };
+    // Football default points to a league that is no longer active
+    const stalePrefs = {
+      defaultSport: 'football',
+      defaultFootball: { platform: 'espn', leagueId: 'old-fb', seasonYear: 2024 },
+    };
+
+    let deleteCalled = false;
+    let deleteUrl: URL | null = null;
+
+    const env = {
+      INTERNAL_SERVICE_TOKEN: 'internal-secret',
+      AUTH_WORKER: {
+        fetch: async (req: Request) => {
+          const url = new URL(req.url);
+          if (url.pathname === '/internal/leagues') {
+            return new Response(JSON.stringify({ leagues: [activeLeague] }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          if (url.pathname === '/internal/user/preferences') {
+            return new Response(JSON.stringify(stalePrefs), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          if (req.method === 'DELETE' && url.pathname.startsWith('/internal/leagues/default/')) {
+            deleteCalled = true;
+            deleteUrl = url;
+            return new Response(JSON.stringify({ success: true }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          return new Response(JSON.stringify({ leagues: [] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        },
+      },
+    } as unknown as Env;
+
+    const result = await tool!.handler({}, env, 'Bearer test-token');
+    const payload = JSON.parse(result.content[0].text) as {
+      warnings?: string[];
+    };
+
+    // DELETE should have been called with platform + leagueId + seasonYear query params
+    expect(deleteCalled).toBe(true);
+    expect(deleteUrl!.searchParams.get('platform')).toBe('espn');
+    expect(deleteUrl!.searchParams.get('leagueId')).toBe('old-fb');
+    expect(deleteUrl!.searchParams.get('seasonYear')).toBe('2024');
+
+    // Warning should mention the stale league
+    expect(payload.warnings).toBeDefined();
+    expect(payload.warnings!.length).toBeGreaterThan(0);
+    expect(payload.warnings![0]).toContain('old-fb');
+  });
+
+  it('get_user_session: stale default skips DELETE when platform fetch failed', async () => {
+    const tool = getUnifiedTools().find((t) => t.name === 'get_user_session');
+    expect(tool).toBeTruthy();
+
+    const stalePrefs = {
+      defaultSport: 'football',
+      defaultFootball: { platform: 'yahoo', leagueId: 'nfl.l.123', seasonYear: 2025 },
+    };
+
+    let deleteCalled = false;
+
+    const env = {
+      INTERNAL_SERVICE_TOKEN: 'internal-secret',
+      AUTH_WORKER: {
+        fetch: async (req: Request) => {
+          const url = new URL(req.url);
+          if (url.pathname === '/internal/leagues') {
+            return new Response(JSON.stringify({ leagues: [] }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          if (url.pathname === '/internal/leagues/yahoo') {
+            // Simulate Yahoo fetch failure
+            return new Response(JSON.stringify({ error: 'Yahoo API unavailable' }), {
+              status: 502,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          if (url.pathname === '/internal/user/preferences') {
+            return new Response(JSON.stringify(stalePrefs), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          if (req.method === 'DELETE' && url.pathname.startsWith('/internal/leagues/default/')) {
+            deleteCalled = true;
+            return new Response(JSON.stringify({ success: true }), { status: 200 });
+          }
+          return new Response(JSON.stringify({ leagues: [] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        },
+      },
+    } as unknown as Env;
+
+    const result = await tool!.handler({}, env, 'Bearer test-token');
+    const payload = JSON.parse(result.content[0].text) as { warnings?: string[] };
+
+    // DELETE must NOT fire when the platform fetch failed
+    expect(deleteCalled).toBe(false);
+    // A warning should appear mentioning the unavailability (not clearing)
+    expect(payload.warnings?.some((w) => w.includes('temporarily unavailable'))).toBe(true);
+  });
+
+  it('get_user_session: recurring Yahoo leagues dedup to current season only', async () => {
+    const tool = getUnifiedTools().find((t) => t.name === 'get_user_session');
+    expect(tool).toBeTruthy();
+
+    // Same Yahoo league renewed across two seasons — game_key changes, stable league_id does not.
+    const yahooLeagues = [
+      { sport: 'football', leagueKey: '449.l.1000', leagueName: 'Touchdown League', teamId: 't1', seasonYear: 2024 },
+      { sport: 'football', leagueKey: '461.l.1000', leagueName: 'Touchdown League', teamId: 't2', seasonYear: 2025 },
+    ];
+
+    const env = {
+      INTERNAL_SERVICE_TOKEN: 'internal-secret',
+      AUTH_WORKER: {
+        fetch: async (req: Request) => {
+          const url = new URL(req.url);
+          if (url.pathname === '/internal/leagues/yahoo') {
+            return new Response(JSON.stringify({ leagues: yahooLeagues }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          return new Response(JSON.stringify({ leagues: [] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        },
+      },
+    } as unknown as Env;
+
+    const result = await tool!.handler({}, env, 'Bearer test-token');
+    const payload = JSON.parse(result.content[0].text) as {
+      allLeagues: Array<{ platform: string; sport: string; leagueId: string; seasonYear: number }>;
+      totalLeaguesFound: number;
+    };
+
+    // Only the 2025 season should appear — 2024 is superseded
+    const yahooFootball = payload.allLeagues.filter(
+      (l) => l.platform === 'yahoo' && l.sport === 'football'
+    );
+    expect(yahooFootball).toHaveLength(1);
+    expect(yahooFootball[0].seasonYear).toBe(2025);
+    expect(yahooFootball[0].leagueId).toBe('461.l.1000');
+  });
+
+  it('get_user_session: distinct Yahoo leagues with the same name remain separate', async () => {
+    const tool = getUnifiedTools().find((t) => t.name === 'get_user_session');
+    expect(tool).toBeTruthy();
+
+    const yahooLeagues = [
+      { sport: 'football', leagueKey: '461.l.1000', leagueName: 'Touchdown League', teamId: 't1', seasonYear: 2025 },
+      { sport: 'football', leagueKey: '461.l.2000', leagueName: 'Touchdown League', teamId: 't2', seasonYear: 2025 },
+    ];
+
+    const env = {
+      INTERNAL_SERVICE_TOKEN: 'internal-secret',
+      AUTH_WORKER: {
+        fetch: async (req: Request) => {
+          const url = new URL(req.url);
+          if (url.pathname === '/internal/leagues/yahoo') {
+            return new Response(JSON.stringify({ leagues: yahooLeagues }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          return new Response(JSON.stringify({ leagues: [] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        },
+      },
+    } as unknown as Env;
+
+    const result = await tool!.handler({}, env, 'Bearer test-token');
+    const payload = JSON.parse(result.content[0].text) as {
+      allLeagues: Array<{ platform: string; sport: string; leagueId: string; leagueName: string }>;
+      totalLeaguesFound: number;
+    };
+
+    const yahooFootball = payload.allLeagues.filter(
+      (l) => l.platform === 'yahoo' && l.sport === 'football'
+    );
+    expect(payload.totalLeaguesFound).toBe(2);
+    expect(yahooFootball).toHaveLength(2);
+    expect(yahooFootball.map((l) => l.leagueId).sort()).toEqual(['461.l.1000', '461.l.2000']);
   });
 
   it('get_players routes unchanged to client', async () => {

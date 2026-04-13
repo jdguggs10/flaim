@@ -1131,6 +1131,56 @@ api.get('/internal/user/preferences', async (c) => {
   });
 });
 
+// Internal: clear a default league for a sport (called by fantasy-mcp read-time self-heal)
+api.delete('/internal/leagues/default/:sport', async (c) => {
+  const { userId, error: authError } = await getInternalUserId(c.req.raw, c.env, undefined, { allowStaticApiKey: true });
+  if (!userId) {
+    const status = authError?.includes(INTERNAL_SERVICE_TOKEN_HEADER) || authError?.includes('Internal service authentication') ? 403 : 401;
+    return c.json({ error: 'unauthorized', error_description: authError || 'Authentication required' }, status);
+  }
+
+  const sport = c.req.param('sport');
+  const validSports = ['football', 'baseball', 'basketball', 'hockey'];
+  if (!validSports.includes(sport)) {
+    return c.json({ error: 'Invalid sport' }, 400);
+  }
+
+  const platform = c.req.query('platform');
+  const leagueId = c.req.query('leagueId');
+  const seasonYearParam = c.req.query('seasonYear');
+  const seasonYear =
+    seasonYearParam === undefined ? undefined : Number.parseInt(seasonYearParam, 10);
+  if (seasonYearParam !== undefined && Number.isNaN(seasonYear)) {
+    return c.json({ error: 'Invalid seasonYear' }, 400);
+  }
+
+  const storage = EspnSupabaseStorage.fromEnvironment(c.env);
+
+  // If platform + leagueId are provided, do an exact conditional clear — only
+  // removes the default if it still points to this specific league + season.
+  if (platform && leagueId) {
+    await storage.clearStaleDefaultForLeague(
+      userId,
+      platform as 'espn' | 'yahoo' | 'sleeper',
+      leagueId,
+      seasonYear,
+      sport
+    );
+    return c.json({ success: true });
+  }
+
+  const result = await storage.clearDefaultLeague(
+    userId,
+    sport as 'football' | 'baseball' | 'basketball' | 'hockey'
+  );
+
+  if (!result.success) {
+    return c.json({ error: result.error || 'Failed to clear default' }, 500);
+  }
+
+  return c.json({ success: true });
+});
+
 // Set default sport
 api.post('/user/preferences/default-sport', async (c) => {
   const { userId, error: authError } = await getClerkUserId(c.req.raw, c.env);

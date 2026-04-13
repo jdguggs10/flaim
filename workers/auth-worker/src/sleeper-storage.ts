@@ -1,4 +1,10 @@
 import { createClient } from '@supabase/supabase-js';
+import { clearDefaultsForLeague as _clearDefaultsForLeague, clearDefaultsForPlatform as _clearDefaultsForPlatform } from './preference-defaults';
+
+function maskUserId(userId: string): string {
+  if (!userId || userId.length <= 8) return '***';
+  return `${userId.substring(0, 8)}...`;
+}
 
 interface SleeperStorageEnv {
   SUPABASE_URL: string;
@@ -135,6 +141,18 @@ export class SleeperStorage {
   }
 
   async deleteSleeperLeague(clerkUserId: string, leagueId: string): Promise<void> {
+    // Resolve platform identifiers before deleting (route arg is DB row UUID)
+    const { data: row, error: lookupError } = await this.supabase
+      .from('sleeper_leagues')
+      .select('league_id, season_year')
+      .eq('clerk_user_id', clerkUserId)
+      .eq('id', leagueId)
+      .maybeSingle();
+
+    if (lookupError) {
+      console.warn(`[sleeper-storage] Failed to look up Sleeper league ${leagueId} before delete:`, lookupError);
+    }
+
     const { error } = await this.supabase
       .from('sleeper_leagues')
       .delete()
@@ -142,6 +160,11 @@ export class SleeperStorage {
       .eq('id', leagueId);
 
     if (error) throw new Error(`Failed to delete Sleeper league: ${error.message}`);
+
+    // Clear any sport default pointing to this league (keyed by platform league_id + season)
+    if (row) {
+      await this._clearDefaultsForLeague(clerkUserId, 'sleeper', row.league_id, row.season_year);
+    }
   }
 
   async deleteAllSleeperLeagues(clerkUserId: string): Promise<void> {
@@ -151,5 +174,22 @@ export class SleeperStorage {
       .eq('clerk_user_id', clerkUserId);
 
     if (error) throw new Error(`Failed to delete Sleeper leagues: ${error.message}`);
+
+    // Clear all Sleeper sport defaults for this user
+    await this._clearDefaultsForPlatform(clerkUserId, 'sleeper');
+  }
+
+  private async _clearDefaultsForLeague(clerkUserId: string, platform: 'sleeper', leagueId: string, seasonYear: number): Promise<void> {
+    const result = await _clearDefaultsForLeague(this.supabase, clerkUserId, platform, leagueId, seasonYear);
+    if (result.skipped) {
+      console.warn(`[sleeper-storage] clearDefaultsForLeague skipped for user ${maskUserId(clerkUserId)}: ${result.error ?? 'unknown reason'}`);
+    }
+  }
+
+  private async _clearDefaultsForPlatform(clerkUserId: string, platform: 'sleeper'): Promise<void> {
+    const result = await _clearDefaultsForPlatform(this.supabase, clerkUserId, platform);
+    if (result.skipped) {
+      console.warn(`[sleeper-storage] clearDefaultsForPlatform skipped for user ${maskUserId(clerkUserId)}: ${result.error ?? 'unknown reason'}`);
+    }
   }
 }

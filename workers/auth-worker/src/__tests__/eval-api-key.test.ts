@@ -11,6 +11,10 @@ const DEMO_USER_ID = 'user_demo_test_54321';
 const INTERNAL_SERVICE_TOKEN = 'internal-service-secret';
 
 const mockRateLimiter = { limit: async () => ({ success: true }) };
+const { mockClearDefaultLeague, mockClearStaleDefaultForLeague } = vi.hoisted(() => ({
+  mockClearDefaultLeague: vi.fn().mockResolvedValue({ success: true }),
+  mockClearStaleDefaultForLeague: vi.fn().mockResolvedValue(undefined),
+}));
 
 const baseEnv = {
   SUPABASE_URL: 'https://example.supabase.co',
@@ -63,6 +67,8 @@ vi.mock('../supabase-storage', () => {
       defaultBasketball: null,
       defaultHockey: null,
     }),
+    clearDefaultLeague: mockClearDefaultLeague,
+    clearStaleDefaultForLeague: mockClearStaleDefaultForLeague,
   };
   return {
     EspnSupabaseStorage: {
@@ -120,6 +126,8 @@ vi.mock('../oauth-handlers', () => ({
 describe('eval API key auth', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockClearDefaultLeague.mockResolvedValue({ success: true });
+    mockClearStaleDefaultForLeague.mockResolvedValue(undefined);
   });
 
   // =========================================================================
@@ -421,6 +429,59 @@ describe('eval API key auth', () => {
       })
     );
     expect(res.status).toBe(401);
+  });
+
+  // Test H: DELETE /internal/leagues/default/:sport with no auth → 401/403
+  it('DELETE /auth/internal/leagues/default/football without internal token returns 403', async () => {
+    const res = await appFetch(
+      makeRequest('/auth/internal/leagues/default/football', {
+        method: 'DELETE',
+        headers: bearerHeaders(EVAL_API_KEY), // Bearer only — no X-Flaim-Internal-Token
+      })
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it('DELETE /auth/internal/leagues/default/football without any auth returns 4xx', async () => {
+    const res = await appFetch(
+      makeRequest('/auth/internal/leagues/default/football', {
+        method: 'DELETE',
+      })
+    );
+    // Route uses getInternalUserId which checks internal service token first;
+    // missing internal token → 403, missing bearer → 401; either is a rejection.
+    expect([401, 403]).toContain(res.status);
+  });
+
+  // Test I: DELETE /internal/leagues/default/:sport with invalid sport → 400
+  it('DELETE /auth/internal/leagues/default/soccer with valid auth returns 400 for invalid sport', async () => {
+    const res = await appFetch(
+      makeRequest('/auth/internal/leagues/default/soccer', {
+        method: 'DELETE',
+        headers: internalHeaders(EVAL_API_KEY),
+      })
+    );
+    expect(res.status).toBe(400);
+    const body = await res.json() as { error: string };
+    expect(body.error).toContain('Invalid sport');
+  });
+
+  it('DELETE /auth/internal/leagues/default/football with platform, leagueId, and seasonYear clears the exact stale default', async () => {
+    const res = await appFetch(
+      makeRequest('/auth/internal/leagues/default/football?platform=espn&leagueId=123&seasonYear=2024', {
+        method: 'DELETE',
+        headers: internalHeaders(EVAL_API_KEY),
+      })
+    );
+    expect(res.status).toBe(200);
+    expect(mockClearStaleDefaultForLeague).toHaveBeenCalledWith(
+      EVAL_USER_ID,
+      'espn',
+      '123',
+      2024,
+      'football'
+    );
+    expect(mockClearDefaultLeague).not.toHaveBeenCalled();
   });
 
   it('internal helper route rejects requests missing internal token', async () => {

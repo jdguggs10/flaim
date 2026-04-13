@@ -14,6 +14,7 @@
  */
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { clearDefaultsForLeague as _clearDefaultsForLeague, clearDefaultsForPlatform as _clearDefaultsForPlatform } from './preference-defaults';
 
 // =============================================================================
 // TYPES
@@ -427,9 +428,23 @@ export class YahooStorage {
   }
 
   /**
-   * Delete a specific Yahoo league
+   * Delete a specific Yahoo league.
+   * Resolves the platform league_key and season_year before deleting so that any
+   * matching sport default in user_preferences can be cleared correctly.
    */
   async deleteYahooLeague(clerkUserId: string, leagueId: string): Promise<void> {
+    // Resolve platform identifiers before deleting (route arg is DB row UUID)
+    const { data: row, error: lookupError } = await this.supabase
+      .from('yahoo_leagues')
+      .select('league_key, season_year')
+      .eq('clerk_user_id', clerkUserId)
+      .eq('id', leagueId)
+      .maybeSingle();
+
+    if (lookupError) {
+      console.warn(`[yahoo-storage] Failed to look up Yahoo league ${leagueId} before delete:`, lookupError);
+    }
+
     const { error } = await this.supabase
       .from('yahoo_leagues')
       .delete()
@@ -442,6 +457,11 @@ export class YahooStorage {
     }
 
     console.log(`[yahoo-storage] Deleted Yahoo league ${leagueId} for user ${maskUserId(clerkUserId)}`);
+
+    // Clear any sport default pointing to this league (keyed by platform league_key + season)
+    if (row) {
+      await this._clearDefaultsForLeague(clerkUserId, 'yahoo', row.league_key, row.season_year);
+    }
   }
 
   /**
@@ -459,6 +479,27 @@ export class YahooStorage {
     }
 
     console.log(`[yahoo-storage] Deleted all Yahoo leagues for user ${maskUserId(clerkUserId)}`);
+
+    // Clear all Yahoo sport defaults for this user
+    await this._clearDefaultsForPlatform(clerkUserId, 'yahoo');
+  }
+
+  // ---------------------------------------------------------------------------
+  // INTERNAL DEFAULT CLEANUP HELPERS
+  // ---------------------------------------------------------------------------
+
+  private async _clearDefaultsForLeague(clerkUserId: string, platform: 'yahoo', leagueId: string, seasonYear: number): Promise<void> {
+    const result = await _clearDefaultsForLeague(this.supabase, clerkUserId, platform, leagueId, seasonYear);
+    if (result.skipped) {
+      console.warn(`[yahoo-storage] clearDefaultsForLeague skipped for user ${maskUserId(clerkUserId)}: ${result.error ?? 'unknown reason'}`);
+    }
+  }
+
+  private async _clearDefaultsForPlatform(clerkUserId: string, platform: 'yahoo'): Promise<void> {
+    const result = await _clearDefaultsForPlatform(this.supabase, clerkUserId, platform);
+    if (result.skipped) {
+      console.warn(`[yahoo-storage] clearDefaultsForPlatform skipped for user ${maskUserId(clerkUserId)}: ${result.error ?? 'unknown reason'}`);
+    }
   }
 
   // ---------------------------------------------------------------------------
