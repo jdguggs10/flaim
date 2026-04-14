@@ -111,44 +111,26 @@ Current homepage behavior reads stored answers from `/api/public-chat/cache` onl
 
 ### Manual Refresh Runner
 
-Phase 2 adds a standalone manual cache-refresh command that runs outside the visitor request path:
-
-```bash
-npm run refresh -- --preset lite-standings --sport baseball
-```
+The homepage cache refresh flow now runs outside this repo in an external private runner. `flaim/web` only defines the read path and shared cache contract.
 
 Notes:
 
-- Runs Gemini CLI headlessly from an isolated temp workspace
-- Injects the same cached Gerry session context used by the web app
-- Writes one row into `demo_answer_cache`
-- Logs the attempt in `demo_refresh_runs`
-- Rejects answers that fail to use Flaim league data when the preset requires MCP grounding
-- Preserves the last good answer and marks the cache row degraded if a later refresh fails
-- Supports `--dry-run`, `--print-prompt`, `--model`, `--expires-minutes`, and `--stale-minutes`
-
-This command is the bridge to Pi automation. For now it is intentionally manual and single-run.
+- The runner populates `demo_answer_cache` out of band on a schedule
+- Each refresh attempt logs a row in `demo_refresh_runs`
+- The website reads cached answers only; it never triggers refresh execution
+- The shared contract is the cache key format plus matching preset IDs and version constants
 
 ### Scheduler And Health Scripts
 
-Phase 3 adds the first Pi-facing automation layer:
-
-```bash
-npm run refresh-next -- --sport baseball
-npm run health -- --sport baseball
-```
+Scheduling and health checks also live in that external runner now, not in this repo.
 
 Notes:
 
-- `refresh-next` selects exactly one preset for the requested sport each time it runs
-- Missing or degraded rows are prioritized first
-- If nothing is degraded or expired, the script keeps moving by selecting the oldest ready row
-- This keeps the first rollout conservative and predictable at a `12m` cron cadence
-- `health` reports per-preset cache state plus the latest failure context from `demo_refresh_runs`
-- `refresh-next -- --select-only --sport baseball` is the cheapest way to inspect which preset the queue would choose next without spending provider tokens
-- The production refresh worker now runs the same queue/health logic from a dedicated standalone runner repo on the Pi, with the scripts in this repo retained as the implementation reference and local/manual path
+- The website still surfaces freshness and latest-failure state from `demo_refresh_runs`
+- Preset IDs and cache-version constants in `web/lib/public-chat.ts` must stay aligned with the external runner
+- If a homepage preset is added, removed, or re-versioned here, the runner must be updated to match
 
-Important: this warmup cache does not include sports news. The live public-chat turn uses a fresh Responses API `web_search` tool call for current-context sports details.
+Important: this cache does not include live sports-news lookups. The homepage serves cached answers only and does not run a live provider or `web_search` turn per visitor request.
 
 ## Conventions
 

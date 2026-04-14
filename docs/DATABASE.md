@@ -224,10 +224,10 @@ Operational log for public-demo refresh attempts. Used to understand refresh cad
 | source_meta | jsonb | Additional provider/runtime metadata |
 | created_at | timestamptz | Created timestamp |
 
-The standalone demo runner (`npm run refresh`) writes one `completed`, `dry_run`, or `failed` row here for each attempted preset refresh.
+An external private demo runner writes one `completed`, `dry_run`, or `failed` row here for each attempted preset refresh.
 
 Current read patterns:
-- `flaim-demo` runner queries recent rows by `sport` ordered by `created_at desc`
+- The external private runner queries recent rows by `sport` ordered by `created_at desc`
 - `flaim/web` queries the latest row for a single `preset_id + sport` pair ordered by `created_at desc`
 
 Recommended indexes:
