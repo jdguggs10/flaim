@@ -173,7 +173,7 @@ Note: `espn-client` is called internally via service binding for MCP traffic, bu
 | 424 from Responses API | MCP transport/protocol mismatch | Ensure `server_url` is `https://api.flaim.app/mcp`, calls are POST-based, and deployed `fantasy-mcp` includes stream-mode MCP responses plus non-POST `405` handling |
 | `EMFILE: too many open files, watch` | File descriptor limit too low for dev watchers | Run `ulimit -n 8192` (or higher) and restart `wrangler dev` |
 | `EPERM` writing Wrangler logs/registry | Global Wrangler directory not writable | Use `WRANGLER_LOG_PATH` + `WRANGLER_REGISTRY_PATH` env vars |
-| Worker logs missing from CF Observability despite `observability.enabled: true` | `observability.enabled` alone does not enable console.log capture | Add `"logs": { "enabled": true, "head_sampling_rate": 1 }` sub-key inside `observability` in every env block of `wrangler.jsonc` |
+| Service-bound worker logs visible in `wrangler tail` but missing from stored CF queries | Cloudflare Workers Logs historical coverage can be inconsistent for service-bound workers even when `fantasy-mcp` is queryable | Treat this as a platform limitation/bug for now; use `wrangler tail` for live confirmation and keep `fantasy-mcp` as the reliable stored-log gate |
 
 ## Architecture
 
