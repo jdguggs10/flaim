@@ -4,7 +4,7 @@ import type { Env } from '../../src/types';
 import { getUnifiedTools } from '../../src/mcp/tools';
 import { INTERNAL_SERVICE_TOKEN_HEADER } from '@flaim/worker-shared';
 
-function buildMcpRequest(pathname: '/mcp' | '/fantasy/mcp'): Request {
+function buildMcpRequest(pathname: string): Request {
   return new Request(`https://api.flaim.app${pathname}`, {
     method: 'POST',
     headers: {
@@ -21,7 +21,7 @@ function buildMcpRequest(pathname: '/mcp' | '/fantasy/mcp'): Request {
   });
 }
 
-function buildMcpGetRequest(pathname: '/mcp' | '/fantasy/mcp'): Request {
+function buildMcpGetRequest(pathname: string): Request {
   return new Request(`https://api.flaim.app${pathname}`, {
     method: 'GET',
     headers: {
@@ -140,9 +140,30 @@ describe('fantasy-mcp gateway integration', () => {
     const fantasyResponse = await app.fetch(buildMcpGetRequest('/fantasy/mcp'), env, mockExecutionContext());
     expect(fantasyResponse.status).toBe(405);
 
+    const tracedResponse = await app.fetch(
+      buildMcpGetRequest('/mcp/r/run-1/t/trace-1'),
+      env,
+      mockExecutionContext()
+    );
+    expect(tracedResponse.status).toBe(405);
+
     expect(mcpResponse.headers.get('Allow')).toBe('POST');
 
     // Auth should not be called — 405 fires before auth/introspection
+    expect(authFetch).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 for malformed traced MCP routes', async () => {
+    const authFetch = vi.fn(async () => new Response('unexpected', { status: 500 }));
+    const env = buildEnv(authFetch);
+
+    const response = await app.fetch(
+      new Request('https://api.flaim.app/mcp/r/run-only', { method: 'POST' }),
+      env,
+      mockExecutionContext()
+    );
+
+    expect(response.status).toBe(400);
     expect(authFetch).not.toHaveBeenCalled();
   });
 
@@ -235,6 +256,32 @@ describe('fantasy-mcp gateway integration', () => {
     expect(introspectReq.url).toBe('https://internal/internal/introspect');
     expect(introspectReq.headers.get('X-Flaim-Expected-Resource')).toBe('https://api.flaim.app/mcp');
     expect(introspectReq.headers.get(INTERNAL_SERVICE_TOKEN_HEADER)).toBe('internal-secret');
+  });
+
+  it('accepts traced MCP routes and preserves the base auth resource', async () => {
+    const authFetch = vi.fn(async (request: Request) => {
+      if (new URL(request.url).pathname === '/internal/introspect') {
+        expect(request.headers.get('X-Flaim-Expected-Resource')).toBe('https://api.flaim.app/mcp');
+        expect(request.headers.get('X-Flaim-Eval-Run')).toBe('run-1');
+        expect(request.headers.get('X-Flaim-Eval-Trace')).toBe('trace-1');
+        return new Response(
+          JSON.stringify({ valid: true, userId: 'user-123', scope: 'mcp:read', authType: 'oauth' }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+      return new Response('not found', { status: 404 });
+    });
+    const env = buildEnv(authFetch);
+
+    const response = await app.fetch(
+      buildMcpRequest('/mcp/r/run-1/t/trace-1'),
+      env,
+      mockExecutionContext()
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Content-Type')).toContain('text/event-stream');
+    expect(authFetch).toHaveBeenCalled();
   });
 
   it('fails closed with 401 when introspection returns non-OK', async () => {

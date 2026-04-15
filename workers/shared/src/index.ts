@@ -56,6 +56,7 @@ export {
   CORRELATION_ID_HEADER,
   EVAL_RUN_HEADER,
   EVAL_TRACE_HEADER,
+  extractEvalContextFromPath,
   getCorrelationId,
   getEvalContext,
   withCorrelationId,

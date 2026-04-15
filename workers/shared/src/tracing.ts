@@ -11,6 +11,22 @@ export interface EvalContext {
   evalTraceId?: string;
 }
 
+export function extractEvalContextFromPath(pathname: string): EvalContext | null {
+  const match = pathname.match(/^\/(?:fantasy\/)?mcp\/r\/([^/]+)\/t\/([^/]+)\/?$/);
+  if (!match) {
+    return null;
+  }
+
+  try {
+    return {
+      evalRunId: decodeURIComponent(match[1] || ""),
+      evalTraceId: decodeURIComponent(match[2] || ""),
+    };
+  } catch {
+    return null;
+  }
+}
+
 export function getCorrelationId(request: Request): string {
   return (
     request.headers.get(CORRELATION_ID_HEADER) ||
@@ -31,6 +47,11 @@ export function withCorrelationId(
 }
 
 export function getEvalContext(request: Request): EvalContext {
+  const pathContext = extractEvalContextFromPath(new URL(request.url).pathname);
+  if (pathContext?.evalRunId && pathContext?.evalTraceId) {
+    return pathContext;
+  }
+
   const evalRunId = request.headers.get(EVAL_RUN_HEADER) || undefined;
   const evalTraceId = request.headers.get(EVAL_TRACE_HEADER) || undefined;
   return { evalRunId, evalTraceId };
