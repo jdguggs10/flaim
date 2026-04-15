@@ -8,7 +8,8 @@
     "head_sampling_rate": 1,
     "logs": {
       "enabled": true,
-      "head_sampling_rate": 1
+      "head_sampling_rate": 1,
+      "invocation_logs": true
     }
   },
   // Environment configurations
@@ -19,7 +20,12 @@
       "workers_dev": true,
       "observability": {
         "enabled": true,
-        "head_sampling_rate": 1
+        "head_sampling_rate": 1,
+        "logs": {
+          "enabled": true,
+          "head_sampling_rate": 1,
+          "invocation_logs": true
+        }
       },
       "routes": [
         {
@@ -66,7 +72,12 @@
       "workers_dev": true,
       "observability": {
         "enabled": true,
-        "head_sampling_rate": 1
+        "head_sampling_rate": 1,
+        "logs": {
+          "enabled": true,
+          "head_sampling_rate": 1,
+          "invocation_logs": true
+        }
       },
       // Service bindings for platform workers
       "services": [

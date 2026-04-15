@@ -8,7 +8,8 @@
     "head_sampling_rate": 1,
     "logs": {
       "enabled": true,
-      "head_sampling_rate": 1
+      "head_sampling_rate": 1,
+      "invocation_logs": true
     }
   },
   // Required secrets (set via `wrangler secret put` or Cloudflare dashboard):
@@ -25,7 +26,12 @@
       "workers_dev": true, // Enable .workers.dev URL for worker-to-worker calls
       "observability": {
         "enabled": true,
-        "head_sampling_rate": 1
+        "head_sampling_rate": 1,
+        "logs": {
+          "enabled": true,
+          "head_sampling_rate": 1,
+          "invocation_logs": true
+        }
       },
       // Cloudflare native rate limiting is configured per-environment.
       "ratelimits": [
@@ -82,7 +88,12 @@
       "workers_dev": true, // Also keep workers.dev URL available
       "observability": {
         "enabled": true,
-        "head_sampling_rate": 1
+        "head_sampling_rate": 1,
+        "logs": {
+          "enabled": true,
+          "head_sampling_rate": 1,
+          "invocation_logs": true
+        }
       },
       "ratelimits": [
         {
