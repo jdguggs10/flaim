@@ -13,6 +13,7 @@ const env: OAuthEnv = {
 };
 
 const corsHeaders = {};
+const cursorRedirectUri = 'cursor://anysphere.cursor-mcp/oauth/abc123/callback';
 
 function buildRegisterRequest(): Request {
   return new Request('https://api.flaim.app/auth/register', {
@@ -23,6 +24,13 @@ function buildRegisterRequest(): Request {
       client_name: 'Test Client',
     }),
   });
+}
+
+function expectRedirectLocation(response: Response): URL {
+  expect(response.status).toBe(302);
+  const location = response.headers.get('Location');
+  expect(location).not.toBeNull();
+  return new URL(location!);
 }
 
 describe('oauth-handlers', () => {
@@ -130,6 +138,53 @@ describe('oauth-handlers', () => {
     const location = new URL(res.headers.get('Location')!);
     expect(location.origin).toBe('https://preview.example.com');
     expect(location.pathname).toBe('/oauth/consent');
+  });
+
+  it('redirects cursor:// client with error query on unsupported response_type', async () => {
+    const req = new Request(
+      `https://api.flaim.app/authorize?response_type=token&client_id=test` +
+      `&redirect_uri=${encodeURIComponent(cursorRedirectUri)}` +
+      `&code_challenge=abc123&code_challenge_method=S256`
+    );
+    const res = await handleAuthorize(req, env);
+
+    const redirect = expectRedirectLocation(res);
+    expect(redirect.protocol).toBe('cursor:');
+    expect(redirect.hostname).toBe('anysphere.cursor-mcp');
+    expect(redirect.pathname).toBe('/oauth/abc123/callback');
+    expect(redirect.searchParams.get('error')).toBe('unsupported_response_type');
+    expect(redirect.searchParams.get('error_description')).toBe('Only code response type is supported');
+  });
+
+  it('redirects cursor:// client with error query on missing PKCE', async () => {
+    const req = new Request(
+      `https://api.flaim.app/authorize?response_type=code&client_id=test` +
+      `&redirect_uri=${encodeURIComponent(cursorRedirectUri)}`
+    );
+    const res = await handleAuthorize(req, env);
+
+    const redirect = expectRedirectLocation(res);
+    expect(redirect.protocol).toBe('cursor:');
+    expect(redirect.hostname).toBe('anysphere.cursor-mcp');
+    expect(redirect.pathname).toBe('/oauth/abc123/callback');
+    expect(redirect.searchParams.get('error')).toBe('invalid_request');
+    expect(redirect.searchParams.get('error_description')).toBe('code_challenge is required (PKCE)');
+  });
+
+  it('redirects cursor:// client with error query on non-S256 PKCE method', async () => {
+    const req = new Request(
+      `https://api.flaim.app/authorize?response_type=code&client_id=test` +
+      `&redirect_uri=${encodeURIComponent(cursorRedirectUri)}` +
+      `&code_challenge=abc123&code_challenge_method=plain`
+    );
+    const res = await handleAuthorize(req, env);
+
+    const redirect = expectRedirectLocation(res);
+    expect(redirect.protocol).toBe('cursor:');
+    expect(redirect.hostname).toBe('anysphere.cursor-mcp');
+    expect(redirect.pathname).toBe('/oauth/abc123/callback');
+    expect(redirect.searchParams.get('error')).toBe('invalid_request');
+    expect(redirect.searchParams.get('error_description')).toBe('Only S256 PKCE is supported');
   });
 
   it('authorization server metadata advertises S256 only', async () => {
