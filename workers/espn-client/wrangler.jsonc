@@ -8,7 +8,8 @@
     "head_sampling_rate": 1,
     "logs": {
       "enabled": true,
-      "head_sampling_rate": 1
+      "head_sampling_rate": 1,
+      "invocation_logs": true
     }
   },
   // Environment configurations
@@ -19,7 +20,12 @@
       "workers_dev": false,
       "observability": {
         "enabled": true,
-        "head_sampling_rate": 1
+        "head_sampling_rate": 1,
+        "logs": {
+          "enabled": true,
+          "head_sampling_rate": 1,
+          "invocation_logs": true
+        }
       },
       "kv_namespaces": [
         { "binding": "ESPN_PLAYERS_CACHE", "id": "8aed89c806d34c53aa5edf53c26f9d32", "preview_id": "ed5d96feef944254af880eafe9c131b3" }
@@ -41,7 +47,12 @@
       "workers_dev": false,
       "observability": {
         "enabled": true,
-        "head_sampling_rate": 1
+        "head_sampling_rate": 1,
+        "logs": {
+          "enabled": true,
+          "head_sampling_rate": 1,
+          "invocation_logs": true
+        }
       },
       "kv_namespaces": [
         { "binding": "ESPN_PLAYERS_CACHE", "id": "ed5d96feef944254af880eafe9c131b3", "preview_id": "ed5d96feef944254af880eafe9c131b3" }

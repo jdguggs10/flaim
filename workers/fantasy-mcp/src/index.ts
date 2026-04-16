@@ -8,6 +8,7 @@ import {
   EVAL_TRACE_HEADER,
   getCorrelationId,
   getEvalContext,
+  withEvalHeaders,
   withInternalServiceToken,
 } from '@flaim/worker-shared';
 import type { Env } from './types';
@@ -161,6 +162,25 @@ function buildMethodNotAllowedResponse(allow: string): Response {
   );
 }
 
+function buildMalformedEvalRouteResponse(): Response {
+  return new Response(
+    JSON.stringify({
+      jsonrpc: '2.0',
+      error: {
+        code: -32600,
+        message: 'Malformed eval trace route.',
+      },
+      id: null,
+    }),
+    {
+      status: 400,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    }
+  );
+}
+
 async function handleMcpRequest(c: Context<{ Bindings: Env }>): Promise<Response> {
   const correlationId = getCorrelationId(c.req.raw);
   const { evalRunId, evalTraceId } = getEvalContext(c.req.raw);
@@ -192,10 +212,14 @@ async function handleMcpRequest(c: Context<{ Bindings: Env }>): Promise<Response
     try {
       const introspectRes = await c.env.AUTH_WORKER.fetch(
         new Request('https://internal/internal/introspect', {
-          headers: withInternalServiceToken({
-            Authorization: authHeader,
-            'X-Flaim-Expected-Resource': expectedResource,
-          }, c.env, 'auth-worker /internal/introspect'),
+          headers: withEvalHeaders(
+            withInternalServiceToken({
+              Authorization: authHeader,
+              'X-Flaim-Expected-Resource': expectedResource,
+            }, c.env, 'auth-worker /internal/introspect'),
+            evalRunId,
+            evalTraceId
+          ),
         })
       );
       if (!introspectRes.ok) {
@@ -316,6 +340,18 @@ app.all('/mcp/', async (c) => {
   return handleMcpEndpoint(c);
 });
 
+app.all('/mcp/r/:runId/t/:traceId', async (c) => {
+  return handleMcpEndpoint(c);
+});
+
+app.all('/mcp/r/:runId/t/:traceId/', async (c) => {
+  return handleMcpEndpoint(c);
+});
+
+app.all('/mcp/r/*', () => {
+  return buildMalformedEvalRouteResponse();
+});
+
 app.get('/mcp/.well-known/oauth-authorization-server', async (c) => {
   return proxyAuthorizationServerMetadata(c);
 });
@@ -351,6 +387,18 @@ app.all('/fantasy/mcp', async (c) => {
 
 app.all('/fantasy/mcp/', async (c) => {
   return handleMcpEndpoint(c);
+});
+
+app.all('/fantasy/mcp/r/:runId/t/:traceId', async (c) => {
+  return handleMcpEndpoint(c);
+});
+
+app.all('/fantasy/mcp/r/:runId/t/:traceId/', async (c) => {
+  return handleMcpEndpoint(c);
+});
+
+app.all('/fantasy/mcp/r/*', () => {
+  return buildMalformedEvalRouteResponse();
 });
 
 app.get('/fantasy/mcp/.well-known/oauth-authorization-server', async (c) => {

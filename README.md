@@ -53,6 +53,12 @@ The AI will detect and activate the skill automatically when you ask fantasy que
 
 All tools connect through a single MCP endpoint: `https://api.flaim.app/mcp`
 
+For eval and observability runs, Flaim also supports an eval-only traced alias:
+
+- `https://api.flaim.app/mcp/r/<run_id>/t/<trace_id>`
+
+Normal clients should continue to use the base `/mcp` endpoint.
+
 ## Supported Platforms
 
 | Platform | Sports | Auth |

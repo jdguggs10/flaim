@@ -8,7 +8,8 @@
     "head_sampling_rate": 1,
     "logs": {
       "enabled": true,
-      "head_sampling_rate": 1
+      "head_sampling_rate": 1,
+      "invocation_logs": true
     }
   },
   "env": {
@@ -17,7 +18,12 @@
       "workers_dev": false,
       "observability": {
         "enabled": true,
-        "head_sampling_rate": 1
+        "head_sampling_rate": 1,
+        "logs": {
+          "enabled": true,
+          "head_sampling_rate": 1,
+          "invocation_logs": true
+        }
       },
       "kv_namespaces": [
         { "binding": "SLEEPER_PLAYERS_CACHE", "id": "b34c0c797b7b4e1285458361694b8d5e", "preview_id": "81df4492a52c456c9f6362a5cc5a5816" }
@@ -36,7 +42,12 @@
       "workers_dev": false,
       "observability": {
         "enabled": true,
-        "head_sampling_rate": 1
+        "head_sampling_rate": 1,
+        "logs": {
+          "enabled": true,
+          "head_sampling_rate": 1,
+          "invocation_logs": true
+        }
       },
       "kv_namespaces": [
         { "binding": "SLEEPER_PLAYERS_CACHE", "id": "81df4492a52c456c9f6362a5cc5a5816", "preview_id": "81df4492a52c456c9f6362a5cc5a5816" }
