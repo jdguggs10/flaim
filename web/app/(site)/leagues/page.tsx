@@ -2020,7 +2020,7 @@ function LeaguesPageContent() {
                   <span className="text-lg">Sleeper</span>
                   {isSleeperConnected && (
                     <span className="text-xs px-2 py-0.5 rounded-full bg-success/20 text-success">
-                      Connected
+                      Username Stored
                     </span>
                   )}
                 </div>
