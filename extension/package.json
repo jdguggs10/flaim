@@ -11,7 +11,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@clerk/chrome-extension": "^2.8.17",
+    "@clerk/chrome-extension": "^2.9.14",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
