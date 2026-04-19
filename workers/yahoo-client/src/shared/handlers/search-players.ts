@@ -40,7 +40,7 @@ export function createSearchPlayersHandler(config: YahooHandlerContext): Handler
       const league = unwrapLeague(leagueArray);
       const playersObj = league.players as Record<string, unknown> | undefined;
       const playersArray = asArray(playersObj);
-      const ownerMap = await fetchLeagueOwnershipMap(credentials, league_id);
+      const ownership = await fetchLeagueOwnershipMap(credentials, league_id);
 
       const players = playersArray.map((playerWrapper: unknown) => {
         const playerData = getPath(playerWrapper, ['player']) as unknown[];
@@ -57,7 +57,7 @@ export function createSearchPlayersHandler(config: YahooHandlerContext): Handler
           position: playerMeta.display_position as string,
           market_percent_owned: extractPlayerPercentOwned(playerData),
           ownership_scope: 'platform_global' as const,
-          ...enrichPlayerWithOwnership(playerId, ownerMap),
+          ...enrichPlayerWithOwnership(playerId, ownership),
         };
       });
 
