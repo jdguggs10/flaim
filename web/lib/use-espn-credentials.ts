@@ -30,7 +30,11 @@ type FetchInit = RequestInit & { timeoutMs?: number; signal?: AbortSignal };
 async function fetchWithTimeout(url: string, init: FetchInit = {}): Promise<Response> {
   const { timeoutMs = DEFAULT_TIMEOUT_MS, signal: callerSignal, ...rest } = init;
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  let timedOut = false;
+  const timeoutId = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
 
   let callerAbortListener: (() => void) | null = null;
   if (callerSignal) {
@@ -44,6 +48,14 @@ async function fetchWithTimeout(url: string, init: FetchInit = {}): Promise<Resp
 
   try {
     return await fetch(url, { ...rest, signal: controller.signal });
+  } catch (err) {
+    // Distinguish a timeout-driven abort from a caller-driven abort so
+    // callers can silently ignore their own cancellation while still
+    // surfacing stalled requests as a real error.
+    if (timedOut) {
+      throw new Error(`Request timed out after ${timeoutMs}ms`);
+    }
+    throw err;
   } finally {
     clearTimeout(timeoutId);
     if (callerSignal && callerAbortListener) {
@@ -133,6 +145,7 @@ export function useEspnCredentials(): EspnCredentialsState {
     setIsLoadingCreds(true);
     setCredsError(null);
 
+    let errored = false;
     try {
       const res = await fetchWithTimeout('/api/auth/espn/credentials?forEdit=true', {
         signal: controller.signal,
@@ -145,11 +158,15 @@ export function useEspnCredentials(): EspnCredentialsState {
       }
     } catch (err) {
       if (isAbortError(err)) return;
+      errored = true;
       console.error('Failed to fetch credentials for editing:', err);
+      setCredsError(err instanceof Error ? err.message : 'Failed to load credentials');
     } finally {
       if (!controller.signal.aborted) {
         setIsLoadingCreds(false);
-        setIsEditingCreds(true);
+        if (!errored) {
+          setIsEditingCreds(true);
+        }
       }
       if (editControllerRef.current === controller) {
         editControllerRef.current = null;
