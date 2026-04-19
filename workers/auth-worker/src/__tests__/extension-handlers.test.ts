@@ -124,6 +124,20 @@ describe('handleSyncCredentials', () => {
     const body = await res.json() as { error?: string };
     expect(body.error).toBe('server_error');
   });
+
+  it('returns 400 when request body is invalid JSON', async () => {
+    const req = new Request('https://api.flaim.app/extension/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{not-json',
+    });
+
+    const res = await handleSyncCredentials(req, env, userId, corsHeaders);
+    expect(res.status).toBe(400);
+    const body = await res.json() as { error?: string; error_description?: string };
+    expect(body.error).toBe('invalid_request');
+    expect(body.error_description).toBe('Invalid request body');
+  });
 });
 
 describe('handleGetExtensionStatus', () => {
@@ -180,7 +194,8 @@ describe('handleGetExtensionStatus', () => {
     const res = await handleGetExtensionStatus(env, userId, corsHeaders);
     expect(res.status).toBe(200);
 
-    const body = await res.json() as { hasCredentials?: boolean };
+    const body = await res.json() as { connected?: boolean; hasCredentials?: boolean };
+    expect(body.connected).toBe(false);
     expect(body.hasCredentials).toBe(false);
   });
 });

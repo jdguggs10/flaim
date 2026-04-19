@@ -3,7 +3,6 @@ import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
 const CSRF_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
-const CSRF_EXEMPT_PATH_PREFIXES = ['/api/extension/'];
 
 const ALLOWED_ORIGINS = [
   'https://flaim.app',
@@ -44,21 +43,15 @@ function getRequestOrigin(request: NextRequest): string | null {
   }
 }
 
-function isCsrfExempt(pathname: string): boolean {
-  return CSRF_EXEMPT_PATH_PREFIXES.some(prefix => pathname.startsWith(prefix));
-}
-
 export default clerkMiddleware((_auth, request) => {
   const { pathname } = request.nextUrl;
 
   if (pathname.startsWith('/api') && CSRF_METHODS.has(request.method)) {
-    if (!isCsrfExempt(pathname)) {
-      const hasAuthHeader = Boolean(request.headers.get('authorization'));
-      if (!hasAuthHeader) {
-        const origin = getRequestOrigin(request);
-        if (!origin || !isOriginAllowed(origin)) {
-          return NextResponse.json({ error: 'Invalid origin' }, { status: 403 });
-        }
+    const hasAuthHeader = Boolean(request.headers.get('authorization'));
+    if (!hasAuthHeader) {
+      const origin = getRequestOrigin(request);
+      if (!origin || !isOriginAllowed(origin)) {
+        return NextResponse.json({ error: 'Invalid origin' }, { status: 403 });
       }
     }
   }
