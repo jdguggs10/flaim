@@ -18,6 +18,11 @@ export interface ExtensionEnv {
   ENVIRONMENT?: string;
 }
 
+interface ExtensionSyncBody {
+  swid: string;
+  s2: string;
+}
+
 // =============================================================================
 // HELPERS
 // =============================================================================
@@ -44,6 +49,62 @@ function isValidS2(s2: string): boolean {
   return s2.length >= 50;
 }
 
+function jsonResponse(body: Record<string, unknown>, status: number, corsHeaders: Record<string, string>): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json', ...corsHeaders },
+  });
+}
+
+function parseSyncCredentialsBody(
+  rawBody: unknown,
+  corsHeaders: Record<string, string>
+): { body?: ExtensionSyncBody; response?: Response } {
+  if (!rawBody || typeof rawBody !== 'object') {
+    return {
+      response: jsonResponse({
+        error: 'invalid_request',
+        error_description: 'Invalid request body',
+      }, 400, corsHeaders),
+    };
+  }
+
+  const bodyRecord = rawBody as { swid?: unknown; s2?: unknown };
+  if (typeof bodyRecord.swid !== 'string' || typeof bodyRecord.s2 !== 'string' || !bodyRecord.swid || !bodyRecord.s2) {
+    return {
+      response: jsonResponse({
+        error: 'invalid_request',
+        error_description: 'swid and s2 are required',
+      }, 400, corsHeaders),
+    };
+  }
+
+  if (!isValidSwid(bodyRecord.swid)) {
+    return {
+      response: jsonResponse({
+        error: 'invalid_request',
+        error_description: 'Invalid SWID format (expected UUID in curly braces)',
+      }, 400, corsHeaders),
+    };
+  }
+
+  if (!isValidS2(bodyRecord.s2)) {
+    return {
+      response: jsonResponse({
+        error: 'invalid_request',
+        error_description: 'Invalid espn_s2 format (too short)',
+      }, 400, corsHeaders),
+    };
+  }
+
+  return {
+    body: {
+      swid: bodyRecord.swid,
+      s2: bodyRecord.s2,
+    },
+  };
+}
+
 // =============================================================================
 // HANDLERS
 // =============================================================================
@@ -59,72 +120,36 @@ export async function handleSyncCredentials(
   corsHeaders: Record<string, string>
 ): Promise<Response> {
   try {
-    const body = await request.json() as { swid?: string; s2?: string };
-
-    // Validate required fields
-    if (!body.swid || !body.s2) {
-      return new Response(JSON.stringify({
-        error: 'invalid_request',
-        error_description: 'swid and s2 are required',
-      }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json', ...corsHeaders },
-      });
+    const rawBody = await request.json().catch(() => null);
+    const parsedBody = parseSyncCredentialsBody(rawBody, corsHeaders);
+    if (parsedBody.response) {
+      return parsedBody.response;
     }
-
-    // Validate credential formats
-    if (!isValidSwid(body.swid)) {
-      return new Response(JSON.stringify({
-        error: 'invalid_request',
-        error_description: 'Invalid SWID format (expected UUID in curly braces)',
-      }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json', ...corsHeaders },
-      });
-    }
-
-    if (!isValidS2(body.s2)) {
-      return new Response(JSON.stringify({
-        error: 'invalid_request',
-        error_description: 'Invalid espn_s2 format (too short)',
-      }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json', ...corsHeaders },
-      });
-    }
+    const body = parsedBody.body!;
 
     // Store credentials
     const credStorage = EspnSupabaseStorage.fromEnvironment(env);
     const success = await credStorage.setCredentials(userId, body.swid, body.s2);
 
     if (!success) {
-      return new Response(JSON.stringify({
+      return jsonResponse({
         error: 'server_error',
         error_description: 'Failed to store credentials',
-      }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json', ...corsHeaders },
-      });
+      }, 500, corsHeaders);
     }
 
     console.log(`[extension] Credentials synced for ${maskUserId(userId)}`);
 
-    return new Response(JSON.stringify({
+    return jsonResponse({
       success: true,
       message: 'Credentials synced successfully',
-    }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json', ...corsHeaders },
-    });
+    }, 200, corsHeaders);
   } catch (error) {
     console.error('[extension] Failed to sync credentials:', error);
-    return new Response(JSON.stringify({
+    return jsonResponse({
       error: 'server_error',
       error_description: 'Failed to sync credentials',
-    }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json', ...corsHeaders },
-    });
+    }, 500, corsHeaders);
   }
 }
 
@@ -145,7 +170,7 @@ export async function handleGetExtensionStatus(
 
     return new Response(JSON.stringify({
       success: true,
-      connected: true,
+      connected: hasCredentials,
       hasCredentials,
       lastSync: metadata?.lastUpdated || null,
       preferences: {
