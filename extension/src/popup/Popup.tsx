@@ -138,15 +138,15 @@ export default function Popup() {
   const userId = user?.id ?? null;
 
   const supportInfo = useMemo(() => {
+    const truncatedUserId = userId ? `${userId.slice(0, 12)}…` : 'unknown';
     const parts = [
-      `userId=${userId ?? 'unknown'}`,
-      `email=${primaryEmail ?? 'unknown'}`,
+      `userId=${truncatedUserId}`,
       `version=${extensionVersion ?? 'unknown'}`,
       `lastSync=${lastSync ?? 'unknown'}`,
       `siteBase=auto`,
     ];
     return parts.join(' | ');
-  }, [userId, primaryEmail, extensionVersion, lastSync]);
+  }, [userId, extensionVersion, lastSync]);
 
   // Setup flow state
   const [discoveredLeagues, setDiscoveredLeagues] = useState<DiscoveredLeague[]>([]);
