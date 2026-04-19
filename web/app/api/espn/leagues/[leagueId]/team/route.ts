@@ -7,6 +7,52 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
+import { z } from 'zod';
+
+const PatchBodySchema = z.object({
+  teamId: z.string().min(1, 'teamId is required'),
+  sport: z.string().optional(),
+  teamName: z.string().optional(),
+  leagueName: z.string().optional(),
+  seasonYear: z.number().optional(),
+});
+
+const AuthWorkerErrorSchema = z
+  .object({
+    error: z.string().optional(),
+    message: z.string().optional(),
+  })
+  .passthrough();
+
+const AuthWorkerLeagueSchema = z
+  .object({
+    leagueId: z.string(),
+    sport: z.string(),
+    teamId: z.string().nullish(),
+    leagueName: z.string().nullish(),
+    hasTeamSelected: z.boolean().nullish(),
+  })
+  .passthrough();
+
+const PatchResponseSchema = z
+  .object({
+    league: AuthWorkerLeagueSchema.optional(),
+  })
+  .passthrough();
+
+const ListLeaguesSchema = z
+  .object({
+    leagues: z.array(AuthWorkerLeagueSchema),
+  })
+  .passthrough();
+
+type AuthWorkerLeague = z.infer<typeof AuthWorkerLeagueSchema>;
+
+async function parseAuthWorkerError(response: Response): Promise<z.infer<typeof AuthWorkerErrorSchema>> {
+  const raw = await response.json().catch(() => ({}));
+  const parsed = AuthWorkerErrorSchema.safeParse(raw);
+  return parsed.success ? parsed.data : {};
+}
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ leagueId: string }> }) {
   try {
@@ -17,21 +63,17 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     }
 
     const { leagueId } = await params;
-    const body: {
-      teamId: string;
-      sport?: string;
-      teamName?: string;
-      leagueName?: string;
-      seasonYear?: number;
-    } = await request.json();
-
-    if (!body.teamId) {
-      return NextResponse.json({
-        error: 'teamId is required'
-      }, { status: 400 });
+    const rawBody = await request.json().catch(() => null);
+    const bodyParsed = PatchBodySchema.safeParse(rawBody);
+    if (!bodyParsed.success) {
+      const teamIdIssue = bodyParsed.error.issues.find((issue) => issue.path[0] === 'teamId');
+      return NextResponse.json(
+        { error: teamIdIssue?.message ?? 'Invalid request body' },
+        { status: 400 },
+      );
     }
+    const body = bodyParsed.data;
 
-    // Call auth-worker PATCH endpoint
     const authWorkerUrl = process.env.NEXT_PUBLIC_AUTH_WORKER_URL;
     if (!authWorkerUrl) {
       return NextResponse.json({ error: 'NEXT_PUBLIC_AUTH_WORKER_URL is not configured' }, { status: 500 });
@@ -57,27 +99,35 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     });
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({})) as any;
+      const errorData = await parseAuthWorkerError(response);
       console.error('Auth-worker error:', response.status, errorData);
-      
-      return NextResponse.json({ 
+
+      return NextResponse.json({
         error: errorData.error || 'Failed to save team selection',
-        details: errorData.message 
+        details: errorData.message
       }, { status: response.status });
     }
 
-    const data = await response.json() as any;
-    
+    const rawData = await response.json().catch(() => null);
+    const dataParsed = PatchResponseSchema.safeParse(rawData);
+    if (!dataParsed.success) {
+      console.error('Auth-worker PATCH response failed validation:', dataParsed.error.issues);
+      return NextResponse.json(
+        { error: 'Upstream returned an unexpected response shape' },
+        { status: 502 },
+      );
+    }
+
     return NextResponse.json({
       success: true,
       message: 'Team selection saved successfully',
-      league: data.league
+      league: dataParsed.data.league
     });
 
   } catch (error) {
     console.error('Team selection API error:', error);
     return NextResponse.json(
-      { error: 'Failed to save team selection' }, 
+      { error: 'Failed to save team selection' },
       { status: 500 }
     );
   }
@@ -95,7 +145,6 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const { searchParams } = new URL(request.url);
     const sport = searchParams.get('sport');
 
-    // Call auth-worker to get leagues
     const authWorkerUrl = process.env.NEXT_PUBLIC_AUTH_WORKER_URL;
     if (!authWorkerUrl) {
       return NextResponse.json({ error: 'NEXT_PUBLIC_AUTH_WORKER_URL is not configured' }, { status: 500 });
@@ -114,32 +163,39 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     });
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({})) as any;
+      const errorData = await parseAuthWorkerError(response);
       console.error('Auth-worker error:', response.status, errorData);
-      
-      return NextResponse.json({ 
+
+      return NextResponse.json({
         error: errorData.error || 'Failed to retrieve leagues'
       }, { status: response.status });
     }
 
-    const data = await response.json() as any;
-    const leagues = data.leagues || [];
-    
+    const rawData = await response.json().catch(() => null);
+    const dataParsed = ListLeaguesSchema.safeParse(rawData);
+    if (!dataParsed.success) {
+      console.error('Auth-worker leagues list failed validation:', dataParsed.error.issues);
+      return NextResponse.json(
+        { error: 'Upstream returned an unexpected response shape' },
+        { status: 502 },
+      );
+    }
+    const leagues = dataParsed.data.leagues;
+
     if (leagues.length === 0) {
-      return NextResponse.json({ 
-        error: 'No leagues found for user' 
+      return NextResponse.json({
+        error: 'No leagues found for user'
       }, { status: 404 });
     }
 
-    // Find the specific league
-    const league = leagues.find((league: any) => 
-      league.leagueId === leagueId && 
-      (sport ? league.sport === sport : true)
+    const league = leagues.find((item: AuthWorkerLeague) =>
+      item.leagueId === leagueId &&
+      (sport ? item.sport === sport : true)
     );
 
     if (!league) {
-      return NextResponse.json({ 
-        error: 'League not found' 
+      return NextResponse.json({
+        error: 'League not found'
       }, { status: 404 });
     }
 
@@ -157,7 +213,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   } catch (error) {
     console.error('Team selection GET API error:', error);
     return NextResponse.json(
-      { error: 'Failed to retrieve team selection' }, 
+      { error: 'Failed to retrieve team selection' },
       { status: 500 }
     );
   }
