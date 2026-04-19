@@ -23,6 +23,39 @@ export interface EspnCredentialsState {
   handleCancelEdit: () => void;
 }
 
+const DEFAULT_TIMEOUT_MS = 10_000;
+
+type FetchInit = RequestInit & { timeoutMs?: number; signal?: AbortSignal };
+
+async function fetchWithTimeout(url: string, init: FetchInit = {}): Promise<Response> {
+  const { timeoutMs = DEFAULT_TIMEOUT_MS, signal: callerSignal, ...rest } = init;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  let callerAbortListener: (() => void) | null = null;
+  if (callerSignal) {
+    if (callerSignal.aborted) {
+      controller.abort();
+    } else {
+      callerAbortListener = () => controller.abort();
+      callerSignal.addEventListener('abort', callerAbortListener);
+    }
+  }
+
+  try {
+    return await fetch(url, { ...rest, signal: controller.signal });
+  } finally {
+    clearTimeout(timeoutId);
+    if (callerSignal && callerAbortListener) {
+      callerSignal.removeEventListener('abort', callerAbortListener);
+    }
+  }
+}
+
+function isAbortError(err: unknown): boolean {
+  return err instanceof DOMException && err.name === 'AbortError';
+}
+
 export function useEspnCredentials(): EspnCredentialsState {
   const { isLoaded, isSignedIn } = useAuth();
   const { user } = useUser();
@@ -41,12 +74,16 @@ export function useEspnCredentials(): EspnCredentialsState {
   const [showCredsHelp, setShowCredsHelp] = useState(false);
 
   const successTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const editControllerRef = useRef<AbortController | null>(null);
+  const saveControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     return () => {
       if (successTimeoutRef.current) {
         clearTimeout(successTimeoutRef.current);
       }
+      editControllerRef.current?.abort();
+      saveControllerRef.current?.abort();
     };
   }, []);
 
@@ -58,21 +95,24 @@ export function useEspnCredentials(): EspnCredentialsState {
       return;
     }
 
-    let isActive = true;
+    const controller = new AbortController();
 
     const loadCredentials = async () => {
       try {
-        const credsRes = await fetch('/api/auth/espn/credentials');
-        if (!isActive) return;
+        const credsRes = await fetchWithTimeout('/api/auth/espn/credentials', {
+          signal: controller.signal,
+        });
+        if (controller.signal.aborted) return;
         if (credsRes.ok) {
           const data = await credsRes.json() as { hasCredentials?: boolean; lastUpdated?: string };
           setHasCredentials(!!data.hasCredentials);
           setLastUpdated(data.lastUpdated || null);
         }
       } catch (err) {
+        if (isAbortError(err)) return;
         console.error('Failed to check credentials:', err);
       } finally {
-        if (isActive) {
+        if (!controller.signal.aborted) {
           setIsCheckingCreds(false);
         }
       }
@@ -81,26 +121,39 @@ export function useEspnCredentials(): EspnCredentialsState {
     loadCredentials();
 
     return () => {
-      isActive = false;
+      controller.abort();
     };
   }, [isLoaded, isSignedIn]);
 
   const handleEditCredentials = async () => {
+    editControllerRef.current?.abort();
+    const controller = new AbortController();
+    editControllerRef.current = controller;
+
     setIsLoadingCreds(true);
     setCredsError(null);
 
     try {
-      const res = await fetch('/api/auth/espn/credentials?forEdit=true');
+      const res = await fetchWithTimeout('/api/auth/espn/credentials?forEdit=true', {
+        signal: controller.signal,
+      });
+      if (controller.signal.aborted) return;
       if (res.ok) {
         const data = await res.json() as { hasCredentials?: boolean; swid?: string; s2?: string };
         if (data.swid) setSwid(data.swid);
         if (data.s2) setEspnS2(data.s2);
       }
     } catch (err) {
+      if (isAbortError(err)) return;
       console.error('Failed to fetch credentials for editing:', err);
     } finally {
-      setIsLoadingCreds(false);
-      setIsEditingCreds(true);
+      if (!controller.signal.aborted) {
+        setIsLoadingCreds(false);
+        setIsEditingCreds(true);
+      }
+      if (editControllerRef.current === controller) {
+        editControllerRef.current = null;
+      }
     }
   };
 
@@ -110,11 +163,15 @@ export function useEspnCredentials(): EspnCredentialsState {
       return;
     }
 
+    saveControllerRef.current?.abort();
+    const controller = new AbortController();
+    saveControllerRef.current = controller;
+
     setCredsSaving(true);
     setCredsError(null);
 
     try {
-      const res = await fetch('/api/auth/espn/credentials', {
+      const res = await fetchWithTimeout('/api/auth/espn/credentials', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -122,7 +179,9 @@ export function useEspnCredentials(): EspnCredentialsState {
           s2: espnS2.trim(),
           email: user?.primaryEmailAddress?.emailAddress,
         }),
+        signal: controller.signal,
       });
+      if (controller.signal.aborted) return;
 
       if (!res.ok) {
         const data = await res.json() as { error?: string };
@@ -140,13 +199,21 @@ export function useEspnCredentials(): EspnCredentialsState {
       }
       successTimeoutRef.current = setTimeout(() => setCredsSuccess(false), 3000);
     } catch (err) {
+      if (isAbortError(err)) return;
       setCredsError(err instanceof Error ? err.message : 'Failed to save credentials');
     } finally {
-      setCredsSaving(false);
+      if (!controller.signal.aborted) {
+        setCredsSaving(false);
+      }
+      if (saveControllerRef.current === controller) {
+        saveControllerRef.current = null;
+      }
     }
   };
 
   const handleCancelEdit = () => {
+    editControllerRef.current?.abort();
+    editControllerRef.current = null;
     setIsEditingCreds(false);
     setSwid('');
     setEspnS2('');
