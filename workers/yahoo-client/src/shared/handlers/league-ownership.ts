@@ -51,7 +51,7 @@ export async function fetchLeagueOwnershipMap(
     const teamsObj = getPath(league, ['teams']) as Record<string, unknown> | undefined;
     const teamsArray = asArray(teamsObj);
 
-    const rosterEntries = await Promise.all(
+    const rosterResults = await Promise.allSettled(
       teamsArray.map(async (teamWrapper: unknown) => {
         const teamData = getPath(teamWrapper, ['team']) as unknown[] | undefined;
         if (!Array.isArray(teamData)) return null;
@@ -60,32 +60,49 @@ export async function fetchLeagueOwnershipMap(
         const teamKey = typeof team.team_key === 'string' ? team.team_key : null;
         if (!teamKey) return null;
 
-        const rosterResponse = await yahooFetch(`/team/${teamKey}/roster`, {
-          credentials,
-          timeout: OWNERSHIP_TIMEOUT_MS,
-        });
-        if (!rosterResponse.ok) {
-          throw new Error(`Failed roster fetch for ${teamKey}`);
-        }
+        try {
+          const rosterResponse = await yahooFetch(`/team/${teamKey}/roster`, {
+            credentials,
+            timeout: OWNERSHIP_TIMEOUT_MS,
+          });
+          if (!rosterResponse.ok) {
+            throw new Error(`HTTP ${rosterResponse.status}`);
+          }
 
-        const rosterRaw = await rosterResponse.json();
-        const rosterTeamArray = getPath(rosterRaw, ['fantasy_content', 'team']);
-        const rosterTeam = unwrapTeam(rosterTeamArray);
+          const rosterRaw = await rosterResponse.json();
+          const rosterTeamArray = getPath(rosterRaw, ['fantasy_content', 'team']);
+          const rosterTeam = unwrapTeam(rosterTeamArray);
 
-        return {
-          teamKey,
-          teamName:
-            (typeof team.name === 'string' && team.name) ||
-            (typeof rosterTeam.name === 'string' && rosterTeam.name) ||
+          return {
             teamKey,
-          ownerName: extractManagerName(team) ?? extractManagerName(rosterTeam),
-          playerIds: extractRosterPlayerIds(rosterTeam),
-        };
+            teamName:
+              (typeof team.name === 'string' && team.name) ||
+              (typeof rosterTeam.name === 'string' && rosterTeam.name) ||
+              teamKey,
+            ownerName: extractManagerName(team) ?? extractManagerName(rosterTeam),
+            playerIds: extractRosterPlayerIds(rosterTeam),
+          };
+        } catch (error) {
+          console.warn(
+            `[yahoo-league-ownership] roster fetch failed for team ${teamKey}:`,
+            error instanceof Error ? error.message : error,
+          );
+          return null;
+        }
       }),
     );
 
     const ownerMap = new Map<string, YahooLeagueOwnerInfo>();
-    for (const rosterEntry of rosterEntries) {
+    for (const result of rosterResults) {
+      if (result.status === 'rejected') {
+        console.warn(
+          '[yahoo-league-ownership] unexpected roster enrichment rejection:',
+          result.reason instanceof Error ? result.reason.message : result.reason,
+        );
+        continue;
+      }
+
+      const rosterEntry = result.value;
       if (!rosterEntry) continue;
 
       for (const playerId of rosterEntry.playerIds) {
