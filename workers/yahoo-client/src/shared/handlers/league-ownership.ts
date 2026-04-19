@@ -9,6 +9,16 @@ export interface YahooLeagueOwnerInfo {
   ownerName: string | undefined;
 }
 
+/**
+ * `complete` distinguishes a genuinely free-agent miss from a miss caused by a
+ * roster fetch we failed to complete. When false, callers must treat map misses
+ * as "unknown" rather than FREE_AGENT.
+ */
+export interface YahooLeagueOwnershipResult {
+  map: Map<string, YahooLeagueOwnerInfo>;
+  complete: boolean;
+}
+
 const OWNERSHIP_TIMEOUT_MS = 12000;
 
 function extractRosterPlayerIds(team: Record<string, unknown>): string[] {
@@ -35,7 +45,7 @@ function extractRosterPlayerIds(team: Record<string, unknown>): string[] {
 export async function fetchLeagueOwnershipMap(
   credentials: YahooCredentials,
   leagueId: string,
-): Promise<Map<string, YahooLeagueOwnerInfo> | null> {
+): Promise<YahooLeagueOwnershipResult | null> {
   try {
     const teamsResponse = await yahooFetch(`/league/${leagueId}/teams`, {
       credentials,
@@ -93,17 +103,22 @@ export async function fetchLeagueOwnershipMap(
     );
 
     const ownerMap = new Map<string, YahooLeagueOwnerInfo>();
+    let complete = true;
     for (const result of rosterResults) {
       if (result.status === 'rejected') {
         console.warn(
           '[yahoo-league-ownership] unexpected roster enrichment rejection:',
           result.reason instanceof Error ? result.reason.message : result.reason,
         );
+        complete = false;
         continue;
       }
 
       const rosterEntry = result.value;
-      if (!rosterEntry) continue;
+      if (!rosterEntry) {
+        complete = false;
+        continue;
+      }
 
       for (const playerId of rosterEntry.playerIds) {
         ownerMap.set(playerId, {
@@ -114,7 +129,7 @@ export async function fetchLeagueOwnershipMap(
       }
     }
 
-    return ownerMap;
+    return { map: ownerMap, complete };
   } catch (error) {
     console.warn(
       '[yahoo-league-ownership] roster ownership enrichment failed:',
@@ -126,13 +141,13 @@ export async function fetchLeagueOwnershipMap(
 
 export function enrichPlayerWithOwnership(
   playerId: string | number | undefined,
-  ownerMap: Map<string, YahooLeagueOwnerInfo> | null,
+  ownership: YahooLeagueOwnershipResult | null,
 ): {
   league_status: 'ROSTERED' | 'FREE_AGENT' | null;
   league_team_name: string | null;
   league_owner_name: string | null;
 } {
-  if (!ownerMap) {
+  if (!ownership) {
     return { league_status: null, league_team_name: null, league_owner_name: null };
   }
 
@@ -142,9 +157,16 @@ export function enrichPlayerWithOwnership(
     return { league_status: null, league_team_name: null, league_owner_name: null };
   }
 
-  const owner = ownerMap.get(normalizedPlayerId);
+  const owner = ownership.map.get(normalizedPlayerId);
   if (!owner) {
-    return { league_status: 'FREE_AGENT', league_team_name: null, league_owner_name: null };
+    // When ownership data is incomplete (a roster fetch failed), we can't tell a
+    // real free agent apart from a player on the missing team. Surface null so
+    // downstream doesn't falsely label rostered players as FREE_AGENT.
+    return {
+      league_status: ownership.complete ? 'FREE_AGENT' : null,
+      league_team_name: null,
+      league_owner_name: null,
+    };
   }
 
   return {
