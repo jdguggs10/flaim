@@ -7,6 +7,7 @@
 
 // Cache the API base URL after first detection
 let cachedApiBase: string | null = null;
+let cachedApiBasePromise: Promise<string> | null = null;
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 const DISCOVER_TIMEOUT_MS = 60_000;
@@ -17,30 +18,41 @@ const DISCOVER_TIMEOUT_MS = 60_000;
  * 1. VITE_SITE_BASE env var (for preview builds)
  * 2. Chrome extension dev mode detection (unpacked = localhost)
  * 3. Production fallback (flaim.app)
+ *
+ * Concurrent callers before first resolution share a single in-flight
+ * detection promise so chrome.management.getSelf() is only invoked once.
  */
 async function detectApiBase(): Promise<string> {
   if (cachedApiBase) return cachedApiBase;
+  if (cachedApiBasePromise) return cachedApiBasePromise;
 
-  // 1. Environment variable takes precedence (for preview builds)
-  const envBase = import.meta.env.VITE_SITE_BASE as string | undefined;
-  if (envBase) {
-    cachedApiBase = `${envBase}/api/extension`;
-    return cachedApiBase;
-  }
+  cachedApiBasePromise = (async () => {
+    // 1. Environment variable takes precedence (for preview builds)
+    const envBase = import.meta.env.VITE_SITE_BASE as string | undefined;
+    if (envBase) {
+      return `${envBase}/api/extension`;
+    }
 
-  // 2. Fall back to dev mode detection
+    // 2. Fall back to dev mode detection
+    try {
+      const info = await chrome.management.getSelf();
+      const isDevMode = info.installType === 'development';
+      return isDevMode
+        ? 'http://localhost:3000/api/extension'
+        : 'https://flaim.app/api/extension';
+    } catch {
+      // Fallback to production if detection fails
+      return 'https://flaim.app/api/extension';
+    }
+  })();
+
   try {
-    const info = await chrome.management.getSelf();
-    const isDevMode = info.installType === 'development';
-    cachedApiBase = isDevMode
-      ? 'http://localhost:3000/api/extension'
-      : 'https://flaim.app/api/extension';
-  } catch {
-    // Fallback to production if detection fails
-    cachedApiBase = 'https://flaim.app/api/extension';
+    const resolved = await cachedApiBasePromise;
+    cachedApiBase = resolved;
+    return resolved;
+  } finally {
+    cachedApiBasePromise = null;
   }
-
-  return cachedApiBase;
 }
 
 /**
