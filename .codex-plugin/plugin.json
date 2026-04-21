@@ -1,0 +1,39 @@
+{
+  "name": "flaim-fantasy",
+  "version": "1.0.2",
+  "description": "Read-only fantasy sports analysis across ESPN, Yahoo, and Sleeper. Get roster advice, standings, matchups, waiver wire picks, and start/sit decisions.",
+  "author": {
+    "name": "Flaim"
+  },
+  "homepage": "https://flaim.app",
+  "repository": "https://github.com/jdguggs10/flaim",
+  "license": "MIT",
+  "keywords": [
+    "fantasy-sports",
+    "espn",
+    "yahoo",
+    "sleeper",
+    "read-only"
+  ],
+  "skills": "./.agents/skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Flaim Fantasy",
+    "shortDescription": "Read-only fantasy analysis for ESPN, Yahoo, and Sleeper.",
+    "longDescription": "Use Flaim's fantasy-analysis skills and MCP server to review rosters, matchups, standings, transactions, and waiver options across your real leagues without making account changes.",
+    "developerName": "Flaim",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive",
+      "Read"
+    ],
+    "websiteURL": "https://flaim.app",
+    "privacyPolicyURL": "https://flaim.app/privacy",
+    "termsOfServiceURL": "https://flaim.app/terms",
+    "defaultPrompt": [
+      "Review my fantasy roster and suggest my best starters.",
+      "Analyze my matchup and flag my biggest strengths and risks.",
+      "Find the best waiver targets in my league right now."
+    ]
+  }
+}
