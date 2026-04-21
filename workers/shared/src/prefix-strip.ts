@@ -18,8 +18,8 @@
  * stripPrefix("/health", "/baseball")          // returns "/health" (no match)
  */
 export function stripPrefix(pathname: string, prefix: string): string {
-  // Normalize prefix to start with /
-  const normalizedPrefix = prefix.startsWith('/') ? prefix : `/${prefix}`;
+  // Normalize prefix to start with / and avoid trailing-slash mismatch.
+  const normalizedPrefix = (prefix.startsWith('/') ? prefix : `/${prefix}`).replace(/\/$/, '') || '/';
 
   // Strip only exact-prefix or path-segment matches.
   if (pathname === normalizedPrefix) {

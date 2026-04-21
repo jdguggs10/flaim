@@ -17,11 +17,20 @@ describe('stripPrefix', () => {
   it('normalizes prefix without leading slash', () => {
     expect(stripPrefix('/baseball/health', 'baseball')).toBe('/health');
   });
+
+  it('normalizes prefix with trailing slash', () => {
+    expect(stripPrefix('/baseball/health', '/baseball/')).toBe('/health');
+  });
 });
 
 describe('getPathname', () => {
   it('returns parsed pathname with prefix stripping applied', () => {
     const request = new Request('https://example.com/baseball/standings?league=123');
     expect(getPathname(request, '/baseball')).toBe('/standings');
+  });
+
+  it('returns pathname unchanged when no prefix is provided', () => {
+    const request = new Request('https://example.com/baseball/standings?league=123');
+    expect(getPathname(request)).toBe('/baseball/standings');
   });
 });
