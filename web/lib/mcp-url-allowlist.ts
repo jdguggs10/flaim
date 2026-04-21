@@ -6,7 +6,7 @@
 /** Valid MCP server host patterns. */
 export const ALLOWED_MCP_HOST_PATTERNS = [
   'flaim.app',
-  ...(process.env.NODE_ENV === 'development' ? ['localhost', '127.0.0.1'] : []),
+  ...(process.env.NODE_ENV === 'development' ? ['localhost', '127.0.0.1', '[::1]'] : []),
 ];
 
 /** Flaim CF account subdomain. Workers are <name>.gerrygugger.workers.dev. */
@@ -32,7 +32,7 @@ export function isAllowedUrl(urlString: string): boolean {
     }
 
     // Must be HTTPS in production, allow HTTP for localhost
-    const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
+    const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
     if (!isLocalhost && url.protocol !== 'https:') {
       return false;
     }
