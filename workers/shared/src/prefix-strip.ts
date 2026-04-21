@@ -21,9 +21,14 @@ export function stripPrefix(pathname: string, prefix: string): string {
   // Normalize prefix to start with /
   const normalizedPrefix = prefix.startsWith('/') ? prefix : `/${prefix}`;
 
-  if (pathname.startsWith(normalizedPrefix)) {
-    const stripped = pathname.slice(normalizedPrefix.length);
-    return stripped || '/';
+  // Strip only exact-prefix or path-segment matches.
+  if (pathname === normalizedPrefix) {
+    return '/';
+  }
+
+  const prefixWithSlash = `${normalizedPrefix}/`;
+  if (pathname.startsWith(prefixWithSlash)) {
+    return pathname.slice(normalizedPrefix.length);
   }
 
   return pathname;
