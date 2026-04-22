@@ -45,7 +45,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { useEspnCredentials } from '@/lib/use-espn-credentials';
-import { getDefaultSeasonYear } from '@/lib/season-utils';
+import { getDefaultSeasonYear, getPreviousSeasonYear, getSeasonYearOptions } from '@/lib/season-utils';
 import { CHROME_EXTENSION_URL } from '@/config/constants';
 import { StepConnectAI } from '@/components/site/StepConnectAI';
 
@@ -113,7 +113,7 @@ interface UnifiedLeague {
   platform: 'espn' | 'yahoo' | 'sleeper';
   // Common fields
   sport: string;
-  seasonYear: number;
+  seasonYear?: number;
   leagueName: string;
   teamName?: string;
   isDefault: boolean;
@@ -143,13 +143,8 @@ const SPORT_OPTIONS: { value: Sport; label: string; emoji: string }[] = [
   { value: 'hockey', label: 'Hockey', emoji: '\u{1F3D2}' },
 ];
 
-// Generate season options (current year down to 2000)
+// Generate season options (current season year down to 2000)
 const MIN_YEAR = 2000;
-const currentYear = new Date().getFullYear();
-const SEASON_OPTIONS = Array.from(
-  { length: currentYear - MIN_YEAR + 1 },
-  (_, i) => currentYear - i
-);
 
 function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
@@ -166,7 +161,7 @@ function espnToUnified(leagues: League[], preferences: UserPreferencesState): Un
     return {
       platform: 'espn' as const,
       sport: l.sport,
-      seasonYear: l.seasonYear || new Date().getFullYear(),
+      seasonYear: l.seasonYear,
       leagueName: l.leagueName || `League ${l.leagueId}`,
       teamName: l.teamName,
       isDefault,
@@ -302,11 +297,22 @@ function LeaguesPageContent() {
   const [selectedTeamId, setSelectedTeamId] = useState<string>('');
   const [isAddingLeague, setIsAddingLeague] = useState(false);
   const [discoverLeagueKey, setDiscoverLeagueKey] = useState<string>('');
+  const manualSeasonOptions = useMemo(
+    () => getSeasonYearOptions(newLeagueSport, MIN_YEAR),
+    [newLeagueSport]
+  );
 
   // Helper to determine if a league is "old" (no seasons in last 2 years)
-  const isOldLeague = (seasons: { seasonYear: number }[]): boolean => {
-    const thresholdYear = new Date().getFullYear() - 2;
-    const mostRecentYear = Math.max(...seasons.map(s => s.seasonYear), 0);
+  const isOldLeague = (sport: Sport, seasons: Array<{ seasonYear?: number }>): boolean => {
+    const knownSeasonYears = seasons
+      .map((season) => season.seasonYear)
+      .filter((seasonYear): seasonYear is number => typeof seasonYear === 'number');
+    if (knownSeasonYears.length === 0) {
+      return false;
+    }
+
+    const thresholdYear = getDefaultSeasonYear(sport) - 1;
+    const mostRecentYear = Math.max(...knownSeasonYears);
     return mostRecentYear < thresholdYear;
   };
 
@@ -346,7 +352,7 @@ function LeaguesPageContent() {
 
     // Sort seasons desc within each group
     for (const group of grouped.values()) {
-      group.seasons.sort((a, b) => b.seasonYear - a.seasonYear);
+      group.seasons.sort((a, b) => (b.seasonYear ?? 0) - (a.seasonYear ?? 0));
       // Use most recent season's league name
       group.leagueName = group.seasons[0]?.leagueName || group.leagueName;
       group.teamId = group.seasons.find((s) => s.teamId)?.teamId;
@@ -357,7 +363,7 @@ function LeaguesPageContent() {
     const oldLeagueGroups: UnifiedLeagueGroup[] = [];
 
     for (const group of grouped.values()) {
-      if (isOldLeague(group.seasons)) {
+      if (isOldLeague(group.sport as Sport, group.seasons)) {
         oldLeagueGroups.push(group);
       } else {
         activeLeagues.push(group);
@@ -639,7 +645,10 @@ function LeaguesPageContent() {
 
     // Check for duplicates (including season year for multi-season support)
     const exists = leagues.some(
-      (l) => l.leagueId === newLeagueId.trim() && l.sport === newLeagueSport && l.seasonYear === newLeagueSeason
+      (l) =>
+        l.leagueId === newLeagueId.trim() &&
+        l.sport === newLeagueSport &&
+        l.seasonYear === newLeagueSeason
     );
     if (exists) {
       setLeagueError('This league and season is already added');
@@ -1231,7 +1240,9 @@ function LeaguesPageContent() {
                                 <div className="flex items-center gap-1 text-xs text-muted-foreground">
                                   {(() => {
                                     const mostRecentSeason = group.seasons[0];
+                                    const mostRecentSeasonYear = mostRecentSeason?.seasonYear;
                                     const isLeagueDefault = mostRecentSeason?.isDefault;
+                                    const canSetDefault = !!mostRecentSeason?.teamId && typeof mostRecentSeasonYear === 'number';
                                     const leagueKey = group.platform === 'yahoo'
                                       ? `yahoo:${mostRecentSeason?.yahooId}`
                                       : group.platform === 'sleeper'
@@ -1246,17 +1257,24 @@ function LeaguesPageContent() {
                                             ? 'text-warning'
                                             : 'text-muted-foreground hover:text-warning'
                                         }`}
-                                        onClick={() => handleSetDefault(
-                                          group.platform,
-                                          mostRecentSeason.leagueId,
-                                          mostRecentSeason.sport,
-                                          mostRecentSeason.seasonYear,
-                                          mostRecentSeason.yahooId
-                                        )}
-                                        disabled={isSettingThis || isLeagueDefault || !mostRecentSeason?.teamId}
+                                        onClick={() => {
+                                          if (!canSetDefault) {
+                                            return;
+                                          }
+                                          handleSetDefault(
+                                            group.platform,
+                                            mostRecentSeason.leagueId,
+                                            mostRecentSeason.sport,
+                                            mostRecentSeasonYear,
+                                            mostRecentSeason.yahooId
+                                          );
+                                        }}
+                                        disabled={isSettingThis || isLeagueDefault || !canSetDefault}
                                         title={
                                           !mostRecentSeason?.teamId
                                             ? 'No team selected'
+                                            : mostRecentSeasonYear === undefined
+                                            ? 'Legacy league row is missing a season year'
                                             : isLeagueDefault
                                             ? 'Default league for this sport'
                                             : 'Set as default for this sport'
@@ -1662,10 +1680,10 @@ function LeaguesPageContent() {
                                 This season
                               </Button>
                               <Button
-                                variant={newLeagueSeason === new Date().getFullYear() - 1 ? 'default' : 'outline'}
+                                variant={newLeagueSeason === getPreviousSeasonYear(newLeagueSport) ? 'default' : 'outline'}
                                 size="sm"
                                 onClick={() => {
-                                  setNewLeagueSeason(new Date().getFullYear() - 1);
+                                  setNewLeagueSeason(getPreviousSeasonYear(newLeagueSport));
                                   setSeasonManuallySet(true);
                                 }}
                                 disabled={isVerifying}
@@ -1692,8 +1710,16 @@ function LeaguesPageContent() {
                                   onValueChange={(v) => {
                                     const sport = v as Sport;
                                     setNewLeagueSport(sport);
+                                    const defaultSeasonYear = getDefaultSeasonYear(sport);
                                     if (!seasonManuallySet) {
-                                      setNewLeagueSeason(getDefaultSeasonYear(sport));
+                                      setNewLeagueSeason(defaultSeasonYear);
+                                      return;
+                                    }
+
+                                    const seasonOptions = getSeasonYearOptions(sport, MIN_YEAR);
+                                    if (!seasonOptions.includes(newLeagueSeason)) {
+                                      setNewLeagueSeason(defaultSeasonYear);
+                                      setSeasonManuallySet(false);
                                     }
                                   }}
                                   disabled={isVerifying}
@@ -1724,7 +1750,7 @@ function LeaguesPageContent() {
                                     <SelectValue />
                                   </SelectTrigger>
                                   <SelectContent>
-                                    {SEASON_OPTIONS.map((year) => (
+                                    {manualSeasonOptions.map((year) => (
                                       <SelectItem key={year} value={String(year)}>
                                         {year}
                                       </SelectItem>
