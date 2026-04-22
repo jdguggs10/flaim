@@ -90,7 +90,7 @@ Season year defaults are deterministic and use America/New_York time. The canoni
 | Basketball | Aug 1 | ~10 weeks before NBA opening night (late October) |
 | Hockey | Aug 1 | ~10 weeks before NHL opening night (early October) |
 
-**ESPN normalization:** ESPN uses the END year for NBA/NHL seasons (e.g., `2025` for the 2024-25 season). Flaim normalizes this to the start year internally via `toCanonicalYear()`/`toPlatformYear()` in `workers/auth-worker/src/season-utils.ts`.
+**ESPN normalization:** ESPN uses the END year for NBA/NHL seasons (e.g., `2025` for the 2024-25 season). Flaim normalizes this to the start year internally via the shared `toCanonicalYear()`/`toPlatformYear()` helpers in `@flaim/worker-shared` (`workers/shared/src/season.ts`).
 
 ## User Defaults
 

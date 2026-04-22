@@ -1,5 +1,9 @@
 import type { AutoPullResponse, EspnLeagueInfo, SportName } from '@/lib/espn-types';
-import { getDefaultSeasonYear } from '@/lib/season-utils';
+import {
+  getDefaultSeasonYear,
+  toCanonicalYear,
+  toPlatformYear,
+} from '@/lib/season-utils';
 
 interface EspnCredentials {
   swid: string;
@@ -124,20 +128,6 @@ function normalizeSport(input?: string): SportName | null {
   return null;
 }
 
-function toEspnSeasonYear(canonicalYear: number, sport: string): number {
-  if (sport === 'basketball' || sport === 'hockey') {
-    return canonicalYear + 1;
-  }
-  return canonicalYear;
-}
-
-function fromEspnSeasonYear(espnYear: number, sport: string): number {
-  if (sport === 'basketball' || sport === 'hockey') {
-    return espnYear - 1;
-  }
-  return espnYear;
-}
-
 async function fetchEspnCredentials(
   authHeader: string,
   correlationId?: string
@@ -259,8 +249,8 @@ async function getBasicLeagueInfo(
   seasonYear?: number
 ): Promise<BasicLeagueInfoResponse> {
   try {
-    const requestedSeasonYear = seasonYear || getDefaultSeasonYear(sport);
-    const espnSeasonYear = toEspnSeasonYear(requestedSeasonYear, sport);
+    const requestedSeasonYear = seasonYear ?? getDefaultSeasonYear(sport);
+    const espnSeasonYear = toPlatformYear(requestedSeasonYear, sport, 'espn');
     const gameId = ESPN_GAME_IDS[sport];
     const apiPath = `/seasons/${espnSeasonYear}/segments/0/leagues/${leagueId}?view=mStandings&view=mTeam&view=mSettings`;
 
@@ -327,7 +317,7 @@ async function getBasicLeagueInfo(
 
     const leagueName = data.settings?.name || `${sport.charAt(0).toUpperCase()}${sport.slice(1)} League ${leagueId}`;
     const returnedSeasonYear = data.seasonId
-      ? fromEspnSeasonYear(data.seasonId, sport)
+      ? toCanonicalYear(data.seasonId, sport, 'espn')
       : requestedSeasonYear;
 
     const teams = (data.teams || []).map((team) => ({
@@ -425,7 +415,7 @@ export async function runEspnAutoPull(params: {
     leagueId,
     leagueName: leagueInfo.leagueName || `${targetSport} League ${leagueId}`,
     sport: targetSport,
-    seasonYear: leagueInfo.seasonYear || seasonYear || currentSeasonYear,
+    seasonYear: leagueInfo.seasonYear ?? seasonYear ?? currentSeasonYear,
     gameId: ESPN_GAME_IDS[targetSport],
     standings: leagueInfo.standings || [],
     teams: leagueInfo.teams || [],
