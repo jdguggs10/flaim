@@ -16,7 +16,7 @@ import {
   transformStats,
   POSITION_SLOTS,
 } from './mappings';
-import { getCurrentSeasonYear } from '../../shared/season';
+import { getCurrentSeasonYear, fromEspnSeasonYear } from '../../shared/season';
 
 const GAME_ID = 'fhl'; // ESPN's game ID for fantasy hockey
 
@@ -190,6 +190,8 @@ async function handleGetStandings(
   correlationId?: string
 ): Promise<ExecuteResponse> {
   const { league_id, season_year } = params;
+  // season_year is ESPN year here (converted by index.ts). Reverse for non-API comparisons.
+  const canonicalSeasonYear = fromEspnSeasonYear(season_year, 'hockey');
 
   try {
     const credentials = await getCredentials(env, authHeader, correlationId);
@@ -213,14 +215,14 @@ async function handleGetStandings(
       (t) => t.rankFinal != null || t.rankCalculatedFinal != null
     );
     let seasonPhase: 'regular_season' | 'playoffs_in_progress' | 'season_complete';
-    if (hasExplicitCompletionData || season_year < currentSeasonYear) {
+    if (hasExplicitCompletionData || canonicalSeasonYear < currentSeasonYear) {
       seasonPhase = 'season_complete';
-    } else if (season_year === currentSeasonYear) {
+    } else if (canonicalSeasonYear === currentSeasonYear) {
       const regularPeriods = data.settings?.regularSeasonMatchupPeriods ?? 0;
       const scoringPeriod = data.scoringPeriodId ?? 0;
       seasonPhase = scoringPeriod > regularPeriods ? 'playoffs_in_progress' : 'regular_season';
     } else {
-      // season_year > currentSeasonYear — future season, treat as not yet started
+      // canonicalSeasonYear > currentSeasonYear — future season, treat as not yet started
       seasonPhase = 'regular_season';
     }
     const seasonComplete = seasonPhase === 'season_complete';
@@ -288,7 +290,7 @@ async function handleGetStandings(
       success: true,
       data: {
         leagueId: league_id,
-        seasonYear: season_year,
+        seasonYear: canonicalSeasonYear,
         seasonPhase,
         seasonComplete,
         standings
@@ -313,6 +315,7 @@ async function handleGetMatchups(
   correlationId?: string
 ): Promise<ExecuteResponse> {
   const { league_id, season_year, week } = params;
+  const canonicalSeasonYear = fromEspnSeasonYear(season_year, 'hockey');
 
   try {
     const credentials = await getCredentials(env, authHeader, correlationId);
@@ -367,7 +370,7 @@ async function handleGetMatchups(
       success: true,
       data: {
         leagueId: league_id,
-        seasonYear: season_year,
+        seasonYear: canonicalSeasonYear,
         currentScoringPeriod: data.scoringPeriodId,
         matchupPeriod: matchupPeriod ?? null,
         matchups
@@ -485,6 +488,7 @@ async function handleGetFreeAgents(
   correlationId?: string
 ): Promise<ExecuteResponse> {
   const { league_id, season_year, position, count } = params;
+  const canonicalSeasonYear = fromEspnSeasonYear(season_year, 'hockey');
 
   try {
     const credentials = await getCredentials(env, authHeader, correlationId);
@@ -551,7 +555,7 @@ async function handleGetFreeAgents(
       success: true,
       data: {
         leagueId: league_id,
-        seasonYear: season_year,
+        seasonYear: canonicalSeasonYear,
         position: positionKey,
         count: freeAgents.length,
         freeAgents

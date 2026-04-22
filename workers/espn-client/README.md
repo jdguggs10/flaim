@@ -39,7 +39,7 @@ interface ExecuteRequest {
   params: {
     sport: 'football' | 'baseball' | 'basketball' | 'hockey';
     league_id: string;
-    season_year: number;
+    season_year: number;  // canonical start year (e.g., 2024 for the 2024-25 NBA season)
     team_id?: string;
     week?: number;
     position?: string;
@@ -50,6 +50,10 @@ interface ExecuteRequest {
 ```
 
 `/execute` reads end-user auth from the HTTP `Authorization` header and requires `X-Flaim-Internal-Token` for internal calls. Manual ESPN onboarding now runs in the web server layer, not through public ESPN worker routes.
+
+**Season year convention:** Callers always pass canonical start-year (e.g., 2024 for the 2024-25 NBA season). The `/execute` route converts to ESPN-native year before dispatching to handlers via `toEspnSeasonYear()` in `src/shared/season.ts`. ESPN uses end-year for basketball and hockey (e.g., 2025 for 2024-25); football and baseball are unchanged.
+
+**Handler contract:** By the time a sport handler runs, `params.season_year` is already the ESPN-native year. Handlers use it directly for ESPN API URLs. Use `fromEspnSeasonYear()` (same module) when canonical year is needed for non-API operations — `seasonPhase` comparisons, response `seasonYear` echo fields.
 
 ## Supported Tools
 

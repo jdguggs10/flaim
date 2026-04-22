@@ -4,12 +4,24 @@
  * Flaim stores canonical start-year (e.g., 2024 for the 2024-25 NBA season).
  * ESPN's API expects end-year for basketball/hockey (e.g., 2025).
  * This function converts canonical → ESPN-native.
+ *
+ * Called by index.ts at the /execute boundary — handlers receive ESPN year, not canonical.
+ * Use fromEspnSeasonYear() inside handlers when canonical year is needed (e.g., seasonPhase
+ * comparisons, response echoes).
  */
 export function toEspnSeasonYear(canonicalYear: number, sport: string): number {
   if (sport === 'basketball' || sport === 'hockey') {
     return canonicalYear + 1;
   }
   return canonicalYear;
+}
+
+/** Inverse of toEspnSeasonYear — converts ESPN-native year back to canonical start year. */
+export function fromEspnSeasonYear(espnYear: number, sport: string): number {
+  if (sport === 'basketball' || sport === 'hockey') {
+    return espnYear - 1;
+  }
+  return espnYear;
 }
 
 /**
