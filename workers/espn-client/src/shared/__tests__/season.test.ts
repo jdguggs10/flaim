@@ -4,6 +4,7 @@ import {
   createSeasonContext,
   fromEspnSeasonYear,
   getSeasonContext,
+  getCurrentSeasonYear,
   normalizeEspnLeagueStatus,
   toEspnSeasonYear,
   withSeasonContext,
@@ -59,6 +60,16 @@ describe('createSeasonContext', () => {
       canonicalYear: 2024,
       espnYear: 2025,
     });
+  });
+});
+
+describe('getCurrentSeasonYear', () => {
+  it('uses the shared rollover rules for football', () => {
+    expect(getCurrentSeasonYear('football', new Date('2026-01-15T12:00:00Z'))).toBe(2025);
+  });
+
+  it('uses the shared rollover rules for basketball', () => {
+    expect(getCurrentSeasonYear('basketball', new Date('2026-08-01T12:00:00Z'))).toBe(2026);
   });
 });
 

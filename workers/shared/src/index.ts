@@ -29,6 +29,16 @@ export {
   getPathname,
 } from './prefix-strip.js';
 
+// Season utilities
+export {
+  getDefaultSeasonYear,
+  isCurrentSeason,
+  toCanonicalYear,
+  toPlatformYear,
+  getSeasonLabel,
+} from './season.js';
+export type { SeasonSport } from './season.js';
+
 // Auth-worker fetch helper
 export { authWorkerFetch } from './auth-fetch.js';
 
