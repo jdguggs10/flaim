@@ -24,6 +24,24 @@ export function fromEspnSeasonYear(espnYear: number, sport: string): number {
   return espnYear;
 }
 
+export function normalizeEspnLeagueStatus(status: unknown, sport: string): unknown {
+  if (!status || typeof status !== 'object') {
+    return status;
+  }
+
+  const statusRecord = status as Record<string, unknown>;
+  const previousSeasons = Array.isArray(statusRecord.previousSeasons)
+    ? statusRecord.previousSeasons.map((season) =>
+        typeof season === 'number' ? fromEspnSeasonYear(season, sport) : season
+      )
+    : statusRecord.previousSeasons;
+
+  return {
+    ...statusRecord,
+    previousSeasons,
+  };
+}
+
 export function createSeasonContext(canonicalYear: number, sport: string): EspnSeasonContext {
   return {
     canonicalYear,

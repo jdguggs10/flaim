@@ -64,7 +64,7 @@ interface RoutedToolParams extends ToolParams {
 }
 ```
 
-Handlers should use `params.seasonContext.espnYear` for ESPN URLs, cache keys, and ESPN stat-season matches, while keeping `params.season_year` / `params.seasonContext.canonicalYear` for outward-facing logic and season-phase comparisons. Production callers should route through `/execute`; direct tests should add `seasonContext` explicitly with `withSeasonContext()`.
+Handlers should use `params.seasonContext.espnYear` for ESPN URLs, cache keys, and ESPN stat-season matches, while keeping `params.season_year` / `params.seasonContext.canonicalYear` for outward-facing logic and season-phase comparisons. For cross-calendar sports, outward `get_league_info` year fields such as `seasonId` and `status.previousSeasons` should stay canonical even though ESPN returns end-year values. Production callers should route through `/execute`; direct tests should add `seasonContext` explicitly with `withSeasonContext()`.
 
 ## Supported Tools
 

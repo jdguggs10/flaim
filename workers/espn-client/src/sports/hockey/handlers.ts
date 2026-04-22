@@ -16,7 +16,7 @@ import {
   transformStats,
   POSITION_SLOTS,
 } from './mappings';
-import { getCurrentSeasonYear, getSeasonContext } from '../../shared/season';
+import { getCurrentSeasonYear, getSeasonContext, normalizeEspnLeagueStatus } from '../../shared/season';
 
 const GAME_ID = 'fhl'; // ESPN's game ID for fantasy hockey
 
@@ -109,7 +109,7 @@ async function handleGetLeagueInfo(
   correlationId?: string
 ): Promise<ExecuteResponse> {
   const { league_id } = params;
-  const { espnYear } = getSeasonContext(params);
+  const { canonicalYear, espnYear } = getSeasonContext(params);
 
   try {
     const credentials = await getCredentials(env, authHeader, correlationId);
@@ -151,10 +151,10 @@ async function handleGetLeagueInfo(
         id: data.id,
         name: data.settings.name,
         size: data.settings.size,
-        status: data.status,
+        status: normalizeEspnLeagueStatus(data.status, 'hockey'),
         scoringPeriodId: data.scoringPeriodId,
         currentMatchupPeriod: data.currentMatchupPeriod,
-        seasonId: data.seasonId,
+        seasonId: canonicalYear,
         segmentId: data.segmentId,
         teams,
         scoringSettings: {

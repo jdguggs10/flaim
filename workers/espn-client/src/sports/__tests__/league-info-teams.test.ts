@@ -27,6 +27,10 @@ const scenarios = [
   { label: 'hockey', sport: 'hockey', handlers: hockeyHandlers, expectedEspnYear: 2025 },
 ] as const;
 
+const crossCalendarScenarios = scenarios.filter(
+  (scenario) => scenario.sport === 'basketball' || scenario.sport === 'hockey'
+);
+
 function makeParams(sport: Sport): HandlerToolParams {
   return withSeasonContext({
     sport,
@@ -41,6 +45,11 @@ const mockLeagueResponse = {
   segmentId: 0,
   scoringPeriodId: 5,
   currentMatchupPeriod: 5,
+  status: {
+    currentMatchupPeriod: 5,
+    isActive: true,
+    previousSeasons: [2024, 2025],
+  },
   settings: {
     name: 'Test League',
     size: 10,
@@ -144,6 +153,38 @@ describe('espn cross-sport get_league_info teams array', () => {
       ownerName: undefined,
       owners: undefined,
     });
+  });
+
+  it.each(crossCalendarScenarios)('$label keeps outward seasonId canonical', async ({ sport, handlers }) => {
+    espnFetchMock.mockResolvedValue(
+      new Response(JSON.stringify(mockLeagueResponse), { status: 200 })
+    );
+
+    const params = makeParams(sport);
+    const result = await handlers.get_league_info({} as never, params, 'Bearer x', 'cid');
+
+    expect(result.success).toBe(true);
+    const data = result.data as { seasonId?: number };
+
+    expect(data.seasonId).toBe(2024);
+  });
+
+  it.each(crossCalendarScenarios)('$label normalizes status.previousSeasons to canonical years', async ({ sport, handlers }) => {
+    espnFetchMock.mockResolvedValue(
+      new Response(JSON.stringify(mockLeagueResponse), { status: 200 })
+    );
+
+    const params = makeParams(sport);
+    const result = await handlers.get_league_info({} as never, params, 'Bearer x', 'cid');
+
+    expect(result.success).toBe(true);
+    const data = result.data as {
+      status?: {
+        previousSeasons?: number[];
+      };
+    };
+
+    expect(data.status?.previousSeasons).toEqual([2023, 2024]);
   });
 
   it.each(scenarios)('$label requests mTeam view in API path', async ({ sport, handlers, expectedEspnYear }) => {

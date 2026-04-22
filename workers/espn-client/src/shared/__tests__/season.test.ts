@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { RoutedToolParams } from '../../types';
-import { createSeasonContext, getSeasonContext, toEspnSeasonYear, fromEspnSeasonYear, withSeasonContext } from '../season';
+import {
+  createSeasonContext,
+  fromEspnSeasonYear,
+  getSeasonContext,
+  normalizeEspnLeagueStatus,
+  toEspnSeasonYear,
+  withSeasonContext,
+} from '../season';
 
 describe('toEspnSeasonYear', () => {
   it('adds 1 for basketball', () => {
@@ -52,6 +59,22 @@ describe('createSeasonContext', () => {
       canonicalYear: 2024,
       espnYear: 2025,
     });
+  });
+});
+
+describe('normalizeEspnLeagueStatus', () => {
+  it('normalizes previousSeasons to canonical years for basketball', () => {
+    expect(normalizeEspnLeagueStatus({
+      currentMatchupPeriod: 5,
+      previousSeasons: [2024, 2025],
+    }, 'basketball')).toEqual({
+      currentMatchupPeriod: 5,
+      previousSeasons: [2023, 2024],
+    });
+  });
+
+  it('passes through non-object values unchanged', () => {
+    expect(normalizeEspnLeagueStatus(null, 'hockey')).toBeNull();
   });
 });
 
