@@ -21,9 +21,9 @@ vi.mock('../../shared/espn-transactions', () => ({
 }));
 
 const scenarios = [
-  { label: 'baseball', sport: 'baseball', gameId: 'flb', handlers: baseballHandlers, expectedEspnYear: 2024 },
-  { label: 'basketball', sport: 'basketball', gameId: 'fba', handlers: basketballHandlers, expectedEspnYear: 2025 },
-  { label: 'hockey', sport: 'hockey', gameId: 'fhl', handlers: hockeyHandlers, expectedEspnYear: 2025 },
+  { label: 'baseball', sport: 'baseball', gameId: 'flb', handlers: baseballHandlers, expectedEspnYear: 2024, expectedResponseSeasonYear: 2024 },
+  { label: 'basketball', sport: 'basketball', gameId: 'fba', handlers: basketballHandlers, expectedEspnYear: 2025, expectedResponseSeasonYear: 2024 },
+  { label: 'hockey', sport: 'hockey', gameId: 'fhl', handlers: hockeyHandlers, expectedEspnYear: 2025, expectedResponseSeasonYear: 2024 },
 ] as const;
 
 function makeParams(sport: Sport, overrides: Partial<ToolParams> = {}): HandlerToolParams {
@@ -46,7 +46,7 @@ describe('espn cross-sport get_transactions handlers', () => {
     vi.clearAllMocks();
   });
 
-  it.each(scenarios)('$label routes get_transactions using the sport game id', async ({ sport, gameId, handlers, expectedEspnYear }) => {
+  it.each(scenarios)('$label routes get_transactions using the sport game id', async ({ sport, gameId, handlers, expectedEspnYear, expectedResponseSeasonYear }) => {
     getCredentialsMock.mockResolvedValue({ s2: 'token', swid: '{swid}' });
     getLeagueContextMock.mockResolvedValue({ scoringPeriodId: 10, teams: { '1': 'Team One' } });
     fetchMTransactions2Mock.mockResolvedValue({ truncated: false, transactions: [
@@ -68,8 +68,15 @@ describe('espn cross-sport get_transactions handlers', () => {
     expect(fetchMTransactions2Mock).toHaveBeenCalledWith(gameId, '123', expectedEspnYear, { s2: 'token', swid: '{swid}' }, [7]);
 
     if (!result.success) return;
-    const data = result.data as { count: number; window: { mode: string; weeks: number[] }; teams: Record<string, string>; transactions: Array<{ transaction_id: string }> };
+    const data = result.data as {
+      count: number;
+      season_year: number;
+      window: { mode: string; weeks: number[] };
+      teams: Record<string, string>;
+      transactions: Array<{ transaction_id: string }>;
+    };
     expect(data.window).toEqual({ mode: 'explicit_week', weeks: [7] });
+    expect(data.season_year).toBe(expectedResponseSeasonYear);
     expect(data.count).toBe(1);
     expect(data.transactions[0]?.transaction_id).toBe('t1');
     expect(data.teams).toEqual({ '1': 'Team One' });
