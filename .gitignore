@@ -60,6 +60,8 @@ next-env.d.ts
 *gemini*.md
 *AGENTS*.md
 *agents*.md
+!/CLAUDE.md
+!/AGENTS.md
 
 # OS files
 .DS_Store
