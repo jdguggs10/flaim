@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi, type MockedFunction } from 'vitest';
-import { handleSleeperDiscover, type SleeperConnectEnv } from '../sleeper-connect-handlers';
+import { handleSleeperDiscover, handleSleeperLeagues, type SleeperConnectEnv } from '../sleeper-connect-handlers';
 import { SleeperStorage } from '../sleeper-storage';
 import { getDefaultSeasonYear } from '../season-utils';
 
@@ -36,6 +36,7 @@ describe('sleeper-connect-handlers', () => {
   let mockStorage: {
     saveSleeperConnection: ReturnType<typeof vi.fn>;
     saveSleeperLeague: ReturnType<typeof vi.fn>;
+    getSleeperLeagues: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(() => {
@@ -45,6 +46,7 @@ describe('sleeper-connect-handlers', () => {
     mockStorage = {
       saveSleeperConnection: vi.fn().mockResolvedValue(undefined),
       saveSleeperLeague: vi.fn().mockResolvedValue(undefined),
+      getSleeperLeagues: vi.fn().mockResolvedValue([]),
     };
 
     vi.mocked(SleeperStorage.fromEnvironment).mockReturnValue(mockStorage as unknown as SleeperStorage);
@@ -203,5 +205,102 @@ describe('sleeper-connect-handlers', () => {
         rosterId: 7,
       }),
     );
+  });
+
+  it('includes recurringLeagueId when the Sleeper history chain resolves', async () => {
+    mockStorage.getSleeperLeagues.mockResolvedValue([
+      {
+        id: 'row-2025',
+        clerkUserId: 'user_1',
+        leagueId: 'sleeper-2025',
+        sport: 'football',
+        seasonYear: 2025,
+        leagueName: 'Dynasty Squad',
+        rosterId: 7,
+        sleeperUserId: 'sleeper_123',
+      },
+      {
+        id: 'row-2024',
+        clerkUserId: 'user_1',
+        leagueId: 'sleeper-2024',
+        sport: 'football',
+        seasonYear: 2024,
+        leagueName: 'Dynasty Squad',
+        rosterId: 7,
+        sleeperUserId: 'sleeper_123',
+      },
+    ]);
+
+    mockFetch.mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith('/league/sleeper-2025')) {
+        return jsonResponse({
+          league_id: 'sleeper-2025',
+          name: 'Dynasty Squad',
+          sport: 'nfl',
+          season: '2025',
+          previous_league_id: 'sleeper-2024',
+        });
+      }
+      if (url.endsWith('/league/sleeper-2024')) {
+        return jsonResponse({
+          league_id: 'sleeper-2024',
+          name: 'Dynasty Squad',
+          sport: 'nfl',
+          season: '2024',
+          previous_league_id: null,
+        });
+      }
+      return new Response(null, { status: 404 });
+    });
+
+    const response = await handleSleeperLeagues(env, 'user_1', corsHeaders);
+    const body = (await response.json()) as {
+      leagues: Array<{ leagueId: string; recurringLeagueId: string; seasonYear: number }>;
+    };
+
+    expect(response.status).toBe(200);
+    expect(body.leagues).toEqual([
+      expect.objectContaining({
+        leagueId: 'sleeper-2025',
+        recurringLeagueId: 'sleeper-2024',
+        seasonYear: 2025,
+      }),
+      expect.objectContaining({
+        leagueId: 'sleeper-2024',
+        recurringLeagueId: 'sleeper-2024',
+        seasonYear: 2024,
+      }),
+    ]);
+  });
+
+  it('falls back to the raw leagueId when recurring chain lookup fails', async () => {
+    mockStorage.getSleeperLeagues.mockResolvedValue([
+      {
+        id: 'row-2025',
+        clerkUserId: 'user_1',
+        leagueId: 'sleeper-2025',
+        sport: 'football',
+        seasonYear: 2025,
+        leagueName: 'Dynasty Squad',
+        rosterId: 7,
+        sleeperUserId: 'sleeper_123',
+      },
+    ]);
+
+    mockFetch.mockResolvedValue(new Response(null, { status: 503 }));
+
+    const response = await handleSleeperLeagues(env, 'user_1', corsHeaders);
+    const body = (await response.json()) as {
+      leagues: Array<{ leagueId: string; recurringLeagueId: string }>;
+    };
+
+    expect(response.status).toBe(200);
+    expect(body.leagues).toEqual([
+      expect.objectContaining({
+        leagueId: 'sleeper-2025',
+        recurringLeagueId: 'sleeper-2025',
+      }),
+    ]);
   });
 });

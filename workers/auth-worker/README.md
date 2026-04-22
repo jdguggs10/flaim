@@ -56,6 +56,17 @@ These endpoints manage the OAuth 2.0 client flow with Yahoo Fantasy.
 | `GET /internal/leagues/yahoo` | Internal + Clerk JWT / OAuth / Eval key | Get stored Yahoo leagues for internal workers |
 | `DELETE /leagues/yahoo/:id` | Clerk JWT | Delete a Yahoo league |
 
+### Sleeper Connect
+
+| Endpoint | Auth | Purpose |
+|----------|------|---------|
+| `POST /connect/sleeper/discover` | Clerk JWT | Discover Sleeper leagues and prior seasons |
+| `GET /connect/sleeper/status` | Clerk JWT | Check Sleeper connection status |
+| `DELETE /connect/sleeper/disconnect` | Clerk JWT | Remove Sleeper connection |
+| `GET /leagues/sleeper` | Clerk JWT | Get stored Sleeper leagues |
+| `GET /internal/leagues/sleeper` | Internal + Clerk JWT / OAuth / Eval key | Get stored Sleeper leagues for internal workers |
+| `DELETE /leagues/sleeper/:id` | Clerk JWT | Delete a Sleeper league |
+
 ### Extension APIs
 
 | Endpoint | Auth | Purpose |
@@ -116,6 +127,7 @@ A static Bearer token that resolves to a specific Clerk user ID with `mcp:read` 
 - `GET /auth/internal/connect/yahoo/credentials`
 - `GET /auth/internal/leagues`
 - `GET /auth/internal/leagues/yahoo`
+- `GET /auth/internal/leagues/sleeper`
 - `GET /auth/internal/user/preferences`
 
 **Current mapping:** `EVAL_USER_ID` → `user_36UBCM4x2hK1aJYY1F7iV1svNw6` (test email on Clerk prod).
@@ -182,3 +194,4 @@ npm run deploy       # Deploy
 - Deleting a league removes all seasons for that league.
 - Shared season helper logic now lives in `@flaim/worker-shared` (`src/season.ts`); `src/season-utils.ts` stays as a backward-compatible wrapper for local imports.
 - `src/v3/get-league-info.ts` returns canonical start years in `seasonYear`, `settings.season`, and `status.previousSeasons`; ESPN-native end years are only used for upstream ESPN requests.
+- Sleeper league responses keep the season-specific `leagueId` for direct tool calls, and also compute a `recurringLeagueId` on read by following Sleeper's `previous_league_id` chain so downstream consumers can group recurring seasons safely.

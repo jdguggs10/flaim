@@ -1,8 +1,9 @@
-import { SleeperStorage } from './sleeper-storage';
+import { SleeperStorage, type SleeperLeague } from './sleeper-storage';
 import { getDefaultSeasonYear } from './season-utils';
 
 const SLEEPER_API = 'https://api.sleeper.app/v1';
 const MAX_HISTORY_YEARS = 5;
+const MAX_RECURRING_CHAIN_DEPTH = 25;
 
 export interface SleeperConnectEnv {
   SUPABASE_URL: string;
@@ -28,6 +29,16 @@ interface SleeperApiRoster {
   owner_id: string;
 }
 
+interface SleeperLeagueResponse {
+  id: string;
+  sport: string;
+  leagueId: string;
+  leagueName: string;
+  rosterId: number | null;
+  seasonYear: number;
+  recurringLeagueId: string;
+}
+
 function mapSport(sleeperSport: string): string {
   if (sleeperSport === 'nfl') return 'football';
   if (sleeperSport === 'nba') return 'basketball';
@@ -40,6 +51,60 @@ async function sleeperGet<T>(path: string): Promise<T> {
   });
   if (!res.ok) throw new Error(`Sleeper API ${res.status}: ${path}`);
   return res.json() as Promise<T>;
+}
+
+async function resolveRecurringLeagueId(
+  leagueId: string,
+  cache: Map<string, string>,
+  depth = 0,
+  visited = new Set<string>()
+): Promise<string> {
+  const cached = cache.get(leagueId);
+  if (cached) return cached;
+
+  if (depth >= MAX_RECURRING_CHAIN_DEPTH || visited.has(leagueId)) {
+    cache.set(leagueId, leagueId);
+    return leagueId;
+  }
+
+  visited.add(leagueId);
+
+  try {
+    const league = await sleeperGet<SleeperApiLeague>(`/league/${leagueId}`);
+    if (!league.previous_league_id) {
+      cache.set(leagueId, leagueId);
+      return leagueId;
+    }
+
+    const recurringLeagueId = await resolveRecurringLeagueId(league.previous_league_id, cache, depth + 1, visited);
+    cache.set(leagueId, recurringLeagueId);
+    return recurringLeagueId;
+  } catch (error) {
+    console.warn(`[sleeper-connect] Failed to resolve recurring league for ${leagueId}:`, error);
+    cache.set(leagueId, leagueId);
+    return leagueId;
+  }
+}
+
+async function buildSleeperLeagueResponse(leagues: SleeperLeague[]): Promise<SleeperLeagueResponse[]> {
+  const recurringIdCache = new Map<string, string>();
+  const responseLeagues: SleeperLeagueResponse[] = [];
+
+  // Process sequentially so chain resolution can reuse cached roots from newer seasons.
+  for (const league of leagues) {
+    const recurringLeagueId = await resolveRecurringLeagueId(league.leagueId, recurringIdCache);
+    responseLeagues.push({
+      id: league.id,
+      sport: league.sport,
+      leagueId: league.leagueId,
+      leagueName: league.leagueName,
+      rosterId: league.rosterId,
+      seasonYear: league.seasonYear,
+      recurringLeagueId,
+    });
+  }
+
+  return responseLeagues;
 }
 
 export async function handleSleeperDiscover(
@@ -211,16 +276,10 @@ export async function handleSleeperLeagues(
   try {
     const storage = SleeperStorage.fromEnvironment(env);
     const leagues = await storage.getSleeperLeagues(userId);
+    const responseLeagues = await buildSleeperLeagueResponse(leagues);
     return new Response(
       JSON.stringify({
-        leagues: leagues.map((l) => ({
-          id: l.id,
-          sport: l.sport,
-          leagueId: l.leagueId,
-          leagueName: l.leagueName,
-          rosterId: l.rosterId,
-          seasonYear: l.seasonYear,
-        })),
+        leagues: responseLeagues,
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
@@ -243,17 +302,11 @@ export async function handleSleeperLeagueDelete(
     const storage = SleeperStorage.fromEnvironment(env);
     await storage.deleteSleeperLeague(userId, leagueId);
     const leagues = await storage.getSleeperLeagues(userId);
+    const responseLeagues = await buildSleeperLeagueResponse(leagues);
     return new Response(
       JSON.stringify({
         success: true,
-        leagues: leagues.map((l) => ({
-          id: l.id,
-          sport: l.sport,
-          leagueId: l.leagueId,
-          leagueName: l.leagueName,
-          rosterId: l.rosterId,
-          seasonYear: l.seasonYear,
-        })),
+        leagues: responseLeagues,
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

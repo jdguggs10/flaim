@@ -90,6 +90,7 @@ interface UserLeague {
   seasonYear?: number;
   leagueName?: string;
   teamName?: string;
+  recurringLeagueId?: string;
 }
 
 function getYahooStableLeagueId(leagueId: string): string {
@@ -100,6 +101,9 @@ function getYahooStableLeagueId(leagueId: string): string {
 function getActiveLeagueGroupKey(league: UserLeague): string {
   if (league.platform === 'yahoo') {
     return `${league.platform}:${(league.sport || '').toLowerCase()}:${getYahooStableLeagueId(league.leagueId)}`;
+  }
+  if (league.platform === 'sleeper') {
+    return `${league.platform}:${(league.sport || '').toLowerCase()}:${league.recurringLeagueId || league.leagueId}`;
   }
   return `${league.platform}:${league.leagueId}`;
 }
@@ -277,6 +281,7 @@ async function fetchSleeperLeagues(
         leagueName: string;
         rosterId?: number;
         seasonYear: number;
+        recurringLeagueId?: string;
       }>;
     };
 
@@ -287,6 +292,7 @@ async function fetchSleeperLeagues(
       leagueName: league.leagueName,
       teamId: league.rosterId ? String(league.rosterId) : '',
       seasonYear: league.seasonYear,
+      recurringLeagueId: league.recurringLeagueId,
     }));
 
     console.log(`[fantasy-mcp] ${cid} found ${leagues.length} Sleeper leagues`);
@@ -492,6 +498,10 @@ export function getUnifiedTools(): UnifiedTool[] {
               const currentSeason = groupSeasons.find(s => s.seasonYear === currentYear);
               if (currentSeason) {
                 leagues.push(currentSeason);
+              } else if (groupSeasons[0]?.platform === 'sleeper') {
+                // Sleeper league IDs are season-specific, so a fallback here can promote a
+                // past canonical season into the active session view.
+                continue;
               } else {
                 // Fallback: most recent season (e.g., league not yet created for current season)
                 leagues.push(groupSeasons[0]);

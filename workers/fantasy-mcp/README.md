@@ -54,6 +54,7 @@ All tools take explicit parameters. Call `get_user_session` first in a normal ch
 `get_transactions` uses platform-specific week semantics in v1: ESPN/Sleeper support explicit `week`, while Yahoo ignores explicit `week` and uses a recent 14-day timestamp window. Yahoo `type=waiver` filtering is intentionally unsupported in v1. ESPN responses include a `teams` map (team ID → display name) so the LLM can resolve numeric `team_ids` on each transaction to human-readable names. Player entries are enriched with name, position, and pro team.
 `get_free_agents` returns platform-specific availability context: ESPN/Yahoo include ownership percentages and sort by ownership, while Sleeper returns available-player identities from the public player index without ownership percentages.
 `get_players` always returns identity, but ownership context is platform-specific: ESPN and Yahoo include market/global ownership and may also include league ownership fields (`league_status`, `league_team_name`, `league_owner_name`); Sleeper returns identity with unavailable ownership context. If league ownership fields are absent, null, or unavailable, fall back to `get_league_info` + `get_roster`.
+Recurring seasons are grouped by stable league identity before active/history selection. Yahoo derives that from the stable league ID inside `league_key`; Sleeper uses auth-worker's `recurringLeagueId`, which is computed from Sleeper's `previous_league_id` chain while keeping the season-specific `leagueId` intact for direct calls.
 
 ### Tool Parameters
 
