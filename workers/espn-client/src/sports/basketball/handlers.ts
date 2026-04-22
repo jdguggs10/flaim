@@ -1,5 +1,5 @@
 // workers/espn-client/src/sports/basketball/handlers.ts
-import type { Env, ToolParams, ExecuteResponse, EspnLeagueResponse, EspnPlayerPoolResponse } from '../../types';
+import type { Env, RoutedToolParams, ExecuteResponse, EspnLeagueResponse, EspnPlayerPoolResponse } from '../../types';
 import { getCredentials } from '../../shared/auth';
 import { espnFetch, handleEspnError, requireCredentials } from '../../shared/espn-api';
 import { fetchEspnTransactionsByWeeks, fetchEspnMTransactions2, mergeTradePlayerDetails, getEspnLeagueContext, fetchEspnPlayersByIds, enrichTransactions } from '../../shared/espn-transactions';
@@ -16,13 +16,13 @@ import {
   transformStats,
   POSITION_SLOTS,
 } from './mappings';
-import { getCurrentSeasonYear, fromEspnSeasonYear } from '../../shared/season';
+import { getCurrentSeasonYear, getSeasonContext } from '../../shared/season';
 
 const GAME_ID = 'fba'; // ESPN's game ID for fantasy basketball
 
 type HandlerFn = (
   env: Env,
-  params: ToolParams,
+  params: RoutedToolParams,
   authHeader?: string,
   correlationId?: string
 ) => Promise<ExecuteResponse>;
@@ -39,11 +39,12 @@ export const basketballHandlers: Record<string, HandlerFn> = {
 
 async function handleSearchPlayers(
   env: Env,
-  params: ToolParams,
+  params: RoutedToolParams,
   authHeader?: string,
   correlationId?: string,
 ): Promise<ExecuteResponse> {
-  const { query, position, count, season_year, league_id } = params;
+  const { query, position, count, league_id } = params;
+  const { espnYear } = getSeasonContext(params);
 
   if (!query) {
     return { success: false, error: 'query is required for get_players', code: 'MISSING_PARAM' };
@@ -51,7 +52,7 @@ async function handleSearchPlayers(
 
   try {
     const limit = Math.max(1, Math.min(25, Math.trunc(Number.isFinite(Number(count)) ? Number(count) : 10)));
-    const playersIndex = await getEspnPlayersIndex(env, 'basketball', season_year);
+    const playersIndex = await getEspnPlayersIndex(env, 'basketball', espnYear);
     const normalizedQuery = query.toLowerCase();
     const normalizedPosition = position?.trim().toUpperCase();
     const filterByPosition = normalizedPosition && normalizedPosition !== 'ALL';
@@ -66,7 +67,7 @@ async function handleSearchPlayers(
 
     // League ownership enrichment (null if no credentials or league_id)
     const ownerMap = league_id
-      ? await fetchLeagueOwnershipMap(env, GAME_ID, league_id, season_year, authHeader, correlationId)
+      ? await fetchLeagueOwnershipMap(env, GAME_ID, league_id, espnYear, authHeader, correlationId)
       : null;
 
     const players = matched.map((p) => ({
@@ -103,16 +104,17 @@ async function handleSearchPlayers(
  */
 async function handleGetLeagueInfo(
   env: Env,
-  params: ToolParams,
+  params: RoutedToolParams,
   authHeader?: string,
   correlationId?: string
 ): Promise<ExecuteResponse> {
-  const { league_id, season_year } = params;
+  const { league_id } = params;
+  const { espnYear } = getSeasonContext(params);
 
   try {
     const credentials = await getCredentials(env, authHeader, correlationId);
 
-    const path = `/seasons/${season_year}/segments/0/leagues/${league_id}?view=mSettings&view=mTeam`;
+    const path = `/seasons/${espnYear}/segments/0/leagues/${league_id}?view=mSettings&view=mTeam`;
     const response = await espnFetch(path, GAME_ID, { credentials, timeout: 7000 });
 
     if (!response.ok) {
@@ -185,18 +187,17 @@ async function handleGetLeagueInfo(
  */
 async function handleGetStandings(
   env: Env,
-  params: ToolParams,
+  params: RoutedToolParams,
   authHeader?: string,
   correlationId?: string
 ): Promise<ExecuteResponse> {
-  const { league_id, season_year } = params;
-  // season_year is ESPN year here (converted by index.ts). Reverse for non-API comparisons.
-  const canonicalSeasonYear = fromEspnSeasonYear(season_year, 'basketball');
+  const { league_id } = params;
+  const { canonicalYear, espnYear } = getSeasonContext(params);
 
   try {
     const credentials = await getCredentials(env, authHeader, correlationId);
 
-    const path = `/seasons/${season_year}/segments/0/leagues/${league_id}?view=mStandings&view=mTeam`;
+    const path = `/seasons/${espnYear}/segments/0/leagues/${league_id}?view=mStandings&view=mTeam`;
     const response = await espnFetch(path, GAME_ID, { credentials, timeout: 7000 });
 
     if (!response.ok) {
@@ -215,14 +216,14 @@ async function handleGetStandings(
       (t) => t.rankFinal != null || t.rankCalculatedFinal != null
     );
     let seasonPhase: 'regular_season' | 'playoffs_in_progress' | 'season_complete';
-    if (hasExplicitCompletionData || canonicalSeasonYear < currentSeasonYear) {
+    if (hasExplicitCompletionData || canonicalYear < currentSeasonYear) {
       seasonPhase = 'season_complete';
-    } else if (canonicalSeasonYear === currentSeasonYear) {
+    } else if (canonicalYear === currentSeasonYear) {
       const regularPeriods = data.settings?.regularSeasonMatchupPeriods ?? 0;
       const scoringPeriod = data.scoringPeriodId ?? 0;
       seasonPhase = scoringPeriod > regularPeriods ? 'playoffs_in_progress' : 'regular_season';
     } else {
-      // canonicalSeasonYear > currentSeasonYear — future season, treat as not yet started
+      // canonicalYear > currentSeasonYear — future season, treat as not yet started
       seasonPhase = 'regular_season';
     }
     const seasonComplete = seasonPhase === 'season_complete';
@@ -290,7 +291,7 @@ async function handleGetStandings(
       success: true,
       data: {
         leagueId: league_id,
-        seasonYear: canonicalSeasonYear,
+        seasonYear: canonicalYear,
         seasonPhase,
         seasonComplete,
         standings
@@ -310,17 +311,17 @@ async function handleGetStandings(
  */
 async function handleGetMatchups(
   env: Env,
-  params: ToolParams,
+  params: RoutedToolParams,
   authHeader?: string,
   correlationId?: string
 ): Promise<ExecuteResponse> {
-  const { league_id, season_year, week } = params;
-  const canonicalSeasonYear = fromEspnSeasonYear(season_year, 'basketball');
+  const { league_id, week } = params;
+  const { canonicalYear, espnYear } = getSeasonContext(params);
 
   try {
     const credentials = await getCredentials(env, authHeader, correlationId);
 
-    let path = `/seasons/${season_year}/segments/0/leagues/${league_id}?view=mMatchupScore&view=mScoreboard&view=mTeam`;
+    let path = `/seasons/${espnYear}/segments/0/leagues/${league_id}?view=mMatchupScore&view=mScoreboard&view=mTeam`;
     if (week) {
       path += `&scoringPeriodId=${week}&matchupPeriodId=${week}`;
     }
@@ -370,7 +371,7 @@ async function handleGetMatchups(
       success: true,
       data: {
         leagueId: league_id,
-        seasonYear: canonicalSeasonYear,
+        seasonYear: canonicalYear,
         currentScoringPeriod: data.scoringPeriodId,
         matchupPeriod: matchupPeriod ?? null,
         matchups
@@ -390,17 +391,18 @@ async function handleGetMatchups(
  */
 async function handleGetRoster(
   env: Env,
-  params: ToolParams,
+  params: RoutedToolParams,
   authHeader?: string,
   correlationId?: string
 ): Promise<ExecuteResponse> {
-  const { league_id, season_year, team_id, week } = params;
+  const { league_id, team_id, week } = params;
+  const { espnYear } = getSeasonContext(params);
 
   try {
     const credentials = await getCredentials(env, authHeader, correlationId);
     requireCredentials(credentials, 'roster data');
 
-    let path = `/seasons/${season_year}/segments/0/leagues/${league_id}?view=mRoster&view=mTeam`;
+    let path = `/seasons/${espnYear}/segments/0/leagues/${league_id}?view=mRoster&view=mTeam`;
     if (week) {
       path += `&scoringPeriodId=${week}`;
     }
@@ -436,7 +438,7 @@ async function handleGetRoster(
 
       // Get current season stats if available
       const currentStats = stats.find((s) =>
-        s.seasonId === season_year && s.statSourceId === 0
+        s.seasonId === espnYear && s.statSourceId === 0
       );
 
       return {
@@ -483,12 +485,12 @@ async function handleGetRoster(
  */
 async function handleGetFreeAgents(
   env: Env,
-  params: ToolParams,
+  params: RoutedToolParams,
   authHeader?: string,
   correlationId?: string
 ): Promise<ExecuteResponse> {
-  const { league_id, season_year, position, count } = params;
-  const canonicalSeasonYear = fromEspnSeasonYear(season_year, 'basketball');
+  const { league_id, position, count } = params;
+  const { canonicalYear, espnYear } = getSeasonContext(params);
 
   try {
     const credentials = await getCredentials(env, authHeader, correlationId);
@@ -498,7 +500,7 @@ async function handleGetFreeAgents(
     const slotIds = POSITION_SLOTS[positionKey] || POSITION_SLOTS['ALL'];
     const limit = Math.min(Math.max(1, count || 25), 100);
 
-    const path = `/seasons/${season_year}/segments/0/leagues/${league_id}?view=kona_player_info`;
+    const path = `/seasons/${espnYear}/segments/0/leagues/${league_id}?view=kona_player_info`;
 
     // Build the X-Fantasy-Filter header for free agents
     const filter = {
@@ -533,7 +535,7 @@ async function handleGetFreeAgents(
 
       // Get current season stats if available
       const currentStats = stats.find((s) =>
-        s.seasonId === season_year && s.statSourceId === 0
+        s.seasonId === espnYear && s.statSourceId === 0
       );
 
       return {
@@ -555,7 +557,7 @@ async function handleGetFreeAgents(
       success: true,
       data: {
         leagueId: league_id,
-        seasonYear: canonicalSeasonYear,
+        seasonYear: canonicalYear,
         position: positionKey,
         count: freeAgents.length,
         freeAgents
@@ -572,17 +574,18 @@ async function handleGetFreeAgents(
 
 async function handleGetTransactions(
   env: Env,
-  params: ToolParams,
+  params: RoutedToolParams,
   authHeader?: string,
   correlationId?: string
 ): Promise<ExecuteResponse> {
-  const { league_id, season_year, week, count, type } = params;
+  const { league_id, week, count, type } = params;
+  const { canonicalYear, espnYear } = getSeasonContext(params);
 
   try {
     const credentials = await getCredentials(env, authHeader, correlationId);
     requireCredentials(credentials, 'get_transactions');
 
-    const ctx = await getEspnLeagueContext(GAME_ID, league_id, season_year, credentials);
+    const ctx = await getEspnLeagueContext(GAME_ID, league_id, espnYear, credentials);
     const currentWeek = ctx.scoringPeriodId;
     const weeks = week != null
       ? [Math.max(0, week)]
@@ -599,7 +602,7 @@ async function handleGetTransactions(
     let merged: NormalizedTransaction[];
     let truncated = false;
     try {
-      const mResult = await fetchEspnMTransactions2(GAME_ID, league_id, season_year, credentials, weeks);
+      const mResult = await fetchEspnMTransactions2(GAME_ID, league_id, espnYear, credentials, weeks);
       truncated = mResult.truncated;
 
       // Trade player detail fallback: activity feed for accepted/upheld trades (ESPN items bug)
@@ -610,7 +613,7 @@ async function handleGetTransactions(
       merged = mResult.transactions;
       if (hasEmptyTrades) {
         try {
-          const activityRows = await fetchEspnTransactionsByWeeks(GAME_ID, league_id, season_year, credentials, weeks);
+          const activityRows = await fetchEspnTransactionsByWeeks(GAME_ID, league_id, espnYear, credentials, weeks);
           merged = mergeTradePlayerDetails(mResult.transactions, activityRows);
         } catch (fallbackErr) {
           console.warn('[get_transactions] Activity feed trade fallback failed:', fallbackErr instanceof Error ? fallbackErr.message : fallbackErr);
@@ -618,7 +621,7 @@ async function handleGetTransactions(
       }
     } catch (mTxnErr) {
       console.warn('[get_transactions] mTransactions2 failed, falling back to activity feed:', mTxnErr instanceof Error ? mTxnErr.message : mTxnErr);
-      merged = await fetchEspnTransactionsByWeeks(GAME_ID, league_id, season_year, credentials, weeks);
+      merged = await fetchEspnTransactionsByWeeks(GAME_ID, league_id, espnYear, credentials, weeks);
     }
 
     let filtered = merged
@@ -631,7 +634,7 @@ async function handleGetTransactions(
     ]))];
     if (allIds.length > 0) {
       try {
-        const playerMap = await fetchEspnPlayersByIds(GAME_ID, season_year, allIds);
+        const playerMap = await fetchEspnPlayersByIds(GAME_ID, espnYear, allIds);
         if (playerMap) {
           filtered = enrichTransactions(filtered, playerMap, getPositionName, getProTeamAbbrev);
         }
@@ -647,7 +650,7 @@ async function handleGetTransactions(
         platform: 'espn',
         sport: params.sport,
         league_id,
-        season_year,
+        season_year: canonicalYear,
         window: {
           mode: week ? 'explicit_week' : 'recent_two_weeks',
           weeks

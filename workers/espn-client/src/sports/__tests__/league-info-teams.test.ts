@@ -3,9 +3,10 @@ import { baseballHandlers } from '../baseball/handlers';
 import { basketballHandlers } from '../basketball/handlers';
 import { footballHandlers } from '../football/handlers';
 import { hockeyHandlers } from '../hockey/handlers';
-import type { ToolParams } from '../../types';
+import type { HandlerToolParams, Sport } from '../../types';
 import { getCredentials } from '../../shared/auth';
 import { espnFetch } from '../../shared/espn-api';
+import { withSeasonContext } from '../../shared/season';
 
 vi.mock('../../shared/auth', () => ({
   getCredentials: vi.fn(),
@@ -20,11 +21,19 @@ vi.mock('../../shared/espn-api', async () => {
 });
 
 const scenarios = [
-  { label: 'football', sport: 'football', handlers: footballHandlers },
-  { label: 'baseball', sport: 'baseball', handlers: baseballHandlers },
-  { label: 'basketball', sport: 'basketball', handlers: basketballHandlers },
-  { label: 'hockey', sport: 'hockey', handlers: hockeyHandlers },
+  { label: 'football', sport: 'football', handlers: footballHandlers, expectedEspnYear: 2024 },
+  { label: 'baseball', sport: 'baseball', handlers: baseballHandlers, expectedEspnYear: 2024 },
+  { label: 'basketball', sport: 'basketball', handlers: basketballHandlers, expectedEspnYear: 2025 },
+  { label: 'hockey', sport: 'hockey', handlers: hockeyHandlers, expectedEspnYear: 2025 },
 ] as const;
+
+function makeParams(sport: Sport): HandlerToolParams {
+  return withSeasonContext({
+    sport,
+    league_id: '123',
+    season_year: 2024,
+  });
+}
 
 const mockLeagueResponse = {
   id: 123,
@@ -84,7 +93,7 @@ describe('espn cross-sport get_league_info teams array', () => {
       new Response(JSON.stringify(mockLeagueResponse), { status: 200 })
     );
 
-    const params: ToolParams = { sport, league_id: '123', season_year: 2025 };
+    const params = makeParams(sport);
     const result = await handlers.get_league_info({} as never, params, 'Bearer x', 'cid');
 
     expect(result.success).toBe(true);
@@ -137,15 +146,16 @@ describe('espn cross-sport get_league_info teams array', () => {
     });
   });
 
-  it.each(scenarios)('$label requests mTeam view in API path', async ({ sport, handlers }) => {
+  it.each(scenarios)('$label requests mTeam view in API path', async ({ sport, handlers, expectedEspnYear }) => {
     espnFetchMock.mockResolvedValue(
       new Response(JSON.stringify(mockLeagueResponse), { status: 200 })
     );
 
-    const params: ToolParams = { sport, league_id: '123', season_year: 2025 };
+    const params = makeParams(sport);
     await handlers.get_league_info({} as never, params, 'Bearer x', 'cid');
 
     const fetchPath = espnFetchMock.mock.calls[0][0] as string;
+    expect(fetchPath).toContain(`/seasons/${expectedEspnYear}/segments/0/leagues/123`);
     expect(fetchPath).toContain('view=mSettings');
     expect(fetchPath).toContain('view=mTeam');
   });

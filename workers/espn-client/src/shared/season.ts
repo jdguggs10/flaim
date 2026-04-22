@@ -1,3 +1,5 @@
+import type { EspnSeasonContext, RoutedToolParams, ToolParams } from '../types';
+
 /**
  * Season Year Translation for ESPN
  *
@@ -5,9 +7,7 @@
  * ESPN's API expects end-year for basketball/hockey (e.g., 2025).
  * This function converts canonical → ESPN-native.
  *
- * Called by index.ts at the /execute boundary — handlers receive ESPN year, not canonical.
- * Use fromEspnSeasonYear() inside handlers when canonical year is needed (e.g., seasonPhase
- * comparisons, response echoes).
+ * `/execute` computes this once and attaches it to the internal `seasonContext`.
  */
 export function toEspnSeasonYear(canonicalYear: number, sport: string): number {
   if (sport === 'basketball' || sport === 'hockey') {
@@ -22,6 +22,29 @@ export function fromEspnSeasonYear(espnYear: number, sport: string): number {
     return espnYear - 1;
   }
   return espnYear;
+}
+
+export function createSeasonContext(canonicalYear: number, sport: string): EspnSeasonContext {
+  return {
+    canonicalYear,
+    espnYear: toEspnSeasonYear(canonicalYear, sport),
+  };
+}
+
+export function withSeasonContext(params: ToolParams): RoutedToolParams {
+  return {
+    ...params,
+    seasonContext: createSeasonContext(params.season_year, params.sport),
+  };
+}
+
+export function getSeasonContext(params: RoutedToolParams): EspnSeasonContext {
+  if (!params.seasonContext) {
+    throw new Error(
+      'Missing seasonContext for routed handler params. Call handlers through /execute or wrap test params with withSeasonContext().'
+    );
+  }
+  return params.seasonContext;
 }
 
 /**

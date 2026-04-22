@@ -1,5 +1,5 @@
 // workers/espn-client/src/sports/baseball/handlers.ts
-import type { Env, ToolParams, ExecuteResponse, EspnLeagueResponse, EspnPlayerPoolResponse } from '../../types';
+import type { Env, RoutedToolParams, ExecuteResponse, EspnLeagueResponse, EspnPlayerPoolResponse } from '../../types';
 import { getCredentials } from '../../shared/auth';
 import { espnFetch, handleEspnError, requireCredentials } from '../../shared/espn-api';
 import { fetchEspnTransactionsByWeeks, fetchEspnMTransactions2, mergeTradePlayerDetails, getEspnLeagueContext, fetchEspnPlayersByIds, enrichTransactions } from '../../shared/espn-transactions';
@@ -22,7 +22,7 @@ const GAME_ID = 'flb'; // ESPN's game ID for fantasy baseball
 
 type HandlerFn = (
   env: Env,
-  params: ToolParams,
+  params: RoutedToolParams,
   authHeader?: string,
   correlationId?: string
 ) => Promise<ExecuteResponse>;
@@ -39,7 +39,7 @@ export const baseballHandlers: Record<string, HandlerFn> = {
 
 async function handleSearchPlayers(
   env: Env,
-  params: ToolParams,
+  params: RoutedToolParams,
   authHeader?: string,
   correlationId?: string,
 ): Promise<ExecuteResponse> {
@@ -103,7 +103,7 @@ async function handleSearchPlayers(
  */
 async function handleGetLeagueInfo(
   env: Env,
-  params: ToolParams,
+  params: RoutedToolParams,
   authHeader?: string,
   correlationId?: string
 ): Promise<ExecuteResponse> {
@@ -185,7 +185,7 @@ async function handleGetLeagueInfo(
  */
 async function handleGetStandings(
   env: Env,
-  params: ToolParams,
+  params: RoutedToolParams,
   authHeader?: string,
   correlationId?: string
 ): Promise<ExecuteResponse> {
@@ -307,7 +307,7 @@ async function handleGetStandings(
  */
 async function handleGetMatchups(
   env: Env,
-  params: ToolParams,
+  params: RoutedToolParams,
   authHeader?: string,
   correlationId?: string
 ): Promise<ExecuteResponse> {
@@ -386,7 +386,7 @@ async function handleGetMatchups(
  */
 async function handleGetRoster(
   env: Env,
-  params: ToolParams,
+  params: RoutedToolParams,
   authHeader?: string,
   correlationId?: string
 ): Promise<ExecuteResponse> {
@@ -479,7 +479,7 @@ async function handleGetRoster(
  */
 async function handleGetFreeAgents(
   env: Env,
-  params: ToolParams,
+  params: RoutedToolParams,
   authHeader?: string,
   correlationId?: string
 ): Promise<ExecuteResponse> {
@@ -567,7 +567,7 @@ async function handleGetFreeAgents(
 
 async function handleGetTransactions(
   env: Env,
-  params: ToolParams,
+  params: RoutedToolParams,
   authHeader?: string,
   correlationId?: string
 ): Promise<ExecuteResponse> {

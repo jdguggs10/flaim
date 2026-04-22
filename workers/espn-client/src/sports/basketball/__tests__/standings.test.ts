@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi, type MockedFunction } from 'vitest';
 import { basketballHandlers } from '../handlers';
-import type { ToolParams } from '../../../types';
+import type { RoutedToolParams } from '../../../types';
 import { getCredentials } from '../../../shared/auth';
 import { espnFetch } from '../../../shared/espn-api';
-import { toEspnSeasonYear, getCurrentSeasonYear } from '../../../shared/season';
+import { getCurrentSeasonYear, withSeasonContext } from '../../../shared/season';
 
 vi.mock('../../../shared/auth', () => ({
   getCredentials: vi.fn(),
@@ -17,15 +17,21 @@ vi.mock('../../../shared/espn-api', async () => {
   };
 });
 
-// Handlers receive ESPN year (index.ts converts at /execute boundary).
-// Use toEspnSeasonYear to mirror what index.ts sends.
 const CURRENT_CANONICAL_YEAR = getCurrentSeasonYear('basketball');
-const CURRENT_ESPN_YEAR = toEspnSeasonYear(CURRENT_CANONICAL_YEAR, 'basketball');
 const HISTORICAL_CANONICAL_YEAR = 2022;
-const HISTORICAL_ESPN_YEAR = toEspnSeasonYear(HISTORICAL_CANONICAL_YEAR, 'basketball');
+const CURRENT_ESPN_YEAR = withSeasonContext({
+  sport: 'basketball',
+  league_id: '123',
+  season_year: CURRENT_CANONICAL_YEAR,
+}).seasonContext.espnYear;
+const HISTORICAL_ESPN_YEAR = withSeasonContext({
+  sport: 'basketball',
+  league_id: '123',
+  season_year: HISTORICAL_CANONICAL_YEAR,
+}).seasonContext.espnYear;
 
-function makeParams(season_year: number): ToolParams {
-  return { sport: 'basketball', league_id: '123', season_year };
+function makeParams(season_year: number): RoutedToolParams {
+  return withSeasonContext({ sport: 'basketball', league_id: '123', season_year });
 }
 
 function jsonResponse(payload: unknown, status = 200): Response {
@@ -72,9 +78,10 @@ describe('basketball get_standings handler — seasonPhase and canonical year', 
       ],
     }));
 
-    const result = await basketballHandlers.get_standings({} as never, makeParams(HISTORICAL_ESPN_YEAR), 'Bearer x', 'cid');
+    const result = await basketballHandlers.get_standings({} as never, makeParams(HISTORICAL_CANONICAL_YEAR), 'Bearer x', 'cid');
 
     expect(result.success).toBe(true);
+    expect(espnFetchMock.mock.calls[0]?.[0]).toContain(`/seasons/${HISTORICAL_ESPN_YEAR}/segments/0/leagues/123`);
     const data = result.data as Record<string, unknown>;
     expect(data.seasonPhase).toBe('season_complete');
     expect(data.seasonComplete).toBe(true);
@@ -107,7 +114,7 @@ describe('basketball get_standings handler — seasonPhase and canonical year', 
       ],
     }));
 
-    const result = await basketballHandlers.get_standings({} as never, makeParams(HISTORICAL_ESPN_YEAR), 'Bearer x', 'cid');
+    const result = await basketballHandlers.get_standings({} as never, makeParams(HISTORICAL_CANONICAL_YEAR), 'Bearer x', 'cid');
 
     expect(result.success).toBe(true);
     const data = result.data as Record<string, unknown>;
@@ -129,9 +136,10 @@ describe('basketball get_standings handler — seasonPhase and canonical year', 
       ],
     }));
 
-    const result = await basketballHandlers.get_standings({} as never, makeParams(CURRENT_ESPN_YEAR), 'Bearer x', 'cid');
+    const result = await basketballHandlers.get_standings({} as never, makeParams(CURRENT_CANONICAL_YEAR), 'Bearer x', 'cid');
 
     expect(result.success).toBe(true);
+    expect(espnFetchMock.mock.calls[0]?.[0]).toContain(`/seasons/${CURRENT_ESPN_YEAR}/segments/0/leagues/123`);
     const data = result.data as Record<string, unknown>;
     expect(data.seasonPhase).toBe('playoffs_in_progress');
     expect(data.seasonComplete).toBe(false);
@@ -152,7 +160,7 @@ describe('basketball get_standings handler — seasonPhase and canonical year', 
       ],
     }));
 
-    const result = await basketballHandlers.get_standings({} as never, makeParams(CURRENT_ESPN_YEAR), 'Bearer x', 'cid');
+    const result = await basketballHandlers.get_standings({} as never, makeParams(CURRENT_CANONICAL_YEAR), 'Bearer x', 'cid');
 
     expect(result.success).toBe(true);
     const data = result.data as Record<string, unknown>;
@@ -175,7 +183,7 @@ describe('basketball get_standings handler — seasonPhase and canonical year', 
       ],
     }));
 
-    const result = await basketballHandlers.get_standings({} as never, makeParams(HISTORICAL_ESPN_YEAR), 'Bearer x', 'cid');
+    const result = await basketballHandlers.get_standings({} as never, makeParams(HISTORICAL_CANONICAL_YEAR), 'Bearer x', 'cid');
 
     const data = result.data as Record<string, unknown>;
     const standings = data.standings as Array<Record<string, unknown>>;

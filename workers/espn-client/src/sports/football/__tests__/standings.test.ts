@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi, type MockedFunction } from 'vitest';
 import { footballHandlers } from '../handlers';
-import type { ToolParams } from '../../../types';
+import type { RoutedToolParams } from '../../../types';
 import { getCredentials } from '../../../shared/auth';
 import { espnFetch } from '../../../shared/espn-api';
-import { getCurrentSeasonYear } from '../../../shared/season';
+import { getCurrentSeasonYear, withSeasonContext } from '../../../shared/season';
 
 vi.mock('../../../shared/auth', () => ({
   getCredentials: vi.fn(),
@@ -21,8 +21,8 @@ const HISTORICAL_YEAR = 2022;
 // Use sport-aware current season year — matches what the handler uses internally
 const CURRENT_SEASON_YEAR = getCurrentSeasonYear('football');
 
-function makeParams(season_year: number): ToolParams {
-  return { sport: 'football', league_id: '123', season_year };
+function makeParams(season_year: number): RoutedToolParams {
+  return withSeasonContext({ sport: 'football', league_id: '123', season_year });
 }
 
 function jsonResponse(payload: unknown, status = 200): Response {

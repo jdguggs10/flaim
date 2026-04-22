@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { toEspnSeasonYear, fromEspnSeasonYear } from '../season';
+import type { RoutedToolParams } from '../../types';
+import { createSeasonContext, getSeasonContext, toEspnSeasonYear, fromEspnSeasonYear, withSeasonContext } from '../season';
 
 describe('toEspnSeasonYear', () => {
   it('adds 1 for basketball', () => {
@@ -42,5 +43,55 @@ describe('fromEspnSeasonYear', () => {
 
   it('is the inverse of toEspnSeasonYear for hockey', () => {
     expect(fromEspnSeasonYear(toEspnSeasonYear(2024, 'hockey'), 'hockey')).toBe(2024);
+  });
+});
+
+describe('createSeasonContext', () => {
+  it('tracks both canonical and ESPN year for basketball', () => {
+    expect(createSeasonContext(2024, 'basketball')).toEqual({
+      canonicalYear: 2024,
+      espnYear: 2025,
+    });
+  });
+});
+
+describe('withSeasonContext', () => {
+  it('preserves external params and adds seasonContext', () => {
+    expect(withSeasonContext({
+      sport: 'hockey',
+      league_id: '123',
+      season_year: 2024,
+    })).toEqual({
+      sport: 'hockey',
+      league_id: '123',
+      season_year: 2024,
+      seasonContext: {
+        canonicalYear: 2024,
+        espnYear: 2025,
+      },
+    });
+  });
+});
+
+describe('getSeasonContext', () => {
+  it('returns routed seasonContext when present', () => {
+    const params = withSeasonContext({
+      sport: 'basketball',
+      league_id: '123',
+      season_year: 2024,
+    });
+
+    expect(getSeasonContext(params)).toEqual({
+      canonicalYear: 2024,
+      espnYear: 2025,
+    });
+  });
+
+  it('throws when routed params are missing seasonContext', () => {
+    expect(() => getSeasonContext({
+      sport: 'football',
+      league_id: '123',
+      season_year: 2025,
+    } as unknown as RoutedToolParams)).toThrow(/Missing seasonContext/);
   });
 });

@@ -1,5 +1,5 @@
 // workers/espn-client/src/types.ts
-import type { BaseEnvWithAuth } from '@flaim/worker-shared';
+import type { BaseEnvWithAuth, ExecuteResponse as SharedExecuteResponse } from '@flaim/worker-shared';
 
 // ---------------------------------------------------------------------------
 // ESPN Fantasy API response types
@@ -152,5 +152,23 @@ export interface ToolParams {
   count?: number;
   query?: string;
 }
+
+export interface EspnSeasonContext {
+  canonicalYear: number;
+  espnYear: number;
+}
+
+export interface RoutedToolParams extends ToolParams {
+  seasonContext: EspnSeasonContext;
+}
+
+export type HandlerToolParams = RoutedToolParams;
+
+export type SportHandler = (
+  env: Env,
+  params: RoutedToolParams,
+  authHeader?: string,
+  correlationId?: string
+) => Promise<SharedExecuteResponse>;
 
 export type { ExecuteResponse } from '@flaim/worker-shared';

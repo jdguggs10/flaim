@@ -1,7 +1,7 @@
 // workers/espn-client/src/index.ts
 import { Context, Hono } from 'hono';
 import { cors } from 'hono/cors';
-import type { Env, ExecuteRequest, ExecuteResponse, Sport, ToolParams } from './types';
+import type { Env, ExecuteRequest, ExecuteResponse, RoutedToolParams, Sport } from './types';
 import { baseballHandlers } from './sports/baseball/handlers';
 import { basketballHandlers } from './sports/basketball/handlers';
 import { footballHandlers } from './sports/football/handlers';
@@ -15,7 +15,7 @@ import {
   getEvalContext,
   validateInternalService,
 } from '@flaim/worker-shared';
-import { toEspnSeasonYear } from './shared/season';
+import { withSeasonContext } from './shared/season';
 import { logEvalEvent } from './logging';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -49,13 +49,11 @@ app.post('/execute', async (c) => {
   const { tool, params } = body;
   const authHeader = c.req.header('Authorization');
   const { sport, league_id, season_year } = params;
-
-  // Translate canonical start-year to ESPN-native before routing to handlers.
-  // For basketball/hockey ESPN expects end-year; for football/baseball this is a no-op.
-  const espnParams = { ...params, season_year: toEspnSeasonYear(season_year, sport) };
+  const routedParams = withSeasonContext(params);
+  const { espnYear } = routedParams.seasonContext;
 
   const startTime = Date.now();
-  console.log(`[espn-client] ${correlationId} ${tool} ${sport} league=${league_id} season=${espnParams.season_year}`);
+  console.log(`[espn-client] ${correlationId} ${tool} ${sport} league=${league_id} season=${season_year} espnSeason=${espnYear}`);
   logEvalEvent({
     service: 'espn-client',
     phase: 'execute_start',
@@ -65,12 +63,12 @@ app.post('/execute', async (c) => {
     tool,
     sport,
     league_id,
-    message: `${tool} ${sport} league=${league_id} season=${espnParams.season_year}`,
+    message: `${tool} ${sport} league=${league_id} season=${season_year} espnSeason=${espnYear}`,
   });
 
   // Route to sport-specific handler
   try {
-    const result = await routeToSport(c.env, sport, tool, espnParams, authHeader, correlationId);
+    const result = await routeToSport(c.env, sport, tool, routedParams, authHeader, correlationId);
     const duration = Date.now() - startTime;
     console.log(`[espn-client] ${correlationId} ${tool} ${sport} completed in ${duration}ms success=${result.success}`);
     logEvalEvent({
@@ -125,7 +123,7 @@ async function routeToSport(
   env: Env,
   sport: Sport,
   tool: string,
-  params: ToolParams,
+  params: RoutedToolParams,
   authHeader?: string,
   correlationId?: string
 ): Promise<ExecuteResponse> {
