@@ -155,7 +155,7 @@ describe('espn cross-sport get_league_info teams array', () => {
     });
   });
 
-  it.each(crossCalendarScenarios)('$label keeps outward seasonId canonical', async ({ sport, handlers }) => {
+  it.each(scenarios)('$label keeps outward seasonId canonical', async ({ sport, handlers }) => {
     espnFetchMock.mockResolvedValue(
       new Response(JSON.stringify(mockLeagueResponse), { status: 200 })
     );
