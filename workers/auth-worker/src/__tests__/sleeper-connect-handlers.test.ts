@@ -292,6 +292,92 @@ describe('sleeper-connect-handlers', () => {
     );
   });
 
+  it('persists the verified recurring root for long Sleeper history chains', async () => {
+    const currentYear = 2025;
+    const rootYear = 1998;
+
+    mockFetch.mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith('/user/deep_history')) {
+        return jsonResponse({
+          user_id: 'sleeper_deep',
+          username: 'deep_history',
+          display_name: 'Deep History',
+        });
+      }
+      if (url.includes('/user/sleeper_deep/leagues/nfl/2025')) {
+        return jsonResponse([
+          {
+            league_id: `deep-${currentYear}`,
+            name: 'Dynasty Squad',
+            sport: 'nfl',
+            season: String(currentYear),
+            previous_league_id: `deep-${currentYear - 1}`,
+          },
+        ]);
+      }
+      if (url.includes('/user/sleeper_deep/leagues/nba/2024')) {
+        return jsonResponse([]);
+      }
+
+      const rosterMatch = url.match(/\/league\/deep-(\d{4})\/rosters$/);
+      if (rosterMatch) {
+        return jsonResponse([
+          { roster_id: 7, owner_id: 'sleeper_deep' },
+        ]);
+      }
+
+      const leagueMatch = url.match(/\/league\/deep-(\d{4})$/);
+      if (leagueMatch) {
+        const year = Number(leagueMatch[1]);
+        return jsonResponse({
+          league_id: `deep-${year}`,
+          name: 'Dynasty Squad',
+          sport: 'nfl',
+          season: String(year),
+          previous_league_id: year > rootYear ? `deep-${year - 1}` : null,
+        });
+      }
+
+      return new Response(null, { status: 404 });
+    });
+
+    const request = new Request('https://api.flaim.app/connect/sleeper/discover', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'deep_history' }),
+    });
+
+    const response = await handleSleeperDiscover(request, env, 'user_1', corsHeaders);
+    const body = (await response.json()) as {
+      success: boolean;
+      leagues_found: number;
+      seasons_discovered: number;
+    };
+
+    expect(response.status).toBe(200);
+    expect(body.success).toBe(true);
+    expect(body.leagues_found).toBe(5);
+    expect(body.seasons_discovered).toBe(5);
+    expect(mockStorage.saveSleeperLeague).toHaveBeenCalledTimes(5);
+    expect(mockStorage.saveSleeperLeague).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        leagueId: 'deep-2025',
+        seasonYear: 2025,
+        recurringLeagueId: `deep-${rootYear}`,
+      }),
+    );
+    expect(mockStorage.saveSleeperLeague).toHaveBeenNthCalledWith(
+      5,
+      expect.objectContaining({
+        leagueId: 'deep-2021',
+        seasonYear: 2021,
+        recurringLeagueId: `deep-${rootYear}`,
+      }),
+    );
+  });
+
   it('does not persist a synthetic recurringLeagueId when history lookup fails during discovery', async () => {
     mockFetch.mockImplementation(async (input) => {
       const url = String(input);

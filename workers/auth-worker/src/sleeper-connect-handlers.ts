@@ -3,7 +3,6 @@ import { getDefaultSeasonYear } from './season-utils';
 
 const SLEEPER_API = 'https://api.sleeper.app/v1';
 const MAX_HISTORY_YEARS = 5;
-const MAX_RECURRING_CHAIN_DEPTH = 25;
 
 export interface SleeperConnectEnv {
   SUPABASE_URL: string;
@@ -92,45 +91,60 @@ function describeSleeperResolutionFailure(leagueId: string, error: unknown): str
 
 async function tryResolveRecurringLeagueId(
   leagueId: string,
-  cache: Map<string, string>,
-  leagueCache: Map<string, Promise<SleeperApiLeague>>,
-  depth = 0,
-  visited = new Set<string>()
+  cache: Map<string, string | null>,
+  leagueCache: Map<string, Promise<SleeperApiLeague>>
 ): Promise<RecurringLeagueResolutionResult> {
-  const cached = cache.get(leagueId);
-  if (cached) return { recurringLeagueId: cached };
+  const path: string[] = [];
+  const visited = new Set<string>();
+  let currentLeagueId: string | null = leagueId;
 
-  if (depth >= MAX_RECURRING_CHAIN_DEPTH || visited.has(leagueId)) {
-    return {
-      failureReason: depth >= MAX_RECURRING_CHAIN_DEPTH
-        ? `exceeded recurring chain depth ${MAX_RECURRING_CHAIN_DEPTH} at ${leagueId}`
-        : `detected recurring league cycle at ${leagueId}`,
-    };
-  }
+  while (currentLeagueId) {
+    if (cache.has(currentLeagueId)) {
+      const cached = cache.get(currentLeagueId) ?? null;
+      for (const pathLeagueId of path) {
+        cache.set(pathLeagueId, cached);
+      }
 
-  visited.add(leagueId);
-
-  try {
-    const league = await getSleeperLeague(leagueId, leagueCache);
-    if (!league.previous_league_id) {
-      cache.set(leagueId, leagueId);
-      return { recurringLeagueId: leagueId };
+      return cached
+        ? { recurringLeagueId: cached }
+        : { failureReason: `unresolved recurring chain at ${currentLeagueId}` };
     }
 
-    const resolution = await tryResolveRecurringLeagueId(league.previous_league_id, cache, leagueCache, depth + 1, visited);
-    if (!resolution.recurringLeagueId) {
-      return resolution;
+    if (visited.has(currentLeagueId)) {
+      for (const pathLeagueId of path) {
+        cache.set(pathLeagueId, null);
+      }
+      return { failureReason: `detected recurring league cycle at ${currentLeagueId}` };
     }
-    cache.set(leagueId, resolution.recurringLeagueId);
-    return { recurringLeagueId: resolution.recurringLeagueId };
-  } catch (error) {
-    return { failureReason: describeSleeperResolutionFailure(leagueId, error) };
+
+    visited.add(currentLeagueId);
+    path.push(currentLeagueId);
+
+    try {
+      const league = await getSleeperLeague(currentLeagueId, leagueCache);
+      if (!league.previous_league_id) {
+        for (const pathLeagueId of path) {
+          cache.set(pathLeagueId, league.league_id);
+        }
+        return { recurringLeagueId: league.league_id };
+      }
+
+      currentLeagueId = league.previous_league_id;
+    } catch (error) {
+      const failureReason = describeSleeperResolutionFailure(currentLeagueId, error);
+      for (const pathLeagueId of path) {
+        cache.set(pathLeagueId, null);
+      }
+      return { failureReason };
+    }
   }
+
+  return { failureReason: `unresolved recurring chain at ${leagueId}` };
 }
 
 async function resolveRecurringLeagueId(
   leagueId: string,
-  cache: Map<string, string>,
+  cache: Map<string, string | null>,
   leagueCache: Map<string, Promise<SleeperApiLeague>>
 ): Promise<string> {
   const resolution = await tryResolveRecurringLeagueId(leagueId, cache, leagueCache);
@@ -141,12 +155,11 @@ async function resolveRecurringLeagueId(
   console.warn(
     `[sleeper-connect] Falling back to season-scoped leagueId ${leagueId} for recurring grouping: ${resolution.failureReason ?? 'unresolved recurring chain'}`
   );
-  cache.set(leagueId, leagueId);
   return leagueId;
 }
 
 async function buildSleeperLeagueResponse(leagues: SleeperLeague[]): Promise<SleeperLeagueResponse[]> {
-  const recurringIdCache = new Map<string, string>();
+  const recurringIdCache = new Map<string, string | null>();
   const leagueCache = new Map<string, Promise<SleeperApiLeague>>();
   for (const league of leagues) {
     if (league.recurringLeagueId) {
@@ -217,7 +230,7 @@ export async function handleSleeperDiscover(
     const currentLeagues = [...(nflLeagues ?? []), ...(nbaLeagues ?? [])];
     let totalSaved = 0;
     const seasonsDiscovered = new Set<string>();
-    const recurringIdCache = new Map<string, string>();
+    const recurringIdCache = new Map<string, string | null>();
     const leagueCache = new Map<string, Promise<SleeperApiLeague>>();
     const processedLeagueIds = new Set<string>();
 
