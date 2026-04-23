@@ -492,6 +492,59 @@ describe('sleeper-connect-handlers', () => {
     ]);
   });
 
+  it('falls back to the raw leagueId when recurring history contains a cycle for legacy rows', async () => {
+    mockStorage.getSleeperLeagues.mockResolvedValue([
+      {
+        id: 'row-cycle',
+        clerkUserId: 'user_1',
+        leagueId: 'cycle-2025',
+        sport: 'football',
+        seasonYear: 2025,
+        leagueName: 'Dynasty Squad',
+        rosterId: 7,
+        recurringLeagueId: undefined,
+        sleeperUserId: 'sleeper_123',
+      },
+    ]);
+
+    mockFetch.mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith('/league/cycle-2025')) {
+        return jsonResponse({
+          league_id: 'cycle-2025',
+          name: 'Dynasty Squad',
+          sport: 'nfl',
+          season: '2025',
+          previous_league_id: 'cycle-2024',
+        });
+      }
+      if (url.endsWith('/league/cycle-2024')) {
+        return jsonResponse({
+          league_id: 'cycle-2024',
+          name: 'Dynasty Squad',
+          sport: 'nfl',
+          season: '2024',
+          previous_league_id: 'cycle-2025',
+        });
+      }
+      return new Response(null, { status: 404 });
+    });
+
+    const response = await handleSleeperLeagues(env, 'user_1', corsHeaders);
+    const body = (await response.json()) as {
+      leagues: Array<{ leagueId: string; recurringLeagueId: string }>;
+    };
+
+    expect(response.status).toBe(200);
+    expect(body.leagues).toEqual([
+      expect.objectContaining({
+        leagueId: 'cycle-2025',
+        recurringLeagueId: 'cycle-2025',
+      }),
+    ]);
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+
   it('returns recurringLeagueId on the delete response without refetching legacy chain data', async () => {
     mockStorage.getSleeperLeagues.mockResolvedValue([
       {

@@ -53,23 +53,7 @@ export interface SleeperLeague {
 }
 
 function isMissingRecurringLeagueIdColumnError(error: SupabaseErrorLike | null | undefined): boolean {
-  if (!error) return false;
-
-  const combined = [error.code, error.message, error.details, error.hint]
-    .filter(Boolean)
-    .join(' ')
-    .toLowerCase();
-
-  if (!combined.includes('recurring_league_id')) {
-    return false;
-  }
-
-  return combined.includes('column')
-    || combined.includes('schema cache')
-    || combined.includes('unknown')
-    || combined.includes('not found')
-    || error.code === '42703'
-    || error.code === 'PGRST204';
+  return error?.code === '42703' || error?.code === 'PGRST204';
 }
 
 export class SleeperStorage {
@@ -182,7 +166,9 @@ export class SleeperStorage {
         throw new Error(`Failed to save Sleeper league: ${error.message}`);
       }
 
-      console.warn('[sleeper-storage] recurring_league_id column unavailable; retrying without it');
+      console.warn(
+        `[sleeper-storage] recurring_league_id column unavailable for user ${maskUserId(league.clerkUserId)} league ${league.leagueId}; retrying without it (code=${error.code ?? 'unknown'})`
+      );
       this.recurringLeagueIdColumnStatus = 'missing';
     }
 

@@ -122,6 +122,59 @@ describe('SleeperStorage', () => {
       expect(mockUpsert).toHaveBeenCalledOnce();
       expect(mockUpsert.mock.calls[0][0]).not.toHaveProperty('recurring_league_id');
     });
+
+    it('retries without recurringLeagueId when PostgREST schema cache is stale', async () => {
+      mockUpsert
+        .mockReturnValueOnce({
+          error: {
+            code: 'PGRST204',
+            message: "Could not find the 'recurring_league_id' column in the schema cache",
+          },
+        })
+        .mockReturnValue({ error: null });
+
+      await storage.saveSleeperLeague({
+        clerkUserId: 'user_123',
+        leagueId: 'league-2026',
+        sport: 'football',
+        seasonYear: 2026,
+        leagueName: 'Dynasty Squad',
+        rosterId: 7,
+        recurringLeagueId: 'league-root',
+        sleeperUserId: 'sleeper_123',
+      });
+
+      expect(mockUpsert).toHaveBeenCalledTimes(2);
+      expect(mockUpsert.mock.calls[0][0]).toMatchObject({
+        league_id: 'league-2026',
+        recurring_league_id: 'league-root',
+      });
+      expect(mockUpsert.mock.calls[1][0]).not.toHaveProperty('recurring_league_id');
+    });
+
+    it('does not treat unrelated errors as a missing recurringLeagueId column', async () => {
+      mockUpsert.mockReturnValueOnce({
+        error: {
+          code: '42501',
+          message: 'permission denied while writing recurring_league_id',
+        },
+      });
+
+      await expect(
+        storage.saveSleeperLeague({
+          clerkUserId: 'user_123',
+          leagueId: 'league-2027',
+          sport: 'football',
+          seasonYear: 2027,
+          leagueName: 'Dynasty Squad',
+          rosterId: 7,
+          recurringLeagueId: 'league-root',
+          sleeperUserId: 'sleeper_123',
+        })
+      ).rejects.toThrow('Failed to save Sleeper league: permission denied while writing recurring_league_id');
+
+      expect(mockUpsert).toHaveBeenCalledOnce();
+    });
   });
 
   // ===========================================================================

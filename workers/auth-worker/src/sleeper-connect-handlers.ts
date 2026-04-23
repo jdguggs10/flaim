@@ -39,6 +39,11 @@ interface SleeperLeagueResponse {
   recurringLeagueId: string;
 }
 
+interface RecurringLeagueResolutionResult {
+  recurringLeagueId?: string;
+  failureReason?: string;
+}
+
 function mapSport(sleeperSport: string): string {
   if (sleeperSport === 'nfl') return 'football';
   if (sleeperSport === 'nba') return 'basketball';
@@ -74,18 +79,33 @@ async function getSleeperLeague(
   return request;
 }
 
+function describeSleeperResolutionFailure(leagueId: string, error: unknown): string {
+  if (error instanceof Error) {
+    const statusMatch = error.message.match(/Sleeper API (\d{3}):/);
+    if (statusMatch) {
+      return `Sleeper API ${statusMatch[1]} while resolving ${leagueId}`;
+    }
+    return `${error.message} while resolving ${leagueId}`;
+  }
+  return `unknown error while resolving ${leagueId}`;
+}
+
 async function tryResolveRecurringLeagueId(
   leagueId: string,
   cache: Map<string, string>,
   leagueCache: Map<string, Promise<SleeperApiLeague>>,
   depth = 0,
   visited = new Set<string>()
-): Promise<string | undefined> {
+): Promise<RecurringLeagueResolutionResult> {
   const cached = cache.get(leagueId);
-  if (cached) return cached;
+  if (cached) return { recurringLeagueId: cached };
 
   if (depth >= MAX_RECURRING_CHAIN_DEPTH || visited.has(leagueId)) {
-    return undefined;
+    return {
+      failureReason: depth >= MAX_RECURRING_CHAIN_DEPTH
+        ? `exceeded recurring chain depth ${MAX_RECURRING_CHAIN_DEPTH} at ${leagueId}`
+        : `detected recurring league cycle at ${leagueId}`,
+    };
   }
 
   visited.add(leagueId);
@@ -94,18 +114,17 @@ async function tryResolveRecurringLeagueId(
     const league = await getSleeperLeague(leagueId, leagueCache);
     if (!league.previous_league_id) {
       cache.set(leagueId, leagueId);
-      return leagueId;
+      return { recurringLeagueId: leagueId };
     }
 
-    const recurringLeagueId = await tryResolveRecurringLeagueId(league.previous_league_id, cache, leagueCache, depth + 1, visited);
-    if (!recurringLeagueId) {
-      return undefined;
+    const resolution = await tryResolveRecurringLeagueId(league.previous_league_id, cache, leagueCache, depth + 1, visited);
+    if (!resolution.recurringLeagueId) {
+      return resolution;
     }
-    cache.set(leagueId, recurringLeagueId);
-    return recurringLeagueId;
+    cache.set(leagueId, resolution.recurringLeagueId);
+    return { recurringLeagueId: resolution.recurringLeagueId };
   } catch (error) {
-    console.warn(`[sleeper-connect] Failed to resolve recurring league for ${leagueId}:`, error);
-    return undefined;
+    return { failureReason: describeSleeperResolutionFailure(leagueId, error) };
   }
 }
 
@@ -114,11 +133,14 @@ async function resolveRecurringLeagueId(
   cache: Map<string, string>,
   leagueCache: Map<string, Promise<SleeperApiLeague>>
 ): Promise<string> {
-  const recurringLeagueId = await tryResolveRecurringLeagueId(leagueId, cache, leagueCache);
-  if (recurringLeagueId) {
-    return recurringLeagueId;
+  const resolution = await tryResolveRecurringLeagueId(leagueId, cache, leagueCache);
+  if (resolution.recurringLeagueId) {
+    return resolution.recurringLeagueId;
   }
 
+  console.warn(
+    `[sleeper-connect] Falling back to season-scoped leagueId ${leagueId} for recurring grouping: ${resolution.failureReason ?? 'unresolved recurring chain'}`
+  );
   cache.set(leagueId, leagueId);
   return leagueId;
 }
@@ -212,8 +234,10 @@ export async function handleSleeperDiscover(
         const rosters = await sleeperGet<SleeperApiRoster[]>(`/league/${league.league_id}/rosters`);
         const userRoster = rosters?.find((r) => r.owner_id === sleeperUserId);
         rosterId = userRoster?.roster_id ?? null;
-      } catch {
-        // Non-fatal: save without roster_id
+      } catch (error) {
+        console.warn(
+          `[sleeper-connect] Failed to load rosters for ${league.league_id}; saving without rosterId: ${describeSleeperResolutionFailure(league.league_id, error)}`
+        );
       }
 
       const leagueToSave: Parameters<SleeperStorage['saveSleeperLeague']>[0] = {
@@ -240,16 +264,23 @@ export async function handleSleeperDiscover(
           if (prevLeague?.league_id) {
             await processLeague(prevLeague, recurringLeagueId, depth + 1);
           }
-        } catch {
-          // Non-fatal: history traversal best-effort
+        } catch (error) {
+          console.warn(
+            `[sleeper-connect] Failed to traverse previous league ${league.previous_league_id} from ${league.league_id}: ${describeSleeperResolutionFailure(league.previous_league_id, error)}`
+          );
         }
       }
     }
 
     await Promise.all(currentLeagues.map(async (league) => {
       cacheSleeperLeague(leagueCache, league);
-      const recurringLeagueId = await tryResolveRecurringLeagueId(league.league_id, recurringIdCache, leagueCache);
-      await processLeague(league, recurringLeagueId);
+      const resolution = await tryResolveRecurringLeagueId(league.league_id, recurringIdCache, leagueCache);
+      if (!resolution.recurringLeagueId) {
+        console.warn(
+          `[sleeper-connect] Discovery could not persist recurringLeagueId for ${league.league_id}: ${resolution.failureReason ?? 'unresolved recurring chain'}`
+        );
+      }
+      await processLeague(league, resolution.recurringLeagueId);
     }));
 
     return new Response(
