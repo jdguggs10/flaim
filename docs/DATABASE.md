@@ -94,8 +94,8 @@ Constraints/Indexes:
 - Index on `clerk_user_id` for fast user lookups.
 
 Notes:
-- New discovery writes persist `recurring_league_id` when the column is available.
-- During rollout, auth-worker retries writes without `recurring_league_id` if the live schema does not have the column yet; those legacy rows still rely on read-time fallback until they are rediscovered.
+- New discovery writes persist `recurring_league_id` when the column is available and the full Sleeper history chain resolves successfully.
+- During rollout, auth-worker retries writes without `recurring_league_id` if the live schema does not have the column yet; those legacy or unresolved rows still rely on read-time fallback until they are rediscovered.
 
 ### platform_oauth_states
 Short-lived OAuth state values for platform-connect flows (separate from MCP OAuth state table).

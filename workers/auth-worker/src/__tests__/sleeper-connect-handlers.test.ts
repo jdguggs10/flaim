@@ -292,6 +292,68 @@ describe('sleeper-connect-handlers', () => {
     );
   });
 
+  it('does not persist a synthetic recurringLeagueId when history lookup fails during discovery', async () => {
+    mockFetch.mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith('/user/history_gap')) {
+        return jsonResponse({
+          user_id: 'sleeper_gap',
+          username: 'history_gap',
+          display_name: 'History Gap',
+        });
+      }
+      if (url.includes('/user/sleeper_gap/leagues/nfl/2025')) {
+        return jsonResponse([
+          {
+            league_id: 'gap-2025',
+            name: 'Dynasty Squad',
+            sport: 'nfl',
+            season: '2025',
+            previous_league_id: 'gap-2024',
+          },
+        ]);
+      }
+      if (url.includes('/user/sleeper_gap/leagues/nba/2024')) {
+        return jsonResponse([]);
+      }
+      if (url.endsWith('/league/gap-2024')) {
+        return new Response(null, { status: 503 });
+      }
+      if (url.includes('/league/gap-2025/rosters')) {
+        return jsonResponse([
+          { roster_id: 7, owner_id: 'sleeper_gap' },
+        ]);
+      }
+      return new Response(null, { status: 404 });
+    });
+
+    const request = new Request('https://api.flaim.app/connect/sleeper/discover', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'history_gap' }),
+    });
+
+    const response = await handleSleeperDiscover(request, env, 'user_1', corsHeaders);
+    const body = (await response.json()) as {
+      success: boolean;
+      leagues_found: number;
+      seasons_discovered: number;
+    };
+
+    expect(response.status).toBe(200);
+    expect(body.success).toBe(true);
+    expect(body.leagues_found).toBe(1);
+    expect(body.seasons_discovered).toBe(1);
+    expect(mockStorage.saveSleeperLeague).toHaveBeenCalledOnce();
+    expect(mockStorage.saveSleeperLeague).toHaveBeenCalledWith(
+      expect.objectContaining({
+        leagueId: 'gap-2025',
+        seasonYear: 2025,
+      }),
+    );
+    expect(mockStorage.saveSleeperLeague.mock.calls[0][0]).not.toHaveProperty('recurringLeagueId');
+  });
+
   it('returns stored recurringLeagueId without extra Sleeper fetches', async () => {
     mockStorage.getSleeperLeagues.mockResolvedValue([
       {
