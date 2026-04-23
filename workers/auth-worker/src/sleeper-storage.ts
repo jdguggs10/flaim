@@ -27,9 +27,17 @@ interface SleeperLeagueRow {
   season_year: number;
   league_name: string;
   roster_id: number | null;
+  recurring_league_id?: string | null;
   sleeper_user_id: string;
   created_at: string;
   updated_at: string;
+}
+
+interface SupabaseErrorLike {
+  code?: string;
+  message?: string;
+  details?: string;
+  hint?: string;
 }
 
 export interface SleeperLeague {
@@ -40,11 +48,33 @@ export interface SleeperLeague {
   seasonYear: number;
   leagueName: string;
   rosterId: number | null;
+  recurringLeagueId?: string;
   sleeperUserId: string;
+}
+
+function isMissingRecurringLeagueIdColumnError(error: SupabaseErrorLike | null | undefined): boolean {
+  if (!error) return false;
+
+  const combined = [error.code, error.message, error.details, error.hint]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+
+  if (!combined.includes('recurring_league_id')) {
+    return false;
+  }
+
+  return combined.includes('column')
+    || combined.includes('schema cache')
+    || combined.includes('unknown')
+    || combined.includes('not found')
+    || error.code === '42703'
+    || error.code === 'PGRST204';
 }
 
 export class SleeperStorage {
   private supabase;
+  private recurringLeagueIdColumnStatus: 'unknown' | 'available' | 'missing' = 'unknown';
 
   constructor(supabaseUrl: string, supabaseKey: string) {
     this.supabase = createClient(supabaseUrl, supabaseKey);
@@ -111,6 +141,7 @@ export class SleeperStorage {
       seasonYear: row.season_year,
       leagueName: row.league_name,
       rosterId: row.roster_id,
+      recurringLeagueId: row.recurring_league_id ?? undefined,
       sleeperUserId: row.sleeper_user_id,
     }));
   }
@@ -122,22 +153,41 @@ export class SleeperStorage {
     seasonYear: number;
     leagueName: string;
     rosterId: number | null;
+    recurringLeagueId?: string;
     sleeperUserId: string;
   }): Promise<void> {
-    const { error } = await this.supabase
-      .from('sleeper_leagues')
-      .upsert({
-        clerk_user_id: league.clerkUserId,
-        league_id: league.leagueId,
-        sport: league.sport,
-        season_year: league.seasonYear,
-        league_name: league.leagueName,
-        roster_id: league.rosterId,
-        sleeper_user_id: league.sleeperUserId,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'clerk_user_id,league_id,season_year' });
+    const basePayload = {
+      clerk_user_id: league.clerkUserId,
+      league_id: league.leagueId,
+      sport: league.sport,
+      season_year: league.seasonYear,
+      league_name: league.leagueName,
+      roster_id: league.rosterId,
+      sleeper_user_id: league.sleeperUserId,
+      updated_at: new Date().toISOString(),
+    };
 
-    if (error) throw new Error(`Failed to save Sleeper league: ${error.message}`);
+    if (league.recurringLeagueId && this.recurringLeagueIdColumnStatus !== 'missing') {
+      const error = await this.upsertSleeperLeagueRow({
+        ...basePayload,
+        recurring_league_id: league.recurringLeagueId,
+      });
+
+      if (!error) {
+        this.recurringLeagueIdColumnStatus = 'available';
+        return;
+      }
+
+      if (!isMissingRecurringLeagueIdColumnError(error)) {
+        throw new Error(`Failed to save Sleeper league: ${error.message}`);
+      }
+
+      console.warn('[sleeper-storage] recurring_league_id column unavailable; retrying without it');
+      this.recurringLeagueIdColumnStatus = 'missing';
+    }
+
+    const legacyError = await this.upsertSleeperLeagueRow(basePayload);
+    if (legacyError) throw new Error(`Failed to save Sleeper league: ${legacyError.message}`);
   }
 
   async deleteSleeperLeague(clerkUserId: string, leagueId: string): Promise<void> {
@@ -191,5 +241,13 @@ export class SleeperStorage {
     if (result.skipped) {
       console.warn(`[sleeper-storage] clearDefaultsForPlatform skipped for user ${maskUserId(clerkUserId)}: ${result.error ?? 'unknown reason'}`);
     }
+  }
+
+  private async upsertSleeperLeagueRow(payload: Record<string, unknown>): Promise<SupabaseErrorLike | null> {
+    const { error } = await this.supabase
+      .from('sleeper_leagues')
+      .upsert(payload, { onConflict: 'clerk_user_id,league_id,season_year' });
+
+    return (error as SupabaseErrorLike | null) ?? null;
   }
 }

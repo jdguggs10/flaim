@@ -194,4 +194,5 @@ npm run deploy       # Deploy
 - Deleting a league removes all seasons for that league.
 - Shared season helper logic now lives in `@flaim/worker-shared` (`src/season.ts`); `src/season-utils.ts` stays as a backward-compatible wrapper for local imports.
 - `src/v3/get-league-info.ts` returns canonical start years in `seasonYear`, `settings.season`, and `status.previousSeasons`; ESPN-native end years are only used for upstream ESPN requests.
-- Sleeper league responses keep the season-specific `leagueId` for direct tool calls, and also compute a `recurringLeagueId` on read by following Sleeper's `previous_league_id` chain so downstream consumers can group recurring seasons safely.
+- Sleeper league responses keep the season-specific `leagueId` for direct tool calls, and also persist a `recurringLeagueId` during discovery by following Sleeper's `previous_league_id` chain. Read paths prefer the stored recurring ID and only fall back to live chain resolution for legacy rows that do not have it yet.
+- During the `sleeper_leagues.recurring_league_id` rollout, discovery writes retry without that column if the live database schema has not been migrated yet, which preserves the legacy read fallback until the migration lands.

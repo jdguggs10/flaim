@@ -3,7 +3,7 @@ import { getDefaultSeasonYear } from './season-utils';
 
 const SLEEPER_API = 'https://api.sleeper.app/v1';
 const MAX_HISTORY_YEARS = 5;
-const MAX_RECURRING_CHAIN_DEPTH = 25;
+const MAX_RECURRING_CHAIN_DEPTH = 12;
 
 export interface SleeperConnectEnv {
   SUPABASE_URL: string;
@@ -53,9 +53,31 @@ async function sleeperGet<T>(path: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+function cacheSleeperLeague(
+  leagueCache: Map<string, Promise<SleeperApiLeague>>,
+  league: SleeperApiLeague
+): void {
+  leagueCache.set(league.league_id, Promise.resolve(league));
+}
+
+async function getSleeperLeague(
+  leagueId: string,
+  leagueCache: Map<string, Promise<SleeperApiLeague>>
+): Promise<SleeperApiLeague> {
+  const cached = leagueCache.get(leagueId);
+  if (cached) {
+    return cached;
+  }
+
+  const request = sleeperGet<SleeperApiLeague>(`/league/${leagueId}`);
+  leagueCache.set(leagueId, request);
+  return request;
+}
+
 async function resolveRecurringLeagueId(
   leagueId: string,
   cache: Map<string, string>,
+  leagueCache: Map<string, Promise<SleeperApiLeague>>,
   depth = 0,
   visited = new Set<string>()
 ): Promise<string> {
@@ -70,13 +92,13 @@ async function resolveRecurringLeagueId(
   visited.add(leagueId);
 
   try {
-    const league = await sleeperGet<SleeperApiLeague>(`/league/${leagueId}`);
+    const league = await getSleeperLeague(leagueId, leagueCache);
     if (!league.previous_league_id) {
       cache.set(leagueId, leagueId);
       return leagueId;
     }
 
-    const recurringLeagueId = await resolveRecurringLeagueId(league.previous_league_id, cache, depth + 1, visited);
+    const recurringLeagueId = await resolveRecurringLeagueId(league.previous_league_id, cache, leagueCache, depth + 1, visited);
     cache.set(leagueId, recurringLeagueId);
     return recurringLeagueId;
   } catch (error) {
@@ -88,12 +110,19 @@ async function resolveRecurringLeagueId(
 
 async function buildSleeperLeagueResponse(leagues: SleeperLeague[]): Promise<SleeperLeagueResponse[]> {
   const recurringIdCache = new Map<string, string>();
-  const responseLeagues: SleeperLeagueResponse[] = [];
-
-  // Process sequentially so chain resolution can reuse cached roots from newer seasons.
+  const leagueCache = new Map<string, Promise<SleeperApiLeague>>();
   for (const league of leagues) {
-    const recurringLeagueId = await resolveRecurringLeagueId(league.leagueId, recurringIdCache);
-    responseLeagues.push({
+    if (league.recurringLeagueId) {
+      recurringIdCache.set(league.leagueId, league.recurringLeagueId);
+      recurringIdCache.set(league.recurringLeagueId, league.recurringLeagueId);
+    }
+  }
+
+  return Promise.all(leagues.map(async (league) => {
+    const recurringLeagueId = league.recurringLeagueId
+      ?? await resolveRecurringLeagueId(league.leagueId, recurringIdCache, leagueCache);
+
+    return {
       id: league.id,
       sport: league.sport,
       leagueId: league.leagueId,
@@ -101,10 +130,8 @@ async function buildSleeperLeagueResponse(leagues: SleeperLeague[]): Promise<Sle
       rosterId: league.rosterId,
       seasonYear: league.seasonYear,
       recurringLeagueId,
-    });
-  }
-
-  return responseLeagues;
+    };
+  }));
 }
 
 export async function handleSleeperDiscover(
@@ -153,10 +180,16 @@ export async function handleSleeperDiscover(
     const currentLeagues = [...(nflLeagues ?? []), ...(nbaLeagues ?? [])];
     let totalSaved = 0;
     const seasonsDiscovered = new Set<string>();
+    const recurringIdCache = new Map<string, string>();
+    const leagueCache = new Map<string, Promise<SleeperApiLeague>>();
+    const processedLeagueIds = new Set<string>();
 
     // Process each league and traverse history chain
-    async function processLeague(league: SleeperApiLeague, depth = 0): Promise<void> {
-      if (depth >= MAX_HISTORY_YEARS) return;
+    async function processLeague(league: SleeperApiLeague, recurringLeagueId: string, depth = 0): Promise<void> {
+      if (depth >= MAX_HISTORY_YEARS || processedLeagueIds.has(league.league_id)) return;
+
+      processedLeagueIds.add(league.league_id);
+      cacheSleeperLeague(leagueCache, league);
 
       // Find user's roster_id in this league
       let rosterId: number | null = null;
@@ -175,6 +208,7 @@ export async function handleSleeperDiscover(
         seasonYear: parseInt(league.season, 10) || getDefaultSeasonYear('football'),
         leagueName: league.name,
         rosterId,
+        recurringLeagueId,
         sleeperUserId: sleeperUserId,
       });
       totalSaved++;
@@ -183,9 +217,9 @@ export async function handleSleeperDiscover(
       // Traverse previous season
       if (league.previous_league_id) {
         try {
-          const prevLeague = await sleeperGet<SleeperApiLeague>(`/league/${league.previous_league_id}`);
+          const prevLeague = await getSleeperLeague(league.previous_league_id, leagueCache);
           if (prevLeague?.league_id) {
-            await processLeague(prevLeague, depth + 1);
+            await processLeague(prevLeague, recurringLeagueId, depth + 1);
           }
         } catch {
           // Non-fatal: history traversal best-effort
@@ -193,7 +227,11 @@ export async function handleSleeperDiscover(
       }
     }
 
-    await Promise.all(currentLeagues.map((league) => processLeague(league)));
+    await Promise.all(currentLeagues.map(async (league) => {
+      cacheSleeperLeague(leagueCache, league);
+      const recurringLeagueId = await resolveRecurringLeagueId(league.league_id, recurringIdCache, leagueCache);
+      await processLeague(league, recurringLeagueId);
+    }));
 
     return new Response(
       JSON.stringify({

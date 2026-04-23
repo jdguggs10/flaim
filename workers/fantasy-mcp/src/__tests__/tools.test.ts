@@ -759,6 +759,51 @@ describe('fantasy-mcp tools', () => {
     });
   });
 
+  it('get_user_session: grouped Sleeper seasons keep only the current season in active leagues', async () => {
+    const tool = getUnifiedTools().find((t) => t.name === 'get_user_session');
+    expect(tool).toBeTruthy();
+
+    const sleeperLeagues = [
+      { sport: 'football', leagueId: 'sleeper-2025', recurringLeagueId: 'sleeper-root', leagueName: 'Dynasty Squad', rosterId: 7, seasonYear: 2025 },
+      { sport: 'football', leagueId: 'sleeper-2024', recurringLeagueId: 'sleeper-root', leagueName: 'Dynasty Squad', rosterId: 7, seasonYear: 2024 },
+    ];
+
+    const env = {
+      INTERNAL_SERVICE_TOKEN: 'internal-secret',
+      AUTH_WORKER: {
+        fetch: async (req: Request) => {
+          const url = new URL(req.url);
+          if (url.pathname === '/internal/leagues/sleeper') {
+            return new Response(JSON.stringify({ leagues: sleeperLeagues }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          return new Response(JSON.stringify({ leagues: [] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        },
+      },
+    } as unknown as Env;
+
+    const result = await tool!.handler({}, env, 'Bearer test-token');
+    const payload = JSON.parse(result.content[0].text) as {
+      allLeagues: Array<{ platform: string; sport: string; leagueId: string; seasonYear: number }>;
+      totalLeaguesFound: number;
+    };
+
+    const sleeperFootball = payload.allLeagues.filter(
+      (l) => l.platform === 'sleeper' && l.sport === 'football'
+    );
+    expect(payload.totalLeaguesFound).toBe(1);
+    expect(sleeperFootball).toHaveLength(1);
+    expect(sleeperFootball[0]).toMatchObject({
+      leagueId: 'sleeper-2025',
+      seasonYear: 2025,
+    });
+  });
+
   it('get_user_session: distinct Yahoo leagues with the same name remain separate', async () => {
     const tool = getUnifiedTools().find((t) => t.name === 'get_user_session');
     expect(tool).toBeTruthy();

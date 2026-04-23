@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it, vi, type MockedFunction } from 'vitest';
-import { handleSleeperDiscover, handleSleeperLeagues, type SleeperConnectEnv } from '../sleeper-connect-handlers';
+import {
+  handleSleeperDiscover,
+  handleSleeperLeagueDelete,
+  handleSleeperLeagues,
+  type SleeperConnectEnv,
+} from '../sleeper-connect-handlers';
 import { SleeperStorage } from '../sleeper-storage';
 import { getDefaultSeasonYear } from '../season-utils';
 
@@ -36,6 +41,7 @@ describe('sleeper-connect-handlers', () => {
   let mockStorage: {
     saveSleeperConnection: ReturnType<typeof vi.fn>;
     saveSleeperLeague: ReturnType<typeof vi.fn>;
+    deleteSleeperLeague: ReturnType<typeof vi.fn>;
     getSleeperLeagues: ReturnType<typeof vi.fn>;
   };
 
@@ -46,6 +52,7 @@ describe('sleeper-connect-handlers', () => {
     mockStorage = {
       saveSleeperConnection: vi.fn().mockResolvedValue(undefined),
       saveSleeperLeague: vi.fn().mockResolvedValue(undefined),
+      deleteSleeperLeague: vi.fn().mockResolvedValue(undefined),
       getSleeperLeagues: vi.fn().mockResolvedValue([]),
     };
 
@@ -203,11 +210,136 @@ describe('sleeper-connect-handlers', () => {
         sport: 'football',
         seasonYear: 2025,
         rosterId: 7,
+        recurringLeagueId: 'league_nfl_1',
       }),
     );
   });
 
-  it('includes recurringLeagueId when the Sleeper history chain resolves', async () => {
+  it('persists recurringLeagueId during discovery for every season in the history chain', async () => {
+    mockFetch.mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith('/user/history_user')) {
+        return jsonResponse({
+          user_id: 'sleeper_history',
+          username: 'history_user',
+          display_name: 'History User',
+        });
+      }
+      if (url.includes('/user/sleeper_history/leagues/nfl/2025')) {
+        return jsonResponse([
+          {
+            league_id: 'chain-2025',
+            name: 'Dynasty Squad',
+            sport: 'nfl',
+            season: '2025',
+            previous_league_id: 'chain-2024',
+          },
+        ]);
+      }
+      if (url.includes('/user/sleeper_history/leagues/nba/2024')) {
+        return jsonResponse([]);
+      }
+      if (url.endsWith('/league/chain-2024')) {
+        return jsonResponse({
+          league_id: 'chain-2024',
+          name: 'Dynasty Squad',
+          sport: 'nfl',
+          season: '2024',
+          previous_league_id: null,
+        });
+      }
+      if (url.includes('/league/chain-2025/rosters') || url.includes('/league/chain-2024/rosters')) {
+        return jsonResponse([
+          { roster_id: 7, owner_id: 'sleeper_history' },
+        ]);
+      }
+      return new Response(null, { status: 404 });
+    });
+
+    const request = new Request('https://api.flaim.app/connect/sleeper/discover', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'history_user' }),
+    });
+
+    const response = await handleSleeperDiscover(request, env, 'user_1', corsHeaders);
+    const body = (await response.json()) as {
+      success: boolean;
+      leagues_found: number;
+      seasons_discovered: number;
+    };
+
+    expect(response.status).toBe(200);
+    expect(body.success).toBe(true);
+    expect(body.leagues_found).toBe(2);
+    expect(body.seasons_discovered).toBe(2);
+    expect(mockStorage.saveSleeperLeague).toHaveBeenCalledTimes(2);
+    expect(mockStorage.saveSleeperLeague).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        leagueId: 'chain-2025',
+        seasonYear: 2025,
+        recurringLeagueId: 'chain-2024',
+      }),
+    );
+    expect(mockStorage.saveSleeperLeague).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        leagueId: 'chain-2024',
+        seasonYear: 2024,
+        recurringLeagueId: 'chain-2024',
+      }),
+    );
+  });
+
+  it('returns stored recurringLeagueId without extra Sleeper fetches', async () => {
+    mockStorage.getSleeperLeagues.mockResolvedValue([
+      {
+        id: 'row-2025',
+        clerkUserId: 'user_1',
+        leagueId: 'sleeper-2025',
+        sport: 'football',
+        seasonYear: 2025,
+        leagueName: 'Dynasty Squad',
+        rosterId: 7,
+        recurringLeagueId: 'sleeper-root',
+        sleeperUserId: 'sleeper_123',
+      },
+      {
+        id: 'row-2024',
+        clerkUserId: 'user_1',
+        leagueId: 'sleeper-2024',
+        sport: 'football',
+        seasonYear: 2024,
+        leagueName: 'Dynasty Squad',
+        rosterId: 7,
+        recurringLeagueId: 'sleeper-root',
+        sleeperUserId: 'sleeper_123',
+      },
+    ]);
+
+    const response = await handleSleeperLeagues(env, 'user_1', corsHeaders);
+    const body = (await response.json()) as {
+      leagues: Array<{ leagueId: string; recurringLeagueId: string; seasonYear: number }>;
+    };
+
+    expect(response.status).toBe(200);
+    expect(body.leagues).toEqual([
+      expect.objectContaining({
+        leagueId: 'sleeper-2025',
+        recurringLeagueId: 'sleeper-root',
+        seasonYear: 2025,
+      }),
+      expect.objectContaining({
+        leagueId: 'sleeper-2024',
+        recurringLeagueId: 'sleeper-root',
+        seasonYear: 2024,
+      }),
+    ]);
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('uses stored recurringLeagueId values before legacy fallback fetches', async () => {
     mockStorage.getSleeperLeagues.mockResolvedValue([
       {
         id: 'row-2025',
@@ -227,6 +359,7 @@ describe('sleeper-connect-handlers', () => {
         seasonYear: 2024,
         leagueName: 'Dynasty Squad',
         rosterId: 7,
+        recurringLeagueId: 'sleeper-root',
         sleeperUserId: 'sleeper_123',
       },
     ]);
@@ -242,15 +375,6 @@ describe('sleeper-connect-handlers', () => {
           previous_league_id: 'sleeper-2024',
         });
       }
-      if (url.endsWith('/league/sleeper-2024')) {
-        return jsonResponse({
-          league_id: 'sleeper-2024',
-          name: 'Dynasty Squad',
-          sport: 'nfl',
-          season: '2024',
-          previous_league_id: null,
-        });
-      }
       return new Response(null, { status: 404 });
     });
 
@@ -263,18 +387,19 @@ describe('sleeper-connect-handlers', () => {
     expect(body.leagues).toEqual([
       expect.objectContaining({
         leagueId: 'sleeper-2025',
-        recurringLeagueId: 'sleeper-2024',
+        recurringLeagueId: 'sleeper-root',
         seasonYear: 2025,
       }),
       expect.objectContaining({
         leagueId: 'sleeper-2024',
-        recurringLeagueId: 'sleeper-2024',
+        recurringLeagueId: 'sleeper-root',
         seasonYear: 2024,
       }),
     ]);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 
-  it('falls back to the raw leagueId when recurring chain lookup fails', async () => {
+  it('falls back to the raw leagueId when recurring chain lookup fails for legacy rows', async () => {
     mockStorage.getSleeperLeagues.mockResolvedValue([
       {
         id: 'row-2025',
@@ -284,6 +409,7 @@ describe('sleeper-connect-handlers', () => {
         seasonYear: 2025,
         leagueName: 'Dynasty Squad',
         rosterId: 7,
+        recurringLeagueId: undefined,
         sleeperUserId: 'sleeper_123',
       },
     ]);
@@ -302,5 +428,38 @@ describe('sleeper-connect-handlers', () => {
         recurringLeagueId: 'sleeper-2025',
       }),
     ]);
+  });
+
+  it('returns recurringLeagueId on the delete response without refetching legacy chain data', async () => {
+    mockStorage.getSleeperLeagues.mockResolvedValue([
+      {
+        id: 'row-2024',
+        clerkUserId: 'user_1',
+        leagueId: 'sleeper-2024',
+        sport: 'football',
+        seasonYear: 2024,
+        leagueName: 'Dynasty Squad',
+        rosterId: 7,
+        recurringLeagueId: 'sleeper-root',
+        sleeperUserId: 'sleeper_123',
+      },
+    ]);
+
+    const response = await handleSleeperLeagueDelete(env, 'user_1', 'row-2025', corsHeaders);
+    const body = (await response.json()) as {
+      success: boolean;
+      leagues: Array<{ leagueId: string; recurringLeagueId: string }>;
+    };
+
+    expect(response.status).toBe(200);
+    expect(body.success).toBe(true);
+    expect(mockStorage.deleteSleeperLeague).toHaveBeenCalledWith('user_1', 'row-2025');
+    expect(body.leagues).toEqual([
+      expect.objectContaining({
+        leagueId: 'sleeper-2024',
+        recurringLeagueId: 'sleeper-root',
+      }),
+    ]);
+    expect(mockFetch).not.toHaveBeenCalled();
   });
 });

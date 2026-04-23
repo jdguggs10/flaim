@@ -86,11 +86,16 @@ One row per user + league + sport + season.
 | season_year | int | Season year |
 | league_name | text | League name (optional) |
 | roster_id | integer | User's roster ID in this league (optional, found during discovery) |
+| recurring_league_id | text | Stable recurring root ID derived from Sleeper's `previous_league_id` chain (optional on legacy rows) |
 | sleeper_user_id | text | Sleeper user ID (not null) |
 
 Constraints/Indexes:
 - Unique per season: unique on `(clerk_user_id, league_id, season_year)`.
 - Index on `clerk_user_id` for fast user lookups.
+
+Notes:
+- New discovery writes persist `recurring_league_id` when the column is available.
+- During rollout, auth-worker retries writes without `recurring_league_id` if the live schema does not have the column yet; those legacy rows still rely on read-time fallback until they are rediscovered.
 
 ### platform_oauth_states
 Short-lived OAuth state values for platform-connect flows (separate from MCP OAuth state table).

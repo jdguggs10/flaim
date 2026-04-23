@@ -53,6 +53,77 @@ describe('SleeperStorage', () => {
     vi.restoreAllMocks();
   });
 
+  describe('saveSleeperLeague', () => {
+    it('persists recurringLeagueId when the column is available', async () => {
+      await storage.saveSleeperLeague({
+        clerkUserId: 'user_123',
+        leagueId: 'league-2025',
+        sport: 'football',
+        seasonYear: 2025,
+        leagueName: 'Dynasty Squad',
+        rosterId: 7,
+        recurringLeagueId: 'league-root',
+        sleeperUserId: 'sleeper_123',
+      });
+
+      expect(mockFrom).toHaveBeenCalledWith('sleeper_leagues');
+      expect(mockUpsert).toHaveBeenCalledOnce();
+      const payload = mockUpsert.mock.calls[0][0];
+      expect(payload).toMatchObject({
+        league_id: 'league-2025',
+        recurring_league_id: 'league-root',
+      });
+    });
+
+    it('retries without recurringLeagueId when the column is unavailable', async () => {
+      mockUpsert
+        .mockReturnValueOnce({
+          error: {
+            code: '42703',
+            message: 'column sleeper_leagues.recurring_league_id does not exist',
+          },
+        })
+        .mockReturnValue({ error: null });
+
+      await storage.saveSleeperLeague({
+        clerkUserId: 'user_123',
+        leagueId: 'league-2025',
+        sport: 'football',
+        seasonYear: 2025,
+        leagueName: 'Dynasty Squad',
+        rosterId: 7,
+        recurringLeagueId: 'league-root',
+        sleeperUserId: 'sleeper_123',
+      });
+
+      expect(mockUpsert).toHaveBeenCalledTimes(2);
+      expect(mockUpsert.mock.calls[0][0]).toMatchObject({
+        league_id: 'league-2025',
+        recurring_league_id: 'league-root',
+      });
+      expect(mockUpsert.mock.calls[1][0]).toMatchObject({
+        league_id: 'league-2025',
+      });
+      expect(mockUpsert.mock.calls[1][0]).not.toHaveProperty('recurring_league_id');
+
+      mockUpsert.mockClear();
+
+      await storage.saveSleeperLeague({
+        clerkUserId: 'user_123',
+        leagueId: 'league-2024',
+        sport: 'football',
+        seasonYear: 2024,
+        leagueName: 'Dynasty Squad',
+        rosterId: 7,
+        recurringLeagueId: 'league-root',
+        sleeperUserId: 'sleeper_123',
+      });
+
+      expect(mockUpsert).toHaveBeenCalledOnce();
+      expect(mockUpsert.mock.calls[0][0]).not.toHaveProperty('recurring_league_id');
+    });
+  });
+
   // ===========================================================================
   // deleteSleeperLeague Tests
   // ===========================================================================
