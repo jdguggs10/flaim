@@ -120,6 +120,12 @@ describe('hockey get_standings handler — seasonPhase and canonical year', () =
     const data = result.data as Record<string, unknown>;
     expect(data.seasonPhase).toBe('season_complete');
     expect(data.seasonYear).toBe(HISTORICAL_CANONICAL_YEAR);
+    const standings = data.standings as Array<Record<string, unknown>>;
+    expect(standings[0].finalRank).toBeNull();
+    expect(standings[0].championshipWon).toBeNull();
+    expect(standings[0].playoffOutcome).toBeNull();
+    expect(standings[0].madePlayoffs).toBeNull();
+    expect(standings[0].outcomeConfidence).toBeNull();
   });
 
   it('returns playoffs_in_progress for current season past regular season periods', async () => {
@@ -145,6 +151,12 @@ describe('hockey get_standings handler — seasonPhase and canonical year', () =
     expect(data.seasonComplete).toBe(false);
     // Response must echo canonical year, not ESPN year
     expect(data.seasonYear).toBe(CURRENT_CANONICAL_YEAR);
+    const standings = data.standings as Array<Record<string, unknown>>;
+    expect(standings[0].finalRank).toBeNull();
+    expect(standings[0].championshipWon).toBeNull();
+    expect(standings[0].playoffOutcome).toBeNull();
+    expect(standings[0].madePlayoffs).toBe(true);
+    expect(standings[0].outcomeConfidence).toBeNull();
   });
 
   it('returns regular_season for current season within regular season periods', async () => {
@@ -167,6 +179,12 @@ describe('hockey get_standings handler — seasonPhase and canonical year', () =
     expect(data.seasonPhase).toBe('regular_season');
     expect(data.seasonComplete).toBe(false);
     expect(data.seasonYear).toBe(CURRENT_CANONICAL_YEAR);
+    const standings = data.standings as Array<Record<string, unknown>>;
+    expect(standings[0].finalRank).toBeNull();
+    expect(standings[0].championshipWon).toBeNull();
+    expect(standings[0].playoffOutcome).toBeNull();
+    expect(standings[0].madePlayoffs).toBeNull();
+    expect(standings[0].outcomeConfidence).toBeNull();
   });
 
   it('uses rankCalculatedFinal when rankFinal is absent', async () => {

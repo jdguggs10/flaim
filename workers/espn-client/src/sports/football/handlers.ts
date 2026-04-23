@@ -17,6 +17,7 @@ import {
   POSITION_SLOTS,
 } from './mappings';
 import { getCurrentSeasonYear, getSeasonContext, normalizeEspnLeagueStatus } from '../../shared/season';
+import { deriveStandingsOutcome, deriveStandingsSeasonPhase } from '../../shared/standings';
 
 const GAME_ID = 'ffl'; // ESPN's game ID for fantasy football
 
@@ -144,25 +145,13 @@ async function handleGetStandings(
     const data = await response.json() as EspnLeagueResponse;
     const teams = data.teams || [];
 
-    // Determine seasonPhase using sport-aware season year to handle cross-calendar sports correctly.
-    // getCurrentSeasonYear('football') returns 2024 in Jan 2025 (before Jul rollover), so NFL
-    // January playoffs are not incorrectly marked as season_complete.
-    // Primary signal: explicit rankFinal/rankCalculatedFinal → ESPN has finalized the season.
-    const currentSeasonYear = getCurrentSeasonYear('football');
-    const hasExplicitCompletionData = teams.some(
-      (t) => t.rankFinal != null || t.rankCalculatedFinal != null
-    );
-    let seasonPhase: 'regular_season' | 'playoffs_in_progress' | 'season_complete';
-    if (hasExplicitCompletionData || season_year < currentSeasonYear) {
-      seasonPhase = 'season_complete';
-    } else if (season_year === currentSeasonYear) {
-      const regularPeriods = data.settings?.regularSeasonMatchupPeriods ?? 0;
-      const scoringPeriod = data.scoringPeriodId ?? 0;
-      seasonPhase = scoringPeriod > regularPeriods ? 'playoffs_in_progress' : 'regular_season';
-    } else {
-      // season_year > currentSeasonYear — future season, treat as not yet started
-      seasonPhase = 'regular_season';
-    }
+    const seasonPhase = deriveStandingsSeasonPhase({
+      requestedSeasonYear: season_year,
+      currentSeasonYear: getCurrentSeasonYear('football'),
+      scoringPeriodId: data.scoringPeriodId,
+      regularSeasonMatchupPeriods: data.settings?.regularSeasonMatchupPeriods,
+      teams,
+    });
     const seasonComplete = seasonPhase === 'season_complete';
 
     // Transform and sort teams by standings
@@ -174,23 +163,12 @@ async function handleGetStandings(
       const totalGames = wins + losses + ties;
       const winPercentage = totalGames > 0 ? wins / totalGames : 0;
 
-      // Season outcome fields — only populated for completed seasons with explicit ESPN data
-      const rf = team.rankFinal ?? team.rankCalculatedFinal ?? null;
-
-      const finalRank = seasonComplete && rf !== null ? rf : null;
-      const championshipWon = finalRank !== null ? finalRank === 1 : null;
-      const playoffOutcome: 'champion' | 'runner_up' | 'eliminated' | 'missed_playoffs' | null =
-        finalRank !== null
-          ? finalRank === 1 ? 'champion'
-          : finalRank === 2 ? 'runner_up'
-          : team.playoffSeed != null ? 'eliminated'
-          : 'missed_playoffs'
-        : null;
-      const outcomeConfidence: 'explicit' | null = finalRank !== null ? 'explicit' : null;
-      // madePlayoffs: true if playoff seed present; false if season is complete with explicit ranks
-      // but no playoff seed (team missed playoffs); null if unknown
-      const madePlayoffs: boolean | null =
-        team.playoffSeed != null ? true : (seasonComplete && rf !== null ? false : null);
+      const outcome = deriveStandingsOutcome({
+        rankFinal: team.rankFinal,
+        rankCalculatedFinal: team.rankCalculatedFinal,
+        playoffSeed: team.playoffSeed,
+        seasonComplete,
+      });
 
       return {
         teamId: team.id,
@@ -207,11 +185,7 @@ async function handleGetStandings(
         playoffSeed: team.playoffSeed ?? null,
         draftDayProjectedRank: team.draftDayProjectedRank,
         currentProjectedRank: team.currentProjectedRank,
-        madePlayoffs,
-        finalRank,
-        championshipWon,
-        playoffOutcome,
-        outcomeConfidence,
+        ...outcome,
       };
     }).sort((a, b) => {
       // Sort by win percentage descending, then by wins descending
