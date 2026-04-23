@@ -76,6 +76,7 @@ interface SleeperLeague {
   leagueId: string;  // Sleeper's numeric string league ID
   leagueName: string;
   rosterId: number | null;
+  recurringLeagueId?: string;
 }
 
 interface LeagueDefault {
@@ -124,6 +125,7 @@ interface UnifiedLeague {
   yahooId?: string;      // UUID for Yahoo league (for API calls)
   // Sleeper-specific
   sleeperId?: string;    // DB UUID for deletion (Sleeper only)
+  recurringLeagueId?: string;
 }
 
 interface UnifiedLeagueGroup {
@@ -215,6 +217,7 @@ function sleeperToUnified(
       teamId: sl.rosterId != null ? String(sl.rosterId) : undefined,
       isDefault,
       sleeperId: sl.id,
+      recurringLeagueId: sl.recurringLeagueId,
     };
   });
 }
@@ -325,16 +328,17 @@ function LeaguesPageContent() {
       ...sleeperToUnified(sleeperLeagues, preferences),
     ];
 
-    // Group by platform + leagueId (ESPN) or leagueName (Yahoo)
-    // Yahoo uses unique leagueKey per season, so we group by name instead
+    // Group by stable recurring identity where available.
+    // Yahoo uses league name in the web UI because leagueKey is season-scoped.
+    // Sleeper keeps season-specific leagueId for actions, but can group by recurringLeagueId.
     const grouped = new Map<string, UnifiedLeagueGroup>();
 
     for (const league of allLeagues) {
-      // Yahoo: group by league name since leagueKey differs per season
-      // ESPN: group by leagueId which stays consistent across seasons
       const groupKey = league.platform === 'yahoo'
         ? `${league.platform}:${league.sport}:${league.leagueName}`
-        : `${league.platform}:${league.sport}:${league.leagueId}`;
+        : league.platform === 'sleeper'
+          ? `${league.platform}:${league.sport}:${league.recurringLeagueId || league.leagueId}`
+          : `${league.platform}:${league.sport}:${league.leagueId}`;
 
       if (!grouped.has(groupKey)) {
         grouped.set(groupKey, {

@@ -714,6 +714,96 @@ describe('fantasy-mcp tools', () => {
     expect(yahooFootball[0].leagueId).toBe('461.l.1000');
   });
 
+  it('get_user_session: historical Sleeper football season does not leak into active session view', async () => {
+    const tool = getUnifiedTools().find((t) => t.name === 'get_user_session');
+    expect(tool).toBeTruthy();
+
+    const sleeperLeagues = [
+      { sport: 'football', leagueId: 'sleeper-2025', leagueName: 'Dynasty Squad', rosterId: 7, seasonYear: 2025 },
+      { sport: 'football', leagueId: 'sleeper-2024', leagueName: 'Dynasty Squad', rosterId: 7, seasonYear: 2024 },
+    ];
+
+    const env = {
+      INTERNAL_SERVICE_TOKEN: 'internal-secret',
+      AUTH_WORKER: {
+        fetch: async (req: Request) => {
+          const url = new URL(req.url);
+          if (url.pathname === '/internal/leagues/sleeper') {
+            return new Response(JSON.stringify({ leagues: sleeperLeagues }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          return new Response(JSON.stringify({ leagues: [] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        },
+      },
+    } as unknown as Env;
+
+    const result = await tool!.handler({}, env, 'Bearer test-token');
+    const payload = JSON.parse(result.content[0].text) as {
+      allLeagues: Array<{ platform: string; sport: string; leagueId: string; seasonYear: number }>;
+      totalLeaguesFound: number;
+    };
+
+    const sleeperFootball = payload.allLeagues.filter(
+      (l) => l.platform === 'sleeper' && l.sport === 'football'
+    );
+    expect(payload.totalLeaguesFound).toBe(1);
+    expect(sleeperFootball).toHaveLength(1);
+    expect(sleeperFootball[0]).toMatchObject({
+      leagueId: 'sleeper-2025',
+      seasonYear: 2025,
+    });
+  });
+
+  it('get_user_session: grouped Sleeper seasons keep only the current season in active leagues', async () => {
+    const tool = getUnifiedTools().find((t) => t.name === 'get_user_session');
+    expect(tool).toBeTruthy();
+
+    const sleeperLeagues = [
+      { sport: 'football', leagueId: 'sleeper-2025', recurringLeagueId: 'sleeper-root', leagueName: 'Dynasty Squad', rosterId: 7, seasonYear: 2025 },
+      { sport: 'football', leagueId: 'sleeper-2024', recurringLeagueId: 'sleeper-root', leagueName: 'Dynasty Squad', rosterId: 7, seasonYear: 2024 },
+    ];
+
+    const env = {
+      INTERNAL_SERVICE_TOKEN: 'internal-secret',
+      AUTH_WORKER: {
+        fetch: async (req: Request) => {
+          const url = new URL(req.url);
+          if (url.pathname === '/internal/leagues/sleeper') {
+            return new Response(JSON.stringify({ leagues: sleeperLeagues }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          return new Response(JSON.stringify({ leagues: [] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        },
+      },
+    } as unknown as Env;
+
+    const result = await tool!.handler({}, env, 'Bearer test-token');
+    const payload = JSON.parse(result.content[0].text) as {
+      allLeagues: Array<{ platform: string; sport: string; leagueId: string; seasonYear: number }>;
+      totalLeaguesFound: number;
+    };
+
+    const sleeperFootball = payload.allLeagues.filter(
+      (l) => l.platform === 'sleeper' && l.sport === 'football'
+    );
+    expect(payload.totalLeaguesFound).toBe(1);
+    expect(sleeperFootball).toHaveLength(1);
+    expect(sleeperFootball[0]).toMatchObject({
+      leagueId: 'sleeper-2025',
+      seasonYear: 2025,
+    });
+  });
+
   it('get_user_session: distinct Yahoo leagues with the same name remain separate', async () => {
     const tool = getUnifiedTools().find((t) => t.name === 'get_user_session');
     expect(tool).toBeTruthy();
@@ -754,6 +844,53 @@ describe('fantasy-mcp tools', () => {
     expect(payload.totalLeaguesFound).toBe(2);
     expect(yahooFootball).toHaveLength(2);
     expect(yahooFootball.map((l) => l.leagueId).sort()).toEqual(['461.l.1000', '461.l.2000']);
+  });
+
+  it('get_ancient_history: recurring Sleeper seasons stay grouped under the active league', async () => {
+    const tool = getUnifiedTools().find((t) => t.name === 'get_ancient_history');
+    expect(tool).toBeTruthy();
+
+    const sleeperLeagues = [
+      { sport: 'football', leagueId: 'sleeper-2025', recurringLeagueId: 'sleeper-root', leagueName: 'Dynasty Squad', rosterId: 7, seasonYear: 2025 },
+      { sport: 'football', leagueId: 'sleeper-2024', recurringLeagueId: 'sleeper-root', leagueName: 'Dynasty Squad', rosterId: 7, seasonYear: 2024 },
+    ];
+
+    const env = {
+      INTERNAL_SERVICE_TOKEN: 'internal-secret',
+      AUTH_WORKER: {
+        fetch: async (req: Request) => {
+          const url = new URL(req.url);
+          if (url.pathname === '/internal/leagues/sleeper') {
+            return new Response(JSON.stringify({ leagues: sleeperLeagues }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          return new Response(JSON.stringify({ leagues: [] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        },
+      },
+    } as unknown as Env;
+
+    const result = await tool!.handler({}, env, 'Bearer test-token');
+    const payload = JSON.parse(result.content[0].text) as {
+      oldLeagues: Array<{ platform: string; leagueId: string; seasonYear: number }>;
+      oldSeasonsFromActiveLeagues: Record<string, Array<{ platform: string; leagueId: string; seasonYear: number }>>;
+      totalOldSeasons: number;
+    };
+
+    expect(payload.oldLeagues).toHaveLength(0);
+    expect(Object.keys(payload.oldSeasonsFromActiveLeagues)).toEqual(['sleeper:football:sleeper-root']);
+    const allOldSeasons = Object.values(payload.oldSeasonsFromActiveLeagues).flat();
+    expect(payload.totalOldSeasons).toBe(1);
+    expect(allOldSeasons).toHaveLength(1);
+    expect(allOldSeasons[0]).toMatchObject({
+      platform: 'sleeper',
+      leagueId: 'sleeper-2024',
+      seasonYear: 2024,
+    });
   });
 
   it('get_players routes unchanged to client', async () => {
