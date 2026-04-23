@@ -146,7 +146,20 @@ describe('deriveStandingsOutcome', () => {
       championshipWon: true,
       playoffOutcome: 'champion',
       outcomeConfidence: 'explicit',
-      madePlayoffs: false,
+      madePlayoffs: true,
+    });
+  });
+
+  it('treats a runner-up without playoffSeed as having made the playoffs', () => {
+    expect(deriveStandingsOutcome({
+      rankCalculatedFinal: 2,
+      seasonComplete: true,
+    })).toEqual({
+      finalRank: 2,
+      championshipWon: false,
+      playoffOutcome: 'runner_up',
+      outcomeConfidence: 'explicit',
+      madePlayoffs: true,
     });
   });
 });

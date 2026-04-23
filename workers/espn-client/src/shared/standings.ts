@@ -69,7 +69,9 @@ export function deriveStandingsOutcome({
       : null;
   const outcomeConfidence = finalRank !== null ? 'explicit' : null;
   const madePlayoffs =
-    playoffSeed != null ? true : (seasonComplete && resolvedFinalRank !== null ? false : null);
+    playoffSeed != null || (finalRank !== null && finalRank <= 2)
+      ? true
+      : (seasonComplete && resolvedFinalRank !== null ? false : null);
 
   return {
     finalRank,
