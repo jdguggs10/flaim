@@ -68,6 +68,7 @@ Leagues are stored per season year. The `/leagues` UI defaults the season year b
 
 - **Baseball (flb)**: Defaults to the previous year until Feb 1, then switches to the current year
 - **Football (ffl)**: Defaults to the previous year until Jul 1, then switches to the current year
+- **Basketball (fba)** / **Hockey (fhl)**: Manual ESPN onboarding still stores the canonical start year (for example `2024` for the 2024-25 season) even though ESPN's upstream API uses the end year
 
 Deleting a league removes all seasons for that league.
 

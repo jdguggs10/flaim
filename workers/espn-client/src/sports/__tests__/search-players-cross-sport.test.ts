@@ -3,19 +3,30 @@ import { baseballHandlers } from '../baseball/handlers';
 import { basketballHandlers } from '../basketball/handlers';
 import { footballHandlers } from '../football/handlers';
 import { hockeyHandlers } from '../hockey/handlers';
-import type { ToolParams } from '../../types';
+import type { HandlerToolParams, Sport } from '../../types';
 import { getEspnPlayersIndex } from '../../shared/espn-players-cache';
+import { withSeasonContext } from '../../shared/season';
 
 vi.mock('../../shared/espn-players-cache', () => ({
   getEspnPlayersIndex: vi.fn(),
 }));
 
 const scenarios = [
-  { label: 'football', sport: 'football', handlers: footballHandlers },
-  { label: 'baseball', sport: 'baseball', handlers: baseballHandlers },
-  { label: 'basketball', sport: 'basketball', handlers: basketballHandlers },
-  { label: 'hockey', sport: 'hockey', handlers: hockeyHandlers },
+  { label: 'football', sport: 'football', handlers: footballHandlers, expectedEspnYear: 2024 },
+  { label: 'baseball', sport: 'baseball', handlers: baseballHandlers, expectedEspnYear: 2024 },
+  { label: 'basketball', sport: 'basketball', handlers: basketballHandlers, expectedEspnYear: 2025 },
+  { label: 'hockey', sport: 'hockey', handlers: hockeyHandlers, expectedEspnYear: 2025 },
 ] as const;
+
+function makeParams(sport: Sport): HandlerToolParams {
+  return withSeasonContext({
+    sport,
+    league_id: '123',
+    season_year: 2024,
+    query: ' ',
+    count: 10,
+  });
+}
 
 describe('espn cross-sport get_players handlers', () => {
   const getPlayersIndexMock = getEspnPlayersIndex as MockedFunction<typeof getEspnPlayersIndex>;
@@ -24,7 +35,7 @@ describe('espn cross-sport get_players handlers', () => {
     vi.clearAllMocks();
   });
 
-  it.each(scenarios)('$label maps market ownership with platform_global scope', async ({ sport, handlers }) => {
+  it.each(scenarios)('$label maps market ownership with platform_global scope', async ({ sport, handlers, expectedEspnYear }) => {
     getPlayersIndexMock.mockResolvedValue(
       new Map([
         [1, { id: 1, fullName: 'Giancarlo Stanton', defaultPositionId: 1, proTeamId: 1, percentOwned: 47 }],
@@ -32,16 +43,11 @@ describe('espn cross-sport get_players handlers', () => {
       ])
     );
 
-    const params: ToolParams = {
-      sport,
-      league_id: '123',
-      season_year: 2025,
-      query: ' ',
-      count: 10,
-    };
+    const params = makeParams(sport);
 
     const result = await handlers.get_players({} as never, params);
     expect(result.success).toBe(true);
+    expect(getPlayersIndexMock).toHaveBeenCalledWith(expect.anything(), sport, expectedEspnYear);
     if (!result.success) return;
 
     const data = result.data as {

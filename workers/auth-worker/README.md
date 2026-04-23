@@ -180,3 +180,5 @@ npm run deploy       # Deploy
 
 - Leagues are stored per season year; `(user, sport, leagueId, seasonYear)` is unique.
 - Deleting a league removes all seasons for that league.
+- Shared season helper logic now lives in `@flaim/worker-shared` (`src/season.ts`); `src/season-utils.ts` stays as a backward-compatible wrapper for local imports.
+- `src/v3/get-league-info.ts` returns canonical start years in `seasonYear`, `settings.season`, and `status.previousSeasons`; ESPN-native end years are only used for upstream ESPN requests.

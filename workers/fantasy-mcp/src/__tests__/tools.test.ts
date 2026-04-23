@@ -75,6 +75,36 @@ describe('fantasy-mcp tools', () => {
     expect((result.structuredContent as Record<string, unknown>).totalLeaguesFound).toBe(0);
   });
 
+  it('get_user_session keeps canonical current-season labels in the session payload', async () => {
+    const tool = getUnifiedTools().find((t) => t.name === 'get_user_session');
+    expect(tool).toBeTruthy();
+
+    const env = {
+      INTERNAL_SERVICE_TOKEN: 'internal-secret',
+      AUTH_WORKER: {
+        fetch: async () =>
+          new Response(JSON.stringify({ leagues: [] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+      },
+    } as unknown as Env;
+
+    const result = await tool!.handler({}, env, 'Bearer test-token');
+    const payload = JSON.parse(result.content[0].text) as {
+      currentSeasons: Record<string, { year: number; label: string }>;
+    };
+
+    expect(payload.currentSeasons.football.label).toBe(String(payload.currentSeasons.football.year));
+    expect(payload.currentSeasons.baseball.label).toBe(String(payload.currentSeasons.baseball.year));
+    expect(payload.currentSeasons.basketball.label).toBe(
+      `${payload.currentSeasons.basketball.year}-${String(payload.currentSeasons.basketball.year + 1).slice(2)}`
+    );
+    expect(payload.currentSeasons.hockey.label).toBe(
+      `${payload.currentSeasons.hockey.year}-${String(payload.currentSeasons.hockey.year + 1).slice(2)}`
+    );
+  });
+
   it('get_user_session includes widgetUri in tool definition', () => {
     const tool = getUnifiedTools().find((t) => t.name === 'get_user_session');
     expect(tool?.widgetUri).toBe('ui://widget/user-session.html');

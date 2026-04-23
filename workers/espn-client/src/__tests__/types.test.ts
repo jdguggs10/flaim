@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Sport, ToolParams, ExecuteRequest, ExecuteResponse } from '../types';
+import type { Sport, ToolParams, RoutedToolParams, ExecuteRequest, ExecuteResponse } from '../types';
 
 describe('espn-client types', () => {
   describe('Sport type', () => {
@@ -50,6 +50,24 @@ describe('espn-client types', () => {
       };
       expect(request.tool).toBe('get_standings');
       expect(request.params.league_id).toBe('12345');
+    });
+  });
+
+  describe('RoutedToolParams interface', () => {
+    it('keeps canonical season_year and adds explicit seasonContext', () => {
+      const params: RoutedToolParams = {
+        sport: 'basketball',
+        league_id: '12345',
+        season_year: 2024,
+        seasonContext: {
+          canonicalYear: 2024,
+          espnYear: 2025,
+        },
+      };
+
+      expect(params.season_year).toBe(2024);
+      expect(params.seasonContext.canonicalYear).toBe(2024);
+      expect(params.seasonContext.espnYear).toBe(2025);
     });
   });
 

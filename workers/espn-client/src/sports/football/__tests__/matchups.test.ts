@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi, type MockedFunction } from 'vitest';
 import { footballHandlers } from '../handlers';
-import type { ToolParams } from '../../../types';
+import { withSeasonContext } from '../../../shared/season';
 import { getCredentials } from '../../../shared/auth';
 import { espnFetch } from '../../../shared/espn-api';
 
@@ -46,7 +46,7 @@ describe('football get_matchups handler', () => {
       }), { status: 200, headers: { 'Content-Type': 'application/json' } })
     );
 
-    const params: ToolParams = { sport: 'football', league_id: '123', season_year: 2025 };
+    const params = withSeasonContext({ sport: 'football', league_id: '123', season_year: 2025 });
     const result = await footballHandlers.get_matchups({} as never, params, 'Bearer x', 'cid');
 
     expect(result.success).toBe(true);
@@ -68,7 +68,7 @@ describe('football get_matchups handler', () => {
       }), { status: 200, headers: { 'Content-Type': 'application/json' } })
     );
 
-    const params: ToolParams = { sport: 'football', league_id: '123', season_year: 2025, week: 3 };
+    const params = withSeasonContext({ sport: 'football', league_id: '123', season_year: 2025, week: 3 });
     const result = await footballHandlers.get_matchups({} as never, params, 'Bearer x', 'cid');
 
     expect(result.success).toBe(true);
@@ -97,7 +97,7 @@ describe('football get_matchups handler', () => {
       }), { status: 200, headers: { 'Content-Type': 'application/json' } })
     );
 
-    const params: ToolParams = { sport: 'football', league_id: '123', season_year: 2025 };
+    const params = withSeasonContext({ sport: 'football', league_id: '123', season_year: 2025 });
     const result = await footballHandlers.get_matchups({} as never, params, 'Bearer x', 'cid');
 
     expect(result.success).toBe(true);

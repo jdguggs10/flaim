@@ -3,6 +3,16 @@ import { footballHandlers } from '../handlers';
 import type { ToolParams } from '../../../types';
 import { getCredentials } from '../../../shared/auth';
 import { fetchEspnTransactionsByWeeks, fetchEspnMTransactions2, mergeTradePlayerDetails, getEspnLeagueContext, fetchEspnPlayersByIds, enrichTransactions } from '../../../shared/espn-transactions';
+import { withSeasonContext } from '../../../shared/season';
+
+function makeParams(overrides: Partial<ToolParams> = {}) {
+  return withSeasonContext({
+    sport: 'football',
+    league_id: '123',
+    season_year: 2025,
+    ...overrides,
+  });
+}
 
 vi.mock('../../../shared/auth', () => ({
   getCredentials: vi.fn(),
@@ -38,12 +48,7 @@ describe('football get_transactions handler', () => {
       { transaction_id: 't1', type: 'add', status: 'complete', timestamp: 1000, week: 9 },
     ] } as never);
 
-    const params: ToolParams = {
-      sport: 'football',
-      league_id: '123',
-      season_year: 2025,
-      count: 999,
-    };
+    const params = makeParams({ count: 999 });
 
     const result = await footballHandlers.get_transactions({} as never, params, 'Bearer x', 'cid-1');
 
@@ -67,14 +72,7 @@ describe('football get_transactions handler', () => {
       { transaction_id: 't2', type: 'trade', status: 'complete', timestamp: 1000, week: 7, players_added: [{ id: '2' }], players_dropped: [] },
     ] } as never);
 
-    const params: ToolParams = {
-      sport: 'football',
-      league_id: '123',
-      season_year: 2025,
-      week: 7,
-      type: 'trade',
-      count: 1,
-    };
+    const params = makeParams({ week: 7, type: 'trade', count: 1 });
 
     const result = await footballHandlers.get_transactions({} as never, params, 'Bearer x', 'cid-2');
 
@@ -121,12 +119,7 @@ describe('football get_transactions handler', () => {
       }));
     });
 
-    const params: ToolParams = {
-      sport: 'football',
-      league_id: '123',
-      season_year: 2025,
-      week: 8,
-    };
+    const params = makeParams({ week: 8 });
 
     const result = await footballHandlers.get_transactions({} as never, params, 'Bearer x', 'cid-enrich');
 
@@ -154,12 +147,7 @@ describe('football get_transactions handler', () => {
     ] } as never);
     fetchPlayersByIdsMock.mockRejectedValue(new Error('ESPN API error'));
 
-    const params: ToolParams = {
-      sport: 'football',
-      league_id: '123',
-      season_year: 2025,
-      week: 8,
-    };
+    const params = makeParams({ week: 8 });
 
     const result = await footballHandlers.get_transactions({} as never, params, 'Bearer x', 'cid-degrade');
 
@@ -208,7 +196,7 @@ describe('football get_transactions handler', () => {
       { ...activityRows[0], transaction_id: '400', type: 'trade' as const, status: 'complete' as const },
     ] as never);
 
-    const params: ToolParams = { sport: 'football', league_id: '123', season_year: 2025 };
+    const params = makeParams();
     const result = await footballHandlers.get_transactions({} as never, params, 'Bearer x', 'cid-merge');
 
     expect(result.success).toBe(true);
@@ -234,7 +222,7 @@ describe('football get_transactions handler', () => {
       },
     ] } as never);
 
-    const params: ToolParams = { sport: 'football', league_id: '123', season_year: 2025 };
+    const params = makeParams();
     const result = await footballHandlers.get_transactions({} as never, params, 'Bearer x', 'cid-no-merge');
 
     expect(result.success).toBe(true);
@@ -250,7 +238,7 @@ describe('football get_transactions handler', () => {
       { transaction_id: 'a1', type: 'add', status: 'complete', timestamp: 1000, week: 10 },
     ] as never);
 
-    const params: ToolParams = { sport: 'football', league_id: '123', season_year: 2025 };
+    const params = makeParams();
     const result = await footballHandlers.get_transactions({} as never, params, 'Bearer x', 'cid-fallback');
 
     expect(result.success).toBe(true);
@@ -263,11 +251,7 @@ describe('football get_transactions handler', () => {
   it('returns credentials error when ESPN is not connected', async () => {
     getCredentialsMock.mockResolvedValue(null);
 
-    const params: ToolParams = {
-      sport: 'football',
-      league_id: '123',
-      season_year: 2025,
-    };
+    const params = makeParams();
 
     const result = await footballHandlers.get_transactions({} as never, params, 'Bearer x', 'cid-3');
 

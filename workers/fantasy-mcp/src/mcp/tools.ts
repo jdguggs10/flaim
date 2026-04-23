@@ -3,7 +3,13 @@ import { z } from 'zod';
 import type { ZodRawShapeCompat } from '@modelcontextprotocol/sdk/server/zod-compat.js';
 import type { Env, Platform, Sport, ToolParams } from '../types';
 import { routeToClient, type RouteResult } from '../router';
-import { withCorrelationId, withEvalHeaders, withInternalServiceToken } from '@flaim/worker-shared';
+import {
+  getDefaultSeasonYear,
+  getSeasonLabel,
+  withCorrelationId,
+  withEvalHeaders,
+  withInternalServiceToken,
+} from '@flaim/worker-shared';
 import { logEvalEvent } from '../logging';
 
 // =============================================================================
@@ -398,48 +404,6 @@ async function withToolLogging<T>(
 }
 
 // =============================================================================
-// HELPER: Get current season for a sport
-// =============================================================================
-
-function getCurrentSeason(sport: Sport): number {
-  const now = new Date();
-  const ny = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/New_York',
-    year: 'numeric',
-    month: '2-digit',
-  }).formatToParts(now);
-
-  const year = Number(ny.find((p) => p.type === 'year')?.value);
-  const month = Number(ny.find((p) => p.type === 'month')?.value);
-
-  // Rollover months — must match auth-worker's ROLLOVER_MONTHS.
-  // Returns canonical start year for the current season.
-  switch (sport) {
-    case 'baseball':
-      return month < 2 ? year - 1 : year;   // Feb 1
-    case 'football':
-      return month < 7 ? year - 1 : year;   // Jul 1
-    case 'basketball':
-      return month < 8 ? year - 1 : year;   // Aug 1
-    case 'hockey':
-      return month < 8 ? year - 1 : year;   // Aug 1
-    default:
-      return year;
-  }
-}
-
-/**
- * Get a human-readable season label from a canonical start year.
- * Cross-year sports (basketball, hockey) → "2024-25"; others → "2025".
- */
-function getSeasonLabel(canonicalYear: number, sport: string): string {
-  if (sport === 'basketball' || sport === 'hockey') {
-    return `${canonicalYear}-${String(canonicalYear + 1).slice(2)}`;
-  }
-  return String(canonicalYear);
-}
-
-// =============================================================================
 // UNIFIED TOOLS
 // =============================================================================
 
@@ -523,7 +487,7 @@ export function getUnifiedTools(): UnifiedTool[] {
             if (mostRecentYear >= thresholdYear) {
               // Determine current season for this league's sport
               const sport = (groupSeasons[0]?.sport || '').toLowerCase();
-              const currentYear = getCurrentSeason(sport as Sport);
+              const currentYear = getDefaultSeasonYear(sport as Sport);
               // Take only the current-season entry (or most recent if no exact match)
               const currentSeason = groupSeasons.find(s => s.seasonYear === currentYear);
               if (currentSeason) {
@@ -665,10 +629,10 @@ export function getUnifiedTools(): UnifiedTool[] {
             success: true,
             currentDate: new Date().toISOString(),
             currentSeasons: {
-              football: { year: getCurrentSeason('football'), label: getSeasonLabel(getCurrentSeason('football'), 'football') },
-              baseball: { year: getCurrentSeason('baseball'), label: getSeasonLabel(getCurrentSeason('baseball'), 'baseball') },
-              basketball: { year: getCurrentSeason('basketball'), label: getSeasonLabel(getCurrentSeason('basketball'), 'basketball') },
-              hockey: { year: getCurrentSeason('hockey'), label: getSeasonLabel(getCurrentSeason('hockey'), 'hockey') },
+              football: { year: getDefaultSeasonYear('football'), label: getSeasonLabel(getDefaultSeasonYear('football'), 'football') },
+              baseball: { year: getDefaultSeasonYear('baseball'), label: getSeasonLabel(getDefaultSeasonYear('baseball'), 'baseball') },
+              basketball: { year: getDefaultSeasonYear('basketball'), label: getSeasonLabel(getDefaultSeasonYear('basketball'), 'basketball') },
+              hockey: { year: getDefaultSeasonYear('hockey'), label: getSeasonLabel(getDefaultSeasonYear('hockey'), 'hockey') },
             },
             timezone: 'America/New_York',
             totalLeaguesFound: leagues.length,
@@ -681,7 +645,7 @@ export function getUnifiedTools(): UnifiedTool[] {
                   leagueId: defaultLeague.leagueId,
                   teamId: defaultLeague.teamId,
                   seasonYear: defaultLeague.seasonYear,
-                  season: getSeasonLabel(defaultLeague.seasonYear || getCurrentSeason(defaultLeague.sport as Sport), defaultLeague.sport || ''),
+                  season: getSeasonLabel(defaultLeague.seasonYear || getDefaultSeasonYear(defaultLeague.sport as Sport), defaultLeague.sport as Sport),
                   leagueName: defaultLeague.leagueName,
                   teamName: defaultLeague.teamName,
                 }
@@ -695,7 +659,7 @@ export function getUnifiedTools(): UnifiedTool[] {
                   leagueName: league.leagueName,
                   sport: league.sport,
                   seasonYear: league.seasonYear,
-                  season: getSeasonLabel(league.seasonYear || getCurrentSeason(sport as Sport), sport),
+                  season: getSeasonLabel(league.seasonYear || getDefaultSeasonYear(sport as Sport), sport as Sport),
                   teamId: league.teamId,
                   teamName: league.teamName,
                 },
@@ -790,7 +754,7 @@ export function getUnifiedTools(): UnifiedTool[] {
             } else {
               // Active league - include everything except the current season
               const sport = (groupSeasons[0]?.sport || '').toLowerCase();
-              const currentYear = getCurrentSeason(sport as Sport);
+              const currentYear = getDefaultSeasonYear(sport as Sport);
               const ancientSeasons = groupSeasons.filter(s => s.seasonYear !== currentYear);
               if (ancientSeasons.length > 0) {
                 oldSeasons[key] = ancientSeasons;

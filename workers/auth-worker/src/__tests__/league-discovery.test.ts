@@ -220,4 +220,59 @@ describe('discoverAndSaveLeagues', () => {
       })
     );
   });
+
+  it('converts canonical historical basketball seasons back to ESPN-native years for ESPN calls', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({
+        preferences: [
+          {
+            id: 'pref-1',
+            type: { code: 'fantasy' },
+            metaData: {
+              entry: {
+                entryId: 8,
+                gameId: 3,
+                seasonId: 2026,
+                entryMetadata: { teamName: 'Buckets' },
+                groups: [{ groupId: 54321, groupName: 'Dynasty Hoops' }],
+              },
+            },
+          },
+        ],
+      }),
+    } as Response);
+
+    mockGetLeagueInfo
+      .mockResolvedValueOnce({
+        status: { previousSeasons: [2024] },
+      } as any)
+      .mockResolvedValueOnce({ leagueName: 'Dynasty Hoops 2024-25' } as any);
+
+    mockGetLeagueTeams.mockResolvedValueOnce([
+      { teamId: '8', teamName: 'Buckets 2024-25' },
+    ]);
+
+    const storage = {
+      leagueExists: vi.fn()
+        .mockResolvedValueOnce(false)
+        .mockResolvedValueOnce(false),
+      addLeague: vi.fn().mockResolvedValue({ success: true }),
+      updateLeague: vi.fn().mockResolvedValue(true),
+    } as any;
+
+    await discoverAndSaveLeagues('user_123', '{swid}', 's2token', storage);
+
+    expect(mockGetLeagueTeams).toHaveBeenCalledWith('{swid}', 's2token', '54321', 2025, 'fba');
+    expect(mockGetLeagueInfo).toHaveBeenNthCalledWith(2, '{swid}', 's2token', '54321', 2025, 'fba');
+    expect(storage.addLeague).toHaveBeenCalledWith('user_123', expect.objectContaining({
+      leagueId: '54321',
+      sport: 'basketball',
+      seasonYear: 2024,
+      teamId: '8',
+      teamName: 'Buckets 2024-25',
+    }));
+  });
 });

@@ -1,5 +1,5 @@
 // workers/espn-client/src/sports/baseball/handlers.ts
-import type { Env, ToolParams, ExecuteResponse, EspnLeagueResponse, EspnPlayerPoolResponse } from '../../types';
+import type { Env, RoutedToolParams, ExecuteResponse, EspnLeagueResponse, EspnPlayerPoolResponse } from '../../types';
 import { getCredentials } from '../../shared/auth';
 import { espnFetch, handleEspnError, requireCredentials } from '../../shared/espn-api';
 import { fetchEspnTransactionsByWeeks, fetchEspnMTransactions2, mergeTradePlayerDetails, getEspnLeagueContext, fetchEspnPlayersByIds, enrichTransactions } from '../../shared/espn-transactions';
@@ -16,13 +16,13 @@ import {
   transformStats,
   POSITION_SLOTS,
 } from './mappings';
-import { getCurrentSeasonYear } from '../../shared/season';
+import { getCurrentSeasonYear, getSeasonContext, normalizeEspnLeagueStatus } from '../../shared/season';
 
 const GAME_ID = 'flb'; // ESPN's game ID for fantasy baseball
 
 type HandlerFn = (
   env: Env,
-  params: ToolParams,
+  params: RoutedToolParams,
   authHeader?: string,
   correlationId?: string
 ) => Promise<ExecuteResponse>;
@@ -39,7 +39,7 @@ export const baseballHandlers: Record<string, HandlerFn> = {
 
 async function handleSearchPlayers(
   env: Env,
-  params: ToolParams,
+  params: RoutedToolParams,
   authHeader?: string,
   correlationId?: string,
 ): Promise<ExecuteResponse> {
@@ -103,16 +103,17 @@ async function handleSearchPlayers(
  */
 async function handleGetLeagueInfo(
   env: Env,
-  params: ToolParams,
+  params: RoutedToolParams,
   authHeader?: string,
   correlationId?: string
 ): Promise<ExecuteResponse> {
-  const { league_id, season_year } = params;
+  const { league_id } = params;
+  const { canonicalYear, espnYear } = getSeasonContext(params);
 
   try {
     const credentials = await getCredentials(env, authHeader, correlationId);
 
-    const path = `/seasons/${season_year}/segments/0/leagues/${league_id}?view=mSettings&view=mTeam`;
+    const path = `/seasons/${espnYear}/segments/0/leagues/${league_id}?view=mSettings&view=mTeam`;
     const response = await espnFetch(path, GAME_ID, { credentials, timeout: 7000 });
 
     if (!response.ok) {
@@ -149,10 +150,10 @@ async function handleGetLeagueInfo(
         id: data.id,
         name: data.settings.name,
         size: data.settings.size,
-        status: data.status,
+        status: normalizeEspnLeagueStatus(data.status, 'baseball'),
         scoringPeriodId: data.scoringPeriodId,
         currentMatchupPeriod: data.currentMatchupPeriod,
-        seasonId: data.seasonId,
+        seasonId: canonicalYear,
         segmentId: data.segmentId,
         teams,
         scoringSettings: {
@@ -185,7 +186,7 @@ async function handleGetLeagueInfo(
  */
 async function handleGetStandings(
   env: Env,
-  params: ToolParams,
+  params: RoutedToolParams,
   authHeader?: string,
   correlationId?: string
 ): Promise<ExecuteResponse> {
@@ -307,7 +308,7 @@ async function handleGetStandings(
  */
 async function handleGetMatchups(
   env: Env,
-  params: ToolParams,
+  params: RoutedToolParams,
   authHeader?: string,
   correlationId?: string
 ): Promise<ExecuteResponse> {
@@ -386,7 +387,7 @@ async function handleGetMatchups(
  */
 async function handleGetRoster(
   env: Env,
-  params: ToolParams,
+  params: RoutedToolParams,
   authHeader?: string,
   correlationId?: string
 ): Promise<ExecuteResponse> {
@@ -479,7 +480,7 @@ async function handleGetRoster(
  */
 async function handleGetFreeAgents(
   env: Env,
-  params: ToolParams,
+  params: RoutedToolParams,
   authHeader?: string,
   correlationId?: string
 ): Promise<ExecuteResponse> {
@@ -567,7 +568,7 @@ async function handleGetFreeAgents(
 
 async function handleGetTransactions(
   env: Env,
-  params: ToolParams,
+  params: RoutedToolParams,
   authHeader?: string,
   correlationId?: string
 ): Promise<ExecuteResponse> {

@@ -1,5 +1,9 @@
 import type { AutoPullResponse, EspnLeagueInfo, SportName } from '@/lib/espn-types';
-import { getDefaultSeasonYear } from '@/lib/season-utils';
+import {
+  getDefaultSeasonYear,
+  toCanonicalYear,
+  toPlatformYear,
+} from '@/lib/season-utils';
 
 interface EspnCredentials {
   swid: string;
@@ -124,13 +128,6 @@ function normalizeSport(input?: string): SportName | null {
   return null;
 }
 
-function toEspnSeasonYear(canonicalYear: number, sport: string): number {
-  if (sport === 'basketball' || sport === 'hockey') {
-    return canonicalYear + 1;
-  }
-  return canonicalYear;
-}
-
 async function fetchEspnCredentials(
   authHeader: string,
   correlationId?: string
@@ -252,8 +249,8 @@ async function getBasicLeagueInfo(
   seasonYear?: number
 ): Promise<BasicLeagueInfoResponse> {
   try {
-    const requestedSeasonYear = seasonYear || getDefaultSeasonYear(sport);
-    const espnSeasonYear = toEspnSeasonYear(requestedSeasonYear, sport);
+    const requestedSeasonYear = seasonYear ?? getDefaultSeasonYear(sport);
+    const espnSeasonYear = toPlatformYear(requestedSeasonYear, sport, 'espn');
     const gameId = ESPN_GAME_IDS[sport];
     const apiPath = `/seasons/${espnSeasonYear}/segments/0/leagues/${leagueId}?view=mStandings&view=mTeam&view=mSettings`;
 
@@ -319,7 +316,9 @@ async function getBasicLeagueInfo(
     }
 
     const leagueName = data.settings?.name || `${sport.charAt(0).toUpperCase()}${sport.slice(1)} League ${leagueId}`;
-    const returnedSeasonYear = data.seasonId || requestedSeasonYear;
+    const returnedSeasonYear = data.seasonId
+      ? toCanonicalYear(data.seasonId, sport, 'espn')
+      : requestedSeasonYear;
 
     const teams = (data.teams || []).map((team) => ({
       teamId: team.id?.toString() || '',
@@ -411,18 +410,19 @@ export async function runEspnAutoPull(params: {
     };
   }
 
+  const currentSeasonYear = getDefaultSeasonYear(targetSport);
   const responseLeagueInfo: EspnLeagueInfo = {
     leagueId,
     leagueName: leagueInfo.leagueName || `${targetSport} League ${leagueId}`,
     sport: targetSport,
-    seasonYear: leagueInfo.seasonYear || seasonYear || new Date().getFullYear(),
+    seasonYear: leagueInfo.seasonYear ?? seasonYear ?? currentSeasonYear,
     gameId: ESPN_GAME_IDS[targetSport],
     standings: leagueInfo.standings || [],
     teams: leagueInfo.teams || [],
   };
 
   if (!responseLeagueInfo.teams.length) {
-    const suggestedYear = responseLeagueInfo.seasonYear === new Date().getFullYear()
+    const suggestedYear = responseLeagueInfo.seasonYear === currentSeasonYear
       ? responseLeagueInfo.seasonYear - 1
       : responseLeagueInfo.seasonYear;
     return {
@@ -481,7 +481,7 @@ export async function runEspnDiscoverSeasons(params: {
   const MIN_YEAR = 2000;
   const MAX_CONSECUTIVE_MISSES = 2;
   const PROBE_DELAY_MS = 200;
-  const currentYear = new Date().getFullYear();
+  const currentSeasonYear = getDefaultSeasonYear(targetSport);
   const discovered: DiscoveredSeason[] = [];
   let consecutiveMisses = 0;
   let skippedCount = 0;
@@ -489,7 +489,7 @@ export async function runEspnDiscoverSeasons(params: {
   let limitExceeded = false;
   let minYearReached = false;
 
-  for (let year = currentYear; year >= MIN_YEAR; year -= 1) {
+  for (let year = currentSeasonYear; year >= MIN_YEAR; year -= 1) {
     if (year === MIN_YEAR) {
       minYearReached = true;
     }
@@ -499,7 +499,7 @@ export async function runEspnDiscoverSeasons(params: {
       continue;
     }
 
-    const mustProbe = year >= currentYear - 1;
+    const mustProbe = year >= currentSeasonYear - 1;
     if (!mustProbe && consecutiveMisses >= MAX_CONSECUTIVE_MISSES) {
       break;
     }
@@ -656,7 +656,7 @@ export async function runEspnDiscoverSeasons(params: {
       success: true,
       leagueId,
       sport: targetSport,
-      startYear: currentYear,
+      startYear: currentSeasonYear,
       minYearReached,
       rateLimited,
       limitExceeded,

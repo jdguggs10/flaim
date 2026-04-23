@@ -2,7 +2,7 @@
 
 Internal ESPN API client used by the unified gateway (`fantasy-mcp`). Handles all ESPN Fantasy sports data fetching.
 
-> **Note**: Primarily called via service binding from `fantasy-mcp`. It also exposes onboarding endpoints used by the web app (manual ESPN setup).
+> **Note**: Primarily called via service binding from `fantasy-mcp`. It exposes only the internal `/execute` contract plus `/health`.
 
 ## Purpose
 
@@ -39,7 +39,7 @@ interface ExecuteRequest {
   params: {
     sport: 'football' | 'baseball' | 'basketball' | 'hockey';
     league_id: string;
-    season_year: number;
+    season_year: number;  // canonical start year (e.g., 2024 for the 2024-25 NBA season)
     team_id?: string;
     week?: number;
     position?: string;
@@ -50,6 +50,21 @@ interface ExecuteRequest {
 ```
 
 `/execute` reads end-user auth from the HTTP `Authorization` header and requires `X-Flaim-Internal-Token` for internal calls. Manual ESPN onboarding now runs in the web server layer, not through public ESPN worker routes.
+
+**Season year convention:** Callers always pass canonical start-year (e.g., 2024 for the 2024-25 NBA season). `/execute` preserves that external `params.season_year` value and adds explicit internal season context before dispatching to handlers. ESPN uses end-year for basketball and hockey (e.g., 2025 for 2024-25); football and baseball are unchanged.
+
+**Handler contract:** Routed handlers receive canonical request params plus explicit season context:
+
+```typescript
+interface RoutedToolParams extends ToolParams {
+  seasonContext: {
+    canonicalYear: number; // same value as params.season_year
+    espnYear: number;      // ESPN-native year for API calls
+  };
+}
+```
+
+Handlers should use `params.seasonContext.espnYear` for ESPN URLs, cache keys, and ESPN stat-season matches, while keeping `params.season_year` / `params.seasonContext.canonicalYear` for outward-facing logic and season-phase comparisons. For cross-calendar sports, outward `get_league_info` year fields such as `seasonId` and `status.previousSeasons` should stay canonical even though ESPN returns end-year values. Production callers should route through `/execute`; direct tests should add `seasonContext` explicitly with `withSeasonContext()`.
 
 ## Supported Tools
 

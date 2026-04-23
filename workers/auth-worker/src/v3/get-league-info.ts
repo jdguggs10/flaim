@@ -13,6 +13,7 @@ import {
   gameIdToSport,
   type EspnLeagueInfo
 } from '../espn-types';
+import { getDefaultSeasonYear, toCanonicalYear, toPlatformYear } from '../season-utils';
 
 interface EspnApiLeagueResponse {
   id: string;
@@ -45,7 +46,8 @@ export type { EspnLeagueInfo };
  * @param swid - ESPN SWID cookie value
  * @param s2 - ESPN espn_s2 cookie value
  * @param leagueId - ESPN league ID
- * @param season - Season year (defaults to current year)
+ * @param season - ESPN-native request year. When omitted, defaults from the
+ * sport's canonical current season and is translated to ESPN's native year.
  * @param gameId - ESPN game ID (ffl, flb, fba, fhl) - defaults to 'ffl' for backwards compatibility
  * @returns Promise with league information
  * @throws {EspnAuthenticationFailed} If authentication fails
@@ -56,7 +58,7 @@ export async function getLeagueInfo(
   swid: string,
   s2: string,
   leagueId: string,
-  season: number = new Date().getFullYear(),
+  season?: number,
   gameId: string = 'ffl'
 ): Promise<EspnLeagueInfo> {
   if (!swid || !s2) {
@@ -66,8 +68,12 @@ export async function getLeagueInfo(
     throw new Error('League ID is required');
   }
 
+  const requestedSport = gameIdToSport(gameId) || 'football';
+  const requestSeason =
+    season ?? toPlatformYear(getDefaultSeasonYear(requestedSport), requestedSport, 'espn');
+
   // First, try the simpler endpoint with just mSettings view
-  const url = `https://lm-api-reads.fantasy.espn.com/apis/v3/games/${gameId}/seasons/${season}/segments/0/leagues/${leagueId}?view=mSettings`;
+  const url = `https://lm-api-reads.fantasy.espn.com/apis/v3/games/${gameId}/seasons/${requestSeason}/segments/0/leagues/${leagueId}?view=mSettings`;
   
   try {
     const response = await fetch(url, {
@@ -92,7 +98,7 @@ export async function getLeagueInfo(
         throw new EspnAuthenticationFailed('ESPN authentication failed - invalid or expired cookies');
       }
       if (response.status === 404) {
-        throw new EspnLeagueNotFound(`League with ID ${leagueId} not found for season ${season}`);
+        throw new EspnLeagueNotFound(`League with ID ${leagueId} not found for season ${requestSeason}`);
       }
       const errorText = await response.text().catch(() => 'Failed to read error response');
       console.error('API error response:', errorText);
@@ -123,13 +129,17 @@ export async function getLeagueInfo(
     }
 
     // Map the API response to our EspnLeagueInfo interface
-    const sport = gameIdToSport(gameId) || gameIdToSport(data.gameId.toString()) || 'football';
+    const sport = requestedSport;
+    const canonicalSeasonYear = toCanonicalYear(data.seasonId, sport, 'espn');
+    const canonicalPreviousSeasons = (data.status?.previousSeasons || []).map((year) =>
+      toCanonicalYear(year, sport, 'espn')
+    );
     
     return {
       leagueId: data.id,
       leagueName: data.name,
       sport: sport as SportName,
-      seasonYear: data.seasonId,
+      seasonYear: canonicalSeasonYear,
       gameId: data.gameId.toString(),
       scoringPeriodId: data.scoringPeriodId,
       firstScoringPeriod: data.firstScoringPeriod || 1,
@@ -137,13 +147,13 @@ export async function getLeagueInfo(
       status: {
         currentMatchupPeriod: data.status?.currentMatchupPeriod || 1,
         isActive: data.status?.isActive || false,
-        previousSeasons: data.status?.previousSeasons || []
+        previousSeasons: canonicalPreviousSeasons
       },
       settings: {
         name: data.settings?.name || '',
         size: data.settings?.size || 0,
         status: data.status?.statusType?.type || 'UNKNOWN',
-        season: data.seasonId,
+        season: canonicalSeasonYear,
         currentMatchupPeriod: data.status?.currentMatchupPeriod || 1,
         gameId: data.gameId,
         gameName: data.gameName || 'Unknown',
@@ -169,7 +179,8 @@ export async function getLeagueInfo(
  * @param swid - ESPN SWID cookie value
  * @param s2 - ESPN espn_s2 cookie value
  * @param leagueId - ESPN league ID
- * @param season - Season year (defaults to current year)
+ * @param season - ESPN-native request year. When omitted, derives from the
+ * canonical current season for the sport.
  * @param gameId - ESPN game ID (ffl, flb, fba, fhl) - defaults to 'ffl'
  * @returns League info or null if an error occurs
  */
@@ -177,7 +188,7 @@ export async function getLeagueInfoSafe(
   swid: string,
   s2: string,
   leagueId: string,
-  season: number = new Date().getFullYear(),
+  season?: number,
   gameId: string = 'ffl'
 ): Promise<EspnLeagueInfo | null> {
   try {

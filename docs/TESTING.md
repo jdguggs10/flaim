@@ -5,19 +5,21 @@ Keep testing light and focused. Flaim is a solo hobby project; prioritize critic
 ## What We Test Today
 
 Automated tests currently focus on the Workers layer:
+- **web**: targeted server-side ESPN onboarding regression coverage
 - **auth-worker**: OAuth handler behavior, league discovery helpers, ESPN type utilities
 - **fantasy-mcp**: tool routing, schema constraints, and core tool contract behavior
 - **espn-client**: type utilities plus cross-sport handler behavior (transactions and search)
 - **yahoo-client**: response normalizers plus cross-sport handler behavior (transactions and search)
 - **sleeper-client**: sport handlers, KV player cache, free-agent computation, transactions enrichment, routing
 
-The **web app** and **extension** do not have automated tests right now. Manual testing is acceptable until usage grows.
+The **extension** does not have automated tests right now. Most web UI flows are still manually tested; only the ESPN onboarding server helpers have automated coverage so far.
 
 ## Run Tests
 
 Workers use Vitest.
 
 ```bash
+cd web && npm test
 cd workers/auth-worker && npm test
 cd workers/fantasy-mcp && npm test
 cd workers/espn-client && npm test

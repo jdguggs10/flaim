@@ -16,7 +16,7 @@ import {
 } from '../espn-types';
 import { getLeagueInfo } from './get-league-info';
 import { getLeagueTeams } from './get-league-teams';
-import { toCanonicalYear } from '../season-utils';
+import { toCanonicalYear, toPlatformYear } from '../season-utils';
 
 // =============================================================================
 // FAN API TYPES
@@ -372,24 +372,22 @@ async function discoverHistoricalSeasons(
     const previousSeasons = leagueInfo.status.previousSeasons;
     console.log(`Found ${previousSeasons.length} historical seasons for league ${league.leagueId}`);
 
-    for (const year of previousSeasons) {
+    for (const canonicalYear of previousSeasons) {
       try {
+        const espnYear = toPlatformYear(canonicalYear, sport, 'espn');
+
         // FIRST: Validate membership - only count if user was a member
-        const teams = await getLeagueTeams(swid, s2, league.leagueId, year, league.gameId);
+        const teams = await getLeagueTeams(swid, s2, league.leagueId, espnYear, league.gameId);
         const historicalTeam = teams.find(t => t.teamId === String(league.teamId));
 
         if (!historicalTeam) {
           // User wasn't in this season - don't count it at all
-          console.log(`Skipping season ${year} for league ${league.leagueId}: teamId ${league.teamId} not found`);
+          console.log(`Skipping season ${canonicalYear} for league ${league.leagueId}: teamId ${league.teamId} not found`);
           continue;
         }
 
         // User was a member - count it as found
         result.found++;
-
-        // Normalize ESPN-native year to canonical for DB operations.
-        // `year` stays ESPN-native for API calls above; only DB writes use canonical.
-        const canonicalYear = toCanonicalYear(year, sport, 'espn');
 
         // Check if already saved (DB stores canonical year)
         const exists = await storage.leagueExists(userId, sport, league.leagueId, canonicalYear);
@@ -403,8 +401,8 @@ async function discoverHistoricalSeasons(
           continue;
         }
 
-        // Get league info for historical season (for league name) — uses ESPN-native year
-        const historicalInfo = await getLeagueInfo(swid, s2, league.leagueId, year, league.gameId);
+        // Get league info for historical season (for league name) using ESPN-native year.
+        const historicalInfo = await getLeagueInfo(swid, s2, league.leagueId, espnYear, league.gameId);
 
         const addResult = await storage.addLeague(userId, {
           leagueId: league.leagueId,
@@ -418,12 +416,12 @@ async function discoverHistoricalSeasons(
         if (addResult.success) {
           result.added++;
         } else if (addResult.code !== 'DUPLICATE') {
-          console.error(`Failed to add historical season ${year} for league ${league.leagueId}:`, addResult.error);
+          console.error(`Failed to add historical season ${canonicalYear} for league ${league.leagueId}:`, addResult.error);
         }
 
       } catch (seasonError) {
         // Per-season error handling - continue with other seasons
-        console.error(`Error fetching season ${year} for league ${league.leagueId}:`, seasonError);
+        console.error(`Error fetching season ${canonicalYear} for league ${league.leagueId}:`, seasonError);
         continue;
       }
     }

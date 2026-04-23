@@ -17,3 +17,11 @@
  * extension-less form, so both consumers stay happy.
  */
 export { isValidRedirectUri } from './oauth-redirect';
+export {
+  getDefaultSeasonYear,
+  isCurrentSeason,
+  toCanonicalYear,
+  toPlatformYear,
+  getSeasonLabel,
+} from './season';
+export type { SeasonSport } from './season';
