@@ -578,6 +578,37 @@ describe('sleeper-connect-handlers', () => {
     ]);
   });
 
+  it('falls back to the raw leagueId when Sleeper returns a null league body for legacy rows', async () => {
+    mockStorage.getSleeperLeagues.mockResolvedValue([
+      {
+        id: 'row-null',
+        clerkUserId: 'user_1',
+        leagueId: 'null-2025',
+        sport: 'football',
+        seasonYear: 2025,
+        leagueName: 'Dynasty Squad',
+        rosterId: 7,
+        recurringLeagueId: undefined,
+        sleeperUserId: 'sleeper_123',
+      },
+    ]);
+
+    mockFetch.mockResolvedValue(jsonResponse(null, 200));
+
+    const response = await handleSleeperLeagues(env, 'user_1', corsHeaders);
+    const body = (await response.json()) as {
+      leagues: Array<{ leagueId: string; recurringLeagueId: string }>;
+    };
+
+    expect(response.status).toBe(200);
+    expect(body.leagues).toEqual([
+      expect.objectContaining({
+        leagueId: 'null-2025',
+        recurringLeagueId: 'null-2025',
+      }),
+    ]);
+  });
+
   it('falls back to the raw leagueId when recurring history contains a cycle for legacy rows', async () => {
     mockStorage.getSleeperLeagues.mockResolvedValue([
       {
