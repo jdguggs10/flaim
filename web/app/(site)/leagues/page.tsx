@@ -152,6 +152,21 @@ function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
+function getYahooConnectErrorMessage(error: string, description: string | null): string {
+  switch (error) {
+    case 'token_refresh_validation_failed':
+      return 'Yahoo connection did not complete because the refresh token could not be validated. Please connect Yahoo again.';
+    case 'token_refresh_validation_unavailable':
+      return 'Yahoo connection could not be validated because Yahoo was temporarily unavailable. Please try again in a few minutes.';
+    case 'token_exchange_failed':
+      return description || 'Yahoo connection failed while exchanging the authorization code. Please try again.';
+    case 'oauth_denied':
+      return 'Yahoo connection was canceled.';
+    default:
+      return description || 'Yahoo connection failed. Please try again.';
+  }
+}
+
 // Convert ESPN leagues to unified format (isDefault computed from preferences)
 function espnToUnified(leagues: League[], preferences: UserPreferencesState): UnifiedLeague[] {
   return leagues.map((l) => {
@@ -617,6 +632,13 @@ function LeaguesPageContent() {
       }
     };
     loadPreferences();
+
+    const yahooError = searchParams.get('error');
+    if (yahooError) {
+      setLeagueError(getYahooConnectErrorMessage(yahooError, searchParams.get('error_description')));
+      setIsYahooSetupOpen(true);
+      router.replace('/leagues', { scroll: false });
+    }
 
     const yahooParam = searchParams.get('yahoo');
     if (yahooParam === 'connected') {

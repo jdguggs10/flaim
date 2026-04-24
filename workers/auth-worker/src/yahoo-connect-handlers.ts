@@ -40,6 +40,7 @@ interface YahooTokenResponse {
   expires_in: number;
   token_type: string;
   xoauth_yahoo_guid?: string;
+  status?: number;
   error?: string;
   error_description?: string;
 }
@@ -103,6 +104,18 @@ function looksLikeNewerCredentials(
 }
 
 const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
+
+function isUsableTokenResponse(response: YahooTokenResponse): boolean {
+  return typeof response.access_token === 'string'
+    && response.access_token.length > 0
+    && typeof response.expires_in === 'number'
+    && Number.isFinite(response.expires_in)
+    && response.expires_in > 0;
+}
+
+function isTransientYahooTokenError(status?: number): boolean {
+  return status === 429 || (typeof status === 'number' && status >= 500);
+}
 
 // =============================================================================
 // TOKEN ACQUISITION
@@ -187,7 +200,12 @@ async function getValidYahooAccessToken(
     }
 
     const ownerId = crypto.randomUUID();
-    const won = await storage.acquireRefreshLease(userId, ownerId, LEASE_TTL_MS);
+    const won = await storage.acquireRefreshLease(
+      userId,
+      ownerId,
+      LEASE_TTL_MS,
+      credentials.refreshToken
+    );
 
     if (!won) {
       const latest = await storage.getYahooCredentials(userId);
@@ -220,8 +238,12 @@ async function getValidYahooAccessToken(
     let result: YahooTokenResponse;
     try {
       result = await refreshAccessToken(credentials.refreshToken, env, controller.signal);
-    } catch {
+    } catch (error) {
       clearTimeout(timer);
+      console.error(
+        `[yahoo-connect] Yahoo token refresh request failed for user ${maskUserId(userId)}:`,
+        error instanceof Error ? error.message : error
+      );
       try {
         await storage.releaseRefreshLease(userId, ownerId);
       } catch (releaseError) {
@@ -232,6 +254,11 @@ async function getValidYahooAccessToken(
     clearTimeout(timer);
 
     if (result.error) {
+      const statusSuffix = result.status ? ` (HTTP ${result.status})` : '';
+      console.error(
+        `[yahoo-connect] Yahoo token refresh failed for user ${maskUserId(userId)}: ${result.error}${statusSuffix}` +
+          (result.error_description ? ` - ${result.error_description}` : '')
+      );
       try {
         await storage.releaseRefreshLease(userId, ownerId);
       } catch (releaseError) {
@@ -246,6 +273,16 @@ async function getValidYahooAccessToken(
         error: 'refresh_failed',
         errorDescription: result.error_description || 'Failed to refresh access token',
       };
+    }
+
+    if (!isUsableTokenResponse(result)) {
+      console.error(`[yahoo-connect] Yahoo token refresh returned an invalid token response for user ${maskUserId(userId)}`);
+      try {
+        await storage.releaseRefreshLease(userId, ownerId);
+      } catch (releaseError) {
+        console.warn('[yahoo-connect] Failed to release Yahoo refresh lease after invalid Yahoo refresh response:', releaseError);
+      }
+      return { error: 'refresh_failed', errorDescription: 'Failed to refresh access token' };
     }
 
     const expiresAt = new Date(Date.now() + result.expires_in * 1000);
@@ -425,16 +462,66 @@ export async function handleYahooCallback(
       return errorRedirect('token_exchange_failed', 'Yahoo did not provide a refresh token');
     }
 
-    // Calculate token expiration
-    const expiresAt = new Date(Date.now() + tokenResponse.expires_in * 1000);
+    // This intentional second Yahoo call proves the refresh path works now,
+    // so reconnect cannot look successful and then fail after access-token expiry.
+    const validationController = new AbortController();
+    const validationTimer = setTimeout(() => validationController.abort(), REFRESH_TIMEOUT_MS);
+    let validatedTokenResponse: YahooTokenResponse;
+    try {
+      validatedTokenResponse = await refreshAccessToken(
+        tokenResponse.refresh_token,
+        env,
+        validationController.signal
+      );
+    } catch (error) {
+      clearTimeout(validationTimer);
+      console.error(
+        '[yahoo-connect] Refresh token validation failed after Yahoo callback:',
+        error instanceof Error ? error.message : error
+      );
+      return errorRedirect(
+        'token_refresh_validation_unavailable',
+        'Yahoo refresh token validation is temporarily unavailable. Please try again.'
+      );
+    }
+    clearTimeout(validationTimer);
+
+    if (validatedTokenResponse.error) {
+      const statusSuffix = validatedTokenResponse.status ? ` (HTTP ${validatedTokenResponse.status})` : '';
+      const isTransient = isTransientYahooTokenError(validatedTokenResponse.status);
+      console.error(
+        `[yahoo-connect] Refresh token validation failed after Yahoo callback: ${validatedTokenResponse.error}${statusSuffix}` +
+          (validatedTokenResponse.error_description ? ` - ${validatedTokenResponse.error_description}` : '')
+      );
+      return errorRedirect(
+        isTransient ? 'token_refresh_validation_unavailable' : 'token_refresh_validation_failed',
+        isTransient
+          ? 'Yahoo refresh token validation is temporarily unavailable. Please try again.'
+          : 'Yahoo refresh token validation failed'
+      );
+    }
+
+    if (!isUsableTokenResponse(validatedTokenResponse)) {
+      console.error('[yahoo-connect] Refresh token validation returned an invalid token response after Yahoo callback');
+      return errorRedirect(
+        'token_refresh_validation_failed',
+        'Yahoo refresh token validation failed'
+      );
+    }
+
+    const refreshToken = validatedTokenResponse.refresh_token || tokenResponse.refresh_token;
+    const yahooGuid = validatedTokenResponse.xoauth_yahoo_guid || tokenResponse.xoauth_yahoo_guid;
+
+    // Calculate token expiration from the validated refresh response.
+    const expiresAt = new Date(Date.now() + validatedTokenResponse.expires_in * 1000);
 
     // Save credentials
     await storage.saveYahooCredentials({
       clerkUserId,
-      accessToken: tokenResponse.access_token,
-      refreshToken: tokenResponse.refresh_token,
+      accessToken: validatedTokenResponse.access_token,
+      refreshToken,
       expiresAt,
-      yahooGuid: tokenResponse.xoauth_yahoo_guid,
+      yahooGuid,
     });
 
     console.log(`[yahoo-connect] Successfully connected user ${maskUserId(clerkUserId)} to Yahoo`);
@@ -647,6 +734,7 @@ async function exchangeCodeForTokens(
       token_type: 'bearer',
       error: data.error || 'token_error',
       error_description: data.error_description || 'Failed to exchange code for tokens',
+      status: response.status,
     };
   }
 
@@ -671,6 +759,7 @@ async function refreshAccessToken(
     },
     body: new URLSearchParams({
       grant_type: 'refresh_token',
+      redirect_uri: getCallbackUrl(env),
       refresh_token: refreshToken,
     }).toString(),
     signal,
@@ -685,6 +774,7 @@ async function refreshAccessToken(
       token_type: 'bearer',
       error: data.error || 'refresh_error',
       error_description: data.error_description || 'Failed to refresh access token',
+      status: response.status,
     };
   }
 
