@@ -596,9 +596,9 @@ function LeaguesPageContent() {
     let shouldCheckYahooStatus = true;
     try {
       const res = await fetch('/api/connect/yahoo/discover', { method: 'POST' });
-      // Auth-worker error bodies carry reconnect codes even when the response is not ok.
-      const data = parseYahooDiscoverErrorResponse(await res.json().catch(() => null));
       if (!res.ok) {
+        // Auth-worker error bodies carry reconnect codes even when the response is not ok.
+        const data = parseYahooDiscoverErrorResponse(await res.json().catch(() => null));
         if (
           res.status === 401 ||
           res.status === 403 ||
@@ -640,7 +640,7 @@ function LeaguesPageContent() {
     }
 
     const resetRefreshState = () => setIsRefreshingYahooAuth(false);
-    const resetTimer = window.setTimeout(resetRefreshState, 60_000);
+    const resetTimer = window.setTimeout(resetRefreshState, 15_000);
     const handlePageHide = () => {
       window.clearTimeout(resetTimer);
     };
