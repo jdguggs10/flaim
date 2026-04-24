@@ -279,6 +279,7 @@ function LeaguesPageContent() {
   const [isYahooDisconnecting, setIsYahooDisconnecting] = useState(false);
   const [yahooLeagues, setYahooLeagues] = useState<YahooLeague[]>([]);
   const [isDiscoveringYahoo, setIsDiscoveringYahoo] = useState(false);
+  const [isRefreshingYahooAuth, setIsRefreshingYahooAuth] = useState(false);
   const [sleeperLeagues, setSleeperLeagues] = useState<SleeperLeague[]>([]);
   const [deletingSleeperKey, setDeletingSleeperKey] = useState<string | null>(null);
   const [isSleeperSetupOpen, setIsSleeperSetupOpen] = useState(false);
@@ -571,18 +572,36 @@ function LeaguesPageContent() {
     }
   };
 
-  const discoverYahooLeagues = async () => {
+  const discoverYahooLeagues = async (): Promise<boolean> => {
     setIsDiscoveringYahoo(true);
+    setLeagueError(null);
     try {
       const res = await fetch('/api/connect/yahoo/discover', { method: 'POST' });
-      if (res.ok) {
-        await loadYahooLeagues();
+      const data = await res.json().catch(() => ({})) as {
+        error?: string;
+        error_description?: string;
+      };
+      if (!res.ok) {
+        throw new Error(data.error_description || data.error || 'Failed to refresh Yahoo leagues');
       }
+      await loadYahooLeagues();
+      return true;
     } catch (err) {
       console.error('Failed to discover Yahoo leagues:', err);
+      setIsYahooSetupOpen(true);
+      setLeagueError(err instanceof Error ? err.message : 'Failed to refresh Yahoo leagues');
+      return false;
     } finally {
+      await checkYahooStatus();
       setIsDiscoveringYahoo(false);
     }
+  };
+
+  const refreshYahooAuth = () => {
+    setLeagueError(null);
+    setLeagueNotice(null);
+    setIsRefreshingYahooAuth(true);
+    window.location.href = '/api/connect/yahoo/authorize';
   };
 
   const disconnectYahoo = async () => {
@@ -645,7 +664,7 @@ function LeaguesPageContent() {
       // Just came from OAuth — trust the param, skip status check
       setIsYahooConnected(true);
       setIsCheckingYahoo(false);
-      discoverYahooLeagues();
+      void discoverYahooLeagues();
       router.replace('/leagues', { scroll: false });
     } else {
       // Normal page load — check status from backend
@@ -1996,7 +2015,7 @@ function LeaguesPageContent() {
                 <div id="yahoo-setup-content" className="px-4 pb-4 space-y-3">
                   <p className="text-sm text-muted-foreground">
                     {isYahooConnected
-                      ? 'Use the Refresh Leagues button to trigger a fresh pull of your leagues, teams, and seasons from Yahoo.'
+                      ? 'Refresh signs in with Yahoo again, validates access, then pulls your latest leagues.'
                       : 'Connect your Yahoo account to add leagues.'}
                   </p>
                   {isCheckingYahoo ? (
@@ -2015,16 +2034,21 @@ function LeaguesPageContent() {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={discoverYahooLeagues}
-                          disabled={isDiscoveringYahoo}
+                          onClick={refreshYahooAuth}
+                          disabled={isDiscoveringYahoo || isRefreshingYahooAuth}
                         >
-                          {isDiscoveringYahoo ? (
+                          {isRefreshingYahooAuth ? (
                             <>
                               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                              Discovering...
+                              Opening Yahoo...
+                            </>
+                          ) : isDiscoveringYahoo ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Refreshing...
                             </>
                           ) : (
-                            'Refresh Leagues'
+                            'Refresh'
                           )}
                         </Button>
                         <Button
@@ -2050,9 +2074,17 @@ function LeaguesPageContent() {
                       <Button
                         variant="outline"
                         className="w-full"
-                        onClick={() => { window.location.href = '/api/connect/yahoo/authorize'; }}
+                        onClick={refreshYahooAuth}
+                        disabled={isRefreshingYahooAuth}
                       >
-                        Connect Yahoo
+                        {isRefreshingYahooAuth ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Opening Yahoo...
+                          </>
+                        ) : (
+                          'Connect Yahoo'
+                        )}
                       </Button>
                     </div>
                   )}
