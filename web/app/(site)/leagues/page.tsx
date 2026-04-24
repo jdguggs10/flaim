@@ -596,6 +596,7 @@ function LeaguesPageContent() {
     let shouldCheckYahooStatus = true;
     try {
       const res = await fetch('/api/connect/yahoo/discover', { method: 'POST' });
+      // Auth-worker error bodies carry reconnect codes even when the response is not ok.
       const data = parseYahooDiscoverErrorResponse(await res.json().catch(() => null));
       if (!res.ok) {
         if (
@@ -604,6 +605,7 @@ function LeaguesPageContent() {
           data.error === 'not_connected' ||
           data.error === 'refresh_failed'
         ) {
+          // The opened panel and notice are the reconnect prompt, so skip the error banner.
           setIsYahooSetupOpen(true);
           setLeagueNotice('Your Yahoo session has expired. Click Refresh to sign in again and pull your latest leagues.');
           shouldCheckYahooStatus = false;
@@ -638,7 +640,7 @@ function LeaguesPageContent() {
     }
 
     const resetRefreshState = () => setIsRefreshingYahooAuth(false);
-    const resetTimer = window.setTimeout(resetRefreshState, 10_000);
+    const resetTimer = window.setTimeout(resetRefreshState, 60_000);
     const handlePageHide = () => {
       window.clearTimeout(resetTimer);
     };
@@ -649,7 +651,7 @@ function LeaguesPageContent() {
     };
 
     window.addEventListener('pagehide', handlePageHide, { once: true });
-    window.addEventListener('pageshow', handlePageShow);
+    window.addEventListener('pageshow', handlePageShow, { once: true });
 
     return () => {
       window.clearTimeout(resetTimer);
