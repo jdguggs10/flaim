@@ -167,6 +167,23 @@ function getYahooConnectErrorMessage(error: string, description: string | null):
   }
 }
 
+interface YahooDiscoverErrorResponse {
+  error?: string;
+  error_description?: string;
+}
+
+function parseYahooDiscoverErrorResponse(data: unknown): YahooDiscoverErrorResponse {
+  if (!data || typeof data !== 'object') {
+    return {};
+  }
+
+  const record = data as Record<string, unknown>;
+  return {
+    error: typeof record.error === 'string' ? record.error : undefined,
+    error_description: typeof record.error_description === 'string' ? record.error_description : undefined,
+  };
+}
+
 // Convert ESPN leagues to unified format (isDefault computed from preferences)
 function espnToUnified(leagues: League[], preferences: UserPreferencesState): UnifiedLeague[] {
   return leagues.map((l) => {
@@ -577,10 +594,7 @@ function LeaguesPageContent() {
     setLeagueError(null);
     try {
       const res = await fetch('/api/connect/yahoo/discover', { method: 'POST' });
-      const data = await res.json().catch(() => ({})) as {
-        error?: string;
-        error_description?: string;
-      };
+      const data = parseYahooDiscoverErrorResponse(await res.json().catch(() => null));
       if (!res.ok) {
         if (
           res.status === 401 ||
@@ -598,10 +612,10 @@ function LeaguesPageContent() {
       console.error('Failed to discover Yahoo leagues:', err);
       setLeagueError(err instanceof Error ? err.message : 'Failed to refresh Yahoo leagues');
     } finally {
-      await checkYahooStatus().catch((err: unknown) => {
+      setIsDiscoveringYahoo(false);
+      void checkYahooStatus().catch((err: unknown) => {
         console.error('Failed to refresh Yahoo status:', err);
       });
-      setIsDiscoveringYahoo(false);
     }
   };
 
@@ -609,6 +623,14 @@ function LeaguesPageContent() {
     setLeagueError(null);
     setLeagueNotice(null);
     setIsRefreshingYahooAuth(true);
+    function handlePageHide() {
+      window.clearTimeout(resetTimer);
+    }
+    const resetTimer = window.setTimeout(() => {
+      window.removeEventListener('pagehide', handlePageHide);
+      setIsRefreshingYahooAuth(false);
+    }, 10_000);
+    window.addEventListener('pagehide', handlePageHide, { once: true });
     window.location.href = '/api/connect/yahoo/authorize';
   };
 
