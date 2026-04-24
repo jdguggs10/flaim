@@ -572,7 +572,7 @@ function LeaguesPageContent() {
     }
   };
 
-  const discoverYahooLeagues = async (): Promise<boolean> => {
+  const discoverYahooLeagues = async (): Promise<void> => {
     setIsDiscoveringYahoo(true);
     setLeagueError(null);
     try {
@@ -582,15 +582,20 @@ function LeaguesPageContent() {
         error_description?: string;
       };
       if (!res.ok) {
+        if (
+          res.status === 401 ||
+          res.status === 403 ||
+          data.error === 'not_connected' ||
+          data.error === 'refresh_failed'
+        ) {
+          setIsYahooSetupOpen(true);
+        }
         throw new Error(data.error_description || data.error || 'Failed to refresh Yahoo leagues');
       }
       await loadYahooLeagues();
-      return true;
     } catch (err) {
       console.error('Failed to discover Yahoo leagues:', err);
-      setIsYahooSetupOpen(true);
       setLeagueError(err instanceof Error ? err.message : 'Failed to refresh Yahoo leagues');
-      return false;
     } finally {
       await checkYahooStatus();
       setIsDiscoveringYahoo(false);
@@ -601,6 +606,7 @@ function LeaguesPageContent() {
     setLeagueError(null);
     setLeagueNotice(null);
     setIsRefreshingYahooAuth(true);
+    window.setTimeout(() => setIsRefreshingYahooAuth(false), 10_000);
     window.location.href = '/api/connect/yahoo/authorize';
   };
 
