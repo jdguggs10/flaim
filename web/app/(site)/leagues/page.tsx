@@ -592,6 +592,8 @@ function LeaguesPageContent() {
   const discoverYahooLeagues = async (): Promise<void> => {
     setIsDiscoveringYahoo(true);
     setLeagueError(null);
+    setLeagueNotice(null);
+    let shouldCheckYahooStatus = true;
     try {
       const res = await fetch('/api/connect/yahoo/discover', { method: 'POST' });
       const data = parseYahooDiscoverErrorResponse(await res.json().catch(() => null));
@@ -603,6 +605,8 @@ function LeaguesPageContent() {
           data.error === 'refresh_failed'
         ) {
           setIsYahooSetupOpen(true);
+          setLeagueNotice('Your Yahoo session has expired. Click Refresh to sign in again and pull your latest leagues.');
+          shouldCheckYahooStatus = false;
           return;
         }
         throw new Error(data.error_description || data.error || 'Failed to refresh Yahoo leagues');
@@ -613,9 +617,11 @@ function LeaguesPageContent() {
       setLeagueError(err instanceof Error ? err.message : 'Failed to refresh Yahoo leagues');
     } finally {
       setIsDiscoveringYahoo(false);
-      void checkYahooStatus().catch((err: unknown) => {
-        console.error('Failed to refresh Yahoo status:', err);
-      });
+      if (shouldCheckYahooStatus) {
+        void checkYahooStatus().catch((err: unknown) => {
+          console.error('Failed to refresh Yahoo status:', err);
+        });
+      }
     }
   };
 
@@ -623,16 +629,34 @@ function LeaguesPageContent() {
     setLeagueError(null);
     setLeagueNotice(null);
     setIsRefreshingYahooAuth(true);
-    function handlePageHide() {
-      window.clearTimeout(resetTimer);
-    }
-    const resetTimer = window.setTimeout(() => {
-      window.removeEventListener('pagehide', handlePageHide);
-      setIsRefreshingYahooAuth(false);
-    }, 10_000);
-    window.addEventListener('pagehide', handlePageHide, { once: true });
     window.location.href = '/api/connect/yahoo/authorize';
   };
+
+  useEffect(() => {
+    if (!isRefreshingYahooAuth) {
+      return;
+    }
+
+    const resetRefreshState = () => setIsRefreshingYahooAuth(false);
+    const resetTimer = window.setTimeout(resetRefreshState, 10_000);
+    const handlePageHide = () => {
+      window.clearTimeout(resetTimer);
+    };
+    const handlePageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) {
+        resetRefreshState();
+      }
+    };
+
+    window.addEventListener('pagehide', handlePageHide, { once: true });
+    window.addEventListener('pageshow', handlePageShow);
+
+    return () => {
+      window.clearTimeout(resetTimer);
+      window.removeEventListener('pagehide', handlePageHide);
+      window.removeEventListener('pageshow', handlePageShow);
+    };
+  }, [isRefreshingYahooAuth]);
 
   const disconnectYahoo = async () => {
     setIsYahooDisconnecting(true);
