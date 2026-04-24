@@ -5,6 +5,18 @@ export interface YahooCredentials {
   accessToken: string;
 }
 
+async function throwYahooAuthWorkerError(response: Response): Promise<never> {
+  const errorData = await response.json().catch(() => ({})) as {
+    error?: string;
+    error_description?: string;
+  };
+  const errorSummary = errorData.error || response.statusText;
+  const errorDetail = errorData.error_description
+    ? `${errorSummary}: ${errorData.error_description}`
+    : errorSummary;
+  throw new Error(`YAHOO_AUTH_ERROR: ${errorDetail}`);
+}
+
 export async function getYahooCredentials(
   env: Env,
   authHeader?: string,
@@ -32,8 +44,7 @@ export async function getYahooCredentials(
   }
 
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({})) as { error?: string };
-    throw new Error(`Auth-worker error: ${errorData.error || response.statusText}`);
+    await throwYahooAuthWorkerError(response);
   }
 
   // auth-worker returns snake_case, we normalize to camelCase
@@ -67,9 +78,12 @@ export async function resolveUserTeamKey(
     headers,
   });
 
+  if (response.status === 404) {
+    return null;
+  }
+
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({})) as { error?: string };
-    throw new Error(`Auth-worker error: ${errorData.error || response.statusText}`);
+    await throwYahooAuthWorkerError(response);
   }
 
   const data = (await response.json()) as { leagues?: YahooLeagueEntry[] };

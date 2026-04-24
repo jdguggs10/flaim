@@ -192,6 +192,9 @@ export class YahooStorage {
         expires_at: params.expiresAt.toISOString(),
         yahoo_guid: params.yahooGuid || null,
         updated_at: new Date().toISOString(),
+        // Reconnect replaces the token set, so any outstanding refresh winner is stale.
+        refresh_lease_owner: null,
+        refresh_lease_expires_at: null,
       },
       { onConflict: 'clerk_user_id' }
     );
@@ -290,23 +293,29 @@ export class YahooStorage {
    *
    * The update only succeeds if no other owner holds an unexpired lease
    * (refresh_lease_owner IS NULL OR refresh_lease_expires_at < now).
+   * The token row must still match the credentials the caller read before
+   * trying to refresh.
    * Returns true if this caller won the lease, false if another holder beat them.
    */
   async acquireRefreshLease(
     clerkUserId: string,
     ownerId: string,
-    ttlMs: number
+    ttlMs: number,
+    expectedRefreshToken: string
   ): Promise<boolean> {
     const expiresAt = new Date(Date.now() + ttlMs).toISOString();
     const now = new Date().toISOString();
-    const { data, error } = await this.supabase
+    const query = this.supabase
       .from('yahoo_credentials')
       .update({
         refresh_lease_owner: ownerId,
         refresh_lease_expires_at: expiresAt,
       })
       .eq('clerk_user_id', clerkUserId)
-      .or(`refresh_lease_owner.is.null,refresh_lease_expires_at.lt.${now},refresh_lease_expires_at.is.null`)
+      .eq('refresh_token', expectedRefreshToken);
+
+    const { data, error } = await query
+      .or(`refresh_lease_owner.is.null,refresh_lease_expires_at.lt."${now}",refresh_lease_expires_at.is.null`)
       .select('clerk_user_id');
 
     if (error) {
