@@ -199,7 +199,7 @@ function parseYahooDiscoverErrorResponse(data: unknown): YahooDiscoverErrorRespo
 }
 
 function formatLastUpdated(value: string): string {
-  return new Date(value).toLocaleDateString(undefined, {
+  return new Date(value).toLocaleString(undefined, {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
@@ -231,8 +231,14 @@ function ConnectionBadge({ isChecking, isConnected }: { isChecking: boolean; isC
   );
 }
 
-function shouldApplyState(shouldApply?: () => boolean): boolean {
+function canApplyState(shouldApply?: () => boolean): boolean {
   return shouldApply ? shouldApply() : true;
+}
+
+type ConnectionStatusResult = 'connected' | 'disconnected' | 'unknown';
+
+function isDefinitiveDisconnectedStatus(status: number, data: { error?: string }): boolean {
+  return status === 401 || status === 403 || data.error === 'not_connected';
 }
 
 // Convert ESPN leagues to unified format (isDefault computed from preferences)
@@ -366,7 +372,10 @@ function LeaguesPageContent() {
   const [accountScopedUserId, setAccountScopedUserId] = useState<string | null>(null);
   const [settingSportDefault, setSettingSportDefault] = useState<string | null>(null);
   const currentUserIdRef = useRef<string | null>(null);
-  currentUserIdRef.current = isSignedIn ? userId ?? null : null;
+
+  useEffect(() => {
+    currentUserIdRef.current = isSignedIn ? userId ?? null : null;
+  }, [isSignedIn, userId]);
 
   const isAccountStateCurrent = Boolean(isSignedIn && userId && accountScopedUserId === userId);
   const displayLeagues = isAccountStateCurrent ? leagues : EMPTY_ESPN_LEAGUES;
@@ -406,6 +415,7 @@ function LeaguesPageContent() {
 
   const createAccountGuard = useCallback(() => {
     const operationUserId = currentUserIdRef.current;
+    // Event-driven refresh/disconnect flows create their own guard; effect-driven loaders receive one from their effect cleanup.
     return () => Boolean(operationUserId && currentUserIdRef.current === operationUserId);
   }, []);
 
@@ -567,32 +577,31 @@ function LeaguesPageContent() {
     }
   }, [credsSuccess, espnCredsDialogOpen]);
 
-  // Load leagues on mount
-  const loadLeagues = async (options?: { showSpinner?: boolean; shouldApply?: () => boolean }) => {
+  const loadLeagues = useCallback(async (options?: { showSpinner?: boolean; shouldApply?: () => boolean }) => {
     const showSpinner = options?.showSpinner ?? true;
     const shouldApply = options?.shouldApply;
-    if (showSpinner && shouldApplyState(shouldApply)) setIsLoadingLeagues(true);
+    if (showSpinner && canApplyState(shouldApply)) setIsLoadingLeagues(true);
 
     try {
       const leaguesRes = await fetch('/api/espn/leagues');
       if (leaguesRes.ok) {
         const data = await leaguesRes.json() as { leagues?: League[] };
-        if (!shouldApplyState(shouldApply)) return;
+        if (!canApplyState(shouldApply)) return;
         setLeagues(data.leagues || []);
       }
     } catch (err) {
       console.error('Failed to load leagues:', err);
     } finally {
-      if (showSpinner && shouldApplyState(shouldApply)) setIsLoadingLeagues(false);
+      if (showSpinner && canApplyState(shouldApply)) setIsLoadingLeagues(false);
     }
-  };
+  }, []);
 
-  const checkYahooStatus = async (shouldApply?: () => boolean): Promise<boolean> => {
+  const checkYahooStatus = useCallback(async (shouldApply?: () => boolean): Promise<ConnectionStatusResult> => {
     try {
       const res = await fetch('/api/connect/yahoo/status');
+      const data = await res.json().catch(() => ({})) as { connected?: boolean; lastUpdated?: string; error?: string };
       if (res.ok) {
-        const data = await res.json() as { connected?: boolean; lastUpdated?: string };
-        if (!shouldApplyState(shouldApply)) return false;
+        if (!canApplyState(shouldApply)) return 'unknown';
         const connected = data.connected ?? false;
         setIsYahooConnected(connected);
         setYahooLastUpdated(connected ? data.lastUpdated || null : null);
@@ -600,34 +609,36 @@ function LeaguesPageContent() {
           setYahooLeagues([]);
           setIsLoadingYahooLeagues(false);
         }
-        return connected;
-      } else {
-        if (shouldApplyState(shouldApply)) {
+        return connected ? 'connected' : 'disconnected';
+      }
+
+      if (isDefinitiveDisconnectedStatus(res.status, data)) {
+        if (canApplyState(shouldApply)) {
           clearYahooConnectionState();
           setYahooLeagues([]);
           setIsLoadingYahooLeagues(false);
         }
-        return false;
+        return 'disconnected';
       }
+
+      console.error('Failed to check Yahoo status:', data.error || `HTTP ${res.status}`);
+      if (canApplyState(shouldApply)) setIsLoadingYahooLeagues(false);
+      return 'unknown';
     } catch (err) {
       console.error('Failed to check Yahoo status:', err);
-      if (shouldApplyState(shouldApply)) {
-        clearYahooConnectionState();
-        setYahooLeagues([]);
-        setIsLoadingYahooLeagues(false);
-      }
-      return false;
+      if (canApplyState(shouldApply)) setIsLoadingYahooLeagues(false);
+      return 'unknown';
     } finally {
-      if (shouldApplyState(shouldApply)) setIsCheckingYahoo(false);
+      if (canApplyState(shouldApply)) setIsCheckingYahoo(false);
     }
-  };
+  }, [clearYahooConnectionState]);
 
-  const checkSleeperStatus = async (shouldApply?: () => boolean): Promise<boolean> => {
+  const checkSleeperStatus = useCallback(async (shouldApply?: () => boolean): Promise<ConnectionStatusResult> => {
     try {
       const res = await fetch('/api/connect/sleeper/status');
+      const data = await res.json().catch(() => ({})) as { connected?: boolean; sleeperUsername?: string; lastUpdated?: string; error?: string };
       if (res.ok) {
-        const data = await res.json() as { connected?: boolean; sleeperUsername?: string; lastUpdated?: string };
-        if (!shouldApplyState(shouldApply)) return false;
+        if (!canApplyState(shouldApply)) return 'unknown';
         const connected = data.connected ?? false;
         setIsSleeperConnected(connected);
         setSleeperUsername(data.sleeperUsername || null);
@@ -636,61 +647,63 @@ function LeaguesPageContent() {
           setSleeperLeagues([]);
           setIsLoadingSleeperLeagues(false);
         }
-        return connected;
-      } else {
-        if (shouldApplyState(shouldApply)) {
+        return connected ? 'connected' : 'disconnected';
+      }
+
+      if (isDefinitiveDisconnectedStatus(res.status, data)) {
+        if (canApplyState(shouldApply)) {
           clearSleeperConnectionState();
           setSleeperLeagues([]);
           setIsLoadingSleeperLeagues(false);
         }
-        return false;
+        return 'disconnected';
       }
+
+      console.error('Failed to check Sleeper status:', data.error || `HTTP ${res.status}`);
+      if (canApplyState(shouldApply)) setIsLoadingSleeperLeagues(false);
+      return 'unknown';
     } catch (err) {
       console.error('Failed to check Sleeper status:', err);
-      if (shouldApplyState(shouldApply)) {
-        clearSleeperConnectionState();
-        setSleeperLeagues([]);
-        setIsLoadingSleeperLeagues(false);
-      }
-      return false;
+      if (canApplyState(shouldApply)) setIsLoadingSleeperLeagues(false);
+      return 'unknown';
     } finally {
-      if (shouldApplyState(shouldApply)) setIsCheckingSleeper(false);
+      if (canApplyState(shouldApply)) setIsCheckingSleeper(false);
     }
-  };
+  }, [clearSleeperConnectionState]);
 
-  const loadYahooLeagues = async (shouldApply?: () => boolean) => {
-    if (shouldApplyState(shouldApply)) setIsLoadingYahooLeagues(true);
+  const loadYahooLeagues = useCallback(async (shouldApply?: () => boolean) => {
+    if (canApplyState(shouldApply)) setIsLoadingYahooLeagues(true);
     try {
       const res = await fetch('/api/connect/yahoo/leagues');
       if (res.ok) {
         const data = await res.json() as { leagues?: YahooLeague[] };
-        if (!shouldApplyState(shouldApply)) return;
+        if (!canApplyState(shouldApply)) return;
         setYahooLeagues(data.leagues || []);
       }
     } catch (err) {
       console.error('Failed to load Yahoo leagues:', err);
     } finally {
-      if (shouldApplyState(shouldApply)) setIsLoadingYahooLeagues(false);
+      if (canApplyState(shouldApply)) setIsLoadingYahooLeagues(false);
     }
-  };
+  }, []);
 
-  const loadSleeperLeagues = async (shouldApply?: () => boolean) => {
-    if (shouldApplyState(shouldApply)) setIsLoadingSleeperLeagues(true);
+  const loadSleeperLeagues = useCallback(async (shouldApply?: () => boolean) => {
+    if (canApplyState(shouldApply)) setIsLoadingSleeperLeagues(true);
     try {
       const res = await fetch('/api/connect/sleeper/leagues');
       if (res.ok) {
         const data = await res.json() as { leagues?: SleeperLeague[] };
-        if (!shouldApplyState(shouldApply)) return;
+        if (!canApplyState(shouldApply)) return;
         setSleeperLeagues(data.leagues || []);
       }
     } catch (err) {
       console.error('Failed to load Sleeper leagues:', err);
     } finally {
-      if (shouldApplyState(shouldApply)) setIsLoadingSleeperLeagues(false);
+      if (canApplyState(shouldApply)) setIsLoadingSleeperLeagues(false);
     }
-  };
+  }, []);
 
-  const discoverSleeperLeagues = async (username: string) => {
+  const discoverSleeperLeagues = useCallback(async (username: string) => {
     const shouldApply = createAccountGuard();
     if (!shouldApply()) return;
 
@@ -716,9 +729,9 @@ function LeaguesPageContent() {
       setIsSleeperConnected(true);
       setSleeperUsername(username);
       setSleeperConnectInput('');
-      const connected = await checkSleeperStatus(shouldApply);
+      const status = await checkSleeperStatus(shouldApply);
       if (!shouldApply()) return;
-      if (connected) {
+      if (status !== 'disconnected') {
         await loadSleeperLeagues(shouldApply);
       } else {
         setIsLoadingSleeperLeagues(false);
@@ -732,9 +745,9 @@ function LeaguesPageContent() {
         setIsDiscoveringSleeper(false);
       }
     }
-  };
+  }, [checkSleeperStatus, createAccountGuard, loadSleeperLeagues]);
 
-  const disconnectSleeper = async () => {
+  const disconnectSleeper = useCallback(async () => {
     const shouldApply = createAccountGuard();
     if (!shouldApply()) return;
 
@@ -757,15 +770,16 @@ function LeaguesPageContent() {
         setIsSleeperDisconnecting(false);
       }
     }
-  };
+  }, [createAccountGuard]);
 
-  const discoverYahooLeagues = async (): Promise<void> => {
+  const discoverYahooLeagues = useCallback(async (): Promise<void> => {
     const shouldApply = createAccountGuard();
     if (!shouldApply()) return;
 
     setIsDiscoveringYahoo(true);
     setLeagueError(null);
     setLeagueNotice(null);
+    let didLoadYahooLeagues = false;
     let shouldCheckYahooStatus = true;
     try {
       const res = await fetch('/api/connect/yahoo/discover', { method: 'POST' });
@@ -789,6 +803,7 @@ function LeaguesPageContent() {
         }
         throw new Error(data.error_description || data.error || 'Failed to refresh Yahoo leagues');
       }
+      didLoadYahooLeagues = true;
       await loadYahooLeagues(shouldApply);
     } catch (err) {
       if (shouldApply()) {
@@ -798,7 +813,9 @@ function LeaguesPageContent() {
     } finally {
       if (shouldApply()) {
         setIsDiscoveringYahoo(false);
-        setIsLoadingYahooLeagues(false);
+        if (!didLoadYahooLeagues) {
+          setIsLoadingYahooLeagues(false);
+        }
         if (shouldCheckYahooStatus) {
           void checkYahooStatus(shouldApply).catch((err: unknown) => {
             console.error('Failed to refresh Yahoo status:', err);
@@ -806,7 +823,7 @@ function LeaguesPageContent() {
         }
       }
     }
-  };
+  }, [checkYahooStatus, clearYahooConnectionState, createAccountGuard, loadYahooLeagues]);
 
   const refreshYahooAuth = () => {
     setLeagueError(null);
@@ -841,7 +858,7 @@ function LeaguesPageContent() {
     };
   }, [isRefreshingYahooAuth]);
 
-  const disconnectYahoo = async () => {
+  const disconnectYahoo = useCallback(async () => {
     const shouldApply = createAccountGuard();
     if (!shouldApply()) return;
 
@@ -863,7 +880,7 @@ function LeaguesPageContent() {
         setIsYahooDisconnecting(false);
       }
     }
-  };
+  }, [createAccountGuard]);
 
   useEffect(() => {
     if (!isLoaded) {
@@ -887,12 +904,13 @@ function LeaguesPageContent() {
     setIsLoadingSleeperLeagues(true);
     setIsCheckingYahoo(true);
     setIsCheckingSleeper(true);
+    // The display gate must move to the new user before any async loaders can resolve.
     setAccountScopedUserId(userId);
     void loadLeagues({ showSpinner: true, shouldApply: () => isActive });
     return () => {
       isActive = false;
     };
-  }, [clearAccountScopedState, isLoaded, isSignedIn, userId]);
+  }, [clearAccountScopedState, isLoaded, isSignedIn, loadLeagues, userId]);
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn || !userId) return;
@@ -943,9 +961,9 @@ function LeaguesPageContent() {
     } else {
       // Normal page load — check status from backend
       void (async () => {
-        const connected = await checkYahooStatus(shouldApply);
+        const status = await checkYahooStatus(shouldApply);
         if (!shouldApply()) return;
-        if (connected) {
+        if (status !== 'disconnected') {
           await loadYahooLeagues(shouldApply);
         } else {
           setIsLoadingYahooLeagues(false);
@@ -955,9 +973,9 @@ function LeaguesPageContent() {
 
     // Load Sleeper leagues and check connection
     void (async () => {
-      const connected = await checkSleeperStatus(shouldApply);
+      const status = await checkSleeperStatus(shouldApply);
       if (!shouldApply()) return;
-      if (connected) {
+      if (status !== 'disconnected') {
         await loadSleeperLeagues(shouldApply);
       } else {
         setIsLoadingSleeperLeagues(false);
@@ -966,8 +984,18 @@ function LeaguesPageContent() {
     return () => {
       isActive = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoaded, isSignedIn, userId]);
+  }, [
+    checkSleeperStatus,
+    checkYahooStatus,
+    discoverYahooLeagues,
+    isLoaded,
+    isSignedIn,
+    loadSleeperLeagues,
+    loadYahooLeagues,
+    router,
+    searchParams,
+    userId,
+  ]);
 
   // Verify league (call auto-pull to get league info)
   const handleVerifyLeague = async () => {

@@ -90,7 +90,10 @@ export function useEspnCredentials(): EspnCredentialsState {
   const editControllerRef = useRef<AbortController | null>(null);
   const saveControllerRef = useRef<AbortController | null>(null);
   const currentUserIdRef = useRef<string | null>(null);
-  currentUserIdRef.current = isSignedIn ? userId ?? null : null;
+
+  useEffect(() => {
+    currentUserIdRef.current = isSignedIn ? userId ?? null : null;
+  }, [isSignedIn, userId]);
 
   useEffect(() => {
     return () => {
