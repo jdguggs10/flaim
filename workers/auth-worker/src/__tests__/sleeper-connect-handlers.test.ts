@@ -3,6 +3,7 @@ import {
   handleSleeperDiscover,
   handleSleeperLeagueDelete,
   handleSleeperLeagues,
+  handleSleeperStatus,
   type SleeperConnectEnv,
 } from '../sleeper-connect-handlers';
 import { SleeperStorage } from '../sleeper-storage';
@@ -42,6 +43,7 @@ describe('sleeper-connect-handlers', () => {
     saveSleeperConnection: ReturnType<typeof vi.fn>;
     saveSleeperLeague: ReturnType<typeof vi.fn>;
     deleteSleeperLeague: ReturnType<typeof vi.fn>;
+    getSleeperConnection: ReturnType<typeof vi.fn>;
     getSleeperLeagues: ReturnType<typeof vi.fn>;
   };
 
@@ -53,6 +55,7 @@ describe('sleeper-connect-handlers', () => {
       saveSleeperConnection: vi.fn().mockResolvedValue(undefined),
       saveSleeperLeague: vi.fn().mockResolvedValue(undefined),
       deleteSleeperLeague: vi.fn().mockResolvedValue(undefined),
+      getSleeperConnection: vi.fn().mockResolvedValue(null),
       getSleeperLeagues: vi.fn().mockResolvedValue([]),
     };
 
@@ -693,5 +696,50 @@ describe('sleeper-connect-handlers', () => {
       }),
     ]);
     expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  describe('handleSleeperStatus', () => {
+    it('returns connected=true with league count and lastUpdated when a connection exists', async () => {
+      const updatedAt = '2026-01-25T12:00:00.000Z';
+      mockStorage.getSleeperConnection.mockResolvedValue({
+        sleeperUserId: 'sleeper_123',
+        sleeperUsername: 'demo_user',
+        updatedAt,
+      });
+      mockStorage.getSleeperLeagues.mockResolvedValue([
+        {
+          id: 'row-1',
+          clerkUserId: 'user_1',
+          leagueId: 'sleeper-2025',
+          sport: 'football',
+          seasonYear: 2025,
+          leagueName: 'Dynasty Squad',
+          rosterId: 7,
+          sleeperUserId: 'sleeper_123',
+        },
+      ]);
+
+      const response = await handleSleeperStatus(env, 'user_1', corsHeaders);
+      const body = (await response.json()) as Record<string, unknown>;
+
+      expect(response.status).toBe(200);
+      expect(body.connected).toBe(true);
+      expect(body.sleeperUserId).toBe('sleeper_123');
+      expect(body.sleeperUsername).toBe('demo_user');
+      expect(body.leagueCount).toBe(1);
+      expect(body.lastUpdated).toBe(updatedAt);
+    });
+
+    it('returns connected=false without lastUpdated when no connection exists', async () => {
+      mockStorage.getSleeperConnection.mockResolvedValue(null);
+
+      const response = await handleSleeperStatus(env, 'user_1', corsHeaders);
+      const body = (await response.json()) as Record<string, unknown>;
+
+      expect(response.status).toBe(200);
+      expect(body.connected).toBe(false);
+      expect(body.lastUpdated).toBeUndefined();
+      expect(mockStorage.getSleeperLeagues).not.toHaveBeenCalled();
+    });
   });
 });

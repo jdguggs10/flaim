@@ -68,10 +68,10 @@ export class SleeperStorage {
     return new SleeperStorage(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY);
   }
 
-  async getSleeperConnection(clerkUserId: string): Promise<{ sleeperUserId: string; sleeperUsername: string | null } | null> {
+  async getSleeperConnection(clerkUserId: string): Promise<{ sleeperUserId: string; sleeperUsername: string | null; updatedAt?: string } | null> {
     const { data, error } = await this.supabase
       .from('sleeper_connections')
-      .select('sleeper_user_id, sleeper_username')
+      .select('sleeper_user_id, sleeper_username, updated_at')
       .eq('clerk_user_id', clerkUserId)
       .single();
 
@@ -79,6 +79,7 @@ export class SleeperStorage {
     return {
       sleeperUserId: (data as SleeperConnectionRow).sleeper_user_id,
       sleeperUsername: (data as SleeperConnectionRow).sleeper_username,
+      updatedAt: (data as SleeperConnectionRow).updated_at,
     };
   }
 

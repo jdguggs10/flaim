@@ -69,11 +69,12 @@ function isAbortError(err: unknown): boolean {
 }
 
 export function useEspnCredentials(): EspnCredentialsState {
-  const { isLoaded, isSignedIn } = useAuth();
+  const { isLoaded, isSignedIn, userId } = useAuth();
   const { user } = useUser();
 
   const [hasCredentials, setHasCredentials] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
+  const [credentialsUserId, setCredentialsUserId] = useState<string | null>(null);
   const [isCheckingCreds, setIsCheckingCreds] = useState(true);
   const [isEditingCreds, setIsEditingCreds] = useState(false);
   const [isLoadingCreds, setIsLoadingCreds] = useState(false);
@@ -88,6 +89,8 @@ export function useEspnCredentials(): EspnCredentialsState {
   const successTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const editControllerRef = useRef<AbortController | null>(null);
   const saveControllerRef = useRef<AbortController | null>(null);
+  const currentUserIdRef = useRef<string | null>(null);
+  currentUserIdRef.current = isSignedIn ? userId ?? null : null;
 
   useEffect(() => {
     return () => {
@@ -101,13 +104,36 @@ export function useEspnCredentials(): EspnCredentialsState {
 
   useEffect(() => {
     if (!isLoaded) return;
-    if (!isSignedIn) {
+
+    editControllerRef.current?.abort();
+    editControllerRef.current = null;
+    saveControllerRef.current?.abort();
+    saveControllerRef.current = null;
+    if (successTimeoutRef.current) {
+      clearTimeout(successTimeoutRef.current);
+      successTimeoutRef.current = null;
+    }
+    setIsEditingCreds(false);
+    setIsLoadingCreds(false);
+    setCredsSaving(false);
+    setSwid('');
+    setEspnS2('');
+    setCredsError(null);
+    setCredsSuccess(false);
+
+    if (!isSignedIn || !userId) {
       setHasCredentials(false);
+      setLastUpdated(null);
+      setCredentialsUserId(null);
       setIsCheckingCreds(false);
       return;
     }
 
     const controller = new AbortController();
+    setHasCredentials(false);
+    setLastUpdated(null);
+    setCredentialsUserId(userId);
+    setIsCheckingCreds(true);
 
     const loadCredentials = async () => {
       try {
@@ -117,12 +143,18 @@ export function useEspnCredentials(): EspnCredentialsState {
         if (controller.signal.aborted) return;
         if (credsRes.ok) {
           const data = await credsRes.json() as { hasCredentials?: boolean; lastUpdated?: string };
-          setHasCredentials(!!data.hasCredentials);
-          setLastUpdated(data.lastUpdated || null);
+          const connected = !!data.hasCredentials;
+          setHasCredentials(connected);
+          setLastUpdated(connected ? data.lastUpdated || null : null);
+        } else {
+          setHasCredentials(false);
+          setLastUpdated(null);
         }
       } catch (err) {
         if (isAbortError(err)) return;
         console.error('Failed to check credentials:', err);
+        setHasCredentials(false);
+        setLastUpdated(null);
       } finally {
         if (!controller.signal.aborted) {
           setIsCheckingCreds(false);
@@ -135,9 +167,13 @@ export function useEspnCredentials(): EspnCredentialsState {
     return () => {
       controller.abort();
     };
-  }, [isLoaded, isSignedIn]);
+  }, [isLoaded, isSignedIn, userId]);
 
   const handleEditCredentials = async () => {
+    const operationUserId = currentUserIdRef.current;
+    const shouldApply = () => Boolean(operationUserId && currentUserIdRef.current === operationUserId);
+    if (!shouldApply()) return;
+
     editControllerRef.current?.abort();
     const controller = new AbortController();
     editControllerRef.current = controller;
@@ -150,19 +186,21 @@ export function useEspnCredentials(): EspnCredentialsState {
       const res = await fetchWithTimeout('/api/auth/espn/credentials?forEdit=true', {
         signal: controller.signal,
       });
-      if (controller.signal.aborted) return;
+      if (controller.signal.aborted || !shouldApply()) return;
       if (res.ok) {
         const data = await res.json() as { hasCredentials?: boolean; swid?: string; s2?: string };
+        if (!shouldApply()) return;
         if (data.swid) setSwid(data.swid);
         if (data.s2) setEspnS2(data.s2);
       }
     } catch (err) {
       if (isAbortError(err)) return;
+      if (!shouldApply()) return;
       errored = true;
       console.error('Failed to fetch credentials for editing:', err);
       setCredsError(err instanceof Error ? err.message : 'Failed to load credentials');
     } finally {
-      if (!controller.signal.aborted) {
+      if (!controller.signal.aborted && shouldApply()) {
         setIsLoadingCreds(false);
         if (!errored) {
           setIsEditingCreds(true);
@@ -175,6 +213,10 @@ export function useEspnCredentials(): EspnCredentialsState {
   };
 
   const handleSaveCredentials = async () => {
+    const operationUserId = currentUserIdRef.current;
+    const shouldApply = () => Boolean(operationUserId && currentUserIdRef.current === operationUserId);
+    if (!shouldApply()) return;
+
     if (!swid.trim() || !espnS2.trim()) {
       setCredsError('Both SWID and ESPN_S2 are required');
       return;
@@ -198,14 +240,16 @@ export function useEspnCredentials(): EspnCredentialsState {
         }),
         signal: controller.signal,
       });
-      if (controller.signal.aborted) return;
+      if (controller.signal.aborted || !shouldApply()) return;
 
       if (!res.ok) {
         const data = await res.json() as { error?: string };
+        if (!shouldApply()) return;
         throw new Error(data.error || 'Failed to save credentials');
       }
 
       setHasCredentials(true);
+      setCredentialsUserId(operationUserId);
       setIsEditingCreds(false);
       setSwid('');
       setEspnS2('');
@@ -217,9 +261,10 @@ export function useEspnCredentials(): EspnCredentialsState {
       successTimeoutRef.current = setTimeout(() => setCredsSuccess(false), 3000);
     } catch (err) {
       if (isAbortError(err)) return;
+      if (!shouldApply()) return;
       setCredsError(err instanceof Error ? err.message : 'Failed to save credentials');
     } finally {
-      if (!controller.signal.aborted) {
+      if (!controller.signal.aborted && shouldApply()) {
         setCredsSaving(false);
       }
       if (saveControllerRef.current === controller) {
@@ -237,10 +282,13 @@ export function useEspnCredentials(): EspnCredentialsState {
     setCredsError(null);
   };
 
+  const isCredentialStateCurrent = Boolean(isLoaded && isSignedIn && userId && credentialsUserId === userId);
+  const isCredentialStatusPending = Boolean(isLoaded && isSignedIn && userId && !isCredentialStateCurrent);
+
   return {
-    hasCredentials,
-    lastUpdated,
-    isCheckingCreds,
+    hasCredentials: isCredentialStateCurrent && hasCredentials,
+    lastUpdated: isCredentialStateCurrent ? lastUpdated : null,
+    isCheckingCreds: isCheckingCreds || isCredentialStatusPending,
     isEditingCreds,
     isLoadingCreds,
     swid,

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { Suspense, useEffect, useState, useMemo } from 'react';
+import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth, SignInButton, SignUpButton } from '@clerk/nextjs';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -147,9 +147,23 @@ const SPORT_OPTIONS: { value: Sport; label: string; emoji: string }[] = [
 
 // Generate season options (current season year down to 2000)
 const MIN_YEAR = 2000;
+const EMPTY_ESPN_LEAGUES: League[] = [];
+const EMPTY_YAHOO_LEAGUES: YahooLeague[] = [];
+const EMPTY_SLEEPER_LEAGUES: SleeperLeague[] = [];
+const EMPTY_USER_PREFERENCES: UserPreferencesState = {
+  defaultSport: null,
+  defaultFootball: null,
+  defaultBaseball: null,
+  defaultBasketball: null,
+  defaultHockey: null,
+};
 
 function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+function createEmptyPreferences(): UserPreferencesState {
+  return { ...EMPTY_USER_PREFERENCES };
 }
 
 function getYahooConnectErrorMessage(error: string, description: string | null): string {
@@ -182,6 +196,43 @@ function parseYahooDiscoverErrorResponse(data: unknown): YahooDiscoverErrorRespo
     error: typeof record.error === 'string' ? record.error : undefined,
     error_description: typeof record.error_description === 'string' ? record.error_description : undefined,
   };
+}
+
+function formatLastUpdated(value: string): string {
+  return new Date(value).toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+function ConnectionBadge({ isChecking, isConnected }: { isChecking: boolean; isConnected: boolean }) {
+  if (isChecking) {
+    return (
+      <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+        <Loader2 className="h-3 w-3 animate-spin" />
+        Checking...
+      </span>
+    );
+  }
+
+  return (
+    <span
+      className={`text-xs px-2 py-0.5 rounded-full ${
+        isConnected
+          ? 'bg-success/20 text-success'
+          : 'bg-muted text-muted-foreground'
+      }`}
+    >
+      {isConnected ? 'Connected' : 'Not connected'}
+    </span>
+  );
+}
+
+function shouldApplyState(shouldApply?: () => boolean): boolean {
+  return shouldApply ? shouldApply() : true;
 }
 
 // Convert ESPN leagues to unified format (isDefault computed from preferences)
@@ -255,7 +306,7 @@ function sleeperToUnified(
 }
 
 function LeaguesPageContent() {
-  const { isLoaded, isSignedIn } = useAuth();
+  const { isLoaded, isSignedIn, userId } = useAuth();
   const {
     hasCredentials,
     lastUpdated: espnLastUpdated,
@@ -295,6 +346,7 @@ function LeaguesPageContent() {
   const [isCheckingYahoo, setIsCheckingYahoo] = useState(true);
   const [isYahooDisconnecting, setIsYahooDisconnecting] = useState(false);
   const [yahooLeagues, setYahooLeagues] = useState<YahooLeague[]>([]);
+  const [isLoadingYahooLeagues, setIsLoadingYahooLeagues] = useState(true);
   const [isDiscoveringYahoo, setIsDiscoveringYahoo] = useState(false);
   const [isRefreshingYahooAuth, setIsRefreshingYahooAuth] = useState(false);
   const [sleeperLeagues, setSleeperLeagues] = useState<SleeperLeague[]>([]);
@@ -302,23 +354,26 @@ function LeaguesPageContent() {
   const [isSleeperSetupOpen, setIsSleeperSetupOpen] = useState(false);
   const [isSleeperConnected, setIsSleeperConnected] = useState(false);
   const [sleeperUsername, setSleeperUsername] = useState<string | null>(null);
+  const [sleeperLastUpdated, setSleeperLastUpdated] = useState<string | null>(null);
   const [isCheckingSleeper, setIsCheckingSleeper] = useState(true);
+  const [isLoadingSleeperLeagues, setIsLoadingSleeperLeagues] = useState(true);
   const [isSleeperDisconnecting, setIsSleeperDisconnecting] = useState(false);
   const [isDiscoveringSleeper, setIsDiscoveringSleeper] = useState(false);
   const [sleeperConnectInput, setSleeperConnectInput] = useState('');
   const [sleeperError, setSleeperError] = useState<string | null>(null);
   const [espnCredsDialogOpen, setEspnCredsDialogOpen] = useState(false);
-  const [preferences, setPreferences] = useState<UserPreferencesState>({
-    defaultSport: null,
-    defaultFootball: null,
-    defaultBaseball: null,
-    defaultBasketball: null,
-    defaultHockey: null,
-  });
+  const [preferences, setPreferences] = useState<UserPreferencesState>(() => createEmptyPreferences());
+  const [accountScopedUserId, setAccountScopedUserId] = useState<string | null>(null);
   const [settingSportDefault, setSettingSportDefault] = useState<string | null>(null);
+  const currentUserIdRef = useRef<string | null>(null);
+  currentUserIdRef.current = isSignedIn ? userId ?? null : null;
 
-  // Convenience accessor
-  const defaultSport = preferences.defaultSport;
+  const isAccountStateCurrent = Boolean(isSignedIn && userId && accountScopedUserId === userId);
+  const displayLeagues = isAccountStateCurrent ? leagues : EMPTY_ESPN_LEAGUES;
+  const displayYahooLeagues = isAccountStateCurrent ? yahooLeagues : EMPTY_YAHOO_LEAGUES;
+  const displaySleeperLeagues = isAccountStateCurrent ? sleeperLeagues : EMPTY_SLEEPER_LEAGUES;
+  const displayPreferences = isAccountStateCurrent ? preferences : EMPTY_USER_PREFERENCES;
+  const defaultSport = displayPreferences.defaultSport;
   const [showOldLeagues, setShowOldLeagues] = useState(false);
 
   // Add league flow state
@@ -338,6 +393,40 @@ function LeaguesPageContent() {
     [newLeagueSport]
   );
 
+  const clearYahooConnectionState = useCallback(() => {
+    setIsYahooConnected(false);
+    setYahooLastUpdated(null);
+  }, []);
+
+  const clearSleeperConnectionState = useCallback(() => {
+    setIsSleeperConnected(false);
+    setSleeperUsername(null);
+    setSleeperLastUpdated(null);
+  }, []);
+
+  const createAccountGuard = useCallback(() => {
+    const operationUserId = currentUserIdRef.current;
+    return () => Boolean(operationUserId && currentUserIdRef.current === operationUserId);
+  }, []);
+
+  const clearAccountScopedState = useCallback(() => {
+    setLeagues([]);
+    setYahooLeagues([]);
+    setSleeperLeagues([]);
+    clearYahooConnectionState();
+    clearSleeperConnectionState();
+    setPreferences(createEmptyPreferences());
+    setSleeperError(null);
+    setLeagueError(null);
+    setLeagueNotice(null);
+    setIsDiscoveringYahoo(false);
+    setIsRefreshingYahooAuth(false);
+    setIsYahooDisconnecting(false);
+    setIsDiscoveringSleeper(false);
+    setIsSleeperDisconnecting(false);
+    setDeletingSleeperKey(null);
+  }, [clearSleeperConnectionState, clearYahooConnectionState]);
+
   // Helper to determine if a league is "old" (no seasons in last 2 years)
   const isOldLeague = (sport: Sport, seasons: Array<{ seasonYear?: number }>): boolean => {
     const knownSeasonYears = seasons
@@ -356,9 +445,9 @@ function LeaguesPageContent() {
   const leaguesBySport = useMemo(() => {
     // Convert all platforms to unified format
     const allLeagues = [
-      ...espnToUnified(leagues, preferences),
-      ...yahooToUnified(yahooLeagues, preferences),
-      ...sleeperToUnified(sleeperLeagues, preferences),
+      ...espnToUnified(displayLeagues, displayPreferences),
+      ...yahooToUnified(displayYahooLeagues, displayPreferences),
+      ...sleeperToUnified(displaySleeperLeagues, displayPreferences),
     ];
 
     // Group by stable recurring identity where available.
@@ -432,7 +521,7 @@ function LeaguesPageContent() {
     });
 
     return { active: sortedActive, old: oldLeagueGroups };
-  }, [leagues, yahooLeagues, sleeperLeagues, preferences]);
+  }, [displayLeagues, displayYahooLeagues, displaySleeperLeagues, displayPreferences]);
 
   const discoverableEspnLeagues = useMemo(() => {
     const groups: Array<{
@@ -479,76 +568,132 @@ function LeaguesPageContent() {
   }, [credsSuccess, espnCredsDialogOpen]);
 
   // Load leagues on mount
-  const loadLeagues = async (options?: { showSpinner?: boolean }) => {
+  const loadLeagues = async (options?: { showSpinner?: boolean; shouldApply?: () => boolean }) => {
     const showSpinner = options?.showSpinner ?? true;
-    if (showSpinner) setIsLoadingLeagues(true);
+    const shouldApply = options?.shouldApply;
+    if (showSpinner && shouldApplyState(shouldApply)) setIsLoadingLeagues(true);
 
     try {
       const leaguesRes = await fetch('/api/espn/leagues');
       if (leaguesRes.ok) {
         const data = await leaguesRes.json() as { leagues?: League[] };
+        if (!shouldApplyState(shouldApply)) return;
         setLeagues(data.leagues || []);
       }
     } catch (err) {
       console.error('Failed to load leagues:', err);
     } finally {
-      if (showSpinner) setIsLoadingLeagues(false);
+      if (showSpinner && shouldApplyState(shouldApply)) setIsLoadingLeagues(false);
     }
   };
 
-  const checkYahooStatus = async () => {
+  const checkYahooStatus = async (shouldApply?: () => boolean): Promise<boolean> => {
     try {
       const res = await fetch('/api/connect/yahoo/status');
       if (res.ok) {
         const data = await res.json() as { connected?: boolean; lastUpdated?: string };
-        setIsYahooConnected(data.connected ?? false);
-        setYahooLastUpdated(data.lastUpdated || null);
+        if (!shouldApplyState(shouldApply)) return false;
+        const connected = data.connected ?? false;
+        setIsYahooConnected(connected);
+        setYahooLastUpdated(connected ? data.lastUpdated || null : null);
+        if (!connected) {
+          setYahooLeagues([]);
+          setIsLoadingYahooLeagues(false);
+        }
+        return connected;
+      } else {
+        if (shouldApplyState(shouldApply)) {
+          clearYahooConnectionState();
+          setYahooLeagues([]);
+          setIsLoadingYahooLeagues(false);
+        }
+        return false;
       }
     } catch (err) {
       console.error('Failed to check Yahoo status:', err);
+      if (shouldApplyState(shouldApply)) {
+        clearYahooConnectionState();
+        setYahooLeagues([]);
+        setIsLoadingYahooLeagues(false);
+      }
+      return false;
     } finally {
-      setIsCheckingYahoo(false);
+      if (shouldApplyState(shouldApply)) setIsCheckingYahoo(false);
     }
   };
 
-  const checkSleeperStatus = async () => {
+  const checkSleeperStatus = async (shouldApply?: () => boolean): Promise<boolean> => {
     try {
       const res = await fetch('/api/connect/sleeper/status');
       if (res.ok) {
-        const data = await res.json() as { connected?: boolean; sleeperUsername?: string };
-        setIsSleeperConnected(data.connected ?? false);
+        const data = await res.json() as { connected?: boolean; sleeperUsername?: string; lastUpdated?: string };
+        if (!shouldApplyState(shouldApply)) return false;
+        const connected = data.connected ?? false;
+        setIsSleeperConnected(connected);
         setSleeperUsername(data.sleeperUsername || null);
+        setSleeperLastUpdated(connected ? data.lastUpdated || null : null);
+        if (!connected) {
+          setSleeperLeagues([]);
+          setIsLoadingSleeperLeagues(false);
+        }
+        return connected;
+      } else {
+        if (shouldApplyState(shouldApply)) {
+          clearSleeperConnectionState();
+          setSleeperLeagues([]);
+          setIsLoadingSleeperLeagues(false);
+        }
+        return false;
       }
     } catch (err) {
       console.error('Failed to check Sleeper status:', err);
+      if (shouldApplyState(shouldApply)) {
+        clearSleeperConnectionState();
+        setSleeperLeagues([]);
+        setIsLoadingSleeperLeagues(false);
+      }
+      return false;
     } finally {
-      setIsCheckingSleeper(false);
+      if (shouldApplyState(shouldApply)) setIsCheckingSleeper(false);
     }
   };
 
-  const loadYahooLeagues = async () => {
+  const loadYahooLeagues = async (shouldApply?: () => boolean) => {
+    if (shouldApplyState(shouldApply)) setIsLoadingYahooLeagues(true);
     try {
       const res = await fetch('/api/connect/yahoo/leagues');
       if (res.ok) {
         const data = await res.json() as { leagues?: YahooLeague[] };
+        if (!shouldApplyState(shouldApply)) return;
         setYahooLeagues(data.leagues || []);
       }
     } catch (err) {
       console.error('Failed to load Yahoo leagues:', err);
+    } finally {
+      if (shouldApplyState(shouldApply)) setIsLoadingYahooLeagues(false);
     }
   };
 
-  const loadSleeperLeagues = async () => {
+  const loadSleeperLeagues = async (shouldApply?: () => boolean) => {
+    if (shouldApplyState(shouldApply)) setIsLoadingSleeperLeagues(true);
     try {
       const res = await fetch('/api/connect/sleeper/leagues');
       if (res.ok) {
         const data = await res.json() as { leagues?: SleeperLeague[] };
+        if (!shouldApplyState(shouldApply)) return;
         setSleeperLeagues(data.leagues || []);
       }
-    } catch {}
+    } catch (err) {
+      console.error('Failed to load Sleeper leagues:', err);
+    } finally {
+      if (shouldApplyState(shouldApply)) setIsLoadingSleeperLeagues(false);
+    }
   };
 
   const discoverSleeperLeagues = async (username: string) => {
+    const shouldApply = createAccountGuard();
+    if (!shouldApply()) return;
+
     setIsDiscoveringSleeper(true);
     setSleeperError(null);
     try {
@@ -557,48 +702,78 @@ function LeaguesPageContent() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username }),
       });
+      if (!shouldApply()) return;
       if (!res.ok) {
         const data = await res.json() as { error?: string };
+        if (!shouldApply()) return;
         throw new Error(data.error || 'Failed to discover Sleeper leagues');
+      }
+      const data = await res.json() as { success?: boolean; warning?: string };
+      if (!shouldApply()) return;
+      if (data.success === false) {
+        throw new Error(data.warning || 'Failed to refresh Sleeper leagues');
       }
       setIsSleeperConnected(true);
       setSleeperUsername(username);
       setSleeperConnectInput('');
-      await loadSleeperLeagues();
+      const connected = await checkSleeperStatus(shouldApply);
+      if (!shouldApply()) return;
+      if (connected) {
+        await loadSleeperLeagues(shouldApply);
+      } else {
+        setIsLoadingSleeperLeagues(false);
+      }
     } catch (err) {
-      setSleeperError(err instanceof Error ? err.message : 'Failed to connect Sleeper');
+      if (shouldApply()) {
+        setSleeperError(err instanceof Error ? err.message : 'Failed to connect Sleeper');
+      }
     } finally {
-      setIsDiscoveringSleeper(false);
+      if (shouldApply()) {
+        setIsDiscoveringSleeper(false);
+      }
     }
   };
 
   const disconnectSleeper = async () => {
+    const shouldApply = createAccountGuard();
+    if (!shouldApply()) return;
+
     setIsSleeperDisconnecting(true);
     try {
       const res = await fetch('/api/connect/sleeper/disconnect', { method: 'DELETE' });
-      if (res.ok) {
+      if (shouldApply() && res.ok) {
         setIsSleeperConnected(false);
         setSleeperUsername(null);
+        setSleeperLastUpdated(null);
         setSleeperLeagues([]);
       }
     } catch (err) {
-      console.error('Failed to disconnect Sleeper:', err);
-      setLeagueError('Failed to disconnect Sleeper. Please try again.');
+      if (shouldApply()) {
+        console.error('Failed to disconnect Sleeper:', err);
+        setLeagueError('Failed to disconnect Sleeper. Please try again.');
+      }
     } finally {
-      setIsSleeperDisconnecting(false);
+      if (shouldApply()) {
+        setIsSleeperDisconnecting(false);
+      }
     }
   };
 
   const discoverYahooLeagues = async (): Promise<void> => {
+    const shouldApply = createAccountGuard();
+    if (!shouldApply()) return;
+
     setIsDiscoveringYahoo(true);
     setLeagueError(null);
     setLeagueNotice(null);
     let shouldCheckYahooStatus = true;
     try {
       const res = await fetch('/api/connect/yahoo/discover', { method: 'POST' });
+      if (!shouldApply()) return;
       if (!res.ok) {
         // Auth-worker error bodies carry reconnect codes even when the response is not ok.
         const data = parseYahooDiscoverErrorResponse(await res.json().catch(() => null));
+        if (!shouldApply()) return;
         if (
           res.status === 401 ||
           res.status === 403 ||
@@ -607,22 +782,28 @@ function LeaguesPageContent() {
         ) {
           // The opened panel and notice are the reconnect prompt, so skip the error banner.
           setIsYahooSetupOpen(true);
+          clearYahooConnectionState();
           setLeagueNotice('Your Yahoo session has expired. Click Refresh to sign in again and pull your latest leagues.');
           shouldCheckYahooStatus = false;
           return;
         }
         throw new Error(data.error_description || data.error || 'Failed to refresh Yahoo leagues');
       }
-      await loadYahooLeagues();
+      await loadYahooLeagues(shouldApply);
     } catch (err) {
-      console.error('Failed to discover Yahoo leagues:', err);
-      setLeagueError(err instanceof Error ? err.message : 'Failed to refresh Yahoo leagues');
+      if (shouldApply()) {
+        console.error('Failed to discover Yahoo leagues:', err);
+        setLeagueError(err instanceof Error ? err.message : 'Failed to refresh Yahoo leagues');
+      }
     } finally {
-      setIsDiscoveringYahoo(false);
-      if (shouldCheckYahooStatus) {
-        void checkYahooStatus().catch((err: unknown) => {
-          console.error('Failed to refresh Yahoo status:', err);
-        });
+      if (shouldApply()) {
+        setIsDiscoveringYahoo(false);
+        setIsLoadingYahooLeagues(false);
+        if (shouldCheckYahooStatus) {
+          void checkYahooStatus(shouldApply).catch((err: unknown) => {
+            console.error('Failed to refresh Yahoo status:', err);
+          });
+        }
       }
     }
   };
@@ -661,32 +842,68 @@ function LeaguesPageContent() {
   }, [isRefreshingYahooAuth]);
 
   const disconnectYahoo = async () => {
+    const shouldApply = createAccountGuard();
+    if (!shouldApply()) return;
+
     setIsYahooDisconnecting(true);
     try {
       const res = await fetch('/api/connect/yahoo/disconnect', { method: 'DELETE' });
-      if (res.ok) {
+      if (shouldApply() && res.ok) {
         setIsYahooConnected(false);
+        setYahooLastUpdated(null);
         setYahooLeagues([]);
       }
     } catch (err) {
-      console.error('Failed to disconnect Yahoo:', err);
-      setLeagueError('Failed to disconnect Yahoo. Please try again.');
+      if (shouldApply()) {
+        console.error('Failed to disconnect Yahoo:', err);
+        setLeagueError('Failed to disconnect Yahoo. Please try again.');
+      }
     } finally {
-      setIsYahooDisconnecting(false);
+      if (shouldApply()) {
+        setIsYahooDisconnecting(false);
+      }
     }
   };
 
   useEffect(() => {
-    if (!isLoaded || !isSignedIn) {
-      setIsLoadingLeagues(false);
+    if (!isLoaded) {
       return;
     }
 
-    loadLeagues({ showSpinner: true });
-  }, [isLoaded, isSignedIn]);
+    if (!isSignedIn || !userId) {
+      clearAccountScopedState();
+      setAccountScopedUserId(null);
+      setIsLoadingLeagues(false);
+      setIsLoadingYahooLeagues(false);
+      setIsLoadingSleeperLeagues(false);
+      setIsCheckingYahoo(false);
+      setIsCheckingSleeper(false);
+      return;
+    }
+
+    let isActive = true;
+    clearAccountScopedState();
+    setIsLoadingYahooLeagues(true);
+    setIsLoadingSleeperLeagues(true);
+    setIsCheckingYahoo(true);
+    setIsCheckingSleeper(true);
+    setAccountScopedUserId(userId);
+    void loadLeagues({ showSpinner: true, shouldApply: () => isActive });
+    return () => {
+      isActive = false;
+    };
+  }, [clearAccountScopedState, isLoaded, isSignedIn, userId]);
 
   useEffect(() => {
-    if (!isSignedIn) return;
+    if (!isLoaded || !isSignedIn || !userId) return;
+
+    let isActive = true;
+    const shouldApply = () => isActive;
+
+    setIsCheckingYahoo(true);
+    setIsCheckingSleeper(true);
+    setIsLoadingYahooLeagues(true);
+    setIsLoadingSleeperLeagues(true);
 
     // Fetch user preferences
     const loadPreferences = async () => {
@@ -694,6 +911,7 @@ function LeaguesPageContent() {
         const res = await fetch('/api/user/preferences');
         if (res.ok) {
           const data = await res.json() as UserPreferencesState;
+          if (!shouldApply()) return;
           setPreferences({
             defaultSport: data.defaultSport || null,
             defaultFootball: data.defaultFootball || null,
@@ -724,13 +942,32 @@ function LeaguesPageContent() {
       router.replace('/leagues', { scroll: false });
     } else {
       // Normal page load — check status from backend
-      checkYahooStatus().then(() => loadYahooLeagues());
+      void (async () => {
+        const connected = await checkYahooStatus(shouldApply);
+        if (!shouldApply()) return;
+        if (connected) {
+          await loadYahooLeagues(shouldApply);
+        } else {
+          setIsLoadingYahooLeagues(false);
+        }
+      })();
     }
 
     // Load Sleeper leagues and check connection
-    checkSleeperStatus().then(() => loadSleeperLeagues());
+    void (async () => {
+      const connected = await checkSleeperStatus(shouldApply);
+      if (!shouldApply()) return;
+      if (connected) {
+        await loadSleeperLeagues(shouldApply);
+      } else {
+        setIsLoadingSleeperLeagues(false);
+      }
+    })();
+    return () => {
+      isActive = false;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isSignedIn]);
+  }, [isLoaded, isSignedIn, userId]);
 
   // Verify league (call auto-pull to get league info)
   const handleVerifyLeague = async () => {
@@ -1088,6 +1325,24 @@ function LeaguesPageContent() {
   const isDiscoveringSelected = selectedDiscoverLeague
     ? discoveringLeagueKey === selectedDiscoverLeague.key
     : false;
+  const hasAnyLeagueGroups = leaguesBySport.active.length > 0 || leaguesBySport.old.length > 0;
+  const displayLeagueError = isAccountStateCurrent ? leagueError : null;
+  const displayLeagueNotice = isAccountStateCurrent ? leagueNotice : null;
+  const displayYahooConnected = isAccountStateCurrent && isYahooConnected;
+  const displayYahooLastUpdated = isAccountStateCurrent ? yahooLastUpdated : null;
+  const isYahooStatusChecking = !isAccountStateCurrent || isCheckingYahoo;
+  const displaySleeperConnected = isAccountStateCurrent && isSleeperConnected;
+  const displaySleeperUsername = isAccountStateCurrent ? sleeperUsername : null;
+  const displaySleeperLastUpdated = isAccountStateCurrent ? sleeperLastUpdated : null;
+  const displaySleeperError = isAccountStateCurrent ? sleeperError : null;
+  const isSleeperStatusChecking = !isAccountStateCurrent || isCheckingSleeper;
+  const isLeagueStateLoading =
+    !isAccountStateCurrent ||
+    isLoadingLeagues ||
+    isLoadingYahooLeagues ||
+    isLoadingSleeperLeagues ||
+    isCheckingYahoo ||
+    isCheckingSleeper;
 
   // Loading state
   if (!isLoaded) {
@@ -1152,17 +1407,17 @@ function LeaguesPageContent() {
         </div>
 
         {/* Global alerts */}
-        {leagueError && (
+        {displayLeagueError && (
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
-            <AlertDescription>{leagueError}</AlertDescription>
+            <AlertDescription>{displayLeagueError}</AlertDescription>
           </Alert>
         )}
 
-        {leagueNotice && (
+        {displayLeagueNotice && (
           <Alert className="bg-info/10 border-info/30 text-info">
             <CheckCircle2 className="h-4 w-4" />
-            <AlertDescription>{leagueNotice}</AlertDescription>
+            <AlertDescription>{displayLeagueNotice}</AlertDescription>
           </Alert>
         )}
 
@@ -1274,12 +1529,12 @@ function LeaguesPageContent() {
           </CardHeader>
           {isLeaguesSectionOpen ? (
           <CardContent id="leagues-card-content" className="pt-0">
-            {isLoadingLeagues ? (
+            {isLeagueStateLoading && !hasAnyLeagueGroups ? (
               <div className="flex items-center justify-center gap-2 py-8 text-muted-foreground">
                 <Loader2 className="h-5 w-5 animate-spin" />
                 <span className="text-sm">Loading your leagues...</span>
               </div>
-            ) : leaguesBySport.active.length === 0 && leaguesBySport.old.length === 0 ? (
+            ) : !hasAnyLeagueGroups ? (
               <div className="text-center py-6 text-muted-foreground">
                 <p className="text-sm">No leagues added yet.</p>
               </div>
@@ -1595,16 +1850,7 @@ function LeaguesPageContent() {
               >
                 <div className="flex items-center gap-2">
                   <span className="text-lg">ESPN</span>
-                  {isCheckingCreds ? (
-                    <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                      Checking...
-                    </span>
-                  ) : hasCredentials ? (
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-success/20 text-success">
-                      Credentials Saved
-                    </span>
-                  ) : null}
+                  <ConnectionBadge isChecking={isCheckingCreds} isConnected={hasCredentials} />
                 </div>
                 <ChevronDown
                   className={`h-5 w-5 text-muted-foreground transition-transform ${
@@ -1619,7 +1865,7 @@ function LeaguesPageContent() {
                   </p>
                   {espnLastUpdated && (
                     <p className="text-xs text-muted-foreground">
-                      Last synced: {new Date(espnLastUpdated).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                      Last updated: {formatLastUpdated(espnLastUpdated)}
                     </p>
                   )}
                   {!verifiedLeague && (
@@ -2055,11 +2301,7 @@ function LeaguesPageContent() {
               >
                 <div className="flex items-center gap-2">
                   <span className="text-lg">Yahoo</span>
-                  {isYahooConnected && (
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-success/20 text-success">
-                      Auth Connected
-                    </span>
-                  )}
+                  <ConnectionBadge isChecking={isYahooStatusChecking} isConnected={displayYahooConnected} />
                 </div>
                 <ChevronDown
                   className={`h-5 w-5 text-muted-foreground transition-transform ${
@@ -2070,20 +2312,20 @@ function LeaguesPageContent() {
               {isYahooSetupOpen && (
                 <div id="yahoo-setup-content" className="px-4 pb-4 space-y-3">
                   <p className="text-sm text-muted-foreground">
-                    {isYahooConnected
+                    {displayYahooConnected
                       ? 'Refresh signs in with Yahoo again, validates access, then pulls your latest leagues.'
                       : 'Connect your Yahoo account to add leagues.'}
                   </p>
-                  {isCheckingYahoo ? (
+                  {isYahooStatusChecking ? (
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <Loader2 className="h-4 w-4 animate-spin" />
                       Checking Yahoo connection...
                     </div>
-                  ) : isYahooConnected ? (
+                  ) : displayYahooConnected ? (
                     <div className="space-y-3">
-                      {yahooLastUpdated && (
+                      {displayYahooLastUpdated && (
                         <p className="text-xs text-muted-foreground">
-                          Last synced: {new Date(yahooLastUpdated).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                          Last updated: {formatLastUpdated(displayYahooLastUpdated)}
                         </p>
                       )}
                       <div className="flex gap-2">
@@ -2158,11 +2400,7 @@ function LeaguesPageContent() {
               >
                 <div className="flex items-center gap-2">
                   <span className="text-lg">Sleeper</span>
-                  {isSleeperConnected && (
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-success/20 text-success">
-                      Username Stored
-                    </span>
-                  )}
+                  <ConnectionBadge isChecking={isSleeperStatusChecking} isConnected={displaySleeperConnected} />
                 </div>
                 <ChevronDown
                   className={`h-5 w-5 text-muted-foreground transition-transform ${
@@ -2172,36 +2410,41 @@ function LeaguesPageContent() {
               </button>
               {isSleeperSetupOpen && (
                 <div id="sleeper-setup-content" className="px-4 pb-4 space-y-3">
-                  {sleeperError && (
+                  {displaySleeperError && (
                     <Alert variant="destructive">
                       <AlertCircle className="h-4 w-4" />
-                      <AlertDescription>{sleeperError}</AlertDescription>
+                      <AlertDescription>{displaySleeperError}</AlertDescription>
                     </Alert>
                   )}
-                  {isCheckingSleeper ? (
+                  {isSleeperStatusChecking ? (
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <Loader2 className="h-4 w-4 animate-spin" />
                       Checking Sleeper connection...
                     </div>
-                  ) : isSleeperConnected ? (
+                  ) : displaySleeperConnected ? (
                     <div className="space-y-3">
                       <p className="text-sm text-muted-foreground">
-                        Connected as <strong>{sleeperUsername}</strong>. Refresh to pull latest leagues.
+                        Connected as <strong>{displaySleeperUsername}</strong>. Refresh to pull latest leagues.
                       </p>
+                      {displaySleeperLastUpdated && (
+                        <p className="text-xs text-muted-foreground">
+                          Last updated: {formatLastUpdated(displaySleeperLastUpdated)}
+                        </p>
+                      )}
                       <div className="flex gap-2">
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => sleeperUsername && discoverSleeperLeagues(sleeperUsername)}
-                          disabled={isDiscoveringSleeper || !sleeperUsername}
+                          onClick={() => displaySleeperUsername && discoverSleeperLeagues(displaySleeperUsername)}
+                          disabled={isDiscoveringSleeper || !displaySleeperUsername}
                         >
                           {isDiscoveringSleeper ? (
                             <>
                               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                              Discovering...
+                              Refreshing...
                             </>
                           ) : (
-                            'Refresh Leagues'
+                            'Refresh'
                           )}
                         </Button>
                         <Button

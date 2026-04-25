@@ -6,6 +6,7 @@ const mockFrom = vi.fn();
 const mockSelect = vi.fn();
 const mockDelete = vi.fn();
 const mockEq = vi.fn();
+const mockSingle = vi.fn();
 const mockMaybeSingle = vi.fn();
 const mockUpsert = vi.fn();
 
@@ -31,11 +32,14 @@ describe('SleeperStorage', () => {
     });
     mockSelect.mockReturnValue({
       eq: mockEq,
+      single: mockSingle,
       maybeSingle: mockMaybeSingle,
     });
+    mockSingle.mockResolvedValue({ data: null, error: null });
     mockMaybeSingle.mockResolvedValue({ data: null, error: null });
     mockEq.mockReturnValue({
       eq: mockEq,
+      single: mockSingle,
       maybeSingle: mockMaybeSingle,
       select: mockSelect,
       delete: mockDelete,
@@ -174,6 +178,30 @@ describe('SleeperStorage', () => {
       ).rejects.toThrow('Failed to save Sleeper league: permission denied while writing recurring_league_id');
 
       expect(mockUpsert).toHaveBeenCalledOnce();
+    });
+  });
+
+  describe('getSleeperConnection', () => {
+    it('returns Sleeper connection metadata including updatedAt', async () => {
+      mockSingle.mockResolvedValueOnce({
+        data: {
+          sleeper_user_id: 'sleeper_123',
+          sleeper_username: 'demo_user',
+          updated_at: '2026-01-25T12:00:00.000Z',
+        },
+        error: null,
+      });
+
+      const result = await storage.getSleeperConnection('user_123');
+
+      expect(mockFrom).toHaveBeenCalledWith('sleeper_connections');
+      expect(mockSelect).toHaveBeenCalledWith('sleeper_user_id, sleeper_username, updated_at');
+      expect(mockEq).toHaveBeenCalledWith('clerk_user_id', 'user_123');
+      expect(result).toEqual({
+        sleeperUserId: 'sleeper_123',
+        sleeperUsername: 'demo_user',
+        updatedAt: '2026-01-25T12:00:00.000Z',
+      });
     });
   });
 
