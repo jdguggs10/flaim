@@ -275,7 +275,7 @@ Opening a PR triggers a full preview stack: Vercel preview deploy + all 5 Cloudf
 | Supabase | Shared (same instance) | Shared (same instance) |
 | Worker URLs | Custom domains (`api.flaim.app/*`) | `.workers.dev` URLs |
 
-**Vercel env vars are scoped by environment.** `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, `AUTH_WORKER_URL`, `NEXT_PUBLIC_AUTH_WORKER_URL`, and `NEXT_PUBLIC_FANTASY_MCP_URL` each have separate Production and Preview values. Preview points to dev Clerk and preview worker URLs. Server-only web routes should use `AUTH_WORKER_URL`; browser-visible configuration uses the `NEXT_PUBLIC_*` names.
+**Vercel env vars are scoped by environment.** `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, `AUTH_WORKER_URL`, `NEXT_PUBLIC_AUTH_WORKER_URL`, and `NEXT_PUBLIC_FANTASY_MCP_URL` each have separate Production and Preview values. Preview points to dev Clerk and preview worker URLs. Server-only web routes should use `AUTH_WORKER_URL` with the direct `.workers.dev` worker URL; browser-visible configuration uses the `NEXT_PUBLIC_*` names and may point at the public custom gateway.
 
 **Auth-worker resolves frontend redirects dynamically in preview** — no static `FRONTEND_URL` needed. It reads the `Origin` header (OAuth consent) or stored `redirect_after` (Yahoo callback) and accepts any `flaim-*.vercel.app` origin.
 

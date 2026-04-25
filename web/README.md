@@ -82,7 +82,7 @@ NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_...
 CLERK_SECRET_KEY=sk_...
 
 # Worker URLs (unified gateway is primary)
-AUTH_WORKER_URL=https://api.flaim.app/auth
+AUTH_WORKER_URL=https://auth-worker.gerrygugger.workers.dev
 NEXT_PUBLIC_AUTH_WORKER_URL=https://api.flaim.app/auth
 NEXT_PUBLIC_FANTASY_MCP_URL=https://api.flaim.app/mcp
 # Shared internal token for server-to-worker helper calls
