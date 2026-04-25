@@ -7,14 +7,30 @@ interface SeasonCounts {
   alreadySaved: number;
 }
 
-function isSeasonCounts(value: unknown): value is SeasonCounts {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    typeof (value as Record<string, unknown>).found === 'number' &&
-    typeof (value as Record<string, unknown>).added === 'number' &&
-    typeof (value as Record<string, unknown>).alreadySaved === 'number'
-  );
+function parseOptionalCount(value: unknown): number | null {
+  if (value === undefined || value === null) return 0;
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function normalizeSeasonCounts(value: unknown): SeasonCounts | null {
+  if (value === undefined || value === null) {
+    return { found: 0, added: 0, alreadySaved: 0 };
+  }
+
+  if (typeof value !== 'object') return null;
+
+  const record = value as Record<string, unknown>;
+  const found = parseOptionalCount(record.found);
+  const added = parseOptionalCount(record.added);
+  const alreadySaved = parseOptionalCount(record.alreadySaved);
+
+  if (found === null || added === null || alreadySaved === null) return null;
+
+  return { found, added, alreadySaved };
+}
+
+function normalizeAuthWorkerUrl(value: string): string {
+  return value.replace(/\/+$/, '');
 }
 
 export async function POST() {
@@ -34,7 +50,7 @@ export async function POST() {
       return NextResponse.json({ error: 'Authentication token unavailable' }, { status: 401 });
     }
 
-    const workerRes = await fetch(`${authWorkerUrl}/extension/discover`, {
+    const workerRes = await fetch(`${normalizeAuthWorkerUrl(authWorkerUrl)}/extension/discover`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -61,20 +77,26 @@ export async function POST() {
       pastSeasons?: unknown;
     } | null;
 
-    if (
-      !data ||
-      !isSeasonCounts(data.currentSeason) ||
-      !isSeasonCounts(data.pastSeasons)
-    ) {
+    if (!data) {
       return NextResponse.json(
         { error: 'server_error', error_description: 'Unexpected response from ESPN refresh service' },
         { status: 502 }
       );
     }
 
+    const currentSeason = normalizeSeasonCounts(data.currentSeason);
+    const pastSeasons = normalizeSeasonCounts(data.pastSeasons);
+
+    if (!currentSeason || !pastSeasons) {
+      return NextResponse.json(
+        { error: 'server_error', error_description: 'Unexpected season counts from ESPN refresh service' },
+        { status: 502 }
+      );
+    }
+
     return NextResponse.json({
-      currentSeason: data.currentSeason,
-      pastSeasons: data.pastSeasons,
+      currentSeason,
+      pastSeasons,
     });
   } catch (error) {
     console.error('ESPN refresh route error:', error);

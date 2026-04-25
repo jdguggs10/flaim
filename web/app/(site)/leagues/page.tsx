@@ -199,6 +199,9 @@ interface EspnDiscoveryResponse {
   pastSeasons?: EspnDiscoveryCounts;
 }
 
+const ESPN_ERROR_CREDENTIALS_NOT_FOUND = 'credentials_not_found';
+const ESPN_ERROR_AUTH_FAILED = 'espn_auth_failed';
+
 function parseYahooDiscoverErrorResponse(data: unknown): YahooDiscoverErrorResponse {
   if (!data || typeof data !== 'object') {
     return {};
@@ -212,11 +215,11 @@ function parseYahooDiscoverErrorResponse(data: unknown): YahooDiscoverErrorRespo
 }
 
 function getEspnDiscoverErrorMessage(status: number, data: EspnDiscoveryResponse): string {
-  if (data.error === 'credentials_not_found') {
+  if (data.error === ESPN_ERROR_CREDENTIALS_NOT_FOUND) {
     return 'Add ESPN credentials with the Chrome extension or manual entry, then refresh again.';
   }
 
-  if (status === 401 || status === 403 || data.error === 'espn_auth_failed') {
+  if (status === 401 || status === 403 || data.error === ESPN_ERROR_AUTH_FAILED) {
     return 'ESPN credentials look expired or invalid. Update them, then refresh again.';
   }
 
@@ -669,8 +672,8 @@ function LeaguesPageContent() {
         if (
           res.status === 401 ||
           res.status === 403 ||
-          data.error === 'credentials_not_found' ||
-          data.error === 'espn_auth_failed'
+          data.error === ESPN_ERROR_CREDENTIALS_NOT_FOUND ||
+          data.error === ESPN_ERROR_AUTH_FAILED
         ) {
           setIsEspnSetupOpen(true);
         }
