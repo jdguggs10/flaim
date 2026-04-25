@@ -28,7 +28,7 @@ export async function POST() {
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
     }
 
-    const authWorkerUrl = process.env.NEXT_PUBLIC_AUTH_WORKER_URL;
+    const authWorkerUrl = process.env.AUTH_WORKER_URL || process.env.NEXT_PUBLIC_AUTH_WORKER_URL;
     if (!authWorkerUrl) {
       return NextResponse.json({ error: 'AUTH_WORKER_URL not configured' }, { status: 500 });
     }
@@ -44,6 +44,7 @@ export async function POST() {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${bearer}`,
       },
+      // The auth-worker discovers all ESPN leagues from stored credentials; no request body is required.
     });
 
     if (!workerRes.ok) {
@@ -61,14 +62,12 @@ export async function POST() {
     }
 
     const data = await workerRes.json().catch(() => null) as {
-      discovered?: unknown[];
       currentSeason?: unknown;
       pastSeasons?: unknown;
     } | null;
 
     if (
       !data ||
-      !Array.isArray(data.discovered) ||
       !isSeasonCounts(data.currentSeason) ||
       !isSeasonCounts(data.pastSeasons)
     ) {
@@ -79,7 +78,6 @@ export async function POST() {
     }
 
     return NextResponse.json({
-      discovered: data.discovered,
       currentSeason: data.currentSeason,
       pastSeasons: data.pastSeasons,
     });

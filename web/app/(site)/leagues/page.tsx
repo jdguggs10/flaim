@@ -236,7 +236,7 @@ function formatEspnRefreshNotice(data: EspnDiscoveryResponse): string {
   }
 
   if (found > 0) {
-    return 'ESPN refresh complete. No new ESPN league seasons found.';
+    return `ESPN refresh complete. All ${found} league season${found === 1 ? '' : 's'} already up to date.`;
   }
 
   return 'ESPN refresh complete. No ESPN leagues found for these credentials.';
@@ -649,7 +649,6 @@ function LeaguesPageContent() {
     if (!hasCredentials) {
       setIsEspnSetupOpen(true);
       setLeagueNotice(null);
-      setLeagueError('Add ESPN credentials with the Chrome extension or manual entry, then refresh again.');
       return;
     }
 
@@ -2038,12 +2037,19 @@ function LeaguesPageContent() {
                             </a>
                           </Button>
                         )}
-                        <details className="group w-full sm:w-auto">
-                          <summary className="flex h-8 w-full cursor-pointer list-none items-center justify-center gap-2 rounded-md border border-input bg-background px-3 text-xs font-medium shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground sm:w-auto [&::-webkit-details-marker]:hidden">
-                            Advanced
-                            <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-180" />
-                          </summary>
-                          <div className="mt-2 grid gap-1 rounded-md border bg-background p-2 shadow-sm sm:w-64">
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="w-full sm:w-auto"
+                            >
+                              Advanced
+                              <ChevronDown className="ml-2 h-4 w-4 text-muted-foreground" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent align="start" className="w-64 p-2">
+                            <div className="grid gap-1">
                             <Button asChild variant="ghost" size="sm" className="w-full justify-start">
                               <a
                                 href={CHROME_EXTENSION_URL}
@@ -2392,8 +2398,9 @@ function LeaguesPageContent() {
                             </div>
                           </DialogContent>
                         </Dialog>
-                          </div>
-                        </details>
+                            </div>
+                          </PopoverContent>
+                        </Popover>
                       </div>
                     </div>
                   )}
