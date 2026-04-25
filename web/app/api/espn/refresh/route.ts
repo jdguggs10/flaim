@@ -34,6 +34,10 @@ function normalizeAuthWorkerUrl(value: string): string {
   return value.replace(/\/+$/, '');
 }
 
+function isFetchTimeoutError(error: unknown): boolean {
+  return error instanceof Error && (error.name === 'AbortError' || error.name === 'TimeoutError');
+}
+
 export async function POST() {
   try {
     const { userId, getToken } = await auth();
@@ -51,12 +55,24 @@ export async function POST() {
       return NextResponse.json({ error: 'Authentication token unavailable' }, { status: 401 });
     }
 
-    const workerRes = await fetch(`${normalizeAuthWorkerUrl(authWorkerUrl)}/extension/discover`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${bearer}`,
-      },
-    });
+    let workerRes: Response;
+    try {
+      workerRes = await fetch(`${normalizeAuthWorkerUrl(authWorkerUrl)}/extension/discover`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${bearer}`,
+        },
+        signal: AbortSignal.timeout(10_000),
+      });
+    } catch (error) {
+      if (isFetchTimeoutError(error)) {
+        return NextResponse.json(
+          { error: 'server_timeout', error_description: 'ESPN refresh service timed out' },
+          { status: 504 }
+        );
+      }
+      throw error;
+    }
 
     if (!workerRes.ok) {
       const error = await workerRes.json().catch(() => ({ error: 'Unknown error' })) as {

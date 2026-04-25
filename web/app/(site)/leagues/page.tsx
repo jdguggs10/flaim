@@ -33,6 +33,7 @@ import {
   Briefcase,
   Chrome,
   Info,
+  RefreshCw,
 } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -664,7 +665,6 @@ function LeaguesPageContent() {
         method: 'POST',
         headers: {
           'Accept': 'application/json',
-          'Content-Type': 'application/json',
         },
       });
       const data = await res.json().catch(() => ({})) as EspnDiscoveryResponse;
@@ -2027,7 +2027,10 @@ function LeaguesPageContent() {
                                 Refreshing...
                               </>
                             ) : (
-                              'Refresh'
+                              <>
+                                <RefreshCw className="mr-2 h-4 w-4" />
+                                Refresh
+                              </>
                             )}
                           </Button>
                         ) : (
