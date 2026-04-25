@@ -443,6 +443,7 @@ function LeaguesPageContent() {
   const [seasonManuallySet, setSeasonManuallySet] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
   const [verifiedLeague, setVerifiedLeague] = useState<VerifiedLeague | null>(null);
+  const isManualVerificationPending = verifiedLeague !== null;
   const [selectedTeamId, setSelectedTeamId] = useState<string>('');
   const [isAddingLeague, setIsAddingLeague] = useState(false);
   const [discoverLeagueKey, setDiscoverLeagueKey] = useState<string>('');
@@ -2011,7 +2012,7 @@ function LeaguesPageContent() {
                       <Loader2 className="h-4 w-4 animate-spin" />
                       Checking ESPN connection...
                     </div>
-                  ) : !verifiedLeague && (
+                  ) : !isManualVerificationPending && (
                     <div className="space-y-3">
                       <div className="flex flex-col gap-2 sm:flex-row">
                         {displayEspnConnected ? (
@@ -2111,6 +2112,7 @@ function LeaguesPageContent() {
                                 onClick={() => {
                                   setEspnAdvancedOpen(false);
                                   setEspnCredsDialogOpen(true);
+                                  // Clear stale form state before loading the saved credentials into the dialog.
                                   handleCancelEdit();
                                   handleEditCredentials();
                                 }}

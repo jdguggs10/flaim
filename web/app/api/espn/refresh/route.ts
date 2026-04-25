@@ -7,6 +7,9 @@ interface SeasonCounts {
   alreadySaved: number;
 }
 
+// Fail before the platform timeout so the client gets a structured 504.
+const ESPN_REFRESH_WORKER_TIMEOUT_MS = 10_000;
+
 function normalizeSeasonCountValue(value: unknown): number | null {
   // Missing count fields mean zero; present-but-invalid fields make the worker response malformed.
   if (value === undefined || value === null) return 0;
@@ -38,6 +41,12 @@ function isFetchTimeoutError(error: unknown): boolean {
   return error instanceof Error && (error.name === 'AbortError' || error.name === 'TimeoutError');
 }
 
+function normalizeWorkerErrorStatus(status: number): number {
+  if (status === 401 || status === 403 || status === 429) return status;
+  if (status >= 500) return 502;
+  return status >= 400 ? status : 502;
+}
+
 export async function POST() {
   try {
     const { userId, getToken } = await auth();
@@ -62,7 +71,7 @@ export async function POST() {
         headers: {
           Authorization: `Bearer ${bearer}`,
         },
-        signal: AbortSignal.timeout(10_000),
+        signal: AbortSignal.timeout(ESPN_REFRESH_WORKER_TIMEOUT_MS),
       });
     } catch (error) {
       if (isFetchTimeoutError(error)) {
@@ -84,7 +93,7 @@ export async function POST() {
           error: error.error || 'Failed to refresh ESPN leagues',
           error_description: error.error_description,
         },
-        { status: workerRes.status }
+        { status: normalizeWorkerErrorStatus(workerRes.status) }
       );
     }
 
