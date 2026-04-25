@@ -47,3 +47,7 @@ jobs:
       - name: Type-check
         run: npx tsc --noEmit
         working-directory: web
+
+      - name: Test
+        run: corepack pnpm run test
+        working-directory: web
