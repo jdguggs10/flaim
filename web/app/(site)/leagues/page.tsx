@@ -42,7 +42,6 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '@/components/ui/dialog';
 import { useEspnCredentials } from '@/lib/use-espn-credentials';
 import { getDefaultSeasonYear, getPreviousSeasonYear, getSeasonYearOptions } from '@/lib/season-utils';
@@ -393,6 +392,7 @@ function LeaguesPageContent() {
   const [isLeaguesSectionOpen, setIsLeaguesSectionOpen] = useState(true);
   const [isAiSectionOpen, setIsAiSectionOpen] = useState(true);
   const [isEspnSetupOpen, setIsEspnSetupOpen] = useState(false);
+  const [espnAdvancedOpen, setEspnAdvancedOpen] = useState(false);
   const [isYahooSetupOpen, setIsYahooSetupOpen] = useState(false);
   const [isYahooConnected, setIsYahooConnected] = useState(false);
   const [yahooLastUpdated, setYahooLastUpdated] = useState<string | null>(null);
@@ -478,6 +478,7 @@ function LeaguesPageContent() {
     setLeagueError(null);
     setLeagueNotice(null);
     setIsRefreshingEspn(false);
+    setEspnAdvancedOpen(false);
     setIsDiscoveringYahoo(false);
     setIsRefreshingYahooAuth(false);
     setIsYahooDisconnecting(false);
@@ -663,6 +664,7 @@ function LeaguesPageContent() {
         method: 'POST',
         headers: {
           'Accept': 'application/json',
+          'Content-Type': 'application/json',
         },
       });
       const data = await res.json().catch(() => ({})) as EspnDiscoveryResponse;
@@ -2040,7 +2042,7 @@ function LeaguesPageContent() {
                             </a>
                           </Button>
                         )}
-                        <Popover>
+                        <Popover open={espnAdvancedOpen} onOpenChange={setEspnAdvancedOpen}>
                           <PopoverTrigger asChild>
                             <Button
                               variant="outline"
@@ -2053,34 +2055,70 @@ function LeaguesPageContent() {
                           </PopoverTrigger>
                           <PopoverContent align="start" className="w-64 p-2">
                             <div className="grid gap-1">
-                            <Button asChild variant="ghost" size="sm" className="w-full justify-start">
-                              <a
-                                href={CHROME_EXTENSION_URL}
-                                target="_blank"
-                                rel="noopener noreferrer"
+                              <Button asChild variant="ghost" size="sm" className="w-full justify-start">
+                                <a
+                                  href={CHROME_EXTENSION_URL}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={() => setEspnAdvancedOpen(false)}
+                                >
+                                  <Chrome className="h-4 w-4 mr-2" />
+                                  Open Chrome Extension
+                                </a>
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="w-full justify-start"
+                                disabled={discoverableEspnLeagues.length === 0}
+                                aria-label="Discover historical seasons"
+                                title={
+                                  discoverableEspnLeagues.length === 0
+                                    ? 'Add an ESPN football or baseball league first'
+                                    : 'Discover historical seasons'
+                                }
+                                onClick={() => {
+                                  setEspnAdvancedOpen(false);
+                                  setDiscoverDialogOpen(true);
+                                }}
                               >
-                                <Chrome className="h-4 w-4 mr-2" />
-                                Open Chrome Extension
-                              </a>
-                            </Button>
+                                <History className="h-4 w-4 mr-2" />
+                                Discover Seasons
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="w-full justify-start"
+                                aria-label="Add league manually"
+                                title="Add Manually"
+                                onClick={() => {
+                                  setEspnAdvancedOpen(false);
+                                  setManualDialogOpen(true);
+                                }}
+                              >
+                                <Briefcase className="h-4 w-4 mr-2" />
+                                Add League Manually
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="w-full justify-start"
+                                title="Edit ESPN credentials"
+                                aria-label="Edit ESPN credentials"
+                                onClick={() => {
+                                  setEspnAdvancedOpen(false);
+                                  setEspnCredsDialogOpen(true);
+                                  handleCancelEdit();
+                                  handleEditCredentials();
+                                }}
+                              >
+                                <Wrench className="h-4 w-4 mr-2" />
+                                Edit ESPN Credentials
+                              </Button>
+                            </div>
+                          </PopoverContent>
+                        </Popover>
                         <Dialog open={discoverDialogOpen} onOpenChange={setDiscoverDialogOpen}>
-                          <DialogTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="w-full justify-start"
-                              disabled={discoverableEspnLeagues.length === 0}
-                              aria-label="Discover historical seasons"
-                              title={
-                                discoverableEspnLeagues.length === 0
-                                  ? 'Add an ESPN football or baseball league first'
-                                  : 'Discover historical seasons'
-                              }
-                            >
-                              <History className="h-4 w-4 mr-2" />
-                              Discover Seasons
-                            </Button>
-                          </DialogTrigger>
                           <DialogContent>
                             <DialogHeader>
                               <DialogTitle>Discover historical seasons</DialogTitle>
@@ -2155,18 +2193,6 @@ function LeaguesPageContent() {
                           </DialogContent>
                         </Dialog>
                         <Dialog open={manualDialogOpen} onOpenChange={setManualDialogOpen}>
-                          <DialogTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="w-full justify-start"
-                              aria-label="Add league manually"
-                              title="Add Manually"
-                            >
-                              <Briefcase className="h-4 w-4 mr-2" />
-                              Add League Manually
-                            </Button>
-                          </DialogTrigger>
                           <DialogContent>
                           <DialogHeader>
                             <div className="flex items-center gap-2">
@@ -2326,18 +2352,6 @@ function LeaguesPageContent() {
                             }
                           }}
                         >
-                          <DialogTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="w-full justify-start"
-                              title="Edit ESPN credentials"
-                              aria-label="Edit ESPN credentials"
-                            >
-                              <Wrench className="h-4 w-4 mr-2" />
-                              Edit ESPN Credentials
-                            </Button>
-                          </DialogTrigger>
                           <DialogContent>
                             <DialogHeader>
                               <DialogTitle>ESPN Credentials</DialogTitle>
@@ -2401,9 +2415,6 @@ function LeaguesPageContent() {
                             </div>
                           </DialogContent>
                         </Dialog>
-                            </div>
-                          </PopoverContent>
-                        </Popover>
                       </div>
                     </div>
                   )}

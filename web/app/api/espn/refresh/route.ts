@@ -7,7 +7,7 @@ interface SeasonCounts {
   alreadySaved: number;
 }
 
-function parseOptionalCount(value: unknown): number | null {
+function normalizeSeasonCountValue(value: unknown): number | null {
   if (value === undefined || value === null) return 0;
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
@@ -20,9 +20,9 @@ function normalizeSeasonCounts(value: unknown): SeasonCounts | null {
   if (typeof value !== 'object') return null;
 
   const record = value as Record<string, unknown>;
-  const found = parseOptionalCount(record.found);
-  const added = parseOptionalCount(record.added);
-  const alreadySaved = parseOptionalCount(record.alreadySaved);
+  const found = normalizeSeasonCountValue(record.found);
+  const added = normalizeSeasonCountValue(record.added);
+  const alreadySaved = normalizeSeasonCountValue(record.alreadySaved);
 
   if (found === null || added === null || alreadySaved === null) return null;
 
