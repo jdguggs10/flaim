@@ -679,6 +679,8 @@ function LeaguesPageContent() {
         const data = await res.json() as { leagues?: YahooLeague[] };
         if (!canApplyState(shouldApply)) return;
         setYahooLeagues(data.leagues || []);
+      } else {
+        console.error(`Failed to load Yahoo leagues: HTTP ${res.status}`);
       }
     } catch (err) {
       console.error('Failed to load Yahoo leagues:', err);
@@ -695,6 +697,8 @@ function LeaguesPageContent() {
         const data = await res.json() as { leagues?: SleeperLeague[] };
         if (!canApplyState(shouldApply)) return;
         setSleeperLeagues(data.leagues || []);
+      } else {
+        console.error(`Failed to load Sleeper leagues: HTTP ${res.status}`);
       }
     } catch (err) {
       console.error('Failed to load Sleeper leagues:', err);
