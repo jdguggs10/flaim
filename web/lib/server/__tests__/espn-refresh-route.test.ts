@@ -63,6 +63,7 @@ describe('ESPN refresh normalization helpers', () => {
   });
 
   it('rejects present-but-invalid season count fields', () => {
+    expect(normalizeSeasonCounts([])).toBeNull();
     expect(normalizeSeasonCounts({ found: '3', added: 1, alreadySaved: 0 })).toBeNull();
     expect(normalizeSeasonCounts({ found: Number.NaN, added: 1, alreadySaved: 0 })).toBeNull();
     expect(normalizeSeasonCounts({ found: -1, added: 1, alreadySaved: 0 })).toBeNull();
@@ -209,6 +210,26 @@ describe('POST /api/espn/refresh', () => {
     expect(body).toEqual({
       error: 'server_error',
       error_description: 'Unexpected response from ESPN refresh service',
+    });
+  });
+
+  it('returns bad gateway when the auth worker returns malformed season counts', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({
+      currentSeason: {
+        found: 'three',
+        added: 0,
+        alreadySaved: 0,
+      },
+      pastSeasons: [],
+    })));
+
+    const response = await POST();
+    const body = await response.json();
+
+    expect(response.status).toBe(502);
+    expect(body).toEqual({
+      error: 'server_error',
+      error_description: 'Unexpected season counts from ESPN refresh service',
     });
   });
 });

@@ -15,7 +15,7 @@ export function normalizeSeasonCounts(value: unknown): SeasonCounts | null {
     return { found: 0, added: 0, alreadySaved: 0 };
   }
 
-  if (typeof value !== 'object') return null;
+  if (typeof value !== 'object' || Array.isArray(value)) return null;
 
   const record = value as Record<string, unknown>;
   const found = normalizeSeasonCountValue(record.found);
