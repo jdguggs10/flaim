@@ -343,6 +343,7 @@ export async function handleSleeperStatus(
         sleeperUserId: connection.sleeperUserId,
         sleeperUsername: connection.sleeperUsername,
         leagueCount: leagues.length,
+        lastUpdated: connection.updatedAt,
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
