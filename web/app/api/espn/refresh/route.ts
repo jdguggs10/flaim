@@ -17,10 +17,6 @@ function isSeasonCounts(value: unknown): value is SeasonCounts {
   );
 }
 
-/**
- * POST /api/espn/refresh
- * Discover and save ESPN leagues using the user's stored ESPN credentials.
- */
 export async function POST() {
   try {
     const { userId, getToken } = await auth();
@@ -28,12 +24,12 @@ export async function POST() {
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
     }
 
-    const authWorkerUrl = process.env.AUTH_WORKER_URL || process.env.NEXT_PUBLIC_AUTH_WORKER_URL;
+    const authWorkerUrl = process.env.AUTH_WORKER_URL;
     if (!authWorkerUrl) {
       return NextResponse.json({ error: 'AUTH_WORKER_URL not configured' }, { status: 500 });
     }
 
-    const bearer = await getToken?.();
+    const bearer = await getToken();
     if (!bearer) {
       return NextResponse.json({ error: 'Authentication token unavailable' }, { status: 401 });
     }
@@ -44,7 +40,6 @@ export async function POST() {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${bearer}`,
       },
-      // The auth-worker discovers all ESPN leagues from stored credentials; no request body is required.
     });
 
     if (!workerRes.ok) {
