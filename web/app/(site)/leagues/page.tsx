@@ -186,6 +186,19 @@ interface YahooDiscoverErrorResponse {
   error_description?: string;
 }
 
+interface EspnDiscoveryCounts {
+  found?: number;
+  added?: number;
+  alreadySaved?: number;
+}
+
+interface EspnDiscoveryResponse {
+  error?: string;
+  error_description?: string;
+  currentSeason?: EspnDiscoveryCounts;
+  pastSeasons?: EspnDiscoveryCounts;
+}
+
 function parseYahooDiscoverErrorResponse(data: unknown): YahooDiscoverErrorResponse {
   if (!data || typeof data !== 'object') {
     return {};
@@ -196,6 +209,37 @@ function parseYahooDiscoverErrorResponse(data: unknown): YahooDiscoverErrorRespo
     error: typeof record.error === 'string' ? record.error : undefined,
     error_description: typeof record.error_description === 'string' ? record.error_description : undefined,
   };
+}
+
+function getEspnDiscoverErrorMessage(status: number, data: EspnDiscoveryResponse): string {
+  if (data.error === 'credentials_not_found') {
+    return 'Add ESPN credentials with the Chrome extension or manual entry, then refresh again.';
+  }
+
+  if (status === 401 || status === 403 || data.error === 'espn_auth_failed') {
+    return 'ESPN credentials look expired or invalid. Update them, then refresh again.';
+  }
+
+  return data.error_description || data.error || 'Failed to refresh ESPN leagues';
+}
+
+function formatEspnRefreshNotice(data: EspnDiscoveryResponse): string {
+  const currentAdded = data.currentSeason?.added ?? 0;
+  const historicalAdded = data.pastSeasons?.added ?? 0;
+  const currentFound = data.currentSeason?.found ?? 0;
+  const historicalFound = data.pastSeasons?.found ?? 0;
+  const added = currentAdded + historicalAdded;
+  const found = currentFound + historicalFound;
+
+  if (added > 0) {
+    return `ESPN refresh complete. Added ${added} new league season${added === 1 ? '' : 's'}.`;
+  }
+
+  if (found > 0) {
+    return 'ESPN refresh complete. No new ESPN league seasons found.';
+  }
+
+  return 'ESPN refresh complete. No ESPN leagues found for these credentials.';
 }
 
 function formatLastUpdated(value: string): string {
@@ -353,6 +397,7 @@ function LeaguesPageContent() {
   const [isYahooDisconnecting, setIsYahooDisconnecting] = useState(false);
   const [yahooLeagues, setYahooLeagues] = useState<YahooLeague[]>([]);
   const [isLoadingYahooLeagues, setIsLoadingYahooLeagues] = useState(true);
+  const [isRefreshingEspn, setIsRefreshingEspn] = useState(false);
   const [isDiscoveringYahoo, setIsDiscoveringYahoo] = useState(false);
   const [isRefreshingYahooAuth, setIsRefreshingYahooAuth] = useState(false);
   const [sleeperLeagues, setSleeperLeagues] = useState<SleeperLeague[]>([]);
@@ -429,6 +474,7 @@ function LeaguesPageContent() {
     setSleeperError(null);
     setLeagueError(null);
     setLeagueNotice(null);
+    setIsRefreshingEspn(false);
     setIsDiscoveringYahoo(false);
     setIsRefreshingYahooAuth(false);
     setIsYahooDisconnecting(false);
@@ -595,6 +641,57 @@ function LeaguesPageContent() {
       if (showSpinner && canApplyState(shouldApply)) setIsLoadingLeagues(false);
     }
   }, []);
+
+  const refreshEspnLeagues = useCallback(async (): Promise<void> => {
+    const shouldApply = createAccountGuard();
+    if (!shouldApply()) return;
+
+    if (!hasCredentials) {
+      setIsEspnSetupOpen(true);
+      setLeagueNotice(null);
+      setLeagueError('Add ESPN credentials with the Chrome extension or manual entry, then refresh again.');
+      return;
+    }
+
+    setIsRefreshingEspn(true);
+    setLeagueError(null);
+    setLeagueNotice(null);
+    try {
+      const res = await fetch('/api/espn/refresh', {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+        },
+      });
+      const data = await res.json().catch(() => ({})) as EspnDiscoveryResponse;
+      if (!shouldApply()) return;
+
+      if (!res.ok) {
+        if (
+          res.status === 401 ||
+          res.status === 403 ||
+          data.error === 'credentials_not_found' ||
+          data.error === 'espn_auth_failed'
+        ) {
+          setIsEspnSetupOpen(true);
+        }
+        throw new Error(getEspnDiscoverErrorMessage(res.status, data));
+      }
+
+      await loadLeagues({ showSpinner: false, shouldApply });
+      if (!shouldApply()) return;
+      setLeagueNotice(formatEspnRefreshNotice(data));
+    } catch (err) {
+      if (shouldApply()) {
+        console.error('Failed to refresh ESPN leagues:', err);
+        setLeagueError(err instanceof Error ? err.message : 'Failed to refresh ESPN leagues');
+      }
+    } finally {
+      if (shouldApply()) {
+        setIsRefreshingEspn(false);
+      }
+    }
+  }, [createAccountGuard, hasCredentials, loadLeagues]);
 
   const checkYahooStatus = useCallback(async (shouldApply?: () => boolean): Promise<ConnectionStatusResult> => {
     try {
@@ -1360,6 +1457,9 @@ function LeaguesPageContent() {
   const hasAnyLeagueGroups = leaguesBySport.active.length > 0 || leaguesBySport.old.length > 0;
   const displayLeagueError = isAccountStateCurrent ? leagueError : null;
   const displayLeagueNotice = isAccountStateCurrent ? leagueNotice : null;
+  const displayEspnConnected = isAccountStateCurrent && hasCredentials;
+  const displayEspnLastUpdated = isAccountStateCurrent ? espnLastUpdated : null;
+  const isEspnStatusChecking = !isAccountStateCurrent || isCheckingCreds;
   const displayYahooConnected = isAccountStateCurrent && isYahooConnected;
   const displayYahooLastUpdated = isAccountStateCurrent ? yahooLastUpdated : null;
   const isYahooStatusChecking = !isAccountStateCurrent || isCheckingYahoo;
@@ -1882,7 +1982,7 @@ function LeaguesPageContent() {
               >
                 <div className="flex items-center gap-2">
                   <span className="text-lg">ESPN</span>
-                  <ConnectionBadge isChecking={isCheckingCreds} isConnected={hasCredentials} />
+                  <ConnectionBadge isChecking={isEspnStatusChecking} isConnected={displayEspnConnected} />
                 </div>
                 <ChevronDown
                   className={`h-5 w-5 text-muted-foreground transition-transform ${
@@ -1893,32 +1993,73 @@ function LeaguesPageContent() {
               {isEspnSetupOpen && (
                 <div id="espn-setup-content" className="px-4 pb-4 space-y-3">
                   <p className="text-sm text-muted-foreground">
-                    Use the extension to update credentials and discover leagues, or add one manually.
+                    {displayEspnConnected
+                      ? 'Refresh uses your stored ESPN credentials to discover leagues and reload the ESPN list.'
+                      : 'Add ESPN credentials with the extension or manual entry, then refresh.'}
                   </p>
-                  {espnLastUpdated && (
+                  {displayEspnLastUpdated && (
                     <p className="text-xs text-muted-foreground">
-                      Last updated: {formatLastUpdated(espnLastUpdated)}
+                      Credentials updated: {formatLastUpdated(displayEspnLastUpdated)}
                     </p>
                   )}
-                  {!verifiedLeague && (
+                  {isEspnStatusChecking ? (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Checking ESPN connection...
+                    </div>
+                  ) : !verifiedLeague && (
                     <div className="space-y-3">
-                      <div className="flex gap-2">
-                        <a
-                          href={CHROME_EXTENSION_URL}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          <Button variant="outline" size="sm">
-                            <Chrome className="h-4 w-4 mr-2" />
-                            Chrome Extension
+                      <div className="flex flex-col gap-2 sm:flex-row">
+                        {displayEspnConnected ? (
+                          <Button
+                            size="sm"
+                            onClick={refreshEspnLeagues}
+                            disabled={isRefreshingEspn}
+                            className="w-full sm:w-auto"
+                          >
+                            {isRefreshingEspn ? (
+                              <>
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                Refreshing...
+                              </>
+                            ) : (
+                              'Refresh'
+                            )}
                           </Button>
-                        </a>
+                        ) : (
+                          <Button asChild size="sm" className="w-full sm:w-auto">
+                            <a
+                              href={CHROME_EXTENSION_URL}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              <Chrome className="h-4 w-4 mr-2" />
+                              Open Extension
+                            </a>
+                          </Button>
+                        )}
+                        <details className="group w-full sm:w-auto">
+                          <summary className="flex h-8 w-full cursor-pointer list-none items-center justify-center gap-2 rounded-md border border-input bg-background px-3 text-xs font-medium shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground sm:w-auto [&::-webkit-details-marker]:hidden">
+                            Advanced
+                            <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-180" />
+                          </summary>
+                          <div className="mt-2 grid gap-1 rounded-md border bg-background p-2 shadow-sm sm:w-64">
+                            <Button asChild variant="ghost" size="sm" className="w-full justify-start">
+                              <a
+                                href={CHROME_EXTENSION_URL}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                <Chrome className="h-4 w-4 mr-2" />
+                                Open Chrome Extension
+                              </a>
+                            </Button>
                         <Dialog open={discoverDialogOpen} onOpenChange={setDiscoverDialogOpen}>
                           <DialogTrigger asChild>
                             <Button
-                              variant="outline"
-                              size="icon"
-                              className="h-8 w-8"
+                              variant="ghost"
+                              size="sm"
+                              className="w-full justify-start"
                               disabled={discoverableEspnLeagues.length === 0}
                               aria-label="Discover historical seasons"
                               title={
@@ -1927,7 +2068,8 @@ function LeaguesPageContent() {
                                   : 'Discover historical seasons'
                               }
                             >
-                              <History className="h-4 w-4" />
+                              <History className="h-4 w-4 mr-2" />
+                              Discover Seasons
                             </Button>
                           </DialogTrigger>
                           <DialogContent>
@@ -2006,13 +2148,14 @@ function LeaguesPageContent() {
                         <Dialog open={manualDialogOpen} onOpenChange={setManualDialogOpen}>
                           <DialogTrigger asChild>
                             <Button
-                              variant="outline"
-                              size="icon"
-                              className="h-8 w-8"
+                              variant="ghost"
+                              size="sm"
+                              className="w-full justify-start"
                               aria-label="Add league manually"
                               title="Add Manually"
                             >
-                              <Briefcase className="h-4 w-4" />
+                              <Briefcase className="h-4 w-4 mr-2" />
+                              Add League Manually
                             </Button>
                           </DialogTrigger>
                           <DialogContent>
@@ -2176,13 +2319,14 @@ function LeaguesPageContent() {
                         >
                           <DialogTrigger asChild>
                             <Button
-                              variant="outline"
-                              size="icon"
-                              className="h-8 w-8 shrink-0"
-                              title="Add manually"
-                              aria-label="Add ESPN credentials manually"
+                              variant="ghost"
+                              size="sm"
+                              className="w-full justify-start"
+                              title="Edit ESPN credentials"
+                              aria-label="Edit ESPN credentials"
                             >
-                              <Wrench className="h-4 w-4" />
+                              <Wrench className="h-4 w-4 mr-2" />
+                              Edit ESPN Credentials
                             </Button>
                           </DialogTrigger>
                           <DialogContent>
@@ -2248,6 +2392,8 @@ function LeaguesPageContent() {
                             </div>
                           </DialogContent>
                         </Dialog>
+                          </div>
+                        </details>
                       </div>
                     </div>
                   )}
