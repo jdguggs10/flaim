@@ -2112,7 +2112,7 @@ function LeaguesPageContent() {
                                 onClick={() => {
                                   setEspnAdvancedOpen(false);
                                   setEspnCredsDialogOpen(true);
-                                  // Clear stale form state before loading the saved credentials into the dialog.
+                                  // Avoid stale form values flashing before the dialog re-populates.
                                   handleCancelEdit();
                                   handleEditCredentials();
                                 }}

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  normalizeSeasonCountValue,
   normalizeSeasonCounts,
   normalizeWorkerErrorStatus,
 } from '../espn-refresh';
@@ -60,12 +61,19 @@ describe('ESPN refresh normalization helpers', () => {
   it('rejects present-but-invalid season count fields', () => {
     expect(normalizeSeasonCounts({ found: '3', added: 1, alreadySaved: 0 })).toBeNull();
     expect(normalizeSeasonCounts({ found: Number.NaN, added: 1, alreadySaved: 0 })).toBeNull();
+    expect(normalizeSeasonCounts({ found: -1, added: 1, alreadySaved: 0 })).toBeNull();
   });
 
-  it('passes expected upstream statuses and maps worker 5xx responses to bad gateway', () => {
+  it('rejects invalid individual season count values', () => {
+    expect(normalizeSeasonCountValue(Number.NaN)).toBeNull();
+    expect(normalizeSeasonCountValue(-1)).toBeNull();
+  });
+
+  it('passes expected upstream statuses and maps other worker errors to bad gateway', () => {
     expect(normalizeWorkerErrorStatus(401)).toBe(401);
     expect(normalizeWorkerErrorStatus(403)).toBe(403);
     expect(normalizeWorkerErrorStatus(429)).toBe(429);
+    expect(normalizeWorkerErrorStatus(422)).toBe(502);
     expect(normalizeWorkerErrorStatus(503)).toBe(502);
   });
 });
