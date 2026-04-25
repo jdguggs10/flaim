@@ -49,5 +49,5 @@ jobs:
         working-directory: web
 
       - name: Test
-        run: pnpm run test
+        run: corepack pnpm run test
         working-directory: web

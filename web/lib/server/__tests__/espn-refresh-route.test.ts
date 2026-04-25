@@ -39,7 +39,11 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  process.env.AUTH_WORKER_URL = ORIGINAL_AUTH_WORKER_URL;
+  if (ORIGINAL_AUTH_WORKER_URL === undefined) {
+    delete process.env.AUTH_WORKER_URL;
+  } else {
+    process.env.AUTH_WORKER_URL = ORIGINAL_AUTH_WORKER_URL;
+  }
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
