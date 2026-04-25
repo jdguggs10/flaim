@@ -8,6 +8,7 @@ interface SeasonCounts {
 }
 
 function normalizeSeasonCountValue(value: unknown): number | null {
+  // Missing count fields mean zero; present-but-invalid fields make the worker response malformed.
   if (value === undefined || value === null) return 0;
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
@@ -53,7 +54,6 @@ export async function POST() {
     const workerRes = await fetch(`${normalizeAuthWorkerUrl(authWorkerUrl)}/extension/discover`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
         Authorization: `Bearer ${bearer}`,
       },
     });
