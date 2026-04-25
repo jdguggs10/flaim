@@ -71,6 +71,53 @@ describe('ESPN refresh normalization helpers', () => {
 });
 
 describe('POST /api/espn/refresh', () => {
+  it('rejects unauthenticated requests without calling the auth worker', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    mocks.auth.mockResolvedValue({
+      userId: null,
+      getToken: vi.fn(),
+    });
+
+    const response = await POST();
+    const body = await response.json();
+
+    expect(response.status).toBe(401);
+    expect(body).toEqual({ error: 'Authentication required' });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('fails fast when AUTH_WORKER_URL is not configured', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    delete process.env.AUTH_WORKER_URL;
+
+    const response = await POST();
+    const body = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(body).toEqual({ error: 'AUTH_WORKER_URL not configured' });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects requests when Clerk cannot issue a bearer token', async () => {
+    const fetchMock = vi.fn();
+    const getToken = vi.fn(async () => null);
+    vi.stubGlobal('fetch', fetchMock);
+    mocks.auth.mockResolvedValue({
+      userId: 'user_123',
+      getToken,
+    });
+
+    const response = await POST();
+    const body = await response.json();
+
+    expect(response.status).toBe(401);
+    expect(body).toEqual({ error: 'Authentication token unavailable' });
+    expect(getToken).toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('proxies to the auth worker and returns normalized counts', async () => {
     const fetchMock = vi.fn(async () => jsonResponse({
       currentSeason: {
@@ -137,6 +184,19 @@ describe('POST /api/espn/refresh', () => {
     expect(body).toEqual({
       error: 'upstream_unavailable',
       error_description: 'Auth worker unavailable',
+    });
+  });
+
+  it('returns bad gateway when the auth worker returns a null body', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(null)));
+
+    const response = await POST();
+    const body = await response.json();
+
+    expect(response.status).toBe(502);
+    expect(body).toEqual({
+      error: 'server_error',
+      error_description: 'Unexpected response from ESPN refresh service',
     });
   });
 });
