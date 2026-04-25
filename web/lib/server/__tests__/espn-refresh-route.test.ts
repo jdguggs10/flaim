@@ -55,6 +55,11 @@ describe('ESPN refresh normalization helpers', () => {
       added: 0,
       alreadySaved: 0,
     });
+    expect(normalizeSeasonCounts(null)).toEqual({
+      found: 0,
+      added: 0,
+      alreadySaved: 0,
+    });
     expect(normalizeSeasonCounts({ found: 3 })).toEqual({
       found: 3,
       added: 0,
@@ -67,11 +72,13 @@ describe('ESPN refresh normalization helpers', () => {
     expect(normalizeSeasonCounts({ found: '3', added: 1, alreadySaved: 0 })).toBeNull();
     expect(normalizeSeasonCounts({ found: Number.NaN, added: 1, alreadySaved: 0 })).toBeNull();
     expect(normalizeSeasonCounts({ found: -1, added: 1, alreadySaved: 0 })).toBeNull();
+    expect(normalizeSeasonCounts({ found: 1.7, added: 1, alreadySaved: 0 })).toBeNull();
   });
 
   it('rejects invalid individual season count values', () => {
     expect(normalizeSeasonCountValue(Number.NaN)).toBeNull();
     expect(normalizeSeasonCountValue(-1)).toBeNull();
+    expect(normalizeSeasonCountValue(1.7)).toBeNull();
   });
 
   it('passes expected upstream statuses and maps other worker errors to bad gateway', () => {

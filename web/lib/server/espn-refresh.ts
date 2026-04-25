@@ -7,7 +7,7 @@ export interface SeasonCounts {
 export function normalizeSeasonCountValue(value: unknown): number | null {
   // Missing count fields mean zero; present-but-invalid fields make the worker response malformed.
   if (value === undefined || value === null) return 0;
-  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : null;
 }
 
 export function normalizeSeasonCounts(value: unknown): SeasonCounts | null {
