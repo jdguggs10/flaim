@@ -1,50 +1,12 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
+import { normalizeSeasonCounts, normalizeWorkerErrorStatus } from '@/lib/server/espn-refresh';
 
-interface SeasonCounts {
-  found: number;
-  added: number;
-  alreadySaved: number;
-}
-
-// Fail before the platform timeout so the client gets a structured 504.
-const ESPN_REFRESH_WORKER_TIMEOUT_MS = 10_000;
-
-function normalizeSeasonCountValue(value: unknown): number | null {
-  // Missing count fields mean zero; present-but-invalid fields make the worker response malformed.
-  if (value === undefined || value === null) return 0;
-  return typeof value === 'number' && Number.isFinite(value) ? value : null;
-}
-
-function normalizeSeasonCounts(value: unknown): SeasonCounts | null {
-  if (value === undefined || value === null) {
-    return { found: 0, added: 0, alreadySaved: 0 };
-  }
-
-  if (typeof value !== 'object') return null;
-
-  const record = value as Record<string, unknown>;
-  const found = normalizeSeasonCountValue(record.found);
-  const added = normalizeSeasonCountValue(record.added);
-  const alreadySaved = normalizeSeasonCountValue(record.alreadySaved);
-
-  if (found === null || added === null || alreadySaved === null) return null;
-
-  return { found, added, alreadySaved };
-}
+// ESPN discovery can include Fan API calls plus historical season discovery.
+export const maxDuration = 60;
 
 function normalizeAuthWorkerUrl(value: string): string {
   return value.replace(/\/+$/, '');
-}
-
-function isFetchTimeoutError(error: unknown): boolean {
-  return error instanceof Error && (error.name === 'AbortError' || error.name === 'TimeoutError');
-}
-
-function normalizeWorkerErrorStatus(status: number): number {
-  if (status === 401 || status === 403 || status === 429) return status;
-  if (status >= 500) return 502;
-  return status >= 400 ? status : 502;
 }
 
 export async function POST() {
@@ -64,24 +26,12 @@ export async function POST() {
       return NextResponse.json({ error: 'Authentication token unavailable' }, { status: 401 });
     }
 
-    let workerRes: Response;
-    try {
-      workerRes = await fetch(`${normalizeAuthWorkerUrl(authWorkerUrl)}/extension/discover`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${bearer}`,
-        },
-        signal: AbortSignal.timeout(ESPN_REFRESH_WORKER_TIMEOUT_MS),
-      });
-    } catch (error) {
-      if (isFetchTimeoutError(error)) {
-        return NextResponse.json(
-          { error: 'server_timeout', error_description: 'ESPN refresh service timed out' },
-          { status: 504 }
-        );
-      }
-      throw error;
-    }
+    const workerRes = await fetch(`${normalizeAuthWorkerUrl(authWorkerUrl)}/extension/discover`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${bearer}`,
+      },
+    });
 
     if (!workerRes.ok) {
       const error = await workerRes.json().catch(() => ({ error: 'Unknown error' })) as {
