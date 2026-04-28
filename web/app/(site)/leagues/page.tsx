@@ -694,6 +694,7 @@ function LeaguesPageContent() {
         return connected ? 'connected' : 'disconnected';
       }
 
+      // Yahoo status only reports stored connection metadata; retryable refresh failures surface in discovery.
       if (res.status === 401 || res.status === 403 || data.error === 'not_connected') {
         if (canApplyState(shouldApply)) {
           clearYahooConnectionState();

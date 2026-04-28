@@ -151,7 +151,8 @@ function isTransientYahooTokenFailure(response: Pick<YahooTokenResponse, 'status
     return false;
   }
 
-  // readYahooTokenResponse attaches status to token endpoint errors; without it, do not guess from text alone.
+  // Yahoo can send transient "Too many" text with HTTP 400; after permanent signals are ruled out,
+  // allow token-endpoint text matching on any error status. Without status, do not guess from text alone.
   return response.status !== undefined && response.status >= 400 && hasTransientYahooTokenFailureSignal(text);
 }
 

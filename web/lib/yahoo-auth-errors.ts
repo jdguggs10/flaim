@@ -51,6 +51,7 @@ export function isYahooTransientAuthError(error?: string): boolean {
 }
 
 export function isYahooTransientAuthResponse(data: { error?: string; retryable?: boolean }): boolean {
+  // retryable is an internal auth-worker contract; explicit reconnect errors still win.
   const reconnectError = typeof data.error === 'string' && YAHOO_RECONNECT_ERRORS.has(data.error);
   return !reconnectError && (isYahooTransientAuthError(data.error) || data.retryable === true);
 }
