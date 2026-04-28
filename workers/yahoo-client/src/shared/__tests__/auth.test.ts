@@ -5,6 +5,11 @@ import { getYahooCredentials, resolveUserTeamKey } from '../auth';
 
 vi.mock('@flaim/worker-shared', () => ({
   authWorkerFetch: vi.fn(),
+  YahooAuthWorkerErrorCode: {
+    REFRESH_TEMPORARILY_UNAVAILABLE: 'refresh_temporarily_unavailable',
+    TOKEN_REFRESH_VALIDATION_UNAVAILABLE: 'token_refresh_validation_unavailable',
+    TOKEN_EXCHANGE_UNAVAILABLE: 'token_exchange_unavailable',
+  },
 }));
 
 const mockAuthWorkerFetch = authWorkerFetch as MockedFunction<typeof authWorkerFetch>;

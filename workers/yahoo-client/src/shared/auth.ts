@@ -1,5 +1,5 @@
 import type { Env } from '../types';
-import { authWorkerFetch } from '@flaim/worker-shared';
+import { authWorkerFetch, YahooAuthWorkerErrorCode } from '@flaim/worker-shared';
 
 export interface YahooCredentials {
   accessToken: string;
@@ -20,8 +20,8 @@ async function throwYahooAuthWorkerError(response: Response): Promise<never> {
     response.status === 429 ||
     response.status === 503 ||
     errorData.retryable === true ||
-    errorData.error === 'refresh_temporarily_unavailable' ||
-    errorData.error === 'token_refresh_validation_unavailable';
+    errorData.error === YahooAuthWorkerErrorCode.REFRESH_TEMPORARILY_UNAVAILABLE ||
+    errorData.error === YahooAuthWorkerErrorCode.TOKEN_REFRESH_VALIDATION_UNAVAILABLE;
 
   if (isTransientAuthFailure) {
     throw new Error(`YAHOO_AUTH_UNAVAILABLE: ${errorDetail}`);

@@ -19,6 +19,7 @@
 
 import { YahooStorage, type YahooCredentials } from './yahoo-storage';
 import { getFrontendUrl, resolvePreviewOrigin } from './preview-url';
+import { YahooAuthWorkerErrorCode } from '@flaim/worker-shared';
 
 // =============================================================================
 // TYPES
@@ -336,7 +337,7 @@ async function getValidYahooAccessToken(
         console.warn('[yahoo-connect] Failed to release Yahoo refresh lease after refresh exception:', releaseError);
       }
       return {
-        error: 'refresh_temporarily_unavailable',
+        error: YahooAuthWorkerErrorCode.REFRESH_TEMPORARILY_UNAVAILABLE,
         errorDescription: isAbort
           ? 'Yahoo token refresh timed out. Please try again later.'
           : 'Yahoo token refresh is temporarily unavailable. Please try again later.',
@@ -363,7 +364,7 @@ async function getValidYahooAccessToken(
       }
       if (isTransientYahooTokenFailure(result)) {
         return {
-          error: 'refresh_temporarily_unavailable',
+          error: YahooAuthWorkerErrorCode.REFRESH_TEMPORARILY_UNAVAILABLE,
           errorDescription: result.error_description || 'Yahoo token refresh is temporarily unavailable',
           retryable: true,
         };
@@ -417,10 +418,10 @@ function yahooRefreshFailureResponse(
   result: Extract<GetTokenResult, { error: string }>,
   corsHeaders: Record<string, string>
 ): Response {
-  if (result.error === 'refresh_temporarily_unavailable') {
+  if (result.error === YahooAuthWorkerErrorCode.REFRESH_TEMPORARILY_UNAVAILABLE) {
     return new Response(
       JSON.stringify({
-        error: 'refresh_temporarily_unavailable',
+        error: YahooAuthWorkerErrorCode.REFRESH_TEMPORARILY_UNAVAILABLE,
         error_description: result.errorDescription || 'Yahoo token refresh is temporarily unavailable. Please try again later.',
         retryable: true,
       }),
@@ -590,7 +591,7 @@ export async function handleYahooCallback(
         error instanceof Error ? error.message : error
       );
       return errorRedirect(
-        'token_exchange_unavailable',
+        YahooAuthWorkerErrorCode.TOKEN_EXCHANGE_UNAVAILABLE,
         'Yahoo token exchange is temporarily unavailable. Please try again.'
       );
     }
@@ -600,7 +601,7 @@ export async function handleYahooCallback(
       console.error(`[yahoo-connect] Token exchange failed: ${tokenResponse.error}`);
       const isTransient = isTransientYahooTokenFailure(tokenResponse);
       return errorRedirect(
-        isTransient ? 'token_exchange_unavailable' : 'token_exchange_failed',
+        isTransient ? YahooAuthWorkerErrorCode.TOKEN_EXCHANGE_UNAVAILABLE : 'token_exchange_failed',
         isTransient
           ? 'Yahoo token exchange is temporarily unavailable. Please try again.'
           : tokenResponse.error_description || 'Failed to exchange code for tokens'
@@ -631,7 +632,7 @@ export async function handleYahooCallback(
         error instanceof Error ? error.message : error
       );
       return errorRedirect(
-        'token_refresh_validation_unavailable',
+        YahooAuthWorkerErrorCode.TOKEN_REFRESH_VALIDATION_UNAVAILABLE,
         'Yahoo refresh token validation is temporarily unavailable. Please try again.'
       );
     }
@@ -645,7 +646,7 @@ export async function handleYahooCallback(
           (validatedTokenResponse.error_description ? ` - ${validatedTokenResponse.error_description}` : '')
       );
       return errorRedirect(
-        isTransient ? 'token_refresh_validation_unavailable' : 'token_refresh_validation_failed',
+        isTransient ? YahooAuthWorkerErrorCode.TOKEN_REFRESH_VALIDATION_UNAVAILABLE : 'token_refresh_validation_failed',
         isTransient
           ? 'Yahoo refresh token validation is temporarily unavailable. Please try again.'
           : 'Yahoo refresh token validation failed'

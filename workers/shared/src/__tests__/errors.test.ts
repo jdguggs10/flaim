@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ErrorCode, extractErrorCode } from '../errors';
+import { ErrorCode, YahooAuthWorkerErrorCode, extractErrorCode } from '../errors';
 
 describe('error utilities', () => {
   it('extractErrorCode parses CODE: message format', () => {
@@ -26,5 +26,11 @@ describe('error utilities', () => {
     expect(ErrorCode.YAHOO_API_ERROR).toBe('YAHOO_API_ERROR');
     expect(ErrorCode.SLEEPER_NOT_FOUND).toBe('SLEEPER_NOT_FOUND');
     expect(ErrorCode.SLEEPER_TIMEOUT).toBe('SLEEPER_TIMEOUT');
+  });
+
+  it('Yahoo auth-worker error codes include transient auth failures', () => {
+    expect(YahooAuthWorkerErrorCode.REFRESH_TEMPORARILY_UNAVAILABLE).toBe('refresh_temporarily_unavailable');
+    expect(YahooAuthWorkerErrorCode.TOKEN_REFRESH_VALIDATION_UNAVAILABLE).toBe('token_refresh_validation_unavailable');
+    expect(YahooAuthWorkerErrorCode.TOKEN_EXCHANGE_UNAVAILABLE).toBe('token_exchange_unavailable');
   });
 });

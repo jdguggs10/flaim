@@ -63,7 +63,15 @@ export const ErrorCode = {
   INTERNAL_ERROR: 'INTERNAL_ERROR',
 } as const;
 
+export const YahooAuthWorkerErrorCode = {
+  REFRESH_TEMPORARILY_UNAVAILABLE: 'refresh_temporarily_unavailable',
+  TOKEN_REFRESH_VALIDATION_UNAVAILABLE: 'token_refresh_validation_unavailable',
+  TOKEN_EXCHANGE_UNAVAILABLE: 'token_exchange_unavailable',
+} as const;
+
 export type ErrorCodeValue = (typeof ErrorCode)[keyof typeof ErrorCode];
+export type YahooAuthWorkerErrorCodeValue =
+  (typeof YahooAuthWorkerErrorCode)[keyof typeof YahooAuthWorkerErrorCode];
 
 /**
  * Extract a machine-readable error code from a caught error.

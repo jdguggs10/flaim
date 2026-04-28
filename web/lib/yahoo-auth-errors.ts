@@ -1,14 +1,16 @@
+import { YahooAuthWorkerErrorCode } from '@flaim/worker-shared';
+
 export interface YahooDiscoverErrorResponse {
   error?: string;
   error_description?: string;
   retryable?: boolean;
 }
 
-const YAHOO_RECONNECT_ERRORS = new Set(['not_connected', 'refresh_failed']);
-const YAHOO_TRANSIENT_AUTH_ERRORS = new Set([
-  'refresh_temporarily_unavailable',
-  'token_refresh_validation_unavailable',
-  'token_exchange_unavailable',
+const YAHOO_RECONNECT_ERRORS = new Set<string>(['not_connected', 'refresh_failed']);
+const YAHOO_TRANSIENT_AUTH_ERRORS = new Set<string>([
+  YahooAuthWorkerErrorCode.REFRESH_TEMPORARILY_UNAVAILABLE,
+  YahooAuthWorkerErrorCode.TOKEN_REFRESH_VALIDATION_UNAVAILABLE,
+  YahooAuthWorkerErrorCode.TOKEN_EXCHANGE_UNAVAILABLE,
 ]);
 
 const YAHOO_TRANSIENT_AUTH_FALLBACK =
@@ -18,11 +20,11 @@ export function getYahooConnectErrorMessage(error: string, description: string |
   switch (error) {
     case 'token_refresh_validation_failed':
       return 'Yahoo connection did not complete because the refresh token could not be validated. Please connect Yahoo again.';
-    case 'refresh_temporarily_unavailable':
+    case YahooAuthWorkerErrorCode.REFRESH_TEMPORARILY_UNAVAILABLE:
       return YAHOO_TRANSIENT_AUTH_FALLBACK;
-    case 'token_refresh_validation_unavailable':
+    case YahooAuthWorkerErrorCode.TOKEN_REFRESH_VALIDATION_UNAVAILABLE:
       return 'Yahoo connection could not be validated because Yahoo was temporarily unavailable. Please try again in a few minutes.';
-    case 'token_exchange_unavailable':
+    case YahooAuthWorkerErrorCode.TOKEN_EXCHANGE_UNAVAILABLE:
       return 'Yahoo connection could not be started because Yahoo was temporarily unavailable. Please try again in a few minutes.';
     case 'token_exchange_failed':
       return description || 'Yahoo connection failed while exchanging the authorization code. Please try again.';
