@@ -1,5 +1,5 @@
 import type { Env } from '../types';
-import { authWorkerFetch } from '@flaim/worker-shared';
+import { authWorkerFetch, YahooAuthWorkerErrorCode } from '@flaim/worker-shared';
 
 export interface YahooCredentials {
   accessToken: string;
@@ -9,11 +9,25 @@ async function throwYahooAuthWorkerError(response: Response): Promise<never> {
   const errorData = await response.json().catch(() => ({})) as {
     error?: string;
     error_description?: string;
+    retryable?: boolean;
   };
   const errorSummary = errorData.error || response.statusText;
   const errorDetail = errorData.error_description
     ? `${errorSummary}: ${errorData.error_description}`
     : errorSummary;
+  // retryable is the durable contract; status and known codes keep older worker responses classified correctly.
+  // TOKEN_EXCHANGE_UNAVAILABLE is an OAuth redirect code, not an internal credentials API response.
+  const isTransientAuthFailure =
+    response.status === 429 ||
+    response.status === 503 ||
+    errorData.retryable === true ||
+    errorData.error === YahooAuthWorkerErrorCode.REFRESH_TEMPORARILY_UNAVAILABLE ||
+    errorData.error === YahooAuthWorkerErrorCode.TOKEN_REFRESH_VALIDATION_UNAVAILABLE;
+
+  if (isTransientAuthFailure) {
+    throw new Error(`YAHOO_AUTH_UNAVAILABLE: ${errorDetail}`);
+  }
+
   throw new Error(`YAHOO_AUTH_ERROR: ${errorDetail}`);
 }
 

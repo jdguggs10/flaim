@@ -37,6 +37,7 @@ export const ErrorCode = {
 
   // Yahoo-specific
   YAHOO_AUTH_ERROR: 'YAHOO_AUTH_ERROR',
+  YAHOO_AUTH_UNAVAILABLE: 'YAHOO_AUTH_UNAVAILABLE',
   YAHOO_ACCESS_DENIED: 'YAHOO_ACCESS_DENIED',
   YAHOO_NOT_FOUND: 'YAHOO_NOT_FOUND',
   YAHOO_RATE_LIMITED: 'YAHOO_RATE_LIMITED',
@@ -62,7 +63,17 @@ export const ErrorCode = {
   INTERNAL_ERROR: 'INTERNAL_ERROR',
 } as const;
 
+// Internal auth-worker wire/redirect codes. Platform clients map these to the
+// public MCP-level ErrorCode values above, such as YAHOO_AUTH_UNAVAILABLE.
+export const YahooAuthWorkerErrorCode = {
+  REFRESH_TEMPORARILY_UNAVAILABLE: 'refresh_temporarily_unavailable',
+  TOKEN_REFRESH_VALIDATION_UNAVAILABLE: 'token_refresh_validation_unavailable',
+  TOKEN_EXCHANGE_UNAVAILABLE: 'token_exchange_unavailable',
+} as const;
+
 export type ErrorCodeValue = (typeof ErrorCode)[keyof typeof ErrorCode];
+export type YahooAuthWorkerErrorCodeValue =
+  (typeof YahooAuthWorkerErrorCode)[keyof typeof YahooAuthWorkerErrorCode];
 
 /**
  * Extract a machine-readable error code from a caught error.

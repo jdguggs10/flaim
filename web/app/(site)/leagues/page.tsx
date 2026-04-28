@@ -46,6 +46,14 @@ import {
 } from '@/components/ui/dialog';
 import { useEspnCredentials } from '@/lib/use-espn-credentials';
 import { getDefaultSeasonYear, getPreviousSeasonYear, getSeasonYearOptions } from '@/lib/season-utils';
+import {
+  getYahooConnectErrorMessage,
+  getYahooTransientAuthMessage,
+  isYahooReconnectRequired,
+  isYahooTransientAuthError,
+  isYahooTransientAuthResponse,
+  parseYahooDiscoverErrorResponse,
+} from '@/lib/yahoo-auth-errors';
 import { CHROME_EXTENSION_URL } from '@/config/constants';
 import { StepConnectAI } from '@/components/site/StepConnectAI';
 
@@ -166,26 +174,6 @@ function createEmptyPreferences(): UserPreferencesState {
   return { ...EMPTY_USER_PREFERENCES };
 }
 
-function getYahooConnectErrorMessage(error: string, description: string | null): string {
-  switch (error) {
-    case 'token_refresh_validation_failed':
-      return 'Yahoo connection did not complete because the refresh token could not be validated. Please connect Yahoo again.';
-    case 'token_refresh_validation_unavailable':
-      return 'Yahoo connection could not be validated because Yahoo was temporarily unavailable. Please try again in a few minutes.';
-    case 'token_exchange_failed':
-      return description || 'Yahoo connection failed while exchanging the authorization code. Please try again.';
-    case 'oauth_denied':
-      return 'Yahoo connection was canceled.';
-    default:
-      return description || 'Yahoo connection failed. Please try again.';
-  }
-}
-
-interface YahooDiscoverErrorResponse {
-  error?: string;
-  error_description?: string;
-}
-
 interface EspnDiscoveryCounts {
   found?: number;
   added?: number;
@@ -201,18 +189,6 @@ interface EspnDiscoveryResponse {
 
 const ESPN_ERROR_CREDENTIALS_NOT_FOUND = 'credentials_not_found';
 const ESPN_ERROR_AUTH_FAILED = 'espn_auth_failed';
-
-function parseYahooDiscoverErrorResponse(data: unknown): YahooDiscoverErrorResponse {
-  if (!data || typeof data !== 'object') {
-    return {};
-  }
-
-  const record = data as Record<string, unknown>;
-  return {
-    error: typeof record.error === 'string' ? record.error : undefined,
-    error_description: typeof record.error_description === 'string' ? record.error_description : undefined,
-  };
-}
 
 function getEspnDiscoverErrorMessage(status: number, data: EspnDiscoveryResponse): string {
   if (data.error === ESPN_ERROR_CREDENTIALS_NOT_FOUND) {
@@ -284,7 +260,7 @@ function canApplyState(shouldApply?: () => boolean): boolean {
 
 type ConnectionStatusResult = 'connected' | 'disconnected' | 'unknown';
 
-function isDefinitiveDisconnectedStatus(status: number, data: { error?: string }): boolean {
+function isSleeperDisconnectedStatus(status: number, data: { error?: string }): boolean {
   return status === 401 || status === 403 || data.error === 'not_connected';
 }
 
@@ -701,7 +677,11 @@ function LeaguesPageContent() {
   const checkYahooStatus = useCallback(async (shouldApply?: () => boolean): Promise<ConnectionStatusResult> => {
     try {
       const res = await fetch('/api/connect/yahoo/status');
-      const data = await res.json().catch(() => ({})) as { connected?: boolean; lastUpdated?: string; error?: string };
+      const data = await res.json().catch(() => ({})) as {
+        connected?: boolean;
+        lastUpdated?: string;
+        error?: string;
+      };
       if (res.ok) {
         if (!canApplyState(shouldApply)) return 'unknown';
         const connected = data.connected ?? false;
@@ -714,7 +694,8 @@ function LeaguesPageContent() {
         return connected ? 'connected' : 'disconnected';
       }
 
-      if (isDefinitiveDisconnectedStatus(res.status, data)) {
+      // Yahoo status only reports stored connection metadata; retryable refresh failures surface in discovery.
+      if (res.status === 401 || res.status === 403 || data.error === 'not_connected') {
         if (canApplyState(shouldApply)) {
           clearYahooConnectionState();
           setYahooLeagues([]);
@@ -752,7 +733,7 @@ function LeaguesPageContent() {
         return connected ? 'connected' : 'disconnected';
       }
 
-      if (isDefinitiveDisconnectedStatus(res.status, data)) {
+      if (isSleeperDisconnectedStatus(res.status, data)) {
         if (canApplyState(shouldApply)) {
           clearSleeperConnectionState();
           setSleeperLeagues([]);
@@ -894,16 +875,18 @@ function LeaguesPageContent() {
         // Auth-worker error bodies carry reconnect codes even when the response is not ok.
         const data = parseYahooDiscoverErrorResponse(await res.json().catch(() => null));
         if (!shouldApply()) return;
-        if (
-          res.status === 401 ||
-          res.status === 403 ||
-          data.error === 'not_connected' ||
-          data.error === 'refresh_failed'
-        ) {
+        if (isYahooReconnectRequired(res.status, data)) {
           // The opened panel and notice are the reconnect prompt, so skip the error banner.
           setIsYahooSetupOpen(true);
           clearYahooConnectionState();
           setLeagueNotice('Your Yahoo session has expired. Click Refresh to sign in again and pull your latest leagues.');
+          shouldCheckYahooStatus = false;
+          return;
+        }
+        if (isYahooTransientAuthResponse(data)) {
+          setIsYahooConnected(true);
+          setLeagueError(null);
+          setLeagueNotice(getYahooTransientAuthMessage(data));
           shouldCheckYahooStatus = false;
           return;
         }
@@ -1052,8 +1035,14 @@ function LeaguesPageContent() {
 
     const yahooError = searchParams.get('error');
     if (yahooError) {
-      setLeagueError(getYahooConnectErrorMessage(yahooError, searchParams.get('error_description')));
-      setIsYahooSetupOpen(true);
+      if (isYahooTransientAuthError(yahooError)) {
+        setLeagueError(null);
+        setLeagueNotice(getYahooConnectErrorMessage(yahooError, searchParams.get('error_description')));
+      } else {
+        setLeagueNotice(null);
+        setLeagueError(getYahooConnectErrorMessage(yahooError, searchParams.get('error_description')));
+        setIsYahooSetupOpen(true);
+      }
       router.replace('/leagues', { scroll: false });
     }
 
