@@ -63,6 +63,8 @@ export const ErrorCode = {
   INTERNAL_ERROR: 'INTERNAL_ERROR',
 } as const;
 
+// Internal auth-worker wire/redirect codes. Platform clients map these to the
+// public MCP-level ErrorCode values above, such as YAHOO_AUTH_UNAVAILABLE.
 export const YahooAuthWorkerErrorCode = {
   REFRESH_TEMPORARILY_UNAVAILABLE: 'refresh_temporarily_unavailable',
   TOKEN_REFRESH_VALIDATION_UNAVAILABLE: 'token_refresh_validation_unavailable',

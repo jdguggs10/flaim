@@ -778,6 +778,36 @@ describe('yahoo-connect-handlers', () => {
       expect(mockStorage.updateYahooCredentials).not.toHaveBeenCalled();
     });
 
+    it('returns retryable 503 when Yahoo returns HTTP 429 during refresh', async () => {
+      mockStorage.getYahooCredentials.mockResolvedValue({
+        clerkUserId: 'user_123',
+        accessToken: 'old-access-token',
+        refreshToken: 'refresh-token',
+        expiresAt: new Date(Date.now() + 2 * 60 * 1000),
+        needsRefresh: true,
+      });
+      mockStorage.acquireRefreshLease.mockResolvedValue(true);
+
+      mockFetch.mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            error: 'rate_limited',
+            error_description: 'Too many token requests',
+          }),
+          { status: 429 }
+        )
+      );
+
+      const response = await handleYahooCredentials(env, 'user_123', corsHeaders);
+
+      expect(response.status).toBe(503);
+      const body = (await response.json()) as Record<string, unknown>;
+      expect(body.error).toBe('refresh_temporarily_unavailable');
+      expect(body.error_description).toBe('Too many token requests');
+      expect(body.retryable).toBe(true);
+      expect(mockStorage.updateYahooCredentials).not.toHaveBeenCalled();
+    });
+
     it('uses newer stored credentials when a concurrent refresh already succeeded', async () => {
       const originalUpdatedAt = new Date('2026-04-10T13:50:00Z');
       const refreshedUpdatedAt = new Date('2026-04-10T13:50:05Z');

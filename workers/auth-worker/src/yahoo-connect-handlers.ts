@@ -56,7 +56,8 @@ const YAHOO_TOKEN_URL = 'https://api.login.yahoo.com/oauth2/get_token';
 const YAHOO_SCOPE = 'fspt-r'; // Fantasy Sports read access
 
 const LEASE_TTL_MS       = 30_000;
-const REFRESH_TIMEOUT_MS = 20_000; // must be < LEASE_TTL_MS
+// Used for both OAuth exchange and refresh token requests; must stay below LEASE_TTL_MS.
+const YAHOO_TOKEN_REQUEST_TIMEOUT_MS = 20_000;
 const POLL_INTERVAL_MS   =    300;
 const MAX_REFRESH_ATTEMPTS = 3;
 
@@ -361,7 +362,7 @@ async function getValidYahooAccessToken(
     }
 
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), REFRESH_TIMEOUT_MS);
+    const timer = setTimeout(() => controller.abort(), YAHOO_TOKEN_REQUEST_TIMEOUT_MS);
     let result: YahooTokenResponse;
     try {
       result = await refreshAccessToken(credentials.refreshToken, env, controller.signal);
@@ -622,7 +623,7 @@ export async function handleYahooCallback(
 
     // Exchange code for tokens
     const exchangeController = new AbortController();
-    const exchangeTimer = setTimeout(() => exchangeController.abort(), REFRESH_TIMEOUT_MS);
+    const exchangeTimer = setTimeout(() => exchangeController.abort(), YAHOO_TOKEN_REQUEST_TIMEOUT_MS);
     let tokenResponse: YahooTokenResponse;
     try {
       tokenResponse = await exchangeCodeForTokens(code, env, exchangeController.signal);
@@ -659,7 +660,7 @@ export async function handleYahooCallback(
     // This intentional second Yahoo call proves the refresh path works now,
     // so reconnect cannot look successful and then fail after access-token expiry.
     const validationController = new AbortController();
-    const validationTimer = setTimeout(() => validationController.abort(), REFRESH_TIMEOUT_MS);
+    const validationTimer = setTimeout(() => validationController.abort(), YAHOO_TOKEN_REQUEST_TIMEOUT_MS);
     let validatedTokenResponse: YahooTokenResponse;
     try {
       validatedTokenResponse = await refreshAccessToken(
