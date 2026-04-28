@@ -719,6 +719,36 @@ describe('yahoo-connect-handlers', () => {
       expect(mockStorage.updateYahooCredentials).not.toHaveBeenCalled();
     });
 
+    it('does not treat mixed permanent and transient token response fields as retryable', async () => {
+      mockStorage.getYahooCredentials.mockResolvedValue({
+        clerkUserId: 'user_123',
+        accessToken: 'old-access-token',
+        refreshToken: 'refresh-token',
+        expiresAt: new Date(Date.now() + 2 * 60 * 1000),
+        needsRefresh: true,
+      });
+      mockStorage.acquireRefreshLease.mockResolvedValue(true);
+
+      mockFetch.mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            error: 'temporarily_unavailable',
+            error_description: 'Refresh token permanently revoked',
+          }),
+          { status: 400 }
+        )
+      );
+
+      const response = await handleYahooCredentials(env, 'user_123', corsHeaders);
+
+      expect(response.status).toBe(401);
+      const body = (await response.json()) as Record<string, unknown>;
+      expect(body.error).toBe('refresh_failed');
+      expect(body.error_description).toBe('Refresh token permanently revoked');
+      expect(body.retryable).toBeUndefined();
+      expect(mockStorage.updateYahooCredentials).not.toHaveBeenCalled();
+    });
+
     it('returns retryable 503 when Yahoo returns a transient refresh status', async () => {
       mockStorage.getYahooCredentials.mockResolvedValue({
         clerkUserId: 'user_123',

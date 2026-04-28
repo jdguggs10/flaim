@@ -146,6 +146,7 @@ function isTransientYahooTokenFailure(response: Pick<YahooTokenResponse, 'status
   }
 
   const text = normalizeYahooTokenErrorText(response);
+  // Permanent signals win over transient-looking text so revoked/expired tokens still trigger reconnect.
   if (hasPermanentYahooTokenFailureSignal(text)) {
     return false;
   }

@@ -22,6 +22,7 @@ describe('error utilities', () => {
     expect(ErrorCode.INTERNAL_AUTH_REQUIRED).toBe('INTERNAL_AUTH_REQUIRED');
     expect(ErrorCode.INTERNAL_ERROR).toBe('INTERNAL_ERROR');
     expect(ErrorCode.ESPN_NOT_FOUND).toBe('ESPN_NOT_FOUND');
+    expect(ErrorCode.YAHOO_AUTH_UNAVAILABLE).toBe('YAHOO_AUTH_UNAVAILABLE');
     expect(ErrorCode.YAHOO_API_ERROR).toBe('YAHOO_API_ERROR');
     expect(ErrorCode.SLEEPER_NOT_FOUND).toBe('SLEEPER_NOT_FOUND');
     expect(ErrorCode.SLEEPER_TIMEOUT).toBe('SLEEPER_TIMEOUT');
