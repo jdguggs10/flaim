@@ -55,9 +55,9 @@ export function isYahooTransientAuthError(error?: string): boolean {
   return typeof error === 'string' && YAHOO_TRANSIENT_AUTH_ERRORS.has(error);
 }
 
+// INVARIANT: Any new auth-worker error code that requires reconnect MUST be added
+// to YAHOO_RECONNECT_ERRORS above, or retryable: true will suppress the reconnect prompt.
 export function isYahooTransientAuthResponse(data: { error?: string; retryable?: boolean }): boolean {
-  // retryable is an internal auth-worker contract, but any reconnect-required error must stay in
-  // YAHOO_RECONNECT_ERRORS so a future retryable flag cannot suppress the reconnect prompt.
   const reconnectError = typeof data.error === 'string' && YAHOO_RECONNECT_ERRORS.has(data.error);
   return !reconnectError && (isYahooTransientAuthError(data.error) || data.retryable === true);
 }

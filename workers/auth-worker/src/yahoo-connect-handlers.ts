@@ -139,6 +139,8 @@ function normalizeYahooTokenErrorText(response: Pick<YahooTokenResponse, 'error'
     .toLowerCase();
 }
 
+// Triggered by Yahoo returning plain-text "Too many requests to Yahoo token endpoint" with HTTP 400
+// when the existing refresh token is still valid.
 function hasPermanentYahooTokenFailureSignal(text: string): boolean {
   // Evaluated before transient signals so mixed messages like "temporarily unavailable, token revoked" stay permanent.
   return text.includes('invalid_grant')
@@ -148,7 +150,8 @@ function hasPermanentYahooTokenFailureSignal(text: string): boolean {
     || text.includes('already used');
 }
 
-// Observed Yahoo trigger: a plain-text "Too many requests to Yahoo token endpoint" body with HTTP 400.
+// Triggered by Yahoo returning plain-text "Too many requests to Yahoo token endpoint" with HTTP 400
+// when the existing refresh token is still valid.
 function hasTransientYahooTokenFailureSignal(text: string): boolean {
   return text.includes('too many')
     || text.includes('rate limit')
