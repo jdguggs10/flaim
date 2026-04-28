@@ -6,6 +6,8 @@ export interface YahooDiscoverErrorResponse {
   retryable?: boolean;
 }
 
+// Any future auth-worker error that requires a reconnect must be listed here;
+// otherwise retryable: true will route it to the temporary notice path.
 const YAHOO_RECONNECT_ERRORS = new Set<string>(['not_connected', 'refresh_failed']);
 const YAHOO_TRANSIENT_AUTH_ERRORS = new Set<string>([
   YahooAuthWorkerErrorCode.REFRESH_TEMPORARILY_UNAVAILABLE,
