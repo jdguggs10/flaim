@@ -46,6 +46,14 @@ import {
 } from '@/components/ui/dialog';
 import { useEspnCredentials } from '@/lib/use-espn-credentials';
 import { getDefaultSeasonYear, getPreviousSeasonYear, getSeasonYearOptions } from '@/lib/season-utils';
+import {
+  getYahooConnectErrorMessage,
+  getYahooTransientAuthMessage,
+  isYahooReconnectRequired,
+  isYahooTransientAuthError,
+  isYahooTransientAuthResponse,
+  parseYahooDiscoverErrorResponse,
+} from '@/lib/yahoo-auth-errors';
 import { CHROME_EXTENSION_URL } from '@/config/constants';
 import { StepConnectAI } from '@/components/site/StepConnectAI';
 
@@ -166,32 +174,6 @@ function createEmptyPreferences(): UserPreferencesState {
   return { ...EMPTY_USER_PREFERENCES };
 }
 
-function getYahooConnectErrorMessage(error: string, description: string | null): string {
-  switch (error) {
-    case 'token_refresh_validation_failed':
-      return 'Yahoo connection did not complete because the refresh token could not be validated. Please connect Yahoo again.';
-    case 'refresh_temporarily_unavailable':
-    case 'temporary_yahoo_unavailable':
-      return 'Yahoo is temporarily unavailable while refreshing your connection. Please try again in a few minutes.';
-    case 'token_refresh_validation_unavailable':
-      return 'Yahoo connection could not be validated because Yahoo was temporarily unavailable. Please try again in a few minutes.';
-    case 'token_exchange_unavailable':
-      return 'Yahoo connection could not be started because Yahoo was temporarily unavailable. Please try again in a few minutes.';
-    case 'token_exchange_failed':
-      return description || 'Yahoo connection failed while exchanging the authorization code. Please try again.';
-    case 'oauth_denied':
-      return 'Yahoo connection was canceled.';
-    default:
-      return description || 'Yahoo connection failed. Please try again.';
-  }
-}
-
-interface YahooDiscoverErrorResponse {
-  error?: string;
-  error_description?: string;
-  retryable?: boolean;
-}
-
 interface EspnDiscoveryCounts {
   found?: number;
   added?: number;
@@ -207,26 +189,6 @@ interface EspnDiscoveryResponse {
 
 const ESPN_ERROR_CREDENTIALS_NOT_FOUND = 'credentials_not_found';
 const ESPN_ERROR_AUTH_FAILED = 'espn_auth_failed';
-const YAHOO_RECONNECT_ERRORS = new Set(['not_connected', 'refresh_failed']);
-const YAHOO_TRANSIENT_AUTH_ERRORS = new Set([
-  'refresh_temporarily_unavailable',
-  'temporary_yahoo_unavailable',
-  'token_refresh_validation_unavailable',
-  'token_exchange_unavailable',
-]);
-
-function parseYahooDiscoverErrorResponse(data: unknown): YahooDiscoverErrorResponse {
-  if (!data || typeof data !== 'object') {
-    return {};
-  }
-
-  const record = data as Record<string, unknown>;
-  return {
-    error: typeof record.error === 'string' ? record.error : undefined,
-    error_description: typeof record.error_description === 'string' ? record.error_description : undefined,
-    retryable: typeof record.retryable === 'boolean' ? record.retryable : undefined,
-  };
-}
 
 function getEspnDiscoverErrorMessage(status: number, data: EspnDiscoveryResponse): string {
   if (data.error === ESPN_ERROR_CREDENTIALS_NOT_FOUND) {
@@ -238,41 +200,6 @@ function getEspnDiscoverErrorMessage(status: number, data: EspnDiscoveryResponse
   }
 
   return data.error_description || data.error || 'Failed to refresh ESPN leagues';
-}
-
-function isYahooTransientAuthError(error?: string): boolean {
-  return typeof error === 'string' && YAHOO_TRANSIENT_AUTH_ERRORS.has(error);
-}
-
-function isYahooTransientAuthResponse(data: { error?: string; retryable?: boolean }): boolean {
-  return isYahooTransientAuthError(data.error) || data.retryable === true;
-}
-
-function isYahooReconnectRequired(status: number, data: { error?: string; retryable?: boolean }): boolean {
-  if (isYahooTransientAuthResponse(data)) {
-    return false;
-  }
-
-  return (
-    status === 401 ||
-    status === 403 ||
-    (typeof data.error === 'string' && YAHOO_RECONNECT_ERRORS.has(data.error))
-  );
-}
-
-function getYahooTransientAuthMessage(data: { error?: string; error_description?: string }): string {
-  if (
-    data.error === 'refresh_temporarily_unavailable' ||
-    data.error === 'temporary_yahoo_unavailable'
-  ) {
-    return 'Yahoo is temporarily unavailable while refreshing your connection. Please try again in a few minutes.';
-  }
-
-  if (data.error === 'token_refresh_validation_unavailable') {
-    return 'Yahoo connection could not be validated because Yahoo was temporarily unavailable. Please try again in a few minutes.';
-  }
-
-  return data.error_description || 'Yahoo is temporarily unavailable while refreshing your connection. Please try again in a few minutes.';
 }
 
 function formatEspnRefreshNotice(data: EspnDiscoveryResponse): string {
@@ -754,8 +681,6 @@ function LeaguesPageContent() {
         connected?: boolean;
         lastUpdated?: string;
         error?: string;
-        error_description?: string;
-        retryable?: boolean;
       };
       if (res.ok) {
         if (!canApplyState(shouldApply)) return 'unknown';
@@ -767,16 +692,6 @@ function LeaguesPageContent() {
           setIsLoadingYahooLeagues(false);
         }
         return connected ? 'connected' : 'disconnected';
-      }
-
-      if (isYahooTransientAuthResponse(data)) {
-        if (canApplyState(shouldApply)) {
-          setIsYahooConnected(true);
-          setLeagueError(null);
-          setLeagueNotice(getYahooTransientAuthMessage(data));
-          setIsLoadingYahooLeagues(false);
-        }
-        return 'unknown';
       }
 
       if (isYahooReconnectRequired(res.status, data)) {

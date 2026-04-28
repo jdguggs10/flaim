@@ -122,16 +122,32 @@ function normalizeYahooTokenErrorText(response: Pick<YahooTokenResponse, 'error'
   return `${response.error || ''} ${response.error_description || ''} ${response.upstream_error_text || ''}`.toLowerCase();
 }
 
+function hasPermanentYahooTokenFailureSignal(text: string): boolean {
+  return text.includes('invalid_grant')
+    || text.includes('revoked')
+    || text.includes('permanent')
+    || text.includes('expired')
+    || text.includes('already used');
+}
+
+function hasTransientYahooTokenFailureSignal(text: string): boolean {
+  return text.includes('too many')
+    || text.includes('rate limit')
+    || text.includes('temporarily')
+    || text.includes('temporary');
+}
+
 function isTransientYahooTokenFailure(response: Pick<YahooTokenResponse, 'status' | 'error' | 'error_description' | 'upstream_error_text'>): boolean {
   if (isTransientYahooTokenError(response.status)) {
     return true;
   }
 
   const text = normalizeYahooTokenErrorText(response);
-  return text.includes('too many')
-    || text.includes('rate limit')
-    || text.includes('temporarily')
-    || text.includes('temporary');
+  if (hasPermanentYahooTokenFailureSignal(text)) {
+    return false;
+  }
+
+  return response.status !== undefined && response.status >= 400 && hasTransientYahooTokenFailureSignal(text);
 }
 
 function trimYahooTokenBody(text: string): string | undefined {
@@ -145,14 +161,12 @@ function trimYahooTokenBody(text: string): string | undefined {
 function parseYahooTokenBody(text: string): Partial<YahooTokenResponse> | null {
   try {
     const parsed = JSON.parse(text) as unknown;
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      return parsed as Partial<YahooTokenResponse>;
-    }
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? parsed as Partial<YahooTokenResponse>
+      : null;
   } catch {
     return null;
   }
-
-  return null;
 }
 
 async function readYahooTokenResponse(
@@ -854,18 +868,6 @@ async function exchangeCodeForTokens(
     'Failed to exchange code for tokens'
   );
 
-  if (!response.ok) {
-    return {
-      access_token: '',
-      expires_in: 0,
-      token_type: 'bearer',
-      error: data.error || 'token_error',
-      error_description: data.error_description || 'Failed to exchange code for tokens',
-      upstream_error_text: data.upstream_error_text,
-      status: response.status,
-    };
-  }
-
   return data;
 }
 
@@ -898,18 +900,6 @@ async function refreshAccessToken(
     'refresh_error',
     'Failed to refresh access token'
   );
-
-  if (!response.ok) {
-    return {
-      access_token: '',
-      expires_in: 0,
-      token_type: 'bearer',
-      error: data.error || 'refresh_error',
-      error_description: data.error_description || 'Failed to refresh access token',
-      upstream_error_text: data.upstream_error_text,
-      status: response.status,
-    };
-  }
 
   return data;
 }
