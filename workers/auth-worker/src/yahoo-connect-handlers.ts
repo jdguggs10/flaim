@@ -107,12 +107,25 @@ function looksLikeNewerCredentials(
 
 const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
 
-function isUsableTokenResponse(response: YahooTokenResponse): boolean {
+type UsableYahooTokenResponse =
+  Partial<YahooTokenResponse> &
+  Pick<YahooTokenResponse, 'access_token' | 'expires_in'>;
+
+function isUsableTokenResponse(response: Partial<YahooTokenResponse>): response is UsableYahooTokenResponse {
   return typeof response.access_token === 'string'
     && response.access_token.length > 0
     && typeof response.expires_in === 'number'
     && Number.isFinite(response.expires_in)
     && response.expires_in > 0;
+}
+
+function toYahooTokenResponse(response: UsableYahooTokenResponse): YahooTokenResponse {
+  return {
+    ...response,
+    token_type: typeof response.token_type === 'string' && response.token_type.length > 0
+      ? response.token_type
+      : 'bearer',
+  };
 }
 
 function isTransientYahooTokenError(status?: number): boolean {
@@ -153,8 +166,9 @@ function isTransientYahooTokenFailure(response: Pick<YahooTokenResponse, 'status
     return false;
   }
 
-  // Yahoo can send transient "Too many" text with HTTP 400; after permanent signals are ruled out,
-  // allow token-endpoint text matching on any error status. Without status, do not guess from text alone.
+  // Yahoo has returned plain-text bodies like "Too many requests to Yahoo token endpoint" with HTTP 400.
+  // After permanent signals are ruled out, allow token-endpoint text matching on any error status.
+  // Without status, do not guess from text alone.
   return response.status !== undefined && response.status >= 400 && hasTransientYahooTokenFailureSignal(text);
 }
 
@@ -187,7 +201,7 @@ async function readYahooTokenResponse(
   const data = parseYahooTokenBody(text);
   const nonJsonDescription = data ? undefined : trimYahooTokenBody(text);
 
-  if (!response.ok || !data) {
+  if (!response.ok) {
     return {
       access_token: '',
       expires_in: 0,
@@ -201,7 +215,30 @@ async function readYahooTokenResponse(
     };
   }
 
-  return data as YahooTokenResponse;
+  if (!data) {
+    return {
+      access_token: '',
+      expires_in: 0,
+      token_type: 'bearer',
+      error: fallbackError,
+      error_description: fallbackErrorDescription,
+      upstream_error_text: nonJsonDescription,
+      status: response.status,
+    };
+  }
+
+  if (!isUsableTokenResponse(data)) {
+    return {
+      access_token: '',
+      expires_in: 0,
+      token_type: 'bearer',
+      error: fallbackError,
+      error_description: fallbackErrorDescription,
+      status: response.status,
+    };
+  }
+
+  return toYahooTokenResponse(data);
 }
 
 // =============================================================================
@@ -419,6 +456,7 @@ function yahooRefreshFailureResponse(
   result: Extract<GetTokenResult, { error: string }>,
   corsHeaders: Record<string, string>
 ): Response {
+  // The error code is the canonical response signal; retryable is retained for downstream clients.
   if (result.error === YahooAuthWorkerErrorCode.REFRESH_TEMPORARILY_UNAVAILABLE) {
     return new Response(
       JSON.stringify({
