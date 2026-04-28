@@ -9,6 +9,7 @@ export interface YahooDiscoverErrorResponse {
 // Any future auth-worker error that requires a reconnect must be listed here;
 // otherwise retryable: true will route it to the temporary notice path.
 const YAHOO_RECONNECT_ERRORS = new Set<string>(['not_connected', 'refresh_failed']);
+// Includes OAuth callback redirect codes; yahoo-client's credentials API classifier is intentionally narrower.
 const YAHOO_TRANSIENT_AUTH_ERRORS = new Set<string>([
   YahooAuthWorkerErrorCode.REFRESH_TEMPORARILY_UNAVAILABLE,
   YahooAuthWorkerErrorCode.TOKEN_REFRESH_VALIDATION_UNAVAILABLE,
@@ -55,7 +56,8 @@ export function isYahooTransientAuthError(error?: string): boolean {
 }
 
 export function isYahooTransientAuthResponse(data: { error?: string; retryable?: boolean }): boolean {
-  // retryable is an internal auth-worker contract; explicit reconnect errors still win.
+  // retryable is an internal auth-worker contract, but any reconnect-required error must stay in
+  // YAHOO_RECONNECT_ERRORS so a future retryable flag cannot suppress the reconnect prompt.
   const reconnectError = typeof data.error === 'string' && YAHOO_RECONNECT_ERRORS.has(data.error);
   return !reconnectError && (isYahooTransientAuthError(data.error) || data.retryable === true);
 }

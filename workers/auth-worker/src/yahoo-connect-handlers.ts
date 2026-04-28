@@ -148,6 +148,7 @@ function hasPermanentYahooTokenFailureSignal(text: string): boolean {
     || text.includes('already used');
 }
 
+// Observed Yahoo trigger: a plain-text "Too many requests to Yahoo token endpoint" body with HTTP 400.
 function hasTransientYahooTokenFailureSignal(text: string): boolean {
   return text.includes('too many')
     || text.includes('rate limit')
@@ -166,7 +167,6 @@ function isTransientYahooTokenFailure(response: Pick<YahooTokenResponse, 'status
     return false;
   }
 
-  // Yahoo has returned plain-text bodies like "Too many requests to Yahoo token endpoint" with HTTP 400.
   // After permanent signals are ruled out, allow token-endpoint text matching on any error status.
   // Without status, do not guess from text alone.
   return response.status !== undefined && response.status >= 400 && hasTransientYahooTokenFailureSignal(text);
