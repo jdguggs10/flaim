@@ -260,7 +260,7 @@ function canApplyState(shouldApply?: () => boolean): boolean {
 
 type ConnectionStatusResult = 'connected' | 'disconnected' | 'unknown';
 
-function isDefinitiveDisconnectedStatus(status: number, data: { error?: string }): boolean {
+function isSleeperDisconnectedStatus(status: number, data: { error?: string }): boolean {
   return status === 401 || status === 403 || data.error === 'not_connected';
 }
 
@@ -694,7 +694,7 @@ function LeaguesPageContent() {
         return connected ? 'connected' : 'disconnected';
       }
 
-      if (isYahooReconnectRequired(res.status, data)) {
+      if (res.status === 401 || res.status === 403 || data.error === 'not_connected') {
         if (canApplyState(shouldApply)) {
           clearYahooConnectionState();
           setYahooLeagues([]);
@@ -732,7 +732,7 @@ function LeaguesPageContent() {
         return connected ? 'connected' : 'disconnected';
       }
 
-      if (isDefinitiveDisconnectedStatus(res.status, data)) {
+      if (isSleeperDisconnectedStatus(res.status, data)) {
         if (canApplyState(shouldApply)) {
           clearSleeperConnectionState();
           setSleeperLeagues([]);

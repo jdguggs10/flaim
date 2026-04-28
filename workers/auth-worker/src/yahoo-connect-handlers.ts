@@ -119,7 +119,10 @@ function isTransientYahooTokenError(status?: number): boolean {
 }
 
 function normalizeYahooTokenErrorText(response: Pick<YahooTokenResponse, 'error' | 'error_description' | 'upstream_error_text'>): string {
-  return `${response.error || ''} ${response.error_description || ''} ${response.upstream_error_text || ''}`.toLowerCase();
+  return [response.error, response.error_description, response.upstream_error_text]
+    .filter((value): value is string => typeof value === 'string' && value.length > 0)
+    .join(' ')
+    .toLowerCase();
 }
 
 function hasPermanentYahooTokenFailureSignal(text: string): boolean {
@@ -147,9 +150,11 @@ function isTransientYahooTokenFailure(response: Pick<YahooTokenResponse, 'status
     return false;
   }
 
+  // readYahooTokenResponse attaches status to token endpoint errors; without it, do not guess from text alone.
   return response.status !== undefined && response.status >= 400 && hasTransientYahooTokenFailureSignal(text);
 }
 
+// Empty token error bodies carry no useful diagnostic detail for logs or callers.
 function trimYahooTokenBody(text: string): string | undefined {
   const trimmed = text.trim();
   if (!trimmed) {

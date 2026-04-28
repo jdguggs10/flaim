@@ -48,32 +48,47 @@ describe('getYahooCredentials', () => {
     );
   });
 
-  it('classifies retryable auth-worker refresh failures as temporarily unavailable', async () => {
+  it('classifies 503 auth-worker failures as temporarily unavailable', async () => {
     mockAuthWorkerFetch.mockResolvedValue(
       new Response(
         JSON.stringify({
-          error: 'refresh_temporarily_unavailable',
+          error: 'server_timeout',
           error_description: 'Yahoo token refresh is temporarily unavailable',
-          retryable: true,
         }),
         { status: 503 }
       )
     );
 
     await expect(getYahooCredentials(env, 'Bearer token')).rejects.toThrow(
-      'YAHOO_AUTH_UNAVAILABLE: refresh_temporarily_unavailable: Yahoo token refresh is temporarily unavailable'
+      'YAHOO_AUTH_UNAVAILABLE: server_timeout: Yahoo token refresh is temporarily unavailable'
     );
   });
 
-  it('classifies transient Yahoo auth failures while resolving team keys', async () => {
+  it('classifies retryable auth-worker failures as temporarily unavailable', async () => {
+    mockAuthWorkerFetch.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          error: 'upstream_busy',
+          error_description: 'Try again later',
+          retryable: true,
+        }),
+        { status: 502 }
+      )
+    );
+
+    await expect(getYahooCredentials(env, 'Bearer token')).rejects.toThrow(
+      'YAHOO_AUTH_UNAVAILABLE: upstream_busy: Try again later'
+    );
+  });
+
+  it('classifies known transient Yahoo auth codes while resolving team keys', async () => {
     mockAuthWorkerFetch.mockResolvedValue(
       new Response(
         JSON.stringify({
           error: 'refresh_temporarily_unavailable',
           error_description: 'Try again later',
-          retryable: true,
         }),
-        { status: 503 }
+        { status: 400 }
       )
     );
 

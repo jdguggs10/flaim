@@ -15,6 +15,7 @@ async function throwYahooAuthWorkerError(response: Response): Promise<never> {
   const errorDetail = errorData.error_description
     ? `${errorSummary}: ${errorData.error_description}`
     : errorSummary;
+  // retryable is the durable contract; status and known codes keep older worker responses classified correctly.
   const isTransientAuthFailure =
     response.status === 429 ||
     response.status === 503 ||
