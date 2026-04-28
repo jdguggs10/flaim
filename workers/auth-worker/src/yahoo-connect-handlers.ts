@@ -127,6 +127,7 @@ function normalizeYahooTokenErrorText(response: Pick<YahooTokenResponse, 'error'
 }
 
 function hasPermanentYahooTokenFailureSignal(text: string): boolean {
+  // Evaluated before transient signals so mixed messages like "temporarily unavailable, token revoked" stay permanent.
   return text.includes('invalid_grant')
     || text.includes('revoked')
     || text.includes('permanent')

@@ -16,6 +16,7 @@ async function throwYahooAuthWorkerError(response: Response): Promise<never> {
     ? `${errorSummary}: ${errorData.error_description}`
     : errorSummary;
   // retryable is the durable contract; status and known codes keep older worker responses classified correctly.
+  // TOKEN_EXCHANGE_UNAVAILABLE is an OAuth redirect code, not an internal credentials API response.
   const isTransientAuthFailure =
     response.status === 429 ||
     response.status === 503 ||

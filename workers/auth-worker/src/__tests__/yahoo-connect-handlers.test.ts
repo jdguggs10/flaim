@@ -664,7 +664,6 @@ describe('yahoo-connect-handlers', () => {
         expiresAt: new Date(Date.now() + 2 * 60 * 1000),
         needsRefresh: true,
       });
-      mockStorage.acquireRefreshLease.mockResolvedValue(true);
 
       let capturedOwnerId: string | undefined;
       mockStorage.acquireRefreshLease.mockImplementation(
