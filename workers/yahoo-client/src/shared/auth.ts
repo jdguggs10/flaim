@@ -9,11 +9,24 @@ async function throwYahooAuthWorkerError(response: Response): Promise<never> {
   const errorData = await response.json().catch(() => ({})) as {
     error?: string;
     error_description?: string;
+    retryable?: boolean;
   };
   const errorSummary = errorData.error || response.statusText;
   const errorDetail = errorData.error_description
     ? `${errorSummary}: ${errorData.error_description}`
     : errorSummary;
+  const isTransientAuthFailure =
+    response.status === 429 ||
+    response.status === 503 ||
+    errorData.retryable === true ||
+    errorData.error === 'refresh_temporarily_unavailable' ||
+    errorData.error === 'temporary_yahoo_unavailable' ||
+    errorData.error === 'token_refresh_validation_unavailable';
+
+  if (isTransientAuthFailure) {
+    throw new Error(`YAHOO_AUTH_UNAVAILABLE: ${errorDetail}`);
+  }
+
   throw new Error(`YAHOO_AUTH_ERROR: ${errorDetail}`);
 }
 

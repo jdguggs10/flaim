@@ -48,6 +48,40 @@ describe('getYahooCredentials', () => {
     );
   });
 
+  it('classifies retryable auth-worker refresh failures as temporarily unavailable', async () => {
+    mockAuthWorkerFetch.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          error: 'refresh_temporarily_unavailable',
+          error_description: 'Yahoo token refresh is temporarily unavailable',
+          retryable: true,
+        }),
+        { status: 503 }
+      )
+    );
+
+    await expect(getYahooCredentials(env, 'Bearer token')).rejects.toThrow(
+      'YAHOO_AUTH_UNAVAILABLE: refresh_temporarily_unavailable: Yahoo token refresh is temporarily unavailable'
+    );
+  });
+
+  it('classifies transient Yahoo auth failures while resolving team keys', async () => {
+    mockAuthWorkerFetch.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          error: 'refresh_temporarily_unavailable',
+          error_description: 'Try again later',
+          retryable: true,
+        }),
+        { status: 503 }
+      )
+    );
+
+    await expect(resolveUserTeamKey(env, '461.l.12345', 'Bearer token')).rejects.toThrow(
+      'YAHOO_AUTH_UNAVAILABLE: refresh_temporarily_unavailable: Try again later'
+    );
+  });
+
   it('returns null when Yahoo team key resolution receives a 404', async () => {
     mockAuthWorkerFetch.mockResolvedValue(new Response(null, { status: 404 }));
 
