@@ -128,18 +128,17 @@ When adding basketball or hockey:
 ## Development
 
 ```bash
-# Run locally
-npm run dev:yahoo-client  # Port 8791
+# Run locally from the repository root
+corepack pnpm --dir workers/yahoo-client run dev  # Port 8791
 
 # Or directly
-cd workers/yahoo-client
-wrangler dev --env dev --port 8791
+corepack pnpm --dir workers/yahoo-client exec wrangler dev --env dev --port 8791
 
 # Run tests
-npm test
+corepack pnpm --dir workers/yahoo-client run test
 
 # Type check
-npm run type-check
+corepack pnpm --dir workers/yahoo-client run type-check
 ```
 
 ## Testing

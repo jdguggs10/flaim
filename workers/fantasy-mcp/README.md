@@ -84,12 +84,11 @@ Auth is validated by auth-worker via service binding.
 ## Development
 
 ```bash
-# Run locally
-npm run dev:fantasy-mcp  # Port 8790
+# Run locally from the repository root
+corepack pnpm --dir workers/fantasy-mcp run dev  # Port 8790
 
 # Or directly
-cd workers/fantasy-mcp
-wrangler dev --env dev --port 8790
+corepack pnpm --dir workers/fantasy-mcp exec wrangler dev --env dev --port 8790
 ```
 
 ## Production URLs

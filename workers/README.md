@@ -27,35 +27,34 @@ The unified gateway (`fantasy-mcp`) uses explicit tool parameters (`platform`, `
 
 ```bash
 # Run all workers (auth + unified gateway + platform clients)
-npm run dev:workers
+corepack pnpm run dev:workers
 
-# Run unified gateway workers
-npm run dev:fantasy-mcp    # Port 8790
-npm run dev:espn-client    # Port 8789
-npm run dev:yahoo-client   # Port 8791
-npm run dev --workspace workers/sleeper-client  # Port 8792
+# Run gateway/client workers individually
+corepack pnpm run dev:fantasy-mcp                 # Port 8790
+corepack pnpm run dev:espn-client                 # Port 8789
+corepack pnpm --dir workers/yahoo-client run dev  # Port 8791
+corepack pnpm --dir workers/sleeper-client run dev  # Port 8792
+
+# Run individually
+corepack pnpm --dir workers/auth-worker run dev
+corepack pnpm --dir workers/fantasy-mcp run dev
+corepack pnpm --dir workers/espn-client run dev
+corepack pnpm --dir workers/yahoo-client run dev
+corepack pnpm --dir workers/sleeper-client run dev
+
+# Or with wrangler directly
+corepack pnpm --dir workers/auth-worker exec wrangler dev --env dev --port 8786
+```
 
 **Local service bindings note:** `fantasy-mcp` relies on Wrangler's local registry to resolve
 `ESPN`, `YAHOO`, and `SLEEPER` service bindings. Use `WRANGLER_LOG_PATH` + `WRANGLER_REGISTRY_PATH`
-(already wired into `npm run dev:workers`) to avoid binding resolution issues.
-
-# Run individually
-cd workers/auth-worker && npm run dev
-cd workers/fantasy-mcp && npm run dev
-cd workers/espn-client && npm run dev
-cd workers/yahoo-client && npm run dev
-cd workers/sleeper-client && npm run dev
-
-# Or with wrangler directly
-cd workers/auth-worker && wrangler dev --env dev --port 8786
-```
+(already wired into `corepack pnpm run dev:workers`) to avoid binding resolution issues.
 
 ## Testing
 
 ```bash
-cd workers/<worker-name>
-npm test           # Run Vitest tests (auth-worker, espn-client, yahoo-client, sleeper-client, fantasy-mcp)
-npm run type-check # TypeScript check (auth-worker, espn-client, yahoo-client, sleeper-client, fantasy-mcp)
+corepack pnpm --dir workers/<worker-name> run test       # Run Vitest tests
+corepack pnpm --dir workers/<worker-name> run type-check # TypeScript check
 ```
 
 Add focused tests for handler changes in `__tests__/` or `*.test.ts`.
@@ -149,11 +148,11 @@ Credentials are fetched from auth-worker per request; MCP workers don't store th
 ```bash
 # Usually handled by GitHub Actions (.github/workflows/deploy-workers.yml)
 # Manual fallback (deploy each worker explicitly):
-cd workers/auth-worker && wrangler deploy --env preview   # or --env prod
-cd workers/fantasy-mcp && npm run deploy:preview          # or npm run deploy:prod
-cd workers/espn-client && npm run deploy:preview          # or npm run deploy:prod
-cd workers/yahoo-client && npm run deploy:preview         # or npm run deploy:prod
-cd workers/sleeper-client && npm run deploy:preview       # or npm run deploy:prod
+corepack pnpm --dir workers/auth-worker exec wrangler deploy --env preview   # or --env prod
+corepack pnpm --dir workers/fantasy-mcp run deploy:preview                   # or deploy:prod
+corepack pnpm --dir workers/espn-client run deploy:preview                   # or deploy:prod
+corepack pnpm --dir workers/yahoo-client run deploy:preview                  # or deploy:prod
+corepack pnpm --dir workers/sleeper-client run deploy:preview                # or deploy:prod
 ```
 
 Workers use custom routes via `api.flaim.app`:

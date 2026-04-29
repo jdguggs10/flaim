@@ -140,12 +140,11 @@ Each sport's mappings.ts exports:
 ## Development
 
 ```bash
-# Run locally
-npm run dev:espn-client  # Port 8789
+# Run locally from the repository root
+corepack pnpm --dir workers/espn-client run dev  # Port 8789
 
 # Or directly
-cd workers/espn-client
-wrangler dev --env dev --port 8789
+corepack pnpm --dir workers/espn-client exec wrangler dev --env dev --port 8789
 ```
 
 ## Tech Debt

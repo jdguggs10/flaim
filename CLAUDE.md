@@ -65,7 +65,7 @@ Then load the area-specific entry point if relevant:
 - `pnpm` workspace (`packageManager: pnpm@10`)
 - Next.js web app in `web/`
 - Cloudflare Workers in `workers/`
-- Chrome extension in `extension/`
+- Chrome extension in `extension/` (npm-isolated; see `extension/package-lock.json`)
 
 Prefer `corepack pnpm ...` from the repo root unless a package README says otherwise.
 

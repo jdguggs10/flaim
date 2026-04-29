@@ -19,21 +19,21 @@ The **extension** does not have automated tests right now. Most web UI flows are
 Workers use Vitest.
 
 ```bash
-cd web && npm test
-cd workers/auth-worker && npm test
-cd workers/fantasy-mcp && npm test
-cd workers/espn-client && npm test
-cd workers/yahoo-client && npm test
-cd workers/sleeper-client && npm test
+corepack pnpm --dir web run test
+corepack pnpm --dir workers/auth-worker run test
+corepack pnpm --dir workers/fantasy-mcp run test
+corepack pnpm --dir workers/espn-client run test
+corepack pnpm --dir workers/yahoo-client run test
+corepack pnpm --dir workers/sleeper-client run test
 ```
 
 Type checks (where configured):
 
 ```bash
-cd workers/auth-worker && npm run type-check
-cd workers/fantasy-mcp && npm run type-check
-cd workers/espn-client && npm run type-check
-cd workers/sleeper-client && npm run type-check
+corepack pnpm --dir workers/auth-worker run type-check
+corepack pnpm --dir workers/fantasy-mcp run type-check
+corepack pnpm --dir workers/espn-client run type-check
+corepack pnpm --dir workers/sleeper-client run type-check
 ```
 
 ## Sleeper Smoke Test Fixtures
@@ -99,7 +99,7 @@ Skip tests for small UI copy tweaks or non-critical refactors.
 
 ## Eval Harness
 
-The eval harness supports headless API key auth via `FLAIM_EVAL_API_KEY`. When set, `npm run eval` skips the OAuth browser flow entirely. See `workers/auth-worker/README.md` for the eval API key security model.
+The external eval harness supports headless API key auth via `FLAIM_EVAL_API_KEY`. When set, its eval command skips the OAuth browser flow entirely. See `workers/auth-worker/README.md` for the eval API key security model.
 
 ## Deferred (for now)
 

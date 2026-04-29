@@ -87,18 +87,17 @@ interface ExecuteRequest {
 ## Development
 
 ```bash
-# Run locally (port 8792)
-npm run dev
+# Run locally from the repository root (port 8792)
+corepack pnpm --dir workers/sleeper-client run dev
 
 # Or directly
-cd workers/sleeper-client
-wrangler dev --env dev --port 8792
+corepack pnpm --dir workers/sleeper-client exec wrangler dev --env dev --port 8792
 
 # Run tests
-npm test
+corepack pnpm --dir workers/sleeper-client run test
 
 # Type check
-npm run type-check
+corepack pnpm --dir workers/sleeper-client run type-check
 ```
 
 ## Related

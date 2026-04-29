@@ -4,11 +4,13 @@ Next.js 15 app with App Router, Tailwind CSS v4, and shadcn/ui. Handles site pag
 
 ## Quick Start
 
+Run from the repository root:
+
 ```bash
-npm run dev:frontend     # Just the web app
-npm run dev              # Web + all workers
-npm run build            # Production build
-npm run lint             # ESLint
+corepack pnpm run dev:frontend     # Just the web app
+corepack pnpm run dev              # Web + all workers
+corepack pnpm run build            # Production build
+corepack pnpm run lint             # ESLint
 ```
 
 ## Directory Structure

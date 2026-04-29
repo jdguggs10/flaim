@@ -83,10 +83,13 @@ Solo indie project — built with care, maintained for the long term. No VC fund
 
 ```bash
 git clone https://github.com/jdguggs10/flaim.git
-cd flaim && npm install
+cd flaim
+corepack pnpm install
 cp web/.env.example web/.env.local  # add keys
-npm run dev
+corepack pnpm run dev
 ```
+
+Root, web, and workers use `pnpm` via Corepack. The Chrome extension is intentionally npm-isolated under `extension/` with its own lockfile and release flow.
 
 | Document | Description |
 |----------|-------------|

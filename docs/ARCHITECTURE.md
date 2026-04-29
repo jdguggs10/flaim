@@ -9,12 +9,14 @@ Flaim is an MCP (Model Context Protocol) service that connects ESPN, Yahoo, and 
 ```bash
 git clone https://github.com/jdguggs10/flaim
 cd flaim
-npm install
+corepack pnpm install
 cp web/.env.example web/.env.local   # add keys
-npm run dev
+corepack pnpm run dev
 ```
 
-**Prerequisites:** Node 24+, npm, `npm i -g wrangler`
+**Prerequisites:** Node 24+ with Corepack. Wrangler is installed through workspace dependencies and can be run with `corepack pnpm exec wrangler`.
+
+Root, web, and workers use `pnpm` via Corepack. The Chrome extension is intentionally npm-isolated under `extension/` with its own lockfile and Chrome Web Store release flow.
 
 ## Core Pieces
 
@@ -45,7 +47,7 @@ workers/                    # Cloudflare Workers (see workers/README.md)
   yahoo-client/             # Yahoo API client (called by fantasy-mcp)
   sleeper-client/           # Sleeper API client (called by fantasy-mcp; public API)
   shared/                   # @flaim/worker-shared package
-extension/                  # Chrome extension (see extension/README.md)
+extension/                  # Chrome extension; npm-isolated (see extension/README.md)
 docs/                       # Documentation
 ```
 
@@ -210,7 +212,7 @@ See `workers/README.md` for worker-to-worker communication requirements.
 |--------------|---------|--------------|
 | Deploy to prod | Push/merge to `main` | Workers + Frontend auto-deploy (~1-2 min) |
 | Test in preview | Open a PR | Workers + Frontend deploy to preview URLs |
-| Test locally | `npm run dev` | Nothing deploys, runs on localhost |
+| Test locally | `corepack pnpm run dev` | Nothing deploys, runs on localhost |
 | Check deploy status | `gh run list --limit 5` | Shows recent GitHub Actions runs |
 | Fix broken prod | Revert commit, push to `main` | Auto-redeploys with fix |
 | Instant worker rollback | `wrangler rollback --env prod` in worker dir | Reverts to previous version without git commit |
@@ -238,7 +240,7 @@ See `workers/README.md` for worker-to-worker communication requirements.
 
 | Env | ENVIRONMENT | NODE_ENV | Notes |
 |-----|-------------|----------|-------|
-| dev | dev | development | Local `npm run dev` |
+| dev | dev | development | Local `corepack pnpm run dev` |
 | preview | preview | production | PR deploys (auto) |
 | prod | prod | production | main branch (auto) |
 
@@ -247,11 +249,11 @@ See `workers/README.md` for worker-to-worker communication requirements.
 Usually not needed since CI/CD handles it, but available for debugging:
 
 - **Workers** (manual fallback, per worker):
-  - `cd workers/auth-worker && wrangler deploy --env preview` (or `--env prod`)
-  - `cd workers/fantasy-mcp && npm run deploy:preview` (or `npm run deploy:prod`)
-  - `cd workers/espn-client && npm run deploy:preview` (or `npm run deploy:prod`)
-  - `cd workers/yahoo-client && npm run deploy:preview` (or `npm run deploy:prod`)
-  - `cd workers/sleeper-client && npm run deploy:preview` (or `npm run deploy:prod`)
+  - `corepack pnpm --dir workers/auth-worker exec wrangler deploy --env preview` (or `--env prod`)
+  - `corepack pnpm --dir workers/fantasy-mcp run deploy:preview` (or `deploy:prod`)
+  - `corepack pnpm --dir workers/espn-client run deploy:preview` (or `deploy:prod`)
+  - `corepack pnpm --dir workers/yahoo-client run deploy:preview` (or `deploy:prod`)
+  - `corepack pnpm --dir workers/sleeper-client run deploy:preview` (or `deploy:prod`)
 - **Frontend**: Push to `main` or PR (Vercel auto-deploys)
 - **Extension**: See `extension/README.md` for Chrome Web Store update process
 
@@ -304,7 +306,7 @@ Verify: `curl https://api.flaim.app/auth/health`
 | Symptom | Cause | Fix |
 |---------|-------|-----|
 | Double slashes in URLs | Trailing slash in env vars | Remove trailing slashes |
-| Extension "Failed to fetch" | Production build loaded locally | Rebuild with `NODE_ENV=development npm run build` |
+| Extension "Failed to fetch" | Production build loaded locally | Rebuild from `extension/` with `npm run build:dev` |
 | Extension not signed in | Clerk session not syncing | Close/reopen extension popup, confirm flaim.app sign-in |
 | MCP error 424 "Failed Dependency" | AI client can't reach localhost MCP URLs | Deploy workers to preview, update `.env.local` with preview URLs |
 | Node.js v25 localStorage warning | Known Node v25 regression | Harmless; suppressed via `--no-webstorage` in dev script |

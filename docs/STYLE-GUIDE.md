@@ -24,5 +24,5 @@ The homepage and guide pages have different copy rules.
 
 ## Verification
 
-- Run `npm run ui:check` for token/palette consistency.
-- Run `npm run lint` before shipping frontend changes.
+- Run `corepack pnpm run ui:check` for token/palette consistency.
+- Run `corepack pnpm run lint` before shipping frontend changes.

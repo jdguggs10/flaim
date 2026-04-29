@@ -183,9 +183,9 @@ YAHOO_CLIENT_SECRET=your-yahoo-client-secret
 ## Development
 
 ```bash
-npm run dev          # Start dev server
-npx tsc --noEmit     # Type check
-npm run deploy       # Deploy
+corepack pnpm --dir workers/auth-worker run dev          # Start dev server
+corepack pnpm --dir workers/auth-worker run type-check   # Type check
+corepack pnpm --dir workers/auth-worker run deploy       # Deploy
 ```
 
 ## League Storage Notes
