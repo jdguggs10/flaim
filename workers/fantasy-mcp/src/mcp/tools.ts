@@ -494,9 +494,14 @@ export function getUnifiedTools(): UnifiedTool[] {
             if (currentSeason) {
               leagues.push(currentSeason);
             }
+            // No fallback to the most recent historical season: showing stale
+            // leagues in get_user_session causes agents and widgets to treat
+            // old seasons as active. Provider-lag cases get a distinct message
+            // below and remain available through get_ancient_history.
           }
 
           const hasLeagues = leagues.length > 0;
+          const hasRawLeagues = allLeagues.length > 0;
           const sportCounts = leagues.reduce(
             (acc, l) => {
               const sport = l.sport?.toLowerCase() || 'unknown';
@@ -508,8 +513,9 @@ export function getUnifiedTools(): UnifiedTool[] {
 
           let sessionMessage: string;
           if (!hasLeagues) {
-            sessionMessage =
-              'No leagues configured. Please go to flaim.app/settings to add your fantasy platform credentials.';
+            sessionMessage = hasRawLeagues
+              ? 'No current-season leagues found. Provider data exists, but every returned league is for a non-current season. Do not treat historical leagues as active; use get_ancient_history only when the user asks about past seasons.'
+              : 'No leagues configured. Please go to flaim.app/settings to add your fantasy platform credentials.';
           } else if (leagues.length === 1) {
             const league = leagues[0];
             sessionMessage = `Use platform="${league.platform}", sport="${league.sport}", leagueId="${league.leagueId}", teamId="${league.teamId || 'none'}", seasonYear=${league.seasonYear} for all tool calls.`;
@@ -560,6 +566,9 @@ export function getUnifiedTools(): UnifiedTool[] {
             basketball: preferences.defaultBasketball,
             hockey: preferences.defaultHockey,
           };
+          const rawLeagueKeys = new Set(
+            allLeagues.map((l) => `${l.platform}:${l.leagueId}:${l.seasonYear}`)
+          );
 
           for (const [sport, defaultInfo] of Object.entries(sportDefaultMap)) {
             if (defaultInfo) {
@@ -577,14 +586,7 @@ export function getUnifiedTools(): UnifiedTool[] {
                   // Platform fetch failed — the league may still be valid. Preserve
                   // the default and surface a transient warning instead of clearing.
                   warnings.push(`Could not verify ${sport} default: ${defaultInfo.platform} data is temporarily unavailable. Default preserved.`);
-                } else if (
-                  allLeagues.some(
-                    (l) =>
-                      l.platform === defaultInfo.platform &&
-                      l.leagueId === defaultInfo.leagueId &&
-                      l.seasonYear === defaultInfo.seasonYear
-                  )
-                ) {
+                } else if (rawLeagueKeys.has(`${defaultInfo.platform}:${defaultInfo.leagueId}:${defaultInfo.seasonYear}`)) {
                   // The default still exists in the provider payload, but is not
                   // part of the current-session view. Preserve it so season
                   // rollover/provider lag does not delete user preferences.

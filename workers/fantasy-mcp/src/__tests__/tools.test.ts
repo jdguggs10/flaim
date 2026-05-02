@@ -760,10 +760,56 @@ describe('fantasy-mcp tools', () => {
     expect(payload.warnings?.some((w) => w.includes('Preserved non-current baseball default'))).toBe(true);
   });
 
+  it('get_user_session: provider-lag seasons are omitted with a current-season message', async () => {
+    const tool = getUnifiedTools().find((t) => t.name === 'get_user_session');
+    expect(tool).toBeTruthy();
+
+    const previousSeasonLeague = {
+      platform: 'espn',
+      sport: 'baseball',
+      leagueId: 'bb-2025',
+      leagueName: 'Diamond',
+      teamId: 't2',
+      seasonYear: 2025,
+    };
+
+    const env = {
+      INTERNAL_SERVICE_TOKEN: 'internal-secret',
+      AUTH_WORKER: {
+        fetch: async (req: Request) => {
+          const url = new URL(req.url);
+          if (url.pathname === '/internal/leagues') {
+            return new Response(JSON.stringify({ leagues: [previousSeasonLeague] }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          return new Response(JSON.stringify({ leagues: [] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        },
+      },
+    } as unknown as Env;
+
+    const result = await tool!.handler({}, env, 'Bearer test-token');
+    const payload = JSON.parse(result.content[0].text) as {
+      allLeagues: Array<{ sport: string; seasonYear: number }>;
+      instructions: string;
+      totalLeaguesFound: number;
+    };
+
+    expect(payload.totalLeaguesFound).toBe(0);
+    expect(payload.allLeagues).toHaveLength(0);
+    expect(payload.instructions).toContain('No current-season leagues found');
+    expect(payload.instructions).not.toContain('No leagues configured');
+  });
+
   it('get_user_session: recurring Yahoo leagues dedup to current season only', async () => {
     const tool = getUnifiedTools().find((t) => t.name === 'get_user_session');
     expect(tool).toBeTruthy();
 
+    // fetchYahooLeagues maps Yahoo's leagueKey field into the normalized leagueId.
     // Same Yahoo league renewed across two seasons — game_key changes, stable league_id does not.
     const yahooLeagues = [
       { sport: 'football', leagueKey: '449.l.1000', leagueName: 'Touchdown League', teamId: 't1', seasonYear: 2024 },
@@ -811,6 +857,7 @@ describe('fantasy-mcp tools', () => {
     // Yahoo can return renewed leagues whose visible lineage is the same even
     // when the stable league_id portion changes. The active session view should
     // still expose only the current baseball season.
+    // fetchYahooLeagues maps Yahoo's leagueKey field into the normalized leagueId.
     const yahooLeagues = [
       { sport: 'baseball', leagueKey: '422.l.1000', leagueName: 'Car Ramrod', teamId: 't1', teamName: "Gerry Gugger's Nice Team", seasonYear: 2024 },
       { sport: 'baseball', leagueKey: '431.l.2000', leagueName: 'Car Ramrod', teamId: 't2', teamName: "Gerry Gugger's Nice Team", seasonYear: 2025 },
