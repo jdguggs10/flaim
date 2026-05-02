@@ -459,9 +459,6 @@ export function getUnifiedTools(): UnifiedTool[] {
           // Combine all leagues
           const allLeagues = [...espnData.leagues, ...yahooData.leagues, ...sleeperData.leagues];
 
-          // Filter to active leagues (have a season within 2 years) and limit to 2 most recent seasons
-          const thresholdYear = getActiveThresholdYear();
-
           // Track which platforms failed to fetch — used to avoid clearing valid defaults
           // when a platform was temporarily unavailable.
           const failedPlatforms = new Set<string>();
@@ -482,34 +479,29 @@ export function getUnifiedTools(): UnifiedTool[] {
             leagueGroups.get(key)!.push(league);
           }
 
-          // Filter to active leagues and limit seasons
+          // Filter to active leagues. The session view is intentionally strict:
+          // only the sport's current canonical season belongs here. Older seasons
+          // stay discoverable through get_ancient_history.
           const leagues: typeof allLeagues = [];
           for (const [, groupSeasons] of leagueGroups) {
             // Sort by seasonYear descending
             groupSeasons.sort((a, b) => (b.seasonYear || 0) - (a.seasonYear || 0));
-            const mostRecentYear = groupSeasons[0]?.seasonYear || 0;
 
-            // Only include if most recent season is within threshold
-            if (mostRecentYear >= thresholdYear) {
-              // Determine current season for this league's sport
-              const sport = (groupSeasons[0]?.sport || '').toLowerCase();
-              const currentYear = getDefaultSeasonYear(sport as Sport);
-              // Take only the current-season entry (or most recent if no exact match)
-              const currentSeason = groupSeasons.find(s => s.seasonYear === currentYear);
-              if (currentSeason) {
-                leagues.push(currentSeason);
-              } else if (groupSeasons[0]?.platform === 'sleeper') {
-                // Sleeper league IDs are season-specific, so a fallback here can promote a
-                // past canonical season into the active session view.
-                continue;
-              } else {
-                // Fallback: most recent season (e.g., league not yet created for current season)
-                leagues.push(groupSeasons[0]);
-              }
+            // Determine current season for this league's sport
+            const sport = (groupSeasons[0]?.sport || '').toLowerCase();
+            const currentYear = getDefaultSeasonYear(sport as Sport);
+            const currentSeason = groupSeasons.find(s => s.seasonYear === currentYear);
+            if (currentSeason) {
+              leagues.push(currentSeason);
             }
+            // No fallback to the most recent historical season: showing stale
+            // leagues in get_user_session causes agents and widgets to treat
+            // old seasons as active. Provider-lag cases get a distinct message
+            // below and remain available through get_ancient_history.
           }
 
           const hasLeagues = leagues.length > 0;
+          const hasRawLeagues = allLeagues.length > 0;
           const sportCounts = leagues.reduce(
             (acc, l) => {
               const sport = l.sport?.toLowerCase() || 'unknown';
@@ -521,8 +513,9 @@ export function getUnifiedTools(): UnifiedTool[] {
 
           let sessionMessage: string;
           if (!hasLeagues) {
-            sessionMessage =
-              'No leagues configured. Please go to flaim.app/settings to add your fantasy platform credentials.';
+            sessionMessage = hasRawLeagues
+              ? 'No current-season leagues found. Provider data exists, but every returned league is for a non-current season. Do not treat historical leagues as active; use get_ancient_history only when the user asks about past seasons.'
+              : 'No leagues configured. Please go to flaim.app/settings to add your fantasy platform credentials.';
           } else if (leagues.length === 1) {
             const league = leagues[0];
             sessionMessage = `Use platform="${league.platform}", sport="${league.sport}", leagueId="${league.leagueId}", teamId="${league.teamId || 'none'}", seasonYear=${league.seasonYear} for all tool calls.`;
@@ -573,6 +566,9 @@ export function getUnifiedTools(): UnifiedTool[] {
             basketball: preferences.defaultBasketball,
             hockey: preferences.defaultHockey,
           };
+          const rawLeagueKeys = new Set(
+            allLeagues.map((l) => `${l.platform}:${l.leagueId}:${l.seasonYear}`)
+          );
 
           for (const [sport, defaultInfo] of Object.entries(sportDefaultMap)) {
             if (defaultInfo) {
@@ -590,38 +586,43 @@ export function getUnifiedTools(): UnifiedTool[] {
                   // Platform fetch failed — the league may still be valid. Preserve
                   // the default and surface a transient warning instead of clearing.
                   warnings.push(`Could not verify ${sport} default: ${defaultInfo.platform} data is temporarily unavailable. Default preserved.`);
+                } else if (rawLeagueKeys.has(`${defaultInfo.platform}:${defaultInfo.leagueId}:${defaultInfo.seasonYear}`)) {
+                  // The default still exists in the provider payload, but is not
+                  // part of the current-session view. Preserve it so season
+                  // rollover/provider lag does not delete user preferences.
+                  warnings.push(`Preserved non-current ${sport} default: league ${defaultInfo.leagueId} is not shown in active leagues.`);
                 } else {
-                // Platform fetch succeeded but league is missing — it's genuinely stale.
-                // Fire a best-effort clear so future reads don't repeat this lookup.
-                const staleBaseHeaders: Record<string, string> = {
-                  'Content-Type': 'application/json',
-                  ...(authHeader ? { Authorization: authHeader } : {}),
-                };
-                const withStaleCorrelation = correlationId ? withCorrelationId(staleBaseHeaders, correlationId) : new Headers(staleBaseHeaders);
-                const withStaleInternal = withInternalServiceToken(withStaleCorrelation, env, `auth-worker /internal/leagues/default/${sport}`);
-                const staleHeaders = withEvalHeaders(withStaleInternal, evalRunId, evalTraceId);
-                const staleUrl = new URL(`https://internal/internal/leagues/default/${sport}`);
-                staleUrl.searchParams.set('platform', defaultInfo.platform);
-                staleUrl.searchParams.set('leagueId', defaultInfo.leagueId);
-                staleUrl.searchParams.set('seasonYear', String(defaultInfo.seasonYear));
-                let cleared = false;
-                try {
-                  const clearResp = await env.AUTH_WORKER.fetch(
-                    new Request(staleUrl.toString(), { method: 'DELETE', headers: staleHeaders })
-                  );
-                  cleared = clearResp.ok;
-                  if (!clearResp.ok) {
-                    console.error(`[get_user_session] Stale ${sport} default DELETE returned ${clearResp.status}`);
+                  // Platform fetch succeeded but league is missing — it's genuinely stale.
+                  // Fire a best-effort clear so future reads don't repeat this lookup.
+                  const staleBaseHeaders: Record<string, string> = {
+                    'Content-Type': 'application/json',
+                    ...(authHeader ? { Authorization: authHeader } : {}),
+                  };
+                  const withStaleCorrelation = correlationId ? withCorrelationId(staleBaseHeaders, correlationId) : new Headers(staleBaseHeaders);
+                  const withStaleInternal = withInternalServiceToken(withStaleCorrelation, env, `auth-worker /internal/leagues/default/${sport}`);
+                  const staleHeaders = withEvalHeaders(withStaleInternal, evalRunId, evalTraceId);
+                  const staleUrl = new URL(`https://internal/internal/leagues/default/${sport}`);
+                  staleUrl.searchParams.set('platform', defaultInfo.platform);
+                  staleUrl.searchParams.set('leagueId', defaultInfo.leagueId);
+                  staleUrl.searchParams.set('seasonYear', String(defaultInfo.seasonYear));
+                  let cleared = false;
+                  try {
+                    const clearResp = await env.AUTH_WORKER.fetch(
+                      new Request(staleUrl.toString(), { method: 'DELETE', headers: staleHeaders })
+                    );
+                    cleared = clearResp.ok;
+                    if (!clearResp.ok) {
+                      console.error(`[get_user_session] Stale ${sport} default DELETE returned ${clearResp.status}`);
+                    }
+                  } catch (e) {
+                    console.error(`[get_user_session] Network error clearing stale ${sport} default:`, e);
                   }
-                } catch (e) {
-                  console.error(`[get_user_session] Network error clearing stale ${sport} default:`, e);
+                  warnings.push(
+                    cleared
+                      ? `Cleared stale ${sport} default: league ${defaultInfo.leagueId} is no longer in your active leagues.`
+                      : `Stale ${sport} default detected (league ${defaultInfo.leagueId} is no longer active) — automatic cleanup failed, will retry next session.`
+                  );
                 }
-                warnings.push(
-                  cleared
-                    ? `Cleared stale ${sport} default: league ${defaultInfo.leagueId} is no longer in your active leagues.`
-                    : `Stale ${sport} default detected (league ${defaultInfo.leagueId} is no longer active) — automatic cleanup failed, will retry next session.`
-                );
-                } // end: platform fetch succeeded (stale default)
               }
             }
           }
