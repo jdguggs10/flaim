@@ -39,17 +39,25 @@ export function createFantasyMcpServer(ctx: McpContext): McpServer {
   server.registerResource(
     'user-session-widget',
     'ui://widget/user-session.html',
-    {},
+    {
+      mimeType: 'text/html;profile=mcp-app',
+    },
     async () => ({
       contents: [{
         uri: 'ui://widget/user-session.html',
-        mimeType: 'text/html+skybridge',
+        mimeType: 'text/html;profile=mcp-app',
         text: USER_SESSION_WIDGET_HTML,
         _meta: {
-          'openai/widgetDomain': 'https://flaim.app',
+          ui: {
+            csp: {
+              connectDomains: [],
+              resourceDomains: [],
+            },
+          },
           'openai/widgetCSP': {
             connect_domains: [],
             resource_domains: [],
+            redirect_domains: ['https://flaim.app'],
           },
         },
       }],
@@ -73,6 +81,9 @@ export function createFantasyMcpServer(ctx: McpContext): McpServer {
             'openai/toolInvocation/invoked': tool.openaiMeta.invoked,
           }),
           ...(tool.widgetUri && {
+            ui: {
+              resourceUri: tool.widgetUri,
+            },
             'openai/outputTemplate': tool.widgetUri,
             'openai/widgetAccessible': true,
             'openai/resultCanProduceWidget': true,

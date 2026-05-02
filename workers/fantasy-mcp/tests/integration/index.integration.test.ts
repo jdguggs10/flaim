@@ -5,6 +5,15 @@ import { getUnifiedTools } from '../../src/mcp/tools';
 import { INTERNAL_SERVICE_TOKEN_HEADER } from '@flaim/worker-shared';
 
 function buildMcpRequest(pathname: '/mcp' | '/fantasy/mcp'): Request {
+  return buildMcpJsonRpcRequest(pathname, 'tools/list');
+}
+
+function buildMcpJsonRpcRequest(
+  pathname: '/mcp' | '/fantasy/mcp',
+  method: string,
+  params: Record<string, unknown> = {},
+  id = 'wire-test-1'
+): Request {
   return new Request(`https://api.flaim.app${pathname}`, {
     method: 'POST',
     headers: {
@@ -14,9 +23,9 @@ function buildMcpRequest(pathname: '/mcp' | '/fantasy/mcp'): Request {
     },
     body: JSON.stringify({
       jsonrpc: '2.0',
-      id: 'wire-test-1',
-      method: 'tools/list',
-      params: {},
+      id,
+      method,
+      params,
     }),
   });
 }
@@ -30,7 +39,7 @@ function buildMcpGetRequest(pathname: '/mcp' | '/fantasy/mcp'): Request {
   });
 }
 
-async function parseJsonRpcResponse(response: Response): Promise<{
+type JsonRpcTestPayload = {
   result?: {
     tools?: Array<{
       name: string;
@@ -47,34 +56,39 @@ async function parseJsonRpcResponse(response: Response): Promise<{
         destructiveHint?: boolean;
         idempotentHint?: boolean;
       };
-      _meta?: { securitySchemes?: Array<{ type?: string; scopes?: string[] }> };
+      _meta?: Record<string, unknown> & {
+        securitySchemes?: Array<{ type?: string; scopes?: string[] }>;
+        ui?: { resourceUri?: string };
+        'openai/outputTemplate'?: string;
+        'openai/widgetAccessible'?: boolean;
+        'openai/resultCanProduceWidget'?: boolean;
+        'openai/widgetDomain'?: string;
+      };
+    }>;
+    resources?: Array<{
+      uri: string;
+      name?: string;
+      mimeType?: string;
+      _meta?: Record<string, unknown>;
+    }>;
+    contents?: Array<{
+      uri?: string;
+      mimeType?: string;
+      text?: string;
+      _meta?: Record<string, unknown> & {
+        ui?: { csp?: { connectDomains?: unknown[]; resourceDomains?: unknown[] }; domain?: string };
+        'openai/widgetCSP'?: { connect_domains?: unknown[]; resource_domains?: unknown[] };
+        'openai/widgetDomain'?: string;
+      };
     }>;
   };
-}> {
+};
+
+async function parseJsonRpcResponse(response: Response): Promise<JsonRpcTestPayload> {
   const contentType = response.headers.get('Content-Type') || '';
 
   if (contentType.includes('application/json')) {
-    return response.json() as Promise<{
-      result?: {
-        tools?: Array<{
-          name: string;
-          inputSchema?: {
-            properties?: {
-              platform?: {
-                enum?: string[];
-              };
-            };
-          };
-          annotations?: {
-            readOnlyHint?: boolean;
-            openWorldHint?: boolean;
-            destructiveHint?: boolean;
-            idempotentHint?: boolean;
-          };
-          _meta?: { securitySchemes?: Array<{ type?: string; scopes?: string[] }> };
-        }>;
-      };
-    }>;
+    return response.json() as Promise<JsonRpcTestPayload>;
   }
 
   if (contentType.includes('text/event-stream')) {
@@ -85,27 +99,7 @@ async function parseJsonRpcResponse(response: Response): Promise<{
       .map((line) => line.slice(5).trim())
       .join('\n')
       .trim();
-    return JSON.parse(data) as {
-      result?: {
-        tools?: Array<{
-          name: string;
-          inputSchema?: {
-            properties?: {
-              platform?: {
-                enum?: string[];
-              };
-            };
-          };
-          annotations?: {
-            readOnlyHint?: boolean;
-            openWorldHint?: boolean;
-            destructiveHint?: boolean;
-            idempotentHint?: boolean;
-          };
-          _meta?: { securitySchemes?: Array<{ type?: string; scopes?: string[] }> };
-        }>;
-      };
-    };
+    return JSON.parse(data) as JsonRpcTestPayload;
   }
 
   throw new Error(`Unsupported MCP response content type: ${contentType}`);
@@ -216,6 +210,13 @@ describe('fantasy-mcp gateway integration', () => {
     const freeAgentsTool = tools?.find((tool) => tool.name === 'get_free_agents');
     expect(freeAgentsTool).toBeDefined();
     expect(freeAgentsTool?.inputSchema?.properties?.platform?.enum).toContain('sleeper');
+    const userSessionTool = tools?.find((tool) => tool.name === 'get_user_session');
+    expect(userSessionTool).toBeDefined();
+    expect(userSessionTool?._meta?.ui).toEqual({ resourceUri: 'ui://widget/user-session.html' });
+    expect(userSessionTool?._meta?.['openai/outputTemplate']).toBe('ui://widget/user-session.html');
+    expect(userSessionTool?._meta?.['openai/widgetAccessible']).toBe(true);
+    expect(userSessionTool?._meta?.['openai/resultCanProduceWidget']).toBe(true);
+    expect(userSessionTool?._meta?.['openai/widgetDomain']).toBeUndefined();
 
     const scopeByTool = new Map(getUnifiedTools().map((tool) => [tool.name, tool.requiredScope]));
     for (const tool of tools || []) {
@@ -235,6 +236,52 @@ describe('fantasy-mcp gateway integration', () => {
     expect(introspectReq.url).toBe('https://internal/internal/introspect');
     expect(introspectReq.headers.get('X-Flaim-Expected-Resource')).toBe('https://api.flaim.app/mcp');
     expect(introspectReq.headers.get(INTERNAL_SERVICE_TOKEN_HEADER)).toBe('internal-secret');
+  });
+
+  it('exposes the user session MCP Apps resource metadata', async () => {
+    const authFetch = vi.fn(async () =>
+      new Response(JSON.stringify({ valid: true, userId: 'user-123', scope: 'mcp:read mcp:write', authType: 'oauth' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    );
+    const env = buildEnv(authFetch);
+
+    const listResponse = await app.fetch(
+      buildMcpJsonRpcRequest('/mcp', 'resources/list', {}, 'resources-list-1'),
+      env,
+      mockExecutionContext()
+    );
+    expect(listResponse.status).toBe(200);
+    const listPayload = await parseJsonRpcResponse(listResponse);
+    const resource = listPayload.result?.resources?.find((item) => item.uri === 'ui://widget/user-session.html');
+    expect(resource).toBeDefined();
+    expect(resource?.mimeType).toBe('text/html;profile=mcp-app');
+
+    const readResponse = await app.fetch(
+      buildMcpJsonRpcRequest(
+        '/mcp',
+        'resources/read',
+        { uri: 'ui://widget/user-session.html' },
+        'resources-read-1'
+      ),
+      env,
+      mockExecutionContext()
+    );
+    expect(readResponse.status).toBe(200);
+    const readPayload = await parseJsonRpcResponse(readResponse);
+    const content = readPayload.result?.contents?.find((item) => item.uri === 'ui://widget/user-session.html');
+    expect(content?.mimeType).toBe('text/html;profile=mcp-app');
+    expect(content?.text).toContain('<title>Flaim</title>');
+    expect(content?._meta?.ui?.csp?.connectDomains).toEqual([]);
+    expect(content?._meta?.ui?.csp?.resourceDomains).toEqual([]);
+    expect(content?._meta?.ui?.domain).toBeUndefined();
+    expect(content?._meta?.['openai/widgetDomain']).toBeUndefined();
+    expect(content?._meta?.['openai/widgetCSP']).toEqual({
+      connect_domains: [],
+      resource_domains: [],
+      redirect_domains: ['https://flaim.app'],
+    });
   });
 
   it('fails closed with 401 when introspection returns non-OK', async () => {

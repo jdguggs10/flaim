@@ -4,6 +4,7 @@ import { getUnifiedTools, hasRequiredScope, mcpAuthError } from '../mcp/tools';
 import { buildMcpAuthErrorResponse } from '../auth-response';
 import type { Env } from '../types';
 import { routeToClient } from '../router';
+import { USER_SESSION_WIDGET_HTML } from '../widgets/user-session-widget';
 
 /** Helper to cast an AnySchema value to z3 ZodTypeAny for .parse() in tests. */
 const asZod = (schema: unknown) => schema as z.ZodTypeAny;
@@ -73,6 +74,10 @@ describe('fantasy-mcp tools', () => {
     // structuredContent mirrors the text payload
     expect(result.structuredContent).toBeDefined();
     expect((result.structuredContent as Record<string, unknown>).totalLeaguesFound).toBe(0);
+    expect(result._meta?.ui).toEqual({ resourceUri: 'ui://widget/user-session.html' });
+    expect(result._meta?.['openai/outputTemplate']).toBe('ui://widget/user-session.html');
+    expect(result._meta?.['openai/widgetAccessible']).toBe(true);
+    expect(result._meta?.['openai/resultCanProduceWidget']).toBe(true);
   });
 
   it('get_user_session keeps canonical current-season labels in the session payload', async () => {
@@ -108,6 +113,14 @@ describe('fantasy-mcp tools', () => {
   it('get_user_session includes widgetUri in tool definition', () => {
     const tool = getUnifiedTools().find((t) => t.name === 'get_user_session');
     expect(tool?.widgetUri).toBe('ui://widget/user-session.html');
+  });
+
+  it('user session widget declares the MCP Apps lifecycle messages', () => {
+    expect(USER_SESSION_WIDGET_HTML).toContain("method: 'ui/initialize'");
+    expect(USER_SESSION_WIDGET_HTML).toContain("protocolVersion: '2026-01-26'");
+    expect(USER_SESSION_WIDGET_HTML).toContain("method: 'ui/notifications/initialized'");
+    expect(USER_SESSION_WIDGET_HTML).toContain("msg.method === 'ui/notifications/tool-result'");
+    expect(USER_SESSION_WIDGET_HTML).toContain("msg.method === 'ui/resource-teardown'");
   });
 
   it('get_user_session returns only current-season leagues', async () => {
