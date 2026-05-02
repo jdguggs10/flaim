@@ -221,6 +221,7 @@ export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
       var url = new URL(event.origin);
       var host = url.hostname;
       if (url.protocol !== 'https:') return false;
+      // Extend this allowlist when a new MCP Apps host origin is certified.
       return host === 'chatgpt.com' ||
         host === 'chat.openai.com' ||
         host === 'claude.ai' ||
@@ -263,6 +264,7 @@ export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
       jsonrpc: '2.0',
       method: 'ui/notifications/size-changed',
       params: {
+        // Matches the ChatGPT text-response widget width declared above.
         width: document.documentElement.scrollWidth || 353,
         height: document.documentElement.scrollHeight || document.body.scrollHeight || 0,
       },
@@ -294,7 +296,7 @@ export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
         if (result && typeof result.catch === 'function') {
           // A resolved promise only tells us the host accepted the request;
           // rejection is the only observable signal where fallback is useful.
-          result.catch(openLegacyLeagues);
+          result.catch(function() { openLegacyLeagues(); });
         }
         return false;
       }

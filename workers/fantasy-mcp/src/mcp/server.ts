@@ -57,6 +57,7 @@ export function createFantasyMcpServer(ctx: McpContext): McpServer {
           'openai/widgetCSP': {
             connect_domains: [],
             resource_domains: [],
+            // Keep external-link allowlisting without reintroducing a stable widget domain.
             redirect_domains: ['https://flaim.app'],
           },
         },
