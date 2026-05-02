@@ -116,11 +116,14 @@ describe('fantasy-mcp tools', () => {
   });
 
   it('user session widget declares the MCP Apps lifecycle messages', () => {
+    // The widget is shipped as serialized HTML, so these assertions guard the
+    // protocol strings that MCP Apps hosts need to see at runtime.
     expect(USER_SESSION_WIDGET_HTML).toContain("method: 'ui/initialize'");
     expect(USER_SESSION_WIDGET_HTML).toContain("protocolVersion: '2026-01-26'");
     expect(USER_SESSION_WIDGET_HTML).toContain("method: 'ui/notifications/initialized'");
     expect(USER_SESSION_WIDGET_HTML).toContain("msg.method === 'ui/notifications/tool-result'");
     expect(USER_SESSION_WIDGET_HTML).toContain("msg.method === 'ui/resource-teardown'");
+    expect(USER_SESSION_WIDGET_HTML).toContain('isTrustedMessageEvent(event)');
   });
 
   it('get_user_session returns only current-season leagues', async () => {

@@ -205,9 +205,29 @@ export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
   function postToParent(message) {
     try {
       if (window.parent && window.parent !== window) {
+        // Sandboxed MCP Apps hosts do not always expose a stable target origin.
+        // These lifecycle messages contain no secrets, so '*' is intentional.
         window.parent.postMessage(message, '*');
       }
     } catch (_) {}
+  }
+
+  function isTrustedMessageEvent(event) {
+    if (event.source && window.parent && event.source !== window.parent) return false;
+    if (!event.origin || event.origin === 'null') return true;
+    try {
+      var url = new URL(event.origin);
+      var host = url.hostname;
+      if (url.protocol !== 'https:') return false;
+      return host === 'chatgpt.com' ||
+        host === 'chat.openai.com' ||
+        host === 'claude.ai' ||
+        host.endsWith('.claude.ai') ||
+        host.endsWith('.claudemcpcontent.com') ||
+        host.endsWith('.oaiusercontent.com');
+    } catch (_) {
+      return false;
+    }
   }
 
   function sendInitialized() {
@@ -237,16 +257,14 @@ export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
   }
 
   function sendSizeChanged() {
-    try {
-      postToParent({
-        jsonrpc: '2.0',
-        method: 'ui/notifications/size-changed',
-        params: {
-          width: document.documentElement.scrollWidth || 353,
-          height: document.documentElement.scrollHeight || document.body.scrollHeight || 0,
-        },
-      });
-    } catch (_) {}
+    postToParent({
+      jsonrpc: '2.0',
+      method: 'ui/notifications/size-changed',
+      params: {
+        width: document.documentElement.scrollWidth || 353,
+        height: document.documentElement.scrollHeight || document.body.scrollHeight || 0,
+      },
+    });
   }
 
   function openLegacyLeagues() {
@@ -272,6 +290,8 @@ export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
       if (window.openai && typeof window.openai.openExternal === 'function') {
         var result = window.openai.openExternal({ href: LEAGUES_URL });
         if (result && typeof result.catch === 'function') {
+          // A resolved promise only tells us the host accepted the request;
+          // rejection is the only observable signal where fallback is useful.
           result.catch(openLegacyLeagues);
         }
         return false;
@@ -414,10 +434,13 @@ export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
   // MCP Apps bridge: receive lifecycle messages and tool-result notifications.
   window.addEventListener('message', function(event) {
     if (!event.data) return;
+    if (!isTrustedMessageEvent(event)) return;
     var msg = event.data;
 
-    if (msg.jsonrpc === '2.0' && msg.id === initId && Object.prototype.hasOwnProperty.call(msg, 'result')) {
-      sendInitialized();
+    if (msg.jsonrpc === '2.0' && msg.id === initId) {
+      if (Object.prototype.hasOwnProperty.call(msg, 'result')) {
+        sendInitialized();
+      }
       return;
     }
 
