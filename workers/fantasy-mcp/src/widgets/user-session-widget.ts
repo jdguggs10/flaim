@@ -214,6 +214,8 @@ export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
 
   function isTrustedMessageEvent(event) {
     if (event.source && window.parent && event.source !== window.parent) return false;
+    // Claude Desktop and other sandboxed MCP Apps hosts can emit "null"
+    // origins. Accept them only after the parent-frame source check above.
     if (!event.origin || event.origin === 'null') return true;
     try {
       var url = new URL(event.origin);
@@ -462,6 +464,8 @@ export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
     var data = extract(msg);
     if (data) render(data);
   });
+  // Safe in non-MCP hosts: postToParent no-ops when the widget is top-level,
+  // and ChatGPT window.openai data paths remain independent of initialization.
   startMcpAppsLifecycle();
 })();
 </script>
