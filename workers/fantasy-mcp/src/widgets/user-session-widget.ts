@@ -213,7 +213,7 @@ export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
   }
 
   function isTrustedMessageEvent(event) {
-    if (event.source && window.parent && event.source !== window.parent) return false;
+    if (!event.source || !window.parent || event.source !== window.parent) return false;
     // Claude Desktop and other sandboxed MCP Apps hosts can emit "null"
     // origins. Accept them only after the parent-frame source check above.
     if (!event.origin || event.origin === 'null') return true;
@@ -271,6 +271,14 @@ export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
     });
   }
 
+  function queueSizeChanged() {
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(sendSizeChanged);
+      return;
+    }
+    setTimeout(sendSizeChanged, 0);
+  }
+
   function openLegacyLeagues() {
     try {
       if (window.openai && typeof window.openai.openUrl === 'function') {
@@ -298,6 +306,7 @@ export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
           // rejection is the only observable signal where fallback is useful.
           result.catch(function() { openLegacyLeagues(); });
         }
+        if (result === false) return openLegacyLeagues();
         return false;
       }
     } catch (_) {}
@@ -314,7 +323,7 @@ export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
         '<a href="https://flaim.app/leagues" target="_blank" rel="noopener">Connect a league</a>' +
         '</div>';
       rendered = true;
-      sendSizeChanged();
+      queueSizeChanged();
       return;
     }
 
@@ -382,7 +391,7 @@ export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
 
     container.innerHTML = html;
     rendered = true;
-    sendSizeChanged();
+    queueSizeChanged();
   }
 
   function esc(s) {
@@ -442,9 +451,7 @@ export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
     var msg = event.data;
 
     if (msg.jsonrpc === '2.0' && msg.id === initId) {
-      if (Object.prototype.hasOwnProperty.call(msg, 'result')) {
-        sendInitialized();
-      }
+      sendInitialized();
       return;
     }
 
