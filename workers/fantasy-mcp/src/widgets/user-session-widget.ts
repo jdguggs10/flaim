@@ -2,7 +2,8 @@
 
 /**
  * Self-contained HTML widget for the get_user_session tool.
- * Renders the user's fantasy leagues inline in ChatGPT via the Apps SDK widget protocol.
+ * Renders the user's fantasy leagues inline through the MCP Apps bridge, with
+ * ChatGPT window.openai compatibility as a fallback.
  *
  * Design constraints:
  * - No external scripts, fonts, images, or stylesheets (CSP-safe for iframe sandbox)
@@ -10,10 +11,10 @@
  * - System fonts only
  * - Aligns with flaim.app branding
  *
- * Data access — in order of priority:
- * 1. openai:set_globals CustomEvent → window.openai.toolOutput (primary, async)
- * 2. window.openai.toolOutput on immediate/DOMContentLoaded (may already be set)
- * 3. postMessage JSON-RPC ui/notifications/tool-result (fallback)
+ * Data access - in order of priority:
+ * 1. MCP Apps postMessage JSON-RPC ui/notifications/tool-result
+ * 2. openai:set_globals CustomEvent -> window.openai.toolOutput
+ * 3. window.openai.toolOutput on immediate/DOMContentLoaded (may already be set)
  *
  * References:
  * - https://developers.openai.com/apps-sdk/build/chatgpt-ui/
@@ -197,10 +198,88 @@ export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
   var SPORT_ORDER = { baseball: 0, football: 1, basketball: 2, hockey: 3 };
   var SPORT_EMOJI = { baseball: '⚾', football: '🏈', basketball: '🏀', hockey: '🏒' };
   var LEAGUES_URL = 'https://flaim.app/leagues';
+  var initId = 'flaim-init-' + Math.random().toString(36).slice(2);
+  var initializedSent = false;
   var rendered = false;
 
-  function openLeagues(e) {
-    if (e && e.preventDefault) e.preventDefault();
+  function postToParent(message) {
+    try {
+      if (window.parent && window.parent !== window) {
+        // Sandboxed MCP Apps hosts do not always expose a stable target origin.
+        // These lifecycle messages contain no secrets, so '*' is intentional.
+        window.parent.postMessage(message, '*');
+      }
+    } catch (_) {}
+  }
+
+  function isTrustedMessageEvent(event) {
+    if (!event.source || !window.parent || event.source !== window.parent) return false;
+    // Claude Desktop and other sandboxed MCP Apps hosts can emit "null"
+    // origins. Accept them only after the parent-frame source check above.
+    if (!event.origin || event.origin === 'null') return true;
+    try {
+      var url = new URL(event.origin);
+      var host = url.hostname;
+      if (url.protocol !== 'https:') return false;
+      // Extend this allowlist when a new MCP Apps host origin is certified.
+      return host === 'chatgpt.com' ||
+        host === 'chat.openai.com' ||
+        host === 'claude.ai' ||
+        host.endsWith('.claude.ai') ||
+        host.endsWith('.claudemcpcontent.com') ||
+        host.endsWith('.oaiusercontent.com');
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function sendInitialized() {
+    if (initializedSent) return;
+    initializedSent = true;
+    postToParent({
+      jsonrpc: '2.0',
+      method: 'ui/notifications/initialized',
+      params: {},
+    });
+  }
+
+  function startMcpAppsLifecycle() {
+    postToParent({
+      jsonrpc: '2.0',
+      id: initId,
+      method: 'ui/initialize',
+      params: {
+        protocolVersion: '2026-01-26',
+        appInfo: {
+          name: 'Flaim',
+          version: '1.0.0',
+        },
+        appCapabilities: {},
+      },
+    });
+  }
+
+  function sendSizeChanged() {
+    postToParent({
+      jsonrpc: '2.0',
+      method: 'ui/notifications/size-changed',
+      params: {
+        // Matches the ChatGPT text-response widget width declared above.
+        width: document.documentElement.scrollWidth || 353,
+        height: document.documentElement.scrollHeight || document.body.scrollHeight || 0,
+      },
+    });
+  }
+
+  function queueSizeChanged() {
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(sendSizeChanged);
+      return;
+    }
+    setTimeout(sendSizeChanged, 0);
+  }
+
+  function openLegacyLeagues() {
     try {
       if (window.openai && typeof window.openai.openUrl === 'function') {
         window.openai.openUrl(LEAGUES_URL);
@@ -217,6 +296,23 @@ export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
     return false;
   }
 
+  function openLeagues(e) {
+    if (e && e.preventDefault) e.preventDefault();
+    try {
+      if (window.openai && typeof window.openai.openExternal === 'function') {
+        var result = window.openai.openExternal({ href: LEAGUES_URL });
+        if (result && typeof result.catch === 'function') {
+          // A resolved promise only tells us the host accepted the request;
+          // rejection is the only observable signal where fallback is useful.
+          result.catch(function() { openLegacyLeagues(); });
+        }
+        if (result === false) return openLegacyLeagues();
+        return false;
+      }
+    } catch (_) {}
+    return openLegacyLeagues();
+  }
+
   function render(data) {
     if (rendered) return;
     var container = document.getElementById('content');
@@ -227,6 +323,7 @@ export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
         '<a href="https://flaim.app/leagues" target="_blank" rel="noopener">Connect a league</a>' +
         '</div>';
       rendered = true;
+      queueSizeChanged();
       return;
     }
 
@@ -294,6 +391,7 @@ export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
 
     container.innerHTML = html;
     rendered = true;
+    queueSizeChanged();
   }
 
   function esc(s) {
@@ -333,7 +431,7 @@ export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
     }
   }
 
-  // 1. Primary: listen for openai:set_globals CustomEvent (fires when SDK populates toolOutput)
+  // ChatGPT compatibility: listen for openai:set_globals CustomEvent.
   window.addEventListener('openai:set_globals', function(event) {
     if (rendered) return;
     var globals = event.detail && event.detail.globals;
@@ -342,16 +440,30 @@ export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
     }
   });
 
-  // 2. Check immediately and on DOMContentLoaded (toolOutput may already be set)
+  // ChatGPT compatibility: toolOutput may already be set.
   tryToolOutput();
   document.addEventListener('DOMContentLoaded', tryToolOutput);
 
-  // 3. Fallback: postMessage JSON-RPC from parent
+  // MCP Apps bridge: receive lifecycle messages and tool-result notifications.
   window.addEventListener('message', function(event) {
-    if (rendered) return;
     if (!event.data) return;
+    if (!isTrustedMessageEvent(event)) return;
     var msg = event.data;
-    // JSON-RPC tool-result envelope
+
+    if (msg.jsonrpc === '2.0' && msg.id === initId) {
+      sendInitialized();
+      return;
+    }
+
+    if (msg.jsonrpc === '2.0' && msg.method === 'ui/resource-teardown') {
+      if (msg.id !== undefined && msg.id !== null) {
+        postToParent({ jsonrpc: '2.0', id: msg.id, result: {} });
+      }
+      return;
+    }
+
+    if (rendered) return;
+
     if (msg.jsonrpc === '2.0' && msg.method === 'ui/notifications/tool-result') {
       var data = extract(msg.params);
       if (data) render(data);
@@ -361,6 +473,9 @@ export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
     var data = extract(msg);
     if (data) render(data);
   });
+  // Safe in non-MCP hosts: postToParent no-ops when the widget is top-level,
+  // and ChatGPT window.openai data paths remain independent of initialization.
+  startMcpAppsLifecycle();
 })();
 </script>
 </body>

@@ -683,6 +683,9 @@ export function getUnifiedTools(): UnifiedTool[] {
             content: [{ type: 'text' as const, text: JSON.stringify(sessionData, null, 2) }],
             structuredContent: sessionData as unknown as Record<string, unknown>,
             _meta: {
+              ui: {
+                resourceUri: 'ui://widget/user-session.html',
+              },
               'openai/outputTemplate': 'ui://widget/user-session.html',
               'openai/widgetAccessible': true,
               'openai/resultCanProduceWidget': true,
