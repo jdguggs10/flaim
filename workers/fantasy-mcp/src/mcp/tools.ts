@@ -459,9 +459,6 @@ export function getUnifiedTools(): UnifiedTool[] {
           // Combine all leagues
           const allLeagues = [...espnData.leagues, ...yahooData.leagues, ...sleeperData.leagues];
 
-          // Filter to active leagues (have a season within 2 years) and limit to 2 most recent seasons
-          const thresholdYear = getActiveThresholdYear();
-
           // Track which platforms failed to fetch — used to avoid clearing valid defaults
           // when a platform was temporarily unavailable.
           const failedPlatforms = new Set<string>();
@@ -482,30 +479,20 @@ export function getUnifiedTools(): UnifiedTool[] {
             leagueGroups.get(key)!.push(league);
           }
 
-          // Filter to active leagues and limit seasons
+          // Filter to active leagues. The session view is intentionally strict:
+          // only the sport's current canonical season belongs here. Older seasons
+          // stay discoverable through get_ancient_history.
           const leagues: typeof allLeagues = [];
           for (const [, groupSeasons] of leagueGroups) {
             // Sort by seasonYear descending
             groupSeasons.sort((a, b) => (b.seasonYear || 0) - (a.seasonYear || 0));
-            const mostRecentYear = groupSeasons[0]?.seasonYear || 0;
 
-            // Only include if most recent season is within threshold
-            if (mostRecentYear >= thresholdYear) {
-              // Determine current season for this league's sport
-              const sport = (groupSeasons[0]?.sport || '').toLowerCase();
-              const currentYear = getDefaultSeasonYear(sport as Sport);
-              // Take only the current-season entry (or most recent if no exact match)
-              const currentSeason = groupSeasons.find(s => s.seasonYear === currentYear);
-              if (currentSeason) {
-                leagues.push(currentSeason);
-              } else if (groupSeasons[0]?.platform === 'sleeper') {
-                // Sleeper league IDs are season-specific, so a fallback here can promote a
-                // past canonical season into the active session view.
-                continue;
-              } else {
-                // Fallback: most recent season (e.g., league not yet created for current season)
-                leagues.push(groupSeasons[0]);
-              }
+            // Determine current season for this league's sport
+            const sport = (groupSeasons[0]?.sport || '').toLowerCase();
+            const currentYear = getDefaultSeasonYear(sport as Sport);
+            const currentSeason = groupSeasons.find(s => s.seasonYear === currentYear);
+            if (currentSeason) {
+              leagues.push(currentSeason);
             }
           }
 
@@ -590,38 +577,50 @@ export function getUnifiedTools(): UnifiedTool[] {
                   // Platform fetch failed — the league may still be valid. Preserve
                   // the default and surface a transient warning instead of clearing.
                   warnings.push(`Could not verify ${sport} default: ${defaultInfo.platform} data is temporarily unavailable. Default preserved.`);
+                } else if (
+                  allLeagues.some(
+                    (l) =>
+                      l.platform === defaultInfo.platform &&
+                      l.leagueId === defaultInfo.leagueId &&
+                      l.seasonYear === defaultInfo.seasonYear
+                  )
+                ) {
+                  // The default still exists in the provider payload, but is not
+                  // part of the current-session view. Preserve it so season
+                  // rollover/provider lag does not delete user preferences.
+                  warnings.push(`Preserved non-current ${sport} default: league ${defaultInfo.leagueId} is not shown in active leagues.`);
                 } else {
-                // Platform fetch succeeded but league is missing — it's genuinely stale.
-                // Fire a best-effort clear so future reads don't repeat this lookup.
-                const staleBaseHeaders: Record<string, string> = {
-                  'Content-Type': 'application/json',
-                  ...(authHeader ? { Authorization: authHeader } : {}),
-                };
-                const withStaleCorrelation = correlationId ? withCorrelationId(staleBaseHeaders, correlationId) : new Headers(staleBaseHeaders);
-                const withStaleInternal = withInternalServiceToken(withStaleCorrelation, env, `auth-worker /internal/leagues/default/${sport}`);
-                const staleHeaders = withEvalHeaders(withStaleInternal, evalRunId, evalTraceId);
-                const staleUrl = new URL(`https://internal/internal/leagues/default/${sport}`);
-                staleUrl.searchParams.set('platform', defaultInfo.platform);
-                staleUrl.searchParams.set('leagueId', defaultInfo.leagueId);
-                staleUrl.searchParams.set('seasonYear', String(defaultInfo.seasonYear));
-                let cleared = false;
-                try {
-                  const clearResp = await env.AUTH_WORKER.fetch(
-                    new Request(staleUrl.toString(), { method: 'DELETE', headers: staleHeaders })
-                  );
-                  cleared = clearResp.ok;
-                  if (!clearResp.ok) {
-                    console.error(`[get_user_session] Stale ${sport} default DELETE returned ${clearResp.status}`);
+                  // Platform fetch succeeded but league is missing — it's genuinely stale.
+                  // Fire a best-effort clear so future reads don't repeat this lookup.
+                  const staleBaseHeaders: Record<string, string> = {
+                    'Content-Type': 'application/json',
+                    ...(authHeader ? { Authorization: authHeader } : {}),
+                  };
+                  const withStaleCorrelation = correlationId ? withCorrelationId(staleBaseHeaders, correlationId) : new Headers(staleBaseHeaders);
+                  const withStaleInternal = withInternalServiceToken(withStaleCorrelation, env, `auth-worker /internal/leagues/default/${sport}`);
+                  const staleHeaders = withEvalHeaders(withStaleInternal, evalRunId, evalTraceId);
+                  const staleUrl = new URL(`https://internal/internal/leagues/default/${sport}`);
+                  staleUrl.searchParams.set('platform', defaultInfo.platform);
+                  staleUrl.searchParams.set('leagueId', defaultInfo.leagueId);
+                  staleUrl.searchParams.set('seasonYear', String(defaultInfo.seasonYear));
+                  let cleared = false;
+                  try {
+                    const clearResp = await env.AUTH_WORKER.fetch(
+                      new Request(staleUrl.toString(), { method: 'DELETE', headers: staleHeaders })
+                    );
+                    cleared = clearResp.ok;
+                    if (!clearResp.ok) {
+                      console.error(`[get_user_session] Stale ${sport} default DELETE returned ${clearResp.status}`);
+                    }
+                  } catch (e) {
+                    console.error(`[get_user_session] Network error clearing stale ${sport} default:`, e);
                   }
-                } catch (e) {
-                  console.error(`[get_user_session] Network error clearing stale ${sport} default:`, e);
+                  warnings.push(
+                    cleared
+                      ? `Cleared stale ${sport} default: league ${defaultInfo.leagueId} is no longer in your active leagues.`
+                      : `Stale ${sport} default detected (league ${defaultInfo.leagueId} is no longer active) — automatic cleanup failed, will retry next session.`
+                  );
                 }
-                warnings.push(
-                  cleared
-                    ? `Cleared stale ${sport} default: league ${defaultInfo.leagueId} is no longer in your active leagues.`
-                    : `Stale ${sport} default detected (league ${defaultInfo.leagueId} is no longer active) — automatic cleanup failed, will retry next session.`
-                );
-                } // end: platform fetch succeeded (stale default)
               }
             }
           }

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, type MockedFunction } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, type MockedFunction } from 'vitest';
 import type { z } from 'zod';
 import { getUnifiedTools, hasRequiredScope, mcpAuthError } from '../mcp/tools';
 import { buildMcpAuthErrorResponse } from '../auth-response';
@@ -14,6 +14,15 @@ vi.mock('../router', () => ({
 }));
 
 describe('fantasy-mcp tools', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-03-05T12:00:00-05:00'));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('exposes the unified tool set', () => {
     const tools = getUnifiedTools();
     const names = tools.map((tool) => tool.name).sort();
@@ -686,6 +695,71 @@ describe('fantasy-mcp tools', () => {
     expect(payload.warnings?.some((w) => w.includes('temporarily unavailable'))).toBe(true);
   });
 
+  it('get_user_session: non-current default present in raw leagues is preserved but not shown active', async () => {
+    const tool = getUnifiedTools().find((t) => t.name === 'get_user_session');
+    expect(tool).toBeTruthy();
+
+    const previousSeasonLeague = {
+      platform: 'espn',
+      sport: 'baseball',
+      leagueId: 'bb-2025',
+      leagueName: 'Diamond',
+      teamId: 't2',
+      seasonYear: 2025,
+    };
+    const prefs = {
+      defaultSport: 'baseball',
+      defaultBaseball: { platform: 'espn', leagueId: 'bb-2025', seasonYear: 2025 },
+    };
+
+    let deleteCalled = false;
+
+    const env = {
+      INTERNAL_SERVICE_TOKEN: 'internal-secret',
+      AUTH_WORKER: {
+        fetch: async (req: Request) => {
+          const url = new URL(req.url);
+          if (url.pathname === '/internal/leagues') {
+            return new Response(JSON.stringify({ leagues: [previousSeasonLeague] }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          if (url.pathname === '/internal/user/preferences') {
+            return new Response(JSON.stringify(prefs), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          if (req.method === 'DELETE' && url.pathname.startsWith('/internal/leagues/default/')) {
+            deleteCalled = true;
+            return new Response(JSON.stringify({ success: true }), { status: 200 });
+          }
+          return new Response(JSON.stringify({ leagues: [] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        },
+      },
+    } as unknown as Env;
+
+    const result = await tool!.handler({}, env, 'Bearer test-token');
+    const payload = JSON.parse(result.content[0].text) as {
+      allLeagues: Array<{ sport: string; seasonYear: number }>;
+      defaultLeagues: Record<string, unknown>;
+      defaultLeague: unknown;
+      totalLeaguesFound: number;
+      warnings?: string[];
+    };
+
+    expect(deleteCalled).toBe(false);
+    expect(payload.totalLeaguesFound).toBe(0);
+    expect(payload.allLeagues).toHaveLength(0);
+    expect(payload.defaultLeagues.baseball).toBeUndefined();
+    expect(payload.defaultLeague).toBeNull();
+    expect(payload.warnings?.some((w) => w.includes('Preserved non-current baseball default'))).toBe(true);
+  });
+
   it('get_user_session: recurring Yahoo leagues dedup to current season only', async () => {
     const tool = getUnifiedTools().find((t) => t.name === 'get_user_session');
     expect(tool).toBeTruthy();
@@ -728,6 +802,55 @@ describe('fantasy-mcp tools', () => {
     expect(yahooFootball).toHaveLength(1);
     expect(yahooFootball[0].seasonYear).toBe(2025);
     expect(yahooFootball[0].leagueId).toBe('461.l.1000');
+  });
+
+  it('get_user_session: Yahoo seasons with changed stable IDs still hide historical seasons', async () => {
+    const tool = getUnifiedTools().find((t) => t.name === 'get_user_session');
+    expect(tool).toBeTruthy();
+
+    // Yahoo can return renewed leagues whose visible lineage is the same even
+    // when the stable league_id portion changes. The active session view should
+    // still expose only the current baseball season.
+    const yahooLeagues = [
+      { sport: 'baseball', leagueKey: '422.l.1000', leagueName: 'Car Ramrod', teamId: 't1', teamName: "Gerry Gugger's Nice Team", seasonYear: 2024 },
+      { sport: 'baseball', leagueKey: '431.l.2000', leagueName: 'Car Ramrod', teamId: 't2', teamName: "Gerry Gugger's Nice Team", seasonYear: 2025 },
+      { sport: 'baseball', leagueKey: '442.l.3000', leagueName: 'Car Ramrod', teamId: 't3', teamName: "Gerry Gugger's Nice Team", seasonYear: 2026 },
+    ];
+
+    const env = {
+      INTERNAL_SERVICE_TOKEN: 'internal-secret',
+      AUTH_WORKER: {
+        fetch: async (req: Request) => {
+          const url = new URL(req.url);
+          if (url.pathname === '/internal/leagues/yahoo') {
+            return new Response(JSON.stringify({ leagues: yahooLeagues }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          return new Response(JSON.stringify({ leagues: [] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        },
+      },
+    } as unknown as Env;
+
+    const result = await tool!.handler({}, env, 'Bearer test-token');
+    const payload = JSON.parse(result.content[0].text) as {
+      allLeagues: Array<{ platform: string; sport: string; leagueId: string; seasonYear: number }>;
+      totalLeaguesFound: number;
+    };
+
+    const yahooBaseball = payload.allLeagues.filter(
+      (l) => l.platform === 'yahoo' && l.sport === 'baseball'
+    );
+    expect(yahooBaseball).toHaveLength(1);
+    expect(yahooBaseball[0]).toMatchObject({
+      leagueId: '442.l.3000',
+      seasonYear: 2026,
+    });
+    expect(payload.totalLeaguesFound).toBe(1);
   });
 
   it('get_user_session: historical Sleeper football season does not leak into active session view', async () => {
