@@ -173,6 +173,7 @@ describe('baseball get_standings handler — outcome fields', () => {
   it('returns regular_season with null outcome fields during current regular season', async () => {
     espnFetchMock.mockResolvedValue(jsonResponse({
       scoringPeriodId: 10,
+      currentMatchupPeriod: 10,
       settings: { regularSeasonMatchupPeriods: 18 },
       teams: [
         {
@@ -192,6 +193,36 @@ describe('baseball get_standings handler — outcome fields', () => {
 
     const standings = data.standings as Array<Record<string, unknown>>;
     expect(standings[0].rank).toBe(1);
+    expect(standings[0].finalRank).toBeNull();
+    expect(standings[0].championshipWon).toBeNull();
+    expect(standings[0].playoffOutcome).toBeNull();
+    expect(standings[0].outcomeConfidence).toBeNull();
+    expect(standings[0].madePlayoffs).toBeNull();
+  });
+
+  it('uses currentMatchupPeriod instead of daily scoringPeriodId for active baseball standings', async () => {
+    espnFetchMock.mockResolvedValue(jsonResponse({
+      scoringPeriodId: 130,
+      status: { currentMatchupPeriod: 10 },
+      settings: { regularSeasonMatchupPeriods: 18 },
+      teams: [
+        {
+          id: 1,
+          location: 'Alpha', nickname: 'Aces',
+          rankCalculatedFinal: 1,
+          record: { overall: { wins: 8, losses: 2, ties: 0, pointsFor: 780, pointsAgainst: 640 } },
+        },
+      ],
+    }));
+
+    const result = await baseballHandlers.get_standings({} as never, makeParams(CURRENT_SEASON_YEAR), 'Bearer x', 'cid');
+
+    expect(result.success).toBe(true);
+    const data = result.data as Record<string, unknown>;
+    expect(data.seasonPhase).toBe('regular_season');
+    expect(data.seasonComplete).toBe(false);
+
+    const standings = data.standings as Array<Record<string, unknown>>;
     expect(standings[0].finalRank).toBeNull();
     expect(standings[0].championshipWon).toBeNull();
     expect(standings[0].playoffOutcome).toBeNull();

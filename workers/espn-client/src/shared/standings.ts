@@ -16,6 +16,7 @@ interface DeriveSeasonPhaseInput {
   requestedSeasonYear: number;
   currentSeasonYear: number;
   scoringPeriodId?: number;
+  currentMatchupPeriod?: number;
   regularSeasonMatchupPeriods?: number;
   teams: EspnTeam[];
 }
@@ -35,17 +36,24 @@ export function deriveStandingsSeasonPhase({
   requestedSeasonYear,
   currentSeasonYear,
   scoringPeriodId,
+  currentMatchupPeriod,
   regularSeasonMatchupPeriods,
   teams,
 }: DeriveSeasonPhaseInput): EspnSeasonPhase {
-  if (hasExplicitCompletionData(teams) || requestedSeasonYear < currentSeasonYear) {
+  if (requestedSeasonYear < currentSeasonYear) {
     return 'season_complete';
   }
 
   if (requestedSeasonYear === currentSeasonYear) {
-    const regularPeriods = regularSeasonMatchupPeriods ?? 0;
-    const scoringPeriod = scoringPeriodId ?? 0;
-    return scoringPeriod > regularPeriods ? 'playoffs_in_progress' : 'regular_season';
+    const matchupPeriod = currentMatchupPeriod ?? scoringPeriodId;
+    if (
+      regularSeasonMatchupPeriods != null
+      && matchupPeriod != null
+      && matchupPeriod > regularSeasonMatchupPeriods
+    ) {
+      return hasExplicitCompletionData(teams) ? 'season_complete' : 'playoffs_in_progress';
+    }
+    return 'regular_season';
   }
 
   return 'regular_season';

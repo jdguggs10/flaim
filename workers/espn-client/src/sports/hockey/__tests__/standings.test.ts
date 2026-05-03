@@ -161,7 +161,8 @@ describe('hockey get_standings handler — seasonPhase and canonical year', () =
 
   it('returns regular_season for current season within regular season periods', async () => {
     espnFetchMock.mockResolvedValue(jsonResponse({
-      scoringPeriodId: 10,
+      scoringPeriodId: 130,
+      status: { currentMatchupPeriod: 10 },
       settings: { regularSeasonMatchupPeriods: 22 },
       teams: [
         {
