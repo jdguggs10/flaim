@@ -78,6 +78,14 @@ All four sports (football, baseball, basketball, hockey) support the same 7 tool
 - `get_players` - Player lookup with market/global ownership context
 - `get_transactions` - Recent transactions (adds, drops, waivers, trades, failed bids, trade lifecycle)
 
+### ESPN Period Fields
+
+ESPN exposes both `scoringPeriodId` and `currentMatchupPeriod`. Treat `currentMatchupPeriod` as the current fantasy matchup/week when normalizing standings or defaulting `get_matchups`; `scoringPeriodId` can be daily for sports such as baseball and may be much larger than the weekly matchup period.
+
+When callers pass an explicit `week`, use it. Otherwise prefer `currentMatchupPeriod` from the league response or `status.currentMatchupPeriod`, then fall back to `scoringPeriodId`.
+
+For current ESPN seasons, derive `seasonPhase` from matchup context before trusting final-rank-like fields. Fields such as `rankFinal` and `rankCalculatedFinal` prove season completion for historical seasons, but active leagues can expose them before live play is complete. Keep outcome fields such as `finalRank`, `championshipWon`, and `playoffOutcome` null unless `seasonComplete` is true.
+
 ### `get_transactions` Response Shape
 
 The `get_transactions` response includes:
