@@ -156,7 +156,8 @@ describe('football get_standings handler — outcome fields', () => {
 
   it('returns regular_season for current season within regular season periods', async () => {
     espnFetchMock.mockResolvedValue(jsonResponse({
-      scoringPeriodId: 10,
+      scoringPeriodId: 130,
+      status: { currentMatchupPeriod: 10 },
       settings: { regularSeasonMatchupPeriods: 14 },
       teams: [
         {

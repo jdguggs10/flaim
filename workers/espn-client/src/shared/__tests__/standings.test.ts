@@ -59,6 +59,16 @@ describe('deriveStandingsSeasonPhase', () => {
     })).toBe('regular_season');
   });
 
+  it('returns regular_season when regular-season length is unavailable', () => {
+    expect(deriveStandingsSeasonPhase({
+      requestedSeasonYear: 2026,
+      currentSeasonYear: 2026,
+      scoringPeriodId: 150,
+      currentMatchupPeriod: 22,
+      teams: [{ id: 1, rankCalculatedFinal: 1 }],
+    })).toBe('regular_season');
+  });
+
   it('returns regular_season for future seasons', () => {
     expect(deriveStandingsSeasonPhase({
       requestedSeasonYear: 2027,
