@@ -123,6 +123,7 @@ async function handleGetLeagueInfo(
     }
 
     const data = await response.json() as EspnLeagueResponse;
+    const currentMatchupPeriod = data.currentMatchupPeriod ?? data.status?.currentMatchupPeriod;
 
     if (!data || !data.settings) {
       return {
@@ -154,7 +155,7 @@ async function handleGetLeagueInfo(
         size: data.settings.size,
         status: normalizeEspnLeagueStatus(data.status, 'basketball'),
         scoringPeriodId: data.scoringPeriodId,
-        currentMatchupPeriod: data.currentMatchupPeriod,
+        currentMatchupPeriod,
         seasonId: canonicalYear,
         segmentId: data.segmentId,
         teams,
@@ -206,12 +207,14 @@ async function handleGetStandings(
     }
 
     const data = await response.json() as EspnLeagueResponse;
+    const currentMatchupPeriod = data.currentMatchupPeriod ?? data.status?.currentMatchupPeriod;
     const teams = data.teams || [];
 
     const seasonPhase = deriveStandingsSeasonPhase({
       requestedSeasonYear: canonicalYear,
       currentSeasonYear: getCurrentSeasonYear('basketball'),
       scoringPeriodId: data.scoringPeriodId,
+      currentMatchupPeriod,
       regularSeasonMatchupPeriods: data.settings?.regularSeasonMatchupPeriods,
       teams,
     });
@@ -307,6 +310,7 @@ async function handleGetMatchups(
     }
 
     const data = await response.json() as EspnLeagueResponse;
+    const currentMatchupPeriod = data.currentMatchupPeriod ?? data.status?.currentMatchupPeriod;
     const schedule = data.schedule || [];
     const teamsById = Object.fromEntries(
       (data.teams || []).map((team) => [
@@ -318,7 +322,7 @@ async function handleGetMatchups(
     );
 
     // Transform matchups
-    const matchupPeriod = week ?? data.scoringPeriodId ?? data.currentMatchupPeriod;
+    const matchupPeriod = week ?? currentMatchupPeriod ?? data.scoringPeriodId;
     const matchups = schedule
       .filter((matchup) => matchupPeriod == null || matchup.matchupPeriodId === matchupPeriod)
       .map((matchup) => ({

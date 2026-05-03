@@ -5,14 +5,26 @@ import {
 } from '../standings';
 
 describe('deriveStandingsSeasonPhase', () => {
-  it('marks the season complete when ESPN exposes explicit final ranks', () => {
+  it('marks the current season complete when explicit final ranks align with postseason matchup context', () => {
     expect(deriveStandingsSeasonPhase({
       requestedSeasonYear: 2026,
       currentSeasonYear: 2026,
-      scoringPeriodId: 10,
+      scoringPeriodId: 150,
+      currentMatchupPeriod: 21,
       regularSeasonMatchupPeriods: 20,
       teams: [{ id: 1, rankFinal: 1 }],
     })).toBe('season_complete');
+  });
+
+  it('ignores explicit final-rank-like fields during the current regular season', () => {
+    expect(deriveStandingsSeasonPhase({
+      requestedSeasonYear: 2026,
+      currentSeasonYear: 2026,
+      scoringPeriodId: 150,
+      currentMatchupPeriod: 10,
+      regularSeasonMatchupPeriods: 20,
+      teams: [{ id: 1, rankCalculatedFinal: 1 }],
+    })).toBe('regular_season');
   });
 
   it('marks older seasons complete even without explicit final ranks', () => {
@@ -29,7 +41,8 @@ describe('deriveStandingsSeasonPhase', () => {
     expect(deriveStandingsSeasonPhase({
       requestedSeasonYear: 2026,
       currentSeasonYear: 2026,
-      scoringPeriodId: 22,
+      scoringPeriodId: 150,
+      currentMatchupPeriod: 22,
       regularSeasonMatchupPeriods: 20,
       teams: [{ id: 1 }],
     })).toBe('playoffs_in_progress');
@@ -39,7 +52,8 @@ describe('deriveStandingsSeasonPhase', () => {
     expect(deriveStandingsSeasonPhase({
       requestedSeasonYear: 2026,
       currentSeasonYear: 2026,
-      scoringPeriodId: 10,
+      scoringPeriodId: 150,
+      currentMatchupPeriod: 10,
       regularSeasonMatchupPeriods: 20,
       teams: [{ id: 1 }],
     })).toBe('regular_season');

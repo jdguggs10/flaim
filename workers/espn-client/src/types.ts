@@ -14,10 +14,17 @@ export interface EspnLeagueResponse {
   segmentId?: number;
   scoringPeriodId?: number;
   currentMatchupPeriod?: number;
-  status?: unknown;
+  status?: EspnLeagueStatus;
   settings?: EspnLeagueSettings;
   teams?: EspnTeam[];
   schedule?: EspnMatchup[];
+}
+
+export interface EspnLeagueStatus {
+  currentMatchupPeriod?: number;
+  isActive?: boolean;
+  previousSeasons?: number[];
+  [key: string]: unknown;
 }
 
 export interface EspnLeagueSettings {
