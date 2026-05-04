@@ -32,7 +32,9 @@ Produce a clean recent-activity briefing for the user's current or specified fan
 
 ### 2. Pull recent transactions
 
-- Call `get_transactions` for the selected league.
+- For daily or 24-hour briefs, call `get_transactions` with the default count or explicit `count: 25`.
+- Use a larger count such as `count: 40` only when the requested window is busier or longer than a normal daily brief.
+- Do not use `count: 100` unless the user asks for an exhaustive or full-week activity audit.
 - Retrieve the recent transaction window the platform provides, then trim the presentation to the requested day range.
 - Remember platform caveats:
   - Yahoo ignores explicit `week` and uses a recent timestamp window.
