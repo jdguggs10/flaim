@@ -67,8 +67,8 @@ const YAHOO_SCOPE = 'fspt-r'; // Fantasy Sports read access
 const LEASE_TTL_MS       = 30_000;
 // Used for both OAuth exchange and refresh token requests; must stay below LEASE_TTL_MS.
 const YAHOO_TOKEN_REQUEST_TIMEOUT_MS = 20_000;
-// Must stay below the gateway timeout budget so waiters return a retryable 503
-// before the MCP gateway drops the request.
+// Must stay below the ~25s MCP gateway timeout budget so waiters return a
+// retryable 503 before the gateway drops the request.
 const MAX_LEASE_WAIT_MS = 10_000;
 const POLL_INTERVAL_MS   =    300;
 const MAX_REFRESH_ATTEMPTS = 3;
@@ -535,6 +535,8 @@ function yahooApiFailureResponse(
     headers['Retry-After'] = String(retryAfter);
   }
 
+  // Expose upstream_status deliberately: it lets MCP clients distinguish Yahoo
+  // 999 rate limits from ordinary transient 5xx failures without log access.
   if (classification.retryable) {
     const isRateLimited = classification.kind === 'rate_limited';
     return new Response(

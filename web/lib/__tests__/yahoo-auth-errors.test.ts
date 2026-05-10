@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { YahooAuthWorkerErrorCode } from '@flaim/worker-shared';
 import {
   getYahooConnectErrorMessage,
   getYahooTransientAuthMessage,
@@ -21,6 +22,16 @@ describe('Yahoo auth error helpers', () => {
 
     expect(isYahooTransientAuthResponse(response)).toBe(true);
     expect(isYahooReconnectRequired(503, response)).toBe(false);
+  });
+
+  it('routes temporary Yahoo API failures to a notice instead of reconnect', () => {
+    const response = {
+      error: YahooAuthWorkerErrorCode.YAHOO_API_TEMPORARILY_UNAVAILABLE,
+      retryable: true,
+    };
+
+    expect(isYahooTransientAuthResponse(response)).toBe(true);
+    expect(isYahooReconnectRequired(429, response)).toBe(false);
   });
 
   it('keeps definitive Yahoo auth failures on the reconnect path', () => {
