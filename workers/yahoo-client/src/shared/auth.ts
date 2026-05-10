@@ -18,7 +18,7 @@ async function throwYahooAuthWorkerError(response: Response): Promise<never> {
     retry_after?: number;
   };
   const headerRetryAfter = parseRetryAfterSeconds(response.headers.get('Retry-After'));
-  const retryAfter = typeof errorData.retry_after === 'number' ? errorData.retry_after : headerRetryAfter;
+  const retryAfter = headerRetryAfter ?? (typeof errorData.retry_after === 'number' ? errorData.retry_after : undefined);
   const errorSummary = errorData.error || response.statusText;
   const errorDetail = errorData.error_description
     ? `${errorSummary}: ${errorData.error_description}`

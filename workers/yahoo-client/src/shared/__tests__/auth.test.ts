@@ -107,6 +107,27 @@ describe('getYahooCredentials', () => {
     } satisfies Partial<YahooClientError>);
   });
 
+  it('prefers Retry-After header over body retry_after on transient failures', async () => {
+    mockAuthWorkerFetch.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          error: 'refresh_temporarily_unavailable',
+          error_description: 'Try again later',
+          retryable: true,
+          retry_after: 120,
+        }),
+        { status: 503, headers: { 'Retry-After': '30' } }
+      )
+    );
+
+    await expect(getYahooCredentials(env, 'Bearer token')).rejects.toMatchObject({
+      code: 'YAHOO_AUTH_UNAVAILABLE',
+      status: 503,
+      retryable: true,
+      retryAfter: 30,
+    } satisfies Partial<YahooClientError>);
+  });
+
   it('classifies known transient Yahoo auth codes while resolving team keys', async () => {
     mockAuthWorkerFetch.mockResolvedValue(
       new Response(
