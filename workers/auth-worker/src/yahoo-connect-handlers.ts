@@ -70,7 +70,6 @@ const YAHOO_TOKEN_REQUEST_TIMEOUT_MS = 20_000;
 const MAX_LEASE_WAIT_MS = 10_000;
 const POLL_INTERVAL_MS   =    300;
 const MAX_REFRESH_ATTEMPTS = 3;
-const YAHOO_API_TEMPORARILY_UNAVAILABLE = 'yahoo_api_temporarily_unavailable';
 
 /**
  * Get the OAuth callback URL based on environment
@@ -538,7 +537,7 @@ function yahooApiFailureResponse(
     const isRateLimited = classification.kind === 'rate_limited';
     return new Response(
       JSON.stringify({
-        error: YAHOO_API_TEMPORARILY_UNAVAILABLE,
+        error: YahooAuthWorkerErrorCode.YAHOO_API_TEMPORARILY_UNAVAILABLE,
         error_description: isRateLimited
           ? 'Yahoo is temporarily rate limiting league discovery. Please wait a bit and try again.'
           : 'Yahoo league discovery is temporarily unavailable. Please try again later.',
