@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  classifyYahooApiFailure,
   defaultYahooRetryAfterSeconds,
   isYahooRateLimitStatus,
   isYahooTransientHttpStatus,
@@ -31,5 +32,33 @@ describe('HTTP helpers', () => {
 
     expect(retryAfterSecondsFromHeaders(new Headers({ 'Retry-After': '60' }), 429)).toBe(60);
     expect(retryAfterSecondsFromHeaders(new Headers(), 999)).toBe(900);
+  });
+
+  it('classifies Yahoo API statuses consistently', () => {
+    expect(classifyYahooApiFailure(new Response(null, { status: 401 }))).toMatchObject({
+      kind: 'auth_error',
+      status: 401,
+      retryable: false,
+    });
+    expect(classifyYahooApiFailure({ status: 999, headers: new Headers() })).toMatchObject({
+      kind: 'rate_limited',
+      status: 429,
+      retryable: true,
+      retryAfter: 900,
+    });
+    expect(classifyYahooApiFailure(new Response(null, {
+      status: 503,
+      headers: { 'Retry-After': '30' },
+    }))).toMatchObject({
+      kind: 'transient',
+      status: 503,
+      retryable: true,
+      retryAfter: 30,
+    });
+    expect(classifyYahooApiFailure(new Response(null, { status: 418 }))).toMatchObject({
+      kind: 'unexpected',
+      status: 502,
+      retryable: false,
+    });
   });
 });

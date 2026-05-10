@@ -22,11 +22,10 @@ import { getFrontendUrl, resolvePreviewOrigin } from './preview-url';
 import {
   YAHOO_DEFAULT_TRANSIENT_RETRY_AFTER_SECONDS,
   YAHOO_REFRESH_IN_PROGRESS_RETRY_AFTER_SECONDS,
+  classifyYahooApiFailure,
   defaultYahooRetryAfterSeconds,
-  isYahooRateLimitStatus,
   isYahooTransientHttpStatus,
   parseRetryAfterSeconds,
-  retryAfterSecondsFromHeaders,
   YahooAuthWorkerErrorCode,
 } from '@flaim/worker-shared';
 
@@ -524,27 +523,19 @@ function yahooRefreshFailureResponse(
   );
 }
 
-function isTransientYahooApiFailure(status: number): boolean {
-  return isYahooTransientHttpStatus(status);
-}
-
-function getYahooApiRetryAfterSeconds(response: Pick<Response, 'headers' | 'status'>): number | undefined {
-  return retryAfterSecondsFromHeaders(response.headers, response.status);
-}
-
 function yahooApiFailureResponse(
   response: Pick<Response, 'headers' | 'status'>,
   corsHeaders: Record<string, string>
 ): Response {
-  const retryable = isTransientYahooApiFailure(response.status);
-  const retryAfter = retryable ? getYahooApiRetryAfterSeconds(response) : undefined;
+  const classification = classifyYahooApiFailure(response);
+  const retryAfter = classification.retryAfter;
   const headers: Record<string, string> = { 'Content-Type': 'application/json', ...corsHeaders };
   if (retryAfter) {
     headers['Retry-After'] = String(retryAfter);
   }
 
-  if (retryable) {
-    const isRateLimited = isYahooRateLimitStatus(response.status);
+  if (classification.retryable) {
+    const isRateLimited = classification.kind === 'rate_limited';
     return new Response(
       JSON.stringify({
         error: YAHOO_API_TEMPORARILY_UNAVAILABLE,
@@ -553,10 +544,10 @@ function yahooApiFailureResponse(
           : 'Yahoo league discovery is temporarily unavailable. Please try again later.',
         retryable: true,
         retry_after: retryAfter,
-        upstream_status: response.status,
+        upstream_status: classification.upstreamStatus,
       }),
       {
-        status: isRateLimited ? 429 : 503,
+        status: classification.status,
         headers,
       }
     );
@@ -565,11 +556,11 @@ function yahooApiFailureResponse(
   return new Response(
     JSON.stringify({
       error: 'yahoo_api_error',
-      error_description: `Yahoo API returned ${response.status}`,
-      upstream_status: response.status,
+      error_description: `Yahoo API returned ${classification.upstreamStatus}`,
+      upstream_status: classification.upstreamStatus,
     }),
     {
-      status: response.status === 401 ? 401 : 502,
+      status: classification.kind === 'auth_error' ? classification.status : 502,
       headers,
     }
   );

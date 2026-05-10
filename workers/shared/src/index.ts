@@ -34,11 +34,16 @@ export {
   YAHOO_DEFAULT_RATE_LIMIT_RETRY_AFTER_SECONDS,
   YAHOO_DEFAULT_TRANSIENT_RETRY_AFTER_SECONDS,
   YAHOO_REFRESH_IN_PROGRESS_RETRY_AFTER_SECONDS,
+  classifyYahooApiFailure,
   defaultYahooRetryAfterSeconds,
   isYahooRateLimitStatus,
   isYahooTransientHttpStatus,
   parseRetryAfterSeconds,
   retryAfterSecondsFromHeaders,
+} from './http.js';
+export type {
+  YahooApiFailureClassification,
+  YahooApiFailureKind,
 } from './http.js';
 
 // Season utilities

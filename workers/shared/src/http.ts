@@ -44,3 +44,47 @@ export function retryAfterSecondsFromHeaders(
 ): number | undefined {
   return parseRetryAfterSeconds(headers.get('Retry-After')) ?? defaultYahooRetryAfterSeconds(status) ?? fallback;
 }
+
+export type YahooApiFailureKind =
+  | 'auth_error'
+  | 'access_denied'
+  | 'not_found'
+  | 'rate_limited'
+  | 'transient'
+  | 'unexpected';
+
+export interface YahooApiFailureClassification {
+  kind: YahooApiFailureKind;
+  upstreamStatus: number;
+  status: 401 | 403 | 404 | 429 | 502 | 503;
+  retryable: boolean;
+  retryAfter?: number;
+}
+
+export function classifyYahooApiFailure(
+  response: Pick<Response, 'headers' | 'status'>
+): YahooApiFailureClassification {
+  const { status: upstreamStatus } = response;
+  const retryable = isYahooTransientHttpStatus(upstreamStatus);
+  const retryAfter = retryable
+    ? retryAfterSecondsFromHeaders(response.headers, upstreamStatus)
+    : undefined;
+
+  if (upstreamStatus === 401) {
+    return { kind: 'auth_error', upstreamStatus, status: 401, retryable: false };
+  }
+  if (upstreamStatus === 403) {
+    return { kind: 'access_denied', upstreamStatus, status: 403, retryable: false };
+  }
+  if (upstreamStatus === 404) {
+    return { kind: 'not_found', upstreamStatus, status: 404, retryable: false };
+  }
+  if (isYahooRateLimitStatus(upstreamStatus)) {
+    return { kind: 'rate_limited', upstreamStatus, status: 429, retryable: true, retryAfter };
+  }
+  if (typeof upstreamStatus === 'number' && upstreamStatus >= 500) {
+    return { kind: 'transient', upstreamStatus, status: 503, retryable: true, retryAfter };
+  }
+
+  return { kind: 'unexpected', upstreamStatus, status: 502, retryable: false };
+}
