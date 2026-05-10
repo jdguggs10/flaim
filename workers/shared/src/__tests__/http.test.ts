@@ -18,6 +18,7 @@ describe('HTTP helpers', () => {
       expect(parseRetryAfterSeconds('120abc')).toBeUndefined();
       expect(parseRetryAfterSeconds('0')).toBeUndefined();
       expect(parseRetryAfterSeconds('Sun, 10 May 2026 15:05:00 GMT')).toBe(300);
+      // Past dates use a short retry floor instead of falling back to a longer Yahoo default.
       expect(parseRetryAfterSeconds('Sun, 10 May 2026 14:55:00 GMT')).toBe(30);
       expect(parseRetryAfterSeconds('invalid')).toBeUndefined();
     } finally {

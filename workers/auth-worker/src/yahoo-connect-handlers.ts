@@ -1119,7 +1119,10 @@ export async function handleYahooDiscover(
     if (!apiResponse.ok) {
       const errorText = await apiResponse.text();
       console.error(`[yahoo-connect] Yahoo API error: ${apiResponse.status} - ${errorText}`);
-      return yahooApiFailureResponse(apiResponse, corsHeaders);
+      return yahooApiFailureResponse(
+        { status: apiResponse.status, headers: apiResponse.headers },
+        corsHeaders
+      );
     }
 
     const rawData = await apiResponse.json();
