@@ -4,19 +4,13 @@ import type { Env } from '../../types';
 import { getYahooCredentials, resolveUserTeamKey } from '../auth';
 import type { YahooClientError } from '../errors';
 
-vi.mock('@flaim/worker-shared', () => ({
-  authWorkerFetch: vi.fn(),
-  parseRetryAfterSeconds: (value: string | null) => {
-    if (!value) return undefined;
-    const seconds = Number.parseInt(value, 10);
-    return Number.isFinite(seconds) && seconds > 0 ? seconds : undefined;
-  },
-  YahooAuthWorkerErrorCode: {
-    REFRESH_TEMPORARILY_UNAVAILABLE: 'refresh_temporarily_unavailable',
-    TOKEN_REFRESH_VALIDATION_UNAVAILABLE: 'token_refresh_validation_unavailable',
-    TOKEN_EXCHANGE_UNAVAILABLE: 'token_exchange_unavailable',
-  },
-}));
+vi.mock('@flaim/worker-shared', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@flaim/worker-shared')>();
+  return {
+    ...actual,
+    authWorkerFetch: vi.fn(),
+  };
+});
 
 const mockAuthWorkerFetch = authWorkerFetch as MockedFunction<typeof authWorkerFetch>;
 

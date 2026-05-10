@@ -33,4 +33,20 @@ describe('Yahoo API errors', () => {
       })
     );
   });
+
+  it('classifies upstream 5xx as a transient Yahoo error', () => {
+    const response = new Response(null, {
+      status: 503,
+      headers: { 'Retry-After': '60' },
+    });
+
+    expect(() => handleYahooError(response)).toThrow(
+      expect.objectContaining({
+        code: 'YAHOO_TRANSIENT_ERROR',
+        status: 503,
+        retryable: true,
+        retryAfter: 60,
+      })
+    );
+  });
 });

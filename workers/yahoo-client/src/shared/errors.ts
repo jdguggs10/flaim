@@ -35,6 +35,7 @@ export function defaultMetadataForYahooCode(code?: string): Pick<YahooClientErro
   switch (code) {
     case 'YAHOO_AUTH_UNAVAILABLE':
     case 'YAHOO_TIMEOUT':
+    case 'YAHOO_TRANSIENT_ERROR':
       return { status: 503, retryable: true, retryAfter: YAHOO_DEFAULT_TRANSIENT_RETRY_AFTER_SECONDS };
     case 'YAHOO_RATE_LIMITED':
       return { status: 429, retryable: true, retryAfter: YAHOO_DEFAULT_RATE_LIMIT_RETRY_AFTER_SECONDS };

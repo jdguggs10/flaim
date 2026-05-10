@@ -90,6 +90,14 @@ export function handleYahooError(response: Response): never {
         retryable: classification.retryable,
         retryAfter: classification.retryAfter,
       });
+    case 'transient':
+      throw new YahooClientError({
+        code: 'YAHOO_TRANSIENT_ERROR',
+        message: 'Yahoo is temporarily unavailable. Please try again later.',
+        status: classification.status,
+        retryable: classification.retryable,
+        retryAfter: classification.retryAfter,
+      });
     default:
       console.error(`[yahoo-api] Unexpected Yahoo status: ${classification.upstreamStatus}`);
       throw new YahooClientError({

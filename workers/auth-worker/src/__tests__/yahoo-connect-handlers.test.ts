@@ -1266,7 +1266,7 @@ describe('yahoo-connect-handlers', () => {
 
       try {
         const responsePromise = handleYahooDiscover(env, 'user_123', corsHeaders);
-        await vi.advanceTimersByTimeAsync(11_000);
+        await vi.advanceTimersByTimeAsync(10_001);
         const response = await responsePromise;
 
         expect(response.status).toBe(503);

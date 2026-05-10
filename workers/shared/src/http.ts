@@ -5,12 +5,16 @@ export const YAHOO_REFRESH_IN_PROGRESS_RETRY_AFTER_SECONDS = 5;
 export function parseRetryAfterSeconds(value: string | null): number | undefined {
   if (!value) return undefined;
 
-  const seconds = Number.parseInt(value, 10);
-  if (Number.isFinite(seconds) && seconds > 0) {
-    return seconds;
+  const trimmed = value.trim();
+  if (/^\d+$/.test(trimmed)) {
+    const seconds = Number(trimmed);
+    return seconds > 0 ? seconds : undefined;
+  }
+  if (/^[+-]?\d/.test(trimmed)) {
+    return undefined;
   }
 
-  const retryAt = Date.parse(value);
+  const retryAt = Date.parse(trimmed);
   if (Number.isFinite(retryAt)) {
     const delta = Math.ceil((retryAt - Date.now()) / 1000);
     return Math.max(1, delta);
