@@ -18,6 +18,8 @@ export function parseRetryAfterSeconds(value: string | null): number | undefined
   const retryAt = Date.parse(trimmed);
   if (Number.isFinite(retryAt)) {
     const delta = Math.ceil((retryAt - Date.now()) / 1000);
+    // A stale HTTP-date means the delay has already elapsed; keep a tiny retry hint
+    // instead of falling back to a longer default for Yahoo rate-limit responses.
     return Math.max(1, delta);
   }
 

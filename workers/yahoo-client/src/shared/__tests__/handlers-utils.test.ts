@@ -30,4 +30,21 @@ describe('shared handler utilities', () => {
       retry_after: 900,
     });
   });
+
+  it('uses default metadata for known Yahoo error codes', () => {
+    expect(toExecuteErrorResponse(new Error('YAHOO_NOT_FOUND: League missing'))).toEqual({
+      success: false,
+      error: 'YAHOO_NOT_FOUND: League missing',
+      code: 'YAHOO_NOT_FOUND',
+      status: 404,
+    });
+  });
+
+  it('leaves unknown Yahoo error codes without retry metadata', () => {
+    expect(toExecuteErrorResponse(new Error('YAHOO_UNKNOWN_EDGE: Unexpected'))).toEqual({
+      success: false,
+      error: 'YAHOO_UNKNOWN_EDGE: Unexpected',
+      code: 'YAHOO_UNKNOWN_EDGE',
+    });
+  });
 });

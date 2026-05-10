@@ -1,5 +1,6 @@
 import type { YahooCredentials } from './auth';
 import {
+  ErrorCode,
   YAHOO_DEFAULT_TRANSIENT_RETRY_AFTER_SECONDS,
   classifyYahooApiFailure,
 } from '@flaim/worker-shared';
@@ -92,7 +93,7 @@ export function handleYahooError(response: Response): never {
       });
     case 'transient':
       throw new YahooClientError({
-        code: 'YAHOO_TRANSIENT_ERROR',
+        code: ErrorCode.YAHOO_TRANSIENT_ERROR,
         message: 'Yahoo is temporarily unavailable. Please try again later.',
         status: classification.status,
         retryable: classification.retryable,
