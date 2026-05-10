@@ -4,6 +4,7 @@
 export const YAHOO_DEFAULT_RATE_LIMIT_RETRY_AFTER_SECONDS = 15 * 60;
 export const YAHOO_DEFAULT_TRANSIENT_RETRY_AFTER_SECONDS = 5 * 60;
 export const YAHOO_REFRESH_IN_PROGRESS_RETRY_AFTER_SECONDS = 5;
+export const YAHOO_STALE_RETRY_AFTER_DATE_SECONDS = 30;
 
 export function parseRetryAfterSeconds(value: string | null): number | undefined {
   if (!value) return undefined;
@@ -21,9 +22,9 @@ export function parseRetryAfterSeconds(value: string | null): number | undefined
   const retryAt = Date.parse(trimmed);
   if (Number.isFinite(retryAt)) {
     const delta = Math.ceil((retryAt - Date.now()) / 1000);
-    // A stale HTTP-date means the delay has already elapsed; keep a tiny retry hint
-    // instead of falling back to a longer default for Yahoo rate-limit responses.
-    return Math.max(1, delta);
+    // A stale or clock-skewed HTTP-date means the delay has already elapsed;
+    // keep a short retry hint instead of falling back to a longer Yahoo default.
+    return Math.max(YAHOO_STALE_RETRY_AFTER_DATE_SECONDS, delta);
   }
 
   return undefined;

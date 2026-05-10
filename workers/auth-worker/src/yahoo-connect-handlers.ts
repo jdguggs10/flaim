@@ -563,6 +563,9 @@ function yahooApiFailureResponse(
       upstream_status: classification.upstreamStatus,
     }),
     {
+      // Discovery 403/404 can be ambiguous between Yahoo permissions, stale
+      // league IDs, and upstream platform behavior, so keep them as platform
+      // API failures instead of routing users into reconnect-required auth UI.
       status: classification.kind === 'auth_error' ? classification.status : 502,
       headers,
     }
