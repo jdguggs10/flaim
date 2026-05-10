@@ -11,6 +11,9 @@ export interface RouteResult {
   data?: unknown;
   error?: string;
   code?: string;
+  status?: number;
+  retryable?: boolean;
+  retry_after?: number;
 }
 
 /**
@@ -67,11 +70,20 @@ export async function routeToClient(
     clearTimeout(timeoutId);
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({})) as { error?: string; code?: string };
+      const errorData = await response.json().catch(() => ({})) as {
+        error?: string;
+        code?: string;
+        retryable?: boolean;
+        retry_after?: number;
+      };
+      const retryAfter = parseRetryAfterSeconds(response.headers.get('Retry-After')) ?? errorData.retry_after;
       return {
         success: false,
         error: errorData.error || `Platform worker returned ${response.status}`,
-        code: errorData.code || 'PLATFORM_ERROR'
+        code: errorData.code || 'PLATFORM_ERROR',
+        status: response.status,
+        retryable: errorData.retryable,
+        retry_after: retryAfter,
       };
     }
 
@@ -91,6 +103,17 @@ export async function routeToClient(
       code: 'ROUTING_ERROR'
     };
   }
+}
+
+function parseRetryAfterSeconds(value: string | null): number | undefined {
+  if (!value) return undefined;
+  const seconds = Number.parseInt(value, 10);
+  if (Number.isFinite(seconds) && seconds > 0) return seconds;
+  const dateMs = Date.parse(value);
+  if (Number.isFinite(dateMs)) {
+    return Math.max(1, Math.ceil((dateMs - Date.now()) / 1000));
+  }
+  return undefined;
 }
 
 function selectClient(env: Env, platform: Platform): Fetcher | null {

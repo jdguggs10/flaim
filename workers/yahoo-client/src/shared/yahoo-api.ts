@@ -1,4 +1,5 @@
 import type { YahooCredentials } from './auth';
+import { YahooClientError } from './errors';
 
 const YAHOO_BASE_URL = 'https://fantasysports.yahooapis.com/fantasy/v2';
 
@@ -41,7 +42,13 @@ export async function yahooFetch(
   } catch (error) {
     clearTimeout(timeoutId);
     if (error instanceof Error && error.name === 'AbortError') {
-      throw new Error('YAHOO_TIMEOUT: Request timed out');
+      throw new YahooClientError({
+        code: 'YAHOO_TIMEOUT',
+        message: 'Request timed out',
+        status: 503,
+        retryable: true,
+        retryAfter: 300,
+      });
     }
     throw error;
   }
@@ -53,17 +60,45 @@ export async function yahooFetch(
 export function handleYahooError(response: Response): never {
   switch (response.status) {
     case 401:
-      throw new Error('YAHOO_AUTH_ERROR: Yahoo token expired or invalid');
+      throw new YahooClientError({ code: 'YAHOO_AUTH_ERROR', message: 'Yahoo token expired or invalid', status: 401 });
     case 403:
-      throw new Error('YAHOO_ACCESS_DENIED: Access denied to this resource');
+      throw new YahooClientError({ code: 'YAHOO_ACCESS_DENIED', message: 'Access denied to this resource', status: 403 });
     case 404:
-      throw new Error('YAHOO_NOT_FOUND: League or resource not found');
+      throw new YahooClientError({ code: 'YAHOO_NOT_FOUND', message: 'League or resource not found', status: 404 });
     case 429:
-      throw new Error('YAHOO_RATE_LIMITED: Too many requests. Please wait.');
+    case 999:
+      throw new YahooClientError({
+        code: 'YAHOO_RATE_LIMITED',
+        message: 'Too many requests. Please wait.',
+        status: 429,
+        retryable: true,
+        retryAfter: getYahooRetryAfterSeconds(response, 900),
+      });
     default:
       console.error(`[yahoo-api] Unexpected Yahoo status: ${response.status}`);
-      throw new Error('YAHOO_API_ERROR: An unexpected error occurred with Yahoo. Please try again.');
+      throw new YahooClientError({
+        code: 'YAHOO_API_ERROR',
+        message: 'An unexpected error occurred with Yahoo. Please try again.',
+        status: response.status >= 500 ? 503 : 502,
+        retryable: response.status >= 500,
+        retryAfter: response.status >= 500 ? getYahooRetryAfterSeconds(response, 300) : undefined,
+      });
   }
+}
+
+function getYahooRetryAfterSeconds(response: Response, fallback: number): number {
+  const value = response.headers.get('Retry-After');
+  if (!value) return fallback;
+
+  const seconds = Number.parseInt(value, 10);
+  if (Number.isFinite(seconds) && seconds > 0) return seconds;
+
+  const dateMs = Date.parse(value);
+  if (Number.isFinite(dateMs)) {
+    return Math.max(1, Math.ceil((dateMs - Date.now()) / 1000));
+  }
+
+  return fallback;
 }
 
 /**

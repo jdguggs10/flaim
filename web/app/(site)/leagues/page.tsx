@@ -431,6 +431,7 @@ function LeaguesPageContent() {
   const clearYahooConnectionState = useCallback(() => {
     setIsYahooConnected(false);
     setYahooLastUpdated(null);
+    setYahooLeagues([]);
   }, []);
 
   const clearSleeperConnectionState = useCallback(() => {
@@ -879,7 +880,7 @@ function LeaguesPageContent() {
           // The opened panel and notice are the reconnect prompt, so skip the error banner.
           setIsYahooSetupOpen(true);
           clearYahooConnectionState();
-          setLeagueNotice('Your Yahoo session has expired. Click Refresh to sign in again and pull your latest leagues.');
+          setLeagueNotice('Your Yahoo session has expired. Click Connect Yahoo to sign in again and pull your latest leagues.');
           shouldCheckYahooStatus = false;
           return;
         }
@@ -2506,7 +2507,7 @@ function LeaguesPageContent() {
                 <div id="yahoo-setup-content" className="px-4 pb-4 space-y-3">
                   <p className="text-sm text-muted-foreground">
                     {displayYahooConnected
-                      ? 'Refresh signs in with Yahoo again, validates access, then pulls your latest leagues.'
+                      ? 'Refresh pulls your latest leagues using the stored Yahoo connection. If Yahoo reports that access expired, you will be asked to reconnect.'
                       : 'Connect your Yahoo account to add leagues.'}
                   </p>
                   {isYahooStatusChecking ? (
@@ -2525,15 +2526,10 @@ function LeaguesPageContent() {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={refreshYahooAuth}
-                          disabled={isDiscoveringYahoo || isRefreshingYahooAuth}
+                          onClick={discoverYahooLeagues}
+                          disabled={isDiscoveringYahoo}
                         >
-                          {isRefreshingYahooAuth ? (
-                            <>
-                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                              Opening Yahoo...
-                            </>
-                          ) : isDiscoveringYahoo ? (
+                          {isDiscoveringYahoo ? (
                             <>
                               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                               Refreshing...

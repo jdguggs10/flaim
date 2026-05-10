@@ -95,4 +95,7 @@ export interface ExecuteResponse {
   data?: unknown;
   error?: string;
   code?: string;
+  status?: number;
+  retryable?: boolean;
+  retry_after?: number;
 }

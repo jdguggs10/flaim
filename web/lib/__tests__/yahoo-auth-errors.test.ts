@@ -42,19 +42,23 @@ describe('Yahoo auth error helpers', () => {
       error: 'refresh_temporarily_unavailable',
       error_description: 'Try again later',
       retryable: true,
+      retry_after: 300,
     })).toEqual({
       error: 'refresh_temporarily_unavailable',
       error_description: 'Try again later',
       retryable: true,
+      retry_after: 300,
     });
 
     expect(parseYahooDiscoverErrorResponse({
       error: 'refresh_temporarily_unavailable',
       retryable: 1,
+      retry_after: '300',
     })).toEqual({
       error: 'refresh_temporarily_unavailable',
       error_description: undefined,
       retryable: undefined,
+      retry_after: undefined,
     });
 
     expect(parseYahooDiscoverErrorResponse(null)).toEqual({});

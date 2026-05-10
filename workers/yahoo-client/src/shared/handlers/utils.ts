@@ -1,12 +1,19 @@
 import type { ExecuteResponse } from '../../types';
 import { extractErrorCode } from '@flaim/worker-shared';
 import { asArray, parseYahooPercentOwned } from '../normalizers';
+import { defaultMetadataForYahooCode, isYahooClientError } from '../errors';
 
 export function toExecuteErrorResponse(error: unknown): ExecuteResponse {
+  const code = extractErrorCode(error);
+  const metadata = isYahooClientError(error) ? error : defaultMetadataForYahooCode(code);
+
   return {
     success: false,
     error: error instanceof Error ? error.message : 'Unknown error',
-    code: extractErrorCode(error),
+    code,
+    status: metadata.status,
+    retryable: metadata.retryable,
+    retry_after: metadata.retryAfter,
   };
 }
 

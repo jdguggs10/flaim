@@ -49,6 +49,8 @@ interface ExecuteRequest {
 
 `/execute` reads end-user auth from the HTTP `Authorization` header and requires `X-Flaim-Internal-Token` for internal calls.
 
+Yahoo auth and rate-limit failures return `success: false` with the matching HTTP status when the handler can classify them. Retryable failures include `retryable: true`, `retry_after`, and a `Retry-After` response header so the MCP gateway can preserve backoff guidance.
+
 ## Supported Tools
 
 ### Football
@@ -80,6 +82,7 @@ Unlike ESPN (cookie-based), Yahoo uses OAuth 2.0:
 - Access tokens expire after ~1 hour
 - Refresh handled automatically by `auth-worker`
 - Tokens retrieved via service binding on each request
+- Transient refresh and Yahoo rate-limit failures are surfaced as retryable errors rather than reconnect-required auth failures.
 
 ### JSON Response Format
 Yahoo's JSON is structurally quirky:

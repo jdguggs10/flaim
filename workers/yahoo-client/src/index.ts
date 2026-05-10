@@ -80,8 +80,9 @@ app.post('/execute', async (c) => {
       message: `${tool} ${sport} completed success=${result.success}`,
     });
 
-    const response = c.json(result);
+    const response = c.json(result, executeResponseStatus(result));
     response.headers.set(CORRELATION_ID_HEADER, correlationId);
+    if (result.retry_after) response.headers.set('Retry-After', String(result.retry_after));
     if (evalRunId) response.headers.set(EVAL_RUN_HEADER, evalRunId);
     if (evalTraceId) response.headers.set(EVAL_TRACE_HEADER, evalTraceId);
     return response;
@@ -172,6 +173,23 @@ async function routeToSport(
 
     default:
       return { success: false, error: `Unknown sport: ${sport}`, code: 'INVALID_SPORT' };
+  }
+}
+
+function executeResponseStatus(result: ExecuteResponse): 200 | 400 | 401 | 403 | 404 | 429 | 500 | 502 | 503 {
+  if (result.success) return 200;
+  switch (result.status) {
+    case 400:
+    case 401:
+    case 403:
+    case 404:
+    case 429:
+    case 500:
+    case 502:
+    case 503:
+      return result.status;
+    default:
+      return 200;
   }
 }
 

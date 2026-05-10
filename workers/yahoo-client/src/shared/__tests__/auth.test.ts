@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi, type MockedFunction } from 'vites
 import { authWorkerFetch } from '@flaim/worker-shared';
 import type { Env } from '../../types';
 import { getYahooCredentials, resolveUserTeamKey } from '../auth';
+import type { YahooClientError } from '../errors';
 
 vi.mock('@flaim/worker-shared', () => ({
   authWorkerFetch: vi.fn(),
@@ -84,6 +85,27 @@ describe('getYahooCredentials', () => {
     await expect(getYahooCredentials(env, 'Bearer token')).rejects.toThrow(
       'YAHOO_AUTH_UNAVAILABLE: upstream_busy: Try again later'
     );
+  });
+
+  it('preserves auth-worker retry metadata on transient failures', async () => {
+    mockAuthWorkerFetch.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          error: 'refresh_temporarily_unavailable',
+          error_description: 'Try again later',
+          retryable: true,
+          retry_after: 120,
+        }),
+        { status: 503, headers: { 'Retry-After': '120' } }
+      )
+    );
+
+    await expect(getYahooCredentials(env, 'Bearer token')).rejects.toMatchObject({
+      code: 'YAHOO_AUTH_UNAVAILABLE',
+      status: 503,
+      retryable: true,
+      retryAfter: 120,
+    } satisfies Partial<YahooClientError>);
   });
 
   it('classifies known transient Yahoo auth codes while resolving team keys', async () => {

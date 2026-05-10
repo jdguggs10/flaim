@@ -1248,6 +1248,39 @@ describe('yahoo-connect-handlers', () => {
       expect(body.success).toBe(true);
     });
 
+    it('returns retryable 503 when a refresh lease stays active too long', async () => {
+      vi.useFakeTimers();
+
+      const stale = {
+        clerkUserId: 'user_123',
+        accessToken: 'old-token',
+        refreshToken: 'old-refresh',
+        expiresAt: new Date(Date.now() + 2 * 60 * 1000),
+        needsRefresh: true,
+        refreshLeaseOwner: 'other-owner',
+        refreshLeaseExpiresAt: new Date(Date.now() + 30_000),
+      };
+
+      mockStorage.getYahooCredentials.mockResolvedValue(stale);
+      mockStorage.acquireRefreshLease.mockResolvedValue(false);
+
+      try {
+        const responsePromise = handleYahooDiscover(env, 'user_123', corsHeaders);
+        await vi.advanceTimersByTimeAsync(11_000);
+        const response = await responsePromise;
+
+        expect(response.status).toBe(503);
+        expect(response.headers.get('Retry-After')).toBe('5');
+        const body = (await response.json()) as Record<string, unknown>;
+        expect(body.error).toBe('refresh_temporarily_unavailable');
+        expect(body.retryable).toBe(true);
+        expect(body.retry_after).toBe(5);
+        expect(mockFetch).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('returns Yahoo refresh error description from discovery path', async () => {
       mockStorage.getYahooCredentials.mockResolvedValue({
         clerkUserId: 'user_123',
@@ -1300,6 +1333,133 @@ describe('yahoo-connect-handlers', () => {
       expect(body.retryable).toBe(true);
       expect(mockStorage.updateYahooCredentials).not.toHaveBeenCalled();
       expect(mockStorage.upsertYahooLeague).not.toHaveBeenCalled();
+    });
+
+    it('returns retryable rate-limit response when Yahoo league discovery returns HTTP 999', async () => {
+      mockStorage.getYahooCredentials.mockResolvedValue({
+        clerkUserId: 'user_123',
+        accessToken: 'fresh-token',
+        refreshToken: 'refresh-token',
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+        needsRefresh: false,
+      });
+
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 999,
+        headers: new Headers(),
+        text: vi.fn().mockResolvedValue('Yahoo rate limit'),
+      } as unknown as Response);
+
+      const response = await handleYahooDiscover(env, 'user_123', corsHeaders);
+
+      expect(response.status).toBe(429);
+      expect(response.headers.get('Retry-After')).toBe('900');
+      const body = (await response.json()) as Record<string, unknown>;
+      expect(body.error).toBe('yahoo_api_temporarily_unavailable');
+      expect(body.retryable).toBe(true);
+      expect(body.retry_after).toBe(900);
+      expect(body.upstream_status).toBe(999);
+      expect(mockStorage.upsertYahooLeague).not.toHaveBeenCalled();
+    });
+
+    it('preserves upstream Retry-After when Yahoo league discovery returns HTTP 429', async () => {
+      mockStorage.getYahooCredentials.mockResolvedValue({
+        clerkUserId: 'user_123',
+        accessToken: 'fresh-token',
+        refreshToken: 'refresh-token',
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+        needsRefresh: false,
+      });
+
+      mockFetch.mockResolvedValue(
+        new Response('Slow down', {
+          status: 429,
+          headers: { 'Retry-After': '120' },
+        })
+      );
+
+      const response = await handleYahooDiscover(env, 'user_123', corsHeaders);
+
+      expect(response.status).toBe(429);
+      expect(response.headers.get('Retry-After')).toBe('120');
+      const body = (await response.json()) as Record<string, unknown>;
+      expect(body.error).toBe('yahoo_api_temporarily_unavailable');
+      expect(body.retryable).toBe(true);
+      expect(body.retry_after).toBe(120);
+    });
+
+    it('stores Yahoo team_key during league discovery', async () => {
+      mockStorage.getYahooCredentials.mockResolvedValue({
+        clerkUserId: 'user_123',
+        accessToken: 'fresh-token',
+        refreshToken: 'refresh-token',
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+        needsRefresh: false,
+      });
+
+      mockFetch.mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            fantasy_content: {
+              users: {
+                count: 1,
+                0: {
+                  user: [
+                    { guid: 'guid-123' },
+                    {
+                      games: {
+                        count: 1,
+                        0: {
+                          game: [
+                            { code: 'nfl', season: '2025' },
+                            {
+                              leagues: {
+                                count: 1,
+                                0: {
+                                  league: [
+                                    { league_key: '449.l.123', name: 'Test Yahoo League' },
+                                    {
+                                      teams: {
+                                        count: 1,
+                                        0: {
+                                          team: [[
+                                            { team_key: '449.l.123.t.3' },
+                                            { team_id: '3' },
+                                            { name: 'Gerry Team' },
+                                          ]],
+                                        },
+                                      },
+                                    },
+                                  ],
+                                },
+                              },
+                            },
+                          ],
+                        },
+                      },
+                    },
+                  ],
+                },
+              },
+            },
+          }),
+          { status: 200 }
+        )
+      );
+
+      const response = await handleYahooDiscover(env, 'user_123', corsHeaders);
+
+      expect(response.status).toBe(200);
+      expect(mockStorage.upsertYahooLeague).toHaveBeenCalledWith(
+        expect.objectContaining({
+          clerkUserId: 'user_123',
+          leagueKey: '449.l.123',
+          teamId: '3',
+          teamKey: '449.l.123.t.3',
+          teamName: 'Gerry Team',
+        })
+      );
     });
   });
 });

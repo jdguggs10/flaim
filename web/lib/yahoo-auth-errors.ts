@@ -4,6 +4,7 @@ export interface YahooDiscoverErrorResponse {
   error?: string;
   error_description?: string;
   retryable?: boolean;
+  retry_after?: number;
 }
 
 // Any future auth-worker error that requires a reconnect must be listed here;
@@ -48,6 +49,7 @@ export function parseYahooDiscoverErrorResponse(data: unknown): YahooDiscoverErr
     error: typeof record.error === 'string' ? record.error : undefined,
     error_description: typeof record.error_description === 'string' ? record.error_description : undefined,
     retryable: typeof record.retryable === 'boolean' ? record.retryable : undefined,
+    retry_after: typeof record.retry_after === 'number' ? record.retry_after : undefined,
   };
 }
 

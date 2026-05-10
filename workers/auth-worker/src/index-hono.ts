@@ -913,10 +913,11 @@ api.get('/connect/yahoo/callback', async (c) => {
 api.get('/internal/connect/yahoo/credentials', async (c) => {
   const { userId, error: authError } = await getInternalUserId(c.req.raw, c.env, undefined, { allowStaticApiKey: true });
   if (!userId) {
+    const status = authError?.includes(INTERNAL_SERVICE_TOKEN_HEADER) || authError?.includes('Internal service authentication') ? 403 : 401;
     return c.json({
       error: 'unauthorized',
       error_description: authError || 'Authentication required',
-    }, 401);
+    }, status);
   }
   return handleYahooCredentials(c.env as YahooConnectEnv, userId, getCorsHeaders(c.req.raw));
 });

@@ -15,6 +15,7 @@ vi.mock('../router', () => ({
 
 describe('fantasy-mcp tools', () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-03-05T12:00:00-05:00'));
   });
@@ -354,6 +355,45 @@ describe('fantasy-mcp tools', () => {
     const payload = JSON.parse(text as string) as { success?: boolean; data?: { count?: number } };
     expect(payload.success).toBe(true);
     expect(payload.data?.count).toBe(1);
+  });
+
+  it('tool errors preserve retry metadata in structuredContent and _meta', async () => {
+    const tool = getUnifiedTools().find((t) => t.name === 'get_standings');
+    expect(tool).toBeTruthy();
+
+    const routeToClientMock = routeToClient as MockedFunction<typeof routeToClient>;
+    routeToClientMock.mockResolvedValue({
+      success: false,
+      error: 'YAHOO_AUTH_UNAVAILABLE: Yahoo token refresh is already in progress',
+      code: 'YAHOO_AUTH_UNAVAILABLE',
+      status: 503,
+      retryable: true,
+      retry_after: 5,
+    });
+
+    const result = await tool!.handler({
+      platform: 'yahoo',
+      sport: 'football',
+      league_id: '449.l.123',
+      season_year: 2025,
+    }, {} as Env, 'Bearer token', 'corr-retry');
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toBe(
+      'YAHOO_AUTH_UNAVAILABLE: Yahoo token refresh is already in progress'
+    );
+    expect(result.structuredContent).toMatchObject({
+      success: false,
+      code: 'YAHOO_AUTH_UNAVAILABLE',
+      status: 503,
+      retryable: true,
+      retry_after: 5,
+    });
+    expect(result._meta).toMatchObject({
+      status: 503,
+      retryable: true,
+      retry_after: 5,
+    });
   });
 
   it('get_free_agents schema accepts sleeper platform', () => {

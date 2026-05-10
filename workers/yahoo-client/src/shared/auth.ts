@@ -1,5 +1,6 @@
 import type { Env } from '../types';
 import { authWorkerFetch, YahooAuthWorkerErrorCode } from '@flaim/worker-shared';
+import { YahooClientError } from './errors';
 
 export interface YahooCredentials {
   accessToken: string;
@@ -10,7 +11,10 @@ async function throwYahooAuthWorkerError(response: Response): Promise<never> {
     error?: string;
     error_description?: string;
     retryable?: boolean;
+    retry_after?: number;
   };
+  const headerRetryAfter = parseRetryAfterSeconds(response.headers.get('Retry-After'));
+  const retryAfter = typeof errorData.retry_after === 'number' ? errorData.retry_after : headerRetryAfter;
   const errorSummary = errorData.error || response.statusText;
   const errorDetail = errorData.error_description
     ? `${errorSummary}: ${errorData.error_description}`
@@ -25,10 +29,31 @@ async function throwYahooAuthWorkerError(response: Response): Promise<never> {
     errorData.error === YahooAuthWorkerErrorCode.TOKEN_REFRESH_VALIDATION_UNAVAILABLE;
 
   if (isTransientAuthFailure) {
-    throw new Error(`YAHOO_AUTH_UNAVAILABLE: ${errorDetail}`);
+    throw new YahooClientError({
+      code: 'YAHOO_AUTH_UNAVAILABLE',
+      message: errorDetail,
+      status: response.status,
+      retryable: true,
+      retryAfter,
+    });
   }
 
-  throw new Error(`YAHOO_AUTH_ERROR: ${errorDetail}`);
+  throw new YahooClientError({
+    code: 'YAHOO_AUTH_ERROR',
+    message: errorDetail,
+    status: response.status,
+  });
+}
+
+function parseRetryAfterSeconds(value: string | null): number | undefined {
+  if (!value) return undefined;
+  const seconds = Number.parseInt(value, 10);
+  if (Number.isFinite(seconds) && seconds > 0) return seconds;
+  const dateMs = Date.parse(value);
+  if (Number.isFinite(dateMs)) {
+    return Math.max(1, Math.ceil((dateMs - Date.now()) / 1000));
+  }
+  return undefined;
 }
 
 export async function getYahooCredentials(
