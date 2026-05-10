@@ -15,7 +15,7 @@ describe('HTTP helpers', () => {
     try {
       expect(parseRetryAfterSeconds('120')).toBe(120);
       expect(parseRetryAfterSeconds('Sun, 10 May 2026 15:05:00 GMT')).toBe(300);
-      expect(parseRetryAfterSeconds('Sun, 10 May 2026 14:55:00 GMT')).toBeUndefined();
+      expect(parseRetryAfterSeconds('Sun, 10 May 2026 14:55:00 GMT')).toBe(1);
       expect(parseRetryAfterSeconds('invalid')).toBeUndefined();
     } finally {
       vi.useRealTimers();

@@ -13,7 +13,7 @@ export function parseRetryAfterSeconds(value: string | null): number | undefined
   const retryAt = Date.parse(value);
   if (Number.isFinite(retryAt)) {
     const delta = Math.ceil((retryAt - Date.now()) / 1000);
-    return delta > 0 ? delta : undefined;
+    return Math.max(1, delta);
   }
 
   return undefined;
