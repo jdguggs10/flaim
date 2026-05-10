@@ -67,6 +67,8 @@ const YAHOO_SCOPE = 'fspt-r'; // Fantasy Sports read access
 const LEASE_TTL_MS       = 30_000;
 // Used for both OAuth exchange and refresh token requests; must stay below LEASE_TTL_MS.
 const YAHOO_TOKEN_REQUEST_TIMEOUT_MS = 20_000;
+// Must stay below the gateway timeout budget so waiters return a retryable 503
+// before the MCP gateway drops the request.
 const MAX_LEASE_WAIT_MS = 10_000;
 const POLL_INTERVAL_MS   =    300;
 const MAX_REFRESH_ATTEMPTS = 3;

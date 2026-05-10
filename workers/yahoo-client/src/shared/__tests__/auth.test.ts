@@ -128,4 +128,22 @@ describe('getYahooCredentials', () => {
 
     await expect(resolveUserTeamKey(env, '461.l.12345', 'Bearer token')).resolves.toBeNull();
   });
+
+  it('returns the persisted Yahoo team key for the requested league', async () => {
+    mockAuthWorkerFetch.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          leagues: [
+            { leagueKey: '461.l.99999', teamKey: '461.l.99999.t.9' },
+            { leagueKey: '461.l.12345', teamKey: '461.l.12345.t.4' },
+          ],
+        }),
+        { status: 200 }
+      )
+    );
+
+    await expect(resolveUserTeamKey(env, '461.l.12345', 'Bearer token')).resolves.toBe(
+      '461.l.12345.t.4'
+    );
+  });
 });

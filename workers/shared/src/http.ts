@@ -1,3 +1,5 @@
+// Yahoo 999 responses rarely include Retry-After; keep the fallback conservative
+// so automatic retry loops do not keep hammering a rate-limited connection.
 export const YAHOO_DEFAULT_RATE_LIMIT_RETRY_AFTER_SECONDS = 15 * 60;
 export const YAHOO_DEFAULT_TRANSIENT_RETRY_AFTER_SECONDS = 5 * 60;
 export const YAHOO_REFRESH_IN_PROGRESS_RETRY_AFTER_SECONDS = 5;
