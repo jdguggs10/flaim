@@ -19,7 +19,16 @@
 
 import { YahooStorage, type YahooCredentials } from './yahoo-storage';
 import { getFrontendUrl, resolvePreviewOrigin } from './preview-url';
-import { YahooAuthWorkerErrorCode } from '@flaim/worker-shared';
+import {
+  YAHOO_DEFAULT_TRANSIENT_RETRY_AFTER_SECONDS,
+  YAHOO_REFRESH_IN_PROGRESS_RETRY_AFTER_SECONDS,
+  defaultYahooRetryAfterSeconds,
+  isYahooRateLimitStatus,
+  isYahooTransientHttpStatus,
+  parseRetryAfterSeconds,
+  retryAfterSecondsFromHeaders,
+  YahooAuthWorkerErrorCode,
+} from '@flaim/worker-shared';
 
 // =============================================================================
 // TYPES
@@ -62,9 +71,6 @@ const YAHOO_TOKEN_REQUEST_TIMEOUT_MS = 20_000;
 const MAX_LEASE_WAIT_MS = 10_000;
 const POLL_INTERVAL_MS   =    300;
 const MAX_REFRESH_ATTEMPTS = 3;
-const YAHOO_DEFAULT_RATE_LIMIT_RETRY_AFTER_SECONDS = 15 * 60;
-const YAHOO_DEFAULT_TRANSIENT_RETRY_AFTER_SECONDS = 5 * 60;
-const YAHOO_REFRESH_IN_PROGRESS_RETRY_AFTER_SECONDS = 5;
 const YAHOO_API_TEMPORARILY_UNAVAILABLE = 'yahoo_api_temporarily_unavailable';
 
 /**
@@ -136,34 +142,7 @@ function toYahooTokenResponse(response: UsableYahooTokenResponse): YahooTokenRes
 }
 
 function isTransientYahooTokenError(status?: number): boolean {
-  return status === 429 || (typeof status === 'number' && status >= 500);
-}
-
-function parseRetryAfterSeconds(value: string | null): number | undefined {
-  if (!value) return undefined;
-
-  const seconds = Number.parseInt(value, 10);
-  if (Number.isFinite(seconds) && seconds > 0) {
-    return seconds;
-  }
-
-  const retryAt = Date.parse(value);
-  if (Number.isFinite(retryAt)) {
-    const delta = Math.ceil((retryAt - Date.now()) / 1000);
-    return delta > 0 ? delta : undefined;
-  }
-
-  return undefined;
-}
-
-function defaultRetryAfterSeconds(status?: number): number | undefined {
-  if (status === 429 || status === 999) {
-    return YAHOO_DEFAULT_RATE_LIMIT_RETRY_AFTER_SECONDS;
-  }
-  if (typeof status === 'number' && status >= 500) {
-    return YAHOO_DEFAULT_TRANSIENT_RETRY_AFTER_SECONDS;
-  }
-  return undefined;
+  return isYahooTransientHttpStatus(status);
 }
 
 function normalizeYahooTokenErrorText(response: Pick<YahooTokenResponse, 'error' | 'error_description' | 'upstream_error_text'>): string {
@@ -250,7 +229,7 @@ async function readYahooTokenResponse(
         : fallbackErrorDescription,
       upstream_error_text: nonJsonDescription,
       status: response.status,
-      retry_after: retryAfter ?? defaultRetryAfterSeconds(response.status),
+      retry_after: retryAfter ?? defaultYahooRetryAfterSeconds(response.status),
     };
   }
 
@@ -263,7 +242,7 @@ async function readYahooTokenResponse(
       error_description: fallbackErrorDescription,
       upstream_error_text: nonJsonDescription,
       status: response.status,
-      retry_after: retryAfter ?? defaultRetryAfterSeconds(response.status),
+      retry_after: retryAfter ?? defaultYahooRetryAfterSeconds(response.status),
     };
   }
 
@@ -275,7 +254,7 @@ async function readYahooTokenResponse(
       error: fallbackError,
       error_description: fallbackErrorDescription,
       status: response.status,
-      retry_after: retryAfter ?? defaultRetryAfterSeconds(response.status),
+      retry_after: retryAfter ?? defaultYahooRetryAfterSeconds(response.status),
     };
   }
 
@@ -459,7 +438,7 @@ async function getValidYahooAccessToken(
           error: YahooAuthWorkerErrorCode.REFRESH_TEMPORARILY_UNAVAILABLE,
           errorDescription: result.error_description || 'Yahoo token refresh is temporarily unavailable',
           retryable: true,
-          retryAfter: result.retry_after ?? defaultRetryAfterSeconds(result.status),
+          retryAfter: result.retry_after ?? defaultYahooRetryAfterSeconds(result.status),
         };
       }
       return {
@@ -546,11 +525,11 @@ function yahooRefreshFailureResponse(
 }
 
 function isTransientYahooApiFailure(status: number): boolean {
-  return status === 429 || status === 999 || status >= 500;
+  return isYahooTransientHttpStatus(status);
 }
 
 function getYahooApiRetryAfterSeconds(response: Pick<Response, 'headers' | 'status'>): number | undefined {
-  return parseRetryAfterSeconds(response.headers.get('Retry-After')) ?? defaultRetryAfterSeconds(response.status);
+  return retryAfterSecondsFromHeaders(response.headers, response.status);
 }
 
 function yahooApiFailureResponse(
@@ -565,7 +544,7 @@ function yahooApiFailureResponse(
   }
 
   if (retryable) {
-    const isRateLimited = response.status === 429 || response.status === 999;
+    const isRateLimited = isYahooRateLimitStatus(response.status);
     return new Response(
       JSON.stringify({
         error: YAHOO_API_TEMPORARILY_UNAVAILABLE,
@@ -1308,6 +1287,7 @@ function parseYahooLeaguesResponse(data: unknown): DiscoveredYahooLeague[] {
             }
           }
 
+          // Yahoo's canonical team key is the league key plus ".t.{team_id}".
           const resolvedTeamKey = teamKey || (teamId ? `${leagueKey}.t.${teamId}` : '');
 
           leagues.push({

@@ -371,7 +371,7 @@ function routeResultToMcp(result: RouteResult): McpToolResponse {
     content: [{ type: 'text', text }],
     structuredContent: errorPayload,
     isError: true,
-    _meta: meta,
+    ...(Object.keys(meta).length > 0 ? { _meta: meta } : {}),
   };
 }
 

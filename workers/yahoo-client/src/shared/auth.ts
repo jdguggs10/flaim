@@ -1,5 +1,9 @@
 import type { Env } from '../types';
-import { authWorkerFetch, YahooAuthWorkerErrorCode } from '@flaim/worker-shared';
+import {
+  authWorkerFetch,
+  parseRetryAfterSeconds,
+  YahooAuthWorkerErrorCode,
+} from '@flaim/worker-shared';
 import { YahooClientError } from './errors';
 
 export interface YahooCredentials {
@@ -43,17 +47,6 @@ async function throwYahooAuthWorkerError(response: Response): Promise<never> {
     message: errorDetail,
     status: response.status,
   });
-}
-
-function parseRetryAfterSeconds(value: string | null): number | undefined {
-  if (!value) return undefined;
-  const seconds = Number.parseInt(value, 10);
-  if (Number.isFinite(seconds) && seconds > 0) return seconds;
-  const dateMs = Date.parse(value);
-  if (Number.isFinite(dateMs)) {
-    return Math.max(1, Math.ceil((dateMs - Date.now()) / 1000));
-  }
-  return undefined;
 }
 
 export async function getYahooCredentials(

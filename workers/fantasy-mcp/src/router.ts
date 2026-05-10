@@ -1,6 +1,7 @@
 // workers/fantasy-mcp/src/router.ts
 import type { Env, Platform, ToolParams } from './types';
 import {
+  parseRetryAfterSeconds,
   withCorrelationId,
   withEvalHeaders,
   withInternalServiceToken,
@@ -103,17 +104,6 @@ export async function routeToClient(
       code: 'ROUTING_ERROR'
     };
   }
-}
-
-function parseRetryAfterSeconds(value: string | null): number | undefined {
-  if (!value) return undefined;
-  const seconds = Number.parseInt(value, 10);
-  if (Number.isFinite(seconds) && seconds > 0) return seconds;
-  const dateMs = Date.parse(value);
-  if (Number.isFinite(dateMs)) {
-    return Math.max(1, Math.ceil((dateMs - Date.now()) / 1000));
-  }
-  return undefined;
 }
 
 function selectClient(env: Env, platform: Platform): Fetcher | null {

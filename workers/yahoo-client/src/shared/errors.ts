@@ -1,3 +1,8 @@
+import {
+  YAHOO_DEFAULT_RATE_LIMIT_RETRY_AFTER_SECONDS,
+  YAHOO_DEFAULT_TRANSIENT_RETRY_AFTER_SECONDS,
+} from '@flaim/worker-shared';
+
 export interface YahooClientErrorOptions {
   code: string;
   message: string;
@@ -30,9 +35,9 @@ export function defaultMetadataForYahooCode(code?: string): Pick<YahooClientErro
   switch (code) {
     case 'YAHOO_AUTH_UNAVAILABLE':
     case 'YAHOO_TIMEOUT':
-      return { status: 503, retryable: true, retryAfter: 300 };
+      return { status: 503, retryable: true, retryAfter: YAHOO_DEFAULT_TRANSIENT_RETRY_AFTER_SECONDS };
     case 'YAHOO_RATE_LIMITED':
-      return { status: 429, retryable: true, retryAfter: 900 };
+      return { status: 429, retryable: true, retryAfter: YAHOO_DEFAULT_RATE_LIMIT_RETRY_AFTER_SECONDS };
     case 'YAHOO_NOT_CONNECTED':
     case 'YAHOO_AUTH_ERROR':
       return { status: 401 };

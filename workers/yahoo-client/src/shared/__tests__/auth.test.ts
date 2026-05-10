@@ -6,6 +6,11 @@ import type { YahooClientError } from '../errors';
 
 vi.mock('@flaim/worker-shared', () => ({
   authWorkerFetch: vi.fn(),
+  parseRetryAfterSeconds: (value: string | null) => {
+    if (!value) return undefined;
+    const seconds = Number.parseInt(value, 10);
+    return Number.isFinite(seconds) && seconds > 0 ? seconds : undefined;
+  },
   YahooAuthWorkerErrorCode: {
     REFRESH_TEMPORARILY_UNAVAILABLE: 'refresh_temporarily_unavailable',
     TOKEN_REFRESH_VALIDATION_UNAVAILABLE: 'token_refresh_validation_unavailable',

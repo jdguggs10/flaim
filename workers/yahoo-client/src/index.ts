@@ -189,7 +189,7 @@ function executeResponseStatus(result: ExecuteResponse): 200 | 400 | 401 | 403 |
     case 503:
       return result.status;
     default:
-      return 200;
+      return 500;
   }
 }
 

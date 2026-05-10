@@ -1,4 +1,5 @@
 import type { YahooCredentials } from './auth';
+import { retryAfterSecondsFromHeaders } from '@flaim/worker-shared';
 import { YahooClientError } from './errors';
 
 const YAHOO_BASE_URL = 'https://fantasysports.yahooapis.com/fantasy/v2';
@@ -72,7 +73,7 @@ export function handleYahooError(response: Response): never {
         message: 'Too many requests. Please wait.',
         status: 429,
         retryable: true,
-        retryAfter: getYahooRetryAfterSeconds(response, 900),
+        retryAfter: retryAfterSecondsFromHeaders(response.headers, response.status, 900),
       });
     default:
       console.error(`[yahoo-api] Unexpected Yahoo status: ${response.status}`);
@@ -81,24 +82,11 @@ export function handleYahooError(response: Response): never {
         message: 'An unexpected error occurred with Yahoo. Please try again.',
         status: response.status >= 500 ? 503 : 502,
         retryable: response.status >= 500,
-        retryAfter: response.status >= 500 ? getYahooRetryAfterSeconds(response, 300) : undefined,
+        retryAfter: response.status >= 500
+          ? retryAfterSecondsFromHeaders(response.headers, response.status, 300)
+          : undefined,
       });
   }
-}
-
-function getYahooRetryAfterSeconds(response: Response, fallback: number): number {
-  const value = response.headers.get('Retry-After');
-  if (!value) return fallback;
-
-  const seconds = Number.parseInt(value, 10);
-  if (Number.isFinite(seconds) && seconds > 0) return seconds;
-
-  const dateMs = Date.parse(value);
-  if (Number.isFinite(dateMs)) {
-    return Math.max(1, Math.ceil((dateMs - Date.now()) / 1000));
-  }
-
-  return fallback;
 }
 
 /**

@@ -304,6 +304,7 @@ function debugLog(env: Env, message: string): void {
 interface AuthResult {
   userId: string | null;
   error?: string;
+  status?: 401 | 403 | 500;
   authType?: 'clerk' | 'oauth' | 'eval-api-key' | 'demo-api-key';
   scope?: string;
 }
@@ -422,18 +423,23 @@ async function getClerkUserId(request: Request, env: Env): Promise<AuthResult> {
   return { userId: null, error: 'Clerk authentication required' };
 }
 
-async function requireInternalService(request: Request, env: Env): Promise<string | null> {
+interface InternalAuthFailure {
+  error: string;
+  status: 403 | 500;
+}
+
+async function requireInternalService(request: Request, env: Env): Promise<InternalAuthFailure | null> {
   if (!env.INTERNAL_SERVICE_TOKEN) {
-    return 'Internal service authentication is not configured';
+    return { error: 'Internal service authentication is not configured', status: 500 };
   }
 
   const providedToken = request.headers.get(INTERNAL_SERVICE_TOKEN_HEADER);
   if (!providedToken) {
-    return `Missing or invalid ${INTERNAL_SERVICE_TOKEN_HEADER}`;
+    return { error: `Missing or invalid ${INTERNAL_SERVICE_TOKEN_HEADER}`, status: 403 };
   }
 
   if (!(await constantTimeEqual(providedToken, env.INTERNAL_SERVICE_TOKEN))) {
-    return `Missing or invalid ${INTERNAL_SERVICE_TOKEN_HEADER}`;
+    return { error: `Missing or invalid ${INTERNAL_SERVICE_TOKEN_HEADER}`, status: 403 };
   }
 
   return null;
@@ -447,7 +453,7 @@ async function getInternalUserId(
 ): Promise<AuthResult> {
   const internalError = await requireInternalService(request, env);
   if (internalError) {
-    return { userId: null, error: internalError };
+    return { userId: null, error: internalError.error, status: internalError.status };
   }
 
   return getVerifiedUserId(request, env, expectedResource, options);
@@ -683,10 +689,10 @@ api.post('/revoke', (c) => {
 // Token introspection (internal — called by fantasy-mcp gateway via service binding)
 api.get('/internal/introspect', async (c) => {
   const expectedResource = c.req.header('X-Flaim-Expected-Resource') || undefined;
-  const { userId, error: authError, scope, authType } = await getInternalUserId(c.req.raw, c.env, expectedResource, { allowStaticApiKey: true });
+  const { userId, error: authError, status: authStatus, scope, authType } = await getInternalUserId(c.req.raw, c.env, expectedResource, { allowStaticApiKey: true });
 
   if (!userId) {
-    return c.json({ valid: false, error: authError || 'Invalid token' }, authError?.includes(INTERNAL_SERVICE_TOKEN_HEADER) || authError?.includes('Internal service authentication') ? 403 : 401);
+    return c.json({ valid: false, error: authError || 'Invalid token' }, authStatus ?? 401);
   }
 
   return c.json({ valid: true, userId, scope: scope || 'mcp:read', authType });
@@ -911,13 +917,12 @@ api.get('/connect/yahoo/callback', async (c) => {
 
 // Get Yahoo credentials (internal use - requires auth)
 api.get('/internal/connect/yahoo/credentials', async (c) => {
-  const { userId, error: authError } = await getInternalUserId(c.req.raw, c.env, undefined, { allowStaticApiKey: true });
+  const { userId, error: authError, status: authStatus } = await getInternalUserId(c.req.raw, c.env, undefined, { allowStaticApiKey: true });
   if (!userId) {
-    const status = authError?.includes(INTERNAL_SERVICE_TOKEN_HEADER) || authError?.includes('Internal service authentication') ? 403 : 401;
     return c.json({
       error: 'unauthorized',
       error_description: authError || 'Authentication required',
-    }, status);
+    }, authStatus ?? 401);
   }
   return handleYahooCredentials(c.env as YahooConnectEnv, userId, getCorsHeaders(c.req.raw));
 });
@@ -975,13 +980,12 @@ api.get('/leagues/yahoo', async (c) => {
 });
 
 api.get('/internal/leagues/yahoo', async (c) => {
-  const { userId, error: authError } = await getInternalUserId(c.req.raw, c.env, undefined, { allowStaticApiKey: true });
+  const { userId, error: authError, status: authStatus } = await getInternalUserId(c.req.raw, c.env, undefined, { allowStaticApiKey: true });
   if (!userId) {
-    const status = authError?.includes(INTERNAL_SERVICE_TOKEN_HEADER) || authError?.includes('Internal service authentication') ? 403 : 401;
     return c.json({
       error: 'unauthorized',
       error_description: authError || 'Authentication required',
-    }, status);
+    }, authStatus ?? 401);
   }
 
   const storage = YahooStorage.fromEnvironment(c.env);
@@ -1065,13 +1069,12 @@ api.get('/leagues/sleeper', async (c) => {
 });
 
 api.get('/internal/leagues/sleeper', async (c) => {
-  const { userId, error: authError } = await getInternalUserId(c.req.raw, c.env, undefined, { allowStaticApiKey: true });
+  const { userId, error: authError, status: authStatus } = await getInternalUserId(c.req.raw, c.env, undefined, { allowStaticApiKey: true });
   if (!userId) {
-    const status = authError?.includes(INTERNAL_SERVICE_TOKEN_HEADER) || authError?.includes('Internal service authentication') ? 403 : 401;
     return c.json({
       error: 'unauthorized',
       error_description: authError || 'Authentication required',
-    }, status);
+    }, authStatus ?? 401);
   }
   return handleSleeperLeagues(c.env as SleeperConnectEnv, userId, getCorsHeaders(c.req.raw));
 });
@@ -1114,10 +1117,9 @@ api.get('/user/preferences', async (c) => {
 });
 
 api.get('/internal/user/preferences', async (c) => {
-  const { userId, error: authError } = await getInternalUserId(c.req.raw, c.env, undefined, { allowStaticApiKey: true });
+  const { userId, error: authError, status: authStatus } = await getInternalUserId(c.req.raw, c.env, undefined, { allowStaticApiKey: true });
   if (!userId) {
-    const status = authError?.includes(INTERNAL_SERVICE_TOKEN_HEADER) || authError?.includes('Internal service authentication') ? 403 : 401;
-    return c.json({ error: 'unauthorized', error_description: authError || 'Authentication required' }, status);
+    return c.json({ error: 'unauthorized', error_description: authError || 'Authentication required' }, authStatus ?? 401);
   }
 
   const storage = EspnSupabaseStorage.fromEnvironment(c.env);
@@ -1134,10 +1136,9 @@ api.get('/internal/user/preferences', async (c) => {
 
 // Internal: clear a default league for a sport (called by fantasy-mcp read-time self-heal)
 api.delete('/internal/leagues/default/:sport', async (c) => {
-  const { userId, error: authError } = await getInternalUserId(c.req.raw, c.env, undefined, { allowStaticApiKey: true });
+  const { userId, error: authError, status: authStatus } = await getInternalUserId(c.req.raw, c.env, undefined, { allowStaticApiKey: true });
   if (!userId) {
-    const status = authError?.includes(INTERNAL_SERVICE_TOKEN_HEADER) || authError?.includes('Internal service authentication') ? 403 : 401;
-    return c.json({ error: 'unauthorized', error_description: authError || 'Authentication required' }, status);
+    return c.json({ error: 'unauthorized', error_description: authError || 'Authentication required' }, authStatus ?? 401);
   }
 
   const sport = c.req.param('sport');
@@ -1224,15 +1225,14 @@ api.delete('/credentials/espn', async (c) => {
 });
 
 api.get('/internal/credentials/espn/raw', async (c) => {
-  const { userId, error: authError, authType } = await getInternalUserId(c.req.raw, c.env, undefined, { allowStaticApiKey: true });
+  const { userId, error: authError, status: authStatus, authType } = await getInternalUserId(c.req.raw, c.env, undefined, { allowStaticApiKey: true });
   debugLog(c.env, `🔐 [auth-worker] /internal/credentials/espn/raw - Verified user: ${userId ? maskUserId(userId) : 'null'}, authType: ${authType || 'none'}, authError: ${authError || 'none'}`);
 
   if (!userId) {
-    const status = authError?.includes(INTERNAL_SERVICE_TOKEN_HEADER) || authError?.includes('Internal service authentication') ? 403 : 401;
     return c.json({
       error: 'Authentication required',
       message: authError || 'Missing or invalid Authorization token'
-    }, status);
+    }, authStatus ?? 401);
   }
 
   return getRawEspnCredentialsResponse(c.env, userId, getCorsHeaders(c.req.raw));
@@ -1393,13 +1393,12 @@ api.delete('/leagues', async (c) => {
 });
 
 api.get('/internal/leagues', async (c) => {
-  const { userId: clerkUserId, error: authError } = await getInternalUserId(c.req.raw, c.env, undefined, { allowStaticApiKey: true });
+  const { userId: clerkUserId, error: authError, status: authStatus } = await getInternalUserId(c.req.raw, c.env, undefined, { allowStaticApiKey: true });
   if (!clerkUserId) {
-    const status = authError?.includes(INTERNAL_SERVICE_TOKEN_HEADER) || authError?.includes('Internal service authentication') ? 403 : 401;
     return c.json({
       error: 'Authentication required',
       message: authError || 'Missing or invalid Authorization token'
-    }, status);
+    }, authStatus ?? 401);
   }
 
   const storage = EspnSupabaseStorage.fromEnvironment(c.env);
