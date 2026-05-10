@@ -554,7 +554,7 @@ function yahooApiFailureResponse(
 
   return new Response(
     JSON.stringify({
-      error: 'yahoo_api_error',
+      error: YahooAuthWorkerErrorCode.YAHOO_API_ERROR,
       error_description: `Yahoo API returned ${classification.upstreamStatus}`,
       upstream_status: classification.upstreamStatus,
     }),

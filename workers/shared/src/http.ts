@@ -10,6 +10,7 @@ export function parseRetryAfterSeconds(value: string | null): number | undefined
     const seconds = Number(trimmed);
     return seconds > 0 ? seconds : undefined;
   }
+  // Numeric-looking malformed values like "120s" should not fall through to Date.parse.
   if (/^[+-]?\d/.test(trimmed)) {
     return undefined;
   }

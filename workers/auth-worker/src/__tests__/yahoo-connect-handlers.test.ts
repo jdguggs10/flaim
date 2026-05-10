@@ -1389,6 +1389,34 @@ describe('yahoo-connect-handlers', () => {
       expect(body.retry_after).toBe(120);
     });
 
+    it('returns retryable temporary response when Yahoo league discovery returns HTTP 503', async () => {
+      mockStorage.getYahooCredentials.mockResolvedValue({
+        clerkUserId: 'user_123',
+        accessToken: 'fresh-token',
+        refreshToken: 'refresh-token',
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+        needsRefresh: false,
+      });
+
+      mockFetch.mockResolvedValue(
+        new Response('Yahoo unavailable', {
+          status: 503,
+          headers: { 'Retry-After': '30' },
+        })
+      );
+
+      const response = await handleYahooDiscover(env, 'user_123', corsHeaders);
+
+      expect(response.status).toBe(503);
+      expect(response.headers.get('Retry-After')).toBe('30');
+      const body = (await response.json()) as Record<string, unknown>;
+      expect(body.error).toBe('yahoo_api_temporarily_unavailable');
+      expect(body.retryable).toBe(true);
+      expect(body.retry_after).toBe(30);
+      expect(body.upstream_status).toBe(503);
+      expect(mockStorage.upsertYahooLeague).not.toHaveBeenCalled();
+    });
+
     it('stores Yahoo team_key during league discovery', async () => {
       mockStorage.getYahooCredentials.mockResolvedValue({
         clerkUserId: 'user_123',
