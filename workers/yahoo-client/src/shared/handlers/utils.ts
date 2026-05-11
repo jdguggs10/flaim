@@ -12,6 +12,7 @@ export function toExecuteErrorResponse(error: unknown): ExecuteResponse {
     error: error instanceof Error ? error.message : 'Unknown error',
     code,
     status: metadata.status,
+    upstream_status: isYahooClientError(error) ? error.upstreamStatus : undefined,
     retryable: metadata.retryable,
     retry_after: metadata.retryAfter,
   };

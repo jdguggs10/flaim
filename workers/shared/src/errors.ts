@@ -99,6 +99,7 @@ export interface ExecuteResponse {
   error?: string;
   code?: string;
   status?: number;
+  upstream_status?: number;
   retryable?: boolean;
   retry_after?: number;
 }

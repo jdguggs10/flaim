@@ -88,6 +88,7 @@ export function handleYahooError(response: Response): never {
         code: 'YAHOO_RATE_LIMITED',
         message: 'Too many requests. Please wait.',
         status: classification.status,
+        upstreamStatus: classification.upstreamStatus,
         retryable: classification.retryable,
         retryAfter: classification.retryAfter,
       });
@@ -96,6 +97,7 @@ export function handleYahooError(response: Response): never {
         code: ErrorCode.YAHOO_TRANSIENT_ERROR,
         message: 'Yahoo is temporarily unavailable. Please try again later.',
         status: classification.status,
+        upstreamStatus: classification.upstreamStatus,
         retryable: classification.retryable,
         retryAfter: classification.retryAfter,
       });
@@ -105,6 +107,7 @@ export function handleYahooError(response: Response): never {
         code: 'YAHOO_API_ERROR',
         message: 'An unexpected error occurred with Yahoo. Please try again.',
         status: classification.status,
+        upstreamStatus: classification.upstreamStatus,
         retryable: classification.retryable,
         retryAfter: classification.retryAfter,
       });

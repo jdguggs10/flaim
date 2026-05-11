@@ -16,6 +16,7 @@ async function throwYahooAuthWorkerError(response: Response): Promise<never> {
     error_description?: string;
     retryable?: boolean;
     retry_after?: number;
+    upstream_status?: number;
   };
   const headerRetryAfter = parseRetryAfterSeconds(response.headers.get('Retry-After'));
   const retryAfter = headerRetryAfter ?? (typeof errorData.retry_after === 'number' ? errorData.retry_after : undefined);
@@ -37,6 +38,7 @@ async function throwYahooAuthWorkerError(response: Response): Promise<never> {
       code: 'YAHOO_AUTH_UNAVAILABLE',
       message: errorDetail,
       status: response.status,
+      upstreamStatus: errorData.upstream_status,
       retryable: true,
       retryAfter,
     });

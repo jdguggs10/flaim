@@ -344,6 +344,35 @@ export class YahooStorage {
   }
 
   /**
+   * Convert the caller-owned refresh lease into a short cooldown marker.
+   *
+   * This reuses the existing lease columns so near-concurrent requests do not
+   * immediately stampede Yahoo's token endpoint after a transient refresh
+   * failure.
+   */
+  async markRefreshCooldown(
+    clerkUserId: string,
+    ownerId: string,
+    retryAfterSeconds: number
+  ): Promise<void> {
+    const boundedRetryAfterSeconds = Math.max(1, Math.ceil(retryAfterSeconds));
+    const expiresAt = new Date(Date.now() + boundedRetryAfterSeconds * 1000).toISOString();
+    const { error } = await this.supabase
+      .from('yahoo_credentials')
+      .update({
+        refresh_lease_owner: `cooldown:${ownerId}`,
+        refresh_lease_expires_at: expiresAt,
+      })
+      .eq('clerk_user_id', clerkUserId)
+      .eq('refresh_lease_owner', ownerId);
+
+    if (error) {
+      console.error('[yahoo-storage] Failed to mark Yahoo refresh cooldown:', error);
+      throw new Error('Failed to mark Yahoo refresh cooldown');
+    }
+  }
+
+  /**
    * Delete Yahoo credentials for a user
    */
   async deleteYahooCredentials(clerkUserId: string): Promise<void> {
