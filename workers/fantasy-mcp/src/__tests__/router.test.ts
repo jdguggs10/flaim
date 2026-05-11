@@ -137,6 +137,41 @@ describe('fantasy-mcp router', () => {
       expect(result).toEqual(responseBody);
     });
 
+    it('preserves retry metadata from platform worker errors', async () => {
+      const params: ToolParams = {
+        platform: 'yahoo',
+        sport: 'football',
+        league_id: '449.l.12345',
+        season_year: 2025,
+      };
+      const env = {
+        INTERNAL_SERVICE_TOKEN: 'internal-secret',
+        YAHOO: {
+          fetch: async () => new Response(JSON.stringify({
+            success: false,
+            error: 'YAHOO_AUTH_UNAVAILABLE: Yahoo token refresh is already in progress',
+            code: 'YAHOO_AUTH_UNAVAILABLE',
+            retryable: true,
+            retry_after: 5,
+          }), {
+            status: 503,
+            headers: { 'Content-Type': 'application/json', 'Retry-After': '5' },
+          }),
+        },
+      } as unknown as Env;
+
+      const result = await routeToClient(env, 'get_standings', params);
+
+      expect(result).toEqual({
+        success: false,
+        error: 'YAHOO_AUTH_UNAVAILABLE: Yahoo token refresh is already in progress',
+        code: 'YAHOO_AUTH_UNAVAILABLE',
+        status: 503,
+        retryable: true,
+        retry_after: 5,
+      });
+    });
+
     it('returns a timeout error when the platform worker takes too long', async () => {
       vi.useFakeTimers();
 

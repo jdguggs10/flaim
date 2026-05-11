@@ -41,6 +41,7 @@ export const ErrorCode = {
   YAHOO_ACCESS_DENIED: 'YAHOO_ACCESS_DENIED',
   YAHOO_NOT_FOUND: 'YAHOO_NOT_FOUND',
   YAHOO_RATE_LIMITED: 'YAHOO_RATE_LIMITED',
+  YAHOO_TRANSIENT_ERROR: 'YAHOO_TRANSIENT_ERROR',
   YAHOO_API_ERROR: 'YAHOO_API_ERROR',
   YAHOO_NOT_CONNECTED: 'YAHOO_NOT_CONNECTED',
   YAHOO_TIMEOUT: 'YAHOO_TIMEOUT',
@@ -69,6 +70,8 @@ export const YahooAuthWorkerErrorCode = {
   REFRESH_TEMPORARILY_UNAVAILABLE: 'refresh_temporarily_unavailable',
   TOKEN_REFRESH_VALIDATION_UNAVAILABLE: 'token_refresh_validation_unavailable',
   TOKEN_EXCHANGE_UNAVAILABLE: 'token_exchange_unavailable',
+  YAHOO_API_ERROR: 'yahoo_api_error',
+  YAHOO_API_TEMPORARILY_UNAVAILABLE: 'yahoo_api_temporarily_unavailable',
 } as const;
 
 export type ErrorCodeValue = (typeof ErrorCode)[keyof typeof ErrorCode];
@@ -95,4 +98,7 @@ export interface ExecuteResponse {
   data?: unknown;
   error?: string;
   code?: string;
+  status?: number;
+  retryable?: boolean;
+  retry_after?: number;
 }

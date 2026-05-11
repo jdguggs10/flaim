@@ -348,7 +348,31 @@ function routeResultToMcp(result: RouteResult): McpToolResponse {
       data: result.data,
     });
   }
-  return mcpError(`${result.code || 'ERROR'}: ${result.error}`);
+
+  const errorPayload: Record<string, unknown> = {
+    success: false,
+    code: result.code || 'ERROR',
+    error: result.error || 'Unknown error',
+  };
+  if (result.status !== undefined) errorPayload.status = result.status;
+  if (result.retryable !== undefined) errorPayload.retryable = result.retryable;
+  if (result.retry_after !== undefined) errorPayload.retry_after = result.retry_after;
+
+  const meta: Record<string, unknown> = {};
+  if (result.status !== undefined) meta.status = result.status;
+  if (result.retryable !== undefined) meta.retryable = result.retryable;
+  if (result.retry_after !== undefined) meta.retry_after = result.retry_after;
+
+  const text = typeof errorPayload.error === 'string' && errorPayload.error.startsWith(`${errorPayload.code}:`)
+    ? errorPayload.error
+    : `${errorPayload.code}: ${errorPayload.error}`;
+
+  return {
+    content: [{ type: 'text', text }],
+    structuredContent: errorPayload,
+    isError: true,
+    ...(Object.keys(meta).length > 0 ? { _meta: meta } : {}),
+  };
 }
 
 // =============================================================================

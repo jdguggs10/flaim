@@ -1,4 +1,10 @@
 import type { YahooCredentials } from './auth';
+import {
+  ErrorCode,
+  YAHOO_DEFAULT_TRANSIENT_RETRY_AFTER_SECONDS,
+  classifyYahooApiFailure,
+} from '@flaim/worker-shared';
+import { YahooClientError } from './errors';
 
 const YAHOO_BASE_URL = 'https://fantasysports.yahooapis.com/fantasy/v2';
 
@@ -41,7 +47,13 @@ export async function yahooFetch(
   } catch (error) {
     clearTimeout(timeoutId);
     if (error instanceof Error && error.name === 'AbortError') {
-      throw new Error('YAHOO_TIMEOUT: Request timed out');
+      throw new YahooClientError({
+        code: 'YAHOO_TIMEOUT',
+        message: 'Request timed out',
+        status: 503,
+        retryable: true,
+        retryAfter: YAHOO_DEFAULT_TRANSIENT_RETRY_AFTER_SECONDS,
+      });
     }
     throw error;
   }
@@ -51,18 +63,51 @@ export async function yahooFetch(
  * Handle Yahoo API error responses
  */
 export function handleYahooError(response: Response): never {
-  switch (response.status) {
-    case 401:
-      throw new Error('YAHOO_AUTH_ERROR: Yahoo token expired or invalid');
-    case 403:
-      throw new Error('YAHOO_ACCESS_DENIED: Access denied to this resource');
-    case 404:
-      throw new Error('YAHOO_NOT_FOUND: League or resource not found');
-    case 429:
-      throw new Error('YAHOO_RATE_LIMITED: Too many requests. Please wait.');
+  const classification = classifyYahooApiFailure(response);
+  switch (classification.kind) {
+    case 'auth_error':
+      throw new YahooClientError({
+        code: 'YAHOO_AUTH_ERROR',
+        message: 'Yahoo token expired or invalid',
+        status: classification.status,
+      });
+    case 'access_denied':
+      throw new YahooClientError({
+        code: 'YAHOO_ACCESS_DENIED',
+        message: 'Access denied to this resource',
+        status: classification.status,
+      });
+    case 'not_found':
+      throw new YahooClientError({
+        code: 'YAHOO_NOT_FOUND',
+        message: 'League or resource not found',
+        status: classification.status,
+      });
+    case 'rate_limited':
+      throw new YahooClientError({
+        code: 'YAHOO_RATE_LIMITED',
+        message: 'Too many requests. Please wait.',
+        status: classification.status,
+        retryable: classification.retryable,
+        retryAfter: classification.retryAfter,
+      });
+    case 'transient':
+      throw new YahooClientError({
+        code: ErrorCode.YAHOO_TRANSIENT_ERROR,
+        message: 'Yahoo is temporarily unavailable. Please try again later.',
+        status: classification.status,
+        retryable: classification.retryable,
+        retryAfter: classification.retryAfter,
+      });
     default:
-      console.error(`[yahoo-api] Unexpected Yahoo status: ${response.status}`);
-      throw new Error('YAHOO_API_ERROR: An unexpected error occurred with Yahoo. Please try again.');
+      console.error(`[yahoo-api] Unexpected Yahoo status: ${classification.upstreamStatus}`);
+      throw new YahooClientError({
+        code: 'YAHOO_API_ERROR',
+        message: 'An unexpected error occurred with Yahoo. Please try again.',
+        status: classification.status,
+        retryable: classification.retryable,
+        retryAfter: classification.retryAfter,
+      });
   }
 }
 

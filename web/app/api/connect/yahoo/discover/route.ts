@@ -30,7 +30,12 @@ export async function POST() {
     });
 
     const data = await workerRes.json().catch(() => ({ error: 'Unknown error' })) as Record<string, unknown>;
-    return NextResponse.json(data, { status: workerRes.status });
+    const headers = new Headers();
+    const retryAfter = workerRes.headers.get('Retry-After');
+    if (retryAfter) {
+      headers.set('Retry-After', retryAfter);
+    }
+    return NextResponse.json(data, { status: workerRes.status, headers });
   } catch (error) {
     console.error('Yahoo discover route error:', error);
     return NextResponse.json({ error: 'Failed to discover Yahoo leagues' }, { status: 500 });

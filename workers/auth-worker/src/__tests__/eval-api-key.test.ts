@@ -442,6 +442,15 @@ describe('eval API key auth', () => {
     expect(res.status).toBe(403);
   });
 
+  it('GET /auth/internal/connect/yahoo/credentials without internal token returns 403', async () => {
+    const res = await appFetch(
+      makeRequest('/auth/internal/connect/yahoo/credentials', {
+        headers: bearerHeaders(EVAL_API_KEY),
+      })
+    );
+    expect(res.status).toBe(403);
+  });
+
   it('DELETE /auth/internal/leagues/default/football without any auth returns 4xx', async () => {
     const res = await appFetch(
       makeRequest('/auth/internal/leagues/default/football', {

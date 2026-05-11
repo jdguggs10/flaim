@@ -1,6 +1,7 @@
 // workers/fantasy-mcp/src/router.ts
 import type { Env, Platform, ToolParams } from './types';
 import {
+  parseRetryAfterSeconds,
   withCorrelationId,
   withEvalHeaders,
   withInternalServiceToken,
@@ -11,6 +12,9 @@ export interface RouteResult {
   data?: unknown;
   error?: string;
   code?: string;
+  status?: number;
+  retryable?: boolean;
+  retry_after?: number;
 }
 
 /**
@@ -67,11 +71,20 @@ export async function routeToClient(
     clearTimeout(timeoutId);
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({})) as { error?: string; code?: string };
+      const errorData = await response.json().catch(() => ({})) as {
+        error?: string;
+        code?: string;
+        retryable?: boolean;
+        retry_after?: number;
+      };
+      const retryAfter = parseRetryAfterSeconds(response.headers.get('Retry-After')) ?? errorData.retry_after;
       return {
         success: false,
         error: errorData.error || `Platform worker returned ${response.status}`,
-        code: errorData.code || 'PLATFORM_ERROR'
+        code: errorData.code || 'PLATFORM_ERROR',
+        status: response.status,
+        retryable: errorData.retryable,
+        retry_after: retryAfter,
       };
     }
 

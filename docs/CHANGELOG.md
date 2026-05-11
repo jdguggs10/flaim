@@ -8,6 +8,13 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 - **Changed**: Updated repo docs to reflect the current chat split: public `/chat` live demo and internal `/dev` lab.
 - **Fixed**: Removed stale dev-only chat framing and cleaned unresolved merge-conflict markers from `docs/ARCHITECTURE.md`.
 
+### Yahoo Connection Reliability
+- **Changed**: Yahoo Refresh on `/leagues` now uses the stored connection to rediscover leagues instead of starting a fresh OAuth flow every time.
+- **Changed**: Yahoo refresh lease waiters now return an explicit retryable response before the MCP gateway timeout budget is exhausted.
+- **Fixed**: Yahoo league discovery rate limits (`429`/`999`) and transient upstream failures now return retryable responses with `Retry-After` instead of generic refresh failures.
+- **Fixed**: Yahoo retry metadata now propagates through yahoo-client and fantasy-mcp instead of collapsing into generic tool errors.
+- **Fixed**: Yahoo discovery now persists `team_key` for pending waiver/trade transaction lookups.
+
 ### Security Hardening
 - **Fixed**: OAuth authorization code race condition — atomic `UPDATE...WHERE used_at IS NULL` prevents double-exchange attacks.
 - **Fixed**: PKCE `code_verifier` validation — enforces 43-128 char length and unreserved charset per RFC 7636, with constant-time challenge comparison.
