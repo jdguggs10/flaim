@@ -354,22 +354,25 @@ export class YahooStorage {
     clerkUserId: string,
     ownerId: string,
     retryAfterSeconds: number
-  ): Promise<void> {
+  ): Promise<boolean> {
     const boundedRetryAfterSeconds = Math.max(1, Math.ceil(retryAfterSeconds));
     const expiresAt = new Date(Date.now() + boundedRetryAfterSeconds * 1000).toISOString();
-    const { error } = await this.supabase
+    const { data, error } = await this.supabase
       .from('yahoo_credentials')
       .update({
         refresh_lease_owner: `cooldown:${ownerId}`,
         refresh_lease_expires_at: expiresAt,
       })
       .eq('clerk_user_id', clerkUserId)
-      .eq('refresh_lease_owner', ownerId);
+      .eq('refresh_lease_owner', ownerId)
+      .select('clerk_user_id');
 
     if (error) {
       console.error('[yahoo-storage] Failed to mark Yahoo refresh cooldown:', error);
       throw new Error('Failed to mark Yahoo refresh cooldown');
     }
+
+    return (data?.length ?? 0) > 0;
   }
 
   /**

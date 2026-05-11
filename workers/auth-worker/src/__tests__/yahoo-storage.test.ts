@@ -440,8 +440,11 @@ describe('YahooStorage', () => {
 
   describe('markRefreshCooldown', () => {
     it('replaces the current lease owner with a bounded cooldown marker', async () => {
-      await storage.markRefreshCooldown('user_123', 'owner-1', 60);
+      mockSelect.mockResolvedValue({ data: [{ clerk_user_id: 'user_123' }], error: null });
 
+      const result = await storage.markRefreshCooldown('user_123', 'owner-1', 60);
+
+      expect(result).toBe(true);
       expect(mockUpdate).toHaveBeenCalledWith(
         expect.objectContaining({
           refresh_lease_owner: 'cooldown:owner-1',
@@ -454,18 +457,16 @@ describe('YahooStorage', () => {
       expect(mockEq).toHaveBeenNthCalledWith(2, 'refresh_lease_owner', 'owner-1');
     });
 
+    it('returns false when the owner guard rejects the cooldown marker', async () => {
+      mockSelect.mockResolvedValue({ data: [], error: null });
+
+      const result = await storage.markRefreshCooldown('user_123', 'owner-1', 60);
+
+      expect(result).toBe(false);
+    });
+
     it('throws when cooldown marking hits a storage error', async () => {
-      mockEq
-        .mockReturnValueOnce({
-          eq: mockEq,
-          or: mockOr,
-          single: mockSingle,
-          select: mockSelect,
-          delete: mockDelete,
-          is: mockIs,
-          error: { message: 'DB down' },
-        })
-        .mockReturnValueOnce({ error: { message: 'DB down' } });
+      mockSelect.mockResolvedValue({ data: null, error: { message: 'DB down' } });
 
       await expect(
         storage.markRefreshCooldown('user_123', 'owner-1', 60)

@@ -62,7 +62,7 @@ describe('yahoo-connect-handlers', () => {
       updateYahooCredentials: vi.fn().mockResolvedValue(true),
       acquireRefreshLease: vi.fn().mockResolvedValue(true),
       releaseRefreshLease: vi.fn().mockResolvedValue(undefined),
-      markRefreshCooldown: vi.fn().mockResolvedValue(undefined),
+      markRefreshCooldown: vi.fn().mockResolvedValue(true),
       deleteYahooCredentials: vi.fn().mockResolvedValue(undefined),
       deleteAllYahooLeagues: vi.fn().mockResolvedValue(undefined),
       hasYahooCredentials: vi.fn(),
@@ -966,6 +966,7 @@ describe('yahoo-connect-handlers', () => {
         expect(body.error_description).toBe('Yahoo token refresh is cooling down after a transient failure. Please try again shortly.');
         expect(body.retryable).toBe(true);
         expect(body.retry_after).toBe(45);
+        expect(mockStorage.acquireRefreshLease).not.toHaveBeenCalled();
         expect(mockFetch).not.toHaveBeenCalled();
         expect(mockStorage.markRefreshCooldown).not.toHaveBeenCalled();
       } finally {

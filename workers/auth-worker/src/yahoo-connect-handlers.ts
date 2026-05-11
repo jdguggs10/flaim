@@ -73,6 +73,8 @@ const MAX_LEASE_WAIT_MS = 10_000;
 const POLL_INTERVAL_MS   =    300;
 const MAX_REFRESH_ATTEMPTS = 3;
 const REFRESH_COOLDOWN_OWNER_PREFIX = 'cooldown:';
+// Plain-text "too many token requests" deserves a short pause; network
+// timeouts use the longer generic Yahoo transient cooldown.
 const YAHOO_TOKEN_TEXT_TRANSIENT_RETRY_AFTER_SECONDS = 60;
 
 /**
@@ -326,7 +328,10 @@ async function markYahooRefreshCooldown(
   retryAfterSeconds: number
 ): Promise<void> {
   try {
-    await storage.markRefreshCooldown(userId, ownerId, retryAfterSeconds);
+    const marked = await storage.markRefreshCooldown(userId, ownerId, retryAfterSeconds);
+    if (!marked) {
+      console.debug('[yahoo-connect] Skipped Yahoo refresh cooldown because the lease is no longer owned by this request');
+    }
   } catch (cooldownError) {
     console.warn('[yahoo-connect] Failed to mark Yahoo refresh cooldown after transient refresh failure:', cooldownError);
     try {
@@ -405,6 +410,9 @@ async function getValidYahooAccessToken(
   for (let attempt = 0; attempt < MAX_REFRESH_ATTEMPTS; attempt++) {
     if (!credentials.needsRefresh) {
       return toTokenResult(credentials);
+    }
+    if (isRefreshCooldown(credentials)) {
+      return yahooRefreshCooldownResult(credentials);
     }
 
     const ownerId = crypto.randomUUID();
