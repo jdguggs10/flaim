@@ -68,7 +68,7 @@ export interface CreateTokenParams {
   clientName?: string; // AI platform name (Claude, ChatGPT, etc.)
   expiresInSeconds?: number; // Default: 3600 (1 hour)
   includeRefreshToken?: boolean;
-  refreshTokenExpiresInSeconds?: number; // Default: 7776000 (90 days)
+  refreshTokenExpiresInSeconds?: number; // Default: 31536000 (1 year)
 }
 
 export interface CreateStateParams {
@@ -87,7 +87,7 @@ export interface TokenValidationResult {
 }
 
 export const DEFAULT_OAUTH_ACCESS_TOKEN_TTL_SECONDS = 3600; // 1 hour
-export const DEFAULT_OAUTH_REFRESH_TOKEN_TTL_SECONDS = 7776000; // 90 days
+export const DEFAULT_OAUTH_REFRESH_TOKEN_TTL_SECONDS = 31536000; // 1 year
 export const MIN_OAUTH_REFRESH_TOKEN_TTL_SECONDS = 3600; // 1 hour
 export const MAX_OAUTH_REFRESH_TOKEN_TTL_SECONDS = 31536000; // 1 year
 

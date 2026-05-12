@@ -89,7 +89,7 @@ describe('OAuthStorage MCP token lifetimes', () => {
     vi.clearAllMocks();
   });
 
-  it('defaults refresh-token inactivity TTL to 90 days', async () => {
+  it('defaults refresh-token inactivity TTL to 1 year', async () => {
     const { insertPayloads } = buildTableMock();
     const storage = new OAuthStorage('https://example.supabase.co', 'test-key');
 
