@@ -94,6 +94,7 @@ describe('getYahooCredentials', () => {
           error_description: 'Try again later',
           retryable: true,
           retry_after: 120,
+          upstream_status: 429,
         }),
         { status: 503, headers: { 'Retry-After': '120' } }
       )
@@ -102,6 +103,7 @@ describe('getYahooCredentials', () => {
     await expect(getYahooCredentials(env, 'Bearer token')).rejects.toMatchObject({
       code: 'YAHOO_AUTH_UNAVAILABLE',
       status: 503,
+      upstreamStatus: 429,
       retryable: true,
       retryAfter: 120,
     } satisfies Partial<YahooClientError>);

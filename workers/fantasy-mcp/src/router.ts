@@ -13,6 +13,7 @@ export interface RouteResult {
   error?: string;
   code?: string;
   status?: number;
+  upstream_status?: number;
   retryable?: boolean;
   retry_after?: number;
 }
@@ -74,6 +75,7 @@ export async function routeToClient(
       const errorData = await response.json().catch(() => ({})) as {
         error?: string;
         code?: string;
+        upstream_status?: number;
         retryable?: boolean;
         retry_after?: number;
       };
@@ -83,6 +85,7 @@ export async function routeToClient(
         error: errorData.error || `Platform worker returned ${response.status}`,
         code: errorData.code || 'PLATFORM_ERROR',
         status: response.status,
+        upstream_status: errorData.upstream_status,
         retryable: errorData.retryable,
         retry_after: retryAfter,
       };

@@ -7,6 +7,7 @@ export interface YahooClientErrorOptions {
   code: string;
   message: string;
   status?: number;
+  upstreamStatus?: number;
   retryable?: boolean;
   retryAfter?: number;
 }
@@ -14,6 +15,7 @@ export interface YahooClientErrorOptions {
 export class YahooClientError extends Error {
   readonly code: string;
   readonly status?: number;
+  readonly upstreamStatus?: number;
   readonly retryable?: boolean;
   readonly retryAfter?: number;
 
@@ -22,6 +24,7 @@ export class YahooClientError extends Error {
     this.name = 'YahooClientError';
     this.code = options.code;
     this.status = options.status;
+    this.upstreamStatus = options.upstreamStatus;
     this.retryable = options.retryable;
     this.retryAfter = options.retryAfter;
   }

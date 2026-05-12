@@ -12,6 +12,8 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 - **Changed**: Yahoo Refresh on `/leagues` now uses the stored connection to rediscover leagues instead of starting a fresh OAuth flow every time.
 - **Changed**: Yahoo refresh lease waiters now return an explicit retryable response before the MCP gateway timeout budget is exhausted.
 - **Fixed**: Yahoo league discovery rate limits (`429`/`999`) and transient upstream failures now return retryable responses with `Retry-After` instead of generic refresh failures.
+- **Fixed**: Yahoo transient token-refresh failures now set a short cooldown so near-concurrent tool calls do not immediately re-hit Yahoo's token endpoint.
+- **Fixed**: Yahoo token-refresh retry hints now include `retry_after` for text-classified rate limits and preserve upstream status metadata through MCP tool errors.
 - **Fixed**: Yahoo retry metadata now propagates through yahoo-client and fantasy-mcp instead of collapsing into generic tool errors.
 - **Fixed**: Yahoo discovery now persists `team_key` for pending waiver/trade transaction lookups.
 

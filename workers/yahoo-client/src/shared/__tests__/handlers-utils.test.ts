@@ -19,6 +19,7 @@ describe('shared handler utilities', () => {
       code: 'YAHOO_RATE_LIMITED',
       message: 'Too many requests. Please wait.',
       status: 429,
+      upstreamStatus: 999,
       retryable: true,
       retryAfter: 900,
     }))).toEqual({
@@ -26,6 +27,7 @@ describe('shared handler utilities', () => {
       error: 'YAHOO_RATE_LIMITED: Too many requests. Please wait.',
       code: 'YAHOO_RATE_LIMITED',
       status: 429,
+      upstream_status: 999,
       retryable: true,
       retry_after: 900,
     });

@@ -151,6 +151,7 @@ describe('fantasy-mcp router', () => {
             success: false,
             error: 'YAHOO_AUTH_UNAVAILABLE: Yahoo token refresh is already in progress',
             code: 'YAHOO_AUTH_UNAVAILABLE',
+            upstream_status: 429,
             retryable: true,
             retry_after: 5,
           }), {
@@ -167,6 +168,7 @@ describe('fantasy-mcp router', () => {
         error: 'YAHOO_AUTH_UNAVAILABLE: Yahoo token refresh is already in progress',
         code: 'YAHOO_AUTH_UNAVAILABLE',
         status: 503,
+        upstream_status: 429,
         retryable: true,
         retry_after: 5,
       });
