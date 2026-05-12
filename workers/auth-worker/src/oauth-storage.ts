@@ -753,9 +753,9 @@ function parseRefreshTokenTtlSeconds(value?: string): number {
 
   if (parsed < MIN_OAUTH_REFRESH_TOKEN_TTL_SECONDS) {
     console.warn(
-      `[oauth-storage] OAUTH_REFRESH_TOKEN_TTL_SECONDS="${value}" is below minimum, using default ${DEFAULT_OAUTH_REFRESH_TOKEN_TTL_SECONDS}s`
+      `[oauth-storage] OAUTH_REFRESH_TOKEN_TTL_SECONDS="${value}" is below minimum, clamping to ${MIN_OAUTH_REFRESH_TOKEN_TTL_SECONDS}s`
     );
-    return DEFAULT_OAUTH_REFRESH_TOKEN_TTL_SECONDS;
+    return MIN_OAUTH_REFRESH_TOKEN_TTL_SECONDS;
   }
 
   if (parsed > MAX_OAUTH_REFRESH_TOKEN_TTL_SECONDS) {

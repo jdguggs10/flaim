@@ -73,7 +73,8 @@
       "vars": {
         "NODE_ENV": "production",
         "ENVIRONMENT": "prod",
-        "FRONTEND_URL": "https://flaim.app"
+        "FRONTEND_URL": "https://flaim.app",
+        "OAUTH_REFRESH_TOKEN_TTL_SECONDS": "7776000"
       }
     },
     // Preview environment (remote dev/staging)
@@ -110,7 +111,8 @@
       "vars": {
         "NODE_ENV": "production",
         "ENVIRONMENT": "preview",
-        "FRONTEND_URL": "https://preview.flaim.app"
+        "FRONTEND_URL": "https://preview.flaim.app",
+        "OAUTH_REFRESH_TOKEN_TTL_SECONDS": "7776000"
       }
     },
     // Development environment (local)
@@ -134,7 +136,8 @@
       "vars": {
         "NODE_ENV": "development",
         "ENVIRONMENT": "dev",
-        "FRONTEND_URL": "http://localhost:3000"
+        "FRONTEND_URL": "http://localhost:3000",
+        "OAUTH_REFRESH_TOKEN_TTL_SECONDS": "7776000"
       }
     }
   }

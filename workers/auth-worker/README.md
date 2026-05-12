@@ -43,7 +43,7 @@ This avoids state collisions during sign-in redirects while maintaining backward
 MCP OAuth token lifetime:
 - Access tokens remain short-lived: 1 hour.
 - Refresh tokens rotate on every successful refresh.
-- Refresh-token inactivity window defaults to 90 days (`7776000` seconds) and can be overridden with `OAUTH_REFRESH_TOKEN_TTL_SECONDS`.
+- Refresh-token inactivity window defaults to 90 days (`7776000` seconds) and can be overridden with `OAUTH_REFRESH_TOKEN_TTL_SECONDS` (clamped to 1 hour minimum, 1 year maximum).
 - This provider-side MCP OAuth flow is separate from the downstream Yahoo OAuth token chain.
 
 ### Yahoo Connect (Flaim → Yahoo)

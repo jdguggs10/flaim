@@ -155,7 +155,7 @@ describe('OAuthStorage MCP token lifetimes', () => {
     );
   });
 
-  it('uses the default when OAUTH_REFRESH_TOKEN_TTL_SECONDS env override is below minimum', async () => {
+  it('clamps OAUTH_REFRESH_TOKEN_TTL_SECONDS env override to the 1-hour minimum', async () => {
     const { insertPayloads } = buildTableMock();
     const storage = OAuthStorage.fromEnvironment({
       SUPABASE_URL: 'https://example.supabase.co',
@@ -172,10 +172,10 @@ describe('OAuthStorage MCP token lifetimes', () => {
 
     const refreshTokenExpiresAt = new Date(insertPayloads[0].refresh_token_expires_at as string).getTime();
     expect(refreshTokenExpiresAt).toBeGreaterThanOrEqual(
-      before + DEFAULT_OAUTH_REFRESH_TOKEN_TTL_SECONDS * 1000 - 1000
+      before + MIN_OAUTH_REFRESH_TOKEN_TTL_SECONDS * 1000 - 1000
     );
     expect(refreshTokenExpiresAt).toBeLessThanOrEqual(
-      after + DEFAULT_OAUTH_REFRESH_TOKEN_TTL_SECONDS * 1000 + 1000
+      after + MIN_OAUTH_REFRESH_TOKEN_TTL_SECONDS * 1000 + 1000
     );
   });
 
