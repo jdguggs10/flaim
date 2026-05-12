@@ -54,7 +54,6 @@ interface YahooTokenResponse {
   error_description?: string;
   upstream_error_text?: string;
   retry_after?: number;
-  upstream_body_class?: YahooTokenBodyClass;
 }
 
 type YahooCredentialRefreshState = 'none' | 'in_progress' | 'cooldown' | 'expired';
@@ -62,7 +61,6 @@ type YahooTokenBodyClass =
   | 'empty'
   | 'json_error'
   | 'plain_text'
-  | 'invalid_json'
   | 'invalid_success_shape'
   | 'usable_success';
 type YahooTokenFailureDiagnosticKind =
@@ -88,6 +86,10 @@ interface YahooRefreshDiagnosticFields {
   hasUpstreamErrorText?: boolean;
   cooldownMarked?: boolean;
 }
+
+type YahooTokenDiagnosticResponse = YahooTokenResponse & {
+  upstream_body_class?: YahooTokenBodyClass;
+};
 
 // =============================================================================
 // CONFIGURATION
@@ -318,17 +320,15 @@ async function readYahooTokenResponse(
   response: Response,
   fallbackError: string,
   fallbackErrorDescription: string
-): Promise<YahooTokenResponse> {
+): Promise<YahooTokenDiagnosticResponse> {
   const text = await response.text();
   const data = parseYahooTokenBody(text);
   const nonJsonDescription = data ? undefined : trimYahooTokenBody(text);
-  const bodyClass: YahooTokenBodyClass = data
+  const failureBodyClass: YahooTokenBodyClass = data
     ? 'json_error'
     : text.trim().length === 0
       ? 'empty'
-      : nonJsonDescription
-        ? 'plain_text'
-        : 'invalid_json';
+      : 'plain_text';
   const retryAfter = parseRetryAfterSeconds(response.headers.get('Retry-After'));
 
   if (!response.ok) {
@@ -343,7 +343,7 @@ async function readYahooTokenResponse(
       upstream_error_text: nonJsonDescription,
       status: response.status,
       retry_after: retryAfter ?? defaultYahooRetryAfterSeconds(response.status),
-      upstream_body_class: bodyClass,
+      upstream_body_class: failureBodyClass,
     };
   }
 
@@ -357,7 +357,7 @@ async function readYahooTokenResponse(
       upstream_error_text: nonJsonDescription,
       status: response.status,
       retry_after: retryAfter ?? defaultYahooRetryAfterSeconds(response.status),
-      upstream_body_class: bodyClass,
+      upstream_body_class: failureBodyClass,
     };
   }
 
@@ -418,12 +418,13 @@ function retryAfterFromLease(credentials: { refreshLeaseExpiresAt?: Date } | nul
 }
 
 function yahooRefreshCooldownResult(credentials: YahooCredentials, correlationId?: string): GetTokenResult {
-  const retryAfter = retryAfterFromLease(credentials) ?? YAHOO_REFRESH_IN_PROGRESS_RETRY_AFTER_SECONDS;
+  const leaseRemainingSeconds = retryAfterFromLease(credentials);
+  const retryAfter = leaseRemainingSeconds ?? YAHOO_REFRESH_IN_PROGRESS_RETRY_AFTER_SECONDS;
   logYahooRefreshDiagnostic('active_cooldown_returned', {
     correlationId,
     userId: credentials.clerkUserId,
     retryAfter,
-    leaseRemainingSeconds: retryAfterFromLease(credentials),
+    leaseRemainingSeconds,
     refreshState: yahooRefreshState(credentials),
   });
   return {
@@ -657,7 +658,7 @@ async function getValidYahooAccessToken(
     });
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), YAHOO_TOKEN_REQUEST_TIMEOUT_MS);
-    let result: YahooTokenResponse;
+    let result: YahooTokenDiagnosticResponse;
     try {
       logDiagnostic('refresh_request_started', { userId, attempt });
       result = await refreshAccessToken(credentials.refreshToken, env, controller.signal);
@@ -1410,7 +1411,7 @@ async function exchangeCodeForTokens(
   code: string,
   env: YahooConnectEnv,
   signal?: AbortSignal
-): Promise<YahooTokenResponse> {
+): Promise<YahooTokenDiagnosticResponse> {
   const credentials = btoa(`${env.YAHOO_CLIENT_ID}:${env.YAHOO_CLIENT_SECRET}`);
 
   const response = await fetch(YAHOO_TOKEN_URL, {
@@ -1443,7 +1444,7 @@ async function refreshAccessToken(
   refreshToken: string,
   env: YahooConnectEnv,
   signal?: AbortSignal
-): Promise<YahooTokenResponse> {
+): Promise<YahooTokenDiagnosticResponse> {
   const credentials = btoa(`${env.YAHOO_CLIENT_ID}:${env.YAHOO_CLIENT_SECRET}`);
 
   const response = await fetch(YAHOO_TOKEN_URL, {

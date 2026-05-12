@@ -1396,6 +1396,33 @@ describe('yahoo-connect-handlers', () => {
       }
     });
 
+    it('returns expired lease state without exposing the lease owner', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-05-12T01:30:00Z'));
+      try {
+        mockStorage.getYahooCredentialHealth.mockResolvedValue({
+          clerkUserId: 'user_123',
+          expiresAt: new Date('2026-05-12T01:31:00Z'),
+          yahooGuidPresent: true,
+          needsRefresh: true,
+          refreshLeaseOwner: 'refresh:owner-1',
+          refreshLeaseExpiresAt: new Date('2026-05-12T01:29:55Z'),
+        });
+
+        const response = await handleYahooCredentialHealth(env, 'user_123', corsHeaders);
+
+        expect(response.status).toBe(200);
+        const body = (await response.json()) as Record<string, any>;
+        expect(body.refresh).toEqual({
+          state: 'expired',
+          leaseExpiresAt: '2026-05-12T01:29:55.000Z',
+        });
+        expect(JSON.stringify(body)).not.toContain('owner-1');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('returns disconnected health when no Yahoo credential row exists', async () => {
       vi.useFakeTimers();
       vi.setSystemTime(new Date('2026-05-12T01:30:00Z'));
@@ -1414,6 +1441,23 @@ describe('yahoo-connect-handlers', () => {
       } finally {
         vi.useRealTimers();
       }
+    });
+
+    it('returns server_error when credential health lookup fails', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      mockStorage.getYahooCredentialHealth.mockRejectedValue(new Error('db offline'));
+
+      const response = await handleYahooCredentialHealth(env, 'user_123', corsHeaders);
+
+      expect(response.status).toBe(500);
+      expect(await response.json()).toEqual({
+        error: 'server_error',
+        error_description: 'Failed to retrieve Yahoo credential health',
+      });
+      expect(errorSpy).toHaveBeenCalledWith(
+        '[yahoo-connect] Credential health error:',
+        expect.any(Error)
+      );
     });
   });
 
