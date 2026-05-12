@@ -149,6 +149,11 @@ function secondsUntil(date?: Date): number | undefined {
   return Math.ceil((date.getTime() - Date.now()) / 1000);
 }
 
+function nonNegativeSecondsUntil(date?: Date): number | undefined {
+  const seconds = secondsUntil(date);
+  return seconds !== undefined ? Math.max(seconds, 0) : undefined;
+}
+
 function boundedPositiveSecondsUntil(date?: Date): number | undefined {
   const seconds = secondsUntil(date);
   return seconds !== undefined && seconds > 0 ? seconds : undefined;
@@ -324,7 +329,7 @@ async function readYahooTokenResponse(
   const text = await response.text();
   const data = parseYahooTokenBody(text);
   const nonJsonDescription = data ? undefined : trimYahooTokenBody(text);
-  const failureBodyClass: YahooTokenBodyClass = data
+  const bodyClassForErrorPaths: YahooTokenBodyClass = data
     ? 'json_error'
     : text.trim().length === 0
       ? 'empty'
@@ -343,7 +348,7 @@ async function readYahooTokenResponse(
       upstream_error_text: nonJsonDescription,
       status: response.status,
       retry_after: retryAfter ?? defaultYahooRetryAfterSeconds(response.status),
-      upstream_body_class: failureBodyClass,
+      upstream_body_class: bodyClassForErrorPaths,
     };
   }
 
@@ -357,7 +362,7 @@ async function readYahooTokenResponse(
       upstream_error_text: nonJsonDescription,
       status: response.status,
       retry_after: retryAfter ?? defaultYahooRetryAfterSeconds(response.status),
-      upstream_body_class: failureBodyClass,
+      upstream_body_class: bodyClassForErrorPaths,
     };
   }
 
@@ -1235,7 +1240,8 @@ export async function handleYahooCredentials(
 export async function handleYahooCredentialHealth(
   env: YahooConnectEnv,
   userId: string,
-  corsHeaders: Record<string, string>
+  corsHeaders: Record<string, string>,
+  correlationId?: string
 ): Promise<Response> {
   try {
     const storage = YahooStorage.fromEnvironment(env);
@@ -1274,7 +1280,7 @@ export async function handleYahooCredentialHealth(
         yahooGuidPresent: credentials.yahooGuidPresent,
         accessToken: {
           expiresAt: credentials.expiresAt.toISOString(),
-          expiresInSeconds: secondsUntil(credentials.expiresAt),
+          expiresInSeconds: nonNegativeSecondsUntil(credentials.expiresAt),
           needsRefresh: credentials.needsRefresh,
           state: credentials.needsRefresh ? 'needs_refresh' : 'fresh',
         },
@@ -1296,6 +1302,11 @@ export async function handleYahooCredentialHealth(
       }
     );
   } catch (error) {
+    logYahooRefreshDiagnostic('credential_health_error', {
+      correlationId,
+      userId,
+      reason: 'storage_error',
+    });
     console.error('[yahoo-connect] Credential health error:', error);
     return new Response(
       JSON.stringify({

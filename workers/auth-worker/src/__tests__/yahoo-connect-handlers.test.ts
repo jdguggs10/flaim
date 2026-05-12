@@ -1339,7 +1339,7 @@ describe('yahoo-connect-handlers', () => {
 
         expect(response.status).toBe(200);
         expect(response.headers.get('Cache-Control')).toBe('no-store');
-        const body = (await response.json()) as Record<string, any>;
+        const body = (await response.json()) as Record<string, unknown>;
         expect(body).toEqual({
           connected: true,
           hasCredentials: true,
@@ -1380,7 +1380,7 @@ describe('yahoo-connect-handlers', () => {
         const response = await handleYahooCredentialHealth(env, 'user_123', corsHeaders);
 
         expect(response.status).toBe(200);
-        const body = (await response.json()) as Record<string, any>;
+        const body = (await response.json()) as Record<string, unknown>;
         expect(body.refresh).toEqual({
           state: 'cooldown',
           leaseExpiresAt: '2026-05-12T01:31:15.000Z',
@@ -1412,12 +1412,38 @@ describe('yahoo-connect-handlers', () => {
         const response = await handleYahooCredentialHealth(env, 'user_123', corsHeaders);
 
         expect(response.status).toBe(200);
-        const body = (await response.json()) as Record<string, any>;
+        const body = (await response.json()) as Record<string, unknown>;
         expect(body.refresh).toEqual({
           state: 'expired',
           leaseExpiresAt: '2026-05-12T01:29:55.000Z',
         });
         expect(JSON.stringify(body)).not.toContain('owner-1');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('clamps expired access-token health timing to zero seconds', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-05-12T01:30:00Z'));
+      try {
+        mockStorage.getYahooCredentialHealth.mockResolvedValue({
+          clerkUserId: 'user_123',
+          expiresAt: new Date('2026-05-12T01:29:30Z'),
+          yahooGuidPresent: true,
+          needsRefresh: true,
+        });
+
+        const response = await handleYahooCredentialHealth(env, 'user_123', corsHeaders);
+
+        expect(response.status).toBe(200);
+        const body = (await response.json()) as Record<string, unknown>;
+        expect(body.accessToken).toMatchObject({
+          expiresAt: '2026-05-12T01:29:30.000Z',
+          expiresInSeconds: 0,
+          needsRefresh: true,
+          state: 'needs_refresh',
+        });
       } finally {
         vi.useRealTimers();
       }
@@ -1445,9 +1471,10 @@ describe('yahoo-connect-handlers', () => {
 
     it('returns server_error when credential health lookup fails', async () => {
       const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
       mockStorage.getYahooCredentialHealth.mockRejectedValue(new Error('db offline'));
 
-      const response = await handleYahooCredentialHealth(env, 'user_123', corsHeaders);
+      const response = await handleYahooCredentialHealth(env, 'user_123', corsHeaders, 'req_health');
 
       expect(response.status).toBe(500);
       expect(await response.json()).toEqual({
@@ -1457,6 +1484,15 @@ describe('yahoo-connect-handlers', () => {
       expect(errorSpy).toHaveBeenCalledWith(
         '[yahoo-connect] Credential health error:',
         expect.any(Error)
+      );
+      expect(yahooRefreshDiagnostics(logSpy)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            event: 'credential_health_error',
+            correlation_id: 'req_health',
+            reason: 'storage_error',
+          }),
+        ])
       );
     });
   });

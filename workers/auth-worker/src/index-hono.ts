@@ -942,7 +942,12 @@ api.get('/internal/connect/yahoo/credential-health', async (c) => {
       error_description: authError || 'Authentication required',
     }, authStatus ?? 401);
   }
-  return handleYahooCredentialHealth(c.env as YahooConnectEnv, userId, getCorsHeaders(c.req.raw));
+  return handleYahooCredentialHealth(
+    c.env as YahooConnectEnv,
+    userId,
+    getCorsHeaders(c.req.raw),
+    c.req.header('X-Correlation-ID') || undefined
+  );
 });
 
 // Check Yahoo connection status (requires Clerk JWT)
