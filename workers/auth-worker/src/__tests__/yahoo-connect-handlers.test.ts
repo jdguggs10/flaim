@@ -1467,6 +1467,7 @@ describe('yahoo-connect-handlers', () => {
 
         expect(response.status).toBe(200);
         const body = (await response.json()) as Record<string, unknown>;
+        expect(body.lastUpdated).toBeNull();
         expect(body.accessToken).toMatchObject({
           expiresAt: '2026-05-12T01:29:30.000Z',
           expiresInSeconds: 0,
@@ -1574,6 +1575,7 @@ describe('yahoo-connect-handlers', () => {
     });
 
     it('returns retryable 503 when a refresh lease stays active too long', async () => {
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
       vi.useFakeTimers();
 
       const stale = {
@@ -1590,7 +1592,7 @@ describe('yahoo-connect-handlers', () => {
       mockStorage.acquireRefreshLease.mockResolvedValue(false);
 
       try {
-        const responsePromise = handleYahooDiscover(env, 'user_123', corsHeaders);
+        const responsePromise = handleYahooDiscover(env, 'user_123', corsHeaders, 'req_wait_timeout');
         await vi.advanceTimersByTimeAsync(10_001);
         const response = await responsePromise;
 
@@ -1601,6 +1603,15 @@ describe('yahoo-connect-handlers', () => {
         expect(body.retryable).toBe(true);
         expect(body.retry_after).toBe(5);
         expect(mockFetch).not.toHaveBeenCalled();
+        expect(yahooRefreshDiagnostics(logSpy)).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              event: 'lease_wait_timeout',
+              correlation_id: 'req_wait_timeout',
+              retry_after: 5,
+            }),
+          ])
+        );
       } finally {
         vi.useRealTimers();
       }

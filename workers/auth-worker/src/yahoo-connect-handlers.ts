@@ -734,7 +734,7 @@ async function getValidYahooAccessToken(
         }
         return toTokenResult(latest);
       }
-      if (isTransientYahooTokenFailure(result)) {
+      if (failureKind === 'transient_http' || failureKind === 'transient_text') {
         const retryAfter = retryAfterForTransientYahooTokenFailure(result);
         logDiagnostic('refresh_transient_failure', {
           userId,
@@ -1293,7 +1293,7 @@ export async function handleYahooCredentialHealth(
         hasCredentials: true,
         platform: 'yahoo',
         checkedAt,
-        lastUpdated: credentials.updatedAt?.toISOString(),
+        lastUpdated: credentials.updatedAt?.toISOString() ?? null,
         yahooGuidPresent: credentials.yahooGuidPresent,
         accessToken: {
           expiresAt: credentials.expiresAt.toISOString(),
