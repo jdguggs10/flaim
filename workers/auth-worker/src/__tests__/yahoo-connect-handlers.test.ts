@@ -701,6 +701,65 @@ describe('yahoo-connect-handlers', () => {
       expect(body.error_description).toBe('Refresh token expired');
     });
 
+    it('classifies unexpected Yahoo refresh errors without retry metadata', async () => {
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+      mockStorage.getYahooCredentials.mockResolvedValue({
+        clerkUserId: 'user_123',
+        accessToken: 'old-access-token',
+        refreshToken: 'mystery-refresh-token',
+        expiresAt: new Date(Date.now() + 2 * 60 * 1000),
+        needsRefresh: true,
+      });
+      mockStorage.acquireRefreshLease.mockResolvedValue(true);
+
+      mockFetch.mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            error: 'mystery_failure',
+            error_description: 'Unhandled Yahoo token response',
+          }),
+          { status: 400 }
+        )
+      );
+
+      const response = await handleYahooCredentials(env, 'user_123', corsHeaders, 'req_unexpected');
+
+      expect(response.status).toBe(401);
+      const body = (await response.json()) as Record<string, unknown>;
+      expect(body.error).toBe('refresh_failed');
+      expect(body.error_description).toBe('Unhandled Yahoo token response');
+      expect(body.retryable).toBeUndefined();
+      expect(body.retry_after).toBeUndefined();
+      expect(mockStorage.markRefreshCooldown).not.toHaveBeenCalled();
+      expect(mockStorage.updateYahooCredentials).not.toHaveBeenCalled();
+
+      const diagnostics = yahooRefreshDiagnostics(logSpy);
+      expect(diagnostics).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            event: 'refresh_response_error',
+            correlation_id: 'req_unexpected',
+            token_error: 'mystery_failure',
+            failure_kind: 'unexpected',
+          }),
+          expect.objectContaining({
+            event: 'refresh_permanent_failure',
+            correlation_id: 'req_unexpected',
+            token_error: 'mystery_failure',
+            failure_kind: 'unexpected',
+          }),
+        ])
+      );
+      expect(diagnostics).not.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ event: 'refresh_transient_failure' }),
+        ])
+      );
+      const serialized = JSON.stringify(diagnostics);
+      expect(serialized).not.toContain('old-access-token');
+      expect(serialized).not.toContain('mystery-refresh-token');
+    });
+
     it('returns retryable 503 when Yahoo returns a non-JSON Too many token response', async () => {
       mockStorage.getYahooCredentials.mockResolvedValue({
         clerkUserId: 'user_123',
@@ -1507,6 +1566,7 @@ describe('yahoo-connect-handlers', () => {
       const response = await handleYahooCredentialHealth(env, 'user_123', corsHeaders, 'req_health');
 
       expect(response.status).toBe(500);
+      expect(response.headers.get('Cache-Control')).toBe('no-store');
       expect(await response.json()).toEqual({
         error: 'server_error',
         error_description: 'Failed to retrieve Yahoo credential health',

@@ -43,11 +43,15 @@ export interface YahooConnectEnv {
   FRONTEND_URL?: string;
 }
 
+// Yahoo's token endpoint returns success and error bodies through the same
+// parser. Error bodies are normalized with inert placeholders for the required
+// token fields; use isUsableTokenResponse before treating a parsed body as a
+// usable token.
 interface YahooTokenResponse {
-  access_token?: string;
+  access_token: string;
   refresh_token?: string;
-  expires_in?: number;
-  token_type?: string;
+  expires_in: number;
+  token_type: string;
   xoauth_yahoo_guid?: string;
   status?: number;
   error?: string;
@@ -227,12 +231,16 @@ type UsableYahooTokenResponse =
     expires_in: number;
   };
 
-function isUsableTokenResponse(response: Partial<YahooTokenResponse>): response is UsableYahooTokenResponse {
+function hasUsableTokenFields(response: Partial<YahooTokenResponse>): boolean {
   return typeof response.access_token === 'string'
     && response.access_token.length > 0
     && typeof response.expires_in === 'number'
     && Number.isFinite(response.expires_in)
     && response.expires_in > 0;
+}
+
+function isUsableTokenResponse(response: Partial<YahooTokenResponse>): response is UsableYahooTokenResponse {
+  return hasUsableTokenFields(response);
 }
 
 function toYahooTokenResponse(response: UsableYahooTokenResponse): YahooTokenResponse {
@@ -739,13 +747,7 @@ async function getValidYahooAccessToken(
         logDiagnostic('refresh_transient_failure', {
           userId,
           attempt,
-          upstreamStatus: result.status,
-          tokenError: result.error,
-          failureKind,
-          bodyClass: result.upstream_body_class,
           retryAfter,
-          hasRetryAfter: result.retry_after !== undefined,
-          hasUpstreamErrorText: Boolean(result.upstream_error_text),
         });
         await markYahooRefreshCooldown(storage, userId, ownerId, retryAfter, correlationId);
         return {
@@ -775,7 +777,7 @@ async function getValidYahooAccessToken(
       };
     }
 
-    if (!isUsableTokenResponse(result)) {
+    if (!hasUsableTokenFields(result)) {
       logDiagnostic('refresh_invalid_response', {
         userId,
         attempt,
@@ -1134,7 +1136,7 @@ export async function handleYahooCallback(
       );
     }
 
-    if (!isUsableTokenResponse(validatedTokenResponse)) {
+    if (!hasUsableTokenFields(validatedTokenResponse)) {
       console.error('[yahoo-connect] Refresh token validation returned an invalid token response after Yahoo callback');
       return errorRedirect(
         'token_refresh_validation_failed',
@@ -1326,7 +1328,11 @@ export async function handleYahooCredentialHealth(
       }),
       {
         status: 500,
-        headers: { 'Content-Type': 'application/json', ...corsHeaders },
+        headers: {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-store',
+          ...corsHeaders,
+        },
       }
     );
   }
