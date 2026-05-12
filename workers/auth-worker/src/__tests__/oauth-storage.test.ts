@@ -40,17 +40,16 @@ function buildTableMock(options?: {
     error: null,
   });
 
-  const selectEq = vi.fn().mockReturnValue({ single: lookupSingle });
+  const selectEq = vi.fn().mockReturnValue({
+    single: lookupSingle,
+    is: refreshableIs,
+  });
   const select = vi.fn((columns?: string) => {
     if (columns === '*') {
       return { eq: selectEq };
     }
 
     return { single: insertSingle };
-  });
-  selectEq.mockReturnValue({
-    single: lookupSingle,
-    is: refreshableIs,
   });
 
   const insert = vi.fn((payload: Record<string, unknown>) => {
@@ -254,6 +253,14 @@ describe('OAuthStorage MCP token lifetimes', () => {
     expect(refreshableIs).toHaveBeenCalledWith('revoked_at', null);
     expect(refreshableNot).toHaveBeenCalledWith('refresh_token', 'is', null);
     expect(refreshableGt).toHaveBeenCalledWith('refresh_token_expires_at', expect.any(String));
+    expect(refreshableLimit).toHaveBeenCalledWith(50);
+  });
+
+  it('returns no refreshable user tokens when none match', async () => {
+    const { refreshableLimit } = buildTableMock({ refreshableRows: [] });
+    const storage = new OAuthStorage('https://example.supabase.co', 'test-key');
+
+    await expect(storage.getRefreshableUserTokens('user_123')).resolves.toEqual([]);
     expect(refreshableLimit).toHaveBeenCalledWith(50);
   });
 

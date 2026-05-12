@@ -651,6 +651,9 @@ export class OAuthStorage {
    *
    * Connection status should use getRefreshableUserTokens so an idle MCP
    * client remains connected between one-hour access token refreshes.
+   *
+   * @deprecated Use getRefreshableUserTokens for connection status. This only
+   * reflects current access-token validity.
    */
   async getUserTokens(userId: string): Promise<OAuthToken[]> {
     const { data, error } = await this.supabase
@@ -681,6 +684,9 @@ export class OAuthStorage {
 
   /**
    * Get all connections that can still be refreshed for a user.
+   *
+   * Returns raw token fields for server-side management. Do not expose returned
+   * OAuthToken objects directly to clients.
    */
   async getRefreshableUserTokens(userId: string): Promise<OAuthToken[]> {
     const { data, error } = await this.supabase

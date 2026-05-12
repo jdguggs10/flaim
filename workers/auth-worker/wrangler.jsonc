@@ -16,6 +16,8 @@
   // - SUPABASE_SERVICE_KEY
   // - YAHOO_CLIENT_ID      (Yahoo Developer App)
   // - YAHOO_CLIENT_SECRET  (Yahoo Developer App)
+  // Optional vars:
+  // - OAUTH_REFRESH_TOKEN_TTL_SECONDS (defaults to 7776000 in code; set only to override)
 
   // Environment configurations
   "env": {
@@ -73,8 +75,7 @@
       "vars": {
         "NODE_ENV": "production",
         "ENVIRONMENT": "prod",
-        "FRONTEND_URL": "https://flaim.app",
-        "OAUTH_REFRESH_TOKEN_TTL_SECONDS": "7776000"
+        "FRONTEND_URL": "https://flaim.app"
       }
     },
     // Preview environment (remote dev/staging)
@@ -111,8 +112,7 @@
       "vars": {
         "NODE_ENV": "production",
         "ENVIRONMENT": "preview",
-        "FRONTEND_URL": "https://preview.flaim.app",
-        "OAUTH_REFRESH_TOKEN_TTL_SECONDS": "7776000"
+        "FRONTEND_URL": "https://preview.flaim.app"
       }
     },
     // Development environment (local)
@@ -136,8 +136,7 @@
       "vars": {
         "NODE_ENV": "development",
         "ENVIRONMENT": "dev",
-        "FRONTEND_URL": "http://localhost:3000",
-        "OAUTH_REFRESH_TOKEN_TTL_SECONDS": "7776000"
+        "FRONTEND_URL": "http://localhost:3000"
       }
     }
   }
