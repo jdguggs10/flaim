@@ -102,6 +102,9 @@ vi.mock('../yahoo-connect-handlers', () => ({
   handleYahooCredentials: vi.fn().mockResolvedValue(
     new Response(JSON.stringify({ access_token: 'test' }), { status: 200 })
   ),
+  handleYahooCredentialHealth: vi.fn().mockResolvedValue(
+    new Response(JSON.stringify({ connected: true }), { status: 200 })
+  ),
   handleYahooDisconnect: vi.fn(),
   handleYahooDiscover: vi.fn(),
   handleYahooStatus: vi.fn(),
@@ -209,6 +212,15 @@ describe('eval API key auth', () => {
       })
     );
     expect(res.status).toBe(200);
+  });
+
+  it('GET /auth/internal/connect/yahoo/credential-health rejects static API keys', async () => {
+    const res = await appFetch(
+      makeRequest('/auth/internal/connect/yahoo/credential-health', {
+        headers: internalHeaders(EVAL_API_KEY),
+      })
+    );
+    expect(res.status).toBe(401);
   });
 
   it('GET /auth/internal/user/preferences with valid API key returns preferences', async () => {

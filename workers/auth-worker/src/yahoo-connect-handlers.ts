@@ -44,16 +44,49 @@ export interface YahooConnectEnv {
 }
 
 interface YahooTokenResponse {
-  access_token: string;
+  access_token?: string;
   refresh_token?: string;
-  expires_in: number;
-  token_type: string;
+  expires_in?: number;
+  token_type?: string;
   xoauth_yahoo_guid?: string;
   status?: number;
   error?: string;
   error_description?: string;
   upstream_error_text?: string;
   retry_after?: number;
+  upstream_body_class?: YahooTokenBodyClass;
+}
+
+type YahooCredentialRefreshState = 'none' | 'in_progress' | 'cooldown' | 'expired';
+type YahooTokenBodyClass =
+  | 'empty'
+  | 'json_error'
+  | 'plain_text'
+  | 'invalid_json'
+  | 'invalid_success_shape'
+  | 'usable_success';
+type YahooTokenFailureDiagnosticKind =
+  | 'transient_http'
+  | 'transient_text'
+  | 'permanent'
+  | 'unexpected';
+
+interface YahooRefreshDiagnosticFields {
+  correlationId?: string;
+  userId?: string;
+  attempt?: number;
+  reason?: string;
+  refreshState?: YahooCredentialRefreshState;
+  accessTokenExpiresInSeconds?: number;
+  leaseRemainingSeconds?: number;
+  retryAfter?: number;
+  upstreamStatus?: number;
+  tokenError?: string;
+  failureKind?: YahooTokenFailureDiagnosticKind;
+  bodyClass?: YahooTokenBodyClass;
+  hasRetryAfter?: boolean;
+  hasUpstreamErrorText?: boolean;
+  cooldownMarked?: boolean;
 }
 
 // =============================================================================
@@ -107,6 +140,56 @@ function maskUserId(userId: string): string {
   return `${userId.substring(0, 8)}...`;
 }
 
+function secondsUntil(date?: Date): number | undefined {
+  if (!date) {
+    return undefined;
+  }
+  return Math.ceil((date.getTime() - Date.now()) / 1000);
+}
+
+function boundedPositiveSecondsUntil(date?: Date): number | undefined {
+  const seconds = secondsUntil(date);
+  return seconds !== undefined && seconds > 0 ? seconds : undefined;
+}
+
+function yahooRefreshState(credentials: { refreshLeaseOwner?: string; refreshLeaseExpiresAt?: Date } | null): YahooCredentialRefreshState {
+  if (!credentials?.refreshLeaseOwner) {
+    return 'none';
+  }
+  if (leaseExpired(credentials)) {
+    return 'expired';
+  }
+  return credentials.refreshLeaseOwner.startsWith(REFRESH_COOLDOWN_OWNER_PREFIX)
+    ? 'cooldown'
+    : 'in_progress';
+}
+
+function logYahooRefreshDiagnostic(event: string, fields: YahooRefreshDiagnosticFields = {}): void {
+  const payload: Record<string, unknown> = {
+    service: 'auth-worker',
+    component: 'yahoo-connect',
+    event,
+  };
+
+  if (fields.userId) payload.user_id = maskUserId(fields.userId);
+  if (fields.correlationId) payload.correlation_id = fields.correlationId;
+  if (fields.attempt !== undefined) payload.attempt = fields.attempt;
+  if (fields.reason !== undefined) payload.reason = fields.reason;
+  if (fields.refreshState !== undefined) payload.refresh_state = fields.refreshState;
+  if (fields.accessTokenExpiresInSeconds !== undefined) payload.access_token_expires_in_seconds = fields.accessTokenExpiresInSeconds;
+  if (fields.leaseRemainingSeconds !== undefined) payload.lease_remaining_seconds = fields.leaseRemainingSeconds;
+  if (fields.retryAfter !== undefined) payload.retry_after = fields.retryAfter;
+  if (fields.upstreamStatus !== undefined) payload.upstream_status = fields.upstreamStatus;
+  if (fields.tokenError !== undefined) payload.token_error = fields.tokenError;
+  if (fields.failureKind !== undefined) payload.failure_kind = fields.failureKind;
+  if (fields.bodyClass !== undefined) payload.body_class = fields.bodyClass;
+  if (fields.hasRetryAfter !== undefined) payload.has_retry_after = fields.hasRetryAfter;
+  if (fields.hasUpstreamErrorText !== undefined) payload.has_upstream_error_text = fields.hasUpstreamErrorText;
+  if (fields.cooldownMarked !== undefined) payload.cooldown_marked = fields.cooldownMarked;
+
+  console.log(JSON.stringify(payload));
+}
+
 function looksLikeNewerCredentials(
   original: { accessToken: string; refreshToken: string; updatedAt?: Date },
   latest: { accessToken: string; refreshToken: string; updatedAt?: Date }
@@ -125,8 +208,10 @@ function looksLikeNewerCredentials(
 const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
 
 type UsableYahooTokenResponse =
-  Partial<YahooTokenResponse> &
-  Pick<YahooTokenResponse, 'access_token' | 'expires_in'>;
+  YahooTokenResponse & {
+    access_token: string;
+    expires_in: number;
+  };
 
 function isUsableTokenResponse(response: Partial<YahooTokenResponse>): response is UsableYahooTokenResponse {
   return typeof response.access_token === 'string'
@@ -192,6 +277,23 @@ function isTransientYahooTokenFailure(response: Pick<YahooTokenResponse, 'status
   return response.status !== undefined && response.status >= 400 && hasTransientYahooTokenFailureSignal(text);
 }
 
+function classifyYahooTokenFailureForDiagnostics(
+  response: Pick<YahooTokenResponse, 'status' | 'error' | 'error_description' | 'upstream_error_text'>
+): YahooTokenFailureDiagnosticKind {
+  if (isTransientYahooTokenError(response.status)) {
+    return 'transient_http';
+  }
+
+  const text = normalizeYahooTokenErrorText(response);
+  if (hasPermanentYahooTokenFailureSignal(text)) {
+    return 'permanent';
+  }
+  if (response.status !== undefined && response.status >= 400 && hasTransientYahooTokenFailureSignal(text)) {
+    return 'transient_text';
+  }
+  return 'unexpected';
+}
+
 // Empty token error bodies carry no useful diagnostic detail for logs or callers.
 function trimYahooTokenBody(text: string): string | undefined {
   const trimmed = text.trim();
@@ -220,6 +322,13 @@ async function readYahooTokenResponse(
   const text = await response.text();
   const data = parseYahooTokenBody(text);
   const nonJsonDescription = data ? undefined : trimYahooTokenBody(text);
+  const bodyClass: YahooTokenBodyClass = data
+    ? 'json_error'
+    : text.trim().length === 0
+      ? 'empty'
+      : nonJsonDescription
+        ? 'plain_text'
+        : 'invalid_json';
   const retryAfter = parseRetryAfterSeconds(response.headers.get('Retry-After'));
 
   if (!response.ok) {
@@ -234,6 +343,7 @@ async function readYahooTokenResponse(
       upstream_error_text: nonJsonDescription,
       status: response.status,
       retry_after: retryAfter ?? defaultYahooRetryAfterSeconds(response.status),
+      upstream_body_class: bodyClass,
     };
   }
 
@@ -247,6 +357,7 @@ async function readYahooTokenResponse(
       upstream_error_text: nonJsonDescription,
       status: response.status,
       retry_after: retryAfter ?? defaultYahooRetryAfterSeconds(response.status),
+      upstream_body_class: bodyClass,
     };
   }
 
@@ -259,10 +370,14 @@ async function readYahooTokenResponse(
       error_description: fallbackErrorDescription,
       status: response.status,
       retry_after: retryAfter ?? defaultYahooRetryAfterSeconds(response.status),
+      upstream_body_class: 'invalid_success_shape',
     };
   }
 
-  return toYahooTokenResponse(data);
+  return {
+    ...toYahooTokenResponse(data),
+    upstream_body_class: 'usable_success',
+  };
 }
 
 // =============================================================================
@@ -299,19 +414,23 @@ function isRefreshCooldown(credentials: { refreshLeaseOwner?: string; refreshLea
 }
 
 function retryAfterFromLease(credentials: { refreshLeaseExpiresAt?: Date } | null): number | undefined {
-  if (!credentials?.refreshLeaseExpiresAt) {
-    return undefined;
-  }
-  const seconds = Math.ceil((credentials.refreshLeaseExpiresAt.getTime() - Date.now()) / 1000);
-  return seconds > 0 ? seconds : undefined;
+  return boundedPositiveSecondsUntil(credentials?.refreshLeaseExpiresAt);
 }
 
-function yahooRefreshCooldownResult(credentials: YahooCredentials): GetTokenResult {
+function yahooRefreshCooldownResult(credentials: YahooCredentials, correlationId?: string): GetTokenResult {
+  const retryAfter = retryAfterFromLease(credentials) ?? YAHOO_REFRESH_IN_PROGRESS_RETRY_AFTER_SECONDS;
+  logYahooRefreshDiagnostic('active_cooldown_returned', {
+    correlationId,
+    userId: credentials.clerkUserId,
+    retryAfter,
+    leaseRemainingSeconds: retryAfterFromLease(credentials),
+    refreshState: yahooRefreshState(credentials),
+  });
   return {
     error: YahooAuthWorkerErrorCode.REFRESH_TEMPORARILY_UNAVAILABLE,
     errorDescription: 'Yahoo token refresh is cooling down after a transient failure. Please try again shortly.',
     retryable: true,
-    retryAfter: retryAfterFromLease(credentials) ?? YAHOO_REFRESH_IN_PROGRESS_RETRY_AFTER_SECONDS,
+    retryAfter,
   };
 }
 
@@ -325,14 +444,27 @@ async function markYahooRefreshCooldown(
   storage: YahooStorage,
   userId: string,
   ownerId: string,
-  retryAfterSeconds: number
+  retryAfterSeconds: number,
+  correlationId?: string
 ): Promise<void> {
   try {
     const marked = await storage.markRefreshCooldown(userId, ownerId, retryAfterSeconds);
+    logYahooRefreshDiagnostic('cooldown_mark_attempted', {
+      correlationId,
+      userId,
+      retryAfter: retryAfterSeconds,
+      cooldownMarked: marked,
+    });
     if (!marked) {
       console.debug('[yahoo-connect] Skipped Yahoo refresh cooldown because the lease is no longer owned by this request');
     }
   } catch (cooldownError) {
+    logYahooRefreshDiagnostic('cooldown_mark_failed', {
+      correlationId,
+      userId,
+      retryAfter: retryAfterSeconds,
+      reason: 'storage_error',
+    });
     console.warn('[yahoo-connect] Failed to mark Yahoo refresh cooldown after transient refresh failure:', cooldownError);
     try {
       await storage.releaseRefreshLease(userId, ownerId);
@@ -345,18 +477,26 @@ async function markYahooRefreshCooldown(
 async function waitForFreshCredentialsOrLeaseClear(
   storage: YahooStorage,
   userId: string,
-  credentials: YahooCredentials
+  credentials: YahooCredentials,
+  correlationId?: string
 ): Promise<RetryTokenResult> {
   let latest: YahooCredentials | null = credentials;
   const deadline = Date.now() + MAX_LEASE_WAIT_MS;
 
   while (latest && !leaseExpired(latest)) {
     if (isRefreshCooldown(latest)) {
-      return yahooRefreshCooldownResult(latest);
+      return yahooRefreshCooldownResult(latest, correlationId);
     }
 
     const remainingMs = deadline - Date.now();
     if (remainingMs <= 0) {
+      logYahooRefreshDiagnostic('lease_wait_timeout', {
+        correlationId,
+        userId,
+        retryAfter: YAHOO_REFRESH_IN_PROGRESS_RETRY_AFTER_SECONDS,
+        refreshState: yahooRefreshState(latest),
+        leaseRemainingSeconds: boundedPositiveSecondsUntil(latest.refreshLeaseExpiresAt),
+      });
       return {
         error: YahooAuthWorkerErrorCode.REFRESH_TEMPORARILY_UNAVAILABLE,
         errorDescription: 'Yahoo token refresh is already in progress. Please try again shortly.',
@@ -370,22 +510,44 @@ async function waitForFreshCredentialsOrLeaseClear(
     latest = await storage.getYahooCredentials(userId);
 
     if (!latest) {
+      logYahooRefreshDiagnostic('credentials_missing_while_waiting', { correlationId, userId });
       return { error: 'not_connected' };
     }
     if (!latest.needsRefresh) {
+      logYahooRefreshDiagnostic('lease_wait_finished_with_fresh_token', {
+        correlationId,
+        userId,
+        accessTokenExpiresInSeconds: secondsUntil(latest.expiresAt),
+      });
       return toTokenResult(latest);
     }
     if (leaseExpired(latest)) {
+      logYahooRefreshDiagnostic('lease_expired_retrying_refresh', {
+        correlationId,
+        userId,
+        refreshState: yahooRefreshState(latest),
+      });
       return { retry: true, credentials: latest };
     }
   }
 
   if (!latest) {
+    logYahooRefreshDiagnostic('credentials_missing_after_wait', { correlationId, userId });
     return { error: 'not_connected' };
   }
   if (!latest.needsRefresh) {
+    logYahooRefreshDiagnostic('lease_wait_finished_with_fresh_token', {
+      correlationId,
+      userId,
+      accessTokenExpiresInSeconds: secondsUntil(latest.expiresAt),
+    });
     return toTokenResult(latest);
   }
+  logYahooRefreshDiagnostic('lease_expired_retrying_refresh', {
+    correlationId,
+    userId,
+    refreshState: yahooRefreshState(latest),
+  });
   return { retry: true, credentials: latest };
 }
 
@@ -400,22 +562,40 @@ async function getValidYahooAccessToken(
   storage: YahooStorage,
   userId: string,
   env: YahooConnectEnv,
-  initialCredentials?: YahooCredentials
+  initialCredentials?: YahooCredentials,
+  correlationId?: string
 ): Promise<GetTokenResult> {
+  const logDiagnostic = (event: string, fields: YahooRefreshDiagnosticFields = {}) => {
+    logYahooRefreshDiagnostic(event, { correlationId, ...fields });
+  };
+
   let credentials = initialCredentials ?? await storage.getYahooCredentials(userId);
   if (!credentials) {
+    logDiagnostic('credentials_missing', { userId });
     return { error: 'not_connected' };
   }
 
   for (let attempt = 0; attempt < MAX_REFRESH_ATTEMPTS; attempt++) {
     if (!credentials.needsRefresh) {
+      logDiagnostic('token_fresh_returned', {
+        userId,
+        attempt,
+        accessTokenExpiresInSeconds: secondsUntil(credentials.expiresAt),
+        refreshState: yahooRefreshState(credentials),
+      });
       return toTokenResult(credentials);
     }
     if (isRefreshCooldown(credentials)) {
-      return yahooRefreshCooldownResult(credentials);
+      return yahooRefreshCooldownResult(credentials, correlationId);
     }
 
     const ownerId = crypto.randomUUID();
+    logDiagnostic('lease_acquire_attempt', {
+      userId,
+      attempt,
+      accessTokenExpiresInSeconds: secondsUntil(credentials.expiresAt),
+      refreshState: yahooRefreshState(credentials),
+    });
     const won = await storage.acquireRefreshLease(
       userId,
       ownerId,
@@ -424,17 +604,34 @@ async function getValidYahooAccessToken(
     );
 
     if (!won) {
+      logDiagnostic('lease_not_acquired', {
+        userId,
+        attempt,
+        refreshState: yahooRefreshState(credentials),
+        leaseRemainingSeconds: boundedPositiveSecondsUntil(credentials.refreshLeaseExpiresAt),
+      });
       const latest = await storage.getYahooCredentials(userId);
       if (!latest) {
+        logDiagnostic('credentials_missing_after_lease_loss', { userId, attempt });
         return { error: 'not_connected' };
       }
       if (!latest.needsRefresh) {
+        logDiagnostic('lease_loss_found_fresh_token', {
+          userId,
+          attempt,
+          accessTokenExpiresInSeconds: secondsUntil(latest.expiresAt),
+        });
         return toTokenResult(latest);
       }
       if (isRefreshCooldown(latest)) {
-        return yahooRefreshCooldownResult(latest);
+        return yahooRefreshCooldownResult(latest, correlationId);
       }
       if (leaseExpired(latest)) {
+        logDiagnostic('lease_loss_found_expired_lease_retrying', {
+          userId,
+          attempt,
+          refreshState: yahooRefreshState(latest),
+        });
         credentials = latest;
         continue;
       }
@@ -442,7 +639,8 @@ async function getValidYahooAccessToken(
       const loserResult = await waitForFreshCredentialsOrLeaseClear(
         storage,
         userId,
-        latest
+        latest,
+        correlationId
       );
 
       if ('retry' in loserResult) {
@@ -452,14 +650,26 @@ async function getValidYahooAccessToken(
       return loserResult;
     }
 
+    logDiagnostic('lease_acquired', {
+      userId,
+      attempt,
+      accessTokenExpiresInSeconds: secondsUntil(credentials.expiresAt),
+    });
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), YAHOO_TOKEN_REQUEST_TIMEOUT_MS);
     let result: YahooTokenResponse;
     try {
+      logDiagnostic('refresh_request_started', { userId, attempt });
       result = await refreshAccessToken(credentials.refreshToken, env, controller.signal);
     } catch (error) {
       clearTimeout(timer);
       const isAbort = error instanceof Error && error.name === 'AbortError';
+      logDiagnostic('refresh_request_exception', {
+        userId,
+        attempt,
+        reason: isAbort ? 'abort' : 'fetch_error',
+        retryAfter: YAHOO_DEFAULT_TRANSIENT_RETRY_AFTER_SECONDS,
+      });
       console.error(
         `[yahoo-connect] Yahoo token refresh request failed for user ${maskUserId(userId)}:`,
         error instanceof Error ? error.message : error
@@ -468,7 +678,8 @@ async function getValidYahooAccessToken(
         storage,
         userId,
         ownerId,
-        YAHOO_DEFAULT_TRANSIENT_RETRY_AFTER_SECONDS
+        YAHOO_DEFAULT_TRANSIENT_RETRY_AFTER_SECONDS,
+        correlationId
       );
       return {
         error: YahooAuthWorkerErrorCode.REFRESH_TEMPORARILY_UNAVAILABLE,
@@ -482,13 +693,29 @@ async function getValidYahooAccessToken(
     clearTimeout(timer);
 
     if (result.error) {
+      const failureKind = classifyYahooTokenFailureForDiagnostics(result);
       const statusSuffix = result.status ? ` (HTTP ${result.status})` : '';
+      logDiagnostic('refresh_response_error', {
+        userId,
+        attempt,
+        upstreamStatus: result.status,
+        tokenError: result.error,
+        failureKind,
+        bodyClass: result.upstream_body_class,
+        hasRetryAfter: result.retry_after !== undefined,
+        hasUpstreamErrorText: Boolean(result.upstream_error_text),
+      });
       console.error(
         `[yahoo-connect] Yahoo token refresh failed for user ${maskUserId(userId)}: ${result.error}${statusSuffix}` +
           (result.error_description ? ` - ${result.error_description}` : '')
       );
       const latest = await storage.getYahooCredentials(userId);
       if (latest && !latest.needsRefresh && looksLikeNewerCredentials(credentials, latest)) {
+        logDiagnostic('concurrent_refresh_used', {
+          userId,
+          attempt,
+          accessTokenExpiresInSeconds: secondsUntil(latest.expiresAt),
+        });
         console.log(`[yahoo-connect] Using concurrently refreshed token for user ${maskUserId(userId)}`);
         try {
           await storage.releaseRefreshLease(userId, ownerId);
@@ -499,7 +726,18 @@ async function getValidYahooAccessToken(
       }
       if (isTransientYahooTokenFailure(result)) {
         const retryAfter = retryAfterForTransientYahooTokenFailure(result);
-        await markYahooRefreshCooldown(storage, userId, ownerId, retryAfter);
+        logDiagnostic('refresh_transient_failure', {
+          userId,
+          attempt,
+          upstreamStatus: result.status,
+          tokenError: result.error,
+          failureKind,
+          bodyClass: result.upstream_body_class,
+          retryAfter,
+          hasRetryAfter: result.retry_after !== undefined,
+          hasUpstreamErrorText: Boolean(result.upstream_error_text),
+        });
+        await markYahooRefreshCooldown(storage, userId, ownerId, retryAfter, correlationId);
         return {
           error: YahooAuthWorkerErrorCode.REFRESH_TEMPORARILY_UNAVAILABLE,
           errorDescription: result.error_description || 'Yahoo token refresh is temporarily unavailable',
@@ -513,6 +751,14 @@ async function getValidYahooAccessToken(
       } catch (releaseError) {
         console.warn('[yahoo-connect] Failed to release Yahoo refresh lease after Yahoo refresh error:', releaseError);
       }
+      logDiagnostic('refresh_permanent_failure', {
+        userId,
+        attempt,
+        upstreamStatus: result.status,
+        tokenError: result.error,
+        failureKind,
+        bodyClass: result.upstream_body_class,
+      });
       return {
         error: 'refresh_failed',
         errorDescription: result.error_description || 'Failed to refresh access token',
@@ -520,6 +766,13 @@ async function getValidYahooAccessToken(
     }
 
     if (!isUsableTokenResponse(result)) {
+      logDiagnostic('refresh_invalid_response', {
+        userId,
+        attempt,
+        upstreamStatus: result.status,
+        bodyClass: result.upstream_body_class,
+        hasRetryAfter: result.retry_after !== undefined,
+      });
       console.error(`[yahoo-connect] Yahoo token refresh returned an invalid token response for user ${maskUserId(userId)}`);
       try {
         await storage.releaseRefreshLease(userId, ownerId);
@@ -537,15 +790,27 @@ async function getValidYahooAccessToken(
     );
 
     if (wrote) {
+      logDiagnostic('credential_update_succeeded', {
+        userId,
+        attempt,
+        accessTokenExpiresInSeconds: result.expires_in,
+      });
       console.log(`[yahoo-connect] Token refreshed for user ${maskUserId(userId)}`);
       return { accessToken: result.access_token, expiresIn: result.expires_in };
     }
 
+    logDiagnostic('credential_update_owner_guard_miss', { userId, attempt });
     const latest = await storage.getYahooCredentials(userId);
     if (!latest) {
+      logDiagnostic('credentials_missing_after_owner_guard_miss', { userId, attempt });
       return { error: 'not_connected' };
     }
     if (!latest.needsRefresh) {
+      logDiagnostic('owner_guard_miss_found_fresh_token', {
+        userId,
+        attempt,
+        accessTokenExpiresInSeconds: secondsUntil(latest.expiresAt),
+      });
       return toTokenResult(latest);
     }
     credentials = latest;
@@ -553,8 +818,13 @@ async function getValidYahooAccessToken(
 
   const latest = await storage.getYahooCredentials(userId);
   if (latest && !latest.needsRefresh) {
+    logDiagnostic('max_attempts_found_fresh_token', {
+      userId,
+      accessTokenExpiresInSeconds: secondsUntil(latest.expiresAt),
+    });
     return toTokenResult(latest);
   }
+  logDiagnostic('max_refresh_attempts_exhausted', { userId });
   return { error: 'refresh_failed' };
 }
 
@@ -902,11 +1172,12 @@ export async function handleYahooCallback(
 export async function handleYahooCredentials(
   env: YahooConnectEnv,
   userId: string,
-  corsHeaders: Record<string, string>
+  corsHeaders: Record<string, string>,
+  correlationId?: string
 ): Promise<Response> {
   try {
     const storage = YahooStorage.fromEnvironment(env);
-    const result = await getValidYahooAccessToken(storage, userId, env);
+    const result = await getValidYahooAccessToken(storage, userId, env, undefined, correlationId);
 
     if ('error' in result) {
       if (result.error === 'not_connected') {
@@ -944,6 +1215,91 @@ export async function handleYahooCredentials(
       JSON.stringify({
         error: 'server_error',
         error_description: 'Failed to retrieve credentials',
+      }),
+      {
+        status: 500,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders },
+      }
+    );
+  }
+}
+
+/**
+ * GET /internal/connect/yahoo/credential-health
+ *
+ * Returns non-secret Yahoo credential timing and refresh lease state for
+ * production diagnostics. This never returns access tokens, refresh tokens, or
+ * raw lease owner IDs.
+ */
+export async function handleYahooCredentialHealth(
+  env: YahooConnectEnv,
+  userId: string,
+  corsHeaders: Record<string, string>
+): Promise<Response> {
+  try {
+    const storage = YahooStorage.fromEnvironment(env);
+    const credentials = await storage.getYahooCredentialHealth(userId);
+
+    if (!credentials) {
+      return new Response(
+        JSON.stringify({
+          connected: false,
+          hasCredentials: false,
+          platform: 'yahoo',
+          checkedAt: new Date().toISOString(),
+        }),
+        {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-store',
+            ...corsHeaders,
+          },
+        }
+      );
+    }
+
+    const refreshState = yahooRefreshState(credentials);
+    const leaseRemainingSeconds = boundedPositiveSecondsUntil(credentials.refreshLeaseExpiresAt);
+    const checkedAt = new Date().toISOString();
+
+    return new Response(
+      JSON.stringify({
+        connected: true,
+        hasCredentials: true,
+        platform: 'yahoo',
+        checkedAt,
+        lastUpdated: credentials.updatedAt?.toISOString(),
+        yahooGuidPresent: credentials.yahooGuidPresent,
+        accessToken: {
+          expiresAt: credentials.expiresAt.toISOString(),
+          expiresInSeconds: secondsUntil(credentials.expiresAt),
+          needsRefresh: credentials.needsRefresh,
+          state: credentials.needsRefresh ? 'needs_refresh' : 'fresh',
+        },
+        refresh: {
+          state: refreshState === 'none' ? 'idle' : refreshState,
+          leaseExpiresAt: credentials.refreshLeaseExpiresAt?.toISOString(),
+          retryAfterSeconds: refreshState === 'cooldown' || refreshState === 'in_progress'
+            ? leaseRemainingSeconds
+            : undefined,
+        },
+      }),
+      {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-store',
+          ...corsHeaders,
+        },
+      }
+    );
+  } catch (error) {
+    console.error('[yahoo-connect] Credential health error:', error);
+    return new Response(
+      JSON.stringify({
+        error: 'server_error',
+        error_description: 'Failed to retrieve Yahoo credential health',
       }),
       {
         status: 500,
@@ -1148,7 +1504,8 @@ interface DiscoveredYahooLeague {
 export async function handleYahooDiscover(
   env: YahooConnectEnv,
   userId: string,
-  corsHeaders: Record<string, string>
+  corsHeaders: Record<string, string>,
+  correlationId?: string
 ): Promise<Response> {
   try {
     const storage = YahooStorage.fromEnvironment(env);
@@ -1173,7 +1530,7 @@ export async function handleYahooDiscover(
     let accessToken = credentials.accessToken;
     if (credentials.needsRefresh) {
       console.log(`[yahoo-connect] Refreshing token before discovery for user ${maskUserId(userId)}`);
-      const tokenResult = await getValidYahooAccessToken(storage, userId, env, credentials);
+      const tokenResult = await getValidYahooAccessToken(storage, userId, env, credentials, correlationId);
       if ('error' in tokenResult) {
         return yahooRefreshFailureResponse(tokenResult, corsHeaders);
       }

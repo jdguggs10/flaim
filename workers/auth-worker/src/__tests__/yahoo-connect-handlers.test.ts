@@ -3,6 +3,7 @@ import {
   handleYahooAuthorize,
   handleYahooCallback,
   handleYahooCredentials,
+  handleYahooCredentialHealth,
   handleYahooDisconnect,
   handleYahooDiscover,
   handleYahooStatus,
@@ -34,12 +35,26 @@ const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
 };
 
+function yahooRefreshDiagnostics(spy: { mock: { calls: unknown[][] } }): Array<Record<string, unknown>> {
+  return spy.mock.calls
+    .map(call => String(call[0]))
+    .map((line) => {
+      try {
+        return JSON.parse(line) as Record<string, unknown>;
+      } catch {
+        return null;
+      }
+    })
+    .filter((entry): entry is Record<string, unknown> => entry?.component === 'yahoo-connect');
+}
+
 describe('yahoo-connect-handlers', () => {
   let mockStorage: {
     createPlatformOAuthState: ReturnType<typeof vi.fn>;
     consumePlatformOAuthState: ReturnType<typeof vi.fn>;
     saveYahooCredentials: ReturnType<typeof vi.fn>;
     getYahooCredentials: ReturnType<typeof vi.fn>;
+    getYahooCredentialHealth: ReturnType<typeof vi.fn>;
     updateYahooCredentials: ReturnType<typeof vi.fn>;
     acquireRefreshLease: ReturnType<typeof vi.fn>;
     releaseRefreshLease: ReturnType<typeof vi.fn>;
@@ -59,6 +74,7 @@ describe('yahoo-connect-handlers', () => {
       consumePlatformOAuthState: vi.fn(),
       saveYahooCredentials: vi.fn().mockResolvedValue(undefined),
       getYahooCredentials: vi.fn(),
+      getYahooCredentialHealth: vi.fn(),
       updateYahooCredentials: vi.fn().mockResolvedValue(true),
       acquireRefreshLease: vi.fn().mockResolvedValue(true),
       releaseRefreshLease: vi.fn().mockResolvedValue(undefined),
@@ -571,6 +587,33 @@ describe('yahoo-connect-handlers', () => {
       expect(body.access_token).toBe('fresh-access-token');
     });
 
+    it('logs a non-secret diagnostic when returning a fresh token', async () => {
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+      mockStorage.getYahooCredentials.mockResolvedValue({
+        clerkUserId: 'user_123456789',
+        accessToken: 'fresh-access-token',
+        refreshToken: 'refresh-token',
+        expiresAt: new Date(Date.now() + 30 * 60 * 1000),
+        needsRefresh: false,
+      });
+
+      await handleYahooCredentials(env, 'user_123456789', corsHeaders, 'req_123');
+
+      const diagnostics = yahooRefreshDiagnostics(logSpy);
+      expect(diagnostics).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            event: 'token_fresh_returned',
+            user_id: 'user_123...',
+            correlation_id: 'req_123',
+          }),
+        ])
+      );
+      const serialized = JSON.stringify(diagnostics);
+      expect(serialized).not.toContain('fresh-access-token');
+      expect(serialized).not.toContain('refresh-token');
+    });
+
     it('refreshes token when needsRefresh is true', async () => {
       mockStorage.getYahooCredentials.mockResolvedValue({
         clerkUserId: 'user_123',
@@ -787,6 +830,7 @@ describe('yahoo-connect-handlers', () => {
     });
 
     it('returns retryable 503 when Yahoo returns HTTP 429 during refresh', async () => {
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
       mockStorage.getYahooCredentials.mockResolvedValue({
         clerkUserId: 'user_123',
         accessToken: 'old-access-token',
@@ -806,7 +850,7 @@ describe('yahoo-connect-handlers', () => {
         )
       );
 
-      const response = await handleYahooCredentials(env, 'user_123', corsHeaders);
+      const response = await handleYahooCredentials(env, 'user_123', corsHeaders, 'req_429');
 
       expect(response.status).toBe(503);
       const body = (await response.json()) as Record<string, unknown>;
@@ -817,6 +861,31 @@ describe('yahoo-connect-handlers', () => {
       expect(body.upstream_status).toBe(429);
       expect(mockStorage.markRefreshCooldown).toHaveBeenCalledWith('user_123', expect.any(String), 900);
       expect(mockStorage.updateYahooCredentials).not.toHaveBeenCalled();
+
+      const diagnostics = yahooRefreshDiagnostics(logSpy);
+      expect(diagnostics).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            event: 'refresh_response_error',
+            correlation_id: 'req_429',
+            upstream_status: 429,
+            token_error: 'rate_limited',
+            failure_kind: 'transient_http',
+          }),
+          expect.objectContaining({
+            event: 'refresh_transient_failure',
+            retry_after: 900,
+          }),
+          expect.objectContaining({
+            event: 'cooldown_mark_attempted',
+            retry_after: 900,
+            cooldown_marked: true,
+          }),
+        ])
+      );
+      const serialized = JSON.stringify(diagnostics);
+      expect(serialized).not.toContain('old-access-token');
+      expect(serialized).not.toContain('refresh-token');
     });
 
     it('uses newer stored credentials when a concurrent refresh already succeeded', async () => {
@@ -1244,6 +1313,107 @@ describe('yahoo-connect-handlers', () => {
       expect(body.connected).toBe(false);
       expect(body.leagueCount).toBe(0);
       expect(body.lastUpdated).toBeUndefined();
+    });
+  });
+
+  // ===========================================================================
+  // handleYahooCredentialHealth Tests
+  // ===========================================================================
+
+  describe('handleYahooCredentialHealth', () => {
+    it('returns non-secret credential health for a fresh token', async () => {
+      const expiresAt = new Date('2026-05-12T02:00:00Z');
+      const updatedAt = new Date('2026-05-12T01:00:00Z');
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-05-12T01:30:00Z'));
+      try {
+        mockStorage.getYahooCredentialHealth.mockResolvedValue({
+          clerkUserId: 'user_123',
+          expiresAt,
+          yahooGuidPresent: true,
+          needsRefresh: false,
+          updatedAt,
+        });
+
+        const response = await handleYahooCredentialHealth(env, 'user_123', corsHeaders);
+
+        expect(response.status).toBe(200);
+        expect(response.headers.get('Cache-Control')).toBe('no-store');
+        const body = (await response.json()) as Record<string, any>;
+        expect(body).toEqual({
+          connected: true,
+          hasCredentials: true,
+          platform: 'yahoo',
+          checkedAt: '2026-05-12T01:30:00.000Z',
+          lastUpdated: '2026-05-12T01:00:00.000Z',
+          yahooGuidPresent: true,
+          accessToken: {
+            expiresAt: '2026-05-12T02:00:00.000Z',
+            expiresInSeconds: 1800,
+            needsRefresh: false,
+            state: 'fresh',
+          },
+          refresh: {
+            state: 'idle',
+          },
+        });
+        expect(JSON.stringify(body)).not.toContain('access-token');
+        expect(JSON.stringify(body)).not.toContain('refresh-token');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('returns cooldown state without exposing the lease owner', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-05-12T01:30:00Z'));
+      try {
+        mockStorage.getYahooCredentialHealth.mockResolvedValue({
+          clerkUserId: 'user_123',
+          expiresAt: new Date('2026-05-12T01:31:00Z'),
+          yahooGuidPresent: false,
+          needsRefresh: true,
+          refreshLeaseOwner: 'cooldown:owner-1',
+          refreshLeaseExpiresAt: new Date('2026-05-12T01:31:15Z'),
+        });
+
+        const response = await handleYahooCredentialHealth(env, 'user_123', corsHeaders);
+
+        expect(response.status).toBe(200);
+        const body = (await response.json()) as Record<string, any>;
+        expect(body.refresh).toEqual({
+          state: 'cooldown',
+          leaseExpiresAt: '2026-05-12T01:31:15.000Z',
+          retryAfterSeconds: 75,
+        });
+        expect(body.accessToken).toMatchObject({
+          needsRefresh: true,
+          state: 'needs_refresh',
+        });
+        expect(JSON.stringify(body)).not.toContain('owner-1');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('returns disconnected health when no Yahoo credential row exists', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-05-12T01:30:00Z'));
+      try {
+        mockStorage.getYahooCredentialHealth.mockResolvedValue(null);
+
+        const response = await handleYahooCredentialHealth(env, 'user_123', corsHeaders);
+
+        expect(response.status).toBe(200);
+        expect(await response.json()).toEqual({
+          connected: false,
+          hasCredentials: false,
+          platform: 'yahoo',
+          checkedAt: '2026-05-12T01:30:00.000Z',
+        });
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 

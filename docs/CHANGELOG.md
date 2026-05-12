@@ -9,6 +9,7 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 - **Fixed**: Removed stale dev-only chat framing and cleaned unresolved merge-conflict markers from `docs/ARCHITECTURE.md`.
 
 ### Yahoo Connection Reliability
+- **Added**: Yahoo token-refresh diagnostics now emit structured non-secret refresh events and expose an internal credential-health endpoint for production incident triage.
 - **Changed**: Yahoo Refresh on `/leagues` now uses the stored connection to rediscover leagues instead of starting a fresh OAuth flow every time.
 - **Changed**: Yahoo refresh lease waiters now return an explicit retryable response before the MCP gateway timeout budget is exhausted.
 - **Fixed**: Yahoo league discovery rate limits (`429`/`999`) and transient upstream failures now return retryable responses with `Retry-After` instead of generic refresh failures.

@@ -52,6 +52,7 @@ import {
   handleYahooAuthorize,
   handleYahooCallback,
   handleYahooCredentials,
+  handleYahooCredentialHealth,
   handleYahooDisconnect,
   handleYahooDiscover,
   handleYahooStatus,
@@ -924,7 +925,24 @@ api.get('/internal/connect/yahoo/credentials', async (c) => {
       error_description: authError || 'Authentication required',
     }, authStatus ?? 401);
   }
-  return handleYahooCredentials(c.env as YahooConnectEnv, userId, getCorsHeaders(c.req.raw));
+  return handleYahooCredentials(
+    c.env as YahooConnectEnv,
+    userId,
+    getCorsHeaders(c.req.raw),
+    c.req.header('X-Correlation-ID') || undefined
+  );
+});
+
+// Get non-secret Yahoo credential refresh health (internal diagnostics)
+api.get('/internal/connect/yahoo/credential-health', async (c) => {
+  const { userId, error: authError, status: authStatus } = await getInternalUserId(c.req.raw, c.env);
+  if (!userId) {
+    return c.json({
+      error: 'unauthorized',
+      error_description: authError || 'Authentication required',
+    }, authStatus ?? 401);
+  }
+  return handleYahooCredentialHealth(c.env as YahooConnectEnv, userId, getCorsHeaders(c.req.raw));
 });
 
 // Check Yahoo connection status (requires Clerk JWT)
@@ -960,7 +978,12 @@ api.post('/connect/yahoo/discover', async (c) => {
       error_description: authError || 'Authentication required',
     }, 401);
   }
-  return handleYahooDiscover(c.env as YahooConnectEnv, userId, getCorsHeaders(c.req.raw));
+  return handleYahooDiscover(
+    c.env as YahooConnectEnv,
+    userId,
+    getCorsHeaders(c.req.raw),
+    c.req.header('X-Correlation-ID') || undefined
+  );
 });
 
 // List Yahoo leagues (requires auth)
