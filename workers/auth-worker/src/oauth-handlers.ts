@@ -697,7 +697,6 @@ export async function handleCheckStatus(
     const connections = tokens.map(t => ({
       id: t.id, // Real ID for revocation
       expiresAt: t.expiresAt.toISOString(),
-      refreshTokenExpiresAt: t.refreshTokenExpiresAt?.toISOString(),
       scope: t.scope,
       clientName: t.clientName || 'MCP Client',
     }));

@@ -88,6 +88,7 @@ export interface TokenValidationResult {
 
 export const DEFAULT_OAUTH_ACCESS_TOKEN_TTL_SECONDS = 3600; // 1 hour
 export const DEFAULT_OAUTH_REFRESH_TOKEN_TTL_SECONDS = 7776000; // 90 days
+export const MIN_OAUTH_REFRESH_TOKEN_TTL_SECONDS = 3600; // 1 hour
 export const MAX_OAUTH_REFRESH_TOKEN_TTL_SECONDS = 31536000; // 1 year
 
 export interface OAuthStorageEnv {
@@ -646,7 +647,10 @@ export class OAuthStorage {
   }
 
   /**
-   * Get all active tokens for a user
+   * Get all currently valid access tokens for a user.
+   *
+   * Connection status should use getRefreshableUserTokens so an idle MCP
+   * client remains connected between one-hour access token refreshes.
    */
   async getUserTokens(userId: string): Promise<OAuthToken[]> {
     const { data, error } = await this.supabase
@@ -685,7 +689,8 @@ export class OAuthStorage {
       .eq('user_id', userId)
       .is('revoked_at', null)
       .not('refresh_token', 'is', null)
-      .gt('refresh_token_expires_at', new Date().toISOString());
+      .gt('refresh_token_expires_at', new Date().toISOString())
+      .limit(50);
 
     if (error) {
       console.error('[oauth-storage] Failed to get refreshable user tokens:', error);
@@ -742,6 +747,13 @@ function parseRefreshTokenTtlSeconds(value?: string): number {
   if (!Number.isFinite(parsed) || parsed <= 0) {
     console.warn(
       `[oauth-storage] Invalid OAUTH_REFRESH_TOKEN_TTL_SECONDS="${value}", using default ${DEFAULT_OAUTH_REFRESH_TOKEN_TTL_SECONDS}s`
+    );
+    return DEFAULT_OAUTH_REFRESH_TOKEN_TTL_SECONDS;
+  }
+
+  if (parsed < MIN_OAUTH_REFRESH_TOKEN_TTL_SECONDS) {
+    console.warn(
+      `[oauth-storage] OAUTH_REFRESH_TOKEN_TTL_SECONDS="${value}" is below minimum, using default ${DEFAULT_OAUTH_REFRESH_TOKEN_TTL_SECONDS}s`
     );
     return DEFAULT_OAUTH_REFRESH_TOKEN_TTL_SECONDS;
   }

@@ -283,12 +283,12 @@ describe('oauth-handlers', () => {
 
     const body = await res.json() as {
       hasConnection?: boolean;
-      connections?: Array<{ clientName?: string; refreshTokenExpiresAt?: string }>;
+      connections?: Array<Record<string, unknown> & { clientName?: string }>;
     };
     expect(body.hasConnection).toBe(true);
     expect(body.connections).toHaveLength(1);
     expect(body.connections?.[0].clientName).toBe('Perplexity');
-    expect(body.connections?.[0].refreshTokenExpiresAt).toBeTruthy();
+    expect(body.connections?.[0]).not.toHaveProperty('refreshTokenExpiresAt');
     expect(getRefreshableUserTokens).toHaveBeenCalledWith('user_123');
   });
 });

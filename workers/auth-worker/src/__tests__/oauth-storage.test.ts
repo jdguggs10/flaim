@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   DEFAULT_OAUTH_REFRESH_TOKEN_TTL_SECONDS,
   MAX_OAUTH_REFRESH_TOKEN_TTL_SECONDS,
+  MIN_OAUTH_REFRESH_TOKEN_TTL_SECONDS,
   OAuthStorage,
 } from '../oauth-storage';
 
@@ -22,10 +23,11 @@ function buildTableMock(options?: {
 }) {
   const insertPayloads: Record<string, unknown>[] = [];
 
-  const refreshableGt = vi.fn().mockResolvedValue({
+  const refreshableLimit = vi.fn().mockResolvedValue({
     data: options?.refreshableRows ?? [],
     error: options?.refreshableError ?? null,
   });
+  const refreshableGt = vi.fn().mockReturnValue({ limit: refreshableLimit });
   const refreshableNot = vi.fn().mockReturnValue({ gt: refreshableGt });
   const refreshableIs = vi.fn().mockReturnValue({ not: refreshableNot });
 
@@ -75,6 +77,7 @@ function buildTableMock(options?: {
     refreshableIs,
     refreshableNot,
     refreshableGt,
+    refreshableLimit,
     lookupSingle,
     update,
     updateEq,
@@ -152,6 +155,30 @@ describe('OAuthStorage MCP token lifetimes', () => {
     );
   });
 
+  it('uses the default when OAUTH_REFRESH_TOKEN_TTL_SECONDS env override is below minimum', async () => {
+    const { insertPayloads } = buildTableMock();
+    const storage = OAuthStorage.fromEnvironment({
+      SUPABASE_URL: 'https://example.supabase.co',
+      SUPABASE_SERVICE_KEY: 'test-key',
+      OAUTH_REFRESH_TOKEN_TTL_SECONDS: String(MIN_OAUTH_REFRESH_TOKEN_TTL_SECONDS - 1),
+    });
+
+    const before = Date.now();
+    await storage.createAccessToken({
+      userId: 'user_123',
+      includeRefreshToken: true,
+    });
+    const after = Date.now();
+
+    const refreshTokenExpiresAt = new Date(insertPayloads[0].refresh_token_expires_at as string).getTime();
+    expect(refreshTokenExpiresAt).toBeGreaterThanOrEqual(
+      before + DEFAULT_OAUTH_REFRESH_TOKEN_TTL_SECONDS * 1000 - 1000
+    );
+    expect(refreshTokenExpiresAt).toBeLessThanOrEqual(
+      after + DEFAULT_OAUTH_REFRESH_TOKEN_TTL_SECONDS * 1000 + 1000
+    );
+  });
+
   it('refresh rotation carries forward the configured refresh-token TTL', async () => {
     const { insertPayloads, updateEq } = buildTableMock({
       lookupRow: {
@@ -202,7 +229,7 @@ describe('OAuthStorage MCP token lifetimes', () => {
   it('gets refreshable user tokens using refresh-token expiry, not access-token expiry', async () => {
     const expiredAccessToken = new Date(Date.now() - 60 * 60 * 1000).toISOString();
     const validRefreshToken = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-    const { refreshableIs, refreshableNot, refreshableGt } = buildTableMock({
+    const { refreshableIs, refreshableNot, refreshableGt, refreshableLimit } = buildTableMock({
       refreshableRows: [
         {
           id: 'token-id',
@@ -227,6 +254,7 @@ describe('OAuthStorage MCP token lifetimes', () => {
     expect(refreshableIs).toHaveBeenCalledWith('revoked_at', null);
     expect(refreshableNot).toHaveBeenCalledWith('refresh_token', 'is', null);
     expect(refreshableGt).toHaveBeenCalledWith('refresh_token_expires_at', expect.any(String));
+    expect(refreshableLimit).toHaveBeenCalledWith(50);
   });
 
   it('treats active connection status as refreshable token status', async () => {

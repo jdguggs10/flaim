@@ -50,7 +50,6 @@ export async function GET() {
       connections?: Array<{
         id: string;
         expiresAt: string;
-        refreshTokenExpiresAt?: string;
         scope: string;
         clientName?: string;
       }>;
