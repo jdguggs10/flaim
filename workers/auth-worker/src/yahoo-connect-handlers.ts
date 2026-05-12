@@ -76,6 +76,7 @@ interface YahooRefreshDiagnosticFields {
   reason?: string;
   refreshState?: YahooCredentialRefreshState;
   accessTokenExpiresInSeconds?: number;
+  accessTokenLifetimeSeconds?: number;
   leaseRemainingSeconds?: number;
   retryAfter?: number;
   upstreamStatus?: number;
@@ -184,6 +185,7 @@ function logYahooRefreshDiagnostic(event: string, fields: YahooRefreshDiagnostic
   if (fields.reason !== undefined) payload.reason = fields.reason;
   if (fields.refreshState !== undefined) payload.refresh_state = fields.refreshState;
   if (fields.accessTokenExpiresInSeconds !== undefined) payload.access_token_expires_in_seconds = fields.accessTokenExpiresInSeconds;
+  if (fields.accessTokenLifetimeSeconds !== undefined) payload.access_token_lifetime_seconds = fields.accessTokenLifetimeSeconds;
   if (fields.leaseRemainingSeconds !== undefined) payload.lease_remaining_seconds = fields.leaseRemainingSeconds;
   if (fields.retryAfter !== undefined) payload.retry_after = fields.retryAfter;
   if (fields.upstreamStatus !== undefined) payload.upstream_status = fields.upstreamStatus;
@@ -799,7 +801,7 @@ async function getValidYahooAccessToken(
       logDiagnostic('credential_update_succeeded', {
         userId,
         attempt,
-        accessTokenExpiresInSeconds: result.expires_in,
+        accessTokenLifetimeSeconds: result.expires_in,
       });
       console.log(`[yahoo-connect] Token refreshed for user ${maskUserId(userId)}`);
       return { accessToken: result.access_token, expiresIn: result.expires_in };
@@ -1267,7 +1269,17 @@ export async function handleYahooCredentialHealth(
     }
 
     const refreshState = yahooRefreshState(credentials);
+    const responseRefreshState = refreshState === 'none' ? 'idle' : refreshState;
     const leaseRemainingSeconds = boundedPositiveSecondsUntil(credentials.refreshLeaseExpiresAt);
+    const refresh: Record<string, string | number | undefined> = {
+      state: responseRefreshState,
+    };
+    if (refreshState !== 'none') {
+      refresh.leaseExpiresAt = credentials.refreshLeaseExpiresAt?.toISOString();
+    }
+    if (refreshState === 'cooldown' || refreshState === 'in_progress') {
+      refresh.retryAfterSeconds = leaseRemainingSeconds;
+    }
     const checkedAt = new Date().toISOString();
 
     return new Response(
@@ -1284,13 +1296,7 @@ export async function handleYahooCredentialHealth(
           needsRefresh: credentials.needsRefresh,
           state: credentials.needsRefresh ? 'needs_refresh' : 'fresh',
         },
-        refresh: {
-          state: refreshState === 'none' ? 'idle' : refreshState,
-          leaseExpiresAt: credentials.refreshLeaseExpiresAt?.toISOString(),
-          retryAfterSeconds: refreshState === 'cooldown' || refreshState === 'in_progress'
-            ? leaseRemainingSeconds
-            : undefined,
-        },
+        refresh,
       }),
       {
         status: 200,

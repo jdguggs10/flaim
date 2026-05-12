@@ -1333,6 +1333,7 @@ describe('yahoo-connect-handlers', () => {
           yahooGuidPresent: true,
           needsRefresh: false,
           updatedAt,
+          refreshLeaseExpiresAt: new Date('2026-05-12T01:31:00Z'),
         });
 
         const response = await handleYahooCredentialHealth(env, 'user_123', corsHeaders);
