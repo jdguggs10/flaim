@@ -88,6 +88,7 @@ export interface TokenValidationResult {
 
 export const DEFAULT_OAUTH_ACCESS_TOKEN_TTL_SECONDS = 3600; // 1 hour
 export const DEFAULT_OAUTH_REFRESH_TOKEN_TTL_SECONDS = 7776000; // 90 days
+export const MAX_OAUTH_REFRESH_TOKEN_TTL_SECONDS = 31536000; // 1 year
 
 export interface OAuthStorageEnv {
   SUPABASE_URL: string;
@@ -686,7 +687,12 @@ export class OAuthStorage {
       .not('refresh_token', 'is', null)
       .gt('refresh_token_expires_at', new Date().toISOString());
 
-    if (error || !data) {
+    if (error) {
+      console.error('[oauth-storage] Failed to get refreshable user tokens:', error);
+      return [];
+    }
+
+    if (!data) {
       return [];
     }
 
@@ -706,7 +712,7 @@ export class OAuthStorage {
   }
 
   /**
-   * Check if a user has any active OAuth connections
+   * Check if a user has any active refreshable MCP OAuth connections.
    */
   async hasActiveConnection(userId: string): Promise<boolean> {
     const tokens = await this.getRefreshableUserTokens(userId);
@@ -738,6 +744,13 @@ function parseRefreshTokenTtlSeconds(value?: string): number {
       `[oauth-storage] Invalid OAUTH_REFRESH_TOKEN_TTL_SECONDS="${value}", using default ${DEFAULT_OAUTH_REFRESH_TOKEN_TTL_SECONDS}s`
     );
     return DEFAULT_OAUTH_REFRESH_TOKEN_TTL_SECONDS;
+  }
+
+  if (parsed > MAX_OAUTH_REFRESH_TOKEN_TTL_SECONDS) {
+    console.warn(
+      `[oauth-storage] OAUTH_REFRESH_TOKEN_TTL_SECONDS="${value}" exceeds max, clamping to ${MAX_OAUTH_REFRESH_TOKEN_TTL_SECONDS}s`
+    );
+    return MAX_OAUTH_REFRESH_TOKEN_TTL_SECONDS;
   }
 
   return Math.floor(parsed);
