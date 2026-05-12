@@ -57,6 +57,8 @@ These endpoints manage the OAuth 2.0 client flow with Yahoo Fantasy.
 | `GET /internal/leagues/yahoo` | Internal + Clerk JWT / OAuth / Eval key | Get stored Yahoo leagues for internal workers |
 | `DELETE /leagues/yahoo/:id` | Clerk JWT | Delete a Yahoo league |
 
+`/internal/connect/yahoo/credential-health` returns no access or refresh tokens. Its `refresh.state` can be `idle`, `in_progress`, `cooldown`, or `expired`; `leaseExpiresAt` is included when a lease timestamp exists, while `retryAfterSeconds` is only included for active `in_progress` or `cooldown` waits.
+
 ### Sleeper Connect
 
 | Endpoint | Auth | Purpose |

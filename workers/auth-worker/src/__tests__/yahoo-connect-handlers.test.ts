@@ -1396,6 +1396,34 @@ describe('yahoo-connect-handlers', () => {
       }
     });
 
+    it('returns in-progress state with retry timing without exposing the lease owner', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-05-12T01:30:00Z'));
+      try {
+        mockStorage.getYahooCredentialHealth.mockResolvedValue({
+          clerkUserId: 'user_123',
+          expiresAt: new Date('2026-05-12T01:31:00Z'),
+          yahooGuidPresent: true,
+          needsRefresh: true,
+          refreshLeaseOwner: 'refresh:owner-1',
+          refreshLeaseExpiresAt: new Date('2026-05-12T01:30:45Z'),
+        });
+
+        const response = await handleYahooCredentialHealth(env, 'user_123', corsHeaders);
+
+        expect(response.status).toBe(200);
+        const body = (await response.json()) as Record<string, unknown>;
+        expect(body.refresh).toEqual({
+          state: 'in_progress',
+          leaseExpiresAt: '2026-05-12T01:30:45.000Z',
+          retryAfterSeconds: 45,
+        });
+        expect(JSON.stringify(body)).not.toContain('owner-1');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('returns expired lease state without exposing the lease owner', async () => {
       vi.useFakeTimers();
       vi.setSystemTime(new Date('2026-05-12T01:30:00Z'));
