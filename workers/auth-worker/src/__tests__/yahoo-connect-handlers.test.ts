@@ -1634,6 +1634,7 @@ describe('yahoo-connect-handlers', () => {
     });
 
     it('returns retryable 503 from discovery path for transient Yahoo refresh response', async () => {
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
       mockStorage.getYahooCredentials.mockResolvedValue({
         clerkUserId: 'user_123',
         accessToken: 'old-token',
@@ -1649,7 +1650,7 @@ describe('yahoo-connect-handlers', () => {
         })
       );
 
-      const response = await handleYahooDiscover(env, 'user_123', corsHeaders);
+      const response = await handleYahooDiscover(env, 'user_123', corsHeaders, 'req_discover');
 
       expect(response.status).toBe(503);
       const body = (await response.json()) as Record<string, unknown>;
@@ -1660,6 +1661,22 @@ describe('yahoo-connect-handlers', () => {
       expect(mockStorage.markRefreshCooldown).toHaveBeenCalledWith('user_123', expect.any(String), 60);
       expect(mockStorage.updateYahooCredentials).not.toHaveBeenCalled();
       expect(mockStorage.upsertYahooLeague).not.toHaveBeenCalled();
+      expect(yahooRefreshDiagnostics(logSpy)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            event: 'refresh_response_error',
+            correlation_id: 'req_discover',
+          }),
+          expect.objectContaining({
+            event: 'refresh_transient_failure',
+            correlation_id: 'req_discover',
+          }),
+          expect.objectContaining({
+            event: 'cooldown_mark_attempted',
+            correlation_id: 'req_discover',
+          }),
+        ])
+      );
     });
 
     it('returns retryable rate-limit response when Yahoo league discovery returns HTTP 999', async () => {

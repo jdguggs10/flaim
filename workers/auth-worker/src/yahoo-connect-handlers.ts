@@ -1273,9 +1273,10 @@ export async function handleYahooCredentialHealth(
     const checkedAtDate = new Date();
     const checkedAtNowMs = checkedAtDate.getTime();
     const refreshState = yahooRefreshState(credentials, checkedAtNowMs);
+    // Keep the internal lease-state enum distinct from the external diagnostic contract.
     const responseRefreshState = refreshState === 'none' ? 'idle' : refreshState;
     const leaseRemainingSeconds = boundedPositiveSecondsUntil(credentials.refreshLeaseExpiresAt, checkedAtNowMs);
-    const refresh: Record<string, string | number> = {
+    const refresh: { state: string; leaseExpiresAt?: string; retryAfterSeconds?: number } = {
       state: responseRefreshState,
     };
     if (refreshState !== 'none' && credentials.refreshLeaseExpiresAt) {
