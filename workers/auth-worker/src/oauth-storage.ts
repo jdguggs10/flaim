@@ -68,7 +68,7 @@ export interface CreateTokenParams {
   clientName?: string; // AI platform name (Claude, ChatGPT, etc.)
   expiresInSeconds?: number; // Default: 3600 (1 hour)
   includeRefreshToken?: boolean;
-  refreshTokenExpiresInSeconds?: number; // Default: 604800 (7 days)
+  refreshTokenExpiresInSeconds?: number; // Default: 31536000 (1 year)
 }
 
 export interface CreateStateParams {
@@ -84,6 +84,17 @@ export interface TokenValidationResult {
   scope?: string;
   resource?: string | null;
   error?: string;
+}
+
+export const DEFAULT_OAUTH_ACCESS_TOKEN_TTL_SECONDS = 3600; // 1 hour
+export const DEFAULT_OAUTH_REFRESH_TOKEN_TTL_SECONDS = 31536000; // 1 year
+export const MIN_OAUTH_REFRESH_TOKEN_TTL_SECONDS = 3600; // 1 hour
+export const MAX_OAUTH_REFRESH_TOKEN_TTL_SECONDS = 31536000; // 1 year
+
+export interface OAuthStorageEnv {
+  SUPABASE_URL: string;
+  SUPABASE_SERVICE_KEY: string;
+  OAUTH_REFRESH_TOKEN_TTL_SECONDS?: string;
 }
 
 // =============================================================================
@@ -200,9 +211,11 @@ function redirectUrisMatch(expectedRedirectUri: string, actualRedirectUri: strin
 
 export class OAuthStorage {
   private supabase: SupabaseClient;
+  private refreshTokenTtlSeconds: number;
 
-  constructor(supabaseUrl: string, supabaseKey: string) {
+  constructor(supabaseUrl: string, supabaseKey: string, options?: { refreshTokenTtlSeconds?: number }) {
     this.supabase = createClient(supabaseUrl, supabaseKey);
+    this.refreshTokenTtlSeconds = options?.refreshTokenTtlSeconds ?? DEFAULT_OAUTH_REFRESH_TOKEN_TTL_SECONDS;
   }
 
   // ---------------------------------------------------------------------------
@@ -445,7 +458,7 @@ export class OAuthStorage {
    */
   async createAccessToken(params: CreateTokenParams): Promise<OAuthToken> {
     const accessToken = generateSecureToken(32);
-    const expiresInSeconds = params.expiresInSeconds ?? 3600; // 1 hour default
+    const expiresInSeconds = params.expiresInSeconds ?? DEFAULT_OAUTH_ACCESS_TOKEN_TTL_SECONDS; // 1 hour default
     const expiresAt = new Date(Date.now() + expiresInSeconds * 1000);
 
     // Derive clientName from redirectUri if not explicitly provided
@@ -456,7 +469,7 @@ export class OAuthStorage {
 
     if (params.includeRefreshToken) {
       refreshToken = generateSecureToken(32);
-      const refreshExpiresIn = params.refreshTokenExpiresInSeconds ?? 604800; // 7 days default
+      const refreshExpiresIn = params.refreshTokenExpiresInSeconds ?? this.refreshTokenTtlSeconds;
       refreshTokenExpiresAt = new Date(Date.now() + refreshExpiresIn * 1000);
     }
 
@@ -634,7 +647,13 @@ export class OAuthStorage {
   }
 
   /**
-   * Get all active tokens for a user
+   * Get all currently valid access tokens for a user.
+   *
+   * Connection status should use getRefreshableUserTokens so an idle MCP
+   * client remains connected between one-hour access token refreshes.
+   *
+   * @deprecated Use getRefreshableUserTokens for connection status. This only
+   * reflects current access-token validity.
    */
   async getUserTokens(userId: string): Promise<OAuthToken[]> {
     const { data, error } = await this.supabase
@@ -664,10 +683,50 @@ export class OAuthStorage {
   }
 
   /**
-   * Check if a user has any active OAuth connections
+   * Get all connections that can still be refreshed for a user.
+   *
+   * Returns raw token fields for server-side management. Do not expose returned
+   * OAuthToken objects directly to clients.
+   */
+  async getRefreshableUserTokens(userId: string): Promise<OAuthToken[]> {
+    const { data, error } = await this.supabase
+      .from('oauth_tokens')
+      .select('*')
+      .eq('user_id', userId)
+      .is('revoked_at', null)
+      .not('refresh_token', 'is', null)
+      .gt('refresh_token_expires_at', new Date().toISOString())
+      .limit(50);
+
+    if (error) {
+      console.error('[oauth-storage] Failed to get refreshable user tokens:', error);
+      return [];
+    }
+
+    if (!data) {
+      return [];
+    }
+
+    return data.map((row) => ({
+      id: row.id,
+      accessToken: row.access_token,
+      userId: row.user_id,
+      scope: row.scope,
+      resource: row.resource || undefined,
+      clientName: row.client_name || 'MCP Client',
+      expiresAt: new Date(row.expires_at),
+      refreshToken: row.refresh_token || undefined,
+      refreshTokenExpiresAt: row.refresh_token_expires_at
+        ? new Date(row.refresh_token_expires_at)
+        : undefined,
+    }));
+  }
+
+  /**
+   * Check if a user has any active refreshable MCP OAuth connections.
    */
   async hasActiveConnection(userId: string): Promise<boolean> {
-    const tokens = await this.getUserTokens(userId);
+    const tokens = await this.getRefreshableUserTokens(userId);
     return tokens.length > 0;
   }
 
@@ -678,7 +737,39 @@ export class OAuthStorage {
   /**
    * Create instance from environment variables
    */
-  static fromEnvironment(env: { SUPABASE_URL: string; SUPABASE_SERVICE_KEY: string }): OAuthStorage {
-    return new OAuthStorage(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY);
+  static fromEnvironment(env: OAuthStorageEnv): OAuthStorage {
+    return new OAuthStorage(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY, {
+      refreshTokenTtlSeconds: parseRefreshTokenTtlSeconds(env.OAUTH_REFRESH_TOKEN_TTL_SECONDS),
+    });
   }
+}
+
+function parseRefreshTokenTtlSeconds(value?: string): number {
+  if (!value) {
+    return DEFAULT_OAUTH_REFRESH_TOKEN_TTL_SECONDS;
+  }
+
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    console.warn(
+      `[oauth-storage] Invalid OAUTH_REFRESH_TOKEN_TTL_SECONDS="${value}", using default ${DEFAULT_OAUTH_REFRESH_TOKEN_TTL_SECONDS}s`
+    );
+    return DEFAULT_OAUTH_REFRESH_TOKEN_TTL_SECONDS;
+  }
+
+  if (parsed < MIN_OAUTH_REFRESH_TOKEN_TTL_SECONDS) {
+    console.warn(
+      `[oauth-storage] OAUTH_REFRESH_TOKEN_TTL_SECONDS="${value}" is below minimum, clamping to ${MIN_OAUTH_REFRESH_TOKEN_TTL_SECONDS}s`
+    );
+    return MIN_OAUTH_REFRESH_TOKEN_TTL_SECONDS;
+  }
+
+  if (parsed > MAX_OAUTH_REFRESH_TOKEN_TTL_SECONDS) {
+    console.warn(
+      `[oauth-storage] OAUTH_REFRESH_TOKEN_TTL_SECONDS="${value}" exceeds max, clamping to ${MAX_OAUTH_REFRESH_TOKEN_TTL_SECONDS}s`
+    );
+    return MAX_OAUTH_REFRESH_TOKEN_TTL_SECONDS;
+  }
+
+  return Math.floor(parsed);
 }

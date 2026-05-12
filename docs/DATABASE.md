@@ -161,8 +161,21 @@ Access and refresh tokens for MCP clients.
 | expires_at | timestamptz | Access token expiry |
 | revoked_at | timestamptz | Revocation time |
 | refresh_token | text | Optional refresh token |
-| refresh_token_expires_at | timestamptz | Refresh token expiry |
+| refresh_token_expires_at | timestamptz | MCP refresh-token inactivity expiry (1 year by default; `OAUTH_REFRESH_TOKEN_TTL_SECONDS`) |
 | created_at | timestamptz | Created timestamp |
+
+When extending the MCP refresh-token inactivity window for an existing deployment, non-revoked rows with still-valid refresh tokens can be backfilled so current connectors inherit the longer window without reconnecting:
+
+```sql
+UPDATE oauth_tokens
+SET refresh_token_expires_at = GREATEST(
+  refresh_token_expires_at,
+  now() + interval '1 year'
+)
+WHERE refresh_token IS NOT NULL
+  AND revoked_at IS NULL
+  AND refresh_token_expires_at > now();
+```
 
 ### oauth_states
 Short-lived OAuth state values used for server-side validation.

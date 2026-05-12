@@ -22,7 +22,7 @@ This worker has three distinct responsibilities:
 
 ### OAuth 2.1 Provider (AI clients → Flaim)
 
-These endpoints let Claude, ChatGPT, and Gemini authenticate via MCP.
+These endpoints let Claude, ChatGPT, Perplexity, Gemini, and other MCP clients authenticate to Flaim.
 
 | Endpoint | Auth | Purpose |
 |----------|------|---------|
@@ -39,6 +39,12 @@ These endpoints let Claude, ChatGPT, and Gemini authenticate via MCP.
 OAuth consent callback note:
 The consent screen accepts `oauth_state` (preferred) and legacy `state` query params.
 This avoids state collisions during sign-in redirects while maintaining backward compatibility.
+
+MCP OAuth token lifetime:
+- Access tokens remain short-lived: 1 hour.
+- Refresh tokens rotate on every successful refresh.
+- Refresh-token inactivity window defaults to 1 year (`31536000` seconds) and can be overridden with `OAUTH_REFRESH_TOKEN_TTL_SECONDS` (clamped to 1 hour minimum, 1 year maximum).
+- This provider-side MCP OAuth flow is separate from the downstream Yahoo OAuth token chain.
 
 ### Yahoo Connect (Flaim → Yahoo)
 

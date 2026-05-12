@@ -16,6 +16,8 @@
   // - SUPABASE_SERVICE_KEY
   // - YAHOO_CLIENT_ID      (Yahoo Developer App)
   // - YAHOO_CLIENT_SECRET  (Yahoo Developer App)
+  // Optional vars:
+  // - OAUTH_REFRESH_TOKEN_TTL_SECONDS (defaults to 7776000 in code; set only to override)
 
   // Environment configurations
   "env": {
