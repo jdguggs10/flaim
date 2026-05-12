@@ -161,7 +161,7 @@ Access and refresh tokens for MCP clients.
 | expires_at | timestamptz | Access token expiry |
 | revoked_at | timestamptz | Revocation time |
 | refresh_token | text | Optional refresh token |
-| refresh_token_expires_at | timestamptz | Refresh token expiry |
+| refresh_token_expires_at | timestamptz | MCP refresh-token inactivity expiry (90 days by default; `OAUTH_REFRESH_TOKEN_TTL_SECONDS`) |
 | created_at | timestamptz | Created timestamp |
 
 ### oauth_states

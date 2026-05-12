@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { handleAuthorize, handleClientRegistration, handleMetadataDiscovery, validateOAuthToken } from '../oauth-handlers';
+import {
+  handleAuthorize,
+  handleCheckStatus,
+  handleClientRegistration,
+  handleMetadataDiscovery,
+  validateOAuthToken,
+} from '../oauth-handlers';
 import { isValidRedirectUri } from '@flaim/worker-shared';
 import { handleToken } from '../oauth-handlers';
 import { OAuthStorage } from '../oauth-storage';
@@ -232,6 +238,58 @@ describe('oauth-handlers', () => {
     expect(body.refresh_token).toBe('refresh-token');
     expect(typeof body.expires_in).toBe('number');
     expect(body.expires_in).toBeGreaterThan(0);
+  });
+
+  it('returns invalid_grant when refresh token is expired', async () => {
+    const refreshAccessToken = vi.fn().mockResolvedValue(null);
+    vi.spyOn(OAuthStorage, 'fromEnvironment').mockReturnValue({
+      refreshAccessToken,
+    } as unknown as OAuthStorage);
+
+    const req = new Request('https://api.flaim.app/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        grant_type: 'refresh_token',
+        refresh_token: 'expired-refresh-token',
+      }),
+    });
+
+    const res = await handleToken(req, env, corsHeaders);
+    expect(res.status).toBe(400);
+
+    const body = await res.json() as { error?: string; error_description?: string };
+    expect(body.error).toBe('invalid_grant');
+    expect(body.error_description).toBe('Invalid or expired refresh token');
+    expect(refreshAccessToken).toHaveBeenCalledWith('expired-refresh-token');
+  });
+
+  it('reports active connection when access token expired but refresh token is still valid', async () => {
+    const getRefreshableUserTokens = vi.fn().mockResolvedValue([
+      {
+        id: 'token-id',
+        expiresAt: new Date(Date.now() - 60 * 60 * 1000),
+        refreshTokenExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        scope: 'mcp:read',
+        clientName: 'Perplexity',
+      },
+    ]);
+    vi.spyOn(OAuthStorage, 'fromEnvironment').mockReturnValue({
+      getRefreshableUserTokens,
+    } as unknown as OAuthStorage);
+
+    const res = await handleCheckStatus(env, 'user_123', corsHeaders);
+    expect(res.status).toBe(200);
+
+    const body = await res.json() as {
+      hasConnection?: boolean;
+      connections?: Array<{ clientName?: string; refreshTokenExpiresAt?: string }>;
+    };
+    expect(body.hasConnection).toBe(true);
+    expect(body.connections).toHaveLength(1);
+    expect(body.connections?.[0].clientName).toBe('Perplexity');
+    expect(body.connections?.[0].refreshTokenExpiresAt).toBeTruthy();
+    expect(getRefreshableUserTokens).toHaveBeenCalledWith('user_123');
   });
 });
 

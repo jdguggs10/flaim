@@ -4,6 +4,10 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### MCP OAuth
+- **Changed**: MCP OAuth refresh-token inactivity window is now 90 days by default (`OAUTH_REFRESH_TOKEN_TTL_SECONDS`, default `7776000`) while access tokens remain 1 hour and refresh tokens continue rotating on successful refresh.
+- **Fixed**: `/oauth/status` now reports an active AI connector when a non-revoked refresh token is still valid, even after the current 1-hour access token expires.
+
 ### Documentation
 - **Changed**: Updated repo docs to reflect the current chat split: public `/chat` live demo and internal `/dev` lab.
 - **Fixed**: Removed stale dev-only chat framing and cleaned unresolved merge-conflict markers from `docs/ARCHITECTURE.md`.

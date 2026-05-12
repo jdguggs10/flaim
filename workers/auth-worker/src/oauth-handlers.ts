@@ -31,6 +31,7 @@ export interface OAuthEnv {
   NODE_ENV?: string;
   ENVIRONMENT?: string;
   FRONTEND_URL?: string;
+  OAUTH_REFRESH_TOKEN_TTL_SECONDS?: string;
 }
 
 interface AuthorizeParams {
@@ -681,7 +682,7 @@ export async function validateOAuthToken(
 
 /**
  * Check active connection status
- * Used by frontend to see if user has connected Claude/ChatGPT
+ * Used by frontend to see if user has refreshable MCP OAuth connections.
  */
 export async function handleCheckStatus(
   env: OAuthEnv,
@@ -690,12 +691,13 @@ export async function handleCheckStatus(
 ): Promise<Response> {
   try {
     const storage = OAuthStorage.fromEnvironment(env);
-    const tokens = await storage.getUserTokens(userId);
+    const tokens = await storage.getRefreshableUserTokens(userId);
 
     // Map to safe public format for display
     const connections = tokens.map(t => ({
       id: t.id, // Real ID for revocation
       expiresAt: t.expiresAt.toISOString(),
+      refreshTokenExpiresAt: t.refreshTokenExpiresAt?.toISOString(),
       scope: t.scope,
       clientName: t.clientName || 'MCP Client',
     }));

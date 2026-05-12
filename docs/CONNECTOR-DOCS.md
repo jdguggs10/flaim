@@ -1,6 +1,6 @@
-# Flaim Setup Docs (Claude + ChatGPT + Gemini)
+# Flaim Setup Docs (Claude + ChatGPT + Perplexity + Gemini)
 
-This page is the single user-facing guide for connecting Flaim to AI clients (Claude, ChatGPT, Gemini CLI) and using read-only fantasy analysis tools.
+This page is the single user-facing guide for connecting Flaim to AI clients (Claude, ChatGPT, Perplexity, Gemini CLI) and using read-only fantasy analysis tools.
 
 ## What Flaim Is
 
@@ -18,6 +18,7 @@ Flaim cannot place trades, add/drop players, or modify league settings.
 - **Token URL:** `https://api.flaim.app/auth/token`
 - **Revocation URL:** `https://api.flaim.app/auth/revoke`
 - **Discovery:** `https://api.flaim.app/.well-known/oauth-authorization-server`
+- **Token lifetime:** 1-hour access tokens plus rotating refresh tokens with a 90-day inactivity window by default (`OAUTH_REFRESH_TOKEN_TTL_SECONDS`, default `7776000`)
 
 ## Setup (Once)
 
@@ -38,6 +39,11 @@ Flaim cannot place trades, add/drop players, or modify league settings.
 ### Claude (Claude Desktop or claude.ai)
 
 1. Add a remote MCP server with URL `https://api.flaim.app/mcp`.
+2. Complete the OAuth consent screen when prompted.
+
+### Perplexity (Custom Remote Connector)
+
+1. Add a custom remote connector with URL `https://api.flaim.app/mcp`, OAuth auth, and Streamable HTTP transport.
 2. Complete the OAuth consent screen when prompted.
 
 ### Gemini CLI

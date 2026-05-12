@@ -133,7 +133,7 @@ ESPN Cookies → POST /api/extension/sync → Auth Worker → Supabase
 - Clerk JWT verification in auth-worker
 - Extension never stores long-lived custom tokens
 
-## Claude + ChatGPT OAuth 2.1
+## AI Client OAuth 2.1
 
 Users connect their own AI subscription to Flaim's MCP servers:
 
@@ -141,8 +141,9 @@ Users connect their own AI subscription to Flaim's MCP servers:
 - **OAuth Flow**: Full OAuth 2.1 with PKCE, Dynamic Client Registration (RFC 7591), Protected Resource Metadata (RFC 9728)
 - **Endpoints**: `/auth/register` (DCR), `/auth/authorize`, `/auth/token`, `/auth/revoke`
 - **Metadata**: `/.well-known/oauth-authorization-server`, `/.well-known/oauth-protected-resource`
+- **Token lifetime**: MCP access tokens are short-lived (1 hour). Refresh tokens rotate on each successful refresh and use a 90-day inactivity window by default (`OAUTH_REFRESH_TOKEN_TTL_SECONDS`, default `7776000`).
 
-**User flow**: Add MCP URL in Claude/ChatGPT → 401 triggers OAuth → user consents at `flaim.app/oauth/consent` → token exchange → tools available.
+**User flow**: Add MCP URL in Claude, ChatGPT, Perplexity, or another supported MCP client → 401 triggers OAuth → user consents at `flaim.app/oauth/consent` → token exchange → tools available.
 
 ## MCP Tools
 
