@@ -55,12 +55,15 @@ These endpoints manage the OAuth 2.0 client flow with Yahoo Fantasy.
 | `GET /connect/yahoo/authorize` | Clerk JWT | Start Yahoo OAuth flow |
 | `GET /connect/yahoo/callback` | None (state param) | Handle Yahoo redirect |
 | `GET /internal/connect/yahoo/credentials` | Internal + Clerk JWT / OAuth / Eval key | Get Yahoo tokens (auto-refreshes) for internal workers |
+| `GET /internal/connect/yahoo/credential-health` | Internal + Clerk JWT / OAuth | Non-secret Yahoo credential/refresh health for diagnostics |
 | `GET /connect/yahoo/status` | Clerk JWT | Check Yahoo connection status |
 | `DELETE /connect/yahoo/disconnect` | Clerk JWT | Remove Yahoo connection |
 | `POST /connect/yahoo/discover` | Clerk JWT | Discover Yahoo leagues |
 | `GET /leagues/yahoo` | Clerk JWT | Get stored Yahoo leagues |
 | `GET /internal/leagues/yahoo` | Internal + Clerk JWT / OAuth / Eval key | Get stored Yahoo leagues for internal workers |
 | `DELETE /leagues/yahoo/:id` | Clerk JWT | Delete a Yahoo league |
+
+`/internal/connect/yahoo/credential-health` returns no access or refresh tokens. Its `refresh.state` can be `idle`, `in_progress`, `cooldown`, or `expired`; `leaseExpiresAt` is included when a lease owner and timestamp exist, including past timestamps for `expired` leases, while `retryAfterSeconds` is only included for active `in_progress` or `cooldown` waits. `lastUpdated` is `null` when the credential row has no update timestamp.
 
 ### Sleeper Connect
 

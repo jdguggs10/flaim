@@ -246,6 +246,22 @@ describe('YahooStorage', () => {
   });
 
   describe('getYahooCredentials', () => {
+    it('selects token fields needed for refresh', async () => {
+      mockSingle.mockResolvedValue({
+        data: null,
+        error: { code: 'PGRST116', message: 'No rows' },
+      });
+
+      await storage.getYahooCredentials('user_123');
+
+      expect(mockSelect).toHaveBeenCalledWith(
+        expect.stringContaining('access_token')
+      );
+      expect(mockSelect).toHaveBeenCalledWith(
+        expect.stringContaining('refresh_token')
+      );
+    });
+
     it('returns credentials with needsRefresh=false when token is fresh', async () => {
       // Token expires in 30 minutes - well outside the 5-minute buffer
       const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
@@ -317,6 +333,91 @@ describe('YahooStorage', () => {
       const result = await storage.getYahooCredentials('nonexistent-user');
 
       expect(result).toBeNull();
+    });
+  });
+
+  describe('getYahooCredentialHealth', () => {
+    it('selects only non-secret fields and maps credential health', async () => {
+      const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
+      const updatedAt = new Date('2026-05-12T01:00:00Z');
+      const leaseExpiresAt = new Date(Date.now() + 60_000);
+      mockSingle.mockResolvedValue({
+        data: {
+          clerk_user_id: 'user_123',
+          expires_at: expiresAt.toISOString(),
+          yahoo_guid: 'guid-123',
+          updated_at: updatedAt.toISOString(),
+          refresh_lease_owner: 'cooldown:owner-1',
+          refresh_lease_expires_at: leaseExpiresAt.toISOString(),
+        },
+        error: null,
+      });
+
+      const result = await storage.getYahooCredentialHealth('user_123');
+
+      expect(mockSelect).toHaveBeenCalledWith(
+        'clerk_user_id, expires_at, yahoo_guid, updated_at, refresh_lease_owner, refresh_lease_expires_at'
+      );
+      const selectedFields = String(mockSelect.mock.calls[0][0]);
+      expect(selectedFields).not.toContain('access_token');
+      expect(selectedFields).not.toContain('refresh_token');
+      expect(result).toEqual({
+        clerkUserId: 'user_123',
+        expiresAt,
+        yahooGuidPresent: true,
+        needsRefresh: false,
+        updatedAt,
+        refreshLeaseOwner: 'cooldown:owner-1',
+        refreshLeaseExpiresAt: leaseExpiresAt,
+      });
+    });
+
+    it('returns health with needsRefresh=true when token is within the refresh buffer', async () => {
+      const expiresAt = new Date(Date.now() + 3 * 60 * 1000);
+      mockSingle.mockResolvedValue({
+        data: {
+          clerk_user_id: 'user_123',
+          expires_at: expiresAt.toISOString(),
+          yahoo_guid: null,
+          updated_at: null,
+          refresh_lease_owner: null,
+          refresh_lease_expires_at: null,
+        },
+        error: null,
+      });
+
+      const result = await storage.getYahooCredentialHealth('user_123');
+
+      expect(result?.needsRefresh).toBe(true);
+      expect(result?.yahooGuidPresent).toBe(false);
+      expect(result?.refreshLeaseOwner).toBeUndefined();
+    });
+
+    it('returns null when no credential health row exists', async () => {
+      mockSingle.mockResolvedValue({
+        data: null,
+        error: { code: 'PGRST116', message: 'No rows' },
+      });
+
+      const result = await storage.getYahooCredentialHealth('missing-user');
+
+      expect(result).toBeNull();
+    });
+
+    it('throws when the credential health query fails', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      mockSingle.mockResolvedValue({
+        data: null,
+        error: { code: '500', message: 'Database unavailable' },
+      });
+
+      await expect(storage.getYahooCredentialHealth('user_123')).rejects.toThrow(
+        'Failed to get Yahoo credential health'
+      );
+      expect(errorSpy).toHaveBeenCalledWith(
+        '[yahoo-storage] Failed to get Yahoo credential health:',
+        expect.objectContaining({ message: 'Database unavailable' })
+      );
     });
   });
 

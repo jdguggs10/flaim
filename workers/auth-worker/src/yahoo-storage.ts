@@ -49,6 +49,16 @@ export interface YahooCredentials {
   refreshLeaseExpiresAt?: Date;
 }
 
+export interface YahooCredentialHealth {
+  clerkUserId: string;
+  expiresAt: Date;
+  yahooGuidPresent: boolean;
+  needsRefresh: boolean;
+  updatedAt?: Date;
+  refreshLeaseOwner?: string;
+  refreshLeaseExpiresAt?: Date;
+}
+
 export interface SaveCredentialsParams {
   clerkUserId: string;
   accessToken: string;
@@ -231,6 +241,45 @@ export class YahooStorage {
       refreshToken: data.refresh_token,
       expiresAt,
       yahooGuid: data.yahoo_guid || undefined,
+      needsRefresh,
+      updatedAt: data.updated_at ? new Date(data.updated_at) : undefined,
+      refreshLeaseOwner: data.refresh_lease_owner ?? undefined,
+      refreshLeaseExpiresAt: data.refresh_lease_expires_at
+        ? new Date(data.refresh_lease_expires_at)
+        : undefined,
+    };
+  }
+
+  /**
+   * Get non-secret Yahoo credential health for diagnostics.
+   * Does not select access_token or refresh_token.
+   */
+  async getYahooCredentialHealth(clerkUserId: string): Promise<YahooCredentialHealth | null> {
+    const { data, error } = await this.supabase
+      .from('yahoo_credentials')
+      .select('clerk_user_id, expires_at, yahoo_guid, updated_at, refresh_lease_owner, refresh_lease_expires_at')
+      .eq('clerk_user_id', clerkUserId)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return null;
+      }
+      console.error('[yahoo-storage] Failed to get Yahoo credential health:', error);
+      throw new Error('Failed to get Yahoo credential health');
+    }
+
+    if (!data) {
+      return null;
+    }
+
+    const expiresAt = new Date(data.expires_at);
+    const needsRefresh = expiresAt.getTime() - Date.now() < REFRESH_BUFFER_MS;
+
+    return {
+      clerkUserId: data.clerk_user_id,
+      expiresAt,
+      yahooGuidPresent: Boolean(data.yahoo_guid),
       needsRefresh,
       updatedAt: data.updated_at ? new Date(data.updated_at) : undefined,
       refreshLeaseOwner: data.refresh_lease_owner ?? undefined,
