@@ -143,28 +143,31 @@ function maskUserId(userId: string): string {
   return `${userId.substring(0, 8)}...`;
 }
 
-function secondsUntil(date?: Date): number | undefined {
+function secondsUntil(date?: Date, nowMs = Date.now()): number | undefined {
   if (!date) {
     return undefined;
   }
-  return Math.ceil((date.getTime() - Date.now()) / 1000);
+  return Math.ceil((date.getTime() - nowMs) / 1000);
 }
 
-function nonNegativeSecondsUntil(date?: Date): number | undefined {
-  const seconds = secondsUntil(date);
+function nonNegativeSecondsUntil(date?: Date, nowMs = Date.now()): number | undefined {
+  const seconds = secondsUntil(date, nowMs);
   return seconds !== undefined ? Math.max(seconds, 0) : undefined;
 }
 
-function boundedPositiveSecondsUntil(date?: Date): number | undefined {
-  const seconds = secondsUntil(date);
+function boundedPositiveSecondsUntil(date?: Date, nowMs = Date.now()): number | undefined {
+  const seconds = secondsUntil(date, nowMs);
   return seconds !== undefined && seconds > 0 ? seconds : undefined;
 }
 
-function yahooRefreshState(credentials: { refreshLeaseOwner?: string; refreshLeaseExpiresAt?: Date } | null): YahooCredentialRefreshState {
+function yahooRefreshState(
+  credentials: { refreshLeaseOwner?: string; refreshLeaseExpiresAt?: Date } | null,
+  nowMs = Date.now()
+): YahooCredentialRefreshState {
   if (!credentials?.refreshLeaseOwner) {
     return 'none';
   }
-  if (leaseExpired(credentials)) {
+  if (leaseExpired(credentials, nowMs)) {
     return 'expired';
   }
   return credentials.refreshLeaseOwner.startsWith(REFRESH_COOLDOWN_OWNER_PREFIX)
@@ -406,12 +409,15 @@ function toTokenResult(credentials: { accessToken: string; expiresAt: Date }): G
   };
 }
 
-function leaseExpired(credentials: { refreshLeaseOwner?: string; refreshLeaseExpiresAt?: Date } | null): boolean {
+function leaseExpired(
+  credentials: { refreshLeaseOwner?: string; refreshLeaseExpiresAt?: Date } | null,
+  nowMs = Date.now()
+): boolean {
   if (!credentials?.refreshLeaseOwner) {
     return true;
   }
   return credentials.refreshLeaseExpiresAt
-    ? credentials.refreshLeaseExpiresAt.getTime() <= Date.now()
+    ? credentials.refreshLeaseExpiresAt.getTime() <= nowMs
     : true;
 }
 
@@ -1268,9 +1274,11 @@ export async function handleYahooCredentialHealth(
       );
     }
 
-    const refreshState = yahooRefreshState(credentials);
+    const checkedAtDate = new Date();
+    const checkedAtNowMs = checkedAtDate.getTime();
+    const refreshState = yahooRefreshState(credentials, checkedAtNowMs);
     const responseRefreshState = refreshState === 'none' ? 'idle' : refreshState;
-    const leaseRemainingSeconds = boundedPositiveSecondsUntil(credentials.refreshLeaseExpiresAt);
+    const leaseRemainingSeconds = boundedPositiveSecondsUntil(credentials.refreshLeaseExpiresAt, checkedAtNowMs);
     const refresh: Record<string, string | number | undefined> = {
       state: responseRefreshState,
     };
@@ -1280,7 +1288,7 @@ export async function handleYahooCredentialHealth(
     if (refreshState === 'cooldown' || refreshState === 'in_progress') {
       refresh.retryAfterSeconds = leaseRemainingSeconds;
     }
-    const checkedAt = new Date().toISOString();
+    const checkedAt = checkedAtDate.toISOString();
 
     return new Response(
       JSON.stringify({
@@ -1292,7 +1300,7 @@ export async function handleYahooCredentialHealth(
         yahooGuidPresent: credentials.yahooGuidPresent,
         accessToken: {
           expiresAt: credentials.expiresAt.toISOString(),
-          expiresInSeconds: nonNegativeSecondsUntil(credentials.expiresAt),
+          expiresInSeconds: nonNegativeSecondsUntil(credentials.expiresAt, checkedAtNowMs),
           needsRefresh: credentials.needsRefresh,
           state: credentials.needsRefresh ? 'needs_refresh' : 'fresh',
         },
