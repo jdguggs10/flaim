@@ -88,6 +88,8 @@ interface YahooRefreshDiagnosticFields {
   cooldownMarked?: boolean;
 }
 
+// Internal annotation from the Yahoo token endpoint parser. This is consumed by
+// diagnostics only and is never serialized to external callers.
 type YahooTokenDiagnosticResponse = YahooTokenResponse & {
   upstream_body_class?: YahooTokenBodyClass;
 };
@@ -273,23 +275,7 @@ function hasTransientYahooTokenFailureSignal(text: string): boolean {
     || text.includes('temporary');
 }
 
-function isTransientYahooTokenFailure(response: Pick<YahooTokenResponse, 'status' | 'error' | 'error_description' | 'upstream_error_text'>): boolean {
-  if (isTransientYahooTokenError(response.status)) {
-    return true;
-  }
-
-  const text = normalizeYahooTokenErrorText(response);
-  // Permanent signals win over transient-looking text so revoked/expired tokens still trigger reconnect.
-  if (hasPermanentYahooTokenFailureSignal(text)) {
-    return false;
-  }
-
-  // After permanent signals are ruled out, allow token-endpoint text matching on any error status.
-  // Without status, do not guess from text alone.
-  return response.status !== undefined && response.status >= 400 && hasTransientYahooTokenFailureSignal(text);
-}
-
-function classifyYahooTokenFailureForDiagnostics(
+function classifyYahooTokenFailure(
   response: Pick<YahooTokenResponse, 'status' | 'error' | 'error_description' | 'upstream_error_text'>
 ): YahooTokenFailureDiagnosticKind {
   if (isTransientYahooTokenError(response.status)) {
@@ -297,13 +283,23 @@ function classifyYahooTokenFailureForDiagnostics(
   }
 
   const text = normalizeYahooTokenErrorText(response);
+  // Permanent signals win over transient-looking text so revoked/expired tokens still trigger reconnect.
   if (hasPermanentYahooTokenFailureSignal(text)) {
     return 'permanent';
   }
+
+  // After permanent signals are ruled out, allow token-endpoint text matching on any error status.
+  // Without status, do not guess from text alone.
   if (response.status !== undefined && response.status >= 400 && hasTransientYahooTokenFailureSignal(text)) {
     return 'transient_text';
   }
+
   return 'unexpected';
+}
+
+function isTransientYahooTokenFailure(response: Pick<YahooTokenResponse, 'status' | 'error' | 'error_description' | 'upstream_error_text'>): boolean {
+  const failureKind = classifyYahooTokenFailure(response);
+  return failureKind === 'transient_http' || failureKind === 'transient_text';
 }
 
 // Empty token error bodies carry no useful diagnostic detail for logs or callers.
@@ -707,7 +703,7 @@ async function getValidYahooAccessToken(
     clearTimeout(timer);
 
     if (result.error) {
-      const failureKind = classifyYahooTokenFailureForDiagnostics(result);
+      const failureKind = classifyYahooTokenFailure(result);
       const statusSuffix = result.status ? ` (HTTP ${result.status})` : '';
       logDiagnostic('refresh_response_error', {
         userId,
@@ -1279,13 +1275,13 @@ export async function handleYahooCredentialHealth(
     const refreshState = yahooRefreshState(credentials, checkedAtNowMs);
     const responseRefreshState = refreshState === 'none' ? 'idle' : refreshState;
     const leaseRemainingSeconds = boundedPositiveSecondsUntil(credentials.refreshLeaseExpiresAt, checkedAtNowMs);
-    const refresh: Record<string, string | number | undefined> = {
+    const refresh: Record<string, string | number> = {
       state: responseRefreshState,
     };
-    if (refreshState !== 'none') {
-      refresh.leaseExpiresAt = credentials.refreshLeaseExpiresAt?.toISOString();
+    if (refreshState !== 'none' && credentials.refreshLeaseExpiresAt) {
+      refresh.leaseExpiresAt = credentials.refreshLeaseExpiresAt.toISOString();
     }
-    if (refreshState === 'cooldown' || refreshState === 'in_progress') {
+    if ((refreshState === 'cooldown' || refreshState === 'in_progress') && leaseRemainingSeconds !== undefined) {
       refresh.retryAfterSeconds = leaseRemainingSeconds;
     }
     const checkedAt = checkedAtDate.toISOString();
