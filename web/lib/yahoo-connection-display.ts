@@ -90,9 +90,9 @@ export function getYahooStatusCopy(state: YahooDisplayState, health: YahooConnec
     case 'cooldown':
       return `Yahoo is temporarily unavailable. ${retryAfter ? `Try syncing leagues again in ${retryAfter}.` : 'Try syncing leagues again in a few minutes.'} If this keeps happening, reconnect Yahoo.`;
     case 'in_progress':
-      return `Yahoo is finishing a login check from another request. ${retryAfter ? `Try syncing leagues again in ${retryAfter}.` : 'Try syncing leagues again shortly.'}`;
+      return `Yahoo is refreshing credentials from another request. ${retryAfter ? `Try syncing leagues again in ${retryAfter}.` : 'Try syncing leagues again shortly.'}`;
     case 'reconnect_needed':
-      return 'Yahoo needs you to sign in again before Flaim can sync leagues or answer Yahoo questions.';
+      return 'Yahoo needs you to sign in again before Flaim can sync leagues.';
     case 'not_connected':
       return 'Connect your Yahoo account to add leagues.';
     case 'checking':

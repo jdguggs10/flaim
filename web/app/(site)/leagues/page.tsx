@@ -790,6 +790,7 @@ function LeaguesPageContent() {
 
     let isActive = true;
     const retryTimer = window.setTimeout(() => {
+      // Show the checking state immediately; checkYahooStatus clears it when the status request settles.
       setIsCheckingYahoo(true);
       void checkYahooStatus(() => isActive);
     }, Math.ceil(recheckAfterSeconds * 1000));
