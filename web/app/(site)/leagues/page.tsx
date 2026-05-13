@@ -166,6 +166,7 @@ const EMPTY_USER_PREFERENCES: UserPreferencesState = {
   defaultHockey: null,
 };
 const YAHOO_STATUS_RECHECK_FALLBACK_SECONDS = 5;
+const YAHOO_STATUS_RECHECK_MAX_SECONDS = 15 * 60;
 
 function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
@@ -867,21 +868,16 @@ function LeaguesPageContent() {
     if (refreshState !== 'cooldown' && refreshState !== 'in_progress') {
       return;
     }
-    const recheckAfterSeconds = typeof retryAfterSeconds === 'number' && retryAfterSeconds > 0
-      ? retryAfterSeconds
-      : YAHOO_STATUS_RECHECK_FALLBACK_SECONDS;
+    const recheckAfterSeconds = Math.min(
+      typeof retryAfterSeconds === 'number' && retryAfterSeconds > 0
+        ? retryAfterSeconds
+        : YAHOO_STATUS_RECHECK_FALLBACK_SECONDS,
+      YAHOO_STATUS_RECHECK_MAX_SECONDS
+    );
 
     let isActive = true;
     const retryTimer = window.setTimeout(() => {
-      setYahooHealth((current) => {
-        if (
-          current?.refreshState === refreshState &&
-          current.retryAfterSeconds === retryAfterSeconds
-        ) {
-          return { ...current, retryAfterSeconds: undefined };
-        }
-        return current;
-      });
+      setIsCheckingYahoo(true);
       void checkYahooStatus(() => isActive);
     }, Math.ceil(recheckAfterSeconds * 1000));
 
@@ -1634,8 +1630,6 @@ function LeaguesPageContent() {
   const isYahooTemporarilyBusy =
     yahooDisplayState === 'cooldown' ||
     yahooDisplayState === 'in_progress';
-  const isYahooSyncTemporarilyBlocked =
-    isYahooTemporarilyBusy;
   const shouldShowYahooStatusAlert =
     isYahooTemporarilyBusy ||
     yahooDisplayState === 'reconnect_needed';
@@ -2721,7 +2715,7 @@ function LeaguesPageContent() {
                           variant="default"
                           size="sm"
                           onClick={discoverYahooLeagues}
-                          disabled={isDiscoveringYahoo || isYahooSyncTemporarilyBlocked}
+                          disabled={isDiscoveringYahoo || isYahooTemporarilyBusy}
                           className="w-full sm:w-auto"
                         >
                           {isDiscoveringYahoo ? (
