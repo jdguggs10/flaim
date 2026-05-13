@@ -48,6 +48,26 @@ function yahooRefreshDiagnostics(spy: { mock: { calls: unknown[][] } }): Array<R
     .filter((entry): entry is Record<string, unknown> => entry?.component === 'yahoo-connect');
 }
 
+function expectNoRawYahooTokenFields(value: unknown): void {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      expectNoRawYahooTokenFields(item);
+    }
+    return;
+  }
+
+  if (!value || typeof value !== 'object') {
+    return;
+  }
+
+  const record = value as Record<string, unknown>;
+  expect(Object.keys(record)).not.toContain('accessToken');
+  expect(Object.keys(record)).not.toContain('refreshToken');
+  for (const item of Object.values(record)) {
+    expectNoRawYahooTokenFields(item);
+  }
+}
+
 describe('yahoo-connect-handlers', () => {
   let mockStorage: {
     createPlatformOAuthState: ReturnType<typeof vi.fn>;
@@ -1362,8 +1382,7 @@ describe('yahoo-connect-handlers', () => {
         accessTokenState: 'fresh',
         refreshState: 'idle',
       });
-      expect(JSON.stringify(body)).not.toContain('access-token');
-      expect(JSON.stringify(body)).not.toContain('refresh-token');
+      expectNoRawYahooTokenFields(body);
     });
 
     it('returns coarse cooldown health without exposing diagnostic fields', async () => {
@@ -1393,6 +1412,7 @@ describe('yahoo-connect-handlers', () => {
             retryAfterSeconds: 300,
           },
         });
+        expectNoRawYahooTokenFields(body);
         expect(JSON.stringify(body)).not.toContain('owner-1');
         expect(JSON.stringify(body)).not.toContain('yahooGuidPresent');
         expect(JSON.stringify(body)).not.toContain('expiresAt');

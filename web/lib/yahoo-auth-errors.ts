@@ -31,6 +31,11 @@ export function formatYahooRetryAfter(retryAfterSeconds?: number): string | null
     return `${roundedSeconds} second${roundedSeconds === 1 ? '' : 's'}`;
   }
 
+  if (retryAfterSeconds >= 60 * 60) {
+    const roundedHours = Math.max(1, Math.round(retryAfterSeconds / (60 * 60)));
+    return `about ${roundedHours} hour${roundedHours === 1 ? '' : 's'}`;
+  }
+
   const roundedMinutes = Math.max(1, Math.round(retryAfterSeconds / 60));
   return `about ${roundedMinutes} minute${roundedMinutes === 1 ? '' : 's'}`;
 }

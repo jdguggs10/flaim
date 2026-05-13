@@ -15,6 +15,7 @@ describe('Yahoo auth error helpers', () => {
     expect(formatYahooRetryAfter(30)).toBe('30 seconds');
     expect(formatYahooRetryAfter(60)).toBe('about 1 minute');
     expect(formatYahooRetryAfter(61)).toBe('about 1 minute');
+    expect(formatYahooRetryAfter(7200)).toBe('about 2 hours');
     expect(formatYahooRetryAfter(0)).toBeNull();
     expect(formatYahooRetryAfter(-1)).toBeNull();
     expect(formatYahooRetryAfter(undefined)).toBeNull();
