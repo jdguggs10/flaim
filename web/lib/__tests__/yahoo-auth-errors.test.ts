@@ -7,6 +7,7 @@ import {
   isYahooReconnectRequired,
   isYahooTransientAuthResponse,
   parseYahooDiscoverErrorResponse,
+  parseYahooRetryAfterSeconds,
 } from '../yahoo-auth-errors';
 
 describe('Yahoo auth error helpers', () => {
@@ -18,6 +19,18 @@ describe('Yahoo auth error helpers', () => {
     expect(formatYahooRetryAfter(-1)).toBeNull();
     expect(formatYahooRetryAfter(undefined)).toBeNull();
     expect(formatYahooRetryAfter(Number.NaN)).toBeNull();
+  });
+
+  it('parses retry-after query params defensively', () => {
+    expect(parseYahooRetryAfterSeconds('45')).toBe(45);
+    expect(parseYahooRetryAfterSeconds(' 45 ')).toBe(45);
+    expect(parseYahooRetryAfterSeconds(null)).toBeUndefined();
+    expect(parseYahooRetryAfterSeconds('')).toBeUndefined();
+    expect(parseYahooRetryAfterSeconds('0')).toBeUndefined();
+    expect(parseYahooRetryAfterSeconds('-1')).toBeUndefined();
+    expect(parseYahooRetryAfterSeconds('1e10')).toBeUndefined();
+    expect(parseYahooRetryAfterSeconds('45 seconds')).toBeUndefined();
+    expect(parseYahooRetryAfterSeconds('Infinity')).toBeUndefined();
   });
 
   it('uses the shared connect-message copy for transient notices', () => {

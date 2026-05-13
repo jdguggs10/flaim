@@ -35,6 +35,20 @@ export function formatYahooRetryAfter(retryAfterSeconds?: number): string | null
   return `about ${roundedMinutes} minute${roundedMinutes === 1 ? '' : 's'}`;
 }
 
+export function parseYahooRetryAfterSeconds(value: string | null): number | undefined {
+  if (value === null) {
+    return undefined;
+  }
+
+  const trimmedValue = value.trim();
+  if (!/^\d+$/.test(trimmedValue)) {
+    return undefined;
+  }
+
+  const parsed = Number.parseInt(trimmedValue, 10);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : undefined;
+}
+
 function retryCopy(retryAfterSeconds?: number): string {
   const retryAfter = formatYahooRetryAfter(retryAfterSeconds);
   return retryAfter ? `Try again in ${retryAfter}.` : YAHOO_GENERIC_RETRY_COPY;
