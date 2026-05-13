@@ -165,7 +165,7 @@ const EMPTY_USER_PREFERENCES: UserPreferencesState = {
   defaultBasketball: null,
   defaultHockey: null,
 };
-const YAHOO_STATUS_RECHECK_FALLBACK_SECONDS = 5;
+const YAHOO_STATUS_RECHECK_FALLBACK_SECONDS = 30;
 const YAHOO_STATUS_RECHECK_MAX_SECONDS = 15 * 60;
 
 function capitalize(s: string): string {
@@ -1027,16 +1027,19 @@ function LeaguesPageContent() {
         if (isYahooTransientAuthResponse(data)) {
           // Surface the temporary Yahoo state where the sync/reconnect actions live,
           // instead of leaving the user with a detached page-level notice.
+          const retryAfterSeconds = typeof data.retry_after === 'number' &&
+            Number.isFinite(data.retry_after) &&
+            data.retry_after > 0
+            ? data.retry_after
+            : undefined;
           setIsYahooSetupOpen(true);
           setIsYahooConnected(true);
           setIsYahooReconnectNeeded(false);
-          if (data.retry_after !== undefined) {
-            setYahooHealth({
-              accessTokenState: 'needs_refresh',
-              refreshState: 'cooldown',
-              retryAfterSeconds: data.retry_after,
-            });
-          }
+          setYahooHealth({
+            accessTokenState: 'needs_refresh',
+            refreshState: 'cooldown',
+            retryAfterSeconds,
+          });
           setLeagueError(null);
           setLeagueNotice(null);
           shouldCheckYahooStatus = false;
