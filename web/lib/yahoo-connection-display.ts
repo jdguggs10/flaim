@@ -64,6 +64,7 @@ export function getYahooDisplayState(
 }
 
 export function getYahooBadgeCopy(state: YahooDisplayState): { label: string; className: string } {
+  // Keep badge classes as literal strings so Tailwind includes them in production CSS.
   switch (state) {
     case 'checking':
       return { label: 'Checking...', className: 'bg-muted text-muted-foreground' };

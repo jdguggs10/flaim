@@ -2586,7 +2586,6 @@ function LeaguesPageContent() {
               >
                 <div className="flex items-center gap-2">
                   <span className="text-lg">Yahoo</span>
-                  {/* Badge classes are literal strings in yahoo-connection-display.ts for Tailwind scanning. */}
                   <span className={`text-xs px-2 py-0.5 rounded-full ${yahooBadgeCopy.className}`}>
                     {isYahooStatusChecking ? (
                       <span className="flex items-center gap-1">
