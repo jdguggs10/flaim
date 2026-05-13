@@ -1027,6 +1027,8 @@ function LeaguesPageContent() {
           return;
         }
         if (isYahooTransientAuthResponse(data)) {
+          // Surface the temporary Yahoo state where the sync/reconnect actions live,
+          // instead of leaving the user with a detached page-level notice.
           setIsYahooSetupOpen(true);
           setIsYahooConnected(true);
           setIsYahooReconnectNeeded(false);

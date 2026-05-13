@@ -13,7 +13,7 @@ describe('Yahoo auth error helpers', () => {
   it('formats retry-after values for user-facing copy', () => {
     expect(formatYahooRetryAfter(30)).toBe('30 seconds');
     expect(formatYahooRetryAfter(60)).toBe('about 1 minute');
-    expect(formatYahooRetryAfter(61)).toBe('about 2 minutes');
+    expect(formatYahooRetryAfter(61)).toBe('about 1 minute');
     expect(formatYahooRetryAfter(undefined)).toBeNull();
     expect(formatYahooRetryAfter(Number.NaN)).toBeNull();
   });
