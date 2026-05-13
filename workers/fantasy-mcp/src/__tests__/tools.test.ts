@@ -136,6 +136,13 @@ describe('fantasy-mcp tools', () => {
     expect(USER_SESSION_WIDGET_HTML).toContain('isTrustedMessageEvent(event)');
   });
 
+  it('user session widget reports the card size instead of the host frame size', () => {
+    expect(USER_SESSION_WIDGET_HTML).toContain('var WIDGET_WIDTH = 353');
+    expect(USER_SESSION_WIDGET_HTML).toContain("document.querySelector('.widget')");
+    expect(USER_SESSION_WIDGET_HTML).toContain('Math.ceil(rect.width)');
+    expect(USER_SESSION_WIDGET_HTML).not.toContain('document.documentElement.scrollWidth');
+  });
+
   it('get_user_session returns only current-season leagues', async () => {
     const tool = getUnifiedTools().find((t) => t.name === 'get_user_session');
     expect(tool).toBeTruthy();

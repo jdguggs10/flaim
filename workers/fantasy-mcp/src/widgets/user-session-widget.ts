@@ -28,18 +28,23 @@ export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
 <title>Flaim</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html,
+  body {
+    width: 353px;
+    max-width: 353px;
+    overflow-x: hidden;
+    background: transparent;
+  }
   body {
     font-family: "Geist", "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     font-size: 14px;
     line-height: 1.5;
     color: #0d0d0d;
-    background: #fff;
-    width: 353px;
-    overflow-x: hidden;
     padding: 0;
   }
   .widget {
     position: relative;
+    width: 353px;
     background: #fff;
     border-radius: 24px;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
@@ -198,6 +203,7 @@ export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
   var SPORT_ORDER = { baseball: 0, football: 1, basketball: 2, hockey: 3 };
   var SPORT_EMOJI = { baseball: '⚾', football: '🏈', basketball: '🏀', hockey: '🏒' };
   var LEAGUES_URL = 'https://flaim.app/leagues';
+  var WIDGET_WIDTH = 353;
   var initId = 'flaim-init-' + Math.random().toString(36).slice(2);
   var initializedSent = false;
   var rendered = false;
@@ -260,13 +266,14 @@ export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
   }
 
   function sendSizeChanged() {
+    var widget = document.querySelector('.widget');
+    var rect = widget && widget.getBoundingClientRect ? widget.getBoundingClientRect() : null;
     postToParent({
       jsonrpc: '2.0',
       method: 'ui/notifications/size-changed',
       params: {
-        // Matches the ChatGPT text-response widget width declared above.
-        width: document.documentElement.scrollWidth || 353,
-        height: document.documentElement.scrollHeight || document.body.scrollHeight || 0,
+        width: rect && rect.width ? Math.ceil(rect.width) : WIDGET_WIDTH,
+        height: rect && rect.height ? Math.ceil(rect.height) : document.body.scrollHeight || 0,
       },
     });
   }
