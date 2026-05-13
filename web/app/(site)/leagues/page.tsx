@@ -165,6 +165,7 @@ const EMPTY_USER_PREFERENCES: UserPreferencesState = {
   defaultBasketball: null,
   defaultHockey: null,
 };
+const YAHOO_STATUS_RECHECK_FALLBACK_SECONDS = 5;
 
 function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
@@ -290,7 +291,9 @@ function parseYahooConnectionHealth(value: unknown): YahooConnectionHealth | nul
     return null;
   }
 
-  const retryAfterSeconds = typeof record.retryAfterSeconds === 'number' && Number.isFinite(record.retryAfterSeconds)
+  const retryAfterSeconds = typeof record.retryAfterSeconds === 'number' &&
+    Number.isFinite(record.retryAfterSeconds) &&
+    record.retryAfterSeconds > 0
     ? record.retryAfterSeconds
     : undefined;
 
@@ -861,13 +864,12 @@ function LeaguesPageContent() {
     }
     const refreshState = yahooHealth?.refreshState;
     const retryAfterSeconds = yahooHealth?.retryAfterSeconds;
-    if (
-      (refreshState !== 'cooldown' && refreshState !== 'in_progress') ||
-      typeof retryAfterSeconds !== 'number' ||
-      retryAfterSeconds <= 0
-    ) {
+    if (refreshState !== 'cooldown' && refreshState !== 'in_progress') {
       return;
     }
+    const recheckAfterSeconds = typeof retryAfterSeconds === 'number' && retryAfterSeconds > 0
+      ? retryAfterSeconds
+      : YAHOO_STATUS_RECHECK_FALLBACK_SECONDS;
 
     let isActive = true;
     const retryTimer = window.setTimeout(() => {
@@ -881,7 +883,7 @@ function LeaguesPageContent() {
         return current;
       });
       void checkYahooStatus(() => isActive);
-    }, Math.ceil(retryAfterSeconds * 1000));
+    }, Math.ceil(recheckAfterSeconds * 1000));
 
     return () => {
       isActive = false;
@@ -1629,15 +1631,13 @@ function LeaguesPageContent() {
   );
   const yahooBadgeCopy = getYahooBadgeCopy(yahooDisplayState);
   const yahooStatusCopy = getYahooStatusCopy(yahooDisplayState, displayYahooHealth);
-  const hasPositiveYahooRetryAfter =
-    typeof displayYahooHealth?.retryAfterSeconds === 'number' &&
-    displayYahooHealth.retryAfterSeconds > 0;
-  const isYahooSyncTemporarilyBlocked =
-    (yahooDisplayState === 'cooldown' || yahooDisplayState === 'in_progress') &&
-    hasPositiveYahooRetryAfter;
-  const shouldShowYahooStatusAlert =
+  const isYahooTemporarilyBusy =
     yahooDisplayState === 'cooldown' ||
-    yahooDisplayState === 'in_progress' ||
+    yahooDisplayState === 'in_progress';
+  const isYahooSyncTemporarilyBlocked =
+    isYahooTemporarilyBusy;
+  const shouldShowYahooStatusAlert =
+    isYahooTemporarilyBusy ||
     yahooDisplayState === 'reconnect_needed';
   const displaySleeperConnected = isAccountStateCurrent && isSleeperConnected;
   const displaySleeperUsername = isAccountStateCurrent ? sleeperUsername : null;
