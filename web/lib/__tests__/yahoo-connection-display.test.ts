@@ -57,6 +57,7 @@ describe('Yahoo display copy', () => {
 
   it('maps connection health to display state', () => {
     expect(getYahooDisplayState(false, false, false, null)).toBe('not_connected');
+    expect(getYahooDisplayState(false, true, false, null)).toBe('connected');
     expect(getYahooDisplayState(false, true, false, { accessTokenState: 'fresh', refreshState: 'idle' })).toBe('connected');
     expect(getYahooDisplayState(false, true, false, { accessTokenState: 'needs_refresh', refreshState: 'expired' })).toBe('connected');
     expect(getYahooDisplayState(false, true, false, { accessTokenState: 'needs_refresh', refreshState: 'cooldown' })).toBe('cooldown');

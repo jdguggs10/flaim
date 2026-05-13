@@ -59,8 +59,7 @@ export function getYahooDisplayState(
   if (!isConnected) return 'not_connected';
   if (health?.refreshState === 'cooldown') return 'cooldown';
   if (health?.refreshState === 'in_progress') return 'in_progress';
-  // Expired means a stale refresh lock, not a broken user connection.
-  if (health?.refreshState === 'expired') return 'connected';
+  // Idle and expired states are usable; expired only means a stale refresh lock.
   return 'connected';
 }
 
@@ -73,7 +72,7 @@ export function getYahooBadgeCopy(state: YahooDisplayState): { label: string; cl
     case 'cooldown':
       return { label: 'Temporarily unavailable', className: 'bg-warning/20 text-warning' };
     case 'in_progress':
-      return { label: 'Checking Yahoo', className: 'bg-warning/20 text-warning' };
+      return { label: 'Refreshing', className: 'bg-warning/20 text-warning' };
     case 'reconnect_needed':
       return { label: 'Reconnect needed', className: 'bg-destructive/10 text-destructive' };
     case 'not_connected':

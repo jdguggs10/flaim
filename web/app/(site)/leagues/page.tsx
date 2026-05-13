@@ -2602,7 +2602,7 @@ function LeaguesPageContent() {
               </button>
               {isYahooSetupOpen && (
                 <div id="yahoo-setup-content" className="px-4 pb-4 space-y-3">
-                  {!shouldShowYahooStatusAlert && (
+                  {!shouldShowYahooStatusAlert && yahooDisplayState !== 'checking' && (
                     <p className="text-sm text-muted-foreground">
                       {yahooStatusCopy}
                     </p>
