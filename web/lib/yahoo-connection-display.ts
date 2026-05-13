@@ -1,7 +1,10 @@
+import type {
+  YahooPublicAccessTokenState,
+  YahooPublicCredentialHealth,
+  YahooPublicRefreshState,
+} from '@flaim/worker-shared';
 import { formatYahooRetryAfter } from './yahoo-auth-errors';
 
-export type YahooAccessTokenState = 'fresh' | 'needs_refresh';
-export type YahooRefreshState = 'idle' | 'in_progress' | 'cooldown' | 'expired';
 export type YahooDisplayState =
   | 'checking'
   | 'not_connected'
@@ -10,14 +13,10 @@ export type YahooDisplayState =
   | 'cooldown'
   | 'reconnect_needed';
 
-export interface YahooConnectionHealth {
-  accessTokenState: YahooAccessTokenState;
-  refreshState: YahooRefreshState;
-  retryAfterSeconds?: number;
-}
+export type YahooConnectionHealth = YahooPublicCredentialHealth;
 
-const VALID_YAHOO_ACCESS_TOKEN_STATES = new Set<YahooAccessTokenState>(['fresh', 'needs_refresh']);
-const VALID_YAHOO_REFRESH_STATES = new Set<YahooRefreshState>(['idle', 'in_progress', 'cooldown', 'expired']);
+const VALID_YAHOO_ACCESS_TOKEN_STATES = new Set<YahooPublicAccessTokenState>(['fresh', 'needs_refresh']);
+const VALID_YAHOO_REFRESH_STATES = new Set<YahooPublicRefreshState>(['idle', 'in_progress', 'cooldown', 'expired']);
 
 export function parseYahooConnectionHealth(value: unknown): YahooConnectionHealth | null {
   if (!value || typeof value !== 'object') {
@@ -30,8 +29,8 @@ export function parseYahooConnectionHealth(value: unknown): YahooConnectionHealt
   if (
     typeof accessTokenState !== 'string' ||
     typeof refreshState !== 'string' ||
-    !VALID_YAHOO_ACCESS_TOKEN_STATES.has(accessTokenState as YahooAccessTokenState) ||
-    !VALID_YAHOO_REFRESH_STATES.has(refreshState as YahooRefreshState)
+    !VALID_YAHOO_ACCESS_TOKEN_STATES.has(accessTokenState as YahooPublicAccessTokenState) ||
+    !VALID_YAHOO_REFRESH_STATES.has(refreshState as YahooPublicRefreshState)
   ) {
     return null;
   }
@@ -43,8 +42,8 @@ export function parseYahooConnectionHealth(value: unknown): YahooConnectionHealt
     : undefined;
 
   return {
-    accessTokenState: accessTokenState as YahooAccessTokenState,
-    refreshState: refreshState as YahooRefreshState,
+    accessTokenState: accessTokenState as YahooPublicAccessTokenState,
+    refreshState: refreshState as YahooPublicRefreshState,
     retryAfterSeconds,
   };
 }
@@ -88,7 +87,7 @@ export function getYahooStatusCopy(state: YahooDisplayState, health: YahooConnec
 
   switch (state) {
     case 'connected':
-      return 'Sync leagues pulls your latest Yahoo leagues using your current Yahoo connection. Reconnect Yahoo opens Yahoo sign-in again if the connection needs repair.';
+      return 'Sync leagues pulls your latest Yahoo leagues using your current Yahoo connection. Reconnect Yahoo opens Yahoo sign-in again to repair the connection if it stops working.';
     case 'cooldown':
       return `Yahoo is temporarily unavailable. ${retryAfter ? `Try syncing leagues again in ${retryAfter}.` : 'Try syncing leagues again in a few minutes.'} If this keeps happening, reconnect Yahoo.`;
     case 'in_progress':

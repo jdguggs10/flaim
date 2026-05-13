@@ -27,6 +27,8 @@ import {
   isYahooTransientHttpStatus,
   parseRetryAfterSeconds,
   YahooAuthWorkerErrorCode,
+  type YahooPublicCredentialHealth,
+  type YahooPublicRefreshState,
 } from '@flaim/worker-shared';
 
 // =============================================================================
@@ -61,7 +63,6 @@ interface YahooTokenResponse {
 }
 
 type YahooCredentialRefreshState = 'none' | 'in_progress' | 'cooldown' | 'expired';
-type YahooPublicRefreshState = 'idle' | 'in_progress' | 'cooldown' | 'expired';
 type YahooTokenBodyClass =
   | 'empty'
   | 'json_error'
@@ -186,17 +187,12 @@ function publicYahooRefreshState(refreshState: YahooCredentialRefreshState): Yah
   return refreshState === 'none' ? 'idle' : refreshState;
 }
 
-function buildPublicYahooHealth(credentials: YahooCredentialHealth, nowMs = Date.now()): {
-  accessTokenState: 'fresh' | 'needs_refresh';
-  refreshState: YahooPublicRefreshState;
-  retryAfterSeconds?: number;
-} {
+function buildPublicYahooHealth(
+  credentials: YahooCredentialHealth,
+  nowMs = Date.now()
+): YahooPublicCredentialHealth {
   const refreshState = yahooRefreshState(credentials, nowMs);
-  const health: {
-    accessTokenState: 'fresh' | 'needs_refresh';
-    refreshState: YahooPublicRefreshState;
-    retryAfterSeconds?: number;
-  } = {
+  const health: YahooPublicCredentialHealth = {
     accessTokenState: credentials.needsRefresh ? 'needs_refresh' : 'fresh',
     refreshState: publicYahooRefreshState(refreshState),
   };

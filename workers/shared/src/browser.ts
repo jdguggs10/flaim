@@ -28,3 +28,8 @@ export type { SeasonSport } from './season';
 
 export { YahooAuthWorkerErrorCode } from './errors';
 export type { YahooAuthWorkerErrorCodeValue } from './errors';
+export type {
+  YahooPublicAccessTokenState,
+  YahooPublicCredentialHealth,
+  YahooPublicRefreshState,
+} from './yahoo';

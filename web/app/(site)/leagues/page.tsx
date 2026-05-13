@@ -938,8 +938,8 @@ function LeaguesPageContent() {
           return;
         }
         if (isYahooTransientAuthResponse(data)) {
-          // Surface the temporary Yahoo state where the sync/reconnect actions live,
-          // instead of leaving the user with a detached page-level notice.
+          // Intentionally open the Yahoo panel so the temporary state appears beside
+          // the Sync leagues and Reconnect Yahoo actions that resolve it.
           const retryAfterSeconds = typeof data.retry_after === 'number' &&
             Number.isFinite(data.retry_after) &&
             data.retry_after > 0
