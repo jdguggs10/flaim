@@ -172,7 +172,7 @@ const EMPTY_USER_PREFERENCES: UserPreferencesState = {
   defaultBasketball: null,
   defaultHockey: null,
 };
-const YAHOO_STATUS_RECHECK_FALLBACK_SECONDS = 30;
+const YAHOO_STATUS_RECHECK_FALLBACK_SECONDS = 60;
 const YAHOO_STATUS_RECHECK_MAX_SECONDS = 15 * 60;
 
 function capitalize(s: string): string {
@@ -2585,6 +2585,7 @@ function LeaguesPageContent() {
               >
                 <div className="flex items-center gap-2">
                   <span className="text-lg">Yahoo</span>
+                  {/* Badge classes are literal strings in yahoo-connection-display.ts for Tailwind scanning. */}
                   <span className={`text-xs px-2 py-0.5 rounded-full ${yahooBadgeCopy.className}`}>
                     {isYahooStatusChecking ? (
                       <span className="flex items-center gap-1">

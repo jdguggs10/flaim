@@ -72,7 +72,7 @@ export function getYahooBadgeCopy(state: YahooDisplayState): { label: string; cl
     case 'cooldown':
       return { label: 'Temporarily unavailable', className: 'bg-warning/20 text-warning' };
     case 'in_progress':
-      return { label: 'Refreshing', className: 'bg-warning/20 text-warning' };
+      return { label: 'Syncing', className: 'bg-warning/20 text-warning' };
     case 'reconnect_needed':
       return { label: 'Reconnect needed', className: 'bg-destructive/10 text-destructive' };
     case 'not_connected':
