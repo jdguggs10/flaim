@@ -19,18 +19,48 @@ const YAHOO_TRANSIENT_AUTH_ERRORS = new Set<string>([
 ]);
 
 const YAHOO_TRANSIENT_AUTH_FALLBACK =
-  'Yahoo is temporarily unavailable while refreshing your connection. Please try again in a few minutes.';
+  'Yahoo is temporarily unavailable. Try again in a few minutes.';
 
-export function getYahooConnectErrorMessage(error: string, description: string | null): string {
+export function formatYahooRetryAfter(retryAfterSeconds?: number): string | null {
+  if (typeof retryAfterSeconds !== 'number' || !Number.isFinite(retryAfterSeconds) || retryAfterSeconds <= 0) {
+    return null;
+  }
+
+  if (retryAfterSeconds < 60) {
+    const roundedSeconds = Math.ceil(retryAfterSeconds);
+    return `${roundedSeconds} second${roundedSeconds === 1 ? '' : 's'}`;
+  }
+
+  const roundedMinutes = Math.ceil(retryAfterSeconds / 60);
+  return `about ${roundedMinutes} minute${roundedMinutes === 1 ? '' : 's'}`;
+}
+
+function appendRetryAfter(message: string, retryAfterSeconds?: number): string {
+  const retryAfter = formatYahooRetryAfter(retryAfterSeconds);
+  if (!retryAfter) {
+    return message;
+  }
+
+  const messageWithoutGenericRetry = message
+    .replace(/ Please try again in a few minutes\.$/, '')
+    .replace(/ Try again in a few minutes\.$/, '');
+  return `${messageWithoutGenericRetry} Try again in ${retryAfter}.`;
+}
+
+export function getYahooConnectErrorMessage(
+  error: string,
+  description: string | null,
+  retryAfterSeconds?: number
+): string {
   switch (error) {
     case 'token_refresh_validation_failed':
       return 'Yahoo connection did not complete because the refresh token could not be validated. Please connect Yahoo again.';
     case YahooAuthWorkerErrorCode.REFRESH_TEMPORARILY_UNAVAILABLE:
-      return YAHOO_TRANSIENT_AUTH_FALLBACK;
+      return appendRetryAfter(YAHOO_TRANSIENT_AUTH_FALLBACK, retryAfterSeconds);
     case YahooAuthWorkerErrorCode.TOKEN_REFRESH_VALIDATION_UNAVAILABLE:
-      return 'Yahoo connection could not be validated because Yahoo was temporarily unavailable. Please try again in a few minutes.';
+      return appendRetryAfter('Yahoo connection could not be validated because Yahoo was temporarily unavailable. Try again in a few minutes.', retryAfterSeconds);
     case YahooAuthWorkerErrorCode.TOKEN_EXCHANGE_UNAVAILABLE:
-      return 'Yahoo connection could not be started because Yahoo was temporarily unavailable. Please try again in a few minutes.';
+      return appendRetryAfter('Yahoo connection could not be started because Yahoo was temporarily unavailable. Try again in a few minutes.', retryAfterSeconds);
     case 'token_exchange_failed':
       return description || 'Yahoo connection failed while exchanging the authorization code. Please try again.';
     case 'oauth_denied':
@@ -77,10 +107,10 @@ export function isYahooReconnectRequired(status: number, data: { error?: string;
   );
 }
 
-export function getYahooTransientAuthMessage(data: { error?: string; error_description?: string }): string {
+export function getYahooTransientAuthMessage(data: { error?: string; error_description?: string; retry_after?: number }): string {
   if (data.error && isYahooTransientAuthError(data.error)) {
-    return getYahooConnectErrorMessage(data.error, data.error_description || null);
+    return getYahooConnectErrorMessage(data.error, data.error_description || null, data.retry_after);
   }
 
-  return data.error_description || YAHOO_TRANSIENT_AUTH_FALLBACK;
+  return appendRetryAfter(data.error_description || YAHOO_TRANSIENT_AUTH_FALLBACK, data.retry_after);
 }

@@ -57,7 +57,7 @@ export default function PlatformsGuidePage() {
                 },
                 {
                   "@type": "HowToStep",
-                  name: "Authenticate Yahoo",
+                  name: "Connect Yahoo",
                   text: "Start Yahoo auth and approve Flaim access.",
                 },
                 {
@@ -236,6 +236,15 @@ export default function PlatformsGuidePage() {
             <h3 className="mb-2 font-medium">Yahoo troubleshooting</h3>
             <ul className="list-disc list-inside space-y-2 text-sm text-muted-foreground">
               <li>
+                Sync leagues pulls the latest league list using the current
+                Yahoo connection. Reconnect Yahoo opens Yahoo sign-in again.
+              </li>
+              <li>
+                Temporarily unavailable means Yahoo is asking Flaim to wait
+                before another sync. Try again after the suggested wait, or
+                reconnect Yahoo if it keeps happening.
+              </li>
+              <li>
                 Auth completed but Flaim still looks disconnected: retry from{" "}
                 <Link href="/leagues" className="text-primary hover:underline">
                   /leagues
@@ -247,7 +256,8 @@ export default function PlatformsGuidePage() {
                 has supported active leagues and reconnect.
               </li>
               <li>
-                Yahoo worked before and stopped: reconnect to refresh access.
+                Yahoo worked before and stopped: reconnect Yahoo to repair the
+                stored authorization.
               </li>
             </ul>
           </div>
