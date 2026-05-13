@@ -58,13 +58,14 @@ describe('Yahoo display copy', () => {
   it('maps connection health to display state', () => {
     expect(getYahooDisplayState(false, false, false, null)).toBe('not_connected');
     expect(getYahooDisplayState(false, true, false, { accessTokenState: 'fresh', refreshState: 'idle' })).toBe('connected');
+    expect(getYahooDisplayState(false, true, false, { accessTokenState: 'needs_refresh', refreshState: 'expired' })).toBe('connected');
     expect(getYahooDisplayState(false, true, false, { accessTokenState: 'needs_refresh', refreshState: 'cooldown' })).toBe('cooldown');
     expect(getYahooDisplayState(false, true, false, { accessTokenState: 'needs_refresh', refreshState: 'in_progress' })).toBe('in_progress');
   });
 
   it('returns badge and status copy for cooldown and reconnect-needed states', () => {
     expect(getYahooBadgeCopy('cooldown')).toEqual({
-      label: 'Yahoo temporarily unavailable',
+      label: 'Temporarily unavailable',
       className: 'bg-warning/20 text-warning',
     });
     expect(getYahooStatusCopy('cooldown', {

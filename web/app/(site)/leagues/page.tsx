@@ -694,6 +694,7 @@ function LeaguesPageContent() {
       const data = await res.json().catch(() => ({})) as {
         connected?: boolean;
         lastUpdated?: string;
+        // Keep the wire shape loose and validate it before using it in UI state.
         health?: unknown;
         error?: string;
       };
