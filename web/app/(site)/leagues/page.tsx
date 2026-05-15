@@ -47,12 +47,19 @@ import {
 import { useEspnCredentials } from '@/lib/use-espn-credentials';
 import { getDefaultSeasonYear, getPreviousSeasonYear, getSeasonYearOptions } from '@/lib/season-utils';
 import {
+  getYahooBadgeCopy,
+  getYahooDisplayState,
+  getYahooStatusCopy,
+  parseYahooConnectionHealth,
+  type YahooConnectionHealth,
+} from '@/lib/yahoo-connection-display';
+import {
   getYahooConnectErrorMessage,
-  getYahooTransientAuthMessage,
   isYahooReconnectRequired,
   isYahooTransientAuthError,
   isYahooTransientAuthResponse,
   parseYahooDiscoverErrorResponse,
+  parseYahooRetryAfterSeconds,
 } from '@/lib/yahoo-auth-errors';
 import { CHROME_EXTENSION_URL } from '@/config/constants';
 import { StepConnectAI } from '@/components/site/StepConnectAI';
@@ -165,6 +172,8 @@ const EMPTY_USER_PREFERENCES: UserPreferencesState = {
   defaultBasketball: null,
   defaultHockey: null,
 };
+const YAHOO_STATUS_RECHECK_FALLBACK_SECONDS = 60;
+const YAHOO_STATUS_RECHECK_MAX_SECONDS = 15 * 60;
 
 function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
@@ -372,6 +381,8 @@ function LeaguesPageContent() {
   const [espnAdvancedOpen, setEspnAdvancedOpen] = useState(false);
   const [isYahooSetupOpen, setIsYahooSetupOpen] = useState(false);
   const [isYahooConnected, setIsYahooConnected] = useState(false);
+  const [yahooHealth, setYahooHealth] = useState<YahooConnectionHealth | null>(null);
+  const [isYahooReconnectNeeded, setIsYahooReconnectNeeded] = useState(false);
   const [yahooLastUpdated, setYahooLastUpdated] = useState<string | null>(null);
   const [isCheckingYahoo, setIsCheckingYahoo] = useState(true);
   const [isYahooDisconnecting, setIsYahooDisconnecting] = useState(false);
@@ -379,7 +390,7 @@ function LeaguesPageContent() {
   const [isLoadingYahooLeagues, setIsLoadingYahooLeagues] = useState(true);
   const [isRefreshingEspn, setIsRefreshingEspn] = useState(false);
   const [isDiscoveringYahoo, setIsDiscoveringYahoo] = useState(false);
-  const [isRefreshingYahooAuth, setIsRefreshingYahooAuth] = useState(false);
+  const [isReconnectingYahoo, setIsReconnectingYahoo] = useState(false);
   const [sleeperLeagues, setSleeperLeagues] = useState<SleeperLeague[]>([]);
   const [deletingSleeperKey, setDeletingSleeperKey] = useState<string | null>(null);
   const [isSleeperSetupOpen, setIsSleeperSetupOpen] = useState(false);
@@ -430,6 +441,8 @@ function LeaguesPageContent() {
 
   const clearYahooConnectionState = useCallback(() => {
     setIsYahooConnected(false);
+    setYahooHealth(null);
+    setIsYahooReconnectNeeded(false);
     setYahooLastUpdated(null);
     setYahooLeagues([]);
   }, []);
@@ -459,7 +472,7 @@ function LeaguesPageContent() {
     setIsRefreshingEspn(false);
     setEspnAdvancedOpen(false);
     setIsDiscoveringYahoo(false);
-    setIsRefreshingYahooAuth(false);
+    setIsReconnectingYahoo(false);
     setIsYahooDisconnecting(false);
     setIsDiscoveringSleeper(false);
     setIsSleeperDisconnecting(false);
@@ -681,12 +694,16 @@ function LeaguesPageContent() {
       const data = await res.json().catch(() => ({})) as {
         connected?: boolean;
         lastUpdated?: string;
+        // Keep the wire shape loose and validate it before using it in UI state.
+        health?: unknown;
         error?: string;
       };
       if (res.ok) {
         if (!canApplyState(shouldApply)) return 'unknown';
         const connected = data.connected ?? false;
         setIsYahooConnected(connected);
+        setYahooHealth(connected ? parseYahooConnectionHealth(data.health) : null);
+        setIsYahooReconnectNeeded(false);
         setYahooLastUpdated(connected ? data.lastUpdated || null : null);
         if (!connected) {
           setYahooLeagues([]);
@@ -754,6 +771,42 @@ function LeaguesPageContent() {
       if (canApplyState(shouldApply)) setIsCheckingSleeper(false);
     }
   }, [clearSleeperConnectionState]);
+
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn || !userId) {
+      return;
+    }
+    const refreshState = yahooHealth?.refreshState;
+    const retryAfterSeconds = yahooHealth?.retryAfterSeconds;
+    if (refreshState !== 'cooldown' && refreshState !== 'in_progress') {
+      return;
+    }
+    const recheckAfterSeconds = Math.min(
+      typeof retryAfterSeconds === 'number' && retryAfterSeconds > 0
+        ? retryAfterSeconds
+        : YAHOO_STATUS_RECHECK_FALLBACK_SECONDS,
+      YAHOO_STATUS_RECHECK_MAX_SECONDS
+    );
+
+    let isActive = true;
+    const retryTimer = window.setTimeout(() => {
+      // Show the checking state immediately; checkYahooStatus clears it when the status request settles.
+      setIsCheckingYahoo(true);
+      void checkYahooStatus(() => isActive);
+    }, Math.ceil(recheckAfterSeconds * 1000));
+
+    return () => {
+      isActive = false;
+      window.clearTimeout(retryTimer);
+    };
+  }, [
+    checkYahooStatus,
+    isLoaded,
+    isSignedIn,
+    userId,
+    yahooHealth?.refreshState,
+    yahooHealth?.retryAfterSeconds,
+  ]);
 
   const loadYahooLeagues = useCallback(async (shouldApply?: () => boolean) => {
     if (canApplyState(shouldApply)) setIsLoadingYahooLeagues(true);
@@ -880,25 +933,45 @@ function LeaguesPageContent() {
           // The opened panel and notice are the reconnect prompt, so skip the error banner.
           setIsYahooSetupOpen(true);
           clearYahooConnectionState();
-          setLeagueNotice('Your Yahoo session has expired. Click Connect Yahoo to sign in again and pull your latest leagues.');
+          setIsYahooReconnectNeeded(true);
+          setLeagueNotice(null);
           shouldCheckYahooStatus = false;
           return;
         }
         if (isYahooTransientAuthResponse(data)) {
+          // Intentionally open the Yahoo panel so the temporary state appears beside
+          // the Sync leagues and Reconnect Yahoo actions that resolve it.
+          const retryAfterSeconds = typeof data.retry_after === 'number' &&
+            Number.isFinite(data.retry_after) &&
+            data.retry_after > 0
+            ? data.retry_after
+            : undefined;
+          setIsYahooSetupOpen(true);
           setIsYahooConnected(true);
+          setIsYahooReconnectNeeded(false);
+          setYahooHealth({
+            accessTokenState: 'needs_refresh',
+            refreshState: 'cooldown',
+            retryAfterSeconds,
+          });
           setLeagueError(null);
-          setLeagueNotice(getYahooTransientAuthMessage(data));
+          setLeagueNotice(null);
           shouldCheckYahooStatus = false;
           return;
         }
-        throw new Error(data.error_description || data.error || 'Failed to refresh Yahoo leagues');
+        throw new Error(data.error_description || data.error || 'Failed to sync Yahoo leagues');
       }
       didLoadYahooLeagues = true;
+      setYahooHealth({
+        accessTokenState: 'fresh',
+        refreshState: 'idle',
+      });
+      setIsYahooReconnectNeeded(false);
       await loadYahooLeagues(shouldApply);
     } catch (err) {
       if (shouldApply()) {
         console.error('Failed to discover Yahoo leagues:', err);
-        setLeagueError(err instanceof Error ? err.message : 'Failed to refresh Yahoo leagues');
+        setLeagueError(err instanceof Error ? err.message : 'Failed to sync Yahoo leagues');
       }
     } finally {
       if (shouldApply()) {
@@ -915,26 +988,27 @@ function LeaguesPageContent() {
     }
   }, [checkYahooStatus, clearYahooConnectionState, createAccountGuard, loadYahooLeagues]);
 
-  const refreshYahooAuth = () => {
+  const reconnectYahoo = () => {
     setLeagueError(null);
     setLeagueNotice(null);
-    setIsRefreshingYahooAuth(true);
+    setIsYahooReconnectNeeded(false);
+    setIsReconnectingYahoo(true);
     window.location.href = '/api/connect/yahoo/authorize';
   };
 
   useEffect(() => {
-    if (!isRefreshingYahooAuth) {
+    if (!isReconnectingYahoo) {
       return;
     }
 
-    const resetRefreshState = () => setIsRefreshingYahooAuth(false);
-    const resetTimer = window.setTimeout(resetRefreshState, 15_000);
+    const resetReconnectState = () => setIsReconnectingYahoo(false);
+    const resetTimer = window.setTimeout(resetReconnectState, 15_000);
     const handlePageHide = () => {
       window.clearTimeout(resetTimer);
     };
     const handlePageShow = (event: PageTransitionEvent) => {
       if (event.persisted) {
-        resetRefreshState();
+        resetReconnectState();
       }
     };
 
@@ -946,7 +1020,7 @@ function LeaguesPageContent() {
       window.removeEventListener('pagehide', handlePageHide);
       window.removeEventListener('pageshow', handlePageShow);
     };
-  }, [isRefreshingYahooAuth]);
+  }, [isReconnectingYahoo]);
 
   const disconnectYahoo = useCallback(async () => {
     const shouldApply = createAccountGuard();
@@ -956,9 +1030,7 @@ function LeaguesPageContent() {
     try {
       const res = await fetch('/api/connect/yahoo/disconnect', { method: 'DELETE' });
       if (shouldApply() && res.ok) {
-        setIsYahooConnected(false);
-        setYahooLastUpdated(null);
-        setYahooLeagues([]);
+        clearYahooConnectionState();
       }
     } catch (err) {
       if (shouldApply()) {
@@ -970,7 +1042,7 @@ function LeaguesPageContent() {
         setIsYahooDisconnecting(false);
       }
     }
-  }, [createAccountGuard]);
+  }, [clearYahooConnectionState, createAccountGuard]);
 
   useEffect(() => {
     if (!isLoaded) {
@@ -1036,12 +1108,13 @@ function LeaguesPageContent() {
 
     const yahooError = searchParams.get('error');
     if (yahooError) {
+      const retryAfter = parseYahooRetryAfterSeconds(searchParams.get('retry_after'));
       if (isYahooTransientAuthError(yahooError)) {
         setLeagueError(null);
-        setLeagueNotice(getYahooConnectErrorMessage(yahooError, searchParams.get('error_description')));
+        setLeagueNotice(getYahooConnectErrorMessage(yahooError, searchParams.get('error_description'), retryAfter));
       } else {
         setLeagueNotice(null);
-        setLeagueError(getYahooConnectErrorMessage(yahooError, searchParams.get('error_description')));
+        setLeagueError(getYahooConnectErrorMessage(yahooError, searchParams.get('error_description'), retryAfter));
         setIsYahooSetupOpen(true);
       }
       router.replace('/leagues', { scroll: false });
@@ -1051,6 +1124,8 @@ function LeaguesPageContent() {
     if (yahooParam === 'connected') {
       // Just came from OAuth — trust the param, skip status check
       setIsYahooConnected(true);
+      setYahooHealth(null);
+      setIsYahooReconnectNeeded(false);
       setIsCheckingYahoo(false);
       void discoverYahooLeagues();
       router.replace('/leagues', { scroll: false });
@@ -1457,7 +1532,23 @@ function LeaguesPageContent() {
   const isEspnStatusChecking = !isAccountStateCurrent || isCheckingCreds;
   const displayYahooConnected = isAccountStateCurrent && isYahooConnected;
   const displayYahooLastUpdated = isAccountStateCurrent ? yahooLastUpdated : null;
+  const displayYahooHealth = isAccountStateCurrent ? yahooHealth : null;
+  const displayYahooReconnectNeeded = isAccountStateCurrent && isYahooReconnectNeeded;
   const isYahooStatusChecking = !isAccountStateCurrent || isCheckingYahoo;
+  const yahooDisplayState = getYahooDisplayState(
+    isYahooStatusChecking,
+    displayYahooConnected,
+    displayYahooReconnectNeeded,
+    displayYahooHealth
+  );
+  const yahooBadgeCopy = getYahooBadgeCopy(yahooDisplayState);
+  const yahooStatusCopy = getYahooStatusCopy(yahooDisplayState, displayYahooHealth);
+  const isYahooTemporarilyBusy =
+    yahooDisplayState === 'cooldown' ||
+    yahooDisplayState === 'in_progress';
+  const shouldShowYahooStatusAlert =
+    isYahooTemporarilyBusy ||
+    yahooDisplayState === 'reconnect_needed';
   const displaySleeperConnected = isAccountStateCurrent && isSleeperConnected;
   const displaySleeperUsername = isAccountStateCurrent ? sleeperUsername : null;
   const displaySleeperLastUpdated = isAccountStateCurrent ? sleeperLastUpdated : null;
@@ -1499,7 +1590,7 @@ function LeaguesPageContent() {
               <div className="space-y-2">
                 <h2 className="font-medium">What happens here</h2>
                 <ul className="space-y-2 text-sm text-muted-foreground">
-                  <li>Connect your fantasy platforms and refresh league data</li>
+                  <li>Connect your fantasy platforms and sync league data</li>
                   <li>Copy the Flaim MCP name and URL for Claude, ChatGPT, or Perplexity</li>
                   <li>Choose defaults and manage seasons once your account is linked</li>
                 </ul>
@@ -1543,7 +1634,7 @@ function LeaguesPageContent() {
 
         {displayLeagueNotice && (
           <Alert className="bg-info/10 border-info/30 text-info">
-            <CheckCircle2 className="h-4 w-4" />
+            <Info className="h-4 w-4" />
             <AlertDescription>{displayLeagueNotice}</AlertDescription>
           </Alert>
         )}
@@ -1942,7 +2033,7 @@ function LeaguesPageContent() {
               <div className="min-w-0 space-y-2">
                 <CardTitle className="text-lg">1. Connect Platforms</CardTitle>
                 <CardDescription>
-                  Connect, refresh, or manually add leagues from ESPN, Yahoo, and Sleeper here.
+                  Connect, sync, or manually add leagues from ESPN, Yahoo, and Sleeper here.
                 </CardDescription>
               </div>
               <ChevronDown
@@ -2495,7 +2586,14 @@ function LeaguesPageContent() {
               >
                 <div className="flex items-center gap-2">
                   <span className="text-lg">Yahoo</span>
-                  <ConnectionBadge isChecking={isYahooStatusChecking} isConnected={displayYahooConnected} />
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${yahooBadgeCopy.className}`}>
+                    {isYahooStatusChecking ? (
+                      <span className="flex items-center gap-1">
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        {yahooBadgeCopy.label}
+                      </span>
+                    ) : yahooBadgeCopy.label}
+                  </span>
                 </div>
                 <ChevronDown
                   className={`h-5 w-5 text-muted-foreground transition-transform ${
@@ -2505,11 +2603,17 @@ function LeaguesPageContent() {
               </button>
               {isYahooSetupOpen && (
                 <div id="yahoo-setup-content" className="px-4 pb-4 space-y-3">
-                  <p className="text-sm text-muted-foreground">
-                    {displayYahooConnected
-                      ? 'Refresh pulls your latest leagues using the stored Yahoo connection. If Yahoo reports that access expired, you will be asked to reconnect.'
-                      : 'Connect your Yahoo account to add leagues.'}
-                  </p>
+                  {!shouldShowYahooStatusAlert && yahooDisplayState !== 'checking' && (
+                    <p className="text-sm text-muted-foreground">
+                      {yahooStatusCopy}
+                    </p>
+                  )}
+                  {shouldShowYahooStatusAlert && (
+                    <Alert variant={yahooDisplayState === 'reconnect_needed' ? 'destructive' : 'warning'}>
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>{yahooStatusCopy}</AlertDescription>
+                    </Alert>
+                  )}
                   {isYahooStatusChecking ? (
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <Loader2 className="h-4 w-4 animate-spin" />
@@ -2522,20 +2626,40 @@ function LeaguesPageContent() {
                           Last updated: {formatLastUpdated(displayYahooLastUpdated)}
                         </p>
                       )}
-                      <div className="flex gap-2">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                         <Button
-                          variant="outline"
+                          variant="default"
                           size="sm"
                           onClick={discoverYahooLeagues}
-                          disabled={isDiscoveringYahoo}
+                          disabled={isDiscoveringYahoo || isYahooTemporarilyBusy}
+                          className="w-full sm:w-auto"
                         >
                           {isDiscoveringYahoo ? (
                             <>
                               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                              Refreshing...
+                              Syncing...
                             </>
                           ) : (
-                            'Refresh'
+                            <>
+                              <RefreshCw className="mr-2 h-4 w-4" />
+                              Sync leagues
+                            </>
+                          )}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={reconnectYahoo}
+                          disabled={isReconnectingYahoo}
+                          className="w-full sm:w-auto"
+                        >
+                          {isReconnectingYahoo ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Opening Yahoo...
+                            </>
+                          ) : (
+                            'Reconnect Yahoo'
                           )}
                         </Button>
                         <Button
@@ -2543,7 +2667,7 @@ function LeaguesPageContent() {
                           size="sm"
                           onClick={disconnectYahoo}
                           disabled={isYahooDisconnecting}
-                          className="text-destructive hover:text-destructive"
+                          className="w-full text-destructive hover:text-destructive sm:w-auto"
                         >
                           {isYahooDisconnecting ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
@@ -2556,21 +2680,23 @@ function LeaguesPageContent() {
                   ) : (
                     <div className="p-4 border rounded-lg bg-muted/40 space-y-2">
                       <p className="text-sm text-muted-foreground">
-                        Sign in with Yahoo to connect your fantasy leagues. Uses OAuth — no passwords stored.
+                        {yahooDisplayState === 'reconnect_needed'
+                          ? 'Sign in with Yahoo again to repair your connection. Uses OAuth — no passwords stored.'
+                          : 'Sign in with Yahoo to connect your fantasy leagues. Uses OAuth — no passwords stored.'}
                       </p>
                       <Button
                         variant="outline"
                         className="w-full"
-                        onClick={refreshYahooAuth}
-                        disabled={isRefreshingYahooAuth}
+                        onClick={reconnectYahoo}
+                        disabled={isReconnectingYahoo}
                       >
-                        {isRefreshingYahooAuth ? (
+                        {isReconnectingYahoo ? (
                           <>
                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                             Opening Yahoo...
                           </>
                         ) : (
-                          'Connect Yahoo'
+                          yahooDisplayState === 'reconnect_needed' ? 'Reconnect Yahoo' : 'Connect Yahoo'
                         )}
                       </Button>
                     </div>

@@ -373,16 +373,16 @@ export function StepConnectPlatforms({ className }: StepConnectPlatformsProps) {
             ) : yahooStatus === 'connected' ? (
               <div className="space-y-2">
                 <Button variant="outline" size="sm" className="w-full" onClick={handleConnectYahoo}>
-                  Refresh Yahoo Auth
+                  Reconnect Yahoo
                 </Button>
                 <div className="flex items-center justify-center gap-2 h-8 rounded-md px-3 text-xs font-medium w-full bg-muted text-muted-foreground">
                   <Check className="h-3.5 w-3.5" />
-                  Auth Connected
+                  Yahoo connected
                 </div>
               </div>
             ) : (
               <Button variant="outline" size="sm" className="w-full" onClick={handleConnectYahoo}>
-                Authenticate Yahoo
+                Connect Yahoo
               </Button>
             )}
           </div>

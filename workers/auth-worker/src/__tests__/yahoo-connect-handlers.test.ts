@@ -48,6 +48,26 @@ function yahooRefreshDiagnostics(spy: { mock: { calls: unknown[][] } }): Array<R
     .filter((entry): entry is Record<string, unknown> => entry?.component === 'yahoo-connect');
 }
 
+function expectNoRawYahooTokenFields(value: unknown): void {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      expectNoRawYahooTokenFields(item);
+    }
+    return;
+  }
+
+  if (!value || typeof value !== 'object') {
+    return;
+  }
+
+  const record = value as Record<string, unknown>;
+  expect(Object.keys(record)).not.toContain('accessToken');
+  expect(Object.keys(record)).not.toContain('refreshToken');
+  for (const item of Object.values(record)) {
+    expectNoRawYahooTokenFields(item);
+  }
+}
+
 describe('yahoo-connect-handlers', () => {
   let mockStorage: {
     createPlatformOAuthState: ReturnType<typeof vi.fn>;
@@ -1339,11 +1359,10 @@ describe('yahoo-connect-handlers', () => {
   describe('handleYahooStatus', () => {
     it('returns connected=true with league count and lastUpdated when credentials exist', async () => {
       const mockUpdatedAt = new Date('2026-01-25T12:00:00Z');
-      mockStorage.getYahooCredentials.mockResolvedValue({
+      mockStorage.getYahooCredentialHealth.mockResolvedValue({
         clerkUserId: 'user_123',
-        accessToken: 'access',
-        refreshToken: 'refresh',
-        expiresAt: new Date(),
+        expiresAt: new Date('2026-01-25T13:00:00Z'),
+        yahooGuidPresent: true,
         needsRefresh: false,
         updatedAt: mockUpdatedAt,
       });
@@ -1359,10 +1378,51 @@ describe('yahoo-connect-handlers', () => {
       expect(body.connected).toBe(true);
       expect(body.leagueCount).toBe(2);
       expect(body.lastUpdated).toBe(mockUpdatedAt.toISOString());
+      expect(body.health).toEqual({
+        accessTokenState: 'fresh',
+        refreshState: 'idle',
+      });
+      expectNoRawYahooTokenFields(body);
+    });
+
+    it('returns coarse cooldown health without exposing diagnostic fields', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-05-12T01:30:00Z'));
+      try {
+        mockStorage.getYahooCredentialHealth.mockResolvedValue({
+          clerkUserId: 'user_123',
+          expiresAt: new Date('2026-05-12T01:31:00Z'),
+          yahooGuidPresent: true,
+          needsRefresh: true,
+          refreshLeaseOwner: 'cooldown:owner-1',
+          refreshLeaseExpiresAt: new Date('2026-05-12T01:35:00Z'),
+        });
+        mockStorage.getYahooLeagues.mockResolvedValue([]);
+
+        const response = await handleYahooStatus(env, 'user_123', corsHeaders);
+
+        expect(response.status).toBe(200);
+        const body = (await response.json()) as Record<string, unknown>;
+        expect(body).toMatchObject({
+          connected: true,
+          leagueCount: 0,
+          health: {
+            accessTokenState: 'needs_refresh',
+            refreshState: 'cooldown',
+            retryAfterSeconds: 300,
+          },
+        });
+        expectNoRawYahooTokenFields(body);
+        expect(JSON.stringify(body)).not.toContain('owner-1');
+        expect(JSON.stringify(body)).not.toContain('yahooGuidPresent');
+        expect(JSON.stringify(body)).not.toContain('expiresAt');
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('returns connected=false when no credentials exist', async () => {
-      mockStorage.getYahooCredentials.mockResolvedValue(null);
+      mockStorage.getYahooCredentialHealth.mockResolvedValue(null);
       mockStorage.getYahooLeagues.mockResolvedValue([]);
 
       const response = await handleYahooStatus(env, 'user_123', corsHeaders);
@@ -1372,6 +1432,7 @@ describe('yahoo-connect-handlers', () => {
       expect(body.connected).toBe(false);
       expect(body.leagueCount).toBe(0);
       expect(body.lastUpdated).toBeUndefined();
+      expect(body.health).toBeUndefined();
     });
   });
 

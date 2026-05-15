@@ -46,6 +46,13 @@ export type {
   YahooApiFailureKind,
 } from './http.js';
 
+// Yahoo public API contract types
+export type {
+  YahooPublicAccessTokenState,
+  YahooPublicCredentialHealth,
+  YahooPublicRefreshState,
+} from './yahoo.js';
+
 // Season utilities
 export {
   getDefaultSeasonYear,

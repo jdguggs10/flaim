@@ -17,7 +17,7 @@
  * For the PROVIDER side (issuing tokens TO AI clients), see oauth-handlers.ts.
  */
 
-import { YahooStorage, type YahooCredentials } from './yahoo-storage';
+import { YahooStorage, type YahooCredentialHealth, type YahooCredentials } from './yahoo-storage';
 import { getFrontendUrl, resolvePreviewOrigin } from './preview-url';
 import {
   YAHOO_DEFAULT_TRANSIENT_RETRY_AFTER_SECONDS,
@@ -27,6 +27,8 @@ import {
   isYahooTransientHttpStatus,
   parseRetryAfterSeconds,
   YahooAuthWorkerErrorCode,
+  type YahooPublicCredentialHealth,
+  type YahooPublicRefreshState,
 } from '@flaim/worker-shared';
 
 // =============================================================================
@@ -179,6 +181,26 @@ function yahooRefreshState(
   return credentials.refreshLeaseOwner.startsWith(REFRESH_COOLDOWN_OWNER_PREFIX)
     ? 'cooldown'
     : 'in_progress';
+}
+
+function publicYahooRefreshState(refreshState: YahooCredentialRefreshState): YahooPublicRefreshState {
+  return refreshState === 'none' ? 'idle' : refreshState;
+}
+
+function buildPublicYahooHealth(
+  credentials: YahooCredentialHealth,
+  nowMs = Date.now()
+): YahooPublicCredentialHealth {
+  const refreshState = yahooRefreshState(credentials, nowMs);
+  const health: YahooPublicCredentialHealth = {
+    accessTokenState: credentials.needsRefresh ? 'needs_refresh' : 'fresh',
+    refreshState: publicYahooRefreshState(refreshState),
+  };
+  const retryAfterSeconds = boundedPositiveSecondsUntil(credentials.refreshLeaseExpiresAt, nowMs);
+  if ((refreshState === 'cooldown' || refreshState === 'in_progress') && retryAfterSeconds !== undefined) {
+    health.retryAfterSeconds = retryAfterSeconds;
+  }
+  return health;
 }
 
 function logYahooRefreshDiagnostic(event: string, fields: YahooRefreshDiagnosticFields = {}): void {
@@ -1276,7 +1298,7 @@ export async function handleYahooCredentialHealth(
     const checkedAtNowMs = checkedAtDate.getTime();
     const refreshState = yahooRefreshState(credentials, checkedAtNowMs);
     // Keep the internal lease-state enum distinct from the external diagnostic contract.
-    const responseRefreshState = refreshState === 'none' ? 'idle' : refreshState;
+    const responseRefreshState = publicYahooRefreshState(refreshState);
     const leaseRemainingSeconds = boundedPositiveSecondsUntil(credentials.refreshLeaseExpiresAt, checkedAtNowMs);
     const refresh: { state: string; leaseExpiresAt?: string; retryAfterSeconds?: number } = {
       state: responseRefreshState,
@@ -1396,17 +1418,19 @@ export async function handleYahooStatus(
   try {
     const storage = YahooStorage.fromEnvironment(env);
 
-    // Get credentials (includes updatedAt) and leagues in parallel
+    // Public status exposes only coarse, non-secret health for the web UI.
     const [credentials, leagues] = await Promise.all([
-      storage.getYahooCredentials(userId),
+      storage.getYahooCredentialHealth(userId),
       storage.getYahooLeagues(userId),
     ]);
+    const checkedAtNowMs = Date.now();
 
     return new Response(
       JSON.stringify({
         connected: !!credentials,
         leagueCount: leagues.length,
         lastUpdated: credentials?.updatedAt?.toISOString(),
+        health: credentials ? buildPublicYahooHealth(credentials, checkedAtNowMs) : undefined,
       }),
       {
         status: 200,
