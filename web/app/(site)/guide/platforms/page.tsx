@@ -348,7 +348,7 @@ export default function PlatformsGuidePage() {
 
         <div className="flex items-center gap-4 border-t pt-4 text-sm">
           <Link href="/guide/ai" className="text-primary hover:underline">
-            ChatGPT setup &rarr;
+            AI setup &rarr;
           </Link>
           <Link href="/guide/sports" className="text-primary hover:underline">
             How Flaim analyzes sports &rarr;

@@ -393,7 +393,7 @@ export default function SportsGuidePage() {
             &larr; Platform setup
           </Link>
           <Link href="/guide/ai" className="text-primary hover:underline">
-            ChatGPT setup &rarr;
+            AI setup &rarr;
           </Link>
         </div>
       </div>
