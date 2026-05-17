@@ -282,6 +282,42 @@ describe('yahoo-connect-handlers', () => {
       expect(exchangeBody.get('redirect_uri')).toBe('https://api.flaim.app/auth/connect/yahoo/callback');
     });
 
+    it('saves credentials when token exchange omits the optional Yahoo GUID', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      mockStorage.consumePlatformOAuthState.mockResolvedValue({
+        clerkUserId: 'user_abc123',
+        platform: 'yahoo',
+        redirectAfter: undefined,
+      });
+
+      mockFetch.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            access_token: 'yahoo-access-token',
+            refresh_token: 'yahoo-refresh-token',
+            expires_in: 3600,
+          }),
+          { status: 200 }
+        )
+      );
+
+      const request = new Request('https://api.flaim.app/connect/yahoo/callback?code=auth_code&state=user_abc123:nonce');
+
+      const response = await handleYahooCallback(request, env, corsHeaders);
+
+      expect(response.status).toBe(302);
+      expect(mockStorage.saveYahooCredentials).toHaveBeenCalledWith(
+        expect.objectContaining({
+          clerkUserId: 'user_abc123',
+          accessToken: 'yahoo-access-token',
+          refreshToken: 'yahoo-refresh-token',
+          yahooGuid: undefined,
+        })
+      );
+      expect(warnSpy).toHaveBeenCalledWith('[yahoo-connect] Yahoo token exchange omitted GUID for user user_abc...');
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+
     it('does not save credentials when token exchange omits a refresh token', async () => {
       mockStorage.consumePlatformOAuthState.mockResolvedValue({
         clerkUserId: 'user_abc123',

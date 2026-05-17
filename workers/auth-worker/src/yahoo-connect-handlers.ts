@@ -1118,7 +1118,8 @@ export async function handleYahooCallback(
       return errorRedirect('token_exchange_failed', 'Yahoo did not return usable token fields');
     }
 
-    // Validate refresh token is present
+    // hasUsableTokenFields validates the access-token shape; reconnect must
+    // also return a refresh token for future lazy refreshes.
     if (!tokenResponse.refresh_token) {
       console.error('[yahoo-connect] Yahoo did not return a refresh token');
       return errorRedirect('token_exchange_failed', 'Yahoo did not provide a refresh token');
