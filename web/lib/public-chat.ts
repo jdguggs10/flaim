@@ -36,8 +36,8 @@ export const PUBLIC_DEMO_CONTEXT_VERSION = "v2";
 export const PUBLIC_CHAT_SIMPLE_PRESETS: readonly PublicChatPreset[] = [
   {
     id: "hot-hands",
-    title: "Who are this team's best players?",
-    userMessage: "Who are this team's best players?",
+    title: "Who are the top players on this roster?",
+    userMessage: "Who are the top players on this roster?",
     allowedTools: ["get_roster"] as const,
     rail: "top",
   },
@@ -71,8 +71,8 @@ export const PUBLIC_CHAT_SIMPLE_PRESETS: readonly PublicChatPreset[] = [
   },
   {
     id: "win-history",
-    title: "Has this team ever won this thing?",
-    userMessage: "Has this team ever won this thing?",
+    title: "Has this team ever won the championship?",
+    userMessage: "Has this team ever won the championship?",
     allowedTools: ["get_ancient_history", "get_standings"] as const,
     rail: "top",
   },
@@ -117,8 +117,8 @@ export const PUBLIC_CHAT_DEEP_PRESETS: readonly PublicChatPreset[] = [
   {
     id: "drop-target",
     rail: "bottom",
-    title: "What player should this team give up on?",
-    userMessage: "What player should this team give up on?",
+    title: "Who should this team consider cutting?",
+    userMessage: "Who should this team consider cutting?",
     allowedTools: ["get_roster", "get_players"] as const,
   },
   {

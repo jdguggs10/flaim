@@ -141,7 +141,7 @@ export default function AiGuidePage() {
         }}
       />
       <div className="container mx-auto max-w-2xl px-4 py-12">
-        <h1 className="mb-4 text-3xl font-bold">ChatGPT Setup</h1>
+        <h1 className="mb-4 text-3xl font-bold">ChatGPT & AI Setup</h1>
         <p className="mb-4 text-lg font-medium text-foreground">
           ChatGPT is the primary Flaim setup path. Flaim Fantasy is available in
           ChatGPT Apps for read-only fantasy sports analysis.
