@@ -21,12 +21,12 @@ export const metadata: Metadata = {
     template: "%s | Flaim",
   },
   description:
-    "Flaim Fantasy is approved for ChatGPT Apps and preparing for public ChatGPT availability. Connect ESPN, Yahoo, and Sleeper leagues now; manual MCP setup is available for Claude, Perplexity, Gemini CLI, and supported developer/testing setups.",
+    "Flaim Fantasy is available in ChatGPT Apps. Connect ESPN, Yahoo, and Sleeper leagues for read-only fantasy analysis in ChatGPT, with optional MCP setup for Claude, Perplexity, Gemini CLI, and supported developer/testing setups.",
   metadataBase: new URL("https://flaim.app"),
   openGraph: {
     title: "Flaim — Fantasy Leagues for ChatGPT",
     description:
-      "Flaim Fantasy is approved for ChatGPT Apps and preparing for public ChatGPT availability. Connect ESPN, Yahoo, and Sleeper leagues now for read-only fantasy analysis.",
+      "Flaim Fantasy is available in ChatGPT Apps. Connect ESPN, Yahoo, and Sleeper leagues for read-only, league-specific fantasy analysis.",
     url: "https://flaim.app",
     siteName: "Flaim",
     type: "website",
@@ -36,7 +36,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Flaim — Fantasy Leagues for ChatGPT",
     description:
-      "Flaim Fantasy is approved for ChatGPT Apps and preparing for public ChatGPT availability. Connect ESPN, Yahoo, and Sleeper leagues now.",
+      "Flaim Fantasy is available in ChatGPT Apps. Connect ESPN, Yahoo, and Sleeper leagues for read-only fantasy analysis.",
   },
   icons: {
     icon: [
@@ -80,7 +80,7 @@ export default function RootLayout({
                 "@type": "SoftwareApplication",
                 name: "Flaim Fantasy",
                 description:
-                  "Flaim Fantasy connects ESPN, Yahoo, and Sleeper fantasy league data to ChatGPT for read-only, league-specific analysis after public publishing. It is approved for ChatGPT Apps and preparing for public ChatGPT availability.",
+                  "Flaim Fantasy connects ESPN, Yahoo, and Sleeper fantasy league data to ChatGPT for read-only, league-specific analysis through ChatGPT Apps.",
                 applicationCategory: "SportsApplication",
                 applicationSubCategory: "Fantasy Sports AI Tool",
                 operatingSystem: "Web",
@@ -90,8 +90,8 @@ export default function RootLayout({
                   "ESPN fantasy league integration",
                   "Yahoo fantasy league integration",
                   "Sleeper fantasy league integration",
-                  "Approved for ChatGPT Apps",
-                  "Preparing for public ChatGPT availability",
+                  "Available in ChatGPT Apps",
+                  "ChatGPT fantasy sports analysis",
                   "MCP (Model Context Protocol) server",
                   "Manual MCP setup for Claude, Perplexity, Gemini CLI, and supported developer/testing setups",
                   "Read-only access — no trades, drops, or roster changes",

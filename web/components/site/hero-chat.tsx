@@ -97,10 +97,9 @@ export function HeroChat() {
           </span>
         </h1>
         <p className="max-w-xl text-lg leading-7 text-foreground/70 md:text-xl md:leading-8">
-          Flaim Fantasy has been approved for ChatGPT Apps and is preparing for
-          public ChatGPT availability. Connect your ESPN, Yahoo, and Sleeper leagues
-          now so ChatGPT can answer with your real fantasy context when it goes
-          live.
+          Flaim Fantasy is available in ChatGPT Apps. Connect ESPN, Yahoo, and
+          Sleeper, then ask ChatGPT about your real rosters, matchups,
+          standings, free agents, and league history.
         </p>
       </div>
     </section>

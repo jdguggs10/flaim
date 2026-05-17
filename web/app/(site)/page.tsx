@@ -6,7 +6,7 @@ import { HeroChat } from "@/components/site/hero-chat";
 export const metadata: Metadata = {
   title: "Flaim — Fantasy Leagues for ChatGPT",
   description:
-    "Flaim Fantasy is approved for ChatGPT Apps and preparing for public ChatGPT availability. Connect ESPN, Yahoo, and Sleeper leagues now; manual MCP setup is available for Claude, Perplexity, Gemini CLI, and supported developer/testing setups.",
+    "Flaim Fantasy is available in ChatGPT Apps. Connect ESPN, Yahoo, and Sleeper leagues for read-only fantasy analysis in ChatGPT, with optional MCP setup for Claude, Perplexity, Gemini CLI, and supported developer/testing setups.",
   alternates: {
     canonical: "https://flaim.app",
   },
@@ -57,7 +57,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
                 name: "Do I need a Chrome extension?",
                 acceptedAnswer: {
                   "@type": "Answer",
-                  text: "Only for ESPN. The Flaim Chrome extension syncs your ESPN cookies automatically so Flaim can read your private leagues. Yahoo connects through OAuth, and Sleeper just needs your username. That league setup is separate from the ChatGPT Apps public publishing timeline.",
+                  text: "Only for ESPN. The Flaim Chrome extension syncs your ESPN cookies automatically so Flaim can read your private leagues. Yahoo connects through OAuth, and Sleeper just needs your username. After that, ChatGPT can use your connected Flaim account for read-only fantasy analysis.",
                 },
               },
               {
@@ -65,7 +65,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
                 name: "Which AI apps work with Flaim?",
                 acceptedAnswer: {
                   "@type": "Answer",
-                  text: "Flaim Fantasy has been approved for ChatGPT Apps and is preparing for public ChatGPT availability. Until public publishing is complete, manual MCP setup can be used with Claude, Perplexity, Gemini CLI, and supported developer/testing setups using https://api.flaim.app/mcp.",
+                  text: "Flaim Fantasy is available in ChatGPT Apps. Manual MCP setup remains available for Claude, Perplexity, Gemini CLI, and supported developer/testing setups using https://api.flaim.app/mcp.",
                 },
               },
               {
@@ -81,7 +81,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
                 name: "Where do I finish setup?",
                 acceptedAnswer: {
                   "@type": "Answer",
-                  text: "Use flaim.app/leagues to connect ESPN, Yahoo, and Sleeper now. Flaim Fantasy is approved for ChatGPT Apps and preparing for public ChatGPT availability, so connecting leagues now gets your fantasy context ready. Manual MCP setup for Claude, Perplexity, Gemini CLI, and supported developer/testing setups is documented at flaim.app/guide/ai.",
+                  text: "Use flaim.app/leagues to connect ESPN, Yahoo, and Sleeper, then open Flaim Fantasy in ChatGPT Apps. Manual MCP setup for Claude, Perplexity, Gemini CLI, and supported developer/testing setups is documented at flaim.app/guide/ai.",
                 },
               },
             ],
@@ -342,10 +342,8 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
             Ready to connect your leagues?
           </h2>
           <p className="text-muted-foreground mb-6">
-            Flaim Fantasy is approved for ChatGPT Apps and preparing for public
-            ChatGPT availability.
-            Connect your leagues now so your fantasy context is ready when the
-            app becomes publicly available in ChatGPT.
+            Flaim Fantasy is available in ChatGPT Apps. Connect your leagues so
+            ChatGPT can answer with your real fantasy context.
           </p>
           <div className="flex flex-col items-center justify-center gap-3 sm:flex-row">
             <SignedOut>
@@ -381,8 +379,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
                   Only for ESPN. The Flaim Chrome extension syncs your ESPN
                   cookies automatically so Flaim can read your private leagues.
                   Yahoo connects through OAuth, Sleeper just needs your
-                  username. That league setup is separate from the ChatGPT Apps
-                  public publishing timeline.
+                  username. ChatGPT uses the league data you connect here.
                 </p>
               </div>
             </details>
@@ -395,10 +392,8 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
               </summary>
               <div className="px-4 pb-4 text-sm text-muted-foreground space-y-2">
                 <p>
-                  Flaim Fantasy has been approved for ChatGPT Apps and is
-                  preparing for public ChatGPT availability. Until public
-                  publishing is complete, manual MCP setup can be used with
-                  Claude, Perplexity, Gemini CLI, and supported
+                  Flaim Fantasy is available in ChatGPT Apps. Manual MCP setup
+                  can also be used with Claude, Perplexity, Gemini CLI, and supported
                   developer/testing setups using{" "}
                   <code className="rounded bg-muted px-1 py-0.5 text-xs">
                     https://api.flaim.app/mcp
@@ -441,10 +436,8 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
                   >
                     Your Leagues
                   </Link>{" "}
-                  to connect ESPN, Yahoo, and Sleeper now. Flaim Fantasy is
-                  approved for ChatGPT Apps and preparing for public ChatGPT
-                  availability, so connecting leagues now gets your fantasy
-                  context ready. The{" "}
+                  to connect ESPN, Yahoo, and Sleeper, then open Flaim Fantasy
+                  in ChatGPT. The{" "}
                   <Link
                     href="/guide/platforms"
                     className="text-primary hover:underline"

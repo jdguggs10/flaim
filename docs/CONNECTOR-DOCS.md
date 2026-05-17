@@ -1,6 +1,6 @@
 # Flaim Setup Docs (ChatGPT App + Supported MCP Clients)
 
-This page is the single user-facing guide for preparing Flaim for the approved ChatGPT app while public publishing is pending, plus supported MCP/direct clients such as Claude, Perplexity, and Gemini CLI.
+This page is the single user-facing guide for using Flaim Fantasy in ChatGPT Apps, plus secondary MCP/direct setup for Claude, Perplexity, Gemini CLI, and developer testing.
 
 ## What Flaim Is
 
@@ -33,7 +33,7 @@ Flaim cannot place trades, add/drop players, or modify league settings.
 
 ### ChatGPT App
 
-Use the Flaim ChatGPT app experience when public ChatGPT availability opens. It uses the same read-only league tools and OAuth flow described on this page.
+Use Flaim Fantasy in ChatGPT Apps as the primary experience. It uses the same read-only league tools and OAuth flow described on this page.
 
 ### Direct MCP Clients
 
@@ -76,7 +76,7 @@ Sleeper support is currently football + basketball (Phase 1).
 
 ## Working Examples (Copy/Paste)
 
-These are intentionally short and “directory reviewer friendly”.
+These are intentionally short and easy to copy/paste.
 
 1. **List leagues**
    - “What fantasy leagues do I have? Show platform, sport, league id, season.”

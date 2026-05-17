@@ -4,7 +4,7 @@ import Link from "next/link";
 export const metadata: Metadata = {
   title: "Flaim Setup Guide",
   description:
-    "Set up Flaim for ChatGPT-first fantasy sports analysis. Connect platforms, prepare your account, and use manual MCP setup for Claude, Perplexity, or Gemini CLI.",
+    "Set up Flaim for ChatGPT-first fantasy sports analysis. Connect platforms, use Flaim Fantasy in ChatGPT Apps, and optionally configure MCP for Claude, Perplexity, or Gemini CLI.",
   alternates: {
     canonical: "https://flaim.app/guide",
   },
@@ -19,9 +19,9 @@ const guideCards = [
   },
   {
     href: "/guide/ai",
-    title: "Connect ChatGPT",
+    title: "Use ChatGPT",
     kicker: "Primary AI path",
-    body: "Flaim is approved for ChatGPT Apps, with public publishing still pending. Manual MCP setup for Claude, Perplexity, and Gemini CLI lives here too.",
+    body: "Use Flaim Fantasy in ChatGPT Apps. Manual MCP setup for Claude, Perplexity, and Gemini CLI lives here too.",
   },
   {
     href: "/guide/platforms",
@@ -44,13 +44,13 @@ export default function GuidePage() {
         <div className="mb-10 space-y-4">
           <h1 className="text-3xl font-bold">Flaim Setup Guide</h1>
           <p className="text-lg font-medium text-foreground">
-            Set up your fantasy platforms first, then connect Flaim to ChatGPT
-            when publishing opens. Claude, Perplexity, and Gemini CLI remain
+            Set up your fantasy platforms first, then use Flaim Fantasy in
+            ChatGPT Apps. Claude, Perplexity, and Gemini CLI remain optional
             manual MCP setup paths.
           </p>
           <p className="text-muted-foreground">
-            Flaim is approved for ChatGPT Apps, but the public ChatGPT path
-            waits on the remaining publishing step.
+            ChatGPT is the main setup path for most users; the manual MCP
+            details are here for alternate AI tools and developer testing.
           </p>
         </div>
 
@@ -75,7 +75,7 @@ export default function GuidePage() {
           <ol className="list-decimal list-inside space-y-2 text-sm text-muted-foreground">
             <li>Sign in and connect at least one platform in /leagues.</li>
             <li>Set a default league so Flaim has a clear first context.</li>
-            <li>Use ChatGPT once publishing is complete, or use manual MCP setup for Claude, Perplexity, and Gemini CLI.</li>
+            <li>Open ChatGPT and use Flaim Fantasy, or use manual MCP setup for Claude, Perplexity, and Gemini CLI.</li>
           </ol>
         </section>
       </div>

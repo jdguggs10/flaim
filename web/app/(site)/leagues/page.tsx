@@ -1592,7 +1592,7 @@ function LeaguesPageContent() {
                 <ul className="space-y-2 text-sm text-muted-foreground">
                   <li>Connect your fantasy platforms and sync league data</li>
                   <li>Pick the sport and league ChatGPT should use by default</li>
-                  <li>Use manual MCP details only for Claude, Perplexity, Gemini CLI, or connector testing</li>
+                  <li>Use manual MCP details only for Claude, Perplexity, Gemini CLI, or developer testing</li>
                 </ul>
               </div>
               <div className="flex flex-col gap-3 sm:flex-row">
@@ -1681,13 +1681,15 @@ function LeaguesPageContent() {
           <div className="space-y-1">
             <h2 className="text-sm font-semibold">Tips for using Flaim from ChatGPT</h2>
             <p className="text-sm text-muted-foreground">
-              Flaim has been approved for ChatGPT Apps, but public publishing is still pending. Until it appears in ChatGPT, finish platform setup here and use manual MCP only where your assistant supports it.
+              Flaim Fantasy is available in ChatGPT Apps. Finish platform setup
+              here, set a default league if needed, then open ChatGPT and ask
+              about your connected fantasy context.
             </p>
           </div>
           <ol className="space-y-2 text-sm text-muted-foreground">
             <li>Connect at least one fantasy platform before trying ChatGPT.</li>
             <li>Set a default sport or league so Flaim can choose the right context faster.</li>
-            <li>When ChatGPT publishing is complete, start a fresh chat and ask a concrete league question like “Show me my roster.”</li>
+            <li>Start a fresh ChatGPT chat and ask a concrete league question like “Show me my roster.”</li>
             <li>For Claude, Perplexity, or Gemini CLI, use the manual MCP details in the setup guide and then start a fresh conversation.</li>
           </ol>
         </section>

@@ -21,7 +21,7 @@ export default function PlatformsGuidePage() {
               "@context": "https://schema.org",
               "@type": "HowTo",
               name: "Connect ESPN fantasy leagues to Flaim",
-              dateModified: "2026-03-28",
+              dateModified: "2026-05-17",
               description:
                 "Sync your ESPN fantasy leagues using the Chrome extension or manual credentials, then verify they appear in Flaim.",
               step: [
@@ -46,7 +46,7 @@ export default function PlatformsGuidePage() {
               "@context": "https://schema.org",
               "@type": "HowTo",
               name: "Connect Yahoo fantasy leagues to Flaim",
-              dateModified: "2026-03-28",
+              dateModified: "2026-05-17",
               description:
                 "Start Yahoo OAuth from /leagues, approve access, and wait for league discovery to finish.",
               step: [
@@ -71,7 +71,7 @@ export default function PlatformsGuidePage() {
               "@context": "https://schema.org",
               "@type": "HowTo",
               name: "Connect Sleeper fantasy leagues to Flaim",
-              dateModified: "2026-03-28",
+              dateModified: "2026-05-17",
               description:
                 "Enter your exact Sleeper username in /leagues and wait for league discovery.",
               step: [
@@ -105,7 +105,7 @@ export default function PlatformsGuidePage() {
           </Link>
           .
         </p>
-        <p className="text-xs text-muted-foreground">Last updated March 2026</p>
+        <p className="text-xs text-muted-foreground">Last updated May 2026</p>
         <p className="mt-4 mb-8 text-muted-foreground">
           Connect your fantasy platforms in{" "}
           <Link href="/leagues" className="text-primary hover:underline">
@@ -113,7 +113,7 @@ export default function PlatformsGuidePage() {
           </Link>{" "}
           before using Flaim from ChatGPT. Each platform connects differently,
           but the goal is the same: get your leagues visible in Flaim so
-          ChatGPT has account context once the app is published.
+          ChatGPT has the right account context.
         </p>
 
         <section className="mb-10">
@@ -314,11 +314,11 @@ export default function PlatformsGuidePage() {
               <Link href="/leagues" className="text-primary hover:underline">
                 /leagues
               </Link>{" "}
-              shows leagues you can use, not just a pending state.
+              shows leagues you can use, not just a still-syncing state.
             </li>
             <li>You can identify the league you want to analyze first.</li>
             <li>
-              After public ChatGPT availability opens, or after{" "}
+              After you open Flaim Fantasy in ChatGPT, or after{" "}
               <Link href="/guide/ai" className="text-primary hover:underline">
                 manual MCP setup
               </Link>{" "}
@@ -333,10 +333,10 @@ export default function PlatformsGuidePage() {
           <p className="text-muted-foreground">
             Once your leagues are visible in Flaim,{" "}
             <Link href="/guide/ai" className="text-primary hover:underline">
-              prepare ChatGPT
+              use Flaim Fantasy in ChatGPT
             </Link>{" "}
-            for the approved app path. Claude, Perplexity, and Gemini CLI can
-            still use the manual MCP URL{" "}
+            for read-only fantasy analysis. Claude, Perplexity, and Gemini CLI
+            can still use the manual MCP URL{" "}
             <code className="rounded bg-muted px-1 py-0.5 text-xs">
               https://api.flaim.app/mcp
             </code>

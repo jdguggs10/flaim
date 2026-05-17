@@ -730,9 +730,9 @@ export function PublicChatExperience({
                           className="w-[18rem] rounded-2xl border-border p-4 text-sm leading-6"
                         >
                           <p className="text-foreground">
-                            When Flaim becomes publicly available in ChatGPT,
-                            connecting Flaim will put your fantasy league tools
-                            in this drawer.
+                            Flaim Fantasy is available in ChatGPT Apps.
+                            Connecting Flaim puts your fantasy league tools in
+                            this drawer.
                           </p>
                         </PopoverContent>
                       </Popover>
@@ -770,11 +770,10 @@ export function PublicChatExperience({
                           className="w-[19rem] rounded-2xl border-border p-4 text-sm leading-6"
                         >
                           <p className="text-foreground">
-                            Flaim Fantasy is approved for ChatGPT Apps and
-                            preparing for public ChatGPT availability. Manual
-                            MCP/custom connector setup remains available for
-                            Claude, Perplexity, Gemini CLI, and supported
-                            developer/testing setups.
+                            Flaim Fantasy is available in ChatGPT Apps for
+                            read-only league analysis. Manual MCP setup remains
+                            available for Claude, Perplexity, Gemini CLI, and
+                            supported developer/testing setups.
                           </p>
                         </PopoverContent>
                       </Popover>
@@ -807,8 +806,8 @@ export function PublicChatExperience({
                         >
                           <p className="text-foreground">
                             This demo shows recently refreshed answers from
-                            a real demo league. Connect yours now so your
-                            context is ready for public ChatGPT availability.
+                            a real demo league. Connect yours so ChatGPT can
+                            answer with your fantasy context.
                           </p>
                         </PopoverContent>
                       </Popover>

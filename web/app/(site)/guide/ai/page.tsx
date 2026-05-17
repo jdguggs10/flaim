@@ -4,7 +4,7 @@ import Link from "next/link";
 export const metadata: Metadata = {
   title: "ChatGPT & AI Setup for Flaim Fantasy",
   description:
-    "Set up Flaim for ChatGPT-first fantasy sports analysis, with manual MCP setup notes for Claude, Perplexity, and Gemini CLI.",
+    "Use Flaim Fantasy in ChatGPT Apps, with optional manual MCP setup notes for Claude, Perplexity, and Gemini CLI.",
   alternates: {
     canonical: "https://flaim.app/guide/ai",
   },
@@ -17,6 +17,36 @@ export default function AiGuidePage() {
         type="application/ld+json"
         dangerouslySetInnerHTML={{
           __html: JSON.stringify([
+            {
+              "@context": "https://schema.org",
+              "@type": "HowTo",
+              name: "Use Flaim Fantasy in ChatGPT Apps",
+              dateModified: "2026-05-17",
+              description:
+                "Connect your fantasy leagues in Flaim, then use Flaim Fantasy from ChatGPT Apps for read-only league analysis.",
+              step: [
+                {
+                  "@type": "HowToStep",
+                  name: "Connect leagues first",
+                  text: "Use https://flaim.app/leagues to connect ESPN, Yahoo, or Sleeper.",
+                },
+                {
+                  "@type": "HowToStep",
+                  name: "Set a default context",
+                  text: "Choose the sport or league ChatGPT should use first if you have more than one connected league.",
+                },
+                {
+                  "@type": "HowToStep",
+                  name: "Open Flaim Fantasy in ChatGPT",
+                  text: "Open ChatGPT, use Flaim Fantasy from ChatGPT Apps, and authorize Flaim if prompted.",
+                },
+                {
+                  "@type": "HowToStep",
+                  name: "Ask about your league",
+                  text: "Start a fresh conversation and ask what leagues you have or ask a specific roster, matchup, standings, or waiver question.",
+                },
+              ],
+            },
             {
               "@context": "https://schema.org",
               "@type": "HowTo",
@@ -113,8 +143,8 @@ export default function AiGuidePage() {
       <div className="container mx-auto max-w-2xl px-4 py-12">
         <h1 className="mb-4 text-3xl font-bold">ChatGPT Setup</h1>
         <p className="mb-4 text-lg font-medium text-foreground">
-          ChatGPT is the primary Flaim setup path. Flaim has been approved for
-          ChatGPT Apps, with public publishing still pending.
+          ChatGPT is the primary Flaim setup path. Flaim Fantasy is available in
+          ChatGPT Apps for read-only fantasy sports analysis.
         </p>
         <p className="text-xs text-muted-foreground">Last updated May 2026</p>
         <p className="mt-4 mb-8 text-muted-foreground">
@@ -122,8 +152,8 @@ export default function AiGuidePage() {
           <Link href="/leagues" className="text-primary hover:underline">
             /leagues
           </Link>
-          . When the ChatGPT app is published, that account setup is what
-          ChatGPT will use. Claude, Perplexity, and Gemini CLI remain manual MCP
+          . That account setup is what ChatGPT uses when you open Flaim
+          Fantasy. Claude, Perplexity, and Gemini CLI remain optional manual MCP
           setup paths using the URL below.
         </p>
 
@@ -147,8 +177,8 @@ export default function AiGuidePage() {
               Set the default sport or league ChatGPT should use first.
             </li>
             <li>
-              Use ChatGPT when publishing opens. For Claude, Perplexity, Gemini
-              CLI, or custom-connector testing, add Flaim with this MCP URL:
+              Open ChatGPT and use Flaim Fantasy. For Claude, Perplexity,
+              Gemini CLI, or developer testing, add Flaim with this MCP URL:
             </li>
           </ol>
           <div className="my-4 rounded-lg border bg-muted p-3">
@@ -170,9 +200,9 @@ export default function AiGuidePage() {
         <section id="chatgpt" className="mb-10 scroll-mt-20">
           <h2 className="mb-3 text-xl font-semibold">ChatGPT</h2>
           <p className="mb-4 text-muted-foreground">
-            Flaim has been approved for ChatGPT Apps. Public publishing is the
-            remaining step, so this guide prepares your account without
-            overstating the current ChatGPT state.
+            Flaim Fantasy is available in ChatGPT Apps. Connect your leagues in
+            Flaim first, then use ChatGPT for read-only analysis grounded in
+            your real fantasy context.
           </p>
           <ol className="list-decimal list-inside space-y-2 text-muted-foreground">
             <li>
@@ -185,7 +215,7 @@ export default function AiGuidePage() {
             <li>
               Set a default league if you have more than one connected league.
             </li>
-            <li>After publishing opens, add or enable Flaim from ChatGPT.</li>
+            <li>Open ChatGPT and use Flaim Fantasy from ChatGPT Apps.</li>
             <li>
               Start a fresh ChatGPT conversation and ask what leagues you have.
               See the{" "}
@@ -202,8 +232,9 @@ export default function AiGuidePage() {
             <h3 className="mb-2 font-medium">ChatGPT troubleshooting</h3>
             <ul className="list-disc list-inside space-y-2 text-sm text-muted-foreground">
               <li>
-                Flaim does not appear in ChatGPT yet: publishing is still
-                pending, even though the app has been approved.
+                Flaim does not appear in ChatGPT: search for the exact app name,
+                Flaim Fantasy, and confirm you are using a ChatGPT experience
+                that supports Apps.
               </li>
               <li>
                 ChatGPT cannot see any leagues after setup: go back to{" "}
@@ -375,8 +406,8 @@ export default function AiGuidePage() {
           <h2 className="mb-3 text-xl font-semibold">How to know it worked</h2>
           <ul className="list-disc list-inside space-y-2 text-muted-foreground">
             <li>
-              After ChatGPT publishing opens, ChatGPT shows Flaim as available;
-              in manual MCP clients, the client shows Flaim as authorized.
+              ChatGPT shows Flaim Fantasy as available; in manual MCP clients,
+              the client shows Flaim as authorized.
             </li>
             <li>
               A fresh conversation can answer &ldquo;What leagues do I

@@ -57,16 +57,15 @@ export function StepConnectAI({
           </div>
 
           <p className="mb-4 text-sm text-muted-foreground">
-            ChatGPT is the primary setup path. Flaim has been approved for
-            ChatGPT Apps, with public publishing still pending.
+            ChatGPT is the primary setup path. Flaim Fantasy is available in
+            ChatGPT Apps.
           </p>
         </>
       ) : null}
 
       <p className="mb-3 text-xs text-muted-foreground">
-        Use the setup guide to prepare for public ChatGPT availability, or copy
-        the MCP details below for Claude, Perplexity, Gemini CLI, and
-        custom-connector testing.
+        Use the setup guide for ChatGPT, or copy the MCP details below for
+        Claude, Perplexity, Gemini CLI, and developer testing.
       </p>
 
       <div className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
@@ -77,7 +76,7 @@ export function StepConnectAI({
           >
             ChatGPT
           </Link>
-          <span className="text-[10px] text-muted-foreground">Pending</span>
+          <span className="text-[10px] text-success">Live</span>
         </div>
         <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
           <Link
@@ -125,8 +124,8 @@ export function StepConnectAI({
       </div>
 
       <p className="mb-4 text-xs text-muted-foreground">
-        Do not expect public ChatGPT access until publishing is complete. Manual
-        MCP setup remains useful for other assistants.
+        Manual MCP setup remains useful for other assistants; most users should
+        start with ChatGPT Apps.
       </p>
 
       {!isLoaded && (
@@ -137,7 +136,8 @@ export function StepConnectAI({
 
       {isLoaded && !isSignedIn && (
         <div className="rounded-lg border bg-muted p-3 text-xs text-muted-foreground">
-          Sign in to unlock the MCP server name and URL for your account.
+          Sign in to connect your leagues for ChatGPT and unlock optional MCP
+          details for other clients.
         </div>
       )}
 
