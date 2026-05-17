@@ -13,7 +13,6 @@ const YAHOO_RECONNECT_ERRORS = new Set<string>(['not_connected', 'refresh_failed
 // Includes OAuth callback redirect codes; yahoo-client's credentials API classifier is intentionally narrower.
 const YAHOO_TRANSIENT_AUTH_ERRORS = new Set<string>([
   YahooAuthWorkerErrorCode.REFRESH_TEMPORARILY_UNAVAILABLE,
-  YahooAuthWorkerErrorCode.TOKEN_REFRESH_VALIDATION_UNAVAILABLE,
   YahooAuthWorkerErrorCode.TOKEN_EXCHANGE_UNAVAILABLE,
   YahooAuthWorkerErrorCode.YAHOO_API_TEMPORARILY_UNAVAILABLE,
 ]);
@@ -69,12 +68,8 @@ export function getYahooConnectErrorMessage(
   retryAfterSeconds?: number
 ): string {
   switch (error) {
-    case 'token_refresh_validation_failed':
-      return 'Yahoo connection did not complete because the refresh token could not be validated. Please connect Yahoo again.';
     case YahooAuthWorkerErrorCode.REFRESH_TEMPORARILY_UNAVAILABLE:
       return appendRetryCopy(YAHOO_TRANSIENT_AUTH_BASE, retryAfterSeconds);
-    case YahooAuthWorkerErrorCode.TOKEN_REFRESH_VALIDATION_UNAVAILABLE:
-      return appendRetryCopy('Yahoo connection could not be validated because Yahoo was temporarily unavailable.', retryAfterSeconds);
     case YahooAuthWorkerErrorCode.TOKEN_EXCHANGE_UNAVAILABLE:
       return appendRetryCopy('Yahoo connection could not be started because Yahoo was temporarily unavailable.', retryAfterSeconds);
     case 'token_exchange_failed':
