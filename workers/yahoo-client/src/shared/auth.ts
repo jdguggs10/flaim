@@ -30,8 +30,7 @@ async function throwYahooAuthWorkerError(response: Response): Promise<never> {
     response.status === 429 ||
     response.status === 503 ||
     errorData.retryable === true ||
-    errorData.error === YahooAuthWorkerErrorCode.REFRESH_TEMPORARILY_UNAVAILABLE ||
-    errorData.error === YahooAuthWorkerErrorCode.TOKEN_REFRESH_VALIDATION_UNAVAILABLE;
+    errorData.error === YahooAuthWorkerErrorCode.REFRESH_TEMPORARILY_UNAVAILABLE;
 
   if (isTransientAuthFailure) {
     throw new YahooClientError({
