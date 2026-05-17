@@ -1113,10 +1113,19 @@ export async function handleYahooCallback(
       );
     }
 
+    if (!hasUsableTokenFields(tokenResponse)) {
+      console.error('[yahoo-connect] Token exchange returned unusable token fields');
+      return errorRedirect('token_exchange_failed', 'Yahoo did not return usable token fields');
+    }
+
     // Validate refresh token is present
     if (!tokenResponse.refresh_token) {
       console.error('[yahoo-connect] Yahoo did not return a refresh token');
       return errorRedirect('token_exchange_failed', 'Yahoo did not provide a refresh token');
+    }
+
+    if (!tokenResponse.xoauth_yahoo_guid) {
+      console.warn(`[yahoo-connect] Yahoo token exchange omitted GUID for user ${maskUserId(clerkUserId)}`);
     }
 
     // Yahoo's authorization-code response is the authorization proof. Avoid an
