@@ -15,6 +15,7 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 ### Yahoo Connection Reliability
 - **Added**: Yahoo token-refresh diagnostics now emit structured non-secret refresh events and expose an internal credential-health endpoint for production incident triage.
 - **Added**: Yahoo connection management on `/leagues` now separates **Sync leagues** from **Reconnect Yahoo** and shows coarse temporary-unavailable/reconnect-needed states.
+- **Changed**: Yahoo reconnect now stores the authorization-code token response directly instead of immediately making a second refresh-token validation request, reducing token-endpoint pressure.
 - **Changed**: Yahoo **Sync leagues** on `/leagues` now uses the stored connection to rediscover leagues instead of starting a fresh OAuth flow every time.
 - **Changed**: Yahoo refresh lease waiters now return an explicit retryable response before the MCP gateway timeout budget is exhausted.
 - **Fixed**: Yahoo league discovery rate limits (`429`/`999`) and transient upstream failures now return retryable responses with `Retry-After` instead of generic refresh failures.

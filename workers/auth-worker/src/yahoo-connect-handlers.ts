@@ -1119,66 +1119,18 @@ export async function handleYahooCallback(
       return errorRedirect('token_exchange_failed', 'Yahoo did not provide a refresh token');
     }
 
-    // This intentional second Yahoo call proves the refresh path works now,
-    // so reconnect cannot look successful and then fail after access-token expiry.
-    const validationController = new AbortController();
-    const validationTimer = setTimeout(() => validationController.abort(), YAHOO_TOKEN_REQUEST_TIMEOUT_MS);
-    let validatedTokenResponse: YahooTokenResponse;
-    try {
-      validatedTokenResponse = await refreshAccessToken(
-        tokenResponse.refresh_token,
-        env,
-        validationController.signal
-      );
-    } catch (error) {
-      clearTimeout(validationTimer);
-      console.error(
-        '[yahoo-connect] Refresh token validation failed after Yahoo callback:',
-        error instanceof Error ? error.message : error
-      );
-      return errorRedirect(
-        YahooAuthWorkerErrorCode.TOKEN_REFRESH_VALIDATION_UNAVAILABLE,
-        'Yahoo refresh token validation is temporarily unavailable. Please try again.'
-      );
-    }
-    clearTimeout(validationTimer);
-
-    if (validatedTokenResponse.error) {
-      const statusSuffix = validatedTokenResponse.status ? ` (HTTP ${validatedTokenResponse.status})` : '';
-      const isTransient = isTransientYahooTokenFailure(validatedTokenResponse);
-      console.error(
-        `[yahoo-connect] Refresh token validation failed after Yahoo callback: ${validatedTokenResponse.error}${statusSuffix}` +
-          (validatedTokenResponse.error_description ? ` - ${validatedTokenResponse.error_description}` : '')
-      );
-      return errorRedirect(
-        isTransient ? YahooAuthWorkerErrorCode.TOKEN_REFRESH_VALIDATION_UNAVAILABLE : 'token_refresh_validation_failed',
-        isTransient
-          ? 'Yahoo refresh token validation is temporarily unavailable. Please try again.'
-          : 'Yahoo refresh token validation failed'
-      );
-    }
-
-    if (!hasUsableTokenFields(validatedTokenResponse)) {
-      console.error('[yahoo-connect] Refresh token validation returned an invalid token response after Yahoo callback');
-      return errorRedirect(
-        'token_refresh_validation_failed',
-        'Yahoo refresh token validation failed'
-      );
-    }
-
-    const refreshToken = validatedTokenResponse.refresh_token || tokenResponse.refresh_token;
-    const yahooGuid = validatedTokenResponse.xoauth_yahoo_guid || tokenResponse.xoauth_yahoo_guid;
-
-    // Calculate token expiration from the validated refresh response.
-    const expiresAt = new Date(Date.now() + validatedTokenResponse.expires_in * 1000);
+    // Yahoo's authorization-code response is the authorization proof. Avoid an
+    // immediate refresh-token validation call here; lazy refresh is still
+    // protected by the per-user lease/cooldown path when the token later ages.
+    const expiresAt = new Date(Date.now() + tokenResponse.expires_in * 1000);
 
     // Save credentials
     await storage.saveYahooCredentials({
       clerkUserId,
-      accessToken: validatedTokenResponse.access_token,
-      refreshToken,
+      accessToken: tokenResponse.access_token,
+      refreshToken: tokenResponse.refresh_token,
       expiresAt,
-      yahooGuid,
+      yahooGuid: tokenResponse.xoauth_yahoo_guid,
     });
 
     console.log(`[yahoo-connect] Successfully connected user ${maskUserId(clerkUserId)} to Yahoo`);
