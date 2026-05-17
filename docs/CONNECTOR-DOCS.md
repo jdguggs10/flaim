@@ -1,6 +1,6 @@
-# Flaim Setup Docs (Claude + ChatGPT + Perplexity + Gemini)
+# Flaim Setup Docs (ChatGPT App + Supported MCP Clients)
 
-This page is the single user-facing guide for connecting Flaim to AI clients (Claude, ChatGPT, Perplexity, Gemini CLI) and using read-only fantasy analysis tools.
+This page is the single user-facing guide for preparing Flaim for the approved ChatGPT app while public publishing is pending, plus supported MCP/direct clients such as Claude, Perplexity, and Gemini CLI.
 
 ## What Flaim Is
 
@@ -31,10 +31,13 @@ Flaim cannot place trades, add/drop players, or modify league settings.
 
 ## Connect Your AI Client
 
-### ChatGPT (Custom Action / MCP)
+### ChatGPT App
 
-1. Add an MCP Action/connector and set the **MCP server URL** to `https://api.flaim.app/mcp`.
-2. Complete the OAuth consent screen when prompted.
+Use the Flaim ChatGPT app experience when public ChatGPT availability opens. It uses the same read-only league tools and OAuth flow described on this page.
+
+### Direct MCP Clients
+
+These clients can connect directly to Flaim's MCP endpoint where their MCP support allows remote HTTP servers and OAuth.
 
 ### Claude (Claude Desktop or claude.ai)
 
@@ -105,7 +108,7 @@ For Yahoo in v1, avoid requesting `type=waiver` and avoid relying on explicit `w
 
 ## Troubleshooting
 
-- **“Authentication required” / “token expired”**: re-run the client’s connect flow (Gemini CLI: `/mcp auth flaim`; Claude/ChatGPT: click Connect and approve).
+- **“Authentication required” / “token expired”**: re-run the client’s connect flow (Gemini CLI: `/mcp auth flaim`; supported direct clients: click Connect and approve when prompted).
 - **ESPN stopped working**: ESPN session cookies expire periodically; re-sync using the extension (or re-enter cookies).
 - **No default league**: set one at `https://flaim.app/leagues` to avoid needing to specify IDs in prompts.
 - **Rate limits**: Flaim enforces a per-user daily call limit.

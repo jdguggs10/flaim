@@ -50,7 +50,7 @@ export function SiteHeader() {
                 <Button variant="outline">Sign In</Button>
               </SignInButton>
               <SignUpButton>
-                <Button>Sign Up</Button>
+                <Button>Get Started</Button>
               </SignUpButton>
             </div>
           </SignedOut>

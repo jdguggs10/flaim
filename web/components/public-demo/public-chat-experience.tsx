@@ -124,7 +124,7 @@ function getPublicDemoFailureCopy(
 
   switch (failure.errorCode) {
     case "missing_mcp_grounding":
-      return "The latest refresh did not successfully use Gerry's league data, so the answer was rejected.";
+      return "The latest refresh did not successfully use the demo league data, so the answer was rejected.";
     case "empty_answer":
       return "The latest refresh returned an empty answer, so nothing new was stored.";
     case "provider_failed":
@@ -237,7 +237,7 @@ function IdleState() {
         Pick something
       </p>
       <p className="mt-1 text-sm text-muted-foreground">
-        Real answers from Gerry&apos;s ESPN league
+        Real answers from a real demo ESPN league
       </p>
       {/* Tap logo to cycle animation — easter egg */}
       <button
@@ -599,7 +599,7 @@ export function PublicChatExperience({
                     Demo context
                   </div>
                   <p className="mt-2 text-foreground">
-                    These answers refresh from Gerry&apos;s real ESPN{" "}
+                    These answers refresh from a real demo ESPN{" "}
                     {PUBLIC_SPORT_COPY[demoSport].label} league.
                   </p>
                   <p className="mt-2 text-muted-foreground">
@@ -676,7 +676,7 @@ export function PublicChatExperience({
                       </div>
                     ) : null}
                     <div>
-                      That&apos;s Gerry&apos;s league.{" "}
+                      That&apos;s the demo league.{" "}
                       <Link
                         href="/leagues"
                         className="text-primary hover:underline"
@@ -730,8 +730,9 @@ export function PublicChatExperience({
                           className="w-[18rem] rounded-2xl border-border p-4 text-sm leading-6"
                         >
                           <p className="text-foreground">
-                            Adding and authenticating Flaim to your chatbot puts
-                            it in this drawer.
+                            When Flaim becomes publicly available in ChatGPT,
+                            connecting Flaim will put your fantasy league tools
+                            in this drawer.
                           </p>
                         </PopoverContent>
                       </Popover>
@@ -769,9 +770,11 @@ export function PublicChatExperience({
                           className="w-[19rem] rounded-2xl border-border p-4 text-sm leading-6"
                         >
                           <p className="text-foreground">
-                            Some AIs activate Flaim automatically. For others,
-                            activate Flaim manually in your drawer and
-                            you&apos;ll see a badge here.
+                            Flaim Fantasy is approved for ChatGPT Apps and
+                            preparing for public ChatGPT availability. Manual
+                            MCP/custom connector setup remains available for
+                            Claude, Perplexity, Gemini CLI, and supported
+                            developer/testing setups.
                           </p>
                         </PopoverContent>
                       </Popover>
@@ -804,9 +807,8 @@ export function PublicChatExperience({
                         >
                           <p className="text-foreground">
                             This demo shows recently refreshed answers from
-                            Gerry&apos;s actual league. Set up Flaim to ask
-                            Claude, ChatGPT, or Perplexity about your own
-                            leagues.
+                            a real demo league. Connect yours now so your
+                            context is ready for public ChatGPT availability.
                           </p>
                         </PopoverContent>
                       </Popover>

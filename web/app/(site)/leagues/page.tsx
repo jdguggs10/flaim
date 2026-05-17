@@ -1582,7 +1582,7 @@ function LeaguesPageContent() {
             </div>
             <h1 className="text-3xl font-semibold">Set up Your Leagues</h1>
             <p className="text-muted-foreground">
-              Sign in to connect ESPN, Yahoo, and Sleeper, copy your Flaim connector details, and manage your defaults in one place.
+              Sign in to connect ESPN, Yahoo, and Sleeper, choose the league ChatGPT should use first, and manage your defaults in one place.
             </p>
           </div>
           <Card>
@@ -1591,8 +1591,8 @@ function LeaguesPageContent() {
                 <h2 className="font-medium">What happens here</h2>
                 <ul className="space-y-2 text-sm text-muted-foreground">
                   <li>Connect your fantasy platforms and sync league data</li>
-                  <li>Copy the Flaim MCP name and URL for Claude, ChatGPT, or Perplexity</li>
-                  <li>Choose defaults and manage seasons once your account is linked</li>
+                  <li>Pick the sport and league ChatGPT should use by default</li>
+                  <li>Use manual MCP details only for Claude, Perplexity, Gemini CLI, or connector testing</li>
                 </ul>
               </div>
               <div className="flex flex-col gap-3 sm:flex-row">
@@ -1620,7 +1620,7 @@ function LeaguesPageContent() {
             <h1 className="text-2xl font-semibold">Your Leagues</h1>
           </div>
           <p className="text-muted-foreground">
-            Connect platforms, manage league seasons, copy your AI setup details, and set your defaults here.
+            Connect platforms, manage league seasons, and choose the account context ChatGPT should use first.
           </p>
         </div>
 
@@ -1649,9 +1649,9 @@ function LeaguesPageContent() {
               className="flex w-full items-start justify-between gap-4 text-left"
             >
               <div className="min-w-0 space-y-2">
-                <CardTitle className="text-lg">3. Connect Your AI</CardTitle>
+                <CardTitle className="text-lg">3. Connect ChatGPT</CardTitle>
                 <CardDescription>
-                  Copy the MCP details you need for Claude, ChatGPT, or Perplexity.
+                  ChatGPT is the primary path. Manual MCP setup is available for Claude, Perplexity, Gemini CLI, and testing.
                 </CardDescription>
               </div>
               <ChevronDown
@@ -1679,17 +1679,16 @@ function LeaguesPageContent() {
 
         <section className="order-5 space-y-3 rounded-xl border border-dashed border-border bg-muted/30 p-4">
           <div className="space-y-1">
-            <h2 className="text-sm font-semibold">Tips for activating Flaim in your AI assistant</h2>
+            <h2 className="text-sm font-semibold">Tips for using Flaim from ChatGPT</h2>
             <p className="text-sm text-muted-foreground">
-              After you add and authenticate Flaim, most assistants still need one more click before they use it.
+              Flaim has been approved for ChatGPT Apps, but public publishing is still pending. Until it appears in ChatGPT, finish platform setup here and use manual MCP only where your assistant supports it.
             </p>
           </div>
           <ol className="space-y-2 text-sm text-muted-foreground">
-            <li>Start a fresh chat after the connection is approved.</li>
-            <li>Open the assistant menu where apps, connectors, tools, or integrations live, then select Flaim if it is not already active.</li>
-            <li>Ask a concrete league question like “Show me my roster” or “Who am I playing this week?” instead of a vague prompt.</li>
-            <li>If the assistant still ignores Flaim, say “Use Flaim” and mention your league, team, or sport.</li>
-            <li>Set a default sport or league above so Flaim can pick the right context faster.</li>
+            <li>Connect at least one fantasy platform before trying ChatGPT.</li>
+            <li>Set a default sport or league so Flaim can choose the right context faster.</li>
+            <li>When ChatGPT publishing is complete, start a fresh chat and ask a concrete league question like “Show me my roster.”</li>
+            <li>For Claude, Perplexity, or Gemini CLI, use the manual MCP details in the setup guide and then start a fresh conversation.</li>
           </ol>
         </section>
 
@@ -2047,13 +2046,13 @@ function LeaguesPageContent() {
           <CardContent id="platforms-card-content" className="pt-0">
           <div className="mb-4 flex flex-wrap gap-x-3 gap-y-1 text-sm text-muted-foreground">
             <span>Platform guides:</span>
-            <Link href="/guide/espn" className="text-primary hover:underline">
+            <Link href="/guide/platforms#espn" className="text-primary hover:underline">
               ESPN
             </Link>
-            <Link href="/guide/yahoo" className="text-primary hover:underline">
+            <Link href="/guide/platforms#yahoo" className="text-primary hover:underline">
               Yahoo
             </Link>
-            <Link href="/guide/sleeper" className="text-primary hover:underline">
+            <Link href="/guide/platforms#sleeper" className="text-primary hover:underline">
               Sleeper
             </Link>
           </div>

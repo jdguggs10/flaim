@@ -1,10 +1,10 @@
 # Flaim Fantasy
 
-> Flaim connects your ESPN, Yahoo, and Sleeper fantasy leagues to Claude, ChatGPT, and Perplexity for read-only, league-specific analysis using the Model Context Protocol (MCP).
+> Flaim connects your ESPN, Yahoo, and Sleeper fantasy leagues to the approved Flaim ChatGPT app after public publishing, with supported MCP/direct clients available now for read-only, league-specific analysis using the Model Context Protocol (MCP).
 
 ## What Flaim Is
 
-Flaim is a free, open-source MCP server that gives AI assistants read-only access to your real fantasy sports data. It combines live league data with built-in fantasy analyst guidance so the AI answers are grounded in your league — not generic rankings.
+Flaim is a free, open-source MCP server behind an approved ChatGPT-first fantasy analysis experience with public publishing pending. It gives AI assistants read-only access to your real fantasy sports data and combines live league data with built-in fantasy analyst guidance so answers are grounded in your league — not generic rankings.
 
 Single MCP endpoint: https://api.flaim.app/mcp
 
@@ -38,7 +38,7 @@ Single MCP endpoint: https://api.flaim.app/mcp
    - ESPN: Use the Chrome extension to sync, or use the manual cookie fallback if needed
    - Yahoo: Start Yahoo auth from /leagues and wait for league discovery
    - Sleeper: Enter your exact username and wait for league discovery
-4. Add the MCP server URL to your AI assistant: https://api.flaim.app/mcp
+4. Prepare for the ChatGPT app experience, or add the MCP server URL to a supported direct client: https://api.flaim.app/mcp
 5. Authorize Flaim when prompted
 6. Start a fresh chat and ask "What leagues do I have?" to confirm setup
 
@@ -56,7 +56,7 @@ Single MCP endpoint: https://api.flaim.app/mcp
 ## FAQs
 
 ### What does Flaim do?
-Flaim is a skill that turns your AI into a fantasy sports expert, and a connector to data from your actual fantasy leagues. It lets you ask Claude, ChatGPT, or Perplexity about your actual roster, matchup, standings, transactions, available free agents, waiver wire, and more.
+Flaim is a ChatGPT-first fantasy analysis app, a skill that teaches AI how to analyze your league, and a connector to data from your actual fantasy leagues. It lets you ask about your actual roster, matchup, standings, transactions, available free agents, waiver wire, and more.
 
 ### Is my data safe?
 Flaim is read-only. It cannot trade, drop, or modify anything in your league. ESPN credentials are encrypted and stored securely — they are never shared with AI providers.
@@ -68,7 +68,7 @@ ESPN doesn't offer a public API for fantasy data. The extension is the preferred
 Flaim uses MCP (Model Context Protocol), an open standard for connecting AI assistants to external data. You add a single server URL and Flaim handles authentication and data retrieval after your leagues are linked in /leagues.
 
 ### What AI assistants work with Flaim?
-Claude (via integrations), ChatGPT (via connectors), and Perplexity (via remote connectors).
+The primary planned experience is the Flaim ChatGPT app after public publishing. Supported direct MCP clients can also connect to the same endpoint when they support remote HTTP MCP and OAuth, including Claude, Perplexity, and Gemini CLI.
 
 ## Links
 
@@ -77,8 +77,8 @@ Claude (via integrations), ChatGPT (via connectors), and Perplexity (via remote 
 - Setup guide: https://flaim.app/guide/platforms
 - AI setup guide: https://flaim.app/guide/ai
 - Sports guide: https://flaim.app/guide/sports
-- Claude guide: https://flaim.app/guide/ai#claude
 - ChatGPT guide: https://flaim.app/guide/ai#chatgpt
+- Claude guide: https://flaim.app/guide/ai#claude
 - Perplexity guide: https://flaim.app/guide/ai#perplexity
 - GitHub: https://github.com/jdguggs10/flaim
 - Privacy policy: https://flaim.app/privacy

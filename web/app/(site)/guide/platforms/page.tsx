@@ -111,9 +111,9 @@ export default function PlatformsGuidePage() {
           <Link href="/leagues" className="text-primary hover:underline">
             /leagues
           </Link>{" "}
-          before adding Flaim to your AI assistant. Each platform connects
-          differently, but the goal is the same: get your leagues visible in
-          Flaim so your AI can use them.
+          before using Flaim from ChatGPT. Each platform connects differently,
+          but the goal is the same: get your leagues visible in Flaim so
+          ChatGPT has account context once the app is published.
         </p>
 
         <section className="mb-10">
@@ -176,7 +176,7 @@ export default function PlatformsGuidePage() {
             <li>
               Wait until your ESPN leagues show up before moving on to{" "}
               <Link href="/guide/ai" className="text-primary hover:underline">
-                AI setup
+                ChatGPT setup
               </Link>
               .
             </li>
@@ -318,12 +318,12 @@ export default function PlatformsGuidePage() {
             </li>
             <li>You can identify the league you want to analyze first.</li>
             <li>
-              After{" "}
+              After public ChatGPT availability opens, or after{" "}
               <Link href="/guide/ai" className="text-primary hover:underline">
-                connecting your AI
-              </Link>
-              , a fresh chat can answer &ldquo;What leagues do I have?&rdquo;
-              without an auth error.
+                manual MCP setup
+              </Link>{" "}
+              in a supported client, a fresh chat can answer &ldquo;What leagues do
+              I have?&rdquo; without an auth error.
             </li>
           </ul>
         </section>
@@ -333,9 +333,10 @@ export default function PlatformsGuidePage() {
           <p className="text-muted-foreground">
             Once your leagues are visible in Flaim,{" "}
             <Link href="/guide/ai" className="text-primary hover:underline">
-              add Flaim to your AI assistant
+              prepare ChatGPT
             </Link>{" "}
-            with{" "}
+            for the approved app path. Claude, Perplexity, and Gemini CLI can
+            still use the manual MCP URL{" "}
             <code className="rounded bg-muted px-1 py-0.5 text-xs">
               https://api.flaim.app/mcp
             </code>
@@ -347,7 +348,7 @@ export default function PlatformsGuidePage() {
 
         <div className="flex items-center gap-4 border-t pt-4 text-sm">
           <Link href="/guide/ai" className="text-primary hover:underline">
-            AI assistant setup &rarr;
+            ChatGPT setup &rarr;
           </Link>
           <Link href="/guide/sports" className="text-primary hover:underline">
             How Flaim analyzes sports &rarr;

@@ -14,14 +14,14 @@ const ROTATING_WORDS = [
 ];
 
 const COLOR_CYCLE = [
-  "text-blue-500 dark:text-blue-400",
-  "text-emerald-500 dark:text-emerald-400",
-  "text-orange-500 dark:text-orange-400",
-  "text-violet-500 dark:text-violet-400",
-  "text-rose-500 dark:text-rose-400",
-  "text-cyan-500 dark:text-cyan-400",
-  "text-amber-500 dark:text-amber-400",
-  "text-fuchsia-500 dark:text-fuchsia-400",
+  "text-chart-1",
+  "text-chart-2",
+  "text-chart-3",
+  "text-chart-4",
+  "text-chart-5",
+  "text-success",
+  "text-warning",
+  "text-info",
 ];
 
 function usePrefersReducedMotion() {
@@ -97,9 +97,10 @@ export function HeroChat() {
           </span>
         </h1>
         <p className="max-w-xl text-lg leading-7 text-foreground/70 md:text-xl md:leading-8">
-          Flaim connects ChatGPT, Claude, and Perplexity to ESPN, Yahoo, and
-          Sleeper. Ask about start/sit decisions, waiver wire targets, and
-          what matters in your league right now.
+          Flaim Fantasy has been approved for ChatGPT Apps and is preparing for
+          public ChatGPT availability. Connect your ESPN, Yahoo, and Sleeper leagues
+          now so ChatGPT can answer with your real fantasy context when it goes
+          live.
         </p>
       </div>
     </section>

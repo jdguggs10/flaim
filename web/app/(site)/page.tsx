@@ -4,9 +4,9 @@ import { PublicChatExperience } from "@/components/public-demo/public-chat-exper
 import { HeroChat } from "@/components/site/hero-chat";
 
 export const metadata: Metadata = {
-  title: "Flaim — Connect ESPN, Yahoo & Sleeper Fantasy Leagues to AI",
+  title: "Flaim — Fantasy Leagues for ChatGPT",
   description:
-    "Flaim gives Claude, ChatGPT, and Perplexity read-only access to your real fantasy league data — rosters, standings, matchups, waiver wire, and transactions across football, baseball, basketball, and hockey.",
+    "Flaim Fantasy is approved for ChatGPT Apps and preparing for public ChatGPT availability. Connect ESPN, Yahoo, and Sleeper leagues now; manual MCP setup is available for Claude, Perplexity, Gemini CLI, and supported developer/testing setups.",
   alternates: {
     canonical: "https://flaim.app",
   },
@@ -57,7 +57,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
                 name: "Do I need a Chrome extension?",
                 acceptedAnswer: {
                   "@type": "Answer",
-                  text: "Only for ESPN. The Flaim Chrome extension syncs your ESPN cookies automatically so Flaim can read your private leagues. Yahoo connects through OAuth, Sleeper just needs your username, and your AI assistant connects to Flaim separately using a single MCP URL — no extension required for the AI side.",
+                  text: "Only for ESPN. The Flaim Chrome extension syncs your ESPN cookies automatically so Flaim can read your private leagues. Yahoo connects through OAuth, and Sleeper just needs your username. That league setup is separate from the ChatGPT Apps public publishing timeline.",
                 },
               },
               {
@@ -65,7 +65,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
                 name: "Which AI apps work with Flaim?",
                 acceptedAnswer: {
                   "@type": "Answer",
-                  text: "Flaim works with Claude, ChatGPT, and Perplexity today using the Model Context Protocol (MCP). You add one URL — https://api.flaim.app/mcp — as a connector in any of these AI apps, authorize once, and Flaim handles the rest.",
+                  text: "Flaim Fantasy has been approved for ChatGPT Apps and is preparing for public ChatGPT availability. Until public publishing is complete, manual MCP setup can be used with Claude, Perplexity, Gemini CLI, and supported developer/testing setups using https://api.flaim.app/mcp.",
                 },
               },
               {
@@ -81,7 +81,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
                 name: "Where do I finish setup?",
                 acceptedAnswer: {
                   "@type": "Answer",
-                  text: "Use flaim.app/leagues to connect your fantasy platforms, then add Flaim to your AI assistant using the MCP URL shown on that page. Setup takes about 5 minutes. The setup guides at flaim.app/guide/platforms and flaim.app/guide/ai walk through each step with troubleshooting tips.",
+                  text: "Use flaim.app/leagues to connect ESPN, Yahoo, and Sleeper now. Flaim Fantasy is approved for ChatGPT Apps and preparing for public ChatGPT availability, so connecting leagues now gets your fantasy context ready. Manual MCP setup for Claude, Perplexity, Gemini CLI, and supported developer/testing setups is documented at flaim.app/guide/ai.",
                 },
               },
             ],
@@ -169,22 +169,22 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
             </Link>
             <div className="mt-3 flex flex-wrap gap-2">
               <Link
-                href="/guide/ai#claude"
-                className="rounded-full border bg-background px-3 py-1 transition-colors hover:border-foreground/30"
-              >
-                Claude
-              </Link>
-              <Link
                 href="/guide/ai#chatgpt"
                 className="rounded-full border bg-background px-3 py-1 transition-colors hover:border-foreground/30"
               >
-                ChatGPT
+                ChatGPT Apps
+              </Link>
+              <Link
+                href="/guide/ai#claude"
+                className="rounded-full border bg-background px-3 py-1 transition-colors hover:border-foreground/30"
+              >
+                Claude MCP
               </Link>
               <Link
                 href="/guide/ai#perplexity"
                 className="rounded-full border bg-background px-3 py-1 transition-colors hover:border-foreground/30"
               >
-                Perplexity
+                Perplexity MCP
               </Link>
             </div>
           </div>
@@ -195,7 +195,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
       <section className="px-4 pb-10 text-center">
         <SignedOut>
           <Button asChild size="lg">
-            <Link href="/leagues">Set up Flaim</Link>
+            <Link href="/leagues">Connect leagues now</Link>
           </Button>
         </SignedOut>
         <SignedIn>
@@ -342,13 +342,15 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
             Ready to connect your leagues?
           </h2>
           <p className="text-muted-foreground mb-6">
-            Setup takes about 5 minutes. Connect a platform, add Flaim to your
-            AI, and start asking.
+            Flaim Fantasy is approved for ChatGPT Apps and preparing for public
+            ChatGPT availability.
+            Connect your leagues now so your fantasy context is ready when the
+            app becomes publicly available in ChatGPT.
           </p>
           <div className="flex flex-col items-center justify-center gap-3 sm:flex-row">
             <SignedOut>
               <Button asChild size="lg">
-                <Link href="/leagues">Set up Flaim</Link>
+                <Link href="/leagues">Connect leagues now</Link>
               </Button>
             </SignedOut>
             <SignedIn>
@@ -379,9 +381,8 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
                   Only for ESPN. The Flaim Chrome extension syncs your ESPN
                   cookies automatically so Flaim can read your private leagues.
                   Yahoo connects through OAuth, Sleeper just needs your
-                  username, and your AI assistant connects to Flaim separately
-                  using a single MCP URL — no extension required for the AI
-                  side.
+                  username. That league setup is separate from the ChatGPT Apps
+                  public publishing timeline.
                 </p>
               </div>
             </details>
@@ -394,13 +395,15 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
               </summary>
               <div className="px-4 pb-4 text-sm text-muted-foreground space-y-2">
                 <p>
-                  Claude, ChatGPT, and Perplexity today using the Model Context
-                  Protocol (MCP). You add one URL —{" "}
+                  Flaim Fantasy has been approved for ChatGPT Apps and is
+                  preparing for public ChatGPT availability. Until public
+                  publishing is complete, manual MCP setup can be used with
+                  Claude, Perplexity, Gemini CLI, and supported
+                  developer/testing setups using{" "}
                   <code className="rounded bg-muted px-1 py-0.5 text-xs">
                     https://api.flaim.app/mcp
-                  </code>{" "}
-                  — as a connector in any of these AI apps, authorize once, and
-                  Flaim handles the rest.
+                  </code>
+                  .
                 </p>
               </div>
             </details>
@@ -438,9 +441,10 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
                   >
                     Your Leagues
                   </Link>{" "}
-                  to connect your fantasy platforms, then add Flaim to your AI
-                  assistant using the MCP URL shown on that page. Setup takes
-                  about 5 minutes. The{" "}
+                  to connect ESPN, Yahoo, and Sleeper now. Flaim Fantasy is
+                  approved for ChatGPT Apps and preparing for public ChatGPT
+                  availability, so connecting leagues now gets your fantasy
+                  context ready. The{" "}
                   <Link
                     href="/guide/platforms"
                     className="text-primary hover:underline"
@@ -454,7 +458,8 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
                   >
                     AI setup guide
                   </Link>{" "}
-                  walk through each step with troubleshooting tips.
+                  cover manual MCP setup for Claude, Perplexity, Gemini CLI,
+                  and supported developer/testing setups.
                 </p>
               </div>
             </details>

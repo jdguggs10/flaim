@@ -57,16 +57,28 @@ export function StepConnectAI({
           </div>
 
           <p className="mb-4 text-sm text-muted-foreground">
-            Copy the name and URL below, then add Flaim in your AI assistant.
+            ChatGPT is the primary setup path. Flaim has been approved for
+            ChatGPT Apps, with public publishing still pending.
           </p>
         </>
       ) : null}
 
       <p className="mb-3 text-xs text-muted-foreground">
-        Pick your assistant for step-by-step instructions.
+        Use the setup guide to prepare for public ChatGPT availability, or copy
+        the MCP details below for Claude, Perplexity, Gemini CLI, and
+        custom-connector testing.
       </p>
 
-      <div className="mb-4 grid gap-2 sm:grid-cols-3">
+      <div className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
+          <Link
+            href="/guide/ai#chatgpt"
+            className="text-xs font-medium text-primary hover:underline"
+          >
+            ChatGPT
+          </Link>
+          <span className="text-[10px] text-muted-foreground">Pending</span>
+        </div>
         <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
           <Link
             href="/guide/ai#claude"
@@ -80,23 +92,6 @@ export function StepConnectAI({
             rel="noopener noreferrer"
             className="text-muted-foreground hover:text-foreground transition-colors"
             title="Open Claude connectors"
-          >
-            <ExternalLink className="h-3 w-3" />
-          </a>
-        </div>
-        <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
-          <Link
-            href="/guide/ai#chatgpt"
-            className="text-xs font-medium text-primary hover:underline"
-          >
-            ChatGPT
-          </Link>
-          <a
-            href="https://chatgpt.com/settings#settings/Connectors"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-muted-foreground hover:text-foreground transition-colors"
-            title="Open ChatGPT settings"
           >
             <ExternalLink className="h-3 w-3" />
           </a>
@@ -118,10 +113,20 @@ export function StepConnectAI({
             <ExternalLink className="h-3 w-3" />
           </a>
         </div>
+        <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
+          <Link
+            href="/guide/ai#gemini-cli"
+            className="text-xs font-medium text-primary hover:underline"
+          >
+            Gemini CLI
+          </Link>
+          <span className="text-[10px] text-muted-foreground">Manual</span>
+        </div>
       </div>
 
       <p className="mb-4 text-xs text-muted-foreground">
-        Claude, ChatGPT, and Perplexity are live today.
+        Do not expect public ChatGPT access until publishing is complete. Manual
+        MCP setup remains useful for other assistants.
       </p>
 
       {!isLoaded && (
