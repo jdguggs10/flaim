@@ -16,6 +16,7 @@ export interface RouteResult {
   upstream_status?: number;
   retryable?: boolean;
   retry_after?: number;
+  retry_after_source?: string;
 }
 
 /**
@@ -78,6 +79,7 @@ export async function routeToClient(
         upstream_status?: number;
         retryable?: boolean;
         retry_after?: number;
+        retry_after_source?: string;
       };
       const retryAfter = parseRetryAfterSeconds(response.headers.get('Retry-After')) ?? errorData.retry_after;
       return {
@@ -88,6 +90,7 @@ export async function routeToClient(
         upstream_status: errorData.upstream_status,
         retryable: errorData.retryable,
         retry_after: retryAfter,
+        retry_after_source: errorData.retry_after_source,
       };
     }
 

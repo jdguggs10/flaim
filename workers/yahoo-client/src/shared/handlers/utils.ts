@@ -15,6 +15,7 @@ export function toExecuteErrorResponse(error: unknown): ExecuteResponse {
     upstream_status: isYahooClientError(error) ? error.upstreamStatus : undefined,
     retryable: metadata.retryable,
     retry_after: metadata.retryAfter,
+    retry_after_source: isYahooClientError(error) ? error.retryAfterSource : undefined,
   };
 }
 
