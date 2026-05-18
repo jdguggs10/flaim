@@ -761,7 +761,11 @@ async function markYahooRefreshCooldown(
       retryAfter: retryAfterSeconds,
       reason: 'disabled',
     });
-    await storage.releaseRefreshLease(userId, ownerId);
+    try {
+      await storage.releaseRefreshLease(userId, ownerId);
+    } catch (releaseError) {
+      console.warn('[yahoo-connect] Failed to release Yahoo refresh lease when cooldown disabled:', releaseError);
+    }
     return;
   }
 
