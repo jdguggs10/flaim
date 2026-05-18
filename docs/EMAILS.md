@@ -44,6 +44,8 @@ The first product templates are:
 
 This package intentionally does not include a Resend send path yet. When the first API route, Server Action, or worker sends one of these templates, add the Resend SDK and move `react-email` from `devDependencies` to production `dependencies` so the renderer is available outside the local preview/export workflow.
 
+React Email's preview server may add lockfile entries for its own bundled Next.js version. Those entries are isolated to the preview tooling; the Flaim web app should continue to resolve the app-pinned Next.js version.
+
 ## Clerk templates
 
 Clerk should keep handling auth email. Use the dashboard templates to mirror the same basics:
