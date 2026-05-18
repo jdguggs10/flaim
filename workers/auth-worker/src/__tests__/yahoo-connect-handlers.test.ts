@@ -812,16 +812,23 @@ describe('yahoo-connect-handlers', () => {
           expect.objectContaining({
             event: 'refresh_response_error',
             correlation_id: 'req_429',
+            phase: 'refresh_response',
+            outcome: 'rate_limited',
+            diagnostic_class: 'yahoo_rate_limit',
             upstream_status: 429,
             token_error: 'rate_limited',
             failure_kind: 'transient_http',
           }),
           expect.objectContaining({
             event: 'refresh_transient_failure',
+            outcome: 'rate_limited',
+            diagnostic_class: 'yahoo_rate_limit',
             retry_after: 900,
           }),
           expect.objectContaining({
             event: 'cooldown_mark_attempted',
+            outcome: 'cooldown_marked',
+            diagnostic_class: 'cooldown_mark',
             retry_after: 900,
             cooldown_marked: true,
           }),
@@ -979,6 +986,9 @@ describe('yahoo-connect-handlers', () => {
             expect.objectContaining({
               event: 'refresh_owner_retry_scheduled',
               correlation_id: 'req_retry_success',
+              phase: 'refresh_response',
+              outcome: 'retry_scheduled',
+              diagnostic_class: 'yahoo_transient_text',
               retry_attempt: 1,
               retry_delay_ms: 250,
               failure_kind: 'transient_text',
@@ -986,6 +996,8 @@ describe('yahoo-connect-handlers', () => {
             expect.objectContaining({
               event: 'credential_update_succeeded',
               correlation_id: 'req_retry_success',
+              phase: 'credential_update',
+              outcome: 'success',
             }),
           ])
         );
@@ -1044,6 +1056,9 @@ describe('yahoo-connect-handlers', () => {
             expect.objectContaining({
               event: 'refresh_owner_retry_scheduled',
               correlation_id: 'req_retry_503_success',
+              phase: 'refresh_response',
+              outcome: 'retry_scheduled',
+              diagnostic_class: 'yahoo_transient_http',
               retry_attempt: 1,
               retry_delay_ms: 250,
               upstream_status: 503,
@@ -1052,6 +1067,8 @@ describe('yahoo-connect-handlers', () => {
             expect.objectContaining({
               event: 'credential_update_succeeded',
               correlation_id: 'req_retry_503_success',
+              phase: 'credential_update',
+              outcome: 'success',
             }),
           ])
         );
@@ -1102,6 +1119,9 @@ describe('yahoo-connect-handlers', () => {
             expect.objectContaining({
               event: 'refresh_owner_retry_scheduled',
               correlation_id: 'req_retry_fetch_error',
+              phase: 'refresh_request',
+              outcome: 'retry_scheduled',
+              diagnostic_class: 'fetch_error',
               reason: 'fetch_error',
               retry_attempt: 1,
               retry_delay_ms: 250,
@@ -1109,6 +1129,8 @@ describe('yahoo-connect-handlers', () => {
             expect.objectContaining({
               event: 'credential_update_succeeded',
               correlation_id: 'req_retry_fetch_error',
+              phase: 'credential_update',
+              outcome: 'success',
             }),
           ])
         );
@@ -1157,6 +1179,7 @@ describe('yahoo-connect-handlers', () => {
     });
 
     it('winner: marks cooldown without calling Yahoo when lease acquisition consumes the retry budget', async () => {
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
       vi.useFakeTimers();
       const start = new Date('2026-05-11T18:15:00Z');
       vi.setSystemTime(start);
@@ -1184,6 +1207,18 @@ describe('yahoo-connect-handlers', () => {
         expect(mockFetch).not.toHaveBeenCalled();
         expect(mockStorage.markRefreshCooldown).toHaveBeenCalledWith('user_123', expect.any(String), 300);
         expect(mockStorage.updateYahooCredentials).not.toHaveBeenCalled();
+        expect(yahooRefreshDiagnostics(logSpy)).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              event: 'refresh_request_exception',
+              correlation_id: 'req_acquire_budget',
+              phase: 'refresh_request',
+              outcome: 'lease_budget_exhausted',
+              diagnostic_class: 'lease_budget_exhausted',
+              lease_budget_remaining_ms: 0,
+            }),
+          ])
+        );
       } finally {
         vi.useRealTimers();
       }
@@ -1914,6 +1949,9 @@ describe('yahoo-connect-handlers', () => {
             expect.objectContaining({
               event: 'lease_wait_timeout',
               correlation_id: 'req_wait_timeout',
+              phase: 'waiter',
+              outcome: 'retryable_failure',
+              diagnostic_class: 'lease_wait_timeout',
               retry_after: 5,
             }),
           ])

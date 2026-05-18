@@ -13,7 +13,7 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 - **Fixed**: Removed stale dev-only chat framing and cleaned unresolved merge-conflict markers from `docs/ARCHITECTURE.md`.
 
 ### Yahoo Connection Reliability
-- **Added**: Yahoo token-refresh diagnostics now emit structured non-secret refresh events and expose an internal credential-health endpoint for production incident triage.
+- **Added**: Yahoo token-refresh diagnostics now emit structured non-secret refresh events with failure classes, outcomes, request-timeout/lease-budget fields, and an internal credential-health endpoint for production incident triage.
 - **Added**: Yahoo connection management on `/leagues` now separates **Sync leagues** from **Reconnect Yahoo** and shows coarse temporary-unavailable/reconnect-needed states.
 - **Changed**: Yahoo lazy token refresh now gives the lease owner one short retry for retryable non-rate-limit token-endpoint failures before setting a shared cooldown.
 - **Changed**: Yahoo reconnect now stores the authorization-code token response directly instead of immediately making a second refresh-token validation request, reducing token-endpoint pressure.
