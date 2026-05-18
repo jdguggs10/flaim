@@ -16,6 +16,7 @@ Use `support@flaim.app` as the reply-to address for product email.
 
 - Keep emails quiet and utilitarian: white card, light gray page background, one primary action.
 - Mirror the website tokens in `web/app/globals.css`, but use email-safe hex values in `web/emails/brand.ts`.
+- Use the Flaim mark at 28px next to the text wordmark in the header.
 - Use system fonts, 8px containers, 6px buttons, and plain-language copy.
 - Do not add promotional hero art to auth or security emails.
 - Product and lifecycle emails must include a clear unsubscribe or notification-preferences link in the footer before they are connected to a live sender.

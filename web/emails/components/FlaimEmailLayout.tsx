@@ -8,6 +8,7 @@ import {
   Heading,
   Hr,
   Html,
+  Img,
   Link,
   Preview,
   Section,
@@ -58,6 +59,15 @@ export function FlaimEmailLayout({
       <Body style={styles.body}>
         <Container style={styles.container}>
           <Section style={styles.header}>
+            <Link href={emailBrand.url} style={styles.logoLink}>
+              <Img
+                alt=""
+                height="28"
+                src={emailBrand.logoUrl}
+                style={styles.logo}
+                width="28"
+              />
+            </Link>
             <Link href={emailBrand.url} style={styles.wordmark}>
               {emailBrand.name}
             </Link>
@@ -140,12 +150,22 @@ const styles = {
   header: {
     padding: "0 0 16px",
   },
+  logoLink: {
+    textDecoration: "none",
+  },
+  logo: {
+    display: "inline-block",
+    margin: "0 8px 0 0",
+    verticalAlign: "middle",
+  },
   wordmark: {
     color: emailBrand.colors.foreground,
+    display: "inline-block",
     fontSize: "18px",
     fontWeight: "700",
     lineHeight: "24px",
-    textDecoration: "none",
+    margin: "0",
+    verticalAlign: "middle",
   },
   card: {
     backgroundColor: emailBrand.colors.card,

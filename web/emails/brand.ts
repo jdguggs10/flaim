@@ -1,6 +1,7 @@
 export const emailBrand = {
   name: "Flaim",
   url: "https://flaim.app",
+  logoUrl: "https://flaim.app/flaim-mark-hero.png",
   supportEmail: "support@flaim.app",
   senders: {
     // Dashboard-only auth sender. Product templates should use senders.product.
