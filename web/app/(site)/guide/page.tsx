@@ -4,7 +4,7 @@ import Link from "next/link";
 export const metadata: Metadata = {
   title: "Flaim Setup Guide",
   description:
-    "Set up Flaim for ChatGPT-first fantasy sports analysis. Connect platforms, use Flaim Fantasy in ChatGPT, and optionally configure manual MCP clients such as Claude, Perplexity, or Gemini CLI.",
+    "Set up Flaim for fantasy sports analysis in ChatGPT. Connect ESPN, Yahoo, or Sleeper, then use Flaim Fantasy in ChatGPT.",
   alternates: {
     canonical: "https://flaim.app/guide",
   },
@@ -21,7 +21,7 @@ const guideCards = [
     href: "/guide/ai",
     title: "Use ChatGPT",
     kicker: "Primary AI path",
-    body: "Use Flaim Fantasy in ChatGPT. Optional custom connector and MCP setup for Claude, Perplexity, and Gemini CLI lives here too.",
+    body: "Open ChatGPT and use Flaim Fantasy after your leagues are connected.",
   },
   {
     href: "/guide/platforms",
@@ -45,12 +45,11 @@ export default function GuidePage() {
           <h1 className="text-3xl font-bold">Flaim Setup Guide</h1>
           <p className="text-lg font-medium text-foreground">
             Set up your fantasy platforms first, then use Flaim Fantasy in
-            ChatGPT. Claude, Perplexity, and Gemini CLI remain optional custom
-            connector and manual MCP setup paths.
+            ChatGPT.
           </p>
           <p className="text-muted-foreground">
-            ChatGPT is the main setup path for most users; the optional manual MCP
-            details are here for alternate AI tools and developer testing.
+            The guide starts with the default ChatGPT setup path and keeps
+            platform troubleshooting close by.
           </p>
         </div>
 
@@ -75,7 +74,7 @@ export default function GuidePage() {
           <ol className="list-decimal list-inside space-y-2 text-sm text-muted-foreground">
             <li>Sign in and connect at least one platform in /leagues.</li>
             <li>Set a default league so Flaim has a clear first context.</li>
-            <li>Open ChatGPT and use Flaim Fantasy, or use manual MCP setup for Claude, Perplexity, and Gemini CLI.</li>
+            <li>Open ChatGPT and use Flaim Fantasy.</li>
           </ol>
         </section>
       </div>

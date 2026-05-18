@@ -595,14 +595,7 @@ export function PublicChatExperience({
                   align="end"
                   className="w-[18.5rem] rounded-2xl border-border p-4 text-sm leading-6"
                 >
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
-                    Demo context
-                  </div>
-                  <p className="mt-2 text-foreground">
-                    These answers refresh from a real demo ESPN{" "}
-                    {PUBLIC_SPORT_COPY[demoSport].label} league.
-                  </p>
-                  <p className="mt-2 text-muted-foreground">
+                  <p className="text-foreground">
                     Flaim supports ESPN and Yahoo across football, baseball,
                     basketball, and hockey, plus Sleeper for football and
                     basketball.
@@ -730,9 +723,8 @@ export function PublicChatExperience({
                           className="w-[18rem] rounded-2xl border-border p-4 text-sm leading-6"
                         >
                           <p className="text-foreground">
-                            Flaim Fantasy is available in ChatGPT.
-                            Connecting Flaim puts your fantasy league tools in
-                            this drawer.
+                            Adding and authenticating Flaim to your chatbot puts
+                            it in this drawer.
                           </p>
                         </PopoverContent>
                       </Popover>
@@ -770,10 +762,9 @@ export function PublicChatExperience({
                           className="w-[19rem] rounded-2xl border-border p-4 text-sm leading-6"
                         >
                           <p className="text-foreground">
-                            Flaim Fantasy is available in ChatGPT for read-only
-                            league analysis. Optional manual MCP setup remains
-                            available for Claude, Perplexity, Gemini CLI, and
-                            developer/testing setups.
+                            Some AIs activate Flaim automatically. For others,
+                            activate Flaim manually in your drawer and
+                            you&apos;ll see a badge here.
                           </p>
                         </PopoverContent>
                       </Popover>
@@ -806,8 +797,7 @@ export function PublicChatExperience({
                         >
                           <p className="text-foreground">
                             This demo shows recently refreshed answers from
-                            a real demo league. Connect yours so ChatGPT can
-                            answer with your fantasy context.
+                            Gerry&apos;s actual league.
                           </p>
                         </PopoverContent>
                       </Popover>

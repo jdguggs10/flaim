@@ -97,9 +97,8 @@ export function HeroChat() {
           </span>
         </h1>
         <p className="max-w-xl text-lg leading-7 text-foreground/70 md:text-xl md:leading-8">
-          Flaim Fantasy is available in ChatGPT. Connect ESPN, Yahoo, and
-          Sleeper, then ask ChatGPT about your real rosters, matchups,
-          standings, free agents, and league history.
+          Connect ChatGPT to ESPN, Yahoo, and Sleeper. Ask about your actual
+          roster, matchup, standings, free agents, league history, and more.
         </p>
       </div>
     </section>

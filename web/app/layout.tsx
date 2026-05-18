@@ -21,7 +21,7 @@ export const metadata: Metadata = {
     template: "%s | Flaim",
   },
   description:
-    "Flaim Fantasy is available in ChatGPT. Connect ESPN, Yahoo, and Sleeper leagues for read-only fantasy analysis, with optional manual MCP setup for Claude, Perplexity, Gemini CLI, and developer/testing setups.",
+    "Flaim Fantasy is available in ChatGPT. Connect ESPN, Yahoo, and Sleeper leagues for read-only fantasy analysis.",
   metadataBase: new URL("https://flaim.app"),
   openGraph: {
     title: "Flaim — Fantasy Leagues for ChatGPT",
@@ -92,8 +92,6 @@ export default function RootLayout({
                   "Sleeper fantasy league integration",
                   "Available in ChatGPT",
                   "ChatGPT fantasy sports analysis",
-                  "MCP (Model Context Protocol) server",
-                  "Optional manual MCP setup for Claude, Perplexity, Gemini CLI, and developer/testing setups",
                   "Read-only access — no trades, drops, or roster changes",
                   "9 MCP tools: roster, standings, matchups, free agents, transactions, league info, player search, league history, session",
                 ],

@@ -318,12 +318,12 @@ export default function PlatformsGuidePage() {
             </li>
             <li>You can identify the league you want to analyze first.</li>
             <li>
-              After you open Flaim Fantasy in ChatGPT, or after{" "}
+              After you open Flaim Fantasy in{" "}
               <Link href="/guide/ai" className="text-primary hover:underline">
-                manual MCP setup
-              </Link>{" "}
-              in a supported client, a fresh chat can answer &ldquo;What leagues do
-              I have?&rdquo; without an auth error.
+                ChatGPT
+              </Link>
+              , a fresh chat can answer &ldquo;What leagues do I have?&rdquo;
+              without an auth error.
             </li>
           </ul>
         </section>
@@ -335,14 +335,9 @@ export default function PlatformsGuidePage() {
             <Link href="/guide/ai" className="text-primary hover:underline">
               use Flaim Fantasy in ChatGPT
             </Link>{" "}
-            for read-only fantasy analysis. Claude, Perplexity, and Gemini CLI
-            can still use the manual MCP setup URL{" "}
-            <code className="rounded bg-muted px-1 py-0.5 text-xs">
-              https://api.flaim.app/mcp
-            </code>
-            . Start a new chat and ask about your roster, matchup, or standings.
-            If you use multiple leagues, name the one you want in your first
-            prompt.
+            for read-only fantasy analysis. Start a new chat and ask about your
+            roster, matchup, or standings. If you use multiple leagues, name
+            the one you want in your first prompt.
           </p>
         </section>
 
