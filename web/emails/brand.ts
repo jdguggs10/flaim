@@ -21,7 +21,10 @@ export const emailBrand = {
   },
   fontFamily:
     '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-  radius: "8px",
+  radius: {
+    card: "8px",
+    button: "6px",
+  },
 } as const;
 
 export type EmailBrand = typeof emailBrand;

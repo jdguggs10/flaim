@@ -40,6 +40,8 @@ The first product templates are:
 - `web/emails/welcome.tsx`
 - `web/emails/league-connected.tsx`
 
+This package intentionally does not include a Resend send path yet. Add the Resend SDK with the first API route, Server Action, or worker that actually sends one of these templates.
+
 ## Clerk templates
 
 Clerk should keep handling auth email. Use the dashboard templates to mirror the same basics:

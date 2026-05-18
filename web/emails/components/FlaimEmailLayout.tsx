@@ -17,6 +17,9 @@ import { emailBrand } from "../brand";
 interface FlaimEmailLayoutProps {
   children: React.ReactNode;
   eyebrow?: string;
+  footerDescription?: string;
+  footerSupportText?: string;
+  lang?: string;
   preview: string;
   title: string;
 }
@@ -29,18 +32,21 @@ interface FlaimButtonProps {
 export function FlaimEmailLayout({
   children,
   eyebrow,
+  footerDescription = "Flaim connects your real fantasy leagues to your AI assistant for read-only, league-specific analysis.",
+  footerSupportText = "Need help?",
+  lang = "en",
   preview,
   title,
 }: FlaimEmailLayoutProps) {
   return (
-    <Html lang="en">
+    <Html lang={lang}>
       <Head />
       <Preview>{preview}</Preview>
       <Body style={styles.body}>
         <Container style={styles.container}>
           <Section style={styles.header}>
             <Link href={emailBrand.url} style={styles.wordmark}>
-              Flaim
+              {emailBrand.name}
             </Link>
           </Section>
 
@@ -53,12 +59,9 @@ export function FlaimEmailLayout({
           </Section>
 
           <Section style={styles.footer}>
+            <Text style={styles.footerText}>{footerDescription}</Text>
             <Text style={styles.footerText}>
-              Flaim connects your real fantasy leagues to your AI assistant for
-              read-only, league-specific analysis.
-            </Text>
-            <Text style={styles.footerText}>
-              Need help? Email{" "}
+              {footerSupportText} Email{" "}
               <Link href={`mailto:${emailBrand.supportEmail}`} style={styles.footerLink}>
                 {emailBrand.supportEmail}
               </Link>
@@ -95,7 +98,7 @@ export function FlaimCallout({ children }: { children: React.ReactNode }) {
   return <Section style={styles.callout}>{children}</Section>;
 }
 
-export const styles = {
+const styles = {
   body: {
     backgroundColor: emailBrand.colors.background,
     color: emailBrand.colors.foreground,
@@ -121,7 +124,7 @@ export const styles = {
   card: {
     backgroundColor: emailBrand.colors.card,
     border: `1px solid ${emailBrand.colors.border}`,
-    borderRadius: emailBrand.radius,
+    borderRadius: emailBrand.radius.card,
     padding: "28px",
   },
   eyebrow: {
@@ -154,7 +157,7 @@ export const styles = {
   },
   button: {
     backgroundColor: emailBrand.colors.primary,
-    borderRadius: "6px",
+    borderRadius: emailBrand.radius.button,
     color: emailBrand.colors.primaryForeground,
     display: "inline-block",
     fontSize: "14px",
@@ -171,7 +174,7 @@ export const styles = {
   callout: {
     backgroundColor: emailBrand.colors.muted,
     border: `1px solid ${emailBrand.colors.border}`,
-    borderRadius: emailBrand.radius,
+    borderRadius: emailBrand.radius.card,
     margin: "8px 0 20px",
     padding: "14px 16px",
   },

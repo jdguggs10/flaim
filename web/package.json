@@ -35,7 +35,6 @@
     "react": "^19",
     "react-dom": "^19",
     "react-markdown": "^9.0.1",
-    "resend": "^6.12.3",
     "tailwind-merge": "^2.6.0",
     "vaul": "^1.0.0",
     "zod": "^3.23.8"

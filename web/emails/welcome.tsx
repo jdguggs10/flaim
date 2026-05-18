@@ -13,7 +13,7 @@ interface WelcomeEmailProps {
 }
 
 export default function WelcomeEmail({
-  firstName = "Gerry",
+  firstName = "Alex",
   leaguesUrl = "https://flaim.app/leagues",
 }: WelcomeEmailProps) {
   return (
@@ -43,6 +43,6 @@ export default function WelcomeEmail({
 }
 
 WelcomeEmail.PreviewProps = {
-  firstName: "Gerry",
+  firstName: "Alex",
   leaguesUrl: "https://flaim.app/leagues",
 };

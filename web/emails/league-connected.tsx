@@ -15,7 +15,7 @@ interface LeagueConnectedEmailProps {
 
 export default function LeagueConnectedEmail({
   aiGuideUrl = "https://flaim.app/guide/ai",
-  leagueName = "Gerry's roster",
+  leagueName = "Acme Fantasy League",
   platform = "Yahoo",
 }: LeagueConnectedEmailProps) {
   return (
@@ -44,6 +44,6 @@ export default function LeagueConnectedEmail({
 
 LeagueConnectedEmail.PreviewProps = {
   aiGuideUrl: "https://flaim.app/guide/ai",
-  leagueName: "Gerry's roster",
+  leagueName: "Acme Fantasy League",
   platform: "Yahoo",
 };
