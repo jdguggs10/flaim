@@ -802,6 +802,7 @@ describe('yahoo-connect-handlers', () => {
           status: 400,
           headers: { 'Content-Type': 'text/plain' },
         })));
+      mockStorage.releaseRefreshLease.mockRejectedValueOnce(new Error('release failed'));
 
       const response = await handleYahooCredentials(
         { ...env, YAHOO_REFRESH_COOLDOWN_MODE: 'disabled' },
@@ -828,6 +829,13 @@ describe('yahoo-connect-handlers', () => {
             outcome: 'cooldown_bypassed',
             diagnostic_class: 'cooldown_disabled',
             reason: 'disabled',
+          }),
+          expect.objectContaining({
+            event: 'cooldown_mark_skipped_release_failed',
+            correlation_id: 'req_no_cooldown',
+            diagnostic_class: 'cooldown_disabled',
+            reason: 'release_failed',
+            cooldown_mode: 'disabled',
           }),
         ])
       );

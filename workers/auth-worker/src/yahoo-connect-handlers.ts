@@ -780,6 +780,15 @@ async function markYahooRefreshCooldown(
       await storage.releaseRefreshLease(userId, ownerId);
     } catch (releaseError) {
       console.warn('[yahoo-connect] Failed to release Yahoo refresh lease when cooldown disabled:', releaseError);
+      logYahooRefreshDiagnostic('cooldown_mark_skipped_release_failed', {
+        correlationId,
+        userId,
+        phase: 'cooldown',
+        outcome: 'cooldown_bypassed',
+        diagnosticClass: 'cooldown_disabled',
+        reason: 'release_failed',
+        cooldownMode: 'disabled',
+      });
     }
     return;
   }
