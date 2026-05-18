@@ -6,7 +6,7 @@ import { HeroChat } from "@/components/site/hero-chat";
 export const metadata: Metadata = {
   title: "Flaim — Fantasy Leagues for ChatGPT",
   description:
-    "Flaim Fantasy is available in ChatGPT Apps. Connect ESPN, Yahoo, and Sleeper leagues for read-only fantasy analysis in ChatGPT, with optional MCP setup for Claude, Perplexity, Gemini CLI, and supported developer/testing setups.",
+    "Flaim Fantasy is available in ChatGPT. Connect ESPN, Yahoo, and Sleeper leagues for read-only fantasy analysis, with optional manual MCP setup for Claude, Perplexity, Gemini CLI, and developer/testing setups.",
   alternates: {
     canonical: "https://flaim.app",
   },
@@ -65,7 +65,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
                 name: "Which AI apps work with Flaim?",
                 acceptedAnswer: {
                   "@type": "Answer",
-                  text: "Flaim Fantasy is available in ChatGPT Apps. Manual MCP setup remains available for Claude, Perplexity, Gemini CLI, and supported developer/testing setups using https://api.flaim.app/mcp.",
+                  text: "Flaim Fantasy is available in ChatGPT. Optional manual MCP setup remains available for Claude custom connectors, Perplexity custom remote connectors, Gemini CLI, and developer/testing setups using https://api.flaim.app/mcp.",
                 },
               },
               {
@@ -81,7 +81,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
                 name: "Where do I finish setup?",
                 acceptedAnswer: {
                   "@type": "Answer",
-                  text: "Use flaim.app/leagues to connect ESPN, Yahoo, and Sleeper, then open Flaim Fantasy in ChatGPT Apps. Manual MCP setup for Claude, Perplexity, Gemini CLI, and supported developer/testing setups is documented at flaim.app/guide/ai.",
+                  text: "Use flaim.app/leagues to connect ESPN, Yahoo, and Sleeper, then open Flaim Fantasy in ChatGPT. Optional manual MCP setup for Claude, Perplexity, Gemini CLI, and developer/testing setups is documented at flaim.app/guide/ai.",
                 },
               },
             ],
@@ -172,19 +172,25 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
                 href="/guide/ai#chatgpt"
                 className="rounded-full border bg-background px-3 py-1 transition-colors hover:border-foreground/30"
               >
-                ChatGPT Apps
+                ChatGPT
               </Link>
               <Link
                 href="/guide/ai#claude"
                 className="rounded-full border bg-background px-3 py-1 transition-colors hover:border-foreground/30"
               >
-                Claude MCP
+                Claude connector
               </Link>
               <Link
                 href="/guide/ai#perplexity"
                 className="rounded-full border bg-background px-3 py-1 transition-colors hover:border-foreground/30"
               >
-                Perplexity MCP
+                Perplexity connector
+              </Link>
+              <Link
+                href="/guide/ai#gemini-cli"
+                className="rounded-full border bg-background px-3 py-1 transition-colors hover:border-foreground/30"
+              >
+                Gemini CLI
               </Link>
             </div>
           </div>
@@ -342,7 +348,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
             Ready to connect your leagues?
           </h2>
           <p className="text-muted-foreground mb-6">
-            Flaim Fantasy is available in ChatGPT Apps. Connect your leagues so
+            Flaim Fantasy is available in ChatGPT. Connect your leagues so
             ChatGPT can answer with your real fantasy context.
           </p>
           <div className="flex flex-col items-center justify-center gap-3 sm:flex-row">
@@ -392,9 +398,9 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
               </summary>
               <div className="px-4 pb-4 text-sm text-muted-foreground space-y-2">
                 <p>
-                  Flaim Fantasy is available in ChatGPT Apps. Manual MCP setup
-                  can also be used with Claude, Perplexity, Gemini CLI, and supported
-                  developer/testing setups using{" "}
+                  Flaim Fantasy is available in ChatGPT. Optional manual MCP
+                  setup can also be used with Claude, Perplexity, Gemini CLI,
+                  and developer/testing setups using{" "}
                   <code className="rounded bg-muted px-1 py-0.5 text-xs">
                     https://api.flaim.app/mcp
                   </code>

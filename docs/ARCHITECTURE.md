@@ -2,7 +2,7 @@
 
 Doc routing: see `docs/INDEX.md`.
 
-Flaim is an MCP (Model Context Protocol) service that connects ESPN, Yahoo, and Sleeper fantasy leagues to Flaim Fantasy in ChatGPT Apps and to supported direct MCP clients such as Claude, Perplexity, and Gemini CLI. It handles authentication, credential management, and real-time data fetching. The web app also includes a homepage live demo.
+Flaim is an MCP (Model Context Protocol) service that connects ESPN, Yahoo, and Sleeper fantasy leagues to Flaim Fantasy in ChatGPT and to optional manual MCP clients such as Claude, Perplexity, and Gemini CLI. It handles authentication, credential management, and real-time data fetching. The web app also includes a homepage live demo.
 
 ## Quick Start
 
@@ -55,7 +55,7 @@ docs/                       # Documentation
 
 Flaim is an **authentication and data service**, not a chatbot:
 
-- **MCP Server**: Exposes fantasy league data to ChatGPT Apps and supported direct clients via Model Context Protocol
+- **MCP Server**: Exposes fantasy league data to ChatGPT Apps and optional manual MCP clients via Model Context Protocol
 - **OAuth Provider**: Handles secure authentication between AI clients and ESPN data
 - **Credential Manager**: Securely stores ESPN session cookies (via extension or manual entry)
 
@@ -79,7 +79,7 @@ The public live showcase lives on the homepage, with `/chat` retained as a redir
 Both paths write to the same `espn_leagues` storage.
 
 **Connect AI (both paths):**
-- Open Flaim Fantasy in ChatGPT, or copy the MCP URL from `/leagues` and add it in a supported direct MCP client such as Claude, Perplexity, Gemini CLI, or developer testing tools.
+- Open Flaim Fantasy in ChatGPT, or copy the MCP URL from `/leagues` and add it in an optional manual MCP client such as Claude, Perplexity, Gemini CLI, or developer testing tools.
 
 ## Season Year Defaults
 
@@ -135,7 +135,7 @@ ESPN Cookies → POST /api/extension/sync → Auth Worker → Supabase
 
 ## AI Client OAuth 2.1
 
-ChatGPT Apps and supported direct MCP clients connect to Flaim's MCP servers:
+ChatGPT Apps and optional manual MCP clients connect to Flaim's MCP servers:
 
 - **MCP URL**: `https://api.flaim.app/mcp` (unified gateway - handles all sports; `/fantasy/mcp` also works as legacy alias)
 - **OAuth Flow**: Full OAuth 2.1 with PKCE, Dynamic Client Registration (RFC 7591), Protected Resource Metadata (RFC 9728)
@@ -143,7 +143,7 @@ ChatGPT Apps and supported direct MCP clients connect to Flaim's MCP servers:
 - **Metadata**: `/.well-known/oauth-authorization-server`, `/.well-known/oauth-protected-resource`
 - **Token lifetime**: MCP access tokens are short-lived (1 hour). Refresh tokens rotate on each successful refresh and use a 1-year inactivity window by default (`OAUTH_REFRESH_TOKEN_TTL_SECONDS`, default `31536000`, clamped to 1 hour minimum and 1 year maximum).
 
-**User flow**: Open Flaim Fantasy in ChatGPT Apps, or add the MCP URL in Claude, Perplexity, Gemini CLI, or another supported direct MCP client → 401 triggers OAuth → user consents at `flaim.app/oauth/consent` → token exchange → tools available.
+**User flow**: Open Flaim Fantasy in ChatGPT, or add the MCP URL in Claude, Perplexity, Gemini CLI, or another optional manual MCP client → 401 triggers OAuth → user consents at `flaim.app/oauth/consent` → token exchange → tools available.
 
 ## MCP Tools
 
@@ -154,7 +154,7 @@ The unified gateway exposes tools with explicit parameters (`platform`, `sport`,
 The unified gateway (`fantasy-mcp`) provides a single MCP endpoint for all platforms and sports, replacing the per-sport workers.
 
 ```
-ChatGPT Apps / supported MCP clients → fantasy-mcp (gateway) → espn-client    → ESPN API
+ChatGPT Apps / manual MCP clients → fantasy-mcp (gateway) → espn-client    → ESPN API
                                                            → yahoo-client   → Yahoo API
                                                            → sleeper-client → Sleeper API (public)
                                                            → auth-worker    → Supabase
@@ -200,8 +200,8 @@ See `workers/README.md` for worker-to-worker communication requirements.
 
 1. User syncs ESPN credentials via extension (or manual entry) → stored in Supabase via auth-worker.
 2. User adds leagues at `/leagues` (per-season rows) → stored in Supabase.
-3. User connects through ChatGPT Apps or a supported direct MCP client → OAuth flow → token stored in Supabase.
-4. ChatGPT Apps or the direct MCP client calls an MCP tool after connection → MCP worker fetches creds from auth-worker → calls ESPN → returns data.
+3. User connects through ChatGPT Apps or an optional manual MCP client → OAuth flow → token stored in Supabase.
+4. ChatGPT Apps or the manual MCP client calls an MCP tool after connection → MCP worker fetches creds from auth-worker → calls ESPN → returns data.
 
 ---
 

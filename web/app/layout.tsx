@@ -21,12 +21,12 @@ export const metadata: Metadata = {
     template: "%s | Flaim",
   },
   description:
-    "Flaim Fantasy is available in ChatGPT Apps. Connect ESPN, Yahoo, and Sleeper leagues for read-only fantasy analysis in ChatGPT, with optional MCP setup for Claude, Perplexity, Gemini CLI, and supported developer/testing setups.",
+    "Flaim Fantasy is available in ChatGPT. Connect ESPN, Yahoo, and Sleeper leagues for read-only fantasy analysis, with optional manual MCP setup for Claude, Perplexity, Gemini CLI, and developer/testing setups.",
   metadataBase: new URL("https://flaim.app"),
   openGraph: {
     title: "Flaim — Fantasy Leagues for ChatGPT",
     description:
-      "Flaim Fantasy is available in ChatGPT Apps. Connect ESPN, Yahoo, and Sleeper leagues for read-only, league-specific fantasy analysis.",
+      "Flaim Fantasy is available in ChatGPT. Connect ESPN, Yahoo, and Sleeper leagues for read-only, league-specific fantasy analysis.",
     url: "https://flaim.app",
     siteName: "Flaim",
     type: "website",
@@ -36,7 +36,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Flaim — Fantasy Leagues for ChatGPT",
     description:
-      "Flaim Fantasy is available in ChatGPT Apps. Connect ESPN, Yahoo, and Sleeper leagues for read-only fantasy analysis.",
+      "Flaim Fantasy is available in ChatGPT. Connect ESPN, Yahoo, and Sleeper leagues for read-only fantasy analysis.",
   },
   icons: {
     icon: [
@@ -90,10 +90,10 @@ export default function RootLayout({
                   "ESPN fantasy league integration",
                   "Yahoo fantasy league integration",
                   "Sleeper fantasy league integration",
-                  "Available in ChatGPT Apps",
+                  "Available in ChatGPT",
                   "ChatGPT fantasy sports analysis",
                   "MCP (Model Context Protocol) server",
-                  "Manual MCP setup for Claude, Perplexity, Gemini CLI, and supported developer/testing setups",
+                  "Optional manual MCP setup for Claude, Perplexity, Gemini CLI, and developer/testing setups",
                   "Read-only access — no trades, drops, or roster changes",
                   "9 MCP tools: roster, standings, matchups, free agents, transactions, league info, player search, league history, session",
                 ],

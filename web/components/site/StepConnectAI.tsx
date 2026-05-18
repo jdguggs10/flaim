@@ -58,14 +58,15 @@ export function StepConnectAI({
 
           <p className="mb-4 text-sm text-muted-foreground">
             ChatGPT is the primary setup path. Flaim Fantasy is available in
-            ChatGPT Apps.
+            ChatGPT.
           </p>
         </>
       ) : null}
 
       <p className="mb-3 text-xs text-muted-foreground">
-        Use the setup guide for ChatGPT, or copy the MCP details below for
-        Claude, Perplexity, Gemini CLI, and developer testing.
+        Use the setup guide for ChatGPT, or copy the manual MCP details below
+        for Claude custom connectors, Perplexity custom remote connectors,
+        Gemini CLI, and developer testing.
       </p>
 
       <div className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
@@ -85,15 +86,18 @@ export function StepConnectAI({
           >
             Claude
           </Link>
-          <a
-            href="https://claude.ai/settings/connectors"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-muted-foreground hover:text-foreground transition-colors"
-            title="Open Claude connectors"
-          >
-            <ExternalLink className="h-3 w-3" />
-          </a>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] text-warning">Beta</span>
+            <a
+              href="https://claude.ai/settings/connectors"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-muted-foreground hover:text-foreground transition-colors"
+              title="Open Claude connectors"
+            >
+              <ExternalLink className="h-3 w-3" />
+            </a>
+          </div>
         </div>
         <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
           <Link
@@ -102,15 +106,18 @@ export function StepConnectAI({
           >
             Perplexity
           </Link>
-          <a
-            href="https://www.perplexity.ai/account/connectors"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-muted-foreground hover:text-foreground transition-colors"
-            title="Open Perplexity connectors"
-          >
-            <ExternalLink className="h-3 w-3" />
-          </a>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] text-muted-foreground">Custom</span>
+            <a
+              href="https://www.perplexity.ai/account/connectors"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-muted-foreground hover:text-foreground transition-colors"
+              title="Open Perplexity connectors"
+            >
+              <ExternalLink className="h-3 w-3" />
+            </a>
+          </div>
         </div>
         <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
           <Link
@@ -124,8 +131,8 @@ export function StepConnectAI({
       </div>
 
       <p className="mb-4 text-xs text-muted-foreground">
-        Manual MCP setup remains useful for other assistants; most users should
-        start with ChatGPT Apps.
+        Optional manual MCP setup remains useful for alternate clients; most
+        users should start with ChatGPT.
       </p>
 
       {!isLoaded && (

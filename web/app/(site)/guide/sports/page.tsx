@@ -58,7 +58,7 @@ export default function SportsGuidePage() {
         <p className="text-xs text-muted-foreground">Last updated March 2026</p>
         <p className="mt-4 mb-8 text-muted-foreground">
           Flaim is more than a data connection. It gives ChatGPT and manual MCP
-          assistants a read-only way to reason about fantasy sports with tools
+          clients a read-only way to reason about fantasy sports with tools
           that work across ESPN, Yahoo, and Sleeper.
         </p>
 

@@ -336,7 +336,7 @@ export default function PlatformsGuidePage() {
               use Flaim Fantasy in ChatGPT
             </Link>{" "}
             for read-only fantasy analysis. Claude, Perplexity, and Gemini CLI
-            can still use the manual MCP URL{" "}
+            can still use the manual MCP setup URL{" "}
             <code className="rounded bg-muted px-1 py-0.5 text-xs">
               https://api.flaim.app/mcp
             </code>

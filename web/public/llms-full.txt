@@ -1,6 +1,6 @@
 # Flaim Fantasy
 
-> Flaim connects your ESPN, Yahoo, and Sleeper fantasy leagues to Flaim Fantasy in ChatGPT Apps, with supported MCP/direct clients also available for read-only, league-specific analysis using the Model Context Protocol (MCP).
+> Flaim connects your ESPN, Yahoo, and Sleeper fantasy leagues to Flaim Fantasy in ChatGPT, with optional manual MCP clients also available for read-only, league-specific analysis using the Model Context Protocol (MCP).
 
 ## What Flaim Is
 
@@ -38,7 +38,7 @@ Single MCP endpoint: https://api.flaim.app/mcp
    - ESPN: Use the Chrome extension to sync, or use the manual cookie fallback if needed
    - Yahoo: Start Yahoo auth from /leagues and wait for league discovery
    - Sleeper: Enter your exact username and wait for league discovery
-4. Open Flaim Fantasy in ChatGPT, or add the MCP server URL to a supported direct client: https://api.flaim.app/mcp
+4. Open Flaim Fantasy in ChatGPT, or add the MCP server URL to an optional manual MCP client: https://api.flaim.app/mcp
 5. Authorize Flaim when prompted
 6. Start a fresh chat and ask "What leagues do I have?" to confirm setup
 
@@ -65,10 +65,10 @@ Flaim is read-only. It cannot trade, drop, or modify anything in your league. ES
 ESPN doesn't offer a public API for fantasy data. The extension is the preferred way to sync the session details Flaim needs for read-only access. Manual cookie entry is available as a fallback.
 
 ### How does Flaim connect to AI clients?
-Flaim Fantasy is available in ChatGPT Apps. Supported direct MCP clients can also add the single server URL, and Flaim handles authentication and data retrieval after your leagues are linked in /leagues.
+Flaim Fantasy is available in ChatGPT. Optional manual MCP clients can also add the single server URL, and Flaim handles authentication and data retrieval after your leagues are linked in /leagues.
 
 ### What AI assistants work with Flaim?
-The primary experience is Flaim Fantasy in ChatGPT Apps. Supported direct MCP clients can also connect to the same endpoint when they support remote HTTP MCP and OAuth, including Claude, Perplexity, and Gemini CLI.
+The primary experience is Flaim Fantasy in ChatGPT. Optional manual MCP clients can also connect to the same endpoint when they support remote HTTP MCP and OAuth, including Claude, Perplexity, and Gemini CLI. Claude uses custom connectors, Perplexity uses custom remote connectors, and Gemini CLI uses terminal MCP server configuration.
 
 ## Links
 

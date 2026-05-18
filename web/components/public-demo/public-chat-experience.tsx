@@ -730,7 +730,7 @@ export function PublicChatExperience({
                           className="w-[18rem] rounded-2xl border-border p-4 text-sm leading-6"
                         >
                           <p className="text-foreground">
-                            Flaim Fantasy is available in ChatGPT Apps.
+                            Flaim Fantasy is available in ChatGPT.
                             Connecting Flaim puts your fantasy league tools in
                             this drawer.
                           </p>
@@ -770,10 +770,10 @@ export function PublicChatExperience({
                           className="w-[19rem] rounded-2xl border-border p-4 text-sm leading-6"
                         >
                           <p className="text-foreground">
-                            Flaim Fantasy is available in ChatGPT Apps for
-                            read-only league analysis. Manual MCP setup remains
+                            Flaim Fantasy is available in ChatGPT for read-only
+                            league analysis. Optional manual MCP setup remains
                             available for Claude, Perplexity, Gemini CLI, and
-                            supported developer/testing setups.
+                            developer/testing setups.
                           </p>
                         </PopoverContent>
                       </Popover>

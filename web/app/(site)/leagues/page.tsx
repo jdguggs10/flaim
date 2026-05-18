@@ -1651,7 +1651,8 @@ function LeaguesPageContent() {
               <div className="min-w-0 space-y-2">
                 <CardTitle className="text-lg">3. Connect ChatGPT</CardTitle>
                 <CardDescription>
-                  ChatGPT is the primary path. Manual MCP setup is available for Claude, Perplexity, Gemini CLI, and testing.
+                  ChatGPT is the primary path. Optional manual MCP setup is
+                  available for Claude, Perplexity, Gemini CLI, and testing.
                 </CardDescription>
               </div>
               <ChevronDown
@@ -1681,16 +1682,16 @@ function LeaguesPageContent() {
           <div className="space-y-1">
             <h2 className="text-sm font-semibold">Tips for using Flaim from ChatGPT</h2>
             <p className="text-sm text-muted-foreground">
-              Flaim Fantasy is available in ChatGPT Apps. Finish platform setup
-              here, set a default league if needed, then open ChatGPT and ask
-              about your connected fantasy context.
+              Flaim Fantasy is available in ChatGPT. Finish platform setup here,
+              set a default league if needed, then open ChatGPT and ask about
+              your connected fantasy context.
             </p>
           </div>
           <ol className="space-y-2 text-sm text-muted-foreground">
             <li>Connect at least one fantasy platform before trying ChatGPT.</li>
             <li>Set a default sport or league so Flaim can choose the right context faster.</li>
             <li>Start a fresh ChatGPT chat and ask a concrete league question like “Show me my roster.”</li>
-            <li>For Claude, Perplexity, or Gemini CLI, use the manual MCP details in the setup guide and then start a fresh conversation.</li>
+            <li>For Claude, Perplexity, or Gemini CLI, use the optional manual MCP details in the setup guide and then start a fresh conversation.</li>
           </ol>
         </section>
 

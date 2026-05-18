@@ -4,7 +4,7 @@ import Link from "next/link";
 export const metadata: Metadata = {
   title: "Flaim Setup Guide",
   description:
-    "Set up Flaim for ChatGPT-first fantasy sports analysis. Connect platforms, use Flaim Fantasy in ChatGPT Apps, and optionally configure MCP for Claude, Perplexity, or Gemini CLI.",
+    "Set up Flaim for ChatGPT-first fantasy sports analysis. Connect platforms, use Flaim Fantasy in ChatGPT, and optionally configure manual MCP clients such as Claude, Perplexity, or Gemini CLI.",
   alternates: {
     canonical: "https://flaim.app/guide",
   },
@@ -21,7 +21,7 @@ const guideCards = [
     href: "/guide/ai",
     title: "Use ChatGPT",
     kicker: "Primary AI path",
-    body: "Use Flaim Fantasy in ChatGPT Apps. Manual MCP setup for Claude, Perplexity, and Gemini CLI lives here too.",
+    body: "Use Flaim Fantasy in ChatGPT. Optional custom connector and MCP setup for Claude, Perplexity, and Gemini CLI lives here too.",
   },
   {
     href: "/guide/platforms",
@@ -45,11 +45,11 @@ export default function GuidePage() {
           <h1 className="text-3xl font-bold">Flaim Setup Guide</h1>
           <p className="text-lg font-medium text-foreground">
             Set up your fantasy platforms first, then use Flaim Fantasy in
-            ChatGPT Apps. Claude, Perplexity, and Gemini CLI remain optional
-            manual MCP setup paths.
+            ChatGPT. Claude, Perplexity, and Gemini CLI remain optional custom
+            connector and manual MCP setup paths.
           </p>
           <p className="text-muted-foreground">
-            ChatGPT is the main setup path for most users; the manual MCP
+            ChatGPT is the main setup path for most users; the optional manual MCP
             details are here for alternate AI tools and developer testing.
           </p>
         </div>

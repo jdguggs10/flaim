@@ -4,7 +4,7 @@ import Link from "next/link";
 export const metadata: Metadata = {
   title: "ChatGPT & AI Setup for Flaim Fantasy",
   description:
-    "Use Flaim Fantasy in ChatGPT Apps, with optional manual MCP setup notes for Claude, Perplexity, and Gemini CLI.",
+    "Use Flaim Fantasy in ChatGPT, with optional manual MCP setup notes for Claude, Perplexity, and Gemini CLI.",
   alternates: {
     canonical: "https://flaim.app/guide/ai",
   },
@@ -20,10 +20,10 @@ export default function AiGuidePage() {
             {
               "@context": "https://schema.org",
               "@type": "HowTo",
-              name: "Use Flaim Fantasy in ChatGPT Apps",
+              name: "Use Flaim Fantasy in ChatGPT",
               dateModified: "2026-05-17",
               description:
-                "Connect your fantasy leagues in Flaim, then use Flaim Fantasy from ChatGPT Apps for read-only league analysis.",
+                "Connect your fantasy leagues in Flaim, then use Flaim Fantasy in ChatGPT for read-only league analysis.",
               step: [
                 {
                   "@type": "HowToStep",
@@ -38,7 +38,7 @@ export default function AiGuidePage() {
                 {
                   "@type": "HowToStep",
                   name: "Open Flaim Fantasy in ChatGPT",
-                  text: "Open ChatGPT, use Flaim Fantasy from ChatGPT Apps, and authorize Flaim if prompted.",
+                  text: "Open ChatGPT, use Flaim Fantasy, and authorize Flaim if prompted.",
                 },
                 {
                   "@type": "HowToStep",
@@ -144,7 +144,7 @@ export default function AiGuidePage() {
         <h1 className="mb-4 text-3xl font-bold">ChatGPT & AI Setup</h1>
         <p className="mb-4 text-lg font-medium text-foreground">
           ChatGPT is the primary Flaim setup path. Flaim Fantasy is available in
-          ChatGPT Apps for read-only fantasy sports analysis.
+          ChatGPT for read-only fantasy sports analysis.
         </p>
         <p className="text-xs text-muted-foreground">Last updated May 2026</p>
         <p className="mt-4 mb-8 text-muted-foreground">
@@ -153,8 +153,8 @@ export default function AiGuidePage() {
             /leagues
           </Link>
           . That account setup is what ChatGPT uses when you open Flaim
-          Fantasy. Claude, Perplexity, and Gemini CLI remain optional manual MCP
-          setup paths using the URL below.
+          Fantasy. Claude, Perplexity, and Gemini CLI remain optional custom
+          connector and manual MCP setup paths using the URL below.
         </p>
 
         <section className="mb-10">
@@ -177,8 +177,9 @@ export default function AiGuidePage() {
               Set the default sport or league ChatGPT should use first.
             </li>
             <li>
-              Open ChatGPT and use Flaim Fantasy. For Claude, Perplexity,
-              Gemini CLI, or developer testing, add Flaim with this MCP URL:
+              Open ChatGPT and use Flaim Fantasy. For Claude custom connectors,
+              Perplexity custom remote connectors, Gemini CLI, or developer
+              testing, add Flaim with this MCP URL:
             </li>
           </ol>
           <div className="my-4 rounded-lg border bg-muted p-3">
@@ -200,9 +201,9 @@ export default function AiGuidePage() {
         <section id="chatgpt" className="mb-10 scroll-mt-20">
           <h2 className="mb-3 text-xl font-semibold">ChatGPT</h2>
           <p className="mb-4 text-muted-foreground">
-            Flaim Fantasy is available in ChatGPT Apps. Connect your leagues in
-            Flaim first, then use ChatGPT for read-only analysis grounded in
-            your real fantasy context.
+            Flaim Fantasy is available in ChatGPT. Connect your leagues in Flaim
+            first, then use ChatGPT for read-only analysis grounded in your real
+            fantasy context.
           </p>
           <ol className="list-decimal list-inside space-y-2 text-muted-foreground">
             <li>
@@ -215,7 +216,7 @@ export default function AiGuidePage() {
             <li>
               Set a default league if you have more than one connected league.
             </li>
-            <li>Open ChatGPT and use Flaim Fantasy from ChatGPT Apps.</li>
+            <li>Open ChatGPT and use Flaim Fantasy.</li>
             <li>
               Start a fresh ChatGPT conversation and ask what leagues you have.
               See the{" "}
@@ -255,8 +256,9 @@ export default function AiGuidePage() {
         <section id="claude" className="mb-10 scroll-mt-20">
           <h2 className="mb-3 text-xl font-semibold">Claude</h2>
           <p className="mb-4 text-muted-foreground">
-            Claude is a manual MCP setup path. You need a Claude plan that
-            supports custom connectors.
+            Claude is an optional custom connector setup path. Custom
+            connectors are currently beta in Claude; Free users are limited to
+            one custom connector.
           </p>
           <ol className="list-decimal list-inside space-y-2 text-muted-foreground">
             <li>
@@ -316,9 +318,9 @@ export default function AiGuidePage() {
         <section id="perplexity" className="mb-10 scroll-mt-20">
           <h2 className="mb-3 text-xl font-semibold">Perplexity</h2>
           <p className="mb-4 text-muted-foreground">
-            Perplexity is another manual MCP setup path. The key difference is
-            you need to set the auth method to OAuth and the transport to
-            Streamable HTTP.
+            Perplexity is an optional custom remote connector setup path. The
+            key difference is you need to set the auth method to OAuth and the
+            transport to Streamable HTTP.
           </p>
           <ol className="list-decimal list-inside space-y-2 text-muted-foreground">
             <li>
@@ -336,6 +338,11 @@ export default function AiGuidePage() {
             <li>Set transport to Streamable HTTP.</li>
             <li>Authorize Flaim and start a fresh thread.</li>
           </ol>
+          <p className="mt-3 text-sm text-muted-foreground">
+            Perplexity custom remote connectors require HTTPS. In some
+            workspaces, an admin must enable custom remote connectors before
+            members can add them.
+          </p>
           <p className="mt-3 text-sm text-muted-foreground">
             For Perplexity&apos;s current UI details, check{" "}
             <a

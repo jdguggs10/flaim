@@ -1,6 +1,6 @@
 # Flaim Fantasy
 
-> Flaim connects your ESPN, Yahoo, and Sleeper fantasy leagues to Flaim Fantasy in ChatGPT Apps, with supported MCP/direct clients also available for read-only, league-specific analysis.
+> Flaim connects your ESPN, Yahoo, and Sleeper fantasy leagues to Flaim Fantasy in ChatGPT, with optional manual MCP clients also available for read-only, league-specific analysis.
 
 ## What Flaim does
 
@@ -8,7 +8,7 @@
 - Supports ESPN and Yahoo across football, baseball, basketball, hockey
 - Supports Sleeper for football and basketball
 - 9 tools: roster, standings, matchups, free agents, transactions, league info, player search, league history, session info
-- Available in ChatGPT Apps; also works with supported direct clients via MCP (Model Context Protocol)
+- Available in ChatGPT; also works with optional manual MCP clients via MCP (Model Context Protocol)
 - Read-only — Flaim cannot trade, drop, or modify anything in your league
 
 ## How to connect
@@ -16,7 +16,7 @@
 1. Create an account at https://flaim.app
 2. Open https://flaim.app/leagues
 3. Connect fantasy platforms there (ESPN via Chrome extension or manual fallback, Yahoo via OAuth, Sleeper via username)
-4. Open Flaim Fantasy in ChatGPT, or add MCP server URL https://api.flaim.app/mcp to a supported direct client
+4. Open Flaim Fantasy in ChatGPT, or add MCP server URL https://api.flaim.app/mcp to an optional manual MCP client
 5. Start a fresh chat and ask what leagues you have to confirm setup
 
 ## Links
