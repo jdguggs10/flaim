@@ -63,9 +63,7 @@ export function FlaimEmailLayout({
           </Section>
 
           <Section style={styles.card}>
-            {eyebrow ? (
-              <Text style={styles.eyebrow}>{eyebrow.toUpperCase()}</Text>
-            ) : null}
+            {eyebrow ? <Text style={styles.eyebrow}>{eyebrow}</Text> : null}
             <Heading as="h1" style={styles.heading}>
               {title}
             </Heading>

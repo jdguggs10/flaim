@@ -36,6 +36,8 @@ Export static HTML previews:
 corepack pnpm --dir web run email:export
 ```
 
+This writes ignored preview HTML to `web/.email-out/`.
+
 The first product templates are:
 
 - `web/emails/welcome.tsx`

@@ -11,6 +11,7 @@ import {
 interface WelcomeEmailProps {
   firstName?: string;
   leaguesUrl: string;
+  /** Must be a real unsubscribe or notification-preferences URL before connecting to a live sender. */
   unsubscribeUrl: string;
 }
 
@@ -21,7 +22,7 @@ export default function WelcomeEmail({
 }: WelcomeEmailProps) {
   return (
     <FlaimEmailLayout
-      eyebrow="Welcome"
+      eyebrow="WELCOME"
       footerDescription="Flaim connects your real fantasy leagues to your AI assistant for read-only, league-specific analysis."
       footerDisclosure={
         <>
