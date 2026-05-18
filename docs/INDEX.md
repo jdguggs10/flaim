@@ -13,6 +13,7 @@ Canonical map for docs that live inside this repository.
 | Release history | `docs/CHANGELOG.md` | Condensed release notes.
 | Worker behavior | `workers/*/README.md` | Service-specific implementation notes.
 | Frontend conventions | `docs/STYLE-GUIDE.md` | Lightweight in-repo style baseline.
+| Email brand system | `docs/EMAILS.md` | Provider roles, sender rules, and template conventions.
 
 ## Permanent Docs
 
@@ -21,6 +22,7 @@ Canonical map for docs that live inside this repository.
 - `docs/DATABASE.md`
 - `docs/TESTING.md`
 - `docs/STYLE-GUIDE.md`
+- `docs/EMAILS.md`
 - `docs/CHANGELOG.md`
 - `docs/CONNECTOR-DOCS.md`
 
