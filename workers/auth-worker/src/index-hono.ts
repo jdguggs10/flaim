@@ -89,6 +89,7 @@ export interface Env {
   YAHOO_CLIENT_ID?: string;
   YAHOO_CLIENT_SECRET?: string;
   YAHOO_REFRESH_GRANT_REDIRECT_URI?: 'include' | 'omit';
+  YAHOO_REFRESH_COOLDOWN_MODE?: 'enabled' | 'disabled';
   // Eval/CI API key auth (Cloudflare secrets)
   EVAL_API_KEY?: string;   // Static API key for eval/CI
   EVAL_USER_ID?: string;   // Clerk user ID that the API key resolves to

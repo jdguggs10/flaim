@@ -19,6 +19,7 @@
   // Optional vars:
   // - OAUTH_REFRESH_TOKEN_TTL_SECONDS (defaults to 31536000 in code; set only to override)
   // - YAHOO_REFRESH_GRANT_REDIRECT_URI ("include" by default; "omit" to test Yahoo refresh compatibility)
+  // - YAHOO_REFRESH_COOLDOWN_MODE ("enabled" by default; "disabled" bypasses transient cooldown gates)
 
   // Environment configurations
   "env": {
@@ -77,7 +78,9 @@
         "NODE_ENV": "production",
         "ENVIRONMENT": "prod",
         "FRONTEND_URL": "https://flaim.app",
-        "YAHOO_REFRESH_GRANT_REDIRECT_URI": "omit"
+        // TODO(FLA-127): temporary Yahoo auth diagnostic mode; revert when resolved.
+        "YAHOO_REFRESH_GRANT_REDIRECT_URI": "omit",
+        "YAHOO_REFRESH_COOLDOWN_MODE": "disabled"
       }
     },
     // Preview environment (remote dev/staging)
@@ -115,7 +118,9 @@
         "NODE_ENV": "production",
         "ENVIRONMENT": "preview",
         "FRONTEND_URL": "https://preview.flaim.app",
-        "YAHOO_REFRESH_GRANT_REDIRECT_URI": "omit"
+        // TODO(FLA-127): temporary Yahoo auth diagnostic mode; revert when resolved.
+        "YAHOO_REFRESH_GRANT_REDIRECT_URI": "omit",
+        "YAHOO_REFRESH_COOLDOWN_MODE": "disabled"
       }
     },
     // Development environment (local)
