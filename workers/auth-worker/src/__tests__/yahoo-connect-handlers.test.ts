@@ -781,6 +781,51 @@ describe('yahoo-connect-handlers', () => {
       );
     });
 
+    it('releases the lease instead of marking cooldown when cooldown mode is disabled', async () => {
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+      mockStorage.getYahooCredentials.mockResolvedValue({
+        clerkUserId: 'user_123',
+        accessToken: 'old-access-token',
+        refreshToken: 'refresh-token',
+        expiresAt: new Date(Date.now() + 2 * 60 * 1000),
+        needsRefresh: true,
+      });
+
+      let capturedOwnerId: string | undefined;
+      mockStorage.acquireRefreshLease.mockImplementation(
+        (_userId: string, ownerId: string) => {
+          capturedOwnerId = ownerId;
+          return Promise.resolve(true);
+        }
+      );
+      mockFetch.mockImplementation(() => Promise.resolve(new Response('Too many requests to Yahoo token endpoint', {
+          status: 400,
+          headers: { 'Content-Type': 'text/plain' },
+        })));
+
+      const response = await handleYahooCredentials(
+        { ...env, YAHOO_REFRESH_COOLDOWN_MODE: 'disabled' },
+        'user_123',
+        corsHeaders,
+        'req_no_cooldown'
+      );
+
+      expect(response.status).toBe(503);
+      expect(mockStorage.markRefreshCooldown).not.toHaveBeenCalled();
+      expect(mockStorage.releaseRefreshLease).toHaveBeenCalledWith('user_123', capturedOwnerId);
+      expect(yahooRefreshDiagnostics(logSpy)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            event: 'cooldown_mark_skipped',
+            correlation_id: 'req_no_cooldown',
+            outcome: 'cooldown_bypassed',
+            diagnostic_class: 'cooldown_disabled',
+            reason: 'disabled',
+          }),
+        ])
+      );
+    });
+
     it('does not treat permanent token failures as retryable just because the body says too many', async () => {
       mockStorage.getYahooCredentials.mockResolvedValue({
         clerkUserId: 'user_123',
@@ -1468,6 +1513,66 @@ describe('yahoo-connect-handlers', () => {
         expect(mockStorage.acquireRefreshLease).not.toHaveBeenCalled();
         expect(mockFetch).not.toHaveBeenCalled();
         expect(mockStorage.markRefreshCooldown).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('bypasses active refresh cooldown and attempts refresh when cooldown mode is disabled', async () => {
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-05-11T18:15:00Z'));
+      try {
+        mockStorage.getYahooCredentials.mockResolvedValue({
+          clerkUserId: 'user_123',
+          accessToken: 'old-access-token',
+          refreshToken: 'refresh-token',
+          expiresAt: new Date(Date.now() + 2 * 60 * 1000),
+          needsRefresh: true,
+          refreshLeaseOwner: 'cooldown:owner-1',
+          refreshLeaseExpiresAt: new Date(Date.now() + 45_000),
+        });
+        mockFetch.mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              access_token: 'new-access-token',
+              refresh_token: 'new-refresh-token',
+              expires_in: 3600,
+            }),
+            { status: 200 }
+          )
+        );
+
+        const response = await handleYahooCredentials(
+          { ...env, YAHOO_REFRESH_COOLDOWN_MODE: 'disabled' },
+          'user_123',
+          corsHeaders,
+          'req_bypass_cooldown'
+        );
+
+        expect(response.status).toBe(200);
+        const body = (await response.json()) as Record<string, unknown>;
+        expect(body.access_token).toBe('new-access-token');
+        expect(mockStorage.releaseRefreshLease).toHaveBeenCalledWith('user_123', 'cooldown:owner-1');
+        expect(mockStorage.acquireRefreshLease).toHaveBeenCalledWith('user_123', expect.any(String), 30_000, 'refresh-token');
+        expect(mockFetch).toHaveBeenCalledTimes(1);
+        expect(mockStorage.markRefreshCooldown).not.toHaveBeenCalled();
+        expect(yahooRefreshDiagnostics(logSpy)).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              event: 'cooldown_bypassed',
+              correlation_id: 'req_bypass_cooldown',
+              outcome: 'cooldown_bypassed',
+              diagnostic_class: 'cooldown_disabled',
+              refresh_state: 'cooldown',
+              lease_remaining_seconds: 45,
+            }),
+            expect.objectContaining({
+              event: 'refresh_request_started',
+              correlation_id: 'req_bypass_cooldown',
+            }),
+          ])
+        );
       } finally {
         vi.useRealTimers();
       }

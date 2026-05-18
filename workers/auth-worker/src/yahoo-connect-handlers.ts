@@ -42,6 +42,7 @@ export interface YahooConnectEnv {
   YAHOO_CLIENT_ID: string;
   YAHOO_CLIENT_SECRET: string;
   YAHOO_REFRESH_GRANT_REDIRECT_URI?: 'include' | 'omit';
+  YAHOO_REFRESH_COOLDOWN_MODE?: 'enabled' | 'disabled';
   ENVIRONMENT?: string;
   NODE_ENV?: string;
   FRONTEND_URL?: string;
@@ -98,6 +99,7 @@ type YahooRefreshDiagnosticOutcome =
   | 'fetch_error'
   | 'cooldown_active'
   | 'cooldown_marked'
+  | 'cooldown_bypassed'
   | 'lease_budget_exhausted';
 type YahooRefreshDiagnosticClass =
   | 'yahoo_rate_limit'
@@ -110,6 +112,7 @@ type YahooRefreshDiagnosticClass =
   | 'cooldown_active'
   | 'cooldown_mark'
   | 'cooldown_mark_failed'
+  | 'cooldown_disabled'
   | 'lease_wait_timeout'
   | 'lease_budget_exhausted';
 
@@ -540,6 +543,37 @@ function isRefreshCooldown(credentials: { refreshLeaseOwner?: string; refreshLea
     && !leaseExpired(credentials);
 }
 
+function yahooRefreshCooldownEnabled(env: YahooConnectEnv): boolean {
+  return env.YAHOO_REFRESH_COOLDOWN_MODE !== 'disabled';
+}
+
+async function clearDisabledYahooRefreshCooldown(
+  storage: YahooStorage,
+  credentials: YahooCredentials,
+  correlationId?: string
+): Promise<YahooCredentials> {
+  if (!credentials.refreshLeaseOwner?.startsWith(REFRESH_COOLDOWN_OWNER_PREFIX)) {
+    return credentials;
+  }
+
+  logYahooRefreshDiagnostic('cooldown_bypassed', {
+    correlationId,
+    userId: credentials.clerkUserId,
+    phase: 'cooldown',
+    outcome: 'cooldown_bypassed',
+    diagnosticClass: 'cooldown_disabled',
+    leaseRemainingSeconds: retryAfterFromLease(credentials),
+    refreshState: yahooRefreshState(credentials),
+  });
+
+  await storage.releaseRefreshLease(credentials.clerkUserId, credentials.refreshLeaseOwner);
+  return {
+    ...credentials,
+    refreshLeaseOwner: undefined,
+    refreshLeaseExpiresAt: undefined,
+  };
+}
+
 function retryAfterFromLease(credentials: { refreshLeaseExpiresAt?: Date } | null): number | undefined {
   return boundedPositiveSecondsUntil(credentials?.refreshLeaseExpiresAt);
 }
@@ -714,8 +748,23 @@ async function markYahooRefreshCooldown(
   userId: string,
   ownerId: string,
   retryAfterSeconds: number,
+  env: YahooConnectEnv,
   correlationId?: string
 ): Promise<void> {
+  if (!yahooRefreshCooldownEnabled(env)) {
+    logYahooRefreshDiagnostic('cooldown_mark_skipped', {
+      correlationId,
+      userId,
+      phase: 'cooldown',
+      outcome: 'cooldown_bypassed',
+      diagnosticClass: 'cooldown_disabled',
+      retryAfter: retryAfterSeconds,
+      reason: 'disabled',
+    });
+    await storage.releaseRefreshLease(userId, ownerId);
+    return;
+  }
+
   try {
     const marked = await storage.markRefreshCooldown(userId, ownerId, retryAfterSeconds);
     logYahooRefreshDiagnostic('cooldown_mark_attempted', {
@@ -752,6 +801,7 @@ async function markYahooRefreshCooldown(
 async function waitForFreshCredentialsOrLeaseClear(
   storage: YahooStorage,
   userId: string,
+  env: YahooConnectEnv,
   credentials: YahooCredentials,
   correlationId?: string
 ): Promise<RetryTokenResult> {
@@ -760,7 +810,11 @@ async function waitForFreshCredentialsOrLeaseClear(
 
   while (latest && !leaseExpired(latest)) {
     if (isRefreshCooldown(latest)) {
-      return yahooRefreshCooldownResult(latest, correlationId);
+      if (yahooRefreshCooldownEnabled(env)) {
+        return yahooRefreshCooldownResult(latest, correlationId);
+      }
+      latest = await clearDisabledYahooRefreshCooldown(storage, latest, correlationId);
+      return { retry: true, credentials: latest };
     }
 
     const remainingMs = deadline - Date.now();
@@ -865,7 +919,10 @@ async function getValidYahooAccessToken(
       return toTokenResult(credentials);
     }
     if (isRefreshCooldown(credentials)) {
-      return yahooRefreshCooldownResult(credentials, correlationId);
+      if (yahooRefreshCooldownEnabled(env)) {
+        return yahooRefreshCooldownResult(credentials, correlationId);
+      }
+      credentials = await clearDisabledYahooRefreshCooldown(storage, credentials, correlationId);
     }
 
     const ownerId = crypto.randomUUID();
@@ -906,7 +963,11 @@ async function getValidYahooAccessToken(
         return toTokenResult(latest);
       }
       if (isRefreshCooldown(latest)) {
-        return yahooRefreshCooldownResult(latest, correlationId);
+        if (yahooRefreshCooldownEnabled(env)) {
+          return yahooRefreshCooldownResult(latest, correlationId);
+        }
+        credentials = await clearDisabledYahooRefreshCooldown(storage, latest, correlationId);
+        continue;
       }
       if (leaseExpired(latest)) {
         logDiagnostic('lease_loss_found_expired_lease_retrying', {
@@ -921,6 +982,7 @@ async function getValidYahooAccessToken(
       const loserResult = await waitForFreshCredentialsOrLeaseClear(
         storage,
         userId,
+        env,
         latest,
         correlationId
       );
@@ -959,6 +1021,7 @@ async function getValidYahooAccessToken(
           userId,
           ownerId,
           YAHOO_DEFAULT_TRANSIENT_RETRY_AFTER_SECONDS,
+          env,
           correlationId
         );
         return {
@@ -1027,6 +1090,7 @@ async function getValidYahooAccessToken(
           userId,
           ownerId,
           YAHOO_DEFAULT_TRANSIENT_RETRY_AFTER_SECONDS,
+          env,
           correlationId
         );
         return {
@@ -1126,7 +1190,7 @@ async function getValidYahooAccessToken(
           bodyClass: result.upstream_body_class,
           hasUpstreamRetryAfter: result.retry_after_source === 'upstream_header',
         });
-        await markYahooRefreshCooldown(storage, userId, ownerId, retryAfter, correlationId);
+        await markYahooRefreshCooldown(storage, userId, ownerId, retryAfter, env, correlationId);
         return {
           error: YahooAuthWorkerErrorCode.REFRESH_TEMPORARILY_UNAVAILABLE,
           errorDescription: result.error_description || 'Yahoo token refresh is temporarily unavailable',
