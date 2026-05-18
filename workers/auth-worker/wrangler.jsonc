@@ -78,7 +78,7 @@
         "NODE_ENV": "production",
         "ENVIRONMENT": "prod",
         "FRONTEND_URL": "https://flaim.app",
-        // Temporary Yahoo auth diagnostic mode. Track and revert through FLA-127.
+        // TODO(FLA-127): temporary Yahoo auth diagnostic mode; revert when resolved.
         "YAHOO_REFRESH_GRANT_REDIRECT_URI": "omit",
         "YAHOO_REFRESH_COOLDOWN_MODE": "disabled"
       }
@@ -118,7 +118,7 @@
         "NODE_ENV": "production",
         "ENVIRONMENT": "preview",
         "FRONTEND_URL": "https://preview.flaim.app",
-        // Temporary Yahoo auth diagnostic mode. Track and revert through FLA-127.
+        // TODO(FLA-127): temporary Yahoo auth diagnostic mode; revert when resolved.
         "YAHOO_REFRESH_GRANT_REDIRECT_URI": "omit",
         "YAHOO_REFRESH_COOLDOWN_MODE": "disabled"
       }

@@ -1583,6 +1583,13 @@ describe('yahoo-connect-handlers', () => {
               lease_remaining_seconds: 45,
             }),
             expect.objectContaining({
+              event: 'cooldown_bypass_release_failed',
+              correlation_id: 'req_bypass_cooldown',
+              diagnostic_class: 'cooldown_disabled',
+              reason: 'release_failed',
+              cooldown_mode: 'disabled',
+            }),
+            expect.objectContaining({
               event: 'refresh_request_started',
               correlation_id: 'req_bypass_cooldown',
             }),

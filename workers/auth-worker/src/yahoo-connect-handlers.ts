@@ -572,6 +572,15 @@ async function clearDisabledYahooRefreshCooldown(
     await storage.releaseRefreshLease(credentials.clerkUserId, credentials.refreshLeaseOwner);
   } catch (releaseError) {
     console.warn('[yahoo-connect] Failed to release active Yahoo refresh cooldown while cooldown mode disabled:', releaseError);
+    logYahooRefreshDiagnostic('cooldown_bypass_release_failed', {
+      correlationId,
+      userId: credentials.clerkUserId,
+      phase: 'cooldown',
+      outcome: 'cooldown_bypassed',
+      diagnosticClass: 'cooldown_disabled',
+      reason: 'release_failed',
+      cooldownMode: 'disabled',
+    });
   }
   return {
     ...credentials,
@@ -988,6 +997,15 @@ async function getValidYahooAccessToken(
           return yahooRefreshCooldownResult(latest, correlationId);
         }
         credentials = await clearDisabledYahooRefreshCooldown(storage, latest, correlationId);
+        logDiagnostic('cooldown_cleared_retrying', {
+          userId,
+          attempt,
+          phase: 'cooldown',
+          outcome: 'cooldown_bypassed',
+          diagnosticClass: 'cooldown_disabled',
+          refreshState: 'cooldown',
+          cooldownMode: 'disabled',
+        });
         continue;
       }
       if (leaseExpired(latest)) {
