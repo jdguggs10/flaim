@@ -59,6 +59,5 @@ LeagueConnectedEmail.PreviewProps = {
   aiGuideUrl: "https://flaim.app/guide/ai",
   leagueName: "Acme Fantasy League",
   platform: "Yahoo",
-  unsubscribeUrl:
-    "mailto:support@flaim.app?subject=Unsubscribe%20from%20Flaim%20product%20emails",
-};
+  unsubscribeUrl: "https://flaim.app/notifications/unsubscribe?token=PREVIEW_ONLY",
+} satisfies LeagueConnectedEmailProps;

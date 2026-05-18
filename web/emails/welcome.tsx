@@ -57,6 +57,5 @@ export default function WelcomeEmail({
 WelcomeEmail.PreviewProps = {
   firstName: "Alex",
   leaguesUrl: "https://flaim.app/leagues",
-  unsubscribeUrl:
-    "mailto:support@flaim.app?subject=Unsubscribe%20from%20Flaim%20product%20emails",
-};
+  unsubscribeUrl: "https://flaim.app/notifications/unsubscribe?token=PREVIEW_ONLY",
+} satisfies WelcomeEmailProps;

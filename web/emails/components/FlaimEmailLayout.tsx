@@ -1,4 +1,5 @@
 import * as React from "react";
+// Preview-only for now; move react-email to production deps when adding a send path.
 import {
   Body,
   Button,
@@ -203,7 +204,7 @@ const styles = {
     borderStyle: "solid",
     borderWidth: "1px",
     margin: "8px 0 20px",
-    padding: "14px 16px",
+    padding: "14px 16px 20px",
   },
   footer: {
     padding: "18px 4px 0",
