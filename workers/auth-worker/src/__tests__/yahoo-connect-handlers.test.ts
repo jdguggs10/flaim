@@ -816,6 +816,13 @@ describe('yahoo-connect-handlers', () => {
       expect(yahooRefreshDiagnostics(logSpy)).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
+            event: 'cooldown_mode_disabled',
+            correlation_id: 'req_no_cooldown',
+            diagnostic_class: 'cooldown_disabled',
+            reason: 'env_disabled',
+            cooldown_mode: 'disabled',
+          }),
+          expect.objectContaining({
             event: 'cooldown_mark_skipped',
             correlation_id: 'req_no_cooldown',
             outcome: 'cooldown_bypassed',
@@ -1559,6 +1566,13 @@ describe('yahoo-connect-handlers', () => {
         expect(mockStorage.markRefreshCooldown).not.toHaveBeenCalled();
         expect(yahooRefreshDiagnostics(logSpy)).toEqual(
           expect.arrayContaining([
+            expect.objectContaining({
+              event: 'cooldown_mode_disabled',
+              correlation_id: 'req_bypass_cooldown',
+              diagnostic_class: 'cooldown_disabled',
+              reason: 'env_disabled',
+              cooldown_mode: 'disabled',
+            }),
             expect.objectContaining({
               event: 'cooldown_bypassed',
               correlation_id: 'req_bypass_cooldown',

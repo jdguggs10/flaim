@@ -152,6 +152,7 @@ interface YahooRefreshDiagnosticFields {
   requestHasRedirectUri?: boolean;
   yahooClientIdPresent?: boolean;
   yahooClientSecretPresent?: boolean;
+  cooldownMode?: 'enabled' | 'disabled';
   authType?: string;
 }
 
@@ -306,6 +307,7 @@ function logYahooRefreshDiagnostic(event: string, fields: YahooRefreshDiagnostic
   if (fields.requestHasRedirectUri !== undefined) payload.request_has_redirect_uri = fields.requestHasRedirectUri;
   if (fields.yahooClientIdPresent !== undefined) payload.yahoo_client_id_present = fields.yahooClientIdPresent;
   if (fields.yahooClientSecretPresent !== undefined) payload.yahoo_client_secret_present = fields.yahooClientSecretPresent;
+  if (fields.cooldownMode !== undefined) payload.cooldown_mode = fields.cooldownMode;
   if (fields.authType !== undefined) payload.auth_type = fields.authType;
 
   console.log(JSON.stringify(payload));
@@ -912,6 +914,17 @@ async function getValidYahooAccessToken(
     return { error: 'not_connected' };
   }
 
+  const cooldownEnabled = yahooRefreshCooldownEnabled(env);
+  if (!cooldownEnabled) {
+    logDiagnostic('cooldown_mode_disabled', {
+      userId,
+      phase: 'cooldown',
+      diagnosticClass: 'cooldown_disabled',
+      reason: 'env_disabled',
+      cooldownMode: 'disabled',
+    });
+  }
+
   for (let attempt = 0; attempt < MAX_REFRESH_ATTEMPTS; attempt++) {
     if (!credentials.needsRefresh) {
       logDiagnostic('token_fresh_returned', {
@@ -923,7 +936,7 @@ async function getValidYahooAccessToken(
       return toTokenResult(credentials);
     }
     if (isRefreshCooldown(credentials)) {
-      if (yahooRefreshCooldownEnabled(env)) {
+      if (cooldownEnabled) {
         return yahooRefreshCooldownResult(credentials, correlationId);
       }
       credentials = await clearDisabledYahooRefreshCooldown(storage, credentials, correlationId);
@@ -967,7 +980,7 @@ async function getValidYahooAccessToken(
         return toTokenResult(latest);
       }
       if (isRefreshCooldown(latest)) {
-        if (yahooRefreshCooldownEnabled(env)) {
+        if (cooldownEnabled) {
           return yahooRefreshCooldownResult(latest, correlationId);
         }
         credentials = await clearDisabledYahooRefreshCooldown(storage, latest, correlationId);
