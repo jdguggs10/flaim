@@ -24,6 +24,7 @@ import {
   YAHOO_REFRESH_IN_PROGRESS_RETRY_AFTER_SECONDS,
   classifyYahooApiFailure,
   defaultYahooRetryAfterSeconds,
+  isYahooRateLimitStatus,
   isYahooTransientHttpStatus,
   parseRetryAfterSeconds,
   YahooAuthWorkerErrorCode,
@@ -92,6 +93,8 @@ interface YahooRefreshDiagnosticFields {
   hasRetryAfter?: boolean;
   hasUpstreamErrorText?: boolean;
   cooldownMarked?: boolean;
+  retryDelayMs?: number;
+  retryAttempt?: number;
 }
 
 // Internal annotation from the Yahoo token endpoint parser. This is consumed by
@@ -120,6 +123,8 @@ const REFRESH_COOLDOWN_OWNER_PREFIX = 'cooldown:';
 // Plain-text "too many token requests" deserves a short pause; network
 // timeouts use the longer generic Yahoo transient cooldown.
 const YAHOO_TOKEN_TEXT_TRANSIENT_RETRY_AFTER_SECONDS = 60;
+const YAHOO_OWNER_RETRY_DELAY_MS = 250;
+const YAHOO_OWNER_RETRY_LEASE_SAFETY_MS = 1_000;
 
 /**
  * Get the OAuth callback URL based on environment
@@ -226,6 +231,8 @@ function logYahooRefreshDiagnostic(event: string, fields: YahooRefreshDiagnostic
   if (fields.hasRetryAfter !== undefined) payload.has_retry_after = fields.hasRetryAfter;
   if (fields.hasUpstreamErrorText !== undefined) payload.has_upstream_error_text = fields.hasUpstreamErrorText;
   if (fields.cooldownMarked !== undefined) payload.cooldown_marked = fields.cooldownMarked;
+  if (fields.retryDelayMs !== undefined) payload.retry_delay_ms = fields.retryDelayMs;
+  if (fields.retryAttempt !== undefined) payload.retry_attempt = fields.retryAttempt;
 
   console.log(JSON.stringify(payload));
 }
@@ -308,14 +315,14 @@ function hasTransientYahooTokenFailureSignal(text: string): boolean {
 function classifyYahooTokenFailure(
   response: Pick<YahooTokenResponse, 'status' | 'error' | 'error_description' | 'upstream_error_text'>
 ): YahooTokenFailureDiagnosticKind {
-  if (isTransientYahooTokenError(response.status)) {
-    return 'transient_http';
-  }
-
   const text = normalizeYahooTokenErrorText(response);
   // Permanent signals win over transient-looking text so revoked/expired tokens still trigger reconnect.
   if (hasPermanentYahooTokenFailureSignal(text)) {
     return 'permanent';
+  }
+
+  if (isTransientYahooTokenError(response.status)) {
+    return 'transient_http';
   }
 
   // After permanent signals are ruled out, allow token-endpoint text matching on any error status.
@@ -480,6 +487,39 @@ function retryAfterForTransientYahooTokenFailure(response: Pick<YahooTokenRespon
     ?? YAHOO_TOKEN_TEXT_TRANSIENT_RETRY_AFTER_SECONDS;
 }
 
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'AbortError';
+}
+
+function isNonRateLimitYahooServerError(status?: number): boolean {
+  return typeof status === 'number' && status >= 500 && !isYahooRateLimitStatus(status);
+}
+
+function shouldOwnerRetryYahooTokenResult(
+  result: Pick<YahooTokenResponse, 'status' | 'error' | 'error_description' | 'upstream_error_text'>,
+  failureKind: YahooTokenFailureDiagnosticKind
+): boolean {
+  if (isYahooRateLimitStatus(result.status)) {
+    return false;
+  }
+  return failureKind === 'transient_text' || isNonRateLimitYahooServerError(result.status);
+}
+
+function ownerRetryTimeoutBudgetMs(leaseDeadlineMs: number, delayMs = 0): number {
+  return Math.min(
+    YAHOO_TOKEN_REQUEST_TIMEOUT_MS,
+    leaseDeadlineMs - Date.now() - delayMs - YAHOO_OWNER_RETRY_LEASE_SAFETY_MS
+  );
+}
+
+function canScheduleOwnerRetry(leaseDeadlineMs: number): boolean {
+  return ownerRetryTimeoutBudgetMs(leaseDeadlineMs, YAHOO_OWNER_RETRY_DELAY_MS) > 0;
+}
+
+function hasOwnerRequestBudget(leaseDeadlineMs: number): boolean {
+  return ownerRetryTimeoutBudgetMs(leaseDeadlineMs) > 0;
+}
+
 async function markYahooRefreshCooldown(
   storage: YahooStorage,
   userId: string,
@@ -636,6 +676,7 @@ async function getValidYahooAccessToken(
       accessTokenExpiresInSeconds: secondsUntil(credentials.expiresAt),
       refreshState: yahooRefreshState(credentials),
     });
+    const leaseAttemptStartedAt = Date.now();
     const won = await storage.acquireRefreshLease(
       userId,
       ownerId,
@@ -695,49 +736,94 @@ async function getValidYahooAccessToken(
       attempt,
       accessTokenExpiresInSeconds: secondsUntil(credentials.expiresAt),
     });
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), YAHOO_TOKEN_REQUEST_TIMEOUT_MS);
-    let result: YahooTokenDiagnosticResponse;
-    try {
-      logDiagnostic('refresh_request_started', { userId, attempt });
-      result = await refreshAccessToken(credentials.refreshToken, env, controller.signal);
-    } catch (error) {
-      clearTimeout(timer);
-      const isAbort = error instanceof Error && error.name === 'AbortError';
-      logDiagnostic('refresh_request_exception', {
-        userId,
-        attempt,
-        reason: isAbort ? 'abort' : 'fetch_error',
-        retryAfter: YAHOO_DEFAULT_TRANSIENT_RETRY_AFTER_SECONDS,
-      });
-      console.error(
-        `[yahoo-connect] Yahoo token refresh request failed for user ${maskUserId(userId)}:`,
-        error instanceof Error ? error.message : error
-      );
-      await markYahooRefreshCooldown(
-        storage,
-        userId,
-        ownerId,
-        YAHOO_DEFAULT_TRANSIENT_RETRY_AFTER_SECONDS,
-        correlationId
-      );
-      return {
-        error: YahooAuthWorkerErrorCode.REFRESH_TEMPORARILY_UNAVAILABLE,
-        errorDescription: isAbort
-          ? 'Yahoo token refresh timed out. Please try again later.'
-          : 'Yahoo token refresh is temporarily unavailable. Please try again later.',
-        retryable: true,
-        retryAfter: YAHOO_DEFAULT_TRANSIENT_RETRY_AFTER_SECONDS,
-      };
-    }
-    clearTimeout(timer);
+    const leaseDeadlineMs = leaseAttemptStartedAt + LEASE_TTL_MS;
+    let result: YahooTokenDiagnosticResponse | undefined;
+    let retryAttempt = 0;
 
-    if (result.error) {
+    while (true) {
+      if (!hasOwnerRequestBudget(leaseDeadlineMs)) {
+        logDiagnostic('refresh_request_exception', {
+          userId,
+          attempt,
+          retryAttempt,
+          reason: 'lease_budget_exhausted',
+          retryAfter: YAHOO_DEFAULT_TRANSIENT_RETRY_AFTER_SECONDS,
+        });
+        await markYahooRefreshCooldown(
+          storage,
+          userId,
+          ownerId,
+          YAHOO_DEFAULT_TRANSIENT_RETRY_AFTER_SECONDS,
+          correlationId
+        );
+        return {
+          error: YahooAuthWorkerErrorCode.REFRESH_TEMPORARILY_UNAVAILABLE,
+          errorDescription: 'Yahoo token refresh is temporarily unavailable. Please try again later.',
+          retryable: true,
+          retryAfter: YAHOO_DEFAULT_TRANSIENT_RETRY_AFTER_SECONDS,
+        };
+      }
+      const controller = new AbortController();
+      const requestTimeoutMs = ownerRetryTimeoutBudgetMs(leaseDeadlineMs);
+      const timer = setTimeout(() => controller.abort(), requestTimeoutMs);
+      try {
+        logDiagnostic('refresh_request_started', { userId, attempt, retryAttempt });
+        result = await refreshAccessToken(credentials.refreshToken, env, controller.signal);
+      } catch (error) {
+        clearTimeout(timer);
+        const isAbort = isAbortError(error);
+        if (!isAbort && retryAttempt === 0 && canScheduleOwnerRetry(leaseDeadlineMs)) {
+          logDiagnostic('refresh_owner_retry_scheduled', {
+            userId,
+            attempt,
+            reason: 'fetch_error',
+            retryAttempt: retryAttempt + 1,
+            retryDelayMs: YAHOO_OWNER_RETRY_DELAY_MS,
+          });
+          retryAttempt += 1;
+          await sleep(YAHOO_OWNER_RETRY_DELAY_MS);
+          continue;
+        }
+
+        logDiagnostic('refresh_request_exception', {
+          userId,
+          attempt,
+          retryAttempt,
+          reason: isAbort ? 'abort' : 'fetch_error',
+          retryAfter: YAHOO_DEFAULT_TRANSIENT_RETRY_AFTER_SECONDS,
+        });
+        console.error(
+          `[yahoo-connect] Yahoo token refresh request failed for user ${maskUserId(userId)}:`,
+          error instanceof Error ? error.message : error
+        );
+        await markYahooRefreshCooldown(
+          storage,
+          userId,
+          ownerId,
+          YAHOO_DEFAULT_TRANSIENT_RETRY_AFTER_SECONDS,
+          correlationId
+        );
+        return {
+          error: YahooAuthWorkerErrorCode.REFRESH_TEMPORARILY_UNAVAILABLE,
+          errorDescription: isAbort
+            ? 'Yahoo token refresh timed out. Please try again later.'
+            : 'Yahoo token refresh is temporarily unavailable. Please try again later.',
+          retryable: true,
+          retryAfter: YAHOO_DEFAULT_TRANSIENT_RETRY_AFTER_SECONDS,
+        };
+      }
+      clearTimeout(timer);
+
+      if (!result.error) {
+        break;
+      }
+
       const failureKind = classifyYahooTokenFailure(result);
       const statusSuffix = result.status ? ` (HTTP ${result.status})` : '';
       logDiagnostic('refresh_response_error', {
         userId,
         attempt,
+        retryAttempt,
         upstreamStatus: result.status,
         tokenError: result.error,
         failureKind,
@@ -765,10 +851,30 @@ async function getValidYahooAccessToken(
         return toTokenResult(latest);
       }
       if (failureKind === 'transient_http' || failureKind === 'transient_text') {
+        if (
+          retryAttempt === 0
+          && shouldOwnerRetryYahooTokenResult(result, failureKind)
+          && canScheduleOwnerRetry(leaseDeadlineMs)
+        ) {
+          logDiagnostic('refresh_owner_retry_scheduled', {
+            userId,
+            attempt,
+            retryAttempt: retryAttempt + 1,
+            retryDelayMs: YAHOO_OWNER_RETRY_DELAY_MS,
+            upstreamStatus: result.status,
+            tokenError: result.error,
+            failureKind,
+          });
+          retryAttempt += 1;
+          await sleep(YAHOO_OWNER_RETRY_DELAY_MS);
+          continue;
+        }
+
         const retryAfter = retryAfterForTransientYahooTokenFailure(result);
         logDiagnostic('refresh_transient_failure', {
           userId,
           attempt,
+          retryAttempt,
           retryAfter,
         });
         await markYahooRefreshCooldown(storage, userId, ownerId, retryAfter, correlationId);
@@ -788,6 +894,7 @@ async function getValidYahooAccessToken(
       logDiagnostic('refresh_permanent_failure', {
         userId,
         attempt,
+        retryAttempt,
         upstreamStatus: result.status,
         tokenError: result.error,
         failureKind,
@@ -799,10 +906,16 @@ async function getValidYahooAccessToken(
       };
     }
 
+    if (!result) {
+      logDiagnostic('refresh_invalid_response', { userId, attempt });
+      return { error: 'refresh_failed', errorDescription: 'Failed to refresh access token' };
+    }
+
     if (!hasUsableTokenFields(result)) {
       logDiagnostic('refresh_invalid_response', {
         userId,
         attempt,
+        retryAttempt,
         upstreamStatus: result.status,
         bodyClass: result.upstream_body_class,
         hasRetryAfter: result.retry_after !== undefined,
