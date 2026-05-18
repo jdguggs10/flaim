@@ -9,21 +9,22 @@ import {
 } from "./components/FlaimEmailLayout";
 
 interface LeagueConnectedEmailProps {
-  aiGuideUrl?: string;
+  aiGuideUrl: string;
   leagueName?: string;
   platform?: string;
-  unsubscribeUrl?: string;
+  unsubscribeUrl: string;
 }
 
 export default function LeagueConnectedEmail({
-  aiGuideUrl = "https://flaim.app/guide/ai",
+  aiGuideUrl,
   leagueName = "Acme Fantasy League",
   platform = "Yahoo",
-  unsubscribeUrl = "mailto:support@flaim.app?subject=Unsubscribe%20from%20Flaim%20product%20emails",
+  unsubscribeUrl,
 }: LeagueConnectedEmailProps) {
   return (
     <FlaimEmailLayout
       eyebrow="League connected"
+      footerDescription="Flaim connects your real fantasy leagues to your AI assistant for read-only, league-specific analysis."
       footerDisclosure={
         <>
           You are receiving this because a league was connected to your Flaim

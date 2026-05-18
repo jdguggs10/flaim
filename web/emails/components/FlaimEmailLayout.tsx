@@ -34,7 +34,7 @@ export function FlaimEmailLayout({
   children,
   eyebrow,
   footerDisclosure,
-  footerDescription = "Flaim connects your real fantasy leagues to your AI assistant for read-only, league-specific analysis.",
+  footerDescription,
   footerSupport,
   lang = "en",
   preview,
@@ -63,7 +63,9 @@ export function FlaimEmailLayout({
           </Section>
 
           <Section style={styles.card}>
-            {eyebrow ? <Text style={styles.eyebrow}>{eyebrow}</Text> : null}
+            {eyebrow ? (
+              <Text style={styles.eyebrow}>{eyebrow.toUpperCase()}</Text>
+            ) : null}
             <Heading as="h1" style={styles.heading}>
               {title}
             </Heading>
@@ -148,8 +150,10 @@ const styles = {
   },
   card: {
     backgroundColor: emailBrand.colors.card,
-    border: `1px solid ${emailBrand.colors.border}`,
+    borderColor: emailBrand.colors.border,
     borderRadius: emailBrand.radius.card,
+    borderStyle: "solid",
+    borderWidth: "1px",
     padding: "28px",
   },
   eyebrow: {
@@ -158,7 +162,6 @@ const styles = {
     fontWeight: "700",
     lineHeight: "18px",
     margin: "0 0 10px",
-    textTransform: "uppercase",
   },
   heading: {
     color: emailBrand.colors.foreground,
@@ -197,8 +200,10 @@ const styles = {
   },
   callout: {
     backgroundColor: emailBrand.colors.muted,
-    border: `1px solid ${emailBrand.colors.border}`,
+    borderColor: emailBrand.colors.border,
     borderRadius: emailBrand.radius.card,
+    borderStyle: "solid",
+    borderWidth: "1px",
     margin: "8px 0 20px",
     padding: "14px 16px",
   },

@@ -10,18 +10,19 @@ import {
 
 interface WelcomeEmailProps {
   firstName?: string;
-  leaguesUrl?: string;
-  unsubscribeUrl?: string;
+  leaguesUrl: string;
+  unsubscribeUrl: string;
 }
 
 export default function WelcomeEmail({
   firstName = "Alex",
-  leaguesUrl = "https://flaim.app/leagues",
-  unsubscribeUrl = "mailto:support@flaim.app?subject=Unsubscribe%20from%20Flaim%20product%20emails",
+  leaguesUrl,
+  unsubscribeUrl,
 }: WelcomeEmailProps) {
   return (
     <FlaimEmailLayout
       eyebrow="Welcome"
+      footerDescription="Flaim connects your real fantasy leagues to your AI assistant for read-only, league-specific analysis."
       footerDisclosure={
         <>
           You are receiving this because you created a Flaim account.{" "}

@@ -41,7 +41,7 @@ The first product templates are:
 - `web/emails/welcome.tsx`
 - `web/emails/league-connected.tsx`
 
-Template URL defaults exist for local preview only. Production senders should pass app URLs, action URLs, and unsubscribe/preference URLs explicitly from the send call so preview defaults do not leak into staging or production messages by accident.
+Template URL samples exist in `PreviewProps` for local preview only. Production senders must pass app URLs, action URLs, and unsubscribe/preference URLs explicitly from the send call so preview values do not leak into staging or production messages by accident.
 
 `react-email` and `@react-email/ui` are dev-only preview/export dependencies for now. The preview server uses `@react-email/ui`; do not remove it just because templates do not import it directly.
 
