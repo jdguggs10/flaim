@@ -41,6 +41,7 @@ export interface YahooConnectEnv {
   SUPABASE_SERVICE_KEY: string;
   YAHOO_CLIENT_ID: string;
   YAHOO_CLIENT_SECRET: string;
+  YAHOO_REFRESH_GRANT_REDIRECT_URI?: 'include' | 'omit';
   ENVIRONMENT?: string;
   NODE_ENV?: string;
   FRONTEND_URL?: string;
@@ -617,11 +618,16 @@ function yahooAuthorizationCodeTokenBody(code: string, env: YahooConnectEnv): UR
 }
 
 function yahooRefreshTokenBody(refreshToken: string, env: YahooConnectEnv): URLSearchParams {
-  return new URLSearchParams({
+  const body = new URLSearchParams({
     grant_type: 'refresh_token',
-    redirect_uri: getCallbackUrl(env),
     refresh_token: refreshToken,
   });
+
+  if (env.YAHOO_REFRESH_GRANT_REDIRECT_URI !== 'omit') {
+    body.set('redirect_uri', getCallbackUrl(env));
+  }
+
+  return body;
 }
 
 function isAbortError(error: unknown): boolean {
