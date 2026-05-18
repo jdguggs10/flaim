@@ -3,6 +3,7 @@ import {
   FlaimButton,
   FlaimCallout,
   FlaimEmailLayout,
+  FlaimFooterLink,
   FlaimMutedText,
   FlaimText,
 } from "./components/FlaimEmailLayout";
@@ -10,15 +11,24 @@ import {
 interface WelcomeEmailProps {
   firstName?: string;
   leaguesUrl?: string;
+  unsubscribeUrl?: string;
 }
 
 export default function WelcomeEmail({
   firstName = "Alex",
   leaguesUrl = "https://flaim.app/leagues",
+  unsubscribeUrl = "mailto:support@flaim.app?subject=Unsubscribe%20from%20Flaim%20product%20emails",
 }: WelcomeEmailProps) {
   return (
     <FlaimEmailLayout
       eyebrow="Welcome"
+      footerDisclosure={
+        <>
+          You are receiving this because you created a Flaim account.{" "}
+          <FlaimFooterLink href={unsubscribeUrl}>Unsubscribe</FlaimFooterLink>
+          .
+        </>
+      }
       preview="Connect a league to start using Flaim with your AI assistant."
       title="Connect your first league"
     >
@@ -45,4 +55,6 @@ export default function WelcomeEmail({
 WelcomeEmail.PreviewProps = {
   firstName: "Alex",
   leaguesUrl: "https://flaim.app/leagues",
+  unsubscribeUrl:
+    "mailto:support@flaim.app?subject=Unsubscribe%20from%20Flaim%20product%20emails",
 };

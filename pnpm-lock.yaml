@@ -91,7 +91,7 @@ importers:
         specifier: ^3.3.5
         version: 3.3.5
       '@react-email/ui':
-        specifier: ^6.1.4
+        specifier: 6.1.4
         version: 6.1.4(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
       '@types/node':
         specifier: ^24.0.3
@@ -112,7 +112,7 @@ importers:
         specifier: ^8
         version: 8.5.9
       react-email:
-        specifier: ^6.1.4
+        specifier: 6.1.4
         version: 6.1.4(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
       tailwindcss:
         specifier: ^4.1.18

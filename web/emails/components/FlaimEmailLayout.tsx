@@ -17,7 +17,8 @@ import { emailBrand } from "../brand";
 interface FlaimEmailLayoutProps {
   children: React.ReactNode;
   eyebrow?: string;
-  footerDescription?: string;
+  footerDisclosure?: React.ReactNode;
+  footerDescription?: React.ReactNode;
   footerSupport?: React.ReactNode;
   lang?: string;
   preview: string;
@@ -32,6 +33,7 @@ interface FlaimButtonProps {
 export function FlaimEmailLayout({
   children,
   eyebrow,
+  footerDisclosure,
   footerDescription = "Flaim connects your real fantasy leagues to your AI assistant for read-only, league-specific analysis.",
   footerSupport,
   lang = "en",
@@ -69,7 +71,12 @@ export function FlaimEmailLayout({
           </Section>
 
           <Section style={styles.footer}>
-            <Text style={styles.footerText}>{footerDescription}</Text>
+            {footerDescription ? (
+              <Text style={styles.footerText}>{footerDescription}</Text>
+            ) : null}
+            {footerDisclosure ? (
+              <Text style={styles.footerText}>{footerDisclosure}</Text>
+            ) : null}
             <Text style={styles.footerText}>{supportLine}</Text>
           </Section>
         </Container>
@@ -92,6 +99,20 @@ export function FlaimText({ children }: { children: React.ReactNode }) {
 
 export function FlaimMutedText({ children }: { children: React.ReactNode }) {
   return <Text style={styles.mutedText}>{children}</Text>;
+}
+
+export function FlaimFooterLink({
+  children,
+  href,
+}: {
+  children: React.ReactNode;
+  href: string;
+}) {
+  return (
+    <Link href={href} style={styles.footerLink}>
+      {children}
+    </Link>
+  );
 }
 
 export function FlaimDivider() {
@@ -135,10 +156,9 @@ const styles = {
     color: emailBrand.colors.mutedForeground,
     fontSize: "12px",
     fontWeight: "700",
-    letterSpacing: "0",
     lineHeight: "18px",
     margin: "0 0 10px",
-    textTransform: "uppercase" as const,
+    textTransform: "uppercase",
   },
   heading: {
     color: emailBrand.colors.foreground,
