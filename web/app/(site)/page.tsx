@@ -416,7 +416,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
               </Button>
             </SignedIn>
             <Button asChild variant="outline" size="lg">
-              <Link href="/guide/platforms">Setup guides</Link>
+              <Link href="/guide">Setup guides</Link>
             </Button>
           </div>
         </div>
