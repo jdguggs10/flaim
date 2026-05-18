@@ -912,7 +912,7 @@ async function getValidYahooAccessToken(
     // The loop only breaks after a defined non-error result; this guard keeps
     // TypeScript and future refactors honest without changing runtime behavior.
     if (!result) {
-      logDiagnostic('refresh_invalid_response', { userId, attempt });
+      logDiagnostic('refresh_invalid_response', { userId, attempt, retryAttempt });
       return { error: 'refresh_failed', errorDescription: 'Failed to refresh access token' };
     }
 

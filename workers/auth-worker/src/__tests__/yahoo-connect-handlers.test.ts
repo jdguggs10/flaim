@@ -993,6 +993,72 @@ describe('yahoo-connect-handlers', () => {
       }
     });
 
+    it('winner: retries one transient Yahoo refresh HTTP 5xx before marking cooldown', async () => {
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+      vi.useFakeTimers();
+
+      mockStorage.getYahooCredentials.mockResolvedValue({
+        clerkUserId: 'user_123',
+        accessToken: 'old-access-token',
+        refreshToken: 'refresh-token',
+        expiresAt: new Date(Date.now() + 2 * 60 * 1000),
+        needsRefresh: true,
+      });
+      mockStorage.acquireRefreshLease.mockResolvedValue(true);
+      mockStorage.updateYahooCredentials.mockResolvedValue(true);
+      mockFetch
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              error: 'temporarily_unavailable',
+              error_description: 'Try again later',
+            }),
+            { status: 503 }
+          )
+        )
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({ access_token: 'retry-after-503-token', refresh_token: 'new-refresh', expires_in: 3600 }),
+            { status: 200 }
+          )
+        );
+
+      try {
+        const responsePromise = handleYahooCredentials(env, 'user_123', corsHeaders, 'req_retry_503_success');
+        await vi.advanceTimersByTimeAsync(251);
+        const response = await responsePromise;
+
+        expect(response.status).toBe(200);
+        const body = (await response.json()) as Record<string, unknown>;
+        expect(body.access_token).toBe('retry-after-503-token');
+        expect(mockFetch).toHaveBeenCalledTimes(2);
+        expect(mockStorage.markRefreshCooldown).not.toHaveBeenCalled();
+        expect(mockStorage.updateYahooCredentials).toHaveBeenCalledWith(
+          'user_123',
+          expect.objectContaining({ accessToken: 'retry-after-503-token', refreshToken: 'new-refresh' }),
+          expect.any(String)
+        );
+        expect(yahooRefreshDiagnostics(logSpy)).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              event: 'refresh_owner_retry_scheduled',
+              correlation_id: 'req_retry_503_success',
+              retry_attempt: 1,
+              retry_delay_ms: 250,
+              upstream_status: 503,
+              failure_kind: 'transient_http',
+            }),
+            expect.objectContaining({
+              event: 'credential_update_succeeded',
+              correlation_id: 'req_retry_503_success',
+            }),
+          ])
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('winner: retries one non-abort Yahoo refresh fetch exception before marking cooldown', async () => {
       const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
       vi.useFakeTimers();
