@@ -258,7 +258,11 @@ describe('yahoo-connect-handlers', () => {
 
       const request = new Request('https://api.flaim.app/connect/yahoo/callback?code=auth_code&state=user_abc123:nonce');
 
-      const response = await handleYahooCallback(request, env, corsHeaders);
+      const response = await handleYahooCallback(
+        request,
+        { ...env, YAHOO_REFRESH_GRANT_REDIRECT_URI: 'omit' },
+        corsHeaders
+      );
 
       expect(response.status).toBe(302);
       const location = response.headers.get('Location')!;
@@ -567,6 +571,55 @@ describe('yahoo-connect-handlers', () => {
           refreshToken: 'new-refresh-token',
         }),
         expect.any(String)
+      );
+    });
+
+    it('omits redirect_uri from refresh grant when experiment flag is enabled', async () => {
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+      mockStorage.getYahooCredentials.mockResolvedValue({
+        clerkUserId: 'user_123',
+        accessToken: 'old-access-token',
+        refreshToken: 'refresh-token',
+        expiresAt: new Date(Date.now() + 2 * 60 * 1000),
+        needsRefresh: true,
+      });
+
+      mockFetch.mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            access_token: 'new-access-token',
+            refresh_token: 'new-refresh-token',
+            expires_in: 3600,
+          }),
+          { status: 200 }
+        )
+      );
+
+      const response = await handleYahooCredentials(
+        { ...env, YAHOO_REFRESH_GRANT_REDIRECT_URI: 'omit' },
+        'user_123',
+        corsHeaders,
+        'req_omit_redirect'
+      );
+
+      expect(response.status).toBe(200);
+
+      const refreshRequest = mockFetch.mock.calls[0][1] as RequestInit;
+      const refreshBody = new URLSearchParams(refreshRequest.body as string);
+      expect(refreshBody.get('grant_type')).toBe('refresh_token');
+      expect(refreshBody.get('refresh_token')).toBe('refresh-token');
+      expect(refreshBody.has('redirect_uri')).toBe(false);
+
+      expect(yahooRefreshDiagnostics(logSpy)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            event: 'refresh_request_started',
+            correlation_id: 'req_omit_redirect',
+            token_grant_type: 'refresh_token',
+            request_has_redirect_uri: false,
+            callback_url: 'https://api.flaim.app/auth/connect/yahoo/callback',
+          }),
+        ])
       );
     });
 
