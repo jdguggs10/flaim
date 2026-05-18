@@ -993,6 +993,63 @@ describe('yahoo-connect-handlers', () => {
       }
     });
 
+    it('winner: retries one non-abort Yahoo refresh fetch exception before marking cooldown', async () => {
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+      vi.useFakeTimers();
+
+      mockStorage.getYahooCredentials.mockResolvedValue({
+        clerkUserId: 'user_123',
+        accessToken: 'old-access-token',
+        refreshToken: 'refresh-token',
+        expiresAt: new Date(Date.now() + 2 * 60 * 1000),
+        needsRefresh: true,
+      });
+      mockStorage.acquireRefreshLease.mockResolvedValue(true);
+      mockStorage.updateYahooCredentials.mockResolvedValue(true);
+      mockFetch
+        .mockRejectedValueOnce(new Error('Yahoo network blip'))
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({ access_token: 'retry-after-fetch-error', refresh_token: 'new-refresh', expires_in: 3600 }),
+            { status: 200 }
+          )
+        );
+
+      try {
+        const responsePromise = handleYahooCredentials(env, 'user_123', corsHeaders, 'req_retry_fetch_error');
+        await vi.advanceTimersByTimeAsync(251);
+        const response = await responsePromise;
+
+        expect(response.status).toBe(200);
+        const body = (await response.json()) as Record<string, unknown>;
+        expect(body.access_token).toBe('retry-after-fetch-error');
+        expect(mockFetch).toHaveBeenCalledTimes(2);
+        expect(mockStorage.markRefreshCooldown).not.toHaveBeenCalled();
+        expect(mockStorage.updateYahooCredentials).toHaveBeenCalledWith(
+          'user_123',
+          expect.objectContaining({ accessToken: 'retry-after-fetch-error', refreshToken: 'new-refresh' }),
+          expect.any(String)
+        );
+        expect(yahooRefreshDiagnostics(logSpy)).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              event: 'refresh_owner_retry_scheduled',
+              correlation_id: 'req_retry_fetch_error',
+              reason: 'fetch_error',
+              retry_attempt: 1,
+              retry_delay_ms: 250,
+            }),
+            expect.objectContaining({
+              event: 'credential_update_succeeded',
+              correlation_id: 'req_retry_fetch_error',
+            }),
+          ])
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('winner: does not retry a transient refresh response when the lease budget is too tight', async () => {
       vi.useFakeTimers();
       const start = new Date('2026-05-11T18:15:00Z');

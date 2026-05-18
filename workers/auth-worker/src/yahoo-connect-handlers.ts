@@ -491,18 +491,19 @@ function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === 'AbortError';
 }
 
-function isNonRateLimitYahooServerError(status?: number): boolean {
-  return typeof status === 'number' && status >= 500 && !isYahooRateLimitStatus(status);
-}
-
 function shouldOwnerRetryYahooTokenResult(
   result: Pick<YahooTokenResponse, 'status' | 'error' | 'error_description' | 'upstream_error_text'>,
   failureKind: YahooTokenFailureDiagnosticKind
 ): boolean {
-  if (isYahooRateLimitStatus(result.status)) {
+  const status = result.status;
+  if (isYahooRateLimitStatus(status)) {
     return false;
   }
-  return failureKind === 'transient_text' || isNonRateLimitYahooServerError(result.status);
+
+  // This intentionally mirrors the current Yahoo transient-status classifier:
+  // non-rate-limit transient HTTP failures are server-side 5xx responses.
+  return failureKind === 'transient_text'
+    || (failureKind === 'transient_http' && typeof status === 'number' && status >= 500);
 }
 
 function ownerRetryTimeoutBudgetMs(leaseDeadlineMs: number, delayMs = 0): number {
@@ -773,14 +774,15 @@ async function getValidYahooAccessToken(
         clearTimeout(timer);
         const isAbort = isAbortError(error);
         if (!isAbort && retryAttempt === 0 && canScheduleOwnerRetry(leaseDeadlineMs)) {
+          const nextRetryAttempt = retryAttempt + 1;
           logDiagnostic('refresh_owner_retry_scheduled', {
             userId,
             attempt,
             reason: 'fetch_error',
-            retryAttempt: retryAttempt + 1,
+            retryAttempt: nextRetryAttempt,
             retryDelayMs: YAHOO_OWNER_RETRY_DELAY_MS,
           });
-          retryAttempt += 1;
+          retryAttempt = nextRetryAttempt;
           await sleep(YAHOO_OWNER_RETRY_DELAY_MS);
           continue;
         }
@@ -856,16 +858,17 @@ async function getValidYahooAccessToken(
           && shouldOwnerRetryYahooTokenResult(result, failureKind)
           && canScheduleOwnerRetry(leaseDeadlineMs)
         ) {
+          const nextRetryAttempt = retryAttempt + 1;
           logDiagnostic('refresh_owner_retry_scheduled', {
             userId,
             attempt,
-            retryAttempt: retryAttempt + 1,
+            retryAttempt: nextRetryAttempt,
             retryDelayMs: YAHOO_OWNER_RETRY_DELAY_MS,
             upstreamStatus: result.status,
             tokenError: result.error,
             failureKind,
           });
-          retryAttempt += 1;
+          retryAttempt = nextRetryAttempt;
           await sleep(YAHOO_OWNER_RETRY_DELAY_MS);
           continue;
         }
@@ -906,6 +909,8 @@ async function getValidYahooAccessToken(
       };
     }
 
+    // The loop only breaks after a defined non-error result; this guard keeps
+    // TypeScript and future refactors honest without changing runtime behavior.
     if (!result) {
       logDiagnostic('refresh_invalid_response', { userId, attempt });
       return { error: 'refresh_failed', errorDescription: 'Failed to refresh access token' };
