@@ -737,7 +737,7 @@ describe('yahoo-connect-handlers', () => {
       expect(mockStorage.markRefreshCooldown).not.toHaveBeenCalled();
     });
 
-    it('returns retryable 503 when Yahoo returns a transient refresh status', async () => {
+    it('retries one transient refresh HTTP 5xx, then marks cooldown on the second transient failure', async () => {
       mockStorage.getYahooCredentials.mockResolvedValue({
         clerkUserId: 'user_123',
         accessToken: 'old-access-token',
@@ -767,6 +767,7 @@ describe('yahoo-connect-handlers', () => {
       expect(body.retry_after).toBe(300);
       expect(body.upstream_status).toBe(503);
       expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(mockStorage.markRefreshCooldown).toHaveBeenCalledTimes(1);
       expect(mockStorage.markRefreshCooldown).toHaveBeenCalledWith('user_123', expect.any(String), 300);
       expect(mockStorage.updateYahooCredentials).not.toHaveBeenCalled();
     });

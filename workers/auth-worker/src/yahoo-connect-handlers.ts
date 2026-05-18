@@ -502,6 +502,8 @@ function shouldOwnerRetryYahooTokenResult(
 
   // This intentionally mirrors the current Yahoo transient-status classifier:
   // non-rate-limit transient HTTP failures are server-side 5xx responses.
+  // Transient text is separate because Yahoo can send plain-text "Too many
+  // token requests" as HTTP 400 even when the refresh token is still usable.
   return failureKind === 'transient_text'
     || (failureKind === 'transient_http' && typeof status === 'number' && status >= 500);
 }
@@ -913,7 +915,7 @@ async function getValidYahooAccessToken(
     // TypeScript and future refactors honest without changing runtime behavior.
     if (!result) {
       logDiagnostic('refresh_invalid_response', { userId, attempt, retryAttempt });
-      return { error: 'refresh_failed', errorDescription: 'Failed to refresh access token' };
+      throw new Error('Invariant violation: Yahoo refresh result missing after success loop');
     }
 
     if (!hasUsableTokenFields(result)) {
