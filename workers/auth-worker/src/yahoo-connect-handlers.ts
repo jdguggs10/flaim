@@ -568,7 +568,11 @@ async function clearDisabledYahooRefreshCooldown(
     refreshState: yahooRefreshState(credentials),
   });
 
-  await storage.releaseRefreshLease(credentials.clerkUserId, credentials.refreshLeaseOwner);
+  try {
+    await storage.releaseRefreshLease(credentials.clerkUserId, credentials.refreshLeaseOwner);
+  } catch (releaseError) {
+    console.warn('[yahoo-connect] Failed to release active Yahoo refresh cooldown while cooldown mode disabled:', releaseError);
+  }
   return {
     ...credentials,
     refreshLeaseOwner: undefined,

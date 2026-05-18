@@ -1549,6 +1549,7 @@ describe('yahoo-connect-handlers', () => {
             { status: 200 }
           )
         );
+        mockStorage.releaseRefreshLease.mockRejectedValueOnce(new Error('release failed'));
 
         const response = await handleYahooCredentials(
           { ...env, YAHOO_REFRESH_COOLDOWN_MODE: 'disabled' },
