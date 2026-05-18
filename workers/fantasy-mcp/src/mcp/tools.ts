@@ -358,12 +358,14 @@ function routeResultToMcp(result: RouteResult): McpToolResponse {
   if (result.upstream_status !== undefined) errorPayload.upstream_status = result.upstream_status;
   if (result.retryable !== undefined) errorPayload.retryable = result.retryable;
   if (result.retry_after !== undefined) errorPayload.retry_after = result.retry_after;
+  if (result.retry_after_source !== undefined) errorPayload.retry_after_source = result.retry_after_source;
 
   const meta: Record<string, unknown> = {};
   if (result.status !== undefined) meta.status = result.status;
   if (result.upstream_status !== undefined) meta.upstream_status = result.upstream_status;
   if (result.retryable !== undefined) meta.retryable = result.retryable;
   if (result.retry_after !== undefined) meta.retry_after = result.retry_after;
+  if (result.retry_after_source !== undefined) meta.retry_after_source = result.retry_after_source;
 
   const text = typeof errorPayload.error === 'string' && errorPayload.error.startsWith(`${errorPayload.code}:`)
     ? errorPayload.error

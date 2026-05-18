@@ -919,7 +919,7 @@ api.get('/connect/yahoo/callback', async (c) => {
 
 // Get Yahoo credentials (internal use - requires auth)
 api.get('/internal/connect/yahoo/credentials', async (c) => {
-  const { userId, error: authError, status: authStatus } = await getInternalUserId(c.req.raw, c.env, undefined, { allowStaticApiKey: true });
+  const { userId, error: authError, status: authStatus, authType } = await getInternalUserId(c.req.raw, c.env, undefined, { allowStaticApiKey: true });
   if (!userId) {
     return c.json({
       error: 'unauthorized',
@@ -930,7 +930,8 @@ api.get('/internal/connect/yahoo/credentials', async (c) => {
     c.env as YahooConnectEnv,
     userId,
     getCorsHeaders(c.req.raw),
-    c.req.header('X-Correlation-ID') || undefined
+    c.req.header('X-Correlation-ID') || undefined,
+    authType
   );
 });
 

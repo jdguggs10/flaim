@@ -101,4 +101,5 @@ export interface ExecuteResponse {
   upstream_status?: number;
   retryable?: boolean;
   retry_after?: number;
+  retry_after_source?: string;
 }

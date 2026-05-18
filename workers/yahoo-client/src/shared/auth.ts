@@ -16,6 +16,7 @@ async function throwYahooAuthWorkerError(response: Response): Promise<never> {
     error_description?: string;
     retryable?: boolean;
     retry_after?: number;
+    retry_after_source?: string;
     upstream_status?: number;
   };
   const headerRetryAfter = parseRetryAfterSeconds(response.headers.get('Retry-After'));
@@ -40,6 +41,7 @@ async function throwYahooAuthWorkerError(response: Response): Promise<never> {
       upstreamStatus: errorData.upstream_status,
       retryable: true,
       retryAfter,
+      retryAfterSource: errorData.retry_after_source,
     });
   }
 

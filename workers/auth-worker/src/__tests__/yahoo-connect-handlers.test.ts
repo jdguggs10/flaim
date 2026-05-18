@@ -372,6 +372,7 @@ describe('yahoo-connect-handlers', () => {
     });
 
     it('returns error redirect when token exchange fails', async () => {
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
       mockStorage.consumePlatformOAuthState.mockResolvedValue({
         clerkUserId: 'user_abc123',
         platform: 'yahoo',
@@ -395,6 +396,38 @@ describe('yahoo-connect-handlers', () => {
       expect(response.status).toBe(302);
       const location = response.headers.get('Location')!;
       expect(location).toContain('error=token_exchange_failed');
+
+      expect(yahooRefreshDiagnostics(logSpy)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            event: 'token_exchange_request_started',
+            phase: 'token_exchange',
+            outcome: 'attempt_started',
+            auth_type: 'clerk',
+            token_grant_type: 'authorization_code',
+            callback_host: 'api.flaim.app',
+            callback_path: '/auth/connect/yahoo/callback',
+            request_has_redirect_uri: true,
+            yahoo_client_id_present: true,
+            yahoo_client_secret_present: true,
+          }),
+          expect.objectContaining({
+            event: 'token_exchange_response_error',
+            phase: 'token_exchange',
+            outcome: 'permanent_failure',
+            diagnostic_class: 'yahoo_permanent',
+            auth_type: 'clerk',
+            token_grant_type: 'authorization_code',
+            request_has_redirect_uri: true,
+            upstream_status: 400,
+            token_error: 'invalid_grant',
+            failure_kind: 'permanent',
+            body_class: 'json_error',
+            has_retry_after: false,
+            has_upstream_retry_after: false,
+          }),
+        ])
+      );
     });
 
     it('returns temporary error redirect when token exchange request fails', async () => {
@@ -639,6 +672,7 @@ describe('yahoo-connect-handlers', () => {
     });
 
     it('returns retryable 503 when Yahoo returns a non-JSON Too many token response', async () => {
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
       mockStorage.getYahooCredentials.mockResolvedValue({
         clerkUserId: 'user_123',
         accessToken: 'old-access-token',
@@ -670,11 +704,28 @@ describe('yahoo-connect-handlers', () => {
       expect(body.error_description).toBe('Failed to refresh access token');
       expect(body.retryable).toBe(true);
       expect(body.retry_after).toBe(60);
+      expect(body.retry_after_source).toBe('text_default');
       expect(response.headers.get('Retry-After')).toBe('60');
       expect(mockFetch).toHaveBeenCalledTimes(2);
       expect(mockStorage.markRefreshCooldown).toHaveBeenCalledWith('user_123', capturedOwnerId, 60);
       expect(mockStorage.releaseRefreshLease).not.toHaveBeenCalled();
       expect(mockStorage.updateYahooCredentials).not.toHaveBeenCalled();
+      expect(yahooRefreshDiagnostics(logSpy)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            event: 'refresh_response_error',
+            body_class: 'plain_text',
+            has_retry_after: false,
+            has_upstream_retry_after: false,
+          }),
+          expect.objectContaining({
+            event: 'refresh_transient_failure',
+            diagnostic_class: 'yahoo_transient_text',
+            retry_after: 60,
+            retry_after_source: 'text_default',
+          }),
+        ])
+      );
     });
 
     it('does not treat permanent token failures as retryable just because the body says too many', async () => {
@@ -801,6 +852,7 @@ describe('yahoo-connect-handlers', () => {
       expect(body.error_description).toBe('Too many token requests');
       expect(body.retryable).toBe(true);
       expect(body.retry_after).toBe(900);
+      expect(body.retry_after_source).toBe('fallback_default');
       expect(body.upstream_status).toBe(429);
       expect(mockFetch).toHaveBeenCalledTimes(1);
       expect(mockStorage.markRefreshCooldown).toHaveBeenCalledWith('user_123', expect.any(String), 900);
@@ -818,12 +870,20 @@ describe('yahoo-connect-handlers', () => {
             upstream_status: 429,
             token_error: 'rate_limited',
             failure_kind: 'transient_http',
+            has_retry_after: false,
+            has_upstream_retry_after: false,
+            retry_after_source: 'fallback_default',
+            token_grant_type: 'refresh_token',
+            request_has_redirect_uri: true,
+            callback_url: 'https://api.flaim.app/auth/connect/yahoo/callback',
           }),
           expect.objectContaining({
             event: 'refresh_transient_failure',
             outcome: 'rate_limited',
             diagnostic_class: 'yahoo_rate_limit',
             retry_after: 900,
+            retry_after_source: 'fallback_default',
+            upstream_status: 429,
           }),
           expect.objectContaining({
             event: 'cooldown_mark_attempted',
@@ -837,6 +897,53 @@ describe('yahoo-connect-handlers', () => {
       const serialized = JSON.stringify(diagnostics);
       expect(serialized).not.toContain('old-access-token');
       expect(serialized).not.toContain('refresh-token');
+    });
+
+    it('distinguishes upstream Yahoo Retry-After from fallback cooldowns during refresh', async () => {
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+      mockStorage.getYahooCredentials.mockResolvedValue({
+        clerkUserId: 'user_123',
+        accessToken: 'old-access-token',
+        refreshToken: 'refresh-token',
+        expiresAt: new Date(Date.now() + 2 * 60 * 1000),
+        needsRefresh: true,
+      });
+      mockStorage.acquireRefreshLease.mockResolvedValue(true);
+
+      mockFetch.mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            error: 'rate_limited',
+            error_description: 'Too many token requests',
+          }),
+          { status: 429, headers: { 'Retry-After': '120' } }
+        )
+      );
+
+      const response = await handleYahooCredentials(env, 'user_123', corsHeaders, 'req_429_header');
+
+      expect(response.status).toBe(503);
+      const body = (await response.json()) as Record<string, unknown>;
+      expect(body.retry_after).toBe(120);
+      expect(body.retry_after_source).toBe('upstream_header');
+      expect(response.headers.get('Retry-After')).toBe('120');
+      expect(mockStorage.markRefreshCooldown).toHaveBeenCalledWith('user_123', expect.any(String), 120);
+
+      expect(yahooRefreshDiagnostics(logSpy)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            event: 'refresh_response_error',
+            has_retry_after: true,
+            has_upstream_retry_after: true,
+            retry_after_source: 'upstream_header',
+          }),
+          expect.objectContaining({
+            event: 'refresh_transient_failure',
+            retry_after: 120,
+            retry_after_source: 'upstream_header',
+          }),
+        ])
+      );
     });
 
     it('returns retryable 503 without owner retry when Yahoo returns HTTP 999 during refresh', async () => {
