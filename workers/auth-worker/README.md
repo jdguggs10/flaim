@@ -65,6 +65,10 @@ These endpoints manage the OAuth 2.0 client flow with Yahoo Fantasy.
 
 Yahoo callback stores the authorization-code token response directly after a successful reconnect. Access-token refresh is deferred until the token is stale and then runs through the backend per-user lease/cooldown path, which keeps Yahoo refresh tokens off the browser and avoids an extra token-endpoint call during reconnect. If Yahoo ever returns a bad refresh token with an otherwise successful reconnect, that failure will surface on the first lazy refresh instead of during the callback.
 
+Lazy refresh uses a single per-user lease. The lease owner may retry one short-lived transient, non-rate-limit Yahoo token-endpoint failure before converting the lease into a shared cooldown; other callers wait for the winner or receive retry metadata instead of stampeding Yahoo.
+
+Refresh diagnostics are emitted as structured, non-secret `yahoo-connect` log events with correlation IDs. The refresh path classifies failures with `diagnostic_class` values such as `yahoo_rate_limit`, `yahoo_transient_http`, `yahoo_transient_text`, `fetch_error`, `timeout`, `lease_wait_timeout`, and `lease_budget_exhausted`, plus `outcome`, retry delay, request-timeout, and lease-budget fields where relevant. These fields are intended for production incident triage without exposing access or refresh tokens.
+
 `/internal/connect/yahoo/credential-health` returns no access or refresh tokens. Its `refresh.state` can be `idle`, `in_progress`, `cooldown`, or `expired`; `leaseExpiresAt` is included when a lease owner and timestamp exist, including past timestamps for `expired` leases, while `retryAfterSeconds` is only included for active `in_progress` or `cooldown` waits. `lastUpdated` is `null` when the credential row has no update timestamp.
 
 ### Sleeper Connect
