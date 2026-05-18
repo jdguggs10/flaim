@@ -160,6 +160,7 @@ const REFRESH_COOLDOWN_OWNER_PREFIX = 'cooldown:';
 // Plain-text "too many token requests" deserves a short pause; network
 // timeouts use the longer generic Yahoo transient cooldown.
 const YAHOO_TOKEN_TEXT_TRANSIENT_RETRY_AFTER_SECONDS = 60;
+const YAHOO_OWNER_MAX_RETRIES = 1;
 const YAHOO_OWNER_RETRY_DELAY_MS = 250;
 const YAHOO_OWNER_RETRY_LEASE_SAFETY_MS = 1_000;
 
@@ -776,6 +777,8 @@ async function getValidYahooAccessToken(
       accessTokenExpiresInSeconds: secondsUntil(credentials.expiresAt),
       refreshState: yahooRefreshState(credentials),
     });
+    // Include lease acquisition time in the owner budget so slow storage never
+    // leaves the refresh request racing the actual DB lease expiry.
     const leaseAttemptStartedAt = Date.now();
     const won = await storage.acquireRefreshLease(
       userId,
@@ -884,7 +887,7 @@ async function getValidYahooAccessToken(
       } catch (error) {
         clearTimeout(timer);
         const isAbort = isAbortError(error);
-        if (!isAbort && retryAttempt === 0 && canScheduleOwnerRetry(leaseDeadlineMs)) {
+        if (!isAbort && retryAttempt < YAHOO_OWNER_MAX_RETRIES && canScheduleOwnerRetry(leaseDeadlineMs)) {
           const nextRetryAttempt = retryAttempt + 1;
           logDiagnostic('refresh_owner_retry_scheduled', {
             userId,
@@ -979,7 +982,7 @@ async function getValidYahooAccessToken(
       }
       if (failureKind === 'transient_http' || failureKind === 'transient_text') {
         if (
-          retryAttempt === 0
+          retryAttempt < YAHOO_OWNER_MAX_RETRIES
           && shouldOwnerRetryYahooTokenResult(result, failureKind)
           && canScheduleOwnerRetry(leaseDeadlineMs)
         ) {
