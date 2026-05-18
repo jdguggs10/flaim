@@ -18,7 +18,7 @@ interface FlaimEmailLayoutProps {
   children: React.ReactNode;
   eyebrow?: string;
   footerDescription?: string;
-  footerSupportText?: string;
+  footerSupport?: React.ReactNode;
   lang?: string;
   preview: string;
   title: string;
@@ -33,11 +33,21 @@ export function FlaimEmailLayout({
   children,
   eyebrow,
   footerDescription = "Flaim connects your real fantasy leagues to your AI assistant for read-only, league-specific analysis.",
-  footerSupportText = "Need help?",
+  footerSupport,
   lang = "en",
   preview,
   title,
 }: FlaimEmailLayoutProps) {
+  const supportLine = footerSupport ?? (
+    <>
+      Need help? Email{" "}
+      <Link href={`mailto:${emailBrand.supportEmail}`} style={styles.footerLink}>
+        {emailBrand.supportEmail}
+      </Link>
+      .
+    </>
+  );
+
   return (
     <Html lang={lang}>
       <Head />
@@ -60,13 +70,7 @@ export function FlaimEmailLayout({
 
           <Section style={styles.footer}>
             <Text style={styles.footerText}>{footerDescription}</Text>
-            <Text style={styles.footerText}>
-              {footerSupportText} Email{" "}
-              <Link href={`mailto:${emailBrand.supportEmail}`} style={styles.footerLink}>
-                {emailBrand.supportEmail}
-              </Link>
-              .
-            </Text>
+            <Text style={styles.footerText}>{supportLine}</Text>
           </Section>
         </Container>
       </Body>
