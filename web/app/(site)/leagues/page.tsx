@@ -1638,7 +1638,7 @@ function LeaguesPageContent() {
                 className="flex flex-1 items-start gap-4 text-left"
               >
                 <div className="min-w-0 space-y-2">
-                  <CardTitle className="text-lg">ChatGPT</CardTitle>
+                  <CardTitle className="text-lg">Chatbots</CardTitle>
                 </div>
               </button>
               <div className="flex items-center gap-2">
@@ -1656,7 +1656,7 @@ function LeaguesPageContent() {
                   <PopoverContent align="end" className="max-w-xs text-sm text-muted-foreground">
                     Alternative AI&apos;s are unofficially supported as custom
                     connectors. Click{" "}
-                    <Link href="/guide/ai#custom-connectors" className="text-primary hover:underline">
+                    <Link href="/guide/ai#custom-connectors" className="text-primary underline hover:no-underline">
                       here
                     </Link>{" "}
                     to learn more.
@@ -1668,7 +1668,7 @@ function LeaguesPageContent() {
                   aria-expanded={isAiSectionOpen}
                   aria-controls="ai-card-content"
                   className="rounded-md border border-muted bg-muted/60 p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                  aria-label={isAiSectionOpen ? 'Collapse ChatGPT section' : 'Expand ChatGPT section'}
+                  aria-label={isAiSectionOpen ? 'Collapse chatbots section' : 'Expand chatbots section'}
                 >
                   <ChevronDown
                     className={`h-4 w-4 transition-transform ${
@@ -2817,7 +2817,7 @@ function LeaguesPageContent() {
                           onChange={(e) => setSleeperConnectInput(e.target.value)}
                           onKeyDown={(e) => e.key === 'Enter' && sleeperConnectInput.trim() && discoverSleeperLeagues(sleeperConnectInput.trim())}
                           disabled={isDiscoveringSleeper}
-                          className="h-9 flex-1 text-sm"
+                          className="h-9 flex-1 text-xs"
                         />
                         <Button
                           size="sm"
