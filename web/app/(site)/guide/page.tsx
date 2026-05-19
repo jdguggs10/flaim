@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, ShieldCheck } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 export const metadata: Metadata = {
   title: "Flaim Setup Guide",
@@ -18,29 +19,47 @@ const setupSteps = [
   {
     number: "1",
     title: "Platforms",
-    body: "Connect ESPN, Yahoo, or Sleeper so Flaim can read the fantasy accounts that actually hold your leagues.",
+    body: "Connect ESPN, Yahoo, and/or Sleeper to allow Flaim to access your fantasy league data.",
     primaryHref: "/leagues#platforms",
-    primaryLabel: "Open Your Leagues",
+    primaryLabel: "Connect Your Leagues",
     secondaryHref: "/guide/platforms",
-    secondaryLabel: "Platform help",
+    secondaryLabel: "Fantasy sports provider help",
   },
   {
     number: "2",
     title: "Leagues & Sports",
-    body: "Confirm the leagues Flaim discovered, set your default sport or league when needed, and understand what each sport supports.",
+    body: "Confirm the leagues and seasons Flaim discovered. Then, optionally set your default sport and default league per sport.",
     primaryHref: "/leagues#leagues",
-    primaryLabel: "Manage leagues",
+    primaryLabel: "Manage your leagues",
     secondaryHref: "/guide/sports",
-    secondaryLabel: "Sports coverage",
+    secondaryLabel: "Sports coverage and tools help",
   },
   {
     number: "3",
     title: "AI Agents",
-    body: "Use Flaim Fantasy in ChatGPT first. Other AI agents can connect unofficially when they support custom MCP connectors.",
-    primaryHref: "/guide/ai#chatgpt",
-    primaryLabel: "ChatGPT setup",
+    body: "Flaim Fantasy is an official ChatGPT App. Other AI's including Claude, Perplexity, and more can connect unofficially as well.",
+    primaryHref: "/guide/ai",
+    primaryLabel: "Connect AI agents",
     secondaryHref: "/guide/ai#custom-connectors",
-    secondaryLabel: "Custom connectors",
+    secondaryLabel: "Plugins, connectors, and AI help",
+  },
+] as const;
+
+const guideLinks = [
+  {
+    href: "/guide/platforms",
+    title: "Fantasy sports provider help",
+    body: "ESPN, Yahoo, and Sleeper setup details and troubleshooting.",
+  },
+  {
+    href: "/guide/sports",
+    title: "Sports coverage and tools help",
+    body: "Supported sports, available tools, and what Flaim can analyze.",
+  },
+  {
+    href: "/guide/ai",
+    title: "Plugins, connectors, and AI help",
+    body: "ChatGPT setup plus unofficial custom connector notes.",
   },
 ] as const;
 
@@ -50,18 +69,10 @@ export default function GuidePage() {
       <div className="container mx-auto max-w-3xl px-4 py-12">
         <div className="mb-10 space-y-4">
           <h1 className="text-3xl font-bold">Flaim Setup Guide</h1>
-          <p className="text-lg font-medium text-foreground">
-            Three decisions, one setup page.
-          </p>
-          <p className="text-muted-foreground">
-            Use this guide to understand the flow. Use Your Leagues when
-            you&apos;re ready to connect platforms, manage league defaults, and
-            prepare Flaim for ChatGPT or another AI agent.
-          </p>
         </div>
 
         <section className="mb-4 rounded-lg border bg-muted/40 p-5">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex gap-4">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border bg-background font-bold text-muted-foreground">
                 0
@@ -74,12 +85,31 @@ export default function GuidePage() {
                 </p>
               </div>
             </div>
-            <Button asChild variant="outline" className="shrink-0 sm:w-44">
-              <Link href="/leagues">
-                Start setup
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </Link>
-            </Button>
+            <div className="flex shrink-0 items-center gap-2 sm:justify-end">
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    className="rounded-md border border-muted bg-muted/60 p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                    aria-label="Account security info"
+                    title="Account security info"
+                  >
+                    <ShieldCheck className="h-4 w-4" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent align="end" className="max-w-xs text-sm text-muted-foreground">
+                  Your Flaim account stores your connected platform status,
+                  discovered leagues, and defaults. Platform credentials are
+                  encrypted, and Flaim is read-only by design.
+                </PopoverContent>
+              </Popover>
+              <Button asChild variant="outline" className="shrink-0 sm:w-44">
+                <Link href="/leagues">
+                  Start setup
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Link>
+              </Button>
+            </div>
           </div>
         </section>
 
@@ -115,12 +145,24 @@ export default function GuidePage() {
         </section>
 
         <section className="mt-10 rounded-lg border bg-muted/40 p-5">
-          <h2 className="text-lg font-semibold">Where setup actually happens</h2>
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            Your Leagues is the source of truth for connecting platforms,
-            reviewing discovered leagues, and setting defaults. The guide pages
-            are here for context, troubleshooting, and coverage details.
-          </p>
+          <h2 className="text-lg font-semibold">Additional Information</h2>
+          <div className="mt-4 grid gap-3">
+            {guideLinks.map((guide) => (
+              <Link
+                key={guide.href}
+                href={guide.href}
+                className="group rounded-lg border bg-background p-4 transition-colors hover:bg-muted/50"
+              >
+                <div className="flex items-center gap-3">
+                  <h3 className="flex-1 text-sm font-semibold">{guide.title}</h3>
+                  <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground transition-all group-hover:translate-x-0.5 group-hover:text-primary" />
+                </div>
+                <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                  {guide.body}
+                </p>
+              </Link>
+            ))}
+          </div>
         </section>
       </div>
     </div>
