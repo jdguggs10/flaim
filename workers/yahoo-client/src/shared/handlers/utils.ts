@@ -38,10 +38,6 @@ export function extractPlayerPercentOwned(playerData: unknown[]): number | null 
   return parseYahooPercentOwned(ownership?.percent_owned);
 }
 
-export function withLogLabel(baseLabel: string, suffix: string): string {
-  return `${baseLabel}${suffix}`;
-}
-
 /**
  * Extract the primary manager name from a Yahoo team metadata object.
  * After unwrapTeam merges metadata, team.managers may be:

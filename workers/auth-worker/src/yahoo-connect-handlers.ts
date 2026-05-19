@@ -68,7 +68,7 @@ interface YahooTokenResponse {
 
 type YahooCredentialRefreshState = 'none' | 'in_progress' | 'cooldown' | 'expired';
 type YahooTokenGrantType = 'authorization_code' | 'refresh_token';
-type YahooRetryAfterSource = 'upstream_header' | 'fallback_default' | 'text_default';
+type YahooRetryAfterSource = 'upstream_header' | 'fallback_default';
 type YahooTokenBodyClass =
   | 'empty'
   | 'json_error'
@@ -179,9 +179,11 @@ const MAX_LEASE_WAIT_MS = 10_000;
 const POLL_INTERVAL_MS   =    300;
 const MAX_REFRESH_ATTEMPTS = 3;
 const REFRESH_COOLDOWN_OWNER_PREFIX = 'cooldown:';
-// Plain-text "too many token requests" deserves a short pause; network
-// timeouts use the longer generic Yahoo transient cooldown.
-const YAHOO_TOKEN_TEXT_TRANSIENT_RETRY_AFTER_SECONDS = 60;
+// Defensive fallback for future nonstandard transient token responses that are
+// explicitly classified retryable but do not map to a known Yahoo status/default.
+// Today, normal paths use either Yahoo's Retry-After or shared defaults; this is
+// intentionally shorter than known Yahoo defaults so new classes remain visible.
+const YAHOO_TOKEN_FALLBACK_TRANSIENT_RETRY_AFTER_SECONDS = 60;
 const YAHOO_OWNER_MAX_RETRIES = 1;
 const YAHOO_OWNER_RETRY_DELAY_MS = 250;
 const YAHOO_OWNER_RETRY_LEASE_SAFETY_MS = 1_000;
@@ -361,39 +363,53 @@ function isTransientYahooTokenError(status?: number): boolean {
   return isYahooTransientHttpStatus(status);
 }
 
-function normalizeYahooTokenErrorText(response: Pick<YahooTokenResponse, 'error' | 'error_description' | 'upstream_error_text'>): string {
-  return [response.error, response.error_description, response.upstream_error_text]
+function normalizeYahooTokenText(...values: Array<string | undefined>): string {
+  return values
     .filter((value): value is string => typeof value === 'string' && value.length > 0)
     .join(' ')
     .toLowerCase();
 }
 
-// Triggered by Yahoo returning plain-text "Too many requests to Yahoo token endpoint" with HTTP 400
-// when the existing refresh token is still valid.
-function hasPermanentYahooTokenFailureSignal(text: string): boolean {
-  // Evaluated before transient signals so mixed messages like "temporarily unavailable, token revoked" stay permanent.
-  return text.includes('invalid_grant')
-    || text.includes('revoked')
-    || text.includes('permanent')
-    || text.includes('expired')
-    || text.includes('already used');
-}
+const PERMANENT_YAHOO_TOKEN_ERROR_CODES = [
+  'invalid_grant',
+  'invalid_request',
+  'invalid_client',
+  'unauthorized_client',
+  'unsupported_grant_type',
+  'redirect_uri_mismatch',
+  'malformed_request',
+];
 
-// Triggered by Yahoo returning plain-text "Too many requests to Yahoo token endpoint" with HTTP 400
-// when the existing refresh token is still valid.
-function hasTransientYahooTokenFailureSignal(text: string): boolean {
-  return text.includes('too many')
-    || text.includes('rate limit')
-    || text.includes('temporarily')
-    || text.includes('temporary');
+const PERMANENT_YAHOO_TOKEN_TEXT_SIGNALS = [
+  'refresh token expired',
+  'expired refresh token',
+  'refresh token revoked',
+  'token revoked',
+  'permanent failure',
+  'permanently',
+  'malformed',
+  'redirect_uri',
+  'already used',
+];
+
+function hasPermanentYahooTokenFailureSignal(
+  response: Pick<YahooTokenResponse, 'error' | 'error_description' | 'upstream_error_text'>
+): boolean {
+  // Evaluated before transient signals so mixed messages like "temporarily unavailable, token revoked" stay permanent.
+  const errorCode = typeof response.error === 'string' ? response.error.toLowerCase() : '';
+  if (PERMANENT_YAHOO_TOKEN_ERROR_CODES.includes(errorCode)) {
+    return true;
+  }
+
+  const text = normalizeYahooTokenText(response.error_description, response.upstream_error_text);
+  return PERMANENT_YAHOO_TOKEN_TEXT_SIGNALS.some(signal => text.includes(signal));
 }
 
 function classifyYahooTokenFailure(
-  response: Pick<YahooTokenResponse, 'status' | 'error' | 'error_description' | 'upstream_error_text'>
+  response: Pick<YahooTokenResponse, 'status' | 'error' | 'error_description' | 'upstream_error_text' | 'retry_after_source'>
 ): YahooTokenFailureDiagnosticKind {
-  const text = normalizeYahooTokenErrorText(response);
   // Permanent signals win over transient-looking text so revoked/expired tokens still trigger reconnect.
-  if (hasPermanentYahooTokenFailureSignal(text)) {
+  if (hasPermanentYahooTokenFailureSignal(response)) {
     return 'permanent';
   }
 
@@ -401,16 +417,19 @@ function classifyYahooTokenFailure(
     return 'transient_http';
   }
 
-  // After permanent signals are ruled out, allow token-endpoint text matching on any error status.
-  // Without status, do not guess from text alone.
-  if (response.status !== undefined && response.status >= 400 && hasTransientYahooTokenFailureSignal(text)) {
+  // Yahoo-provided Retry-After is an explicit upstream backoff signal even
+  // when Yahoo uses a non-standard token endpoint status. Permanent OAuth
+  // failures are already filtered above so malformed requests do not get masked.
+  if (response.retry_after_source === 'upstream_header') {
     return 'transient_text';
   }
 
   return 'unexpected';
 }
 
-function isTransientYahooTokenFailure(response: Pick<YahooTokenResponse, 'status' | 'error' | 'error_description' | 'upstream_error_text'>): boolean {
+function isTransientYahooTokenFailure(
+  response: Pick<YahooTokenResponse, 'status' | 'error' | 'error_description' | 'upstream_error_text' | 'retry_after_source'>
+): boolean {
   const failureKind = classifyYahooTokenFailure(response);
   return failureKind === 'transient_http' || failureKind === 'transient_text';
 }
@@ -451,6 +470,8 @@ async function readYahooTokenResponse(
   const upstreamRetryAfter = parseRetryAfterSeconds(response.headers.get('Retry-After'));
   const fallbackRetryAfter = defaultYahooRetryAfterSeconds(response.status);
   const retryAfter = upstreamRetryAfter ?? fallbackRetryAfter;
+  // Preserve whether retry_after came from Yahoo's explicit Retry-After header
+  // or from Flaim's status-based defaults; classification relies on that split.
   const retryAfterSource: YahooRetryAfterSource | undefined = upstreamRetryAfter !== undefined
     ? 'upstream_header'
     : fallbackRetryAfter !== undefined
@@ -617,17 +638,13 @@ function yahooRefreshCooldownResult(credentials: YahooCredentials, correlationId
 function retryAfterForTransientYahooTokenFailure(response: Pick<YahooTokenResponse, 'status' | 'retry_after'>): number {
   return response.retry_after
     ?? defaultYahooRetryAfterSeconds(response.status)
-    ?? YAHOO_TOKEN_TEXT_TRANSIENT_RETRY_AFTER_SECONDS;
+    ?? YAHOO_TOKEN_FALLBACK_TRANSIENT_RETRY_AFTER_SECONDS;
 }
 
 function retryAfterSourceForTransientYahooTokenFailure(
-  response: Pick<YahooTokenResponse, 'retry_after_source'>,
-  failureKind: YahooTokenFailureDiagnosticKind
+  response: Pick<YahooTokenResponse, 'retry_after_source'>
 ): YahooRetryAfterSource {
-  // Plain-text token endpoint throttles can arrive as HTTP 400 without a
-  // Retry-After header. This is our own small default, not a Yahoo instruction.
-  return response.retry_after_source
-    ?? (failureKind === 'transient_text' ? 'text_default' : 'fallback_default');
+  return response.retry_after_source ?? 'fallback_default';
 }
 
 function yahooTokenRequestDiagnosticFields(
@@ -658,6 +675,10 @@ function yahooTokenRequestDiagnosticFields(
   };
 }
 
+function hasYahooClientCredentials(env: YahooConnectEnv): boolean {
+  return Boolean(env.YAHOO_CLIENT_ID && env.YAHOO_CLIENT_SECRET);
+}
+
 function yahooAuthorizationCodeTokenBody(code: string, env: YahooConnectEnv): URLSearchParams {
   return new URLSearchParams({
     grant_type: 'authorization_code',
@@ -672,7 +693,7 @@ function yahooRefreshTokenBody(refreshToken: string, env: YahooConnectEnv): URLS
     refresh_token: refreshToken,
   });
 
-  if (env.YAHOO_REFRESH_GRANT_REDIRECT_URI !== 'omit') {
+  if (env.YAHOO_REFRESH_GRANT_REDIRECT_URI === 'include') {
     body.set('redirect_uri', getCallbackUrl(env));
   }
 
@@ -684,18 +705,21 @@ function isAbortError(error: unknown): boolean {
 }
 
 function shouldOwnerRetryYahooTokenResult(
-  result: Pick<YahooTokenResponse, 'status' | 'error' | 'error_description' | 'upstream_error_text'>,
+  result: Pick<YahooTokenResponse, 'status' | 'error' | 'error_description' | 'upstream_error_text' | 'retry_after_source'>,
   failureKind: YahooTokenFailureDiagnosticKind
 ): boolean {
   const status = result.status;
   if (isYahooRateLimitStatus(status)) {
     return false;
   }
+  if (result.retry_after_source === 'upstream_header') {
+    return false;
+  }
 
   // This intentionally mirrors the current Yahoo transient-status classifier:
   // non-rate-limit transient HTTP failures are server-side 5xx responses.
-  // Transient text is separate because Yahoo can send plain-text "Too many
-  // token requests" as HTTP 400 even when the refresh token is still usable.
+  // Transient text is limited to nonstandard token responses where Yahoo sent
+  // explicit backoff; respect that header instead of immediately retrying.
   return failureKind === 'transient_text'
     || (failureKind === 'transient_http' && typeof status === 'number' && status >= 500);
 }
@@ -1079,11 +1103,32 @@ async function getValidYahooAccessToken(
           retryAfter: YAHOO_DEFAULT_TRANSIENT_RETRY_AFTER_SECONDS,
         };
       }
+      const requestBody = yahooRefreshTokenBody(credentials.refreshToken, env);
+      const requestDiagnosticFields = yahooTokenRequestDiagnosticFields(env, 'refresh_token', requestBody);
+      if (!hasYahooClientCredentials(env)) {
+        logDiagnostic('refresh_config_missing', {
+          userId,
+          attempt,
+          retryAttempt,
+          phase: 'refresh_request',
+          outcome: 'permanent_failure',
+          diagnosticClass: 'yahoo_permanent',
+          reason: 'missing_yahoo_client_config',
+          ...requestDiagnosticFields,
+        });
+        try {
+          await storage.releaseRefreshLease(userId, ownerId);
+        } catch (releaseError) {
+          console.warn('[yahoo-connect] Failed to release Yahoo refresh lease after missing Yahoo client config:', releaseError);
+        }
+        return {
+          error: 'refresh_failed',
+          errorDescription: 'Yahoo client credentials are not configured',
+        };
+      }
       const controller = new AbortController();
       const requestTimeoutMs = ownerRetryTimeoutBudgetMs(leaseDeadlineMs);
       const timer = setTimeout(() => controller.abort(), requestTimeoutMs);
-      const requestBody = yahooRefreshTokenBody(credentials.refreshToken, env);
-      const requestDiagnosticFields = yahooTokenRequestDiagnosticFields(env, 'refresh_token', requestBody);
       try {
         logDiagnostic('refresh_request_started', {
           userId,
@@ -1222,7 +1267,7 @@ async function getValidYahooAccessToken(
         }
 
         const retryAfter = retryAfterForTransientYahooTokenFailure(result);
-        const retryAfterSource = retryAfterSourceForTransientYahooTokenFailure(result, failureKind);
+        const retryAfterSource = retryAfterSourceForTransientYahooTokenFailure(result);
         logDiagnostic('refresh_transient_failure', {
           userId,
           attempt,

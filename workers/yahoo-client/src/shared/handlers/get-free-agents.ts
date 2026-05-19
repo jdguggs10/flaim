@@ -1,9 +1,9 @@
 import type { HandlerFn, YahooHandlerContext } from './types';
 import { getYahooCredentials } from '../auth';
 import { yahooFetch, handleYahooError, requireCredentials } from '../yahoo-api';
-import { asArray, getPath, logStructure, unwrapLeague } from '../normalizers';
+import { asArray, getPath, unwrapLeague } from '../normalizers';
 import { ErrorCode } from '@flaim/worker-shared';
-import { extractPlayerMeta, extractPlayerPercentOwned, toExecuteErrorResponse, withLogLabel } from './utils';
+import { extractPlayerMeta, extractPlayerPercentOwned, toExecuteErrorResponse } from './utils';
 
 const YAHOO_PAGE_SIZE = 100;
 
@@ -66,8 +66,6 @@ export function createGetFreeAgentsHandler(config: YahooHandlerContext): Handler
         }
 
         const raw = await response.json();
-        logStructure(withLogLabel(`get_free_agents raw start=${start}`, config.logLabelSuffix), raw);
-
         const leagueArray = getPath(raw, ['fantasy_content', 'league']);
         league = unwrapLeague(leagueArray);
         const playersObj = league.players as Record<string, unknown> | undefined;
