@@ -14,14 +14,14 @@ const ROTATING_WORDS = [
 ];
 
 const HERO_WORD_COLORS = [
-  "text-[#0077ff] dark:text-[#22d3ee] dark:drop-shadow-[0_0_20px_rgba(34,211,238,0.62)]",
-  "text-[#c026d3] dark:text-[#ff4fd8] dark:drop-shadow-[0_0_20px_rgba(255,79,216,0.58)]",
-  "text-[#4d9f00] dark:text-[#a3ff12] dark:drop-shadow-[0_0_20px_rgba(163,255,18,0.56)]",
-  "text-[#ea580c] dark:text-[#ff8a00] dark:drop-shadow-[0_0_20px_rgba(255,138,0,0.58)]",
-  "text-[#7c3aed] dark:text-[#b76cff] dark:drop-shadow-[0_0_20px_rgba(183,108,255,0.6)]",
-  "text-[#b77900] dark:text-[#fff04a] dark:drop-shadow-[0_0_20px_rgba(255,240,74,0.54)]",
-  "text-[#2563eb] dark:text-[#5f8cff] dark:drop-shadow-[0_0_20px_rgba(95,140,255,0.58)]",
-  "text-[#dc2626] dark:text-[#ff4d5e] dark:drop-shadow-[0_0_20px_rgba(255,77,94,0.58)]",
+  "text-[#0077ff] drop-shadow-[0_0_10px_rgba(0,119,255,0.26)] dark:text-[#22d3ee] dark:drop-shadow-[0_0_20px_rgba(34,211,238,0.62)]",
+  "text-[#c026d3] drop-shadow-[0_0_10px_rgba(192,38,211,0.24)] dark:text-[#ff4fd8] dark:drop-shadow-[0_0_20px_rgba(255,79,216,0.58)]",
+  "text-[#4d9f00] drop-shadow-[0_0_10px_rgba(77,159,0,0.24)] dark:text-[#a3ff12] dark:drop-shadow-[0_0_20px_rgba(163,255,18,0.56)]",
+  "text-[#ea580c] drop-shadow-[0_0_10px_rgba(234,88,12,0.25)] dark:text-[#ff8a00] dark:drop-shadow-[0_0_20px_rgba(255,138,0,0.58)]",
+  "text-[#7c3aed] drop-shadow-[0_0_10px_rgba(124,58,237,0.25)] dark:text-[#b76cff] dark:drop-shadow-[0_0_20px_rgba(183,108,255,0.6)]",
+  "text-[#b77900] drop-shadow-[0_0_10px_rgba(183,121,0,0.23)] dark:text-[#fff04a] dark:drop-shadow-[0_0_20px_rgba(255,240,74,0.54)]",
+  "text-[#2563eb] drop-shadow-[0_0_10px_rgba(37,99,235,0.25)] dark:text-[#5f8cff] dark:drop-shadow-[0_0_20px_rgba(95,140,255,0.58)]",
+  "text-[#dc2626] drop-shadow-[0_0_10px_rgba(220,38,38,0.24)] dark:text-[#ff4d5e] dark:drop-shadow-[0_0_20px_rgba(255,77,94,0.58)]",
 ];
 
 function usePrefersReducedMotion() {
