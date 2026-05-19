@@ -200,8 +200,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
             What you can ask
           </h2>
           <p className="text-center text-muted-foreground mb-8">
-            Start simple. These are the kinds of quick league questions Flaim
-            can answer right away.
+            Start simple.
           </p>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {homepageSimplePresets.map((preset) => (
@@ -227,8 +226,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
             Go deeper
           </h2>
           <p className="text-center text-muted-foreground mb-8">
-            These prompts dig deeper, combining league context and current
-            information to make sharper calls.
+            Combine your league data and web search for even better insights.
           </p>
           <div className="grid gap-2 sm:grid-cols-2">
             {homepageDeepPresets.map((preset) => (
