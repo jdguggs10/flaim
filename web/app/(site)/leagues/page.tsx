@@ -1629,22 +1629,55 @@ function LeaguesPageContent() {
 
         <Card id="connect-ai" className="order-4">
           <CardHeader className="pb-4">
-            <button
-              type="button"
-              onClick={() => setIsAiSectionOpen((prev) => !prev)}
-              aria-expanded={isAiSectionOpen}
-              aria-controls="ai-card-content"
-              className="flex w-full items-start justify-between gap-4 text-left"
-            >
-              <div className="min-w-0 space-y-2">
-                <CardTitle className="text-lg">3. ChatGPT</CardTitle>
+            <div className="flex items-start justify-between gap-4">
+              <button
+                type="button"
+                onClick={() => setIsAiSectionOpen((prev) => !prev)}
+                aria-expanded={isAiSectionOpen}
+                aria-controls="ai-card-content"
+                className="flex flex-1 items-start gap-4 text-left"
+              >
+                <div className="min-w-0 space-y-2">
+                  <CardTitle className="text-lg">ChatGPT</CardTitle>
+                </div>
+              </button>
+              <div className="flex items-center gap-2">
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className="rounded-md border border-muted bg-muted/60 p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                      aria-label="Alternative AI connector info"
+                      title="Alternative AI connector info"
+                    >
+                      <Info className="h-4 w-4" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent align="end" className="max-w-xs text-sm text-muted-foreground">
+                    Alternative AI&apos;s are unofficially supported as custom
+                    connectors. Click{" "}
+                    <Link href="/guide/ai#custom-connectors" className="text-primary hover:underline">
+                      here
+                    </Link>{" "}
+                    to learn more.
+                  </PopoverContent>
+                </Popover>
+                <button
+                  type="button"
+                  onClick={() => setIsAiSectionOpen((prev) => !prev)}
+                  aria-expanded={isAiSectionOpen}
+                  aria-controls="ai-card-content"
+                  className="rounded-md border border-muted bg-muted/60 p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  aria-label={isAiSectionOpen ? 'Collapse ChatGPT section' : 'Expand ChatGPT section'}
+                >
+                  <ChevronDown
+                    className={`h-4 w-4 transition-transform ${
+                      isAiSectionOpen ? 'rotate-180' : ''
+                    }`}
+                  />
+                </button>
               </div>
-              <ChevronDown
-                className={`mt-0.5 h-5 w-5 shrink-0 text-muted-foreground transition-transform ${
-                  isAiSectionOpen ? 'rotate-180' : ''
-                }`}
-              />
-            </button>
+            </div>
           </CardHeader>
           {isAiSectionOpen ? (
             <CardContent id="ai-card-content" className="pt-0">
@@ -1684,7 +1717,7 @@ function LeaguesPageContent() {
                 className="flex flex-1 items-start gap-4 text-left"
               >
                 <div className="min-w-0 space-y-2">
-                  <CardTitle className="text-lg">2. Leagues</CardTitle>
+                  <CardTitle className="text-lg">Leagues</CardTitle>
                 </div>
               </button>
               <div className="flex items-center gap-2">
@@ -2007,7 +2040,7 @@ function LeaguesPageContent() {
                 className="flex flex-1 items-start gap-4 text-left"
               >
                 <div className="min-w-0 space-y-2">
-                  <CardTitle className="text-lg">1. Platforms</CardTitle>
+                  <CardTitle className="text-lg">Platforms</CardTitle>
                 </div>
               </button>
               <div className="flex items-center gap-2">

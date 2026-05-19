@@ -157,7 +157,7 @@ export default function AiGuidePage() {
           connector and manual MCP setup paths using the URL below.
         </p>
 
-        <section className="mb-10">
+        <section id="custom-connectors" className="mb-10 scroll-mt-20">
           <h2 className="mb-3 text-xl font-semibold">The setup flow</h2>
           <ol className="list-decimal list-inside space-y-2 text-muted-foreground">
             <li>

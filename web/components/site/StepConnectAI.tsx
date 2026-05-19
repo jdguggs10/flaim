@@ -1,4 +1,6 @@
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { ExternalLink } from "lucide-react";
 
 const CHATGPT_APP_STORE_URL = "https://chatgpt.com/apps";
 
@@ -33,19 +35,12 @@ export function StepConnectAI({
         </>
       ) : null}
 
-      <div className="grid gap-2">
-        <div className="flex items-center justify-between rounded-md border border-border bg-background px-3 py-2">
-          <a
-            href={CHATGPT_APP_STORE_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs font-medium text-primary hover:underline"
-          >
-            ChatGPT App Store
-          </a>
-          <span className="text-[10px] text-success">Official</span>
-        </div>
-      </div>
+      <Button asChild size="sm" className="w-full">
+        <a href={CHATGPT_APP_STORE_URL} target="_blank" rel="noopener noreferrer">
+          ChatGPT App Store
+          <ExternalLink className="ml-2 h-4 w-4" />
+        </a>
+      </Button>
     </div>
   );
 
