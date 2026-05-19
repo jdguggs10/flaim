@@ -1647,7 +1647,7 @@ function LeaguesPageContent() {
               className="flex w-full items-start justify-between gap-4 text-left"
             >
               <div className="min-w-0 space-y-2">
-                <CardTitle className="text-lg">3. Connect ChatGPT</CardTitle>
+                <CardTitle className="text-lg">3. ChatGPT</CardTitle>
               </div>
               <ChevronDown
                 className={`mt-0.5 h-5 w-5 shrink-0 text-muted-foreground transition-transform ${
@@ -1694,7 +1694,7 @@ function LeaguesPageContent() {
                 className="flex flex-1 items-start gap-4 text-left"
               >
                 <div className="min-w-0 space-y-2">
-                  <CardTitle className="text-lg">2. Your Leagues</CardTitle>
+                  <CardTitle className="text-lg">2. Leagues</CardTitle>
                 </div>
               </button>
               <div className="flex items-center gap-2">
@@ -2018,7 +2018,7 @@ function LeaguesPageContent() {
                 className="flex flex-1 items-start gap-4 text-left"
               >
                 <div className="min-w-0 space-y-2">
-                  <CardTitle className="text-lg">1. Connect Platforms</CardTitle>
+                  <CardTitle className="text-lg">1. Platforms</CardTitle>
                 </div>
               </button>
               <div className="flex items-center gap-2">

@@ -1,5 +1,6 @@
 import { Card } from "@/components/ui/card";
-import Link from "next/link";
+
+const CHATGPT_APP_STORE_URL = "https://chatgpt.com/apps";
 
 interface StepConnectAIProps {
   showStepNumber?: boolean;
@@ -32,36 +33,19 @@ export function StepConnectAI({
         </>
       ) : null}
 
-      <p className="mb-3 text-xs text-muted-foreground">
-        After ESPN, Yahoo, or Sleeper is connected, open ChatGPT and use Flaim
-        Fantasy.
-      </p>
-
-      <div className="mb-4 grid gap-2 sm:grid-cols-2">
+      <div className="grid gap-2">
         <div className="flex items-center justify-between rounded-md border border-border bg-background px-3 py-2">
-          <Link
-            href="/guide/ai#chatgpt"
+          <a
+            href={CHATGPT_APP_STORE_URL}
+            target="_blank"
+            rel="noopener noreferrer"
             className="text-xs font-medium text-primary hover:underline"
           >
-            ChatGPT setup
-          </Link>
-          <span className="text-[10px] text-success">Primary</span>
-        </div>
-        <div className="flex items-center justify-between rounded-md border border-border bg-background px-3 py-2">
-          <Link
-            href="/leagues"
-            className="text-xs font-medium text-primary hover:underline"
-          >
-            Connected leagues
-          </Link>
-          <span className="text-[10px] text-muted-foreground">Required</span>
+            ChatGPT App Store
+          </a>
+          <span className="text-[10px] text-success">Official</span>
         </div>
       </div>
-
-      <p className="text-xs text-muted-foreground">
-        Start a fresh ChatGPT conversation and ask “What leagues do I have?” to
-        confirm Flaim can see your connected fantasy context.
-      </p>
     </div>
   );
 
