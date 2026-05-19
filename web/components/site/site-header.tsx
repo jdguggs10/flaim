@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import Image from "next/image";
 
 const NAV_LINKS = [
-  { href: "/leagues", label: "Your Leagues", labelShort: "Leagues" },
+  { href: "/leagues", label: "Your Leagues", labelShort: "Your Leagues" },
 ] as const;
 
 /**

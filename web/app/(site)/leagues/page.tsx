@@ -1638,7 +1638,7 @@ function LeaguesPageContent() {
                 className="flex flex-1 items-start gap-4 text-left"
               >
                 <div className="min-w-0 space-y-2">
-                  <CardTitle className="text-lg">Chatbots</CardTitle>
+                  <CardTitle className="text-lg">Agents</CardTitle>
                 </div>
               </button>
               <div className="flex items-center gap-2">

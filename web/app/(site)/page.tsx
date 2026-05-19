@@ -398,11 +398,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
           <h2 className="text-2xl font-bold mb-2">
             Ready to connect your leagues?
           </h2>
-          <p className="text-muted-foreground mb-6">
-            Flaim Fantasy is available in ChatGPT. Connect your leagues so
-            ChatGPT can answer with your real fantasy context.
-          </p>
-          <div className="flex flex-col items-center justify-center gap-3 sm:flex-row">
+          <div className="mt-6 flex flex-row flex-wrap items-center justify-center gap-3">
             <SignedOut>
               <Button asChild size="lg">
                 <Link href="/leagues">Connect leagues now</Link>
