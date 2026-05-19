@@ -14,14 +14,14 @@ const ROTATING_WORDS = [
 ];
 
 const HERO_WORD_COLORS = [
-  "text-sky-600 dark:text-cyan-300 dark:drop-shadow-[0_0_18px_rgba(103,232,249,0.45)]",
-  "text-violet-600 dark:text-fuchsia-300 dark:drop-shadow-[0_0_18px_rgba(240,171,252,0.4)]",
-  "text-emerald-600 dark:text-lime-300 dark:drop-shadow-[0_0_18px_rgba(190,242,100,0.38)]",
-  "text-rose-600 dark:text-rose-300 dark:drop-shadow-[0_0_18px_rgba(253,164,175,0.42)]",
-  "text-amber-600 dark:text-yellow-300 dark:drop-shadow-[0_0_18px_rgba(253,224,71,0.38)]",
-  "text-blue-600 dark:text-sky-300 dark:drop-shadow-[0_0_18px_rgba(125,211,252,0.4)]",
-  "text-teal-600 dark:text-teal-300 dark:drop-shadow-[0_0_18px_rgba(94,234,212,0.38)]",
-  "text-orange-600 dark:text-orange-300 dark:drop-shadow-[0_0_18px_rgba(253,186,116,0.4)]",
+  "text-[#0077ff] dark:text-[#22d3ee] dark:drop-shadow-[0_0_20px_rgba(34,211,238,0.62)]",
+  "text-[#c026d3] dark:text-[#ff4fd8] dark:drop-shadow-[0_0_20px_rgba(255,79,216,0.58)]",
+  "text-[#4d9f00] dark:text-[#a3ff12] dark:drop-shadow-[0_0_20px_rgba(163,255,18,0.56)]",
+  "text-[#ea580c] dark:text-[#ff8a00] dark:drop-shadow-[0_0_20px_rgba(255,138,0,0.58)]",
+  "text-[#7c3aed] dark:text-[#b76cff] dark:drop-shadow-[0_0_20px_rgba(183,108,255,0.6)]",
+  "text-[#b77900] dark:text-[#fff04a] dark:drop-shadow-[0_0_20px_rgba(255,240,74,0.54)]",
+  "text-[#2563eb] dark:text-[#5f8cff] dark:drop-shadow-[0_0_20px_rgba(95,140,255,0.58)]",
+  "text-[#dc2626] dark:text-[#ff4d5e] dark:drop-shadow-[0_0_20px_rgba(255,77,94,0.58)]",
 ];
 
 function usePrefersReducedMotion() {
