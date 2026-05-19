@@ -4,7 +4,7 @@ import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } fr
 import { useAuth, SignInButton, SignUpButton } from '@clerk/nextjs';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -1620,9 +1620,6 @@ function LeaguesPageContent() {
             <Trophy className="h-6 w-6" />
             <h1 className="text-2xl font-semibold">Your Leagues</h1>
           </div>
-          <p className="text-muted-foreground">
-            Connect platforms, manage league seasons, and choose the account context ChatGPT should use first.
-          </p>
         </div>
 
         {/* Global alerts */}
@@ -1651,10 +1648,6 @@ function LeaguesPageContent() {
             >
               <div className="min-w-0 space-y-2">
                 <CardTitle className="text-lg">3. Connect ChatGPT</CardTitle>
-                <CardDescription>
-                  Finish league setup here, then open ChatGPT and use Flaim
-                  Fantasy.
-                </CardDescription>
               </div>
               <ChevronDown
                 className={`mt-0.5 h-5 w-5 shrink-0 text-muted-foreground transition-transform ${
@@ -1662,11 +1655,6 @@ function LeaguesPageContent() {
                 }`}
               />
             </button>
-            <div className="pt-2">
-              <Link href="/guide" className="text-sm text-primary hover:underline">
-                See all setup guides
-              </Link>
-            </div>
           </CardHeader>
           {isAiSectionOpen ? (
             <CardContent id="ai-card-content" className="pt-0">
@@ -1707,9 +1695,6 @@ function LeaguesPageContent() {
               >
                 <div className="min-w-0 space-y-2">
                   <CardTitle className="text-lg">2. Your Leagues</CardTitle>
-                  <CardDescription>
-                    Once a platform is connected, your linked teams and seasons appear here.
-                  </CardDescription>
                 </div>
               </button>
               <div className="flex items-center gap-2">
@@ -2024,56 +2009,63 @@ function LeaguesPageContent() {
 
         <Card id="platforms" className="order-2">
           <CardHeader className="pb-4">
-            <button
-              type="button"
-              onClick={() => setIsPlatformsSectionOpen((prev) => !prev)}
-              aria-expanded={isPlatformsSectionOpen}
-              aria-controls="platforms-card-content"
-              className="flex w-full items-start justify-between gap-4 text-left"
-            >
-              <div className="min-w-0 space-y-2">
-                <CardTitle className="text-lg">1. Connect Platforms</CardTitle>
-                <CardDescription>
-                  Connect, sync, or manually add leagues from ESPN, Yahoo, and Sleeper here.
-                </CardDescription>
+            <div className="flex items-start justify-between gap-4">
+              <button
+                type="button"
+                onClick={() => setIsPlatformsSectionOpen((prev) => !prev)}
+                aria-expanded={isPlatformsSectionOpen}
+                aria-controls="platforms-card-content"
+                className="flex flex-1 items-start gap-4 text-left"
+              >
+                <div className="min-w-0 space-y-2">
+                  <CardTitle className="text-lg">1. Connect Platforms</CardTitle>
+                </div>
+              </button>
+              <div className="flex items-center gap-2">
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className="rounded-md border border-muted bg-muted/60 p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                      aria-label="Open platform setup guides"
+                      title="Platform setup guides"
+                    >
+                      <BookOpen className="h-4 w-4" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent align="end" className="w-56 p-2">
+                    <div className="grid gap-1">
+                      <Button asChild variant="ghost" size="sm" className="justify-start">
+                        <Link href="/guide/platforms#espn">ESPN setup guide</Link>
+                      </Button>
+                      <Button asChild variant="ghost" size="sm" className="justify-start">
+                        <Link href="/guide/platforms#yahoo">Yahoo setup guide</Link>
+                      </Button>
+                      <Button asChild variant="ghost" size="sm" className="justify-start">
+                        <Link href="/guide/platforms#sleeper">Sleeper setup guide</Link>
+                      </Button>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+                <button
+                  type="button"
+                  onClick={() => setIsPlatformsSectionOpen((prev) => !prev)}
+                  aria-expanded={isPlatformsSectionOpen}
+                  aria-controls="platforms-card-content"
+                  className="rounded-md border border-muted bg-muted/60 p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  aria-label={isPlatformsSectionOpen ? 'Collapse platforms section' : 'Expand platforms section'}
+                >
+                  <ChevronDown
+                    className={`h-4 w-4 transition-transform ${
+                      isPlatformsSectionOpen ? 'rotate-180' : ''
+                    }`}
+                  />
+                </button>
               </div>
-              <ChevronDown
-                className={`mt-0.5 h-5 w-5 shrink-0 text-muted-foreground transition-transform ${
-                  isPlatformsSectionOpen ? 'rotate-180' : ''
-                }`}
-              />
-            </button>
+            </div>
           </CardHeader>
           {isPlatformsSectionOpen ? (
           <CardContent id="platforms-card-content" className="pt-0">
-          <div className="mb-4 flex justify-end">
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="h-8 w-8"
-                  aria-label="Open platform setup guides"
-                  title="Platform setup guides"
-                >
-                  <BookOpen className="h-4 w-4" />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent align="end" className="w-56 p-2">
-                <div className="grid gap-1">
-                  <Button asChild variant="ghost" size="sm" className="justify-start">
-                    <Link href="/guide/platforms#espn">ESPN setup guide</Link>
-                  </Button>
-                  <Button asChild variant="ghost" size="sm" className="justify-start">
-                    <Link href="/guide/platforms#yahoo">Yahoo setup guide</Link>
-                  </Button>
-                  <Button asChild variant="ghost" size="sm" className="justify-start">
-                    <Link href="/guide/platforms#sleeper">Sleeper setup guide</Link>
-                  </Button>
-                </div>
-              </PopoverContent>
-            </Popover>
-          </div>
           <div className="grid gap-4">
             <div className="border rounded-lg bg-background">
               <button
