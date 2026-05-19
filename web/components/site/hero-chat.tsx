@@ -13,15 +13,15 @@ const ROTATING_WORDS = [
   "waiver wire",
 ];
 
-const HERO_WORD_COLORS = [
-  "text-[#004dff] dark:text-[#22d3ee] dark:drop-shadow-[0_0_20px_rgba(34,211,238,0.62)]",
-  "text-[#d000b8] dark:text-[#ff4fd8] dark:drop-shadow-[0_0_20px_rgba(255,79,216,0.58)]",
-  "text-[#009e3d] dark:text-[#a3ff12] dark:drop-shadow-[0_0_20px_rgba(163,255,18,0.56)]",
-  "text-[#ff4d00] dark:text-[#ff8a00] dark:drop-shadow-[0_0_20px_rgba(255,138,0,0.58)]",
-  "text-[#6a00ff] dark:text-[#b76cff] dark:drop-shadow-[0_0_20px_rgba(183,108,255,0.6)]",
-  "text-[#c98a00] dark:text-[#fff04a] dark:drop-shadow-[0_0_20px_rgba(255,240,74,0.54)]",
-  "text-[#008b8b] dark:text-[#00f5d4] dark:drop-shadow-[0_0_20px_rgba(0,245,212,0.56)]",
-  "text-[#e6002e] dark:text-[#ff4d5e] dark:drop-shadow-[0_0_20px_rgba(255,77,94,0.58)]",
+const COLOR_CYCLE = [
+  "text-blue-500 dark:text-blue-400",
+  "text-emerald-500 dark:text-emerald-400",
+  "text-orange-500 dark:text-orange-400",
+  "text-violet-500 dark:text-violet-400",
+  "text-rose-500 dark:text-rose-400",
+  "text-cyan-500 dark:text-cyan-400",
+  "text-amber-500 dark:text-amber-400",
+  "text-fuchsia-500 dark:text-fuchsia-400",
 ];
 
 function usePrefersReducedMotion() {
@@ -65,7 +65,7 @@ export function HeroChat() {
   const { currentWord, wordIndex, isAnimating } =
     useRotatingWord(prefersReducedMotion);
 
-  const colorClass = HERO_WORD_COLORS[wordIndex % HERO_WORD_COLORS.length];
+  const colorClass = COLOR_CYCLE[wordIndex % COLOR_CYCLE.length];
 
   const slideStyle = prefersReducedMotion
     ? undefined
