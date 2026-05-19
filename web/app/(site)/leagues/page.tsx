@@ -1706,7 +1706,7 @@ function LeaguesPageContent() {
         </section>
 
         {/* Your Leagues Card */}
-        <Card className="order-3">
+        <Card id="leagues" className="order-3">
           <CardHeader>
             <div className="flex items-start justify-between gap-4">
               <button
