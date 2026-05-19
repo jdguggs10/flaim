@@ -1281,15 +1281,29 @@ function LeaguesPageContent() {
           <div className="space-y-1">
             <h2 className="text-sm font-semibold">Tips for using Flaim</h2>
             <p className="text-sm text-muted-foreground">
-              Flaim Fantasy is official in ChatGPT, and also available to use
-              unofficially as a custom connector in other AIs including Claude,
-              Perplexity, and more.
+              Flaim Fantasy provides the connective tissue between your fantasy
+              platforms and your AI agents. Once you&apos;ve connected a Flaim
+              account to both your leagues and your chatbot, you&apos;re done.
+              Everything else happens behind the scenes. Use your AI like you
+              normally would.
             </p>
           </div>
-          <ol className="space-y-2 text-sm text-muted-foreground">
-            <li>Set a default sport and a default league per sport to help guide your AI to the right league data faster.</li>
-            <li>If your AI won&apos;t activate Flaim, you can “force” the AI by selecting Flaim Fantasy from your plugin drawer before chatting.</li>
-          </ol>
+          <div className="grid gap-2 sm:grid-cols-3">
+            {[
+              ['Leagues', 'Connect ESPN, Yahoo, or Sleeper.'],
+              ['Chatbot', 'Connect Flaim to your AI.'],
+              ['Ask normally', 'Flaim handles the context.'],
+            ].map(([label, description]) => (
+              <div key={label} className="rounded-md border bg-background/70 p-3">
+                <div className="text-xs font-semibold uppercase tracking-wide text-foreground/70">
+                  {label}
+                </div>
+                <div className="mt-1 text-sm text-muted-foreground">
+                  {description}
+                </div>
+              </div>
+            ))}
+          </div>
         </section>
 
         {/* Your Leagues Card */}
