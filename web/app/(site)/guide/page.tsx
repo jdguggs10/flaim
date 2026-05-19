@@ -60,6 +60,29 @@ export default function GuidePage() {
           </p>
         </div>
 
+        <section className="mb-4 rounded-lg border bg-muted/40 p-5">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex gap-4">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border bg-background font-bold text-muted-foreground">
+                0
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold">Create a Flaim Account</h2>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                  Flaim needs an account before it can securely remember your
+                  connected platforms, discovered leagues, and default choices.
+                </p>
+              </div>
+            </div>
+            <Button asChild variant="outline" className="shrink-0 sm:w-44">
+              <Link href="/leagues">
+                Start setup
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Link>
+            </Button>
+          </div>
+        </section>
+
         <section className="grid gap-4">
           {setupSteps.map((step) => (
             <Card key={step.number} className="p-5">
