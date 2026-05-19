@@ -1,11 +1,11 @@
 import type { HandlerFn, YahooHandlerContext } from './types';
 import { getYahooCredentials } from '../auth';
 import { yahooFetch, handleYahooError, requireCredentials } from '../yahoo-api';
-import { asArray, getPath, logStructure, unwrapTeam } from '../normalizers';
+import { asArray, getPath, unwrapTeam } from '../normalizers';
 import { ErrorCode } from '@flaim/worker-shared';
-import { extractManagerName, extractPlayerMeta, toExecuteErrorResponse, withLogLabel } from './utils';
+import { extractManagerName, extractPlayerMeta, toExecuteErrorResponse } from './utils';
 
-export function createGetRosterHandler(config: YahooHandlerContext): HandlerFn {
+export function createGetRosterHandler(_config: YahooHandlerContext): HandlerFn {
   return async (env, params, authHeader, correlationId) => {
     const { team_id, league_id, week } = params;
 
@@ -30,8 +30,6 @@ export function createGetRosterHandler(config: YahooHandlerContext): HandlerFn {
       }
 
       const raw = await response.json();
-      logStructure(withLogLabel('get_roster raw', config.logLabelSuffix), raw);
-
       const teamArray = getPath(raw, ['fantasy_content', 'team']);
       const team = unwrapTeam(teamArray as unknown[]);
 

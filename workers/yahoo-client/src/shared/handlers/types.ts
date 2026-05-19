@@ -11,12 +11,10 @@ export interface YahooSportConfig {
   sport: string;
   getPositionFilter: (position?: string) => string;
   extraLeagueFields?: (league: Record<string, unknown>) => Record<string, unknown>;
-  logLabelSuffix?: string;
 }
 
 export interface YahooHandlerContext {
   sport: string;
   getPositionFilter: (position?: string) => string;
   extraLeagueFields?: (league: Record<string, unknown>) => Record<string, unknown>;
-  logLabelSuffix: string;
 }

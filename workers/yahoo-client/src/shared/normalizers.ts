@@ -89,21 +89,6 @@ export function unwrapTeam(teamArray: unknown): Record<string, unknown> {
 }
 
 /**
- * Debug helper - log raw Yahoo response structure
- */
-export function logStructure(label: string, obj: unknown, _depth = 2): void {
-  const seen = new WeakSet();
-  const replacer = (_key: string, value: unknown) => {
-    if (typeof value === 'object' && value !== null) {
-      if (seen.has(value)) return '[Circular]';
-      seen.add(value);
-    }
-    return value;
-  };
-  console.log(`[yahoo-debug] ${label}:`, JSON.stringify(obj, replacer, 2).slice(0, 2000));
-}
-
-/**
  * Parse Yahoo ownership.percent_owned safely.
  * Returns null for missing/non-finite values and preserves valid 0 values.
  */

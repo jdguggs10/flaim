@@ -1,11 +1,11 @@
 import type { HandlerFn, YahooHandlerContext } from './types';
 import { getYahooCredentials } from '../auth';
 import { yahooFetch, handleYahooError, requireCredentials } from '../yahoo-api';
-import { asArray, getPath, logStructure, unwrapLeague, unwrapTeam } from '../normalizers';
+import { asArray, getPath, unwrapLeague, unwrapTeam } from '../normalizers';
 import { ErrorCode } from '@flaim/worker-shared';
-import { toExecuteErrorResponse, withLogLabel } from './utils';
+import { toExecuteErrorResponse } from './utils';
 
-export function createGetStandingsHandler(config: YahooHandlerContext): HandlerFn {
+export function createGetStandingsHandler(_config: YahooHandlerContext): HandlerFn {
   return async (env, params, authHeader, correlationId) => {
     const { league_id } = params;
 
@@ -27,8 +27,6 @@ export function createGetStandingsHandler(config: YahooHandlerContext): HandlerF
       }
 
       const raw = await response.json();
-      logStructure(withLogLabel('get_standings raw', config.logLabelSuffix), raw);
-
       const leagueArray = getPath(raw, ['fantasy_content', 'league']);
       const league = unwrapLeague(leagueArray);
 

@@ -1,11 +1,11 @@
 import type { HandlerFn, YahooHandlerContext } from './types';
 import { getYahooCredentials } from '../auth';
 import { yahooFetch, handleYahooError, requireCredentials } from '../yahoo-api';
-import { asArray, getPath, logStructure, unwrapLeague, unwrapTeam } from '../normalizers';
+import { asArray, getPath, unwrapLeague, unwrapTeam } from '../normalizers';
 import { ErrorCode } from '@flaim/worker-shared';
-import { toExecuteErrorResponse, withLogLabel } from './utils';
+import { toExecuteErrorResponse } from './utils';
 
-export function createGetMatchupsHandler(config: YahooHandlerContext): HandlerFn {
+export function createGetMatchupsHandler(_config: YahooHandlerContext): HandlerFn {
   return async (env, params, authHeader, correlationId) => {
     const { league_id, week } = params;
 
@@ -28,8 +28,6 @@ export function createGetMatchupsHandler(config: YahooHandlerContext): HandlerFn
       }
 
       const raw = await response.json();
-      logStructure(withLogLabel('get_matchups raw', config.logLabelSuffix), raw);
-
       const leagueArray = getPath(raw, ['fantasy_content', 'league']);
       const league = unwrapLeague(leagueArray);
       const currentWeek = league.current_week as number | undefined;

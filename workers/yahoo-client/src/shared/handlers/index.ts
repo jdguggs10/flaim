@@ -12,7 +12,6 @@ export type { HandlerFn, YahooSportConfig } from './types';
 export function createYahooHandlers(config: YahooSportConfig): Record<string, HandlerFn> {
   const context: YahooHandlerContext = {
     ...config,
-    logLabelSuffix: config.logLabelSuffix ?? (config.sport === 'baseball' ? ' (baseball)' : ''),
   };
 
   return {
