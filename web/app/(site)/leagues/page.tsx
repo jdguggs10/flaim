@@ -1290,9 +1290,18 @@ function LeaguesPageContent() {
           </div>
           <div className="grid gap-2 sm:grid-cols-3">
             {[
-              ['Leagues', 'Connect ESPN, Yahoo, or Sleeper.'],
-              ['Chatbot', 'Connect Flaim to your AI.'],
-              ['Ask normally', 'Flaim handles the context.'],
+              [
+                'Leagues',
+                'Connect ESPN, Yahoo, or Sleeper, then set a default sport and league.',
+              ],
+              [
+                'Chatbot',
+                'Open ChatGPT or another AI agent and connect Flaim Fantasy.',
+              ],
+              [
+                'Ask normally',
+                'If Flaim does not activate, select it from your plugin drawer before chatting.',
+              ],
             ].map(([label, description]) => (
               <div key={label} className="rounded-md border bg-background/70 p-3">
                 <div className="text-xs font-semibold uppercase tracking-wide text-foreground/70">
