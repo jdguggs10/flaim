@@ -1681,17 +1681,16 @@ function LeaguesPageContent() {
 
         <section className="order-5 space-y-3 rounded-xl border border-dashed border-border bg-muted/30 p-4">
           <div className="space-y-1">
-            <h2 className="text-sm font-semibold">Tips for using Flaim from ChatGPT</h2>
+            <h2 className="text-sm font-semibold">Tips for using Flaim</h2>
             <p className="text-sm text-muted-foreground">
-              Flaim Fantasy is available in ChatGPT. Finish platform setup here,
-              set a default league if needed, then open ChatGPT and ask about
-              your connected fantasy context.
+              Flaim Fantasy is official in ChatGPT, and also available to use
+              unofficially as a custom connector in other AIs including Claude,
+              Perplexity, and more.
             </p>
           </div>
           <ol className="space-y-2 text-sm text-muted-foreground">
-            <li>Connect at least one fantasy platform before trying ChatGPT.</li>
-            <li>Set a default sport or league so Flaim can choose the right context faster.</li>
-            <li>Start a fresh ChatGPT chat and ask a concrete league question like “Show me my roster.”</li>
+            <li>Set a default sport and a default league per sport to help guide your AI to the right league data faster.</li>
+            <li>If your AI won&apos;t activate Flaim, you can “force” the AI by selecting Flaim Fantasy from your plugin drawer before chatting.</li>
           </ol>
         </section>
 
