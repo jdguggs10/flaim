@@ -18,7 +18,6 @@ import {
 } from '@/components/ui/select';
 import {
   Loader2,
-  Trophy,
   Trash2,
   CheckCircle2,
   AlertCircle,
@@ -37,7 +36,6 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   Dialog,
   DialogContent,
@@ -1614,14 +1612,6 @@ function LeaguesPageContent() {
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto flex max-w-2xl flex-col gap-6 px-4 py-8">
-        {/* Header */}
-        <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <Trophy className="h-6 w-6" />
-            <h1 className="text-2xl font-semibold">Your Leagues</h1>
-          </div>
-        </div>
-
         {/* Global alerts */}
         {displayLeagueError && (
           <Alert variant="destructive">
@@ -1698,22 +1688,21 @@ function LeaguesPageContent() {
                 </div>
               </button>
               <div className="flex items-center gap-2">
-                <TooltipProvider delayDuration={150}>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        type="button"
-                        className="rounded-md border border-muted bg-muted/60 p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-warning"
-                        aria-label="Star defaults info"
-                      >
-                        <Star className="h-4 w-4" />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent side="top" className="max-w-xs whitespace-normal">
-                      Stars mark your defaults. Set a default sport, and also set a default team per sport.
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className="rounded-md border border-muted bg-muted/60 p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-warning"
+                      aria-label="Star defaults info"
+                      title="Star defaults info"
+                    >
+                      <Star className="h-4 w-4" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent align="end" className="max-w-xs text-sm text-muted-foreground">
+                    Stars mark your defaults. Set a default sport, and also set a default team per sport.
+                  </PopoverContent>
+                </Popover>
                 <button
                   type="button"
                   onClick={() => setIsLeaguesSectionOpen((prev) => !prev)}
