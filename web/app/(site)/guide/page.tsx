@@ -38,7 +38,7 @@ const setupSteps = [
     number: "3",
     title: "AI Agents",
     body: "Flaim Fantasy is an official ChatGPT App. Other AI's including Claude, Perplexity, and more can connect unofficially as well.",
-    primaryHref: "/guide/ai",
+    primaryHref: "/leagues#connect-ai",
     primaryLabel: "Connect AI agents",
     secondaryHref: "/guide/ai#custom-connectors",
     secondaryLabel: "Plugins, connectors, and AI help",
@@ -71,7 +71,24 @@ export default function GuidePage() {
           <h1 className="text-3xl font-bold">Flaim Setup Guide</h1>
         </div>
 
-        <section className="mb-4 rounded-lg border bg-muted/40 p-5">
+        <section className="relative mb-4 rounded-lg border bg-muted/40 p-5 pr-14">
+          <Popover>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                className="absolute right-5 top-5 rounded-md border border-muted bg-muted/60 p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                aria-label="Account security info"
+                title="Account security info"
+              >
+                <ShieldCheck className="h-4 w-4" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="max-w-xs text-sm text-muted-foreground">
+              Your Flaim account stores your connected platform status,
+              discovered leagues, and defaults. Platform credentials are
+              encrypted, and Flaim is read-only by design.
+            </PopoverContent>
+          </Popover>
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex gap-4">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border bg-background font-bold text-muted-foreground">
@@ -85,31 +102,12 @@ export default function GuidePage() {
                 </p>
               </div>
             </div>
-            <div className="flex shrink-0 items-center gap-2 sm:justify-end">
-              <Popover>
-                <PopoverTrigger asChild>
-                  <button
-                    type="button"
-                    className="rounded-md border border-muted bg-muted/60 p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                    aria-label="Account security info"
-                    title="Account security info"
-                  >
-                    <ShieldCheck className="h-4 w-4" />
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent align="end" className="max-w-xs text-sm text-muted-foreground">
-                  Your Flaim account stores your connected platform status,
-                  discovered leagues, and defaults. Platform credentials are
-                  encrypted, and Flaim is read-only by design.
-                </PopoverContent>
-              </Popover>
-              <Button asChild variant="outline" className="shrink-0 sm:w-44">
-                <Link href="/leagues">
-                  Start setup
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </Link>
-              </Button>
-            </div>
+            <Button asChild variant="outline" className="shrink-0 sm:w-44">
+              <Link href="/leagues">
+                Start setup
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Link>
+            </Button>
           </div>
         </section>
 
