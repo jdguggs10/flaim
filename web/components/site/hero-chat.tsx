@@ -13,15 +13,15 @@ const ROTATING_WORDS = [
   "waiver wire",
 ];
 
-const COLOR_CYCLE = [
-  "text-chart-1",
-  "text-chart-2",
-  "text-chart-3",
-  "text-chart-4",
-  "text-chart-5",
-  "text-success",
-  "text-warning",
-  "text-info",
+const HERO_WORD_COLORS = [
+  "text-sky-600 dark:text-cyan-300 dark:drop-shadow-[0_0_18px_rgba(103,232,249,0.45)]",
+  "text-violet-600 dark:text-fuchsia-300 dark:drop-shadow-[0_0_18px_rgba(240,171,252,0.4)]",
+  "text-emerald-600 dark:text-lime-300 dark:drop-shadow-[0_0_18px_rgba(190,242,100,0.38)]",
+  "text-rose-600 dark:text-rose-300 dark:drop-shadow-[0_0_18px_rgba(253,164,175,0.42)]",
+  "text-amber-600 dark:text-yellow-300 dark:drop-shadow-[0_0_18px_rgba(253,224,71,0.38)]",
+  "text-blue-600 dark:text-sky-300 dark:drop-shadow-[0_0_18px_rgba(125,211,252,0.4)]",
+  "text-teal-600 dark:text-teal-300 dark:drop-shadow-[0_0_18px_rgba(94,234,212,0.38)]",
+  "text-orange-600 dark:text-orange-300 dark:drop-shadow-[0_0_18px_rgba(253,186,116,0.4)]",
 ];
 
 function usePrefersReducedMotion() {
@@ -65,7 +65,7 @@ export function HeroChat() {
   const { currentWord, wordIndex, isAnimating } =
     useRotatingWord(prefersReducedMotion);
 
-  const colorClass = COLOR_CYCLE[wordIndex % COLOR_CYCLE.length];
+  const colorClass = HERO_WORD_COLORS[wordIndex % HERO_WORD_COLORS.length];
 
   const slideStyle = prefersReducedMotion
     ? undefined
