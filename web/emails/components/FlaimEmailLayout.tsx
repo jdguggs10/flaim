@@ -112,6 +112,10 @@ export function FlaimMutedText({ children }: { children: React.ReactNode }) {
   return <Text style={styles.mutedText}>{children}</Text>;
 }
 
+export function FlaimCalloutText({ children }: { children: React.ReactNode }) {
+  return <Text style={styles.calloutText}>{children}</Text>;
+}
+
 export function FlaimFooterLink({
   children,
   href,
@@ -224,7 +228,13 @@ const styles = {
     borderStyle: "solid",
     borderWidth: "1px",
     margin: "8px 0 20px",
-    padding: "14px 16px 20px",
+    padding: "14px 16px",
+  },
+  calloutText: {
+    color: emailBrand.colors.mutedForeground,
+    fontSize: "14px",
+    lineHeight: "22px",
+    margin: "0",
   },
   footer: {
     padding: "18px 4px 0",

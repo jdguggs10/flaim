@@ -2,9 +2,9 @@ import * as React from "react";
 import {
   FlaimButton,
   FlaimCallout,
+  FlaimCalloutText,
   FlaimEmailLayout,
   FlaimFooterLink,
-  FlaimMutedText,
   FlaimText,
 } from "./components/FlaimEmailLayout";
 
@@ -36,20 +36,18 @@ export default function WelcomeEmail({
     >
       <FlaimText>Hi {firstName},</FlaimText>
       <FlaimText>
-        Flaim is ready when you are. Connect ESPN, Yahoo, or Sleeper, then ask
-        your AI assistant questions that use your actual roster, standings, and
-        league context.
+        Flaim is ready when you are. Connect ESPN, Yahoo, or Sleeper to ChatGPT
+        to ask questions using your actual roster, standings, and league data.
+        Include web search to get updated stats, waiver wire adds, trade
+        targets, and more. Enjoy.
       </FlaimText>
       <FlaimButton href={leaguesUrl}>Open league setup</FlaimButton>
       <FlaimCallout>
-        <FlaimMutedText>
-          Flaim is read-only. It can inspect your league data, but it cannot set
+        <FlaimCalloutText>
+          Flaim is read-only. It can access your league data, but it cannot set
           lineups, drop players, make trades, or change league settings.
-        </FlaimMutedText>
+        </FlaimCalloutText>
       </FlaimCallout>
-      <FlaimMutedText>
-        If you already connected a league, you can ignore this email.
-      </FlaimMutedText>
     </FlaimEmailLayout>
   );
 }
