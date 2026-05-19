@@ -2055,18 +2055,12 @@ function LeaguesPageContent() {
                       <BookOpen className="h-4 w-4" />
                     </button>
                   </PopoverTrigger>
-                  <PopoverContent align="end" className="w-56 p-2">
-                    <div className="grid gap-1">
-                      <Button asChild variant="ghost" size="sm" className="justify-start">
-                        <Link href="/guide/platforms#espn">ESPN setup guide</Link>
-                      </Button>
-                      <Button asChild variant="ghost" size="sm" className="justify-start">
-                        <Link href="/guide/platforms#yahoo">Yahoo setup guide</Link>
-                      </Button>
-                      <Button asChild variant="ghost" size="sm" className="justify-start">
-                        <Link href="/guide/platforms#sleeper">Sleeper setup guide</Link>
-                      </Button>
-                    </div>
+                  <PopoverContent align="end" className="max-w-xs text-sm text-muted-foreground">
+                    For more help connecting your fantasy platform, click{" "}
+                    <Link href="/guide/platforms" className="text-primary underline hover:no-underline">
+                      here
+                    </Link>
+                    .
                   </PopoverContent>
                 </Popover>
                 <button
