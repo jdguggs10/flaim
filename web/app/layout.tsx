@@ -17,16 +17,16 @@ const geistMono = localFont({
 
 export const metadata: Metadata = {
   title: {
-    default: "Flaim — Connect Your Fantasy Leagues to AI",
+    default: "Flaim — Fantasy Leagues for ChatGPT",
     template: "%s | Flaim",
   },
   description:
-    "Flaim gives Claude, ChatGPT, and Perplexity read-only access to your real ESPN, Yahoo, and Sleeper fantasy leagues — rosters, standings, matchups, waiver wire, and transactions across football, baseball, basketball, and hockey.",
+    "Flaim Fantasy is available in ChatGPT. Connect ESPN, Yahoo, and Sleeper leagues for read-only fantasy analysis.",
   metadataBase: new URL("https://flaim.app"),
   openGraph: {
-    title: "Flaim — Connect Your Fantasy Leagues to AI",
+    title: "Flaim — Fantasy Leagues for ChatGPT",
     description:
-      "Flaim gives Claude, ChatGPT, and Perplexity read-only access to your real ESPN, Yahoo, and Sleeper fantasy leagues — rosters, standings, matchups, waiver wire, and transactions.",
+      "Flaim Fantasy is available in ChatGPT. Connect ESPN, Yahoo, and Sleeper leagues for read-only, league-specific fantasy analysis.",
     url: "https://flaim.app",
     siteName: "Flaim",
     type: "website",
@@ -34,9 +34,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Flaim — Connect Your Fantasy Leagues to AI",
+    title: "Flaim — Fantasy Leagues for ChatGPT",
     description:
-      "Flaim gives Claude, ChatGPT, and Perplexity read-only access to your real ESPN, Yahoo, and Sleeper fantasy leagues — rosters, standings, matchups, waiver wire, and transactions.",
+      "Flaim Fantasy is available in ChatGPT. Connect ESPN, Yahoo, and Sleeper leagues for read-only fantasy analysis.",
   },
   icons: {
     icon: [
@@ -80,7 +80,7 @@ export default function RootLayout({
                 "@type": "SoftwareApplication",
                 name: "Flaim Fantasy",
                 description:
-                  "Flaim connects ESPN, Yahoo, and Sleeper fantasy league data to Claude, ChatGPT, and Perplexity for read-only, league-specific analysis.",
+                  "Flaim Fantasy connects ESPN, Yahoo, and Sleeper fantasy league data to ChatGPT for read-only, league-specific analysis through ChatGPT Apps.",
                 applicationCategory: "SportsApplication",
                 applicationSubCategory: "Fantasy Sports AI Tool",
                 operatingSystem: "Web",
@@ -90,8 +90,8 @@ export default function RootLayout({
                   "ESPN fantasy league integration",
                   "Yahoo fantasy league integration",
                   "Sleeper fantasy league integration",
-                  "MCP (Model Context Protocol) server",
-                  "Works with Claude, ChatGPT, and Perplexity",
+                  "Available in ChatGPT",
+                  "ChatGPT fantasy sports analysis",
                   "Read-only access — no trades, drops, or roster changes",
                   "9 MCP tools: roster, standings, matchups, free agents, transactions, league info, player search, league history, session",
                 ],

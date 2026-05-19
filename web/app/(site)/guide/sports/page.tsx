@@ -57,18 +57,18 @@ export default function SportsGuidePage() {
         </p>
         <p className="text-xs text-muted-foreground">Last updated March 2026</p>
         <p className="mt-4 mb-8 text-muted-foreground">
-          Flaim is more than a data connection. It teaches your AI how to think
-          about fantasy sports through the Flaim Skill and a set of read-only
-          tools that work across ESPN, Yahoo, and Sleeper.
+          Flaim is more than a data connection. It gives ChatGPT a read-only
+          way to reason about fantasy sports with tools that work across ESPN,
+          Yahoo, and Sleeper.
         </p>
 
         {/* The Flaim Skill */}
         <section className="mb-10">
           <h2 className="mb-3 text-xl font-semibold">The Flaim Skill</h2>
           <p className="mb-4 text-muted-foreground">
-            When you connect Flaim to your AI assistant, it does not just expose
-            raw data. The Flaim Skill is a set of instructions that shape how
-            your AI reasons about fantasy sports. It covers three areas:
+            When you connect Flaim, it does not just expose raw data. The Flaim
+            Skill is a set of instructions that shape how your assistant reasons
+            about fantasy sports. It covers three areas:
           </p>
           <div className="space-y-4">
             <div className="rounded-lg border bg-background p-4">
@@ -393,7 +393,7 @@ export default function SportsGuidePage() {
             &larr; Platform setup
           </Link>
           <Link href="/guide/ai" className="text-primary hover:underline">
-            AI assistant setup &rarr;
+            AI setup &rarr;
           </Link>
         </div>
       </div>

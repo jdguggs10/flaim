@@ -4,7 +4,7 @@
 [![MCP Tools](https://img.shields.io/badge/MCP_Tools-9-green.svg)](https://api.flaim.app/mcp)
 [![Chrome Web Store](https://img.shields.io/badge/Chrome_Extension-v1.5.1-yellow.svg)](https://chromewebstore.google.com/detail/flaim-espn-fantasy-connec/mbnokejgglkfgkeeenolgdpcnfakpbkn)
 
-Connect your ESPN, Yahoo, and Sleeper leagues to ChatGPT, Claude, and Gemini CLI so you can ask about your actual team, matchup, standings, and waiver wire. Flaim combines live league data with built-in fantasy analyst guidance, so the answers are grounded in your league instead of generic rankings.
+Connect your ESPN, Yahoo, and Sleeper leagues, then use Flaim Fantasy in ChatGPT for read-only analysis grounded in your real league. The same MCP service also supports optional manual MCP clients like Claude, Perplexity, and Gemini CLI where their MCP capabilities allow.
 
 Read-only by design. No trades, no drops, no roster changes — just advice.
 
@@ -16,10 +16,10 @@ The **Flaim skill** teaches your AI assistant how to behave like a fantasy analy
 
 1. **Sign up** at [flaim.app](https://flaim.app)
 2. **Connect your platforms** — ESPN via [Chrome extension](https://chromewebstore.google.com/detail/flaim-espn-fantasy-connec/mbnokejgglkfgkeeenolgdpcnfakpbkn), Yahoo via OAuth, Sleeper by username
-3. **Leagues auto-discovered** — all your leagues and past seasons are found automatically
+3. **Leagues discovered** — Flaim finds supported leagues where possible; some private leagues or historical seasons may need manual follow-up
 4. **Pick a default league** for AI conversations
-5. **Install the skill** — recommended for agent-skill tools; copy `.agents/skills/flaim-fantasy/` into your project or home directory (see [The Skill](#the-skill) below)
-6. **Add Flaim to your AI** — use the MCP URL in Claude, ChatGPT, or Gemini CLI
+5. **Use Flaim in AI** — open Flaim Fantasy in ChatGPT, or add the MCP URL in an optional manual MCP client such as Claude, Perplexity, or Gemini CLI
+6. **Optional: install the skill** — recommended for agent-skill tools; copy `.agents/skills/flaim-fantasy/` into your project or home directory (see [The Skill](#the-skill) below)
 7. **Ask questions** — "Who should I start this week?", "What's on the waiver wire?", etc.
 
 ## The Skill
@@ -66,7 +66,7 @@ All tools connect through a single MCP endpoint: `https://api.flaim.app/mcp`
 ```
 Chrome Extension → flaim.app → Auth Worker → Supabase
                       ↓
-Claude/ChatGPT/Gemini CLI → Fantasy MCP Gateway → ESPN/Yahoo/Sleeper Clients → Platform APIs
+ChatGPT Apps / manual MCP clients → Fantasy MCP Gateway → ESPN/Yahoo/Sleeper Clients → Platform APIs
 ```
 
 - **Web App (Next.js on Vercel)** — landing/site pages, public live demo, OAuth, league management

@@ -1,6 +1,6 @@
-# Flaim Setup Docs (Claude + ChatGPT + Perplexity + Gemini)
+# Flaim Setup Docs (ChatGPT + Optional MCP Clients)
 
-This page is the single user-facing guide for connecting Flaim to AI clients (Claude, ChatGPT, Perplexity, Gemini CLI) and using read-only fantasy analysis tools.
+This page is the single user-facing guide for using Flaim Fantasy in ChatGPT, plus secondary manual MCP setup for Claude custom connectors, Perplexity custom remote connectors, Gemini CLI, and developer testing.
 
 ## What Flaim Is
 
@@ -31,17 +31,31 @@ Flaim cannot place trades, add/drop players, or modify league settings.
 
 ## Connect Your AI Client
 
-### ChatGPT (Custom Action / MCP)
+| Client | Status | Setup path |
+|--------|--------|------------|
+| ChatGPT | Primary | Use Flaim Fantasy in ChatGPT |
+| Claude | Optional custom connector | Add Flaim as a Claude custom connector where your Claude account supports it |
+| Perplexity | Optional custom remote connector | Add Flaim as a custom remote connector with OAuth and Streamable HTTP |
+| Gemini CLI | Optional terminal MCP client | Add Flaim as a Gemini CLI MCP server |
 
-1. Add an MCP Action/connector and set the **MCP server URL** to `https://api.flaim.app/mcp`.
-2. Complete the OAuth consent screen when prompted.
+### ChatGPT
 
-### Claude (Claude Desktop or claude.ai)
+Use Flaim Fantasy in ChatGPT as the primary experience. It is distributed through ChatGPT Apps and uses the same read-only league tools and OAuth flow described on this page.
+
+### Manual MCP Clients
+
+These clients can connect directly to Flaim's MCP endpoint where their MCP support allows remote HTTP servers and OAuth.
+
+### Claude (Custom Connector)
+
+Claude custom connectors are currently beta. Free users are limited to one custom connector.
 
 1. Add a remote MCP server with URL `https://api.flaim.app/mcp`.
 2. Complete the OAuth consent screen when prompted.
 
 ### Perplexity (Custom Remote Connector)
+
+Perplexity custom remote connectors require HTTPS. In some workspaces, admins must enable custom remote connectors before members can add them.
 
 1. Add a custom remote connector with URL `https://api.flaim.app/mcp`, OAuth auth, and Streamable HTTP transport.
 2. Complete the OAuth consent screen when prompted.
@@ -73,7 +87,7 @@ Sleeper support is currently football + basketball (Phase 1).
 
 ## Working Examples (Copy/Paste)
 
-These are intentionally short and “directory reviewer friendly”.
+These are intentionally short and easy to copy/paste.
 
 1. **List leagues**
    - “What fantasy leagues do I have? Show platform, sport, league id, season.”
@@ -105,7 +119,7 @@ For Yahoo in v1, avoid requesting `type=waiver` and avoid relying on explicit `w
 
 ## Troubleshooting
 
-- **“Authentication required” / “token expired”**: re-run the client’s connect flow (Gemini CLI: `/mcp auth flaim`; Claude/ChatGPT: click Connect and approve).
+- **“Authentication required” / “token expired”**: re-run the client’s connect flow (Gemini CLI: `/mcp auth flaim`; manual MCP clients: click Connect and approve when prompted).
 - **ESPN stopped working**: ESPN session cookies expire periodically; re-sync using the extension (or re-enter cookies).
 - **No default league**: set one at `https://flaim.app/leagues` to avoid needing to specify IDs in prompts.
 - **Rate limits**: Flaim enforces a per-user daily call limit.

@@ -10,9 +10,9 @@ You are an expert fantasy sports analyst powered by Flaim. You advise users on l
 
 ## What is Flaim?
 
-Flaim is a read-only fantasy analysis service. It is a combination of a tailored skill for better analysis, as well as a service that connects user's actual fantasy league data to AI assistants. Users sign up at flaim.app, connect their fantasy platforms, and then use Flaim's MCP tools through Claude, ChatGPT, Gemini, or others.
+Flaim is a read-only fantasy analysis service. It combines Flaim Fantasy in ChatGPT, a tailored skill for better analysis, and a service that connects a user's actual fantasy league data to AI assistants. Users sign up at flaim.app, connect their fantasy platforms, and then use Flaim's MCP tools through ChatGPT or through optional manual MCP clients such as Claude, Perplexity, Gemini CLI, or others.
 
-Flaim supports **ESPN**, **Yahoo**, and **Sleeper** across **football, baseball, basketball, and hockey** and is actively tested on **Claude**, **ChatGPT**, and **Gemini**.
+Flaim supports **ESPN** and **Yahoo** across **football, baseball, basketball, and hockey**, and **Sleeper** across **football and basketball**. The primary experience is Flaim Fantasy in ChatGPT, with optional manual MCP clients available where their MCP capabilities allow.
 
 ### How users manage their Flaim leagues, teams, and account
 

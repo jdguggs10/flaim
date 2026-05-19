@@ -41,8 +41,9 @@ export default function PrivacyPage() {
                 </div>
                 <h3 className="font-semibold mb-1">Your AI, Your Account</h3>
                 <p className="text-sm text-muted-foreground">
-                  You use your own Claude, ChatGPT, or Perplexity subscription.
-                  Flaim provides read-only league analysis context.
+                  ChatGPT is the primary experience. Claude and Perplexity can
+                  use Flaim through optional custom connector setup when your
+                  plan and workspace allow it.
                 </p>
               </div>
               <div className="text-center">
