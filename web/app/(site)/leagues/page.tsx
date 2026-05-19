@@ -32,6 +32,7 @@ import {
   EyeOff,
   Briefcase,
   Chrome,
+  BookOpen,
   Info,
   RefreshCw,
 } from 'lucide-react';
@@ -2046,17 +2047,33 @@ function LeaguesPageContent() {
           </CardHeader>
           {isPlatformsSectionOpen ? (
           <CardContent id="platforms-card-content" className="pt-0">
-          <div className="mb-4 flex flex-wrap gap-x-3 gap-y-1 text-sm text-muted-foreground">
-            <span>Platform guides:</span>
-            <Link href="/guide/platforms#espn" className="text-primary hover:underline">
-              ESPN
-            </Link>
-            <Link href="/guide/platforms#yahoo" className="text-primary hover:underline">
-              Yahoo
-            </Link>
-            <Link href="/guide/platforms#sleeper" className="text-primary hover:underline">
-              Sleeper
-            </Link>
+          <div className="mb-4 flex justify-end">
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-8 w-8"
+                  aria-label="Open platform setup guides"
+                  title="Platform setup guides"
+                >
+                  <BookOpen className="h-4 w-4" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-56 p-2">
+                <div className="grid gap-1">
+                  <Button asChild variant="ghost" size="sm" className="justify-start">
+                    <Link href="/guide/platforms#espn">ESPN setup guide</Link>
+                  </Button>
+                  <Button asChild variant="ghost" size="sm" className="justify-start">
+                    <Link href="/guide/platforms#yahoo">Yahoo setup guide</Link>
+                  </Button>
+                  <Button asChild variant="ghost" size="sm" className="justify-start">
+                    <Link href="/guide/platforms#sleeper">Sleeper setup guide</Link>
+                  </Button>
+                </div>
+              </PopoverContent>
+            </Popover>
           </div>
           <div className="grid gap-4">
             <div className="border rounded-lg bg-background">
@@ -2082,7 +2099,7 @@ function LeaguesPageContent() {
                   <p className="text-sm text-muted-foreground">
                     {displayEspnConnected
                       ? 'Refresh uses your stored ESPN credentials to discover leagues and reload the ESPN list.'
-                      : 'Add ESPN credentials with the extension or manual entry, then refresh.'}
+                      : 'Add ESPN credentials with the extension.'}
                   </p>
                   {displayEspnLastUpdated && (
                     <p className="text-xs text-muted-foreground">
@@ -2096,7 +2113,7 @@ function LeaguesPageContent() {
                     </div>
                   ) : !isManualVerificationPending && (
                     <div className="space-y-3">
-                      <div className="flex flex-col gap-2 sm:flex-row">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                         {displayEspnConnected ? (
                           <Button
                             size="sm"
@@ -2679,15 +2696,10 @@ function LeaguesPageContent() {
                       </div>
                     </div>
                   ) : (
-                    <div className="p-4 border rounded-lg bg-muted/40 space-y-2">
-                      <p className="text-sm text-muted-foreground">
-                        {yahooDisplayState === 'reconnect_needed'
-                          ? 'Sign in with Yahoo again to repair your connection. Uses OAuth — no passwords stored.'
-                          : 'Sign in with Yahoo to connect your fantasy leagues. Uses OAuth — no passwords stored.'}
-                      </p>
+                    <div className="space-y-3">
                       <Button
-                        variant="outline"
-                        className="w-full"
+                        size="sm"
+                        className="w-full sm:w-auto"
                         onClick={reconnectYahoo}
                         disabled={isReconnectingYahoo}
                       >
@@ -2740,19 +2752,21 @@ function LeaguesPageContent() {
                   ) : displaySleeperConnected ? (
                     <div className="space-y-3">
                       <p className="text-sm text-muted-foreground">
-                        Connected as <strong>{displaySleeperUsername}</strong>. Refresh to pull latest leagues.
+                        {displaySleeperUsername
+                          ? `Connected as ${displaySleeperUsername}. Refresh to pull latest leagues.`
+                          : 'Connected to Sleeper. Refresh to pull latest leagues.'}
                       </p>
                       {displaySleeperLastUpdated && (
                         <p className="text-xs text-muted-foreground">
                           Last updated: {formatLastUpdated(displaySleeperLastUpdated)}
                         </p>
                       )}
-                      <div className="flex gap-2">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                         <Button
-                          variant="outline"
                           size="sm"
                           onClick={() => displaySleeperUsername && discoverSleeperLeagues(displaySleeperUsername)}
                           disabled={isDiscoveringSleeper || !displaySleeperUsername}
+                          className="w-full sm:w-auto"
                         >
                           {isDiscoveringSleeper ? (
                             <>
@@ -2768,7 +2782,7 @@ function LeaguesPageContent() {
                           size="sm"
                           onClick={disconnectSleeper}
                           disabled={isSleeperDisconnecting}
-                          className="text-destructive hover:text-destructive"
+                          className="w-full text-destructive hover:text-destructive sm:w-auto"
                         >
                           {isSleeperDisconnecting ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
@@ -2781,21 +2795,22 @@ function LeaguesPageContent() {
                   ) : (
                     <div className="space-y-3">
                       <p className="text-sm text-muted-foreground">
-                        Enter your Sleeper username to discover your leagues. No password needed — Sleeper&apos;s API is public.
+                        Enter your Sleeper username to discover your leagues.
                       </p>
-                      <div className="flex gap-2">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                         <Input
                           placeholder="Sleeper username"
                           value={sleeperConnectInput}
                           onChange={(e) => setSleeperConnectInput(e.target.value)}
                           onKeyDown={(e) => e.key === 'Enter' && sleeperConnectInput.trim() && discoverSleeperLeagues(sleeperConnectInput.trim())}
                           disabled={isDiscoveringSleeper}
-                          className="flex-1"
+                          className="h-9 flex-1 text-sm"
                         />
                         <Button
                           size="sm"
                           onClick={() => discoverSleeperLeagues(sleeperConnectInput.trim())}
                           disabled={isDiscoveringSleeper || !sleeperConnectInput.trim()}
+                          className="w-full sm:w-auto"
                         >
                           {isDiscoveringSleeper ? (
                             <>
