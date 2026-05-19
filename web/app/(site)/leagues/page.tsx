@@ -1292,15 +1292,15 @@ function LeaguesPageContent() {
             {[
               [
                 'Leagues',
-                'Connect ESPN, Yahoo, or Sleeper, then set a default sport and league.',
+                'Connect ESPN, Yahoo, or Sleeper, then set a default sport and/or a default league per sport.',
               ],
               [
                 'Chatbot',
-                'Open ChatGPT or another AI agent and connect Flaim Fantasy.',
+                'Connect Flaim Fantasy to ChatGPT or another AI agent.',
               ],
               [
                 'Ask normally',
-                'If Flaim does not activate, select it from your plugin drawer before chatting.',
+                'If your AI does not activate Flaim, select Flaim Fantasy from your plugin drawer before chatting.',
               ],
             ].map(([label, description]) => (
               <div key={label} className="rounded-md border bg-background/70 p-3">
