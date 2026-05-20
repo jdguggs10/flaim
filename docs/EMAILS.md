@@ -64,7 +64,8 @@ Use this mailing convention for Clerk templates:
 
 Use the dashboard templates to mirror the same basics:
 
-- Header logo: Clerk `{{> app_logo}}` partial, backed by the application logo in Clerk Dashboard > application Settings > Branding. The workspace profile logo does not populate `app.logo_image_url`.
+- Header logo: Clerk `{{> app_logo}}` partial, backed by the square application logo in Clerk Dashboard > application Settings > Branding. The workspace profile logo does not populate `app.logo_image_url`.
+- Logo sizing: Clerk/Revolvapp normalizes the app logo image to a 128px rendered image in preview and sent test emails. Attempts to shrink it with `re-image width`, raw `img` markup, `re-style` CSS, static hosted image URLs, or `re-social-item` either render at 128px, get stripped, or break variable rendering. Keep Clerk auth templates on the native `{{> app_logo}}` partial; use the smaller 28px mark only in Resend/React Email templates where Flaim controls the HTML.
 - Header color: `#030712`
 - Primary button: `#111827` background, `#f8fafc` text, 6px radius
 - Body font: system sans-serif
