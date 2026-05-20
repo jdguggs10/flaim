@@ -1291,8 +1291,8 @@ function LeaguesPageContent() {
           <div className="grid gap-2 sm:grid-cols-2">
             {[
               [
-                'Set defaults',
-                'Connect ESPN, Yahoo, or Sleeper, then set a default sport and/or a default league per sport.',
+                'Quicker Answers',
+                'Set defaults so you can ask "Find me a waiver wire add" and your AI will know what sport and what team without even asking.',
               ],
               [
                 'Activating Flaim',
