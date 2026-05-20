@@ -54,7 +54,15 @@ React Email's preview server may add lockfile entries for its own bundled Next.j
 
 ## Clerk templates
 
-Clerk should keep handling auth email. Use the dashboard templates to mirror the same basics:
+Clerk should keep handling auth email. The production Clerk dashboard templates have been customized directly for the active Authentication and Security email types.
+
+Use this mailing convention for Clerk templates:
+
+- From local part: `accounts`
+- Reply-to local part: `support`
+- Delivered by Clerk: enabled
+
+Use the dashboard templates to mirror the same basics:
 
 - Text wordmark: `Flaim`
 - Header color: `#030712`
@@ -62,4 +70,21 @@ Clerk should keep handling auth email. Use the dashboard templates to mirror the
 - Body font: system sans-serif
 - Footer: `Need help? Email support@flaim.app.`
 
-Keep Clerk's default auth/security wording unless there is a concrete product reason to change it. Auth email deliverability matters more than clever copy.
+Customized production templates:
+
+| Group | Template | Subject |
+| --- | --- | --- |
+| Authentication | Email link - Sign up | `Sign up to Flaim` |
+| Authentication | Email link - Verify email | `Verify your email address for Flaim` |
+| Authentication | Invitation | `You're invited to Flaim` |
+| Authentication | Verification code | `{{otp_code}} is your Flaim verification code` |
+| Security | Account Locked | `Your Flaim account has been locked` |
+| Security | Password changed | `Your Flaim password has been changed` |
+| Security | Password removed | `Your Flaim password has been removed` |
+| Security | Primary email address changed | `Your Flaim email address was updated` |
+| Security | Reset password code | `{{otp_code}} is your Flaim reset password code` |
+| Security | Sign in from new device | `New sign-in to your Flaim account` |
+
+Unavailable templates are intentionally untouched until the corresponding Clerk features are enabled. As of this pass, that includes magic-link sign-in, strict-enumeration-protection emails, passkey emails, organization emails, waitlist emails, and Clerk Billing emails.
+
+Keep Clerk auth/security copy factual and short. Auth email deliverability matters more than clever copy.
