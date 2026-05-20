@@ -1288,19 +1288,15 @@ function LeaguesPageContent() {
               normally would.
             </p>
           </div>
-          <div className="grid gap-2 sm:grid-cols-3">
+          <div className="grid gap-2 sm:grid-cols-2">
             {[
               [
-                'Leagues',
+                'Set defaults',
                 'Connect ESPN, Yahoo, or Sleeper, then set a default sport and/or a default league per sport.',
               ],
               [
-                'Chatbot',
-                'Connect Flaim Fantasy to ChatGPT or another AI agent.',
-              ],
-              [
-                'Ask normally',
-                'If your AI does not activate Flaim, select Flaim Fantasy from your plugin drawer before chatting.',
+                'Activating Flaim',
+                'Use your AI like you normally would and Flaim should activate automatically. You can also say, "Use Flaim." to help it activate, or select Flaim Fantasy from your plugin drawer (the plus button).',
               ],
             ].map(([label, description]) => (
               <div key={label} className="rounded-md border bg-background/70 p-3">
