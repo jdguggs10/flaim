@@ -16,7 +16,9 @@ Use `support@flaim.app` as the reply-to address for product email.
 
 - Keep emails quiet and utilitarian: white card, light gray page background, one primary action.
 - Mirror the website tokens in `web/app/globals.css`, but use email-safe hex values in `web/emails/brand.ts`.
-- Use the Flaim mark at 28px next to the text wordmark in the header.
+- Use shared colors, type, button styling, support footer, and plain-language copy across providers.
+- Resend product emails use the Flaim mark at 28px next to the text wordmark in the header.
+- Clerk auth emails use the dashboard application logo at 72px with the `FLAIM FANTASY` label. Keep this provider-specific because Clerk/Revolvapp controls the final email HTML.
 - Use system fonts, 8px containers, 6px buttons, and plain-language copy.
 - Do not add promotional hero art to auth or security emails.
 - Product and lifecycle emails must include a clear unsubscribe or notification-preferences link in the footer before they are connected to a live sender.
@@ -54,7 +56,9 @@ React Email's preview server may add lockfile entries for its own bundled Next.j
 
 ## Clerk templates
 
-Clerk should keep handling auth email. The production Clerk dashboard templates have been customized directly for the active Authentication and Security email types.
+Clerk should keep handling auth email. Production Clerk dashboard templates are customized directly in Clerk, then documented here so the dashboard state remains reproducible.
+
+Clerk template editing is dashboard-driven. There is no single shared layout file that automatically updates every Clerk email type, so treat the source below as the canonical frame to paste into each enabled template, then adjust only the title, body copy, action, and security context for that template.
 
 Use this mailing convention for Clerk templates:
 
@@ -64,14 +68,39 @@ Use this mailing convention for Clerk templates:
 
 Use the dashboard templates to mirror the same basics:
 
-- Header logo: Clerk `{{> app_logo}}` partial, backed by the square application logo in Clerk Dashboard > application Settings > Branding. The workspace profile logo does not populate `app.logo_image_url`.
-- Logo sizing: Clerk/Revolvapp normalizes the app logo image to a 128px rendered image in preview and sent test emails. Attempts to shrink it with `re-image width`, raw `img` markup, `re-style` CSS, static hosted image URLs, or `re-social-item` either render at 128px, get stripped, or break variable rendering. Keep Clerk auth templates on the native `{{> app_logo}}` partial; use the smaller 28px mark only in Resend/React Email templates where Flaim controls the HTML.
+- Header logo: `re-image` using `{{{app.logo_image_url}}}`, backed by the square application logo in Clerk Dashboard > application Settings > Branding. The workspace profile logo does not populate `app.logo_image_url`.
+- Logo sizing: 72px. Keep the uploaded source image square and use template sizing for rendered scale.
+- Header alignment: logo, `FLAIM FANTASY` label, card/body content, CTA, and footer all share the same left edge.
+- Header spacing: 4px top padding above the logo.
 - Header color: `#030712`
 - Primary button: `#111827` background, `#f8fafc` text, 6px radius
 - Body font: system sans-serif
 - Footer: `Need help? Email support@flaim.app.`
 
-Customized production templates:
+Canonical Clerk frame:
+
+```html
+<re-main background-color="#ffffff" border-radius="8px">
+    <re-block align="left" padding="4px 28px 28px 28px" background-color="#ffffff" border-radius="8px">
+        <re-image src="{{{app.logo_image_url}}}" alt="{{app.name}} logo" width="72px"></re-image>
+        <re-text margin="0px 0px 10px 0px" font-size="12px" font-weight="bold" line-height="18px" color="#6b7280">
+            FLAIM FANTASY
+        </re-text>
+
+        <!-- Template-specific eyebrow, heading, body, action, and security context go here. -->
+    </re-block>
+</re-main>
+<re-footer padding="18px 28px 0px 28px">
+    <re-text font-size="12px" line-height="18px" color="#6b7280">
+        Need help? Email <a href="mailto:support@flaim.app">support@flaim.app</a>.
+    </re-text>
+    <re-text font-size="12px" line-height="18px" color="#6b7280">
+        &copy; 2026 Flaim
+    </re-text>
+</re-footer>
+```
+
+Rollout order:
 
 | Group | Template | Subject |
 | --- | --- | --- |
@@ -86,6 +115,19 @@ Customized production templates:
 | Security | Reset password code | `{{otp_code}} is your Flaim reset password code` |
 | Security | Sign in from new device | `New sign-in to your Flaim account` |
 
-Unavailable templates are intentionally untouched until the corresponding Clerk features are enabled. As of this pass, that includes magic-link sign-in, strict-enumeration-protection emails, passkey emails, organization emails, waitlist emails, and Clerk Billing emails.
+Roll these out in small batches:
+
+1. Core active auth: sign-up link, verify-email link, verification code, invitation.
+2. Account/security notices: new device, password changed/removed, account locked, primary email changed, reset password code.
+3. Feature-gated templates when enabled: password sign-in/recovery variants, magic-link sign-in, passkey emails, MFA-related emails, strict-enumeration-protection emails, organization emails, waitlist emails, and Clerk Billing emails.
+
+Do a real test email after each batch. Clerk preview is useful for layout, but sent email is the evidence that the `app.logo_image_url` value, logo sizing, and footer alignment survived Clerk/Revolvapp rendering.
 
 Keep Clerk auth/security copy factual and short. Auth email deliverability matters more than clever copy.
+
+Reference points from Clerk's docs:
+
+- Email templates are edited per template in the Clerk Dashboard.
+- Preview, copy, revert, and reset are per-template operations.
+- Delivered by Clerk, From, Reply-To, and Subject are per-template settings.
+- Clerk uses Handlebars variables such as `{{action_url}}`, `{{app.name}}`, `{{app.domain_name}}`, and `{{{app.logo_image_url}}}`.

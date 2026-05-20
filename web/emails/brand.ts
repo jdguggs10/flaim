@@ -3,6 +3,7 @@ export const emailBrand = {
   url: "https://flaim.app",
   logoUrl: "https://flaim.app/flaim-mark-hero.png",
   supportEmail: "support@flaim.app",
+  subtitle: "FLAIM FANTASY",
   senders: {
     // Dashboard-only auth sender. Product templates should use senders.product.
     clerk: "Flaim <accounts@flaim.app>",
@@ -26,6 +27,12 @@ export const emailBrand = {
   radius: {
     card: "8px",
     button: "6px",
+  },
+  clerk: {
+    // Keep in sync with docs/EMAILS.md and the Clerk dashboard template frame.
+    logoWidth: "72px",
+    contentPadding: "4px 28px 28px 28px",
+    footerPadding: "18px 28px 0px 28px",
   },
 } as const;
 
