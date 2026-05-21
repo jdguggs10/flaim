@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 
+import { pathToFileURL } from "node:url";
 import { Resend } from "resend";
 
 const CLERK_USERS_URL = "https://api.clerk.com/v1/users";
 const DEFAULT_LIMIT = 100;
 const MAX_LIMIT = 500;
 
-function parseArgs(argv) {
+export function parseArgs(argv) {
   const args = {
     apply: false,
     delayMs: 0,
@@ -104,23 +105,23 @@ Resend rate limits apply. Use --delay-ms, --max-users, and --offset to pace larg
 `);
 }
 
-function cleanString(value) {
+export function cleanString(value) {
   const cleaned = typeof value === "string" ? value.trim() : "";
   return cleaned || null;
 }
 
 // Keep primary email selection aligned with web/lib/server/resend-contact-sync.ts.
-function getPrimaryEmailAddress(user) {
+export function getPrimaryEmailAddress(user) {
   const emails = Array.isArray(user.email_addresses) ? user.email_addresses : [];
   if (emails.length === 1) return emails[0];
   return emails.find((email) => email.id === user.primary_email_address_id) ?? null;
 }
 
-function getPrimaryEmail(user) {
+export function getPrimaryEmail(user) {
   return cleanString(getPrimaryEmailAddress(user)?.email_address)?.toLowerCase() ?? null;
 }
 
-function hasExplicitUnverifiedStatus(emailAddress) {
+export function hasExplicitUnverifiedStatus(emailAddress) {
   const status = cleanString(emailAddress?.verification?.status);
   return Boolean(status && status !== "verified");
 }
@@ -148,7 +149,7 @@ function isAlreadyInSegment(error) {
   return /already.*segment/i.test(error?.message ?? "") || error?.statusCode === 409;
 }
 
-function maskEmail(email) {
+export function maskEmail(email) {
   const [local, domain] = email.split("@");
   if (!domain) return email;
   const prefix = local.slice(0, 2);
@@ -326,7 +327,9 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error(error instanceof Error ? error.message : error);
-  process.exit(1);
-});
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((error) => {
+    console.error(error instanceof Error ? error.message : error);
+    process.exit(1);
+  });
+}
