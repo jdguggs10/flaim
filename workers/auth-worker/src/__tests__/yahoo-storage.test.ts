@@ -263,7 +263,6 @@ describe('YahooStorage', () => {
     });
 
     it('returns credentials with needsRefresh=false when token is fresh', async () => {
-      // Token expires in 30 minutes - well outside the 5-minute buffer
       const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
       mockSingle.mockResolvedValue({
         data: {
@@ -283,9 +282,8 @@ describe('YahooStorage', () => {
       expect(result?.needsRefresh).toBe(false);
     });
 
-    it('returns credentials with needsRefresh=true when within 5-minute buffer', async () => {
-      // Token expires in 3 minutes - within the 5-minute buffer
-      const expiresAt = new Date(Date.now() + 3 * 60 * 1000);
+    it('returns credentials with needsRefresh=false until the near-expiry buffer', async () => {
+      const expiresAt = new Date(Date.now() + 90 * 1000);
       mockSingle.mockResolvedValue({
         data: {
           clerk_user_id: 'user_123',
@@ -301,6 +299,26 @@ describe('YahooStorage', () => {
 
       expect(result).not.toBeNull();
       expect(result?.accessToken).toBe('expiring-token');
+      expect(result?.needsRefresh).toBe(false);
+    });
+
+    it('returns credentials with needsRefresh=true when within near-expiry buffer', async () => {
+      const expiresAt = new Date(Date.now() + 2 * 1000);
+      mockSingle.mockResolvedValue({
+        data: {
+          clerk_user_id: 'user_123',
+          access_token: 'near-expiry-token',
+          refresh_token: 'refresh-token',
+          expires_at: expiresAt.toISOString(),
+          yahoo_guid: 'guid-123',
+        },
+        error: null,
+      });
+
+      const result = await storage.getYahooCredentials('user_123');
+
+      expect(result).not.toBeNull();
+      expect(result?.accessToken).toBe('near-expiry-token');
       expect(result?.needsRefresh).toBe(true);
     });
 
@@ -372,8 +390,8 @@ describe('YahooStorage', () => {
       });
     });
 
-    it('returns health with needsRefresh=true when token is within the refresh buffer', async () => {
-      const expiresAt = new Date(Date.now() + 3 * 60 * 1000);
+    it('returns health with needsRefresh=true when token is within the near-expiry buffer', async () => {
+      const expiresAt = new Date(Date.now() + 2 * 1000);
       mockSingle.mockResolvedValue({
         data: {
           clerk_user_id: 'user_123',

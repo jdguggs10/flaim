@@ -100,11 +100,8 @@ export interface SaveLeagueParams {
 // UTILITIES
 // =============================================================================
 
-/**
- * 5-minute buffer for token refresh
- * Tokens expiring within this window should be proactively refreshed
- */
-const REFRESH_BUFFER_MS = 5 * 60 * 1000;
+// Yahoo has returned 429s when refreshed minutes early; refresh only at expiry.
+const REFRESH_BUFFER_MS = 5 * 1000;
 
 /**
  * Mask user ID for logging
@@ -235,7 +232,7 @@ export class YahooStorage {
 
   /**
    * Get Yahoo credentials for a user
-   * Includes needsRefresh flag based on 5-minute buffer
+   * Includes needsRefresh flag based on the near-expiry refresh buffer.
    */
   async getYahooCredentials(clerkUserId: string): Promise<YahooCredentials | null> {
     const { data, error } = await this.supabase

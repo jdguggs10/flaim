@@ -65,6 +65,8 @@ These endpoints manage the OAuth 2.0 client flow with Yahoo Fantasy.
 
 Yahoo callback stores the authorization-code token response directly after a successful reconnect. Access-token refresh is deferred until the token is stale and then runs through the backend per-user lease path, which keeps Yahoo refresh tokens off the browser and avoids an extra token-endpoint call during reconnect. If Yahoo ever returns a bad refresh token with an otherwise successful reconnect, that failure surfaces on the first lazy refresh instead of during the callback.
 
+Yahoo access tokens are used until near expiry instead of refreshing several minutes early. May 2026 production logs showed Yahoo returning `429` / `Too many failed requests` when Flaim refreshed with roughly 90 seconds still left on the current access token.
+
 Yahoo authorization-code exchange sends `redirect_uri` using the registered Flaim callback URL. Yahoo refresh-token exchange intentionally omits `redirect_uri`; May 2026 production logs showed the restored include-redirect refresh shape returning Yahoo `429` / `Too many failed requests` on the first lazy refresh after reconnect.
 
 Keep `request_has_redirect_uri` diagnostics in place. If this behavior is revisited, require live evidence from successful post-expiry refreshes before changing the refresh-token request shape again.
