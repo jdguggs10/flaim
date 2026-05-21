@@ -18,8 +18,6 @@
   // - YAHOO_CLIENT_SECRET  (Yahoo Developer App)
   // Optional vars:
   // - OAUTH_REFRESH_TOKEN_TTL_SECONDS (defaults to 31536000 in code; set only to override)
-  // - YAHOO_REFRESH_GRANT_REDIRECT_URI ("omit" by default; "include" is a compatibility escape hatch)
-  // - YAHOO_REFRESH_COOLDOWN_MODE ("enabled" by default; "disabled" bypasses transient cooldown gates)
 
   // Environment configurations
   "env": {
@@ -77,9 +75,7 @@
       "vars": {
         "NODE_ENV": "production",
         "ENVIRONMENT": "prod",
-        "FRONTEND_URL": "https://flaim.app",
-        // Explicit even though "omit" is the code default: keeps the validated Yahoo refresh-token grant shape visible in config.
-        "YAHOO_REFRESH_GRANT_REDIRECT_URI": "omit"
+        "FRONTEND_URL": "https://flaim.app"
       }
     },
     // Preview environment (remote dev/staging)
@@ -116,9 +112,7 @@
       "vars": {
         "NODE_ENV": "production",
         "ENVIRONMENT": "preview",
-        "FRONTEND_URL": "https://preview.flaim.app",
-        // Explicit even though "omit" is the code default: keeps the validated Yahoo refresh-token grant shape visible in config.
-        "YAHOO_REFRESH_GRANT_REDIRECT_URI": "omit"
+        "FRONTEND_URL": "https://preview.flaim.app"
       }
     },
     // Development environment (local)

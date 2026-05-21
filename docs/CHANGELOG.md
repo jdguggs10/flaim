@@ -16,17 +16,16 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 - **Added**: Yahoo token-refresh diagnostics now emit structured non-secret refresh events with failure classes, outcomes, request-timeout/lease-budget fields, and an internal credential-health endpoint for production incident triage.
 - **Added**: Yahoo token-refresh diagnostics now distinguish Yahoo-provided `Retry-After` headers from Flaim fallback cooldowns with `retry_after_source`, and log non-secret token request shape fields (grant type, callback URL/host/path, redirect URI presence, caller auth type, and Yahoo client credential presence) to investigate recurring refresh failures.
 - **Added**: Yahoo connection management on `/leagues` now separates **Sync leagues** from **Reconnect Yahoo** and shows coarse temporary-unavailable/reconnect-needed states.
-- **Changed**: Yahoo refresh-token grants now omit `redirect_uri` by default. The authorization-code exchange still includes `redirect_uri`; do not reuse that request body for refresh-token grants.
-- **Changed**: Yahoo refresh cooldowns are re-enabled in production/preview as a narrow circuit breaker for retryable token-refresh failures only; malformed/permanent OAuth failures now release the lease and surface immediately instead of entering cooldown.
-- **Changed**: Yahoo lazy token refresh now gives the lease owner one short retry for retryable non-rate-limit token-endpoint failures before setting a shared cooldown.
+- **Changed**: Yahoo refresh-token grants now follow Yahoo's documented request shape again and include `redirect_uri`; the temporary omit-redirect compatibility flag was removed.
+- **Changed**: Yahoo token-refresh failures now release the per-user refresh lease and surface upstream status immediately instead of writing a persisted cooldown marker that can mask malformed/permanent failures.
+- **Changed**: Yahoo lazy token refresh still uses a per-user lease and owner retry for short-lived non-rate-limit failures, but no longer converts failed refresh attempts into shared persisted cooldowns.
 - **Changed**: Yahoo reconnect now stores the authorization-code token response directly instead of immediately making a second refresh-token validation request, reducing token-endpoint pressure.
 - **Changed**: Yahoo **Sync leagues** on `/leagues` now uses the stored connection to rediscover leagues instead of starting a fresh OAuth flow every time.
 - **Changed**: Yahoo refresh lease waiters now return an explicit retryable response before the MCP gateway timeout budget is exhausted.
 - **Removed**: Unconditional raw Yahoo response debug logs from successful yahoo-client tool calls; production diagnostics should use structured non-secret auth-worker events and request/completion metadata instead of roster/league payload slices.
-- **Fixed**: Repeated Yahoo failures after the 1-hour access token expired were traced to the refresh-token request shape, not user reconnect state or actual request volume. Live production validation showed refresh failed with `request_has_redirect_uri=true`, then succeeded with `request_has_redirect_uri=false`; subsequent Yahoo `get_league_info`, `get_roster`, `get_standings`, and `get_matchups` calls returned successfully.
+- **Fixed**: Repeated Yahoo failures after the 1-hour access token expired now preserve upstream status and sanitized upstream body text in diagnostics instead of collapsing into a generic cooldown state.
 - **Fixed**: Yahoo league discovery rate limits (`429`/`999`) and transient upstream failures now return retryable responses with `Retry-After` instead of generic refresh failures.
-- **Fixed**: When cooldowns are enabled, Yahoo transient token-refresh failures set a short cooldown so near-concurrent tool calls do not immediately re-hit Yahoo's token endpoint.
-- **Fixed**: Yahoo token-refresh retry hints now include `retry_after` for confirmed transient/backoff failures and preserve upstream status metadata through MCP tool errors.
+- **Fixed**: Yahoo token-refresh failures preserve upstream status metadata through MCP tool errors.
 - **Fixed**: Yahoo retry metadata now propagates through yahoo-client and fantasy-mcp instead of collapsing into generic tool errors.
 - **Fixed**: Yahoo discovery now persists `team_key` for pending waiver/trade transaction lookups.
 
