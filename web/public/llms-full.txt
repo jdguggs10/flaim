@@ -26,7 +26,7 @@ Single MCP endpoint: https://api.flaim.app/mcp
 
 | Platform | Sports | Auth Method |
 |----------|--------|-------------|
-| ESPN | Football, Baseball, Basketball, Hockey | Chrome extension preferred, manual cookie fallback available |
+| ESPN | Football, Baseball, Basketball, Hockey | Chrome extension required for private ESPN leagues |
 | Yahoo | Football, Baseball, Basketball, Hockey | OAuth 2.0 (sign in with Yahoo) |
 | Sleeper | Football, Basketball | Username only (public API) |
 
@@ -35,7 +35,7 @@ Single MCP endpoint: https://api.flaim.app/mcp
 1. Create a Flaim account at https://flaim.app
 2. Open https://flaim.app/leagues
 3. Connect your fantasy platforms there:
-   - ESPN: Use the Chrome extension to sync, or use the manual cookie fallback if needed
+   - ESPN: Use the Chrome extension to sync private ESPN leagues
    - Yahoo: Start Yahoo auth from /leagues and wait for league discovery
    - Sleeper: Enter your exact username and wait for league discovery
 4. Open Flaim Fantasy in ChatGPT, or add the MCP server URL to an optional manual MCP client: https://api.flaim.app/mcp

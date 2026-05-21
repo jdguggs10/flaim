@@ -37,7 +37,7 @@ const setupSteps = [
   {
     number: "3",
     title: "AI Agents",
-    body: "Flaim Fantasy is an official ChatGPT App. Other AI's including Claude, Perplexity, and more can connect unofficially as well.",
+    body: "Flaim Fantasy is an official ChatGPT App. Other AI clients including Claude, Perplexity, and more can also connect as custom connectors.",
     primaryHref: "/leagues#connect-ai",
     primaryLabel: "Connect AI agents",
     secondaryHref: "/guide/ai#custom-connectors",

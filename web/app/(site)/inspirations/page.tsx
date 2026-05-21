@@ -28,7 +28,7 @@ const inspirations = [
     description: "Bet tracking done right. The real ones know.",
   },
   {
-    name: "Mosiac",
+    name: "Mosaic",
     url: "https://www.threads.com/@jweingardt?igshid=NTc4MTIwNjQ2YQ==",
     description: "Baseball done right.",
   },
