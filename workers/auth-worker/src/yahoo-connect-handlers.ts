@@ -20,6 +20,7 @@
 import { YahooStorage, type YahooCredentialHealth, type YahooCredentials } from './yahoo-storage';
 import { getFrontendUrl, resolvePreviewOrigin } from './preview-url';
 import {
+  YAHOO_DEFAULT_TRANSIENT_RETRY_AFTER_SECONDS,
   YAHOO_REFRESH_IN_PROGRESS_RETRY_AFTER_SECONDS,
   classifyYahooApiFailure,
   defaultYahooRetryAfterSeconds,
@@ -975,8 +976,10 @@ async function getValidYahooAccessToken(
           'lease_budget_exhausted'
         );
         return {
-          error: 'refresh_failed',
+          error: YahooAuthWorkerErrorCode.REFRESH_TEMPORARILY_UNAVAILABLE,
           errorDescription: 'Yahoo token refresh lease budget was exhausted before a request could be sent',
+          retryable: true,
+          retryAfter: YAHOO_REFRESH_IN_PROGRESS_RETRY_AFTER_SECONDS,
         };
       }
       const requestBody = yahooRefreshTokenBody(credentials.refreshToken, env);
@@ -1061,10 +1064,12 @@ async function getValidYahooAccessToken(
           isAbort ? 'timeout' : 'fetch_error'
         );
         return {
-          error: 'refresh_failed',
+          error: YahooAuthWorkerErrorCode.REFRESH_TEMPORARILY_UNAVAILABLE,
           errorDescription: isAbort
             ? 'Yahoo token refresh timed out'
             : 'Yahoo token refresh request failed',
+          retryable: true,
+          retryAfter: YAHOO_DEFAULT_TRANSIENT_RETRY_AFTER_SECONDS,
         };
       }
       clearTimeout(timer);
@@ -1139,6 +1144,10 @@ async function getValidYahooAccessToken(
           continue;
         }
 
+        const retryAfter = result.retry_after
+          ?? defaultYahooRetryAfterSeconds(result.status)
+          ?? YAHOO_DEFAULT_TRANSIENT_RETRY_AFTER_SECONDS;
+        const retryAfterSource = result.retry_after_source ?? 'fallback_default';
         logDiagnostic('refresh_transient_failure', {
           userId,
           attempt,
@@ -1146,8 +1155,8 @@ async function getValidYahooAccessToken(
           phase: 'refresh_response',
           outcome: diagnosticOutcome,
           diagnosticClass,
-          retryAfter: result.retry_after,
-          retryAfterSource: result.retry_after_source,
+          retryAfter,
+          retryAfterSource,
           upstreamStatus: result.status,
           tokenError: result.error,
           failureKind,
@@ -1163,8 +1172,11 @@ async function getValidYahooAccessToken(
           diagnosticOutcome
         );
         return {
-          error: 'refresh_failed',
+          error: YahooAuthWorkerErrorCode.REFRESH_TEMPORARILY_UNAVAILABLE,
           errorDescription: result.error_description || 'Failed to refresh access token',
+          retryable: true,
+          retryAfter,
+          retryAfterSource,
           upstreamStatus: result.status,
         };
       }
