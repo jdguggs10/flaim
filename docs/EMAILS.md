@@ -56,7 +56,19 @@ This package includes a server-only Resend send helper, but no user action shoul
 
 Clerk is the source of truth for user identity. Resend is the product email audience and delivery layer, not the canonical CRM. The Clerk webhook at `web/app/api/webhooks/clerk/route.ts` keeps Resend contacts lightly synchronized from `user.created` and `user.updated` events. The handler verifies Clerk's webhook signature with `CLERK_WEBHOOK_SIGNING_SECRET`, acknowledges verified Clerk events even if downstream Resend sync fails, and does nothing unless `RESEND_CONTACT_SYNC_ENABLED=true`.
 
-The contact sync stores only email, first name, last name, and minimal properties (`clerk_user_id`, latest Clerk event, and source). It intentionally does not resubscribe existing contacts during updates, so Resend unsubscribe state remains authoritative for product and broadcast email. If `RESEND_CONTACT_SEGMENT_ID` is set, new and updated contacts are assigned to that Resend Segment for future Broadcast targeting.
+The contact sync stores only email, first name, and last name. It intentionally does not resubscribe existing contacts during updates, so Resend unsubscribe state remains authoritative for product and broadcast email. If `RESEND_CONTACT_SEGMENT_ID` is set, new and updated contacts are assigned to that Resend Segment for future Broadcast targeting. Avoid writing custom Resend contact properties unless those properties have first been created in Resend.
+
+Existing users are backfilled with a separate dry-run-first script. Run it from the repo root:
+
+```sh
+corepack pnpm --dir web exec node scripts/backfill-resend-contacts.mjs
+```
+
+The script requires `CLERK_SECRET_KEY` for dry-runs and also requires `RESEND_CONTACTS_API_KEY` when applying writes. `RESEND_API_KEY` should remain the send-only email key; the contact sync key needs Resend Contacts and Segments permissions. The script skips users without a primary email and users whose primary email is explicitly unverified. To write a single controlled contact before a full backfill:
+
+```sh
+corepack pnpm --dir web exec node scripts/backfill-resend-contacts.mjs --apply --max-users 1
+```
 
 React Email's preview server may add lockfile entries for its own bundled Next.js version. Those entries are isolated to the preview tooling; the Flaim web app should continue to resolve the app-pinned Next.js version. Keep the React Email preview packages pinned to exact versions so preview tooling upgrades do not silently churn the lockfile.
 

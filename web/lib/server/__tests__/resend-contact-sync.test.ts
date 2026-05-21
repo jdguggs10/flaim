@@ -11,7 +11,11 @@ import {
 const clerkUser: ClerkUserEmailSyncPayload = {
   email_addresses: [
     { id: "secondary", email_address: "secondary@example.com" },
-    { id: "primary", email_address: "Gerry@Example.com" },
+    {
+      id: "primary",
+      email_address: "Gerry@Example.com",
+      verification: { status: "verified" },
+    },
   ],
   first_name: "Gerry",
   id: "user_123",
@@ -92,6 +96,17 @@ describe("syncClerkUserToResendContact", () => {
     expect(get).not.toHaveBeenCalled();
   });
 
+  it("reports missing contact API configuration when enabled without a client", async () => {
+    const result = await syncClerkUserToResendContact(clerkUser, "user.created", {
+      enabled: true,
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: "RESEND_CONTACTS_API_KEY or RESEND_API_KEY is not configured",
+    });
+  });
+
   it("creates a Resend contact without changing future unsubscribe state", async () => {
     const { client, create } = makeClient(false);
 
@@ -110,11 +125,6 @@ describe("syncClerkUserToResendContact", () => {
       email: "gerry@example.com",
       firstName: "Gerry",
       lastName: "Gugger",
-      properties: {
-        clerk_event: "user.created",
-        clerk_user_id: "user_123",
-        source: "clerk",
-      },
       segments: [{ id: "segment_123" }],
       unsubscribed: false,
     });
@@ -138,11 +148,6 @@ describe("syncClerkUserToResendContact", () => {
       email: "gerry@example.com",
       firstName: "Gerry",
       lastName: "Gugger",
-      properties: {
-        clerk_event: "user.updated",
-        clerk_user_id: "user_123",
-        source: "clerk",
-      },
     });
     expect(segmentAdd).toHaveBeenCalledWith({
       email: "gerry@example.com",
@@ -166,11 +171,31 @@ describe("syncClerkUserToResendContact", () => {
       email: "gerry@example.com",
       firstName: undefined,
       lastName: undefined,
-      properties: {
-        clerk_event: "user.updated",
-        clerk_user_id: "user_123",
-        source: "clerk",
-      },
     });
+  });
+
+  it("skips explicitly unverified Clerk primary emails", async () => {
+    const { client, get } = makeClient(false);
+
+    const result = await syncClerkUserToResendContact({
+      ...clerkUser,
+      email_addresses: [
+        {
+          id: "primary",
+          email_address: "unverified@example.com",
+          verification: { status: "unverified" },
+        },
+      ],
+    }, "user.created", {
+      client,
+      enabled: true,
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      skipped: true,
+      error: "Clerk user primary email is not verified",
+    });
+    expect(get).not.toHaveBeenCalled();
   });
 });

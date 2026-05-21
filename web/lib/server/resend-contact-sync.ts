@@ -5,11 +5,17 @@ import type {
   GetContactOptions,
   UpdateContactOptions,
 } from "resend";
-import { getResendClient, getResendErrorMessage } from "@/lib/server/resend-client";
+import {
+  getResendContactsClient,
+  getResendErrorMessage,
+} from "@/lib/server/resend-client";
 
 type ClerkEmailAddress = {
   email_address?: string | null;
   id?: string | null;
+  verification?: {
+    status?: string | null;
+  } | null;
 };
 
 export type ClerkUserEmailSyncPayload = {
@@ -84,6 +90,20 @@ export function getClerkUserPrimaryEmail(user: ClerkUserEmailSyncPayload) {
   return cleanString(primaryEmail?.email_address)?.toLowerCase() ?? null;
 }
 
+function hasExplicitUnverifiedStatus(emailAddress: ClerkEmailAddress | null | undefined) {
+  const status = cleanString(emailAddress?.verification?.status);
+  return Boolean(status && status !== "verified");
+}
+
+function getClerkUserPrimaryEmailAddress(user: ClerkUserEmailSyncPayload) {
+  const emailAddresses = user.email_addresses ?? [];
+  return (
+    emailAddresses.find((email) => email.id === user.primary_email_address_id) ??
+    emailAddresses[0] ??
+    null
+  );
+}
+
 async function ensureContactSegment(
   client: ContactSyncClient,
   email: string,
@@ -100,7 +120,7 @@ async function ensureContactSegment(
 
 export async function syncClerkUserToResendContact(
   user: ClerkUserEmailSyncPayload,
-  eventType: ContactSyncEventType,
+  _eventType: ContactSyncEventType,
   options: SyncClerkUserOptions = {},
 ): Promise<ContactSyncResult> {
   if (!isContactSyncEnabled(options)) {
@@ -112,19 +132,19 @@ export async function syncClerkUserToResendContact(
     return { ok: false, skipped: true, error: "Clerk user has no email address" };
   }
 
-  const client = options.client ?? getResendClient();
+  const primaryEmailAddress = getClerkUserPrimaryEmailAddress(user);
+  if (hasExplicitUnverifiedStatus(primaryEmailAddress)) {
+    return { ok: false, skipped: true, error: "Clerk user primary email is not verified" };
+  }
+
+  const client = options.client ?? getResendContactsClient();
   if (!client) {
-    return { ok: false, error: "RESEND_API_KEY is not configured" };
+    return { ok: false, error: "RESEND_CONTACTS_API_KEY or RESEND_API_KEY is not configured" };
   }
 
   const firstName = cleanString(user.first_name);
   const lastName = cleanString(user.last_name);
   const segmentId = cleanString(options.segmentId ?? process.env.RESEND_CONTACT_SEGMENT_ID);
-  const properties = {
-    clerk_event: eventType,
-    clerk_user_id: user.id,
-    source: "clerk",
-  };
 
   try {
     const existing = await client.contacts.get({ email });
@@ -138,7 +158,6 @@ export async function syncClerkUserToResendContact(
         email,
         firstName: firstName ?? undefined,
         lastName: lastName ?? undefined,
-        properties,
         unsubscribed: false,
       };
 
@@ -158,7 +177,6 @@ export async function syncClerkUserToResendContact(
       email,
       firstName: firstName ?? undefined,
       lastName: lastName ?? undefined,
-      properties,
     });
 
     if (updated.error) {
