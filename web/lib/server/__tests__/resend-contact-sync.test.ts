@@ -83,7 +83,7 @@ describe("syncClerkUserToResendContact", () => {
   it("skips when contact sync is disabled", async () => {
     const { client, get } = makeClient(false);
 
-    const result = await syncClerkUserToResendContact(clerkUser, "user.created", {
+    const result = await syncClerkUserToResendContact(clerkUser, {
       client,
       enabled: false,
     });
@@ -97,7 +97,7 @@ describe("syncClerkUserToResendContact", () => {
   });
 
   it("reports missing contact API configuration when enabled without a client", async () => {
-    const result = await syncClerkUserToResendContact(clerkUser, "user.created", {
+    const result = await syncClerkUserToResendContact(clerkUser, {
       enabled: true,
     });
 
@@ -110,7 +110,7 @@ describe("syncClerkUserToResendContact", () => {
   it("creates a Resend contact without changing future unsubscribe state", async () => {
     const { client, create } = makeClient(false);
 
-    const result = await syncClerkUserToResendContact(clerkUser, "user.created", {
+    const result = await syncClerkUserToResendContact(clerkUser, {
       client,
       enabled: true,
       segmentId: "segment_123",
@@ -133,7 +133,7 @@ describe("syncClerkUserToResendContact", () => {
   it("updates an existing Resend contact without passing unsubscribed", async () => {
     const { client, segmentAdd, update } = makeClient(true);
 
-    const result = await syncClerkUserToResendContact(clerkUser, "user.updated", {
+    const result = await syncClerkUserToResendContact(clerkUser, {
       client,
       enabled: true,
       segmentId: "segment_123",
@@ -158,14 +158,17 @@ describe("syncClerkUserToResendContact", () => {
   it("omits blank names when updating an existing Resend contact", async () => {
     const { client, update } = makeClient(true);
 
-    await syncClerkUserToResendContact({
-      ...clerkUser,
-      first_name: null,
-      last_name: " ",
-    }, "user.updated", {
-      client,
-      enabled: true,
-    });
+    await syncClerkUserToResendContact(
+      {
+        ...clerkUser,
+        first_name: null,
+        last_name: " ",
+      },
+      {
+        client,
+        enabled: true,
+      },
+    );
 
     expect(update).toHaveBeenCalledWith({
       email: "gerry@example.com",
@@ -177,19 +180,22 @@ describe("syncClerkUserToResendContact", () => {
   it("skips explicitly unverified Clerk primary emails", async () => {
     const { client, get } = makeClient(false);
 
-    const result = await syncClerkUserToResendContact({
-      ...clerkUser,
-      email_addresses: [
-        {
-          id: "primary",
-          email_address: "unverified@example.com",
-          verification: { status: "unverified" },
-        },
-      ],
-    }, "user.created", {
-      client,
-      enabled: true,
-    });
+    const result = await syncClerkUserToResendContact(
+      {
+        ...clerkUser,
+        email_addresses: [
+          {
+            id: "primary",
+            email_address: "unverified@example.com",
+            verification: { status: "unverified" },
+          },
+        ],
+      },
+      {
+        client,
+        enabled: true,
+      },
+    );
 
     expect(result).toEqual({
       ok: false,
@@ -197,5 +203,38 @@ describe("syncClerkUserToResendContact", () => {
       error: "Clerk user primary email is not verified",
     });
     expect(get).not.toHaveBeenCalled();
+  });
+
+  it("syncs users when Clerk omits email verification status", async () => {
+    const { client, create } = makeClient(false);
+
+    const result = await syncClerkUserToResendContact(
+      {
+        ...clerkUser,
+        email_addresses: [
+          {
+            id: "primary",
+            email_address: "oauth@example.com",
+          },
+        ],
+        primary_email_address_id: "primary",
+      },
+      {
+        client,
+        enabled: true,
+      },
+    );
+
+    expect(result).toEqual({
+      action: "created",
+      email: "oauth@example.com",
+      ok: true,
+    });
+    expect(create).toHaveBeenCalledWith({
+      email: "oauth@example.com",
+      firstName: "Gerry",
+      lastName: "Gugger",
+      unsubscribed: false,
+    });
   });
 });

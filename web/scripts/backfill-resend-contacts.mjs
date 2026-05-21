@@ -87,6 +87,8 @@ Options:
   --max-users <n>      Stop after scanning this many Clerk users.
   --offset <n>         Start at a Clerk list offset.
   --segment-id <id>    Resend Segment ID. Defaults to RESEND_CONTACT_SEGMENT_ID.
+
+Resend rate limits apply. Use --max-users and --offset to pace larger backfills.
 `);
 }
 
@@ -133,7 +135,7 @@ function isNotFound(error) {
 }
 
 function isAlreadyInSegment(error) {
-  return error?.statusCode === 409 || /already.*segment/i.test(error?.message ?? "");
+  return /already.*segment/i.test(error?.message ?? "") || error?.statusCode === 409;
 }
 
 function maskEmail(email) {

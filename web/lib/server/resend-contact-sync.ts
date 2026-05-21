@@ -26,7 +26,6 @@ export type ClerkUserEmailSyncPayload = {
   primary_email_address_id?: string | null;
 };
 
-type ContactSyncEventType = "user.created" | "user.updated";
 type ContactSyncAction = "created" | "updated";
 
 export interface ContactSyncResult {
@@ -74,7 +73,7 @@ function isNotFound(error: ContactApiError) {
 }
 
 function isAlreadyInSegment(error: ContactApiError) {
-  return error.statusCode === 409 || /already.*segment/i.test(error.message ?? "");
+  return /already.*segment/i.test(error.message ?? "") || error.statusCode === 409;
 }
 
 function isContactSyncEnabled(options: SyncClerkUserOptions) {
@@ -91,6 +90,7 @@ export function getClerkUserPrimaryEmail(user: ClerkUserEmailSyncPayload) {
 }
 
 function hasExplicitUnverifiedStatus(emailAddress: ClerkEmailAddress | null | undefined) {
+  // Missing verification status is common for OAuth-backed users; only skip explicit failures.
   const status = cleanString(emailAddress?.verification?.status);
   return Boolean(status && status !== "verified");
 }
@@ -120,7 +120,6 @@ async function ensureContactSegment(
 
 export async function syncClerkUserToResendContact(
   user: ClerkUserEmailSyncPayload,
-  _eventType: ContactSyncEventType,
   options: SyncClerkUserOptions = {},
 ): Promise<ContactSyncResult> {
   if (!isContactSyncEnabled(options)) {
