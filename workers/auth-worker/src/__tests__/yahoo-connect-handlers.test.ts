@@ -552,7 +552,7 @@ describe('yahoo-connect-handlers', () => {
       const refreshBody = new URLSearchParams(refreshRequest.body as string);
       expect(refreshBody.get('grant_type')).toBe('refresh_token');
       expect(refreshBody.get('refresh_token')).toBe('refresh-token');
-      expect(refreshBody.get('redirect_uri')).toBe('https://api.flaim.app/auth/connect/yahoo/callback');
+      expect(refreshBody.has('redirect_uri')).toBe(false);
       expect(mockStorage.acquireRefreshLease).toHaveBeenCalledWith(
         'user_123',
         expect.any(String),
@@ -571,7 +571,7 @@ describe('yahoo-connect-handlers', () => {
       );
     });
 
-    it('includes redirect_uri in refresh-token grants and diagnostics', async () => {
+    it('omits redirect_uri from refresh-token grants and records the request shape in diagnostics', async () => {
       const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
       mockStorage.getYahooCredentials.mockResolvedValue({
         clerkUserId: 'user_123',
@@ -600,7 +600,7 @@ describe('yahoo-connect-handlers', () => {
       const refreshBody = new URLSearchParams(refreshRequest.body as string);
       expect(refreshBody.get('grant_type')).toBe('refresh_token');
       expect(refreshBody.get('refresh_token')).toBe('refresh-token');
-      expect(refreshBody.get('redirect_uri')).toBe('https://api.flaim.app/auth/connect/yahoo/callback');
+      expect(refreshBody.has('redirect_uri')).toBe(false);
 
       expect(yahooRefreshDiagnostics(logSpy)).toEqual(
         expect.arrayContaining([
@@ -608,7 +608,7 @@ describe('yahoo-connect-handlers', () => {
             event: 'refresh_request_started',
             correlation_id: 'req_include_redirect',
             token_grant_type: 'refresh_token',
-            request_has_redirect_uri: true,
+            request_has_redirect_uri: false,
             callback_url: 'https://api.flaim.app/auth/connect/yahoo/callback',
           }),
         ])
@@ -1094,7 +1094,7 @@ describe('yahoo-connect-handlers', () => {
             has_upstream_retry_after: false,
             retry_after_source: 'fallback_default',
             token_grant_type: 'refresh_token',
-            request_has_redirect_uri: true,
+            request_has_redirect_uri: false,
             callback_url: 'https://api.flaim.app/auth/connect/yahoo/callback',
           }),
           expect.objectContaining({

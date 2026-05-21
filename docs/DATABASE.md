@@ -60,8 +60,8 @@ Stores Yahoo OAuth credentials for a Clerk user.
 | refresh_token | text | Yahoo OAuth refresh token |
 | expires_at | timestamptz | Access token expiry |
 | yahoo_guid | text | Optional Yahoo user GUID |
-| refresh_lease_owner | text | Short-lived owner ID for single-writer token refresh; `cooldown:*` marks transient refresh backoff |
-| refresh_lease_expires_at | timestamptz | Expiry for the refresh lease or cooldown marker |
+| refresh_lease_owner | text | Short-lived owner ID for single-writer token refresh; legacy `cooldown:*` markers may exist and are cleared on encounter |
+| refresh_lease_expires_at | timestamptz | Expiry for the refresh lease or legacy cooldown marker |
 | created_at | timestamptz | Created timestamp |
 | updated_at | timestamptz | Updated timestamp |
 

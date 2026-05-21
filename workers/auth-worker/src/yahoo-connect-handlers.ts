@@ -648,7 +648,6 @@ function yahooAuthorizationCodeTokenBody(code: string, env: YahooConnectEnv): UR
 function yahooRefreshTokenBody(refreshToken: string, env: YahooConnectEnv): URLSearchParams {
   return new URLSearchParams({
     grant_type: 'refresh_token',
-    redirect_uri: getCallbackUrl(env),
     refresh_token: refreshToken,
   });
 }
