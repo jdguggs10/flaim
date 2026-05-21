@@ -460,6 +460,50 @@ describe('YahooStorage', () => {
     });
   });
 
+  describe('updateYahooCredentialsIfRefreshTokenMatches', () => {
+    it('recovers refreshed credentials only when the stored refresh token still matches', async () => {
+      mockSelect.mockResolvedValue({ data: [{ clerk_user_id: 'user_123' }], error: null });
+
+      const result = await storage.updateYahooCredentialsIfRefreshTokenMatches(
+        'user_123',
+        {
+          accessToken: 'new-access-token',
+          refreshToken: 'new-refresh-token',
+          expiresAt: new Date('2026-01-24T14:00:00Z'),
+        },
+        'old-refresh-token'
+      );
+
+      expect(result).toBe(true);
+      expect(mockUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          access_token: 'new-access-token',
+          refresh_token: 'new-refresh-token',
+          refresh_lease_owner: null,
+          refresh_lease_expires_at: null,
+        })
+      );
+      expect(mockEq).toHaveBeenCalledWith('clerk_user_id', 'user_123');
+      expect(mockEq).toHaveBeenCalledWith('refresh_token', 'old-refresh-token');
+    });
+
+    it('returns false when a newer refresh token is already stored', async () => {
+      mockSelect.mockResolvedValue({ data: [], error: null });
+
+      const result = await storage.updateYahooCredentialsIfRefreshTokenMatches(
+        'user_123',
+        {
+          accessToken: 'new-access-token',
+          refreshToken: 'new-refresh-token',
+          expiresAt: new Date('2026-01-24T14:00:00Z'),
+        },
+        'old-refresh-token'
+      );
+
+      expect(result).toBe(false);
+    });
+  });
+
   describe('acquireRefreshLease', () => {
     it('returns true when the lease update succeeds', async () => {
       mockSelect.mockResolvedValue({ data: [{ clerk_user_id: 'user_123' }], error: null });

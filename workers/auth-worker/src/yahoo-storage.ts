@@ -114,6 +114,22 @@ function maskUserId(userId: string): string {
   return `${userId.substring(0, 8)}...`;
 }
 
+function yahooCredentialUpdateData(params: UpdateCredentialsParams): Record<string, string | null> {
+  const updateData: Record<string, string | null> = {
+    access_token: params.accessToken,
+    expires_at: params.expiresAt.toISOString(),
+    updated_at: new Date().toISOString(),
+    refresh_lease_owner: null,
+    refresh_lease_expires_at: null,
+  };
+
+  if (params.refreshToken) {
+    updateData.refresh_token = params.refreshToken;
+  }
+
+  return updateData;
+}
+
 // =============================================================================
 // YAHOO STORAGE CLASS
 // =============================================================================
@@ -302,17 +318,7 @@ export class YahooStorage {
     params: UpdateCredentialsParams,
     ownerId?: string
   ): Promise<boolean> {
-    const updateData: Record<string, string | null> = {
-      access_token: params.accessToken,
-      expires_at: params.expiresAt.toISOString(),
-      updated_at: new Date().toISOString(),
-      refresh_lease_owner: null,
-      refresh_lease_expires_at: null,
-    };
-
-    if (params.refreshToken) {
-      updateData.refresh_token = params.refreshToken;
-    }
+    const updateData = yahooCredentialUpdateData(params);
 
     let query = this.supabase
       .from('yahoo_credentials')
@@ -333,6 +339,33 @@ export class YahooStorage {
     const updated = (data?.length ?? 0) > 0;
     if (updated) {
       console.log(`[yahoo-storage] Updated Yahoo credentials for user ${maskUserId(clerkUserId)}`);
+    }
+    return updated;
+  }
+
+  // Recovery is guarded by the refresh token used for the successful Yahoo request.
+  async updateYahooCredentialsIfRefreshTokenMatches(
+    clerkUserId: string,
+    params: UpdateCredentialsParams,
+    expectedRefreshToken: string
+  ): Promise<boolean> {
+    const updateData = yahooCredentialUpdateData(params);
+
+    const { data, error } = await this.supabase
+      .from('yahoo_credentials')
+      .update(updateData)
+      .eq('clerk_user_id', clerkUserId)
+      .eq('refresh_token', expectedRefreshToken)
+      .select('clerk_user_id');
+
+    if (error) {
+      console.error('[yahoo-storage] Failed to recover Yahoo credentials after owner guard miss:', error);
+      throw new Error('Failed to recover Yahoo credentials');
+    }
+
+    const updated = (data?.length ?? 0) > 0;
+    if (updated) {
+      console.log(`[yahoo-storage] Recovered Yahoo credentials for user ${maskUserId(clerkUserId)} after owner guard miss`);
     }
     return updated;
   }
