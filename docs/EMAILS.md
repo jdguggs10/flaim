@@ -50,11 +50,11 @@ The first product templates are:
 
 Template URL samples exist in `PreviewProps` for local preview only. Production senders must pass app URLs, action URLs, and unsubscribe/preference URLs explicitly from the send call so preview values do not leak into staging or production messages by accident.
 
-`react-email`, `@react-email/render`, and `resend` are production dependencies because the server send helper renders and sends these templates. `@react-email/ui` remains a dev-only preview dependency; do not remove it just because templates do not import it directly.
+`@react-email/render`, `resend`, and `server-only` are production dependencies because the server send helper renders and sends these templates. `react-email` and `@react-email/ui` remain dev-only preview dependencies; do not remove `@react-email/ui` just because templates do not import it directly.
 
 This package includes a server-only Resend send helper, but no user action should call it until the corresponding trigger has an explicit send guard and unsubscribe/preference URL. Product email sending stays disabled unless `FLAIM_EMAILS_ENABLED=true` is set.
 
-Clerk is the source of truth for user identity. Resend is the product email audience and delivery layer, not the canonical CRM. The Clerk webhook at `web/app/api/webhooks/clerk/route.ts` keeps Resend contacts lightly synchronized from `user.created` and `user.updated` events. The handler verifies Clerk's webhook signature with `CLERK_WEBHOOK_SIGNING_SECRET` and does nothing unless `RESEND_CONTACT_SYNC_ENABLED=true`.
+Clerk is the source of truth for user identity. Resend is the product email audience and delivery layer, not the canonical CRM. The Clerk webhook at `web/app/api/webhooks/clerk/route.ts` keeps Resend contacts lightly synchronized from `user.created` and `user.updated` events. The handler verifies Clerk's webhook signature with `CLERK_WEBHOOK_SIGNING_SECRET`, acknowledges verified Clerk events even if downstream Resend sync fails, and does nothing unless `RESEND_CONTACT_SYNC_ENABLED=true`.
 
 The contact sync stores only email, first name, last name, and minimal properties (`clerk_user_id`, latest Clerk event, and source). It intentionally does not resubscribe existing contacts during updates, so Resend unsubscribe state remains authoritative for product and broadcast email. If `RESEND_CONTACT_SEGMENT_ID` is set, new and updated contacts are assigned to that Resend Segment for future Broadcast targeting.
 

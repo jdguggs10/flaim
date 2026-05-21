@@ -1,3 +1,4 @@
+import "server-only";
 import * as React from "react";
 import { Resend } from "resend";
 import { emailBrand } from "@/emails/brand";
@@ -36,12 +37,17 @@ interface SendLeagueConnectedEmailParams {
 }
 
 let resend: Resend | null = null;
+let resendApiKey: string | null = null;
 
 function getResendClient() {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) return null;
 
-  resend ??= new Resend(apiKey);
+  if (!resend || resendApiKey !== apiKey) {
+    resend = new Resend(apiKey);
+    resendApiKey = apiKey;
+  }
+
   return resend;
 }
 

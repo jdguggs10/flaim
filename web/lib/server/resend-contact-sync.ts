@@ -1,3 +1,4 @@
+import "server-only";
 import { Resend } from "resend";
 import type {
   AddContactSegmentOptions,
@@ -52,18 +53,23 @@ interface ContactSyncClient {
 }
 
 interface SyncClerkUserOptions {
-  apiKey?: string;
   client?: ContactSyncClient;
   enabled?: boolean;
   segmentId?: string;
 }
 
 let resend: Resend | null = null;
+let resendApiKey: string | null = null;
 
-function getResendClient(apiKey = process.env.RESEND_API_KEY) {
+function getResendClient() {
+  const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) return null;
 
-  resend ??= new Resend(apiKey);
+  if (!resend || resendApiKey !== apiKey) {
+    resend = new Resend(apiKey);
+    resendApiKey = apiKey;
+  }
+
   return resend;
 }
 
@@ -134,7 +140,7 @@ export async function syncClerkUserToResendContact(
     return { ok: false, skipped: true, error: "Clerk user has no email address" };
   }
 
-  const client = options.client ?? getResendClient(options.apiKey);
+  const client = options.client ?? getResendClient();
   if (!client) {
     return { ok: false, error: "RESEND_API_KEY is not configured" };
   }

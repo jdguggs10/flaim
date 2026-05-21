@@ -28,10 +28,7 @@ export async function POST(request: NextRequest) {
 
   if (!result.ok && !result.skipped) {
     console.error("Clerk to Resend contact sync failed:", result.error);
-    return NextResponse.json(
-      { error: "Contact sync failed", received: true },
-      { status: 502 },
-    );
+    return NextResponse.json({ error: "Contact sync failed", received: true, sync: result });
   }
 
   return NextResponse.json({ received: true, sync: result });
