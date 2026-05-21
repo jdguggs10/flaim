@@ -731,8 +731,8 @@ async function releaseYahooRefreshLeaseAfterFailure(
   storage: YahooStorage,
   userId: string,
   ownerId: string,
-  correlationId?: string,
-  outcome: YahooRefreshDiagnosticOutcome = 'permanent_failure'
+  correlationId: string | undefined,
+  outcome: YahooRefreshDiagnosticOutcome
 ): Promise<void> {
   try {
     await storage.releaseRefreshLease(userId, ownerId);
@@ -979,6 +979,7 @@ async function getValidYahooAccessToken(
           error: YahooAuthWorkerErrorCode.REFRESH_TEMPORARILY_UNAVAILABLE,
           errorDescription: 'Yahoo token refresh lease budget was exhausted before a request could be sent',
           retryable: true,
+          // This is local lease contention, not Yahoo backoff; ask callers to retry shortly.
           retryAfter: YAHOO_REFRESH_IN_PROGRESS_RETRY_AFTER_SECONDS,
         };
       }
@@ -1173,7 +1174,7 @@ async function getValidYahooAccessToken(
         );
         return {
           error: YahooAuthWorkerErrorCode.REFRESH_TEMPORARILY_UNAVAILABLE,
-          errorDescription: result.error_description || 'Failed to refresh access token',
+          errorDescription: result.error_description || 'Yahoo token refresh temporarily unavailable. Please try again shortly.',
           retryable: true,
           retryAfter,
           retryAfterSource,
