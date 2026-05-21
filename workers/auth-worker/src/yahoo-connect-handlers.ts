@@ -1202,6 +1202,7 @@ async function getValidYahooAccessToken(
       return {
         error: 'refresh_failed',
         errorDescription: result.error_description || 'Failed to refresh access token',
+        upstreamStatus: result.status,
       };
     }
 

@@ -649,6 +649,7 @@ describe('yahoo-connect-handlers', () => {
       const body = (await response.json()) as Record<string, unknown>;
       expect(body.error).toBe('refresh_failed');
       expect(body.error_description).toBe('Refresh token expired');
+      expect(body.upstream_status).toBe(400);
       expect(mockFetch).toHaveBeenCalledTimes(1);
       expect(mockStorage.updateYahooCredentials).not.toHaveBeenCalled();
       expect(mockStorage.releaseRefreshLease).toHaveBeenCalledWith('user_123', expect.any(String));
@@ -681,6 +682,7 @@ describe('yahoo-connect-handlers', () => {
       const body = (await response.json()) as Record<string, unknown>;
       expect(body.error).toBe('refresh_failed');
       expect(body.error_description).toBe('Unhandled Yahoo token response');
+      expect(body.upstream_status).toBe(400);
       expect(body.retryable).toBeUndefined();
       expect(body.retry_after).toBeUndefined();
       expect(mockStorage.updateYahooCredentials).not.toHaveBeenCalled();
