@@ -3,6 +3,8 @@ import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
 const CSRF_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+// Exact machine-to-machine endpoint paths exempted here must enforce their own request authentication.
+const CSRF_EXEMPT_PATHS = new Set(['/api/webhooks/clerk']);
 
 const ALLOWED_ORIGINS = [
   'https://flaim.app',
@@ -43,17 +45,36 @@ function getRequestOrigin(request: NextRequest): string | null {
   }
 }
 
-export default clerkMiddleware((_auth, request) => {
-  const { pathname } = request.nextUrl;
+export function normalizePathname(pathname: string): string {
+  if (pathname.length > 1) {
+    return pathname.replace(/\/+$/, '');
+  }
+  return pathname;
+}
 
-  if (pathname.startsWith('/api') && CSRF_METHODS.has(request.method)) {
-    const hasAuthHeader = Boolean(request.headers.get('authorization'));
-    if (!hasAuthHeader) {
-      const origin = getRequestOrigin(request);
-      if (!origin || !isOriginAllowed(origin)) {
-        return NextResponse.json({ error: 'Invalid origin' }, { status: 403 });
-      }
-    }
+export function shouldRejectForCsrf(request: NextRequest): boolean {
+  const pathname = normalizePathname(request.nextUrl.pathname);
+
+  if (
+    !(pathname.startsWith('/api') || pathname.startsWith('/trpc')) ||
+    !CSRF_METHODS.has(request.method) ||
+    CSRF_EXEMPT_PATHS.has(pathname)
+  ) {
+    return false;
+  }
+
+  const hasAuthHeader = Boolean(request.headers.get('authorization'));
+  if (hasAuthHeader) {
+    return false;
+  }
+
+  const origin = getRequestOrigin(request);
+  return !origin || !isOriginAllowed(origin);
+}
+
+export default clerkMiddleware((_auth, request) => {
+  if (shouldRejectForCsrf(request)) {
+    return NextResponse.json({ error: 'Invalid origin' }, { status: 403 });
   }
 
   return NextResponse.next();
