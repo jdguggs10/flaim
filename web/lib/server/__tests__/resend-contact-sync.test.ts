@@ -149,4 +149,28 @@ describe("syncClerkUserToResendContact", () => {
       segmentId: "segment_123",
     });
   });
+
+  it("omits blank names when updating an existing Resend contact", async () => {
+    const { client, update } = makeClient(true);
+
+    await syncClerkUserToResendContact({
+      ...clerkUser,
+      first_name: null,
+      last_name: " ",
+    }, "user.updated", {
+      client,
+      enabled: true,
+    });
+
+    expect(update).toHaveBeenCalledWith({
+      email: "gerry@example.com",
+      firstName: undefined,
+      lastName: undefined,
+      properties: {
+        clerk_event: "user.updated",
+        clerk_user_id: "user_123",
+        source: "clerk",
+      },
+    });
+  });
 });

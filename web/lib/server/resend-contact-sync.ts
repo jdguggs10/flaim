@@ -156,8 +156,8 @@ export async function syncClerkUserToResendContact(
 
     const updated = await client.contacts.update({
       email,
-      firstName,
-      lastName,
+      firstName: firstName ?? undefined,
+      lastName: lastName ?? undefined,
       properties,
     });
 
