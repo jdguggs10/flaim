@@ -31,5 +31,7 @@ describe('error utilities', () => {
   it('Yahoo auth-worker error codes include transient auth failures', () => {
     expect(YahooAuthWorkerErrorCode.REFRESH_TEMPORARILY_UNAVAILABLE).toBe('refresh_temporarily_unavailable');
     expect(YahooAuthWorkerErrorCode.TOKEN_EXCHANGE_UNAVAILABLE).toBe('token_exchange_unavailable');
+    expect(YahooAuthWorkerErrorCode.TOKEN_REFRESH_VALIDATION_UNAVAILABLE).toBe('token_refresh_validation_unavailable');
+    expect(YahooAuthWorkerErrorCode.TOKEN_REFRESH_VALIDATION_FAILED).toBe('token_refresh_validation_failed');
   });
 });

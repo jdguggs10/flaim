@@ -63,11 +63,15 @@ These endpoints manage the OAuth 2.0 client flow with Yahoo Fantasy.
 | `GET /internal/leagues/yahoo` | Internal + Clerk JWT / OAuth / Eval key | Get stored Yahoo leagues for internal workers |
 | `DELETE /leagues/yahoo/:id` | Clerk JWT | Delete a Yahoo league |
 
-Yahoo callback stores the authorization-code token response directly after a successful reconnect. Access-token refresh is deferred until the token is stale and then runs through the backend per-user lease path, which keeps Yahoo refresh tokens off the browser and avoids an extra token-endpoint call during reconnect. If Yahoo ever returns a bad refresh token with an otherwise successful reconnect, that failure surfaces on the first lazy refresh instead of during the callback.
+Yahoo callback validates the returned refresh token before saving credentials. That adds one immediate backend token-endpoint call during reconnect, but it prevents a connection from appearing healthy and then failing exactly one hour later on the first lazy refresh. If validation succeeds, Flaim stores the validated access token and Yahoo's latest refresh token.
 
 Yahoo access tokens are used until near expiry instead of refreshing several minutes early. May 2026 production logs showed Yahoo returning `429` / `Too many failed requests` when Flaim refreshed with roughly 90 seconds still left on the current access token.
 
-Yahoo authorization-code exchange sends `redirect_uri` using the registered Flaim callback URL. Yahoo refresh-token exchange intentionally omits `redirect_uri`; May 2026 production logs showed the restored include-redirect refresh shape returning Yahoo `429` / `Too many failed requests` on the first lazy refresh after reconnect.
+Yahoo refresh requests are one-shot per lease owner. If Yahoo returns a transient token-endpoint failure, Flaim leaves the short per-user lease in place and surfaces retry metadata instead of allowing waiters to immediately become the next owner.
+
+During a transient Yahoo token-endpoint failure, users can see a short retry delay while the per-user lease expires. That delay is intentional: it prevents concurrent requests for the same user from immediately retrying Yahoo after a `429`/`999`/`5xx`.
+
+Yahoo authorization-code exchange and refresh-token exchange both send `redirect_uri` using the registered Flaim callback URL. This matches Yahoo's documented token examples and keeps the callback request shape and refresh request shape aligned.
 
 Keep `request_has_redirect_uri` diagnostics in place. If this behavior is revisited, require live evidence from successful post-expiry refreshes before changing the refresh-token request shape again.
 
