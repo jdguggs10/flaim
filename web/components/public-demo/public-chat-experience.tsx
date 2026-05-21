@@ -237,7 +237,7 @@ function IdleState() {
         Pick something
       </p>
       <p className="mt-1 text-sm text-muted-foreground">
-        Real answers from Gerry&apos;s ESPN league
+        Real answers from Gerry&apos;s actual ESPN league
       </p>
       {/* Tap logo to cycle animation — easter egg */}
       <button
@@ -583,23 +583,19 @@ export function PublicChatExperience({
                   <button
                     type="button"
                     aria-label="Show demo context"
-                    className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-background px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-foreground transition-colors hover:bg-muted"
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-border/70 bg-background text-sm text-foreground transition-colors hover:bg-muted"
                   >
                     <span className="leading-none" aria-hidden="true">
                       {PUBLIC_SPORT_COPY[demoSport].icon}
                     </span>
-                    <span>ESPN</span>
                   </button>
                 </PopoverTrigger>
                 <PopoverContent
                   align="end"
                   className="w-[18.5rem] rounded-2xl border-border p-4 text-sm leading-6"
                 >
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
-                    Demo context
-                  </div>
-                  <p className="mt-2 text-foreground">
-                    These answers refresh from Gerry&apos;s real ESPN{" "}
+                  <p className="text-foreground">
+                    These answers refresh from Gerry&apos;s actual ESPN{" "}
                     {PUBLIC_SPORT_COPY[demoSport].label} league.
                   </p>
                   <p className="mt-2 text-muted-foreground">
@@ -730,8 +726,8 @@ export function PublicChatExperience({
                           className="w-[18rem] rounded-2xl border-border p-4 text-sm leading-6"
                         >
                           <p className="text-foreground">
-                            Adding and authenticating Flaim to your chatbot puts
-                            it in this drawer.
+                            Adding Flaim Fantasy to ChatGPT puts it in this
+                            drawer.
                           </p>
                         </PopoverContent>
                       </Popover>
@@ -769,9 +765,9 @@ export function PublicChatExperience({
                           className="w-[19rem] rounded-2xl border-border p-4 text-sm leading-6"
                         >
                           <p className="text-foreground">
-                            Some AIs activate Flaim automatically. For others,
-                            activate Flaim manually in your drawer and
-                            you&apos;ll see a badge here.
+                            Flaim should activate automatically. If it
+                            doesn&apos;t, click it in your drawer to get this
+                            badge here.
                           </p>
                         </PopoverContent>
                       </Popover>
@@ -804,9 +800,7 @@ export function PublicChatExperience({
                         >
                           <p className="text-foreground">
                             This demo shows recently refreshed answers from
-                            Gerry&apos;s actual league. Set up Flaim to ask
-                            Claude, ChatGPT, or Perplexity about your own
-                            leagues.
+                            Gerry&apos;s actual league.
                           </p>
                         </PopoverContent>
                       </Popover>

@@ -47,7 +47,7 @@ function OAuthConsentContent() {
 
   // League checking removed - tools handle missing configuration when called
 
-  // Handle "Allow" - create auth code and redirect to Claude
+  // Handle "Allow" - create auth code and redirect to OAuth client
   const handleAllow = async () => {
     try {
       const response = await fetch('/api/oauth/code', {
@@ -72,7 +72,7 @@ function OAuthConsentContent() {
       const data = await response.json() as { redirect_url?: string };
 
       if (data.redirect_url) {
-        // Redirect back to Claude with the auth code
+        // Redirect back to the OAuth client with the auth code
         window.location.href = data.redirect_url;
       } else {
         throw new Error('No redirect URL returned');
@@ -83,7 +83,7 @@ function OAuthConsentContent() {
     }
   };
 
-  // Handle "Deny" - redirect to Claude with error
+  // Handle "Deny" - redirect to OAuth client with error
   const handleDeny = () => {
     if (oauthParams.redirectUri && isValidRedirectUri(oauthParams.redirectUri)) {
       try {

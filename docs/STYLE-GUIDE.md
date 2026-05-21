@@ -18,7 +18,7 @@ Lightweight in-repo frontend standards.
 
 The homepage and guide pages have different copy rules.
 
-- **Homepage — human-first.** Warm, conversational, personal. Name real users ("Gerry's roster"), speak to the visitor ("What you can ask"), lead with relatable pain ("Stop copying stats into ChatGPT"). No jargon, no feature-list phrasing, no third-person references to Flaim. Structured data schemas handle keyword density invisibly.
+- **Homepage — human-first.** Warm, conversational, personal. The live demo should be honest that it runs on Gerry's actual fantasy league data, while making clear visitors can connect their own leagues. Speak to the visitor ("What you can ask"), lead with relatable pain ("Stop copying stats into ChatGPT"). No jargon, no feature-list phrasing, no third-person references to Flaim. Structured data schemas handle keyword density invisibly.
 - **Guide pages — keyword-rich.** `/guide/platforms`, `/guide/ai`, `/guide/sports` are the long-tail SEO surface. Detailed, instructional, keyword-specific — visitors are already in setup mode.
 - **Rule of thumb:** If you'd read it aloud to a friend, it belongs on the homepage. If you'd scan it while following steps, it belongs in a guide.
 

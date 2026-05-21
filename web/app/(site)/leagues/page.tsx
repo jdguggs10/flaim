@@ -4,48 +4,23 @@ import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } fr
 import { useAuth, SignInButton, SignUpButton } from '@clerk/nextjs';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
   Loader2,
-  Trophy,
   Trash2,
-  CheckCircle2,
   AlertCircle,
-  Search,
   ChevronDown,
-  X,
   Star,
-  History,
-  Wrench,
-  Eye,
-  EyeOff,
-  Briefcase,
   Chrome,
+  BookOpen,
   Info,
   RefreshCw,
 } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import { useEspnCredentials } from '@/lib/use-espn-credentials';
-import { getDefaultSeasonYear, getPreviousSeasonYear, getSeasonYearOptions } from '@/lib/season-utils';
 import {
   getYahooBadgeCopy,
   getYahooDisplayState,
@@ -63,6 +38,7 @@ import {
 } from '@/lib/yahoo-auth-errors';
 import { CHROME_EXTENSION_URL } from '@/config/constants';
 import { StepConnectAI } from '@/components/site/StepConnectAI';
+import { getPreviousSeasonYear } from '@/lib/season-utils';
 
 interface League {
   leagueId: string;
@@ -108,20 +84,6 @@ interface UserPreferencesState {
   defaultHockey: LeagueDefault | null;
 }
 
-interface Team {
-  id: string;
-  name: string;
-  owner?: string;
-}
-
-interface VerifiedLeague {
-  leagueId: string;
-  leagueName: string;
-  sport: string;
-  seasonYear: number;
-  teams: Team[];
-}
-
 type Sport = 'football' | 'baseball' | 'basketball' | 'hockey';
 
 // Unified league for display - combines ESPN, Yahoo, and Sleeper into common format
@@ -160,8 +122,6 @@ const SPORT_OPTIONS: { value: Sport; label: string; emoji: string }[] = [
   { value: 'hockey', label: 'Hockey', emoji: '\u{1F3D2}' },
 ];
 
-// Generate season options (current season year down to 2000)
-const MIN_YEAR = 2000;
 const EMPTY_ESPN_LEAGUES: League[] = [];
 const EMPTY_YAHOO_LEAGUES: YahooLeague[] = [];
 const EMPTY_SLEEPER_LEAGUES: SleeperLeague[] = [];
@@ -181,53 +141,6 @@ function capitalize(s: string): string {
 
 function createEmptyPreferences(): UserPreferencesState {
   return { ...EMPTY_USER_PREFERENCES };
-}
-
-interface EspnDiscoveryCounts {
-  found?: number;
-  added?: number;
-  alreadySaved?: number;
-}
-
-interface EspnDiscoveryResponse {
-  error?: string;
-  error_description?: string;
-  currentSeason?: EspnDiscoveryCounts;
-  pastSeasons?: EspnDiscoveryCounts;
-}
-
-const ESPN_ERROR_CREDENTIALS_NOT_FOUND = 'credentials_not_found';
-const ESPN_ERROR_AUTH_FAILED = 'espn_auth_failed';
-
-function getEspnDiscoverErrorMessage(status: number, data: EspnDiscoveryResponse): string {
-  if (data.error === ESPN_ERROR_CREDENTIALS_NOT_FOUND) {
-    return 'Add ESPN credentials with the Chrome extension or manual entry, then refresh again.';
-  }
-
-  if (status === 401 || status === 403 || data.error === ESPN_ERROR_AUTH_FAILED) {
-    return 'ESPN credentials look expired or invalid. Update them, then refresh again.';
-  }
-
-  return data.error_description || data.error || 'Failed to refresh ESPN leagues';
-}
-
-function formatEspnRefreshNotice(data: EspnDiscoveryResponse): string {
-  const currentAdded = data.currentSeason?.added ?? 0;
-  const historicalAdded = data.pastSeasons?.added ?? 0;
-  const currentFound = data.currentSeason?.found ?? 0;
-  const historicalFound = data.pastSeasons?.found ?? 0;
-  const added = currentAdded + historicalAdded;
-  const found = currentFound + historicalFound;
-
-  if (added > 0) {
-    return `ESPN refresh complete. Added ${added} new league season${added === 1 ? '' : 's'}.`;
-  }
-
-  if (found > 0) {
-    return `ESPN refresh complete. All ${found} league season${found === 1 ? '' : 's'} already up to date.`;
-  }
-
-  return 'ESPN refresh complete. No ESPN leagues found for these credentials.';
 }
 
 function formatLastUpdated(value: string): string {
@@ -349,19 +262,6 @@ function LeaguesPageContent() {
     hasCredentials,
     lastUpdated: espnLastUpdated,
     isCheckingCreds,
-    isLoadingCreds,
-    swid,
-    espnS2,
-    showCredentials,
-    credsSaving,
-    credsError,
-    credsSuccess,
-    setSwid,
-    setEspnS2,
-    setShowCredentials,
-    handleEditCredentials,
-    handleSaveCredentials,
-    handleCancelEdit,
   } = useEspnCredentials();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -373,12 +273,10 @@ function LeaguesPageContent() {
   const [leagueNotice, setLeagueNotice] = useState<string | null>(null);
   const [deletingLeagueKey, setDeletingLeagueKey] = useState<string | null>(null);
   const [settingDefaultKey, setSettingDefaultKey] = useState<string | null>(null);
-  const [discoveringLeagueKey, setDiscoveringLeagueKey] = useState<string | null>(null);
   const [isPlatformsSectionOpen, setIsPlatformsSectionOpen] = useState(true);
   const [isLeaguesSectionOpen, setIsLeaguesSectionOpen] = useState(true);
   const [isAiSectionOpen, setIsAiSectionOpen] = useState(true);
   const [isEspnSetupOpen, setIsEspnSetupOpen] = useState(false);
-  const [espnAdvancedOpen, setEspnAdvancedOpen] = useState(false);
   const [isYahooSetupOpen, setIsYahooSetupOpen] = useState(false);
   const [isYahooConnected, setIsYahooConnected] = useState(false);
   const [yahooHealth, setYahooHealth] = useState<YahooConnectionHealth | null>(null);
@@ -388,7 +286,6 @@ function LeaguesPageContent() {
   const [isYahooDisconnecting, setIsYahooDisconnecting] = useState(false);
   const [yahooLeagues, setYahooLeagues] = useState<YahooLeague[]>([]);
   const [isLoadingYahooLeagues, setIsLoadingYahooLeagues] = useState(true);
-  const [isRefreshingEspn, setIsRefreshingEspn] = useState(false);
   const [isDiscoveringYahoo, setIsDiscoveringYahoo] = useState(false);
   const [isReconnectingYahoo, setIsReconnectingYahoo] = useState(false);
   const [sleeperLeagues, setSleeperLeagues] = useState<SleeperLeague[]>([]);
@@ -403,7 +300,6 @@ function LeaguesPageContent() {
   const [isDiscoveringSleeper, setIsDiscoveringSleeper] = useState(false);
   const [sleeperConnectInput, setSleeperConnectInput] = useState('');
   const [sleeperError, setSleeperError] = useState<string | null>(null);
-  const [espnCredsDialogOpen, setEspnCredsDialogOpen] = useState(false);
   const [preferences, setPreferences] = useState<UserPreferencesState>(() => createEmptyPreferences());
   const [accountScopedUserId, setAccountScopedUserId] = useState<string | null>(null);
   const [settingSportDefault, setSettingSportDefault] = useState<string | null>(null);
@@ -420,24 +316,6 @@ function LeaguesPageContent() {
   const displayPreferences = isAccountStateCurrent ? preferences : EMPTY_USER_PREFERENCES;
   const defaultSport = displayPreferences.defaultSport;
   const [showOldLeagues, setShowOldLeagues] = useState(false);
-
-  // Add league flow state
-  const [manualDialogOpen, setManualDialogOpen] = useState(false);
-  const [discoverDialogOpen, setDiscoverDialogOpen] = useState(false);
-  const [newLeagueId, setNewLeagueId] = useState('');
-  const [newLeagueSport, setNewLeagueSport] = useState<Sport>('football');
-  const [newLeagueSeason, setNewLeagueSeason] = useState<number>(() => getDefaultSeasonYear('football'));
-  const [seasonManuallySet, setSeasonManuallySet] = useState(false);
-  const [isVerifying, setIsVerifying] = useState(false);
-  const [verifiedLeague, setVerifiedLeague] = useState<VerifiedLeague | null>(null);
-  const isManualVerificationPending = verifiedLeague !== null;
-  const [selectedTeamId, setSelectedTeamId] = useState<string>('');
-  const [isAddingLeague, setIsAddingLeague] = useState(false);
-  const [discoverLeagueKey, setDiscoverLeagueKey] = useState<string>('');
-  const manualSeasonOptions = useMemo(
-    () => getSeasonYearOptions(newLeagueSport, MIN_YEAR),
-    [newLeagueSport]
-  );
 
   const clearYahooConnectionState = useCallback(() => {
     setIsYahooConnected(false);
@@ -469,8 +347,6 @@ function LeaguesPageContent() {
     setSleeperError(null);
     setLeagueError(null);
     setLeagueNotice(null);
-    setIsRefreshingEspn(false);
-    setEspnAdvancedOpen(false);
     setIsDiscoveringYahoo(false);
     setIsReconnectingYahoo(false);
     setIsYahooDisconnecting(false);
@@ -488,7 +364,7 @@ function LeaguesPageContent() {
       return false;
     }
 
-    const thresholdYear = getDefaultSeasonYear(sport) - 1;
+    const thresholdYear = getPreviousSeasonYear(sport);
     const mostRecentYear = Math.max(...knownSeasonYears);
     return mostRecentYear < thresholdYear;
   };
@@ -575,50 +451,6 @@ function LeaguesPageContent() {
     return { active: sortedActive, old: oldLeagueGroups };
   }, [displayLeagues, displayYahooLeagues, displaySleeperLeagues, displayPreferences]);
 
-  const discoverableEspnLeagues = useMemo(() => {
-    const groups: Array<{
-      key: string;
-      leagueId: string;
-      sport: string;
-      leagueName?: string;
-      hasTeamSelection: boolean;
-    }> = [];
-
-    for (const [, sportLeagues] of leaguesBySport.active) {
-      for (const group of sportLeagues) {
-        if (group.platform !== 'espn') continue;
-        if (group.sport !== 'baseball' && group.sport !== 'football') continue;
-        const hasTeamSelection = group.seasons.some((season) => !!season.teamId);
-        groups.push({
-          key: `${group.leagueId}-${group.sport}`,
-          leagueId: group.leagueId,
-          sport: group.sport,
-          leagueName: group.leagueName,
-          hasTeamSelection,
-        });
-      }
-    }
-
-    return groups;
-  }, [leaguesBySport]);
-
-  useEffect(() => {
-    if (discoverableEspnLeagues.length === 0) {
-      if (discoverLeagueKey) setDiscoverLeagueKey('');
-      return;
-    }
-
-    if (!discoverableEspnLeagues.some((league) => league.key === discoverLeagueKey)) {
-      setDiscoverLeagueKey(discoverableEspnLeagues[0].key);
-    }
-  }, [discoverLeagueKey, discoverableEspnLeagues]);
-
-  useEffect(() => {
-    if (credsSuccess && espnCredsDialogOpen) {
-      setEspnCredsDialogOpen(false);
-    }
-  }, [credsSuccess, espnCredsDialogOpen]);
-
   const loadLeagues = useCallback(async (options?: { showSpinner?: boolean; shouldApply?: () => boolean }) => {
     const showSpinner = options?.showSpinner ?? true;
     const shouldApply = options?.shouldApply;
@@ -637,56 +469,6 @@ function LeaguesPageContent() {
       if (showSpinner && canApplyState(shouldApply)) setIsLoadingLeagues(false);
     }
   }, []);
-
-  const refreshEspnLeagues = useCallback(async (): Promise<void> => {
-    const shouldApply = createAccountGuard();
-    if (!shouldApply()) return;
-
-    if (!hasCredentials) {
-      setIsEspnSetupOpen(true);
-      setLeagueNotice(null);
-      return;
-    }
-
-    setIsRefreshingEspn(true);
-    setLeagueError(null);
-    setLeagueNotice(null);
-    try {
-      const res = await fetch('/api/espn/refresh', {
-        method: 'POST',
-        headers: {
-          'Accept': 'application/json',
-        },
-      });
-      const data = await res.json().catch(() => ({})) as EspnDiscoveryResponse;
-      if (!shouldApply()) return;
-
-      if (!res.ok) {
-        if (
-          res.status === 401 ||
-          res.status === 403 ||
-          data.error === ESPN_ERROR_CREDENTIALS_NOT_FOUND ||
-          data.error === ESPN_ERROR_AUTH_FAILED
-        ) {
-          setIsEspnSetupOpen(true);
-        }
-        throw new Error(getEspnDiscoverErrorMessage(res.status, data));
-      }
-
-      await loadLeagues({ showSpinner: false, shouldApply });
-      if (!shouldApply()) return;
-      setLeagueNotice(formatEspnRefreshNotice(data));
-    } catch (err) {
-      if (shouldApply()) {
-        console.error('Failed to refresh ESPN leagues:', err);
-        setLeagueError(err instanceof Error ? err.message : 'Failed to refresh ESPN leagues');
-      }
-    } finally {
-      if (shouldApply()) {
-        setIsRefreshingEspn(false);
-      }
-    }
-  }, [createAccountGuard, hasCredentials, loadLeagues]);
 
   const checkYahooStatus = useCallback(async (shouldApply?: () => boolean): Promise<ConnectionStatusResult> => {
     try {
@@ -1168,137 +950,6 @@ function LeaguesPageContent() {
     userId,
   ]);
 
-  // Verify league (call auto-pull to get league info)
-  const handleVerifyLeague = async () => {
-    if (!hasCredentials) {
-      setLeagueError('Add your ESPN credentials on the setup page first');
-      return;
-    }
-
-    if (!newLeagueId.trim()) {
-      setLeagueError('League ID is required');
-      return;
-    }
-
-    // Check for duplicates (including season year for multi-season support)
-    const exists = leagues.some(
-      (l) =>
-        l.leagueId === newLeagueId.trim() &&
-        l.sport === newLeagueSport &&
-        l.seasonYear === newLeagueSeason
-    );
-    if (exists) {
-      setLeagueError('This league and season is already added');
-      return;
-    }
-
-    setIsVerifying(true);
-    setLeagueError(null);
-    setLeagueNotice(null);
-    setVerifiedLeague(null);
-    setSelectedTeamId('');
-
-    try {
-      const res = await fetch('/api/espn/auto-pull', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sport: newLeagueSport,
-          leagueId: newLeagueId.trim(),
-          seasonYear: newLeagueSeason,
-        }),
-      });
-
-      const data = await res.json() as {
-        success?: boolean;
-        error?: string;
-        leagueInfo?: {
-          leagueId: string;
-          leagueName: string;
-          sport: string;
-          seasonYear: number;
-          teams: Array<{ id: string; name: string; owner?: string }>;
-        };
-      };
-
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Failed to verify league');
-      }
-
-      if (!data.leagueInfo) {
-        throw new Error('No league info returned');
-      }
-
-      setVerifiedLeague({
-        leagueId: newLeagueId.trim(),
-        leagueName: data.leagueInfo.leagueName,
-        sport: newLeagueSport,
-        seasonYear: data.leagueInfo.seasonYear,
-        teams: data.leagueInfo.teams.map((t: { teamId?: string; id?: string; teamName?: string; name?: string; ownerName?: string; owner?: string }) => ({
-          id: String(t.teamId || t.id || ''),
-          name: t.teamName || t.name || '',
-          owner: t.ownerName || t.owner,
-        })),
-      });
-      setManualDialogOpen(false); // Close dialog on successful verification
-    } catch (err) {
-      setLeagueError(err instanceof Error ? err.message : 'Failed to verify league');
-    } finally {
-      setIsVerifying(false);
-    }
-  };
-
-  // Add verified league with team selection
-  const handleAddVerifiedLeague = async () => {
-    if (!verifiedLeague) return;
-
-    const selectedTeam = verifiedLeague.teams.find((t) => t.id === selectedTeamId);
-
-    setIsAddingLeague(true);
-    setLeagueError(null);
-    setLeagueNotice(null);
-
-    try {
-      const newLeague: League = {
-        leagueId: verifiedLeague.leagueId,
-        sport: verifiedLeague.sport,
-        leagueName: verifiedLeague.leagueName,
-        seasonYear: verifiedLeague.seasonYear,
-        teamId: selectedTeamId || undefined,
-        teamName: selectedTeam?.name,
-      };
-
-      const updatedLeagues = [...leagues, newLeague];
-
-      const res = await fetch('/api/espn/leagues', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ leagues: updatedLeagues }),
-      });
-
-      if (!res.ok) {
-        const data = await res.json() as { error?: string };
-        throw new Error(data.error || 'Failed to add league');
-      }
-
-      setLeagues(updatedLeagues);
-      setNewLeagueId('');
-      setVerifiedLeague(null);
-      setSelectedTeamId('');
-    } catch (err) {
-      setLeagueError(err instanceof Error ? err.message : 'Failed to add league');
-    } finally {
-      setIsAddingLeague(false);
-    }
-  };
-
-  // Cancel verification
-  const handleCancelVerification = () => {
-    setVerifiedLeague(null);
-    setSelectedTeamId('');
-    setLeagueError(null);
-  };
-
   // Delete league - removes ALL seasons of this league
   const handleDeleteLeague = async (leagueId: string, sport: string) => {
     const leagueKey = `${leagueId}-${sport}`;
@@ -1454,76 +1105,11 @@ function LeaguesPageContent() {
     }
   };
 
-  // Discover historical seasons for a league
-  const handleDiscoverSeasons = async (leagueId: string, sport: string) => {
-    // Only baseball and football are supported
-    if (sport !== 'baseball' && sport !== 'football') {
-      setLeagueError('Season discovery is only available for baseball and football leagues');
-      return;
-    }
-
-    const leagueKey = `${leagueId}-${sport}`;
-    setDiscoveringLeagueKey(leagueKey);
-    setLeagueError(null);
-    setLeagueNotice(null);
-
-    try {
-      const response = await fetch('/api/espn/discover-seasons', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ leagueId, sport })
-      });
-
-      const data = await response.json() as {
-        success?: boolean;
-        error?: string;
-        discovered?: Array<{ seasonYear: number; leagueName: string; teamCount: number }>;
-        skipped?: number;
-        rateLimited?: boolean;
-      };
-
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || 'Discovery failed');
-      }
-
-      // Show success message
-      const count = data.discovered?.length || 0;
-      const skipped = data.skipped || 0;
-      const rateLimitedMsg = data.rateLimited ? ' (stopped early due to rate limiting)' : '';
-
-      // Refresh leagues list to show newly discovered seasons
-      const leaguesRes = await fetch('/api/espn/leagues');
-      if (leaguesRes.ok) {
-        const leaguesData = await leaguesRes.json() as { leagues?: League[] };
-        setLeagues(leaguesData.leagues || []);
-      }
-
-      setLeagueNotice(`Discovered ${count} new season${count !== 1 ? 's' : ''}, ${skipped} already stored${rateLimitedMsg}`);
-      setTimeout(() => setLeagueNotice(null), 5000);
-
-    } catch (err) {
-      setLeagueError(err instanceof Error ? err.message : 'Failed to discover seasons');
-    } finally {
-      setDiscoveringLeagueKey(null);
-    }
-  };
-
   const getSportEmoji = (sport: string) => {
     const option = SPORT_OPTIONS.find((s) => s.value === sport);
     return option?.emoji || '\u{1F3C6}';
   };
 
-  const getSportLabel = (sport: string) => {
-    const option = SPORT_OPTIONS.find((s) => s.value === sport);
-    return option?.label || sport;
-  };
-
-  const selectedDiscoverLeague = discoverableEspnLeagues.find(
-    (league) => league.key === discoverLeagueKey
-  );
-  const isDiscoveringSelected = selectedDiscoverLeague
-    ? discoveringLeagueKey === selectedDiscoverLeague.key
-    : false;
   const hasAnyLeagueGroups = leaguesBySport.active.length > 0 || leaguesBySport.old.length > 0;
   const displayLeagueError = isAccountStateCurrent ? leagueError : null;
   const displayLeagueNotice = isAccountStateCurrent ? leagueNotice : null;
@@ -1582,7 +1168,7 @@ function LeaguesPageContent() {
             </div>
             <h1 className="text-3xl font-semibold">Set up Your Leagues</h1>
             <p className="text-muted-foreground">
-              Sign in to connect ESPN, Yahoo, and Sleeper, copy your Flaim connector details, and manage your defaults in one place.
+              Sign in to connect ESPN, Yahoo, and Sleeper, choose the league ChatGPT should use first, and manage your defaults in one place.
             </p>
           </div>
           <Card>
@@ -1591,8 +1177,8 @@ function LeaguesPageContent() {
                 <h2 className="font-medium">What happens here</h2>
                 <ul className="space-y-2 text-sm text-muted-foreground">
                   <li>Connect your fantasy platforms and sync league data</li>
-                  <li>Copy the Flaim MCP name and URL for Claude, ChatGPT, or Perplexity</li>
-                  <li>Choose defaults and manage seasons once your account is linked</li>
+                  <li>Pick the sport and league ChatGPT should use by default</li>
+                  <li>Open ChatGPT and use Flaim Fantasy once your leagues are connected</li>
                 </ul>
               </div>
               <div className="flex flex-col gap-3 sm:flex-row">
@@ -1613,17 +1199,6 @@ function LeaguesPageContent() {
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto flex max-w-2xl flex-col gap-6 px-4 py-8">
-        {/* Header */}
-        <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <Trophy className="h-6 w-6" />
-            <h1 className="text-2xl font-semibold">Your Leagues</h1>
-          </div>
-          <p className="text-muted-foreground">
-            Connect platforms, manage league seasons, copy your AI setup details, and set your defaults here.
-          </p>
-        </div>
-
         {/* Global alerts */}
         {displayLeagueError && (
           <Alert variant="destructive">
@@ -1641,29 +1216,54 @@ function LeaguesPageContent() {
 
         <Card id="connect-ai" className="order-4">
           <CardHeader className="pb-4">
-            <button
-              type="button"
-              onClick={() => setIsAiSectionOpen((prev) => !prev)}
-              aria-expanded={isAiSectionOpen}
-              aria-controls="ai-card-content"
-              className="flex w-full items-start justify-between gap-4 text-left"
-            >
-              <div className="min-w-0 space-y-2">
-                <CardTitle className="text-lg">3. Connect Your AI</CardTitle>
-                <CardDescription>
-                  Copy the MCP details you need for Claude, ChatGPT, or Perplexity.
-                </CardDescription>
+            <div className="flex items-start justify-between gap-4">
+              <button
+                type="button"
+                onClick={() => setIsAiSectionOpen((prev) => !prev)}
+                aria-expanded={isAiSectionOpen}
+                aria-controls="ai-card-content"
+                className="flex flex-1 items-start gap-4 text-left"
+              >
+                <div className="min-w-0 space-y-2">
+                  <CardTitle className="text-lg">Agents</CardTitle>
+                </div>
+              </button>
+              <div className="flex items-center gap-2">
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className="rounded-md border border-muted bg-muted/60 p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                      aria-label="Alternative AI connector info"
+                      title="Alternative AI connector info"
+                    >
+                      <Info className="h-4 w-4" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent align="end" className="max-w-xs text-sm text-muted-foreground">
+                    Alternative AI&apos;s are unofficially supported as custom
+                    connectors. Click{" "}
+                    <Link href="/guide/ai#custom-connectors" className="text-primary underline hover:no-underline">
+                      here
+                    </Link>{" "}
+                    to learn more.
+                  </PopoverContent>
+                </Popover>
+                <button
+                  type="button"
+                  onClick={() => setIsAiSectionOpen((prev) => !prev)}
+                  aria-expanded={isAiSectionOpen}
+                  aria-controls="ai-card-content"
+                  className="rounded-md border border-muted bg-muted/60 p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  aria-label={isAiSectionOpen ? 'Collapse chatbots section' : 'Expand chatbots section'}
+                >
+                  <ChevronDown
+                    className={`h-4 w-4 transition-transform ${
+                      isAiSectionOpen ? 'rotate-180' : ''
+                    }`}
+                  />
+                </button>
               </div>
-              <ChevronDown
-                className={`mt-0.5 h-5 w-5 shrink-0 text-muted-foreground transition-transform ${
-                  isAiSectionOpen ? 'rotate-180' : ''
-                }`}
-              />
-            </button>
-            <div className="pt-2">
-              <Link href="/guide" className="text-sm text-primary hover:underline">
-                See all setup guides
-              </Link>
             </div>
           </CardHeader>
           {isAiSectionOpen ? (
@@ -1679,22 +1279,40 @@ function LeaguesPageContent() {
 
         <section className="order-5 space-y-3 rounded-xl border border-dashed border-border bg-muted/30 p-4">
           <div className="space-y-1">
-            <h2 className="text-sm font-semibold">Tips for activating Flaim in your AI assistant</h2>
+            <h2 className="text-sm font-semibold">Tips for using Flaim</h2>
             <p className="text-sm text-muted-foreground">
-              After you add and authenticate Flaim, most assistants still need one more click before they use it.
+              Flaim Fantasy provides the connective tissue between your fantasy
+              platforms and your AI agents. Once you&apos;ve connected a Flaim
+              account to both your leagues and your chatbot, you&apos;re done.
+              Everything else happens behind the scenes. Use your AI like you
+              normally would.
             </p>
           </div>
-          <ol className="space-y-2 text-sm text-muted-foreground">
-            <li>Start a fresh chat after the connection is approved.</li>
-            <li>Open the assistant menu where apps, connectors, tools, or integrations live, then select Flaim if it is not already active.</li>
-            <li>Ask a concrete league question like “Show me my roster” or “Who am I playing this week?” instead of a vague prompt.</li>
-            <li>If the assistant still ignores Flaim, say “Use Flaim” and mention your league, team, or sport.</li>
-            <li>Set a default sport or league above so Flaim can pick the right context faster.</li>
-          </ol>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {[
+              [
+                'Quicker Answers',
+                'Set defaults so you can ask "Find me a waiver wire add" and your AI will know what sport and what team without even asking.',
+              ],
+              [
+                'Activating Flaim',
+                'Use your AI like you normally would and Flaim should activate automatically. You can also say, "Use Flaim." to help it activate, or select Flaim Fantasy from your plugin drawer (the plus button).',
+              ],
+            ].map(([label, description]) => (
+              <div key={label} className="rounded-md border bg-background/70 p-3">
+                <div className="text-xs font-semibold uppercase tracking-wide text-foreground/70">
+                  {label}
+                </div>
+                <div className="mt-1 text-sm text-muted-foreground">
+                  {description}
+                </div>
+              </div>
+            ))}
+          </div>
         </section>
 
         {/* Your Leagues Card */}
-        <Card className="order-3">
+        <Card id="leagues" className="order-3">
           <CardHeader>
             <div className="flex items-start justify-between gap-4">
               <button
@@ -1705,29 +1323,25 @@ function LeaguesPageContent() {
                 className="flex flex-1 items-start gap-4 text-left"
               >
                 <div className="min-w-0 space-y-2">
-                  <CardTitle className="text-lg">2. Your Leagues</CardTitle>
-                  <CardDescription>
-                    Once a platform is connected, your linked teams and seasons appear here.
-                  </CardDescription>
+                  <CardTitle className="text-lg">Leagues</CardTitle>
                 </div>
               </button>
               <div className="flex items-center gap-2">
-                <TooltipProvider delayDuration={150}>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        type="button"
-                        className="rounded-md border border-muted bg-muted/60 p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-warning"
-                        aria-label="Star defaults info"
-                      >
-                        <Star className="h-4 w-4" />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent side="top" className="max-w-xs whitespace-normal">
-                      Stars mark your defaults. Set a default sport, and also set a default team per sport.
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className="rounded-md border border-muted bg-muted/60 p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-warning"
+                      aria-label="Star defaults info"
+                      title="Star defaults info"
+                    >
+                      <Star className="h-4 w-4" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent align="end" className="max-w-xs text-sm text-muted-foreground">
+                    Stars mark your defaults. Set a default sport, and also set a default team per sport.
+                  </PopoverContent>
+                </Popover>
                 <button
                   type="button"
                   onClick={() => setIsLeaguesSectionOpen((prev) => !prev)}
@@ -2023,40 +1637,57 @@ function LeaguesPageContent() {
 
         <Card id="platforms" className="order-2">
           <CardHeader className="pb-4">
-            <button
-              type="button"
-              onClick={() => setIsPlatformsSectionOpen((prev) => !prev)}
-              aria-expanded={isPlatformsSectionOpen}
-              aria-controls="platforms-card-content"
-              className="flex w-full items-start justify-between gap-4 text-left"
-            >
-              <div className="min-w-0 space-y-2">
-                <CardTitle className="text-lg">1. Connect Platforms</CardTitle>
-                <CardDescription>
-                  Connect, sync, or manually add leagues from ESPN, Yahoo, and Sleeper here.
-                </CardDescription>
+            <div className="flex items-start justify-between gap-4">
+              <button
+                type="button"
+                onClick={() => setIsPlatformsSectionOpen((prev) => !prev)}
+                aria-expanded={isPlatformsSectionOpen}
+                aria-controls="platforms-card-content"
+                className="flex flex-1 items-start gap-4 text-left"
+              >
+                <div className="min-w-0 space-y-2">
+                  <CardTitle className="text-lg">Platforms</CardTitle>
+                </div>
+              </button>
+              <div className="flex items-center gap-2">
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className="rounded-md border border-muted bg-muted/60 p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                      aria-label="Open platform setup guides"
+                      title="Platform setup guides"
+                    >
+                      <BookOpen className="h-4 w-4" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent align="end" className="max-w-xs text-sm text-muted-foreground">
+                    For more help connecting your fantasy platform, click{" "}
+                    <Link href="/guide/platforms" className="text-primary underline hover:no-underline">
+                      here
+                    </Link>
+                    .
+                  </PopoverContent>
+                </Popover>
+                <button
+                  type="button"
+                  onClick={() => setIsPlatformsSectionOpen((prev) => !prev)}
+                  aria-expanded={isPlatformsSectionOpen}
+                  aria-controls="platforms-card-content"
+                  className="rounded-md border border-muted bg-muted/60 p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  aria-label={isPlatformsSectionOpen ? 'Collapse platforms section' : 'Expand platforms section'}
+                >
+                  <ChevronDown
+                    className={`h-4 w-4 transition-transform ${
+                      isPlatformsSectionOpen ? 'rotate-180' : ''
+                    }`}
+                  />
+                </button>
               </div>
-              <ChevronDown
-                className={`mt-0.5 h-5 w-5 shrink-0 text-muted-foreground transition-transform ${
-                  isPlatformsSectionOpen ? 'rotate-180' : ''
-                }`}
-              />
-            </button>
+            </div>
           </CardHeader>
           {isPlatformsSectionOpen ? (
           <CardContent id="platforms-card-content" className="pt-0">
-          <div className="mb-4 flex flex-wrap gap-x-3 gap-y-1 text-sm text-muted-foreground">
-            <span>Platform guides:</span>
-            <Link href="/guide/espn" className="text-primary hover:underline">
-              ESPN
-            </Link>
-            <Link href="/guide/yahoo" className="text-primary hover:underline">
-              Yahoo
-            </Link>
-            <Link href="/guide/sleeper" className="text-primary hover:underline">
-              Sleeper
-            </Link>
-          </div>
           <div className="grid gap-4">
             <div className="border rounded-lg bg-background">
               <button
@@ -2080,8 +1711,8 @@ function LeaguesPageContent() {
                 <div id="espn-setup-content" className="px-4 pb-4 space-y-3">
                   <p className="text-sm text-muted-foreground">
                     {displayEspnConnected
-                      ? 'Refresh uses your stored ESPN credentials to discover leagues and reload the ESPN list.'
-                      : 'Add ESPN credentials with the extension or manual entry, then refresh.'}
+                      ? 'Manage ESPN leagues, seasons, accounts, and credentials with the Flaim Chrome extension.'
+                      : 'Add ESPN credentials with the Flaim Chrome extension.'}
                   </p>
                   {displayEspnLastUpdated && (
                     <p className="text-xs text-muted-foreground">
@@ -2093,485 +1724,18 @@ function LeaguesPageContent() {
                       <Loader2 className="h-4 w-4 animate-spin" />
                       Checking ESPN connection...
                     </div>
-                  ) : !isManualVerificationPending && (
-                    <div className="space-y-3">
-                      <div className="flex flex-col gap-2 sm:flex-row">
-                        {displayEspnConnected ? (
-                          <Button
-                            size="sm"
-                            onClick={refreshEspnLeagues}
-                            disabled={isRefreshingEspn}
-                            className="w-full sm:w-auto"
-                          >
-                            {isRefreshingEspn ? (
-                              <>
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                Refreshing...
-                              </>
-                            ) : (
-                              <>
-                                <RefreshCw className="mr-2 h-4 w-4" />
-                                Refresh
-                              </>
-                            )}
-                          </Button>
-                        ) : (
-                          <Button asChild size="sm" className="w-full sm:w-auto">
-                            <a
-                              href={CHROME_EXTENSION_URL}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                            >
-                              <Chrome className="h-4 w-4 mr-2" />
-                              Open Extension
-                            </a>
-                          </Button>
-                        )}
-                        <Popover open={espnAdvancedOpen} onOpenChange={setEspnAdvancedOpen}>
-                          <PopoverTrigger asChild>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="w-full sm:w-auto"
-                            >
-                              Advanced
-                              <ChevronDown className="ml-2 h-4 w-4 text-muted-foreground" />
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent align="start" className="w-64 p-2">
-                            <div className="grid gap-1">
-                              <Button asChild variant="ghost" size="sm" className="w-full justify-start">
-                                <a
-                                  href={CHROME_EXTENSION_URL}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  onClick={() => setEspnAdvancedOpen(false)}
-                                >
-                                  <Chrome className="h-4 w-4 mr-2" />
-                                  Open Chrome Extension
-                                </a>
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="w-full justify-start"
-                                disabled={discoverableEspnLeagues.length === 0}
-                                aria-label="Discover historical seasons"
-                                title={
-                                  discoverableEspnLeagues.length === 0
-                                    ? 'Add an ESPN football or baseball league first'
-                                    : 'Discover historical seasons'
-                                }
-                                onClick={() => {
-                                  setEspnAdvancedOpen(false);
-                                  setDiscoverDialogOpen(true);
-                                }}
-                              >
-                                <History className="h-4 w-4 mr-2" />
-                                Discover Seasons
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="w-full justify-start"
-                                aria-label="Add league manually"
-                                title="Add Manually"
-                                onClick={() => {
-                                  setEspnAdvancedOpen(false);
-                                  setManualDialogOpen(true);
-                                }}
-                              >
-                                <Briefcase className="h-4 w-4 mr-2" />
-                                Add League Manually
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="w-full justify-start"
-                                title="Edit ESPN credentials"
-                                aria-label="Edit ESPN credentials"
-                                onClick={() => {
-                                  setEspnAdvancedOpen(false);
-                                  setEspnCredsDialogOpen(true);
-                                  // Avoid stale form values flashing before the dialog re-populates.
-                                  handleCancelEdit();
-                                  handleEditCredentials();
-                                }}
-                              >
-                                <Wrench className="h-4 w-4 mr-2" />
-                                Edit ESPN Credentials
-                              </Button>
-                            </div>
-                          </PopoverContent>
-                        </Popover>
-                        <Dialog open={discoverDialogOpen} onOpenChange={setDiscoverDialogOpen}>
-                          <DialogContent>
-                            <DialogHeader>
-                              <DialogTitle>Discover historical seasons</DialogTitle>
-                              <DialogDescription>
-                                Pull past seasons for an ESPN football or baseball league.
-                              </DialogDescription>
-                            </DialogHeader>
-                            <div className="space-y-4 pt-2">
-                              {discoverableEspnLeagues.length === 0 ? (
-                                <p className="text-sm text-muted-foreground">
-                                  Add an ESPN football or baseball league with a team selected to use this tool.
-                                </p>
-                              ) : (
-                                <>
-                                  <div className="space-y-2">
-                                    <Label>League</Label>
-                                    <Select value={discoverLeagueKey} onValueChange={setDiscoverLeagueKey}>
-                                      <SelectTrigger>
-                                        <SelectValue placeholder="Select a league" />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        {discoverableEspnLeagues.map((league) => (
-                                          <SelectItem key={league.key} value={league.key}>
-                                            {(league.leagueName || `League ${league.leagueId}`)}
-                                            {` • ${getSportLabel(league.sport)}`}
-                                          </SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
-                                  </div>
-                                  {!selectedDiscoverLeague?.hasTeamSelection && (
-                                    <p className="text-xs text-muted-foreground">
-                                      Select a team in this league first.
-                                    </p>
-                                  )}
-                                  <div className="flex gap-2 pt-2">
-                                    <Button
-                                      onClick={() => {
-                                        if (selectedDiscoverLeague) {
-                                          handleDiscoverSeasons(
-                                            selectedDiscoverLeague.leagueId,
-                                            selectedDiscoverLeague.sport
-                                          );
-                                        }
-                                      }}
-                                      disabled={
-                                        !selectedDiscoverLeague
-                                        || !selectedDiscoverLeague.hasTeamSelection
-                                        || isDiscoveringSelected
-                                        || !!discoveringLeagueKey
-                                      }
-                                    >
-                                      {isDiscoveringSelected ? (
-                                        <>
-                                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                          Discovering...
-                                        </>
-                                      ) : (
-                                        'Discover Seasons'
-                                      )}
-                                    </Button>
-                                    <Button
-                                      variant="outline"
-                                      onClick={() => setDiscoverDialogOpen(false)}
-                                    >
-                                      Cancel
-                                    </Button>
-                                  </div>
-                                </>
-                              )}
-                            </div>
-                          </DialogContent>
-                        </Dialog>
-                        <Dialog open={manualDialogOpen} onOpenChange={setManualDialogOpen}>
-                          <DialogContent>
-                          <DialogHeader>
-                            <div className="flex items-center gap-2">
-                              <DialogTitle>Add League Manually</DialogTitle>
-                              <Popover>
-                                <PopoverTrigger asChild>
-                                  <button
-                                    type="button"
-                                    className="text-muted-foreground hover:text-foreground transition-colors"
-                                    aria-label="How to find your league ID"
-                                  >
-                                    <Info className="h-4 w-4" />
-                                  </button>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-80 text-sm">
-                                  <p className="font-medium mb-2">Finding your league ID</p>
-                                  <p className="text-muted-foreground">
-                                    Your league ID is in the ESPN URL when viewing your league:
-                                  </p>
-                                  <code className="block mt-2 p-2 bg-muted rounded text-xs break-all">
-                                    espn.com/fantasy/football/league?leagueId=<strong>12345678</strong>
-                                  </code>
-                                </PopoverContent>
-                              </Popover>
-                            </div>
-                            <DialogDescription>
-                              Enter your ESPN league ID to add a specific league or season.
-                            </DialogDescription>
-                          </DialogHeader>
-                          <div className="space-y-4 pt-2">
-                            {/* Quick season toggles */}
-                            <div className="flex gap-2">
-                              <Button
-                                variant={newLeagueSeason === getDefaultSeasonYear(newLeagueSport) ? 'default' : 'outline'}
-                                size="sm"
-                                onClick={() => {
-                                  setNewLeagueSeason(getDefaultSeasonYear(newLeagueSport));
-                                  setSeasonManuallySet(false);
-                                }}
-                                disabled={isVerifying}
-                              >
-                                This season
-                              </Button>
-                              <Button
-                                variant={newLeagueSeason === getPreviousSeasonYear(newLeagueSport) ? 'default' : 'outline'}
-                                size="sm"
-                                onClick={() => {
-                                  setNewLeagueSeason(getPreviousSeasonYear(newLeagueSport));
-                                  setSeasonManuallySet(true);
-                                }}
-                                disabled={isVerifying}
-                              >
-                                Last season
-                              </Button>
-                            </div>
-                            <div className="space-y-2">
-                              <Label htmlFor="leagueId">League ID</Label>
-                              <Input
-                                id="leagueId"
-                                placeholder="e.g., 12345678"
-                                value={newLeagueId}
-                                onChange={(e) => setNewLeagueId(e.target.value)}
-                                onKeyDown={(e) => e.key === 'Enter' && handleVerifyLeague()}
-                                disabled={isVerifying}
-                              />
-                            </div>
-                            <div className="flex gap-2">
-                              <div className="flex-1 space-y-2">
-                                <Label>Sport</Label>
-                                <Select
-                                  value={newLeagueSport}
-                                  onValueChange={(v) => {
-                                    const sport = v as Sport;
-                                    setNewLeagueSport(sport);
-                                    const defaultSeasonYear = getDefaultSeasonYear(sport);
-                                    if (!seasonManuallySet) {
-                                      setNewLeagueSeason(defaultSeasonYear);
-                                      return;
-                                    }
-
-                                    const seasonOptions = getSeasonYearOptions(sport, MIN_YEAR);
-                                    if (!seasonOptions.includes(newLeagueSeason)) {
-                                      setNewLeagueSeason(defaultSeasonYear);
-                                      setSeasonManuallySet(false);
-                                    }
-                                  }}
-                                  disabled={isVerifying}
-                                >
-                                  <SelectTrigger>
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {SPORT_OPTIONS.map((sport) => (
-                                      <SelectItem key={sport.value} value={sport.value}>
-                                        {sport.emoji} {sport.label}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                              <div className="w-24 space-y-2">
-                                <Label>Season</Label>
-                                <Select
-                                  value={String(newLeagueSeason)}
-                                  onValueChange={(v) => {
-                                    setNewLeagueSeason(Number(v));
-                                    setSeasonManuallySet(true);
-                                  }}
-                                  disabled={isVerifying}
-                                >
-                                  <SelectTrigger>
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {manualSeasonOptions.map((year) => (
-                                      <SelectItem key={year} value={String(year)}>
-                                        {year}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                            </div>
-                            <div className="flex gap-2 pt-2">
-                              <Button
-                                onClick={handleVerifyLeague}
-                                disabled={isVerifying || !newLeagueId.trim()}
-                              >
-                                {isVerifying ? (
-                                  <>
-                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                    Verifying...
-                                  </>
-                                ) : (
-                                  <>
-                                    <Search className="h-4 w-4 mr-2" />
-                                    Verify League
-                                  </>
-                                )}
-                              </Button>
-                              <Button variant="outline" onClick={() => setManualDialogOpen(false)}>
-                                Cancel
-                              </Button>
-                            </div>
-                          </div>
-                          </DialogContent>
-                        </Dialog>
-                        <Dialog
-                          open={espnCredsDialogOpen}
-                          onOpenChange={(open) => {
-                            setEspnCredsDialogOpen(open);
-                            if (open) {
-                              handleCancelEdit();
-                              handleEditCredentials();
-                            } else {
-                              handleCancelEdit();
-                            }
-                          }}
-                        >
-                          <DialogContent>
-                            <DialogHeader>
-                              <DialogTitle>ESPN Credentials</DialogTitle>
-                              <DialogDescription>Enter your ESPN authentication cookies.</DialogDescription>
-                            </DialogHeader>
-                            <div className="space-y-4 pt-2">
-                              {isLoadingCreds ? (
-                                <div className="flex justify-center py-8">
-                                  <Loader2 className="h-6 w-6 animate-spin" />
-                                </div>
-                              ) : (
-                                <>
-                                  {credsError && (
-                                    <div className="p-3 bg-destructive/10 border border-destructive/30 rounded text-sm text-destructive">
-                                      {credsError}
-                                    </div>
-                                  )}
-                                  <div className="space-y-2">
-                                    <Label htmlFor="swid">SWID</Label>
-                                    <Input
-                                      id="swid"
-                                      type={showCredentials ? 'text' : 'password'}
-                                      value={swid}
-                                      onChange={(e) => setSwid(e.target.value)}
-                                    />
-                                  </div>
-                                  <div className="space-y-2">
-                                    <Label htmlFor="espn_s2">ESPN_S2</Label>
-                                    <Input
-                                      id="espn_s2"
-                                      type={showCredentials ? 'text' : 'password'}
-                                      value={espnS2}
-                                      onChange={(e) => setEspnS2(e.target.value)}
-                                    />
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={() => setShowCredentials(!showCredentials)}
-                                    >
-                                      {showCredentials ? (
-                                        <EyeOff className="h-4 w-4 mr-1" />
-                                      ) : (
-                                        <Eye className="h-4 w-4 mr-1" />
-                                      )}
-                                      {showCredentials ? 'Hide' : 'Show'}
-                                    </Button>
-                                  </div>
-                                  <div className="flex gap-2">
-                                    <Button onClick={handleSaveCredentials} disabled={credsSaving}>
-                                      {credsSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-                                      Save
-                                    </Button>
-                                    <Button variant="outline" onClick={() => setEspnCredsDialogOpen(false)}>
-                                      Cancel
-                                    </Button>
-                                  </div>
-                                </>
-                              )}
-                            </div>
-                          </DialogContent>
-                        </Dialog>
-                      </div>
-                    </div>
-                  )}
-
-                {/* Verification result - shows after successful verify */}
-                {verifiedLeague && (
-                  <div className="p-4 border rounded-lg bg-muted/50 space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <CheckCircle2 className="h-5 w-5 text-success" />
-                        <span className="font-medium">League verified</span>
-                      </div>
-                      <Button variant="ghost" size="icon" onClick={handleCancelVerification}>
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xl">{getSportEmoji(verifiedLeague.sport)}</span>
-                        <div>
-                          <div className="font-medium">{verifiedLeague.leagueName}</div>
-                          <div className="text-sm text-muted-foreground">
-                            {verifiedLeague.seasonYear} Season
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>Select Your Team</Label>
-                      <Select value={selectedTeamId} onValueChange={setSelectedTeamId}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Choose your team..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {verifiedLeague.teams.map((team, index) => {
-                            const uniqueId = team.id || String(index + 1);
-                            return (
-                              <SelectItem key={`team-${index}-${uniqueId}`} value={uniqueId}>
-                                {team.name}
-                                {team.owner && (
-                                  <span className="text-muted-foreground ml-2">({team.owner})</span>
-                                )}
-                              </SelectItem>
-                            );
-                          })}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="flex gap-2">
-                      <Button
-                        onClick={handleAddVerifiedLeague}
-                        disabled={isAddingLeague || !selectedTeamId}
+                  ) : (
+                    <Button asChild size="sm" className="w-full sm:w-auto">
+                      <a
+                        href={CHROME_EXTENSION_URL}
+                        target="_blank"
+                        rel="noopener noreferrer"
                       >
-                        {isAddingLeague ? (
-                          <>
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            Adding...
-                          </>
-                        ) : (
-                          'Add League'
-                        )}
-                      </Button>
-                      <Button variant="outline" onClick={handleCancelVerification}>
-                        Cancel
-                      </Button>
-                    </div>
-                  </div>
-                )}
+                        <Chrome className="h-4 w-4 mr-2" />
+                        Open Extension
+                      </a>
+                    </Button>
+                  )}
                 </div>
               )}
             </div>
@@ -2678,15 +1842,10 @@ function LeaguesPageContent() {
                       </div>
                     </div>
                   ) : (
-                    <div className="p-4 border rounded-lg bg-muted/40 space-y-2">
-                      <p className="text-sm text-muted-foreground">
-                        {yahooDisplayState === 'reconnect_needed'
-                          ? 'Sign in with Yahoo again to repair your connection. Uses OAuth — no passwords stored.'
-                          : 'Sign in with Yahoo to connect your fantasy leagues. Uses OAuth — no passwords stored.'}
-                      </p>
+                    <div className="space-y-3">
                       <Button
-                        variant="outline"
-                        className="w-full"
+                        size="sm"
+                        className="w-full sm:w-auto"
                         onClick={reconnectYahoo}
                         disabled={isReconnectingYahoo}
                       >
@@ -2739,19 +1898,21 @@ function LeaguesPageContent() {
                   ) : displaySleeperConnected ? (
                     <div className="space-y-3">
                       <p className="text-sm text-muted-foreground">
-                        Connected as <strong>{displaySleeperUsername}</strong>. Refresh to pull latest leagues.
+                        {displaySleeperUsername
+                          ? `Connected as ${displaySleeperUsername}. Refresh to pull latest leagues.`
+                          : 'Connected to Sleeper. Refresh to pull latest leagues.'}
                       </p>
                       {displaySleeperLastUpdated && (
                         <p className="text-xs text-muted-foreground">
                           Last updated: {formatLastUpdated(displaySleeperLastUpdated)}
                         </p>
                       )}
-                      <div className="flex gap-2">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                         <Button
-                          variant="outline"
                           size="sm"
                           onClick={() => displaySleeperUsername && discoverSleeperLeagues(displaySleeperUsername)}
                           disabled={isDiscoveringSleeper || !displaySleeperUsername}
+                          className="w-full sm:w-auto"
                         >
                           {isDiscoveringSleeper ? (
                             <>
@@ -2767,7 +1928,7 @@ function LeaguesPageContent() {
                           size="sm"
                           onClick={disconnectSleeper}
                           disabled={isSleeperDisconnecting}
-                          className="text-destructive hover:text-destructive"
+                          className="w-full text-destructive hover:text-destructive sm:w-auto"
                         >
                           {isSleeperDisconnecting ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
@@ -2780,21 +1941,22 @@ function LeaguesPageContent() {
                   ) : (
                     <div className="space-y-3">
                       <p className="text-sm text-muted-foreground">
-                        Enter your Sleeper username to discover your leagues. No password needed — Sleeper&apos;s API is public.
+                        Enter your Sleeper username to discover your leagues.
                       </p>
-                      <div className="flex gap-2">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                         <Input
                           placeholder="Sleeper username"
                           value={sleeperConnectInput}
                           onChange={(e) => setSleeperConnectInput(e.target.value)}
                           onKeyDown={(e) => e.key === 'Enter' && sleeperConnectInput.trim() && discoverSleeperLeagues(sleeperConnectInput.trim())}
                           disabled={isDiscoveringSleeper}
-                          className="flex-1"
+                          className="h-9 flex-1 text-xs"
                         />
                         <Button
                           size="sm"
                           onClick={() => discoverSleeperLeagues(sleeperConnectInput.trim())}
                           disabled={isDiscoveringSleeper || !sleeperConnectInput.trim()}
+                          className="w-full sm:w-auto"
                         >
                           {isDiscoveringSleeper ? (
                             <>

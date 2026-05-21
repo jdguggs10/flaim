@@ -4,9 +4,9 @@ import { PublicChatExperience } from "@/components/public-demo/public-chat-exper
 import { HeroChat } from "@/components/site/hero-chat";
 
 export const metadata: Metadata = {
-  title: "Flaim — Connect ESPN, Yahoo & Sleeper Fantasy Leagues to AI",
+  title: "Flaim — Fantasy Leagues for ChatGPT",
   description:
-    "Flaim gives Claude, ChatGPT, and Perplexity read-only access to your real fantasy league data — rosters, standings, matchups, waiver wire, and transactions across football, baseball, basketball, and hockey.",
+    "Flaim Fantasy is available in ChatGPT. Connect ESPN, Yahoo, and Sleeper leagues for read-only fantasy analysis.",
   alternates: {
     canonical: "https://flaim.app",
   },
@@ -57,7 +57,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
                 name: "Do I need a Chrome extension?",
                 acceptedAnswer: {
                   "@type": "Answer",
-                  text: "Only for ESPN. The Flaim Chrome extension syncs your ESPN cookies automatically so Flaim can read your private leagues. Yahoo connects through OAuth, Sleeper just needs your username, and your AI assistant connects to Flaim separately using a single MCP URL — no extension required for the AI side.",
+                  text: "Only for ESPN. The Flaim Chrome extension syncs your ESPN cookies automatically so Flaim can read your private leagues. Yahoo connects through OAuth, and Sleeper just needs your username. After that, ChatGPT can use your connected Flaim account for read-only fantasy analysis.",
                 },
               },
               {
@@ -65,7 +65,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
                 name: "Which AI apps work with Flaim?",
                 acceptedAnswer: {
                   "@type": "Answer",
-                  text: "Flaim works with Claude, ChatGPT, and Perplexity today using the Model Context Protocol (MCP). You add one URL — https://api.flaim.app/mcp — as a connector in any of these AI apps, authorize once, and Flaim handles the rest.",
+                  text: "Flaim Fantasy is available in ChatGPT. Connect your leagues in Flaim, then open ChatGPT and use Flaim Fantasy for read-only fantasy analysis.",
                 },
               },
               {
@@ -81,7 +81,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
                 name: "Where do I finish setup?",
                 acceptedAnswer: {
                   "@type": "Answer",
-                  text: "Use flaim.app/leagues to connect your fantasy platforms, then add Flaim to your AI assistant using the MCP URL shown on that page. Setup takes about 5 minutes. The setup guides at flaim.app/guide/platforms and flaim.app/guide/ai walk through each step with troubleshooting tips.",
+                  text: "Use flaim.app/leagues to connect ESPN, Yahoo, and Sleeper, then open Flaim Fantasy in ChatGPT.",
                 },
               },
             ],
@@ -165,26 +165,14 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
               href="/guide/ai"
               className="text-[11px] font-semibold uppercase tracking-[0.18em] text-foreground/70 hover:text-primary transition-colors"
             >
-              Works with
+              Works With
             </Link>
             <div className="mt-3 flex flex-wrap gap-2">
-              <Link
-                href="/guide/ai#claude"
-                className="rounded-full border bg-background px-3 py-1 transition-colors hover:border-foreground/30"
-              >
-                Claude
-              </Link>
               <Link
                 href="/guide/ai#chatgpt"
                 className="rounded-full border bg-background px-3 py-1 transition-colors hover:border-foreground/30"
               >
                 ChatGPT
-              </Link>
-              <Link
-                href="/guide/ai#perplexity"
-                className="rounded-full border bg-background px-3 py-1 transition-colors hover:border-foreground/30"
-              >
-                Perplexity
               </Link>
             </div>
           </div>
@@ -195,7 +183,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
       <section className="px-4 pb-10 text-center">
         <SignedOut>
           <Button asChild size="lg">
-            <Link href="/leagues">Set up Flaim</Link>
+            <Link href="/leagues">Connect leagues now</Link>
           </Button>
         </SignedOut>
         <SignedIn>
@@ -212,8 +200,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
             What you can ask
           </h2>
           <p className="text-center text-muted-foreground mb-8">
-            Start simple. These are the kinds of quick league questions Flaim
-            can answer right away.
+            Start simple.
           </p>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {homepageSimplePresets.map((preset) => (
@@ -239,8 +226,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
             Go deeper
           </h2>
           <p className="text-center text-muted-foreground mb-8">
-            These prompts dig deeper, combining league context and current
-            information to make sharper calls.
+            Combine your league data and web search for even better insights.
           </p>
           <div className="grid gap-2 sm:grid-cols-2">
             {homepageDeepPresets.map((preset) => (
@@ -280,7 +266,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
           <div className="rounded-xl border bg-background p-4">
             <div className="flex items-center gap-2 font-medium">
               <ShieldCheck className="h-4 w-4 text-primary" />
-              Read-only by design
+              Read-Only
             </div>
             <p className="mt-2 text-sm text-muted-foreground">
               Flaim can inspect your data, but it cannot make trades, drop
@@ -290,17 +276,17 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
           <div className="rounded-xl border bg-background p-4">
             <div className="flex items-center gap-2 font-medium">
               <Sparkles className="h-4 w-4 text-primary" />
-              Works across platforms
+              Multi-League Support
             </div>
             <p className="mt-2 text-sm text-muted-foreground">
-              One account can pull from ESPN, Yahoo, and Sleeper instead of
-              forcing you to copy stats and standings around by hand.
+              One account can support multiple leagues across multiple
+              platforms (ESPN, Yahoo, and Sleeper) at the same time.
             </p>
           </div>
           <div className="rounded-xl border bg-background p-4">
             <div className="flex items-center gap-2 font-medium">
               <SlidersHorizontal className="h-4 w-4 text-primary" />
-              Set defaults once
+              Set defaults
             </div>
             <p className="mt-2 text-sm text-muted-foreground">
               Use{" "}
@@ -310,55 +296,6 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
               to save a default sport and favorite league so your AI needs less
               hand-holding.
             </p>
-          </div>
-        </div>
-      </section>
-
-      {/* Share */}
-      <section className="py-10 px-4">
-        <div className="container max-w-2xl mx-auto text-center">
-          <h2 className="text-2xl font-bold mb-2">
-            Using Flaim for something amazing?
-          </h2>
-          <p className="text-muted-foreground">
-            I&apos;d love to hear about it.{" "}
-            <a
-              href="https://www.threads.com/@jdguggs10"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-primary hover:underline"
-            >
-              Share it with me on Threads
-            </a>
-            .
-          </p>
-        </div>
-      </section>
-
-      {/* Setup CTA */}
-      <section className="py-10 px-4 bg-muted">
-        <div className="container max-w-2xl mx-auto text-center">
-          <h2 className="text-2xl font-bold mb-2">
-            Ready to connect your leagues?
-          </h2>
-          <p className="text-muted-foreground mb-6">
-            Setup takes about 5 minutes. Connect a platform, add Flaim to your
-            AI, and start asking.
-          </p>
-          <div className="flex flex-col items-center justify-center gap-3 sm:flex-row">
-            <SignedOut>
-              <Button asChild size="lg">
-                <Link href="/leagues">Set up Flaim</Link>
-              </Button>
-            </SignedOut>
-            <SignedIn>
-              <Button asChild size="lg">
-                <Link href="/leagues">Your Leagues</Link>
-              </Button>
-            </SignedIn>
-            <Button asChild variant="outline" size="lg">
-              <Link href="/guide/platforms">Setup guides</Link>
-            </Button>
           </div>
         </div>
       </section>
@@ -379,9 +316,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
                   Only for ESPN. The Flaim Chrome extension syncs your ESPN
                   cookies automatically so Flaim can read your private leagues.
                   Yahoo connects through OAuth, Sleeper just needs your
-                  username, and your AI assistant connects to Flaim separately
-                  using a single MCP URL — no extension required for the AI
-                  side.
+                  username. ChatGPT uses the league data you connect here.
                 </p>
               </div>
             </details>
@@ -394,13 +329,9 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
               </summary>
               <div className="px-4 pb-4 text-sm text-muted-foreground space-y-2">
                 <p>
-                  Claude, ChatGPT, and Perplexity today using the Model Context
-                  Protocol (MCP). You add one URL —{" "}
-                  <code className="rounded bg-muted px-1 py-0.5 text-xs">
-                    https://api.flaim.app/mcp
-                  </code>{" "}
-                  — as a connector in any of these AI apps, authorize once, and
-                  Flaim handles the rest.
+                  Flaim Fantasy is available in ChatGPT. Connect your ESPN,
+                  Yahoo, or Sleeper leagues in Flaim, then open ChatGPT and ask
+                  a question about your league.
                 </p>
               </div>
             </details>
@@ -438,9 +369,8 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
                   >
                     Your Leagues
                   </Link>{" "}
-                  to connect your fantasy platforms, then add Flaim to your AI
-                  assistant using the MCP URL shown on that page. Setup takes
-                  about 5 minutes. The{" "}
+                  to connect ESPN, Yahoo, and Sleeper, then open Flaim Fantasy
+                  in ChatGPT. The{" "}
                   <Link
                     href="/guide/platforms"
                     className="text-primary hover:underline"
@@ -454,11 +384,56 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
                   >
                     AI setup guide
                   </Link>{" "}
-                  walk through each step with troubleshooting tips.
+                  shows how to start using Flaim Fantasy in ChatGPT.
                 </p>
               </div>
             </details>
           </div>
+        </div>
+      </section>
+
+      {/* Setup CTA */}
+      <section className="py-10 px-4 bg-muted">
+        <div className="container max-w-2xl mx-auto text-center">
+          <h2 className="text-2xl font-bold mb-2">
+            Ready to connect your leagues?
+          </h2>
+          <div className="mt-6 flex flex-row flex-wrap items-center justify-center gap-3">
+            <SignedOut>
+              <Button asChild size="lg">
+                <Link href="/leagues">Connect leagues now</Link>
+              </Button>
+            </SignedOut>
+            <SignedIn>
+              <Button asChild size="lg">
+                <Link href="/leagues">Your Leagues</Link>
+              </Button>
+            </SignedIn>
+            <Button asChild variant="outline" size="lg">
+              <Link href="/guide">Setup guides</Link>
+            </Button>
+          </div>
+        </div>
+      </section>
+
+      {/* Share */}
+      <section className="py-10 px-4">
+        <div className="container max-w-2xl mx-auto text-center">
+          <h2 className="text-2xl font-bold mb-2">
+            Using Flaim for something amazing?
+          </h2>
+          <p className="text-muted-foreground">
+            I&apos;d love to hear about it.{" "}
+            <a
+              href="https://www.threads.com/@jdguggs10"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary hover:underline"
+            >
+              Share it with me on Threads
+            </a>
+            .
+          </p>
         </div>
       </section>
     </div>

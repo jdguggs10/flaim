@@ -21,9 +21,9 @@ export default function PlatformsGuidePage() {
               "@context": "https://schema.org",
               "@type": "HowTo",
               name: "Connect ESPN fantasy leagues to Flaim",
-              dateModified: "2026-03-28",
+              dateModified: "2026-05-17",
               description:
-                "Sync your ESPN fantasy leagues using the Chrome extension or manual credentials, then verify they appear in Flaim.",
+                "Sync your ESPN fantasy leagues using the Flaim Chrome extension, then verify they appear in Flaim.",
               step: [
                 {
                   "@type": "HowToStep",
@@ -33,7 +33,7 @@ export default function PlatformsGuidePage() {
                 {
                   "@type": "HowToStep",
                   name: "Sync ESPN",
-                  text: "Use the Chrome extension to sync, or paste your SWID and ESPN_S2 cookies as a fallback.",
+                  text: "Use the Flaim Chrome extension to sync ESPN from the browser profile that is signed in to fantasy.espn.com.",
                 },
                 {
                   "@type": "HowToStep",
@@ -46,7 +46,7 @@ export default function PlatformsGuidePage() {
               "@context": "https://schema.org",
               "@type": "HowTo",
               name: "Connect Yahoo fantasy leagues to Flaim",
-              dateModified: "2026-03-28",
+              dateModified: "2026-05-17",
               description:
                 "Start Yahoo OAuth from /leagues, approve access, and wait for league discovery to finish.",
               step: [
@@ -71,7 +71,7 @@ export default function PlatformsGuidePage() {
               "@context": "https://schema.org",
               "@type": "HowTo",
               name: "Connect Sleeper fantasy leagues to Flaim",
-              dateModified: "2026-03-28",
+              dateModified: "2026-05-17",
               description:
                 "Enter your exact Sleeper username in /leagues and wait for league discovery.",
               step: [
@@ -105,15 +105,15 @@ export default function PlatformsGuidePage() {
           </Link>
           .
         </p>
-        <p className="text-xs text-muted-foreground">Last updated March 2026</p>
+        <p className="text-xs text-muted-foreground">Last updated May 2026</p>
         <p className="mt-4 mb-8 text-muted-foreground">
           Connect your fantasy platforms in{" "}
           <Link href="/leagues" className="text-primary hover:underline">
             /leagues
           </Link>{" "}
-          before adding Flaim to your AI assistant. Each platform connects
-          differently, but the goal is the same: get your leagues visible in
-          Flaim so your AI can use them.
+          before using Flaim from ChatGPT. Each platform connects differently,
+          but the goal is the same: get your leagues visible in Flaim so
+          ChatGPT has the right account context.
         </p>
 
         <section className="mb-10">
@@ -141,10 +141,9 @@ export default function PlatformsGuidePage() {
         <section id="espn" className="mb-10 scroll-mt-20">
           <h2 className="mb-3 text-xl font-semibold">ESPN</h2>
           <p className="mb-4 text-muted-foreground">
-            ESPN is the highest-friction setup because ESPN does not offer a
-            public fantasy API. The Chrome extension is the cleanest path.
-            Manual cookie entry exists as a fallback. Your ESPN credentials are
-            never shared with AI providers.
+            ESPN is the highest-friction setup, and Flaim&apos;s Chrome extension
+            is the only path. Your ESPN credentials are never shared with AI
+            providers.
           </p>
           <ol className="list-decimal list-inside space-y-2 text-muted-foreground">
             <li>
@@ -155,28 +154,18 @@ export default function PlatformsGuidePage() {
               and choose ESPN.
             </li>
             <li>
-              Preferred: install the Flaim Chrome extension, sign in to
-              fantasy.espn.com in that browser profile, then trigger Sync from
-              the extension.
+              Install the Flaim Chrome extension, sign in to fantasy.espn.com
+              in that browser profile, then trigger Sync from the extension.
             </li>
             <li>
-              Fallback: use the manual credential path in the ESPN card and
-              paste your{" "}
-              <code className="rounded bg-muted px-1 py-0.5 text-xs">SWID</code>{" "}
-              and{" "}
-              <code className="rounded bg-muted px-1 py-0.5 text-xs">
-                ESPN_S2
-              </code>{" "}
-              values.
-            </li>
-            <li>
-              If Flaim asks for league IDs, add the private leagues you care
-              about and run verification again.
+              Use the extension whenever you need to update ESPN credentials,
+              refresh leagues, discover seasons, or manage a different ESPN
+              account.
             </li>
             <li>
               Wait until your ESPN leagues show up before moving on to{" "}
               <Link href="/guide/ai" className="text-primary hover:underline">
-                AI setup
+                ChatGPT setup
               </Link>
               .
             </li>
@@ -189,16 +178,8 @@ export default function PlatformsGuidePage() {
                 into the correct ESPN account and try the sync again.
               </li>
               <li>
-                Private league still missing: add the league ID manually from
-                the ESPN flow in{" "}
-                <Link href="/leagues" className="text-primary hover:underline">
-                  /leagues
-                </Link>
-                .
-              </li>
-              <li>
-                Credentials expire or become invalid later: rerun extension sync
-                or replace the manual cookies.
+                Credentials expire or become invalid later: rerun extension
+                sync from the browser profile that is signed in to ESPN.
               </li>
             </ul>
           </div>
@@ -314,13 +295,13 @@ export default function PlatformsGuidePage() {
               <Link href="/leagues" className="text-primary hover:underline">
                 /leagues
               </Link>{" "}
-              shows leagues you can use, not just a pending state.
+              shows leagues you can use, not just a still-syncing state.
             </li>
             <li>You can identify the league you want to analyze first.</li>
             <li>
-              After{" "}
+              After you open Flaim Fantasy in{" "}
               <Link href="/guide/ai" className="text-primary hover:underline">
-                connecting your AI
+                ChatGPT
               </Link>
               , a fresh chat can answer &ldquo;What leagues do I have?&rdquo;
               without an auth error.
@@ -333,21 +314,17 @@ export default function PlatformsGuidePage() {
           <p className="text-muted-foreground">
             Once your leagues are visible in Flaim,{" "}
             <Link href="/guide/ai" className="text-primary hover:underline">
-              add Flaim to your AI assistant
+              use Flaim Fantasy in ChatGPT
             </Link>{" "}
-            with{" "}
-            <code className="rounded bg-muted px-1 py-0.5 text-xs">
-              https://api.flaim.app/mcp
-            </code>
-            . Start a new chat and ask about your roster, matchup, or standings.
-            If you use multiple leagues, name the one you want in your first
-            prompt.
+            for read-only fantasy analysis. Start a new chat and ask about your
+            roster, matchup, or standings. If you use multiple leagues, name
+            the one you want in your first prompt.
           </p>
         </section>
 
         <div className="flex items-center gap-4 border-t pt-4 text-sm">
           <Link href="/guide/ai" className="text-primary hover:underline">
-            AI assistant setup &rarr;
+            AI setup &rarr;
           </Link>
           <Link href="/guide/sports" className="text-primary hover:underline">
             How Flaim analyzes sports &rarr;
