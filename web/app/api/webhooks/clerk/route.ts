@@ -39,10 +39,7 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  const result = await syncClerkUserToResendContact(
-    event.data,
-    event.type as "user.created" | "user.updated",
-  );
+  const result = await syncClerkUserToResendContact(event.data);
 
   if (!result.ok && !result.skipped) {
     console.error("Clerk to Resend contact sync failed:", result.error);

@@ -7,6 +7,8 @@ type ResendApiError = {
 
 let resend: Resend | null = null;
 let resendApiKey: string | null = null;
+let resendContacts: Resend | null = null;
+let resendContactsApiKey: string | null = null;
 
 export function getResendClient() {
   const apiKey = process.env.RESEND_API_KEY;
@@ -18,6 +20,18 @@ export function getResendClient() {
   }
 
   return resend;
+}
+
+export function getResendContactsClient() {
+  const apiKey = process.env.RESEND_CONTACTS_API_KEY;
+  if (!apiKey) return null;
+
+  if (!resendContacts || resendContactsApiKey !== apiKey) {
+    resendContacts = new Resend(apiKey);
+    resendContactsApiKey = apiKey;
+  }
+
+  return resendContacts;
 }
 
 export function getResendErrorMessage(error: ResendApiError | unknown) {
