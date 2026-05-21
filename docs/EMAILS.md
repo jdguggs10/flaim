@@ -8,9 +8,11 @@ Flaim uses a small, restrained email system so product emails, auth emails, and 
 | --- | --- | --- |
 | Zoho | Real inboxes, aliases, and replies | `support@flaim.app` |
 | Clerk | Authentication and security emails | `Flaim <accounts@flaim.app>` |
-| Resend | Product and lifecycle emails | `Flaim <updates@send.flaim.app>` |
+| Resend | Product and lifecycle emails | `Flaim <updates@flaim.app>` |
 
 Use `support@flaim.app` as the reply-to address for product email.
+
+Resend's verified domain is `flaim.app`. The `send.flaim.app` DNS records are for Resend's bounce / MAIL FROM infrastructure, not the visible From address.
 
 ## Visual rules
 
@@ -48,9 +50,13 @@ The first product templates are:
 
 Template URL samples exist in `PreviewProps` for local preview only. Production senders must pass app URLs, action URLs, and unsubscribe/preference URLs explicitly from the send call so preview values do not leak into staging or production messages by accident.
 
-`react-email` and `@react-email/ui` are dev-only preview/export dependencies for now. The preview server uses `@react-email/ui`; do not remove it just because templates do not import it directly.
+`react-email`, `@react-email/render`, and `resend` are production dependencies because the server send helper renders and sends these templates. `@react-email/ui` remains a dev-only preview dependency; do not remove it just because templates do not import it directly.
 
-This package intentionally does not include a Resend send path yet. When the first API route, Server Action, or worker sends one of these templates, add the Resend SDK and move `react-email` from `devDependencies` to production `dependencies` so the renderer is available outside the local preview/export workflow.
+This package includes a server-only Resend send helper, but no user action should call it until the corresponding trigger has an explicit send guard and unsubscribe/preference URL. Product email sending stays disabled unless `FLAIM_EMAILS_ENABLED=true` is set.
+
+Clerk is the source of truth for user identity. Resend is the product email audience and delivery layer, not the canonical CRM. The Clerk webhook at `web/app/api/webhooks/clerk/route.ts` keeps Resend contacts lightly synchronized from `user.created` and `user.updated` events. The handler verifies Clerk's webhook signature with `CLERK_WEBHOOK_SIGNING_SECRET` and does nothing unless `RESEND_CONTACT_SYNC_ENABLED=true`.
+
+The contact sync stores only email, first name, last name, and minimal properties (`clerk_user_id`, latest Clerk event, and source). It intentionally does not resubscribe existing contacts during updates, so Resend unsubscribe state remains authoritative for product and broadcast email. If `RESEND_CONTACT_SEGMENT_ID` is set, new and updated contacts are assigned to that Resend Segment for future Broadcast targeting.
 
 React Email's preview server may add lockfile entries for its own bundled Next.js version. Those entries are isolated to the preview tooling; the Flaim web app should continue to resolve the app-pinned Next.js version. Keep the React Email preview packages pinned to exact versions so preview tooling upgrades do not silently churn the lockfile.
 
