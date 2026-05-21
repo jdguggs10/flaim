@@ -69,6 +69,8 @@ export const ErrorCode = {
 export const YahooAuthWorkerErrorCode = {
   REFRESH_TEMPORARILY_UNAVAILABLE: 'refresh_temporarily_unavailable',
   TOKEN_EXCHANGE_UNAVAILABLE: 'token_exchange_unavailable',
+  TOKEN_REFRESH_VALIDATION_UNAVAILABLE: 'token_refresh_validation_unavailable',
+  TOKEN_REFRESH_VALIDATION_FAILED: 'token_refresh_validation_failed',
   YAHOO_API_ERROR: 'yahoo_api_error',
   YAHOO_API_TEMPORARILY_UNAVAILABLE: 'yahoo_api_temporarily_unavailable',
 } as const;
