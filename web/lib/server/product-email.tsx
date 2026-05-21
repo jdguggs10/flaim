@@ -1,9 +1,9 @@
 import "server-only";
 import * as React from "react";
-import { Resend } from "resend";
 import { emailBrand } from "@/emails/brand";
 import LeagueConnectedEmail from "@/emails/league-connected";
 import WelcomeEmail from "@/emails/welcome";
+import { getResendClient, getResendErrorMessage } from "@/lib/server/resend-client";
 
 type ProductEmailTemplate = "welcome" | "league-connected";
 
@@ -36,36 +36,8 @@ interface SendLeagueConnectedEmailParams {
   unsubscribeUrl: string;
 }
 
-let resend: Resend | null = null;
-let resendApiKey: string | null = null;
-
-function getResendClient() {
-  const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) return null;
-
-  if (!resend || resendApiKey !== apiKey) {
-    resend = new Resend(apiKey);
-    resendApiKey = apiKey;
-  }
-
-  return resend;
-}
-
 function isProductEmailEnabled() {
   return process.env.FLAIM_EMAILS_ENABLED === "true";
-}
-
-function getErrorMessage(error: unknown) {
-  if (error instanceof Error) return error.message;
-  if (
-    typeof error === "object" &&
-    error !== null &&
-    "message" in error &&
-    typeof error.message === "string"
-  ) {
-    return error.message;
-  }
-  return "Unknown Resend error";
 }
 
 async function sendProductEmail({
@@ -94,14 +66,14 @@ async function sendProductEmail({
     });
 
     if (error) {
-      const message = getErrorMessage(error);
+      const message = getResendErrorMessage(error);
       console.error(`Resend ${template} email failed:`, message);
       return { ok: false, error: message };
     }
 
     return { ok: true, id: data?.id };
   } catch (error) {
-    const message = getErrorMessage(error);
+    const message = getResendErrorMessage(error);
     console.error(`Resend ${template} email failed:`, message);
     return { ok: false, error: message };
   }

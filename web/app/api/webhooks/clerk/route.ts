@@ -7,6 +7,15 @@ import {
 
 const CONTACT_SYNC_EVENTS = new Set(["user.created", "user.updated"]);
 
+function isClerkUserEmailSyncPayload(data: unknown): data is ClerkUserEmailSyncPayload {
+  return (
+    typeof data === "object" &&
+    data !== null &&
+    "id" in data &&
+    typeof data.id === "string"
+  );
+}
+
 export async function POST(request: NextRequest) {
   let event;
 
@@ -21,13 +30,23 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ received: true, skipped: true });
   }
 
+  if (!isClerkUserEmailSyncPayload(event.data)) {
+    console.error("Clerk webhook payload did not include a user id:", event.type);
+    return NextResponse.json({
+      error: "Unexpected webhook payload",
+      received: true,
+      skipped: true,
+    });
+  }
+
   const result = await syncClerkUserToResendContact(
-    event.data as ClerkUserEmailSyncPayload,
+    event.data,
     event.type as "user.created" | "user.updated",
   );
 
   if (!result.ok && !result.skipped) {
     console.error("Clerk to Resend contact sync failed:", result.error);
+    // Acknowledge verified Clerk events to avoid webhook retry storms for downstream Resend failures.
     return NextResponse.json({ error: "Contact sync failed", received: true, sync: result });
   }
 

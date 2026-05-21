@@ -1,11 +1,11 @@
 import "server-only";
-import { Resend } from "resend";
 import type {
   AddContactSegmentOptions,
   CreateContactOptions,
   GetContactOptions,
   UpdateContactOptions,
 } from "resend";
+import { getResendClient, getResendErrorMessage } from "@/lib/server/resend-client";
 
 type ClerkEmailAddress = {
   email_address?: string | null;
@@ -58,37 +58,9 @@ interface SyncClerkUserOptions {
   segmentId?: string;
 }
 
-let resend: Resend | null = null;
-let resendApiKey: string | null = null;
-
-function getResendClient() {
-  const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) return null;
-
-  if (!resend || resendApiKey !== apiKey) {
-    resend = new Resend(apiKey);
-    resendApiKey = apiKey;
-  }
-
-  return resend;
-}
-
 function cleanString(value: string | null | undefined) {
   const cleaned = value?.trim();
   return cleaned || null;
-}
-
-function getErrorMessage(error: ContactApiError | unknown) {
-  if (error instanceof Error) return error.message;
-  if (
-    typeof error === "object" &&
-    error !== null &&
-    "message" in error &&
-    typeof error.message === "string"
-  ) {
-    return error.message;
-  }
-  return "Unknown Resend contact sync error";
 }
 
 function isNotFound(error: ContactApiError) {
@@ -96,7 +68,7 @@ function isNotFound(error: ContactApiError) {
 }
 
 function isAlreadyInSegment(error: ContactApiError) {
-  return error.statusCode === 409 || /already/i.test(error.message ?? "");
+  return error.statusCode === 409 || /already.*segment/i.test(error.message ?? "");
 }
 
 function isContactSyncEnabled(options: SyncClerkUserOptions) {
@@ -123,7 +95,7 @@ async function ensureContactSegment(
     return null;
   }
 
-  return getErrorMessage(error);
+  return getResendErrorMessage(error);
 }
 
 export async function syncClerkUserToResendContact(
@@ -158,7 +130,7 @@ export async function syncClerkUserToResendContact(
     const existing = await client.contacts.get({ email });
 
     if (existing.error && !isNotFound(existing.error)) {
-      return { ok: false, email, error: getErrorMessage(existing.error) };
+      return { ok: false, email, error: getResendErrorMessage(existing.error) };
     }
 
     if (existing.error) {
@@ -176,7 +148,7 @@ export async function syncClerkUserToResendContact(
 
       const created = await client.contacts.create(payload);
       if (created.error) {
-        return { ok: false, email, error: getErrorMessage(created.error) };
+        return { ok: false, email, error: getResendErrorMessage(created.error) };
       }
 
       return { ok: true, action: "created", email };
@@ -190,7 +162,7 @@ export async function syncClerkUserToResendContact(
     });
 
     if (updated.error) {
-      return { ok: false, email, error: getErrorMessage(updated.error) };
+      return { ok: false, email, error: getResendErrorMessage(updated.error) };
     }
 
     if (segmentId) {
@@ -202,6 +174,6 @@ export async function syncClerkUserToResendContact(
 
     return { ok: true, action: "updated", email };
   } catch (error) {
-    return { ok: false, email, error: getErrorMessage(error) };
+    return { ok: false, email, error: getResendErrorMessage(error) };
   }
 }
