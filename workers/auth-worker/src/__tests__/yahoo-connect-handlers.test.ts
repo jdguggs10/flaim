@@ -1768,7 +1768,7 @@ describe('yahoo-connect-handlers', () => {
       }
     });
 
-    it('winner: owner-guarded write returns false, reread shows fresh token', async () => {
+    it('winner: recovery miss falls through to reread and uses a fresh token', async () => {
       mockStorage.getYahooCredentials
         .mockResolvedValueOnce({
           clerkUserId: 'user_123',
@@ -1798,6 +1798,15 @@ describe('yahoo-connect-handlers', () => {
       expect(response.status).toBe(200);
       const body = (await response.json()) as Record<string, unknown>;
       expect(body.access_token).toBe('concurrent-fresh-token');
+      expect(mockStorage.updateYahooCredentialsIfRefreshTokenMatches).toHaveBeenCalledWith(
+        'user_123',
+        expect.objectContaining({
+          accessToken: 'winner-token',
+          refreshToken: 'new-refresh',
+        }),
+        'refresh-token'
+      );
+      expect(mockStorage.getYahooCredentials).toHaveBeenCalledTimes(2);
     });
 
     it('winner: recovers a rotated Yahoo refresh token when the lease-owner write misses', async () => {

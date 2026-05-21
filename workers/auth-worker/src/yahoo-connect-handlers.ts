@@ -1275,7 +1275,6 @@ async function getValidYahooAccessToken(
       outcome: 'retryable_failure',
       refreshTokenReturned,
       refreshTokenChanged,
-      recoveryAttempted: true,
     });
     const recoveredWrite = await storage.updateYahooCredentialsIfRefreshTokenMatches(
       userId,
@@ -1310,7 +1309,7 @@ async function getValidYahooAccessToken(
     });
     const latest = await storage.getYahooCredentials(userId);
     if (!latest) {
-      logDiagnostic('credentials_missing_after_owner_guard_miss', { userId, attempt });
+      logDiagnostic('credentials_missing_after_recovery_miss', { userId, attempt });
       return { error: 'not_connected' };
     }
     if (!latest.needsRefresh) {

@@ -114,6 +114,22 @@ function maskUserId(userId: string): string {
   return `${userId.substring(0, 8)}...`;
 }
 
+function yahooCredentialUpdateData(params: UpdateCredentialsParams): Record<string, string | null> {
+  const updateData: Record<string, string | null> = {
+    access_token: params.accessToken,
+    expires_at: params.expiresAt.toISOString(),
+    updated_at: new Date().toISOString(),
+    refresh_lease_owner: null,
+    refresh_lease_expires_at: null,
+  };
+
+  if (params.refreshToken) {
+    updateData.refresh_token = params.refreshToken;
+  }
+
+  return updateData;
+}
+
 // =============================================================================
 // YAHOO STORAGE CLASS
 // =============================================================================
@@ -302,17 +318,7 @@ export class YahooStorage {
     params: UpdateCredentialsParams,
     ownerId?: string
   ): Promise<boolean> {
-    const updateData: Record<string, string | null> = {
-      access_token: params.accessToken,
-      expires_at: params.expiresAt.toISOString(),
-      updated_at: new Date().toISOString(),
-      refresh_lease_owner: null,
-      refresh_lease_expires_at: null,
-    };
-
-    if (params.refreshToken) {
-      updateData.refresh_token = params.refreshToken;
-    }
+    const updateData = yahooCredentialUpdateData(params);
 
     let query = this.supabase
       .from('yahoo_credentials')
@@ -337,32 +343,13 @@ export class YahooStorage {
     return updated;
   }
 
-  /**
-   * Recover a successful refresh response when the lease-owner guard missed.
-   *
-   * Yahoo may rotate refresh tokens and revoke the old refresh token after a
-   * successful refresh. If the lease owner changes before we persist that
-   * response, losing the write can strand the row with a revoked refresh token.
-   * This fallback is still guarded by the refresh token originally read by the
-   * caller, so it cannot overwrite a newer refresh that already stored a
-   * different token.
-   */
+  // Recovery is guarded by the refresh token used for the successful Yahoo request.
   async updateYahooCredentialsIfRefreshTokenMatches(
     clerkUserId: string,
     params: UpdateCredentialsParams,
     expectedRefreshToken: string
   ): Promise<boolean> {
-    const updateData: Record<string, string | null> = {
-      access_token: params.accessToken,
-      expires_at: params.expiresAt.toISOString(),
-      updated_at: new Date().toISOString(),
-      refresh_lease_owner: null,
-      refresh_lease_expires_at: null,
-    };
-
-    if (params.refreshToken) {
-      updateData.refresh_token = params.refreshToken;
-    }
+    const updateData = yahooCredentialUpdateData(params);
 
     const { data, error } = await this.supabase
       .from('yahoo_credentials')
