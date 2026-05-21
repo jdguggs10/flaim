@@ -67,6 +67,8 @@ Yahoo callback stores the authorization-code token response directly after a suc
 
 Yahoo access tokens are used until near expiry instead of refreshing several minutes early. May 2026 production logs showed Yahoo returning `429` / `Too many failed requests` when Flaim refreshed with roughly 90 seconds still left on the current access token.
 
+Yahoo refresh requests are one-shot per lease owner. If Yahoo returns a transient token-endpoint failure, Flaim leaves the short per-user lease in place and surfaces retry metadata instead of allowing waiters to immediately become the next owner.
+
 Yahoo authorization-code exchange sends `redirect_uri` using the registered Flaim callback URL. Yahoo refresh-token exchange intentionally omits `redirect_uri`; May 2026 production logs showed the restored include-redirect refresh shape returning Yahoo `429` / `Too many failed requests` on the first lazy refresh after reconnect.
 
 Keep `request_has_redirect_uri` diagnostics in place. If this behavior is revisited, require live evidence from successful post-expiry refreshes before changing the refresh-token request shape again.
