@@ -78,7 +78,6 @@ describe('yahoo-connect-handlers', () => {
     updateYahooCredentials: ReturnType<typeof vi.fn>;
     acquireRefreshLease: ReturnType<typeof vi.fn>;
     releaseRefreshLease: ReturnType<typeof vi.fn>;
-    markRefreshCooldown: ReturnType<typeof vi.fn>;
     deleteYahooCredentials: ReturnType<typeof vi.fn>;
     deleteAllYahooLeagues: ReturnType<typeof vi.fn>;
     hasYahooCredentials: ReturnType<typeof vi.fn>;
@@ -98,7 +97,6 @@ describe('yahoo-connect-handlers', () => {
       updateYahooCredentials: vi.fn().mockResolvedValue(true),
       acquireRefreshLease: vi.fn().mockResolvedValue(true),
       releaseRefreshLease: vi.fn().mockResolvedValue(undefined),
-      markRefreshCooldown: vi.fn().mockResolvedValue(true),
       deleteYahooCredentials: vi.fn().mockResolvedValue(undefined),
       deleteAllYahooLeagues: vi.fn().mockResolvedValue(undefined),
       hasYahooCredentials: vi.fn(),
@@ -258,11 +256,7 @@ describe('yahoo-connect-handlers', () => {
 
       const request = new Request('https://api.flaim.app/connect/yahoo/callback?code=auth_code&state=user_abc123:nonce');
 
-      const response = await handleYahooCallback(
-        request,
-        { ...env, YAHOO_REFRESH_GRANT_REDIRECT_URI: 'omit' },
-        corsHeaders
-      );
+      const response = await handleYahooCallback(request, env, corsHeaders);
 
       expect(response.status).toBe(302);
       const location = response.headers.get('Location')!;
@@ -556,7 +550,7 @@ describe('yahoo-connect-handlers', () => {
       const refreshBody = new URLSearchParams(refreshRequest.body as string);
       expect(refreshBody.get('grant_type')).toBe('refresh_token');
       expect(refreshBody.get('refresh_token')).toBe('refresh-token');
-      expect(refreshBody.has('redirect_uri')).toBe(false);
+      expect(refreshBody.get('redirect_uri')).toBe('https://api.flaim.app/auth/connect/yahoo/callback');
       expect(mockStorage.acquireRefreshLease).toHaveBeenCalledWith(
         'user_123',
         expect.any(String),
@@ -575,7 +569,7 @@ describe('yahoo-connect-handlers', () => {
       );
     });
 
-    it('includes redirect_uri from refresh grant only when compatibility flag is enabled', async () => {
+    it('includes redirect_uri in refresh-token grants and diagnostics', async () => {
       const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
       mockStorage.getYahooCredentials.mockResolvedValue({
         clerkUserId: 'user_123',
@@ -596,12 +590,7 @@ describe('yahoo-connect-handlers', () => {
         )
       );
 
-      const response = await handleYahooCredentials(
-        { ...env, YAHOO_REFRESH_GRANT_REDIRECT_URI: 'include' },
-        'user_123',
-        corsHeaders,
-        'req_include_redirect'
-      );
+      const response = await handleYahooCredentials(env, 'user_123', corsHeaders, 'req_include_redirect');
 
       expect(response.status).toBe(200);
 
@@ -660,9 +649,9 @@ describe('yahoo-connect-handlers', () => {
       const body = (await response.json()) as Record<string, unknown>;
       expect(body.error).toBe('refresh_failed');
       expect(body.error_description).toBe('Refresh token expired');
+      expect(body.upstream_status).toBe(400);
       expect(mockFetch).toHaveBeenCalledTimes(1);
       expect(mockStorage.updateYahooCredentials).not.toHaveBeenCalled();
-      expect(mockStorage.markRefreshCooldown).not.toHaveBeenCalled();
       expect(mockStorage.releaseRefreshLease).toHaveBeenCalledWith('user_123', expect.any(String));
     });
 
@@ -693,9 +682,9 @@ describe('yahoo-connect-handlers', () => {
       const body = (await response.json()) as Record<string, unknown>;
       expect(body.error).toBe('refresh_failed');
       expect(body.error_description).toBe('Unhandled Yahoo token response');
+      expect(body.upstream_status).toBe(400);
       expect(body.retryable).toBeUndefined();
       expect(body.retry_after).toBeUndefined();
-      expect(mockStorage.markRefreshCooldown).not.toHaveBeenCalled();
       expect(mockStorage.updateYahooCredentials).not.toHaveBeenCalled();
 
       const diagnostics = yahooRefreshDiagnostics(logSpy);
@@ -756,7 +745,6 @@ describe('yahoo-connect-handlers', () => {
       expect(body.retryable).toBeUndefined();
       expect(body.retry_after).toBeUndefined();
       expect(response.headers.get('Retry-After')).toBeNull();
-      expect(mockStorage.markRefreshCooldown).not.toHaveBeenCalled();
       expect(mockStorage.releaseRefreshLease).toHaveBeenCalledWith('user_123', expect.any(String));
       expect(mockStorage.updateYahooCredentials).not.toHaveBeenCalled();
 
@@ -810,7 +798,6 @@ describe('yahoo-connect-handlers', () => {
       expect(body.error_description).toBe('Yahoo client credentials are not configured');
       expect(body.retryable).toBeUndefined();
       expect(mockFetch).not.toHaveBeenCalled();
-      expect(mockStorage.markRefreshCooldown).not.toHaveBeenCalled();
       expect(mockStorage.releaseRefreshLease).toHaveBeenCalledWith('user_123', capturedOwnerId);
       expect(mockStorage.updateYahooCredentials).not.toHaveBeenCalled();
 
@@ -865,7 +852,6 @@ describe('yahoo-connect-handlers', () => {
       expect(body.retry_after_source).toBeUndefined();
       expect(response.headers.get('Retry-After')).toBeNull();
       expect(mockFetch).toHaveBeenCalledTimes(1);
-      expect(mockStorage.markRefreshCooldown).not.toHaveBeenCalled();
       expect(mockStorage.releaseRefreshLease).toHaveBeenCalledWith('user_123', capturedOwnerId);
       expect(mockStorage.updateYahooCredentials).not.toHaveBeenCalled();
       expect(yahooRefreshDiagnostics(logSpy)).toEqual(
@@ -877,23 +863,24 @@ describe('yahoo-connect-handlers', () => {
             diagnostic_class: 'yahoo_unexpected_response',
             has_retry_after: false,
             has_upstream_retry_after: false,
+            upstream_error_text: 'Too many requests to Yahoo token endpoint',
           }),
           expect.objectContaining({
             event: 'refresh_permanent_failure',
             diagnostic_class: 'yahoo_unexpected_response',
             failure_kind: 'unexpected',
+            upstream_error_text: 'Too many requests to Yahoo token endpoint',
           }),
         ])
       );
       expect(yahooRefreshDiagnostics(logSpy)).not.toEqual(
         expect.arrayContaining([
           expect.objectContaining({ event: 'refresh_transient_failure' }),
-          expect.objectContaining({ event: 'cooldown_mark_attempted' }),
         ])
       );
     });
 
-    it('releases the lease instead of marking cooldown when cooldown mode is disabled', async () => {
+    it('releases the lease instead of marking cooldown when Yahoo rate-limits refresh', async () => {
       const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
       mockStorage.getYahooCredentials.mockResolvedValue({
         clerkUserId: 'user_123',
@@ -920,37 +907,40 @@ describe('yahoo-connect-handlers', () => {
       mockStorage.releaseRefreshLease.mockRejectedValueOnce(new Error('release failed'));
 
       const response = await handleYahooCredentials(
-        { ...env, YAHOO_REFRESH_COOLDOWN_MODE: 'disabled' },
+        env,
         'user_123',
         corsHeaders,
         'req_no_cooldown'
       );
 
       expect(response.status).toBe(503);
-      expect(mockStorage.markRefreshCooldown).not.toHaveBeenCalled();
+      const body = (await response.json()) as Record<string, unknown>;
+      expect(body.error).toBe('refresh_temporarily_unavailable');
+      expect(body.error_description).toBe('Too many token requests');
+      expect(body.upstream_status).toBe(429);
+      expect(body.retryable).toBe(true);
+      expect(body.retry_after).toBe(900);
+      expect(body.retry_after_source).toBe('fallback_default');
+      expect(response.headers.get('Retry-After')).toBe('900');
       expect(mockStorage.releaseRefreshLease).toHaveBeenCalledWith('user_123', capturedOwnerId);
       expect(yahooRefreshDiagnostics(logSpy)).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
-            event: 'cooldown_mode_disabled',
+            event: 'refresh_response_error',
             correlation_id: 'req_no_cooldown',
-            diagnostic_class: 'cooldown_disabled',
-            reason: 'env_disabled',
-            cooldown_mode: 'disabled',
+            diagnostic_class: 'yahoo_rate_limit',
+            upstream_status: 429,
           }),
           expect.objectContaining({
-            event: 'cooldown_mark_skipped',
+            event: 'refresh_transient_failure',
             correlation_id: 'req_no_cooldown',
-            outcome: 'cooldown_bypassed',
-            diagnostic_class: 'cooldown_disabled',
-            reason: 'disabled',
+            outcome: 'rate_limited',
+            diagnostic_class: 'yahoo_rate_limit',
           }),
           expect.objectContaining({
-            event: 'cooldown_mark_skipped_release_failed',
+            event: 'refresh_failure_lease_release_failed',
             correlation_id: 'req_no_cooldown',
-            diagnostic_class: 'cooldown_disabled',
             reason: 'release_failed',
-            cooldown_mode: 'disabled',
           }),
         ])
       );
@@ -1013,10 +1003,9 @@ describe('yahoo-connect-handlers', () => {
       expect(body.retryable).toBeUndefined();
       expect(mockFetch).toHaveBeenCalledTimes(1);
       expect(mockStorage.updateYahooCredentials).not.toHaveBeenCalled();
-      expect(mockStorage.markRefreshCooldown).not.toHaveBeenCalled();
     });
 
-    it('retries one transient refresh HTTP 5xx, then marks cooldown on the second transient failure', async () => {
+    it('retries one transient refresh HTTP 5xx, then returns retryable failure without cooldown', async () => {
       mockStorage.getYahooCredentials.mockResolvedValue({
         clerkUserId: 'user_123',
         accessToken: 'old-access-token',
@@ -1044,14 +1033,14 @@ describe('yahoo-connect-handlers', () => {
       expect(body.error_description).toBe('Try again later');
       expect(body.retryable).toBe(true);
       expect(body.retry_after).toBe(300);
+      expect(body.retry_after_source).toBe('fallback_default');
       expect(body.upstream_status).toBe(503);
       expect(mockFetch).toHaveBeenCalledTimes(2);
-      expect(mockStorage.markRefreshCooldown).toHaveBeenCalledTimes(1);
-      expect(mockStorage.markRefreshCooldown).toHaveBeenCalledWith('user_123', expect.any(String), 300);
+      expect(mockStorage.releaseRefreshLease).toHaveBeenCalledWith('user_123', expect.any(String));
       expect(mockStorage.updateYahooCredentials).not.toHaveBeenCalled();
     });
 
-    it('returns retryable 503 when Yahoo returns HTTP 429 during refresh', async () => {
+    it('returns retryable metadata when Yahoo returns HTTP 429 during refresh', async () => {
       const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
       mockStorage.getYahooCredentials.mockResolvedValue({
         clerkUserId: 'user_123',
@@ -1078,12 +1067,13 @@ describe('yahoo-connect-handlers', () => {
       const body = (await response.json()) as Record<string, unknown>;
       expect(body.error).toBe('refresh_temporarily_unavailable');
       expect(body.error_description).toBe('Too many token requests');
+      expect(body.upstream_status).toBe(429);
       expect(body.retryable).toBe(true);
       expect(body.retry_after).toBe(900);
       expect(body.retry_after_source).toBe('fallback_default');
-      expect(body.upstream_status).toBe(429);
+      expect(response.headers.get('Retry-After')).toBe('900');
       expect(mockFetch).toHaveBeenCalledTimes(1);
-      expect(mockStorage.markRefreshCooldown).toHaveBeenCalledWith('user_123', expect.any(String), 900);
+      expect(mockStorage.releaseRefreshLease).toHaveBeenCalledWith('user_123', expect.any(String));
       expect(mockStorage.updateYahooCredentials).not.toHaveBeenCalled();
 
       const diagnostics = yahooRefreshDiagnostics(logSpy);
@@ -1102,7 +1092,7 @@ describe('yahoo-connect-handlers', () => {
             has_upstream_retry_after: false,
             retry_after_source: 'fallback_default',
             token_grant_type: 'refresh_token',
-            request_has_redirect_uri: false,
+            request_has_redirect_uri: true,
             callback_url: 'https://api.flaim.app/auth/connect/yahoo/callback',
           }),
           expect.objectContaining({
@@ -1113,13 +1103,6 @@ describe('yahoo-connect-handlers', () => {
             retry_after_source: 'fallback_default',
             upstream_status: 429,
           }),
-          expect.objectContaining({
-            event: 'cooldown_mark_attempted',
-            outcome: 'cooldown_marked',
-            diagnostic_class: 'cooldown_mark',
-            retry_after: 900,
-            cooldown_marked: true,
-          }),
         ])
       );
       const serialized = JSON.stringify(diagnostics);
@@ -1127,7 +1110,7 @@ describe('yahoo-connect-handlers', () => {
       expect(serialized).not.toContain('refresh-token');
     });
 
-    it('distinguishes upstream Yahoo Retry-After from fallback cooldowns during refresh', async () => {
+    it('logs upstream Yahoo Retry-After during refresh without entering cooldown', async () => {
       const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
       mockStorage.getYahooCredentials.mockResolvedValue({
         clerkUserId: 'user_123',
@@ -1152,10 +1135,13 @@ describe('yahoo-connect-handlers', () => {
 
       expect(response.status).toBe(503);
       const body = (await response.json()) as Record<string, unknown>;
+      expect(body.error).toBe('refresh_temporarily_unavailable');
+      expect(body.upstream_status).toBe(429);
+      expect(body.retryable).toBe(true);
       expect(body.retry_after).toBe(120);
       expect(body.retry_after_source).toBe('upstream_header');
       expect(response.headers.get('Retry-After')).toBe('120');
-      expect(mockStorage.markRefreshCooldown).toHaveBeenCalledWith('user_123', expect.any(String), 120);
+      expect(mockStorage.releaseRefreshLease).toHaveBeenCalledWith('user_123', expect.any(String));
 
       expect(yahooRefreshDiagnostics(logSpy)).toEqual(
         expect.arrayContaining([
@@ -1174,7 +1160,7 @@ describe('yahoo-connect-handlers', () => {
       );
     });
 
-    it('honors upstream Yahoo Retry-After as a transient refresh cooldown signal', async () => {
+    it('logs upstream Yahoo Retry-After as a transient refresh signal without entering cooldown', async () => {
       const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
       mockStorage.getYahooCredentials.mockResolvedValue({
         clerkUserId: 'user_123',
@@ -1206,8 +1192,7 @@ describe('yahoo-connect-handlers', () => {
       expect(body.retry_after_source).toBe('upstream_header');
       expect(response.headers.get('Retry-After')).toBe('45');
       expect(mockFetch).toHaveBeenCalledTimes(1);
-      expect(mockStorage.markRefreshCooldown).toHaveBeenCalledWith('user_123', expect.any(String), 45);
-      expect(mockStorage.releaseRefreshLease).not.toHaveBeenCalled();
+      expect(mockStorage.releaseRefreshLease).toHaveBeenCalledWith('user_123', expect.any(String));
       expect(mockStorage.updateYahooCredentials).not.toHaveBeenCalled();
 
       expect(yahooRefreshDiagnostics(logSpy)).toEqual(
@@ -1225,16 +1210,11 @@ describe('yahoo-connect-handlers', () => {
             retry_after: 45,
             retry_after_source: 'upstream_header',
           }),
-          expect.objectContaining({
-            event: 'cooldown_mark_attempted',
-            correlation_id: 'req_retry_after_400',
-            retry_after: 45,
-          }),
         ])
       );
     });
 
-    it('returns retryable 503 without owner retry when Yahoo returns HTTP 999 during refresh', async () => {
+    it('returns retryable metadata without owner retry when Yahoo returns HTTP 999 during refresh', async () => {
       mockStorage.getYahooCredentials.mockResolvedValue({
         clerkUserId: 'user_123',
         accessToken: 'old-access-token',
@@ -1262,9 +1242,10 @@ describe('yahoo-connect-handlers', () => {
       expect(body.error_description).toBe('Yahoo token endpoint returned 999');
       expect(body.retryable).toBe(true);
       expect(body.retry_after).toBe(900);
+      expect(body.retry_after_source).toBe('fallback_default');
       expect(body.upstream_status).toBe(999);
       expect(mockFetch).toHaveBeenCalledTimes(1);
-      expect(mockStorage.markRefreshCooldown).toHaveBeenCalledWith('user_123', expect.any(String), 900);
+      expect(mockStorage.releaseRefreshLease).toHaveBeenCalledWith('user_123', expect.any(String));
       expect(mockStorage.updateYahooCredentials).not.toHaveBeenCalled();
     });
 
@@ -1334,7 +1315,7 @@ describe('yahoo-connect-handlers', () => {
       expect(mockFetch).toHaveBeenCalledTimes(1);
     });
 
-    it('winner: retries one transient Yahoo refresh response before marking cooldown', async () => {
+    it('winner: retries one transient Yahoo refresh response before returning failure', async () => {
       const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
       vi.useFakeTimers();
 
@@ -1373,7 +1354,6 @@ describe('yahoo-connect-handlers', () => {
         const body = (await response.json()) as Record<string, unknown>;
         expect(body.access_token).toBe('retry-winner-token');
         expect(mockFetch).toHaveBeenCalledTimes(2);
-        expect(mockStorage.markRefreshCooldown).not.toHaveBeenCalled();
         expect(mockStorage.updateYahooCredentials).toHaveBeenCalledWith(
           'user_123',
           expect.objectContaining({ accessToken: 'retry-winner-token', refreshToken: 'new-refresh' }),
@@ -1404,7 +1384,7 @@ describe('yahoo-connect-handlers', () => {
       }
     });
 
-    it('winner: retries one transient Yahoo refresh HTTP 5xx before marking cooldown', async () => {
+    it('winner: retries one transient Yahoo refresh HTTP 5xx before returning failure', async () => {
       const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
       vi.useFakeTimers();
 
@@ -1443,7 +1423,6 @@ describe('yahoo-connect-handlers', () => {
         const body = (await response.json()) as Record<string, unknown>;
         expect(body.access_token).toBe('retry-after-503-token');
         expect(mockFetch).toHaveBeenCalledTimes(2);
-        expect(mockStorage.markRefreshCooldown).not.toHaveBeenCalled();
         expect(mockStorage.updateYahooCredentials).toHaveBeenCalledWith(
           'user_123',
           expect.objectContaining({ accessToken: 'retry-after-503-token', refreshToken: 'new-refresh' }),
@@ -1475,7 +1454,7 @@ describe('yahoo-connect-handlers', () => {
       }
     });
 
-    it('winner: retries one non-abort Yahoo refresh fetch exception before marking cooldown', async () => {
+    it('winner: retries one non-abort Yahoo refresh fetch exception before returning failure', async () => {
       const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
       vi.useFakeTimers();
 
@@ -1506,7 +1485,6 @@ describe('yahoo-connect-handlers', () => {
         const body = (await response.json()) as Record<string, unknown>;
         expect(body.access_token).toBe('retry-after-fetch-error');
         expect(mockFetch).toHaveBeenCalledTimes(2);
-        expect(mockStorage.markRefreshCooldown).not.toHaveBeenCalled();
         expect(mockStorage.updateYahooCredentials).toHaveBeenCalledWith(
           'user_123',
           expect.objectContaining({ accessToken: 'retry-after-fetch-error', refreshToken: 'new-refresh' }),
@@ -1571,15 +1549,17 @@ describe('yahoo-connect-handlers', () => {
         expect(body.error).toBe('refresh_temporarily_unavailable');
         expect(body.retryable).toBe(true);
         expect(body.retry_after).toBe(300);
+        expect(body.retry_after_source).toBe('fallback_default');
+        expect(body.upstream_status).toBe(503);
         expect(mockFetch).toHaveBeenCalledTimes(1);
-        expect(mockStorage.markRefreshCooldown).toHaveBeenCalledWith('user_123', expect.any(String), 300);
+        expect(mockStorage.releaseRefreshLease).toHaveBeenCalledWith('user_123', expect.any(String));
         expect(mockStorage.updateYahooCredentials).not.toHaveBeenCalled();
       } finally {
         vi.useRealTimers();
       }
     });
 
-    it('winner: marks cooldown without calling Yahoo when lease acquisition consumes the retry budget', async () => {
+    it('winner: releases the lease without calling Yahoo when lease acquisition consumes the retry budget', async () => {
       const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
       vi.useFakeTimers();
       const start = new Date('2026-05-11T18:15:00Z');
@@ -1603,10 +1583,12 @@ describe('yahoo-connect-handlers', () => {
         expect(response.status).toBe(503);
         const body = (await response.json()) as Record<string, unknown>;
         expect(body.error).toBe('refresh_temporarily_unavailable');
+        expect(body.error_description).toBe('Yahoo token refresh lease budget was exhausted before a request could be sent. Please try again shortly.');
         expect(body.retryable).toBe(true);
-        expect(body.retry_after).toBe(300);
+        expect(body.retry_after).toBe(5);
+        expect(body.retry_after_source).toBe('fallback_default');
         expect(mockFetch).not.toHaveBeenCalled();
-        expect(mockStorage.markRefreshCooldown).toHaveBeenCalledWith('user_123', expect.any(String), 300);
+        expect(mockStorage.releaseRefreshLease).toHaveBeenCalledWith('user_123', expect.any(String));
         expect(mockStorage.updateYahooCredentials).not.toHaveBeenCalled();
         expect(yahooRefreshDiagnostics(logSpy)).toEqual(
           expect.arrayContaining([
@@ -1616,6 +1598,8 @@ describe('yahoo-connect-handlers', () => {
               phase: 'refresh_request',
               outcome: 'lease_budget_exhausted',
               diagnostic_class: 'lease_budget_exhausted',
+              retry_after: 5,
+              retry_after_source: 'fallback_default',
               lease_budget_remaining_ms: 0,
             }),
           ])
@@ -1625,7 +1609,7 @@ describe('yahoo-connect-handlers', () => {
       }
     });
 
-    it('winner: Yahoo timeout (AbortError) marks cooldown and returns retryable temporary error', async () => {
+    it('winner: Yahoo timeout (AbortError) releases the lease and returns retryable failure', async () => {
       mockStorage.getYahooCredentials.mockResolvedValue({
         clerkUserId: 'user_123',
         accessToken: 'old-access-token',
@@ -1651,14 +1635,14 @@ describe('yahoo-connect-handlers', () => {
       expect(response.status).toBe(503);
       const body = (await response.json()) as Record<string, unknown>;
       expect(body.error).toBe('refresh_temporarily_unavailable');
-      expect(body.error_description).toBe('Yahoo token refresh timed out. Please try again later.');
+      expect(body.error_description).toBe('Yahoo token refresh timed out. Please try again shortly.');
       expect(body.retryable).toBe(true);
       expect(body.retry_after).toBe(300);
-      expect(mockStorage.markRefreshCooldown).toHaveBeenCalledWith('user_123', capturedOwnerId, 300);
-      expect(mockStorage.releaseRefreshLease).not.toHaveBeenCalled();
+      expect(body.retry_after_source).toBe('fallback_default');
+      expect(mockStorage.releaseRefreshLease).toHaveBeenCalledWith('user_123', capturedOwnerId);
     });
 
-    it('winner: cooldown mark failure after timeout falls back to releasing the lease', async () => {
+    it('winner: timeout release failure is logged but still returns retryable failure', async () => {
       mockStorage.getYahooCredentials.mockResolvedValue({
         clerkUserId: 'user_123',
         accessToken: 'old-access-token',
@@ -1667,7 +1651,7 @@ describe('yahoo-connect-handlers', () => {
         needsRefresh: true,
       });
       mockStorage.acquireRefreshLease.mockResolvedValue(true);
-      mockStorage.markRefreshCooldown.mockRejectedValue(new Error('cooldown failed'));
+      mockStorage.releaseRefreshLease.mockRejectedValueOnce(new Error('release failed'));
 
       const abortError = new DOMException('The operation was aborted', 'AbortError');
       mockFetch.mockRejectedValue(abortError);
@@ -1677,12 +1661,14 @@ describe('yahoo-connect-handlers', () => {
       expect(response.status).toBe(503);
       const body = (await response.json()) as Record<string, unknown>;
       expect(body.error).toBe('refresh_temporarily_unavailable');
-      expect(body.error_description).toBe('Yahoo token refresh timed out. Please try again later.');
+      expect(body.error_description).toBe('Yahoo token refresh timed out. Please try again shortly.');
       expect(body.retryable).toBe(true);
+      expect(body.retry_after).toBe(300);
+      expect(body.retry_after_source).toBe('fallback_default');
       expect(mockStorage.releaseRefreshLease).toHaveBeenCalledWith('user_123', expect.any(String));
     });
 
-    it('returns active refresh cooldown without hitting Yahoo again', async () => {
+    it('clears a legacy active refresh cooldown and attempts refresh', async () => {
       vi.useFakeTimers();
       vi.setSystemTime(new Date('2026-05-11T18:15:00Z'));
       try {
@@ -1695,26 +1681,31 @@ describe('yahoo-connect-handlers', () => {
           refreshLeaseOwner: 'cooldown:owner-1',
           refreshLeaseExpiresAt: new Date(Date.now() + 45_000),
         });
-        mockStorage.acquireRefreshLease.mockResolvedValue(false);
+        mockFetch.mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              access_token: 'new-access-token',
+              refresh_token: 'new-refresh-token',
+              expires_in: 3600,
+            }),
+            { status: 200 }
+          )
+        );
 
         const response = await handleYahooCredentials(env, 'user_123', corsHeaders);
 
-        expect(response.status).toBe(503);
-        expect(response.headers.get('Retry-After')).toBe('45');
+        expect(response.status).toBe(200);
         const body = (await response.json()) as Record<string, unknown>;
-        expect(body.error).toBe('refresh_temporarily_unavailable');
-        expect(body.error_description).toBe('Yahoo token refresh is cooling down after a transient failure. Please try again shortly.');
-        expect(body.retryable).toBe(true);
-        expect(body.retry_after).toBe(45);
-        expect(mockStorage.acquireRefreshLease).not.toHaveBeenCalled();
-        expect(mockFetch).not.toHaveBeenCalled();
-        expect(mockStorage.markRefreshCooldown).not.toHaveBeenCalled();
+        expect(body.access_token).toBe('new-access-token');
+        expect(mockStorage.releaseRefreshLease).toHaveBeenCalledWith('user_123', 'cooldown:owner-1');
+        expect(mockStorage.acquireRefreshLease).toHaveBeenCalledWith('user_123', expect.any(String), 30_000, 'refresh-token');
+        expect(mockFetch).toHaveBeenCalledTimes(1);
       } finally {
         vi.useRealTimers();
       }
     });
 
-    it('bypasses active refresh cooldown and attempts refresh when cooldown mode is disabled', async () => {
+    it('continues refresh after a legacy cooldown release failure', async () => {
       const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
       vi.useFakeTimers();
       vi.setSystemTime(new Date('2026-05-11T18:15:00Z'));
@@ -1740,12 +1731,7 @@ describe('yahoo-connect-handlers', () => {
         );
         mockStorage.releaseRefreshLease.mockRejectedValueOnce(new Error('release failed'));
 
-        const response = await handleYahooCredentials(
-          { ...env, YAHOO_REFRESH_COOLDOWN_MODE: 'disabled' },
-          'user_123',
-          corsHeaders,
-          'req_bypass_cooldown'
-        );
+        const response = await handleYahooCredentials(env, 'user_123', corsHeaders, 'req_bypass_cooldown');
 
         expect(response.status).toBe(200);
         const body = (await response.json()) as Record<string, unknown>;
@@ -1753,30 +1739,21 @@ describe('yahoo-connect-handlers', () => {
         expect(mockStorage.releaseRefreshLease).toHaveBeenCalledWith('user_123', 'cooldown:owner-1');
         expect(mockStorage.acquireRefreshLease).toHaveBeenCalledWith('user_123', expect.any(String), 30_000, 'refresh-token');
         expect(mockFetch).toHaveBeenCalledTimes(1);
-        expect(mockStorage.markRefreshCooldown).not.toHaveBeenCalled();
         expect(yahooRefreshDiagnostics(logSpy)).toEqual(
           expect.arrayContaining([
-            expect.objectContaining({
-              event: 'cooldown_mode_disabled',
-              correlation_id: 'req_bypass_cooldown',
-              diagnostic_class: 'cooldown_disabled',
-              reason: 'env_disabled',
-              cooldown_mode: 'disabled',
-            }),
             expect.objectContaining({
               event: 'cooldown_bypassed',
               correlation_id: 'req_bypass_cooldown',
               outcome: 'cooldown_bypassed',
-              diagnostic_class: 'cooldown_disabled',
+              diagnostic_class: 'cooldown_active',
               refresh_state: 'cooldown',
               lease_remaining_seconds: 45,
             }),
             expect.objectContaining({
               event: 'cooldown_bypass_release_failed',
               correlation_id: 'req_bypass_cooldown',
-              diagnostic_class: 'cooldown_disabled',
+              diagnostic_class: 'cooldown_active',
               reason: 'release_failed',
-              cooldown_mode: 'disabled',
             }),
             expect.objectContaining({
               event: 'refresh_request_started',
@@ -2464,7 +2441,7 @@ describe('yahoo-connect-handlers', () => {
       expect(body.error_description).toBe('Refresh token already used');
     });
 
-    it('returns retryable 503 from discovery path for transient Yahoo refresh response', async () => {
+    it('returns retryable metadata from discovery path for transient Yahoo refresh response without cooldown', async () => {
       const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
       mockStorage.getYahooCredentials.mockResolvedValue({
         clerkUserId: 'user_123',
@@ -2492,8 +2469,10 @@ describe('yahoo-connect-handlers', () => {
       expect(body.error_description).toBe('Too many token requests');
       expect(body.retryable).toBe(true);
       expect(body.retry_after).toBe(900);
+      expect(body.retry_after_source).toBe('fallback_default');
+      expect(body.upstream_status).toBe(429);
       expect(mockFetch).toHaveBeenCalledTimes(1);
-      expect(mockStorage.markRefreshCooldown).toHaveBeenCalledWith('user_123', expect.any(String), 900);
+      expect(mockStorage.releaseRefreshLease).toHaveBeenCalledWith('user_123', expect.any(String));
       expect(mockStorage.updateYahooCredentials).not.toHaveBeenCalled();
       expect(mockStorage.upsertYahooLeague).not.toHaveBeenCalled();
       expect(yahooRefreshDiagnostics(logSpy)).toEqual(
@@ -2504,10 +2483,6 @@ describe('yahoo-connect-handlers', () => {
           }),
           expect.objectContaining({
             event: 'refresh_transient_failure',
-            correlation_id: 'req_discover',
-          }),
-          expect.objectContaining({
-            event: 'cooldown_mark_attempted',
             correlation_id: 'req_discover',
           }),
         ])

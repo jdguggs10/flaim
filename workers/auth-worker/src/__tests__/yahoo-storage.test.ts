@@ -539,42 +539,6 @@ describe('YahooStorage', () => {
     });
   });
 
-  describe('markRefreshCooldown', () => {
-    it('replaces the current lease owner with a bounded cooldown marker', async () => {
-      mockSelect.mockResolvedValue({ data: [{ clerk_user_id: 'user_123' }], error: null });
-
-      const result = await storage.markRefreshCooldown('user_123', 'owner-1', 60);
-
-      expect(result).toBe(true);
-      expect(mockUpdate).toHaveBeenCalledWith(
-        expect.objectContaining({
-          refresh_lease_owner: 'cooldown:owner-1',
-          refresh_lease_expires_at: expect.any(String),
-        })
-      );
-      const call = mockUpdate.mock.calls[0][0];
-      expect(new Date(call.refresh_lease_expires_at).getTime()).toBeGreaterThan(Date.now());
-      expect(mockEq).toHaveBeenNthCalledWith(1, 'clerk_user_id', 'user_123');
-      expect(mockEq).toHaveBeenNthCalledWith(2, 'refresh_lease_owner', 'owner-1');
-    });
-
-    it('returns false when the owner guard rejects the cooldown marker', async () => {
-      mockSelect.mockResolvedValue({ data: [], error: null });
-
-      const result = await storage.markRefreshCooldown('user_123', 'owner-1', 60);
-
-      expect(result).toBe(false);
-    });
-
-    it('throws when cooldown marking hits a storage error', async () => {
-      mockSelect.mockResolvedValue({ data: null, error: { message: 'DB down' } });
-
-      await expect(
-        storage.markRefreshCooldown('user_123', 'owner-1', 60)
-      ).rejects.toThrow('Failed to mark Yahoo refresh cooldown');
-    });
-  });
-
   describe('deleteYahooCredentials', () => {
     it('deletes credentials for user', async () => {
       mockEq.mockReturnValue({ error: null });
