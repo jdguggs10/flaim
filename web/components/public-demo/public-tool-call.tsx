@@ -21,33 +21,33 @@ function getToolCopy(name?: string | null) {
       };
     case "get_user_session":
       return {
-        title: "Checking demo leagues",
+        title: "Checking Gerry's leagues",
         description: "Looking up the leagues and teams available to analyze right now.",
       };
     case "get_roster":
       return {
-        title: "Reviewing the demo roster",
+        title: "Reviewing Gerry's roster",
         description: "Pulling the current roster so Flaim can spot strengths and weak spots.",
       };
     case "get_standings":
       return {
         title: "Checking the standings",
-        description: "Seeing where the demo team sits and what the table looks like around it.",
+        description: "Seeing where Gerry's team sits and what the table looks like around it.",
       };
     case "get_matchups":
       return {
         title: "Looking at the matchup",
-        description: "Checking who the demo team is facing and where the matchup could swing.",
+        description: "Checking who Gerry is facing and where the matchup could swing.",
       };
     case "get_free_agents":
       return {
         title: "Scanning free agents",
-        description: "Looking for available players who fit the demo team's biggest needs.",
+        description: "Looking for available players who fit Gerry's biggest needs.",
       };
     case "get_transactions":
       return {
         title: "Reviewing league activity",
-        description: "Checking the adds, drops, waivers, and other moves around the demo league.",
+        description: "Checking the adds, drops, waivers, and other moves around Gerry's league.",
       };
     case "get_league_info":
       return {
@@ -62,7 +62,7 @@ function getToolCopy(name?: string | null) {
     default:
       return {
         title: "Checking live league data",
-        description: "Reading current demo league data before answering.",
+        description: "Reading Gerry's current league data before answering.",
       };
   }
 }

@@ -124,7 +124,7 @@ function getPublicDemoFailureCopy(
 
   switch (failure.errorCode) {
     case "missing_mcp_grounding":
-      return "The latest refresh did not successfully use the demo league data, so the answer was rejected.";
+      return "The latest refresh did not successfully use Gerry's league data, so the answer was rejected.";
     case "empty_answer":
       return "The latest refresh returned an empty answer, so nothing new was stored.";
     case "provider_failed":
@@ -237,7 +237,7 @@ function IdleState() {
         Pick something
       </p>
       <p className="mt-1 text-sm text-muted-foreground">
-        Real answers from my actual ESPN league
+        Real answers from Gerry&apos;s actual ESPN league
       </p>
       {/* Tap logo to cycle animation — easter egg */}
       <button
@@ -595,6 +595,10 @@ export function PublicChatExperience({
                   className="w-[18.5rem] rounded-2xl border-border p-4 text-sm leading-6"
                 >
                   <p className="text-foreground">
+                    These answers refresh from Gerry&apos;s actual ESPN{" "}
+                    {PUBLIC_SPORT_COPY[demoSport].label} league.
+                  </p>
+                  <p className="mt-2 text-muted-foreground">
                     Flaim supports ESPN and Yahoo across football, baseball,
                     basketball, and hockey, plus Sleeper for football and
                     basketball.
@@ -668,7 +672,7 @@ export function PublicChatExperience({
                       </div>
                     ) : null}
                     <div>
-                      That&apos;s the demo league.{" "}
+                      That&apos;s Gerry&apos;s league.{" "}
                       <Link
                         href="/leagues"
                         className="text-primary hover:underline"
