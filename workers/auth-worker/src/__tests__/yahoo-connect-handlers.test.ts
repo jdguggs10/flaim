@@ -76,6 +76,7 @@ describe('yahoo-connect-handlers', () => {
     getYahooCredentials: ReturnType<typeof vi.fn>;
     getYahooCredentialHealth: ReturnType<typeof vi.fn>;
     updateYahooCredentials: ReturnType<typeof vi.fn>;
+    updateYahooCredentialsIfRefreshTokenMatches: ReturnType<typeof vi.fn>;
     acquireRefreshLease: ReturnType<typeof vi.fn>;
     releaseRefreshLease: ReturnType<typeof vi.fn>;
     deleteYahooCredentials: ReturnType<typeof vi.fn>;
@@ -95,6 +96,7 @@ describe('yahoo-connect-handlers', () => {
       getYahooCredentials: vi.fn(),
       getYahooCredentialHealth: vi.fn(),
       updateYahooCredentials: vi.fn().mockResolvedValue(true),
+      updateYahooCredentialsIfRefreshTokenMatches: vi.fn().mockResolvedValue(false),
       acquireRefreshLease: vi.fn().mockResolvedValue(true),
       releaseRefreshLease: vi.fn().mockResolvedValue(undefined),
       deleteYahooCredentials: vi.fn().mockResolvedValue(undefined),
@@ -1796,6 +1798,53 @@ describe('yahoo-connect-handlers', () => {
       expect(response.status).toBe(200);
       const body = (await response.json()) as Record<string, unknown>;
       expect(body.access_token).toBe('concurrent-fresh-token');
+    });
+
+    it('winner: recovers a rotated Yahoo refresh token when the lease-owner write misses', async () => {
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+      mockStorage.getYahooCredentials.mockResolvedValueOnce({
+        clerkUserId: 'user_123',
+        accessToken: 'old-access-token',
+        refreshToken: 'old-refresh-token',
+        expiresAt: new Date(Date.now() + 2 * 60 * 1000),
+        needsRefresh: true,
+      });
+      mockStorage.acquireRefreshLease.mockResolvedValue(true);
+      mockStorage.updateYahooCredentials.mockResolvedValue(false);
+      mockStorage.updateYahooCredentialsIfRefreshTokenMatches.mockResolvedValue(true);
+      mockFetch.mockResolvedValue(
+        new Response(
+          JSON.stringify({ access_token: 'winner-token', refresh_token: 'rotated-refresh-token', expires_in: 3600 }),
+          { status: 200 }
+        )
+      );
+
+      const response = await handleYahooCredentials(env, 'user_123', corsHeaders, 'req_recover_rotation');
+
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as Record<string, unknown>;
+      expect(body.access_token).toBe('winner-token');
+      expect(mockStorage.updateYahooCredentialsIfRefreshTokenMatches).toHaveBeenCalledWith(
+        'user_123',
+        expect.objectContaining({
+          accessToken: 'winner-token',
+          refreshToken: 'rotated-refresh-token',
+        }),
+        'old-refresh-token'
+      );
+      expect(mockStorage.getYahooCredentials).toHaveBeenCalledTimes(1);
+      expect(yahooRefreshDiagnostics(logSpy)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            event: 'credential_update_recovered_after_owner_guard_miss',
+            correlation_id: 'req_recover_rotation',
+            refresh_token_returned: true,
+            refresh_token_changed: true,
+            recovery_attempted: true,
+            recovery_succeeded: true,
+          }),
+        ])
+      );
     });
 
     it('loser: lease not acquired, winner finishes before deadline', async () => {

@@ -338,6 +338,52 @@ export class YahooStorage {
   }
 
   /**
+   * Recover a successful refresh response when the lease-owner guard missed.
+   *
+   * Yahoo may rotate refresh tokens and revoke the old refresh token after a
+   * successful refresh. If the lease owner changes before we persist that
+   * response, losing the write can strand the row with a revoked refresh token.
+   * This fallback is still guarded by the refresh token originally read by the
+   * caller, so it cannot overwrite a newer refresh that already stored a
+   * different token.
+   */
+  async updateYahooCredentialsIfRefreshTokenMatches(
+    clerkUserId: string,
+    params: UpdateCredentialsParams,
+    expectedRefreshToken: string
+  ): Promise<boolean> {
+    const updateData: Record<string, string | null> = {
+      access_token: params.accessToken,
+      expires_at: params.expiresAt.toISOString(),
+      updated_at: new Date().toISOString(),
+      refresh_lease_owner: null,
+      refresh_lease_expires_at: null,
+    };
+
+    if (params.refreshToken) {
+      updateData.refresh_token = params.refreshToken;
+    }
+
+    const { data, error } = await this.supabase
+      .from('yahoo_credentials')
+      .update(updateData)
+      .eq('clerk_user_id', clerkUserId)
+      .eq('refresh_token', expectedRefreshToken)
+      .select('clerk_user_id');
+
+    if (error) {
+      console.error('[yahoo-storage] Failed to recover Yahoo credentials after owner guard miss:', error);
+      throw new Error('Failed to recover Yahoo credentials');
+    }
+
+    const updated = (data?.length ?? 0) > 0;
+    if (updated) {
+      console.log(`[yahoo-storage] Recovered Yahoo credentials for user ${maskUserId(clerkUserId)} after owner guard miss`);
+    }
+    return updated;
+  }
+
+  /**
    * Atomically acquire the refresh lease for a user.
    *
    * The update only succeeds if no other owner holds an unexpired lease

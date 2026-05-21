@@ -19,6 +19,7 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 - **Changed**: Yahoo refresh-token grants now follow Yahoo's documented request shape again and include `redirect_uri`; the temporary omit-redirect compatibility flag was removed.
 - **Changed**: Yahoo token-refresh failures now release the per-user refresh lease and surface upstream status/retry metadata immediately instead of writing a persisted cooldown marker that can mask malformed/permanent failures.
 - **Changed**: Yahoo lazy token refresh still uses a per-user lease and owner retry for short-lived non-rate-limit failures, but no longer converts failed refresh attempts into shared persisted cooldowns.
+- **Changed**: Yahoo successful refresh handling now recovers rotated refresh-token writes when the lease-owner guard misses but the row still contains the old refresh token, preventing a valid Yahoo refresh response from being discarded after Yahoo revokes the previous refresh token.
 - **Changed**: Yahoo reconnect now stores the authorization-code token response directly instead of immediately making a second refresh-token validation request, reducing token-endpoint pressure.
 - **Changed**: Yahoo **Sync leagues** on `/leagues` now uses the stored connection to rediscover leagues instead of starting a fresh OAuth flow every time.
 - **Changed**: Yahoo refresh lease waiters now return an explicit retryable response before the MCP gateway timeout budget is exhausted.

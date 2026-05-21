@@ -147,6 +147,10 @@ interface YahooRefreshDiagnosticFields {
   yahooClientIdPresent?: boolean;
   yahooClientSecretPresent?: boolean;
   authType?: string;
+  refreshTokenReturned?: boolean;
+  refreshTokenChanged?: boolean;
+  recoveryAttempted?: boolean;
+  recoverySucceeded?: boolean;
 }
 
 // Internal annotation from the Yahoo token endpoint parser. This is consumed by
@@ -298,6 +302,10 @@ function logYahooRefreshDiagnostic(event: string, fields: YahooRefreshDiagnostic
   if (fields.yahooClientIdPresent !== undefined) payload.yahoo_client_id_present = fields.yahooClientIdPresent;
   if (fields.yahooClientSecretPresent !== undefined) payload.yahoo_client_secret_present = fields.yahooClientSecretPresent;
   if (fields.authType !== undefined) payload.auth_type = fields.authType;
+  if (fields.refreshTokenReturned !== undefined) payload.refresh_token_returned = fields.refreshTokenReturned;
+  if (fields.refreshTokenChanged !== undefined) payload.refresh_token_changed = fields.refreshTokenChanged;
+  if (fields.recoveryAttempted !== undefined) payload.recovery_attempted = fields.recoveryAttempted;
+  if (fields.recoverySucceeded !== undefined) payload.recovery_succeeded = fields.recoverySucceeded;
 
   console.log(JSON.stringify(payload));
 }
@@ -1237,9 +1245,12 @@ async function getValidYahooAccessToken(
     }
 
     const expiresAt = new Date(Date.now() + result.expires_in * 1000);
+    const refreshTokenReturned = Boolean(result.refresh_token);
+    const refreshTokenChanged = Boolean(result.refresh_token && result.refresh_token !== credentials.refreshToken);
+    const refreshedCredentials = { accessToken: result.access_token, refreshToken: result.refresh_token, expiresAt };
     const wrote = await storage.updateYahooCredentials(
       userId,
-      { accessToken: result.access_token, refreshToken: result.refresh_token, expiresAt },
+      refreshedCredentials,
       ownerId
     );
 
@@ -1250,12 +1261,53 @@ async function getValidYahooAccessToken(
         phase: 'credential_update',
         outcome: 'success',
         accessTokenLifetimeSeconds: result.expires_in,
+        refreshTokenReturned,
+        refreshTokenChanged,
       });
       console.log(`[yahoo-connect] Token refreshed for user ${maskUserId(userId)}`);
       return { accessToken: result.access_token, expiresIn: result.expires_in };
     }
 
-    logDiagnostic('credential_update_owner_guard_miss', { userId, attempt });
+    logDiagnostic('credential_update_owner_guard_miss', {
+      userId,
+      attempt,
+      phase: 'credential_update',
+      outcome: 'retryable_failure',
+      refreshTokenReturned,
+      refreshTokenChanged,
+      recoveryAttempted: true,
+    });
+    const recoveredWrite = await storage.updateYahooCredentialsIfRefreshTokenMatches(
+      userId,
+      refreshedCredentials,
+      credentials.refreshToken
+    );
+    if (recoveredWrite) {
+      logDiagnostic('credential_update_recovered_after_owner_guard_miss', {
+        userId,
+        attempt,
+        phase: 'credential_update',
+        outcome: 'success',
+        accessTokenLifetimeSeconds: result.expires_in,
+        refreshTokenReturned,
+        refreshTokenChanged,
+        recoveryAttempted: true,
+        recoverySucceeded: true,
+      });
+      console.log(`[yahoo-connect] Token refresh write recovered for user ${maskUserId(userId)}`);
+      return { accessToken: result.access_token, expiresIn: result.expires_in };
+    }
+
+    logDiagnostic('credential_update_recovery_miss', {
+      userId,
+      attempt,
+      phase: 'credential_update',
+      outcome: 'retryable_failure',
+      refreshTokenReturned,
+      refreshTokenChanged,
+      recoveryAttempted: true,
+      recoverySucceeded: false,
+    });
     const latest = await storage.getYahooCredentials(userId);
     if (!latest) {
       logDiagnostic('credentials_missing_after_owner_guard_miss', { userId, attempt });
