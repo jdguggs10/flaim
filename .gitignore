@@ -17,6 +17,7 @@ build/
 .next/
 out/
 output/
+.email-out/
 
 # Wrangler / Cloudflare
 .wrangler/
