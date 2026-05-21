@@ -786,6 +786,7 @@ async function waitForFreshCredentialsOrLeaseClear(
         errorDescription: 'Yahoo token refresh is already in progress. Please try again shortly.',
         retryable: true,
         retryAfter: YAHOO_REFRESH_IN_PROGRESS_RETRY_AFTER_SECONDS,
+        retryAfterSource: 'fallback_default',
       };
     }
 
@@ -966,6 +967,8 @@ async function getValidYahooAccessToken(
           outcome: 'lease_budget_exhausted',
           diagnosticClass: 'lease_budget_exhausted',
           reason: 'lease_budget_exhausted',
+          retryAfter: YAHOO_REFRESH_IN_PROGRESS_RETRY_AFTER_SECONDS,
+          retryAfterSource: 'fallback_default',
           leaseBudgetRemainingMs: ownerRetryBudgetRemainingMs(leaseDeadlineMs),
         });
         await releaseYahooRefreshLeaseAfterFailure(
@@ -977,10 +980,11 @@ async function getValidYahooAccessToken(
         );
         return {
           error: YahooAuthWorkerErrorCode.REFRESH_TEMPORARILY_UNAVAILABLE,
-          errorDescription: 'Yahoo token refresh lease budget was exhausted before a request could be sent',
+          errorDescription: 'Yahoo token refresh lease budget was exhausted before a request could be sent. Please try again shortly.',
           retryable: true,
           // This is local lease contention, not Yahoo backoff; ask callers to retry shortly.
           retryAfter: YAHOO_REFRESH_IN_PROGRESS_RETRY_AFTER_SECONDS,
+          retryAfterSource: 'fallback_default',
         };
       }
       const requestBody = yahooRefreshTokenBody(credentials.refreshToken, env);
@@ -1067,10 +1071,11 @@ async function getValidYahooAccessToken(
         return {
           error: YahooAuthWorkerErrorCode.REFRESH_TEMPORARILY_UNAVAILABLE,
           errorDescription: isAbort
-            ? 'Yahoo token refresh timed out'
-            : 'Yahoo token refresh request failed',
+            ? 'Yahoo token refresh timed out. Please try again shortly.'
+            : 'Yahoo token refresh request failed. Please try again shortly.',
           retryable: true,
           retryAfter: YAHOO_DEFAULT_TRANSIENT_RETRY_AFTER_SECONDS,
+          retryAfterSource: 'fallback_default',
         };
       }
       clearTimeout(timer);

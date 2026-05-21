@@ -1583,9 +1583,10 @@ describe('yahoo-connect-handlers', () => {
         expect(response.status).toBe(503);
         const body = (await response.json()) as Record<string, unknown>;
         expect(body.error).toBe('refresh_temporarily_unavailable');
-        expect(body.error_description).toBe('Yahoo token refresh lease budget was exhausted before a request could be sent');
+        expect(body.error_description).toBe('Yahoo token refresh lease budget was exhausted before a request could be sent. Please try again shortly.');
         expect(body.retryable).toBe(true);
         expect(body.retry_after).toBe(5);
+        expect(body.retry_after_source).toBe('fallback_default');
         expect(mockFetch).not.toHaveBeenCalled();
         expect(mockStorage.releaseRefreshLease).toHaveBeenCalledWith('user_123', expect.any(String));
         expect(mockStorage.updateYahooCredentials).not.toHaveBeenCalled();
@@ -1597,6 +1598,8 @@ describe('yahoo-connect-handlers', () => {
               phase: 'refresh_request',
               outcome: 'lease_budget_exhausted',
               diagnostic_class: 'lease_budget_exhausted',
+              retry_after: 5,
+              retry_after_source: 'fallback_default',
               lease_budget_remaining_ms: 0,
             }),
           ])
@@ -1632,9 +1635,10 @@ describe('yahoo-connect-handlers', () => {
       expect(response.status).toBe(503);
       const body = (await response.json()) as Record<string, unknown>;
       expect(body.error).toBe('refresh_temporarily_unavailable');
-      expect(body.error_description).toBe('Yahoo token refresh timed out');
+      expect(body.error_description).toBe('Yahoo token refresh timed out. Please try again shortly.');
       expect(body.retryable).toBe(true);
       expect(body.retry_after).toBe(300);
+      expect(body.retry_after_source).toBe('fallback_default');
       expect(mockStorage.releaseRefreshLease).toHaveBeenCalledWith('user_123', capturedOwnerId);
     });
 
@@ -1657,9 +1661,10 @@ describe('yahoo-connect-handlers', () => {
       expect(response.status).toBe(503);
       const body = (await response.json()) as Record<string, unknown>;
       expect(body.error).toBe('refresh_temporarily_unavailable');
-      expect(body.error_description).toBe('Yahoo token refresh timed out');
+      expect(body.error_description).toBe('Yahoo token refresh timed out. Please try again shortly.');
       expect(body.retryable).toBe(true);
       expect(body.retry_after).toBe(300);
+      expect(body.retry_after_source).toBe('fallback_default');
       expect(mockStorage.releaseRefreshLease).toHaveBeenCalledWith('user_123', expect.any(String));
     });
 
