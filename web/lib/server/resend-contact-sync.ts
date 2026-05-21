@@ -81,12 +81,7 @@ function isContactSyncEnabled(options: SyncClerkUserOptions) {
 }
 
 export function getClerkUserPrimaryEmail(user: ClerkUserEmailSyncPayload) {
-  const emailAddresses = user.email_addresses ?? [];
-  const primaryEmail =
-    emailAddresses.find((email) => email.id === user.primary_email_address_id) ??
-    emailAddresses[0];
-
-  return cleanString(primaryEmail?.email_address)?.toLowerCase() ?? null;
+  return cleanString(getClerkUserPrimaryEmailAddress(user)?.email_address)?.toLowerCase() ?? null;
 }
 
 function hasExplicitUnverifiedStatus(emailAddress: ClerkEmailAddress | null | undefined) {
@@ -95,11 +90,15 @@ function hasExplicitUnverifiedStatus(emailAddress: ClerkEmailAddress | null | un
   return Boolean(status && status !== "verified");
 }
 
+// Keep primary email selection aligned with web/scripts/backfill-resend-contacts.mjs.
 function getClerkUserPrimaryEmailAddress(user: ClerkUserEmailSyncPayload) {
   const emailAddresses = user.email_addresses ?? [];
+  if (emailAddresses.length === 1) {
+    return emailAddresses[0];
+  }
+
   return (
     emailAddresses.find((email) => email.id === user.primary_email_address_id) ??
-    emailAddresses[0] ??
     null
   );
 }
@@ -138,7 +137,7 @@ export async function syncClerkUserToResendContact(
 
   const client = options.client ?? getResendContactsClient();
   if (!client) {
-    return { ok: false, error: "RESEND_CONTACTS_API_KEY or RESEND_API_KEY is not configured" };
+    return { ok: false, error: "RESEND_CONTACTS_API_KEY is not configured" };
   }
 
   const firstName = cleanString(user.first_name);

@@ -23,7 +23,7 @@ export function getResendClient() {
 }
 
 export function getResendContactsClient() {
-  const apiKey = process.env.RESEND_CONTACTS_API_KEY ?? process.env.RESEND_API_KEY;
+  const apiKey = process.env.RESEND_CONTACTS_API_KEY;
   if (!apiKey) return null;
 
   if (!resendContacts || resendContactsApiKey !== apiKey) {

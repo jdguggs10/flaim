@@ -9,6 +9,7 @@ const MAX_LIMIT = 500;
 function parseArgs(argv) {
   const args = {
     apply: false,
+    delayMs: 0,
     limit: DEFAULT_LIMIT,
     maxUsers: Number.POSITIVE_INFINITY,
     offset: 0,
@@ -26,6 +27,12 @@ function parseArgs(argv) {
 
     if (arg === "--limit" && next) {
       args.limit = Math.min(Number(next), MAX_LIMIT);
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--delay-ms" && next) {
+      args.delayMs = Number(next);
       index += 1;
       continue;
     }
@@ -68,6 +75,10 @@ function parseArgs(argv) {
     throw new Error("--offset must be zero or greater");
   }
 
+  if (!Number.isFinite(args.delayMs) || args.delayMs < 0) {
+    throw new Error("--delay-ms must be zero or greater");
+  }
+
   return args;
 }
 
@@ -83,12 +94,13 @@ Apply to one eligible user:
 
 Options:
   --apply              Write contacts to Resend. Omit for dry-run.
+  --delay-ms <n>       Wait between Resend writes. Defaults to 0.
   --limit <n>          Clerk page size. Defaults to ${DEFAULT_LIMIT}, max ${MAX_LIMIT}.
   --max-users <n>      Stop after scanning this many Clerk users.
   --offset <n>         Start at a Clerk list offset.
   --segment-id <id>    Resend Segment ID. Defaults to RESEND_CONTACT_SEGMENT_ID.
 
-Resend rate limits apply. Use --max-users and --offset to pace larger backfills.
+Resend rate limits apply. Use --delay-ms, --max-users, and --offset to pace larger backfills.
 `);
 }
 
@@ -97,13 +109,11 @@ function cleanString(value) {
   return cleaned || null;
 }
 
+// Keep primary email selection aligned with web/lib/server/resend-contact-sync.ts.
 function getPrimaryEmailAddress(user) {
   const emails = Array.isArray(user.email_addresses) ? user.email_addresses : [];
-  return (
-    emails.find((email) => email.id === user.primary_email_address_id) ??
-    emails[0] ??
-    null
-  );
+  if (emails.length === 1) return emails[0];
+  return emails.find((email) => email.id === user.primary_email_address_id) ?? null;
 }
 
 function getPrimaryEmail(user) {
@@ -185,6 +195,11 @@ async function ensureContactSegment(resend, email, segmentId) {
   return getResendErrorMessage(error);
 }
 
+async function delay(ms) {
+  if (ms <= 0) return;
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function syncContact({ resend, segmentId, user }) {
   const email = getPrimaryEmail(user);
   const { firstName, lastName } = getNameFields(user);
@@ -200,12 +215,9 @@ async function syncContact({ resend, segmentId, user }) {
       email,
       firstName,
       lastName,
+      ...(segmentId ? { segments: [{ id: segmentId }] } : {}),
       unsubscribed: false,
     };
-
-    if (segmentId) {
-      payload.segments = [{ id: segmentId }];
-    }
 
     const created = await resend.contacts.create(payload);
     if (created.error) {
@@ -238,14 +250,14 @@ async function syncContact({ resend, segmentId, user }) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const clerkSecretKey = process.env.CLERK_SECRET_KEY;
-  const resendContactsApiKey = process.env.RESEND_CONTACTS_API_KEY ?? process.env.RESEND_API_KEY;
+  const resendContactsApiKey = process.env.RESEND_CONTACTS_API_KEY;
 
   if (!clerkSecretKey) {
     throw new Error("CLERK_SECRET_KEY is required");
   }
 
   if (args.apply && !resendContactsApiKey) {
-    throw new Error("RESEND_CONTACTS_API_KEY or RESEND_API_KEY is required when --apply is set");
+    throw new Error("RESEND_CONTACTS_API_KEY is required when --apply is set");
   }
 
   const resend = args.apply ? new Resend(resendContactsApiKey) : null;
@@ -284,12 +296,18 @@ async function main() {
       } else {
         const result = await syncContact({ resend, segmentId: args.segmentId, user });
         if (result.ok) {
-          stats[result.action] += 1;
+          if (result.action === "created") {
+            stats.created += 1;
+          } else {
+            stats.updated += 1;
+          }
           console.log(`${result.action} ${maskEmail(result.email)} ${user.id}`);
         } else {
           stats.failed += 1;
           console.error(`failed ${maskEmail(result.email ?? email)} ${user.id}: ${result.error}`);
         }
+
+        await delay(args.delayMs);
       }
 
       if (stats.scanned >= args.maxUsers) break;

@@ -64,7 +64,7 @@ Existing users are backfilled with a separate dry-run-first script. Run it from 
 corepack pnpm --dir web exec node scripts/backfill-resend-contacts.mjs
 ```
 
-The script requires `CLERK_SECRET_KEY` for dry-runs and also requires `RESEND_CONTACTS_API_KEY` when applying writes. `RESEND_API_KEY` should remain the send-only email key; the contact sync key needs Resend Contacts and Segments permissions. The script skips users without a primary email and users whose primary email is explicitly unverified. To write a single controlled contact before a full backfill:
+The script requires `CLERK_SECRET_KEY` for dry-runs and also requires `RESEND_CONTACTS_API_KEY` when applying writes. `RESEND_API_KEY` should remain the send-only email key; the contact sync key needs Resend Contacts and Segments permissions. The script skips users without a primary email and users whose primary email is explicitly unverified. Use `--delay-ms` to pace larger writes if needed. To write a single controlled contact before a full backfill:
 
 ```sh
 corepack pnpm --dir web exec node scripts/backfill-resend-contacts.mjs --apply --max-users 1

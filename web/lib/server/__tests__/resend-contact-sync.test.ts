@@ -71,11 +71,19 @@ describe("getClerkUserPrimaryEmail", () => {
     expect(getClerkUserPrimaryEmail(clerkUser)).toBe("gerry@example.com");
   });
 
-  it("falls back to the first email address when Clerk has no primary id", () => {
+  it("uses the only email address when Clerk has no primary id", () => {
+    expect(getClerkUserPrimaryEmail({
+      ...clerkUser,
+      email_addresses: [{ id: "only", email_address: "Only@Example.com" }],
+      primary_email_address_id: null,
+    })).toBe("only@example.com");
+  });
+
+  it("does not guess an email address when Clerk has multiple addresses and no primary id", () => {
     expect(getClerkUserPrimaryEmail({
       ...clerkUser,
       primary_email_address_id: null,
-    })).toBe("secondary@example.com");
+    })).toBeNull();
   });
 });
 
@@ -103,7 +111,7 @@ describe("syncClerkUserToResendContact", () => {
 
     expect(result).toEqual({
       ok: false,
-      error: "RESEND_CONTACTS_API_KEY or RESEND_API_KEY is not configured",
+      error: "RESEND_CONTACTS_API_KEY is not configured",
     });
   });
 
