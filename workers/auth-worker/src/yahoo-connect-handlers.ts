@@ -591,10 +591,15 @@ async function readYahooTokenResponse(
       token_type: 'bearer',
       error: fallbackError,
       error_description: fallbackErrorDescription,
+      upstream_error_text: nonJsonDescription,
+      upstream_body_excerpt: upstreamBodyExcerpt,
       status: response.status,
       retry_after: retryAfter,
       retry_after_source: retryAfterSource,
       response_content_type: responseContentType,
+      www_authenticate: wwwAuthenticate ? truncateDiagnosticValue(wwwAuthenticate, YAHOO_TOKEN_HEADER_LOG_LIMIT) : undefined,
+      yahoo_response_headers: yahooResponseHeaders,
+      yahoo_numeric_code: yahooNumericCode,
       upstream_body_class: 'invalid_success_shape',
     };
   }
@@ -618,10 +623,12 @@ function yahooTokenResponseDiagnosticFields(
   | 'wwwAuthenticate'
   | 'yahooResponseHeaders'
   | 'yahooNumericCode'
+  | 'hasRetryAfter'
   | 'hasUpstreamRetryAfter'
   | 'retryAfterSource'
   | 'hasUpstreamErrorText'
 > {
+  const hasYahooRetryAfter = result.retry_after_source === 'upstream_header';
   return {
     upstreamStatus: result.status,
     tokenError: result.error,
@@ -632,7 +639,10 @@ function yahooTokenResponseDiagnosticFields(
     wwwAuthenticate: result.www_authenticate,
     yahooResponseHeaders: result.yahoo_response_headers,
     yahooNumericCode: result.yahoo_numeric_code,
-    hasUpstreamRetryAfter: result.retry_after_source === 'upstream_header',
+    // Keep both field names during the diagnostics transition: has_retry_after
+    // is the legacy log key, while has_upstream_retry_after is explicit.
+    hasRetryAfter: hasYahooRetryAfter,
+    hasUpstreamRetryAfter: hasYahooRetryAfter,
     retryAfterSource: result.retry_after_source,
     hasUpstreamErrorText: Boolean(result.upstream_error_text),
   };
@@ -1181,7 +1191,6 @@ async function getValidYahooAccessToken(
         diagnosticClass,
         failureKind,
         ...yahooTokenResponseDiagnosticFields(result),
-        hasRetryAfter: result.retry_after_source === 'upstream_header',
         secondsSinceCredentialUpdate: secondsSince(credentials.updatedAt),
         ...requestDiagnosticFields,
       });
@@ -1280,6 +1289,8 @@ async function getValidYahooAccessToken(
         retryAttempt,
         upstreamStatus: result.status,
         bodyClass: result.upstream_body_class,
+        // Preserve the old has_retry_after diagnostic key on this one-off
+        // invalid-response event even though it does not use the shared helper.
         hasRetryAfter: result.retry_after_source === 'upstream_header',
       });
       console.error(`[yahoo-connect] Yahoo token refresh returned an invalid token response for user ${maskUserId(userId)}`);
@@ -1656,7 +1667,6 @@ export async function handleYahooCallback(
         diagnosticClass: yahooTokenFailureDiagnosticClass(tokenResponse, failureKind),
         failureKind,
         ...yahooTokenResponseDiagnosticFields(tokenResponse),
-        hasRetryAfter: tokenResponse.retry_after_source === 'upstream_header',
         ...requestDiagnosticFields,
       });
       console.error(`[yahoo-connect] Token exchange failed: ${tokenResponse.error}`);

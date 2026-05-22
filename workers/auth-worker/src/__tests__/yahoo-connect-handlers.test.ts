@@ -358,6 +358,8 @@ describe('yahoo-connect-handlers', () => {
     });
 
     it('does not save credentials when token exchange omits usable token fields', async () => {
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+
       mockStorage.consumePlatformOAuthState.mockResolvedValue({
         clerkUserId: 'user_abc123',
         platform: 'yahoo',
@@ -381,6 +383,16 @@ describe('yahoo-connect-handlers', () => {
       expect(location).toContain('error=token_exchange_failed');
       expect(mockStorage.saveYahooCredentials).not.toHaveBeenCalled();
       expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(yahooRefreshDiagnostics(logSpy)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            event: 'token_exchange_response_error',
+            body_class: 'invalid_success_shape',
+            upstream_body_excerpt: expect.stringContaining('[redacted]'),
+          }),
+        ])
+      );
+      expect(JSON.stringify(yahooRefreshDiagnostics(logSpy))).not.toContain('yahoo-refresh-token');
     });
 
     it('returns error redirect when token exchange fails', async () => {
