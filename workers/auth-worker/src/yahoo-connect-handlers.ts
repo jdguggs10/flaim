@@ -768,7 +768,7 @@ function yahooAuthorizationCodeTokenBody(code: string, env: YahooConnectEnv): UR
   });
 }
 
-function yahooRefreshTokenBody(refreshToken: string, env: YahooConnectEnv): URLSearchParams {
+function yahooRefreshTokenBody(refreshToken: string): URLSearchParams {
   return new URLSearchParams({
     grant_type: 'refresh_token',
     refresh_token: refreshToken,
@@ -1097,7 +1097,7 @@ async function getValidYahooAccessToken(
           retryAfterSource: 'fallback_default',
         };
       }
-      const requestBody = yahooRefreshTokenBody(credentials.refreshToken, env);
+      const requestBody = yahooRefreshTokenBody(credentials.refreshToken);
       const requestDiagnosticFields = yahooTokenRequestDiagnosticFields(env, 'refresh_token', requestBody);
       if (!hasYahooClientCredentials(env)) {
         logDiagnostic('refresh_config_missing', {
