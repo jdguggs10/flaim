@@ -461,8 +461,8 @@ function truncateDiagnosticValue(value: string, limit: number): string {
 
 function sanitizeYahooTokenBodyForLog(text: string): string {
   return text
-    .replace(/("access_token"\s*:\s*")[^"]+(")/gi, '$1[redacted]$2')
-    .replace(/("refresh_token"\s*:\s*")[^"]+(")/gi, '$1[redacted]$2')
+    .replace(/("access_token"\s*:\s*")(?:\\.|[^"\\])*(")/gi, '$1[redacted]$2')
+    .replace(/("refresh_token"\s*:\s*")(?:\\.|[^"\\])*(")/gi, '$1[redacted]$2')
     .replace(/(access_token=)[^&\s]+/gi, '$1[redacted]')
     .replace(/(refresh_token=)[^&\s]+/gi, '$1[redacted]');
 }
@@ -899,6 +899,7 @@ async function waitForFreshCredentialsOrLeaseClear(
         correlationId,
         userId,
         accessTokenExpiresInSeconds: secondsUntil(latest.expiresAt),
+        secondsSinceCredentialUpdate: secondsSince(latest.updatedAt),
       });
       return toTokenResult(latest);
     }
@@ -921,6 +922,7 @@ async function waitForFreshCredentialsOrLeaseClear(
       correlationId,
       userId,
       accessTokenExpiresInSeconds: secondsUntil(latest.expiresAt),
+      secondsSinceCredentialUpdate: secondsSince(latest.updatedAt),
     });
     return toTokenResult(latest);
   }
@@ -963,6 +965,7 @@ async function getValidYahooAccessToken(
         userId,
         attempt,
         accessTokenExpiresInSeconds: secondsUntil(credentials.expiresAt),
+        secondsSinceCredentialUpdate: secondsSince(credentials.updatedAt),
         refreshState: yahooRefreshState(credentials),
       });
       return toTokenResult(credentials);
@@ -1005,6 +1008,7 @@ async function getValidYahooAccessToken(
           userId,
           attempt,
           accessTokenExpiresInSeconds: secondsUntil(latest.expiresAt),
+          secondsSinceCredentialUpdate: secondsSince(latest.updatedAt),
         });
         return toTokenResult(latest);
       }
@@ -1191,6 +1195,7 @@ async function getValidYahooAccessToken(
           userId,
           attempt,
           accessTokenExpiresInSeconds: secondsUntil(latest.expiresAt),
+          secondsSinceCredentialUpdate: secondsSince(latest.updatedAt),
         });
         console.log(`[yahoo-connect] Using concurrently refreshed token for user ${maskUserId(userId)}`);
         try {
@@ -1305,6 +1310,7 @@ async function getValidYahooAccessToken(
         accessTokenLifetimeSeconds: result.expires_in,
         refreshTokenReturned,
         refreshTokenChanged,
+        secondsSinceCredentialUpdate: secondsSince(credentials.updatedAt),
       });
       console.log(`[yahoo-connect] Token refreshed for user ${maskUserId(userId)}`);
       return { accessToken: result.access_token, expiresIn: result.expires_in };

@@ -1070,8 +1070,8 @@ describe('yahoo-connect-handlers', () => {
           JSON.stringify({
             error: 'rate_limited',
             error_description: 'Too many token requests [95022]',
-            access_token: 'body-access-token',
-            refresh_token: 'body-refresh-token',
+            access_token: 'body-access-token-with-"quote',
+            refresh_token: 'body-refresh-token-with-"quote',
           }),
           {
             status: 429,
@@ -1281,6 +1281,7 @@ describe('yahoo-connect-handlers', () => {
     });
 
     it('uses newer stored credentials when a concurrent refresh already succeeded', async () => {
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
       const originalUpdatedAt = new Date('2026-04-10T13:50:00Z');
       const refreshedUpdatedAt = new Date('2026-04-10T13:50:05Z');
 
@@ -1318,15 +1319,26 @@ describe('yahoo-connect-handlers', () => {
       const body = (await response.json()) as Record<string, unknown>;
       expect(body.access_token).toBe('fresh-access-token');
       expect(mockStorage.updateYahooCredentials).not.toHaveBeenCalled();
+      expect(yahooRefreshDiagnostics(logSpy)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            event: 'concurrent_refresh_used',
+            seconds_since_credential_update: expect.any(Number),
+          }),
+        ])
+      );
     });
 
     it('winner: lease acquired, refresh succeeds, write lands', async () => {
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+
       mockStorage.getYahooCredentials.mockResolvedValue({
         clerkUserId: 'user_123',
         accessToken: 'old-access-token',
         refreshToken: 'refresh-token',
         expiresAt: new Date(Date.now() + 2 * 60 * 1000),
         needsRefresh: true,
+        updatedAt: new Date(Date.now() - 70 * 60 * 1000),
       });
       mockStorage.acquireRefreshLease.mockResolvedValue(true);
       mockStorage.updateYahooCredentials.mockResolvedValue(true);
@@ -1344,6 +1356,14 @@ describe('yahoo-connect-handlers', () => {
       expect(body.access_token).toBe('winner-token');
       expect(mockStorage.acquireRefreshLease).toHaveBeenCalledTimes(1);
       expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(yahooRefreshDiagnostics(logSpy)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            event: 'credential_update_succeeded',
+            seconds_since_credential_update: expect.any(Number),
+          }),
+        ])
+      );
     });
 
     it('winner: returns a retryable failure without retrying a transient Yahoo refresh response', async () => {
