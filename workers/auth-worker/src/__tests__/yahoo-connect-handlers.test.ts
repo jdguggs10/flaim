@@ -1314,6 +1314,7 @@ describe('yahoo-connect-handlers', () => {
           needsRefresh: false,
           updatedAt: refreshedUpdatedAt,
         });
+      mockStorage.acquireRefreshLease.mockResolvedValue(false);
 
       mockFetch.mockResolvedValue(
         new Response(
@@ -1330,11 +1331,12 @@ describe('yahoo-connect-handlers', () => {
       expect(response.status).toBe(200);
       const body = (await response.json()) as Record<string, unknown>;
       expect(body.access_token).toBe('fresh-access-token');
+      expect(mockFetch).not.toHaveBeenCalled();
       expect(mockStorage.updateYahooCredentials).not.toHaveBeenCalled();
       expect(yahooRefreshDiagnostics(logSpy)).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
-            event: 'concurrent_refresh_used',
+            event: 'lease_loss_found_fresh_token',
             seconds_since_credential_update: expect.any(Number),
           }),
         ])
@@ -1523,7 +1525,7 @@ describe('yahoo-connect-handlers', () => {
       );
     });
 
-    it('winner: does not retry a transient refresh response when the lease budget is too tight', async () => {
+    it('winner: does not retry a transient refresh response when the lease budget is tight', async () => {
       vi.useFakeTimers();
       const start = new Date('2026-05-11T18:15:00Z');
       vi.setSystemTime(start);
@@ -1567,7 +1569,7 @@ describe('yahoo-connect-handlers', () => {
       }
     });
 
-    it('winner: releases the lease without calling Yahoo when lease acquisition consumes the retry budget', async () => {
+    it('winner: releases the lease without calling Yahoo when lease acquisition leaves too little lease window', async () => {
       const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
       vi.useFakeTimers();
       const start = new Date('2026-05-11T18:15:00Z');
@@ -1585,13 +1587,23 @@ describe('yahoo-connect-handlers', () => {
           vi.setSystemTime(new Date(start.getTime() + 29_100));
           return Promise.resolve(true);
         });
+        mockFetch.mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              access_token: 'new-access-token',
+              refresh_token: 'new-refresh-token',
+              expires_in: 3600,
+            }),
+            { status: 200 }
+          )
+        );
 
         const response = await handleYahooCredentials(env, 'user_123', corsHeaders, 'req_acquire_budget');
 
         expect(response.status).toBe(503);
         const body = (await response.json()) as Record<string, unknown>;
         expect(body.error).toBe('refresh_temporarily_unavailable');
-        expect(body.error_description).toBe('Yahoo token refresh lease budget was exhausted before a request could be sent. Please try again shortly.');
+        expect(body.error_description).toBe('Yahoo token refresh lease window was too short to safely call Yahoo. Please try again shortly.');
         expect(body.retryable).toBe(true);
         expect(body.retry_after).toBe(5);
         expect(body.retry_after_source).toBe('fallback_default');
@@ -1601,14 +1613,12 @@ describe('yahoo-connect-handlers', () => {
         expect(yahooRefreshDiagnostics(logSpy)).toEqual(
           expect.arrayContaining([
             expect.objectContaining({
-              event: 'refresh_request_exception',
+              event: 'lease_window_too_short',
               correlation_id: 'req_acquire_budget',
-              phase: 'refresh_request',
-              outcome: 'lease_budget_exhausted',
-              diagnostic_class: 'lease_budget_exhausted',
+              phase: 'lease',
+              outcome: 'retryable_failure',
+              diagnostic_class: 'lease_window_too_short',
               retry_after: 5,
-              retry_after_source: 'fallback_default',
-              lease_budget_remaining_ms: 0,
             }),
           ])
         );
@@ -1893,7 +1903,7 @@ describe('yahoo-connect-handlers', () => {
       expect(mockFetch).not.toHaveBeenCalled();
     });
 
-    it('loser: lease expires before winner writes, then reacquires and refreshes', async () => {
+    it('loser: stale lease state returns retryable instead of becoming a second Yahoo caller', async () => {
       const stale = {
         clerkUserId: 'user_123',
         accessToken: 'old-token',
@@ -1920,13 +1930,16 @@ describe('yahoo-connect-handlers', () => {
 
       const response = await handleYahooCredentials(env, 'user_123', corsHeaders);
 
-      expect(response.status).toBe(200);
+      expect(response.status).toBe(503);
       const body = (await response.json()) as Record<string, unknown>;
-      expect(body.access_token).toBe('recovered-token');
-      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(body.error).toBe('refresh_temporarily_unavailable');
+      expect(body.retryable).toBe(true);
+      expect(body.retry_after).toBe(5);
+      expect(mockStorage.acquireRefreshLease).toHaveBeenCalledTimes(1);
+      expect(mockFetch).not.toHaveBeenCalled();
     });
 
-    it('loser: stale pre-race lease rereads current winner lease before waiting', async () => {
+    it('loser: stale pre-race lease rereads once before returning retryable', async () => {
       const stalePreRaceLease = {
         clerkUserId: 'user_123',
         accessToken: 'old-token',
@@ -1961,13 +1974,16 @@ describe('yahoo-connect-handlers', () => {
 
       const response = await handleYahooCredentials(env, 'user_123', corsHeaders);
 
-      expect(response.status).toBe(200);
+      expect(response.status).toBe(503);
       const body = (await response.json()) as Record<string, unknown>;
-      expect(body.access_token).toBe('fresh-from-winner');
+      expect(body.error).toBe('refresh_temporarily_unavailable');
+      expect(body.retryable).toBe(true);
+      expect(body.retry_after).toBe(5);
       expect(mockFetch).not.toHaveBeenCalled();
+      expect(mockStorage.getYahooCredentials).toHaveBeenCalledTimes(2);
     });
 
-    it('loser: active winner lease times out instead of immediately retrying Yahoo', async () => {
+    it('loser: active winner lease returns retryable immediately instead of polling or calling Yahoo', async () => {
       const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
       vi.useFakeTimers();
       const start = new Date('2026-05-21T18:45:00Z');
@@ -1987,9 +2003,7 @@ describe('yahoo-connect-handlers', () => {
         mockStorage.getYahooCredentials.mockResolvedValue(activeWinnerLease);
         mockStorage.acquireRefreshLease.mockResolvedValue(false);
 
-        const responsePromise = handleYahooCredentials(env, 'user_123', corsHeaders, 'req_loser_waits');
-        await vi.advanceTimersByTimeAsync(10_500);
-        const response = await responsePromise;
+        const response = await handleYahooCredentials(env, 'user_123', corsHeaders, 'req_loser_waits');
 
         expect(response.status).toBe(503);
         const body = (await response.json()) as Record<string, unknown>;
@@ -2001,9 +2015,9 @@ describe('yahoo-connect-handlers', () => {
         expect(yahooRefreshDiagnostics(logSpy)).toEqual(
           expect.arrayContaining([
             expect.objectContaining({
-              event: 'lease_wait_timeout',
+              event: 'lease_not_acquired',
               correlation_id: 'req_loser_waits',
-              diagnostic_class: 'lease_wait_timeout',
+              diagnostic_class: 'lease_not_acquired',
               retry_after: 5,
             }),
           ])
@@ -2013,7 +2027,7 @@ describe('yahoo-connect-handlers', () => {
       }
     });
 
-    it('winner: owner-guarded write fails, stale reread retries safely instead of writing unguarded', async () => {
+    it('winner: owner-guarded write and recovery miss return retryable instead of writing unguarded', async () => {
       const leaseHeldByOther = {
         clerkUserId: 'user_123',
         accessToken: 'old-token',
@@ -2054,10 +2068,13 @@ describe('yahoo-connect-handlers', () => {
 
       const response = await handleYahooCredentials(env, 'user_123', corsHeaders);
 
-      expect(response.status).toBe(200);
+      expect(response.status).toBe(503);
       const body = (await response.json()) as Record<string, unknown>;
-      expect(body.access_token).toBe('fresh-token');
+      expect(body.error).toBe('refresh_temporarily_unavailable');
+      expect(body.retryable).toBe(true);
       expect(mockStorage.updateYahooCredentials).toHaveBeenCalledTimes(1);
+      expect(mockStorage.updateYahooCredentialsIfRefreshTokenMatches).toHaveBeenCalledTimes(1);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
     });
 
     it('returns server_error when lease acquisition storage call fails', async () => {
@@ -2478,7 +2495,7 @@ describe('yahoo-connect-handlers', () => {
       expect(body.success).toBe(true);
     });
 
-    it('returns retryable 503 when a refresh lease stays active too long', async () => {
+    it('returns retryable 503 immediately when another refresh lease is active', async () => {
       const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
       vi.useFakeTimers();
 
@@ -2496,9 +2513,7 @@ describe('yahoo-connect-handlers', () => {
       mockStorage.acquireRefreshLease.mockResolvedValue(false);
 
       try {
-        const responsePromise = handleYahooDiscover(env, 'user_123', corsHeaders, 'req_wait_timeout');
-        await vi.advanceTimersByTimeAsync(10_001);
-        const response = await responsePromise;
+        const response = await handleYahooDiscover(env, 'user_123', corsHeaders, 'req_wait_timeout');
 
         expect(response.status).toBe(503);
         expect(response.headers.get('Retry-After')).toBe('5');
@@ -2510,11 +2525,11 @@ describe('yahoo-connect-handlers', () => {
         expect(yahooRefreshDiagnostics(logSpy)).toEqual(
           expect.arrayContaining([
             expect.objectContaining({
-              event: 'lease_wait_timeout',
+              event: 'lease_not_acquired',
               correlation_id: 'req_wait_timeout',
-              phase: 'waiter',
+              phase: 'lease',
               outcome: 'retryable_failure',
-              diagnostic_class: 'lease_wait_timeout',
+              diagnostic_class: 'lease_not_acquired',
               retry_after: 5,
             }),
           ])

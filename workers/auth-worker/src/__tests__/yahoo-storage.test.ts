@@ -282,8 +282,8 @@ describe('YahooStorage', () => {
       expect(result?.needsRefresh).toBe(false);
     });
 
-    it('returns credentials with needsRefresh=false until the near-expiry buffer', async () => {
-      const expiresAt = new Date(Date.now() + 90 * 1000);
+    it('returns credentials with needsRefresh=false until the proactive refresh buffer', async () => {
+      const expiresAt = new Date(Date.now() + 6 * 60 * 1000);
       mockSingle.mockResolvedValue({
         data: {
           clerk_user_id: 'user_123',
@@ -302,8 +302,8 @@ describe('YahooStorage', () => {
       expect(result?.needsRefresh).toBe(false);
     });
 
-    it('returns credentials with needsRefresh=true when within near-expiry buffer', async () => {
-      const expiresAt = new Date(Date.now() + 2 * 1000);
+    it('returns credentials with needsRefresh=true when within proactive refresh buffer', async () => {
+      const expiresAt = new Date(Date.now() + 90 * 1000);
       mockSingle.mockResolvedValue({
         data: {
           clerk_user_id: 'user_123',
@@ -390,8 +390,8 @@ describe('YahooStorage', () => {
       });
     });
 
-    it('returns health with needsRefresh=true when token is within the near-expiry buffer', async () => {
-      const expiresAt = new Date(Date.now() + 2 * 1000);
+    it('returns health with needsRefresh=true when token is within the proactive refresh buffer', async () => {
+      const expiresAt = new Date(Date.now() + 90 * 1000);
       mockSingle.mockResolvedValue({
         data: {
           clerk_user_id: 'user_123',
@@ -503,9 +503,11 @@ describe('YahooStorage', () => {
       );
       expect(mockEq).toHaveBeenCalledWith('clerk_user_id', 'user_123');
       expect(mockEq).toHaveBeenCalledWith('refresh_token', 'old-refresh-token');
+      expect(mockOr).toHaveBeenCalledWith(expect.stringContaining('refresh_lease_owner.is.null'));
+      expect(mockOr).toHaveBeenCalledWith(expect.stringContaining('refresh_lease_expires_at.lt.'));
     });
 
-    it('returns false when a newer refresh token is already stored', async () => {
+    it('returns false when a newer refresh token or active lease blocks recovery', async () => {
       mockSelect.mockResolvedValue({ data: [], error: null });
 
       const result = await storage.updateYahooCredentialsIfRefreshTokenMatches(
@@ -519,6 +521,8 @@ describe('YahooStorage', () => {
       );
 
       expect(result).toBe(false);
+      expect(mockOr).toHaveBeenCalledWith(expect.stringContaining('refresh_lease_owner.is.null'));
+      expect(mockOr).toHaveBeenCalledWith(expect.stringContaining('refresh_lease_expires_at.lt.'));
     });
   });
 
