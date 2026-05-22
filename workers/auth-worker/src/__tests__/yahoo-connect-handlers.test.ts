@@ -237,7 +237,8 @@ describe('yahoo-connect-handlers', () => {
       expect(location).toContain('error=invalid_state');
     });
 
-    it('exchanges code for tokens and saves credentials on success', async () => {
+    it('exchanges code for tokens and saves credentials on success without spending the refresh token', async () => {
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
       mockStorage.consumePlatformOAuthState.mockResolvedValue({
         clerkUserId: 'user_abc123',
         platform: 'yahoo',
@@ -251,17 +252,6 @@ describe('yahoo-connect-handlers', () => {
             refresh_token: 'yahoo-refresh-token',
             expires_in: 3600,
             xoauth_yahoo_guid: 'yahoo-guid-123',
-          }),
-          { status: 200 }
-        )
-      );
-      mockFetch.mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            access_token: 'validated-yahoo-access-token',
-            refresh_token: 'validated-yahoo-refresh-token',
-            expires_in: 3600,
-            xoauth_yahoo_guid: 'validated-yahoo-guid-123',
           }),
           { status: 200 }
         )
@@ -280,23 +270,28 @@ describe('yahoo-connect-handlers', () => {
       expect(mockStorage.saveYahooCredentials).toHaveBeenCalledWith(
         expect.objectContaining({
           clerkUserId: 'user_abc123',
-          accessToken: 'validated-yahoo-access-token',
-          refreshToken: 'validated-yahoo-refresh-token',
-          yahooGuid: 'validated-yahoo-guid-123',
+          accessToken: 'yahoo-access-token',
+          refreshToken: 'yahoo-refresh-token',
+          yahooGuid: 'yahoo-guid-123',
         })
       );
-      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
 
       const exchangeRequest = mockFetch.mock.calls[0][1] as RequestInit;
       const exchangeBody = new URLSearchParams(exchangeRequest.body as string);
       expect(exchangeBody.get('grant_type')).toBe('authorization_code');
       expect(exchangeBody.get('redirect_uri')).toBe('https://api.flaim.app/auth/connect/yahoo/callback');
-
-      const validationRequest = mockFetch.mock.calls[1][1] as RequestInit;
-      const validationBody = new URLSearchParams(validationRequest.body as string);
-      expect(validationBody.get('grant_type')).toBe('refresh_token');
-      expect(validationBody.get('redirect_uri')).toBe('https://api.flaim.app/auth/connect/yahoo/callback');
-      expect(validationBody.get('refresh_token')).toBe('yahoo-refresh-token');
+      expect(yahooRefreshDiagnostics(logSpy)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            event: 'token_exchange_response_success',
+            phase: 'token_exchange',
+            outcome: 'success',
+            refresh_token_returned: true,
+            token_grant_type: 'authorization_code',
+          }),
+        ])
+      );
     });
 
     it('saves credentials when token exchange omits the optional Yahoo GUID', async () => {
@@ -317,16 +312,6 @@ describe('yahoo-connect-handlers', () => {
           { status: 200 }
         )
       );
-      mockFetch.mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            access_token: 'validated-yahoo-access-token',
-            refresh_token: 'validated-yahoo-refresh-token',
-            expires_in: 3600,
-          }),
-          { status: 200 }
-        )
-      );
 
       const request = new Request('https://api.flaim.app/connect/yahoo/callback?code=auth_code&state=user_abc123:nonce');
 
@@ -336,170 +321,13 @@ describe('yahoo-connect-handlers', () => {
       expect(mockStorage.saveYahooCredentials).toHaveBeenCalledWith(
         expect.objectContaining({
           clerkUserId: 'user_abc123',
-          accessToken: 'validated-yahoo-access-token',
-          refreshToken: 'validated-yahoo-refresh-token',
+          accessToken: 'yahoo-access-token',
+          refreshToken: 'yahoo-refresh-token',
           yahooGuid: undefined,
         })
       );
-      expect(warnSpy).toHaveBeenCalledWith('[yahoo-connect] Yahoo token exchange and validation omitted GUID for user user_abc...');
-      expect(mockFetch).toHaveBeenCalledTimes(2);
-    });
-
-    it('falls back to the exchange refresh token when validation omits a rotated refresh token', async () => {
-      mockStorage.consumePlatformOAuthState.mockResolvedValue({
-        clerkUserId: 'user_abc123',
-        platform: 'yahoo',
-        redirectAfter: undefined,
-      });
-
-      mockFetch.mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            access_token: 'yahoo-access-token',
-            refresh_token: 'exchange-refresh-token',
-            expires_in: 3600,
-            xoauth_yahoo_guid: 'exchange-yahoo-guid',
-          }),
-          { status: 200 }
-        )
-      );
-      mockFetch.mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            access_token: 'validated-yahoo-access-token',
-            expires_in: 3600,
-          }),
-          { status: 200 }
-        )
-      );
-
-      const request = new Request('https://api.flaim.app/connect/yahoo/callback?code=auth_code&state=user_abc123:nonce');
-
-      const response = await handleYahooCallback(request, env, corsHeaders);
-
-      expect(response.status).toBe(302);
-      expect(mockStorage.saveYahooCredentials).toHaveBeenCalledWith(
-        expect.objectContaining({
-          clerkUserId: 'user_abc123',
-          accessToken: 'validated-yahoo-access-token',
-          refreshToken: 'exchange-refresh-token',
-          yahooGuid: 'exchange-yahoo-guid',
-        })
-      );
-      expect(mockFetch).toHaveBeenCalledTimes(2);
-    });
-
-    it('does not save credentials when refresh-token validation fails after token exchange', async () => {
-      mockStorage.consumePlatformOAuthState.mockResolvedValue({
-        clerkUserId: 'user_abc123',
-        platform: 'yahoo',
-        redirectAfter: undefined,
-      });
-
-      mockFetch.mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            access_token: 'yahoo-access-token',
-            refresh_token: 'yahoo-refresh-token',
-            expires_in: 3600,
-            xoauth_yahoo_guid: 'yahoo-guid-123',
-          }),
-          { status: 200 }
-        )
-      );
-      mockFetch.mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            error: 'rate_limited',
-            error_description: 'Too many failed requests',
-          }),
-          { status: 429 }
-        )
-      );
-
-      const request = new Request('https://api.flaim.app/connect/yahoo/callback?code=auth_code&state=user_abc123:nonce');
-
-      const response = await handleYahooCallback(request, env, corsHeaders);
-
-      expect(response.status).toBe(302);
-      const location = response.headers.get('Location')!;
-      expect(location).toContain('/leagues');
-      expect(location).toContain('error=token_refresh_validation_unavailable');
-      expect(mockStorage.saveYahooCredentials).not.toHaveBeenCalled();
-      expect(mockFetch).toHaveBeenCalledTimes(2);
-    });
-
-    it('does not save credentials when refresh-token validation returns unusable token fields', async () => {
-      mockStorage.consumePlatformOAuthState.mockResolvedValue({
-        clerkUserId: 'user_abc123',
-        platform: 'yahoo',
-        redirectAfter: undefined,
-      });
-
-      mockFetch.mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            access_token: 'yahoo-access-token',
-            refresh_token: 'yahoo-refresh-token',
-            expires_in: 3600,
-            xoauth_yahoo_guid: 'yahoo-guid-123',
-          }),
-          { status: 200 }
-        )
-      );
-      mockFetch.mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            access_token: 'validated-yahoo-access-token',
-            refresh_token: 'validated-yahoo-refresh-token',
-            expires_in: 0,
-          }),
-          { status: 200 }
-        )
-      );
-
-      const request = new Request('https://api.flaim.app/connect/yahoo/callback?code=auth_code&state=user_abc123:nonce');
-
-      const response = await handleYahooCallback(request, env, corsHeaders);
-
-      expect(response.status).toBe(302);
-      const location = response.headers.get('Location')!;
-      expect(location).toContain('/leagues');
-      expect(location).toContain('error=token_refresh_validation_failed');
-      expect(mockStorage.saveYahooCredentials).not.toHaveBeenCalled();
-      expect(mockFetch).toHaveBeenCalledTimes(2);
-    });
-
-    it('does not save credentials when refresh-token validation request throws after token exchange', async () => {
-      mockStorage.consumePlatformOAuthState.mockResolvedValue({
-        clerkUserId: 'user_abc123',
-        platform: 'yahoo',
-        redirectAfter: undefined,
-      });
-
-      mockFetch.mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            access_token: 'yahoo-access-token',
-            refresh_token: 'yahoo-refresh-token',
-            expires_in: 3600,
-            xoauth_yahoo_guid: 'yahoo-guid-123',
-          }),
-          { status: 200 }
-        )
-      );
-      mockFetch.mockRejectedValueOnce(new Error('network unavailable'));
-
-      const request = new Request('https://api.flaim.app/connect/yahoo/callback?code=auth_code&state=user_abc123:nonce');
-
-      const response = await handleYahooCallback(request, env, corsHeaders);
-
-      expect(response.status).toBe(302);
-      const location = response.headers.get('Location')!;
-      expect(location).toContain('/leagues');
-      expect(location).toContain('error=token_refresh_validation_unavailable');
-      expect(mockStorage.saveYahooCredentials).not.toHaveBeenCalled();
-      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(warnSpy).toHaveBeenCalledWith('[yahoo-connect] Yahoo token exchange omitted GUID for user user_abc...');
+      expect(mockFetch).toHaveBeenCalledTimes(1);
     });
 
     it('does not save credentials when token exchange omits a refresh token', async () => {
@@ -530,6 +358,8 @@ describe('yahoo-connect-handlers', () => {
     });
 
     it('does not save credentials when token exchange omits usable token fields', async () => {
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+
       mockStorage.consumePlatformOAuthState.mockResolvedValue({
         clerkUserId: 'user_abc123',
         platform: 'yahoo',
@@ -553,6 +383,16 @@ describe('yahoo-connect-handlers', () => {
       expect(location).toContain('error=token_exchange_failed');
       expect(mockStorage.saveYahooCredentials).not.toHaveBeenCalled();
       expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(yahooRefreshDiagnostics(logSpy)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            event: 'token_exchange_response_error',
+            body_class: 'invalid_success_shape',
+            upstream_body_excerpt: expect.stringContaining('[redacted]'),
+          }),
+        ])
+      );
+      expect(JSON.stringify(yahooRefreshDiagnostics(logSpy))).not.toContain('yahoo-refresh-token');
     });
 
     it('returns error redirect when token exchange fails', async () => {
@@ -736,7 +576,7 @@ describe('yahoo-connect-handlers', () => {
       const refreshBody = new URLSearchParams(refreshRequest.body as string);
       expect(refreshBody.get('grant_type')).toBe('refresh_token');
       expect(refreshBody.get('refresh_token')).toBe('refresh-token');
-      expect(refreshBody.get('redirect_uri')).toBe('https://api.flaim.app/auth/connect/yahoo/callback');
+      expect(refreshBody.has('redirect_uri')).toBe(false);
       expect(mockStorage.acquireRefreshLease).toHaveBeenCalledWith(
         'user_123',
         expect.any(String),
@@ -755,7 +595,7 @@ describe('yahoo-connect-handlers', () => {
       );
     });
 
-    it('includes redirect_uri in refresh-token grants and records the request shape in diagnostics', async () => {
+    it('omits redirect_uri from refresh-token grants and records the request shape in diagnostics', async () => {
       const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
       mockStorage.getYahooCredentials.mockResolvedValue({
         clerkUserId: 'user_123',
@@ -776,7 +616,7 @@ describe('yahoo-connect-handlers', () => {
         )
       );
 
-      const response = await handleYahooCredentials(env, 'user_123', corsHeaders, 'req_include_redirect');
+      const response = await handleYahooCredentials(env, 'user_123', corsHeaders, 'req_omit_redirect');
 
       expect(response.status).toBe(200);
 
@@ -784,15 +624,15 @@ describe('yahoo-connect-handlers', () => {
       const refreshBody = new URLSearchParams(refreshRequest.body as string);
       expect(refreshBody.get('grant_type')).toBe('refresh_token');
       expect(refreshBody.get('refresh_token')).toBe('refresh-token');
-      expect(refreshBody.get('redirect_uri')).toBe('https://api.flaim.app/auth/connect/yahoo/callback');
+      expect(refreshBody.has('redirect_uri')).toBe(false);
 
       expect(yahooRefreshDiagnostics(logSpy)).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
             event: 'refresh_request_started',
-            correlation_id: 'req_include_redirect',
+            correlation_id: 'req_omit_redirect',
             token_grant_type: 'refresh_token',
-            request_has_redirect_uri: true,
+            request_has_redirect_uri: false,
             callback_url: 'https://api.flaim.app/auth/connect/yahoo/callback',
           }),
         ])
@@ -1241,9 +1081,18 @@ describe('yahoo-connect-handlers', () => {
         new Response(
           JSON.stringify({
             error: 'rate_limited',
-            error_description: 'Too many token requests',
+            error_description: 'Too many token requests [95022]',
+            access_token: 'body-access-token-with-"quote',
+            refresh_token: 'body-refresh-token-with-"quote',
           }),
-          { status: 429 }
+          {
+            status: 429,
+            headers: {
+              'Content-Type': 'application/json',
+              'WWW-Authenticate': 'Bearer error="rate_limited", error_description="Too many token requests"',
+              'X-Yahoo-Request-Id': 'yahoo-req-123',
+            },
+          }
         )
       );
 
@@ -1252,7 +1101,7 @@ describe('yahoo-connect-handlers', () => {
       expect(response.status).toBe(503);
       const body = (await response.json()) as Record<string, unknown>;
       expect(body.error).toBe('refresh_temporarily_unavailable');
-      expect(body.error_description).toBe('Too many token requests');
+      expect(body.error_description).toBe('Too many token requests [95022]');
       expect(body.upstream_status).toBe(429);
       expect(body.retryable).toBe(true);
       expect(body.retry_after).toBe(900);
@@ -1277,8 +1126,13 @@ describe('yahoo-connect-handlers', () => {
             has_retry_after: false,
             has_upstream_retry_after: false,
             retry_after_source: 'fallback_default',
+            response_content_type: 'application/json',
+            www_authenticate: 'Bearer error="rate_limited", error_description="Too many token requests"',
+            yahoo_response_headers: { 'x-yahoo-request-id': 'yahoo-req-123' },
+            yahoo_numeric_code: '95022',
+            upstream_body_excerpt: expect.stringContaining('Too many token requests'),
             token_grant_type: 'refresh_token',
-            request_has_redirect_uri: true,
+            request_has_redirect_uri: false,
             callback_url: 'https://api.flaim.app/auth/connect/yahoo/callback',
           }),
           expect.objectContaining({
@@ -1294,6 +1148,9 @@ describe('yahoo-connect-handlers', () => {
       const serialized = JSON.stringify(diagnostics);
       expect(serialized).not.toContain('old-access-token');
       expect(serialized).not.toContain('refresh-token');
+      expect(serialized).not.toContain('body-access-token');
+      expect(serialized).not.toContain('body-refresh-token');
+      expect(serialized).toContain('[redacted]');
     });
 
     it('logs upstream Yahoo Retry-After during refresh without entering cooldown', async () => {
@@ -1436,6 +1293,7 @@ describe('yahoo-connect-handlers', () => {
     });
 
     it('uses newer stored credentials when a concurrent refresh already succeeded', async () => {
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
       const originalUpdatedAt = new Date('2026-04-10T13:50:00Z');
       const refreshedUpdatedAt = new Date('2026-04-10T13:50:05Z');
 
@@ -1473,15 +1331,26 @@ describe('yahoo-connect-handlers', () => {
       const body = (await response.json()) as Record<string, unknown>;
       expect(body.access_token).toBe('fresh-access-token');
       expect(mockStorage.updateYahooCredentials).not.toHaveBeenCalled();
+      expect(yahooRefreshDiagnostics(logSpy)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            event: 'concurrent_refresh_used',
+            seconds_since_credential_update: expect.any(Number),
+          }),
+        ])
+      );
     });
 
     it('winner: lease acquired, refresh succeeds, write lands', async () => {
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+
       mockStorage.getYahooCredentials.mockResolvedValue({
         clerkUserId: 'user_123',
         accessToken: 'old-access-token',
         refreshToken: 'refresh-token',
         expiresAt: new Date(Date.now() + 2 * 60 * 1000),
         needsRefresh: true,
+        updatedAt: new Date(Date.now() - 70 * 60 * 1000),
       });
       mockStorage.acquireRefreshLease.mockResolvedValue(true);
       mockStorage.updateYahooCredentials.mockResolvedValue(true);
@@ -1499,6 +1368,14 @@ describe('yahoo-connect-handlers', () => {
       expect(body.access_token).toBe('winner-token');
       expect(mockStorage.acquireRefreshLease).toHaveBeenCalledTimes(1);
       expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(yahooRefreshDiagnostics(logSpy)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            event: 'credential_update_succeeded',
+            seconds_since_credential_update: expect.any(Number),
+          }),
+        ])
+      );
     });
 
     it('winner: returns a retryable failure without retrying a transient Yahoo refresh response', async () => {
