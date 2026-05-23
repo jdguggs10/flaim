@@ -24,12 +24,9 @@ type TransactionPlayer = {
   team?: string;
 };
 
-const COMPLETED_TRANSACTION_TYPES = ['add', 'drop', 'add/drop', 'trade'];
-
 export function buildYahooTransactionsPath(leagueKey: string, count = 25): string {
   const clamped = Math.max(1, Math.min(100, count));
-  const types = COMPLETED_TRANSACTION_TYPES.map((type) => encodeURIComponent(type)).join(',');
-  return `/league/${leagueKey}/transactions;types=${types};count=${clamped}`;
+  return `/league/${leagueKey}/transactions;count=${clamped}`;
 }
 
 export function buildYahooPendingTransactionsPath(
