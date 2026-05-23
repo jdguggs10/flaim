@@ -10,12 +10,19 @@ export interface NormalizedTransaction {
   date: string;
   week: number | null;
   team_ids?: string[];
-  players_added?: Array<{ id: string; name?: string }>;
-  players_dropped?: Array<{ id: string; name?: string }>;
+  players_added?: TransactionPlayer[];
+  players_dropped?: TransactionPlayer[];
   faab_bid?: number | null;
   waiver_priority?: number | null;
   draft_picks?: unknown[] | null;
 }
+
+type TransactionPlayer = {
+  id: string;
+  name?: string;
+  position?: string;
+  team?: string;
+};
 
 export function buildYahooTransactionsPath(leagueKey: string, count = 25): string {
   const clamped = Math.max(1, Math.min(100, count));
@@ -56,6 +63,50 @@ function mapStatus(value: unknown): 'complete' | 'failed' | 'pending' | 'unknown
   return 'unknown';
 }
 
+function mergeYahooRecordList(value: unknown): Record<string, unknown> {
+  let merged: Record<string, unknown> = {};
+
+  const visit = (item: unknown) => {
+    if (Array.isArray(item)) {
+      for (const child of item) visit(child);
+      return;
+    }
+    if (typeof item === 'object' && item !== null) {
+      merged = { ...merged, ...(item as Record<string, unknown>) };
+    }
+  };
+
+  visit(value);
+  return merged;
+}
+
+function optionalString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function optionalId(value: unknown): string | undefined {
+  if (typeof value === 'string' && value.length > 0) return value;
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  return undefined;
+}
+
+function buildTransactionPlayer(pmeta: Record<string, unknown>): TransactionPlayer | null {
+  const id = optionalId(pmeta.player_id) ?? optionalId(pmeta.player_key);
+  if (!id) return null;
+
+  const name = (pmeta.name as Record<string, unknown> | undefined)?.full;
+  const player: TransactionPlayer = { id };
+  const fullName = optionalString(name);
+  const position = optionalString(pmeta.display_position);
+  const team = optionalString(pmeta.editorial_team_abbr);
+
+  if (fullName) player.name = fullName;
+  if (position) player.position = position;
+  if (team) player.team = team;
+
+  return player;
+}
+
 export function normalizeYahooTransactions(raw: unknown): NormalizedTransaction[] {
   const leagueArray = getPath(raw, ['fantasy_content', 'league']);
   const league = unwrapLeague(leagueArray);
@@ -78,8 +129,8 @@ export function normalizeYahooTransactions(raw: unknown): NormalizedTransaction[
     const type = canonicalType(meta.type);
     if (!type) continue;
 
-    const playersAdded: Array<{ id: string; name?: string }> = [];
-    const playersDropped: Array<{ id: string; name?: string }> = [];
+    const playersAdded: TransactionPlayer[] = [];
+    const playersDropped: TransactionPlayer[] = [];
     let faabBid: number | null = null;
 
     const playersObj = meta.players as Record<string, unknown> | undefined;
@@ -88,31 +139,26 @@ export function normalizeYahooTransactions(raw: unknown): NormalizedTransaction[
       const pdata = getPath(pw, ['player']) as unknown[] | undefined;
       if (!Array.isArray(pdata)) continue;
 
-      let pmeta: Record<string, unknown> = {};
       let tdata: Record<string, unknown> = {};
+      let pmeta: Record<string, unknown> = {};
       for (const e of pdata) {
         if (Array.isArray(e)) {
-          for (const m of e) {
-            if (typeof m === 'object' && m !== null) {
-              pmeta = { ...pmeta, ...(m as Record<string, unknown>) };
-            }
-          }
+          pmeta = { ...pmeta, ...mergeYahooRecordList(e) };
         } else if (typeof e === 'object' && e !== null) {
-          const td = (e as Record<string, unknown>).transaction_data as Record<string, unknown> | undefined;
-          if (td) tdata = td;
+          const td = (e as Record<string, unknown>).transaction_data;
+          if (td) tdata = mergeYahooRecordList(td);
         }
       }
 
-      const pid = String(pmeta.player_id ?? pmeta.player_key ?? '');
-      const name = ((pmeta.name as Record<string, unknown> | undefined)?.full as string | undefined);
       const t = String(tdata.type ?? '').toLowerCase();
       const candidateBid = parseFaabBid(tdata.faab_bid ?? tdata.waiver_bid);
       if (faabBid === null && candidateBid !== null) {
         faabBid = candidateBid;
       }
-      if (pid) {
-        if (t === 'add') playersAdded.push({ id: pid, name });
-        if (t === 'drop') playersDropped.push({ id: pid, name });
+      const player = buildTransactionPlayer(pmeta);
+      if (player) {
+        if (t === 'add') playersAdded.push(player);
+        if (t === 'drop') playersDropped.push(player);
       }
     }
 
