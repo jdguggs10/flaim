@@ -24,9 +24,12 @@ type TransactionPlayer = {
   team?: string;
 };
 
+const COMPLETED_TRANSACTION_TYPES = ['add', 'drop', 'add/drop', 'trade'];
+
 export function buildYahooTransactionsPath(leagueKey: string, count = 25): string {
   const clamped = Math.max(1, Math.min(100, count));
-  return `/league/${leagueKey}/transactions;types=add,drop,trade;count=${clamped}`;
+  const types = COMPLETED_TRANSACTION_TYPES.map((type) => encodeURIComponent(type)).join(',');
+  return `/league/${leagueKey}/transactions;types=${types};count=${clamped}`;
 }
 
 export function buildYahooPendingTransactionsPath(
@@ -43,6 +46,7 @@ function canonicalType(value: unknown): TransactionType | null {
   if (typeof value !== 'string') return null;
   if (value === 'add') return 'add';
   if (value === 'drop') return 'drop';
+  if (value === 'add/drop') return 'add';
   if (value === 'trade') return 'trade';
   if (value === 'waiver') return 'waiver';
   if (value === 'pending_trade') return 'pending_trade';
@@ -126,11 +130,16 @@ export function normalizeYahooTransactions(raw: unknown): NormalizedTransaction[
       }
     }
 
-    const type = canonicalType(meta.type);
-    if (!type) continue;
+    const rawType = canonicalType(meta.type);
+    if (!rawType) continue;
 
     const playersAdded: TransactionPlayer[] = [];
     const playersDropped: TransactionPlayer[] = [];
+    const teamIds = new Set(
+      [meta.trader_team_key, meta.tradee_team_key]
+        .filter((v) => typeof v === 'string')
+        .map((v) => String(v)),
+    );
     let faabBid: number | null = null;
 
     const playersObj = meta.players as Record<string, unknown> | undefined;
@@ -155,16 +164,17 @@ export function normalizeYahooTransactions(raw: unknown): NormalizedTransaction[
       if (faabBid === null && candidateBid !== null) {
         faabBid = candidateBid;
       }
+      const sourceTeamKey = optionalId(tdata.source_team_key);
+      const destinationTeamKey = optionalId(tdata.destination_team_key);
+      if (sourceTeamKey) teamIds.add(sourceTeamKey);
+      if (destinationTeamKey) teamIds.add(destinationTeamKey);
+
       const player = buildTransactionPlayer(pmeta);
       if (player) {
         if (t === 'add') playersAdded.push(player);
         if (t === 'drop') playersDropped.push(player);
       }
     }
-
-    const teamIds = [meta.trader_team_key, meta.tradee_team_key]
-      .filter((v) => typeof v === 'string')
-      .map((v) => String(v));
 
     const timestamp = Number(meta.timestamp ?? 0) * 1000;
     if (faabBid === null) {
@@ -175,6 +185,9 @@ export function normalizeYahooTransactions(raw: unknown): NormalizedTransaction[
       typeof rawPriority === 'number' && Number.isFinite(rawPriority) ? rawPriority
       : typeof rawPriority === 'string' && Number.isFinite(Number(rawPriority)) ? Number(rawPriority)
       : null;
+    const type: TransactionType = rawType === 'add' && playersAdded.length === 0 && playersDropped.length > 0
+      ? 'drop'
+      : rawType;
 
     out.push({
       transaction_id: String(meta.transaction_key ?? meta.transaction_id ?? `${type}-${timestamp}`),
@@ -183,7 +196,7 @@ export function normalizeYahooTransactions(raw: unknown): NormalizedTransaction[
       timestamp,
       date: new Date(timestamp).toISOString().slice(0, 10),
       week: null,
-      team_ids: teamIds.length > 0 ? teamIds : undefined,
+      team_ids: teamIds.size > 0 ? Array.from(teamIds) : undefined,
       players_added: playersAdded,
       players_dropped: playersDropped,
       faab_bid: faabBid,
