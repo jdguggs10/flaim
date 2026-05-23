@@ -1,9 +1,7 @@
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { CHATGPT_APP_URL } from "@/lib/product-links";
 import { ExternalLink } from "lucide-react";
-
-const CHATGPT_APP_URL =
-  "https://chatgpt.com/apps/flaim-fantasy/asdk_app_69a8f78087e081919e52cacacf00ff36";
 
 interface StepConnectAIProps {
   showStepNumber?: boolean;
@@ -38,7 +36,7 @@ export function StepConnectAI({
 
       <Button asChild size="sm" className="w-full">
         <a href={CHATGPT_APP_URL} target="_blank" rel="noopener noreferrer">
-          Open Flaim Fantasy
+          Open in ChatGPT App Store
           <ExternalLink className="ml-2 h-4 w-4" />
         </a>
       </Button>

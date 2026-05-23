@@ -18,6 +18,7 @@ import {
   PUBLIC_CHAT_SIMPLE_PRESETS,
   PUBLIC_CHAT_TOOL_DISPLAY_LABELS,
 } from "@/lib/public-chat";
+import { CHATGPT_APP_URL } from "@/lib/product-links";
 import {
   ArrowRight,
   ChevronDown,
@@ -169,7 +170,9 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
             </Link>
             <div className="mt-3 flex flex-wrap gap-2">
               <Link
-                href="/guide/ai#chatgpt"
+                href={CHATGPT_APP_URL}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="rounded-full border bg-background px-3 py-1 transition-colors hover:border-foreground/30"
               >
                 ChatGPT
