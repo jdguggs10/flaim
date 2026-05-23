@@ -3,8 +3,8 @@ import { buildYahooTransactionsPath, buildYahooPendingTransactionsPath, normaliz
 
 describe('yahoo-transactions', () => {
   it('builds matrix-param path with count clamp', () => {
-    expect(buildYahooTransactionsPath('449.l.123', 0)).toBe('/league/449.l.123/transactions;types=add,drop,trade;count=1');
-    expect(buildYahooTransactionsPath('449.l.123', 999)).toBe('/league/449.l.123/transactions;types=add,drop,trade;count=100');
+    expect(buildYahooTransactionsPath('449.l.123', 0)).toBe('/league/449.l.123/transactions;types=add,drop,add%2Fdrop,trade;count=1');
+    expect(buildYahooTransactionsPath('449.l.123', 999)).toBe('/league/449.l.123/transactions;types=add,drop,add%2Fdrop,trade;count=100');
   });
 
   it('normalizes add/drop transactions from numeric-keyed Yahoo JSON', () => {
@@ -124,6 +124,126 @@ describe('yahoo-transactions', () => {
     expect(normalized[0].players_dropped).toEqual([
       { id: '8888', name: 'Array Drop Player', position: 'RP', team: 'SEA' },
     ]);
+  });
+
+  it('normalizes completed add/drop transactions and extracts team attribution from player transaction data', () => {
+    const raw = {
+      fantasy_content: {
+        league: [
+          { league_key: '449.l.123' },
+          {
+            transactions: {
+              0: {
+                transaction: [
+                  { transaction_key: '449.l.123.tr.4' },
+                  { type: 'add/drop' },
+                  { status: 'successful' },
+                  { timestamp: '1700000000' },
+                  {
+                    players: {
+                      0: {
+                        player: [
+                          [
+                            { player_id: '9999' },
+                            { name: { full: 'Waiver Add Player' } },
+                            { display_position: 'SP' },
+                            { editorial_team_abbr: 'SD' },
+                          ],
+                          {
+                            transaction_data: [
+                              { type: 'add' },
+                              { source_type: 'waivers' },
+                              { destination_team_key: '449.l.123.t.6' },
+                              { faab_bid: '11' },
+                            ],
+                          },
+                        ],
+                      },
+                      1: {
+                        player: [
+                          [
+                            { player_id: '8888' },
+                            { name: { full: 'Waiver Drop Player' } },
+                            { display_position: 'RP' },
+                            { editorial_team_abbr: 'SEA' },
+                          ],
+                          {
+                            transaction_data: [
+                              { type: 'drop' },
+                              { source_team_key: '449.l.123.t.6' },
+                              { destination_type: 'waivers' },
+                            ],
+                          },
+                        ],
+                      },
+                      count: 2,
+                    },
+                  },
+                ],
+              },
+              count: 1,
+            },
+          },
+        ],
+      },
+    };
+
+    const normalized = normalizeYahooTransactions(raw);
+    expect(normalized).toHaveLength(1);
+    expect(normalized[0]).toMatchObject({
+      transaction_id: '449.l.123.tr.4',
+      type: 'add',
+      faab_bid: 11,
+      team_ids: ['449.l.123.t.6'],
+    });
+    expect(normalized[0].players_added).toEqual([
+      { id: '9999', name: 'Waiver Add Player', position: 'SP', team: 'SD' },
+    ]);
+    expect(normalized[0].players_dropped).toEqual([
+      { id: '8888', name: 'Waiver Drop Player', position: 'RP', team: 'SEA' },
+    ]);
+  });
+
+  it('extracts team attribution for standalone adds', () => {
+    const raw = {
+      fantasy_content: {
+        league: [
+          { league_key: '449.l.123' },
+          {
+            transactions: {
+              0: {
+                transaction: [
+                  { transaction_key: '449.l.123.tr.7' },
+                  { type: 'add' },
+                  { status: 'successful' },
+                  { timestamp: '1700000000' },
+                  {
+                    players: {
+                      0: {
+                        player: [
+                          [{ player_id: '7777' }, { name: { full: 'Standalone Add' } }],
+                          { transaction_data: { type: 'add', destination_team_key: '449.l.123.t.3' } },
+                        ],
+                      },
+                      count: 1,
+                    },
+                  },
+                ],
+              },
+              count: 1,
+            },
+          },
+        ],
+      },
+    };
+
+    const normalized = normalizeYahooTransactions(raw);
+    expect(normalized).toHaveLength(1);
+    expect(normalized[0]).toMatchObject({
+      transaction_id: '449.l.123.tr.7',
+      type: 'add',
+      team_ids: ['449.l.123.t.3'],
+    });
   });
 
   it('extracts faab_bid when transaction_data includes waiver bid info', () => {
