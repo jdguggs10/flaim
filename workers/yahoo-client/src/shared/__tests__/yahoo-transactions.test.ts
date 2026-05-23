@@ -3,8 +3,8 @@ import { buildYahooTransactionsPath, buildYahooPendingTransactionsPath, normaliz
 
 describe('yahoo-transactions', () => {
   it('builds matrix-param path with count clamp', () => {
-    expect(buildYahooTransactionsPath('449.l.123', 0)).toBe('/league/449.l.123/transactions;types=add,drop,add%2Fdrop,trade;count=1');
-    expect(buildYahooTransactionsPath('449.l.123', 999)).toBe('/league/449.l.123/transactions;types=add,drop,add%2Fdrop,trade;count=100');
+    expect(buildYahooTransactionsPath('449.l.123', 0)).toBe('/league/449.l.123/transactions;count=1');
+    expect(buildYahooTransactionsPath('449.l.123', 999)).toBe('/league/449.l.123/transactions;count=100');
   });
 
   it('normalizes add/drop transactions from numeric-keyed Yahoo JSON', () => {
