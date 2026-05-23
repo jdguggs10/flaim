@@ -54,6 +54,78 @@ describe('yahoo-transactions', () => {
     expect(normalized[0].players_added).toEqual([{ id: '12', name: 'Sample Player' }]);
   });
 
+  it('normalizes player details when Yahoo returns transaction_data as an array', () => {
+    const raw = {
+      fantasy_content: {
+        league: [
+          { league_key: '449.l.123' },
+          {
+            transactions: {
+              0: {
+                transaction: [
+                  { transaction_key: '449.l.123.tr.3' },
+                  { type: 'add' },
+                  { status: 'successful' },
+                  { timestamp: '1700000000' },
+                  {
+                    players: {
+                      0: {
+                        player: [
+                          [
+                            { player_key: '449.p.9999' },
+                            { player_id: '9999' },
+                            { name: { full: 'Array Add Player' } },
+                            { display_position: 'SP' },
+                            { editorial_team_abbr: 'SD' },
+                          ],
+                          {
+                            transaction_data: [
+                              { type: 'add' },
+                              { source_type: 'freeagents' },
+                              { destination_type: 'team' },
+                            ],
+                          },
+                        ],
+                      },
+                      1: {
+                        player: [
+                          [
+                            { player_id: '8888' },
+                            { name: { full: 'Array Drop Player' } },
+                            { display_position: 'RP' },
+                            { editorial_team_abbr: 'SEA' },
+                          ],
+                          {
+                            transaction_data: [
+                              { type: 'drop' },
+                              { source_type: 'team' },
+                              { destination_type: 'waivers' },
+                            ],
+                          },
+                        ],
+                      },
+                      count: 2,
+                    },
+                  },
+                ],
+              },
+              count: 1,
+            },
+          },
+        ],
+      },
+    };
+
+    const normalized = normalizeYahooTransactions(raw);
+    expect(normalized).toHaveLength(1);
+    expect(normalized[0].players_added).toEqual([
+      { id: '9999', name: 'Array Add Player', position: 'SP', team: 'SD' },
+    ]);
+    expect(normalized[0].players_dropped).toEqual([
+      { id: '8888', name: 'Array Drop Player', position: 'RP', team: 'SEA' },
+    ]);
+  });
+
   it('extracts faab_bid when transaction_data includes waiver bid info', () => {
     const raw = {
       fantasy_content: {
