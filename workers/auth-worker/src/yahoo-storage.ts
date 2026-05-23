@@ -100,8 +100,9 @@ export interface SaveLeagueParams {
 // UTILITIES
 // =============================================================================
 
-// Yahoo has returned 429s when refreshed minutes early; refresh only at expiry.
-const REFRESH_BUFFER_MS = 5 * 1000;
+// Match the original Yahoo OAuth behavior: refresh before the access token
+// expires so user-facing tool calls do not land exactly on the expiry boundary.
+const REFRESH_BUFFER_MS = 5 * 60 * 1000;
 
 /**
  * Mask user ID for logging
@@ -340,7 +341,8 @@ export class YahooStorage {
     return updated;
   }
 
-  // Recovery is guarded by the refresh token used for the successful Yahoo request.
+  // Recovery is guarded by the refresh token used for the successful Yahoo request
+  // and only writes when no newer active lease has taken over.
   async updateYahooCredentialsIfRefreshTokenMatches(
     clerkUserId: string,
     params: UpdateCredentialsParams,
@@ -353,6 +355,7 @@ export class YahooStorage {
       .update(updateData)
       .eq('clerk_user_id', clerkUserId)
       .eq('refresh_token', expectedRefreshToken)
+      .or(`refresh_lease_owner.is.null,refresh_lease_expires_at.lt.${new Date().toISOString()},refresh_lease_expires_at.is.null`)
       .select('clerk_user_id');
 
     if (error) {
@@ -394,7 +397,7 @@ export class YahooStorage {
       .eq('refresh_token', expectedRefreshToken);
 
     const { data, error } = await query
-      .or(`refresh_lease_owner.is.null,refresh_lease_expires_at.lt."${now}",refresh_lease_expires_at.is.null`)
+      .or(`refresh_lease_owner.is.null,refresh_lease_expires_at.lt.${now},refresh_lease_expires_at.is.null`)
       .select('clerk_user_id');
 
     if (error) {

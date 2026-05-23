@@ -65,7 +65,7 @@ These endpoints manage the OAuth 2.0 client flow with Yahoo Fantasy.
 
 Yahoo callback stores the authorization-code token response directly and does not spend the returned refresh token during reconnect. Lazy refresh is the only backend path that uses Yahoo refresh tokens, which keeps reconnect aligned with the standard OAuth authorization-code flow and avoids consuming a brand-new refresh token before the first real post-expiry refresh.
 
-Yahoo access tokens are used until near expiry instead of refreshing several minutes early. May 2026 production logs showed Yahoo returning `429` / `Too many failed requests` when Flaim refreshed with roughly 90 seconds still left on the current access token.
+Yahoo access tokens use a 5-minute proactive refresh buffer. This matches the original Yahoo OAuth behavior and avoids sending user-facing tool calls into Yahoo exactly at the 1-hour access-token expiry boundary.
 
 Yahoo refresh requests are one-shot per lease owner. If Yahoo returns a transient token-endpoint failure, Flaim leaves the short per-user lease in place and surfaces retry metadata instead of allowing waiters to immediately become the next owner.
 
