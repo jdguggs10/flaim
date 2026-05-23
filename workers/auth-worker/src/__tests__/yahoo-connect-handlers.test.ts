@@ -2077,6 +2077,34 @@ describe('yahoo-connect-handlers', () => {
       expect(mockFetch).toHaveBeenCalledTimes(1);
     });
 
+    it('winner: owner-guarded write and recovery miss return not_connected when user disconnected', async () => {
+      mockStorage.getYahooCredentials
+        .mockResolvedValueOnce({
+          clerkUserId: 'user_123',
+          accessToken: 'old-token',
+          refreshToken: 'old-refresh',
+          expiresAt: new Date(Date.now() + 2 * 60 * 1000),
+          needsRefresh: true,
+        })
+        .mockResolvedValueOnce(null);
+      mockStorage.acquireRefreshLease.mockResolvedValue(true);
+      mockStorage.updateYahooCredentials.mockResolvedValue(false);
+      mockStorage.updateYahooCredentialsIfRefreshTokenMatches.mockResolvedValue(false);
+      mockFetch.mockResolvedValue(
+        new Response(
+          JSON.stringify({ access_token: 'winner-token', refresh_token: 'new-refresh', expires_in: 3600 }),
+          { status: 200 }
+        )
+      );
+
+      const response = await handleYahooCredentials(env, 'user_123', corsHeaders);
+
+      expect(response.status).toBe(404);
+      const body = (await response.json()) as Record<string, unknown>;
+      expect(body.error).toBe('not_connected');
+      expect(mockStorage.releaseRefreshLease).not.toHaveBeenCalled();
+    });
+
     it('returns server_error when lease acquisition storage call fails', async () => {
       mockStorage.getYahooCredentials.mockResolvedValue({
         clerkUserId: 'user_123',

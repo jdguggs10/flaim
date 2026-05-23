@@ -938,7 +938,6 @@ async function getValidYahooAccessToken(
     });
     result = await refreshAccessToken(requestBody, env, controller.signal);
   } catch (error) {
-    clearTimeout(timer);
     const isAbort = isAbortError(error);
     logDiagnostic('refresh_request_exception', {
       userId,
@@ -1123,6 +1122,10 @@ async function getValidYahooAccessToken(
   }
 
   const latest = await storage.getYahooCredentials(userId);
+  if (!latest) {
+    logDiagnostic('credentials_missing_after_recovery_miss', { userId });
+    return { error: 'not_connected' };
+  }
   if (latest && !latest.needsRefresh) {
     logDiagnostic('owner_guard_miss_found_fresh_token', {
       userId,

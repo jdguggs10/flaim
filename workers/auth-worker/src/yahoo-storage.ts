@@ -355,7 +355,7 @@ export class YahooStorage {
       .update(updateData)
       .eq('clerk_user_id', clerkUserId)
       .eq('refresh_token', expectedRefreshToken)
-      .or(`refresh_lease_owner.is.null,refresh_lease_expires_at.lt."${new Date().toISOString()}",refresh_lease_expires_at.is.null`)
+      .or(`refresh_lease_owner.is.null,refresh_lease_expires_at.lt.${new Date().toISOString()},refresh_lease_expires_at.is.null`)
       .select('clerk_user_id');
 
     if (error) {
@@ -397,7 +397,7 @@ export class YahooStorage {
       .eq('refresh_token', expectedRefreshToken);
 
     const { data, error } = await query
-      .or(`refresh_lease_owner.is.null,refresh_lease_expires_at.lt."${now}",refresh_lease_expires_at.is.null`)
+      .or(`refresh_lease_owner.is.null,refresh_lease_expires_at.lt.${now},refresh_lease_expires_at.is.null`)
       .select('clerk_user_id');
 
     if (error) {

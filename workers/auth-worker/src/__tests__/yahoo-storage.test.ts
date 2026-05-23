@@ -505,6 +505,9 @@ describe('YahooStorage', () => {
       expect(mockEq).toHaveBeenCalledWith('refresh_token', 'old-refresh-token');
       expect(mockOr).toHaveBeenCalledWith(expect.stringContaining('refresh_lease_owner.is.null'));
       expect(mockOr).toHaveBeenCalledWith(expect.stringContaining('refresh_lease_expires_at.lt.'));
+      const recoveryFilter = String(mockOr.mock.calls[0][0]);
+      expect(recoveryFilter).toMatch(/refresh_lease_expires_at\.lt\.\d{4}-/);
+      expect(recoveryFilter).not.toContain('refresh_lease_expires_at.lt."');
     });
 
     it('returns false when a newer refresh token or active lease blocks recovery', async () => {
@@ -541,7 +544,9 @@ describe('YahooStorage', () => {
       expect(mockEq).toHaveBeenCalledWith('refresh_token', 'refresh-token');
       expect(mockOr).toHaveBeenCalledTimes(1);
       expect(mockOr).toHaveBeenCalledWith(expect.stringContaining('refresh_lease_expires_at.is.null'));
-      expect(mockOr).toHaveBeenCalledWith(expect.stringContaining('refresh_lease_expires_at.lt."'));
+      const leaseFilter = String(mockOr.mock.calls[0][0]);
+      expect(leaseFilter).toMatch(/refresh_lease_expires_at\.lt\.\d{4}-/);
+      expect(leaseFilter).not.toContain('refresh_lease_expires_at.lt."');
     });
 
     it('returns false when another owner already holds the lease', async () => {
