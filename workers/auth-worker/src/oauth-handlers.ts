@@ -20,6 +20,12 @@
 import { OAuthStorage } from './oauth-storage';
 import { getFrontendUrl } from './preview-url';
 import { isValidRedirectUri } from '@flaim/worker-shared';
+import {
+  createConfidentialClientRegistration,
+  getClientIdFromBoundToken,
+  isConfidentialClientId,
+  validateConfidentialClientSecret,
+} from './oauth-client-auth';
 
 // =============================================================================
 // TYPES
@@ -32,6 +38,7 @@ export interface OAuthEnv {
   ENVIRONMENT?: string;
   FRONTEND_URL?: string;
   OAUTH_REFRESH_TOKEN_TTL_SECONDS?: string;
+  OAUTH_CLIENT_REGISTRATION_SIGNING_KEY?: string;
 }
 
 interface AuthorizeParams {
@@ -59,8 +66,9 @@ interface TokenRequest {
 // CONFIGURATION
 // =============================================================================
 
-// OAuth client ID (static for now, no DCR)
-const OAUTH_CLIENT_ID = 'flaim-mcp';
+// Deduplicates noisy fallback warnings only within a warm Worker isolate.
+// Isolate recycling or redeploys reset this flag, so ops may see it again.
+let warnedAboutSigningKeyFallback = false;
 
 // Base URL for OAuth endpoints (used in metadata)
 const getBaseUrl = (env: OAuthEnv): string => {
@@ -93,6 +101,114 @@ function maskState(state: string): string {
   if (!state) return '***';
   if (state.length <= 10) return `${state.substring(0, 3)}...`;
   return `${state.substring(0, 6)}...${state.substring(state.length - 4)}`;
+}
+
+function maskClientId(clientId?: string): string {
+  // Short IDs are legacy/public client IDs; confidential IDs are much longer.
+  if (!clientId) return '***';
+  if (clientId.length <= 18) return `${clientId.substring(0, 6)}...`;
+  return `${clientId.substring(0, 14)}...${clientId.substring(clientId.length - 6)}`;
+}
+
+function getClientRegistrationSigningKey(env: OAuthEnv): string {
+  if (env.OAUTH_CLIENT_REGISTRATION_SIGNING_KEY) {
+    return env.OAUTH_CLIENT_REGISTRATION_SIGNING_KEY;
+  }
+
+  if (!warnedAboutSigningKeyFallback) {
+    warnedAboutSigningKeyFallback = true;
+    console.warn(
+      '[oauth] OAUTH_CLIENT_REGISTRATION_SIGNING_KEY is not set; falling back to SUPABASE_SERVICE_KEY for confidential MCP client signing'
+    );
+  }
+
+  return env.SUPABASE_SERVICE_KEY;
+}
+
+function isPerplexityCallbackUri(uri: string): boolean {
+  try {
+    const parsed = new URL(uri);
+    const hostname = parsed.hostname.toLowerCase();
+    const isPerplexityHost = hostname === 'perplexity.ai'
+      || hostname.endsWith('.perplexity.ai')
+      || hostname === 'perplexity.com'
+      || hostname.endsWith('.perplexity.com');
+
+    return isPerplexityHost
+      && parsed.pathname === '/rest/connections/oauth_callback'
+      && !parsed.search
+      && !parsed.hash;
+  } catch {
+    return false;
+  }
+}
+
+function isPerplexityRegistration(body: ClientRegistrationRequest): boolean {
+  // Perplexity omits token_endpoint_auth_method but currently rejects DCR
+  // responses that do not include a client_secret, so infer confidential mode
+  // from its callback shape when the method is omitted.
+  // TODO: remove this compatibility heuristic if Perplexity starts sending
+  // token_endpoint_auth_method=client_secret_post during registration.
+  return (body.redirect_uris || []).some(isPerplexityCallbackUri);
+}
+
+function invalidClientResponse(
+  description: string,
+  corsHeaders: Record<string, string>
+): Response {
+  return new Response(JSON.stringify({
+    error: 'invalid_client',
+    error_description: description,
+  }), {
+    status: 401,
+    headers: {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'no-store',
+      'Pragma': 'no-cache',
+      ...corsHeaders,
+    },
+  });
+}
+
+async function validateTokenEndpointClient(
+  body: TokenRequest,
+  requiredClientId: string | undefined,
+  unboundConfidentialClientDescription: string,
+  env: OAuthEnv,
+  corsHeaders: Record<string, string>
+): Promise<{ clientId?: string; errorResponse?: Response }> {
+  const signingKey = getClientRegistrationSigningKey(env);
+
+  if (requiredClientId) {
+    if (!body.client_id) {
+      return {
+        errorResponse: invalidClientResponse('client_id is required for this confidential client', corsHeaders),
+      };
+    }
+
+    if (body.client_id !== requiredClientId) {
+      return {
+        errorResponse: invalidClientResponse('client_id does not match this confidential client', corsHeaders),
+      };
+    }
+
+    const validSecret = await validateConfidentialClientSecret(body.client_id, body.client_secret, signingKey);
+    if (!validSecret) {
+      return {
+        errorResponse: invalidClientResponse('Invalid client credentials', corsHeaders),
+      };
+    }
+
+    return { clientId: requiredClientId };
+  }
+
+  if (isConfidentialClientId(body.client_id)) {
+    return {
+      errorResponse: invalidClientResponse(unboundConfidentialClientDescription, corsHeaders),
+    };
+  }
+
+  return {};
 }
 
 // =============================================================================
@@ -204,27 +320,59 @@ export async function handleClientRegistration(
     }
   }
 
-  // Generate an unpredictable client_id (RFC 7591)
-  const clientId = `mcp_${crypto.randomUUID()}`;
+  if (
+    body.token_endpoint_auth_method
+    && !['none', 'client_secret_post'].includes(body.token_endpoint_auth_method)
+  ) {
+    return new Response(JSON.stringify({
+      error: 'invalid_client_metadata',
+      error_description: 'Only none and client_secret_post token endpoint auth methods are supported',
+    }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders }
+    });
+  }
 
-  // For public MCP clients, we don't issue a client_secret
-  // Per RFC 7591, this is allowed for public clients
-  const response = {
+  const inferredPerplexityConfidentialClient =
+    body.token_endpoint_auth_method === undefined && isPerplexityRegistration(body);
+  if (inferredPerplexityConfidentialClient) {
+    console.log('[oauth] Inferring client_secret_post for Perplexity DCR callback heuristic');
+  }
+
+  const issueConfidentialClient =
+    body.token_endpoint_auth_method === 'client_secret_post' || inferredPerplexityConfidentialClient;
+  const confidentialClient = issueConfidentialClient
+    ? await createConfidentialClientRegistration(getClientRegistrationSigningKey(env))
+    : undefined;
+
+  // Generate an unpredictable client_id (RFC 7591)
+  const clientId = confidentialClient?.clientId || `mcp_${crypto.randomUUID()}`;
+
+  // Public MCP clients do not receive a client_secret. Confidential clients
+  // receive one real secret and must use client_secret_post at the token endpoint.
+  const response: Record<string, unknown> = {
     client_id: clientId,
     client_id_issued_at: Math.floor(Date.now() / 1000),
     redirect_uris: redirectUris,
     client_name: body.client_name || 'MCP Client',
     grant_types: body.grant_types || ['authorization_code', 'refresh_token'],
     response_types: body.response_types || ['code'],
-    token_endpoint_auth_method: 'none', // Public client
+    token_endpoint_auth_method: confidentialClient ? 'client_secret_post' : 'none',
   };
 
-  console.log(`📝 DCR: Registered client ${clientId} for ${body.client_name || 'MCP Client'}`);
+  if (confidentialClient) {
+    response.client_secret = confidentialClient.clientSecret;
+    response.client_secret_expires_at = 0; // RFC 7591: 0 means no expiry
+  }
+
+  console.log(`📝 DCR: Registered client ${maskClientId(clientId)} for ${body.client_name || 'MCP Client'}`);
 
   return new Response(JSON.stringify(response), {
     status: 201,
     headers: {
       'Content-Type': 'application/json',
+      'Cache-Control': 'no-store',
+      'Pragma': 'no-cache',
       ...corsHeaders
     }
   });
@@ -335,7 +483,9 @@ export async function handleAuthorize(request: Request, env: OAuthEnv): Promise<
   if (params.client_id) consentUrl.searchParams.set('client_id', params.client_id);
   if (params.resource) consentUrl.searchParams.set('resource', params.resource); // RFC 8707
 
-  console.log(`[oauth] Redirecting to consent page: ${consentUrl.toString()}`);
+  console.log(
+    `[oauth] Redirecting to consent page: ${consentUrl.origin}${consentUrl.pathname}, client_id=${params.client_id ? maskClientId(params.client_id) : 'none'}`
+  );
 
   return Response.redirect(consentUrl.toString(), 302);
 }
@@ -394,7 +544,7 @@ export async function handleCreateCode(
       );
       if (!validState) {
         console.log(
-          `[oauth] Invalid state during /oauth/code: state=${maskState(body.state)}, redirect_uri=${body.redirect_uri}, client_id=${body.client_id || 'none'}`
+          `[oauth] Invalid state during /oauth/code: state=${maskState(body.state)}, redirect_uri=${body.redirect_uri}, client_id=${body.client_id ? maskClientId(body.client_id) : 'none'}`
         );
         return new Response(JSON.stringify({
           error: 'invalid_request',
@@ -415,6 +565,7 @@ export async function handleCreateCode(
     const code = await storage.createAuthorizationCode({
       userId,
       redirectUri: body.redirect_uri,
+      clientId: isConfidentialClientId(body.client_id) ? body.client_id : undefined,
       scope: body.scope || 'mcp:read',
       codeChallenge: body.code_challenge,
       codeChallengeMethod: 'S256',
@@ -497,10 +648,23 @@ export async function handleToken(
         }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
 
+      const requiredClientId = getClientIdFromBoundToken('mcp_ac', body.code);
+      const clientAuth = await validateTokenEndpointClient(
+        body,
+        requiredClientId,
+        'confidential clients must use client-bound authorization codes',
+        env,
+        corsHeaders
+      );
+      if (clientAuth.errorResponse) {
+        return clientAuth.errorResponse;
+      }
+
       const token = await storage.exchangeCodeForToken(
         body.code,
         body.redirect_uri,
-        body.code_verifier
+        body.code_verifier,
+        clientAuth.clientId
       );
 
       if (!token) {
@@ -544,7 +708,19 @@ export async function handleToken(
         }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
 
-      const token = await storage.refreshAccessToken(body.refresh_token);
+      const requiredClientId = getClientIdFromBoundToken('mcp_rt', body.refresh_token);
+      const clientAuth = await validateTokenEndpointClient(
+        body,
+        requiredClientId,
+        'confidential clients must use client-bound refresh tokens',
+        env,
+        corsHeaders
+      );
+      if (clientAuth.errorResponse) {
+        return clientAuth.errorResponse;
+      }
+
+      const token = await storage.refreshAccessToken(body.refresh_token, clientAuth.clientId);
 
       if (!token) {
         return new Response(JSON.stringify({

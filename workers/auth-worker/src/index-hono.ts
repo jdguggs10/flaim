@@ -84,6 +84,7 @@ export interface Env {
   ENVIRONMENT?: string; // 'dev' | 'preview' | 'prod'
   FRONTEND_URL?: string;
   OAUTH_REFRESH_TOKEN_TTL_SECONDS?: string; // MCP OAuth refresh-token inactivity TTL
+  OAUTH_CLIENT_REGISTRATION_SIGNING_KEY?: string; // Optional stable signing key for confidential MCP DCR clients
   CLERK_ISSUER?: string; // Expected Clerk JWT issuer (e.g. "https://clerk.flaim.app")
   // Yahoo OAuth
   YAHOO_CLIENT_ID?: string;

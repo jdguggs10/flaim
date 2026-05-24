@@ -136,7 +136,7 @@ Short-lived authorization codes for OAuth 2.1.
 | Column | Type | Notes |
 |---|---|---|
 | id | uuid | Primary key |
-| code | text | Unique auth code |
+| code | text | Unique auth code; confidential-client codes encode a signed client binding |
 | user_id | text | Clerk user ID |
 | redirect_uri | text | OAuth redirect URI |
 | code_challenge | text | PKCE challenge |
@@ -160,7 +160,7 @@ Access and refresh tokens for MCP clients.
 | client_name | text | Derived from redirect URI (Claude, ChatGPT, etc.) |
 | expires_at | timestamptz | Access token expiry |
 | revoked_at | timestamptz | Revocation time |
-| refresh_token | text | Optional refresh token |
+| refresh_token | text | Optional refresh token; confidential-client refresh tokens encode a signed client binding |
 | refresh_token_expires_at | timestamptz | MCP refresh-token inactivity expiry (1 year by default; `OAUTH_REFRESH_TOKEN_TTL_SECONDS`) |
 | created_at | timestamptz | Created timestamp |
 

@@ -13,6 +13,12 @@
  */
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import {
+  createClientBoundToken,
+  generateSecureToken,
+  getClientIdFromBoundToken,
+  isConfidentialClientId,
+} from './oauth-client-auth';
 
 // =============================================================================
 // TYPES
@@ -22,6 +28,7 @@ export interface OAuthCode {
   code: string;
   userId: string;
   redirectUri: string;
+  clientId?: string;
   codeChallenge?: string;
   codeChallengeMethod?: 'S256';
   scope: string;
@@ -53,6 +60,7 @@ export interface OAuthState {
 export interface CreateCodeParams {
   userId: string;
   redirectUri: string;
+  clientId?: string;
   codeChallenge?: string;
   codeChallengeMethod?: 'S256';
   scope?: string;
@@ -65,6 +73,7 @@ export interface CreateTokenParams {
   scope?: string;
   resource?: string; // RFC 8707 resource indicator
   redirectUri?: string; // For deriving clientName
+  clientId?: string; // Confidential OAuth client binding
   clientName?: string; // AI platform name (Claude, ChatGPT, etc.)
   expiresInSeconds?: number; // Default: 3600 (1 hour)
   includeRefreshToken?: boolean;
@@ -100,18 +109,6 @@ export interface OAuthStorageEnv {
 // =============================================================================
 // UTILITIES
 // =============================================================================
-
-/**
- * Generate a cryptographically secure random string
- * URL-safe base64 encoding
- */
-function generateSecureToken(length: number = 32): string {
-  const bytes = new Uint8Array(length);
-  crypto.getRandomValues(bytes);
-  // Convert to base64url (URL-safe)
-  const base64 = btoa(String.fromCharCode(...bytes));
-  return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-}
 
 /**
  * Verify PKCE code verifier against stored challenge
@@ -226,7 +223,9 @@ export class OAuthStorage {
    * Create and store a new authorization code
    */
   async createAuthorizationCode(params: CreateCodeParams): Promise<string> {
-    const code = generateSecureToken(32);
+    const code = params.clientId && isConfidentialClientId(params.clientId)
+      ? createClientBoundToken('mcp_ac', params.clientId, generateSecureToken(32))
+      : generateSecureToken(32);
     const expiresInSeconds = params.expiresInSeconds ?? 600; // 10 minutes default
     const expiresAt = new Date(Date.now() + expiresInSeconds * 1000);
 
@@ -352,6 +351,7 @@ export class OAuthStorage {
       code: data.code,
       userId: data.user_id,
       redirectUri: data.redirect_uri,
+      clientId: getClientIdFromBoundToken('mcp_ac', data.code),
       codeChallenge: data.code_challenge || undefined,
       codeChallengeMethod: data.code_challenge_method || undefined,
       scope: data.scope,
@@ -388,8 +388,18 @@ export class OAuthStorage {
   async exchangeCodeForToken(
     code: string,
     redirectUri: string,
-    codeVerifier?: string
+    codeVerifier?: string,
+    clientId?: string
   ): Promise<OAuthToken | null> {
+    // Handler validation should reject this before storage, but keep this
+    // pre-claim guard for direct/internal callers so a wrong client_id does
+    // not burn an otherwise valid confidential authorization code.
+    const boundClientId = getClientIdFromBoundToken('mcp_ac', code);
+    if (boundClientId && boundClientId !== clientId) {
+      console.log('[oauth-storage] Confidential client_id mismatch before auth code claim');
+      return null;
+    }
+
     // Atomically claim the code — only succeeds if not already used and not expired
     const { data, error } = await this.supabase
       .from('oauth_codes')
@@ -409,6 +419,7 @@ export class OAuthStorage {
       code: data.code,
       userId: data.user_id,
       redirectUri: data.redirect_uri,
+      clientId: getClientIdFromBoundToken('mcp_ac', data.code),
       codeChallenge: data.code_challenge || undefined,
       codeChallengeMethod: data.code_challenge_method || undefined,
       scope: data.scope,
@@ -420,6 +431,14 @@ export class OAuthStorage {
     if (!redirectUrisMatch(authCode.redirectUri, redirectUri)) {
       console.log(`[oauth-storage] Redirect URI mismatch: expected ${authCode.redirectUri}, got ${redirectUri}`);
       return null; // Code is already burned — correct per RFC 6749 §4.1.2
+    }
+
+    if (authCode.clientId && authCode.clientId !== clientId) {
+      // Code has already been consumed by the atomic claim above; this is
+      // intentional for replay safety if an internal caller bypassed the
+      // pre-claim/handler binding checks.
+      console.log('[oauth-storage] Confidential client_id mismatch during auth code exchange; code consumed, returning invalid_grant');
+      return null;
     }
 
     // Validate PKCE if challenge was provided
@@ -443,6 +462,7 @@ export class OAuthStorage {
       scope: authCode.scope,
       resource: authCode.resource, // RFC 8707 - pass through resource
       redirectUri: authCode.redirectUri, // For deriving clientName
+      clientId: authCode.clientId,
       includeRefreshToken: true,
     });
 
@@ -468,7 +488,10 @@ export class OAuthStorage {
     let refreshTokenExpiresAt: Date | undefined;
 
     if (params.includeRefreshToken) {
-      refreshToken = generateSecureToken(32);
+      const opaqueRefreshToken = generateSecureToken(32);
+      refreshToken = params.clientId && isConfidentialClientId(params.clientId)
+        ? createClientBoundToken('mcp_rt', params.clientId, opaqueRefreshToken)
+        : opaqueRefreshToken;
       const refreshExpiresIn = params.refreshTokenExpiresInSeconds ?? this.refreshTokenTtlSeconds;
       refreshTokenExpiresAt = new Date(Date.now() + refreshExpiresIn * 1000);
     }
@@ -545,7 +568,13 @@ export class OAuthStorage {
   /**
    * Refresh an access token using a refresh token
    */
-  async refreshAccessToken(refreshToken: string): Promise<OAuthToken | null> {
+  async refreshAccessToken(refreshToken: string, clientId?: string): Promise<OAuthToken | null> {
+    const tokenClientId = getClientIdFromBoundToken('mcp_rt', refreshToken);
+    if (tokenClientId && tokenClientId !== clientId) {
+      console.log('[oauth-storage] Confidential client_id mismatch during refresh');
+      return null;
+    }
+
     const { data, error } = await this.supabase
       .from('oauth_tokens')
       .select('*')
@@ -577,6 +606,7 @@ export class OAuthStorage {
       userId: data.user_id,
       scope: data.scope,
       resource: data.resource || undefined, // Preserve resource for audience validation
+      clientId: tokenClientId,
       clientName: data.client_name || undefined, // Preserve clientName
       includeRefreshToken: true,
     });

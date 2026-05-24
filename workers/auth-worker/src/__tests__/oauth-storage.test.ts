@@ -5,8 +5,14 @@ import {
   MIN_OAUTH_REFRESH_TOKEN_TTL_SECONDS,
   OAuthStorage,
 } from '../oauth-storage';
+import {
+  createClientBoundToken,
+  createConfidentialClientRegistration,
+  getClientIdFromBoundToken,
+} from '../oauth-client-auth';
 
 const mockFrom = vi.fn();
+const clientSigningKey = 'test-key';
 
 vi.mock('@supabase/supabase-js', () => ({
   createClient: () => ({
@@ -130,6 +136,37 @@ describe('OAuthStorage MCP token lifetimes', () => {
     expect(refreshTokenExpiresAt).toBeLessThanOrEqual(after + 1209600 * 1000 + 1000);
   });
 
+  it('marks confidential authorization codes with the client binding', async () => {
+    const { insertPayloads } = buildTableMock();
+    const client = await createConfidentialClientRegistration(clientSigningKey);
+    const storage = new OAuthStorage('https://example.supabase.co', 'test-key');
+
+    const code = await storage.createAuthorizationCode({
+      userId: 'user_123',
+      redirectUri: 'https://www.perplexity.ai/rest/connections/oauth_callback',
+      clientId: client.clientId,
+    });
+
+    expect(getClientIdFromBoundToken('mcp_ac', code)).toBe(client.clientId);
+    expect(insertPayloads[0].code).toBe(code);
+  });
+
+  it('marks confidential refresh tokens with the client binding', async () => {
+    const { insertPayloads } = buildTableMock();
+    const client = await createConfidentialClientRegistration(clientSigningKey);
+    const storage = new OAuthStorage('https://example.supabase.co', 'test-key');
+
+    const token = await storage.createAccessToken({
+      userId: 'user_123',
+      includeRefreshToken: true,
+      clientId: client.clientId,
+    });
+
+    expect(token.refreshToken).toBeTruthy();
+    expect(getClientIdFromBoundToken('mcp_rt', token.refreshToken)).toBe(client.clientId);
+    expect(insertPayloads[0].refresh_token).toBe(token.refreshToken);
+  });
+
   it('caps oversized OAUTH_REFRESH_TOKEN_TTL_SECONDS env override at 1 year', async () => {
     const { insertPayloads } = buildTableMock();
     const storage = OAuthStorage.fromEnvironment({
@@ -207,6 +244,64 @@ describe('OAuthStorage MCP token lifetimes', () => {
     const refreshTokenExpiresAt = new Date(insertPayloads[0].refresh_token_expires_at as string).getTime();
     expect(refreshTokenExpiresAt).toBeGreaterThanOrEqual(before + 2592000 * 1000 - 1000);
     expect(refreshTokenExpiresAt).toBeLessThanOrEqual(after + 2592000 * 1000 + 1000);
+  });
+
+  it('refresh rotation preserves confidential client binding', async () => {
+    const client = await createConfidentialClientRegistration(clientSigningKey);
+    const refreshToken = createClientBoundToken('mcp_rt', client.clientId, 'old-refresh-token');
+    const { insertPayloads } = buildTableMock({
+      lookupRow: {
+        access_token: 'old-access-token',
+        refresh_token: refreshToken,
+        refresh_token_expires_at: new Date(Date.now() + 60_000).toISOString(),
+        revoked_at: null,
+        user_id: 'user_123',
+        scope: 'mcp:read',
+        client_name: 'Perplexity',
+      },
+      insertId: 'new-token-id',
+    });
+    const storage = new OAuthStorage('https://example.supabase.co', 'test-key');
+
+    const token = await storage.refreshAccessToken(refreshToken, client.clientId);
+
+    expect(token?.refreshToken).toBeTruthy();
+    expect(getClientIdFromBoundToken('mcp_rt', token?.refreshToken)).toBe(client.clientId);
+    expect(insertPayloads[0].refresh_token).toBe(token?.refreshToken);
+  });
+
+  it('rejects confidential authorization code exchange when client binding mismatches', async () => {
+    const client = await createConfidentialClientRegistration(clientSigningKey);
+    const otherClient = await createConfidentialClientRegistration(clientSigningKey);
+    const code = createClientBoundToken('mcp_ac', client.clientId, 'auth-code');
+    const redirectUri = 'https://www.perplexity.ai/rest/connections/oauth_callback';
+    const single = vi.fn().mockResolvedValue({
+      data: {
+        code,
+        user_id: 'user_123',
+        redirect_uri: redirectUri,
+        code_challenge: null,
+        code_challenge_method: null,
+        scope: 'mcp:read',
+        resource: null,
+        expires_at: new Date(Date.now() + 60_000).toISOString(),
+      },
+      error: null,
+    });
+    const select = vi.fn().mockReturnValue({ single });
+    const gt = vi.fn().mockReturnValue({ select });
+    const is = vi.fn().mockReturnValue({ gt });
+    const eq = vi.fn().mockReturnValue({ is });
+    const update = vi.fn().mockReturnValue({ eq });
+    const insert = vi.fn();
+    mockFrom.mockReturnValue({ update, insert });
+    const storage = new OAuthStorage('https://example.supabase.co', 'test-key');
+
+    const token = await storage.exchangeCodeForToken(code, redirectUri, undefined, otherClient.clientId);
+
+    expect(token).toBeNull();
+    expect(update).not.toHaveBeenCalled();
+    expect(insert).not.toHaveBeenCalled();
   });
 
   it('rejects expired refresh tokens', async () => {

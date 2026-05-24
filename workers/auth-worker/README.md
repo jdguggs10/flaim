@@ -46,6 +46,10 @@ MCP OAuth token lifetime:
 - Refresh-token inactivity window defaults to 1 year (`31536000` seconds) and can be overridden with `OAUTH_REFRESH_TOKEN_TTL_SECONDS` (clamped to 1 hour minimum, 1 year maximum).
 - This provider-side MCP OAuth flow is separate from the downstream Yahoo OAuth token chain.
 
+Dynamic client registration supports both public PKCE clients (`token_endpoint_auth_method: none`) and confidential clients that request or require `client_secret_post`. Confidential registrations receive a generated `client_secret`; token and refresh exchanges validate that secret and bind confidential authorization codes and refresh tokens to the registered client without storing plaintext client secrets. Confidential client IDs are stateless and HMAC-signed with `OAUTH_CLIENT_REGISTRATION_SIGNING_KEY` when set.
+
+Set a dedicated, stable `OAUTH_CLIENT_REGISTRATION_SIGNING_KEY` in preview and production before relying on confidential MCP clients such as Perplexity. If it is absent, the worker falls back to `SUPABASE_SERVICE_KEY` for compatibility. That fallback keeps deployments running, but rotating the Supabase service key will invalidate existing confidential client registrations and surface as `invalid_client` until those clients reconnect.
+
 ### Yahoo Connect (Flaim → Yahoo)
 
 These endpoints manage the OAuth 2.0 client flow with Yahoo Fantasy.
@@ -196,6 +200,8 @@ wrangler secret put SUPABASE_URL --env preview
 wrangler secret put SUPABASE_SERVICE_KEY --env preview
 wrangler secret put YAHOO_CLIENT_ID --env preview
 wrangler secret put YAHOO_CLIENT_SECRET --env preview
+# Optional: if set, keep stable because it signs confidential MCP client IDs
+wrangler secret put OAUTH_CLIENT_REGISTRATION_SIGNING_KEY --env preview
 # Eval API key (optional — for headless eval/CI)
 wrangler secret put EVAL_API_KEY --env preview
 wrangler secret put EVAL_USER_ID --env preview
@@ -209,6 +215,9 @@ SUPABASE_URL=https://your-project-ref.supabase.co
 SUPABASE_SERVICE_KEY=your-service-role-key
 YAHOO_CLIENT_ID=your-yahoo-client-id
 YAHOO_CLIENT_SECRET=your-yahoo-client-secret
+# Optional; defaults to SUPABASE_SERVICE_KEY, but use a dedicated stable value
+# in shared environments so Supabase key rotation does not invalidate clients.
+OAUTH_CLIENT_REGISTRATION_SIGNING_KEY=your-stable-signing-key
 ```
 
 ## Development
