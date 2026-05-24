@@ -18,7 +18,6 @@ import {
   PUBLIC_CHAT_SIMPLE_PRESETS,
   PUBLIC_CHAT_TOOL_DISPLAY_LABELS,
 } from "@/lib/public-chat";
-import { CHATGPT_APP_URL } from "@/lib/product-links";
 import {
   ArrowRight,
   ChevronDown,
@@ -96,91 +95,6 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
         id="live-demo"
         initialPresetId={initialPresetId ?? null}
       />
-
-      <section className="px-4 pb-10 pt-2 sm:px-6 lg:px-8">
-        <div className="mx-auto grid max-w-5xl gap-4 text-sm text-muted-foreground md:grid-cols-3">
-          <div className="rounded-2xl border bg-background/70 p-4">
-            <Link
-              href="/guide/platforms"
-              className="text-[11px] font-semibold uppercase tracking-[0.18em] text-foreground/70 hover:text-primary transition-colors"
-            >
-              Platforms
-            </Link>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <Link
-                href="/guide/platforms#espn"
-                className="rounded-full border bg-background px-3 py-1 transition-colors hover:border-foreground/30"
-              >
-                ESPN
-              </Link>
-              <Link
-                href="/guide/platforms#yahoo"
-                className="rounded-full border bg-background px-3 py-1 transition-colors hover:border-foreground/30"
-              >
-                Yahoo
-              </Link>
-              <Link
-                href="/guide/platforms#sleeper"
-                className="rounded-full border bg-background px-3 py-1 transition-colors hover:border-foreground/30"
-              >
-                Sleeper
-              </Link>
-            </div>
-          </div>
-          <div className="rounded-2xl border bg-background/70 p-4">
-            <Link
-              href="/guide/sports"
-              className="text-[11px] font-semibold uppercase tracking-[0.18em] text-foreground/70 hover:text-primary transition-colors"
-            >
-              Sports
-            </Link>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <Link
-                href="/guide/sports#football"
-                className="rounded-full border bg-background px-3 py-1 transition-colors hover:border-foreground/30"
-              >
-                Football
-              </Link>
-              <Link
-                href="/guide/sports#baseball"
-                className="rounded-full border bg-background px-3 py-1 transition-colors hover:border-foreground/30"
-              >
-                Baseball
-              </Link>
-              <Link
-                href="/guide/sports#basketball"
-                className="rounded-full border bg-background px-3 py-1 transition-colors hover:border-foreground/30"
-              >
-                Basketball
-              </Link>
-              <Link
-                href="/guide/sports#hockey"
-                className="rounded-full border bg-background px-3 py-1 transition-colors hover:border-foreground/30"
-              >
-                Hockey
-              </Link>
-            </div>
-          </div>
-          <div className="rounded-2xl border bg-background/70 p-4">
-            <Link
-              href="/guide/ai"
-              className="text-[11px] font-semibold uppercase tracking-[0.18em] text-foreground/70 hover:text-primary transition-colors"
-            >
-              Works With
-            </Link>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <Link
-                href={CHATGPT_APP_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="rounded-full border bg-background px-3 py-1 transition-colors hover:border-foreground/30"
-              >
-                ChatGPT
-              </Link>
-            </div>
-          </div>
-        </div>
-      </section>
 
       {/* Primary CTA */}
       <section className="px-4 pb-10 text-center">
@@ -413,7 +327,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
               </Button>
             </SignedIn>
             <Button asChild variant="outline" size="lg">
-              <Link href="/guide">Setup guides</Link>
+              <Link href="/guide">Help</Link>
             </Button>
           </div>
         </div>
