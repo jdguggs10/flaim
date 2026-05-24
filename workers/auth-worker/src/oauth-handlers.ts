@@ -334,14 +334,14 @@ export async function handleClientRegistration(
     });
   }
 
-  const inferredPerplexityConfidentialClient = isPerplexityRegistration(body)
+  const perplexityConfidentialOverride = isPerplexityRegistration(body)
     && (body.token_endpoint_auth_method === undefined || body.token_endpoint_auth_method === 'none');
-  if (inferredPerplexityConfidentialClient) {
+  if (perplexityConfidentialOverride) {
     console.log('[oauth] Overriding token_endpoint_auth_method to client_secret_post for Perplexity DCR callback heuristic');
   }
 
   const issueConfidentialClient =
-    body.token_endpoint_auth_method === 'client_secret_post' || inferredPerplexityConfidentialClient;
+    body.token_endpoint_auth_method === 'client_secret_post' || perplexityConfidentialOverride;
   const confidentialClient = issueConfidentialClient
     ? await createConfidentialClientRegistration(getClientRegistrationSigningKey(env))
     : undefined;
