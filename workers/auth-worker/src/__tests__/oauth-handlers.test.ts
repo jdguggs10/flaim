@@ -79,8 +79,9 @@ describe('oauth-handlers', () => {
     expect(body1.client_id).not.toBe(body2.client_id);
   });
 
-  it('keeps public DCR clients public without a client_secret', async () => {
+  it('keeps non-Perplexity public DCR clients public without a client_secret when auth method is none', async () => {
     const res = await handleClientRegistration(buildRegisterRequest({
+      redirect_uris: ['https://claude.ai/api/mcp/auth_callback'],
       token_endpoint_auth_method: 'none',
     }), env, corsHeaders);
 
