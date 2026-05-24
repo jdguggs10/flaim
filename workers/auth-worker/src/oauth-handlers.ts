@@ -335,9 +335,9 @@ export async function handleClientRegistration(
   }
 
   const inferredPerplexityConfidentialClient = isPerplexityRegistration(body)
-    && body.token_endpoint_auth_method !== 'client_secret_post';
+    && (body.token_endpoint_auth_method === undefined || body.token_endpoint_auth_method === 'none');
   if (inferredPerplexityConfidentialClient) {
-    console.log('[oauth] Inferring client_secret_post for Perplexity DCR callback heuristic');
+    console.log('[oauth] Overriding token_endpoint_auth_method to client_secret_post for Perplexity DCR callback heuristic');
   }
 
   const issueConfidentialClient =

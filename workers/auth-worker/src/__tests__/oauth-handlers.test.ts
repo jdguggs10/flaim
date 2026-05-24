@@ -158,6 +158,25 @@ describe('oauth-handlers', () => {
     expect(body.token_endpoint_auth_method).toBe('client_secret_post');
   });
 
+  it('returns a client_secret for Perplexity DCR when auth method is client_secret_post', async () => {
+    const res = await handleClientRegistration(buildRegisterRequest({
+      redirect_uris: ['https://www.perplexity.ai/rest/connections/oauth_callback'],
+      client_name: 'Perplexity',
+      token_endpoint_auth_method: 'client_secret_post',
+    }), env, corsHeaders);
+
+    expect(res.status).toBe(201);
+    const body = await res.json() as {
+      client_id?: string;
+      client_secret?: string;
+      token_endpoint_auth_method?: string;
+    };
+
+    expect(body.client_id).toMatch(/^mcp_conf_/);
+    expect(body.client_secret).toMatch(/^mcp_secret_/);
+    expect(body.token_endpoint_auth_method).toBe('client_secret_post');
+  });
+
   it('returns a client_secret for Perplexity DCR when auth method is omitted', async () => {
     const res = await handleClientRegistration(buildRegisterRequest({
       redirect_uris: ['https://www.perplexity.ai/rest/connections/oauth_callback'],
