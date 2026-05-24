@@ -66,6 +66,7 @@ interface TokenRequest {
 // CONFIGURATION
 // =============================================================================
 
+// Deduplicates noisy fallback warnings only within a warm Worker isolate.
 let warnedAboutSigningKeyFallback = false;
 
 // Base URL for OAuth endpoints (used in metadata)
@@ -144,6 +145,8 @@ function isPerplexityRegistration(body: ClientRegistrationRequest): boolean {
   // Perplexity omits token_endpoint_auth_method but currently rejects DCR
   // responses that do not include a client_secret, so infer confidential mode
   // from its callback shape when the method is omitted.
+  // TODO: remove this compatibility heuristic if Perplexity starts sending
+  // token_endpoint_auth_method=client_secret_post during registration.
   return (body.redirect_uris || []).some(isPerplexityCallbackUri);
 }
 

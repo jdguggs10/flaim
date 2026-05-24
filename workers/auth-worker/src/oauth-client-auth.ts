@@ -51,11 +51,18 @@ export async function validateConfidentialClientSecret(
     && timingSafeEqual(expectedSignature, parts.signature);
 }
 
+/**
+ * Prefixes an opaque auth code or refresh token with a confidential client
+ * binding. opaqueValue must be dot-free because "." is the token delimiter.
+ */
 export function createClientBoundToken(
   kind: ClientBoundTokenKind,
   clientId: string,
   opaqueValue: string
 ): string {
+  if (opaqueValue.includes('.')) {
+    throw new Error('Client-bound token opaqueValue must not contain "."');
+  }
   return `${kind}.${base64UrlEncodeText(clientId)}.${opaqueValue}`;
 }
 
@@ -145,6 +152,7 @@ function timingSafeEqual(actual: string, expected: string): boolean {
   const encoder = new TextEncoder();
   const actualBytes = encoder.encode(actual);
   const expectedBytes = encoder.encode(expected);
+  // All current callers compare fixed-length base64url SHA-256/HMAC outputs.
   if (actualBytes.length !== expectedBytes.length) {
     return false;
   }

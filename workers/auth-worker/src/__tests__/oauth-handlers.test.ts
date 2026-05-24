@@ -3,6 +3,7 @@ import {
   handleAuthorize,
   handleCheckStatus,
   handleClientRegistration,
+  handleCreateCode,
   handleMetadataDiscovery,
   validateOAuthToken,
 } from '../oauth-handlers';
@@ -309,6 +310,41 @@ describe('oauth-handlers', () => {
     expect(redirect.pathname).toBe('/oauth/abc123/callback');
     expect(redirect.searchParams.get('error')).toBe('invalid_request');
     expect(redirect.searchParams.get('error_description')).toBe('Only S256 PKCE is supported');
+  });
+
+  it('passes confidential client_id through /oauth/code into authorization-code storage', async () => {
+    const client = await registerConfidentialClient();
+    const createAuthorizationCode = vi.fn().mockResolvedValue('auth-code');
+    vi.spyOn(OAuthStorage, 'fromEnvironment').mockReturnValue({
+      createAuthorizationCode,
+    } as unknown as OAuthStorage);
+
+    const req = new Request('https://api.flaim.app/oauth/code', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        redirect_uri: 'https://www.perplexity.ai/rest/connections/oauth_callback',
+        scope: 'mcp:read',
+        client_id: client.client_id,
+        code_challenge: 'challenge',
+        code_challenge_method: 'S256',
+      }),
+    });
+
+    const res = await handleCreateCode(req, env, 'user_123', corsHeaders);
+    const body = await res.json() as { success?: boolean; code?: string };
+
+    expect(res.status).toBe(200);
+    expect(body.success).toBe(true);
+    expect(body.code).toBe('auth-code');
+    expect(createAuthorizationCode).toHaveBeenCalledWith(expect.objectContaining({
+      userId: 'user_123',
+      redirectUri: 'https://www.perplexity.ai/rest/connections/oauth_callback',
+      clientId: client.client_id,
+      scope: 'mcp:read',
+      codeChallenge: 'challenge',
+      codeChallengeMethod: 'S256',
+    }));
   });
 
   it('authorization server metadata advertises S256 only', async () => {
