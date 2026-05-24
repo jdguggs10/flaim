@@ -394,6 +394,42 @@ describe('oauth-handlers', () => {
     expect(body.expires_in).toBeGreaterThan(0);
   });
 
+  it('ignores client_secret on public authorization_code exchange', async () => {
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+    const exchangeCodeForToken = vi.fn().mockResolvedValue({
+      accessToken: 'access-token',
+      scope: 'mcp:read',
+      expiresAt,
+      refreshToken: 'refresh-token',
+    });
+    vi.spyOn(OAuthStorage, 'fromEnvironment').mockReturnValue({
+      exchangeCodeForToken,
+    } as unknown as OAuthStorage);
+
+    const req = new Request('https://api.flaim.app/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        grant_type: 'authorization_code',
+        code: 'public-code',
+        redirect_uri: 'https://claude.ai/api/mcp/auth_callback',
+        code_verifier: 'verifier',
+        client_id: 'mcp_public-client',
+        client_secret: 'ignored-public-secret',
+      }),
+    });
+
+    const res = await handleToken(req, env, corsHeaders);
+
+    expect(res.status).toBe(200);
+    expect(exchangeCodeForToken).toHaveBeenCalledWith(
+      'public-code',
+      'https://claude.ai/api/mcp/auth_callback',
+      'verifier',
+      undefined
+    );
+  });
+
   it('accepts authorization_code exchange for valid confidential client_secret', async () => {
     const client = await registerConfidentialClient();
     const authCode = createClientBoundToken('mcp_ac', client.client_id, 'test-code');

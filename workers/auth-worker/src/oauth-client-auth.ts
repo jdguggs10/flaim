@@ -11,12 +11,7 @@ export interface ConfidentialClientRegistration {
 export function generateSecureToken(length: number = 32): string {
   const bytes = new Uint8Array(length);
   crypto.getRandomValues(bytes);
-  let binary = '';
-  for (const byte of bytes) {
-    binary += String.fromCharCode(byte);
-  }
-  const base64 = btoa(binary);
-  return toBase64Url(base64);
+  return bytesToBase64Url(bytes);
 }
 
 export async function createConfidentialClientRegistration(signingKey: string): Promise<ConfidentialClientRegistration> {
@@ -134,8 +129,7 @@ async function sha256Base64Url(value: string): Promise<string> {
   const data = encoder.encode(value);
   const hashBuffer = await crypto.subtle.digest('SHA-256', data);
   const hashArray = new Uint8Array(hashBuffer);
-  const base64 = btoa(String.fromCharCode(...hashArray));
-  return toBase64Url(base64);
+  return bytesToBase64Url(hashArray);
 }
 
 async function hmacSha256Base64Url(value: string, key: string): Promise<string> {
@@ -149,8 +143,7 @@ async function hmacSha256Base64Url(value: string, key: string): Promise<string> 
   );
   const signature = await crypto.subtle.sign('HMAC', cryptoKey, encoder.encode(value));
   const signatureBytes = new Uint8Array(signature);
-  const base64 = btoa(String.fromCharCode(...signatureBytes));
-  return toBase64Url(base64);
+  return bytesToBase64Url(signatureBytes);
 }
 
 function timingSafeEqual(actual: string, expected: string): boolean {
@@ -191,6 +184,14 @@ function base64UrlDecodeText(value: string): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+function bytesToBase64Url(bytes: Uint8Array): string {
+  let binary = '';
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+  return toBase64Url(btoa(binary));
 }
 
 function toBase64Url(value: string): string {

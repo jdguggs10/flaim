@@ -427,7 +427,7 @@ export class OAuthStorage {
     if (authCode.clientId && authCode.clientId !== clientId) {
       // Code has already been consumed by the atomic claim above; this is
       // intentional so a mismatched confidential-client attempt cannot replay.
-      console.log('[oauth-storage] Confidential client_id mismatch during auth code exchange; code consumed');
+      console.log('[oauth-storage] Confidential client_id mismatch during auth code exchange; code consumed, returning invalid_grant');
       return null;
     }
 
