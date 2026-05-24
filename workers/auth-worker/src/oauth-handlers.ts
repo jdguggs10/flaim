@@ -144,9 +144,10 @@ function isPerplexityCallbackUri(uri: string): boolean {
 }
 
 function isPerplexityRegistration(body: ClientRegistrationRequest): boolean {
-  // Perplexity omits token_endpoint_auth_method but currently rejects DCR
-  // responses that do not include a client_secret, so infer confidential mode
-  // from its callback shape when the method is omitted.
+  // Perplexity currently rejects DCR responses that do not include a
+  // client_secret, even when it omits token_endpoint_auth_method or sends
+  // token_endpoint_auth_method=none. Infer confidential mode from its callback
+  // shape so public PKCE clients on other hosts remain unchanged.
   // TODO: remove this compatibility heuristic if Perplexity starts sending
   // token_endpoint_auth_method=client_secret_post during registration.
   return (body.redirect_uris || []).some(isPerplexityCallbackUri);
@@ -333,14 +334,14 @@ export async function handleClientRegistration(
     });
   }
 
-  const inferredPerplexityConfidentialClient =
-    body.token_endpoint_auth_method === undefined && isPerplexityRegistration(body);
-  if (inferredPerplexityConfidentialClient) {
-    console.log('[oauth] Inferring client_secret_post for Perplexity DCR callback heuristic');
+  const perplexityConfidentialOverride = isPerplexityRegistration(body)
+    && (body.token_endpoint_auth_method === undefined || body.token_endpoint_auth_method === 'none');
+  if (perplexityConfidentialOverride) {
+    console.log('[oauth] Overriding token_endpoint_auth_method to client_secret_post for Perplexity DCR callback heuristic');
   }
 
   const issueConfidentialClient =
-    body.token_endpoint_auth_method === 'client_secret_post' || inferredPerplexityConfidentialClient;
+    body.token_endpoint_auth_method === 'client_secret_post' || perplexityConfidentialOverride;
   const confidentialClient = issueConfidentialClient
     ? await createConfidentialClientRegistration(getClientRegistrationSigningKey(env))
     : undefined;

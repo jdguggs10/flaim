@@ -79,8 +79,9 @@ describe('oauth-handlers', () => {
     expect(body1.client_id).not.toBe(body2.client_id);
   });
 
-  it('keeps public DCR clients public without a client_secret', async () => {
+  it('keeps non-Perplexity public DCR clients public without a client_secret when auth method is none', async () => {
     const res = await handleClientRegistration(buildRegisterRequest({
+      redirect_uris: ['https://claude.ai/api/mcp/auth_callback'],
       token_endpoint_auth_method: 'none',
     }), env, corsHeaders);
 
@@ -139,7 +140,7 @@ describe('oauth-handlers', () => {
     expect(body.token_endpoint_auth_method).toBe('client_secret_post');
   });
 
-  it('respects explicit public auth method for Perplexity DCR clients', async () => {
+  it('returns a client_secret for Perplexity DCR even when auth method is none', async () => {
     const res = await handleClientRegistration(buildRegisterRequest({
       redirect_uris: ['https://www.perplexity.ai/rest/connections/oauth_callback'],
       client_name: 'Perplexity',
@@ -153,10 +154,30 @@ describe('oauth-handlers', () => {
       token_endpoint_auth_method?: string;
     };
 
-    expect(body.client_id).toMatch(/^mcp_/);
-    expect(body.client_id).not.toMatch(/^mcp_conf_/);
-    expect(body.client_secret).toBeUndefined();
-    expect(body.token_endpoint_auth_method).toBe('none');
+    expect(body.client_id).toMatch(/^mcp_conf_/);
+    expect(body.client_secret).toMatch(/^mcp_secret_/);
+    expect(body.token_endpoint_auth_method).toBe('client_secret_post');
+  });
+
+  it('returns a client_secret for Perplexity DCR when auth method is client_secret_post', async () => {
+    // This verifies Perplexity works on the normal explicit confidential path,
+    // separate from the compatibility override for omitted/none auth methods.
+    const res = await handleClientRegistration(buildRegisterRequest({
+      redirect_uris: ['https://www.perplexity.ai/rest/connections/oauth_callback'],
+      client_name: 'Perplexity',
+      token_endpoint_auth_method: 'client_secret_post',
+    }), env, corsHeaders);
+
+    expect(res.status).toBe(201);
+    const body = await res.json() as {
+      client_id?: string;
+      client_secret?: string;
+      token_endpoint_auth_method?: string;
+    };
+
+    expect(body.client_id).toMatch(/^mcp_conf_/);
+    expect(body.client_secret).toMatch(/^mcp_secret_/);
+    expect(body.token_endpoint_auth_method).toBe('client_secret_post');
   });
 
   it('returns a client_secret for Perplexity DCR when auth method is omitted', async () => {
