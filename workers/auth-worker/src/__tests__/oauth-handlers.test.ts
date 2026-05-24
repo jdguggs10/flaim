@@ -209,7 +209,8 @@ describe('oauth-handlers', () => {
     expect(exchangeCodeForToken).toHaveBeenCalledWith(
       'test-code',
       'https://claude.ai/api/mcp/auth_callback',
-      'verifier'
+      'verifier',
+      undefined
     );
   });
 
@@ -604,7 +605,7 @@ describe('oauth-handlers', () => {
     const res = await handleToken(req, env, corsHeaders);
 
     expect(res.status).toBe(200);
-    expect(refreshAccessToken).toHaveBeenCalledWith('public-refresh-token');
+    expect(refreshAccessToken).toHaveBeenCalledWith('public-refresh-token', undefined);
   });
 
   it('returns invalid_grant when refresh token is expired', async () => {
@@ -628,7 +629,7 @@ describe('oauth-handlers', () => {
     const body = await res.json() as { error?: string; error_description?: string };
     expect(body.error).toBe('invalid_grant');
     expect(body.error_description).toBe('Invalid or expired refresh token');
-    expect(refreshAccessToken).toHaveBeenCalledWith('expired-refresh-token');
+    expect(refreshAccessToken).toHaveBeenCalledWith('expired-refresh-token', undefined);
   });
 
   it('reports active connection when access token expired but refresh token is still valid', async () => {

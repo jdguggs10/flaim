@@ -450,7 +450,7 @@ export class OAuthStorage {
       scope: authCode.scope,
       resource: authCode.resource, // RFC 8707 - pass through resource
       redirectUri: authCode.redirectUri, // For deriving clientName
-      clientId: authCode.clientId || (clientId && isConfidentialClientId(clientId) ? clientId : undefined),
+      clientId: authCode.clientId,
       includeRefreshToken: true,
     });
 

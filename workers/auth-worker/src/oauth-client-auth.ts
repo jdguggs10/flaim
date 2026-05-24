@@ -26,6 +26,10 @@ export async function createConfidentialClientRegistration(signingKey: string): 
   return { clientId, clientSecret };
 }
 
+/**
+ * Checks confidential client_id shape only. Use validateConfidentialClientSecret
+ * when the caller needs to verify the HMAC signature and matching secret.
+ */
 export function isConfidentialClientId(clientId?: string): clientId is string {
   return getConfidentialClientIdParts(clientId) !== null;
 }

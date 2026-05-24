@@ -270,6 +270,39 @@ describe('OAuthStorage MCP token lifetimes', () => {
     expect(insertPayloads[0].refresh_token).toBe(token?.refreshToken);
   });
 
+  it('rejects confidential authorization code exchange when client binding mismatches', async () => {
+    const client = await createConfidentialClientRegistration(clientSigningKey);
+    const otherClient = await createConfidentialClientRegistration(clientSigningKey);
+    const code = createClientBoundToken('mcp_ac', client.clientId, 'auth-code');
+    const redirectUri = 'https://www.perplexity.ai/rest/connections/oauth_callback';
+    const single = vi.fn().mockResolvedValue({
+      data: {
+        code,
+        user_id: 'user_123',
+        redirect_uri: redirectUri,
+        code_challenge: null,
+        code_challenge_method: null,
+        scope: 'mcp:read',
+        resource: null,
+        expires_at: new Date(Date.now() + 60_000).toISOString(),
+      },
+      error: null,
+    });
+    const select = vi.fn().mockReturnValue({ single });
+    const gt = vi.fn().mockReturnValue({ select });
+    const is = vi.fn().mockReturnValue({ gt });
+    const eq = vi.fn().mockReturnValue({ is });
+    const update = vi.fn().mockReturnValue({ eq });
+    const insert = vi.fn();
+    mockFrom.mockReturnValue({ update, insert });
+    const storage = new OAuthStorage('https://example.supabase.co', 'test-key');
+
+    const token = await storage.exchangeCodeForToken(code, redirectUri, undefined, otherClient.clientId);
+
+    expect(token).toBeNull();
+    expect(insert).not.toHaveBeenCalled();
+  });
+
   it('rejects expired refresh tokens', async () => {
     buildTableMock({
       lookupRow: {

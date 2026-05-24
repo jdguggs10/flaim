@@ -46,7 +46,7 @@ MCP OAuth token lifetime:
 - Refresh-token inactivity window defaults to 1 year (`31536000` seconds) and can be overridden with `OAUTH_REFRESH_TOKEN_TTL_SECONDS` (clamped to 1 hour minimum, 1 year maximum).
 - This provider-side MCP OAuth flow is separate from the downstream Yahoo OAuth token chain.
 
-Dynamic client registration supports both public PKCE clients (`token_endpoint_auth_method: none`) and confidential clients that request or require `client_secret_post`. Confidential registrations receive a generated `client_secret`; token and refresh exchanges validate that secret and bind confidential authorization codes and refresh tokens to the registered client without storing plaintext client secrets. Confidential client IDs are stateless and HMAC-signed with `OAUTH_CLIENT_REGISTRATION_SIGNING_KEY` when set, otherwise `SUPABASE_SERVICE_KEY`.
+Dynamic client registration supports both public PKCE clients (`token_endpoint_auth_method: none`) and confidential clients that request or require `client_secret_post`. Confidential registrations receive a generated `client_secret`; token and refresh exchanges validate that secret and bind confidential authorization codes and refresh tokens to the registered client without storing plaintext client secrets. Confidential client IDs are stateless and HMAC-signed with `OAUTH_CLIENT_REGISTRATION_SIGNING_KEY` when set. A fallback to `SUPABASE_SERVICE_KEY` exists so existing environments keep working, but production and preview should use a dedicated stable signing key to avoid coupling client validity to Supabase service-key rotation.
 
 ### Yahoo Connect (Flaim → Yahoo)
 

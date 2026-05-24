@@ -68,6 +68,7 @@ interface TokenRequest {
 
 // OAuth client ID (static for now, no DCR)
 const OAUTH_CLIENT_ID = 'flaim-mcp';
+let warnedAboutSigningKeyFallback = false;
 
 // Base URL for OAuth endpoints (used in metadata)
 const getBaseUrl = (env: OAuthEnv): string => {
@@ -102,14 +103,25 @@ function maskState(state: string): string {
   return `${state.substring(0, 6)}...${state.substring(state.length - 4)}`;
 }
 
-function maskClientId(clientId: string): string {
+function maskClientId(clientId?: string): string {
   if (!clientId) return '***';
   if (clientId.length <= 18) return `${clientId.substring(0, 6)}...`;
   return `${clientId.substring(0, 14)}...${clientId.substring(clientId.length - 6)}`;
 }
 
 function getClientRegistrationSigningKey(env: OAuthEnv): string {
-  return env.OAUTH_CLIENT_REGISTRATION_SIGNING_KEY || env.SUPABASE_SERVICE_KEY;
+  if (env.OAUTH_CLIENT_REGISTRATION_SIGNING_KEY) {
+    return env.OAUTH_CLIENT_REGISTRATION_SIGNING_KEY;
+  }
+
+  if (!warnedAboutSigningKeyFallback) {
+    warnedAboutSigningKeyFallback = true;
+    console.warn(
+      '[oauth] OAUTH_CLIENT_REGISTRATION_SIGNING_KEY is not set; falling back to SUPABASE_SERVICE_KEY for confidential MCP client signing'
+    );
+  }
+
+  return env.SUPABASE_SERVICE_KEY;
 }
 
 function isPerplexityCallbackUri(uri: string): boolean {
@@ -131,6 +143,9 @@ function isPerplexityCallbackUri(uri: string): boolean {
 }
 
 function isPerplexityRegistration(body: ClientRegistrationRequest): boolean {
+  // Perplexity omits token_endpoint_auth_method but currently rejects DCR
+  // responses that do not include a client_secret, so infer confidential mode
+  // from its callback shape or exact client_name when the method is omitted.
   return (body.redirect_uris || []).some(isPerplexityCallbackUri)
     || body.client_name?.trim().toLowerCase() === 'perplexity';
 }
@@ -642,18 +657,12 @@ export async function handleToken(
         return clientAuth.errorResponse;
       }
 
-      const token = clientAuth.clientId
-        ? await storage.exchangeCodeForToken(
-          body.code,
-          body.redirect_uri,
-          body.code_verifier,
-          clientAuth.clientId
-        )
-        : await storage.exchangeCodeForToken(
-          body.code,
-          body.redirect_uri,
-          body.code_verifier
-        );
+      const token = await storage.exchangeCodeForToken(
+        body.code,
+        body.redirect_uri,
+        body.code_verifier,
+        clientAuth.clientId
+      );
 
       if (!token) {
         return new Response(JSON.stringify({
@@ -702,9 +711,7 @@ export async function handleToken(
         return clientAuth.errorResponse;
       }
 
-      const token = clientAuth.clientId
-        ? await storage.refreshAccessToken(body.refresh_token, clientAuth.clientId)
-        : await storage.refreshAccessToken(body.refresh_token);
+      const token = await storage.refreshAccessToken(body.refresh_token, clientAuth.clientId);
 
       if (!token) {
         return new Response(JSON.stringify({
