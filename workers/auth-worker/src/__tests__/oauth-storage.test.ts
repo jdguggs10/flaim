@@ -300,6 +300,7 @@ describe('OAuthStorage MCP token lifetimes', () => {
     const token = await storage.exchangeCodeForToken(code, redirectUri, undefined, otherClient.clientId);
 
     expect(token).toBeNull();
+    expect(update).not.toHaveBeenCalled();
     expect(insert).not.toHaveBeenCalled();
   });
 

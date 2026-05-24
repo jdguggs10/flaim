@@ -391,6 +391,15 @@ export class OAuthStorage {
     codeVerifier?: string,
     clientId?: string
   ): Promise<OAuthToken | null> {
+    // Handler validation should reject this before storage, but keep this
+    // pre-claim guard for direct/internal callers so a wrong client_id does
+    // not burn an otherwise valid confidential authorization code.
+    const boundClientId = getClientIdFromBoundToken('mcp_ac', code);
+    if (boundClientId && boundClientId !== clientId) {
+      console.log('[oauth-storage] Confidential client_id mismatch before auth code claim');
+      return null;
+    }
+
     // Atomically claim the code — only succeeds if not already used and not expired
     const { data, error } = await this.supabase
       .from('oauth_codes')
@@ -426,7 +435,8 @@ export class OAuthStorage {
 
     if (authCode.clientId && authCode.clientId !== clientId) {
       // Code has already been consumed by the atomic claim above; this is
-      // intentional so a mismatched confidential-client attempt cannot replay.
+      // intentional for replay safety if an internal caller bypassed the
+      // pre-claim/handler binding checks.
       console.log('[oauth-storage] Confidential client_id mismatch during auth code exchange; code consumed, returning invalid_grant');
       return null;
     }

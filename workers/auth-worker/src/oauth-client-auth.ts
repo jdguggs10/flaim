@@ -16,6 +16,8 @@ export function generateSecureToken(length: number = 32): string {
 
 export async function createConfidentialClientRegistration(signingKey: string): Promise<ConfidentialClientRegistration> {
   const clientSecret = `${CLIENT_SECRET_PREFIX}${generateSecureToken(32)}`;
+  // The secret hash is embedded in client_id for stateless validation. This is
+  // safe because clientSecret is 256 bits of random entropy, not user material.
   const clientSecretHash = await sha256Base64Url(clientSecret);
   const clientHandle = generateSecureToken(16);
   const signedPayload = `${clientHandle}.${clientSecretHash}`;
