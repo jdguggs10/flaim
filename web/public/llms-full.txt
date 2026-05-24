@@ -33,14 +33,16 @@ Single MCP endpoint: https://api.flaim.app/mcp
 ## How to Connect
 
 1. Create a Flaim account at https://flaim.app
-2. Open https://flaim.app/leagues
+2. Go to https://flaim.app/leagues
 3. Connect your fantasy platforms there:
-   - ESPN: Use the Chrome extension to sync private ESPN leagues
+   - ESPN: Install the Chrome extension to sync private ESPN leagues
    - Yahoo: Start Yahoo auth from /leagues and wait for league discovery
    - Sleeper: Enter your exact username and wait for league discovery
-4. Open Flaim Fantasy in ChatGPT, or add the MCP server URL to an optional manual MCP client: https://api.flaim.app/mcp
+4. Open Flaim Fantasy in ChatGPT
 5. Authorize Flaim when prompted
 6. Start a fresh chat and ask "What leagues do I have?" to confirm setup
+
+Optional manual MCP clients can use the same server URL after leagues are connected: https://api.flaim.app/mcp
 
 ## Example Prompts
 
@@ -62,7 +64,7 @@ Flaim is a ChatGPT-first fantasy analysis app, a skill that teaches AI how to an
 Flaim is read-only. It cannot trade, drop, or modify anything in your league. ESPN credentials are encrypted and stored securely — they are never shared with AI providers.
 
 ### Why does ESPN need a Chrome extension?
-ESPN doesn't offer a public API for fantasy data. The extension is the preferred way to sync the session details Flaim needs for read-only access. Manual cookie entry is available as a fallback.
+ESPN doesn't offer a public API for private fantasy league data. For private ESPN leagues, the Chrome extension syncs the session details Flaim needs for read-only access.
 
 ### How does Flaim connect to AI clients?
 Flaim Fantasy is available in ChatGPT. Optional manual MCP clients can also add the single server URL, and Flaim handles authentication and data retrieval after your leagues are linked in /leagues.
@@ -74,8 +76,9 @@ The primary experience is Flaim Fantasy in ChatGPT. Optional manual MCP clients 
 
 - Website: https://flaim.app
 - Leagues setup: https://flaim.app/leagues
-- Setup guide: https://flaim.app/guide/platforms
-- AI setup guide: https://flaim.app/guide/ai
+- Help: https://flaim.app/guide
+- Platform guide: https://flaim.app/guide/platforms
+- AI guide: https://flaim.app/guide/ai
 - Sports guide: https://flaim.app/guide/sports
 - ChatGPT guide: https://flaim.app/guide/ai#chatgpt
 - Claude guide: https://flaim.app/guide/ai#claude
