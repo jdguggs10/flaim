@@ -68,6 +68,7 @@ SUPABASE_URL=https://xxx.supabase.co
 SUPABASE_SERVICE_KEY=sb_secret_...
 ENVIRONMENT=prod|preview|dev
 NODE_ENV=production|development
+OAUTH_CLIENT_REGISTRATION_SIGNING_KEY=optional-stable-secret
 ```
 
 ### MCP + Platform Workers (`fantasy-mcp`, `espn-client`, `yahoo-client`, `sleeper-client`)
