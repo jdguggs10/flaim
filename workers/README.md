@@ -71,6 +71,8 @@ NODE_ENV=production|development
 OAUTH_CLIENT_REGISTRATION_SIGNING_KEY=optional-stable-secret
 ```
 
+Use a dedicated stable `OAUTH_CLIENT_REGISTRATION_SIGNING_KEY` for preview and production before depending on confidential MCP clients. If it is omitted, auth-worker falls back to `SUPABASE_SERVICE_KEY`; rotating that key also invalidates existing confidential client registrations.
+
 ### MCP + Platform Workers (`fantasy-mcp`, `espn-client`, `yahoo-client`, `sleeper-client`)
 
 ```

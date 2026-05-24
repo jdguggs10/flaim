@@ -18,7 +18,9 @@
   // - YAHOO_CLIENT_SECRET  (Yahoo Developer App)
   // Optional vars:
   // - OAUTH_REFRESH_TOKEN_TTL_SECONDS (defaults to 31536000 in code; set only to override)
-  // - OAUTH_CLIENT_REGISTRATION_SIGNING_KEY (defaults to SUPABASE_SERVICE_KEY; keep stable if set)
+  // - OAUTH_CLIENT_REGISTRATION_SIGNING_KEY (defaults to SUPABASE_SERVICE_KEY;
+  //   set a dedicated stable secret in preview/prod so Supabase key rotation
+  //   does not invalidate confidential MCP client registrations)
 
   // Environment configurations
   "env": {

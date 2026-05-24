@@ -66,8 +66,6 @@ interface TokenRequest {
 // CONFIGURATION
 // =============================================================================
 
-// OAuth client ID (static for now, no DCR)
-const OAUTH_CLIENT_ID = 'flaim-mcp';
 let warnedAboutSigningKeyFallback = false;
 
 // Base URL for OAuth endpoints (used in metadata)
@@ -145,9 +143,8 @@ function isPerplexityCallbackUri(uri: string): boolean {
 function isPerplexityRegistration(body: ClientRegistrationRequest): boolean {
   // Perplexity omits token_endpoint_auth_method but currently rejects DCR
   // responses that do not include a client_secret, so infer confidential mode
-  // from its callback shape or exact client_name when the method is omitted.
-  return (body.redirect_uris || []).some(isPerplexityCallbackUri)
-    || body.client_name?.trim().toLowerCase() === 'perplexity';
+  // from its callback shape when the method is omitted.
+  return (body.redirect_uris || []).some(isPerplexityCallbackUri);
 }
 
 function shouldIssueConfidentialClient(body: ClientRegistrationRequest): boolean {
@@ -208,14 +205,9 @@ async function validateTokenEndpointClient(
   }
 
   if (isConfidentialClientId(body.client_id)) {
-    const validSecret = await validateConfidentialClientSecret(body.client_id, body.client_secret, signingKey);
-    if (!validSecret) {
-      return {
-        errorResponse: invalidClientResponse('Invalid client credentials', corsHeaders),
-      };
-    }
-
-    return { clientId: body.client_id };
+    return {
+      errorResponse: invalidClientResponse('confidential clients must use client-bound authorization codes and refresh tokens', corsHeaders),
+    };
   }
 
   return {};

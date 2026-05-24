@@ -111,6 +111,24 @@ describe('oauth-handlers', () => {
     expect(body.client_secret).toBeUndefined();
   });
 
+  it('does not infer Perplexity confidential mode from client_name alone', async () => {
+    const res = await handleClientRegistration(buildRegisterRequest({
+      client_name: 'Perplexity',
+    }), env, corsHeaders);
+
+    expect(res.status).toBe(201);
+    const body = await res.json() as {
+      client_id?: string;
+      client_secret?: string;
+      token_endpoint_auth_method?: string;
+    };
+
+    expect(body.client_id).toMatch(/^mcp_/);
+    expect(body.client_id).not.toMatch(/^mcp_conf_/);
+    expect(body.token_endpoint_auth_method).toBe('none');
+    expect(body.client_secret).toBeUndefined();
+  });
+
   it('returns a real client_secret for explicit client_secret_post DCR clients', async () => {
     const body = await registerConfidentialClient();
 
@@ -465,6 +483,35 @@ describe('oauth-handlers', () => {
     expect(exchangeCodeForToken).not.toHaveBeenCalled();
   });
 
+  it('rejects confidential client credentials for an unbound public authorization code', async () => {
+    const client = await registerConfidentialClient();
+    const exchangeCodeForToken = vi.fn();
+    vi.spyOn(OAuthStorage, 'fromEnvironment').mockReturnValue({
+      exchangeCodeForToken,
+    } as unknown as OAuthStorage);
+
+    const req = new Request('https://api.flaim.app/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        grant_type: 'authorization_code',
+        code: 'public-code',
+        redirect_uri: 'https://claude.ai/api/mcp/auth_callback',
+        code_verifier: 'verifier',
+        client_id: client.client_id,
+        client_secret: client.client_secret,
+      }),
+    });
+
+    const res = await handleToken(req, env, corsHeaders);
+    const body = await res.json() as { error?: string; error_description?: string };
+
+    expect(res.status).toBe(401);
+    expect(body.error).toBe('invalid_client');
+    expect(body.error_description).toContain('client-bound authorization codes');
+    expect(exchangeCodeForToken).not.toHaveBeenCalled();
+  });
+
   it('rejects unsigned confidential client_id values', async () => {
     const fakeClientId = buildUnsignedConfidentialClientId();
     const authCode = createClientBoundToken('mcp_ac', fakeClientId, 'test-code');
@@ -578,6 +625,33 @@ describe('oauth-handlers', () => {
 
     expect(res.status).toBe(401);
     expect(body.error).toBe('invalid_client');
+    expect(refreshAccessToken).not.toHaveBeenCalled();
+  });
+
+  it('rejects confidential client credentials for an unbound public refresh token', async () => {
+    const client = await registerConfidentialClient();
+    const refreshAccessToken = vi.fn();
+    vi.spyOn(OAuthStorage, 'fromEnvironment').mockReturnValue({
+      refreshAccessToken,
+    } as unknown as OAuthStorage);
+
+    const req = new Request('https://api.flaim.app/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        grant_type: 'refresh_token',
+        refresh_token: 'public-refresh-token',
+        client_id: client.client_id,
+        client_secret: client.client_secret,
+      }),
+    });
+
+    const res = await handleToken(req, env, corsHeaders);
+    const body = await res.json() as { error?: string; error_description?: string };
+
+    expect(res.status).toBe(401);
+    expect(body.error).toBe('invalid_client');
+    expect(body.error_description).toContain('client-bound authorization codes');
     expect(refreshAccessToken).not.toHaveBeenCalled();
   });
 
