@@ -160,6 +160,8 @@ describe('oauth-handlers', () => {
   });
 
   it('returns a client_secret for Perplexity DCR when auth method is client_secret_post', async () => {
+    // This verifies Perplexity works on the normal explicit confidential path,
+    // separate from the compatibility override for omitted/none auth methods.
     const res = await handleClientRegistration(buildRegisterRequest({
       redirect_uris: ['https://www.perplexity.ai/rest/connections/oauth_callback'],
       client_name: 'Perplexity',
