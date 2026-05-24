@@ -139,7 +139,7 @@ describe('oauth-handlers', () => {
     expect(body.token_endpoint_auth_method).toBe('client_secret_post');
   });
 
-  it('respects explicit public auth method for Perplexity DCR clients', async () => {
+  it('returns a client_secret for Perplexity DCR even when auth method is none', async () => {
     const res = await handleClientRegistration(buildRegisterRequest({
       redirect_uris: ['https://www.perplexity.ai/rest/connections/oauth_callback'],
       client_name: 'Perplexity',
@@ -153,10 +153,9 @@ describe('oauth-handlers', () => {
       token_endpoint_auth_method?: string;
     };
 
-    expect(body.client_id).toMatch(/^mcp_/);
-    expect(body.client_id).not.toMatch(/^mcp_conf_/);
-    expect(body.client_secret).toBeUndefined();
-    expect(body.token_endpoint_auth_method).toBe('none');
+    expect(body.client_id).toMatch(/^mcp_conf_/);
+    expect(body.client_secret).toMatch(/^mcp_secret_/);
+    expect(body.token_endpoint_auth_method).toBe('client_secret_post');
   });
 
   it('returns a client_secret for Perplexity DCR when auth method is omitted', async () => {
