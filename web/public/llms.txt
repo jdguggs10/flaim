@@ -16,7 +16,7 @@
 1. Create an account at https://flaim.app
 2. Go to https://flaim.app/leagues
 3. Connect your fantasy platforms there (private ESPN leagues via Chrome extension, Yahoo via OAuth, Sleeper via username)
-4. Open Flaim Fantasy in ChatGPT
+4. Open Flaim Fantasy in ChatGPT and authorize when prompted
 5. Start a fresh chat and ask what leagues you have to confirm setup
 6. Optional: add MCP server URL https://api.flaim.app/mcp to a manual MCP client
 
