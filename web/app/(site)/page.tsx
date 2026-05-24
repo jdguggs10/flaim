@@ -96,6 +96,56 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
         initialPresetId={initialPresetId ?? null}
       />
 
+      <section className="px-4 pb-10 pt-2 sm:px-6 lg:px-8">
+        <div
+          className="mx-auto grid max-w-5xl gap-4 text-sm text-muted-foreground md:grid-cols-3"
+          aria-label="Flaim platform, sport, and AI support"
+        >
+          <div className="rounded-2xl border bg-background/70 p-4">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-foreground/70">
+              Platforms
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {["ESPN", "Yahoo", "Sleeper"].map((platform) => (
+                <span
+                  key={platform}
+                  className="rounded-full border bg-background px-3 py-1"
+                >
+                  {platform}
+                </span>
+              ))}
+            </div>
+          </div>
+          <div className="rounded-2xl border bg-background/70 p-4">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-foreground/70">
+              Sports
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {["Football", "Baseball", "Basketball", "Hockey"].map(
+                (sport) => (
+                  <span
+                    key={sport}
+                    className="rounded-full border bg-background px-3 py-1"
+                  >
+                    {sport}
+                  </span>
+                ),
+              )}
+            </div>
+          </div>
+          <div className="rounded-2xl border bg-background/70 p-4">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-foreground/70">
+              Works With
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <span className="rounded-full border bg-background px-3 py-1">
+                ChatGPT
+              </span>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* Primary CTA */}
       <section className="px-4 pb-10 text-center">
         <SignedOut>
