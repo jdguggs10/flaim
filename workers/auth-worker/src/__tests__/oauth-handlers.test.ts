@@ -432,6 +432,76 @@ describe('oauth-handlers', () => {
     );
   });
 
+  it('accepts fallback-signed confidential clients while SUPABASE_SERVICE_KEY is unchanged', async () => {
+    const client = await registerConfidentialClient();
+    const authCode = createClientBoundToken('mcp_ac', client.client_id, 'test-code');
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+    const exchangeCodeForToken = vi.fn().mockResolvedValue({
+      accessToken: 'access-token',
+      scope: 'mcp:read',
+      expiresAt,
+      refreshToken: 'refresh-token',
+    });
+    vi.spyOn(OAuthStorage, 'fromEnvironment').mockReturnValue({
+      exchangeCodeForToken,
+    } as unknown as OAuthStorage);
+
+    const req = new Request('https://api.flaim.app/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        grant_type: 'authorization_code',
+        code: authCode,
+        redirect_uri: 'https://claude.ai/api/mcp/auth_callback',
+        code_verifier: 'verifier',
+        client_id: client.client_id,
+        client_secret: client.client_secret,
+      }),
+    });
+
+    const res = await handleToken(req, env, corsHeaders);
+
+    expect(res.status).toBe(200);
+    expect(exchangeCodeForToken).toHaveBeenCalledWith(
+      authCode,
+      'https://claude.ai/api/mcp/auth_callback',
+      'verifier',
+      client.client_id
+    );
+  });
+
+  it('rejects fallback-signed confidential clients after SUPABASE_SERVICE_KEY rotation', async () => {
+    const client = await registerConfidentialClient();
+    const authCode = createClientBoundToken('mcp_ac', client.client_id, 'test-code');
+    const exchangeCodeForToken = vi.fn();
+    vi.spyOn(OAuthStorage, 'fromEnvironment').mockReturnValue({
+      exchangeCodeForToken,
+    } as unknown as OAuthStorage);
+
+    const req = new Request('https://api.flaim.app/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        grant_type: 'authorization_code',
+        code: authCode,
+        redirect_uri: 'https://claude.ai/api/mcp/auth_callback',
+        code_verifier: 'verifier',
+        client_id: client.client_id,
+        client_secret: client.client_secret,
+      }),
+    });
+
+    const res = await handleToken(req, {
+      ...env,
+      SUPABASE_SERVICE_KEY: 'rotated-test-key',
+    }, corsHeaders);
+    const body = await res.json() as { error?: string };
+
+    expect(res.status).toBe(401);
+    expect(body.error).toBe('invalid_client');
+    expect(exchangeCodeForToken).not.toHaveBeenCalled();
+  });
+
   it('rejects authorization_code exchange for missing confidential client_secret', async () => {
     const client = await registerConfidentialClient();
     const authCode = createClientBoundToken('mcp_ac', client.client_id, 'test-code');
@@ -544,7 +614,7 @@ describe('oauth-handlers', () => {
 
     expect(res.status).toBe(401);
     expect(body.error).toBe('invalid_client');
-    expect(body.error_description).toContain('client-bound authorization codes');
+    expect(body.error_description).toBe('confidential clients must use client-bound authorization codes');
     expect(exchangeCodeForToken).not.toHaveBeenCalled();
   });
 
@@ -687,7 +757,7 @@ describe('oauth-handlers', () => {
 
     expect(res.status).toBe(401);
     expect(body.error).toBe('invalid_client');
-    expect(body.error_description).toContain('client-bound authorization codes');
+    expect(body.error_description).toBe('confidential clients must use client-bound refresh tokens');
     expect(refreshAccessToken).not.toHaveBeenCalled();
   });
 

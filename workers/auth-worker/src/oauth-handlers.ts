@@ -67,6 +67,7 @@ interface TokenRequest {
 // =============================================================================
 
 // Deduplicates noisy fallback warnings only within a warm Worker isolate.
+// Isolate recycling or redeploys reset this flag, so ops may see it again.
 let warnedAboutSigningKeyFallback = false;
 
 // Base URL for OAuth endpoints (used in metadata)
@@ -103,6 +104,7 @@ function maskState(state: string): string {
 }
 
 function maskClientId(clientId?: string): string {
+  // Short IDs are legacy/public client IDs; confidential IDs are much longer.
   if (!clientId) return '***';
   if (clientId.length <= 18) return `${clientId.substring(0, 6)}...`;
   return `${clientId.substring(0, 14)}...${clientId.substring(clientId.length - 6)}`;
@@ -150,14 +152,6 @@ function isPerplexityRegistration(body: ClientRegistrationRequest): boolean {
   return (body.redirect_uris || []).some(isPerplexityCallbackUri);
 }
 
-function shouldIssueConfidentialClient(body: ClientRegistrationRequest): boolean {
-  if (body.token_endpoint_auth_method === 'client_secret_post') {
-    return true;
-  }
-
-  return body.token_endpoint_auth_method === undefined && isPerplexityRegistration(body);
-}
-
 function invalidClientResponse(
   description: string,
   corsHeaders: Record<string, string>
@@ -179,6 +173,7 @@ function invalidClientResponse(
 async function validateTokenEndpointClient(
   body: TokenRequest,
   requiredClientId: string | undefined,
+  unboundConfidentialClientDescription: string,
   env: OAuthEnv,
   corsHeaders: Record<string, string>
 ): Promise<{ clientId?: string; errorResponse?: Response }> {
@@ -209,7 +204,7 @@ async function validateTokenEndpointClient(
 
   if (isConfidentialClientId(body.client_id)) {
     return {
-      errorResponse: invalidClientResponse('confidential clients must use client-bound authorization codes and refresh tokens', corsHeaders),
+      errorResponse: invalidClientResponse(unboundConfidentialClientDescription, corsHeaders),
     };
   }
 
@@ -338,7 +333,14 @@ export async function handleClientRegistration(
     });
   }
 
-  const issueConfidentialClient = shouldIssueConfidentialClient(body);
+  const inferredPerplexityConfidentialClient =
+    body.token_endpoint_auth_method === undefined && isPerplexityRegistration(body);
+  if (inferredPerplexityConfidentialClient) {
+    console.log('[oauth] Inferring client_secret_post for Perplexity DCR callback heuristic');
+  }
+
+  const issueConfidentialClient =
+    body.token_endpoint_auth_method === 'client_secret_post' || inferredPerplexityConfidentialClient;
   const confidentialClient = issueConfidentialClient
     ? await createConfidentialClientRegistration(getClientRegistrationSigningKey(env))
     : undefined;
@@ -360,7 +362,7 @@ export async function handleClientRegistration(
 
   if (confidentialClient) {
     response.client_secret = confidentialClient.clientSecret;
-    response.client_secret_expires_at = 0;
+    response.client_secret_expires_at = 0; // RFC 7591: 0 means no expiry
   }
 
   console.log(`📝 DCR: Registered client ${maskClientId(clientId)} for ${body.client_name || 'MCP Client'}`);
@@ -647,7 +649,13 @@ export async function handleToken(
       }
 
       const requiredClientId = getClientIdFromBoundToken('mcp_ac', body.code);
-      const clientAuth = await validateTokenEndpointClient(body, requiredClientId, env, corsHeaders);
+      const clientAuth = await validateTokenEndpointClient(
+        body,
+        requiredClientId,
+        'confidential clients must use client-bound authorization codes',
+        env,
+        corsHeaders
+      );
       if (clientAuth.errorResponse) {
         return clientAuth.errorResponse;
       }
@@ -701,7 +709,13 @@ export async function handleToken(
       }
 
       const requiredClientId = getClientIdFromBoundToken('mcp_rt', body.refresh_token);
-      const clientAuth = await validateTokenEndpointClient(body, requiredClientId, env, corsHeaders);
+      const clientAuth = await validateTokenEndpointClient(
+        body,
+        requiredClientId,
+        'confidential clients must use client-bound refresh tokens',
+        env,
+        corsHeaders
+      );
       if (clientAuth.errorResponse) {
         return clientAuth.errorResponse;
       }

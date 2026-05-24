@@ -11,7 +11,11 @@ export interface ConfidentialClientRegistration {
 export function generateSecureToken(length: number = 32): string {
   const bytes = new Uint8Array(length);
   crypto.getRandomValues(bytes);
-  const base64 = btoa(String.fromCharCode(...bytes));
+  let binary = '';
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+  const base64 = btoa(binary);
   return toBase64Url(base64);
 }
 
@@ -74,6 +78,7 @@ export function getClientIdFromBoundToken(
     return undefined;
   }
 
+  // The client_id segment is base64url text and cannot contain ".".
   const parts = token.split('.');
   if (parts.length !== 3 || parts[0] !== kind || !parts[1] || !parts[2]) {
     return undefined;
