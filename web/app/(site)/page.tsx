@@ -18,9 +18,11 @@ import {
   PUBLIC_CHAT_SIMPLE_PRESETS,
   PUBLIC_CHAT_TOOL_DISPLAY_LABELS,
 } from "@/lib/public-chat";
+import { CHATGPT_APP_URL } from "@/lib/product-links";
 import {
   ArrowRight,
   ChevronDown,
+  ExternalLink,
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
@@ -160,16 +162,28 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
 
       {/* Primary CTA */}
       <section className="px-4 pb-10 text-center">
-        <SignedOut>
-          <Button asChild size="lg">
-            <Link href="/leagues">Connect leagues now</Link>
+        <div className="flex flex-row flex-wrap items-center justify-center gap-3">
+          <SignedOut>
+            <Button asChild size="lg">
+              <Link href="/leagues">Connect leagues now</Link>
+            </Button>
+          </SignedOut>
+          <SignedIn>
+            <Button asChild size="lg">
+              <Link href="/leagues">Your Leagues</Link>
+            </Button>
+          </SignedIn>
+          <Button asChild variant="outline" size="lg">
+            <a
+              href={CHATGPT_APP_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              ChatGPT App Store
+              <ExternalLink className="ml-2 h-4 w-4" aria-hidden="true" />
+            </a>
           </Button>
-        </SignedOut>
-        <SignedIn>
-          <Button asChild size="lg">
-            <Link href="/leagues">Your Leagues</Link>
-          </Button>
-        </SignedIn>
+        </div>
       </section>
 
       {/* What You Can Ask */}
