@@ -32,6 +32,15 @@ interface LandingPageProps {
   }>;
 }
 
+const SUPPORTED_PLATFORMS = ["ESPN", "Yahoo", "Sleeper"] as const;
+const SUPPORTED_SPORTS = [
+  "Football",
+  "Baseball",
+  "Basketball",
+  "Hockey",
+] as const;
+const SUPPORTED_AI_TOOLS = ["ChatGPT"] as const;
+
 function getDemoHref(presetId: string) {
   return `/?preset=${presetId}#live-demo`;
 }
@@ -96,17 +105,17 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
         initialPresetId={initialPresetId ?? null}
       />
 
-      <section className="px-4 pb-10 pt-2 sm:px-6 lg:px-8">
-        <div
-          className="mx-auto grid max-w-5xl gap-4 text-sm text-muted-foreground md:grid-cols-3"
-          aria-label="Flaim platform, sport, and AI support"
-        >
+      <section
+        className="px-4 pb-10 pt-2 sm:px-6 lg:px-8"
+        aria-label="Flaim platform, sport, and AI support"
+      >
+        <div className="mx-auto grid max-w-5xl gap-4 text-sm text-muted-foreground md:grid-cols-3">
           <div className="rounded-2xl border bg-background/70 p-4">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-foreground/70">
               Platforms
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
-              {["ESPN", "Yahoo", "Sleeper"].map((platform) => (
+              {SUPPORTED_PLATFORMS.map((platform) => (
                 <span
                   key={platform}
                   className="rounded-full border bg-background px-3 py-1"
@@ -121,16 +130,14 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
               Sports
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
-              {["Football", "Baseball", "Basketball", "Hockey"].map(
-                (sport) => (
-                  <span
-                    key={sport}
-                    className="rounded-full border bg-background px-3 py-1"
-                  >
-                    {sport}
-                  </span>
-                ),
-              )}
+              {SUPPORTED_SPORTS.map((sport) => (
+                <span
+                  key={sport}
+                  className="rounded-full border bg-background px-3 py-1"
+                >
+                  {sport}
+                </span>
+              ))}
             </div>
           </div>
           <div className="rounded-2xl border bg-background/70 p-4">
@@ -138,9 +145,14 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
               Works With
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
-              <span className="rounded-full border bg-background px-3 py-1">
-                ChatGPT
-              </span>
+              {SUPPORTED_AI_TOOLS.map((tool) => (
+                <span
+                  key={tool}
+                  className="rounded-full border bg-background px-3 py-1"
+                >
+                  {tool}
+                </span>
+              ))}
             </div>
           </div>
         </div>
