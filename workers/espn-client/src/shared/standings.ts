@@ -28,8 +28,16 @@ interface DeriveStandingsOutcomeInput {
   seasonComplete: boolean;
 }
 
+function getValidFinalRank(
+  rankFinal?: number,
+  rankCalculatedFinal?: number,
+): number | null {
+  // ESPN can return 0 as a sentinel for "not yet ranked".
+  return [rankFinal, rankCalculatedFinal].find((rank) => rank != null && rank > 0) ?? null;
+}
+
 function hasExplicitCompletionData(teams: EspnTeam[]): boolean {
-  return teams.some((team) => team.rankFinal != null || team.rankCalculatedFinal != null);
+  return teams.some((team) => getValidFinalRank(team.rankFinal, team.rankCalculatedFinal) !== null);
 }
 
 export function deriveStandingsSeasonPhase({
@@ -65,7 +73,7 @@ export function deriveStandingsOutcome({
   playoffSeed,
   seasonComplete,
 }: DeriveStandingsOutcomeInput): EspnStandingsOutcome {
-  const resolvedFinalRank = rankFinal ?? rankCalculatedFinal ?? null;
+  const resolvedFinalRank = getValidFinalRank(rankFinal, rankCalculatedFinal);
   const finalRank = seasonComplete && resolvedFinalRank !== null ? resolvedFinalRank : null;
   const championshipWon = finalRank !== null ? finalRank === 1 : null;
   const playoffOutcome =
