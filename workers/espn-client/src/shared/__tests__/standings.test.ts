@@ -37,6 +37,17 @@ describe('deriveStandingsSeasonPhase', () => {
     })).toBe('season_complete');
   });
 
+  it('does not treat zero final ranks as explicit completion data', () => {
+    expect(deriveStandingsSeasonPhase({
+      requestedSeasonYear: 2026,
+      currentSeasonYear: 2026,
+      currentMatchupPeriod: 21,
+      scoringPeriodId: 150,
+      regularSeasonMatchupPeriods: 20,
+      teams: [{ id: 1, rankFinal: 0, rankCalculatedFinal: 0 }],
+    })).toBe('playoffs_in_progress');
+  });
+
   it('returns playoffs_in_progress for current-season requests after the regular season', () => {
     expect(deriveStandingsSeasonPhase({
       requestedSeasonYear: 2026,
@@ -145,6 +156,63 @@ describe('deriveStandingsOutcome', () => {
       playoffOutcome: null,
       outcomeConfidence: null,
       madePlayoffs: null,
+    });
+  });
+
+  it('keeps outcome fields null when completed-season final ranks are zero', () => {
+    expect(deriveStandingsOutcome({
+      rankFinal: 0,
+      rankCalculatedFinal: 0,
+      seasonComplete: true,
+    })).toEqual({
+      finalRank: null,
+      championshipWon: null,
+      playoffOutcome: null,
+      outcomeConfidence: null,
+      madePlayoffs: null,
+    });
+  });
+
+  it('keeps outcome fields null when only rankFinal is zero', () => {
+    expect(deriveStandingsOutcome({
+      rankFinal: 0,
+      seasonComplete: true,
+    })).toEqual({
+      finalRank: null,
+      championshipWon: null,
+      playoffOutcome: null,
+      outcomeConfidence: null,
+      madePlayoffs: null,
+    });
+  });
+
+  it('falls back to rankCalculatedFinal when rankFinal is zero', () => {
+    expect(deriveStandingsOutcome({
+      rankFinal: 0,
+      rankCalculatedFinal: 3,
+      playoffSeed: 3,
+      seasonComplete: true,
+    })).toEqual({
+      finalRank: 3,
+      championshipWon: false,
+      playoffOutcome: 'eliminated',
+      outcomeConfidence: 'explicit',
+      madePlayoffs: true,
+    });
+  });
+
+  it('prefers valid rankFinal when rankCalculatedFinal is zero', () => {
+    expect(deriveStandingsOutcome({
+      rankFinal: 2,
+      rankCalculatedFinal: 0,
+      playoffSeed: 2,
+      seasonComplete: true,
+    })).toEqual({
+      finalRank: 2,
+      championshipWon: false,
+      playoffOutcome: 'runner_up',
+      outcomeConfidence: 'explicit',
+      madePlayoffs: true,
     });
   });
 
