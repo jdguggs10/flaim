@@ -1026,46 +1026,70 @@ describe('yahoo-connect-handlers', () => {
       );
     });
 
-    it('keeps retryable metadata when another owner wins before cooldown marking', async () => {
+    it('uses stored cooldown metadata when another owner wins before cooldown marking', async () => {
       const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
-      mockStorage.getYahooCredentials.mockResolvedValue({
-        clerkUserId: 'user_123',
-        accessToken: 'old-access-token',
-        refreshToken: 'refresh-token',
-        expiresAt: new Date(Date.now() + 2 * 60 * 1000),
-        needsRefresh: true,
-      });
-      mockStorage.acquireRefreshLease.mockResolvedValue(true);
-      mockStorage.markRefreshCooldown.mockResolvedValue(false);
-      mockFetch.mockResolvedValue(new Response(
-        JSON.stringify({
-          error: 'rate_limited',
-          error_description: 'Too many token requests',
-        }),
-        { status: 429 }
-      ));
-
-      const response = await handleYahooCredentials(env, 'user_123', corsHeaders, 'req_cooldown_owner_miss');
-
-      expect(response.status).toBe(503);
-      const body = (await response.json()) as Record<string, unknown>;
-      expect(body.error).toBe('refresh_temporarily_unavailable');
-      expect(body.retryable).toBe(true);
-      expect(body.retry_after).toBe(60);
-      expect(body.retry_after_source).toBe('fallback_default');
-      expect(mockStorage.releaseRefreshLease).not.toHaveBeenCalled();
-      expect(yahooRefreshDiagnostics(logSpy)).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            event: 'refresh_cooldown_marked',
-            correlation_id: 'req_cooldown_owner_miss',
-            diagnostic_class: 'yahoo_rate_limit',
-            reason: 'owner_guard_miss',
-            retry_after: 60,
-            retry_after_source: 'fallback_default',
+      vi.useFakeTimers();
+      const start = new Date('2026-05-21T18:45:00Z');
+      vi.setSystemTime(start);
+      try {
+        mockStorage.getYahooCredentials
+          .mockResolvedValueOnce({
+            clerkUserId: 'user_123',
+            accessToken: 'old-access-token',
+            refreshToken: 'refresh-token',
+            expiresAt: new Date(start.getTime() + 2 * 60 * 1000),
+            needsRefresh: true,
+          })
+          .mockResolvedValueOnce({
+            clerkUserId: 'user_123',
+            accessToken: 'old-access-token',
+            refreshToken: 'refresh-token',
+            expiresAt: new Date(start.getTime() + 2 * 60 * 1000),
+            needsRefresh: true,
+            refreshLeaseOwner: 'cooldown:other-owner',
+            refreshLeaseExpiresAt: new Date(start.getTime() + 120_000),
+          });
+        mockStorage.acquireRefreshLease.mockResolvedValue(true);
+        mockStorage.markRefreshCooldown.mockResolvedValue(false);
+        mockFetch.mockResolvedValue(new Response(
+          JSON.stringify({
+            error: 'rate_limited',
+            error_description: 'Too many token requests',
           }),
-        ])
-      );
+          { status: 429 }
+        ));
+
+        const response = await handleYahooCredentials(env, 'user_123', corsHeaders, 'req_cooldown_owner_miss');
+
+        expect(response.status).toBe(503);
+        const body = (await response.json()) as Record<string, unknown>;
+        expect(body.error).toBe('refresh_temporarily_unavailable');
+        expect(body.retryable).toBe(true);
+        expect(body.retry_after).toBe(120);
+        expect(body.retry_after_source).toBe('cooldown_remaining');
+        expect(mockStorage.releaseRefreshLease).not.toHaveBeenCalled();
+        expect(mockStorage.getYahooCredentials).toHaveBeenCalledTimes(2);
+        expect(yahooRefreshDiagnostics(logSpy)).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              event: 'refresh_cooldown_marked',
+              correlation_id: 'req_cooldown_owner_miss',
+              diagnostic_class: 'yahoo_rate_limit',
+              reason: 'owner_guard_miss',
+              retry_after: 60,
+              retry_after_source: 'fallback_default',
+            }),
+            expect.objectContaining({
+              event: 'refresh_cooldown_active',
+              correlation_id: 'req_cooldown_owner_miss',
+              retry_after: 120,
+              retry_after_source: 'cooldown_remaining',
+            }),
+          ])
+        );
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('does not treat permanent token failures as retryable just because the body says too many', async () => {

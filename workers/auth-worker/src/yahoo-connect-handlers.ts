@@ -662,7 +662,7 @@ function yahooRefreshCooldownResult(
   credentials: YahooCredentials,
   logDiagnostic: (event: string, fields?: YahooRefreshDiagnosticFields) => void
 ): GetTokenResult {
-  const retryAfter = retryAfterFromLease(credentials) ?? YAHOO_REFRESH_IN_PROGRESS_RETRY_AFTER_SECONDS;
+  const retryAfter = retryAfterFromLease(credentials) ?? YAHOO_REFRESH_RATE_LIMIT_FALLBACK_COOLDOWN_SECONDS;
   logDiagnostic('refresh_cooldown_active', {
     userId: credentials.clerkUserId,
     phase: 'cooldown',
@@ -1019,6 +1019,12 @@ async function getValidYahooAccessToken(
             ...yahooTokenResponseDiagnosticFields(result),
             secondsSinceCredentialUpdate: secondsSince(credentials.updatedAt),
           });
+          if (!cooldownMarked) {
+            const latest = await storage.getYahooCredentials(userId);
+            if (latest && isRefreshCooldown(latest)) {
+              return yahooRefreshCooldownResult(latest, logDiagnostic);
+            }
+          }
         } catch (cooldownError) {
           console.warn('[yahoo-connect] Failed to mark Yahoo refresh cooldown:', cooldownError);
           logDiagnostic('refresh_cooldown_mark_failed', {
