@@ -19,6 +19,9 @@ on:
       - '.github/workflows/check-web.yml'
   workflow_dispatch:
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
 jobs:
   check:
     name: Lint & Type-check
