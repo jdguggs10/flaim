@@ -371,6 +371,37 @@ export class YahooStorage {
   }
 
   /**
+   * Convert the current refresh lease into a short cooldown marker.
+   * Only the active lease owner can mark cooldown, which prevents stale callers
+   * from extending backoff after another request has already taken over.
+   */
+  async markRefreshCooldown(
+    clerkUserId: string,
+    ownerId: string,
+    cooldownOwnerId: string,
+    ttlMs: number
+  ): Promise<boolean> {
+    const expiresAt = new Date(Date.now() + ttlMs).toISOString();
+
+    const { data, error } = await this.supabase
+      .from('yahoo_credentials')
+      .update({
+        refresh_lease_owner: cooldownOwnerId,
+        refresh_lease_expires_at: expiresAt,
+      })
+      .eq('clerk_user_id', clerkUserId)
+      .eq('refresh_lease_owner', ownerId)
+      .select('clerk_user_id');
+
+    if (error) {
+      console.error('[yahoo-storage] Failed to mark Yahoo refresh cooldown:', error);
+      throw new Error('Failed to mark Yahoo refresh cooldown');
+    }
+
+    return (data?.length ?? 0) > 0;
+  }
+
+  /**
    * Atomically acquire the refresh lease for a user.
    *
    * The update only succeeds if no other owner holds an unexpired lease
