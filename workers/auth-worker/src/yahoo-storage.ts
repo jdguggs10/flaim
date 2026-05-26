@@ -16,6 +16,8 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { clearDefaultsForLeague as _clearDefaultsForLeague, clearDefaultsForPlatform as _clearDefaultsForPlatform } from './preference-defaults';
 
+const REFRESH_COOLDOWN_OWNER_PREFIX = 'cooldown:';
+
 // =============================================================================
 // TYPES
 // =============================================================================
@@ -378,7 +380,6 @@ export class YahooStorage {
   async markRefreshCooldown(
     clerkUserId: string,
     ownerId: string,
-    cooldownOwnerId: string,
     ttlMs: number
   ): Promise<boolean> {
     const expiresAt = new Date(Date.now() + ttlMs).toISOString();
@@ -386,7 +387,7 @@ export class YahooStorage {
     const { data, error } = await this.supabase
       .from('yahoo_credentials')
       .update({
-        refresh_lease_owner: cooldownOwnerId,
+        refresh_lease_owner: `${REFRESH_COOLDOWN_OWNER_PREFIX}${ownerId}`,
         refresh_lease_expires_at: expiresAt,
       })
       .eq('clerk_user_id', clerkUserId)

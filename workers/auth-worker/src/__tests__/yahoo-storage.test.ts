@@ -587,7 +587,6 @@ describe('YahooStorage', () => {
       const result = await storage.markRefreshCooldown(
         'user_123',
         'owner-1',
-        'cooldown:owner-1',
         60_000
       );
 
@@ -609,7 +608,6 @@ describe('YahooStorage', () => {
       const result = await storage.markRefreshCooldown(
         'user_123',
         'owner-1',
-        'cooldown:owner-1',
         60_000
       );
 
@@ -620,7 +618,7 @@ describe('YahooStorage', () => {
       mockSelect.mockResolvedValue({ data: null, error: { message: 'cooldown failed' } });
 
       await expect(
-        storage.markRefreshCooldown('user_123', 'owner-1', 'cooldown:owner-1', 60_000)
+        storage.markRefreshCooldown('user_123', 'owner-1', 60_000)
       ).rejects.toThrow('Failed to mark Yahoo refresh cooldown');
     });
   });

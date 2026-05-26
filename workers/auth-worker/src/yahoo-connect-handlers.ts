@@ -71,7 +71,7 @@ interface YahooTokenResponse {
 
 type YahooCredentialRefreshState = 'none' | 'in_progress' | 'cooldown' | 'expired';
 type YahooTokenGrantType = 'authorization_code' | 'refresh_token';
-type YahooRetryAfterSource = 'upstream_header' | 'fallback_default';
+type YahooRetryAfterSource = 'upstream_header' | 'fallback_default' | 'cooldown_remaining';
 type YahooTokenBodyClass =
   | 'empty'
   | 'json_error'
@@ -666,7 +666,7 @@ function yahooRefreshCooldownResult(
     diagnosticClass: 'cooldown_active',
     refreshState: 'cooldown',
     retryAfter,
-    retryAfterSource: 'fallback_default',
+    retryAfterSource: 'cooldown_remaining',
     leaseRemainingSeconds: retryAfter,
   });
   return {
@@ -674,7 +674,7 @@ function yahooRefreshCooldownResult(
     errorDescription: 'Yahoo token refresh is cooling down after a temporary Yahoo response. Please try again shortly.',
     retryable: true,
     retryAfter,
-    retryAfterSource: 'fallback_default',
+    retryAfterSource: 'cooldown_remaining',
   };
 }
 
@@ -1001,7 +1001,6 @@ async function getValidYahooAccessToken(
           const cooldownMarked = await storage.markRefreshCooldown(
             userId,
             ownerId,
-            `${REFRESH_COOLDOWN_OWNER_PREFIX}${ownerId}`,
             retryAfter * 1000
           );
           logDiagnostic('refresh_cooldown_marked', {
