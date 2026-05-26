@@ -17,7 +17,12 @@
  * For the PROVIDER side (issuing tokens TO AI clients), see oauth-handlers.ts.
  */
 
-import { YahooStorage, type YahooCredentialHealth, type YahooCredentials } from './yahoo-storage';
+import {
+  REFRESH_COOLDOWN_OWNER_PREFIX,
+  YahooStorage,
+  type YahooCredentialHealth,
+  type YahooCredentials,
+} from './yahoo-storage';
 import { getFrontendUrl, resolvePreviewOrigin } from './preview-url';
 import {
   YAHOO_DEFAULT_TRANSIENT_RETRY_AFTER_SECONDS,
@@ -175,7 +180,6 @@ const LEASE_TTL_MS       = 30_000;
 // Used for both OAuth exchange and refresh token requests; must stay below LEASE_TTL_MS.
 const YAHOO_TOKEN_REQUEST_TIMEOUT_MS = 20_000;
 const YAHOO_REQUEST_LEASE_SAFETY_MS = 1_000;
-const REFRESH_COOLDOWN_OWNER_PREFIX = 'cooldown:';
 // Yahoo token refresh 429s often omit Retry-After. Keep our own no-Yahoo
 // window modest so interactive users are not blocked for 15 minutes while
 // still preventing rapid retry pile-ons.

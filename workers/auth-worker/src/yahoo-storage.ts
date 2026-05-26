@@ -16,7 +16,7 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { clearDefaultsForLeague as _clearDefaultsForLeague, clearDefaultsForPlatform as _clearDefaultsForPlatform } from './preference-defaults';
 
-const REFRESH_COOLDOWN_OWNER_PREFIX = 'cooldown:';
+export const REFRESH_COOLDOWN_OWNER_PREFIX = 'cooldown:';
 
 // =============================================================================
 // TYPES
