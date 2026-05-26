@@ -16,6 +16,8 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { clearDefaultsForLeague as _clearDefaultsForLeague, clearDefaultsForPlatform as _clearDefaultsForPlatform } from './preference-defaults';
 
+export const REFRESH_COOLDOWN_OWNER_PREFIX = 'cooldown:';
+
 // =============================================================================
 // TYPES
 // =============================================================================
@@ -368,6 +370,36 @@ export class YahooStorage {
       console.log(`[yahoo-storage] Recovered Yahoo credentials for user ${maskUserId(clerkUserId)} after owner guard miss`);
     }
     return updated;
+  }
+
+  /**
+   * Convert the current refresh lease into a short cooldown marker.
+   * Only the active lease owner can mark cooldown, which prevents stale callers
+   * from extending backoff after another request has already taken over.
+   */
+  async markRefreshCooldown(
+    clerkUserId: string,
+    ownerId: string,
+    ttlMs: number
+  ): Promise<boolean> {
+    const expiresAt = new Date(Date.now() + ttlMs).toISOString();
+
+    const { data, error } = await this.supabase
+      .from('yahoo_credentials')
+      .update({
+        refresh_lease_owner: `${REFRESH_COOLDOWN_OWNER_PREFIX}${ownerId}`,
+        refresh_lease_expires_at: expiresAt,
+      })
+      .eq('clerk_user_id', clerkUserId)
+      .eq('refresh_lease_owner', ownerId)
+      .select('clerk_user_id');
+
+    if (error) {
+      console.error('[yahoo-storage] Failed to mark Yahoo refresh cooldown:', error);
+      throw new Error('Failed to mark Yahoo refresh cooldown');
+    }
+
+    return (data?.length ?? 0) > 0;
   }
 
   /**

@@ -580,6 +580,49 @@ describe('YahooStorage', () => {
     });
   });
 
+  describe('markRefreshCooldown', () => {
+    it('marks cooldown only for the current lease owner', async () => {
+      mockSelect.mockResolvedValue({ data: [{ clerk_user_id: 'user_123' }], error: null });
+
+      const result = await storage.markRefreshCooldown(
+        'user_123',
+        'owner-1',
+        60_000
+      );
+
+      expect(result).toBe(true);
+      expect(mockUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          refresh_lease_owner: 'cooldown:owner-1',
+          refresh_lease_expires_at: expect.any(String),
+        })
+      );
+      expect(mockEq).toHaveBeenNthCalledWith(1, 'clerk_user_id', 'user_123');
+      expect(mockEq).toHaveBeenNthCalledWith(2, 'refresh_lease_owner', 'owner-1');
+      expect(mockSelect).toHaveBeenCalledWith('clerk_user_id');
+    });
+
+    it('returns false when the current lease owner changed', async () => {
+      mockSelect.mockResolvedValue({ data: [], error: null });
+
+      const result = await storage.markRefreshCooldown(
+        'user_123',
+        'owner-1',
+        60_000
+      );
+
+      expect(result).toBe(false);
+    });
+
+    it('throws when cooldown marking hits a storage error', async () => {
+      mockSelect.mockResolvedValue({ data: null, error: { message: 'cooldown failed' } });
+
+      await expect(
+        storage.markRefreshCooldown('user_123', 'owner-1', 60_000)
+      ).rejects.toThrow('Failed to mark Yahoo refresh cooldown');
+    });
+  });
+
   describe('releaseRefreshLease', () => {
     it('clears the lease only for the current owner', async () => {
       await storage.releaseRefreshLease('user_123', 'owner-1');
