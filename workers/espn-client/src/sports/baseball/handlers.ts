@@ -11,6 +11,7 @@ import {
   getPositionName,
   getLineupSlotName,
   getProTeamAbbrev,
+  getStatName,
   getInjuryStatus,
   transformEligiblePositions,
   transformStats,
@@ -20,6 +21,44 @@ import { getCurrentSeasonYear, getSeasonContext, normalizeEspnLeagueStatus } fro
 import { deriveStandingsOutcome, deriveStandingsSeasonPhase } from '../../shared/standings';
 
 const GAME_ID = 'flb'; // ESPN's game ID for fantasy baseball
+
+type MatchupSide = NonNullable<NonNullable<EspnLeagueResponse['schedule']>[number]['home']>;
+
+function normalizeMatchupSide(side: MatchupSide | undefined, teamsById: Record<number, string>, scoringType?: string) {
+  if (!side) return null;
+
+  const isCategoryScoring = scoringType === 'H2H_CATEGORY';
+  const scoreByStat = side.cumulativeScore?.scoreByStat;
+  const categoryScoreAvailable = isCategoryScoring && !!side.cumulativeScore;
+  const categories = scoreByStat
+    ? Object.entries(scoreByStat).map(([statId, value]) => ({
+        statId: Number(statId),
+        name: getStatName(Number(statId)),
+        value: value.score ?? null,
+        result: value.result ?? null,
+        rank: value.rank,
+        ineligible: value.ineligible,
+      }))
+    : undefined;
+
+  return {
+    teamId: side.teamId,
+    teamName: side.teamId ? teamsById[side.teamId] : undefined,
+    scoringType,
+    scoreAvailable: isCategoryScoring ? categoryScoreAvailable : typeof side.totalPoints === 'number',
+    totalPoints: isCategoryScoring ? null : side.totalPoints ?? null,
+    totalProjectedPoints: isCategoryScoring
+      ? null
+      : side.totalProjectedPointsLive ?? side.totalProjectedPoints ?? null,
+    pointsByScoringPeriod: isCategoryScoring ? undefined : side.pointsByScoringPeriod,
+    categoryScore: categoryScoreAvailable ? {
+      wins: side.cumulativeScore?.wins ?? 0,
+      losses: side.cumulativeScore?.losses ?? 0,
+      ties: side.cumulativeScore?.ties ?? 0,
+    } : null,
+    categories,
+  };
+}
 
 type HandlerFn = (
   env: Env,
@@ -295,7 +334,7 @@ async function handleGetMatchups(
   try {
     const credentials = await getCredentials(env, authHeader, correlationId);
 
-    let path = `/seasons/${season_year}/segments/0/leagues/${league_id}?view=mMatchupScore&view=mScoreboard&view=mTeam`;
+    let path = `/seasons/${season_year}/segments/0/leagues/${league_id}?view=mMatchupScore&view=mScoreboard&view=mTeam&view=mSettings`;
     if (week) {
       path += `&scoringPeriodId=${week}&matchupPeriodId=${week}`;
     }
@@ -317,6 +356,7 @@ async function handleGetMatchups(
           : team.name || `Team ${team.id}`,
       ])
     );
+    const scoringType = data?.settings?.scoringSettings?.scoringType;
 
     // Transform matchups
     const matchupPeriod = week ?? currentMatchupPeriod ?? data?.scoringPeriodId;
@@ -324,20 +364,8 @@ async function handleGetMatchups(
       .filter((matchup) => matchupPeriod == null || matchup.matchupPeriodId === matchupPeriod)
       .map((matchup) => ({
         matchupPeriodId: matchup.matchupPeriodId,
-        home: matchup.home ? {
-          teamId: matchup.home.teamId,
-          teamName: matchup.home.teamId ? teamsById[matchup.home.teamId] : undefined,
-          totalPoints: matchup.home.totalPoints || 0,
-          totalProjectedPoints: matchup.home.totalProjectedPointsLive || matchup.home.totalProjectedPoints,
-          pointsByScoringPeriod: matchup.home.pointsByScoringPeriod
-        } : null,
-        away: matchup.away ? {
-          teamId: matchup.away.teamId,
-          teamName: matchup.away.teamId ? teamsById[matchup.away.teamId] : undefined,
-          totalPoints: matchup.away.totalPoints || 0,
-          totalProjectedPoints: matchup.away.totalProjectedPointsLive || matchup.away.totalProjectedPoints,
-          pointsByScoringPeriod: matchup.away.pointsByScoringPeriod
-        } : null,
+        home: normalizeMatchupSide(matchup.home, teamsById, scoringType),
+        away: normalizeMatchupSide(matchup.away, teamsById, scoringType),
         winner: matchup.winner,
         playoffTierType: matchup.playoffTierType
       }));
@@ -349,6 +377,7 @@ async function handleGetMatchups(
         seasonYear: season_year,
         currentScoringPeriod: data?.scoringPeriodId,
         matchupPeriod: matchupPeriod ?? null,
+        scoringType,
         matchups
       }
     };
@@ -603,6 +632,10 @@ async function handleGetTransactions(
     const allIds = [...new Set(filtered.flatMap((t) => [
       ...(t.players_added ?? []).map((p) => p.id),
       ...(t.players_dropped ?? []).map((p) => p.id),
+      ...(t.trade_sides ?? []).flatMap((side) => [
+        ...side.acquired.map((p) => p.id),
+        ...side.gave_up.map((p) => p.id),
+      ]),
     ]))];
     if (allIds.length > 0) {
       try {

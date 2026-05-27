@@ -605,6 +605,10 @@ async function handleGetTransactions(
     const allIds = [...new Set(filtered.flatMap((t) => [
       ...(t.players_added ?? []).map((p) => p.id),
       ...(t.players_dropped ?? []).map((p) => p.id),
+      ...(t.trade_sides ?? []).flatMap((side) => [
+        ...side.acquired.map((p) => p.id),
+        ...side.gave_up.map((p) => p.id),
+      ]),
     ]))];
     if (allIds.length > 0) {
       try {

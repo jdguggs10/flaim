@@ -13,6 +13,11 @@ export interface NormalizedTransaction {
   team_ids?: string[];
   players_added?: Array<{ id: string; name?: string; position?: string; team?: string }>;
   players_dropped?: Array<{ id: string; name?: string; position?: string; team?: string }>;
+  trade_sides?: Array<{
+    team_id: string;
+    acquired: Array<{ id: string; name?: string; position?: string; team?: string }>;
+    gave_up: Array<{ id: string; name?: string; position?: string; team?: string }>;
+  }>;
   faab_bid?: number | null;
 }
 
@@ -44,6 +49,12 @@ interface EspnActivityTopic {
 
 interface EspnActivityResponse {
   topics?: EspnActivityTopic[];
+}
+
+interface TradeMovement {
+  playerId: string;
+  fromTeamId: string;
+  toTeamId: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -284,6 +295,7 @@ export function mergeTradePlayerDetails(
       ...txn,
       players_added: match.players_added,
       players_dropped: match.players_dropped,
+      trade_sides: match.trade_sides,
       team_ids: match.team_ids?.length ? match.team_ids : txn.team_ids,
     };
   });
@@ -327,6 +339,73 @@ function getTeamIds(messageTypeId: number, message: EspnActivityMessage): string
     if (typeof message.for === 'number' && message.for > 0) set.add(String(message.for));
   }
   return Array.from(set);
+}
+
+function buildTradeSides(movements: TradeMovement[]): NonNullable<NormalizedTransaction['trade_sides']> {
+  const teamIds = new Set<string>();
+  for (const movement of movements) {
+    teamIds.add(movement.fromTeamId);
+    teamIds.add(movement.toTeamId);
+  }
+
+  return Array.from(teamIds).sort((a, b) => Number(a) - Number(b)).map((teamId) => ({
+    team_id: teamId,
+    acquired: movements
+      .filter((movement) => movement.toTeamId === teamId)
+      .map((movement) => ({ id: movement.playerId })),
+    gave_up: movements
+      .filter((movement) => movement.fromTeamId === teamId)
+      .map((movement) => ({ id: movement.playerId })),
+  }));
+}
+
+function normalizeTradeTopic(topic: EspnActivityTopic, topicIndex: number, requestedWeeks: Set<number>, explicitSingleWeek: boolean): NormalizedTransaction | null {
+  const messages = topic.messages ?? [];
+  const tradeMessages = messages.filter(
+    (msg) =>
+      msg.messageTypeId === 244 &&
+      msg.targetId !== undefined &&
+      typeof msg.from === 'number' &&
+      msg.from > 0 &&
+      typeof msg.to === 'number' &&
+      msg.to > 0,
+  );
+  if (tradeMessages.length === 0) return null;
+
+  const week = getWeekFromActivity(topic, tradeMessages[0] ?? {});
+  if (week !== null && requestedWeeks.size > 0 && !requestedWeeks.has(week)) {
+    return null;
+  }
+  if (week === null && explicitSingleWeek) {
+    return null;
+  }
+
+  const timestamp = tradeMessages[0]?.date ?? topic.date ?? 0;
+  const movements = tradeMessages.map((msg) => ({
+    playerId: String(msg.targetId),
+    fromTeamId: String(msg.from),
+    toTeamId: String(msg.to),
+  }));
+  const teamIds = Array.from(new Set(movements.flatMap((movement) => [
+    movement.fromTeamId,
+    movement.toTeamId,
+  ]))).sort((a, b) => Number(a) - Number(b));
+
+  return {
+    transaction_id: tradeMessages.length === 1 && tradeMessages[0]?.id !== undefined
+      ? String(tradeMessages[0].id)
+      : String(topic.id ?? `topic-${topicIndex}-trade-${timestamp}-${teamIds.join('-')}`),
+    type: 'trade',
+    status: 'complete',
+    timestamp,
+    date: new Date(timestamp).toISOString().slice(0, 10),
+    week,
+    team_ids: teamIds,
+    players_added: [],
+    players_dropped: [],
+    trade_sides: buildTradeSides(movements),
+    faab_bid: null,
+  };
 }
 
 export interface EspnLeagueContext {
@@ -399,12 +478,14 @@ export async function fetchEspnTransactionsByWeeks(
 
     for (let topicIndex = 0; topicIndex < topics.length; topicIndex += 1) {
       const topic = topics[topicIndex];
+      const tradeRow = normalizeTradeTopic(topic, topicIndex, requestedWeeks, explicitSingleWeek);
       const messages = topic.messages ?? [];
       const topicTimestamp = topic.date ?? 0;
       for (let msgIndex = 0; msgIndex < messages.length; msgIndex += 1) {
         const msg = messages[msgIndex];
         const normalizedType = toTxnTypeFromMessageId(msg.messageTypeId);
         if (!normalizedType) continue;
+        if (normalizedType === 'trade') continue;
 
         const inferredWeek = getWeekFromActivity(topic, msg);
         if (inferredWeek !== null && requestedWeeks.size > 0 && !requestedWeeks.has(inferredWeek)) {
@@ -442,6 +523,11 @@ export async function fetchEspnTransactionsByWeeks(
           players_dropped: dropped,
           faab_bid: msg.messageTypeId === 180 && typeof msg.from === 'number' ? msg.from : null,
         });
+      }
+
+      if (tradeRow && !seen.has(tradeRow.transaction_id)) {
+        seen.add(tradeRow.transaction_id);
+        out.push(tradeRow);
       }
     }
 
@@ -505,5 +591,10 @@ export function enrichTransactions(
     ...txn,
     players_added: enrich(txn.players_added),
     players_dropped: enrich(txn.players_dropped),
+    trade_sides: txn.trade_sides?.map((side) => ({
+      ...side,
+      acquired: enrich(side.acquired) ?? [],
+      gave_up: enrich(side.gave_up) ?? [],
+    })),
   }));
 }
