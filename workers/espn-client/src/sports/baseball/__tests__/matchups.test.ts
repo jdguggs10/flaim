@@ -203,6 +203,57 @@ describe('baseball get_matchups handler', () => {
     }));
   });
 
+  it('does not invent category aggregates when ESPN omits wins and losses', async () => {
+    getCredentialsMock.mockResolvedValue({ s2: 'token', swid: '{swid}' });
+    espnFetchMock.mockResolvedValue(
+      jsonResponse({
+        scoringPeriodId: 63,
+        currentMatchupPeriod: 9,
+        settings: {
+          scoringSettings: { scoringType: 'H2H_CATEGORY' },
+        },
+        schedule: [
+          {
+            matchupPeriodId: 9,
+            home: {
+              teamId: 1,
+              totalPoints: 0,
+              cumulativeScore: {
+                scoreByStat: {
+                  '20': { score: 31, result: 'WIN', rank: 1, ineligible: false },
+                },
+              },
+            },
+            away: { teamId: 7, totalPoints: 0 },
+            winner: 'UNDECIDED',
+          },
+        ],
+      }),
+    );
+
+    const params = withSeasonContext({ sport: 'baseball', league_id: '30201', season_year: 2026 });
+    const result = await baseballHandlers.get_matchups({} as never, params, 'Bearer x', 'cid');
+
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    const data = result.data as {
+      matchups: Array<{
+        home: {
+          scoreAvailable: boolean;
+          categoryScore: null;
+          categories: Array<{ statId: number; value: number | null }> | null;
+        } | null;
+      }>;
+    };
+    expect(data.matchups[0]?.home).toEqual(expect.objectContaining({
+      scoreAvailable: true,
+      categoryScore: null,
+    }));
+    expect(data.matchups[0]?.home?.categories).toEqual([
+      expect.objectContaining({ statId: 20, value: 31 }),
+    ]);
+  });
+
   it('keeps point totals for non-category baseball leagues', async () => {
     getCredentialsMock.mockResolvedValue({ s2: 'token', swid: '{swid}' });
     espnFetchMock.mockResolvedValue(

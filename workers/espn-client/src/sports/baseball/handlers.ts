@@ -51,8 +51,15 @@ function normalizeMatchupSide(
 
   const isCategoryScoring = scoringType === 'H2H_CATEGORY';
   const cumulativeScore = side.cumulativeScore;
+  const categoryWins = cumulativeScore?.wins;
+  const categoryLosses = cumulativeScore?.losses;
+  const categoryTies = cumulativeScore?.ties;
   const scoreByStat = cumulativeScore?.scoreByStat;
-  const categoryScoreAvailable = isCategoryScoring && !!cumulativeScore;
+  const categoryScoreAvailable =
+    isCategoryScoring &&
+    typeof categoryWins === 'number' &&
+    typeof categoryLosses === 'number' &&
+    typeof categoryTies === 'number';
   const categories = isCategoryScoring && scoreByStat
     // Sort by stat ID so the MCP response order is stable across runtimes.
     ? Object.entries(scoreByStat)
@@ -70,16 +77,18 @@ function normalizeMatchupSide(
   return {
     teamId: side.teamId,
     teamName: side.teamId ? teamsById[side.teamId] : undefined,
-    scoreAvailable: isCategoryScoring ? categoryScoreAvailable : typeof side.totalPoints === 'number',
+    scoreAvailable: isCategoryScoring
+      ? categoryScoreAvailable || categories !== null
+      : typeof side.totalPoints === 'number',
     totalPoints: isCategoryScoring ? null : side.totalPoints ?? null,
     totalProjectedPoints: isCategoryScoring
       ? null
       : side.totalProjectedPointsLive ?? side.totalProjectedPoints ?? null,
     pointsByScoringPeriod: isCategoryScoring ? undefined : side.pointsByScoringPeriod,
     categoryScore: categoryScoreAvailable ? {
-      wins: cumulativeScore.wins ?? 0,
-      losses: cumulativeScore.losses ?? 0,
-      ties: cumulativeScore.ties ?? 0,
+      wins: categoryWins,
+      losses: categoryLosses,
+      ties: categoryTies,
     } : null,
     categories,
   };
