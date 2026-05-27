@@ -395,10 +395,8 @@ function normalizeTradeTopic(
     fromTeamId: String(msg.from),
     toTeamId: String(msg.to),
   }));
-  const teamIds = Array.from(new Set(movements.flatMap((movement) => [
-    movement.fromTeamId,
-    movement.toTeamId,
-  ]))).sort((a, b) => Number(a) - Number(b));
+  const tradeSides = buildTradeSides(movements);
+  const teamIds = tradeSides.map((side) => side.team_id);
 
   return {
     transaction_id: String(topic.id ?? `trade-${timestamp}-${teamIds.join('-')}`),
@@ -410,7 +408,7 @@ function normalizeTradeTopic(
     team_ids: teamIds,
     players_added: [],
     players_dropped: [],
-    trade_sides: buildTradeSides(movements),
+    trade_sides: tradeSides,
     faab_bid: null,
   };
 }

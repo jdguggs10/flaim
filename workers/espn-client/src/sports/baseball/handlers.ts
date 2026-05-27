@@ -24,17 +24,37 @@ const GAME_ID = 'flb'; // ESPN's game ID for fantasy baseball
 
 type MatchupSide = NonNullable<NonNullable<EspnLeagueResponse['schedule']>[number]['home']>;
 
+interface NormalizedMatchupSide {
+  teamId?: number;
+  teamName?: string;
+  scoreAvailable: boolean;
+  totalPoints: number | null;
+  totalProjectedPoints: number | null;
+  pointsByScoringPeriod?: Record<string, number>;
+  categoryScore: { wins: number; losses: number; ties: number } | null;
+  categories: Array<{
+    statId: number;
+    name: string;
+    value: number | null;
+    result: string | null;
+    rank?: number;
+    ineligible?: boolean;
+  }> | null;
+}
+
 function normalizeMatchupSide(
   side: MatchupSide | undefined,
   teamsById: Record<string | number, string>,
   scoringType?: string,
-) {
+): NormalizedMatchupSide | null {
   if (!side) return null;
 
   const isCategoryScoring = scoringType === 'H2H_CATEGORY';
-  const scoreByStat = side.cumulativeScore?.scoreByStat;
-  const categoryScoreAvailable = isCategoryScoring && !!side.cumulativeScore;
+  const cumulativeScore = side.cumulativeScore;
+  const scoreByStat = cumulativeScore?.scoreByStat;
+  const categoryScoreAvailable = isCategoryScoring && !!cumulativeScore;
   const categories = isCategoryScoring && scoreByStat
+    // Sort by stat ID so the MCP response order is stable across runtimes.
     ? Object.entries(scoreByStat)
       .sort(([a], [b]) => Number(a) - Number(b))
       .map(([statId, value]) => ({
@@ -45,7 +65,7 @@ function normalizeMatchupSide(
         rank: value.rank,
         ineligible: value.ineligible,
       }))
-    : undefined;
+    : null;
 
   return {
     teamId: side.teamId,
@@ -57,9 +77,9 @@ function normalizeMatchupSide(
       : side.totalProjectedPointsLive ?? side.totalProjectedPoints ?? null,
     pointsByScoringPeriod: isCategoryScoring ? undefined : side.pointsByScoringPeriod,
     categoryScore: categoryScoreAvailable ? {
-      wins: side.cumulativeScore?.wins ?? 0,
-      losses: side.cumulativeScore?.losses ?? 0,
-      ties: side.cumulativeScore?.ties ?? 0,
+      wins: cumulativeScore.wins ?? 0,
+      losses: cumulativeScore.losses ?? 0,
+      ties: cumulativeScore.ties ?? 0,
     } : null,
     categories,
   };

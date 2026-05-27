@@ -145,14 +145,14 @@ describe('baseball get_matchups handler', () => {
           totalPoints: number | null;
           scoreAvailable: boolean;
           categoryScore: { wins: number; losses: number; ties: number } | null;
-          categories?: Array<{
+          categories: Array<{
             statId: number;
             name: string;
             value: number | null;
             result: string | null;
             rank?: number;
             ineligible?: boolean;
-          }>;
+          }> | null;
         } | null;
       }>;
     };
@@ -194,11 +194,12 @@ describe('baseball get_matchups handler', () => {
 
     expect(result.success).toBe(true);
     if (!result.success) return;
-    const data = result.data as { matchups: Array<{ home: { totalPoints: number | null; scoreAvailable: boolean; categoryScore: null } | null }> };
+    const data = result.data as { matchups: Array<{ home: { totalPoints: number | null; scoreAvailable: boolean; categoryScore: null; categories: null } | null }> };
     expect(data.matchups[0]?.home).toEqual(expect.objectContaining({
       totalPoints: null,
       scoreAvailable: false,
       categoryScore: null,
+      categories: null,
     }));
   });
 
@@ -226,11 +227,12 @@ describe('baseball get_matchups handler', () => {
 
     expect(result.success).toBe(true);
     if (!result.success) return;
-    const data = result.data as { matchups: Array<{ home: { totalPoints: number | null; totalProjectedPoints: number | null; categoryScore: null } | null }> };
+    const data = result.data as { matchups: Array<{ home: { totalPoints: number | null; totalProjectedPoints: number | null; categoryScore: null; categories: null } | null }> };
     expect(data.matchups[0]?.home).toEqual(expect.objectContaining({
       totalPoints: 112.4,
       totalProjectedPoints: 145.2,
       categoryScore: null,
+      categories: null,
     }));
   });
 });
