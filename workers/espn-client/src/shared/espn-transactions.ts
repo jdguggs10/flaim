@@ -286,10 +286,7 @@ export function mergeTradePlayerDetails(
   return mTxns.map((txn) => {
     if (!TRADE_TYPES.includes(txn.type)) return txn;
 
-    const hasPlayers =
-      (txn.players_added?.length ?? 0) +
-      (txn.players_dropped?.length ?? 0) +
-      (txn.trade_sides?.length ?? 0) > 0;
+    const hasPlayers = collectTransactionPlayerIds(txn).length > 0;
     if (hasPlayers) return txn;
 
     const txnTeams = new Set(txn.team_ids ?? []);

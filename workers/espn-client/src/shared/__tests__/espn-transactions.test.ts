@@ -781,6 +781,49 @@ describe('espn-transactions', () => {
       expect(result[0].players_dropped).toEqual([{ id: '3002' }]);
     });
 
+    it('treats empty trade sides as missing player data', () => {
+      const mTxns: NormalizedTransaction[] = [
+        {
+          transaction_id: '501',
+          type: 'trade',
+          status: 'complete',
+          timestamp: 1700400000000,
+          date: '2023-11-19',
+          week: 10,
+          team_ids: ['3'],
+          players_added: [],
+          players_dropped: [],
+          trade_sides: [
+            { team_id: '3', acquired: [], gave_up: [] },
+            { team_id: '7', acquired: [], gave_up: [] },
+          ],
+          faab_bid: null,
+        },
+      ];
+
+      const activityTxns: NormalizedTransaction[] = [
+        {
+          transaction_id: 'act-trade-empty-side-fill',
+          type: 'trade',
+          status: 'complete',
+          timestamp: 1700400000000,
+          date: '2023-11-19',
+          week: 10,
+          team_ids: ['3', '7'],
+          players_added: [],
+          players_dropped: [],
+          trade_sides: [
+            { team_id: '3', acquired: [{ id: '7001' }], gave_up: [{ id: '7002' }] },
+            { team_id: '7', acquired: [{ id: '7002' }], gave_up: [{ id: '7001' }] },
+          ],
+          faab_bid: null,
+        },
+      ];
+
+      const result = mergeTradePlayerDetails(mTxns, activityTxns);
+      expect(result[0].trade_sides).toEqual(activityTxns[0].trade_sides);
+    });
+
     it('matches by team overlap and does not reuse the same activity trade', () => {
       const mTxns: NormalizedTransaction[] = [
         {
