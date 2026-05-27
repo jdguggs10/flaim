@@ -622,8 +622,9 @@ export function getUnifiedTools(): UnifiedTool[] {
                 } else {
                   // Platform fetch succeeded but league is missing — it's genuinely stale.
                   // Keep get_user_session truly read-only: report stale defaults
-                  // without mutating preferences from this tool call.
-                  warnings.push(`Stale ${sport} default detected: league ${defaultInfo.leagueId} is no longer in your active leagues.`);
+                  // without mutating preferences from this tool call. Preference
+                  // cleanup belongs in an explicit settings/write path.
+                  warnings.push(`Stale ${sport} default detected: league ${defaultInfo.leagueId} is no longer in your active leagues. Update your default league in Flaim league settings to clear this warning.`);
                 }
               }
             }

@@ -678,6 +678,7 @@ describe('fantasy-mcp tools', () => {
 
     // get_user_session is advertised as read-only and must not clear stale defaults.
     expect(deleteCalled).toBe(false);
+    // Stale entries are filtered from the response even though storage is not mutated.
     expect(payload.defaultLeagues.football).toBeUndefined();
 
     // Warning should mention the stale league without locking punctuation.
