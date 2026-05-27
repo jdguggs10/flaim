@@ -1,29 +1,117 @@
 import * as React from "react";
 import {
-  FlaimButton,
-  FlaimCallout,
-  FlaimCalloutText,
   FlaimEmailLayout,
   FlaimFooterLink,
   FlaimText,
 } from "./components/FlaimEmailLayout";
+import emailLinks from "./flaim-email-links.json";
 
 interface WelcomeEmailProps {
+  chatGptAppUrl?: string;
   firstName?: string;
-  leaguesUrl: string;
+  leaguesUrl?: string;
   /** Must be a real unsubscribe or notification-preferences URL before connecting to a live sender. */
-  unsubscribeUrl: string;
+  unsubscribeUrl?: string;
+}
+
+function WelcomeSetupPath({
+  chatGptAppUrl,
+  leaguesUrl,
+}: {
+  chatGptAppUrl: string;
+  leaguesUrl: string;
+}) {
+  return (
+    <div
+      style={{
+        backgroundColor: "#f9fafb",
+        border: "1px solid #e5e7eb",
+        borderRadius: "8px",
+        margin: "8px 0 20px",
+        padding: "16px",
+      }}
+    >
+      <p style={{ color: "#030712", fontSize: "14px", fontWeight: "700", lineHeight: "22px", margin: "0 0 12px" }}>
+        Finish your setup
+      </p>
+      <table cellPadding="0" cellSpacing="0" role="presentation" style={{ marginBottom: "10px", width: "100%" }}>
+        <tbody>
+          <tr>
+            <td style={{ padding: "0", verticalAlign: "middle", width: "33.333%" }}>
+              <div style={{ backgroundColor: "#22c55e", borderRadius: "999px 0 0 999px", height: "6px", width: "100%" }} />
+            </td>
+            <td style={{ padding: "0", verticalAlign: "middle", width: "33.333%" }}>
+              <div style={{ backgroundColor: "#e5e7eb", height: "6px", width: "100%" }} />
+            </td>
+            <td style={{ padding: "0", verticalAlign: "middle", width: "33.333%" }}>
+              <div style={{ backgroundColor: "#e5e7eb", borderRadius: "0 999px 999px 0", height: "6px", width: "100%" }} />
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <table cellPadding="0" cellSpacing="0" role="presentation" style={{ width: "100%" }}>
+        <tbody>
+          <tr>
+            <td style={{ padding: "0 6px 0 0", verticalAlign: "top", width: "33.333%" }}>
+              <p style={{ color: "#166534", fontSize: "11px", fontWeight: "700", lineHeight: "16px", margin: "0", textTransform: "uppercase" }}>
+                Done
+              </p>
+              <p style={{ color: "#030712", fontSize: "12px", lineHeight: "17px", margin: "2px 0 0" }}>
+                Account
+              </p>
+            </td>
+            <td style={{ padding: "0 6px", verticalAlign: "top", width: "33.333%" }}>
+              <p style={{ color: "#030712", fontSize: "11px", fontWeight: "700", lineHeight: "16px", margin: "0", textTransform: "uppercase" }}>
+                Next
+              </p>
+              <a
+                href={leaguesUrl}
+                style={{
+                  color: "#030712",
+                  fontSize: "12px",
+                  fontWeight: "700",
+                  lineHeight: "17px",
+                  textDecoration: "underline",
+                  textUnderlineOffset: "3px",
+                }}
+              >
+                Connect a league →
+              </a>
+            </td>
+            <td style={{ padding: "0 0 0 6px", verticalAlign: "top", width: "33.333%" }}>
+              <p style={{ color: "#6b7280", fontSize: "11px", fontWeight: "700", lineHeight: "16px", margin: "0", textTransform: "uppercase" }}>
+                Then
+              </p>
+              <a
+                href={chatGptAppUrl}
+                style={{
+                  color: "#6b7280",
+                  fontSize: "12px",
+                  fontWeight: "700",
+                  lineHeight: "17px",
+                  textDecoration: "underline",
+                  textUnderlineOffset: "3px",
+                }}
+              >
+                Open in ChatGPT →
+              </a>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
 export default function WelcomeEmail({
+  chatGptAppUrl = emailLinks.chatGptAppUrl,
   firstName = "Alex",
-  leaguesUrl,
-  unsubscribeUrl,
+  leaguesUrl = emailLinks.leaguesUrl,
+  unsubscribeUrl = "mailto:support@flaim.app?subject=Unsubscribe%20from%20Flaim%20product%20updates",
 }: WelcomeEmailProps) {
   return (
     <FlaimEmailLayout
       eyebrow="WELCOME"
-      footerDescription="Flaim connects your real fantasy leagues to your AI assistant for read-only, league-specific analysis."
       footerDisclosure={
         <>
           You are receiving this because you created a Flaim account.{" "}
@@ -36,24 +124,33 @@ export default function WelcomeEmail({
     >
       <FlaimText>Hi {firstName},</FlaimText>
       <FlaimText>
-        Flaim is ready when you are. Connect ESPN, Yahoo, or Sleeper to ChatGPT
-        to ask questions using your actual roster, standings, and league data.
-        Include web search to get updated stats, waiver wire adds, trade
-        targets, and more. Enjoy.
+        Flaim lets you ask fantasy questions using your real league data,
+        including your roster, standings, matchups, and transactions. Once
+        connected, you can ask about waiver adds, trade ideas, roster decisions,
+        and league trends.
       </FlaimText>
-      <FlaimButton href={leaguesUrl}>Open league setup</FlaimButton>
-      <FlaimCallout>
-        <FlaimCalloutText>
-          Flaim is read-only. It can access your league data, but it cannot set
-          lineups, drop players, make trades, or change league settings.
-        </FlaimCalloutText>
-      </FlaimCallout>
+      <WelcomeSetupPath chatGptAppUrl={chatGptAppUrl} leaguesUrl={leaguesUrl} />
+      <p
+        style={{
+          borderTop: "1px solid #e5e7eb",
+          color: "#6b7280",
+          fontSize: "13px",
+          lineHeight: "21px",
+          margin: "22px 0 0",
+          paddingTop: "16px",
+        }}
+      >
+        Flaim is read-only. It can access your league data, but it cannot set
+        lineups, drop players, make trades, or change league settings.
+      </p>
     </FlaimEmailLayout>
   );
 }
 
 WelcomeEmail.PreviewProps = {
+  chatGptAppUrl: emailLinks.chatGptAppUrl,
   firstName: "Alex",
-  leaguesUrl: "https://flaim.app/leagues",
-  unsubscribeUrl: "https://flaim.app/notifications/unsubscribe?token=PREVIEW_ONLY",
+  leaguesUrl: emailLinks.leaguesUrl,
+  unsubscribeUrl:
+    "mailto:support@flaim.app?subject=Unsubscribe%20from%20Flaim%20product%20updates",
 } satisfies WelcomeEmailProps;

@@ -9,6 +9,8 @@ let resend: Resend | null = null;
 let resendApiKey: string | null = null;
 let resendContacts: Resend | null = null;
 let resendContactsApiKey: string | null = null;
+let resendEvents: Resend | null = null;
+let resendEventsApiKey: string | null = null;
 
 export function getResendClient() {
   const apiKey = process.env.RESEND_API_KEY;
@@ -32,6 +34,18 @@ export function getResendContactsClient() {
   }
 
   return resendContacts;
+}
+
+export function getResendEventsClient() {
+  const apiKey = process.env.RESEND_EVENTS_API_KEY ?? process.env.RESEND_CONTACTS_API_KEY;
+  if (!apiKey) return null;
+
+  if (!resendEvents || resendEventsApiKey !== apiKey) {
+    resendEvents = new Resend(apiKey);
+    resendEventsApiKey = apiKey;
+  }
+
+  return resendEvents;
 }
 
 export function getResendErrorMessage(error: ResendApiError | unknown) {
