@@ -124,6 +124,17 @@ export interface EspnMatchupTeam {
   totalProjectedPoints?: number;
   totalProjectedPointsLive?: number;
   pointsByScoringPeriod?: Record<string, number>;
+  cumulativeScore?: {
+    wins?: number;
+    losses?: number;
+    ties?: number;
+    scoreByStat?: Record<string, {
+      ineligible?: boolean;
+      rank?: number;
+      result?: string | null;
+      score?: number;
+    }>;
+  };
 }
 
 /** Response from the kona_player_info view (free agents). */

@@ -18,14 +18,21 @@ vi.mock('../../../shared/auth', () => ({
   getCredentials: vi.fn(),
 }));
 
-vi.mock('../../../shared/espn-transactions', () => ({
-  getEspnLeagueContext: vi.fn(),
-  fetchEspnTransactionsByWeeks: vi.fn(),
-  fetchEspnMTransactions2: vi.fn(),
-  mergeTradePlayerDetails: vi.fn((mTxns) => mTxns),
-  fetchEspnPlayersByIds: vi.fn(),
-  enrichTransactions: vi.fn((txns) => txns),
-}));
+vi.mock('../../../shared/espn-transactions', async () => {
+  const actual = await vi.importActual<typeof import('../../../shared/espn-transactions')>(
+    '../../../shared/espn-transactions',
+  );
+
+  return {
+    getEspnLeagueContext: vi.fn(),
+    fetchEspnTransactionsByWeeks: vi.fn(),
+    fetchEspnMTransactions2: vi.fn(),
+    mergeTradePlayerDetails: vi.fn((mTxns) => mTxns),
+    fetchEspnPlayersByIds: vi.fn(),
+    enrichTransactions: vi.fn((txns) => txns),
+    collectTransactionPlayerIds: actual.collectTransactionPlayerIds,
+  };
+});
 
 describe('football get_transactions handler', () => {
   const getCredentialsMock = getCredentials as MockedFunction<typeof getCredentials>;

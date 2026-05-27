@@ -83,6 +83,66 @@ describe('espn-transactions', () => {
     });
   });
 
+  describe('enrichTransactions', () => {
+    it('enriches nested trade sides', async () => {
+      const { enrichTransactions } = await import('../espn-transactions');
+      const transactions: NormalizedTransaction[] = [
+        {
+          transaction_id: 'trade-1',
+          type: 'trade',
+          status: 'complete',
+          timestamp: 1700300000000,
+          date: '2023-11-18',
+          week: 9,
+          team_ids: ['1', '2'],
+          players_added: [],
+          players_dropped: [],
+          trade_sides: [
+            { team_id: '1', acquired: [{ id: '1002' }], gave_up: [{ id: '1001' }] },
+            { team_id: '2', acquired: [{ id: '1001' }], gave_up: [{ id: '1002' }] },
+          ],
+          faab_bid: null,
+        },
+      ];
+      const playerMap = new Map([
+        ['1001', { fullName: 'Player One', defaultPositionId: 1, proTeamId: 10 }],
+        ['1002', { fullName: 'Player Two', defaultPositionId: 2, proTeamId: 20 }],
+      ]);
+
+      const result = enrichTransactions(
+        transactions,
+        playerMap,
+        (id) => `POS_${id}`,
+        (id) => `TEAM_${id}`,
+      );
+
+      expect(result[0].trade_sides?.[0]?.acquired[0]).toEqual({
+        id: '1002',
+        name: 'Player Two',
+        position: 'POS_2',
+        team: 'TEAM_20',
+      });
+      expect(result[0].trade_sides?.[0]?.gave_up[0]).toEqual({
+        id: '1001',
+        name: 'Player One',
+        position: 'POS_1',
+        team: 'TEAM_10',
+      });
+      expect(result[0].trade_sides?.[1]?.acquired[0]).toEqual({
+        id: '1001',
+        name: 'Player One',
+        position: 'POS_1',
+        team: 'TEAM_10',
+      });
+      expect(result[0].trade_sides?.[1]?.gave_up[0]).toEqual({
+        id: '1002',
+        name: 'Player Two',
+        position: 'POS_2',
+        team: 'TEAM_20',
+      });
+    });
+  });
+
   it('maps all six message type IDs to correct transaction types', async () => {
     mockFetch
       .mockResolvedValueOnce(jsonResponse({
@@ -114,7 +174,62 @@ describe('espn-transactions', () => {
     expect(byId['12']?.faab_bid).toBe(10);
     expect(byId['13']?.type).toBe('drop');
     expect(byId['14']?.type).toBe('drop');
-    expect(byId['15']?.type).toBe('trade');
+    expect(byId['1']?.type).toBe('trade');
+    expect(byId['1']?.trade_sides).toEqual([
+      {
+        team_id: '2',
+        acquired: [],
+        gave_up: [{ id: '6' }],
+      },
+      {
+        team_id: '3',
+        acquired: [{ id: '6' }],
+        gave_up: [],
+      },
+    ]);
+  });
+
+  it('groups trade activity messages into directional trade sides', async () => {
+    mockFetch
+      .mockResolvedValueOnce(jsonResponse({
+        topics: [
+          {
+            id: 99,
+            date: 1700300000000,
+            scoringPeriodId: 9,
+            messages: [
+              { id: 101, messageTypeId: 244, targetId: 1001, from: 1, to: 2 },
+              { id: 102, messageTypeId: 244, targetId: 1002, from: 2, to: 1 },
+            ],
+          },
+        ],
+      }))
+      .mockResolvedValueOnce(jsonResponse({ topics: [] }));
+
+    const rows = await fetchEspnTransactionsByWeeks('ffl', '123', 2025, { s2: 'x', swid: '{y}' }, [9]);
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      transaction_id: '99',
+      type: 'trade',
+      status: 'complete',
+      week: 9,
+      team_ids: ['1', '2'],
+      players_added: [],
+      players_dropped: [],
+    });
+    expect(rows[0].trade_sides).toEqual([
+      {
+        team_id: '1',
+        acquired: [{ id: '1002' }],
+        gave_up: [{ id: '1001' }],
+      },
+      {
+        team_id: '2',
+        acquired: [{ id: '1001' }],
+        gave_up: [{ id: '1002' }],
+      },
+    ]);
   });
 
   it('normalizes activity feed rows across pages and weeks', async () => {
@@ -152,7 +267,7 @@ describe('espn-transactions', () => {
       faab_bid: 12,
     });
     expect(rows[1]).toMatchObject({
-      transaction_id: '11',
+      transaction_id: '1',
       type: 'trade',
       week: 6,
     });
@@ -582,6 +697,54 @@ describe('espn-transactions', () => {
       expect(result[0].team_ids).toEqual(['1', '3']);
     });
 
+    it('fills directional trade sides from activity feed rows', () => {
+      const mTxns: NormalizedTransaction[] = [
+        {
+          transaction_id: '400',
+          type: 'trade',
+          status: 'complete',
+          timestamp: 1700300000000,
+          date: '2023-11-18',
+          week: 9,
+          team_ids: ['1'],
+          players_added: [],
+          players_dropped: [],
+          faab_bid: null,
+        },
+      ];
+
+      const activityTxns: NormalizedTransaction[] = [
+        {
+          transaction_id: 'act-trade-1',
+          type: 'trade',
+          status: 'complete',
+          timestamp: 1700300000000,
+          date: '2023-11-18',
+          week: 9,
+          team_ids: ['1', '3'],
+          players_added: [],
+          players_dropped: [],
+          trade_sides: [
+            {
+              team_id: '1',
+              acquired: [{ id: '2002' }],
+              gave_up: [{ id: '2001' }],
+            },
+            {
+              team_id: '3',
+              acquired: [{ id: '2001' }],
+              gave_up: [{ id: '2002' }],
+            },
+          ],
+          faab_bid: null,
+        },
+      ];
+
+      const result = mergeTradePlayerDetails(mTxns, activityTxns);
+      expect(result[0].trade_sides).toEqual(activityTxns[0].trade_sides);
+      expect(result[0].team_ids).toEqual(['1', '3']);
+    });
+
     it('does not overwrite trade transactions that already have player items', () => {
       const mTxns: NormalizedTransaction[] = [
         {
@@ -616,6 +779,49 @@ describe('espn-transactions', () => {
       const result = mergeTradePlayerDetails(mTxns, activityTxns);
       expect(result[0].players_added).toEqual([{ id: '3001' }]);
       expect(result[0].players_dropped).toEqual([{ id: '3002' }]);
+    });
+
+    it('treats empty trade sides as missing player data', () => {
+      const mTxns: NormalizedTransaction[] = [
+        {
+          transaction_id: '501',
+          type: 'trade',
+          status: 'complete',
+          timestamp: 1700400000000,
+          date: '2023-11-19',
+          week: 10,
+          team_ids: ['3'],
+          players_added: [],
+          players_dropped: [],
+          trade_sides: [
+            { team_id: '3', acquired: [], gave_up: [] },
+            { team_id: '7', acquired: [], gave_up: [] },
+          ],
+          faab_bid: null,
+        },
+      ];
+
+      const activityTxns: NormalizedTransaction[] = [
+        {
+          transaction_id: 'act-trade-empty-side-fill',
+          type: 'trade',
+          status: 'complete',
+          timestamp: 1700400000000,
+          date: '2023-11-19',
+          week: 10,
+          team_ids: ['3', '7'],
+          players_added: [],
+          players_dropped: [],
+          trade_sides: [
+            { team_id: '3', acquired: [{ id: '7001' }], gave_up: [{ id: '7002' }] },
+            { team_id: '7', acquired: [{ id: '7002' }], gave_up: [{ id: '7001' }] },
+          ],
+          faab_bid: null,
+        },
+      ];
+
+      const result = mergeTradePlayerDetails(mTxns, activityTxns);
+      expect(result[0].trade_sides).toEqual(activityTxns[0].trade_sides);
     });
 
     it('matches by team overlap and does not reuse the same activity trade', () => {
