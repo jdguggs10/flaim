@@ -2,7 +2,7 @@
 import type { Env, RoutedToolParams, ExecuteResponse, EspnLeagueResponse, EspnPlayerPoolResponse } from '../../types';
 import { getCredentials } from '../../shared/auth';
 import { espnFetch, handleEspnError, requireCredentials } from '../../shared/espn-api';
-import { fetchEspnTransactionsByWeeks, fetchEspnMTransactions2, mergeTradePlayerDetails, getEspnLeagueContext, fetchEspnPlayersByIds, enrichTransactions } from '../../shared/espn-transactions';
+import { collectTransactionPlayerIds, fetchEspnTransactionsByWeeks, fetchEspnMTransactions2, mergeTradePlayerDetails, getEspnLeagueContext, fetchEspnPlayersByIds, enrichTransactions } from '../../shared/espn-transactions';
 import type { NormalizedTransaction } from '../../shared/espn-transactions';
 import { getEspnPlayersIndex } from '../../shared/espn-players-cache';
 import { fetchLeagueOwnershipMap, enrichPlayerWithOwnership } from '../../shared/league-ownership';
@@ -606,14 +606,7 @@ async function handleGetTransactions(
       .filter((txn) => !type || txn.type === type)
       .slice(0, maxCount);
 
-    const allIds = [...new Set(filtered.flatMap((t) => [
-      ...(t.players_added ?? []).map((p) => p.id),
-      ...(t.players_dropped ?? []).map((p) => p.id),
-      ...(t.trade_sides ?? []).flatMap((side) => [
-        ...side.acquired.map((p) => p.id),
-        ...side.gave_up.map((p) => p.id),
-      ]),
-    ]))];
+    const allIds = [...new Set(filtered.flatMap(collectTransactionPlayerIds))];
     if (allIds.length > 0) {
       try {
         const playerMap = await fetchEspnPlayersByIds(GAME_ID, espnYear, allIds);

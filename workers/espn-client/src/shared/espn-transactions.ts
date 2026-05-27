@@ -21,6 +21,17 @@ export interface NormalizedTransaction {
   faab_bid?: number | null;
 }
 
+export function collectTransactionPlayerIds(txn: NormalizedTransaction): string[] {
+  return [
+    ...(txn.players_added ?? []).map((p) => p.id),
+    ...(txn.players_dropped ?? []).map((p) => p.id),
+    ...(txn.trade_sides ?? []).flatMap((side) => [
+      ...side.acquired.map((p) => p.id),
+      ...side.gave_up.map((p) => p.id),
+    ]),
+  ];
+}
+
 export interface EspnPlayerBasic {
   fullName?: string;
   defaultPositionId?: number;

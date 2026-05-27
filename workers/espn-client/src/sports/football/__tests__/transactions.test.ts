@@ -25,6 +25,21 @@ vi.mock('../../../shared/espn-transactions', () => ({
   mergeTradePlayerDetails: vi.fn((mTxns) => mTxns),
   fetchEspnPlayersByIds: vi.fn(),
   enrichTransactions: vi.fn((txns) => txns),
+  collectTransactionPlayerIds: vi.fn((txn: {
+    players_added?: Array<{ id: string }>;
+    players_dropped?: Array<{ id: string }>;
+    trade_sides?: Array<{
+      acquired: Array<{ id: string }>;
+      gave_up: Array<{ id: string }>;
+    }>;
+  }) => [
+    ...(txn.players_added ?? []).map((p) => p.id),
+    ...(txn.players_dropped ?? []).map((p) => p.id),
+    ...(txn.trade_sides ?? []).flatMap((side) => [
+      ...side.acquired.map((p) => p.id),
+      ...side.gave_up.map((p) => p.id),
+    ]),
+  ]),
 }));
 
 describe('football get_transactions handler', () => {
