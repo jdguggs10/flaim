@@ -1,9 +1,13 @@
 import { verifyWebhook } from "@clerk/nextjs/webhooks";
-import { NextRequest, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
 import {
   syncClerkUserToResendContact,
   type ClerkUserEmailSyncPayload,
 } from "@/lib/server/resend-contact-sync";
+import {
+  isWelcomeAutomationEnabled,
+  sendWelcomeAutomationEvent,
+} from "@/lib/server/resend-welcome-automation";
 
 const CONTACT_SYNC_EVENTS = new Set(["user.created", "user.updated"]);
 
@@ -47,5 +51,26 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Contact sync failed", received: true, sync: result });
   }
 
-  return NextResponse.json({ received: true, sync: result });
+  if (event.type !== "user.created" || !result.ok) {
+    return NextResponse.json({ received: true, sync: result });
+  }
+
+  if (!isWelcomeAutomationEnabled()) {
+    return NextResponse.json({
+      received: true,
+      sync: result,
+      welcome: { skipped: true, error: "Resend welcome automation is disabled" },
+    });
+  }
+
+  after(async () => {
+    // The request-level guard already checked the feature flag; pass an explicit
+    // enabled override so this queued side effect reflects that same decision.
+    const welcome = await sendWelcomeAutomationEvent(event.data, { enabled: true });
+    if (!welcome.ok && !welcome.skipped) {
+      console.error("Resend welcome automation event failed:", welcome.error);
+    }
+  });
+
+  return NextResponse.json({ received: true, sync: result, welcome: { queued: true } });
 }

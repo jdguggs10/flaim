@@ -58,6 +58,22 @@ Clerk is the source of truth for user identity. Resend is the product email audi
 
 The contact sync stores only email, first name, and last name. It intentionally does not resubscribe existing contacts during updates, so Resend unsubscribe state remains authoritative for product and broadcast email. If `RESEND_CONTACT_SEGMENT_ID` is set, new and updated contacts are assigned to that Resend Segment for future Broadcast targeting. Avoid writing custom Resend contact properties unless those properties have first been created in Resend.
 
+The first automated product email is a Resend Automation for new-user welcome email. Flaim does not queue or schedule this email itself. After a verified Clerk `user.created` webhook successfully syncs the Resend contact, the webhook emits the custom Resend event `flaim.user_created`. Resend owns the automation run, email rendering, unsubscribe handling, and run history.
+
+Keep the welcome automation behind `RESEND_WELCOME_AUTOMATION_ENABLED=true` until the Resend event, template, automation, and real inbox test are verified. The event emitter uses `RESEND_EVENTS_API_KEY` when set, otherwise it falls back to `RESEND_CONTACTS_API_KEY`; do not use the send-only `RESEND_API_KEY` for event/automation management.
+
+Before enabling the flag in production, confirm failed welcome event sends are visible in the production logs or alerting path. The Clerk webhook intentionally acknowledges verified user events even if the downstream Resend event call fails, so a Resend outage or expired events key will not retry through Clerk.
+
+Create or refresh the Resend-side resources with:
+
+```sh
+corepack pnpm --dir web exec node scripts/setup-resend-welcome-automation.mjs
+```
+
+The setup script creates the `flaim.user_created` event, publishes the `flaim-welcome-v1` template, and creates/updates the `Flaim Welcome Email` automation as `disabled`. Re-running the script intentionally disables the automation again as a safety guard while templates are being revised. Enable the automation in Resend only after the production webhook event path has been tested.
+
+The Resend automation template is currently hand-built in `web/scripts/setup-resend-welcome-automation.mjs` and must stay visually synchronized with `web/emails/welcome.tsx`. Shared action URLs live in `web/emails/flaim-email-links.json`. When changing the welcome email, update the React preview and setup-script HTML together, run `corepack pnpm --dir web run email:export`, rerun the setup script, and send a real test email before enabling or re-enabling the automation.
+
 Existing users are backfilled with a separate dry-run-first script. Run it from the repo root:
 
 ```sh
