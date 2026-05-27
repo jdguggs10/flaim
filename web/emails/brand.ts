@@ -1,7 +1,7 @@
 export const emailBrand = {
   name: "Flaim",
   url: "https://flaim.app",
-  logoUrl: "https://flaim.app/flaim-mark-hero.png",
+  logoUrl: "https://flaim.app/flaim-email-mark.png",
   supportEmail: "support@flaim.app",
   subtitle: "FLAIM FANTASY",
   senders: {

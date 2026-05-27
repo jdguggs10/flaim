@@ -78,14 +78,14 @@ function buildWelcomeHtml() {
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;margin:0 auto;">
             <tr>
               <td style="padding:0 0 16px 0;">
-                <a href="https://flaim.app" style="text-decoration:none;"><img alt="" src="https://flaim.app/flaim-mark-hero.png" width="28" height="28" style="display:inline-block;margin:0 8px 0 0;vertical-align:middle;" /></a><a href="https://flaim.app" style="color:#030712;display:inline-block;font-size:18px;font-weight:700;line-height:24px;margin:0;text-decoration:none;vertical-align:middle;">Flaim</a>
+                <a href="https://flaim.app" style="text-decoration:none;"><img alt="" src="https://flaim.app/flaim-email-mark.png" width="32" height="32" style="display:inline-block;margin:0 8px 0 0;vertical-align:middle;" /></a><a href="https://flaim.app" style="color:#030712;display:inline-block;font-size:18px;font-weight:700;line-height:24px;margin:0;text-decoration:none;vertical-align:middle;">Flaim</a>
               </td>
             </tr>
             <tr>
               <td style="background:#ffffff;border:1px solid #e5e7eb;border-radius:8px;padding:28px;">
                 <p style="margin:0 0 10px 0;font-size:12px;line-height:18px;font-weight:700;color:#6b7280;">WELCOME</p>
                 <h1 style="margin:0 0 18px 0;font-size:24px;line-height:32px;font-weight:700;color:#030712;">Connect your first league</h1>
-                <p style="margin:0 0 16px 0;font-size:15px;line-height:24px;color:#030712;">Hi {{GIVEN_NAME}},</p>
+                <p style="margin:0 0 16px 0;font-size:15px;line-height:24px;color:#030712;">Hi {{{GIVEN_NAME}}},</p>
                 <p style="margin:0 0 16px 0;font-size:15px;line-height:24px;color:#030712;">Flaim lets you ask fantasy questions using your real league data, including your roster, standings, matchups, and transactions. Once connected, you can ask about waiver adds, trade ideas, roster decisions, and league trends.</p>
                 <div style="margin:8px 0 20px;padding:16px;border-radius:8px;border:1px solid #e5e7eb;background:#f9fafb;">
                   <p style="margin:0 0 12px 0;font-size:14px;line-height:22px;font-weight:700;color:#030712;">Finish your setup</p>
@@ -131,11 +131,10 @@ function buildWelcomeHtml() {
 }
 
 function buildWelcomeText() {
-  // Custom values use escaped double braces. Resend's built-in unsubscribe URL
-  // is inserted as a trusted URL, so it intentionally uses triple braces.
+  // Resend's template API expects triple braces for template variables.
   return `Welcome to Flaim
 
-Hi {{GIVEN_NAME}},
+Hi {{{GIVEN_NAME}}},
 
 Flaim lets you ask fantasy questions using your real league data, including your roster, standings, matchups, and transactions. Once connected, you can ask about waiver adds, trade ideas, roster decisions, and league trends.
 
