@@ -122,11 +122,23 @@ describe('espn-transactions', () => {
         position: 'POS_2',
         team: 'TEAM_20',
       });
+      expect(result[0].trade_sides?.[0]?.gave_up[0]).toEqual({
+        id: '1001',
+        name: 'Player One',
+        position: 'POS_1',
+        team: 'TEAM_10',
+      });
       expect(result[0].trade_sides?.[1]?.acquired[0]).toEqual({
         id: '1001',
         name: 'Player One',
         position: 'POS_1',
         team: 'TEAM_10',
+      });
+      expect(result[0].trade_sides?.[1]?.gave_up[0]).toEqual({
+        id: '1002',
+        name: 'Player Two',
+        position: 'POS_2',
+        team: 'TEAM_20',
       });
     });
   });
@@ -162,8 +174,8 @@ describe('espn-transactions', () => {
     expect(byId['12']?.faab_bid).toBe(10);
     expect(byId['13']?.type).toBe('drop');
     expect(byId['14']?.type).toBe('drop');
-    expect(byId['15']?.type).toBe('trade');
-    expect(byId['15']?.trade_sides).toEqual([
+    expect(byId['1']?.type).toBe('trade');
+    expect(byId['1']?.trade_sides).toEqual([
       {
         team_id: '2',
         acquired: [],
@@ -255,7 +267,7 @@ describe('espn-transactions', () => {
       faab_bid: 12,
     });
     expect(rows[1]).toMatchObject({
-      transaction_id: '11',
+      transaction_id: '1',
       type: 'trade',
       week: 6,
     });

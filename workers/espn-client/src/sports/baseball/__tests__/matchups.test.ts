@@ -88,7 +88,7 @@ describe('baseball get_matchups handler', () => {
   it('returns H2H category scores without fake point totals', async () => {
     getCredentialsMock.mockResolvedValue({ s2: 'token', swid: '{swid}' });
     espnFetchMock.mockResolvedValue(
-      new Response(JSON.stringify({
+      jsonResponse({
         scoringPeriodId: 63,
         currentMatchupPeriod: 9,
         settings: {
@@ -130,7 +130,7 @@ describe('baseball get_matchups handler', () => {
             winner: 'AWAY',
           },
         ],
-      }), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+      }),
     );
 
     const params = withSeasonContext({ sport: 'baseball', league_id: '30201', season_year: 2026 });
@@ -145,7 +145,14 @@ describe('baseball get_matchups handler', () => {
           totalPoints: number | null;
           scoreAvailable: boolean;
           categoryScore: { wins: number; losses: number; ties: number } | null;
-          categories?: Array<{ statId: number; name: string; value: number | null; result: string | null }>;
+          categories?: Array<{
+            statId: number;
+            name: string;
+            value: number | null;
+            result: string | null;
+            rank?: number;
+            ineligible?: boolean;
+          }>;
         } | null;
       }>;
     };
@@ -157,15 +164,15 @@ describe('baseball get_matchups handler', () => {
       categoryScore: { wins: 4, losses: 5, ties: 1 },
     }));
     expect(data.matchups[0]?.home?.categories).toEqual([
-      expect.objectContaining({ statId: 20, name: 'R', value: 31, result: 'WIN' }),
-      expect.objectContaining({ statId: 47, name: 'ERA', value: 3.42, result: 'LOSS' }),
+      { statId: 20, name: 'R', value: 31, result: 'WIN', rank: 1, ineligible: false },
+      { statId: 47, name: 'ERA', value: 3.42, result: 'LOSS', rank: 2, ineligible: false },
     ]);
   });
 
   it('marks category scores unavailable instead of inventing zeroes', async () => {
     getCredentialsMock.mockResolvedValue({ s2: 'token', swid: '{swid}' });
     espnFetchMock.mockResolvedValue(
-      new Response(JSON.stringify({
+      jsonResponse({
         scoringPeriodId: 63,
         currentMatchupPeriod: 9,
         settings: {
@@ -179,7 +186,7 @@ describe('baseball get_matchups handler', () => {
             winner: 'UNDECIDED',
           },
         ],
-      }), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+      }),
     );
 
     const params = withSeasonContext({ sport: 'baseball', league_id: '30201', season_year: 2026 });
@@ -198,7 +205,7 @@ describe('baseball get_matchups handler', () => {
   it('keeps point totals for non-category baseball leagues', async () => {
     getCredentialsMock.mockResolvedValue({ s2: 'token', swid: '{swid}' });
     espnFetchMock.mockResolvedValue(
-      new Response(JSON.stringify({
+      jsonResponse({
         scoringPeriodId: 3,
         settings: {
           scoringSettings: { scoringType: 'H2H_POINTS' },
@@ -211,7 +218,7 @@ describe('baseball get_matchups handler', () => {
             winner: 'HOME',
           },
         ],
-      }), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+      }),
     );
 
     const params = withSeasonContext({ sport: 'baseball', league_id: '30201', season_year: 2026 });

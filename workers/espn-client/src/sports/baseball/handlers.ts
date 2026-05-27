@@ -24,14 +24,20 @@ const GAME_ID = 'flb'; // ESPN's game ID for fantasy baseball
 
 type MatchupSide = NonNullable<NonNullable<EspnLeagueResponse['schedule']>[number]['home']>;
 
-function normalizeMatchupSide(side: MatchupSide | undefined, teamsById: Record<number, string>, scoringType?: string) {
+function normalizeMatchupSide(
+  side: MatchupSide | undefined,
+  teamsById: Record<string | number, string>,
+  scoringType?: string,
+) {
   if (!side) return null;
 
   const isCategoryScoring = scoringType === 'H2H_CATEGORY';
   const scoreByStat = side.cumulativeScore?.scoreByStat;
   const categoryScoreAvailable = isCategoryScoring && !!side.cumulativeScore;
-  const categories = scoreByStat
-    ? Object.entries(scoreByStat).map(([statId, value]) => ({
+  const categories = isCategoryScoring && scoreByStat
+    ? Object.entries(scoreByStat)
+      .sort(([a], [b]) => Number(a) - Number(b))
+      .map(([statId, value]) => ({
         statId: Number(statId),
         name: getStatName(Number(statId)),
         value: value.score ?? null,
@@ -44,7 +50,6 @@ function normalizeMatchupSide(side: MatchupSide | undefined, teamsById: Record<n
   return {
     teamId: side.teamId,
     teamName: side.teamId ? teamsById[side.teamId] : undefined,
-    scoringType,
     scoreAvailable: isCategoryScoring ? categoryScoreAvailable : typeof side.totalPoints === 'number',
     totalPoints: isCategoryScoring ? null : side.totalPoints ?? null,
     totalProjectedPoints: isCategoryScoring

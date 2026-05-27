@@ -267,13 +267,18 @@ export function mergeTradePlayerDetails(
   mTxns: NormalizedTransaction[],
   activityTxns: NormalizedTransaction[],
 ): NormalizedTransaction[] {
+  // The activity feed labels raw trade movements as "trade"; mTransactions2 can
+  // label resolved rows as "trade_uphold". Timestamp/team matching bridges them.
   const activityTrades = activityTxns.filter((t) => t.type === 'trade');
   const used = new Set<number>();
 
   return mTxns.map((txn) => {
     if (!TRADE_TYPES.includes(txn.type)) return txn;
 
-    const hasPlayers = (txn.players_added?.length ?? 0) + (txn.players_dropped?.length ?? 0) > 0;
+    const hasPlayers =
+      (txn.players_added?.length ?? 0) +
+      (txn.players_dropped?.length ?? 0) +
+      (txn.trade_sides?.length ?? 0) > 0;
     if (hasPlayers) return txn;
 
     const txnTeams = new Set(txn.team_ids ?? []);
@@ -359,7 +364,11 @@ function buildTradeSides(movements: TradeMovement[]): NonNullable<NormalizedTran
   }));
 }
 
-function normalizeTradeTopic(topic: EspnActivityTopic, topicIndex: number, requestedWeeks: Set<number>, explicitSingleWeek: boolean): NormalizedTransaction | null {
+function normalizeTradeTopic(
+  topic: EspnActivityTopic,
+  requestedWeeks: Set<number>,
+  explicitSingleWeek: boolean,
+): NormalizedTransaction | null {
   const messages = topic.messages ?? [];
   const tradeMessages = messages.filter(
     (msg) =>
@@ -372,7 +381,7 @@ function normalizeTradeTopic(topic: EspnActivityTopic, topicIndex: number, reque
   );
   if (tradeMessages.length === 0) return null;
 
-  const week = getWeekFromActivity(topic, tradeMessages[0] ?? {});
+  const week = getWeekFromActivity(topic, tradeMessages[0]);
   if (week !== null && requestedWeeks.size > 0 && !requestedWeeks.has(week)) {
     return null;
   }
@@ -392,9 +401,7 @@ function normalizeTradeTopic(topic: EspnActivityTopic, topicIndex: number, reque
   ]))).sort((a, b) => Number(a) - Number(b));
 
   return {
-    transaction_id: tradeMessages.length === 1 && tradeMessages[0]?.id !== undefined
-      ? String(tradeMessages[0].id)
-      : String(topic.id ?? `topic-${topicIndex}-trade-${timestamp}-${teamIds.join('-')}`),
+    transaction_id: String(topic.id ?? `trade-${timestamp}-${teamIds.join('-')}`),
     type: 'trade',
     status: 'complete',
     timestamp,
@@ -478,7 +485,7 @@ export async function fetchEspnTransactionsByWeeks(
 
     for (let topicIndex = 0; topicIndex < topics.length; topicIndex += 1) {
       const topic = topics[topicIndex];
-      const tradeRow = normalizeTradeTopic(topic, topicIndex, requestedWeeks, explicitSingleWeek);
+      const tradeRow = normalizeTradeTopic(topic, requestedWeeks, explicitSingleWeek);
       const messages = topic.messages ?? [];
       const topicTimestamp = topic.date ?? 0;
       for (let msgIndex = 0; msgIndex < messages.length; msgIndex += 1) {
