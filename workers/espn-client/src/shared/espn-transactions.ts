@@ -400,7 +400,7 @@ function normalizeTradeTopic(
     return null;
   }
 
-  const timestamp = tradeMessages[0]?.date ?? topic.date ?? 0;
+  const timestamp = tradeMessages[0].date ?? topic.date ?? 0;
   const movements = tradeMessages.map((msg) => ({
     playerId: String(msg.targetId),
     fromTeamId: String(msg.from),

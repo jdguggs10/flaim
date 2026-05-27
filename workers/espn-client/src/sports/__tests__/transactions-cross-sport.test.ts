@@ -11,29 +11,21 @@ vi.mock('../../shared/auth', () => ({
   getCredentials: vi.fn(),
 }));
 
-vi.mock('../../shared/espn-transactions', () => ({
-  getEspnLeagueContext: vi.fn(),
-  fetchEspnTransactionsByWeeks: vi.fn(),
-  fetchEspnMTransactions2: vi.fn(),
-  mergeTradePlayerDetails: vi.fn((mTxns) => mTxns),
-  fetchEspnPlayersByIds: vi.fn(),
-  enrichTransactions: vi.fn((txns) => txns),
-  collectTransactionPlayerIds: vi.fn((txn: {
-    players_added?: Array<{ id: string }>;
-    players_dropped?: Array<{ id: string }>;
-    trade_sides?: Array<{
-      acquired: Array<{ id: string }>;
-      gave_up: Array<{ id: string }>;
-    }>;
-  }) => [
-    ...(txn.players_added ?? []).map((p) => p.id),
-    ...(txn.players_dropped ?? []).map((p) => p.id),
-    ...(txn.trade_sides ?? []).flatMap((side) => [
-      ...side.acquired.map((p) => p.id),
-      ...side.gave_up.map((p) => p.id),
-    ]),
-  ]),
-}));
+vi.mock('../../shared/espn-transactions', async () => {
+  const actual = await vi.importActual<typeof import('../../shared/espn-transactions')>(
+    '../../shared/espn-transactions',
+  );
+
+  return {
+    getEspnLeagueContext: vi.fn(),
+    fetchEspnTransactionsByWeeks: vi.fn(),
+    fetchEspnMTransactions2: vi.fn(),
+    mergeTradePlayerDetails: vi.fn((mTxns) => mTxns),
+    fetchEspnPlayersByIds: vi.fn(),
+    enrichTransactions: vi.fn((txns) => txns),
+    collectTransactionPlayerIds: actual.collectTransactionPlayerIds,
+  };
+});
 
 const scenarios = [
   { label: 'baseball', sport: 'baseball', gameId: 'flb', handlers: baseballHandlers, expectedEspnYear: 2024, expectedResponseSeasonYear: 2024 },
