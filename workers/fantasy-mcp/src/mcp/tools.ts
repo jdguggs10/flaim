@@ -456,7 +456,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       openaiMeta: { invoking: 'Loading your leagues\u2026', invoked: 'Leagues loaded' },
       widgetUri: 'ui://widget/user-session.html',
       description:
-        "Call this exactly once at the start of each chat before any other Flaim tool. Returns the user's full league landscape: allLeagues (all active leagues), defaultLeagues (per-sport defaults), and defaultLeague (populated only when a single league exists or defaultSport matches). For vague singular prompts, use defaultLeague when present; otherwise use the relevant sport entry in defaultLeagues. For explicit plural or comparative prompts (each, all, compare, across leagues/platforms), enumerate every matching league in allLeagues and call the target tool once per league. In normal chat flows, do not skip this first step. After this, strongly consider calling get_league_info for the target league. season_year always represents the start year of the season. Read-only. If this call errors, do not repeat it unchanged.",
+        "Use only for fantasy sports questions that need the user's connected league data; do not call for generic coding, scraping, weather, travel, betting, or non-fantasy sports questions. Call this exactly once at the start of each chat before any other Flaim tool. Returns the user's full league landscape: allLeagues (all active leagues), defaultLeagues (per-sport defaults), and defaultLeague (populated only when a single league exists or defaultSport matches). For vague singular prompts, use defaultLeague when present; otherwise use the relevant sport entry in defaultLeagues. For explicit plural or comparative prompts (each, all, compare, across leagues/platforms), enumerate every matching league in allLeagues and call the target tool once per league. In normal chat flows, do not skip this first step. After this, strongly consider calling get_league_info for the target league. season_year always represents the start year of the season. Read-only. If this call errors, do not repeat it unchanged.",
       inputSchema: {},
       handler: async (_args, env, authHeader, correlationId, evalRunId, evalTraceId) => {
         return withToolLogging(correlationId, 'get_user_session', 'session', async () => {
@@ -621,35 +621,10 @@ export function getUnifiedTools(): UnifiedTool[] {
                   warnings.push(`Preserved non-current ${sport} default: league ${defaultInfo.leagueId} is not shown in active leagues.`);
                 } else {
                   // Platform fetch succeeded but league is missing — it's genuinely stale.
-                  // Fire a best-effort clear so future reads don't repeat this lookup.
-                  const staleBaseHeaders: Record<string, string> = {
-                    'Content-Type': 'application/json',
-                    ...(authHeader ? { Authorization: authHeader } : {}),
-                  };
-                  const withStaleCorrelation = correlationId ? withCorrelationId(staleBaseHeaders, correlationId) : new Headers(staleBaseHeaders);
-                  const withStaleInternal = withInternalServiceToken(withStaleCorrelation, env, `auth-worker /internal/leagues/default/${sport}`);
-                  const staleHeaders = withEvalHeaders(withStaleInternal, evalRunId, evalTraceId);
-                  const staleUrl = new URL(`https://internal/internal/leagues/default/${sport}`);
-                  staleUrl.searchParams.set('platform', defaultInfo.platform);
-                  staleUrl.searchParams.set('leagueId', defaultInfo.leagueId);
-                  staleUrl.searchParams.set('seasonYear', String(defaultInfo.seasonYear));
-                  let cleared = false;
-                  try {
-                    const clearResp = await env.AUTH_WORKER.fetch(
-                      new Request(staleUrl.toString(), { method: 'DELETE', headers: staleHeaders })
-                    );
-                    cleared = clearResp.ok;
-                    if (!clearResp.ok) {
-                      console.error(`[get_user_session] Stale ${sport} default DELETE returned ${clearResp.status}`);
-                    }
-                  } catch (e) {
-                    console.error(`[get_user_session] Network error clearing stale ${sport} default:`, e);
-                  }
-                  warnings.push(
-                    cleared
-                      ? `Cleared stale ${sport} default: league ${defaultInfo.leagueId} is no longer in your active leagues.`
-                      : `Stale ${sport} default detected (league ${defaultInfo.leagueId} is no longer active) — automatic cleanup failed, will retry next session.`
-                  );
+                  // Keep get_user_session truly read-only: report stale defaults
+                  // without mutating preferences from this tool call. Preference
+                  // cleanup belongs in an explicit settings/write path.
+                  warnings.push(`Stale ${sport} default detected: league ${defaultInfo.leagueId} is no longer in your active leagues. Update your default league in Flaim league settings to clear this warning.`);
                 }
               }
             }
