@@ -201,14 +201,14 @@ Server-owned cache for public `/chat` warm context. Used to avoid rebuilding the
 | updated_at | timestamptz | Updated timestamp |
 
 ### demo_answer_cache
-Server-owned cache for homepage public-demo answers. Stores the most recent precomputed answer for a preset/sport/version combination so visitors can read cached demo output instead of triggering live provider inference. As of the `v5` public demo cutover, the production writer is the external private `flaim-demo` runner; the website remains read-only against this table.
+Server-owned cache for homepage public-demo answers. Stores the most recent precomputed answer for a preset/sport/version combination so visitors can read cached demo output instead of triggering live provider inference. The production writer is the external private `flaim-demo` runner; the website remains read-only against this table.
 
 | Column | Type | Notes |
 |---|---|---|
 | cache_key | text | Primary key (`public-demo-answer:<preset>:<sport>:<promptVersion>:<contextVersion>`) |
 | preset_id | text | Public preset identifier (for example `hot-hands`, `this-matchup`, `wire-watch`; not exhaustive) |
 | sport | text | Demo sport (`baseball` or `football`) |
-| provider | text | Provider identifier stored by the external writer |
+| provider | text | Opaque provider key stored by the external writer (`gemini` for rollback; current writer keys are runner-owned) |
 | provider_model | text | Model identifier used for the refresh |
 | context_version | text | Session-context contract version |
 | prompt_version | text | Prompt contract version |
