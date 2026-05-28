@@ -123,6 +123,7 @@ export const PUBLIC_CHAT_DEEP_PRESETS: readonly PublicChatPreset[] = [
   },
 ] as const;
 
+/** Presets retained for future reuse but excluded from the active homepage demo. */
 export const PUBLIC_CHAT_BENCHED_PRESETS: readonly PublicChatPreset[] = [
   {
     id: "drop-target",
