@@ -208,7 +208,7 @@ Server-owned cache for homepage public-demo answers. Stores the most recent prec
 | cache_key | text | Primary key (`public-demo-answer:<preset>:<sport>:<promptVersion>:<contextVersion>`) |
 | preset_id | text | Public preset identifier (for example `hot-hands`, `this-matchup`, `wire-watch`; not exhaustive) |
 | sport | text | Demo sport (`baseball` or `football`) |
-| provider | text | Opaque provider key stored by the external writer (`gemini` for rollback; current writer keys are runner-owned) |
+| provider | text | Opaque provider key stored by the external writer. The website intentionally does not depend on the runner's provider choice; `gemini` is stored by the legacy rollback path. |
 | provider_model | text | Model identifier used for the refresh |
 | context_version | text | Session-context contract version |
 | prompt_version | text | Prompt contract version |
