@@ -30,7 +30,7 @@ export interface PublicChatPreset {
   rail?: PublicChatPresetRail;
 }
 
-export const PUBLIC_DEMO_PROMPT_VERSION = "v4";
+export const PUBLIC_DEMO_PROMPT_VERSION = "v5";
 export const PUBLIC_DEMO_CONTEXT_VERSION = "v2";
 
 export const PUBLIC_CHAT_SIMPLE_PRESETS: readonly PublicChatPreset[] = [
@@ -49,17 +49,10 @@ export const PUBLIC_CHAT_SIMPLE_PRESETS: readonly PublicChatPreset[] = [
     rail: "top",
   },
   {
-    id: "quick-start",
-    title: "Am I off to a good start?",
-    userMessage: "Am I off to a good start?",
-    allowedTools: ["get_standings"] as const,
-    rail: "top",
-  },
-  {
     id: "this-matchup",
     title: "Who is winning my matchup?",
     userMessage: "Who is winning my matchup?",
-    allowedTools: ["get_matchups"] as const,
+    allowedTools: ["get_matchups", "get_roster"] as const,
     rail: "top",
   },
   {
@@ -73,14 +66,7 @@ export const PUBLIC_CHAT_SIMPLE_PRESETS: readonly PublicChatPreset[] = [
     id: "win-history",
     title: "Have I ever won the championship?",
     userMessage: "Have I ever won the championship?",
-    allowedTools: ["get_ancient_history", "get_standings"] as const,
-    rail: "top",
-  },
-  {
-    id: "start-sit",
-    title: "Help me with a start/sit decision.",
-    userMessage: "Help me with a start/sit decision.",
-    allowedTools: ["get_roster"] as const,
+    allowedTools: ["get_ancient_history", "get_matchups"] as const,
     rail: "top",
   },
   {
@@ -96,8 +82,8 @@ export const PUBLIC_CHAT_DEEP_PRESETS: readonly PublicChatPreset[] = [
   {
     id: "wire-watch",
     rail: "bottom",
-    title: "Give me my best wire add right now.",
-    userMessage: "Give me my best wire add right now.",
+    title: "Who should I add and drop?",
+    userMessage: "Who should I add and drop?",
     allowedTools: ["get_roster", "get_free_agents", "get_players"] as const,
   },
   {
@@ -108,32 +94,18 @@ export const PUBLIC_CHAT_DEEP_PRESETS: readonly PublicChatPreset[] = [
     allowedTools: ["get_transactions", "get_players"] as const,
   },
   {
-    id: "league-leader",
-    rail: "bottom",
-    title: "Who is winning our league and why?",
-    userMessage: "Who is winning our league and why?",
-    allowedTools: ["get_standings", "get_roster", "get_matchups"] as const,
-  },
-  {
-    id: "drop-target",
-    rail: "bottom",
-    title: "Who should I consider cutting?",
-    userMessage: "Who should I consider cutting?",
-    allowedTools: ["get_roster", "get_players"] as const,
-  },
-  {
     id: "roster-hole",
     rail: "bottom",
-    title: "What is my team's biggest weakness?",
-    userMessage: "What is my team's biggest weakness?",
+    title: "What is my team's biggest roster construction problem?",
+    userMessage: "What is my team's biggest roster construction problem?",
     allowedTools: ["get_roster"] as const,
   },
   {
     id: "sell-high",
     rail: "bottom",
-    title: "Who should I sell high on?",
-    userMessage: "Who should I sell high on?",
-    allowedTools: ["get_roster", "get_players"] as const,
+    title: "Who should I buy low and sell high on?",
+    userMessage: "Who should I buy low and sell high on?",
+    allowedTools: ["get_roster", "get_free_agents", "get_matchups"] as const,
   },
   {
     id: "best-team",
@@ -143,11 +115,42 @@ export const PUBLIC_CHAT_DEEP_PRESETS: readonly PublicChatPreset[] = [
     allowedTools: ["get_standings", "get_roster"] as const,
   },
   {
+    id: "start-sit",
+    rail: "bottom",
+    title: "Who should I start or stream today?",
+    userMessage: "Who should I start or stream today?",
+    allowedTools: ["get_roster", "get_matchups", "get_free_agents"] as const,
+  },
+] as const;
+
+export const PUBLIC_CHAT_BENCHED_PRESETS: readonly PublicChatPreset[] = [
+  {
+    id: "drop-target",
+    rail: "bottom",
+    title: "Who should I consider cutting?",
+    userMessage: "Who should I consider cutting?",
+    allowedTools: ["get_roster", "get_players"] as const,
+  },
+  {
     id: "last-season",
     rail: "bottom",
     title: "How did I do last season?",
     userMessage: "How did I do last season?",
     allowedTools: ["get_ancient_history", "get_standings"] as const,
+  },
+  {
+    id: "quick-start",
+    title: "Am I off to a good start?",
+    userMessage: "Am I off to a good start?",
+    allowedTools: ["get_standings"] as const,
+    rail: "top",
+  },
+  {
+    id: "league-leader",
+    rail: "bottom",
+    title: "Who is winning our league and why?",
+    userMessage: "Who is winning our league and why?",
+    allowedTools: ["get_standings", "get_roster", "get_matchups"] as const,
   },
 ] as const;
 
