@@ -19,8 +19,9 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 - **Changed**: Yahoo refresh-token grants now omit `redirect_uri`, returning lazy refresh to the simpler March-era request shape while keeping `redirect_uri` on authorization-code exchange.
 - **Changed**: Yahoo access tokens now use the original 5-minute proactive refresh buffer again so user-facing tool calls avoid landing exactly on the 1-hour access-token expiry boundary.
 - **Changed**: Yahoo token refresh now performs a single token-endpoint request per lease owner and leaves the short lease in place on transient failures so concurrent waiters back off instead of immediately retrying Yahoo.
+- **Changed**: Yahoo rate-limit-like token refresh failures (`429`/`999`) now convert the active lease into a short shared cooldown marker, using Yahoo's `Retry-After` header when present and a 60-second fallback when Yahoo omits it.
 - **Changed**: Permanent Yahoo token-refresh failures now release the per-user refresh lease and surface upstream status/retry metadata immediately instead of writing a persisted cooldown marker that can mask malformed/permanent failures.
-- **Changed**: Yahoo lazy token refresh still uses a per-user lease for concurrency, but no longer converts failed refresh attempts into shared persisted cooldowns.
+- **Changed**: Yahoo lazy token refresh still uses a per-user lease for concurrency, but only rate-limit-like refresh failures become shared persisted cooldowns.
 - **Changed**: Yahoo successful refresh handling now recovers rotated refresh-token writes when the lease-owner guard misses but the row still contains the old refresh token, preventing a valid Yahoo refresh response from being discarded after Yahoo revokes the previous refresh token.
 - **Changed**: Yahoo reconnect now stores the authorization-code token response directly and no longer spends the returned refresh token in a same-callback validation refresh before the first real post-expiry lazy refresh.
 - **Changed**: Yahoo **Sync leagues** on `/leagues` now uses the stored connection to rediscover leagues instead of starting a fresh OAuth flow every time.
