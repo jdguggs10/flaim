@@ -85,7 +85,7 @@ function buildWelcomeHtml() {
               <td style="background:#ffffff;border:1px solid #e5e7eb;border-radius:8px;padding:28px;">
                 <p style="margin:0 0 10px 0;font-size:12px;line-height:18px;font-weight:700;color:#6b7280;">WELCOME</p>
                 <h1 style="margin:0 0 18px 0;font-size:24px;line-height:32px;font-weight:700;color:#030712;">Connect your first league</h1>
-                <p style="margin:0 0 16px 0;font-size:15px;line-height:24px;color:#030712;">Hi {{{GIVEN_NAME}}},</p>
+                <p style="margin:0 0 16px 0;font-size:15px;line-height:24px;color:#030712;">Hi {{GIVEN_NAME}},</p>
                 <p style="margin:0 0 16px 0;font-size:15px;line-height:24px;color:#030712;">Flaim lets you ask fantasy questions using your real league data, including your roster, standings, matchups, and transactions. Once connected, you can ask about waiver adds, trade ideas, roster decisions, and league trends.</p>
                 <div style="margin:8px 0 20px;padding:16px;border-radius:8px;border:1px solid #e5e7eb;background:#f9fafb;">
                   <p style="margin:0 0 12px 0;font-size:14px;line-height:22px;font-weight:700;color:#030712;">Finish your setup</p>
@@ -131,10 +131,11 @@ function buildWelcomeHtml() {
 }
 
 function buildWelcomeText() {
-  // Resend's template API expects triple braces for template variables.
+  // Custom text values use double braces for escaping. Resend's built-in
+  // unsubscribe URL is inserted as a trusted URL, so it uses triple braces.
   return `Welcome to Flaim
 
-Hi {{{GIVEN_NAME}}},
+Hi {{GIVEN_NAME}},
 
 Flaim lets you ask fantasy questions using your real league data, including your roster, standings, matchups, and transactions. Once connected, you can ask about waiver adds, trade ideas, roster decisions, and league trends.
 
