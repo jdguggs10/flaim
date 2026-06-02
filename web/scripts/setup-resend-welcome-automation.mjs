@@ -78,7 +78,7 @@ function buildWelcomeHtml() {
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;margin:0 auto;">
             <tr>
               <td style="padding:0 0 16px 0;">
-                <a href="https://flaim.app" style="text-decoration:none;"><img alt="" src="https://flaim.app/flaim-mark-hero.png" width="28" height="28" style="display:inline-block;margin:0 8px 0 0;vertical-align:middle;" /></a><a href="https://flaim.app" style="color:#030712;display:inline-block;font-size:18px;font-weight:700;line-height:24px;margin:0;text-decoration:none;vertical-align:middle;">Flaim</a>
+                <a href="https://flaim.app" style="text-decoration:none;"><img alt="" src="https://flaim.app/flaim-email-mark.png" width="32" height="32" style="display:inline-block;margin:0 8px 0 0;vertical-align:middle;" /></a><a href="https://flaim.app" style="color:#030712;display:inline-block;font-size:18px;font-weight:700;line-height:24px;margin:0;text-decoration:none;vertical-align:middle;">Flaim</a>
               </td>
             </tr>
             <tr>
@@ -131,8 +131,8 @@ function buildWelcomeHtml() {
 }
 
 function buildWelcomeText() {
-  // Custom values use escaped double braces. Resend's built-in unsubscribe URL
-  // is inserted as a trusted URL, so it intentionally uses triple braces.
+  // Custom text values use double braces for escaping. Resend's built-in
+  // unsubscribe URL is inserted as a trusted URL, so it uses triple braces.
   return `Welcome to Flaim
 
 Hi {{GIVEN_NAME}},

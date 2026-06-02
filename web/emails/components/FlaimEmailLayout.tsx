@@ -61,10 +61,10 @@ export function FlaimEmailLayout({
             <Link href={emailBrand.url} style={styles.logoLink}>
               <Img
                 alt=""
-                height="28"
+                height="32"
                 src={emailBrand.logoUrl}
                 style={styles.logo}
-                width="28"
+                width="32"
               />
             </Link>
             <Link href={emailBrand.url} style={styles.wordmark}>
