@@ -50,6 +50,26 @@ function isPublicWebSearchTraceName(name: string) {
   return PUBLIC_WEB_SEARCH_TRACE_NAMES.has(normalizedName);
 }
 
+function getPositiveFiniteCount(entry: unknown) {
+  if (!entry || typeof entry !== "object") {
+    return null;
+  }
+
+  const entryRecord = entry as Record<string, unknown>;
+  const callCount =
+    typeof entryRecord.callCount === "number" ? entryRecord.callCount : null;
+  if (callCount !== null && Number.isFinite(callCount) && callCount > 0) {
+    return callCount;
+  }
+
+  const count = typeof entryRecord.count === "number" ? entryRecord.count : null;
+  if (count !== null && Number.isFinite(count) && count > 0) {
+    return count;
+  }
+
+  return null;
+}
+
 export function sanitizePublicDemoToolTraceSummary(
   toolTraceSummary: unknown,
 ): PublicDemoToolTraceSummary | null {
@@ -74,20 +94,8 @@ export function sanitizePublicDemoToolTraceSummary(
       continue;
     }
 
-    if (!entry || typeof entry !== "object") {
-      webSearchCount += 1;
-      continue;
-    }
-
-    const entryRecord = entry as Record<string, unknown>;
-    const count =
-      typeof entryRecord.callCount === "number"
-        ? entryRecord.callCount
-        : typeof entryRecord.count === "number"
-          ? entryRecord.count
-          : 1;
-
-    if (Number.isFinite(count) && count > 0) {
+    const count = getPositiveFiniteCount(entry);
+    if (count !== null) {
       webSearchCount += count;
     }
   }

@@ -67,7 +67,7 @@ describe("sanitizePublicDemoToolTraceSummary", () => {
       byName: {
         search_web: { callCount: 2, errorCount: 0 },
         google_web_search: { count: 3, rawProvider: "internal-provider" },
-        web_search_call: {},
+        web_search_call: { callCount: 1 },
         read_file: { callCount: 9 },
       },
     });
@@ -80,6 +80,38 @@ describe("sanitizePublicDemoToolTraceSummary", () => {
     expect(JSON.stringify(summary)).not.toContain("google_web_search");
     expect(JSON.stringify(summary)).not.toContain("rawProvider");
     expect(JSON.stringify(summary)).not.toContain("read_file");
+  });
+
+  it("skips recognized web search entries with null or non-object values", () => {
+    const summary = sanitizePublicDemoToolTraceSummary({
+      byName: {
+        search_web: null,
+        google_web_search: "present",
+        web_search_call: false,
+        web_search: { callCount: 2 },
+      },
+    });
+
+    expect(summary).toEqual({
+      byName: {
+        web_search: { count: 2 },
+      },
+    });
+  });
+
+  it("skips recognized web search entries with missing or non-numeric counts", () => {
+    const summary = sanitizePublicDemoToolTraceSummary({
+      byName: {
+        search_web: {},
+        google_web_search: { callCount: "3" },
+        web_search_call: { count: Number.NaN },
+        web_search: { callCount: 0 },
+        " web_search ": { count: Number.POSITIVE_INFINITY },
+        " search_web ": { count: -1 },
+      },
+    });
+
+    expect(summary).toBeNull();
   });
 
   it("does not preserve substring matches for private search-like tools", () => {
