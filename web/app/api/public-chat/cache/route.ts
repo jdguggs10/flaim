@@ -6,6 +6,10 @@ import {
   getCachedPublicDemoAnswer,
   getLatestPublicDemoRefreshFailure,
 } from "@/lib/server/public-demo-answer-cache";
+import {
+  sanitizePublicDemoRefreshFailure,
+  sanitizePublicDemoToolTraceSummary,
+} from "@/lib/server/public-demo-cache-response";
 import { NextRequest, NextResponse } from "next/server";
 
 function isPublicChatDemoSport(value: string | null): value is PublicChatDemoSport {
@@ -73,8 +77,12 @@ export async function GET(request: NextRequest) {
               isExpired: cachedAnswer.isExpired,
               isStale: cachedAnswer.isStale,
               status: cachedAnswer.status,
-              failure: cachedAnswer.failureSummary ?? latestFailure,
-              toolTraceSummary: cachedAnswer.toolTraceSummary,
+              failure: sanitizePublicDemoRefreshFailure(
+                cachedAnswer.failureSummary ?? latestFailure,
+              ),
+              toolTraceSummary: sanitizePublicDemoToolTraceSummary(
+                cachedAnswer.toolTraceSummary,
+              ),
             },
           }
         : {
@@ -82,7 +90,7 @@ export async function GET(request: NextRequest) {
             presetId: preset.id,
             sport,
             answer: null,
-            failure: latestFailure,
+            failure: sanitizePublicDemoRefreshFailure(latestFailure),
           },
       {
         headers: {
