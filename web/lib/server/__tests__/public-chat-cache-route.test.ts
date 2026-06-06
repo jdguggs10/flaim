@@ -49,9 +49,37 @@ describe("sanitizePublicDemoToolTraceSummary", () => {
 
     expect(summary).toEqual({
       byName: {
-        web_search: { count: 1 },
+        web_search: { count: 2 },
       },
     });
+  });
+
+  it("returns null for null or empty summaries", () => {
+    expect(sanitizePublicDemoToolTraceSummary(null)).toBeNull();
+    expect(sanitizePublicDemoToolTraceSummary(undefined)).toBeNull();
+    expect(sanitizePublicDemoToolTraceSummary({})).toBeNull();
+    expect(sanitizePublicDemoToolTraceSummary({ byName: null })).toBeNull();
+    expect(sanitizePublicDemoToolTraceSummary({ byName: {} })).toBeNull();
+  });
+
+  it("aggregates multiple public web search entries without exposing raw names", () => {
+    const summary = sanitizePublicDemoToolTraceSummary({
+      byName: {
+        search_web: { callCount: 2, errorCount: 0 },
+        google_web_search: { count: 3, rawProvider: "internal-provider" },
+        web_search_call: {},
+        read_file: { callCount: 9 },
+      },
+    });
+
+    expect(summary).toEqual({
+      byName: {
+        web_search: { count: 6 },
+      },
+    });
+    expect(JSON.stringify(summary)).not.toContain("google_web_search");
+    expect(JSON.stringify(summary)).not.toContain("rawProvider");
+    expect(JSON.stringify(summary)).not.toContain("read_file");
   });
 
   it("does not preserve substring matches for private search-like tools", () => {
@@ -179,7 +207,7 @@ describe("GET /api/public-chat/cache", () => {
     expect(response.status).toBe(200);
     expect(body.answer.toolTraceSummary).toEqual({
       byName: {
-        web_search: { count: 1 },
+        web_search: { count: 2 },
       },
     });
     expect(body.answer.failure).toEqual({

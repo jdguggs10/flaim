@@ -36,7 +36,13 @@ const PUBLIC_WEB_SEARCH_TRACE_NAMES = new Set([
 function isPublicDemoRefreshFailureCode(
   value: string | null,
 ): value is keyof typeof PUBLIC_DEMO_REFRESH_FAILURE_MESSAGES {
-  return Boolean(value && value in PUBLIC_DEMO_REFRESH_FAILURE_MESSAGES);
+  return (
+    value !== null &&
+    Object.prototype.hasOwnProperty.call(
+      PUBLIC_DEMO_REFRESH_FAILURE_MESSAGES,
+      value,
+    )
+  );
 }
 
 function isPublicWebSearchTraceName(name: string) {
@@ -61,15 +67,36 @@ export function sanitizePublicDemoToolTraceSummary(
     return null;
   }
 
-  for (const rawName of Object.keys(byName)) {
+  let webSearchCount = 0;
+
+  for (const [rawName, entry] of Object.entries(byName)) {
     if (!isPublicWebSearchTraceName(rawName)) {
       continue;
     }
 
+    if (!entry || typeof entry !== "object") {
+      webSearchCount += 1;
+      continue;
+    }
+
+    const entryRecord = entry as Record<string, unknown>;
+    const count =
+      typeof entryRecord.callCount === "number"
+        ? entryRecord.callCount
+        : typeof entryRecord.count === "number"
+          ? entryRecord.count
+          : 1;
+
+    if (Number.isFinite(count) && count > 0) {
+      webSearchCount += count;
+    }
+  }
+
+  if (webSearchCount > 0) {
     return {
       byName: {
         web_search: {
-          count: 1,
+          count: webSearchCount,
         },
       },
     };
