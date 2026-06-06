@@ -11,11 +11,11 @@ vi.mock("@/lib/server/public-demo-answer-cache", () => ({
   getLatestPublicDemoRefreshFailure: mocks.getLatestPublicDemoRefreshFailure,
 }));
 
+import { GET } from "../../../app/api/public-chat/cache/route";
 import {
-  GET,
   sanitizePublicDemoRefreshFailure,
   sanitizePublicDemoToolTraceSummary,
-} from "../../../app/api/public-chat/cache/route";
+} from "../public-demo-cache-response";
 
 function publicCacheRequest() {
   return new NextRequest(
