@@ -108,6 +108,45 @@ describe('GET /api/auth/espn/credentials?forEdit=true', () => {
     expect(body).not.toHaveProperty('swid');
     expect(body).not.toHaveProperty('s2');
   });
+
+  it('does not infer edit credentials from hostile upstream raw-only fields', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({
+      email: 'user@example.com',
+      lastUpdated: '2026-06-08T16:30:00.000Z',
+      swid: '{11111111-2222-3333-4444-555555555555}',
+      s2: 'raw-espn-s2-secret-value-that-should-not-return-to-browser',
+    })));
+
+    const response = await GET(credentialsRequest('?forEdit=true'));
+    const body = await response.json() as Record<string, unknown>;
+
+    expect(response.status).toBe(200);
+    expect(body).toEqual({
+      hasCredentials: false,
+      platform: 'espn',
+      email: 'user@example.com',
+      lastUpdated: '2026-06-08T16:30:00.000Z',
+      replaceOnly: true,
+    });
+    expect(body).not.toHaveProperty('swid');
+    expect(body).not.toHaveProperty('s2');
+    expect(JSON.stringify(body)).not.toContain('raw-espn-s2-secret-value');
+  });
+
+  it('returns bad gateway for malformed upstream edit metadata', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{not-json', {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    })));
+
+    const response = await GET(credentialsRequest('?forEdit=true'));
+    const body = await response.json() as Record<string, unknown>;
+
+    expect(response.status).toBe(502);
+    expect(body).toEqual({
+      error: 'Upstream returned an unexpected response shape',
+    });
+  });
 });
 
 describe('GET /api/auth/espn/credentials', () => {

@@ -1,6 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 
+type EspnCredentialsResponse = {
+  hasCredentials?: boolean;
+  swid?: string;
+  s2?: string;
+  email?: string;
+  lastUpdated?: string;
+  platform?: string;
+  replaceOnly?: boolean;
+  maskedSwid?: string;
+  maskedS2?: string;
+};
+
 /**
  * GET /api/auth/espn/credentials
  * -----------------------------------------------------------
@@ -50,23 +62,20 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const data = await workerRes.json() as {
-      hasCredentials?: boolean;
-      swid?: string;
-      s2?: string;
-      email?: string;
-      lastUpdated?: string;
-      platform?: string;
-      replaceOnly?: boolean;
-      maskedSwid?: string;
-      maskedS2?: string;
-    };
-    const hasMaskedPair = !!(data.maskedSwid && data.maskedS2);
-    const hasRawPair = !!(data.swid && data.s2);
-    const hasCredentials = data.hasCredentials ?? (hasMaskedPair || hasRawPair);
-
     // Browser edit flows are replace-only. Never forward raw swid/s2 fields.
     if (forEdit) {
+      const rawData = await workerRes.json().catch(() => null) as unknown;
+      if (!rawData || typeof rawData !== 'object' || Array.isArray(rawData)) {
+        return NextResponse.json(
+          { error: 'Upstream returned an unexpected response shape' },
+          { status: 502 }
+        );
+      }
+
+      const data = rawData as EspnCredentialsResponse;
+      const hasMaskedPair = !!(data.maskedSwid && data.maskedS2);
+      const hasCredentials = data.hasCredentials ?? hasMaskedPair;
+
       return NextResponse.json({
         hasCredentials,
         platform: 'espn',
@@ -77,6 +86,11 @@ export async function GET(request: NextRequest) {
         maskedS2: hasCredentials ? data.maskedS2 : undefined
       });
     }
+
+    const data = await workerRes.json() as EspnCredentialsResponse;
+    const hasMaskedPair = !!(data.maskedSwid && data.maskedS2);
+    const hasRawPair = !!(data.swid && data.s2);
+    const hasCredentials = data.hasCredentials ?? (hasMaskedPair || hasRawPair);
 
     return NextResponse.json({
       hasCredentials,
