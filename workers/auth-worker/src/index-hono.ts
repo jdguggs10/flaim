@@ -597,8 +597,9 @@ api.get('/health', async (c) => {
       healthData.status = 'degraded';
     }
   } catch (error) {
+    console.error('[auth-worker] Supabase health check failed:', error);
     healthData.supabase_status = 'error';
-    healthData.supabase_error = error instanceof Error ? error.message : 'Unknown Supabase error';
+    healthData.supabase_error = 'supabase_connectivity_check_failed';
     healthData.status = 'degraded';
   }
 
@@ -1793,8 +1794,8 @@ api.onError((err, c) => {
   console.error('Auth worker error:', err);
   const corsHeaders = getCorsHeaders(c.req.raw);
   return new Response(JSON.stringify({
-    error: 'Internal server error',
-    details: err instanceof Error ? err.message : 'Unknown error'
+    error: 'server_error',
+    error_description: 'Internal server error'
   }), {
     status: 500,
     headers: { 'Content-Type': 'application/json', ...corsHeaders }
