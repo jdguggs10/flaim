@@ -198,6 +198,9 @@ export function useEspnCredentials(): EspnCredentialsState {
         const connected = !!data.hasCredentials;
         setHasCredentials(connected);
         setLastUpdated(connected ? data.lastUpdated || null : null);
+      } else {
+        const data = await res.json().catch(() => ({})) as { error?: string; message?: string };
+        throw new Error(data.error || data.message || 'Failed to load credential status');
       }
     } catch (err) {
       if (isAbortError(err)) return;

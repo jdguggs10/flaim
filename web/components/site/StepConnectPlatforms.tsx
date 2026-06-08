@@ -144,12 +144,17 @@ export function StepConnectPlatforms({ className }: StepConnectPlatformsProps) {
     setIsLoadingCreds(true);
     try {
       const res = await fetch('/api/auth/espn/credentials?forEdit=true');
-      if (res.ok) {
-        const data = await res.json() as { hasCredentials?: boolean };
-        setHasCredentials(!!data.hasCredentials);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({})) as { error?: string; message?: string };
+        throw new Error(data.error || data.message || 'Failed to load credential status');
       }
-    } catch { /* ignore */ }
-    setIsLoadingCreds(false);
+      const data = await res.json() as { hasCredentials?: boolean };
+      setHasCredentials(!!data.hasCredentials);
+    } catch (err) {
+      setEspnError(err instanceof Error ? err.message : 'Failed to load credential status');
+    } finally {
+      setIsLoadingCreds(false);
+    }
   };
 
   const handleDialogOpenChange = (open: boolean) => {

@@ -91,8 +91,10 @@ describe('GET /api/auth/espn/credentials?forEdit=true', () => {
 
   it('returns replace-only empty state for missing credentials', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({
-      error: 'Credentials not found',
-    }, 404)));
+      hasCredentials: false,
+      platform: 'espn',
+      replaceOnly: true,
+    })));
 
     const response = await GET(credentialsRequest('?forEdit=true'));
     const body = await response.json() as Record<string, unknown>;
@@ -105,5 +107,50 @@ describe('GET /api/auth/espn/credentials?forEdit=true', () => {
     });
     expect(body).not.toHaveProperty('swid');
     expect(body).not.toHaveProperty('s2');
+  });
+});
+
+describe('GET /api/auth/espn/credentials', () => {
+  it('sanitizes raw ESPN credentials from upstream status metadata', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({
+      email: 'user@example.com',
+      lastUpdated: '2026-06-08T16:30:00.000Z',
+      swid: '{11111111-2222-3333-4444-555555555555}',
+      s2: 'raw-espn-s2-secret-value-that-should-not-return-to-browser',
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const response = await GET(credentialsRequest());
+    const body = await response.json() as Record<string, unknown>;
+
+    expect(response.status).toBe(200);
+    expect(body).toEqual({
+      hasCredentials: true,
+      email: 'user@example.com',
+      lastUpdated: '2026-06-08T16:30:00.000Z',
+    });
+    expect(body).not.toHaveProperty('swid');
+    expect(body).not.toHaveProperty('s2');
+    expect(JSON.stringify(body)).not.toContain('raw-espn-s2-secret-value');
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://auth.example/credentials/espn',
+      {
+        headers: {
+          Authorization: 'Bearer test-clerk-token',
+        },
+      },
+    );
+  });
+
+  it('does not infer credentials from incomplete upstream status metadata', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({
+      maskedSwid: '{********-****-****-****-************}',
+    })));
+
+    const response = await GET(credentialsRequest());
+    const body = await response.json() as Record<string, unknown>;
+
+    expect(response.status).toBe(200);
+    expect(body).toEqual({ hasCredentials: false });
   });
 });

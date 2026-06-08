@@ -39,13 +39,6 @@ export async function GET(request: NextRequest) {
 
     // auth-worker returns 404 when user has no stored credentials; treat as empty state
     if (workerRes.status === 404) {
-      if (forEdit) {
-        return NextResponse.json({
-          hasCredentials: false,
-          platform: 'espn',
-          replaceOnly: true
-        }, { status: 200 });
-      }
       return NextResponse.json({ hasCredentials: false }, { status: 200 });
     }
 
@@ -68,7 +61,9 @@ export async function GET(request: NextRequest) {
       maskedSwid?: string;
       maskedS2?: string;
     };
-    const hasCredentials = data.hasCredentials ?? !!(data.maskedSwid || data.maskedS2 || data.swid || data.s2);
+    const hasMaskedPair = !!(data.maskedSwid && data.maskedS2);
+    const hasRawPair = !!(data.swid && data.s2);
+    const hasCredentials = data.hasCredentials ?? (hasMaskedPair || hasRawPair);
 
     // Browser edit flows are replace-only. Never forward raw swid/s2 fields.
     if (forEdit) {
