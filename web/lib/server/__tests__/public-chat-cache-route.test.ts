@@ -168,13 +168,13 @@ describe("sanitizePublicDemoRefreshFailure", () => {
 describe("GET /api/public-chat/cache", () => {
   it("does not expose raw tool traces or raw source metadata", async () => {
     mocks.getCachedPublicDemoAnswer.mockResolvedValue({
-      cacheKey: "public-demo-answer:wire-watch:baseball:v5:v2",
+      cacheKey: "public-demo-answer:wire-watch:baseball:v6:v2",
       presetId: "wire-watch",
       sport: "baseball",
       provider: "gemini",
       providerModel: "gemini-2.5-flash",
       contextVersion: "v2",
-      promptVersion: "v5",
+      promptVersion: "v6",
       answerText: "Add the useful player and drop the risky player.",
       generatedAt: "2026-06-06T12:00:00.000Z",
       expiresAt: "2026-06-06T18:00:00.000Z",
