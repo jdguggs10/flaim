@@ -30,7 +30,7 @@ export interface PublicChatPreset {
   rail?: PublicChatPresetRail;
 }
 
-export const PUBLIC_DEMO_PROMPT_VERSION = "v5";
+export const PUBLIC_DEMO_PROMPT_VERSION = "v6";
 export const PUBLIC_DEMO_CONTEXT_VERSION = "v2";
 
 export const PUBLIC_CHAT_SIMPLE_PRESETS: readonly PublicChatPreset[] = [
