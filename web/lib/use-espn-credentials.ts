@@ -183,6 +183,8 @@ export function useEspnCredentials(): EspnCredentialsState {
 
     setIsLoadingCreds(true);
     setCredsError(null);
+    setSwid('');
+    setEspnS2('');
 
     let errored = false;
     try {
@@ -191,17 +193,18 @@ export function useEspnCredentials(): EspnCredentialsState {
       });
       if (controller.signal.aborted || !shouldApply()) return;
       if (res.ok) {
-        const data = await res.json() as { hasCredentials?: boolean; swid?: string; s2?: string };
+        const data = await res.json() as { hasCredentials?: boolean; lastUpdated?: string };
         if (!shouldApply()) return;
-        if (data.swid) setSwid(data.swid);
-        if (data.s2) setEspnS2(data.s2);
+        const connected = !!data.hasCredentials;
+        setHasCredentials(connected);
+        setLastUpdated(connected ? data.lastUpdated || null : null);
       }
     } catch (err) {
       if (isAbortError(err)) return;
       if (!shouldApply()) return;
       errored = true;
-      console.error('Failed to fetch credentials for editing:', err);
-      setCredsError(err instanceof Error ? err.message : 'Failed to load credentials');
+      console.error('Failed to fetch credential replacement metadata:', err);
+      setCredsError(err instanceof Error ? err.message : 'Failed to load credential status');
     } finally {
       if (!controller.signal.aborted && shouldApply()) {
         setIsLoadingCreds(false);

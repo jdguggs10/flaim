@@ -44,7 +44,6 @@ export function StepConnectPlatforms({ className }: StepConnectPlatformsProps) {
   const [swid, setSwid] = useState('');
   const [espnS2, setEspnS2] = useState('');
   const [showCredentials, setShowCredentials] = useState(false);
-  const [hasLoadedCreds, setHasLoadedCreds] = useState(false);
   const [isLoadingCreds, setIsLoadingCreds] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [espnError, setEspnError] = useState<string | null>(null);
@@ -139,21 +138,28 @@ export function StepConnectPlatforms({ className }: StepConnectPlatformsProps) {
 
   const handleOpenDialog = async () => {
     setDialogOpen(true);
-    if (hasLoadedCreds || swid || espnS2) {
-      setIsLoadingCreds(false);
-      return;
-    }
+    setSwid('');
+    setEspnS2('');
+    setEspnError(null);
     setIsLoadingCreds(true);
     try {
       const res = await fetch('/api/auth/espn/credentials?forEdit=true');
       if (res.ok) {
-        const data = await res.json() as { swid?: string; s2?: string };
-        if (data.swid) setSwid(data.swid);
-        if (data.s2) setEspnS2(data.s2);
-        if (data.swid || data.s2) setHasLoadedCreds(true);
+        const data = await res.json() as { hasCredentials?: boolean };
+        setHasCredentials(!!data.hasCredentials);
       }
     } catch { /* ignore */ }
     setIsLoadingCreds(false);
+  };
+
+  const handleDialogOpenChange = (open: boolean) => {
+    setDialogOpen(open);
+    if (!open) {
+      setSwid('');
+      setEspnS2('');
+      setShowCredentials(false);
+      setEspnError(null);
+    }
   };
 
   const handleSaveCredentials = async () => {
@@ -174,7 +180,7 @@ export function StepConnectPlatforms({ className }: StepConnectPlatformsProps) {
         throw new Error(data.error || 'Failed to save credentials');
       }
       setHasCredentials(true);
-      setDialogOpen(false);
+      handleDialogOpenChange(false);
     } catch (err) {
       setEspnError(err instanceof Error ? err.message : 'Failed to save');
     }
@@ -302,16 +308,20 @@ export function StepConnectPlatforms({ className }: StepConnectPlatformsProps) {
                       Install Extension
                     </Button>
                   </a>
-                  <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+                  <Dialog open={dialogOpen} onOpenChange={handleDialogOpenChange}>
                     <DialogTrigger asChild>
-                      <Button variant="outline" size="icon" className="h-8 w-8 shrink-0" onClick={handleOpenDialog} title="Add manually">
+                      <Button variant="outline" size="icon" className="h-8 w-8 shrink-0" onClick={handleOpenDialog} title={hasCredentials ? 'Replace manually' : 'Add manually'}>
                         <Wrench className="h-4 w-4" />
                       </Button>
                     </DialogTrigger>
                     <DialogContent>
                       <DialogHeader>
-                        <DialogTitle>ESPN Credentials</DialogTitle>
-                        <DialogDescription>Enter your ESPN authentication cookies.</DialogDescription>
+                        <DialogTitle>{hasCredentials ? 'Replace ESPN credentials' : 'Add ESPN credentials'}</DialogTitle>
+                        <DialogDescription>
+                          {hasCredentials
+                            ? 'Saved credentials are not shown. Enter new ESPN cookies to replace them.'
+                            : 'Enter your ESPN authentication cookies.'}
+                        </DialogDescription>
                       </DialogHeader>
                       <div className="space-y-4 pt-2">
                         {isLoadingCreds ? (
@@ -321,24 +331,36 @@ export function StepConnectPlatforms({ className }: StepConnectPlatformsProps) {
                             {espnError && <div className="p-3 bg-destructive/10 border border-destructive/30 rounded text-sm text-destructive">{espnError}</div>}
                             <div className="space-y-2">
                               <Label htmlFor="swid">SWID</Label>
-                              <Input id="swid" type={showCredentials ? 'text' : 'password'} value={swid} onChange={(e) => setSwid(e.target.value)} />
+                              <Input
+                                id="swid"
+                                type={showCredentials ? 'text' : 'password'}
+                                value={swid}
+                                onChange={(e) => setSwid(e.target.value)}
+                                placeholder={hasCredentials ? 'Enter replacement SWID' : '{xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx}'}
+                              />
                             </div>
                             <div className="space-y-2">
                               <Label htmlFor="espn_s2">ESPN_S2</Label>
-                              <Input id="espn_s2" type={showCredentials ? 'text' : 'password'} value={espnS2} onChange={(e) => setEspnS2(e.target.value)} />
+                              <Input
+                                id="espn_s2"
+                                type={showCredentials ? 'text' : 'password'}
+                                value={espnS2}
+                                onChange={(e) => setEspnS2(e.target.value)}
+                                placeholder={hasCredentials ? 'Enter replacement ESPN_S2' : 'espn_s2 cookie value'}
+                              />
                             </div>
                             <div className="flex items-center gap-2">
                               <Button variant="ghost" size="sm" onClick={() => setShowCredentials(!showCredentials)}>
                                 {showCredentials ? <EyeOff className="h-4 w-4 mr-1" /> : <Eye className="h-4 w-4 mr-1" />}
-                                {showCredentials ? 'Hide' : 'Show'}
+                                {showCredentials ? 'Hide entered values' : 'Show entered values'}
                               </Button>
                             </div>
                             <div className="flex gap-2">
                               <Button onClick={handleSaveCredentials} disabled={isSaving}>
                                 {isSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-                                Save
+                                {hasCredentials ? 'Replace' : 'Save'}
                               </Button>
-                              <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
+                              <Button variant="outline" onClick={() => handleDialogOpenChange(false)}>Cancel</Button>
                             </div>
                           </>
                         )}

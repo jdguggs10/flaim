@@ -8,7 +8,7 @@ import { auth } from '@clerk/nextjs/server';
  * Proxies to auth-worker with proper JWT forwarding.
  *
  * Query params:
- * - forEdit=true: Return actual credentials for editing
+ * - forEdit=true: Return replace-only metadata for credential replacement
  */
 export async function GET(request: NextRequest) {
   try {
@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'NEXT_PUBLIC_AUTH_WORKER_URL is not configured' }, { status: 500 });
     }
 
-    // Check if this is a request for editing
+    // Check if this is a request for replace-only credential editing.
     const forEdit = request.nextUrl.searchParams.get('forEdit') === 'true';
     const queryString = forEdit ? '?forEdit=true' : '';
 
@@ -39,6 +39,13 @@ export async function GET(request: NextRequest) {
 
     // auth-worker returns 404 when user has no stored credentials; treat as empty state
     if (workerRes.status === 404) {
+      if (forEdit) {
+        return NextResponse.json({
+          hasCredentials: false,
+          platform: 'espn',
+          replaceOnly: true
+        }, { status: 200 });
+      }
       return NextResponse.json({ hasCredentials: false }, { status: 200 });
     }
 
@@ -50,15 +57,29 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const data = await workerRes.json() as { hasCredentials?: boolean; swid?: string; s2?: string; email?: string; lastUpdated?: string };
-    const hasCredentials = data.hasCredentials ?? (!!data.swid && !!data.s2);
+    const data = await workerRes.json() as {
+      hasCredentials?: boolean;
+      swid?: string;
+      s2?: string;
+      email?: string;
+      lastUpdated?: string;
+      platform?: string;
+      replaceOnly?: boolean;
+      maskedSwid?: string;
+      maskedS2?: string;
+    };
+    const hasCredentials = data.hasCredentials ?? !!(data.maskedSwid || data.maskedS2 || data.swid || data.s2);
 
-    // If editing, return actual credentials
-    if (forEdit && hasCredentials) {
+    // Browser edit flows are replace-only. Never forward raw swid/s2 fields.
+    if (forEdit) {
       return NextResponse.json({
         hasCredentials,
-        swid: data.swid,
-        s2: data.s2
+        platform: 'espn',
+        email: data.email,
+        lastUpdated: data.lastUpdated,
+        replaceOnly: true,
+        maskedSwid: hasCredentials ? data.maskedSwid : undefined,
+        maskedS2: hasCredentials ? data.maskedS2 : undefined
       });
     }
 
