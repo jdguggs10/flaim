@@ -119,6 +119,8 @@ type JwtPayload = { sub?: string; iss?: string; exp?: number; [k: string]: unkno
 const EVAL_RUN_HEADER = 'X-Flaim-Eval-Run';
 const EVAL_TRACE_HEADER = 'X-Flaim-Eval-Trace';
 const INTERNAL_SERVICE_TOKEN_HEADER = 'X-Flaim-Internal-Token';
+const MASKED_ESPN_SWID = '{********-****-****-****-************}';
+const MASKED_ESPN_S2 = '************';
 
 const ALLOWED_ORIGINS = [
   'https://flaim-*.vercel.app',
@@ -1317,24 +1319,28 @@ async function handleCredentialsEspn(c: Context<{ Bindings: Env }>, method: stri
       }, 403);
     }
 
-    // Check if this is an edit request
+    // Browser edit flows are replace-only: expose metadata and masks, never raw cookies.
     const forEdit = url.searchParams.get('forEdit') === 'true';
 
     if (forEdit) {
-      const credentials = await storage.getCredentials(clerkUserId);
+      const metadata = await storage.getCredentialMetadata(clerkUserId);
 
-      if (!credentials) {
+      if (!metadata?.hasCredentials) {
         return c.json({
           hasCredentials: false,
-          message: 'No ESPN credentials found'
-        }, 404);
+          platform: 'espn',
+          replaceOnly: true
+        });
       }
 
       return c.json({
         hasCredentials: true,
         platform: 'espn',
-        swid: credentials.swid,
-        s2: credentials.s2
+        email: metadata.email,
+        lastUpdated: metadata.lastUpdated,
+        replaceOnly: true,
+        maskedSwid: MASKED_ESPN_SWID,
+        maskedS2: MASKED_ESPN_S2
       });
     }
 

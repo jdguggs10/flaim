@@ -178,9 +178,9 @@ describe('eval API key auth', () => {
       })
     );
     expect(res.status).toBe(200);
-    const body = await res.json() as { success: boolean; credentials: unknown };
+    const body = await res.json() as { success: boolean; credentials: { swid: string; s2: string } };
     expect(body.success).toBe(true);
-    expect(body.credentials).toBeTruthy();
+    expect(body.credentials).toEqual({ swid: 'test-swid', s2: 'test-s2' });
   });
 
   it('GET /auth/internal/leagues with valid API key returns leagues', async () => {

@@ -1,6 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 
+type EspnCredentialsResponse = {
+  hasCredentials?: boolean;
+  swid?: string;
+  s2?: string;
+  email?: string;
+  lastUpdated?: string;
+  platform?: string;
+  replaceOnly?: boolean;
+  maskedSwid?: string;
+  maskedS2?: string;
+};
+
 /**
  * GET /api/auth/espn/credentials
  * -----------------------------------------------------------
@@ -8,7 +20,7 @@ import { auth } from '@clerk/nextjs/server';
  * Proxies to auth-worker with proper JWT forwarding.
  *
  * Query params:
- * - forEdit=true: Return actual credentials for editing
+ * - forEdit=true: Return replace-only metadata for credential replacement
  */
 export async function GET(request: NextRequest) {
   try {
@@ -23,7 +35,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'NEXT_PUBLIC_AUTH_WORKER_URL is not configured' }, { status: 500 });
     }
 
-    // Check if this is a request for editing
+    // Check if this is a request for replace-only credential editing.
     const forEdit = request.nextUrl.searchParams.get('forEdit') === 'true';
     const queryString = forEdit ? '?forEdit=true' : '';
 
@@ -50,17 +62,35 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const data = await workerRes.json() as { hasCredentials?: boolean; swid?: string; s2?: string; email?: string; lastUpdated?: string };
-    const hasCredentials = data.hasCredentials ?? (!!data.swid && !!data.s2);
+    // Browser edit flows are replace-only. Never forward raw swid/s2 fields.
+    if (forEdit) {
+      const rawData = await workerRes.json().catch(() => null) as unknown;
+      if (!rawData || typeof rawData !== 'object' || Array.isArray(rawData)) {
+        return NextResponse.json(
+          { error: 'Upstream returned an unexpected response shape' },
+          { status: 502 }
+        );
+      }
 
-    // If editing, return actual credentials
-    if (forEdit && hasCredentials) {
+      const data = rawData as EspnCredentialsResponse;
+      const hasMaskedPair = !!(data.maskedSwid && data.maskedS2);
+      const hasCredentials = data.hasCredentials ?? hasMaskedPair;
+
       return NextResponse.json({
         hasCredentials,
-        swid: data.swid,
-        s2: data.s2
+        platform: 'espn',
+        email: data.email,
+        lastUpdated: data.lastUpdated,
+        replaceOnly: true,
+        maskedSwid: hasCredentials ? data.maskedSwid : undefined,
+        maskedS2: hasCredentials ? data.maskedS2 : undefined
       });
     }
+
+    const data = await workerRes.json() as EspnCredentialsResponse;
+    const hasMaskedPair = !!(data.maskedSwid && data.maskedS2);
+    const hasRawPair = !!(data.swid && data.s2);
+    const hasCredentials = data.hasCredentials ?? (hasMaskedPair || hasRawPair);
 
     return NextResponse.json({
       hasCredentials,
