@@ -75,7 +75,7 @@ Create or refresh the Resend-side resources with:
 corepack pnpm --dir web exec node scripts/setup-resend-welcome-automation.mjs
 ```
 
-The setup script creates the `flaim.user_created` event, publishes the `flaim-welcome-v1` template, and creates/updates the `Flaim Welcome Email` automation as `disabled`. It requires `RESEND_CONTACT_SEGMENT_ID` because the automation chain is `trigger -> contact_update -> add_to_segment -> send_email`. Re-running the script intentionally disables the automation again as a safety guard while templates are being revised. Enable the automation in Resend only after the production webhook event path has been tested.
+The setup script creates the `flaim.user_created` event, publishes the `flaim-welcome-v1` template, and creates/updates the `Flaim Welcome Email` automation as `disabled`. It requires `RESEND_CONTACT_SEGMENT_ID` because the automation chain is `trigger -> add_to_segment -> send_email`. The signup automation does not enrich contact names; that remains the responsibility of the `user.updated` repair path and the backfill script. Re-running the script intentionally disables the automation again as a safety guard while templates are being revised. Enable the automation in Resend only after the production webhook event path has been tested.
 
 The Resend automation template is currently hand-built in `web/scripts/setup-resend-welcome-automation.mjs` and must stay visually synchronized with `web/emails/welcome.tsx`. Shared action URLs live in `web/emails/flaim-email-links.json`. When changing the welcome email, update the React preview and setup-script HTML together, run `corepack pnpm --dir web run email:export`, rerun the setup script, and send a real test email before enabling or re-enabling the automation.
 

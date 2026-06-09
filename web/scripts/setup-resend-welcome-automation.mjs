@@ -225,8 +225,7 @@ async function findTemplateByAlias(alias) {
 function buildAutomation(templateId) {
   return {
     connections: [
-      { from: "start", to: "contact" },
-      { from: "contact", to: "segment" },
+      { from: "start", to: "segment" },
       { from: "segment", to: "welcome" },
     ],
     name: AUTOMATION_NAME,
@@ -236,14 +235,6 @@ function buildAutomation(templateId) {
         key: "start",
         type: "trigger",
         config: { eventName: EVENT_NAME },
-      },
-      {
-        key: "contact",
-        type: "contact_update",
-        config: {
-          firstName: { var: "event.first_name" },
-          lastName: { var: "event.last_name" },
-        },
       },
       {
         key: "segment",
@@ -311,7 +302,7 @@ console.log(JSON.stringify({
   eventId,
   eventName: EVENT_NAME,
   segmentId: CONTACT_SEGMENT_ID,
-  stepKeys: ["start", "contact", "segment", "welcome"],
+  stepKeys: ["start", "segment", "welcome"],
   templateAlias: TEMPLATE_ALIAS,
   templateId,
 }, null, 2));
