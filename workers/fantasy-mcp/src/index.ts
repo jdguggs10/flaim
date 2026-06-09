@@ -193,7 +193,13 @@ async function isAuthenticatedMcpToolAttemptRequest(request: Request): Promise<b
     return false;
   }
 
+  const contentLength = Number(request.headers.get('Content-Length'));
+  if (Number.isFinite(contentLength) && contentLength > 65536) {
+    return false;
+  }
+
   try {
+    // Clone so this logging heuristic never consumes the MCP handler body.
     const payload = await request.clone().json() as { method?: unknown; params?: unknown };
     if (payload?.method !== 'tools/call') {
       return false;

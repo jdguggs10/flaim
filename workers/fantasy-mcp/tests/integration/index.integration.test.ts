@@ -171,6 +171,41 @@ describe('fantasy-mcp gateway integration', () => {
     }
   });
 
+  it('does not emit setup signal for oversized unauthenticated tool-call probes', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    const authFetch = vi.fn(async () => new Response('unexpected', { status: 500 }));
+    const env = buildEnv(authFetch);
+    const body = JSON.stringify({
+      jsonrpc: '2.0',
+      id: 'oversized-probe',
+      method: 'tools/call',
+      params: { name: 'get_user_session', arguments: {} },
+      padding: 'x'.repeat(65536),
+    });
+
+    try {
+      const response = await app.fetch(
+        new Request('https://api.flaim.app/mcp', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Content-Length': String(body.length),
+            Accept: 'application/json',
+          },
+          body,
+        }),
+        env,
+        mockExecutionContext()
+      );
+
+      expect(response.status).toBe(401);
+      expect(authFetch).not.toHaveBeenCalled();
+      expect(emittedSetupSignal(logSpy)).toBe(false);
+    } finally {
+      logSpy.mockRestore();
+    }
+  });
+
   it('serves oauth metadata aliases under /mcp/.well-known', async () => {
     const authFetch = vi.fn(async (request: Request) => {
       if (new URL(request.url).pathname === '/.well-known/oauth-authorization-server') {

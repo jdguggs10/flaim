@@ -196,7 +196,7 @@ async function fetchUserLeagues(
     return { leagues };
   } catch (error) {
     clearTimeout(timeoutId);
-    const isTimeout = (error as Error).name === 'AbortError';
+    const isTimeout = error instanceof Error && error.name === 'AbortError';
     logSessionDiscoveryFailure(env, 'espn', 'league_fetch', correlationId, {
       failure_kind: isTimeout ? 'timeout' : 'fetch_error',
       error_code: isTimeout ? 'auth_worker_timeout' : 'auth_worker_fetch_exception',
@@ -278,7 +278,7 @@ async function fetchYahooLeagues(
     return { leagues };
   } catch (error) {
     clearTimeout(timeoutId);
-    const isTimeout = (error as Error).name === 'AbortError';
+    const isTimeout = error instanceof Error && error.name === 'AbortError';
     logSessionDiscoveryFailure(env, 'yahoo', 'league_fetch', correlationId, {
       failure_kind: isTimeout ? 'timeout' : 'fetch_error',
       error_code: isTimeout ? 'auth_worker_timeout' : 'auth_worker_fetch_exception',
@@ -355,7 +355,7 @@ async function fetchSleeperLeagues(
     return { leagues };
   } catch (error) {
     clearTimeout(timeoutId);
-    const isTimeout = (error as Error).name === 'AbortError';
+    const isTimeout = error instanceof Error && error.name === 'AbortError';
     logSessionDiscoveryFailure(env, 'sleeper', 'league_fetch', correlationId, {
       failure_kind: isTimeout ? 'timeout' : 'fetch_error',
       error_code: isTimeout ? 'auth_worker_timeout' : 'auth_worker_fetch_exception',
