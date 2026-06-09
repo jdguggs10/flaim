@@ -1,10 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   getPrimaryEmail,
   hasExplicitUnverifiedStatus,
   maskEmail,
   parseArgs,
+  syncContact,
 } from "../../../scripts/backfill-resend-contacts.mjs";
 
 describe("backfill-resend-contacts script helpers", () => {
@@ -50,5 +51,79 @@ describe("backfill-resend-contacts script helpers", () => {
     expect(hasExplicitUnverifiedStatus({ verification: { status: "unverified" } })).toBe(true);
     expect(hasExplicitUnverifiedStatus({ verification: { status: "verified" } })).toBe(false);
     expect(hasExplicitUnverifiedStatus({})).toBe(false);
+  });
+
+  it("creates missing contacts with the configured segment", async () => {
+    const update = vi.fn(async () => ({
+      data: null,
+      error: { message: "not found", name: "not_found", statusCode: 404 },
+    }));
+    const create = vi.fn(async () => ({ data: { id: "contact_123" }, error: null }));
+    const resend = {
+      contacts: {
+        create,
+        segments: { add: async () => ({ data: { id: "segment_123" }, error: null }) },
+        update,
+      },
+    };
+
+    const result = await syncContact({
+      resend,
+      segmentId: "segment_123",
+      user: {
+        email_addresses: [{ id: "primary", email_address: "Gerry@Example.com" }],
+        first_name: " Gerry ",
+        last_name: " Gugger ",
+        primary_email_address_id: "primary",
+      },
+    });
+
+    expect(result).toEqual({
+      action: "created",
+      email: "gerry@example.com",
+      ok: true,
+    });
+    expect(update).toHaveBeenCalledWith({
+      email: "gerry@example.com",
+      firstName: "Gerry",
+      lastName: "Gugger",
+    });
+    expect(create).toHaveBeenCalledWith({
+      email: "gerry@example.com",
+      firstName: "Gerry",
+      lastName: "Gugger",
+      segments: [{ id: "segment_123" }],
+      unsubscribed: false,
+    });
+  });
+
+  it("does not create after a non-404 update failure", async () => {
+    const create = vi.fn(async () => ({ data: { id: "contact_123" }, error: null }));
+    const resend = {
+      contacts: {
+        create,
+        segments: { add: async () => ({ data: { id: "segment_123" }, error: null }) },
+        update: async () => ({
+          data: null,
+          error: { message: "rate limited", statusCode: 429 },
+        }),
+      },
+    };
+
+    const result = await syncContact({
+      resend,
+      segmentId: "segment_123",
+      user: {
+        email_addresses: [{ id: "primary", email_address: "Gerry@Example.com" }],
+        primary_email_address_id: "primary",
+      },
+    });
+
+    expect(result).toEqual({
+      email: "gerry@example.com",
+      error: "rate limited",
+      ok: false,
+    });
+    expect(create).not.toHaveBeenCalled();
   });
 });

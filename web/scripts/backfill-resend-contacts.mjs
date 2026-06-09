@@ -201,7 +201,7 @@ async function delay(ms) {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function syncContact({ resend, segmentId, user }) {
+export async function syncContact({ resend, segmentId, user }) {
   const email = getPrimaryEmail(user);
   const { firstName, lastName } = getNameFields(user);
 
