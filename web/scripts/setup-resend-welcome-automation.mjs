@@ -50,9 +50,7 @@ async function ensureEvent() {
   const existing = events.data.find((event) => event.name === EVENT_NAME);
   const schema = {
     clerk_user_id: "string",
-    first_name: "string",
     given_name: "string",
-    last_name: "string",
     source: "string",
   };
 

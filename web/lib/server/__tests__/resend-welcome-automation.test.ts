@@ -78,15 +78,13 @@ describe("sendWelcomeAutomationEvent", () => {
       event: WELCOME_AUTOMATION_EVENT_NAME,
       payload: {
         clerk_user_id: "user_123",
-        first_name: "Gerry",
         given_name: "Gerry",
-        last_name: "Gugger",
         source: "clerk.user_created",
       },
     });
   });
 
-  it("omits blank contact names but falls back to a plain greeting name", async () => {
+  it("falls back to a plain greeting name when Clerk first name is blank", async () => {
     const send = vi.fn(async () => ({
       data: { event: WELCOME_AUTOMATION_EVENT_NAME, object: "event" },
       error: null,
@@ -103,11 +101,6 @@ describe("sendWelcomeAutomationEvent", () => {
     expect(send).toHaveBeenCalledWith(expect.objectContaining({
       payload: expect.objectContaining({
         given_name: "there",
-      }),
-    }));
-    expect(send).toHaveBeenCalledWith(expect.objectContaining({
-      payload: expect.not.objectContaining({
-        first_name: expect.any(String),
       }),
     }));
   });
