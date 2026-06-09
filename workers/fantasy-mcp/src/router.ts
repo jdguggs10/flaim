@@ -25,19 +25,19 @@ function logPlatformToolFailure(
   env: Env,
   params: ToolParams,
   correlationId: string | undefined,
-  fields: Omit<SetupSignalEvent, 'service' | 'component' | 'event' | 'platform' | 'sport' | 'season_year' | 'correlation_id'>
+  fields: Omit<SetupSignalEvent, 'service' | 'component' | 'event' | 'outcome' | 'platform' | 'sport' | 'season_year' | 'correlation_id'>
 ): void {
   logSetupSignal({
     service: 'fantasy-mcp',
     component: 'platform-router',
     event: 'platform_tool_failed',
-    outcome: 'failure',
     platform: params.platform,
     sport: params.sport,
     season_year: params.season_year,
     correlation_id: correlationId,
     environment: env.ENVIRONMENT || env.NODE_ENV,
     ...fields,
+    outcome: 'failure',
   } as SetupSignalEvent & Record<string, unknown>);
 }
 

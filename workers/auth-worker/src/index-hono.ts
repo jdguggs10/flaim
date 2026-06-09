@@ -320,13 +320,13 @@ function logAuthWorkerFailure(
   request: Request,
   env: Env,
   event: string,
-  fields: Omit<SetupSignalEvent, 'service' | 'event'>
+  fields: Omit<SetupSignalEvent, 'service' | 'event' | 'outcome'>
 ): void {
   logSetupSignal({
     ...baseAuthWorkerSignal(request, env),
     event,
-    outcome: 'failure',
     ...fields,
+    outcome: 'failure',
   } as SetupSignalEvent & Record<string, unknown>);
 }
 
@@ -741,6 +741,7 @@ api.get('/internal/introspect', async (c) => {
   const { userId, error: authError, status: authStatus, scope, authType } = await getInternalUserId(c.req.raw, c.env, expectedResource, { allowStaticApiKey: true });
 
   if (!userId) {
+    // 403/500 internal-service auth failures are already logged by getInternalUserId.
     if (authStatus !== 403 && authStatus !== 500) {
       logAuthWorkerFailure(c.req.raw, c.env, 'auth_trust_path_failed', {
         component: 'auth-introspection',

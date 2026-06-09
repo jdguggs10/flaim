@@ -329,7 +329,7 @@ function logYahooRefreshDiagnostic(event: string, fields: YahooRefreshDiagnostic
 function logYahooSetupFailure(
   env: YahooConnectEnv,
   event: string,
-  fields: Omit<SetupSignalEvent, 'service' | 'component' | 'event' | 'platform'>,
+  fields: Omit<SetupSignalEvent, 'service' | 'component' | 'event' | 'outcome' | 'platform'>,
   request?: Request
 ): void {
   const url = request ? new URL(request.url) : undefined;
@@ -337,7 +337,6 @@ function logYahooSetupFailure(
     service: 'auth-worker',
     component: 'yahoo-connect',
     event,
-    outcome: 'failure',
     platform: 'yahoo',
     request_path: url?.pathname,
     method: request?.method,
@@ -346,6 +345,7 @@ function logYahooSetupFailure(
     cf_ray: request?.headers.get('CF-Ray') || undefined,
     environment: env.ENVIRONMENT || env.NODE_ENV,
     ...fields,
+    outcome: 'failure',
   } as SetupSignalEvent & Record<string, unknown>);
 }
 

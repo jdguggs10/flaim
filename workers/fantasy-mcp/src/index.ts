@@ -25,13 +25,12 @@ const app = new Hono<{ Bindings: Env }>();
 function logFantasySetupFailure(
   c: Context<{ Bindings: Env }>,
   event: string,
-  fields: Omit<SetupSignalEvent, 'service' | 'event'>
+  fields: Omit<SetupSignalEvent, 'service' | 'event' | 'outcome'>
 ): void {
   const url = new URL(c.req.raw.url);
   logSetupSignal({
     service: 'fantasy-mcp',
     event,
-    outcome: 'failure',
     request_path: url.pathname,
     method: c.req.method,
     has_auth_header: c.req.raw.headers.has('Authorization'),
@@ -39,6 +38,7 @@ function logFantasySetupFailure(
     cf_ray: c.req.raw.headers.get('CF-Ray') || undefined,
     environment: c.env.ENVIRONMENT || c.env.NODE_ENV,
     ...fields,
+    outcome: 'failure',
   } as SetupSignalEvent & Record<string, unknown>);
 }
 

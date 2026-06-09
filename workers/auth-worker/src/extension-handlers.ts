@@ -60,14 +60,13 @@ function jsonResponse(body: Record<string, unknown>, status: number, corsHeaders
 function logExtensionFailure(
   request: Request,
   env: ExtensionEnv,
-  fields: Omit<SetupSignalEvent, 'service' | 'component' | 'event'>
+  fields: Omit<SetupSignalEvent, 'service' | 'component' | 'event' | 'outcome'>
 ): void {
   const url = new URL(request.url);
   logSetupSignal({
     service: 'auth-worker',
     component: 'espn-extension',
     event: 'onboarding_failed',
-    outcome: 'failure',
     request_path: url.pathname,
     method: request.method,
     has_auth_header: request.headers.has('Authorization'),
@@ -77,6 +76,7 @@ function logExtensionFailure(
     platform: 'espn',
     auth_type: 'clerk',
     ...fields,
+    outcome: 'failure',
   } as SetupSignalEvent & Record<string, unknown>);
 }
 

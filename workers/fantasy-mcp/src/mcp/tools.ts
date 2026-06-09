@@ -83,14 +83,14 @@ function getActiveThresholdYear(): number {
 function logMcpSetupFailure(
   env: Env,
   event: string,
-  fields: Omit<SetupSignalEvent, 'service' | 'event'>
+  fields: Omit<SetupSignalEvent, 'service' | 'event' | 'outcome'>
 ): void {
   logSetupSignal({
     service: 'fantasy-mcp',
     event,
-    outcome: 'failure',
     environment: env.ENVIRONMENT || env.NODE_ENV,
     ...fields,
+    outcome: 'failure',
   } as SetupSignalEvent & Record<string, unknown>);
 }
 
@@ -99,7 +99,7 @@ function logSessionDiscoveryFailure(
   platform: Platform,
   stage: string,
   correlationId: string | undefined,
-  fields: Omit<SetupSignalEvent, 'service' | 'component' | 'event' | 'platform' | 'stage' | 'correlation_id'>
+  fields: Omit<SetupSignalEvent, 'service' | 'component' | 'event' | 'outcome' | 'platform' | 'stage' | 'correlation_id'>
 ): void {
   logMcpSetupFailure(env, 'session_discovery_failed', {
     component: 'session-discovery',

@@ -40,6 +40,10 @@ export interface SetupSignalEvent {
   outcome?: string;
   failure_kind?: string;
   error_code?: string;
+  /**
+   * Transport response status for the failed path; redirect-to-error outcomes
+   * can legitimately carry a 3xx status.
+   */
   http_status?: number;
   upstream_status?: number;
   retryable?: boolean;

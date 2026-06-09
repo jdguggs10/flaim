@@ -189,13 +189,13 @@ function logOAuthFailure(
   request: Request,
   env: OAuthEnv,
   event: string,
-  fields: Omit<SetupSignalEvent, 'service' | 'component' | 'event'>
+  fields: Omit<SetupSignalEvent, 'service' | 'component' | 'event' | 'outcome'>
 ): void {
   logSetupSignal({
     ...baseOAuthSignal(request, env),
     event,
-    outcome: 'failure',
     ...fields,
+    outcome: 'failure',
   } as SetupSignalEvent & Record<string, unknown>);
 }
 
