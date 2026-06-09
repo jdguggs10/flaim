@@ -105,6 +105,27 @@ describe("sendWelcomeAutomationEvent", () => {
     }));
   });
 
+  it("removes markup from the greeting name before sending it to Resend", async () => {
+    const send = vi.fn(async () => ({
+      data: { event: WELCOME_AUTOMATION_EVENT_NAME, object: "event" },
+      error: null,
+    }));
+
+    await sendWelcomeAutomationEvent(
+      { ...clerkUser, first_name: " <b>Gerry</b>\n<svg/onload=alert(1)> " },
+      {
+        client: { events: { send } },
+        enabled: true,
+      },
+    );
+
+    expect(send).toHaveBeenCalledWith(expect.objectContaining({
+      payload: expect.objectContaining({
+        given_name: "Gerry",
+      }),
+    }));
+  });
+
   it("skips explicitly unverified Clerk primary emails", async () => {
     const send = vi.fn();
 
