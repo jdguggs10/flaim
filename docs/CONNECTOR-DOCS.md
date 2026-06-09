@@ -48,7 +48,7 @@ These clients can connect directly to Flaim's MCP endpoint where their MCP suppo
 
 ### Claude (Custom Connector)
 
-Claude custom connectors are currently beta. Free users are limited to one custom connector.
+Flaim is fully live and not in beta. Claude custom connectors are an optional setup path and may still be labeled beta by Claude; Free users are limited to one custom connector.
 
 1. Add a remote MCP server with URL `https://api.flaim.app/mcp`.
 2. Complete the OAuth consent screen when prompted.

@@ -256,9 +256,9 @@ export default function AiGuidePage() {
         <section id="claude" className="mb-10 scroll-mt-20">
           <h2 className="mb-3 text-xl font-semibold">Claude</h2>
           <p className="mb-4 text-muted-foreground">
-            Claude is an optional custom connector setup path. Custom
-            connectors are currently beta in Claude; Free users are limited to
-            one custom connector.
+            Flaim is fully live and not in beta. Claude is an optional custom
+            connector setup path, and Claude may still label custom connectors
+            as beta; Free users are limited to one custom connector.
           </p>
           <ol className="list-decimal list-inside space-y-2 text-muted-foreground">
             <li>
