@@ -59,6 +59,10 @@ function expectRedirectLocation(response: Response): URL {
   return new URL(location!);
 }
 
+function emittedSetupSignal(spy: ReturnType<typeof vi.spyOn>): boolean {
+  return spy.mock.calls.some((call) => String(call[0]).includes('"schema_version":1'));
+}
+
 describe('oauth-handlers', () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -77,6 +81,16 @@ describe('oauth-handlers', () => {
     expect(body1.client_id).toMatch(/^mcp_/);
     expect(body2.client_id).toMatch(/^mcp_/);
     expect(body1.client_id).not.toBe(body2.client_id);
+  });
+
+  it('does not emit setup signal for non-POST DCR probes', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    const req = new Request('https://api.flaim.app/auth/register', { method: 'GET' });
+
+    const res = await handleClientRegistration(req, env, corsHeaders);
+
+    expect(res.status).toBe(405);
+    expect(emittedSetupSignal(logSpy)).toBe(false);
   });
 
   it('keeps non-Perplexity public DCR clients public without a client_secret when auth method is none', async () => {
@@ -221,6 +235,16 @@ describe('oauth-handlers', () => {
     const body = await res.json() as { error?: string; error_description?: string };
     expect(body.error).toBe('invalid_request');
     expect(body.error_description).toBe('redirect_uri is required');
+  });
+
+  it('does not emit setup signal for no-param /authorize probes', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    const req = new Request('https://api.flaim.app/authorize');
+
+    const res = await handleAuthorize(req, env);
+
+    expect(res.status).toBe(400);
+    expect(emittedSetupSignal(logSpy)).toBe(false);
   });
 
   it('returns invalid_grant when token exchange fails', async () => {

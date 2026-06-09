@@ -49,6 +49,10 @@ function yahooRefreshDiagnostics(spy: { mock: { calls: unknown[][] } }): Array<R
     .filter((entry): entry is Record<string, unknown> => entry?.component === 'yahoo-connect');
 }
 
+function yahooSetupSignals(spy: { mock: { calls: unknown[][] } }): Array<Record<string, unknown>> {
+  return yahooRefreshDiagnostics(spy).filter((entry) => entry.schema_version === 1);
+}
+
 function expectNoRawYahooTokenFields(value: unknown): void {
   if (Array.isArray(value)) {
     for (const item of value) {
@@ -188,6 +192,18 @@ describe('yahoo-connect-handlers', () => {
   // ===========================================================================
 
   describe('handleYahooCallback', () => {
+    it('does not emit setup signal for empty callback probes', async () => {
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+      const request = new Request('https://api.flaim.app/connect/yahoo/callback');
+
+      const response = await handleYahooCallback(request, env, corsHeaders);
+
+      expect(response.status).toBe(302);
+      const location = response.headers.get('Location')!;
+      expect(location).toContain('error=missing_code');
+      expect(yahooSetupSignals(logSpy)).toEqual([]);
+    });
+
     it('returns error redirect for missing code', async () => {
       const request = new Request('https://api.flaim.app/connect/yahoo/callback?state=user_123:abc123');
 

@@ -82,8 +82,8 @@ export { ErrorCode, YahooAuthWorkerErrorCode, extractErrorCode } from './errors.
 export type { ErrorCodeValue, YahooAuthWorkerErrorCodeValue, ExecuteResponse } from './errors.js';
 
 // Logging
-export { logEvalEvent } from './logging.js';
-export type { TraceLogEvent } from './logging.js';
+export { logEvalEvent, logSetupSignal } from './logging.js';
+export type { SetupSignalEvent, TraceLogEvent } from './logging.js';
 
 // Tracing utilities
 export {

@@ -6,9 +6,11 @@ import { routeToClient, type RouteResult } from '../router';
 import {
   getDefaultSeasonYear,
   getSeasonLabel,
+  logSetupSignal,
   withCorrelationId,
   withEvalHeaders,
   withInternalServiceToken,
+  type SetupSignalEvent,
 } from '@flaim/worker-shared';
 import { logEvalEvent } from '../logging';
 
@@ -78,6 +80,36 @@ function getActiveThresholdYear(): number {
   return new Date().getFullYear() - 2;
 }
 
+function logMcpSetupFailure(
+  env: Env,
+  event: string,
+  fields: Omit<SetupSignalEvent, 'service' | 'event'>
+): void {
+  logSetupSignal({
+    service: 'fantasy-mcp',
+    event,
+    outcome: 'failure',
+    environment: env.ENVIRONMENT || env.NODE_ENV,
+    ...fields,
+  } as SetupSignalEvent & Record<string, unknown>);
+}
+
+function logSessionDiscoveryFailure(
+  env: Env,
+  platform: Platform,
+  stage: string,
+  correlationId: string | undefined,
+  fields: Omit<SetupSignalEvent, 'service' | 'component' | 'event' | 'platform' | 'stage' | 'correlation_id'>
+): void {
+  logMcpSetupFailure(env, 'session_discovery_failed', {
+    component: 'session-discovery',
+    platform,
+    stage,
+    correlation_id: correlationId,
+    ...fields,
+  });
+}
+
 // =============================================================================
 // HELPER: Fetch user leagues from auth-worker
 // =============================================================================
@@ -141,6 +173,11 @@ async function fetchUserLeagues(
     clearTimeout(timeoutId);
 
     if (!response.ok) {
+      logSessionDiscoveryFailure(env, 'espn', 'league_fetch', correlationId, {
+        failure_kind: response.status === 401 || response.status === 403 ? 'auth' : 'upstream',
+        error_code: response.status === 401 || response.status === 403 ? 'auth_worker_auth_failed' : 'auth_worker_fetch_failed',
+        http_status: response.status,
+      });
       console.error(`[fantasy-mcp] ${cid} leagues fetch failed: ${response.status}`);
       const text = await response.text().catch(() => 'no body');
       return {
@@ -159,11 +196,16 @@ async function fetchUserLeagues(
     return { leagues };
   } catch (error) {
     clearTimeout(timeoutId);
+    const isTimeout = (error as Error).name === 'AbortError';
+    logSessionDiscoveryFailure(env, 'espn', 'league_fetch', correlationId, {
+      failure_kind: isTimeout ? 'timeout' : 'fetch_error',
+      error_code: isTimeout ? 'auth_worker_timeout' : 'auth_worker_fetch_exception',
+    });
     console.error(`[fantasy-mcp] ${cid} failed to fetch leagues:`, error);
     return {
       leagues: [],
       error:
-        (error as Error).name === 'AbortError'
+        isTimeout
           ? 'Fetch timed out after 5 seconds'
           : `Fetch failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
     };
@@ -202,6 +244,11 @@ async function fetchYahooLeagues(
     clearTimeout(timeoutId);
 
     if (!response.ok) {
+      logSessionDiscoveryFailure(env, 'yahoo', 'league_fetch', correlationId, {
+        failure_kind: response.status === 401 || response.status === 403 ? 'auth' : 'upstream',
+        error_code: response.status === 401 || response.status === 403 ? 'auth_worker_auth_failed' : 'auth_worker_fetch_failed',
+        http_status: response.status,
+      });
       console.error(`[fantasy-mcp] ${cid} Yahoo leagues fetch failed: ${response.status}`);
       return { leagues: [], error: `Yahoo leagues fetch failed: ${response.status}` };
     }
@@ -232,6 +279,10 @@ async function fetchYahooLeagues(
   } catch (error) {
     clearTimeout(timeoutId);
     const isTimeout = (error as Error).name === 'AbortError';
+    logSessionDiscoveryFailure(env, 'yahoo', 'league_fetch', correlationId, {
+      failure_kind: isTimeout ? 'timeout' : 'fetch_error',
+      error_code: isTimeout ? 'auth_worker_timeout' : 'auth_worker_fetch_exception',
+    });
     const errorMsg = isTimeout ? 'Yahoo leagues fetch timed out' : `Yahoo leagues fetch failed: ${(error as Error).message}`;
     console.error(`[fantasy-mcp] ${cid} failed to fetch Yahoo leagues: ${errorMsg}`);
     return { leagues: [], error: errorMsg };
@@ -270,6 +321,11 @@ async function fetchSleeperLeagues(
     clearTimeout(timeoutId);
 
     if (!response.ok) {
+      logSessionDiscoveryFailure(env, 'sleeper', 'league_fetch', correlationId, {
+        failure_kind: response.status === 401 || response.status === 403 ? 'auth' : 'upstream',
+        error_code: response.status === 401 || response.status === 403 ? 'auth_worker_auth_failed' : 'auth_worker_fetch_failed',
+        http_status: response.status,
+      });
       console.error(`[fantasy-mcp] ${cid} Sleeper leagues fetch failed: ${response.status}`);
       return { leagues: [], error: `Sleeper leagues fetch failed: ${response.status}` };
     }
@@ -300,6 +356,10 @@ async function fetchSleeperLeagues(
   } catch (error) {
     clearTimeout(timeoutId);
     const isTimeout = (error as Error).name === 'AbortError';
+    logSessionDiscoveryFailure(env, 'sleeper', 'league_fetch', correlationId, {
+      failure_kind: isTimeout ? 'timeout' : 'fetch_error',
+      error_code: isTimeout ? 'auth_worker_timeout' : 'auth_worker_fetch_exception',
+    });
     const errorMsg = isTimeout ? 'Sleeper leagues fetch timed out' : `Sleeper leagues fetch failed: ${(error as Error).message}`;
     console.error(`[fantasy-mcp] ${cid} failed to fetch Sleeper leagues: ${errorMsg}`);
     return { leagues: [], error: errorMsg };
@@ -530,6 +590,18 @@ export function getUnifiedTools(): UnifiedTool[] {
 
           const hasLeagues = leagues.length > 0;
           const hasRawLeagues = allLeagues.length > 0;
+          if (!hasLeagues && hasRawLeagues) {
+            logMcpSetupFailure(env, 'session_discovery_failed', {
+              component: 'session-discovery',
+              stage: 'current_season_filter',
+              failure_kind: 'stale_data',
+              error_code: 'current_season_not_found',
+              correlation_id: correlationId,
+              league_count: allLeagues.length,
+              current_season_found: false,
+              past_seasons_found: true,
+            });
+          }
           const sportCounts = leagues.reduce(
             (acc, l) => {
               const sport = l.sport?.toLowerCase() || 'unknown';
@@ -824,7 +896,7 @@ export function getUnifiedTools(): UnifiedTool[] {
           season_year: args.season_year as number,
         };
 
-        return withToolLogging(correlationId, 'get_league_info', `${params.platform} ${params.sport} league=${params.league_id}`, async () => {
+        return withToolLogging(correlationId, 'get_league_info', `${params.platform} ${params.sport} league=provided`, async () => {
           const result = await routeToClient(env, 'get_league_info', params, authHeader, correlationId, evalRunId, evalTraceId);
           return routeResultToMcp(result);
         }, evalRunId, evalTraceId);
@@ -859,7 +931,7 @@ export function getUnifiedTools(): UnifiedTool[] {
           season_year: args.season_year as number,
         };
 
-        return withToolLogging(correlationId, 'get_standings', `${params.platform} ${params.sport} league=${params.league_id}`, async () => {
+        return withToolLogging(correlationId, 'get_standings', `${params.platform} ${params.sport} league=provided`, async () => {
           const result = await routeToClient(env, 'get_standings', params, authHeader, correlationId, evalRunId, evalTraceId);
           return routeResultToMcp(result);
         }, evalRunId, evalTraceId);
@@ -896,7 +968,7 @@ export function getUnifiedTools(): UnifiedTool[] {
           week: args.week as number | undefined,
         };
 
-        return withToolLogging(correlationId, 'get_matchups', `${params.platform} ${params.sport} league=${params.league_id} week=${params.week || 'current'}`, async () => {
+        return withToolLogging(correlationId, 'get_matchups', `${params.platform} ${params.sport} league=provided week=${params.week || 'current'}`, async () => {
           const result = await routeToClient(env, 'get_matchups', params, authHeader, correlationId, evalRunId, evalTraceId);
           return routeResultToMcp(result);
         }, evalRunId, evalTraceId);
@@ -935,7 +1007,7 @@ export function getUnifiedTools(): UnifiedTool[] {
           week: args.week as number | undefined,
         };
 
-        return withToolLogging(correlationId, 'get_roster', `${params.platform} ${params.sport} league=${params.league_id} team=${params.team_id || 'self'}`, async () => {
+        return withToolLogging(correlationId, 'get_roster', `${params.platform} ${params.sport} league=provided team=${params.team_id ? 'provided' : 'self'}`, async () => {
           const result = await routeToClient(env, 'get_roster', params, authHeader, correlationId, evalRunId, evalTraceId);
           return routeResultToMcp(result);
         }, evalRunId, evalTraceId);
@@ -980,7 +1052,7 @@ export function getUnifiedTools(): UnifiedTool[] {
           count: args.count as number | undefined,
         };
 
-        return withToolLogging(correlationId, 'get_free_agents', `${params.platform} ${params.sport} league=${params.league_id} pos=${params.position || 'ALL'}`, async () => {
+        return withToolLogging(correlationId, 'get_free_agents', `${params.platform} ${params.sport} league=provided pos=${params.position || 'ALL'}`, async () => {
           const result = await routeToClient(env, 'get_free_agents', params, authHeader, correlationId, evalRunId, evalTraceId);
           return routeResultToMcp(result);
         }, evalRunId, evalTraceId);
@@ -1030,7 +1102,7 @@ export function getUnifiedTools(): UnifiedTool[] {
           count: args.count as number | undefined,
         };
 
-        return withToolLogging(correlationId, 'get_players', `${params.platform} ${params.sport} q=${params.query} pos=${params.position || 'ALL'}`, async () => {
+        return withToolLogging(correlationId, 'get_players', `${params.platform} ${params.sport} q=provided pos=${params.position || 'ALL'}`, async () => {
           const result = await routeToClient(env, 'get_players', params, authHeader, correlationId, evalRunId, evalTraceId);
           return routeResultToMcp(result);
         }, evalRunId, evalTraceId);
@@ -1078,7 +1150,7 @@ export function getUnifiedTools(): UnifiedTool[] {
           count: Number.isFinite(requestedCount) ? Math.max(1, Math.min(100, requestedCount)) : 25,
         };
 
-        return withToolLogging(correlationId, 'get_transactions', `${params.platform} ${params.sport} league=${params.league_id} week=${params.week || 'recent'}`, async () => {
+        return withToolLogging(correlationId, 'get_transactions', `${params.platform} ${params.sport} league=provided week=${params.week || 'recent'}`, async () => {
           const result = await routeToClient(env, 'get_transactions', params, authHeader, correlationId, evalRunId, evalTraceId);
           return routeResultToMcp(result);
         }, evalRunId, evalTraceId);
