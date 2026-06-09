@@ -9,6 +9,7 @@ const EVENT_NAME = "flaim.user_created";
 const TEMPLATE_ALIAS = "flaim-welcome-v1";
 const TEMPLATE_NAME = "Flaim Welcome";
 const AUTOMATION_NAME = "Flaim Welcome Email";
+const EVENT_SCHEMA_VERSION = "2026-06-09-given-name";
 const RESEND_PROPAGATION_DELAY_MS = 300;
 const MAX_TEMPLATE_LIST_PAGES = 20;
 const scriptDir = dirname(fileURLToPath(import.meta.url));
@@ -299,6 +300,7 @@ console.log(JSON.stringify({
   // Informational only. The automation binds to the event by name.
   eventId,
   eventName: EVENT_NAME,
+  eventSchemaVersion: EVENT_SCHEMA_VERSION,
   segmentId: CONTACT_SEGMENT_ID,
   stepKeys: ["start", "segment", "welcome"],
   templateAlias: TEMPLATE_ALIAS,

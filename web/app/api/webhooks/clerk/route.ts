@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
 
     after(async () => {
       // Resend Automations identify contacts by email and create missing contacts
-      // before running contact-update, segment, and email steps.
+      // before adding the segment and sending the welcome email.
       const welcome = await sendWelcomeAutomationEvent(user, { enabled: true });
       if (!welcome.ok && !welcome.skipped) {
         console.error("Resend welcome automation event failed:", welcome.error);

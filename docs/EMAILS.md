@@ -58,6 +58,7 @@ Clerk is the source of truth for user identity. Resend is the product email audi
 
 - `user.created`: emit the custom Resend event `flaim.user_created` for the welcome automation.
 - `user.updated`: lightly repair the Resend contact when `RESEND_CONTACT_SYNC_ENABLED=true`.
+- Disabled welcome automation: if `RESEND_WELCOME_AUTOMATION_ENABLED=false`, new `user.created` webhooks do not create or update Resend contacts; signup contact creation is owned by the enabled Resend automation. Run the backfill script for any signup window where the automation was disabled.
 
 The handler verifies Clerk's webhook signature with `CLERK_WEBHOOK_SIGNING_SECRET` and acknowledges verified Clerk events even if downstream Resend work fails, so Resend outages do not create Clerk webhook retry storms.
 
@@ -67,7 +68,7 @@ The first automated product email is a Resend Automation for new-user welcome em
 
 Keep welcome delivery gated until the Resend event, template, automation, Segment, and real inbox test are verified. Production delivery requires both `RESEND_WELCOME_AUTOMATION_ENABLED=true` in Flaim and the Resend automation enabled in Resend. The event emitter uses `RESEND_EVENTS_API_KEY` when set, otherwise it falls back to `RESEND_CONTACTS_API_KEY`; do not use the send-only `RESEND_API_KEY` for event/automation management.
 
-Before enabling the flag in production, confirm failed welcome event sends are visible in the production logs or alerting path. The Clerk webhook intentionally acknowledges verified user events even if the downstream Resend event call fails, so a Resend outage or expired events key will not retry through Clerk. Deploy order for welcome automation changes is: deploy the app, rerun `web/scripts/setup-resend-welcome-automation.mjs`, verify a real test email, then re-enable the automation in Resend. If `RESEND_WELCOME_AUTOMATION_ENABLED=false`, new `user.created` webhooks do not create or update Resend contacts; signup contact creation is owned by the enabled Resend automation, while `user.updated` and the backfill script remain the repair paths.
+Before enabling the flag in production, confirm failed welcome event sends are visible in the production logs or alerting path. The Clerk webhook intentionally acknowledges verified user events even if the downstream Resend event call fails, so a Resend outage or expired events key will not retry through Clerk. Deploy order for welcome automation changes is: deploy the app, rerun `web/scripts/setup-resend-welcome-automation.mjs`, verify a real test email, then re-enable the automation in Resend.
 
 Create or refresh the Resend-side resources with:
 

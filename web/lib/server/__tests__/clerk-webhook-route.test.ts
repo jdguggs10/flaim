@@ -84,6 +84,32 @@ describe("POST /api/webhooks/clerk", () => {
     });
   });
 
+  it("keeps the user.created response queued when the async welcome event fails", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    mocks.verifyWebhook.mockResolvedValue({ type: "user.created", data: clerkUser });
+    mocks.isWelcomeAutomationEnabled.mockReturnValue(true);
+    mocks.sendWelcomeAutomationEvent.mockResolvedValue({
+      ok: false,
+      email: "gerry@example.com",
+      event: "flaim.user_created",
+      error: "Resend rejected the event",
+    });
+
+    const response = await POST(request());
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toEqual({ received: true, welcome: { queued: true } });
+
+    await mocks.afterCallbacks[0]();
+
+    expect(consoleError).toHaveBeenCalledWith(
+      "Resend welcome automation event failed:",
+      "Resend rejected the event",
+    );
+    consoleError.mockRestore();
+  });
+
   it("does not sync contacts or queue an event when welcome automation is disabled", async () => {
     mocks.verifyWebhook.mockResolvedValue({ type: "user.created", data: clerkUser });
     mocks.isWelcomeAutomationEnabled.mockReturnValue(false);
