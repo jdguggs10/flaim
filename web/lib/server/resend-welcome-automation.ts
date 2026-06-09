@@ -75,18 +75,25 @@ export async function sendWelcomeAutomationEvent(
   const email = emailResult.email;
   const firstName = cleanString(user.first_name);
   const lastName = cleanString(user.last_name);
+  const payload: Record<string, string> = {
+    clerk_user_id: user.id,
+    given_name: firstName ?? "there",
+    source: "clerk.user_created",
+  };
+
+  if (firstName) {
+    payload.first_name = firstName;
+  }
+
+  if (lastName) {
+    payload.last_name = lastName;
+  }
 
   try {
     const { data, error } = await client.events.send({
       email,
       event,
-      payload: {
-        clerk_user_id: user.id,
-        first_name: firstName ?? "",
-        given_name: firstName ?? "there",
-        last_name: lastName ?? "",
-        source: "clerk.user_created",
-      },
+      payload,
     });
 
     if (error) {
