@@ -2,7 +2,6 @@ import "server-only";
 import type {
   AddContactSegmentOptions,
   CreateContactOptions,
-  GetContactOptions,
   UpdateContactOptions,
 } from "resend";
 import {
@@ -49,7 +48,6 @@ type ContactApiResponse<T> =
 interface ContactSyncClient {
   contacts: {
     create: (payload: CreateContactOptions) => Promise<ContactApiResponse<{ id: string }>>;
-    get: (payload: GetContactOptions) => Promise<ContactApiResponse<{ id: string }>>;
     segments: {
       add: (payload: AddContactSegmentOptions) => Promise<ContactApiResponse<{ id: string }>>;
     };
@@ -82,6 +80,22 @@ function isContactSyncEnabled(options: SyncClerkUserOptions) {
 
 export function getClerkUserPrimaryEmail(user: ClerkUserEmailSyncPayload) {
   return cleanString(getClerkUserPrimaryEmailAddress(user)?.email_address)?.toLowerCase() ?? null;
+}
+
+export function getClerkUserProductEmail(
+  user: ClerkUserEmailSyncPayload,
+): { email: string; ok: true } | { error: string; ok: false; skipped: true } {
+  const email = getClerkUserPrimaryEmail(user);
+  if (!email) {
+    return { ok: false, skipped: true, error: "Clerk user has no email address" };
+  }
+
+  const primaryEmailAddress = getClerkUserPrimaryEmailAddress(user);
+  if (hasExplicitUnverifiedStatus(primaryEmailAddress)) {
+    return { ok: false, skipped: true, error: "Clerk user primary email is not verified" };
+  }
+
+  return { ok: true, email };
 }
 
 function hasExplicitUnverifiedStatus(emailAddress: ClerkEmailAddress | null | undefined) {
@@ -125,14 +139,9 @@ export async function syncClerkUserToResendContact(
     return { ok: false, skipped: true, error: "Resend contact sync is disabled" };
   }
 
-  const email = getClerkUserPrimaryEmail(user);
-  if (!email) {
-    return { ok: false, skipped: true, error: "Clerk user has no email address" };
-  }
-
-  const primaryEmailAddress = getClerkUserPrimaryEmailAddress(user);
-  if (hasExplicitUnverifiedStatus(primaryEmailAddress)) {
-    return { ok: false, skipped: true, error: "Clerk user primary email is not verified" };
+  const emailResult = getClerkUserProductEmail(user);
+  if (!emailResult.ok) {
+    return emailResult;
   }
 
   const client = options.client ?? getResendContactsClient();
@@ -142,16 +151,21 @@ export async function syncClerkUserToResendContact(
 
   const firstName = cleanString(user.first_name);
   const lastName = cleanString(user.last_name);
+  const email = emailResult.email;
   const segmentId = cleanString(options.segmentId ?? process.env.RESEND_CONTACT_SEGMENT_ID);
 
   try {
-    const existing = await client.contacts.get({ email });
+    const updated = await client.contacts.update({
+      email,
+      firstName: firstName ?? undefined,
+      lastName: lastName ?? undefined,
+    });
 
-    if (existing.error && !isNotFound(existing.error)) {
-      return { ok: false, email, error: getResendErrorMessage(existing.error) };
-    }
+    if (updated.error) {
+      if (!isNotFound(updated.error)) {
+        return { ok: false, email, error: getResendErrorMessage(updated.error) };
+      }
 
-    if (existing.error) {
       const payload: CreateContactOptions = {
         email,
         firstName: firstName ?? undefined,
@@ -169,16 +183,6 @@ export async function syncClerkUserToResendContact(
       }
 
       return { ok: true, action: "created", email };
-    }
-
-    const updated = await client.contacts.update({
-      email,
-      firstName: firstName ?? undefined,
-      lastName: lastName ?? undefined,
-    });
-
-    if (updated.error) {
-      return { ok: false, email, error: getResendErrorMessage(updated.error) };
     }
 
     if (segmentId) {

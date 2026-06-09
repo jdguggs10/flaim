@@ -9,7 +9,9 @@ import {
   sendWelcomeAutomationEvent,
 } from "@/lib/server/resend-welcome-automation";
 
-const CONTACT_SYNC_EVENTS = new Set(["user.created", "user.updated"]);
+const CONTACT_SYNC_EVENTS = new Set(["user.updated"]);
+const WELCOME_EVENTS = new Set(["user.created"]);
+const HANDLED_EVENTS = new Set([...CONTACT_SYNC_EVENTS, ...WELCOME_EVENTS]);
 
 function isClerkUserEmailSyncPayload(data: unknown): data is ClerkUserEmailSyncPayload {
   return (
@@ -30,7 +32,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Webhook verification failed" }, { status: 400 });
   }
 
-  if (!CONTACT_SYNC_EVENTS.has(event.type)) {
+  if (!HANDLED_EVENTS.has(event.type)) {
     return NextResponse.json({ received: true, skipped: true });
   }
 
@@ -43,7 +45,35 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  const result = await syncClerkUserToResendContact(event.data);
+  const user = event.data;
+
+  if (WELCOME_EVENTS.has(event.type)) {
+    if (!isWelcomeAutomationEnabled()) {
+      console.warn(
+        "Resend welcome automation skipped for user.created; signup contact was not created:",
+        user.id,
+      );
+      return NextResponse.json({
+        received: true,
+        welcome: { skipped: true, error: "Resend welcome automation is disabled" },
+      });
+    }
+
+    after(async () => {
+      // Resend Automations identify contacts by email and create missing contacts
+      // before adding the segment and sending the welcome email.
+      // The feature flag was checked before queueing; keep the async call aligned
+      // with that already-made decision.
+      const welcome = await sendWelcomeAutomationEvent(user, { enabled: true });
+      if (!welcome.ok && !welcome.skipped) {
+        console.error("Resend welcome automation event failed:", welcome.error);
+      }
+    });
+
+    return NextResponse.json({ received: true, welcome: { queued: true } });
+  }
+
+  const result = await syncClerkUserToResendContact(user);
 
   if (!result.ok && !result.skipped) {
     console.error("Clerk to Resend contact sync failed:", result.error);
@@ -51,26 +81,5 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Contact sync failed", received: true, sync: result });
   }
 
-  if (event.type !== "user.created" || !result.ok) {
-    return NextResponse.json({ received: true, sync: result });
-  }
-
-  if (!isWelcomeAutomationEnabled()) {
-    return NextResponse.json({
-      received: true,
-      sync: result,
-      welcome: { skipped: true, error: "Resend welcome automation is disabled" },
-    });
-  }
-
-  after(async () => {
-    // The request-level guard already checked the feature flag; pass an explicit
-    // enabled override so this queued side effect reflects that same decision.
-    const welcome = await sendWelcomeAutomationEvent(event.data, { enabled: true });
-    if (!welcome.ok && !welcome.skipped) {
-      console.error("Resend welcome automation event failed:", welcome.error);
-    }
-  });
-
-  return NextResponse.json({ received: true, sync: result, welcome: { queued: true } });
+  return NextResponse.json({ received: true, sync: result });
 }

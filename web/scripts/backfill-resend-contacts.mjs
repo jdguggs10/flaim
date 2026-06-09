@@ -85,7 +85,7 @@ export function parseArgs(argv) {
 
 function printUsage() {
   console.log(`
-Backfill Clerk users into Resend contacts.
+Backfill or repair Clerk users in Resend contacts.
 
 Dry-run:
   node scripts/backfill-resend-contacts.mjs
@@ -201,17 +201,21 @@ async function delay(ms) {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function syncContact({ resend, segmentId, user }) {
+export async function syncContact({ resend, segmentId, user }) {
   const email = getPrimaryEmail(user);
   const { firstName, lastName } = getNameFields(user);
 
-  const existing = await resend.contacts.get({ email });
+  const updated = await resend.contacts.update({
+    email,
+    firstName,
+    lastName,
+  });
 
-  if (existing.error && !isNotFound(existing.error)) {
-    return { ok: false, email, error: getResendErrorMessage(existing.error) };
-  }
+  if (updated.error) {
+    if (!isNotFound(updated.error)) {
+      return { ok: false, email, error: getResendErrorMessage(updated.error) };
+    }
 
-  if (existing.error) {
     const payload = {
       email,
       firstName,
@@ -226,16 +230,6 @@ async function syncContact({ resend, segmentId, user }) {
     }
 
     return { ok: true, action: "created", email };
-  }
-
-  const updated = await resend.contacts.update({
-    email,
-    firstName,
-    lastName,
-  });
-
-  if (updated.error) {
-    return { ok: false, email, error: getResendErrorMessage(updated.error) };
   }
 
   if (segmentId) {
