@@ -49,6 +49,10 @@ export async function POST(request: NextRequest) {
 
   if (WELCOME_EVENTS.has(event.type)) {
     if (!isWelcomeAutomationEnabled()) {
+      console.warn(
+        "Resend welcome automation skipped for user.created; signup contact was not created:",
+        user.id,
+      );
       return NextResponse.json({
         received: true,
         welcome: { skipped: true, error: "Resend welcome automation is disabled" },
@@ -58,6 +62,8 @@ export async function POST(request: NextRequest) {
     after(async () => {
       // Resend Automations identify contacts by email and create missing contacts
       // before adding the segment and sending the welcome email.
+      // The feature flag was checked before queueing; keep the async call aligned
+      // with that already-made decision.
       const welcome = await sendWelcomeAutomationEvent(user, { enabled: true });
       if (!welcome.ok && !welcome.skipped) {
         console.error("Resend welcome automation event failed:", welcome.error);

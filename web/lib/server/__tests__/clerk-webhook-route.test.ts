@@ -111,6 +111,7 @@ describe("POST /api/webhooks/clerk", () => {
   });
 
   it("does not sync contacts or queue an event when welcome automation is disabled", async () => {
+    const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     mocks.verifyWebhook.mockResolvedValue({ type: "user.created", data: clerkUser });
     mocks.isWelcomeAutomationEnabled.mockReturnValue(false);
 
@@ -125,6 +126,11 @@ describe("POST /api/webhooks/clerk", () => {
     expect(mocks.syncClerkUserToResendContact).not.toHaveBeenCalled();
     expect(mocks.after).not.toHaveBeenCalled();
     expect(mocks.sendWelcomeAutomationEvent).not.toHaveBeenCalled();
+    expect(consoleWarn).toHaveBeenCalledWith(
+      "Resend welcome automation skipped for user.created; signup contact was not created:",
+      "user_123",
+    );
+    consoleWarn.mockRestore();
   });
 
   it("keeps user.updated on the Resend contact sync path without queuing welcome email", async () => {
