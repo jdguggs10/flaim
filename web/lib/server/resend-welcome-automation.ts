@@ -5,7 +5,7 @@ import {
   getResendEventsClient,
 } from "@/lib/server/resend-client";
 import {
-  getClerkUserPrimaryEmail,
+  getClerkUserProductEmail,
   type ClerkUserEmailSyncPayload,
 } from "@/lib/server/resend-contact-sync";
 
@@ -58,9 +58,9 @@ export async function sendWelcomeAutomationEvent(
     return { ok: false, skipped: true, error: "Resend welcome automation is disabled" };
   }
 
-  const email = getClerkUserPrimaryEmail(user);
-  if (!email) {
-    return { ok: false, skipped: true, error: "Clerk user has no email address" };
+  const emailResult = getClerkUserProductEmail(user);
+  if (!emailResult.ok) {
+    return emailResult;
   }
 
   const client = options.client ?? getResendEventsClient();
@@ -72,6 +72,7 @@ export async function sendWelcomeAutomationEvent(
   }
 
   const event = cleanString(options.eventName) ?? WELCOME_AUTOMATION_EVENT_NAME;
+  const email = emailResult.email;
   const firstName = cleanString(user.first_name);
   const lastName = cleanString(user.last_name);
 
@@ -81,7 +82,8 @@ export async function sendWelcomeAutomationEvent(
       event,
       payload: {
         clerk_user_id: user.id,
-        first_name: firstName ?? "there",
+        first_name: firstName ?? "",
+        given_name: firstName ?? "there",
         last_name: lastName ?? "",
         source: "clerk.user_created",
       },

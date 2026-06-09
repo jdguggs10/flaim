@@ -79,13 +79,14 @@ describe("sendWelcomeAutomationEvent", () => {
       payload: {
         clerk_user_id: "user_123",
         first_name: "Gerry",
+        given_name: "Gerry",
         last_name: "Gugger",
         source: "clerk.user_created",
       },
     });
   });
 
-  it("falls back to a plain greeting name", async () => {
+  it("keeps contact names blank but falls back to a plain greeting name", async () => {
     const send = vi.fn(async () => ({
       data: { event: WELCOME_AUTOMATION_EVENT_NAME, object: "event" },
       error: null,
@@ -100,8 +101,39 @@ describe("sendWelcomeAutomationEvent", () => {
     );
 
     expect(send).toHaveBeenCalledWith(expect.objectContaining({
-      payload: expect.objectContaining({ first_name: "there" }),
+      payload: expect.objectContaining({
+        first_name: "",
+        given_name: "there",
+      }),
     }));
+  });
+
+  it("skips explicitly unverified Clerk primary emails", async () => {
+    const send = vi.fn();
+
+    const result = await sendWelcomeAutomationEvent(
+      {
+        ...clerkUser,
+        email_addresses: [
+          {
+            id: "primary",
+            email_address: "unverified@example.com",
+            verification: { status: "unverified" },
+          },
+        ],
+      },
+      {
+        client: { events: { send } },
+        enabled: true,
+      },
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      skipped: true,
+      error: "Clerk user primary email is not verified",
+    });
+    expect(send).not.toHaveBeenCalled();
   });
 
   it("skips when the Clerk user has no primary email", async () => {

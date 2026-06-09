@@ -17,11 +17,16 @@ const emailLinks = JSON.parse(
 );
 const CHATGPT_APP_URL = emailLinks.chatGptAppUrl;
 const LEAGUES_URL = emailLinks.leaguesUrl;
+const CONTACT_SEGMENT_ID = process.env.RESEND_CONTACT_SEGMENT_ID?.trim();
 
 const apiKey = process.env.RESEND_EVENTS_API_KEY ?? process.env.RESEND_CONTACTS_API_KEY;
 
 if (!apiKey) {
   throw new Error("RESEND_EVENTS_API_KEY or RESEND_CONTACTS_API_KEY is required");
+}
+
+if (!CONTACT_SEGMENT_ID) {
+  throw new Error("RESEND_CONTACT_SEGMENT_ID is required");
 }
 
 const resend = new Resend(apiKey);
@@ -46,6 +51,7 @@ async function ensureEvent() {
   const schema = {
     clerk_user_id: "string",
     first_name: "string",
+    given_name: "string",
     last_name: "string",
     source: "string",
   };
@@ -218,7 +224,11 @@ async function findTemplateByAlias(alias) {
 
 function buildAutomation(templateId) {
   return {
-    connections: [{ from: "start", to: "welcome" }],
+    connections: [
+      { from: "start", to: "contact" },
+      { from: "contact", to: "segment" },
+      { from: "segment", to: "welcome" },
+    ],
     name: AUTOMATION_NAME,
     status: "disabled",
     steps: [
@@ -226,6 +236,21 @@ function buildAutomation(templateId) {
         key: "start",
         type: "trigger",
         config: { eventName: EVENT_NAME },
+      },
+      {
+        key: "contact",
+        type: "contact_update",
+        config: {
+          firstName: { var: "event.first_name" },
+          lastName: { var: "event.last_name" },
+        },
+      },
+      {
+        key: "segment",
+        type: "add_to_segment",
+        config: {
+          segmentId: CONTACT_SEGMENT_ID,
+        },
       },
       {
         key: "welcome",
@@ -238,7 +263,7 @@ function buildAutomation(templateId) {
             id: templateId,
             variables: {
               // Coupled to the event payload in resend-welcome-automation.ts.
-              GIVEN_NAME: { var: "event.first_name" },
+              GIVEN_NAME: { var: "event.given_name" },
             },
           },
         },
@@ -285,6 +310,8 @@ console.log(JSON.stringify({
   // Informational only. The automation binds to the event by name.
   eventId,
   eventName: EVENT_NAME,
+  segmentId: CONTACT_SEGMENT_ID,
+  stepKeys: ["start", "contact", "segment", "welcome"],
   templateAlias: TEMPLATE_ALIAS,
   templateId,
 }, null, 2));

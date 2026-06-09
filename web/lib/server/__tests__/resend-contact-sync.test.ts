@@ -24,7 +24,12 @@ const clerkUser: ClerkUserEmailSyncPayload = {
 };
 
 function makeClient(existing: boolean) {
-  const get = vi.fn(async () => {
+  const create = vi.fn(async () => ({
+    data: { id: "contact_123" },
+    error: null,
+  }));
+
+  const update = vi.fn(async () => {
     if (existing) {
       return { data: { id: "contact_123" }, error: null };
     }
@@ -35,16 +40,6 @@ function makeClient(existing: boolean) {
     };
   });
 
-  const create = vi.fn(async () => ({
-    data: { id: "contact_123" },
-    error: null,
-  }));
-
-  const update = vi.fn(async () => ({
-    data: { id: "contact_123" },
-    error: null,
-  }));
-
   const add = vi.fn(async () => ({
     data: { id: "segment_123" },
     error: null,
@@ -54,13 +49,11 @@ function makeClient(existing: boolean) {
     client: {
       contacts: {
         create,
-        get,
         segments: { add },
         update,
       },
     },
     create,
-    get,
     segmentAdd: add,
     update,
   };
@@ -89,7 +82,7 @@ describe("getClerkUserPrimaryEmail", () => {
 
 describe("syncClerkUserToResendContact", () => {
   it("skips when contact sync is disabled", async () => {
-    const { client, get } = makeClient(false);
+    const { client, update } = makeClient(false);
 
     const result = await syncClerkUserToResendContact(clerkUser, {
       client,
@@ -101,7 +94,7 @@ describe("syncClerkUserToResendContact", () => {
       skipped: true,
       error: "Resend contact sync is disabled",
     });
-    expect(get).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
   });
 
   it("reports missing contact API configuration when enabled without a client", async () => {
@@ -115,8 +108,8 @@ describe("syncClerkUserToResendContact", () => {
     });
   });
 
-  it("creates a Resend contact without changing future unsubscribe state", async () => {
-    const { client, create } = makeClient(false);
+  it("creates a Resend contact after update reports it missing", async () => {
+    const { client, create, update } = makeClient(false);
 
     const result = await syncClerkUserToResendContact(clerkUser, {
       client,
@@ -128,6 +121,11 @@ describe("syncClerkUserToResendContact", () => {
       action: "created",
       email: "gerry@example.com",
       ok: true,
+    });
+    expect(update).toHaveBeenCalledWith({
+      email: "gerry@example.com",
+      firstName: "Gerry",
+      lastName: "Gugger",
     });
     expect(create).toHaveBeenCalledWith({
       email: "gerry@example.com",
@@ -186,7 +184,7 @@ describe("syncClerkUserToResendContact", () => {
   });
 
   it("skips explicitly unverified Clerk primary emails", async () => {
-    const { client, get } = makeClient(false);
+    const { client, update } = makeClient(false);
 
     const result = await syncClerkUserToResendContact(
       {
@@ -210,7 +208,7 @@ describe("syncClerkUserToResendContact", () => {
       skipped: true,
       error: "Clerk user primary email is not verified",
     });
-    expect(get).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
   });
 
   it("syncs users when Clerk omits email verification status", async () => {
