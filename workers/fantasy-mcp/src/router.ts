@@ -1,10 +1,12 @@
 // workers/fantasy-mcp/src/router.ts
 import type { Env, Platform, ToolParams } from './types';
 import {
+  logSetupSignal,
   parseRetryAfterSeconds,
   withCorrelationId,
   withEvalHeaders,
   withInternalServiceToken,
+  type SetupSignalEvent,
 } from '@flaim/worker-shared';
 
 export interface RouteResult {
@@ -17,6 +19,26 @@ export interface RouteResult {
   retryable?: boolean;
   retry_after?: number;
   retry_after_source?: string;
+}
+
+function logPlatformToolFailure(
+  env: Env,
+  params: ToolParams,
+  correlationId: string | undefined,
+  fields: Omit<SetupSignalEvent, 'service' | 'component' | 'event' | 'outcome' | 'platform' | 'sport' | 'season_year' | 'correlation_id'>
+): void {
+  logSetupSignal({
+    service: 'fantasy-mcp',
+    component: 'platform-router',
+    event: 'platform_tool_failed',
+    platform: params.platform,
+    sport: params.sport,
+    season_year: params.season_year,
+    correlation_id: correlationId,
+    environment: env.ENVIRONMENT || env.NODE_ENV,
+    ...fields,
+    outcome: 'failure',
+  } as SetupSignalEvent & Record<string, unknown>);
 }
 
 /**
@@ -36,6 +58,11 @@ export async function routeToClient(
   // Select the service binding based on platform
   const client = selectClient(env, platform);
   if (!client) {
+    logPlatformToolFailure(env, params, correlationId, {
+      stage: 'service_binding',
+      failure_kind: 'configuration',
+      error_code: 'PLATFORM_NOT_SUPPORTED',
+    });
     return {
       success: false,
       error: `Platform "${platform}" is not yet supported`,
@@ -82,6 +109,16 @@ export async function routeToClient(
         retry_after_source?: string;
       };
       const retryAfter = parseRetryAfterSeconds(response.headers.get('Retry-After')) ?? errorData.retry_after;
+      logPlatformToolFailure(env, params, correlationId, {
+        stage: 'platform_worker_response',
+        failure_kind: errorData.retryable ? 'retryable_upstream' : 'upstream',
+        error_code: errorData.code || 'PLATFORM_ERROR',
+        http_status: response.status,
+        upstream_status: errorData.upstream_status,
+        retryable: errorData.retryable,
+        retry_after: retryAfter,
+        retry_after_source: errorData.retry_after_source,
+      });
       return {
         success: false,
         error: errorData.error || `Platform worker returned ${response.status}`,
@@ -98,12 +135,22 @@ export async function routeToClient(
   } catch (error) {
     clearTimeout(timeoutId);
     if (error instanceof Error && error.name === 'AbortError') {
+      logPlatformToolFailure(env, params, correlationId, {
+        stage: 'platform_worker_fetch',
+        failure_kind: 'timeout',
+        error_code: 'ROUTING_ERROR',
+      });
       return {
         success: false,
         error: `Platform worker "${platform}" timed out after 25s`,
         code: 'ROUTING_ERROR',
       };
     }
+    logPlatformToolFailure(env, params, correlationId, {
+      stage: 'platform_worker_fetch',
+      failure_kind: 'fetch_error',
+      error_code: 'ROUTING_ERROR',
+    });
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to reach platform worker',

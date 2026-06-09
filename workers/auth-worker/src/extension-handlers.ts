@@ -6,6 +6,7 @@
  */
 
 import { EspnSupabaseStorage } from './supabase-storage';
+import { logSetupSignal, type SetupSignalEvent } from '@flaim/worker-shared';
 
 // =============================================================================
 // TYPES
@@ -56,12 +57,37 @@ function jsonResponse(body: Record<string, unknown>, status: number, corsHeaders
   });
 }
 
+function logExtensionFailure(
+  request: Request,
+  env: ExtensionEnv,
+  fields: Omit<SetupSignalEvent, 'service' | 'component' | 'event' | 'outcome'>
+): void {
+  const url = new URL(request.url);
+  logSetupSignal({
+    service: 'auth-worker',
+    component: 'espn-extension',
+    event: 'onboarding_failed',
+    request_path: url.pathname,
+    method: request.method,
+    has_auth_header: request.headers.has('Authorization'),
+    correlation_id: request.headers.get('X-Correlation-ID') || undefined,
+    cf_ray: request.headers.get('CF-Ray') || undefined,
+    environment: env.ENVIRONMENT || env.NODE_ENV,
+    platform: 'espn',
+    auth_type: 'clerk',
+    ...fields,
+    outcome: 'failure',
+  } as SetupSignalEvent & Record<string, unknown>);
+}
+
 function parseSyncCredentialsBody(
   rawBody: unknown,
   corsHeaders: Record<string, string>
-): { body?: ExtensionSyncBody; response?: Response } {
+): { body?: ExtensionSyncBody; response?: Response; errorCode?: string; status?: number } {
   if (!rawBody || typeof rawBody !== 'object') {
     return {
+      errorCode: 'invalid_request_body',
+      status: 400,
       response: jsonResponse({
         error: 'invalid_request',
         error_description: 'Invalid request body',
@@ -72,6 +98,8 @@ function parseSyncCredentialsBody(
   const bodyRecord = rawBody as { swid?: unknown; s2?: unknown };
   if (typeof bodyRecord.swid !== 'string' || typeof bodyRecord.s2 !== 'string' || !bodyRecord.swid || !bodyRecord.s2) {
     return {
+      errorCode: 'missing_espn_credentials',
+      status: 400,
       response: jsonResponse({
         error: 'invalid_request',
         error_description: 'swid and s2 are required',
@@ -81,6 +109,8 @@ function parseSyncCredentialsBody(
 
   if (!isValidSwid(bodyRecord.swid)) {
     return {
+      errorCode: 'invalid_swid',
+      status: 400,
       response: jsonResponse({
         error: 'invalid_request',
         error_description: 'Invalid SWID format (expected UUID in curly braces)',
@@ -90,6 +120,8 @@ function parseSyncCredentialsBody(
 
   if (!isValidS2(bodyRecord.s2)) {
     return {
+      errorCode: 'invalid_espn_s2',
+      status: 400,
       response: jsonResponse({
         error: 'invalid_request',
         error_description: 'Invalid espn_s2 format (too short)',
@@ -123,6 +155,12 @@ export async function handleSyncCredentials(
     const rawBody = await request.json().catch(() => null);
     const parsedBody = parseSyncCredentialsBody(rawBody, corsHeaders);
     if (parsedBody.response) {
+      logExtensionFailure(request, env, {
+        stage: 'credential_payload_validation',
+        failure_kind: 'validation',
+        error_code: parsedBody.errorCode || 'invalid_request',
+        http_status: parsedBody.status || 400,
+      });
       return parsedBody.response;
     }
     const body = parsedBody.body!;
@@ -132,6 +170,12 @@ export async function handleSyncCredentials(
     const success = await credStorage.setCredentials(userId, body.swid, body.s2);
 
     if (!success) {
+      logExtensionFailure(request, env, {
+        stage: 'credential_storage',
+        failure_kind: 'storage',
+        error_code: 'credential_storage_failed',
+        http_status: 500,
+      });
       return jsonResponse({
         error: 'server_error',
         error_description: 'Failed to store credentials',
@@ -145,6 +189,12 @@ export async function handleSyncCredentials(
       message: 'Credentials synced successfully',
     }, 200, corsHeaders);
   } catch (error) {
+    logExtensionFailure(request, env, {
+      stage: 'credential_sync',
+      failure_kind: 'exception',
+      error_code: 'server_error',
+      http_status: 500,
+    });
     console.error('[extension] Failed to sync credentials:', error);
     return jsonResponse({
       error: 'server_error',

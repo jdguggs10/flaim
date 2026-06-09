@@ -8,7 +8,9 @@ import {
   EVAL_TRACE_HEADER,
   getCorrelationId,
   getEvalContext,
+  logSetupSignal,
   withInternalServiceToken,
+  type SetupSignalEvent,
 } from '@flaim/worker-shared';
 import type { Env } from './types';
 import { createFantasyMcpServer } from './mcp/server';
@@ -19,6 +21,26 @@ import { buildMcpAuthErrorResponse } from './auth-response';
 import { USER_SESSION_WIDGET_HTML } from './widgets/user-session-widget';
 
 const app = new Hono<{ Bindings: Env }>();
+
+function logFantasySetupFailure(
+  c: Context<{ Bindings: Env }>,
+  event: string,
+  fields: Omit<SetupSignalEvent, 'service' | 'event' | 'outcome'>
+): void {
+  const url = new URL(c.req.raw.url);
+  logSetupSignal({
+    service: 'fantasy-mcp',
+    event,
+    request_path: url.pathname,
+    method: c.req.method,
+    has_auth_header: c.req.raw.headers.has('Authorization'),
+    correlation_id: c.req.raw.headers.get(CORRELATION_ID_HEADER) || undefined,
+    cf_ray: c.req.raw.headers.get('CF-Ray') || undefined,
+    environment: c.env.ENVIRONMENT || c.env.NODE_ENV,
+    ...fields,
+    outcome: 'failure',
+  } as SetupSignalEvent & Record<string, unknown>);
+}
 
 // CORS middleware
 app.use('*', async (c, next) => {
@@ -161,6 +183,34 @@ function buildMethodNotAllowedResponse(allow: string): Response {
   );
 }
 
+async function isAuthenticatedMcpToolAttemptRequest(request: Request): Promise<boolean> {
+  if (request.method !== 'POST') {
+    return false;
+  }
+
+  const contentType = request.headers.get('Content-Type') || '';
+  if (!contentType.includes('application/json')) {
+    return false;
+  }
+
+  const contentLength = Number(request.headers.get('Content-Length'));
+  if (Number.isFinite(contentLength) && contentLength > 65536) {
+    return false;
+  }
+
+  try {
+    // Clone so this logging heuristic never consumes the MCP handler body.
+    const payload = await request.clone().json() as { method?: unknown; params?: unknown };
+    if (payload?.method !== 'tools/call') {
+      return false;
+    }
+    const params = payload.params;
+    return Boolean(params && typeof params === 'object' && 'name' in params);
+  } catch {
+    return false;
+  }
+}
+
 async function handleMcpRequest(c: Context<{ Bindings: Env }>): Promise<Response> {
   const correlationId = getCorrelationId(c.req.raw);
   const { evalRunId, evalTraceId } = getEvalContext(c.req.raw);
@@ -178,6 +228,16 @@ async function handleMcpRequest(c: Context<{ Bindings: Env }>): Promise<Response
   const authHeader = c.req.header('Authorization');
   const allowPublicHandshake = !authHeader && await isPublicMcpHandshakeRequest(c.req.raw);
   if (!authHeader && !allowPublicHandshake) {
+    if (await isAuthenticatedMcpToolAttemptRequest(c.req.raw)) {
+      logFantasySetupFailure(c, 'auth_trust_path_failed', {
+        component: 'mcp-auth',
+        stage: 'authorization_header',
+        failure_kind: 'auth',
+        error_code: 'missing_authorization',
+        http_status: 401,
+        correlation_id: correlationId,
+      });
+    }
     return buildMcpAuthErrorResponse(c.req.raw);
   }
 
@@ -199,6 +259,15 @@ async function handleMcpRequest(c: Context<{ Bindings: Env }>): Promise<Response
         })
       );
       if (!introspectRes.ok) {
+        logFantasySetupFailure(c, 'auth_trust_path_failed', {
+          component: 'mcp-auth',
+          stage: 'token_introspection',
+          failure_kind: 'auth',
+          error_code: 'introspection_failed',
+          http_status: 401,
+          upstream_status: introspectRes.status,
+          correlation_id: correlationId,
+        });
         return buildMcpAuthErrorResponse(c.req.raw);
       }
       const tokenInfo = await introspectRes.json() as {
@@ -208,10 +277,28 @@ async function handleMcpRequest(c: Context<{ Bindings: Env }>): Promise<Response
         authType?: 'clerk' | 'oauth' | 'eval-api-key' | 'demo-api-key';
       };
       if (!tokenInfo.valid) {
+        logFantasySetupFailure(c, 'auth_trust_path_failed', {
+          component: 'mcp-auth',
+          stage: 'token_introspection',
+          failure_kind: 'auth',
+          error_code: 'invalid_token',
+          http_status: 401,
+          auth_type: tokenInfo.authType,
+          correlation_id: correlationId,
+        });
         return buildMcpAuthErrorResponse(c.req.raw);
       }
       tokenScope = typeof tokenInfo.scope === 'string' ? tokenInfo.scope.trim() : undefined;
       if (!tokenScope) {
+        logFantasySetupFailure(c, 'auth_trust_path_failed', {
+          component: 'mcp-auth',
+          stage: 'scope_validation',
+          failure_kind: 'auth',
+          error_code: 'missing_scope',
+          http_status: 401,
+          auth_type: tokenInfo.authType,
+          correlation_id: correlationId,
+        });
         return buildMcpAuthErrorResponse(c.req.raw);
       }
 
@@ -256,6 +343,14 @@ async function handleMcpRequest(c: Context<{ Bindings: Env }>): Promise<Response
         }
       }
     } catch {
+      logFantasySetupFailure(c, 'auth_trust_path_failed', {
+        component: 'mcp-auth',
+        stage: 'token_introspection',
+        failure_kind: 'fetch_error',
+        error_code: 'introspection_exception',
+        http_status: 401,
+        correlation_id: correlationId,
+      });
       return buildMcpAuthErrorResponse(c.req.raw);
     }
   }

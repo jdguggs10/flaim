@@ -59,6 +59,7 @@ import {
   YahooConnectEnv,
 } from './yahoo-connect-handlers';
 import { YahooStorage } from './yahoo-storage';
+import { logSetupSignal, type SetupSignalEvent } from '@flaim/worker-shared';
 import {
   handleSleeperDiscover,
   handleSleeperStatus,
@@ -302,6 +303,33 @@ function debugLog(env: Env, message: string): void {
   }
 }
 
+function baseAuthWorkerSignal(request: Request, env: Env): Partial<SetupSignalEvent> {
+  const url = new URL(request.url);
+  return {
+    service: 'auth-worker',
+    request_path: url.pathname,
+    method: request.method,
+    has_auth_header: request.headers.has('Authorization'),
+    correlation_id: request.headers.get('X-Correlation-ID') || undefined,
+    cf_ray: request.headers.get('CF-Ray') || undefined,
+    environment: env.ENVIRONMENT || env.NODE_ENV,
+  };
+}
+
+function logAuthWorkerFailure(
+  request: Request,
+  env: Env,
+  event: string,
+  fields: Omit<SetupSignalEvent, 'service' | 'event' | 'outcome'>
+): void {
+  logSetupSignal({
+    ...baseAuthWorkerSignal(request, env),
+    event,
+    ...fields,
+    outcome: 'failure',
+  } as SetupSignalEvent & Record<string, unknown>);
+}
+
 // =============================================================================
 // AUTH HELPERS
 // =============================================================================
@@ -378,6 +406,14 @@ async function getVerifiedUserId(
     for (const staticKey of staticKeys) {
       if (!staticKey.key) continue;
       if (!staticKey.userId) {
+        logAuthWorkerFailure(request, env, 'auth_trust_path_failed', {
+          component: 'static-api-key',
+          stage: 'static_key_config',
+          failure_kind: 'configuration',
+          error_code: 'static_key_user_id_missing',
+          http_status: 500,
+          auth_type: staticKey.authType,
+        });
         console.error(`[auth-worker] ${staticKey.label} set but corresponding user ID missing — skipping static API key auth`);
         continue;
       }
@@ -458,6 +494,13 @@ async function getInternalUserId(
 ): Promise<AuthResult> {
   const internalError = await requireInternalService(request, env);
   if (internalError) {
+    logAuthWorkerFailure(request, env, 'auth_trust_path_failed', {
+      component: 'internal-service-auth',
+      stage: 'internal_service_validation',
+      failure_kind: internalError.status === 500 ? 'configuration' : 'auth',
+      error_code: internalError.status === 500 ? 'internal_service_auth_not_configured' : 'invalid_internal_service_token',
+      http_status: internalError.status,
+    });
     return { userId: null, error: internalError.error, status: internalError.status };
   }
 
@@ -698,6 +741,17 @@ api.get('/internal/introspect', async (c) => {
   const { userId, error: authError, status: authStatus, scope, authType } = await getInternalUserId(c.req.raw, c.env, expectedResource, { allowStaticApiKey: true });
 
   if (!userId) {
+    // 403/500 internal-service auth failures are already logged by getInternalUserId.
+    if (authStatus !== 403 && authStatus !== 500) {
+      logAuthWorkerFailure(c.req.raw, c.env, 'auth_trust_path_failed', {
+        component: 'auth-introspection',
+        stage: 'token_introspection',
+        failure_kind: 'auth',
+        error_code: 'invalid_token',
+        http_status: authStatus ?? 401,
+        auth_type: authType,
+      });
+    }
     return c.json({ valid: false, error: authError || 'Invalid token' }, authStatus ?? 401);
   }
 
@@ -712,6 +766,14 @@ api.get('/internal/introspect', async (c) => {
 api.post('/oauth/code', async (c) => {
   const { userId, error: authError } = await getClerkUserId(c.req.raw, c.env);
   if (!userId) {
+    logAuthWorkerFailure(c.req.raw, c.env, 'oauth_code_failed', {
+      component: 'oauth-provider',
+      stage: 'clerk_auth',
+      failure_kind: 'auth',
+      error_code: 'clerk_auth_required',
+      http_status: 401,
+      auth_type: 'clerk',
+    });
     return c.json({
       error: 'unauthorized',
       error_description: authError || 'Authentication required',
@@ -764,6 +826,15 @@ api.post('/oauth/revoke', async (c) => {
 api.post('/extension/sync', async (c) => {
   const { userId, error: authError } = await getClerkUserId(c.req.raw, c.env);
   if (!userId) {
+    logAuthWorkerFailure(c.req.raw, c.env, 'onboarding_failed', {
+      component: 'espn-extension',
+      stage: 'clerk_auth',
+      failure_kind: 'auth',
+      error_code: 'clerk_auth_required',
+      http_status: 401,
+      platform: 'espn',
+      auth_type: 'clerk',
+    });
     return c.json({
       error: 'unauthorized',
       error_description: authError || 'Authentication required',
@@ -800,6 +871,15 @@ api.get('/extension/connection', async (c) => {
 api.post('/extension/discover', async (c) => {
   const { userId, error: authError } = await getClerkUserId(c.req.raw, c.env);
   if (!userId) {
+    logAuthWorkerFailure(c.req.raw, c.env, 'onboarding_failed', {
+      component: 'espn-extension',
+      stage: 'clerk_auth',
+      failure_kind: 'auth',
+      error_code: 'clerk_auth_required',
+      http_status: 401,
+      platform: 'espn',
+      auth_type: 'clerk',
+    });
     return c.json({
       error: 'unauthorized',
       error_description: authError || 'Authentication required',
@@ -812,6 +892,15 @@ api.post('/extension/discover', async (c) => {
   // Get stored credentials
   const credentials = await storage.getCredentials(userId);
   if (!credentials) {
+    logAuthWorkerFailure(c.req.raw, c.env, 'onboarding_failed', {
+      component: 'espn-extension',
+      stage: 'credential_lookup',
+      failure_kind: 'missing_credentials',
+      error_code: 'credentials_not_found',
+      http_status: 400,
+      platform: 'espn',
+      auth_type: 'clerk',
+    });
     return new Response(JSON.stringify({
       error: 'credentials_not_found',
       error_description: 'ESPN credentials not found. Please sync credentials first.',
@@ -892,6 +981,15 @@ api.post('/extension/discover', async (c) => {
     const isAuthError = errorMessage.includes('authentication') ||
       errorMessage.includes('expired') ||
       errorMessage.includes('invalid');
+    logAuthWorkerFailure(c.req.raw, c.env, 'onboarding_failed', {
+      component: 'espn-extension',
+      stage: 'league_discovery',
+      failure_kind: isAuthError ? 'auth' : 'upstream',
+      error_code: isAuthError ? 'espn_auth_failed' : 'discovery_failed',
+      http_status: isAuthError ? 401 : 500,
+      platform: 'espn',
+      auth_type: 'clerk',
+    });
 
     return c.json({
       error: isAuthError ? 'espn_auth_failed' : 'discovery_failed',
@@ -1279,6 +1377,15 @@ async function handleCredentialsEspn(c: Context<{ Bindings: Env }>, method: stri
   debugLog(env, `🔐 [auth-worker] /credentials/espn - Verified user: ${clerkUserId ? maskUserId(clerkUserId) : 'null'}, authType: ${authType || 'none'}, authError: ${authError || 'none'}`);
 
   if (!clerkUserId) {
+    logAuthWorkerFailure(c.req.raw, env, 'onboarding_failed', {
+      component: 'espn-credentials',
+      stage: 'clerk_auth',
+      failure_kind: 'auth',
+      error_code: 'clerk_auth_required',
+      http_status: 401,
+      platform: 'espn',
+      auth_type: 'clerk',
+    });
     return c.json({
       error: 'Authentication required',
       message: authError || 'Missing or invalid Authorization token'
@@ -1292,6 +1399,15 @@ async function handleCredentialsEspn(c: Context<{ Bindings: Env }>, method: stri
     const validation = validateEspnCredentials(body);
 
     if (!validation.valid) {
+      logAuthWorkerFailure(c.req.raw, env, 'onboarding_failed', {
+        component: 'espn-credentials',
+        stage: 'credential_payload_validation',
+        failure_kind: 'validation',
+        error_code: 'invalid_espn_credentials_payload',
+        http_status: 400,
+        platform: 'espn',
+        auth_type: 'clerk',
+      });
       return c.json({
         error: 'Invalid credentials',
         message: validation.error
@@ -1301,6 +1417,15 @@ async function handleCredentialsEspn(c: Context<{ Bindings: Env }>, method: stri
     const success = await storage.setCredentials(clerkUserId, body.swid!, body.s2!, body.email);
 
     if (!success) {
+      logAuthWorkerFailure(c.req.raw, env, 'onboarding_failed', {
+        component: 'espn-credentials',
+        stage: 'credential_storage',
+        failure_kind: 'storage',
+        error_code: 'credential_storage_failed',
+        http_status: 500,
+        platform: 'espn',
+        auth_type: 'clerk',
+      });
       return c.json({ error: 'Failed to store credentials' }, 500);
     }
 

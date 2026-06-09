@@ -112,6 +112,10 @@ function mockExecutionContext(): ExecutionContext {
   } as unknown as ExecutionContext;
 }
 
+function emittedSetupSignal(spy: { mock: { calls: unknown[][] } }): boolean {
+  return spy.mock.calls.some((call) => String(call[0]).includes('"schema_version":1'));
+}
+
 function buildEnv(authFetch: (request: Request) => Promise<Response>): Env {
   return {
     INTERNAL_SERVICE_TOKEN: 'internal-secret',
@@ -138,6 +142,68 @@ describe('fantasy-mcp gateway integration', () => {
 
     // Auth should not be called — 405 fires before auth/introspection
     expect(authFetch).not.toHaveBeenCalled();
+  });
+
+  it('does not emit setup signal for unauthenticated non-MCP POST probes', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    const authFetch = vi.fn(async () => new Response('unexpected', { status: 500 }));
+    const env = buildEnv(authFetch);
+
+    try {
+      const response = await app.fetch(
+        new Request('https://api.flaim.app/mcp', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+          },
+          body: JSON.stringify({ probe: true }),
+        }),
+        env,
+        mockExecutionContext()
+      );
+
+      expect(response.status).toBe(401);
+      expect(authFetch).not.toHaveBeenCalled();
+      expect(emittedSetupSignal(logSpy)).toBe(false);
+    } finally {
+      logSpy.mockRestore();
+    }
+  });
+
+  it('does not emit setup signal for oversized unauthenticated tool-call probes', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    const authFetch = vi.fn(async () => new Response('unexpected', { status: 500 }));
+    const env = buildEnv(authFetch);
+    const body = JSON.stringify({
+      jsonrpc: '2.0',
+      id: 'oversized-probe',
+      method: 'tools/call',
+      params: { name: 'get_user_session', arguments: {} },
+      padding: 'x'.repeat(65536),
+    });
+
+    try {
+      const response = await app.fetch(
+        new Request('https://api.flaim.app/mcp', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Content-Length': String(body.length),
+            Accept: 'application/json',
+          },
+          body,
+        }),
+        env,
+        mockExecutionContext()
+      );
+
+      expect(response.status).toBe(401);
+      expect(authFetch).not.toHaveBeenCalled();
+      expect(emittedSetupSignal(logSpy)).toBe(false);
+    } finally {
+      logSpy.mockRestore();
+    }
   });
 
   it('serves oauth metadata aliases under /mcp/.well-known', async () => {

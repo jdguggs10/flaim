@@ -32,7 +32,9 @@ import {
   isYahooRateLimitStatus,
   isYahooTransientHttpStatus,
   parseRetryAfterSeconds,
+  logSetupSignal,
   YahooAuthWorkerErrorCode,
+  type SetupSignalEvent,
   type YahooPublicCredentialHealth,
   type YahooPublicRefreshState,
 } from '@flaim/worker-shared';
@@ -322,6 +324,29 @@ function logYahooRefreshDiagnostic(event: string, fields: YahooRefreshDiagnostic
   if (fields.recoverySucceeded !== undefined) payload.recovery_succeeded = fields.recoverySucceeded;
 
   console.log(JSON.stringify(payload));
+}
+
+function logYahooSetupFailure(
+  env: YahooConnectEnv,
+  event: string,
+  fields: Omit<SetupSignalEvent, 'service' | 'component' | 'event' | 'outcome' | 'platform'>,
+  request?: Request
+): void {
+  const url = request ? new URL(request.url) : undefined;
+  logSetupSignal({
+    service: 'auth-worker',
+    component: 'yahoo-connect',
+    event,
+    platform: 'yahoo',
+    request_path: url?.pathname,
+    method: request?.method,
+    has_auth_header: request?.headers.has('Authorization'),
+    correlation_id: fields.correlation_id || request?.headers.get('X-Correlation-ID') || undefined,
+    cf_ray: request?.headers.get('CF-Ray') || undefined,
+    environment: env.ENVIRONMENT || env.NODE_ENV,
+    ...fields,
+    outcome: 'failure',
+  } as SetupSignalEvent & Record<string, unknown>);
 }
 
 type UsableYahooTokenResponse =
@@ -1325,6 +1350,13 @@ export async function handleYahooAuthorize(
       },
     });
   } catch (error) {
+    logYahooSetupFailure(env, 'onboarding_failed', {
+      stage: 'authorization_start',
+      failure_kind: 'storage',
+      error_code: 'authorization_failed',
+      http_status: 500,
+      auth_type: 'clerk',
+    }, request);
     console.error('[yahoo-connect] Authorization error:', error);
     return new Response(
       JSON.stringify({
@@ -1378,11 +1410,27 @@ export async function handleYahooCallback(
 
   // Validate required parameters
   if (!code) {
+    if (state) {
+      logYahooSetupFailure(env, 'oauth_callback_failed', {
+        stage: 'callback_validation',
+        failure_kind: 'validation',
+        error_code: 'missing_code',
+        http_status: 302,
+        auth_type: 'clerk',
+      }, request);
+    }
     console.log('[yahoo-connect] Callback missing code parameter');
     return errorRedirect('missing_code', 'Authorization code not provided');
   }
 
   if (!state) {
+    logYahooSetupFailure(env, 'oauth_callback_failed', {
+      stage: 'callback_validation',
+      failure_kind: 'validation',
+      error_code: 'missing_state',
+      http_status: 302,
+      auth_type: 'clerk',
+    }, request);
     console.log('[yahoo-connect] Callback missing state parameter');
     return errorRedirect('missing_state', 'State parameter not provided');
   }
@@ -1393,6 +1441,13 @@ export async function handleYahooCallback(
     // Validate and consume state (single-use)
     const stateData = await storage.consumePlatformOAuthState(state);
     if (!stateData) {
+      logYahooSetupFailure(env, 'oauth_callback_failed', {
+        stage: 'state_validation',
+        failure_kind: 'validation',
+        error_code: 'invalid_state',
+        http_status: 302,
+        auth_type: 'clerk',
+      }, request);
       console.log('[yahoo-connect] Invalid or expired state');
       return errorRedirect('invalid_state', 'Invalid or expired state parameter');
     }
@@ -1422,6 +1477,16 @@ export async function handleYahooCallback(
       tokenResponse = await exchangeCodeForTokens(requestBody, env, exchangeController.signal);
     } catch (error) {
       clearTimeout(exchangeTimer);
+      logYahooSetupFailure(env, 'oauth_callback_failed', {
+        stage: 'token_exchange',
+        failure_kind: isAbortError(error) ? 'timeout' : 'fetch_error',
+        error_code: YahooAuthWorkerErrorCode.TOKEN_EXCHANGE_UNAVAILABLE,
+        http_status: 302,
+        retryable: true,
+        retry_after: YAHOO_DEFAULT_TRANSIENT_RETRY_AFTER_SECONDS,
+        retry_after_source: 'fallback_default',
+        auth_type: 'clerk',
+      }, request);
       logYahooRefreshDiagnostic('token_exchange_request_exception', {
         userId: clerkUserId,
         authType: 'clerk',
@@ -1445,6 +1510,18 @@ export async function handleYahooCallback(
 
     if (tokenResponse.error) {
       const failureKind = classifyYahooTokenFailure(tokenResponse);
+      const isTransient = isTransientYahooTokenFailure(tokenResponse);
+      logYahooSetupFailure(env, 'oauth_callback_failed', {
+        stage: 'token_exchange',
+        failure_kind: failureKind,
+        error_code: isTransient ? YahooAuthWorkerErrorCode.TOKEN_EXCHANGE_UNAVAILABLE : 'token_exchange_failed',
+        http_status: 302,
+        upstream_status: tokenResponse.status,
+        retryable: isTransient,
+        retry_after: tokenResponse.retry_after,
+        retry_after_source: tokenResponse.retry_after_source,
+        auth_type: 'clerk',
+      }, request);
       logYahooRefreshDiagnostic('token_exchange_response_error', {
         userId: clerkUserId,
         authType: 'clerk',
@@ -1456,7 +1533,6 @@ export async function handleYahooCallback(
         ...requestDiagnosticFields,
       });
       console.error(`[yahoo-connect] Token exchange failed: ${tokenResponse.error}`);
-      const isTransient = isTransientYahooTokenFailure(tokenResponse);
       return errorRedirect(
         isTransient ? YahooAuthWorkerErrorCode.TOKEN_EXCHANGE_UNAVAILABLE : 'token_exchange_failed',
         isTransient
@@ -1466,6 +1542,14 @@ export async function handleYahooCallback(
     }
 
     if (!hasUsableTokenFields(tokenResponse)) {
+      logYahooSetupFailure(env, 'oauth_callback_failed', {
+        stage: 'token_exchange',
+        failure_kind: 'invalid_response',
+        error_code: 'token_exchange_failed',
+        http_status: 302,
+        upstream_status: tokenResponse.status,
+        auth_type: 'clerk',
+      }, request);
       console.error('[yahoo-connect] Token exchange returned unusable token fields');
       return errorRedirect('token_exchange_failed', 'Yahoo did not return usable token fields');
     }
@@ -1473,6 +1557,14 @@ export async function handleYahooCallback(
     // hasUsableTokenFields validates the access-token shape; reconnect must
     // also return a refresh token for future lazy refreshes.
     if (!tokenResponse.refresh_token) {
+      logYahooSetupFailure(env, 'oauth_callback_failed', {
+        stage: 'token_exchange',
+        failure_kind: 'invalid_response',
+        error_code: 'missing_refresh_token',
+        http_status: 302,
+        upstream_status: tokenResponse.status,
+        auth_type: 'clerk',
+      }, request);
       console.error('[yahoo-connect] Yahoo did not return a refresh token');
       return errorRedirect('token_exchange_failed', 'Yahoo did not provide a refresh token');
     }
@@ -1514,6 +1606,13 @@ export async function handleYahooCallback(
       headers: { Location: successUrl.toString(), ...corsHeaders },
     });
   } catch (error) {
+    logYahooSetupFailure(env, 'oauth_callback_failed', {
+      stage: 'callback',
+      failure_kind: 'exception',
+      error_code: 'callback_error',
+      http_status: 302,
+      auth_type: 'clerk',
+    }, request);
     console.error('[yahoo-connect] Callback error:', error);
     return errorRedirect('callback_error', 'An error occurred during authorization');
   }
@@ -1549,6 +1648,18 @@ export async function handleYahooCredentials(
           }
         );
       }
+      logYahooSetupFailure(env, 'platform_auth_failed', {
+        stage: 'credential_refresh',
+        failure_kind: result.retryable ? 'retryable_auth' : 'auth',
+        error_code: result.error,
+        http_status: result.error === YahooAuthWorkerErrorCode.REFRESH_TEMPORARILY_UNAVAILABLE ? 503 : 401,
+        upstream_status: result.upstreamStatus,
+        retryable: result.retryable,
+        retry_after: result.retryAfter,
+        retry_after_source: result.retryAfterSource,
+        correlation_id: correlationId,
+        auth_type: authType,
+      });
       return yahooRefreshFailureResponse(result, corsHeaders);
     }
 
@@ -1567,6 +1678,14 @@ export async function handleYahooCredentials(
       }
     );
   } catch (error) {
+    logYahooSetupFailure(env, 'platform_auth_failed', {
+      stage: 'credentials_lookup',
+      failure_kind: 'exception',
+      error_code: 'server_error',
+      http_status: 500,
+      correlation_id: correlationId,
+      auth_type: authType,
+    });
     console.error('[yahoo-connect] Credentials error:', error);
     return new Response(
       JSON.stringify({
@@ -1882,6 +2001,14 @@ export async function handleYahooDiscover(
     const credentials = await storage.getYahooCredentials(userId);
 
     if (!credentials) {
+      logYahooSetupFailure(env, 'onboarding_failed', {
+        stage: 'credential_lookup',
+        failure_kind: 'missing_credentials',
+        error_code: 'not_connected',
+        http_status: 404,
+        correlation_id: correlationId,
+        auth_type: 'clerk',
+      });
       return new Response(
         JSON.stringify({
           error: 'not_connected',
@@ -1900,6 +2027,18 @@ export async function handleYahooDiscover(
       console.log(`[yahoo-connect] Refreshing token before discovery for user ${maskUserId(userId)}`);
       const tokenResult = await getValidYahooAccessToken(storage, userId, env, credentials, correlationId, 'clerk');
       if ('error' in tokenResult) {
+        logYahooSetupFailure(env, 'onboarding_failed', {
+          stage: 'credential_refresh',
+          failure_kind: tokenResult.retryable ? 'retryable_auth' : 'auth',
+          error_code: tokenResult.error,
+          http_status: tokenResult.error === YahooAuthWorkerErrorCode.REFRESH_TEMPORARILY_UNAVAILABLE ? 503 : 401,
+          upstream_status: tokenResult.upstreamStatus,
+          retryable: tokenResult.retryable,
+          retry_after: tokenResult.retryAfter,
+          retry_after_source: tokenResult.retryAfterSource,
+          correlation_id: correlationId,
+          auth_type: 'clerk',
+        });
         return yahooRefreshFailureResponse(tokenResult, corsHeaders);
       }
       accessToken = tokenResult.accessToken;
@@ -1915,8 +2054,21 @@ export async function handleYahooDiscover(
     });
 
     if (!apiResponse.ok) {
-      const errorText = await apiResponse.text();
-      console.error(`[yahoo-connect] Yahoo API error: ${apiResponse.status} - ${errorText}`);
+      const classification = classifyYahooApiFailure(apiResponse);
+      logYahooSetupFailure(env, 'onboarding_failed', {
+        stage: 'league_discovery',
+        failure_kind: classification.kind,
+        error_code: classification.retryable
+          ? YahooAuthWorkerErrorCode.YAHOO_API_TEMPORARILY_UNAVAILABLE
+          : YahooAuthWorkerErrorCode.YAHOO_API_ERROR,
+        http_status: classification.status,
+        upstream_status: classification.upstreamStatus,
+        retryable: classification.retryable,
+        retry_after: classification.retryAfter,
+        correlation_id: correlationId,
+        auth_type: 'clerk',
+      });
+      console.error(`[yahoo-connect] Yahoo API error during discovery: ${apiResponse.status}`);
       return yahooApiFailureResponse(
         { status: apiResponse.status, headers: apiResponse.headers },
         corsHeaders
@@ -1954,6 +2106,14 @@ export async function handleYahooDiscover(
       }
     );
   } catch (error) {
+    logYahooSetupFailure(env, 'onboarding_failed', {
+      stage: 'league_discovery',
+      failure_kind: 'exception',
+      error_code: 'server_error',
+      http_status: 500,
+      correlation_id: correlationId,
+      auth_type: 'clerk',
+    });
     console.error('[yahoo-connect] Discovery error:', error);
     return new Response(
       JSON.stringify({

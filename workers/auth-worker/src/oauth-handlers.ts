@@ -19,7 +19,7 @@
 
 import { OAuthStorage } from './oauth-storage';
 import { getFrontendUrl } from './preview-url';
-import { isValidRedirectUri } from '@flaim/worker-shared';
+import { isValidRedirectUri, logSetupSignal, type SetupSignalEvent } from '@flaim/worker-shared';
 import {
   createConfidentialClientRegistration,
   getClientIdFromBoundToken,
@@ -171,6 +171,54 @@ function invalidClientResponse(
   });
 }
 
+function baseOAuthSignal(request: Request, env: OAuthEnv): Partial<SetupSignalEvent> {
+  const url = new URL(request.url);
+  return {
+    service: 'auth-worker',
+    component: 'oauth-provider',
+    request_path: url.pathname,
+    method: request.method,
+    has_auth_header: request.headers.has('Authorization'),
+    correlation_id: request.headers.get('X-Correlation-ID') || undefined,
+    cf_ray: request.headers.get('CF-Ray') || undefined,
+    environment: env.ENVIRONMENT || env.NODE_ENV,
+  };
+}
+
+function logOAuthFailure(
+  request: Request,
+  env: OAuthEnv,
+  event: string,
+  fields: Omit<SetupSignalEvent, 'service' | 'component' | 'event' | 'outcome'>
+): void {
+  logSetupSignal({
+    ...baseOAuthSignal(request, env),
+    event,
+    ...fields,
+    outcome: 'failure',
+  } as SetupSignalEvent & Record<string, unknown>);
+}
+
+function hasAuthorizeAttemptEvidence(params: AuthorizeParams): boolean {
+  return Boolean(
+    params.client_id ||
+    params.redirect_uri ||
+    params.code_challenge ||
+    params.state ||
+    params.scope ||
+    params.resource
+  );
+}
+
+function hasStrongAuthorizeAttemptEvidence(params: AuthorizeParams): boolean {
+  return Boolean(
+    params.client_id ||
+    params.code_challenge ||
+    params.state ||
+    params.resource
+  );
+}
+
 async function validateTokenEndpointClient(
   body: TokenRequest,
   requiredClientId: string | undefined,
@@ -298,6 +346,12 @@ export async function handleClientRegistration(
   try {
     body = await request.json() as ClientRegistrationRequest;
   } catch {
+    logOAuthFailure(request, env, 'oauth_registration_failed', {
+      stage: 'request_parse',
+      failure_kind: 'validation',
+      error_code: 'invalid_json',
+      http_status: 400,
+    });
     return new Response(JSON.stringify({
       error: 'invalid_request',
       error_description: 'Invalid JSON body'
@@ -311,6 +365,12 @@ export async function handleClientRegistration(
   const redirectUris = body.redirect_uris || [];
   for (const uri of redirectUris) {
     if (!isValidRedirectUri(uri)) {
+      logOAuthFailure(request, env, 'oauth_registration_failed', {
+        stage: 'redirect_uri_validation',
+        failure_kind: 'validation',
+        error_code: 'invalid_redirect_uri',
+        http_status: 400,
+      });
       return new Response(JSON.stringify({
         error: 'invalid_redirect_uri',
         error_description: `Invalid redirect URI: ${uri}`
@@ -325,6 +385,12 @@ export async function handleClientRegistration(
     body.token_endpoint_auth_method
     && !['none', 'client_secret_post'].includes(body.token_endpoint_auth_method)
   ) {
+    logOAuthFailure(request, env, 'oauth_registration_failed', {
+      stage: 'client_metadata_validation',
+      failure_kind: 'validation',
+      error_code: 'invalid_client_metadata',
+      http_status: 400,
+    });
     return new Response(JSON.stringify({
       error: 'invalid_client_metadata',
       error_description: 'Only none and client_secret_post token endpoint auth methods are supported',
@@ -405,6 +471,14 @@ export async function handleAuthorize(request: Request, env: OAuthEnv): Promise<
 
   // Validate required parameters
   if (params.response_type !== 'code') {
+    if (params.response_type || hasAuthorizeAttemptEvidence(params)) {
+      logOAuthFailure(request, env, 'oauth_authorize_failed', {
+        stage: 'parameter_validation',
+        failure_kind: 'validation',
+        error_code: 'unsupported_response_type',
+        http_status: params.redirect_uri && isValidRedirectUri(params.redirect_uri) ? 302 : 400,
+      });
+    }
     if (params.redirect_uri && isValidRedirectUri(params.redirect_uri)) {
       return Response.redirect(
         buildErrorRedirect(params.redirect_uri, 'unsupported_response_type', 'Only code response type is supported', params.state),
@@ -418,6 +492,14 @@ export async function handleAuthorize(request: Request, env: OAuthEnv): Promise<
   }
 
   if (!params.redirect_uri) {
+    if (hasStrongAuthorizeAttemptEvidence(params)) {
+      logOAuthFailure(request, env, 'oauth_authorize_failed', {
+        stage: 'parameter_validation',
+        failure_kind: 'validation',
+        error_code: 'missing_redirect_uri',
+        http_status: 400,
+      });
+    }
     return new Response(JSON.stringify({
       error: 'invalid_request',
       error_description: 'redirect_uri is required',
@@ -425,6 +507,14 @@ export async function handleAuthorize(request: Request, env: OAuthEnv): Promise<
   }
 
   if (!isValidRedirectUri(params.redirect_uri)) {
+    if (params.response_type === 'code' || hasStrongAuthorizeAttemptEvidence(params)) {
+      logOAuthFailure(request, env, 'oauth_authorize_failed', {
+        stage: 'redirect_uri_validation',
+        failure_kind: 'validation',
+        error_code: 'invalid_redirect_uri',
+        http_status: 400,
+      });
+    }
     return new Response(JSON.stringify({
       error: 'invalid_request',
       error_description: 'redirect_uri is not in the allowed list',
@@ -433,6 +523,14 @@ export async function handleAuthorize(request: Request, env: OAuthEnv): Promise<
 
   // PKCE is required (OAuth 2.1)
   if (!params.code_challenge) {
+    if (hasStrongAuthorizeAttemptEvidence(params)) {
+      logOAuthFailure(request, env, 'oauth_authorize_failed', {
+        stage: 'pkce_validation',
+        failure_kind: 'validation',
+        error_code: 'missing_code_challenge',
+        http_status: 302,
+      });
+    }
     return Response.redirect(
       buildErrorRedirect(params.redirect_uri, 'invalid_request', 'code_challenge is required (PKCE)', params.state),
       302
@@ -441,6 +539,12 @@ export async function handleAuthorize(request: Request, env: OAuthEnv): Promise<
 
   // Only S256 PKCE is supported
   if (params.code_challenge_method && params.code_challenge_method !== 'S256') {
+    logOAuthFailure(request, env, 'oauth_authorize_failed', {
+      stage: 'pkce_validation',
+      failure_kind: 'validation',
+      error_code: 'unsupported_code_challenge_method',
+      http_status: 302,
+    });
     return Response.redirect(
       buildErrorRedirect(params.redirect_uri, 'invalid_request', 'Only S256 PKCE is supported', params.state),
       302
@@ -458,6 +562,12 @@ export async function handleAuthorize(request: Request, env: OAuthEnv): Promise<
         expiresInSeconds: 600,
       });
     } catch (error) {
+      logOAuthFailure(request, env, 'oauth_authorize_failed', {
+        stage: 'state_storage',
+        failure_kind: 'storage',
+        error_code: 'state_storage_failed',
+        http_status: 302,
+      });
       console.error('[oauth] Failed to store state:', error);
       return Response.redirect(
         buildErrorRedirect(params.redirect_uri, 'server_error', 'Failed to initialize authorization state', params.state),
@@ -522,6 +632,13 @@ export async function handleCreateCode(
     };
 
     if (!body.redirect_uri) {
+      logOAuthFailure(request, env, 'oauth_code_failed', {
+        stage: 'parameter_validation',
+        failure_kind: 'validation',
+        error_code: 'missing_redirect_uri',
+        http_status: 400,
+        auth_type: 'clerk',
+      });
       return new Response(JSON.stringify({
         error: 'invalid_request',
         error_description: 'redirect_uri is required',
@@ -529,6 +646,13 @@ export async function handleCreateCode(
     }
 
     if (!isValidRedirectUri(body.redirect_uri)) {
+      logOAuthFailure(request, env, 'oauth_code_failed', {
+        stage: 'redirect_uri_validation',
+        failure_kind: 'validation',
+        error_code: 'invalid_redirect_uri',
+        http_status: 400,
+        auth_type: 'clerk',
+      });
       return new Response(JSON.stringify({
         error: 'invalid_request',
         error_description: 'redirect_uri is not in the allowed list',
@@ -544,8 +668,15 @@ export async function handleCreateCode(
         body.client_id
       );
       if (!validState) {
+        logOAuthFailure(request, env, 'oauth_code_failed', {
+          stage: 'state_validation',
+          failure_kind: 'validation',
+          error_code: 'invalid_state',
+          http_status: 400,
+          auth_type: 'clerk',
+        });
         console.log(
-          `[oauth] Invalid state during /oauth/code: state=${maskState(body.state)}, redirect_uri=${body.redirect_uri}, client_id=${body.client_id ? maskClientId(body.client_id) : 'none'}`
+          `[oauth] Invalid state during /oauth/code: state=${maskState(body.state)}, redirect_uri_allowed=${isValidRedirectUri(body.redirect_uri)}, client_id=${body.client_id ? maskClientId(body.client_id) : 'none'}`
         );
         return new Response(JSON.stringify({
           error: 'invalid_request',
@@ -557,6 +688,13 @@ export async function handleCreateCode(
     // Only S256 PKCE is supported
     const codeChallengeMethod = body.code_challenge_method || 'S256';
     if (codeChallengeMethod !== 'S256') {
+      logOAuthFailure(request, env, 'oauth_code_failed', {
+        stage: 'pkce_validation',
+        failure_kind: 'validation',
+        error_code: 'unsupported_code_challenge_method',
+        http_status: 400,
+        auth_type: 'clerk',
+      });
       return new Response(JSON.stringify({
         error: 'invalid_request',
         error_description: 'Only S256 PKCE is supported',
@@ -586,6 +724,13 @@ export async function handleCreateCode(
       headers: { 'Content-Type': 'application/json', ...corsHeaders },
     });
   } catch (error) {
+    logOAuthFailure(request, env, 'oauth_code_failed', {
+      stage: 'code_creation',
+      failure_kind: 'storage',
+      error_code: 'server_error',
+      http_status: 500,
+      auth_type: 'clerk',
+    });
     console.error('[oauth] Failed to create authorization code:', error);
     return new Response(JSON.stringify({
       error: 'server_error',
@@ -636,6 +781,13 @@ export async function handleToken(
     // Handle authorization_code grant
     if (body.grant_type === 'authorization_code') {
       if (!body.code) {
+        logOAuthFailure(request, env, 'oauth_token_failed', {
+          stage: 'token_exchange',
+          failure_kind: 'validation',
+          error_code: 'missing_code',
+          http_status: 400,
+          auth_type: 'oauth',
+        });
         return new Response(JSON.stringify({
           error: 'invalid_request',
           error_description: 'code is required',
@@ -643,6 +795,13 @@ export async function handleToken(
       }
 
       if (!body.redirect_uri) {
+        logOAuthFailure(request, env, 'oauth_token_failed', {
+          stage: 'token_exchange',
+          failure_kind: 'validation',
+          error_code: 'missing_redirect_uri',
+          http_status: 400,
+          auth_type: 'oauth',
+        });
         return new Response(JSON.stringify({
           error: 'invalid_request',
           error_description: 'redirect_uri is required',
@@ -658,6 +817,13 @@ export async function handleToken(
         corsHeaders
       );
       if (clientAuth.errorResponse) {
+        logOAuthFailure(request, env, 'oauth_token_failed', {
+          stage: 'client_auth',
+          failure_kind: 'auth',
+          error_code: 'invalid_client',
+          http_status: 401,
+          auth_type: 'oauth',
+        });
         return clientAuth.errorResponse;
       }
 
@@ -669,6 +835,13 @@ export async function handleToken(
       );
 
       if (!token) {
+        logOAuthFailure(request, env, 'oauth_token_failed', {
+          stage: 'token_exchange',
+          failure_kind: 'auth',
+          error_code: 'invalid_grant',
+          http_status: 400,
+          auth_type: 'oauth',
+        });
         return new Response(JSON.stringify({
           error: 'invalid_grant',
           error_description: 'Invalid authorization code or PKCE verification failed',
@@ -703,6 +876,13 @@ export async function handleToken(
     // Handle refresh_token grant
     if (body.grant_type === 'refresh_token') {
       if (!body.refresh_token) {
+        logOAuthFailure(request, env, 'oauth_token_failed', {
+          stage: 'token_refresh',
+          failure_kind: 'validation',
+          error_code: 'missing_refresh_token',
+          http_status: 400,
+          auth_type: 'oauth',
+        });
         return new Response(JSON.stringify({
           error: 'invalid_request',
           error_description: 'refresh_token is required',
@@ -718,12 +898,26 @@ export async function handleToken(
         corsHeaders
       );
       if (clientAuth.errorResponse) {
+        logOAuthFailure(request, env, 'oauth_token_failed', {
+          stage: 'client_auth',
+          failure_kind: 'auth',
+          error_code: 'invalid_client',
+          http_status: 401,
+          auth_type: 'oauth',
+        });
         return clientAuth.errorResponse;
       }
 
       const token = await storage.refreshAccessToken(body.refresh_token, clientAuth.clientId);
 
       if (!token) {
+        logOAuthFailure(request, env, 'oauth_token_failed', {
+          stage: 'token_refresh',
+          failure_kind: 'auth',
+          error_code: 'invalid_grant',
+          http_status: 400,
+          auth_type: 'oauth',
+        });
         return new Response(JSON.stringify({
           error: 'invalid_grant',
           error_description: 'Invalid or expired refresh token',
@@ -755,12 +949,26 @@ export async function handleToken(
     }
 
     // Unsupported grant type
+    logOAuthFailure(request, env, 'oauth_token_failed', {
+      stage: 'grant_type_validation',
+      failure_kind: 'validation',
+      error_code: 'unsupported_grant_type',
+      http_status: 400,
+      auth_type: 'oauth',
+    });
     return new Response(JSON.stringify({
       error: 'unsupported_grant_type',
       error_description: 'Only authorization_code and refresh_token grants are supported',
     }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
 
   } catch (error) {
+    logOAuthFailure(request, env, 'oauth_token_failed', {
+      stage: 'token_endpoint',
+      failure_kind: 'exception',
+      error_code: 'server_error',
+      http_status: 500,
+      auth_type: 'oauth',
+    });
     console.error('[oauth] Token endpoint error:', error);
     return new Response(JSON.stringify({
       error: 'server_error',
