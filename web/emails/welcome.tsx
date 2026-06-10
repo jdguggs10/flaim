@@ -56,8 +56,8 @@ function WelcomeSetupPath({
               <p style={{ color: "#166534", fontSize: "11px", fontWeight: "700", lineHeight: "16px", margin: "0", textTransform: "uppercase" }}>
                 Done
               </p>
-              <p style={{ color: "#030712", fontSize: "12px", lineHeight: "17px", margin: "2px 0 0" }}>
-                Account
+              <p style={{ color: "#166534", fontSize: "12px", fontWeight: "700", lineHeight: "17px", margin: "2px 0 0" }}>
+                Create account
               </p>
             </td>
             <td style={{ padding: "0 6px", verticalAlign: "top", width: "33.333%" }}>
@@ -124,10 +124,9 @@ export default function WelcomeEmail({
     >
       <FlaimText>Hi {firstName},</FlaimText>
       <FlaimText>
-        Flaim lets you ask fantasy questions using your real league data,
-        including your roster, standings, matchups, and transactions. Once
-        connected, you can ask about waiver adds, trade ideas, roster decisions,
-        and league trends.
+        Flaim lets you ask fantasy questions using your actual, real league
+        data. Once connected, you can ask about waiver adds, trade grades,
+        roster decisions, and so much more.
       </FlaimText>
       <WelcomeSetupPath chatGptAppUrl={chatGptAppUrl} leaguesUrl={leaguesUrl} />
       <p

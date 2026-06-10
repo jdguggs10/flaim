@@ -91,7 +91,7 @@ function buildWelcomeHtml() {
                 <p style="margin:0 0 10px 0;font-size:12px;line-height:18px;font-weight:700;color:#6b7280;">WELCOME</p>
                 <h1 style="margin:0 0 18px 0;font-size:24px;line-height:32px;font-weight:700;color:#030712;">Connect your first league</h1>
                 <p style="margin:0 0 16px 0;font-size:15px;line-height:24px;color:#030712;">Hi {{{GIVEN_NAME}}},</p>
-                <p style="margin:0 0 16px 0;font-size:15px;line-height:24px;color:#030712;">Flaim lets you ask fantasy questions using your real league data, including your roster, standings, matchups, and transactions. Once connected, you can ask about waiver adds, trade ideas, roster decisions, and league trends.</p>
+                <p style="margin:0 0 16px 0;font-size:15px;line-height:24px;color:#030712;">Flaim lets you ask fantasy questions using your actual, real league data. Once connected, you can ask about waiver adds, trade grades, roster decisions, and so much more.</p>
                 <div style="margin:8px 0 20px;padding:16px;border-radius:8px;border:1px solid #e5e7eb;background:#f9fafb;">
                   <p style="margin:0 0 12px 0;font-size:14px;line-height:22px;font-weight:700;color:#030712;">Finish your setup</p>
                   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:10px;width:100%;">
@@ -105,7 +105,7 @@ function buildWelcomeHtml() {
                     <tr>
                       <td style="padding:0 6px 0 0;vertical-align:top;width:33.333%;">
                         <p style="margin:0;color:#166534;font-size:11px;font-weight:700;line-height:16px;text-transform:uppercase;">Done</p>
-                        <p style="margin:2px 0 0;color:#030712;font-size:12px;line-height:17px;">Account</p>
+                        <p style="margin:2px 0 0;color:#166534;font-size:12px;font-weight:700;line-height:17px;">Create account</p>
                       </td>
                       <td style="padding:0 6px;vertical-align:top;width:33.333%;">
                         <p style="margin:0;color:#030712;font-size:11px;font-weight:700;line-height:16px;text-transform:uppercase;">Next</p>
@@ -141,11 +141,11 @@ function buildWelcomeText() {
 
 Hi {{{GIVEN_NAME}}},
 
-Flaim lets you ask fantasy questions using your real league data, including your roster, standings, matchups, and transactions. Once connected, you can ask about waiver adds, trade ideas, roster decisions, and league trends.
+Flaim lets you ask fantasy questions using your actual, real league data. Once connected, you can ask about waiver adds, trade grades, roster decisions, and so much more.
 
 Finish your setup:
 
-DONE: Account
+DONE: Create account
 NEXT: Connect a league: ${LEAGUES_URL}
 THEN: Open in ChatGPT: ${CHATGPT_APP_URL}
 
