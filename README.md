@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![MCP Tools](https://img.shields.io/badge/MCP_Tools-9-green.svg)](https://api.flaim.app/mcp)
-[![Chrome Web Store](https://img.shields.io/badge/Chrome_Extension-v1.5.1-yellow.svg)](https://chromewebstore.google.com/detail/flaim-espn-fantasy-connec/mbnokejgglkfgkeeenolgdpcnfakpbkn)
+[![Chrome Web Store](https://img.shields.io/badge/Chrome_Extension-v1.5.2-yellow.svg)](https://chromewebstore.google.com/detail/flaim-espn-fantasy-connec/mbnokejgglkfgkeeenolgdpcnfakpbkn)
 
 Connect your ESPN, Yahoo, and Sleeper leagues, then use Flaim Fantasy in ChatGPT for read-only analysis grounded in your real league. The same MCP service also supports optional manual MCP clients like Claude, Perplexity, and Gemini CLI where their MCP capabilities allow.
 

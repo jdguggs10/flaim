@@ -4,6 +4,13 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+## [8.1.0] - 2026-06-10
+
+### Chrome Extension v1.5.2
+- **Fixed**: Non-JSON error responses no longer crash the extension API client; fetch timeouts added (15s default, 60s for discovery) so failures surface instead of spinning indefinitely; discover step re-fetches the Clerk JWT to avoid stale-token failures.
+- **Added**: Sender-origin validation in the background service worker with strict origin matching (no subdomain bypass); allowed origins derived from `VITE_SITE_BASE` so preview builds work automatically.
+- **Changed**: Popup error messages sanitized and length-capped; support-copy payload minimizes PII.
+
 ### MCP OAuth
 - **Changed**: MCP OAuth refresh-token inactivity window is now 1 year by default (`OAUTH_REFRESH_TOKEN_TTL_SECONDS`, default `31536000`, clamped to 1 hour minimum and 1 year maximum) while access tokens remain 1 hour and refresh tokens continue rotating on successful refresh.
 - **Fixed**: `/oauth/status` now reports an active AI connector when a non-revoked refresh token is still valid, even after the current 1-hour access token expires.
