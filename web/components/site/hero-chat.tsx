@@ -14,14 +14,14 @@ const ROTATING_WORDS = [
 ];
 
 const COLOR_CYCLE = [
-  "text-blue-500 dark:text-blue-400",
-  "text-emerald-500 dark:text-emerald-400",
-  "text-orange-500 dark:text-orange-400",
-  "text-violet-500 dark:text-violet-400",
-  "text-rose-500 dark:text-rose-400",
-  "text-cyan-500 dark:text-cyan-400",
-  "text-amber-500 dark:text-amber-400",
-  "text-fuchsia-500 dark:text-fuchsia-400",
+  "text-chart-1",
+  "text-chart-2",
+  "text-chart-3",
+  "text-chart-4",
+  "text-chart-5",
+  "text-success",
+  "text-warning",
+  "text-info",
 ];
 
 function usePrefersReducedMotion() {

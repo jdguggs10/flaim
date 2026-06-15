@@ -63,6 +63,9 @@ const guideLinks = [
   },
 ] as const;
 
+const stepButtonClass =
+  "h-auto min-h-10 w-full whitespace-normal px-3 py-2 text-center leading-snug";
+
 export default function GuidePage() {
   return (
     <div className="min-h-screen bg-background">
@@ -126,14 +129,13 @@ export default function GuidePage() {
                     </p>
                   </div>
                 </div>
-                <div className="flex shrink-0 flex-col gap-2 sm:w-44">
-                  <Button asChild className="w-full">
+                <div className="flex shrink-0 flex-col gap-2 sm:w-56">
+                  <Button asChild className={stepButtonClass}>
                     <Link href={step.primaryHref}>
                       {step.primaryLabel}
-                      <ArrowRight className="ml-2 h-4 w-4" />
                     </Link>
                   </Button>
-                  <Button asChild variant="outline" className="w-full">
+                  <Button asChild variant="outline" className={stepButtonClass}>
                     <Link href={step.secondaryHref}>{step.secondaryLabel}</Link>
                   </Button>
                 </div>
