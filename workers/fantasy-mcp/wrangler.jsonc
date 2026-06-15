@@ -31,6 +31,10 @@
           "zone_name": "flaim.app"
         },
         {
+          "pattern": "api.flaim.app/robots.txt",
+          "zone_name": "flaim.app"
+        },
+        {
           "pattern": "api.flaim.app/favicon.ico",
           "zone_name": "flaim.app"
         },
