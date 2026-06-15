@@ -504,10 +504,20 @@ app.get('/fantasy/widgets/user-session', (c) => {
   return c.html(USER_SESSION_WIDGET_HTML);
 });
 
-// Favicon — redirect to canonical icon so crawlers/clients pick up the current asset
-app.get('/favicon.ico', (c) => c.redirect('https://flaim.app/favicon.ico', 302));
-app.get('/fantasy/favicon.ico', (c) => c.redirect('https://flaim.app/favicon.ico', 302));
-app.get('/apple-icon.png', (c) => c.redirect('https://flaim.app/apple-icon.png', 302));
+// Favicon — proxy the canonical icon so crawlers (e.g. Google favicon service) receive
+// the actual image bytes rather than following a redirect.
+async function proxyFaviconResponse(upstreamUrl: string): Promise<Response> {
+  const upstream = await fetch(upstreamUrl);
+  const headers = new Headers();
+  const contentType = upstream.headers.get('Content-Type');
+  if (contentType) headers.set('Content-Type', contentType);
+  headers.set('Cache-Control', 'public, max-age=86400');
+  return new Response(upstream.body, { status: upstream.status, headers });
+}
+
+app.get('/favicon.ico', () => proxyFaviconResponse('https://flaim.app/favicon.ico'));
+app.get('/fantasy/favicon.ico', () => proxyFaviconResponse('https://flaim.app/favicon.ico'));
+app.get('/apple-icon.png', () => proxyFaviconResponse('https://flaim.app/apple-icon.png'));
 
 // 404 handler
 app.notFound((c) => {
