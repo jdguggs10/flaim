@@ -46,6 +46,7 @@ export function GET() {
   const body = [
     formatRule('*'),
     ...DISCOVERY_USER_AGENTS.map(formatRule),
+    `Host: ${baseUrl}`,
     `Sitemap: ${baseUrl}/sitemap.xml`,
     '',
   ].join('\n\n');
