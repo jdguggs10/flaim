@@ -22,6 +22,29 @@ import { USER_SESSION_WIDGET_HTML } from './widgets/user-session-widget';
 
 const app = new Hono<{ Bindings: Env }>();
 
+const API_ROBOTS_TXT = [
+  'User-agent: *',
+  'Allow: /.well-known/',
+  'Allow: /mcp',
+  'Allow: /mcp/',
+  'Allow: /fantasy/mcp',
+  'Allow: /fantasy/mcp/',
+  'Allow: /favicon.ico',
+  'Allow: /apple-icon.png',
+  'Disallow: /',
+  '',
+].join('\n');
+
+function robotsResponse(): Response {
+  return new Response(API_ROBOTS_TXT, {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/plain; charset=utf-8',
+      'Cache-Control': 'public, max-age=3600',
+    },
+  });
+}
+
 function logFantasySetupFailure(
   c: Context<{ Bindings: Env }>,
   event: string,
@@ -112,6 +135,9 @@ app.get('/health', async (c) => {
   const statusCode = healthData.status === 'healthy' ? 200 : 503;
   return c.json(healthData, statusCode);
 });
+
+app.get('/robots.txt', () => robotsResponse());
+app.get('/fantasy/robots.txt', () => robotsResponse());
 
 // OAuth Protected Resource Metadata (RFC 9728)
 // Path-sensitive: /mcp is canonical, /fantasy/mcp is legacy alias
