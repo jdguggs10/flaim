@@ -1863,7 +1863,9 @@ export async function handleYahooStatus(
     // Public status exposes only coarse, non-secret health for the web UI.
     const [credentials, leagues] = await Promise.all([
       storage.getYahooCredentialHealth(userId),
-      storage.getYahooLeagues(userId),
+      // Exclude archived to match §9 count semantics (inert in 1a, correct once
+      // Yahoo archive ships in 1b).
+      storage.getYahooLeagues(userId, false),
     ]);
     const checkedAtNowMs = Date.now();
 

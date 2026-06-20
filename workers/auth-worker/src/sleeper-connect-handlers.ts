@@ -1,5 +1,5 @@
 import { SleeperStorage, type SleeperLeague } from './sleeper-storage';
-import { ArchiveStorage } from './archive-storage';
+import { ArchiveStorage, archivedKey } from './archive-storage';
 import { getDefaultSeasonYear } from './season-utils';
 
 const SLEEPER_API = 'https://api.sleeper.app/v1';
@@ -209,7 +209,7 @@ async function buildSleeperLeagueResponse(
       recurringLeagueId,
       // Public (UI) responses annotate the archive state so the UI can bucket
       // archived leagues; internal responses omit the flag and exclude the rows.
-      ...(archivedSet ? { archived: archivedSet.has(recurringLeagueId) } : {}),
+      ...(archivedSet ? { archived: archivedSet.has(archivedKey(league.sport, recurringLeagueId)) } : {}),
     };
   }));
 }

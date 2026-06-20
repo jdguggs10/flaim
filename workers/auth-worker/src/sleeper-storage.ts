@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { clearDefaultsForLeague as _clearDefaultsForLeague, clearDefaultsForPlatform as _clearDefaultsForPlatform } from './preference-defaults';
-import { ArchiveStorage } from './archive-storage';
+import { ArchiveStorage, archivedKey } from './archive-storage';
 
 function maskUserId(userId: string): string {
   if (!userId || userId.length <= 8) return '***';
@@ -134,7 +134,7 @@ export class SleeperStorage {
     const rows = (data as SleeperLeagueRow[]).filter((row) => {
       if (!archivedSet) return true;
       const recurringId = row.recurring_league_id ?? row.league_id;
-      return !archivedSet.has(recurringId);
+      return !archivedSet.has(archivedKey(row.sport, recurringId));
     });
 
     return rows.map((row) => ({

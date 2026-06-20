@@ -43,6 +43,16 @@ function maskUserId(userId: string): string {
   return `${userId.substring(0, 8)}...`;
 }
 
+/**
+ * Composite key for the archived set: `sport:recurringId`. The archive table key
+ * includes sport, and recurring-league ids are only unique within a sport (the id
+ * space is shared across sports), so membership checks must scope by sport too.
+ * Centralized here so the read-path and write-path key format can't drift.
+ */
+export function archivedKey(sport: string, recurringLeagueId: string): string {
+  return `${sport}:${recurringLeagueId}`;
+}
+
 export interface ArchiveStorageEnv {
   SUPABASE_URL: string;
   SUPABASE_SERVICE_KEY: string;
@@ -168,8 +178,10 @@ export class ArchiveStorage {
   }
 
   /**
-   * Return the set of archived `recurring_league_id`s for a user + platform.
-   * Used by the read-path filter as a plain column comparison (D2).
+   * Return the set of archived leagues for a user + platform, keyed by
+   * `sport:recurringId` (see `archivedKey`). Used by the read-path filter as a
+   * plain composite-key comparison (D2). The sport is part of the key because
+   * recurring ids are only unique within a sport.
    *
    * THROWS on a DB error (fail-closed). Exclude-path callers (internal
    * `includeArchived:false`) let it propagate so a transient error fails the
@@ -183,7 +195,7 @@ export class ArchiveStorage {
 
     const { data, error } = await this.supabase
       .from('archived_leagues')
-      .select('recurring_league_id')
+      .select('sport, recurring_league_id')
       .eq('clerk_user_id', clerkUserId)
       .eq('platform', platform);
 
@@ -192,6 +204,10 @@ export class ArchiveStorage {
       throw new Error(`Failed to get archived set: ${error?.message ?? 'no data returned'}`);
     }
 
-    return new Set((data as { recurring_league_id: string }[]).map((row) => row.recurring_league_id));
+    return new Set(
+      (data as { sport: string; recurring_league_id: string }[]).map((row) =>
+        archivedKey(row.sport, row.recurring_league_id)
+      )
+    );
   }
 }

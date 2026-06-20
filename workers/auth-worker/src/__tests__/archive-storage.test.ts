@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ArchiveStorage } from '../archive-storage';
+import { ArchiveStorage, archivedKey } from '../archive-storage';
 
 const mockFrom = vi.fn();
 
@@ -84,9 +84,12 @@ describe('ArchiveStorage', () => {
   });
 
   describe('getArchivedSet', () => {
-    it('returns the set of recurring ids for a platform', async () => {
+    it('returns the set keyed by sport:recurringId for a platform', async () => {
       const eqPlatform = vi.fn().mockResolvedValue({
-        data: [{ recurring_league_id: 'a' }, { recurring_league_id: 'b' }],
+        data: [
+          { sport: 'football', recurring_league_id: 'a' },
+          { sport: 'basketball', recurring_league_id: 'b' },
+        ],
         error: null,
       });
       const eqUser = vi.fn().mockReturnValue({ eq: eqPlatform });
@@ -95,9 +98,27 @@ describe('ArchiveStorage', () => {
 
       const set = await storage.getArchivedSet('user_123', 'espn');
 
-      expect(set.has('a')).toBe(true);
-      expect(set.has('b')).toBe(true);
+      expect(select).toHaveBeenCalledWith('sport, recurring_league_id');
+      expect(set.has(archivedKey('football', 'a'))).toBe(true);
+      expect(set.has(archivedKey('basketball', 'b'))).toBe(true);
       expect(set.size).toBe(2);
+    });
+
+    it('keys are sport-scoped so a shared recurring id across sports does not collide', async () => {
+      // ESPN football `123` and ESPN basketball `123` are distinct leagues that
+      // share an id space; archiving one must not over-hide the other.
+      const eqPlatform = vi.fn().mockResolvedValue({
+        data: [{ sport: 'football', recurring_league_id: '123' }],
+        error: null,
+      });
+      const eqUser = vi.fn().mockReturnValue({ eq: eqPlatform });
+      const select = vi.fn().mockReturnValue({ eq: eqUser });
+      mockFrom.mockReturnValue({ select });
+
+      const set = await storage.getArchivedSet('user_123', 'espn');
+
+      expect(set.has(archivedKey('football', '123'))).toBe(true);
+      expect(set.has(archivedKey('basketball', '123'))).toBe(false);
     });
 
     it('throws (fail-closed) on a database error', async () => {

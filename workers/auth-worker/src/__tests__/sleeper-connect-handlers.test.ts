@@ -21,10 +21,14 @@ vi.mock('../sleeper-storage', () => ({
 // (annotate / exclude). Mock it so no real Supabase client is created and the
 // archived set is controllable per test (defaults to empty).
 const mockGetArchivedSet = vi.fn(async () => new Set<string>());
+// Keep the real archivedKey so the handler's composite-key membership check
+// (sport:recurringId) uses the production key format.
+const archivedKey = (sport: string, recurringLeagueId: string) => `${sport}:${recurringLeagueId}`;
 vi.mock('../archive-storage', () => ({
   ArchiveStorage: {
     fromEnvironment: vi.fn(() => ({ getArchivedSet: mockGetArchivedSet })),
   },
+  archivedKey: (sport: string, recurringLeagueId: string) => `${sport}:${recurringLeagueId}`,
 }));
 
 vi.mock('../season-utils', () => ({
@@ -796,13 +800,25 @@ describe('sleeper-connect-handlers', () => {
 
     it('public path annotates archived=true when the recurring id is archived', async () => {
       mockStorage.getSleeperLeagues.mockResolvedValue(stored);
-      mockGetArchivedSet.mockResolvedValue(new Set(['sleeper-root']));
+      // Composite key: the archived set is keyed by sport:recurringId.
+      mockGetArchivedSet.mockResolvedValue(new Set([archivedKey('football', 'sleeper-root')]));
 
       const response = await handleSleeperLeagues(env, 'user_1', corsHeaders);
       const body = (await response.json()) as { leagues: Array<{ archived?: boolean }> };
 
       expect(mockStorage.getSleeperLeagues).toHaveBeenCalledWith('user_1', true);
       expect(body.leagues[0].archived).toBe(true);
+    });
+
+    it('public path does NOT annotate archived for a same recurring id in a different sport', async () => {
+      // Stored league is football; archiving basketball:sleeper-root must not flag it.
+      mockStorage.getSleeperLeagues.mockResolvedValue(stored);
+      mockGetArchivedSet.mockResolvedValue(new Set([archivedKey('basketball', 'sleeper-root')]));
+
+      const response = await handleSleeperLeagues(env, 'user_1', corsHeaders);
+      const body = (await response.json()) as { leagues: Array<{ archived?: boolean }> };
+
+      expect(body.leagues[0].archived).toBe(false);
     });
 
     it('internal path excludes archived rows and omits the flag', async () => {

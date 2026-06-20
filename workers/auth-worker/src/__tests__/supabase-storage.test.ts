@@ -149,8 +149,8 @@ describe('EspnSupabaseStorage', () => {
         return { select: vi.fn().mockReturnValue({ eq }) };
       }
       if (table === 'archived_leagues') {
-        // .select('recurring_league_id').eq(user).eq(platform) resolves with archived ids
-        const eqPlatform = vi.fn().mockResolvedValue({ data: [{ recurring_league_id: '222' }], error: null });
+        // .select('sport, recurring_league_id').eq(user).eq(platform) resolves with archived rows
+        const eqPlatform = vi.fn().mockResolvedValue({ data: [{ sport: 'football', recurring_league_id: '222' }], error: null });
         const eqUser = vi.fn().mockReturnValue({ eq: eqPlatform });
         return { select: vi.fn().mockReturnValue({ eq: eqUser }) };
       }
@@ -159,6 +159,35 @@ describe('EspnSupabaseStorage', () => {
 
     const filtered = await storage.getLeagues('user_123', false);
     expect(filtered.map(l => l.leagueId)).toEqual(['111']);
+  });
+
+  it('getLeagues does NOT over-hide a same-id league in a different sport (cross-sport no-collision)', async () => {
+    // Archive ESPN football `123`; ESPN basketball `123` is a distinct league that
+    // shares the id space and must remain visible.
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'espn_leagues') {
+        const eq = vi.fn().mockResolvedValue({
+          data: [
+            { league_id: '123', sport: 'football', team_id: 't1', team_name: 'A', league_name: 'FB Zombie', season_year: 2025 },
+            { league_id: '123', sport: 'basketball', team_id: 't2', team_name: 'B', league_name: 'BB Keep', season_year: 2025 },
+          ],
+          error: null,
+        });
+        return { select: vi.fn().mockReturnValue({ eq }) };
+      }
+      if (table === 'archived_leagues') {
+        const eqPlatform = vi.fn().mockResolvedValue({ data: [{ sport: 'football', recurring_league_id: '123' }], error: null });
+        const eqUser = vi.fn().mockReturnValue({ eq: eqPlatform });
+        return { select: vi.fn().mockReturnValue({ eq: eqUser }) };
+      }
+      return {};
+    });
+
+    const filtered = await storage.getLeagues('user_123', false);
+    // Only the football `123` is hidden; the basketball `123` survives.
+    expect(filtered.map(l => ({ leagueId: l.leagueId, sport: l.sport }))).toEqual([
+      { leagueId: '123', sport: 'basketball' },
+    ]);
   });
 
   it('getLeagues fails CLOSED: propagates a thrown archive-set error on the exclude path (audit #10)', async () => {
@@ -250,7 +279,7 @@ describe('EspnSupabaseStorage', () => {
         return { select: vi.fn().mockReturnValue({ eq }) };
       }
       if (table === 'archived_leagues') {
-        const eqPlatform = vi.fn().mockResolvedValue({ data: [{ recurring_league_id: '222' }], error: null });
+        const eqPlatform = vi.fn().mockResolvedValue({ data: [{ sport: 'football', recurring_league_id: '222' }], error: null });
         const eqUser = vi.fn().mockReturnValue({ eq: eqPlatform });
         return { select: vi.fn().mockReturnValue({ eq: eqUser }) };
       }
@@ -292,7 +321,8 @@ describe('EspnSupabaseStorage', () => {
         return { select: vi.fn().mockReturnValue({ eq: prefEq }), upsert: vi.fn() };
       }
       if (table === 'archived_leagues') {
-        // delete().eq(user).eq(platform).eq(sport).eq(recurring) — final eq resolves
+        // delete().eq(user).eq(platform).eq(sport).eq(recurring) — final eq resolves.
+        // Record every (column, value) so we can assert the actual archive key.
         let calls = 0;
         const eq = vi.fn();
         eq.mockImplementation(() => {
@@ -309,5 +339,13 @@ describe('EspnSupabaseStorage', () => {
 
     expect(result).toBe(true);
     expect(mockArchiveDelete).toHaveBeenCalled();
+    // Assert the archive delete was keyed on the correct (platform, sport, leagueId),
+    // not just that it ran — a wrong sport/id would otherwise pass.
+    const eqMock = mockArchiveDelete.mock.results[0].value.eq;
+    const eqArgs = eqMock.mock.calls.map((c: unknown[]) => c as [string, string]);
+    expect(eqArgs).toContainEqual(['clerk_user_id', 'user_123']);
+    expect(eqArgs).toContainEqual(['platform', 'espn']);
+    expect(eqArgs).toContainEqual(['sport', 'football']);
+    expect(eqArgs).toContainEqual(['recurring_league_id', '222']);
   });
 });

@@ -59,7 +59,7 @@ import {
   YahooConnectEnv,
 } from './yahoo-connect-handlers';
 import { YahooStorage } from './yahoo-storage';
-import { ArchiveStorage, type ArchivePlatform, type ArchiveSport } from './archive-storage';
+import { ArchiveStorage, archivedKey, type ArchivePlatform, type ArchiveSport } from './archive-storage';
 import { logSetupSignal, type SetupSignalEvent } from '@flaim/worker-shared';
 import {
   handleSleeperDiscover,
@@ -1761,7 +1761,7 @@ async function handleLeagues(c: Context<{ Bindings: Env }>, method: string): Pro
     const leaguesWithPlatform = leagues.map(league => ({
       ...league,
       platform: 'espn' as const,
-      archived: archivedSet.has(league.leagueId),
+      archived: archivedSet.has(archivedKey(league.sport, league.leagueId)),
     }));
 
     return c.json({

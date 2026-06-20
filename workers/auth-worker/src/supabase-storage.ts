@@ -16,7 +16,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { EspnCredentials, EspnCredentialsWithMetadata, EspnLeague, EspnUserData } from './espn-types';
 import { isCurrentSeason, type SeasonSport } from './season-utils';
 import { clearDefaultsForLeague as _clearDefaultsForLeague, clearDefaultsForPlatform as _clearDefaultsForPlatform } from './preference-defaults';
-import { ArchiveStorage } from './archive-storage';
+import { ArchiveStorage, archivedKey } from './archive-storage';
 
 /**
  * Mask user ID for logging to avoid PII exposure
@@ -359,7 +359,7 @@ export class EspnSupabaseStorage {
       : await this.archive.getArchivedSet(clerkUserId, 'espn');
 
     const rows = archivedSet
-      ? rawRows.filter(row => !archivedSet.has(row.league_id))
+      ? rawRows.filter(row => !archivedSet.has(archivedKey(row.sport, row.league_id)))
       : rawRows;
 
     return rows.map(row => ({
@@ -611,7 +611,7 @@ export class EspnSupabaseStorage {
         // Reject an archived league as a new default (§9). ESPN recurring id is league_id.
         // Fail-open on a transient archive-set error: don't block setting a default.
         const archivedSet = await this.getArchivedSetFailOpen(clerkUserId, 'espn');
-        if (archivedSet.has(leagueId)) {
+        if (archivedSet.has(archivedKey(sport, leagueId))) {
           return { success: false, error: 'Cannot set default: league is archived' };
         }
       } else if (platform === 'yahoo') {
@@ -647,7 +647,7 @@ export class EspnSupabaseStorage {
         // fails open rather than breaking default validation.
         const recurringId = await this.resolveSleeperRecurringId(clerkUserId, leagueId, seasonYear);
         const archivedSet = await this.getArchivedSetFailOpen(clerkUserId, 'sleeper');
-        if (archivedSet.has(recurringId)) {
+        if (archivedSet.has(archivedKey(sport, recurringId))) {
           return { success: false, error: 'Cannot set default: league is archived' };
         }
       }

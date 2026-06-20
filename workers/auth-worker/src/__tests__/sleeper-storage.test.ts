@@ -328,6 +328,64 @@ describe('SleeperStorage', () => {
       // upsert should NOT be called — 2025 row deleted but 2024 default is untouched
       expect(mockPrefsUpsert).not.toHaveBeenCalled();
     });
+
+    // archive cleanup: a true delete unarchives the matching (platform, sport, recurringId).
+    it('removes the matching archive row keyed on (sleeper, sport, recurringId)', async () => {
+      const mockArchiveDelete = vi.fn();
+      // Two sequential sleeper_leagues selects: (1) {league_id, season_year},
+      // (2) {recurring_league_id, sport}. Drive maybeSingle by call order.
+      let sleeperSelectCall = 0;
+
+      mockFrom.mockImplementation((table: string) => {
+        if (table === 'sleeper_leagues') {
+          const maybeSingle = vi.fn().mockImplementation(async () => {
+            sleeperSelectCall += 1;
+            return sleeperSelectCall === 1
+              ? { data: { league_id: 'L2025', season_year: 2025 }, error: null }
+              : { data: { recurring_league_id: 'ROOT', sport: 'basketball' }, error: null };
+          });
+          const eqFn = vi.fn();
+          eqFn.mockReturnValue({ eq: eqFn, maybeSingle, error: null });
+          return {
+            select: vi.fn().mockReturnValue({ eq: eqFn }),
+            delete: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ error: null }) }) }),
+          };
+        }
+        if (table === 'user_preferences') {
+          const prefEq = vi.fn().mockReturnValue({
+            maybeSingle: vi.fn().mockResolvedValue({
+              data: { default_football: null, default_baseball: null, default_basketball: null, default_hockey: null },
+              error: null,
+            }),
+          });
+          return { select: vi.fn().mockReturnValue({ eq: prefEq }), upsert: vi.fn() };
+        }
+        if (table === 'archived_leagues') {
+          // delete().eq(user).eq(platform).eq(sport).eq(recurring) — final eq resolves
+          let calls = 0;
+          const eq = vi.fn();
+          eq.mockImplementation(() => {
+            calls += 1;
+            if (calls >= 4) return Promise.resolve({ error: null });
+            return { eq };
+          });
+          return { delete: mockArchiveDelete.mockReturnValue({ eq }) };
+        }
+        return {};
+      });
+
+      await storage.deleteSleeperLeague('user_123', 'league-uuid');
+
+      expect(mockArchiveDelete).toHaveBeenCalled();
+      // Assert the archive delete was keyed on the actual (platform, sport, recurringId),
+      // not just that it ran — a wrong sport/id would otherwise pass.
+      const eqMock = mockArchiveDelete.mock.results[0].value.eq;
+      const eqArgs = eqMock.mock.calls.map((c: unknown[]) => c as [string, string]);
+      expect(eqArgs).toContainEqual(['clerk_user_id', 'user_123']);
+      expect(eqArgs).toContainEqual(['platform', 'sleeper']);
+      expect(eqArgs).toContainEqual(['sport', 'basketball']);
+      expect(eqArgs).toContainEqual(['recurring_league_id', 'ROOT']);
+    });
   });
 
   // ===========================================================================
@@ -411,10 +469,16 @@ describe('SleeperStorage', () => {
       const eq = vi.fn().mockReturnValue({ order });
       return { select: vi.fn().mockReturnValue({ eq }) };
     }
-    // archived_leagues read: .select('recurring_league_id').eq(user).eq(platform)
-    function mockArchiveRead(ids: string[]) {
+    // archived_leagues read: .select('sport, recurring_league_id').eq(user).eq(platform).
+    // Rows default to football (matching the league fixtures); pass [sport, id] tuples
+    // to archive a specific sport.
+    function mockArchiveRead(ids: (string | [string, string])[]) {
       const eqPlatform = vi.fn().mockResolvedValue({
-        data: ids.map((recurring_league_id) => ({ recurring_league_id })),
+        data: ids.map((entry) =>
+          Array.isArray(entry)
+            ? { sport: entry[0], recurring_league_id: entry[1] }
+            : { sport: 'football', recurring_league_id: entry }
+        ),
         error: null,
       });
       const eqUser = vi.fn().mockReturnValue({ eq: eqPlatform });
@@ -435,6 +499,27 @@ describe('SleeperStorage', () => {
 
       const result = await storage.getSleeperLeagues('u', false);
       expect(result.map((l) => l.leagueId)).toEqual(['K2025']);
+    });
+
+    it('does NOT over-hide a same recurring id in a different sport (cross-sport no-collision)', async () => {
+      // Archive football ROOT; a basketball league that shares the recurring id ROOT
+      // is a distinct league and must remain visible.
+      mockFrom.mockImplementation((table: string) => {
+        if (table === 'sleeper_leagues') {
+          return mockLeaguesRead([
+            { id: 'a', clerk_user_id: 'u', league_id: 'L2025', sport: 'football', season_year: 2025, league_name: 'FB Zombie', roster_id: 1, recurring_league_id: 'ROOT', sleeper_user_id: 's' },
+            { id: 'b', clerk_user_id: 'u', league_id: 'B2025', sport: 'basketball', season_year: 2025, league_name: 'BB Keep', roster_id: 2, recurring_league_id: 'ROOT', sleeper_user_id: 's' },
+          ]);
+        }
+        if (table === 'archived_leagues') return mockArchiveRead([['football', 'ROOT']]);
+        return {};
+      });
+
+      const result = await storage.getSleeperLeagues('u', false);
+      // Only the football ROOT is hidden; the basketball ROOT survives.
+      expect(result.map((l) => ({ leagueId: l.leagueId, sport: l.sport }))).toEqual([
+        { leagueId: 'B2025', sport: 'basketball' },
+      ]);
     });
 
     it('falls back to league_id when recurring_league_id is null (null-recurring fallback)', async () => {
@@ -521,7 +606,7 @@ describe('SleeperStorage', () => {
       // archived_leagues read: archive key is the resolved root ROOT2024.
       function mockArchiveRead() {
         const eqPlatform = vi.fn().mockResolvedValue({
-          data: [{ recurring_league_id: 'ROOT2024' }],
+          data: [{ sport: 'football', recurring_league_id: 'ROOT2024' }],
           error: null,
         });
         const eqUser = vi.fn().mockReturnValue({ eq: eqPlatform });
