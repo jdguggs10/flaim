@@ -332,17 +332,13 @@ describe('SleeperStorage', () => {
     // archive cleanup: a true delete unarchives the matching (platform, sport, recurringId).
     it('removes the matching archive row keyed on (sleeper, sport, recurringId)', async () => {
       const mockArchiveDelete = vi.fn();
-      // Two sequential sleeper_leagues selects: (1) {league_id, season_year},
-      // (2) {recurring_league_id, sport}. Drive maybeSingle by call order.
-      let sleeperSelectCall = 0;
-
+      // Single sleeper_leagues select returns all four columns
+      // {league_id, season_year, recurring_league_id, sport}.
       mockFrom.mockImplementation((table: string) => {
         if (table === 'sleeper_leagues') {
-          const maybeSingle = vi.fn().mockImplementation(async () => {
-            sleeperSelectCall += 1;
-            return sleeperSelectCall === 1
-              ? { data: { league_id: 'L2025', season_year: 2025 }, error: null }
-              : { data: { recurring_league_id: 'ROOT', sport: 'basketball' }, error: null };
+          const maybeSingle = vi.fn().mockResolvedValue({
+            data: { league_id: 'L2025', season_year: 2025, recurring_league_id: 'ROOT', sport: 'basketball' },
+            error: null,
           });
           const eqFn = vi.fn();
           eqFn.mockReturnValue({ eq: eqFn, maybeSingle, error: null });
@@ -659,14 +655,11 @@ describe('SleeperStorage', () => {
     it('unarchives the matching recurring id on a true delete', async () => {
       const mockArchiveDelete = vi.fn();
 
-      // First lookup: .select('league_id, season_year').eq(user).eq(id).maybeSingle()
-      // Recurring lookup: .select('recurring_league_id, sport').eq(user).eq(id).maybeSingle()
-      // maybeSingle is hoisted OUT of the factory so its Once queue advances across
-      // both lookups — re-creating it per from() call would reset the queue and feed
-      // the recurring lookup the first (sport-less) row, skipping unarchive.
+      // Single lookup: .select('league_id, season_year, recurring_league_id, sport')
+      // .eq(user).eq(id).maybeSingle() returns all four columns for both the
+      // default-clear and the archive cleanup.
       const sleeperMaybeSingle = vi.fn()
-        .mockResolvedValueOnce({ data: { league_id: 'L2025', season_year: 2025 }, error: null })
-        .mockResolvedValueOnce({ data: { recurring_league_id: 'ROOT', sport: 'football' }, error: null });
+        .mockResolvedValue({ data: { league_id: 'L2025', season_year: 2025, recurring_league_id: 'ROOT', sport: 'football' }, error: null });
       const sleeperEq = vi.fn();
       sleeperEq.mockReturnValue({ eq: sleeperEq, maybeSingle: sleeperMaybeSingle, error: null });
 

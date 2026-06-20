@@ -234,10 +234,12 @@ export class SleeperStorage {
   }
 
   async deleteSleeperLeague(clerkUserId: string, leagueId: string): Promise<void> {
-    // Resolve platform identifiers before deleting (route arg is DB row UUID)
+    // Resolve platform identifiers before deleting (route arg is DB row UUID).
+    // Single read serves both the default-clear (league_id + season_year) and the
+    // archive cleanup (sport + recurring archive key).
     const { data: row, error: lookupError } = await this.supabase
       .from('sleeper_leagues')
-      .select('league_id, season_year')
+      .select('league_id, season_year, recurring_league_id, sport')
       .eq('clerk_user_id', clerkUserId)
       .eq('id', leagueId)
       .maybeSingle();
@@ -250,15 +252,9 @@ export class SleeperStorage {
     // missing recurring_league_id column (pre-migration) by falling back to league_id.
     let archiveRecurringId: { sport: string; recurringLeagueId: string } | null = null;
     if (row) {
-      const { data: recurringRow } = await this.supabase
-        .from('sleeper_leagues')
-        .select('recurring_league_id, sport')
-        .eq('clerk_user_id', clerkUserId)
-        .eq('id', leagueId)
-        .maybeSingle();
       const recurringId =
-        (recurringRow as { recurring_league_id?: string | null } | null)?.recurring_league_id ?? row.league_id;
-      const sport = (recurringRow as { sport?: string } | null)?.sport;
+        (row as { recurring_league_id?: string | null }).recurring_league_id ?? row.league_id;
+      const sport = (row as { sport?: string }).sport;
       if (sport) {
         archiveRecurringId = { sport, recurringLeagueId: recurringId };
       }

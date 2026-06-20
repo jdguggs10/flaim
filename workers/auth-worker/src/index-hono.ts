@@ -1294,7 +1294,9 @@ api.post('/leagues/archive', async (c) => {
   const { platform, sport } = parsed;
 
   const archiveStorage = ArchiveStorage.fromEnvironment(c.env);
-  const espnStorage = EspnSupabaseStorage.fromEnvironment(c.env);
+  // clearStaleDefaultForLeague operates on user_preferences and is platform-agnostic,
+  // so a single storage instance handles the default-clear for every platform.
+  const sharedStorage = EspnSupabaseStorage.fromEnvironment(c.env);
 
   // Resolve the canonical recurring key + the per-season ids whose defaults to clear.
   let recurringLeagueId = parsed.recurringLeagueId;
@@ -1318,7 +1320,7 @@ api.post('/leagues/archive', async (c) => {
   // Auto-clear defaults on archive (D6). ESPN is a single call on the stable
   // league_id; Sleeper clears once per per-season id in the recurring group.
   for (const seasonLeagueId of seasonLeagueIds) {
-    await espnStorage.clearStaleDefaultForLeague(userId, platform, seasonLeagueId, undefined, sport);
+    await sharedStorage.clearStaleDefaultForLeague(userId, platform, seasonLeagueId, undefined, sport);
   }
 
   return c.json({ success: true, platform, sport, recurringLeagueId });

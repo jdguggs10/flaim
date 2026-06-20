@@ -20,6 +20,10 @@ interface ArchiveRequestBody {
   recurringLeagueId?: string;
 }
 
+// Intentional aggregate archived-leagues feed across all platforms. The leagues page
+// currently derives `archived` from the per-platform endpoints, so this is not on the
+// hot path — it's kept for future use (e.g. a dedicated archived-leagues view) and is
+// not dead code.
 export async function GET() {
   try {
     const { userId, getToken } = await auth();
