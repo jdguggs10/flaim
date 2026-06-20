@@ -399,4 +399,224 @@ describe('SleeperStorage', () => {
       expect(instance).toBeInstanceOf(SleeperStorage);
     });
   });
+
+  // ===========================================================================
+  // includeArchived filter (Sleeper) — D2, recurring_league_id ?? league_id
+  // ===========================================================================
+
+  describe('getSleeperLeagues includeArchived', () => {
+    // sleeper_leagues read: .select('*').eq('clerk_user_id', ...).order(...)
+    function mockLeaguesRead(rows: unknown[]) {
+      const order = vi.fn().mockResolvedValue({ data: rows, error: null });
+      const eq = vi.fn().mockReturnValue({ order });
+      return { select: vi.fn().mockReturnValue({ eq }) };
+    }
+    // archived_leagues read: .select('recurring_league_id').eq(user).eq(platform)
+    function mockArchiveRead(ids: string[]) {
+      const eqPlatform = vi.fn().mockResolvedValue({
+        data: ids.map((recurring_league_id) => ({ recurring_league_id })),
+        error: null,
+      });
+      const eqUser = vi.fn().mockReturnValue({ eq: eqPlatform });
+      return { select: vi.fn().mockReturnValue({ eq: eqUser }) };
+    }
+
+    it('excludes a row whose recurring_league_id is archived', async () => {
+      mockFrom.mockImplementation((table: string) => {
+        if (table === 'sleeper_leagues') {
+          return mockLeaguesRead([
+            { id: 'a', clerk_user_id: 'u', league_id: 'L2025', sport: 'football', season_year: 2025, league_name: 'Zombie', roster_id: 1, recurring_league_id: 'ROOT', sleeper_user_id: 's' },
+            { id: 'b', clerk_user_id: 'u', league_id: 'K2025', sport: 'football', season_year: 2025, league_name: 'Keep', roster_id: 2, recurring_league_id: 'KROOT', sleeper_user_id: 's' },
+          ]);
+        }
+        if (table === 'archived_leagues') return mockArchiveRead(['ROOT']);
+        return {};
+      });
+
+      const result = await storage.getSleeperLeagues('u', false);
+      expect(result.map((l) => l.leagueId)).toEqual(['K2025']);
+    });
+
+    it('falls back to league_id when recurring_league_id is null (null-recurring fallback)', async () => {
+      mockFrom.mockImplementation((table: string) => {
+        if (table === 'sleeper_leagues') {
+          return mockLeaguesRead([
+            { id: 'a', clerk_user_id: 'u', league_id: 'L2025', sport: 'football', season_year: 2025, league_name: 'Zombie', roster_id: 1, recurring_league_id: null, sleeper_user_id: 's' },
+            { id: 'b', clerk_user_id: 'u', league_id: 'K2025', sport: 'football', season_year: 2025, league_name: 'Keep', roster_id: 2, recurring_league_id: null, sleeper_user_id: 's' },
+          ]);
+        }
+        // Archived on the season-scoped fallback id L2025
+        if (table === 'archived_leagues') return mockArchiveRead(['L2025']);
+        return {};
+      });
+
+      const result = await storage.getSleeperLeagues('u', false);
+      expect(result.map((l) => l.leagueId)).toEqual(['K2025']);
+    });
+
+    it('fails CLOSED: propagates a thrown archive-set error on the exclude path (audit #10)', async () => {
+      // archived_leagues read errors → getArchivedSet throws → getSleeperLeagues
+      // (includeArchived:false) propagates rather than returning unfiltered rows.
+      function mockArchiveError() {
+        const eqPlatform = vi.fn().mockResolvedValue({ data: null, error: { message: 'boom' } });
+        const eqUser = vi.fn().mockReturnValue({ eq: eqPlatform });
+        return { select: vi.fn().mockReturnValue({ eq: eqUser }) };
+      }
+      mockFrom.mockImplementation((table: string) => {
+        if (table === 'sleeper_leagues') {
+          return mockLeaguesRead([
+            { id: 'a', clerk_user_id: 'u', league_id: 'L2025', sport: 'football', season_year: 2025, league_name: 'Zombie', roster_id: 1, recurring_league_id: 'ROOT', sleeper_user_id: 's' },
+          ]);
+        }
+        if (table === 'archived_leagues') return mockArchiveError();
+        return {};
+      });
+
+      await expect(storage.getSleeperLeagues('u', false)).rejects.toThrow('Failed to get archived set');
+    });
+
+    it('returns all rows and skips the archive read when includeArchived is true', async () => {
+      const archiveSelect = vi.fn();
+      mockFrom.mockImplementation((table: string) => {
+        if (table === 'sleeper_leagues') {
+          return mockLeaguesRead([
+            { id: 'a', clerk_user_id: 'u', league_id: 'L2025', sport: 'football', season_year: 2025, league_name: 'Zombie', roster_id: 1, recurring_league_id: 'ROOT', sleeper_user_id: 's' },
+          ]);
+        }
+        if (table === 'archived_leagues') return { select: archiveSelect };
+        return {};
+      });
+
+      const result = await storage.getSleeperLeagues('u');
+      expect(result.map((l) => l.leagueId)).toEqual(['L2025']);
+      expect(archiveSelect).not.toHaveBeenCalled();
+    });
+  });
+
+  // ===========================================================================
+  // persistRecurringRoot + read-filter parity (D2a / §8.5 #1)
+  // ===========================================================================
+
+  describe('persistRecurringRoot', () => {
+    it('persists the resolved root so the read-filter excludes a NULL-recurring archived row', async () => {
+      // sleeper_leagues UPDATE: .update({...}).eq('clerk_user_id', user).in('league_id', ids)
+      const mockUpdateIn = vi.fn().mockResolvedValue({ error: null });
+      const mockUpdateEq = vi.fn().mockReturnValue({ in: mockUpdateIn });
+      const mockUpdate = vi.fn().mockReturnValue({ eq: mockUpdateEq });
+
+      // Row starts with recurring_league_id = NULL; after persist it stores ROOT2024.
+      let storedRecurring: string | null = null;
+
+      // sleeper_leagues read: .select('*').eq('clerk_user_id', ...).order(...)
+      function mockLeaguesRead() {
+        const order = vi.fn().mockImplementation(async () => ({
+          data: [
+            { id: 'a', clerk_user_id: 'u', league_id: 'L2025', sport: 'football', season_year: 2025, league_name: 'Zombie', roster_id: 1, recurring_league_id: storedRecurring, sleeper_user_id: 's' },
+          ],
+          error: null,
+        }));
+        const eq = vi.fn().mockReturnValue({ order });
+        return { select: vi.fn().mockReturnValue({ eq }), update: mockUpdate };
+      }
+      // archived_leagues read: archive key is the resolved root ROOT2024.
+      function mockArchiveRead() {
+        const eqPlatform = vi.fn().mockResolvedValue({
+          data: [{ recurring_league_id: 'ROOT2024' }],
+          error: null,
+        });
+        const eqUser = vi.fn().mockReturnValue({ eq: eqPlatform });
+        return { select: vi.fn().mockReturnValue({ eq: eqUser }) };
+      }
+
+      mockFrom.mockImplementation((table: string) => {
+        if (table === 'sleeper_leagues') return mockLeaguesRead();
+        if (table === 'archived_leagues') return mockArchiveRead();
+        return {};
+      });
+
+      // (a) Persist the resolved root onto the season-scoped row.
+      await storage.persistRecurringRoot('u', ['L2025'], 'ROOT2024');
+      expect(mockUpdate).toHaveBeenCalledOnce();
+      expect(mockUpdate.mock.calls[0][0]).toMatchObject({ recurring_league_id: 'ROOT2024' });
+      expect(mockUpdateEq).toHaveBeenCalledWith('clerk_user_id', 'u');
+      expect(mockUpdateIn).toHaveBeenCalledWith('league_id', ['L2025']);
+
+      // Simulate the persisted column for the subsequent read.
+      storedRecurring = 'ROOT2024';
+
+      // (b) The exclude filter now keys on the stored root and drops the row.
+      const result = await storage.getSleeperLeagues('u', false);
+      expect(result.map((l) => l.leagueId)).toEqual([]);
+    });
+
+    it('is a no-op when the recurring_league_id column is missing (pre-migration)', async () => {
+      const mockUpdateIn = vi.fn().mockResolvedValue({
+        error: { code: '42703', message: 'column sleeper_leagues.recurring_league_id does not exist' },
+      });
+      const mockUpdateEq = vi.fn().mockReturnValue({ in: mockUpdateIn });
+      const mockUpdate = vi.fn().mockReturnValue({ eq: mockUpdateEq });
+
+      mockFrom.mockImplementation((table: string) => {
+        if (table === 'sleeper_leagues') return { update: mockUpdate };
+        return {};
+      });
+
+      // Tolerates the missing column instead of throwing (mirrors saveSleeperLeague).
+      await expect(storage.persistRecurringRoot('u', ['L2025'], 'ROOT2024')).resolves.toBeUndefined();
+    });
+  });
+
+  // ===========================================================================
+  // deleteSleeperLeague also removes the archive row (D8)
+  // ===========================================================================
+
+  describe('deleteSleeperLeague archive cleanup', () => {
+    it('unarchives the matching recurring id on a true delete', async () => {
+      const mockArchiveDelete = vi.fn();
+
+      // First lookup: .select('league_id, season_year').eq(user).eq(id).maybeSingle()
+      // Recurring lookup: .select('recurring_league_id, sport').eq(user).eq(id).maybeSingle()
+      // maybeSingle is hoisted OUT of the factory so its Once queue advances across
+      // both lookups — re-creating it per from() call would reset the queue and feed
+      // the recurring lookup the first (sport-less) row, skipping unarchive.
+      const sleeperMaybeSingle = vi.fn()
+        .mockResolvedValueOnce({ data: { league_id: 'L2025', season_year: 2025 }, error: null })
+        .mockResolvedValueOnce({ data: { recurring_league_id: 'ROOT', sport: 'football' }, error: null });
+      const sleeperEq = vi.fn();
+      sleeperEq.mockReturnValue({ eq: sleeperEq, maybeSingle: sleeperMaybeSingle, error: null });
+
+      mockFrom.mockImplementation((table: string) => {
+        if (table === 'sleeper_leagues') {
+          return {
+            select: vi.fn().mockReturnValue({ eq: sleeperEq }),
+            delete: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ error: null }) }) }),
+          };
+        }
+        if (table === 'user_preferences') {
+          const prefEq = vi.fn().mockReturnValue({
+            maybeSingle: vi.fn().mockResolvedValue({
+              data: { default_football: null, default_baseball: null, default_basketball: null, default_hockey: null },
+              error: null,
+            }),
+          });
+          return { select: vi.fn().mockReturnValue({ eq: prefEq }), upsert: vi.fn().mockReturnValue({ error: null }) };
+        }
+        if (table === 'archived_leagues') {
+          let calls = 0;
+          const eq = vi.fn();
+          eq.mockImplementation(() => {
+            calls += 1;
+            if (calls >= 4) return Promise.resolve({ error: null });
+            return { eq };
+          });
+          return { delete: mockArchiveDelete.mockReturnValue({ eq }) };
+        }
+        return {};
+      });
+
+      await storage.deleteSleeperLeague('u', 'row-uuid');
+
+      expect(mockArchiveDelete).toHaveBeenCalled();
+    });
+  });
 });

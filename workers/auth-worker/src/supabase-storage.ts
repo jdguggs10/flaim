@@ -16,6 +16,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { EspnCredentials, EspnCredentialsWithMetadata, EspnLeague, EspnUserData } from './espn-types';
 import { isCurrentSeason, type SeasonSport } from './season-utils';
 import { clearDefaultsForLeague as _clearDefaultsForLeague, clearDefaultsForPlatform as _clearDefaultsForPlatform } from './preference-defaults';
+import { ArchiveStorage } from './archive-storage';
 
 /**
  * Mask user ID for logging to avoid PII exposure
@@ -56,9 +57,11 @@ export interface UserPreferences {
 
 export class EspnSupabaseStorage {
   private supabase: SupabaseClient;
+  private archive: ArchiveStorage;
 
   constructor(options: SupabaseStorageOptions) {
     this.supabase = createClient(options.supabaseUrl, options.supabaseKey);
+    this.archive = new ArchiveStorage(options.supabaseUrl, options.supabaseKey);
   }
 
   // =============================================================================
@@ -325,9 +328,13 @@ export class EspnSupabaseStorage {
   }
 
   /**
-   * Retrieve ESPN leagues for a user
+   * Retrieve ESPN leagues for a user.
+   * When `includeArchived` is false, rows whose recurring identity (ESPN uses its
+   * stable `league_id`) is in the user's archived set are excluded (D2). The
+   * default (`true`) keeps dedupe/onboarding/discovery readers unfiltered (D5).
    */
-  async getLeagues(clerkUserId: string): Promise<EspnLeague[]> {
+  async getLeagues(clerkUserId: string, includeArchived: boolean = true): Promise<EspnLeague[]> {
+    let rawRows: { league_id: string; sport: string; team_id: string | null; team_name: string | null; league_name: string | null; season_year: number | null }[];
     try {
       if (!clerkUserId) return [];
 
@@ -337,19 +344,32 @@ export class EspnSupabaseStorage {
         .eq('clerk_user_id', clerkUserId);
 
       if (error || !data) return [];
-
-      return data.map(row => ({
-        leagueId: row.league_id,
-        sport: row.sport as 'football' | 'hockey' | 'baseball' | 'basketball',
-        teamId: row.team_id || undefined,
-        teamName: row.team_name || undefined,
-        leagueName: row.league_name || undefined,
-        seasonYear: row.season_year || undefined,
-      }));
+      rawRows = data;
     } catch (error) {
       console.error('Failed to retrieve ESPN leagues:', error);
       return [];
     }
+
+    // Exclude path (includeArchived:false) fails CLOSED: getArchivedSet throws on a
+    // DB error and we let it propagate rather than returning archived leagues
+    // unfiltered to the AI (audit #10). Annotate/unfiltered callers (default true)
+    // skip this entirely.
+    const archivedSet = includeArchived
+      ? null
+      : await this.archive.getArchivedSet(clerkUserId, 'espn');
+
+    const rows = archivedSet
+      ? rawRows.filter(row => !archivedSet.has(row.league_id))
+      : rawRows;
+
+    return rows.map(row => ({
+      leagueId: row.league_id,
+      sport: row.sport as 'football' | 'hockey' | 'baseball' | 'basketball',
+      teamId: row.team_id || undefined,
+      teamName: row.team_name || undefined,
+      leagueName: row.league_name || undefined,
+      seasonYear: row.season_year || undefined,
+    }));
   }
 
 
@@ -387,11 +407,11 @@ export class EspnSupabaseStorage {
    * Returns leagues where seasonYear matches the current season for their sport.
    * Uses sport-specific rollover logic (America/New_York timezone).
    */
-  async getCurrentSeasonLeagues(clerkUserId: string): Promise<EspnLeague[]> {
+  async getCurrentSeasonLeagues(clerkUserId: string, includeArchived: boolean = false): Promise<EspnLeague[]> {
     try {
       if (!clerkUserId) return [];
 
-      const allLeagues = await this.getLeagues(clerkUserId);
+      const allLeagues = await this.getLeagues(clerkUserId, includeArchived);
 
       // Filter to current season leagues only using sport-specific rollover rules
       return allLeagues.filter(league => {
@@ -493,6 +513,15 @@ export class EspnSupabaseStorage {
       // Clear any stale defaults pointing to this ESPN league for the deleted sport only
       await this.clearStaleDefaultForLeague(clerkUserId, 'espn', leagueId, undefined, sport);
 
+      // A true delete also removes the league's archive entry (D8): deleting then
+      // re-adding returns the league un-archived. ESPN recurring id is league_id.
+      await this.archive.unarchiveLeague(
+        clerkUserId,
+        'espn',
+        sport as 'football' | 'baseball' | 'basketball' | 'hockey',
+        leagueId
+      );
+
       return true;
     } catch (error) {
       console.error('[removeLeague] Failed to remove ESPN league:', error);
@@ -578,6 +607,13 @@ export class EspnSupabaseStorage {
         if (!targetLeague.team_id) {
           return { success: false, error: 'Cannot set default: no team selected for this league' };
         }
+
+        // Reject an archived league as a new default (§9). ESPN recurring id is league_id.
+        // Fail-open on a transient archive-set error: don't block setting a default.
+        const archivedSet = await this.getArchivedSetFailOpen(clerkUserId, 'espn');
+        if (archivedSet.has(leagueId)) {
+          return { success: false, error: 'Cannot set default: league is archived' };
+        }
       } else if (platform === 'yahoo') {
         const { data: targetLeague, error: checkError } = await this.supabase
           .from('yahoo_leagues')
@@ -603,6 +639,16 @@ export class EspnSupabaseStorage {
         if (checkError || !targetLeague) {
           console.error('Sleeper league not found for default:', checkError);
           return { success: false, error: 'League not found' };
+        }
+
+        // Reject an archived league as a new default (§9). Sleeper archive key is
+        // `recurring_league_id ?? league_id` (matches the read-path filter, D2).
+        // Resolve the row's recurring id separately so a missing column (pre-migration)
+        // fails open rather than breaking default validation.
+        const recurringId = await this.resolveSleeperRecurringId(clerkUserId, leagueId, seasonYear);
+        const archivedSet = await this.getArchivedSetFailOpen(clerkUserId, 'sleeper');
+        if (archivedSet.has(recurringId)) {
+          return { success: false, error: 'Cannot set default: league is archived' };
         }
       }
 
@@ -632,6 +678,57 @@ export class EspnSupabaseStorage {
     } catch (error) {
       console.error('Failed to set default league:', error);
       return { success: false, error: 'Internal error' };
+    }
+  }
+
+  /**
+   * Annotate/validation-path wrapper around `getArchivedSet` (which throws on a DB
+   * error to fail-closed for the exclude path). Here we fail-OPEN: a transient
+   * archive-set error treats nothing as archived rather than blocking default
+   * validation. The exclude path (internal `includeArchived:false`) calls
+   * `getArchivedSet` directly and lets the throw propagate (audit #10).
+   */
+  private async getArchivedSetFailOpen(
+    clerkUserId: string,
+    platform: 'espn' | 'yahoo' | 'sleeper'
+  ): Promise<Set<string>> {
+    try {
+      return await this.archive.getArchivedSet(clerkUserId, platform);
+    } catch (error) {
+      console.error('[supabase-storage] getArchivedSet failed; treating as empty (fail-open):', error);
+      return new Set();
+    }
+  }
+
+  /**
+   * Resolve the stored Sleeper recurring id for a season-scoped row, falling back
+   * to the season-scoped `league_id` when the `recurring_league_id` column is
+   * missing (pre-migration) or NULL. Keeps the archive filter key identical to
+   * `getSleeperLeagues` (`recurring_league_id ?? league_id`).
+   */
+  private async resolveSleeperRecurringId(
+    clerkUserId: string,
+    leagueId: string,
+    seasonYear: number
+  ): Promise<string> {
+    try {
+      const { data, error } = await this.supabase
+        .from('sleeper_leagues')
+        .select('recurring_league_id')
+        .eq('clerk_user_id', clerkUserId)
+        .eq('league_id', leagueId)
+        .eq('season_year', seasonYear)
+        .maybeSingle();
+
+      if (error) {
+        // Column missing or other read error — fall back to the season-scoped id.
+        return leagueId;
+      }
+
+      const recurring = (data as { recurring_league_id?: string | null } | null)?.recurring_league_id;
+      return recurring ?? leagueId;
+    } catch {
+      return leagueId;
     }
   }
 

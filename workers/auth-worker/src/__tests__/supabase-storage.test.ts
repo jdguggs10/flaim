@@ -130,4 +130,184 @@ describe('EspnSupabaseStorage', () => {
     expect(result).toEqual({ success: false, error: 'League not found' });
     expect(mockPrefsUpsert).not.toHaveBeenCalled();
   });
+
+  // ===========================================================================
+  // includeArchived filter (ESPN)
+  // ===========================================================================
+
+  it('getLeagues excludes archived rows when includeArchived is false', async () => {
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'espn_leagues') {
+        // .select(...).eq('clerk_user_id', ...) resolves with all rows
+        const eq = vi.fn().mockResolvedValue({
+          data: [
+            { league_id: '111', sport: 'football', team_id: 't1', team_name: 'A', league_name: 'Keep', season_year: 2025 },
+            { league_id: '222', sport: 'football', team_id: 't2', team_name: 'B', league_name: 'Zombie', season_year: 2025 },
+          ],
+          error: null,
+        });
+        return { select: vi.fn().mockReturnValue({ eq }) };
+      }
+      if (table === 'archived_leagues') {
+        // .select('recurring_league_id').eq(user).eq(platform) resolves with archived ids
+        const eqPlatform = vi.fn().mockResolvedValue({ data: [{ recurring_league_id: '222' }], error: null });
+        const eqUser = vi.fn().mockReturnValue({ eq: eqPlatform });
+        return { select: vi.fn().mockReturnValue({ eq: eqUser }) };
+      }
+      return {};
+    });
+
+    const filtered = await storage.getLeagues('user_123', false);
+    expect(filtered.map(l => l.leagueId)).toEqual(['111']);
+  });
+
+  it('getLeagues fails CLOSED: propagates a thrown archive-set error on the exclude path (audit #10)', async () => {
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'espn_leagues') {
+        const eq = vi.fn().mockResolvedValue({
+          data: [
+            { league_id: '111', sport: 'football', team_id: 't1', team_name: 'A', league_name: 'Keep', season_year: 2025 },
+          ],
+          error: null,
+        });
+        return { select: vi.fn().mockReturnValue({ eq }) };
+      }
+      if (table === 'archived_leagues') {
+        // archive read errors → getArchivedSet throws → getLeagues(false) propagates
+        const eqPlatform = vi.fn().mockResolvedValue({ data: null, error: { message: 'boom' } });
+        const eqUser = vi.fn().mockReturnValue({ eq: eqPlatform });
+        return { select: vi.fn().mockReturnValue({ eq: eqUser }) };
+      }
+      return {};
+    });
+
+    await expect(storage.getLeagues('user_123', false)).rejects.toThrow('Failed to get archived set');
+  });
+
+  it('setDefaultLeague fails OPEN on an archive-set error — allows the default (audit #10)', async () => {
+    const mockPrefsUpsert = vi.fn().mockReturnValue({ error: null });
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'espn_leagues') {
+        const single = vi.fn().mockResolvedValue({ data: { league_id: '222', team_id: 't2' }, error: null });
+        const eq = vi.fn();
+        eq.mockReturnValue({ eq, single });
+        return { select: vi.fn().mockReturnValue({ eq }) };
+      }
+      if (table === 'archived_leagues') {
+        // Archive lookup errors — fail-open treats nothing as archived.
+        const eqPlatform = vi.fn().mockResolvedValue({ data: null, error: { message: 'boom' } });
+        const eqUser = vi.fn().mockReturnValue({ eq: eqPlatform });
+        return { select: vi.fn().mockReturnValue({ eq: eqUser }) };
+      }
+      if (table === 'user_preferences') {
+        return { upsert: mockPrefsUpsert };
+      }
+      return {};
+    });
+
+    const result = await storage.setDefaultLeague('user_123', 'espn', 'football', '222', 2025);
+
+    expect(result).toEqual({ success: true });
+    expect(mockPrefsUpsert).toHaveBeenCalledOnce();
+  });
+
+  it('getLeagues returns all rows when includeArchived defaults to true', async () => {
+    const archivedSelect = vi.fn();
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'espn_leagues') {
+        const eq = vi.fn().mockResolvedValue({
+          data: [
+            { league_id: '111', sport: 'football', team_id: 't1', team_name: 'A', league_name: 'Keep', season_year: 2025 },
+            { league_id: '222', sport: 'football', team_id: 't2', team_name: 'B', league_name: 'Zombie', season_year: 2025 },
+          ],
+          error: null,
+        });
+        return { select: vi.fn().mockReturnValue({ eq }) };
+      }
+      if (table === 'archived_leagues') {
+        return { select: archivedSelect };
+      }
+      return {};
+    });
+
+    const all = await storage.getLeagues('user_123');
+    expect(all.map(l => l.leagueId)).toEqual(['111', '222']);
+    // Archive set must NOT be consulted on the default (unfiltered) path.
+    expect(archivedSelect).not.toHaveBeenCalled();
+  });
+
+  // ===========================================================================
+  // setDefaultLeague rejects an archived league (§9)
+  // ===========================================================================
+
+  it('setDefaultLeague rejects an archived ESPN league', async () => {
+    const mockPrefsUpsert = vi.fn();
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'espn_leagues') {
+        const single = vi.fn().mockResolvedValue({ data: { league_id: '222', team_id: 't2' }, error: null });
+        const eq = vi.fn();
+        eq.mockReturnValue({ eq, single });
+        return { select: vi.fn().mockReturnValue({ eq }) };
+      }
+      if (table === 'archived_leagues') {
+        const eqPlatform = vi.fn().mockResolvedValue({ data: [{ recurring_league_id: '222' }], error: null });
+        const eqUser = vi.fn().mockReturnValue({ eq: eqPlatform });
+        return { select: vi.fn().mockReturnValue({ eq: eqUser }) };
+      }
+      if (table === 'user_preferences') {
+        return { upsert: mockPrefsUpsert };
+      }
+      return {};
+    });
+
+    const result = await storage.setDefaultLeague('user_123', 'espn', 'football', '222', 2025);
+
+    expect(result).toEqual({ success: false, error: 'Cannot set default: league is archived' });
+    expect(mockPrefsUpsert).not.toHaveBeenCalled();
+  });
+
+  // ===========================================================================
+  // removeLeague also deletes the matching archive row (D8)
+  // ===========================================================================
+
+  it('removeLeague deletes the matching archived_leagues row', async () => {
+    const mockArchiveDelete = vi.fn();
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'espn_leagues') {
+        const selectFn = vi.fn().mockResolvedValue({
+          data: [{ id: 'row-1', league_id: '222', sport: 'football', season_year: 2025 }],
+          error: null,
+        });
+        const eqFn = vi.fn();
+        eqFn.mockReturnValue({ eq: eqFn, select: selectFn });
+        return { delete: vi.fn().mockReturnValue({ eq: eqFn }) };
+      }
+      if (table === 'user_preferences') {
+        const prefEq = vi.fn().mockReturnValue({
+          maybeSingle: vi.fn().mockResolvedValue({
+            data: { default_football: null, default_baseball: null, default_basketball: null, default_hockey: null },
+            error: null,
+          }),
+        });
+        return { select: vi.fn().mockReturnValue({ eq: prefEq }), upsert: vi.fn() };
+      }
+      if (table === 'archived_leagues') {
+        // delete().eq(user).eq(platform).eq(sport).eq(recurring) — final eq resolves
+        let calls = 0;
+        const eq = vi.fn();
+        eq.mockImplementation(() => {
+          calls += 1;
+          if (calls >= 4) return Promise.resolve({ error: null });
+          return { eq };
+        });
+        return { delete: mockArchiveDelete.mockReturnValue({ eq }) };
+      }
+      return {};
+    });
+
+    const result = await storage.removeLeague('user_123', '222', 'football');
+
+    expect(result).toBe(true);
+    expect(mockArchiveDelete).toHaveBeenCalled();
+  });
 });

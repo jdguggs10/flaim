@@ -1,4 +1,5 @@
 import { SleeperStorage, type SleeperLeague } from './sleeper-storage';
+import { ArchiveStorage } from './archive-storage';
 import { getDefaultSeasonYear } from './season-utils';
 
 const SLEEPER_API = 'https://api.sleeper.app/v1';
@@ -36,11 +37,27 @@ interface SleeperLeagueResponse {
   rosterId: number | null;
   seasonYear: number;
   recurringLeagueId: string;
+  archived?: boolean;
 }
 
 interface RecurringLeagueResolutionResult {
   recurringLeagueId?: string;
   failureReason?: string;
+}
+
+/**
+ * Annotate-path archive-set lookup that fails OPEN: a transient DB error treats
+ * nothing as archived (the UI just loses the `archived` flag) rather than failing
+ * the whole league list. The exclude path keeps fail-closed via getSleeperLeagues
+ * letting getArchivedSet's throw propagate (audit #10).
+ */
+async function getArchivedSetFailOpen(env: SleeperConnectEnv, userId: string): Promise<Set<string>> {
+  try {
+    return await ArchiveStorage.fromEnvironment(env).getArchivedSet(userId, 'sleeper');
+  } catch (error) {
+    console.error('[sleeper-connect] getArchivedSet failed; annotating none (fail-open):', error);
+    return new Set();
+  }
 }
 
 function mapSport(sleeperSport: string): string {
@@ -165,7 +182,10 @@ async function resolveRecurringLeagueId(
   return leagueId;
 }
 
-async function buildSleeperLeagueResponse(leagues: SleeperLeague[]): Promise<SleeperLeagueResponse[]> {
+async function buildSleeperLeagueResponse(
+  leagues: SleeperLeague[],
+  archivedSet?: Set<string>
+): Promise<SleeperLeagueResponse[]> {
   const recurringIdCache = new Map<string, string | null>();
   const leagueCache = new Map<string, Promise<SleeperApiLeague | null>>();
   for (const league of leagues) {
@@ -187,8 +207,119 @@ async function buildSleeperLeagueResponse(leagues: SleeperLeague[]): Promise<Sle
       rosterId: league.rosterId,
       seasonYear: league.seasonYear,
       recurringLeagueId,
+      // Public (UI) responses annotate the archive state so the UI can bucket
+      // archived leagues; internal responses omit the flag and exclude the rows.
+      ...(archivedSet ? { archived: archivedSet.has(recurringLeagueId) } : {}),
     };
   }));
+}
+
+/**
+ * Backfill `recurring_league_id` for a user's existing Sleeper rows by re-running
+ * the previous_league_id chain walk (§5/§8.5) — NOT the cheap `= league_id`
+ * shortcut. For each row, resolves the canonical root and persists it via
+ * saveSleeperLeague (which upserts on (clerk_user_id, league_id, season_year) and
+ * tolerates a missing column). Where a chain is genuinely unresolvable, the
+ * resolver already falls back to the season-scoped league_id.
+ *
+ * This is a callable mechanism only; nothing invokes it automatically. Run it
+ * deliberately (e.g. via a one-off route or script) after migration 023 ships.
+ */
+export async function backfillSleeperRecurringIds(
+  env: SleeperConnectEnv,
+  userId: string
+): Promise<{ processed: number; resolved: number }> {
+  const storage = SleeperStorage.fromEnvironment(env);
+  const leagues = await storage.getSleeperLeagues(userId, true);
+
+  const recurringIdCache = new Map<string, string | null>();
+  const leagueCache = new Map<string, Promise<SleeperApiLeague | null>>();
+
+  let processed = 0;
+  let resolved = 0;
+
+  for (const league of leagues) {
+    processed++;
+    const resolution = await tryResolveRecurringLeagueId(league.leagueId, recurringIdCache, leagueCache);
+    // Use the resolved root; only fall back to the season-scoped id when the
+    // chain is genuinely unresolvable (mirrors discovery's safety net).
+    const recurringLeagueId = resolution.recurringLeagueId ?? league.leagueId;
+    if (resolution.recurringLeagueId) resolved++;
+
+    // Skip a write when the stored value already matches the resolved root.
+    if (league.recurringLeagueId === recurringLeagueId) continue;
+
+    await storage.saveSleeperLeague({
+      clerkUserId: userId,
+      leagueId: league.leagueId,
+      sport: league.sport,
+      seasonYear: league.seasonYear,
+      leagueName: league.leagueName,
+      rosterId: league.rosterId,
+      recurringLeagueId,
+      sleeperUserId: league.sleeperUserId,
+    });
+  }
+
+  return { processed, resolved };
+}
+
+/**
+ * Resolve the canonical recurring root for a Sleeper archive write, fresh from
+ * the previous_league_id chain (§8.5 #1) — never persisting a season-scoped
+ * fallback as the archive key when the real root is resolvable. Also returns the
+ * per-season league_ids of the recurring group present in storage, so defaults
+ * can be cleared per per-season id (D6 / §8.5 #3).
+ *
+ * `requestedRecurringId` is the id the UI sent (the displayed recurring id). We
+ * use it to find the group's stored rows, then re-resolve the canonical root from
+ * the freshest (most recent) season's league_id.
+ */
+export async function resolveSleeperArchiveTarget(
+  env: SleeperConnectEnv,
+  userId: string,
+  requestedRecurringId: string
+): Promise<{ recurringLeagueId: string; leagueName?: string; seasonLeagueIds: string[] }> {
+  const storage = SleeperStorage.fromEnvironment(env);
+  const allLeagues = await storage.getSleeperLeagues(userId, true);
+
+  // Rows belonging to this recurring group: either their stored recurring id
+  // matches, or (fallback) their season-scoped league_id equals the requested id.
+  const groupRows = allLeagues.filter((l) => {
+    const stored = l.recurringLeagueId ?? l.leagueId;
+    return stored === requestedRecurringId || l.leagueId === requestedRecurringId;
+  });
+
+  // When groupRows is empty (no stored rows matched the requested id), seasonLeagueIds
+  // falls back to [recurringLeagueId] below — not a season-scoped league_id — so the
+  // default-clear matches nothing. Benign/self-healing per §8.5 #3.
+  const seasonLeagueIds = Array.from(new Set(groupRows.map((l) => l.leagueId)));
+
+  // Re-resolve the canonical root fresh from the most-recent season's league_id
+  // (groupRows are not season-sorted here; pick the max season_year row).
+  const freshest = groupRows.reduce<SleeperLeague | undefined>((best, cur) => {
+    if (!best) return cur;
+    return cur.seasonYear > best.seasonYear ? cur : best;
+  }, undefined);
+
+  let recurringLeagueId = requestedRecurringId;
+  if (freshest) {
+    const recurringIdCache = new Map<string, string | null>();
+    const leagueCache = new Map<string, Promise<SleeperApiLeague | null>>();
+    recurringLeagueId = await resolveRecurringLeagueId(freshest.leagueId, recurringIdCache, leagueCache);
+  }
+
+  // Persist the resolved root onto every row in the group (D2a / §8.5 #1) so the
+  // read-filter's stored key (`recurring_league_id ?? league_id`) equals the archive
+  // key. Without this, a NULL-recurring row keys the filter on its season-scoped
+  // league_id while archive keys on the root, and the archived league leaks back in.
+  // Tolerates the pre-migration missing-column case (persist becomes a no-op).
+  if (seasonLeagueIds.length > 0) {
+    await storage.persistRecurringRoot(userId, seasonLeagueIds, recurringLeagueId);
+  }
+
+  const leagueName = freshest?.leagueName;
+  return { recurringLeagueId, leagueName, seasonLeagueIds };
 }
 
 export async function handleSleeperDiscover(
@@ -336,7 +467,8 @@ export async function handleSleeperStatus(
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
-    const leagues = await storage.getSleeperLeagues(userId);
+    // Status-card leagueCount excludes archived to match the visible active list (§9).
+    const leagues = await storage.getSleeperLeagues(userId, false);
     return new Response(
       JSON.stringify({
         connected: true,
@@ -380,12 +512,24 @@ export async function handleSleeperDisconnect(
 export async function handleSleeperLeagues(
   env: SleeperConnectEnv,
   userId: string,
-  corsHeaders: Record<string, string>
+  corsHeaders: Record<string, string>,
+  options: { includeArchived?: boolean } = {}
 ): Promise<Response> {
   try {
+    const includeArchived = options.includeArchived ?? true;
     const storage = SleeperStorage.fromEnvironment(env);
-    const leagues = await storage.getSleeperLeagues(userId);
-    const responseLeagues = await buildSleeperLeagueResponse(leagues);
+    // Internal (gateway-facing) callers pass includeArchived:false so archived
+    // leagues are excluded from the AI surfaces (D3). Public (UI) callers keep
+    // the default and annotate each league with an `archived` boolean instead.
+    const leagues = await storage.getSleeperLeagues(userId, includeArchived);
+    // Annotate path (includeArchived:true, public UI) fails OPEN: a transient
+    // archive-set error just drops the `archived` flag rather than 500-ing the list
+    // (audit #10). The exclude path (includeArchived:false) lets getSleeperLeagues
+    // propagate the throw — fail-closed so archived leagues never leak to the AI.
+    const archivedSet = includeArchived
+      ? await getArchivedSetFailOpen(env, userId)
+      : undefined;
+    const responseLeagues = await buildSleeperLeagueResponse(leagues, archivedSet);
     return new Response(
       JSON.stringify({
         leagues: responseLeagues,
@@ -410,8 +554,11 @@ export async function handleSleeperLeagueDelete(
   try {
     const storage = SleeperStorage.fromEnvironment(env);
     await storage.deleteSleeperLeague(userId, leagueId);
+    // Return the public (annotated) list — this feeds the UI directly. Annotate
+    // path fails open on an archive-set error (audit #10).
     const leagues = await storage.getSleeperLeagues(userId);
-    const responseLeagues = await buildSleeperLeagueResponse(leagues);
+    const archivedSet = await getArchivedSetFailOpen(env, userId);
+    const responseLeagues = await buildSleeperLeagueResponse(leagues, archivedSet);
     return new Response(
       JSON.stringify({
         success: true,
