@@ -28,7 +28,7 @@ Root, web, and workers use `pnpm` via Corepack. The Chrome extension is intentio
 - **Yahoo Client (`/workers/yahoo-client`)**: Internal worker handling all Yahoo Fantasy API calls for all sports (football, baseball, basketball, hockey). Called by fantasy-mcp gateway.
 - **Sleeper Client (`/workers/sleeper-client`)**: Internal worker handling all Sleeper API calls for NFL and NBA (public API, no auth required). Called by fantasy-mcp gateway.
 - **Shared package (`/workers/shared`)**: Common utilities (CORS middleware, auth-fetch helper, types) used by all workers.
-- **Supabase Postgres**: `espn_credentials`, `espn_leagues`, `yahoo_leagues`, `sleeper_connections`, `sleeper_leagues`, `user_preferences` (defaults), `oauth_tokens`, `oauth_codes`, plus deprecated `extension_tokens`/`extension_pairing_codes`.
+- **Supabase Postgres**: `espn_credentials`, `espn_leagues`, `yahoo_leagues`, `sleeper_connections`, `sleeper_leagues`, `archived_leagues` (manual league archive), `user_preferences` (defaults), `oauth_tokens`, `oauth_codes`, plus deprecated `extension_tokens`/`extension_pairing_codes`.
 
 ## Runtime Choices (Next.js)
 
