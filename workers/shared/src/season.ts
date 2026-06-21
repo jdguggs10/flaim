@@ -10,7 +10,7 @@ export type SeasonSport = 'baseball' | 'football' | 'basketball' | 'hockey';
 
 const ROLLOVER_MONTHS: Record<SeasonSport, number> = {
   baseball: 2, // Feb 1
-  football: 7, // Jul 1
+  football: 6, // Jun 1
   basketball: 8, // Aug 1
   hockey: 8, // Aug 1
 };

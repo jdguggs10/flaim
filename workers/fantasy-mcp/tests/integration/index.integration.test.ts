@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import app from '../../src/index';
 import type { Env } from '../../src/types';
 import { getUnifiedTools } from '../../src/mcp/tools';
-import { INTERNAL_SERVICE_TOKEN_HEADER } from '@flaim/worker-shared';
+import { INTERNAL_SERVICE_TOKEN_HEADER, getDefaultSeasonYear } from '@flaim/worker-shared';
 
 function buildMcpRequest(pathname: '/mcp' | '/fantasy/mcp'): Request {
   return buildMcpJsonRpcRequest(pathname, 'tools/list');
@@ -605,6 +605,9 @@ describe('fantasy-mcp gateway integration', () => {
   });
 
   it('routes get_user_session and returns leagues from all platforms', async () => {
+    // Use the live current football season so the fixture tracks the rollover
+    // logic rather than a hardcoded year that silently rots each season.
+    const currentFootballSeason = getDefaultSeasonYear('football');
     const espnLeague = {
       platform: 'espn',
       sport: 'football',
@@ -612,7 +615,7 @@ describe('fantasy-mcp gateway integration', () => {
       leagueName: 'Test ESPN League',
       teamId: '1',
       teamName: 'My Team',
-      seasonYear: 2025,
+      seasonYear: currentFootballSeason,
     };
     const yahooLeague = {
       sport: 'football',
@@ -620,7 +623,7 @@ describe('fantasy-mcp gateway integration', () => {
       leagueName: 'Test Yahoo League',
       teamId: '1',
       teamName: 'My Yahoo Team',
-      seasonYear: 2025,
+      seasonYear: currentFootballSeason,
     };
     const sleeperLeague = {
       platform: 'sleeper',
@@ -629,7 +632,7 @@ describe('fantasy-mcp gateway integration', () => {
       leagueName: 'Test Sleeper League',
       teamId: 'sl-1',
       teamName: 'My Sleeper Team',
-      seasonYear: 2025,
+      seasonYear: currentFootballSeason,
     };
 
     const authFetch = vi.fn(async (request: Request) => {
