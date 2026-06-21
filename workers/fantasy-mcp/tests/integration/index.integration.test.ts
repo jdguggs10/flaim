@@ -605,8 +605,7 @@ describe('fantasy-mcp gateway integration', () => {
   });
 
   it('routes get_user_session and returns leagues from all platforms', async () => {
-    // Use the live current football season so the fixture tracks the rollover
-    // logic rather than a hardcoded year that silently rots each season.
+    // Tracks the rollover automatically instead of hardcoding a year that rots each season.
     const currentFootballSeason = getDefaultSeasonYear('football');
     const espnLeague = {
       platform: 'espn',
