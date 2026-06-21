@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { clearDefaultsForLeague as _clearDefaultsForLeague, clearDefaultsForPlatform as _clearDefaultsForPlatform } from './preference-defaults';
+import { ArchiveStorage, archivedKey } from './archive-storage';
 
 function maskUserId(userId: string): string {
   if (!userId || userId.length <= 8) return '***';
@@ -58,10 +59,12 @@ function isMissingRecurringLeagueIdColumnError(error: SupabaseErrorLike | null |
 
 export class SleeperStorage {
   private supabase;
+  private archive: ArchiveStorage;
   private recurringLeagueIdColumnStatus: 'unknown' | 'available' | 'missing' = 'unknown';
 
   constructor(supabaseUrl: string, supabaseKey: string) {
     this.supabase = createClient(supabaseUrl, supabaseKey);
+    this.archive = new ArchiveStorage(supabaseUrl, supabaseKey);
   }
 
   static fromEnvironment(env: SleeperStorageEnv): SleeperStorage {
@@ -108,7 +111,13 @@ export class SleeperStorage {
     if (error) throw new Error(`Failed to delete Sleeper connection: ${error.message}`);
   }
 
-  async getSleeperLeagues(clerkUserId: string): Promise<SleeperLeague[]> {
+  /**
+   * Retrieve Sleeper leagues for a user.
+   * When `includeArchived` is false, rows whose recurring identity
+   * (`recurring_league_id ?? league_id`) is in the user's archived set are
+   * excluded. The default (`true`) keeps dedupe/discovery readers unfiltered.
+   */
+  async getSleeperLeagues(clerkUserId: string, includeArchived: boolean = true): Promise<SleeperLeague[]> {
     const { data, error } = await this.supabase
       .from('sleeper_leagues')
       .select('*')
@@ -118,7 +127,17 @@ export class SleeperStorage {
     if (error) throw new Error(`Failed to get Sleeper leagues: ${error.message}`);
     if (!data) return [];
 
-    return (data as SleeperLeagueRow[]).map((row) => ({
+    const archivedSet = includeArchived
+      ? null
+      : await this.archive.getArchivedSet(clerkUserId, 'sleeper');
+
+    const rows = (data as SleeperLeagueRow[]).filter((row) => {
+      if (!archivedSet) return true;
+      const recurringId = row.recurring_league_id ?? row.league_id;
+      return !archivedSet.has(archivedKey(row.sport, recurringId));
+    });
+
+    return rows.map((row) => ({
       id: row.id,
       clerkUserId: row.clerk_user_id,
       leagueId: row.league_id,
@@ -177,17 +196,68 @@ export class SleeperStorage {
     if (legacyError) throw new Error(`Failed to save Sleeper league: ${legacyError.message}`);
   }
 
+  /**
+   * Persist the canonical recurring root onto every Sleeper row in a group.
+   * After an archive write resolves the chain root, this writes that root
+   * into `recurring_league_id` for the given season-scoped `league_id`s, so the
+   * STORED column the read-filter keys on (`recurring_league_id ?? league_id`) equals
+   * the archive-table key. Without this, a row whose stored column is NULL would key
+   * the filter on its season-scoped `league_id` while the archive keys on the root —
+   * and the archived league would leak back into the AI surfaces.
+   *
+   * Tolerates the pre-migration missing-column case (same fallback as saveSleeperLeague):
+   * if the column is absent, the persist is a no-op and the read-filter already falls
+   * back to `league_id`, so callers should archive on the season-scoped id in that case.
+   */
+  async persistRecurringRoot(clerkUserId: string, leagueIds: string[], recurringRoot: string): Promise<void> {
+    if (!clerkUserId || leagueIds.length === 0 || this.recurringLeagueIdColumnStatus === 'missing') return;
+
+    const { error } = await this.supabase
+      .from('sleeper_leagues')
+      .update({ recurring_league_id: recurringRoot, updated_at: new Date().toISOString() })
+      .eq('clerk_user_id', clerkUserId)
+      .in('league_id', leagueIds);
+
+    if (!error) {
+      this.recurringLeagueIdColumnStatus = 'available';
+      return;
+    }
+
+    if (!isMissingRecurringLeagueIdColumnError(error as SupabaseErrorLike)) {
+      throw new Error(`Failed to persist Sleeper recurring root: ${(error as SupabaseErrorLike).message}`);
+    }
+
+    console.warn(
+      `[sleeper-storage] recurring_league_id column unavailable for user ${maskUserId(clerkUserId)}; skipping recurring-root persist (code=${(error as SupabaseErrorLike).code ?? 'unknown'})`
+    );
+    this.recurringLeagueIdColumnStatus = 'missing';
+  }
+
   async deleteSleeperLeague(clerkUserId: string, leagueId: string): Promise<void> {
-    // Resolve platform identifiers before deleting (route arg is DB row UUID)
+    // Resolve platform identifiers before deleting (route arg is DB row UUID).
+    // Single read serves both the default-clear (league_id + season_year) and the
+    // archive cleanup (sport + recurring archive key).
     const { data: row, error: lookupError } = await this.supabase
       .from('sleeper_leagues')
-      .select('league_id, season_year')
+      .select('league_id, season_year, recurring_league_id, sport')
       .eq('clerk_user_id', clerkUserId)
       .eq('id', leagueId)
       .maybeSingle();
 
     if (lookupError) {
       console.warn(`[sleeper-storage] Failed to look up Sleeper league ${leagueId} before delete:`, lookupError);
+    }
+
+    // Resolve the recurring archive key before the row is gone. Tolerates a
+    // missing recurring_league_id column (pre-migration) by falling back to league_id.
+    let archiveRecurringId: { sport: string; recurringLeagueId: string } | null = null;
+    if (row) {
+      const recurringId =
+        (row as { recurring_league_id?: string | null }).recurring_league_id ?? row.league_id;
+      const sport = (row as { sport?: string }).sport;
+      if (sport) {
+        archiveRecurringId = { sport, recurringLeagueId: recurringId };
+      }
     }
 
     const { error } = await this.supabase
@@ -201,6 +271,16 @@ export class SleeperStorage {
     // Clear any sport default pointing to this league (keyed by platform league_id + season)
     if (row) {
       await this._clearDefaultsForLeague(clerkUserId, 'sleeper', row.league_id, row.season_year);
+    }
+
+    // A true delete also removes the league's archive entry.
+    if (archiveRecurringId) {
+      await this.archive.unarchiveLeague(
+        clerkUserId,
+        'sleeper',
+        archiveRecurringId.sport as 'football' | 'baseball' | 'basketball' | 'hockey',
+        archiveRecurringId.recurringLeagueId
+      );
     }
   }
 

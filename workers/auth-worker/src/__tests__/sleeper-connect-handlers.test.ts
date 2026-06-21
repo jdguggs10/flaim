@@ -4,6 +4,8 @@ import {
   handleSleeperLeagueDelete,
   handleSleeperLeagues,
   handleSleeperStatus,
+  resolveSleeperArchiveTarget,
+  backfillSleeperRecurringIds,
   type SleeperConnectEnv,
 } from '../sleeper-connect-handlers';
 import { SleeperStorage } from '../sleeper-storage';
@@ -13,6 +15,20 @@ vi.mock('../sleeper-storage', () => ({
   SleeperStorage: {
     fromEnvironment: vi.fn(),
   },
+}));
+
+// ArchiveStorage is constructed inside the public/internal Sleeper league handlers
+// (annotate / exclude). Mock it so no real Supabase client is created and the
+// archived set is controllable per test (defaults to empty).
+const mockGetArchivedSet = vi.fn(async () => new Set<string>());
+// Keep the real archivedKey so the handler's composite-key membership check
+// (sport:recurringId) uses the production key format.
+const archivedKey = (sport: string, recurringLeagueId: string) => `${sport}:${recurringLeagueId}`;
+vi.mock('../archive-storage', () => ({
+  ArchiveStorage: {
+    fromEnvironment: vi.fn(() => ({ getArchivedSet: mockGetArchivedSet })),
+  },
+  archivedKey: (sport: string, recurringLeagueId: string) => `${sport}:${recurringLeagueId}`,
 }));
 
 vi.mock('../season-utils', () => ({
@@ -45,11 +61,13 @@ describe('sleeper-connect-handlers', () => {
     deleteSleeperLeague: ReturnType<typeof vi.fn>;
     getSleeperConnection: ReturnType<typeof vi.fn>;
     getSleeperLeagues: ReturnType<typeof vi.fn>;
+    persistRecurringRoot: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(() => {
     vi.clearAllMocks();
     mockFetch.mockReset();
+    mockGetArchivedSet.mockImplementation(async () => new Set<string>());
 
     mockStorage = {
       saveSleeperConnection: vi.fn().mockResolvedValue(undefined),
@@ -57,6 +75,7 @@ describe('sleeper-connect-handlers', () => {
       deleteSleeperLeague: vi.fn().mockResolvedValue(undefined),
       getSleeperConnection: vi.fn().mockResolvedValue(null),
       getSleeperLeagues: vi.fn().mockResolvedValue([]),
+      persistRecurringRoot: vi.fn().mockResolvedValue(undefined),
     };
 
     vi.mocked(SleeperStorage.fromEnvironment).mockReturnValue(mockStorage as unknown as SleeperStorage);
@@ -740,6 +759,204 @@ describe('sleeper-connect-handlers', () => {
       expect(body.connected).toBe(false);
       expect(body.lastUpdated).toBeUndefined();
       expect(mockStorage.getSleeperLeagues).not.toHaveBeenCalled();
+    });
+
+    it('excludes archived leagues from the status leagueCount', async () => {
+      mockStorage.getSleeperConnection.mockResolvedValue({
+        sleeperUserId: 'sleeper_123',
+        sleeperUsername: 'demo_user',
+        updatedAt: '2026-01-25T12:00:00.000Z',
+      });
+      // Status passes includeArchived:false; the storage mock here returns the
+      // already-filtered set, so assert the count reflects what the handler got.
+      mockStorage.getSleeperLeagues.mockResolvedValue([]);
+
+      const response = await handleSleeperStatus(env, 'user_1', corsHeaders);
+      const body = (await response.json()) as Record<string, unknown>;
+
+      expect(body.leagueCount).toBe(0);
+      expect(mockStorage.getSleeperLeagues).toHaveBeenCalledWith('user_1', false);
+    });
+  });
+
+  // ===========================================================================
+  // Public annotate vs internal exclude (UI annotates archived; AI surfaces exclude)
+  // ===========================================================================
+
+  describe('handleSleeperLeagues archive annotation', () => {
+    const stored = [
+      {
+        id: 'row-2025',
+        clerkUserId: 'user_1',
+        leagueId: 'sleeper-2025',
+        sport: 'football',
+        seasonYear: 2025,
+        leagueName: 'Zombie',
+        rosterId: 7,
+        recurringLeagueId: 'sleeper-root',
+        sleeperUserId: 'sleeper_123',
+      },
+    ];
+
+    it('public path annotates archived=true when the recurring id is archived', async () => {
+      mockStorage.getSleeperLeagues.mockResolvedValue(stored);
+      // Composite key: the archived set is keyed by sport:recurringId.
+      mockGetArchivedSet.mockResolvedValue(new Set([archivedKey('football', 'sleeper-root')]));
+
+      const response = await handleSleeperLeagues(env, 'user_1', corsHeaders);
+      const body = (await response.json()) as { leagues: Array<{ archived?: boolean }> };
+
+      expect(mockStorage.getSleeperLeagues).toHaveBeenCalledWith('user_1', true);
+      expect(body.leagues[0].archived).toBe(true);
+    });
+
+    it('public path does NOT annotate archived for a same recurring id in a different sport', async () => {
+      // Stored league is football; archiving basketball:sleeper-root must not flag it.
+      mockStorage.getSleeperLeagues.mockResolvedValue(stored);
+      mockGetArchivedSet.mockResolvedValue(new Set([archivedKey('basketball', 'sleeper-root')]));
+
+      const response = await handleSleeperLeagues(env, 'user_1', corsHeaders);
+      const body = (await response.json()) as { leagues: Array<{ archived?: boolean }> };
+
+      expect(body.leagues[0].archived).toBe(false);
+    });
+
+    it('internal path excludes archived rows and omits the flag', async () => {
+      mockStorage.getSleeperLeagues.mockResolvedValue(stored);
+
+      const response = await handleSleeperLeagues(env, 'user_1', corsHeaders, { includeArchived: false });
+      const body = (await response.json()) as { leagues: Array<{ archived?: boolean }> };
+
+      // Storage was asked to exclude archived; archive set is not consulted for annotation.
+      expect(mockStorage.getSleeperLeagues).toHaveBeenCalledWith('user_1', false);
+      expect(mockGetArchivedSet).not.toHaveBeenCalled();
+      expect(body.leagues[0].archived).toBeUndefined();
+    });
+
+    it('public path fails OPEN on an archive-set error — returns leagues unflagged', async () => {
+      mockStorage.getSleeperLeagues.mockResolvedValue(stored);
+      mockGetArchivedSet.mockRejectedValue(new Error('Failed to get archived set: boom'));
+
+      const response = await handleSleeperLeagues(env, 'user_1', corsHeaders);
+      const body = (await response.json()) as { leagues: Array<{ archived?: boolean }> };
+
+      // The list still returns 200; the archived flag is simply absent/false.
+      expect(response.status).toBe(200);
+      expect(body.leagues).toHaveLength(1);
+      expect(body.leagues[0].archived).toBe(false);
+    });
+  });
+
+  // ===========================================================================
+  // Sleeper id-flip: archive write resolves the canonical root fresh
+  // ===========================================================================
+
+  describe('resolveSleeperArchiveTarget', () => {
+    it('re-resolves the canonical root fresh when a row was keyed on a fallback id', async () => {
+      // Stored rows are keyed on a season-scoped fallback (recurringLeagueId == leagueId).
+      mockStorage.getSleeperLeagues.mockResolvedValue([
+        {
+          id: 'row-2025',
+          clerkUserId: 'user_1',
+          leagueId: 'sleeper-2025',
+          sport: 'football',
+          seasonYear: 2025,
+          leagueName: 'Zombie',
+          rosterId: 7,
+          recurringLeagueId: 'sleeper-2025', // fallback id
+          sleeperUserId: 'sleeper_123',
+        },
+      ]);
+
+      // Fresh chain walk: 2025 -> 2024 (root, no previous_league_id).
+      mockFetch.mockImplementation(async (input) => {
+        const url = String(input);
+        if (url.endsWith('/league/sleeper-2025')) {
+          return jsonResponse({
+            league_id: 'sleeper-2025',
+            name: 'Zombie',
+            sport: 'nfl',
+            season: '2025',
+            previous_league_id: 'sleeper-2024',
+          });
+        }
+        if (url.endsWith('/league/sleeper-2024')) {
+          return jsonResponse({
+            league_id: 'sleeper-2024',
+            name: 'Zombie',
+            sport: 'nfl',
+            season: '2024',
+            previous_league_id: null,
+          });
+        }
+        return new Response(null, { status: 404 });
+      });
+
+      // The UI sent the displayed (fallback) id; archive must resolve the true root.
+      const target = await resolveSleeperArchiveTarget(env, 'user_1', 'sleeper-2025');
+
+      expect(target.recurringLeagueId).toBe('sleeper-2024');
+      expect(target.seasonLeagueIds).toContain('sleeper-2025');
+      expect(target.leagueName).toBe('Zombie');
+      // Persists the resolved root onto the group's rows so the read-filter key
+      // (recurring_league_id ?? league_id) equals the archive key.
+      expect(mockStorage.persistRecurringRoot).toHaveBeenCalledWith(
+        'user_1',
+        ['sleeper-2025'],
+        'sleeper-2024',
+      );
+    });
+  });
+
+  // ===========================================================================
+  // Backfill mechanism (chain-resolving, not the = league_id shortcut)
+  // ===========================================================================
+
+  describe('backfillSleeperRecurringIds', () => {
+    it('resolves the chain root and persists it when the stored value differs', async () => {
+      mockStorage.getSleeperLeagues.mockResolvedValue([
+        {
+          id: 'row-2025',
+          clerkUserId: 'user_1',
+          leagueId: 'sleeper-2025',
+          sport: 'football',
+          seasonYear: 2025,
+          leagueName: 'Zombie',
+          rosterId: 7,
+          recurringLeagueId: 'sleeper-2025', // stale fallback
+          sleeperUserId: 'sleeper_123',
+        },
+      ]);
+
+      mockFetch.mockImplementation(async (input) => {
+        const url = String(input);
+        if (url.endsWith('/league/sleeper-2025')) {
+          return jsonResponse({
+            league_id: 'sleeper-2025',
+            name: 'Zombie',
+            sport: 'nfl',
+            season: '2025',
+            previous_league_id: 'sleeper-2024',
+          });
+        }
+        if (url.endsWith('/league/sleeper-2024')) {
+          return jsonResponse({
+            league_id: 'sleeper-2024',
+            name: 'Zombie',
+            sport: 'nfl',
+            season: '2024',
+            previous_league_id: null,
+          });
+        }
+        return new Response(null, { status: 404 });
+      });
+
+      const result = await backfillSleeperRecurringIds(env, 'user_1');
+
+      expect(result).toEqual({ processed: 1, resolved: 1 });
+      expect(mockStorage.saveSleeperLeague).toHaveBeenCalledWith(
+        expect.objectContaining({ leagueId: 'sleeper-2025', recurringLeagueId: 'sleeper-2024' }),
+      );
     });
   });
 });

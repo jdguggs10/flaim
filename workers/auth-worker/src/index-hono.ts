@@ -59,6 +59,7 @@ import {
   YahooConnectEnv,
 } from './yahoo-connect-handlers';
 import { YahooStorage } from './yahoo-storage';
+import { ArchiveStorage, archivedKey, type ArchivePlatform, type ArchiveSport } from './archive-storage';
 import { logSetupSignal, type SetupSignalEvent } from '@flaim/worker-shared';
 import {
   handleSleeperDiscover,
@@ -66,6 +67,7 @@ import {
   handleSleeperDisconnect,
   handleSleeperLeagues,
   handleSleeperLeagueDelete,
+  resolveSleeperArchiveTarget,
   type SleeperConnectEnv,
 } from './sleeper-connect-handlers';
 import { logEvalEvent } from './logging';
@@ -1121,7 +1123,10 @@ api.get('/internal/leagues/yahoo', async (c) => {
   }
 
   const storage = YahooStorage.fromEnvironment(c.env);
-  const leagues = await storage.getYahooLeagues(userId);
+  // Internal (gateway-facing) endpoint excludes archived leagues so they vanish
+  // from the AI surfaces. No-op for now (the Yahoo archived set stays empty until
+  // Yahoo archive lands), but prevents a latent leak once Yahoo recurring ids ship.
+  const leagues = await storage.getYahooLeagues(userId, false);
 
   return c.json({ leagues }, 200);
 });
@@ -1208,7 +1213,8 @@ api.get('/internal/leagues/sleeper', async (c) => {
       error_description: authError || 'Authentication required',
     }, authStatus ?? 401);
   }
-  return handleSleeperLeagues(c.env as SleeperConnectEnv, userId, getCorsHeaders(c.req.raw));
+  // Internal (gateway-facing) endpoint excludes archived leagues from the AI.
+  return handleSleeperLeagues(c.env as SleeperConnectEnv, userId, getCorsHeaders(c.req.raw), { includeArchived: false });
 });
 
 // Delete Sleeper league (requires auth)
@@ -1223,6 +1229,136 @@ api.delete('/leagues/sleeper/:id', async (c) => {
   const leagueId = c.req.param('id');
   if (!leagueId) return c.json({ error: 'League ID required' }, 400);
   return handleSleeperLeagueDelete(c.env as SleeperConnectEnv, userId, leagueId, getCorsHeaders(c.req.raw));
+});
+
+// =============================================================================
+// LEAGUE ARCHIVE ROUTES (FLA-124)
+// =============================================================================
+
+const ARCHIVE_PLATFORMS: ArchivePlatform[] = ['espn', 'sleeper'];
+const ARCHIVE_SPORTS: ArchiveSport[] = ['football', 'baseball', 'basketball', 'hockey'];
+
+// recurringLeagueId allowlist: numeric ESPN/Sleeper ids plus dotted Yahoo-style
+// league_keys (e.g. "449.l.123"). Dots, dashes, and underscores are permitted; no
+// whitespace or other punctuation. Capped at 255 chars to bound storage/key length.
+const RECURRING_LEAGUE_ID_MAX_LENGTH = 255;
+const RECURRING_LEAGUE_ID_PATTERN = /^[A-Za-z0-9._-]+$/;
+
+interface ArchiveRequestBody {
+  platform?: string;
+  sport?: string;
+  recurringLeagueId?: string;
+}
+
+// Exported for unit tests — pure validation, no side effects.
+export function parseArchiveBody(body: ArchiveRequestBody):
+  | { ok: true; platform: ArchivePlatform; sport: ArchiveSport; recurringLeagueId: string }
+  | { ok: false; error: string } {
+  const { platform, sport, recurringLeagueId } = body;
+  if (!platform || !sport || !recurringLeagueId) {
+    return { ok: false, error: 'platform, sport, and recurringLeagueId are required' };
+  }
+  // Yahoo archive is deferred to a later phase: no stable stored recurring id yet.
+  if (!ARCHIVE_PLATFORMS.includes(platform as ArchivePlatform)) {
+    return { ok: false, error: `Archive is not supported for platform '${platform}'` };
+  }
+  if (!ARCHIVE_SPORTS.includes(sport as ArchiveSport)) {
+    return { ok: false, error: 'Invalid sport' };
+  }
+  if (recurringLeagueId.length > RECURRING_LEAGUE_ID_MAX_LENGTH) {
+    return { ok: false, error: 'Invalid recurringLeagueId' };
+  }
+  if (!RECURRING_LEAGUE_ID_PATTERN.test(recurringLeagueId)) {
+    return { ok: false, error: 'Invalid recurringLeagueId' };
+  }
+  return {
+    ok: true,
+    platform: platform as ArchivePlatform,
+    sport: sport as ArchiveSport,
+    recurringLeagueId,
+  };
+}
+
+// List archived leagues for the user (feeds the web Archived UI section). All
+// platforms — annotation/exclusion happens on the per-platform /leagues* routes.
+api.get('/leagues/archive', async (c) => {
+  const { userId, error: authError } = await getClerkUserId(c.req.raw, c.env);
+  if (!userId) {
+    return c.json({ error: 'unauthorized', error_description: authError || 'Authentication required' }, 401);
+  }
+
+  const archiveStorage = ArchiveStorage.fromEnvironment(c.env);
+  const leagues = await archiveStorage.listArchived(userId);
+
+  return c.json({ leagues }, 200);
+});
+
+// Archive a league (hide it from the AI; survives re-sync). ESPN + Sleeper only (Yahoo deferred to a later phase).
+api.post('/leagues/archive', async (c) => {
+  const { userId, error: authError } = await getClerkUserId(c.req.raw, c.env);
+  if (!userId) {
+    return c.json({ error: 'unauthorized', error_description: authError || 'Authentication required' }, 401);
+  }
+
+  const parsed = parseArchiveBody((await c.req.json()) as ArchiveRequestBody);
+  if (!parsed.ok) {
+    return c.json({ error: parsed.error }, 400);
+  }
+  const { platform, sport } = parsed;
+
+  const archiveStorage = ArchiveStorage.fromEnvironment(c.env);
+  // clearStaleDefaultForLeague operates on user_preferences and is platform-agnostic,
+  // so a single storage instance handles the default-clear for every platform.
+  const sharedStorage = EspnSupabaseStorage.fromEnvironment(c.env);
+
+  // Resolve the canonical recurring key + the per-season ids whose defaults to clear.
+  let recurringLeagueId = parsed.recurringLeagueId;
+  let leagueName: string | undefined;
+  let seasonLeagueIds: string[] = [recurringLeagueId];
+
+  if (platform === 'sleeper') {
+    // Resolve the canonical recurring root fresh so the archive key matches the row's stored id — never archive on a season-scoped fallback.
+    const target = await resolveSleeperArchiveTarget(c.env as SleeperConnectEnv, userId, recurringLeagueId);
+    recurringLeagueId = target.recurringLeagueId;
+    leagueName = target.leagueName;
+    // Clear defaults per per-season league_id of the recurring group.
+    seasonLeagueIds = target.seasonLeagueIds.length > 0 ? target.seasonLeagueIds : [recurringLeagueId];
+  }
+
+  const archived = await archiveStorage.archiveLeague(userId, platform, sport, recurringLeagueId, leagueName);
+  if (!archived) {
+    return c.json({ error: 'Failed to archive league' }, 500);
+  }
+
+  // Auto-clear any default pointing at an archived league. ESPN is a single call on the stable
+  // league_id; Sleeper clears once per per-season id in the recurring group.
+  for (const seasonLeagueId of seasonLeagueIds) {
+    await sharedStorage.clearStaleDefaultForLeague(userId, platform, seasonLeagueId, undefined, sport);
+  }
+
+  return c.json({ success: true, platform, sport, recurringLeagueId });
+});
+
+// Unarchive a league (restore it to the visible/AI surfaces).
+api.delete('/leagues/archive', async (c) => {
+  const { userId, error: authError } = await getClerkUserId(c.req.raw, c.env);
+  if (!userId) {
+    return c.json({ error: 'unauthorized', error_description: authError || 'Authentication required' }, 401);
+  }
+
+  const parsed = parseArchiveBody((await c.req.json()) as ArchiveRequestBody);
+  if (!parsed.ok) {
+    return c.json({ error: parsed.error }, 400);
+  }
+  const { platform, sport, recurringLeagueId } = parsed;
+
+  const archiveStorage = ArchiveStorage.fromEnvironment(c.env);
+  const ok = await archiveStorage.unarchiveLeague(userId, platform, sport, recurringLeagueId);
+  if (!ok) {
+    return c.json({ error: 'Failed to unarchive league' }, 500);
+  }
+
+  return c.json({ success: true, platform, sport, recurringLeagueId });
 });
 
 // =============================================================================
@@ -1565,7 +1701,9 @@ api.get('/internal/leagues', async (c) => {
   }
 
   const storage = EspnSupabaseStorage.fromEnvironment(c.env);
-  const leagues = await storage.getLeagues(clerkUserId);
+  // Internal (gateway-facing) endpoint excludes archived leagues so they vanish
+  // from get_user_session and get_ancient_history automatically.
+  const leagues = await storage.getLeagues(clerkUserId, false);
   const leaguesWithPlatform = leagues.map(league => ({
     ...league,
     platform: 'espn' as const
@@ -1621,12 +1759,24 @@ async function handleLeagues(c: Context<{ Bindings: Env }>, method: string): Pro
     });
 
   } else if (method === 'GET') {
+    // Public (UI) endpoint returns ALL leagues with an `archived` boolean so the
+    // UI can bucket them into the Archived section. ESPN recurring id = league_id.
     const leagues = await storage.getLeagues(clerkUserId);
+    const archiveStorage = ArchiveStorage.fromEnvironment(env);
+    // Annotate path fails OPEN: a transient archive-set error just drops the flag
+    // (the UI loses bucketing) rather than failing the whole league list.
+    let archivedSet: Set<string>;
+    try {
+      archivedSet = await archiveStorage.getArchivedSet(clerkUserId, 'espn');
+    } catch (error) {
+      console.error('[auth-worker] /leagues archived-set lookup failed; annotating none:', error);
+      archivedSet = new Set();
+    }
 
-    // Add platform field to all leagues (currently all are ESPN)
     const leaguesWithPlatform = leagues.map(league => ({
       ...league,
-      platform: 'espn' as const
+      platform: 'espn' as const,
+      archived: archivedSet.has(archivedKey(league.sport, league.leagueId)),
     }));
 
     return c.json({

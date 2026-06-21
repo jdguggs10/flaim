@@ -18,6 +18,8 @@ import {
   BookOpen,
   Info,
   RefreshCw,
+  Archive,
+  ArchiveRestore,
 } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useEspnCredentials } from '@/lib/use-espn-credentials';
@@ -47,6 +49,7 @@ interface League {
   teamId?: string;
   teamName?: string;
   seasonYear?: number;
+  archived?: boolean;
 }
 
 interface YahooLeague {
@@ -68,6 +71,7 @@ interface SleeperLeague {
   leagueName: string;
   rosterId: number | null;
   recurringLeagueId?: string;
+  archived?: boolean;
 }
 
 interface LeagueDefault {
@@ -103,6 +107,8 @@ interface UnifiedLeague {
   // Sleeper-specific
   sleeperId?: string;    // DB UUID for deletion (Sleeper only)
   recurringLeagueId?: string;
+  // Archive state (annotated by the public /leagues* endpoints, ESPN + Sleeper)
+  archived?: boolean;
 }
 
 interface UnifiedLeagueGroup {
@@ -113,6 +119,7 @@ interface UnifiedLeagueGroup {
   leagueName: string;
   teamId?: string;
   seasons: UnifiedLeague[];
+  archived: boolean;     // true when this recurring league is archived (hidden from the AI)
 }
 
 const SPORT_OPTIONS: { value: Sport; label: string; emoji: string }[] = [
@@ -203,6 +210,7 @@ function espnToUnified(leagues: League[], preferences: UserPreferencesState): Un
       isDefault,
       leagueId: l.leagueId,
       teamId: l.teamId,
+      archived: l.archived ?? false,
     };
   });
 }
@@ -252,8 +260,49 @@ function sleeperToUnified(
       isDefault,
       sleeperId: sl.id,
       recurringLeagueId: sl.recurringLeagueId,
+      archived: sl.archived ?? false,
     };
   });
+}
+
+// Resolve the recurring-league archive key for a group: ESPN keys on the stable
+// leagueId; Sleeper keys on its recurring id (falling back to the season league id).
+function getArchiveRecurringId(group: UnifiedLeagueGroup): string {
+  if (group.platform === 'sleeper') {
+    const withRecurring = group.seasons.find((s) => s.recurringLeagueId);
+    return withRecurring?.recurringLeagueId || group.leagueId;
+  }
+  return group.leagueId;
+}
+
+// Archive icon-button shared by the active and old league sections. ESPN + Sleeper
+// only — Yahoo archive is deferred to a later phase, so callers only render this for those two.
+function ArchiveButton({
+  group,
+  archivingLeagueKey,
+  onArchive,
+}: {
+  group: UnifiedLeagueGroup;
+  archivingLeagueKey: string | null;
+  onArchive: (group: UnifiedLeagueGroup) => void;
+}) {
+  const isArchiving = archivingLeagueKey === `${group.platform}:${getArchiveRecurringId(group)}`;
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      className="h-8 w-8 text-muted-foreground hover:text-foreground"
+      onClick={() => onArchive(group)}
+      disabled={isArchiving}
+      title="Archive (hide from your AI)"
+    >
+      {isArchiving ? (
+        <Loader2 className="h-4 w-4 animate-spin" />
+      ) : (
+        <Archive className="h-4 w-4" />
+      )}
+    </Button>
+  );
 }
 
 function LeaguesPageContent() {
@@ -316,6 +365,9 @@ function LeaguesPageContent() {
   const displayPreferences = isAccountStateCurrent ? preferences : EMPTY_USER_PREFERENCES;
   const defaultSport = displayPreferences.defaultSport;
   const [showOldLeagues, setShowOldLeagues] = useState(false);
+  const [showArchivedLeagues, setShowArchivedLeagues] = useState(false);
+  // Keyed by `${platform}:${recurringLeagueId}` while an archive/unarchive request is in flight.
+  const [archivingLeagueKey, setArchivingLeagueKey] = useState<string | null>(null);
 
   const clearYahooConnectionState = useCallback(() => {
     setIsYahooConnected(false);
@@ -399,9 +451,13 @@ function LeaguesPageContent() {
           leagueName: league.leagueName,
           teamId: league.teamId,
           seasons: [],
+          archived: false,
         });
       }
-      grouped.get(groupKey)!.seasons.push(league);
+      const group = grouped.get(groupKey)!;
+      group.seasons.push(league);
+      // Seasons of a recurring league share an archive state; any flagged season archives the group.
+      if (league.archived) group.archived = true;
     }
 
     // Sort seasons desc within each group
@@ -412,17 +468,24 @@ function LeaguesPageContent() {
       group.teamId = group.seasons.find((s) => s.teamId)?.teamId;
     }
 
-    // Separate active vs old leagues
+    // Separate archived, then active vs old. Archived leagues are pulled out of
+    // both the active and old buckets into their own section (hidden from the AI).
     const activeLeagues: UnifiedLeagueGroup[] = [];
     const oldLeagueGroups: UnifiedLeagueGroup[] = [];
+    const archivedLeagueGroups: UnifiedLeagueGroup[] = [];
 
     for (const group of grouped.values()) {
-      if (isOldLeague(group.sport as Sport, group.seasons)) {
+      if (group.archived) {
+        archivedLeagueGroups.push(group);
+      } else if (isOldLeague(group.sport as Sport, group.seasons)) {
         oldLeagueGroups.push(group);
       } else {
         activeLeagues.push(group);
       }
     }
+
+    // Sort archived by most recent season desc for a stable list order.
+    archivedLeagueGroups.sort((a, b) => (b.seasons[0]?.seasonYear ?? 0) - (a.seasons[0]?.seasonYear ?? 0));
 
     // Group active leagues by sport
     const bySportActive = new Map<string, UnifiedLeagueGroup[]>();
@@ -448,7 +511,7 @@ function LeaguesPageContent() {
       return sportOrder.indexOf(a[0]) - sportOrder.indexOf(b[0]);
     });
 
-    return { active: sortedActive, old: oldLeagueGroups };
+    return { active: sortedActive, old: oldLeagueGroups, archived: archivedLeagueGroups };
   }, [displayLeagues, displayYahooLeagues, displaySleeperLeagues, displayPreferences]);
 
   const loadLeagues = useCallback(async (options?: { showSpinner?: boolean; shouldApply?: () => boolean }) => {
@@ -1105,12 +1168,51 @@ function LeaguesPageContent() {
     }
   };
 
+  // Archive/unarchive a league group (ESPN + Sleeper only — Yahoo archive is deferred to a
+  // later phase). Both directions share the flow: resolve key → set loading → fetch → refresh the
+  // affected platform so the `archived` flag re-buckets the group. POST archives (hides
+  // from the AI); DELETE unarchives (restores to the visible/AI surfaces).
+  const performArchiveAction = async (group: UnifiedLeagueGroup, action: 'archive' | 'unarchive') => {
+    const recurringLeagueId = getArchiveRecurringId(group);
+    const actionKey = `${group.platform}:${recurringLeagueId}`;
+    const shouldApply = createAccountGuard();
+    setArchivingLeagueKey(actionKey);
+    setLeagueError(null);
+    setLeagueNotice(null);
+
+    try {
+      const res = await fetch('/api/leagues/archive', {
+        method: action === 'archive' ? 'POST' : 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ platform: group.platform, sport: group.sport, recurringLeagueId }),
+      });
+      if (!res.ok) {
+        const data = await res.json() as { error?: string };
+        throw new Error(data.error || `Failed to ${action} league`);
+      }
+      if (group.platform === 'espn') {
+        await loadLeagues({ showSpinner: false, shouldApply });
+      } else {
+        await loadSleeperLeagues(shouldApply);
+      }
+    } catch (err) {
+      if (shouldApply()) {
+        setLeagueError(err instanceof Error ? err.message : `Failed to ${action} league`);
+      }
+    } finally {
+      if (shouldApply()) setArchivingLeagueKey(null);
+    }
+  };
+
   const getSportEmoji = (sport: string) => {
     const option = SPORT_OPTIONS.find((s) => s.value === sport);
     return option?.emoji || '\u{1F3C6}';
   };
 
-  const hasAnyLeagueGroups = leaguesBySport.active.length > 0 || leaguesBySport.old.length > 0;
+  const hasAnyLeagueGroups =
+    leaguesBySport.active.length > 0 ||
+    leaguesBySport.old.length > 0 ||
+    leaguesBySport.archived.length > 0;
   const displayLeagueError = isAccountStateCurrent ? leagueError : null;
   const displayLeagueNotice = isAccountStateCurrent ? leagueNotice : null;
   const displayEspnConnected = isAccountStateCurrent && hasCredentials;
@@ -1372,6 +1474,11 @@ function LeaguesPageContent() {
               </div>
             ) : (
               <div className="space-y-6">
+                {leaguesBySport.active.length > 0 && (
+                  <p className="text-sm text-muted-foreground">
+                    Used in your AI conversations.
+                  </p>
+                )}
                 {leaguesBySport.active.map(([sport, sportLeagues]) => (
                   <div key={sport} className="space-y-3">
                     {/* Sport Header with Default Star */}
@@ -1484,6 +1591,14 @@ function LeaguesPageContent() {
                                 </div>
                               </div>
                               <div className="flex items-center gap-1 shrink-0">
+                                {/* Archive: ESPN + Sleeper only (Yahoo deferred to a later phase). */}
+                                {(group.platform === 'espn' || group.platform === 'sleeper') && (
+                                  <ArchiveButton
+                                    group={group}
+                                    archivingLeagueKey={archivingLeagueKey}
+                                    onArchive={(g) => performArchiveAction(g, 'archive')}
+                                  />
+                                )}
                                 <Button
                                   variant="ghost"
                                   size="icon"
@@ -1591,36 +1706,130 @@ function LeaguesPageContent() {
                                         {` • Last active: ${mostRecentYear}`}
                                       </div>
                                     </div>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-8 w-8 text-muted-foreground hover:text-destructive shrink-0"
-                                      onClick={() => {
-                                        if (group.platform === 'espn') {
-                                          handleDeleteLeague(group.leagueId, group.sport);
-                                        } else if (group.platform === 'sleeper') {
-                                          handleDeleteSleeperLeagueGroup(group.seasons, group.leagueId);
-                                        } else {
-                                          handleDeleteYahooLeagueGroup(group.seasons);
-                                        }
-                                      }}
-                                      disabled={
-                                        isDeleting
-                                        || (group.platform === 'sleeper' && deletingSleeperKey === `sleeper:${group.leagueId}`)
-                                        || (group.platform === 'yahoo' && deletingLeagueKey === `yahoo:${group.seasons[0]?.yahooId}`)
-                                      }
-                                      title="Delete league"
-                                    >
-                                      {(
-                                        isDeleting
-                                        || (group.platform === 'sleeper' && deletingSleeperKey === `sleeper:${group.leagueId}`)
-                                        || (group.platform === 'yahoo' && deletingLeagueKey === `yahoo:${group.seasons[0]?.yahooId}`)
-                                      ) ? (
-                                        <Loader2 className="h-4 w-4 animate-spin" />
-                                      ) : (
-                                        <Trash2 className="h-4 w-4" />
+                                    <div className="flex items-center gap-1 shrink-0">
+                                      {/* Archive: ESPN + Sleeper only (Yahoo deferred to a later phase). */}
+                                      {(group.platform === 'espn' || group.platform === 'sleeper') && (
+                                        <ArchiveButton
+                                          group={group}
+                                          archivingLeagueKey={archivingLeagueKey}
+                                          onArchive={(g) => performArchiveAction(g, 'archive')}
+                                        />
                                       )}
-                                    </Button>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                        onClick={() => {
+                                          if (group.platform === 'espn') {
+                                            handleDeleteLeague(group.leagueId, group.sport);
+                                          } else if (group.platform === 'sleeper') {
+                                            handleDeleteSleeperLeagueGroup(group.seasons, group.leagueId);
+                                          } else {
+                                            handleDeleteYahooLeagueGroup(group.seasons);
+                                          }
+                                        }}
+                                        disabled={
+                                          isDeleting
+                                          || (group.platform === 'sleeper' && deletingSleeperKey === `sleeper:${group.leagueId}`)
+                                          || (group.platform === 'yahoo' && deletingLeagueKey === `yahoo:${group.seasons[0]?.yahooId}`)
+                                        }
+                                        title="Delete league"
+                                      >
+                                        {(
+                                          isDeleting
+                                          || (group.platform === 'sleeper' && deletingSleeperKey === `sleeper:${group.leagueId}`)
+                                          || (group.platform === 'yahoo' && deletingLeagueKey === `yahoo:${group.seasons[0]?.yahooId}`)
+                                        ) ? (
+                                          <Loader2 className="h-4 w-4 animate-spin" />
+                                        ) : (
+                                          <Trash2 className="h-4 w-4" />
+                                        )}
+                                      </Button>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Archived Leagues Section */}
+                    {leaguesBySport.archived.length > 0 && (
+                      <div className="space-y-3 pt-3 border-t">
+                        <button
+                          type="button"
+                          className="flex items-center gap-2 font-medium text-muted-foreground hover:text-foreground transition-colors w-full"
+                          onClick={() => setShowArchivedLeagues(!showArchivedLeagues)}
+                        >
+                          <Archive className="h-4 w-4" />
+                          <span className="text-base">Archived ({leaguesBySport.archived.length})</span>
+                          <ChevronDown className={`h-4 w-4 ml-auto transition-transform ${showArchivedLeagues ? 'rotate-180' : ''}`} />
+                        </button>
+
+                        {showArchivedLeagues && (
+                          <div className="space-y-3">
+                            <p className="text-sm text-muted-foreground">
+                              Hidden from your AI entirely. Unarchive to bring it back.
+                            </p>
+                            {leaguesBySport.archived.map((group) => {
+                              const baseKey = `${group.leagueId}-${group.sport}`;
+                              const isDeleting =
+                                (group.platform === 'espn' && deletingLeagueKey === baseKey)
+                                || (group.platform === 'sleeper' && deletingSleeperKey === `sleeper:${group.leagueId}`);
+                              const isArchiving = archivingLeagueKey === `${group.platform}:${getArchiveRecurringId(group)}`;
+                              const mostRecentYear = group.seasons[0]?.seasonYear;
+
+                              return (
+                                <div key={group.key} className="rounded-lg border bg-muted/30">
+                                  {/* Archived League Header */}
+                                  <div className="flex items-center justify-between gap-3 p-3">
+                                    <div className="min-w-0">
+                                      <div className="font-medium break-words text-muted-foreground">
+                                        {group.leagueName || `League ${group.leagueId}`}
+                                      </div>
+                                      <div className="text-xs text-muted-foreground/70 break-words">
+                                        {group.platform === 'espn' ? 'ESPN' : 'Sleeper'}
+                                        {mostRecentYear ? ` • Last active: ${mostRecentYear}` : ''}
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center gap-1 shrink-0">
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                                        onClick={() => performArchiveAction(group, 'unarchive')}
+                                        disabled={isArchiving}
+                                        title="Unarchive (show to your AI again)"
+                                      >
+                                        {isArchiving ? (
+                                          <Loader2 className="h-4 w-4 animate-spin" />
+                                        ) : (
+                                          <ArchiveRestore className="h-4 w-4" />
+                                        )}
+                                      </Button>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                        onClick={() => {
+                                          if (group.platform === 'espn') {
+                                            handleDeleteLeague(group.leagueId, group.sport);
+                                          } else {
+                                            handleDeleteSleeperLeagueGroup(group.seasons, group.leagueId);
+                                          }
+                                        }}
+                                        disabled={isDeleting}
+                                        title="Delete league"
+                                      >
+                                        {isDeleting ? (
+                                          <Loader2 className="h-4 w-4 animate-spin" />
+                                        ) : (
+                                          <Trash2 className="h-4 w-4" />
+                                        )}
+                                      </Button>
+                                    </div>
                                   </div>
                                 </div>
                               );
