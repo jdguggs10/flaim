@@ -29,6 +29,10 @@ describe('season helpers', () => {
       expect(getDefaultSeasonYear('football', new Date('2026-06-01T00:00:00-04:00'))).toBe(2026);
     });
 
+    it('returns the current football season on June 15 (regression: previously bucketed as historical)', () => {
+      expect(getDefaultSeasonYear('football', new Date('2026-06-15T12:00:00-04:00'))).toBe(2026);
+    });
+
     it('returns the previous basketball season before Aug 1', () => {
       expect(getDefaultSeasonYear('basketball', new Date('2026-07-15T12:00:00-04:00'))).toBe(2025);
     });
