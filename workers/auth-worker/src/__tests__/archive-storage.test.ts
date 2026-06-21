@@ -123,7 +123,7 @@ describe('ArchiveStorage', () => {
 
     it('throws (fail-closed) on a database error', async () => {
       // Exclude-path callers let this propagate so archived leagues never leak to
-      // the AI on a transient error; annotate-path callers catch it (audit #10).
+      // the AI on a transient error; annotate-path callers catch it.
       const eqPlatform = vi.fn().mockResolvedValue({ data: null, error: { message: 'boom' } });
       const eqUser = vi.fn().mockReturnValue({ eq: eqPlatform });
       const select = vi.fn().mockReturnValue({ eq: eqUser });

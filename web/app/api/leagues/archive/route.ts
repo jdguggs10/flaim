@@ -8,7 +8,7 @@
  * - DELETE → unarchive a league (restore it to the visible/AI surfaces)
  *
  * Body for POST/DELETE: { platform, sport, recurringLeagueId }. ESPN + Sleeper
- * only — Yahoo archive is gated to Phase 1b (D9), enforced by the Auth-Worker.
+ * only — Yahoo archive is deferred to a later phase, enforced by the Auth-Worker.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -20,28 +20,41 @@ interface ArchiveRequestBody {
   recurringLeagueId?: string;
 }
 
+// Shared auth/url/token resolution for the GET/POST/DELETE handlers. Returns the
+// bearer token + worker URL, or a NextResponse to return early when something is
+// missing (callers check via `instanceof NextResponse`).
+async function getArchiveAuthContext(): Promise<{ bearer: string; workerUrl: string } | NextResponse> {
+  const { userId, getToken } = await auth();
+  if (!userId) {
+    return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+  }
+
+  const workerUrl = process.env.NEXT_PUBLIC_AUTH_WORKER_URL;
+  if (!workerUrl) {
+    return NextResponse.json({ error: 'NEXT_PUBLIC_AUTH_WORKER_URL is not configured' }, { status: 500 });
+  }
+
+  const bearer = await getToken?.();
+  if (!bearer) {
+    return NextResponse.json({ error: 'Authentication token unavailable' }, { status: 401 });
+  }
+
+  return { bearer, workerUrl };
+}
+
 // Intentional aggregate archived-leagues feed across all platforms. The leagues page
 // currently derives `archived` from the per-platform endpoints, so this is not on the
 // hot path — it's kept for future use (e.g. a dedicated archived-leagues view) and is
 // not dead code.
 export async function GET() {
   try {
-    const { userId, getToken } = await auth();
-    if (!userId) {
-      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    const authContext = await getArchiveAuthContext();
+    if (authContext instanceof NextResponse) {
+      return authContext;
     }
+    const { bearer, workerUrl } = authContext;
 
-    const authWorkerUrl = process.env.NEXT_PUBLIC_AUTH_WORKER_URL;
-    if (!authWorkerUrl) {
-      return NextResponse.json({ error: 'NEXT_PUBLIC_AUTH_WORKER_URL is not configured' }, { status: 500 });
-    }
-
-    const bearer = await getToken?.();
-    if (!bearer) {
-      return NextResponse.json({ error: 'Authentication token unavailable' }, { status: 401 });
-    }
-
-    const workerResponse = await fetch(`${authWorkerUrl}/leagues/archive`, {
+    const workerResponse = await fetch(`${workerUrl}/leagues/archive`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -63,10 +76,11 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const { userId, getToken } = await auth();
-    if (!userId) {
-      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    const authContext = await getArchiveAuthContext();
+    if (authContext instanceof NextResponse) {
+      return authContext;
     }
+    const { bearer, workerUrl } = authContext;
 
     const body = await request.json() as ArchiveRequestBody;
     if (!body.platform || !body.sport || !body.recurringLeagueId) {
@@ -75,17 +89,7 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    const authWorkerUrl = process.env.NEXT_PUBLIC_AUTH_WORKER_URL;
-    if (!authWorkerUrl) {
-      return NextResponse.json({ error: 'NEXT_PUBLIC_AUTH_WORKER_URL is not configured' }, { status: 500 });
-    }
-
-    const bearer = await getToken?.();
-    if (!bearer) {
-      return NextResponse.json({ error: 'Authentication token unavailable' }, { status: 401 });
-    }
-
-    const workerResponse = await fetch(`${authWorkerUrl}/leagues/archive`, {
+    const workerResponse = await fetch(`${workerUrl}/leagues/archive`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -108,10 +112,11 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const { userId, getToken } = await auth();
-    if (!userId) {
-      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    const authContext = await getArchiveAuthContext();
+    if (authContext instanceof NextResponse) {
+      return authContext;
     }
+    const { bearer, workerUrl } = authContext;
 
     const body = await request.json() as ArchiveRequestBody;
     if (!body.platform || !body.sport || !body.recurringLeagueId) {
@@ -120,17 +125,7 @@ export async function DELETE(request: NextRequest) {
       }, { status: 400 });
     }
 
-    const authWorkerUrl = process.env.NEXT_PUBLIC_AUTH_WORKER_URL;
-    if (!authWorkerUrl) {
-      return NextResponse.json({ error: 'NEXT_PUBLIC_AUTH_WORKER_URL is not configured' }, { status: 500 });
-    }
-
-    const bearer = await getToken?.();
-    if (!bearer) {
-      return NextResponse.json({ error: 'Authentication token unavailable' }, { status: 401 });
-    }
-
-    const workerResponse = await fetch(`${authWorkerUrl}/leagues/archive`, {
+    const workerResponse = await fetch(`${workerUrl}/leagues/archive`, {
       method: 'DELETE',
       headers: {
         'Content-Type': 'application/json',

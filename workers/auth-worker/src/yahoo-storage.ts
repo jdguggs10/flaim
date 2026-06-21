@@ -526,11 +526,11 @@ export class YahooStorage {
   /**
    * Get all Yahoo leagues for a user.
    *
-   * The `includeArchived` parameter exists for read-path parity with ESPN/Sleeper
-   * (D2), but Yahoo archive is gated to Phase 1b (D9): no `recurring_league_id` is
+   * The `includeArchived` parameter exists for read-path parity with ESPN/Sleeper,
+   * but Yahoo archive is deferred to a later phase: no `recurring_league_id` is
    * stored yet, so the archived set is always empty and this method returns all
-   * rows regardless of the flag. Phase 1b will resolve the Yahoo recurring id and
-   * apply the same column-comparison filter.
+   * rows regardless of the flag. A later phase will resolve the Yahoo recurring id
+   * and apply the same column-comparison filter.
    */
   async getYahooLeagues(clerkUserId: string, _includeArchived: boolean = true): Promise<YahooLeague[]> {
     const { data, error } = await this.supabase

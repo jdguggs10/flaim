@@ -11,7 +11,7 @@
  * where `recurring_league_id` is the SAME value the league row stores
  * (ESPN: `league_id`; Sleeper: `recurring_league_id ?? league_id`). The read-path
  * filter is therefore a plain column comparison against the archived set — no
- * separate key-computation and no dependency on display-grouping heuristics (D2).
+ * separate key-computation and no dependency on display-grouping heuristics.
  *
  * All access uses the Supabase service-role key (bypasses RLS), matching every
  * existing league table.
@@ -180,13 +180,13 @@ export class ArchiveStorage {
   /**
    * Return the set of archived leagues for a user + platform, keyed by
    * `sport:recurringId` (see `archivedKey`). Used by the read-path filter as a
-   * plain composite-key comparison (D2). The sport is part of the key because
+   * plain composite-key comparison. The sport is part of the key because
    * recurring ids are only unique within a sport.
    *
    * THROWS on a DB error (fail-closed). Exclude-path callers (internal
    * `includeArchived:false`) let it propagate so a transient error fails the
    * league read rather than silently un-hiding archived leagues from the AI —
-   * the gateway already tolerates a platform fetch failure (audit #10). Annotate-path
+   * the gateway already tolerates a platform fetch failure. Annotate-path
    * callers (public UI) catch it and fall back to an empty set (fail-open) so the
    * UI just loses the archived flag.
    */

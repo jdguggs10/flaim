@@ -276,7 +276,7 @@ function getArchiveRecurringId(group: UnifiedLeagueGroup): string {
 }
 
 // Archive icon-button shared by the active and old league sections. ESPN + Sleeper
-// only — Yahoo is gated to Phase 1b (D9), so callers only render this for those two.
+// only — Yahoo archive is deferred to a later phase, so callers only render this for those two.
 function ArchiveButton({
   group,
   archivingLeagueKey,
@@ -1168,8 +1168,8 @@ function LeaguesPageContent() {
     }
   };
 
-  // Archive/unarchive a league group (ESPN + Sleeper only — Yahoo is gated to Phase 1b,
-  // D9). Both directions share the flow: resolve key → set loading → fetch → refresh the
+  // Archive/unarchive a league group (ESPN + Sleeper only — Yahoo archive is deferred to a
+  // later phase). Both directions share the flow: resolve key → set loading → fetch → refresh the
   // affected platform so the `archived` flag re-buckets the group. POST archives (hides
   // from the AI); DELETE unarchives (restores to the visible/AI surfaces).
   const performArchiveAction = async (group: UnifiedLeagueGroup, action: 'archive' | 'unarchive') => {
@@ -1591,7 +1591,7 @@ function LeaguesPageContent() {
                                 </div>
                               </div>
                               <div className="flex items-center gap-1 shrink-0">
-                                {/* Archive: ESPN + Sleeper only (Yahoo gated to Phase 1b, D9). */}
+                                {/* Archive: ESPN + Sleeper only (Yahoo deferred to a later phase). */}
                                 {(group.platform === 'espn' || group.platform === 'sleeper') && (
                                   <ArchiveButton
                                     group={group}
@@ -1707,7 +1707,7 @@ function LeaguesPageContent() {
                                       </div>
                                     </div>
                                     <div className="flex items-center gap-1 shrink-0">
-                                      {/* Archive: ESPN + Sleeper only (Yahoo gated to Phase 1b, D9). */}
+                                      {/* Archive: ESPN + Sleeper only (Yahoo deferred to a later phase). */}
                                       {(group.platform === 'espn' || group.platform === 'sleeper') && (
                                         <ArchiveButton
                                           group={group}

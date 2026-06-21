@@ -115,7 +115,7 @@ export class SleeperStorage {
    * Retrieve Sleeper leagues for a user.
    * When `includeArchived` is false, rows whose recurring identity
    * (`recurring_league_id ?? league_id`) is in the user's archived set are
-   * excluded (D2). The default (`true`) keeps dedupe/discovery readers unfiltered.
+   * excluded. The default (`true`) keeps dedupe/discovery readers unfiltered.
    */
   async getSleeperLeagues(clerkUserId: string, includeArchived: boolean = true): Promise<SleeperLeague[]> {
     const { data, error } = await this.supabase
@@ -197,8 +197,8 @@ export class SleeperStorage {
   }
 
   /**
-   * Persist the canonical recurring root onto every Sleeper row in a group (D2a /
-   * §8.5 #1). After an archive write resolves the chain root, this writes that root
+   * Persist the canonical recurring root onto every Sleeper row in a group.
+   * After an archive write resolves the chain root, this writes that root
    * into `recurring_league_id` for the given season-scoped `league_id`s, so the
    * STORED column the read-filter keys on (`recurring_league_id ?? league_id`) equals
    * the archive-table key. Without this, a row whose stored column is NULL would key
@@ -273,7 +273,7 @@ export class SleeperStorage {
       await this._clearDefaultsForLeague(clerkUserId, 'sleeper', row.league_id, row.season_year);
     }
 
-    // A true delete also removes the league's archive entry (D8).
+    // A true delete also removes the league's archive entry.
     if (archiveRecurringId) {
       await this.archive.unarchiveLeague(
         clerkUserId,

@@ -761,7 +761,7 @@ describe('sleeper-connect-handlers', () => {
       expect(mockStorage.getSleeperLeagues).not.toHaveBeenCalled();
     });
 
-    it('excludes archived leagues from the status leagueCount (§9)', async () => {
+    it('excludes archived leagues from the status leagueCount', async () => {
       mockStorage.getSleeperConnection.mockResolvedValue({
         sleeperUserId: 'sleeper_123',
         sleeperUsername: 'demo_user',
@@ -780,7 +780,7 @@ describe('sleeper-connect-handlers', () => {
   });
 
   // ===========================================================================
-  // Public annotate vs internal exclude (D3)
+  // Public annotate vs internal exclude (UI annotates archived; AI surfaces exclude)
   // ===========================================================================
 
   describe('handleSleeperLeagues archive annotation', () => {
@@ -833,7 +833,7 @@ describe('sleeper-connect-handlers', () => {
       expect(body.leagues[0].archived).toBeUndefined();
     });
 
-    it('public path fails OPEN on an archive-set error — returns leagues unflagged (audit #10)', async () => {
+    it('public path fails OPEN on an archive-set error — returns leagues unflagged', async () => {
       mockStorage.getSleeperLeagues.mockResolvedValue(stored);
       mockGetArchivedSet.mockRejectedValue(new Error('Failed to get archived set: boom'));
 
@@ -848,7 +848,7 @@ describe('sleeper-connect-handlers', () => {
   });
 
   // ===========================================================================
-  // Sleeper id-flip: archive write resolves the canonical root fresh (§8.5 #1)
+  // Sleeper id-flip: archive write resolves the canonical root fresh
   // ===========================================================================
 
   describe('resolveSleeperArchiveTarget', () => {
@@ -899,7 +899,7 @@ describe('sleeper-connect-handlers', () => {
       expect(target.seasonLeagueIds).toContain('sleeper-2025');
       expect(target.leagueName).toBe('Zombie');
       // Persists the resolved root onto the group's rows so the read-filter key
-      // (recurring_league_id ?? league_id) equals the archive key (D2a / §8.5 #1).
+      // (recurring_league_id ?? league_id) equals the archive key.
       expect(mockStorage.persistRecurringRoot).toHaveBeenCalledWith(
         'user_1',
         ['sleeper-2025'],

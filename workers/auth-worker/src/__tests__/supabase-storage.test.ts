@@ -190,7 +190,7 @@ describe('EspnSupabaseStorage', () => {
     ]);
   });
 
-  it('getLeagues fails CLOSED: propagates a thrown archive-set error on the exclude path (audit #10)', async () => {
+  it('getLeagues fails CLOSED: propagates a thrown archive-set error on the exclude path', async () => {
     mockFrom.mockImplementation((table: string) => {
       if (table === 'espn_leagues') {
         const eq = vi.fn().mockResolvedValue({
@@ -213,7 +213,7 @@ describe('EspnSupabaseStorage', () => {
     await expect(storage.getLeagues('user_123', false)).rejects.toThrow('Failed to get archived set');
   });
 
-  it('setDefaultLeague fails OPEN on an archive-set error — allows the default (audit #10)', async () => {
+  it('setDefaultLeague fails OPEN on an archive-set error — allows the default', async () => {
     const mockPrefsUpsert = vi.fn().mockReturnValue({ error: null });
     mockFrom.mockImplementation((table: string) => {
       if (table === 'espn_leagues') {
@@ -266,7 +266,7 @@ describe('EspnSupabaseStorage', () => {
   });
 
   // ===========================================================================
-  // setDefaultLeague rejects an archived league (§9)
+  // setDefaultLeague rejects an archived league
   // ===========================================================================
 
   it('setDefaultLeague rejects an archived ESPN league', async () => {
@@ -296,7 +296,7 @@ describe('EspnSupabaseStorage', () => {
   });
 
   // ===========================================================================
-  // removeLeague also deletes the matching archive row (D8)
+  // removeLeague also deletes the matching archive row
   // ===========================================================================
 
   it('removeLeague deletes the matching archived_leagues row', async () => {

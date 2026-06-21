@@ -330,8 +330,8 @@ export class EspnSupabaseStorage {
   /**
    * Retrieve ESPN leagues for a user.
    * When `includeArchived` is false, rows whose recurring identity (ESPN uses its
-   * stable `league_id`) is in the user's archived set are excluded (D2). The
-   * default (`true`) keeps dedupe/onboarding/discovery readers unfiltered (D5).
+   * stable `league_id`) is in the user's archived set are excluded. The default
+   * (`true`) keeps dedupe/onboarding/discovery readers unfiltered.
    */
   async getLeagues(clerkUserId: string, includeArchived: boolean = true): Promise<EspnLeague[]> {
     let rawRows: { league_id: string; sport: string; team_id: string | null; team_name: string | null; league_name: string | null; season_year: number | null }[];
@@ -351,9 +351,9 @@ export class EspnSupabaseStorage {
     }
 
     // Exclude path (includeArchived:false) fails CLOSED: getArchivedSet throws on a
-    // DB error and we let it propagate rather than returning archived leagues
-    // unfiltered to the AI (audit #10). Annotate/unfiltered callers (default true)
-    // skip this entirely.
+    // DB error and we let it propagate rather than leaking archived leagues
+    // unfiltered to the AI. Annotate/unfiltered callers (default true) skip this
+    // entirely.
     const archivedSet = includeArchived
       ? null
       : await this.archive.getArchivedSet(clerkUserId, 'espn');
@@ -513,7 +513,7 @@ export class EspnSupabaseStorage {
       // Clear any stale defaults pointing to this ESPN league for the deleted sport only
       await this.clearStaleDefaultForLeague(clerkUserId, 'espn', leagueId, undefined, sport);
 
-      // A true delete also removes the league's archive entry (D8): deleting then
+      // A true delete also removes the league's archive entry: deleting then
       // re-adding returns the league un-archived. ESPN recurring id is league_id.
       await this.archive.unarchiveLeague(
         clerkUserId,
@@ -608,7 +608,7 @@ export class EspnSupabaseStorage {
           return { success: false, error: 'Cannot set default: no team selected for this league' };
         }
 
-        // Reject an archived league as a new default (§9). ESPN recurring id is league_id.
+        // Reject an archived league as a new default. ESPN recurring id is league_id.
         // Fail-open on a transient archive-set error: don't block setting a default.
         const archivedSet = await this.getArchivedSetFailOpen(clerkUserId, 'espn');
         if (archivedSet.has(archivedKey(sport, leagueId))) {
@@ -641,8 +641,8 @@ export class EspnSupabaseStorage {
           return { success: false, error: 'League not found' };
         }
 
-        // Reject an archived league as a new default (§9). Sleeper archive key is
-        // `recurring_league_id ?? league_id` (matches the read-path filter, D2).
+        // Reject an archived league as a new default. Sleeper archive key is
+        // `recurring_league_id ?? league_id` (matches the read-path filter).
         // Resolve the row's recurring id separately so a missing column (pre-migration)
         // fails open rather than breaking default validation.
         const recurringId = await this.resolveSleeperRecurringId(clerkUserId, leagueId, seasonYear);
@@ -686,7 +686,7 @@ export class EspnSupabaseStorage {
    * error to fail-closed for the exclude path). Here we fail-OPEN: a transient
    * archive-set error treats nothing as archived rather than blocking default
    * validation. The exclude path (internal `includeArchived:false`) calls
-   * `getArchivedSet` directly and lets the throw propagate (audit #10).
+   * `getArchivedSet` directly and lets the throw propagate (fail-closed).
    */
   private async getArchivedSetFailOpen(
     clerkUserId: string,

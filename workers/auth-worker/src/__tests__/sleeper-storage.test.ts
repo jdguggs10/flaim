@@ -455,7 +455,7 @@ describe('SleeperStorage', () => {
   });
 
   // ===========================================================================
-  // includeArchived filter (Sleeper) — D2, recurring_league_id ?? league_id
+  // includeArchived filter (Sleeper) — archive key is recurring_league_id ?? league_id
   // ===========================================================================
 
   describe('getSleeperLeagues includeArchived', () => {
@@ -535,7 +535,7 @@ describe('SleeperStorage', () => {
       expect(result.map((l) => l.leagueId)).toEqual(['K2025']);
     });
 
-    it('fails CLOSED: propagates a thrown archive-set error on the exclude path (audit #10)', async () => {
+    it('fails CLOSED: propagates a thrown archive-set error on the exclude path', async () => {
       // archived_leagues read errors → getArchivedSet throws → getSleeperLeagues
       // (includeArchived:false) propagates rather than returning unfiltered rows.
       function mockArchiveError() {
@@ -575,7 +575,7 @@ describe('SleeperStorage', () => {
   });
 
   // ===========================================================================
-  // persistRecurringRoot + read-filter parity (D2a / §8.5 #1)
+  // persistRecurringRoot + read-filter parity (stored recurring root matches the archive key)
   // ===========================================================================
 
   describe('persistRecurringRoot', () => {
@@ -648,7 +648,7 @@ describe('SleeperStorage', () => {
   });
 
   // ===========================================================================
-  // deleteSleeperLeague also removes the archive row (D8)
+  // deleteSleeperLeague also removes the archive row
   // ===========================================================================
 
   describe('deleteSleeperLeague archive cleanup', () => {
