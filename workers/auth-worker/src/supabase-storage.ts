@@ -334,7 +334,7 @@ export class EspnSupabaseStorage {
    * (`true`) keeps dedupe/onboarding/discovery readers unfiltered.
    */
   async getLeagues(clerkUserId: string, includeArchived: boolean = true): Promise<EspnLeague[]> {
-    let rawRows: { league_id: string; sport: string; team_id: string | null; team_name: string | null; league_name: string | null; season_year: number | null }[];
+    let rawRows: { league_id: string; sport: string; team_id: string | null; team_name: string | null; league_name: string | null; season_year: number | null }[] = [];
     try {
       if (!clerkUserId) return [];
 

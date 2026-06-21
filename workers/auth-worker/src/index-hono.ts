@@ -1238,13 +1238,20 @@ api.delete('/leagues/sleeper/:id', async (c) => {
 const ARCHIVE_PLATFORMS: ArchivePlatform[] = ['espn', 'sleeper'];
 const ARCHIVE_SPORTS: ArchiveSport[] = ['football', 'baseball', 'basketball', 'hockey'];
 
+// recurringLeagueId allowlist: numeric ESPN/Sleeper ids plus dotted Yahoo-style
+// league_keys (e.g. "449.l.123"). Dots, dashes, and underscores are permitted; no
+// whitespace or other punctuation. Capped at 255 chars to bound storage/key length.
+const RECURRING_LEAGUE_ID_MAX_LENGTH = 255;
+const RECURRING_LEAGUE_ID_PATTERN = /^[A-Za-z0-9._-]+$/;
+
 interface ArchiveRequestBody {
   platform?: string;
   sport?: string;
   recurringLeagueId?: string;
 }
 
-function parseArchiveBody(body: ArchiveRequestBody):
+// Exported for unit tests — pure validation, no side effects.
+export function parseArchiveBody(body: ArchiveRequestBody):
   | { ok: true; platform: ArchivePlatform; sport: ArchiveSport; recurringLeagueId: string }
   | { ok: false; error: string } {
   const { platform, sport, recurringLeagueId } = body;
@@ -1257,6 +1264,12 @@ function parseArchiveBody(body: ArchiveRequestBody):
   }
   if (!ARCHIVE_SPORTS.includes(sport as ArchiveSport)) {
     return { ok: false, error: 'Invalid sport' };
+  }
+  if (recurringLeagueId.length > RECURRING_LEAGUE_ID_MAX_LENGTH) {
+    return { ok: false, error: 'Invalid recurringLeagueId' };
+  }
+  if (!RECURRING_LEAGUE_ID_PATTERN.test(recurringLeagueId)) {
+    return { ok: false, error: 'Invalid recurringLeagueId' };
   }
   return {
     ok: true,
