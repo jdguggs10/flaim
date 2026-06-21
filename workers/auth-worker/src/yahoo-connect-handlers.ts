@@ -22,6 +22,7 @@ import {
   YahooStorage,
   type YahooCredentialHealth,
   type YahooCredentials,
+  type YahooLeague,
 } from './yahoo-storage';
 import { getFrontendUrl, resolvePreviewOrigin } from './preview-url';
 import {
@@ -1863,8 +1864,8 @@ export async function handleYahooStatus(
     // Public status exposes only coarse, non-secret health for the web UI.
     const [credentials, leagues] = await Promise.all([
       storage.getYahooCredentialHealth(userId),
-      // Exclude archived to match the visible active-list count semantics (inert
-      // for now since Yahoo has no archived set, correct once Yahoo archive ships).
+      // Exclude archived to match the visible active-list count semantics; Yahoo
+      // now has a real archived set, so this excludes archived recurring groups.
       storage.getYahooLeagues(userId, false),
     ]);
     const checkedAtNowMs = Date.now();
@@ -1964,6 +1965,11 @@ async function refreshAccessToken(
 
 const YAHOO_FANTASY_API_URL = 'https://fantasysports.yahooapis.com/fantasy/v2';
 
+// Cap the renew-chain walk so a malformed/looping pointer set can't fetch
+// unbounded league metas. Yahoo Fantasy predates the era any real chain would
+// exceed; matches Sleeper's MAX_HISTORY_YEARS intent.
+const MAX_YAHOO_CHAIN_DEPTH = 25;
+
 /**
  * Map Yahoo sport codes to our internal sport names
  */
@@ -1982,6 +1988,273 @@ interface DiscoveredYahooLeague {
   teamId: string;
   teamKey: string;
   teamName: string;
+  // Yahoo's prior-season renew pointer (league meta resource) in
+  // `{game_key}_{league_id}` form (empty string at the oldest league). Seeds the
+  // chain walk's first hop. May be absent in some responses.
+  renew?: string;
+}
+
+/**
+ * A renew pointer in Yahoo's `{game_key}_{league_id}` form (e.g. "308_51222").
+ * Reconstruct the prior season's league_key as `{game_key}.l.{league_id}`.
+ * Returns null when the pointer is empty (chain terminator) or malformed.
+ */
+function leagueKeyFromRenew(renew: string | undefined | null): string | null {
+  if (!renew || typeof renew !== 'string') return null;
+  const trimmed = renew.trim();
+  if (!trimmed) return null;
+  const underscore = trimmed.indexOf('_');
+  if (underscore <= 0 || underscore >= trimmed.length - 1) return null;
+  const gameKey = trimmed.slice(0, underscore);
+  const leagueId = trimmed.slice(underscore + 1);
+  if (!gameKey || !leagueId) return null;
+  return `${gameKey}.l.${leagueId}`;
+}
+
+interface YahooLeagueMeta {
+  leagueKey: string;
+  renew?: string;
+}
+
+/**
+ * Fetch a single Yahoo league's meta resource (`/league/{league_key}`) and
+ * extract its `league_key` + `renew` pointer. Cached per chain walk so a shared
+ * season is not re-fetched. Returns null on a non-OK response or unparseable body
+ * (treated as an unresolvable link by the caller).
+ */
+async function getYahooLeagueMeta(
+  leagueKey: string,
+  accessToken: string,
+  metaCache: Map<string, Promise<YahooLeagueMeta | null>>
+): Promise<YahooLeagueMeta | null> {
+  const cached = metaCache.get(leagueKey);
+  if (cached) return cached;
+
+  const request = (async (): Promise<YahooLeagueMeta | null> => {
+    const url = `${YAHOO_FANTASY_API_URL}/league/${leagueKey}?format=json`;
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+    if (!res.ok) {
+      throw new Error(`Yahoo API ${res.status} while resolving ${leagueKey}`);
+    }
+    const data = await res.json();
+    return parseYahooLeagueMeta(data, leagueKey);
+  })();
+
+  metaCache.set(leagueKey, request);
+  return request;
+}
+
+/**
+ * Parse the renew pointer (and confirm the league_key) out of Yahoo's nested
+ * single-league meta response. Defensive: `renew` may be absent.
+ *
+ * Shape: { fantasy_content: { league: [ { league_key, renew, renewed, ... } ] } }
+ */
+function parseYahooLeagueMeta(data: unknown, fallbackLeagueKey: string): YahooLeagueMeta | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const leagueArray = (data as any)?.fantasy_content?.league;
+    if (!Array.isArray(leagueArray) || leagueArray.length < 1) {
+      return { leagueKey: fallbackLeagueKey };
+    }
+    const info = leagueArray[0];
+    const leagueKey = typeof info?.league_key === 'string' ? info.league_key : fallbackLeagueKey;
+    const renew = typeof info?.renew === 'string' ? info.renew : undefined;
+    return { leagueKey, renew };
+  } catch {
+    return { leagueKey: fallbackLeagueKey };
+  }
+}
+
+interface YahooRecurringResolutionResult {
+  recurringLeagueId?: string;
+  failureReason?: string;
+}
+
+/**
+ * Walk Yahoo's renew chain to the oldest reachable league (the recurring root),
+ * mirroring Sleeper's tryResolveRecurringLeagueId. Starting from `leagueKey`:
+ * read its `renew` pointer → reconstruct the prior `league_key` → fetch its meta →
+ * repeat until `renew` is empty. The root = oldest reachable `league_key`.
+ *
+ * Includes a fetch cache, a `visited` cycle guard, and a depth cap. When the first
+ * league's `renew` is already known (from the bulk discovery response), `seedRenew`
+ * skips the initial extra meta fetch.
+ */
+async function tryResolveYahooRecurringId(
+  leagueKey: string,
+  accessToken: string,
+  cache: Map<string, string | null>,
+  metaCache: Map<string, Promise<YahooLeagueMeta | null>>,
+  seedRenew?: string
+): Promise<YahooRecurringResolutionResult> {
+  const path: string[] = [];
+  const visited = new Set<string>();
+  let currentLeagueKey: string | null = leagueKey;
+  let pendingRenew: string | undefined = seedRenew;
+  let usedSeed = seedRenew !== undefined;
+
+  while (currentLeagueKey) {
+    if (cache.has(currentLeagueKey)) {
+      const cached = cache.get(currentLeagueKey) ?? null;
+      for (const pathKey of path) cache.set(pathKey, cached);
+      return cached
+        ? { recurringLeagueId: cached }
+        : { failureReason: `unresolved recurring chain at ${currentLeagueKey}` };
+    }
+
+    if (visited.has(currentLeagueKey)) {
+      for (const pathKey of path) cache.set(pathKey, null);
+      return { failureReason: `detected recurring league cycle at ${currentLeagueKey}` };
+    }
+
+    if (path.length >= MAX_YAHOO_CHAIN_DEPTH) {
+      for (const pathKey of path) cache.set(pathKey, null);
+      return { failureReason: `recurring chain exceeded depth cap at ${currentLeagueKey}` };
+    }
+
+    visited.add(currentLeagueKey);
+    path.push(currentLeagueKey);
+
+    try {
+      // Use the seeded renew for the first hop when available; otherwise fetch meta.
+      let renew: string | undefined;
+      if (usedSeed) {
+        renew = pendingRenew;
+        usedSeed = false;
+      } else {
+        const meta = await getYahooLeagueMeta(currentLeagueKey, accessToken, metaCache);
+        if (!meta) {
+          for (const pathKey of path) cache.set(pathKey, null);
+          return { failureReason: `Yahoo returned no meta while resolving ${currentLeagueKey}` };
+        }
+        renew = meta.renew;
+      }
+
+      const priorKey = leagueKeyFromRenew(renew);
+      if (!priorKey) {
+        // Empty/absent renew → this is the oldest reachable league (the root).
+        for (const pathKey of path) cache.set(pathKey, currentLeagueKey);
+        return { recurringLeagueId: currentLeagueKey };
+      }
+
+      currentLeagueKey = priorKey;
+      pendingRenew = undefined;
+    } catch {
+      // Mid-walk meta fetch failed: use the oldest league we actually reached as
+      // the root rather than collapsing to the season-scoped start key. A season
+      // that is consistently unreachable (e.g. token can't read deep history) then
+      // yields a stable root year-over-year, so an archived league does not
+      // resurface on the next re-sync (§8.5 #2). At the first hop currentLeagueKey
+      // is still the season-scoped start, so this is never worse than the old
+      // fallback. (Cycle/depth-cap below remain hard fallbacks.)
+      for (const pathKey of path) cache.set(pathKey, currentLeagueKey);
+      return { recurringLeagueId: currentLeagueKey };
+    }
+  }
+
+  return { failureReason: `unresolved recurring chain at ${leagueKey}` };
+}
+
+/**
+ * Resolve the Yahoo recurring root for `leagueKey`, falling back to the
+ * season-scoped `league_key` when the renew chain can't resolve (mirrors
+ * Sleeper's resolveRecurringLeagueId safety net). Never throws.
+ */
+async function resolveYahooRecurringId(
+  leagueKey: string,
+  accessToken: string,
+  cache: Map<string, string | null>,
+  metaCache: Map<string, Promise<YahooLeagueMeta | null>>,
+  seedRenew?: string
+): Promise<string> {
+  const resolution = await tryResolveYahooRecurringId(leagueKey, accessToken, cache, metaCache, seedRenew);
+  if (resolution.recurringLeagueId) return resolution.recurringLeagueId;
+
+  console.warn(
+    `[yahoo-connect] Falling back to season-scoped league_key ${leagueKey} for recurring grouping: ${resolution.failureReason ?? 'unresolved recurring chain'}`
+  );
+  return leagueKey;
+}
+
+/**
+ * Resolve the canonical recurring root for a Yahoo archive write, fresh from the
+ * renew chain — never persisting a season-scoped fallback as the archive key when
+ * the real root is resolvable. Also returns the group's per-season `league_key`s
+ * (for default-clear) and persists the resolved root onto those rows so the
+ * read-filter's stored key (`recurring_league_id ?? league_key`) equals the
+ * archive key. Mirrors resolveSleeperArchiveTarget.
+ *
+ * `requestedRecurringId` is the id the UI sent (the displayed recurring id or a
+ * season-scoped league_key). Used to locate the group's stored rows; the canonical
+ * root is re-resolved from the freshest (most-recent season) row's league_key.
+ */
+export async function resolveYahooArchiveTarget(
+  env: YahooConnectEnv,
+  userId: string,
+  requestedRecurringId: string
+): Promise<{ recurringLeagueId: string; leagueName?: string; seasonLeagueKeys: string[] }> {
+  const storage = YahooStorage.fromEnvironment(env);
+  const allLeagues = await storage.getYahooLeagues(userId, true);
+
+  // Rows in this recurring group: stored recurring id matches, or (fallback) the
+  // season-scoped league_key equals the requested id.
+  const groupRows = allLeagues.filter((l) => {
+    const stored = l.recurringLeagueId ?? l.leagueKey;
+    return stored === requestedRecurringId || l.leagueKey === requestedRecurringId;
+  });
+
+  const seasonLeagueKeys = Array.from(new Set(groupRows.map((l) => l.leagueKey)));
+
+  // Re-resolve the canonical root fresh from the most-recent season's league_key.
+  const freshest = groupRows.reduce<YahooLeague | undefined>((best, cur) => {
+    if (!best) return cur;
+    return cur.seasonYear > best.seasonYear ? cur : best;
+  }, undefined);
+
+  let recurringLeagueId = requestedRecurringId;
+  if (freshest) {
+    // Re-resolution needs the user's access token; resolve it fresh (with refresh).
+    const accessToken = await getYahooAccessTokenForResolution(storage, env, userId);
+    if (accessToken) {
+      const cache = new Map<string, string | null>();
+      const metaCache = new Map<string, Promise<YahooLeagueMeta | null>>();
+      recurringLeagueId = await resolveYahooRecurringId(freshest.leagueKey, accessToken, cache, metaCache);
+    } else {
+      // No usable token → fall back to the freshest row's stored id (or league_key).
+      recurringLeagueId = freshest.recurringLeagueId ?? freshest.leagueKey;
+    }
+  }
+
+  // Persist the resolved root onto every row in the group so the read-filter's
+  // stored key equals the archive key (tolerates the pre-migration missing column).
+  if (seasonLeagueKeys.length > 0) {
+    await storage.persistYahooRecurringRoot(userId, seasonLeagueKeys, recurringLeagueId);
+  }
+
+  return { recurringLeagueId, leagueName: freshest?.leagueName, seasonLeagueKeys };
+}
+
+/**
+ * Resolve a usable Yahoo access token for recurring-id resolution, refreshing if
+ * needed. Returns null when no credentials exist or the refresh fails — callers
+ * fall back to the stored/season-scoped id rather than throwing.
+ */
+async function getYahooAccessTokenForResolution(
+  storage: YahooStorage,
+  env: YahooConnectEnv,
+  userId: string
+): Promise<string | null> {
+  const credentials = await storage.getYahooCredentials(userId);
+  if (!credentials) return null;
+  if (!credentials.needsRefresh) return credentials.accessToken;
+
+  const tokenResult = await getValidYahooAccessToken(storage, userId, env, credentials, undefined, 'clerk');
+  if ('error' in tokenResult) {
+    console.warn(`[yahoo-connect] Could not refresh token for recurring-id resolution (user ${maskUserId(userId)}): ${tokenResult.error}`);
+    return null;
+  }
+  return tokenResult.accessToken;
 }
 
 /**
@@ -2082,8 +2355,32 @@ export async function handleYahooDiscover(
 
     console.log(`[yahoo-connect] Discovered ${leagues.length} leagues for user ${maskUserId(userId)}`);
 
+    // Resolve each league's recurring root (renew-chain walk) and persist it onto
+    // the row, tolerating a missing column (pre-migration) exactly like Sleeper.
+    // A shared cache de-dupes meta fetches across leagues that share a chain.
+    const recurringIdCache = new Map<string, string | null>();
+    const metaCache = new Map<string, Promise<YahooLeagueMeta | null>>();
+
     // Save leagues to storage
     for (const league of leagues) {
+      let recurringLeagueId: string | undefined;
+      try {
+        recurringLeagueId = await resolveYahooRecurringId(
+          league.leagueKey,
+          accessToken,
+          recurringIdCache,
+          metaCache,
+          league.renew
+        );
+      } catch (error) {
+        // resolveYahooRecurringId never throws, but guard discovery regardless:
+        // persist without a recurring id rather than failing the whole sync.
+        console.warn(
+          `[yahoo-connect] Recurring-id resolution failed for ${league.leagueKey}; saving without it:`,
+          error
+        );
+      }
+
       await storage.upsertYahooLeague({
         clerkUserId: userId,
         sport: league.sport,
@@ -2093,6 +2390,7 @@ export async function handleYahooDiscover(
         teamId: league.teamId,
         teamKey: league.teamKey,
         teamName: league.teamName,
+        recurringLeagueId,
       });
     }
 
@@ -2214,6 +2512,11 @@ function parseYahooLeaguesResponse(data: unknown): DiscoveredYahooLeague[] {
 
           if (!leagueKey || !leagueName) continue;
 
+          // Capture Yahoo's prior-season renew pointer when present in the bulk
+          // response. `renew` lets the chain walk skip the first per-league meta
+          // fetch; it's defensive (absent in some payloads).
+          const renew = typeof leagueInfo?.renew === 'string' ? leagueInfo.renew : undefined;
+
           // Extract team ID and team name from the league data
           // Yahoo API includes the user's team in the league response
           let teamId = '';
@@ -2258,6 +2561,7 @@ function parseYahooLeaguesResponse(data: unknown): DiscoveredYahooLeague[] {
             teamId,
             teamKey: resolvedTeamKey,
             teamName,
+            renew,
           });
         }
       }

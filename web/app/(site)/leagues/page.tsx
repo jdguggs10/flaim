@@ -61,6 +61,8 @@ interface YahooLeague {
   teamId?: string;
   teamKey?: string;
   teamName?: string;
+  recurringLeagueId?: string;
+  archived?: boolean;
 }
 
 interface SleeperLeague {
@@ -107,7 +109,7 @@ interface UnifiedLeague {
   // Sleeper-specific
   sleeperId?: string;    // DB UUID for deletion (Sleeper only)
   recurringLeagueId?: string;
-  // Archive state (annotated by the public /leagues* endpoints, ESPN + Sleeper)
+  // Archive state (annotated by the public /leagues* endpoints, ESPN + Yahoo + Sleeper)
   archived?: boolean;
 }
 
@@ -233,6 +235,8 @@ function yahooToUnified(leagues: YahooLeague[], preferences: UserPreferencesStat
       leagueId: l.leagueKey,
       teamId: l.teamId,
       yahooId: l.id,
+      recurringLeagueId: l.recurringLeagueId,
+      archived: l.archived ?? false,
     };
   });
 }
@@ -266,17 +270,18 @@ function sleeperToUnified(
 }
 
 // Resolve the recurring-league archive key for a group: ESPN keys on the stable
-// leagueId; Sleeper keys on its recurring id (falling back to the season league id).
+// leagueId; Sleeper and Yahoo key on their recurring id (falling back to the season
+// league id — for Yahoo that fallback is the season-scoped leagueKey).
 function getArchiveRecurringId(group: UnifiedLeagueGroup): string {
-  if (group.platform === 'sleeper') {
+  if (group.platform === 'sleeper' || group.platform === 'yahoo') {
     const withRecurring = group.seasons.find((s) => s.recurringLeagueId);
     return withRecurring?.recurringLeagueId || group.leagueId;
   }
   return group.leagueId;
 }
 
-// Archive icon-button shared by the active and old league sections. ESPN + Sleeper
-// only — Yahoo archive is deferred to a later phase, so callers only render this for those two.
+// Archive icon-button shared by the active and old league sections.
+// Rendered for all three platforms (ESPN, Yahoo, Sleeper).
 function ArchiveButton({
   group,
   archivingLeagueKey,
@@ -1168,10 +1173,10 @@ function LeaguesPageContent() {
     }
   };
 
-  // Archive/unarchive a league group (ESPN + Sleeper only — Yahoo archive is deferred to a
-  // later phase). Both directions share the flow: resolve key → set loading → fetch → refresh the
-  // affected platform so the `archived` flag re-buckets the group. POST archives (hides
-  // from the AI); DELETE unarchives (restores to the visible/AI surfaces).
+  // Archive/unarchive a league group (ESPN, Yahoo, Sleeper). Both directions share the
+  // flow: resolve key → set loading → fetch → refresh the affected platform so the
+  // `archived` flag re-buckets the group. POST archives (hides from the AI); DELETE
+  // unarchives (restores to the visible/AI surfaces).
   const performArchiveAction = async (group: UnifiedLeagueGroup, action: 'archive' | 'unarchive') => {
     const recurringLeagueId = getArchiveRecurringId(group);
     const actionKey = `${group.platform}:${recurringLeagueId}`;
@@ -1192,6 +1197,8 @@ function LeaguesPageContent() {
       }
       if (group.platform === 'espn') {
         await loadLeagues({ showSpinner: false, shouldApply });
+      } else if (group.platform === 'yahoo') {
+        await loadYahooLeagues(shouldApply);
       } else {
         await loadSleeperLeagues(shouldApply);
       }
@@ -1591,8 +1598,8 @@ function LeaguesPageContent() {
                                 </div>
                               </div>
                               <div className="flex items-center gap-1 shrink-0">
-                                {/* Archive: ESPN + Sleeper only (Yahoo deferred to a later phase). */}
-                                {(group.platform === 'espn' || group.platform === 'sleeper') && (
+                                {/* Archive: all three platforms (ESPN, Yahoo, Sleeper). */}
+                                {(group.platform === 'espn' || group.platform === 'yahoo' || group.platform === 'sleeper') && (
                                   <ArchiveButton
                                     group={group}
                                     archivingLeagueKey={archivingLeagueKey}
@@ -1707,8 +1714,8 @@ function LeaguesPageContent() {
                                       </div>
                                     </div>
                                     <div className="flex items-center gap-1 shrink-0">
-                                      {/* Archive: ESPN + Sleeper only (Yahoo deferred to a later phase). */}
-                                      {(group.platform === 'espn' || group.platform === 'sleeper') && (
+                                      {/* Archive: all three platforms (ESPN, Yahoo, Sleeper). */}
+                                      {(group.platform === 'espn' || group.platform === 'yahoo' || group.platform === 'sleeper') && (
                                         <ArchiveButton
                                           group={group}
                                           archivingLeagueKey={archivingLeagueKey}
@@ -1777,7 +1784,8 @@ function LeaguesPageContent() {
                               const baseKey = `${group.leagueId}-${group.sport}`;
                               const isDeleting =
                                 (group.platform === 'espn' && deletingLeagueKey === baseKey)
-                                || (group.platform === 'sleeper' && deletingSleeperKey === `sleeper:${group.leagueId}`);
+                                || (group.platform === 'sleeper' && deletingSleeperKey === `sleeper:${group.leagueId}`)
+                                || (group.platform === 'yahoo' && deletingLeagueKey === `yahoo:${group.seasons[0]?.yahooId}`);
                               const isArchiving = archivingLeagueKey === `${group.platform}:${getArchiveRecurringId(group)}`;
                               const mostRecentYear = group.seasons[0]?.seasonYear;
 
@@ -1790,7 +1798,7 @@ function LeaguesPageContent() {
                                         {group.leagueName || `League ${group.leagueId}`}
                                       </div>
                                       <div className="text-xs text-muted-foreground/70 break-words">
-                                        {group.platform === 'espn' ? 'ESPN' : 'Sleeper'}
+                                        {group.platform === 'espn' ? 'ESPN' : group.platform === 'yahoo' ? 'Yahoo' : 'Sleeper'}
                                         {mostRecentYear ? ` • Last active: ${mostRecentYear}` : ''}
                                       </div>
                                     </div>
@@ -1816,6 +1824,8 @@ function LeaguesPageContent() {
                                         onClick={() => {
                                           if (group.platform === 'espn') {
                                             handleDeleteLeague(group.leagueId, group.sport);
+                                          } else if (group.platform === 'yahoo') {
+                                            handleDeleteYahooLeagueGroup(group.seasons);
                                           } else {
                                             handleDeleteSleeperLeagueGroup(group.seasons, group.leagueId);
                                           }
