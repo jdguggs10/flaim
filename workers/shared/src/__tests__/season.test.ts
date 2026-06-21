@@ -17,12 +17,20 @@ describe('season helpers', () => {
       expect(getDefaultSeasonYear('baseball', new Date('2026-02-01T00:00:00-05:00'))).toBe(2026);
     });
 
-    it('returns the previous football season before Jul 1', () => {
-      expect(getDefaultSeasonYear('football', new Date('2026-06-15T12:00:00-04:00'))).toBe(2025);
+    it('returns the previous football season before Jun 1', () => {
+      expect(getDefaultSeasonYear('football', new Date('2026-05-15T12:00:00-04:00'))).toBe(2025);
     });
 
-    it('returns the current football season on Jul 1', () => {
-      expect(getDefaultSeasonYear('football', new Date('2026-07-01T00:00:00-04:00'))).toBe(2026);
+    it('returns the previous football season at the last instant before Jun 1', () => {
+      expect(getDefaultSeasonYear('football', new Date('2026-05-31T23:59:59-04:00'))).toBe(2025);
+    });
+
+    it('returns the current football season on Jun 1', () => {
+      expect(getDefaultSeasonYear('football', new Date('2026-06-01T00:00:00-04:00'))).toBe(2026);
+    });
+
+    it('returns the current football season on June 15 (regression: previously bucketed as historical)', () => {
+      expect(getDefaultSeasonYear('football', new Date('2026-06-15T12:00:00-04:00'))).toBe(2026);
     });
 
     it('returns the previous basketball season before Aug 1', () => {
