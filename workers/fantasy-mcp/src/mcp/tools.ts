@@ -145,7 +145,8 @@ async function fetchUserLeagues(
   authHeader?: string,
   correlationId?: string,
   evalRunId?: string,
-  evalTraceId?: string
+  evalTraceId?: string,
+  includeArchived: boolean = false
 ): Promise<{ leagues: UserLeague[]; error?: string; status?: number }> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 5000);
@@ -162,8 +163,9 @@ async function fetchUserLeagues(
     const withInternal = withInternalServiceToken(withCorrelation, env, 'auth-worker /internal/leagues');
     const headers = withEvalHeaders(withInternal, evalRunId, evalTraceId);
 
+    const url = `https://internal/internal/leagues${includeArchived ? '?includeArchived=true' : ''}`;
     const response = await env.AUTH_WORKER.fetch(
-      new Request('https://internal/internal/leagues', {
+      new Request(url, {
         method: 'GET',
         headers,
         signal: controller.signal,
@@ -217,7 +219,8 @@ async function fetchYahooLeagues(
   authHeader?: string,
   correlationId?: string,
   evalRunId?: string,
-  evalTraceId?: string
+  evalTraceId?: string,
+  includeArchived: boolean = false
 ): Promise<{ leagues: UserLeague[]; error?: string }> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 5000);
@@ -234,8 +237,9 @@ async function fetchYahooLeagues(
     const withInternal = withInternalServiceToken(withCorrelation, env, 'auth-worker /internal/leagues/yahoo');
     const headers = withEvalHeaders(withInternal, evalRunId, evalTraceId);
 
+    const url = `https://internal/internal/leagues/yahoo${includeArchived ? '?includeArchived=true' : ''}`;
     const response = await env.AUTH_WORKER.fetch(
-      new Request('https://internal/internal/leagues/yahoo', {
+      new Request(url, {
         headers,
         signal: controller.signal,
       })
@@ -294,7 +298,8 @@ async function fetchSleeperLeagues(
   authHeader?: string,
   correlationId?: string,
   evalRunId?: string,
-  evalTraceId?: string
+  evalTraceId?: string,
+  includeArchived: boolean = false
 ): Promise<{ leagues: UserLeague[]; error?: string }> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 5000);
@@ -311,8 +316,9 @@ async function fetchSleeperLeagues(
     const withInternal = withInternalServiceToken(withCorrelation, env, 'auth-worker /internal/leagues/sleeper');
     const headers = withEvalHeaders(withInternal, evalRunId, evalTraceId);
 
+    const url = `https://internal/internal/leagues/sleeper${includeArchived ? '?includeArchived=true' : ''}`;
     const response = await env.AUTH_WORKER.fetch(
-      new Request('https://internal/internal/leagues/sleeper', {
+      new Request(url, {
         headers,
         signal: controller.signal,
       })
@@ -796,12 +802,14 @@ export function getUnifiedTools(): UnifiedTool[] {
         const { platform } = args as { platform?: 'espn' | 'yahoo' | 'sleeper' };
         return withToolLogging(correlationId, 'get_ancient_history', `ancient platform=${platform || 'all'}`, async () => {
         try {
-          // Fetch platform leagues in parallel (only requested platforms)
+          // Fetch platform leagues in parallel (only requested platforms).
+          // includeArchived=true keeps archived leagues browsable in history, unlike
+          // get_user_session which excludes them.
           const fetchArgs = [env, authHeader, correlationId, evalRunId, evalTraceId] as const;
           const promises: Promise<{ leagues: UserLeague[]; error?: string }>[] = [];
-          if (!platform || platform === 'espn') promises.push(fetchUserLeagues(...fetchArgs));
-          if (!platform || platform === 'yahoo') promises.push(fetchYahooLeagues(...fetchArgs));
-          if (!platform || platform === 'sleeper') promises.push(fetchSleeperLeagues(...fetchArgs));
+          if (!platform || platform === 'espn') promises.push(fetchUserLeagues(...fetchArgs, true));
+          if (!platform || platform === 'yahoo') promises.push(fetchYahooLeagues(...fetchArgs, true));
+          if (!platform || platform === 'sleeper') promises.push(fetchSleeperLeagues(...fetchArgs, true));
 
           const results = await Promise.allSettled(promises);
           const allLeagues: UserLeague[] = [];

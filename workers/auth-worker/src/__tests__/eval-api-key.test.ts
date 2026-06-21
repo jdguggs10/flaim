@@ -205,6 +205,39 @@ describe('eval API key auth', () => {
     expect(body.leagues).toEqual([]);
   });
 
+  it('GET /auth/internal/leagues?includeArchived=true forwards the flag to storage', async () => {
+    const { EspnSupabaseStorage } = await import('../supabase-storage');
+    await appFetch(
+      makeRequest('/auth/internal/leagues?includeArchived=true', {
+        headers: internalHeaders(EVAL_API_KEY),
+      })
+    );
+    const storage = EspnSupabaseStorage.fromEnvironment(baseEnv as never);
+    expect(storage.getLeagues).toHaveBeenCalledWith(EVAL_USER_ID, true);
+  });
+
+  it('GET /auth/internal/leagues excludes archived by default (no query param)', async () => {
+    const { EspnSupabaseStorage } = await import('../supabase-storage');
+    await appFetch(
+      makeRequest('/auth/internal/leagues', {
+        headers: internalHeaders(EVAL_API_KEY),
+      })
+    );
+    const storage = EspnSupabaseStorage.fromEnvironment(baseEnv as never);
+    expect(storage.getLeagues).toHaveBeenCalledWith(EVAL_USER_ID, false);
+  });
+
+  it('GET /auth/internal/leagues/yahoo?includeArchived=true forwards the flag to storage', async () => {
+    const { YahooStorage } = await import('../yahoo-storage');
+    await appFetch(
+      makeRequest('/auth/internal/leagues/yahoo?includeArchived=true', {
+        headers: internalHeaders(EVAL_API_KEY),
+      })
+    );
+    const storage = YahooStorage.fromEnvironment(baseEnv as never);
+    expect(storage.getYahooLeagues).toHaveBeenCalledWith(EVAL_USER_ID, true);
+  });
+
   it('GET /auth/internal/connect/yahoo/credentials with valid API key succeeds', async () => {
     const res = await appFetch(
       makeRequest('/auth/internal/connect/yahoo/credentials', {

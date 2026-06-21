@@ -1148,9 +1148,10 @@ api.get('/internal/leagues/yahoo', async (c) => {
   }
 
   const storage = YahooStorage.fromEnvironment(c.env);
-  // Internal (gateway-facing) endpoint excludes archived leagues so they vanish
-  // from the AI surfaces. Yahoo archive is active, so this filter is real.
-  const leagues = await storage.getYahooLeagues(userId, false);
+  // Excludes archived leagues by default (get_user_session); get_ancient_history opts in
+  // via ?includeArchived=true so archived leagues stay browsable in history.
+  const includeArchived = c.req.query('includeArchived') === 'true';
+  const leagues = await storage.getYahooLeagues(userId, includeArchived);
 
   return c.json({ leagues }, 200);
 });
@@ -1238,8 +1239,10 @@ api.get('/internal/leagues/sleeper', async (c) => {
       error_description: authError || 'Authentication required',
     }, authStatus ?? 401);
   }
-  // Internal (gateway-facing) endpoint excludes archived leagues from the AI.
-  return handleSleeperLeagues(c.env as SleeperConnectEnv, userId, getCorsHeaders(c.req.raw), { includeArchived: false });
+  // Excludes archived leagues by default (get_user_session); get_ancient_history opts in
+  // via ?includeArchived=true so archived leagues stay browsable in history.
+  const includeArchived = c.req.query('includeArchived') === 'true';
+  return handleSleeperLeagues(c.env as SleeperConnectEnv, userId, getCorsHeaders(c.req.raw), { includeArchived });
 });
 
 // Delete Sleeper league (requires auth)
@@ -1732,9 +1735,10 @@ api.get('/internal/leagues', async (c) => {
   }
 
   const storage = EspnSupabaseStorage.fromEnvironment(c.env);
-  // Internal (gateway-facing) endpoint excludes archived leagues so they vanish
-  // from get_user_session and get_ancient_history automatically.
-  const leagues = await storage.getLeagues(clerkUserId, false);
+  // Excludes archived leagues by default (get_user_session); get_ancient_history opts in
+  // via ?includeArchived=true so archived leagues stay browsable in history.
+  const includeArchived = c.req.query('includeArchived') === 'true';
+  const leagues = await storage.getLeagues(clerkUserId, includeArchived);
   const leaguesWithPlatform = leagues.map(league => ({
     ...league,
     platform: 'espn' as const

@@ -104,15 +104,15 @@ Refresh diagnostics are emitted as structured, non-secret `yahoo-connect` log ev
 
 ### League Archive
 
-Cross-platform manual archive (ESPN + Sleeper; Yahoo deferred to a later phase). Archive state lives in the `archived_leagues` table, keyed on a stable recurring-league identity so it survives re-sync. Archived leagues are **excluded** from the AI-facing `/internal/leagues*` reads and **annotated** with an `archived` flag on the public `/leagues*` reads.
+Cross-platform manual archive (ESPN, Yahoo, Sleeper). Archive state lives in the `archived_leagues` table, keyed on a stable recurring-league identity so it survives re-sync. Archived leagues are **excluded** from the active `get_user_session` view — the `/internal/leagues*` reads default to excluding them — but remain **browsable** in `get_ancient_history`, which opts in by requesting `?includeArchived=true`. The public `/leagues*` reads **annotate** each league with an `archived` flag for the UI.
 
 | Endpoint | Auth | Purpose |
 |----------|------|---------|
-| `POST /leagues/archive` | Clerk JWT | Archive a league `{ platform, sport, recurringLeagueId }` (ESPN/Sleeper) |
+| `POST /leagues/archive` | Clerk JWT | Archive a league `{ platform, sport, recurringLeagueId }` (ESPN/Yahoo/Sleeper) |
 | `DELETE /leagues/archive` | Clerk JWT | Unarchive a league (same body) |
 | `GET /leagues/archive` | Clerk JWT | List the user's archived leagues |
 
-The internal (AI-facing) league reads fail closed: if the archive lookup errors, the read fails rather than returning archived leagues unfiltered. The public/UI reads fail open (they just lose the `archived` flag).
+The exclude path (`get_user_session`) fails closed: if the archive lookup errors, the read fails rather than returning archived leagues unfiltered. The history path (`?includeArchived=true`) skips the archive lookup entirely. The public/UI reads fail open (they just lose the `archived` flag).
 
 ### Extension APIs
 

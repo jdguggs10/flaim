@@ -235,6 +235,65 @@ describe('fantasy-mcp tools', () => {
     expect(bbOld?.seasonYear).toBe(2025);
   });
 
+  it('archived leagues surface in get_ancient_history but stay hidden from get_user_session', async () => {
+    const sessionTool = getUnifiedTools().find((t) => t.name === 'get_user_session');
+    const historyTool = getUnifiedTools().find((t) => t.name === 'get_ancient_history');
+
+    // Baseball current season is 2026 regardless of the football rollover or real date.
+    const activeLeagues = [
+      { platform: 'espn', sport: 'baseball', leagueId: 'active1', leagueName: 'Active', teamId: 't1', seasonYear: 2026 },
+      { platform: 'espn', sport: 'baseball', leagueId: 'active1', leagueName: 'Active', teamId: 't1', seasonYear: 2025 },
+    ];
+    const archivedSeasons = [
+      { platform: 'espn', sport: 'baseball', leagueId: 'zombie1', leagueName: 'Zombie', teamId: 't9', seasonYear: 2026 },
+      { platform: 'espn', sport: 'baseball', leagueId: 'zombie1', leagueName: 'Zombie', teamId: 't9', seasonYear: 2025 },
+      { platform: 'espn', sport: 'baseball', leagueId: 'zombie1', leagueName: 'Zombie', teamId: 't9', seasonYear: 2024 },
+    ];
+
+    // Mirrors the auth-worker internal endpoint: archived rows are returned only when
+    // ?includeArchived=true (the history path), and excluded otherwise (the session path).
+    const env = {
+      INTERNAL_SERVICE_TOKEN: 'internal-secret',
+      AUTH_WORKER: {
+        fetch: async (req: Request) => {
+          const url = new URL(req.url);
+          if (url.pathname === '/internal/leagues') {
+            const includeArchived = url.searchParams.get('includeArchived') === 'true';
+            const leagues = includeArchived ? [...activeLeagues, ...archivedSeasons] : activeLeagues;
+            return new Response(JSON.stringify({ leagues }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          return new Response(JSON.stringify({ leagues: [] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        },
+      },
+    } as unknown as Env;
+
+    // Session view excludes the archived league entirely (current season stays hidden).
+    const sessionResult = await sessionTool!.handler({}, env, 'Bearer test-token');
+    const sessionPayload = JSON.parse(sessionResult.content[0].text) as {
+      allLeagues: Array<{ leagueId: string }>;
+    };
+    expect(sessionPayload.allLeagues.some((l) => l.leagueId === 'zombie1')).toBe(false);
+    expect(sessionPayload.allLeagues.some((l) => l.leagueId === 'active1')).toBe(true);
+
+    // History view keeps the archived league's past seasons browsable.
+    const historyResult = await historyTool!.handler({}, env, 'Bearer test-token');
+    const historyPayload = JSON.parse(historyResult.content[0].text) as {
+      oldSeasonsFromActiveLeagues: Record<string, Array<{ leagueId: string; seasonYear: number }>>;
+    };
+    const zombieOld = Object.values(historyPayload.oldSeasonsFromActiveLeagues)
+      .flat()
+      .filter((s) => s.leagueId === 'zombie1')
+      .map((s) => s.seasonYear)
+      .sort();
+    expect(zombieOld).toEqual([2024, 2025]);
+  });
+
   it('get_ancient_history keeps recurring Yahoo seasons under active leagues', async () => {
     const tool = getUnifiedTools().find((t) => t.name === 'get_ancient_history');
     expect(tool).toBeTruthy();
