@@ -84,6 +84,52 @@ function discoveryResponse(leagueKey: string, season: string, renew: string): un
   };
 }
 
+// Build a bulk discovery response with two NFL leagues in the same game, each
+// carrying its own renew pointer. Used to exercise cross-league chain dedup.
+function twoLeagueDiscoveryResponse(
+  season: string,
+  leagueA: { leagueKey: string; renew: string },
+  leagueB: { leagueKey: string; renew: string }
+): unknown {
+  return {
+    fantasy_content: {
+      users: {
+        count: 1,
+        0: {
+          user: [
+            { guid: 'guid-1' },
+            {
+              games: {
+                count: 1,
+                0: {
+                  game: [
+                    { code: 'nfl', season },
+                    {
+                      leagues: {
+                        count: 2,
+                        0: {
+                          league: [
+                            { league_key: leagueA.leagueKey, name: 'League A', renew: leagueA.renew, renewed: '' },
+                          ],
+                        },
+                        1: {
+                          league: [
+                            { league_key: leagueB.leagueKey, name: 'League B', renew: leagueB.renew, renewed: '' },
+                          ],
+                        },
+                      },
+                    },
+                  ],
+                },
+              },
+            },
+          ],
+        },
+      },
+    },
+  };
+}
+
 interface MockStorage {
   getYahooCredentials: ReturnType<typeof vi.fn>;
   getYahooLeagues: ReturnType<typeof vi.fn>;
@@ -165,6 +211,50 @@ describe('Yahoo recurring-id resolution', () => {
       const saved = mockStorage.upsertYahooLeague.mock.calls[0][0];
       // Empty renew on the bulk row → 449.l.99 is treated as the root itself.
       expect(saved.recurringLeagueId).toBe('449.l.99');
+    });
+
+    it('fetches a shared ancestor meta only once across two leagues that share a chain', async () => {
+      // Two 2025 leagues whose renew chains converge on a common ancestor:
+      //   A: 449.l.10 -(423_10)-> 423.l.10 -(308_10)-> 308.l.10 (root, empty renew)
+      //   B: 449.l.20 -(423_20)-> 423.l.20 -(308_10)-> 308.l.10 (same root)
+      // The shared 308.l.10 meta should be fetched exactly once: the metaCache /
+      // recurringIdCache shared across both leagues' walks dedups it.
+      const metaFetchCounts = new Map<string, number>();
+      mockFetch.mockImplementation(async (input) => {
+        const url = String(input);
+        if (url.includes('/users;use_login=1/games/leagues')) {
+          return jsonResponse(
+            twoLeagueDiscoveryResponse(
+              '2025',
+              { leagueKey: '449.l.10', renew: '423_10' },
+              { leagueKey: '449.l.20', renew: '423_20' }
+            )
+          );
+        }
+        const match = url.match(/\/league\/([^?]+)\?format=json$/);
+        if (match) {
+          const key = match[1];
+          metaFetchCounts.set(key, (metaFetchCounts.get(key) ?? 0) + 1);
+          if (key === '423.l.10') return jsonResponse(leagueMeta('423.l.10', '308_10'));
+          if (key === '423.l.20') return jsonResponse(leagueMeta('423.l.20', '308_10'));
+          if (key === '308.l.10') return jsonResponse(leagueMeta('308.l.10', '')); // shared root
+        }
+        return new Response(null, { status: 404 });
+      });
+
+      const res = await handleYahooDiscover(env, 'u', corsHeaders);
+      expect(res.status).toBe(200);
+
+      // Both leagues resolved to the shared root.
+      expect(mockStorage.upsertYahooLeague).toHaveBeenCalledTimes(2);
+      const savedRoots = mockStorage.upsertYahooLeague.mock.calls.map((call) => call[0].recurringLeagueId);
+      expect(savedRoots).toEqual(['308.l.10', '308.l.10']);
+
+      // The shared ancestor meta is fetched exactly once despite two chain walks
+      // reaching it; the per-walk seed covers the first hop of each league.
+      expect(metaFetchCounts.get('308.l.10')).toBe(1);
+      expect(metaFetchCounts.get('423.l.10')).toBe(1);
+      expect(metaFetchCounts.get('423.l.20')).toBe(1);
     });
   });
 

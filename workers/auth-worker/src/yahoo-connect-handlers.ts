@@ -1966,8 +1966,10 @@ async function refreshAccessToken(
 const YAHOO_FANTASY_API_URL = 'https://fantasysports.yahooapis.com/fantasy/v2';
 
 // Cap the renew-chain walk so a malformed/looping pointer set can't fetch
-// unbounded league metas. Yahoo Fantasy predates the era any real chain would
-// exceed; matches Sleeper's MAX_HISTORY_YEARS intent.
+// unbounded league metas. Yahoo Fantasy Sports has run since ~2001 (~25 NFL
+// seasons), so a real renew chain — one league renewed every year since launch —
+// won't exceed this. The cap only guards against malformed/cyclic pointer data;
+// matches Sleeper's MAX_HISTORY_YEARS intent.
 const MAX_YAHOO_CHAIN_DEPTH = 25;
 
 /**
@@ -2030,6 +2032,10 @@ async function getYahooLeagueMeta(
   const cached = metaCache.get(leagueKey);
   if (cached) return cached;
 
+  // The promise is cached before it settles, so a rejected (non-OK) meta fetch
+  // caches a rejected promise. This is intentional: a second reference to the same
+  // league_key within the same chain walk re-throws consistently instead of
+  // re-fetching, and callers (tryResolveYahooRecurringId) catch it.
   const request = (async (): Promise<YahooLeagueMeta | null> => {
     const url = `${YAHOO_FANTASY_API_URL}/league/${leagueKey}?format=json`;
     const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });

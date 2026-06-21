@@ -59,7 +59,7 @@ import {
   resolveYahooArchiveTarget,
   YahooConnectEnv,
 } from './yahoo-connect-handlers';
-import { YahooStorage } from './yahoo-storage';
+import { YahooStorage, type YahooLeague } from './yahoo-storage';
 import { ArchiveStorage, archivedKey, type ArchivePlatform, type ArchiveSport } from './archive-storage';
 import { logSetupSignal, type SetupSignalEvent } from '@flaim/worker-shared';
 import {
@@ -1098,6 +1098,29 @@ api.post('/connect/yahoo/discover', async (c) => {
   );
 });
 
+// Annotate Yahoo league rows with an `archived` boolean so the public (UI)
+// endpoints can bucket them. Fail-open on an archive-set error — a transient DB
+// error just drops the flag rather than failing the whole list (mirrors Sleeper).
+// The archive key uses the canonical recurring root (recurringLeagueId) when set,
+// falling back to the per-season leagueKey.
+async function annotateYahooLeaguesArchived(
+  env: Env,
+  userId: string,
+  leagues: YahooLeague[]
+): Promise<Array<YahooLeague & { archived: boolean }>> {
+  let archivedSet: Set<string>;
+  try {
+    archivedSet = await ArchiveStorage.fromEnvironment(env).getArchivedSet(userId, 'yahoo');
+  } catch (error) {
+    console.error('[index-hono] getArchivedSet (yahoo) failed; annotating none (fail-open):', error);
+    archivedSet = new Set();
+  }
+  return leagues.map((league) => ({
+    ...league,
+    archived: archivedSet.has(archivedKey(league.sport, league.recurringLeagueId ?? league.leagueKey)),
+  }));
+}
+
 // List Yahoo leagues (requires auth)
 api.get('/leagues/yahoo', async (c) => {
   const { userId, error: authError } = await getClerkUserId(c.req.raw, c.env);
@@ -1110,21 +1133,7 @@ api.get('/leagues/yahoo', async (c) => {
 
   const storage = YahooStorage.fromEnvironment(c.env);
   const leagues = await storage.getYahooLeagues(userId);
-
-  // Public (UI) endpoint: return all rows annotated with an `archived` boolean so
-  // the UI can bucket them. Fail-open on an archive-set error — a transient DB
-  // error just drops the flag rather than failing the whole list (mirrors Sleeper).
-  let archivedSet: Set<string>;
-  try {
-    archivedSet = await ArchiveStorage.fromEnvironment(c.env).getArchivedSet(userId, 'yahoo');
-  } catch (error) {
-    console.error('[index-hono] getArchivedSet (yahoo) failed; annotating none (fail-open):', error);
-    archivedSet = new Set();
-  }
-  const annotated = leagues.map((league) => ({
-    ...league,
-    archived: archivedSet.has(archivedKey(league.sport, league.recurringLeagueId ?? league.leagueKey)),
-  }));
+  const annotated = await annotateYahooLeaguesArchived(c.env, userId, leagues);
 
   return c.json({ leagues: annotated }, 200);
 });
@@ -1164,19 +1173,7 @@ api.delete('/leagues/yahoo/:id', async (c) => {
   const storage = YahooStorage.fromEnvironment(c.env);
   await storage.deleteYahooLeague(userId, leagueId);
   const leagues = await storage.getYahooLeagues(userId);
-
-  // Annotate the returned list (feeds the UI) with `archived`, fail-open.
-  let archivedSet: Set<string>;
-  try {
-    archivedSet = await ArchiveStorage.fromEnvironment(c.env).getArchivedSet(userId, 'yahoo');
-  } catch (error) {
-    console.error('[index-hono] getArchivedSet (yahoo) failed; annotating none (fail-open):', error);
-    archivedSet = new Set();
-  }
-  const annotated = leagues.map((league) => ({
-    ...league,
-    archived: archivedSet.has(archivedKey(league.sport, league.recurringLeagueId ?? league.leagueKey)),
-  }));
+  const annotated = await annotateYahooLeaguesArchived(c.env, userId, leagues);
 
   return c.json({ success: true, leagues: annotated }, 200);
 });
