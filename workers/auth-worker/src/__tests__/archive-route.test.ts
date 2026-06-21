@@ -12,11 +12,16 @@ describe('parseArchiveBody', () => {
     expect(result).toEqual({ ok: true, platform: 'sleeper', sport: 'basketball', recurringLeagueId: '987654321098765432' });
   });
 
-  it('rejects yahoo (not in ARCHIVE_PLATFORMS)', () => {
+  it('accepts a valid yahoo body (Phase 1b — recurring id now resolved)', () => {
     const result = parseArchiveBody({ platform: 'yahoo', sport: 'football', recurringLeagueId: '449.l.123' });
+    expect(result).toEqual({ ok: true, platform: 'yahoo', sport: 'football', recurringLeagueId: '449.l.123' });
+  });
+
+  it('rejects an unsupported platform', () => {
+    const result = parseArchiveBody({ platform: 'cbs', sport: 'football', recurringLeagueId: '123' });
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.error).toContain('yahoo');
+      expect(result.error).toContain('cbs');
     }
   });
 

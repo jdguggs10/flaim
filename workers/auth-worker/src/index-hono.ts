@@ -56,9 +56,10 @@ import {
   handleYahooDisconnect,
   handleYahooDiscover,
   handleYahooStatus,
+  resolveYahooArchiveTarget,
   YahooConnectEnv,
 } from './yahoo-connect-handlers';
-import { YahooStorage } from './yahoo-storage';
+import { YahooStorage, type YahooLeague } from './yahoo-storage';
 import { ArchiveStorage, archivedKey, type ArchivePlatform, type ArchiveSport } from './archive-storage';
 import { logSetupSignal, type SetupSignalEvent } from '@flaim/worker-shared';
 import {
@@ -1097,6 +1098,29 @@ api.post('/connect/yahoo/discover', async (c) => {
   );
 });
 
+// Annotate Yahoo league rows with an `archived` boolean so the public (UI)
+// endpoints can bucket them. Fail-open on an archive-set error — a transient DB
+// error just drops the flag rather than failing the whole list (mirrors Sleeper).
+// The archive key uses the canonical recurring root (recurringLeagueId) when set,
+// falling back to the per-season leagueKey.
+async function annotateYahooLeaguesArchived(
+  env: Env,
+  userId: string,
+  leagues: YahooLeague[]
+): Promise<Array<YahooLeague & { archived: boolean }>> {
+  let archivedSet: Set<string>;
+  try {
+    archivedSet = await ArchiveStorage.fromEnvironment(env).getArchivedSet(userId, 'yahoo');
+  } catch (error) {
+    console.error('[index-hono] getArchivedSet (yahoo) failed; annotating none (fail-open):', error);
+    archivedSet = new Set();
+  }
+  return leagues.map((league) => ({
+    ...league,
+    archived: archivedSet.has(archivedKey(league.sport, league.recurringLeagueId ?? league.leagueKey)),
+  }));
+}
+
 // List Yahoo leagues (requires auth)
 api.get('/leagues/yahoo', async (c) => {
   const { userId, error: authError } = await getClerkUserId(c.req.raw, c.env);
@@ -1109,8 +1133,9 @@ api.get('/leagues/yahoo', async (c) => {
 
   const storage = YahooStorage.fromEnvironment(c.env);
   const leagues = await storage.getYahooLeagues(userId);
+  const annotated = await annotateYahooLeaguesArchived(c.env, userId, leagues);
 
-  return c.json({ leagues }, 200);
+  return c.json({ leagues: annotated }, 200);
 });
 
 api.get('/internal/leagues/yahoo', async (c) => {
@@ -1124,8 +1149,7 @@ api.get('/internal/leagues/yahoo', async (c) => {
 
   const storage = YahooStorage.fromEnvironment(c.env);
   // Internal (gateway-facing) endpoint excludes archived leagues so they vanish
-  // from the AI surfaces. No-op for now (the Yahoo archived set stays empty until
-  // Yahoo archive lands), but prevents a latent leak once Yahoo recurring ids ship.
+  // from the AI surfaces. Yahoo archive is active, so this filter is real.
   const leagues = await storage.getYahooLeagues(userId, false);
 
   return c.json({ leagues }, 200);
@@ -1149,8 +1173,9 @@ api.delete('/leagues/yahoo/:id', async (c) => {
   const storage = YahooStorage.fromEnvironment(c.env);
   await storage.deleteYahooLeague(userId, leagueId);
   const leagues = await storage.getYahooLeagues(userId);
+  const annotated = await annotateYahooLeaguesArchived(c.env, userId, leagues);
 
-  return c.json({ success: true, leagues }, 200);
+  return c.json({ success: true, leagues: annotated }, 200);
 });
 
 // =============================================================================
@@ -1235,7 +1260,7 @@ api.delete('/leagues/sleeper/:id', async (c) => {
 // LEAGUE ARCHIVE ROUTES (FLA-124)
 // =============================================================================
 
-const ARCHIVE_PLATFORMS: ArchivePlatform[] = ['espn', 'sleeper'];
+const ARCHIVE_PLATFORMS: ArchivePlatform[] = ['espn', 'sleeper', 'yahoo'];
 const ARCHIVE_SPORTS: ArchiveSport[] = ['football', 'baseball', 'basketball', 'hockey'];
 
 // recurringLeagueId allowlist: numeric ESPN/Sleeper ids plus dotted Yahoo-style
@@ -1258,7 +1283,6 @@ export function parseArchiveBody(body: ArchiveRequestBody):
   if (!platform || !sport || !recurringLeagueId) {
     return { ok: false, error: 'platform, sport, and recurringLeagueId are required' };
   }
-  // Yahoo archive is deferred to a later phase: no stable stored recurring id yet.
   if (!ARCHIVE_PLATFORMS.includes(platform as ArchivePlatform)) {
     return { ok: false, error: `Archive is not supported for platform '${platform}'` };
   }
@@ -1293,7 +1317,7 @@ api.get('/leagues/archive', async (c) => {
   return c.json({ leagues }, 200);
 });
 
-// Archive a league (hide it from the AI; survives re-sync). ESPN + Sleeper only (Yahoo deferred to a later phase).
+// Archive a league (hide it from the AI; survives re-sync). ESPN + Yahoo + Sleeper.
 api.post('/leagues/archive', async (c) => {
   const { userId, error: authError } = await getClerkUserId(c.req.raw, c.env);
   if (!userId) {
@@ -1323,6 +1347,13 @@ api.post('/leagues/archive', async (c) => {
     leagueName = target.leagueName;
     // Clear defaults per per-season league_id of the recurring group.
     seasonLeagueIds = target.seasonLeagueIds.length > 0 ? target.seasonLeagueIds : [recurringLeagueId];
+  } else if (platform === 'yahoo') {
+    // Resolve the canonical renew-chain root fresh, then clear defaults per
+    // per-season league_key (Yahoo defaults store league_key as leagueId).
+    const target = await resolveYahooArchiveTarget(c.env as YahooConnectEnv, userId, recurringLeagueId);
+    recurringLeagueId = target.recurringLeagueId;
+    leagueName = target.leagueName;
+    seasonLeagueIds = target.seasonLeagueKeys.length > 0 ? target.seasonLeagueKeys : [recurringLeagueId];
   }
 
   const archived = await archiveStorage.archiveLeague(userId, platform, sport, recurringLeagueId, leagueName);

@@ -15,6 +15,7 @@
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { clearDefaultsForLeague as _clearDefaultsForLeague, clearDefaultsForPlatform as _clearDefaultsForPlatform } from './preference-defaults';
+import { ArchiveStorage, archivedKey } from './archive-storage';
 
 export const REFRESH_COOLDOWN_OWNER_PREFIX = 'cooldown:';
 
@@ -85,6 +86,7 @@ export interface YahooLeague {
   teamId?: string;
   teamKey?: string;
   teamName?: string;
+  recurringLeagueId?: string;
 }
 
 export interface SaveLeagueParams {
@@ -96,6 +98,23 @@ export interface SaveLeagueParams {
   teamId?: string;
   teamKey?: string;
   teamName?: string;
+  recurringLeagueId?: string;
+}
+
+interface SupabaseErrorLike {
+  code?: string;
+  message?: string;
+  details?: string;
+  hint?: string;
+}
+
+/**
+ * Treat a missing `recurring_league_id` column (pre-migration) or a stale
+ * PostgREST schema cache as tolerable: discovery/archive writes fall back to a
+ * payload without the column, exactly like Sleeper.
+ */
+function isMissingRecurringLeagueIdColumnError(error: SupabaseErrorLike | null | undefined): boolean {
+  return error?.code === '42703' || error?.code === 'PGRST204';
 }
 
 // =============================================================================
@@ -136,9 +155,12 @@ function yahooCredentialUpdateData(params: UpdateCredentialsParams): Record<stri
 
 export class YahooStorage {
   private supabase: SupabaseClient;
+  private archive: ArchiveStorage;
+  private recurringLeagueIdColumnStatus: 'unknown' | 'available' | 'missing' = 'unknown';
 
   constructor(supabaseUrl: string, supabaseKey: string) {
     this.supabase = createClient(supabaseUrl, supabaseKey);
+    this.archive = new ArchiveStorage(supabaseUrl, supabaseKey);
   }
 
   // ---------------------------------------------------------------------------
@@ -496,46 +518,112 @@ export class YahooStorage {
    * Returns the league ID
    */
   async upsertYahooLeague(params: SaveLeagueParams): Promise<string> {
+    const basePayload = {
+      clerk_user_id: params.clerkUserId,
+      sport: params.sport,
+      season_year: params.seasonYear,
+      league_key: params.leagueKey,
+      league_name: params.leagueName,
+      team_id: params.teamId || null,
+      team_key: params.teamKey || null,
+      team_name: params.teamName || null,
+      updated_at: new Date().toISOString(),
+    };
+
+    // Persist recurring_league_id when present and the column is available.
+    // Tolerates a missing column (pre-migration) by retrying without it — mirrors
+    // Sleeper's saveSleeperLeague so a NULL-recurring row keys the read-filter on
+    // its season-scoped league_key until backfill/archive resolves the real root.
+    if (params.recurringLeagueId && this.recurringLeagueIdColumnStatus !== 'missing') {
+      const result = await this.upsertYahooLeagueRow({
+        ...basePayload,
+        recurring_league_id: params.recurringLeagueId,
+      });
+
+      if (!result.error) {
+        this.recurringLeagueIdColumnStatus = 'available';
+        return result.id;
+      }
+
+      if (!isMissingRecurringLeagueIdColumnError(result.error)) {
+        console.error('[yahoo-storage] Failed to upsert Yahoo league:', result.error);
+        throw new Error('Failed to upsert Yahoo league');
+      }
+
+      console.warn(
+        `[yahoo-storage] recurring_league_id column unavailable for user ${maskUserId(params.clerkUserId)} league ${params.leagueKey}; retrying without it (code=${result.error.code ?? 'unknown'})`
+      );
+      this.recurringLeagueIdColumnStatus = 'missing';
+    }
+
+    const legacy = await this.upsertYahooLeagueRow(basePayload);
+    if (legacy.error) {
+      console.error('[yahoo-storage] Failed to upsert Yahoo league:', legacy.error);
+      throw new Error('Failed to upsert Yahoo league');
+    }
+    return legacy.id;
+  }
+
+  private async upsertYahooLeagueRow(
+    payload: Record<string, unknown>
+  ): Promise<{ id: string; error: null } | { id: ''; error: SupabaseErrorLike }> {
     const { data, error } = await this.supabase
       .from('yahoo_leagues')
-      .upsert(
-        {
-          clerk_user_id: params.clerkUserId,
-          sport: params.sport,
-          season_year: params.seasonYear,
-          league_key: params.leagueKey,
-          league_name: params.leagueName,
-          team_id: params.teamId || null,
-          team_key: params.teamKey || null,
-          team_name: params.teamName || null,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'clerk_user_id,league_key,season_year' }
-      )
+      .upsert(payload, { onConflict: 'clerk_user_id,league_key,season_year' })
       .select('id')
       .single();
 
     if (error) {
-      console.error('[yahoo-storage] Failed to upsert Yahoo league:', error);
-      throw new Error('Failed to upsert Yahoo league');
+      return { id: '', error: error as SupabaseErrorLike };
+    }
+    return { id: data.id, error: null };
+  }
+
+  /**
+   * Persist the canonical recurring root onto every Yahoo row in a group.
+   * After an archive write resolves the renew-chain root, this writes that root
+   * into `recurring_league_id` for the given season-scoped `league_key`s, so the
+   * STORED column the read-filter keys on (`recurring_league_id ?? league_key`)
+   * equals the archive-table key (mirrors Sleeper's persistRecurringRoot).
+   * Tolerates the pre-migration missing-column case as a no-op.
+   */
+  async persistYahooRecurringRoot(clerkUserId: string, leagueKeys: string[], recurringRoot: string): Promise<void> {
+    if (!clerkUserId || leagueKeys.length === 0 || this.recurringLeagueIdColumnStatus === 'missing') return;
+
+    const { error } = await this.supabase
+      .from('yahoo_leagues')
+      .update({ recurring_league_id: recurringRoot, updated_at: new Date().toISOString() })
+      .eq('clerk_user_id', clerkUserId)
+      .in('league_key', leagueKeys);
+
+    if (!error) {
+      this.recurringLeagueIdColumnStatus = 'available';
+      return;
     }
 
-    return data.id;
+    if (!isMissingRecurringLeagueIdColumnError(error as SupabaseErrorLike)) {
+      throw new Error(`Failed to persist Yahoo recurring root: ${(error as SupabaseErrorLike).message}`);
+    }
+
+    console.warn(
+      `[yahoo-storage] recurring_league_id column unavailable for user ${maskUserId(clerkUserId)}; skipping recurring-root persist (code=${(error as SupabaseErrorLike).code ?? 'unknown'})`
+    );
+    this.recurringLeagueIdColumnStatus = 'missing';
   }
 
   /**
    * Get all Yahoo leagues for a user.
    *
-   * The `includeArchived` parameter exists for read-path parity with ESPN/Sleeper,
-   * but Yahoo archive is deferred to a later phase: no `recurring_league_id` is
-   * stored yet, so the archived set is always empty and this method returns all
-   * rows regardless of the flag. A later phase will resolve the Yahoo recurring id
-   * and apply the same column-comparison filter.
+   * When `includeArchived` is false, rows whose recurring identity
+   * (`recurring_league_id ?? league_key`) is in the user's archived set are
+   * excluded. The default (`true`) keeps dedupe/discovery readers unfiltered.
+   * Mirrors getSleeperLeagues; the season-scoped `league_key` is the fallback key
+   * (Yahoo's analogue of Sleeper's per-season `league_id`).
    */
-  async getYahooLeagues(clerkUserId: string, _includeArchived: boolean = true): Promise<YahooLeague[]> {
+  async getYahooLeagues(clerkUserId: string, includeArchived: boolean = true): Promise<YahooLeague[]> {
     const { data, error } = await this.supabase
       .from('yahoo_leagues')
-      .select('id, clerk_user_id, sport, season_year, league_key, league_name, team_id, team_key, team_name')
+      .select('*')
       .eq('clerk_user_id', clerkUserId);
 
     if (error) {
@@ -543,7 +631,17 @@ export class YahooStorage {
       throw new Error('Failed to get Yahoo leagues');
     }
 
-    return (data || []).map((row) => ({
+    const archivedSet = includeArchived
+      ? null
+      : await this.archive.getArchivedSet(clerkUserId, 'yahoo');
+
+    const rows = (data || []).filter((row) => {
+      if (!archivedSet) return true;
+      const recurringId = row.recurring_league_id ?? row.league_key;
+      return !archivedSet.has(archivedKey(row.sport, recurringId));
+    });
+
+    return rows.map((row) => ({
       id: row.id,
       clerkUserId: row.clerk_user_id,
       sport: row.sport as Sport,
@@ -553,6 +651,7 @@ export class YahooStorage {
       teamId: row.team_id || undefined,
       teamKey: row.team_key || undefined,
       teamName: row.team_name || undefined,
+      recurringLeagueId: row.recurring_league_id ?? undefined,
     }));
   }
 
@@ -562,16 +661,32 @@ export class YahooStorage {
    * matching sport default in user_preferences can be cleared correctly.
    */
   async deleteYahooLeague(clerkUserId: string, leagueId: string): Promise<void> {
-    // Resolve platform identifiers before deleting (route arg is DB row UUID)
+    // Resolve platform identifiers before deleting (route arg is DB row UUID).
+    // Single read serves both the default-clear (league_key + season_year) and the
+    // archive cleanup (sport + recurring archive key). Tolerates a missing
+    // recurring_league_id column (pre-migration) by selecting '*' and reading it
+    // off the row if present.
     const { data: row, error: lookupError } = await this.supabase
       .from('yahoo_leagues')
-      .select('league_key, season_year')
+      .select('*')
       .eq('clerk_user_id', clerkUserId)
       .eq('id', leagueId)
       .maybeSingle();
 
     if (lookupError) {
       console.warn(`[yahoo-storage] Failed to look up Yahoo league ${leagueId} before delete:`, lookupError);
+    }
+
+    // Resolve the recurring archive key before the row is gone. Falls back to the
+    // season-scoped league_key when recurring_league_id is absent/NULL.
+    let archiveRecurringId: { sport: string; recurringLeagueId: string } | null = null;
+    if (row) {
+      const recurringId =
+        (row as { recurring_league_id?: string | null }).recurring_league_id ?? row.league_key;
+      const sport = (row as { sport?: string }).sport;
+      if (sport) {
+        archiveRecurringId = { sport, recurringLeagueId: recurringId };
+      }
     }
 
     const { error } = await this.supabase
@@ -590,6 +705,17 @@ export class YahooStorage {
     // Clear any sport default pointing to this league (keyed by platform league_key + season)
     if (row) {
       await this._clearDefaultsForLeague(clerkUserId, 'yahoo', row.league_key, row.season_year);
+    }
+
+    // A true delete also removes the league's archive entry (D8): "delete" forgets,
+    // while "archive" survives re-sync. A later re-add returns un-archived.
+    if (archiveRecurringId) {
+      await this.archive.unarchiveLeague(
+        clerkUserId,
+        'yahoo',
+        archiveRecurringId.sport as Sport,
+        archiveRecurringId.recurringLeagueId
+      );
     }
   }
 
