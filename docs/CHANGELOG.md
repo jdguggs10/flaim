@@ -4,6 +4,9 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### League Archive (FLA-124)
+- **Added**: Manual league archive for ESPN and Sleeper. Users can hide a league from the AI's MCP tools (`get_user_session`, `get_ancient_history`) and restore it from a new Archived section in `/leagues`. Archives are keyed on a stable recurring-league identity (`archived_leagues` table) so they survive annual re-syncs; the AI-facing read path fails closed, so a lookup error never leaks an archived league. Yahoo archive is deferred to a later phase.
+
 ## [8.1.0] - 2026-06-10
 
 ### Chrome Extension v1.5.2
