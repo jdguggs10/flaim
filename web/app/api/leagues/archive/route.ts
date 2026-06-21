@@ -34,7 +34,7 @@ async function getArchiveAuthContext(): Promise<{ bearer: string; workerUrl: str
     return NextResponse.json({ error: 'NEXT_PUBLIC_AUTH_WORKER_URL is not configured' }, { status: 500 });
   }
 
-  const bearer = await getToken?.();
+  const bearer = await getToken();
   if (!bearer) {
     return NextResponse.json({ error: 'Authentication token unavailable' }, { status: 401 });
   }

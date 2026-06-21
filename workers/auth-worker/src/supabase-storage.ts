@@ -406,6 +406,11 @@ export class EspnSupabaseStorage {
    * Get current season leagues for a user (for default dropdown)
    * Returns leagues where seasonYear matches the current season for their sport.
    * Uses sport-specific rollover logic (America/New_York timezone).
+   *
+   * `includeArchived` defaults to false intentionally: the only callers are the
+   * post-discovery default-league dropdown, which must not surface a league the
+   * user has archived. A freshly discovered league is never archived, so this
+   * default does not hide anything the dropdown should show.
    */
   async getCurrentSeasonLeagues(clerkUserId: string, includeArchived: boolean = false): Promise<EspnLeague[]> {
     try {
