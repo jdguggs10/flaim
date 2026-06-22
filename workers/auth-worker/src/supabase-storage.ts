@@ -16,7 +16,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { EspnCredentials, EspnCredentialsWithMetadata, EspnLeague, EspnUserData } from './espn-types';
 import { isCurrentSeason, type SeasonSport } from './season-utils';
 import { clearDefaultsForLeague as _clearDefaultsForLeague, clearDefaultsForPlatform as _clearDefaultsForPlatform } from './preference-defaults';
-import { ArchiveStorage, archivedKey } from './archive-storage';
+import { ArchiveStorage, archivedKey, isSuppressed, type ArchivedFilter } from './archive-storage';
 
 /**
  * Mask user ID for logging to avoid PII exposure
@@ -329,11 +329,13 @@ export class EspnSupabaseStorage {
 
   /**
    * Retrieve ESPN leagues for a user.
-   * When `includeArchived` is false, rows whose recurring identity (ESPN uses its
-   * stable `league_id`) is in the user's archived set are excluded. The default
-   * (`true`) keeps dedupe/onboarding/discovery readers unfiltered.
+   * `archived` controls how suppressed leagues are treated (ESPN's recurring
+   * identity is its stable `league_id`):
+   *   'include-all'      (default) — dedupe/onboarding/discovery readers, unfiltered
+   *   'exclude-archived' — drop both archive modes (active get_user_session view)
+   *   'exclude-hidden'   — drop only 'hidden' (get_ancient_history view)
    */
-  async getLeagues(clerkUserId: string, includeArchived: boolean = true): Promise<EspnLeague[]> {
+  async getLeagues(clerkUserId: string, archived: ArchivedFilter = 'include-all'): Promise<EspnLeague[]> {
     let rawRows: { league_id: string; sport: string; team_id: string | null; team_name: string | null; league_name: string | null; season_year: number | null }[] = [];
     try {
       if (!clerkUserId) return [];
@@ -350,16 +352,15 @@ export class EspnSupabaseStorage {
       return [];
     }
 
-    // Exclude path (includeArchived:false) fails CLOSED: getArchivedSet throws on a
-    // DB error and we let it propagate rather than leaking archived leagues
-    // unfiltered to the AI. Annotate/unfiltered callers (default true) skip this
-    // entirely.
-    const archivedSet = includeArchived
+    // Exclude paths fail CLOSED: getArchivedMap throws on a DB error and we let it
+    // propagate rather than leaking archived leagues unfiltered to the AI.
+    // 'include-all' skips the lookup entirely.
+    const archivedMap = archived === 'include-all'
       ? null
-      : await this.archive.getArchivedSet(clerkUserId, 'espn');
+      : await this.archive.getArchivedMap(clerkUserId, 'espn');
 
-    const rows = archivedSet
-      ? rawRows.filter(row => !archivedSet.has(archivedKey(row.sport, row.league_id)))
+    const rows = archivedMap
+      ? rawRows.filter(row => !isSuppressed(archived, archivedMap, archivedKey(row.sport, row.league_id)))
       : rawRows;
 
     return rows.map(row => ({
@@ -407,16 +408,16 @@ export class EspnSupabaseStorage {
    * Returns leagues where seasonYear matches the current season for their sport.
    * Uses sport-specific rollover logic (America/New_York timezone).
    *
-   * `includeArchived` defaults to false intentionally: the only callers are the
-   * post-discovery default-league dropdown, which must not surface a league the
-   * user has archived. A freshly discovered league is never archived, so this
-   * default does not hide anything the dropdown should show.
+   * `archived` defaults to 'exclude-archived' intentionally: the only callers are
+   * the post-discovery default-league dropdown, which must not surface a league the
+   * user has archived (either mode). A freshly discovered league is never archived,
+   * so this default does not hide anything the dropdown should show.
    */
-  async getCurrentSeasonLeagues(clerkUserId: string, includeArchived: boolean = false): Promise<EspnLeague[]> {
+  async getCurrentSeasonLeagues(clerkUserId: string, archived: ArchivedFilter = 'exclude-archived'): Promise<EspnLeague[]> {
     try {
       if (!clerkUserId) return [];
 
-      const allLeagues = await this.getLeagues(clerkUserId, includeArchived);
+      const allLeagues = await this.getLeagues(clerkUserId, archived);
 
       // Filter to current season leagues only using sport-specific rollover rules
       return allLeagues.filter(league => {

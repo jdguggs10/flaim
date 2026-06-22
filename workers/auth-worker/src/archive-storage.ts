@@ -22,12 +22,28 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 export type ArchivePlatform = 'espn' | 'yahoo' | 'sleeper';
 export type ArchiveSport = 'football' | 'baseball' | 'basketball' | 'hockey';
 
+/**
+ * Suppression mode (FLA-150):
+ *   'historical' — hidden from get_user_session but browsable in get_ancient_history
+ *   'hidden'     — hidden from BOTH AI tools (the original binary-archive behavior)
+ */
+export type ArchiveMode = 'historical' | 'hidden';
+
+/**
+ * How a league read should treat archived leagues:
+ *   'include-all'      — return everything (dedupe / discovery / UI annotation)
+ *   'exclude-archived' — drop BOTH modes (the active get_user_session view)
+ *   'exclude-hidden'   — drop only 'hidden' (the get_ancient_history view)
+ */
+export type ArchivedFilter = 'include-all' | 'exclude-archived' | 'exclude-hidden';
+
 export interface ArchivedLeague {
   platform: ArchivePlatform;
   sport: ArchiveSport;
   recurringLeagueId: string;
   leagueName?: string;
   archivedAt?: string;
+  mode: ArchiveMode;
 }
 
 interface ArchivedLeagueRow {
@@ -36,6 +52,39 @@ interface ArchivedLeagueRow {
   recurring_league_id: string;
   league_name: string | null;
   archived_at: string | null;
+  mode?: string | null;
+}
+
+/** Normalize a raw `mode` value; anything unexpected (incl. null) → 'hidden' (the
+ * most-suppressive, no-leak default). Post-migration every row has a valid mode. */
+function normalizeArchiveMode(mode: string | null | undefined): ArchiveMode {
+  return mode === 'historical' ? 'historical' : 'hidden';
+}
+
+/** True when a DB error indicates the `mode` column doesn't exist yet (code runs
+ * before migration 025). Lets the read path fall back to legacy behavior instead
+ * of failing closed on a transient-looking error it can actually recover from. */
+function isMissingModeColumn(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  if (error.code === '42703') return true; // Postgres undefined_column
+  return /column\b.*\bmode\b.*does not exist/i.test(error.message ?? '');
+}
+
+/**
+ * Decide whether a league row should be dropped under a given filter, given the
+ * archived map (from getArchivedMap) and the row's archive key (archivedKey).
+ * Centralizes the tri-state semantics so the per-platform storage reads can't drift.
+ */
+export function isSuppressed(
+  filter: ArchivedFilter,
+  archived: Map<string, ArchiveMode>,
+  key: string
+): boolean {
+  if (filter === 'include-all') return false;
+  const mode = archived.get(key);
+  if (mode === undefined) return false; // not archived at all
+  if (filter === 'exclude-archived') return true; // active view drops both modes
+  return mode === 'hidden'; // exclude-hidden: history view drops only 'hidden'
 }
 
 function maskUserId(userId: string): string {
@@ -78,7 +127,8 @@ export class ArchiveStorage {
     platform: ArchivePlatform,
     sport: ArchiveSport,
     recurringLeagueId: string,
-    leagueName?: string
+    leagueName?: string,
+    mode: ArchiveMode = 'historical'
   ): Promise<boolean> {
     try {
       if (!clerkUserId || !recurringLeagueId) return false;
@@ -93,6 +143,7 @@ export class ArchiveStorage {
             recurring_league_id: recurringLeagueId,
             league_name: leagueName ?? null,
             archived_at: new Date().toISOString(),
+            mode,
           },
           { onConflict: 'clerk_user_id,platform,sport,recurring_league_id' }
         );
@@ -103,7 +154,7 @@ export class ArchiveStorage {
       }
 
       console.log(
-        `[archive-storage] archiveLeague: archived ${platform}:${sport}:${recurringLeagueId} for user ${maskUserId(clerkUserId)}`
+        `[archive-storage] archiveLeague: ${mode} ${platform}:${sport}:${recurringLeagueId} for user ${maskUserId(clerkUserId)}`
       );
       return true;
     } catch (error) {
@@ -154,9 +205,11 @@ export class ArchiveStorage {
     try {
       if (!clerkUserId) return [];
 
+      // select('*') so the read tolerates the `mode` column being present or absent
+      // (pre-migration); normalizeArchiveMode maps a missing/null mode to 'hidden'.
       const { data, error } = await this.supabase
         .from('archived_leagues')
-        .select('platform, sport, recurring_league_id, league_name, archived_at')
+        .select('*')
         .eq('clerk_user_id', clerkUserId);
 
       if (error || !data) {
@@ -170,6 +223,7 @@ export class ArchiveStorage {
         recurringLeagueId: row.recurring_league_id,
         leagueName: row.league_name ?? undefined,
         archivedAt: row.archived_at ?? undefined,
+        mode: normalizeArchiveMode(row.mode),
       }));
     } catch (error) {
       console.error('[archive-storage] Failed to list archived leagues:', error);
@@ -178,36 +232,68 @@ export class ArchiveStorage {
   }
 
   /**
-   * Return the set of archived leagues for a user + platform, keyed by
-   * `sport:recurringId` (see `archivedKey`). Used by the read-path filter as a
-   * plain composite-key comparison. The sport is part of the key because
-   * recurring ids are only unique within a sport.
+   * Return archived leagues for a user + platform as a `Map<archivedKey, mode>`,
+   * keyed by `sport:recurringId` (see `archivedKey`). The mode lets the read-path
+   * filter distinguish 'historical' (browsable in get_ancient_history) from
+   * 'hidden' (gone from both AI tools).
    *
-   * THROWS on a DB error (fail-closed). Exclude-path callers (internal
-   * `includeArchived:false`) let it propagate so a transient error fails the
-   * league read rather than silently un-hiding archived leagues from the AI —
-   * the gateway already tolerates a platform fetch failure. Annotate-path
-   * callers (public UI) catch it and fall back to an empty set (fail-open) so the
-   * UI just loses the archived flag.
+   * THROWS on a DB error (fail-closed). Exclude-path callers let it propagate so a
+   * transient error fails the league read rather than silently un-hiding archived
+   * leagues from the AI. Annotate-path callers (public UI) catch and fall back to
+   * an empty map (fail-open) so the UI just loses the archived flag.
+   *
+   * Tolerates the pre-migration schema: if the `mode` column doesn't exist yet,
+   * it falls back to reading without it and treats every archived league as
+   * 'hidden' (the original behavior) — so this is safe regardless of whether the
+   * migration or the code lands first. Any OTHER DB error still fails closed.
    */
-  async getArchivedSet(clerkUserId: string, platform: ArchivePlatform): Promise<Set<string>> {
-    if (!clerkUserId) return new Set();
+  async getArchivedMap(clerkUserId: string, platform: ArchivePlatform): Promise<Map<string, ArchiveMode>> {
+    if (!clerkUserId) return new Map();
 
     const { data, error } = await this.supabase
       .from('archived_leagues')
-      .select('sport, recurring_league_id')
+      .select('sport, recurring_league_id, mode')
       .eq('clerk_user_id', clerkUserId)
       .eq('platform', platform);
 
-    if (error || !data) {
-      console.error('[archive-storage] getArchivedSet error:', error);
-      throw new Error(`Failed to get archived set: ${error?.message ?? 'no data returned'}`);
+    if (!error && data) {
+      return new Map(
+        (data as { sport: string; recurring_league_id: string; mode: string | null }[]).map((row) => [
+          archivedKey(row.sport, row.recurring_league_id),
+          normalizeArchiveMode(row.mode),
+        ])
+      );
     }
 
-    return new Set(
-      (data as { sport: string; recurring_league_id: string }[]).map((row) =>
-        archivedKey(row.sport, row.recurring_league_id)
-      )
-    );
+    if (isMissingModeColumn(error)) {
+      const { data: legacyData, error: legacyError } = await this.supabase
+        .from('archived_leagues')
+        .select('sport, recurring_league_id')
+        .eq('clerk_user_id', clerkUserId)
+        .eq('platform', platform);
+
+      if (!legacyError && legacyData) {
+        return new Map(
+          (legacyData as { sport: string; recurring_league_id: string }[]).map((row) => [
+            archivedKey(row.sport, row.recurring_league_id),
+            'hidden' as ArchiveMode,
+          ])
+        );
+      }
+      console.error('[archive-storage] getArchivedMap legacy fallback error:', legacyError);
+      throw new Error(`Failed to get archived map: ${legacyError?.message ?? 'no data returned'}`);
+    }
+
+    console.error('[archive-storage] getArchivedMap error:', error);
+    throw new Error(`Failed to get archived map: ${error?.message ?? 'no data returned'}`);
+  }
+
+  /**
+   * Set of archived keys (both modes) for a user + platform. Back-compat wrapper
+   * over getArchivedMap for callers that only need "is this league suppressed at
+   * all" (the active-view exclude path). Fail-closed (throws) like getArchivedMap.
+   */
+  async getArchivedSet(clerkUserId: string, platform: ArchivePlatform): Promise<Set<string>> {
+    return new Set((await this.getArchivedMap(clerkUserId, platform)).keys());
   }
 }

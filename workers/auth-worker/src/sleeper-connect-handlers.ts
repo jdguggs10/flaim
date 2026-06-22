@@ -1,5 +1,5 @@
 import { SleeperStorage, type SleeperLeague } from './sleeper-storage';
-import { ArchiveStorage, archivedKey } from './archive-storage';
+import { ArchiveStorage, archivedKey, type ArchivedFilter, type ArchiveMode } from './archive-storage';
 import { getDefaultSeasonYear } from './season-utils';
 
 const SLEEPER_API = 'https://api.sleeper.app/v1';
@@ -38,6 +38,7 @@ interface SleeperLeagueResponse {
   seasonYear: number;
   recurringLeagueId: string;
   archived?: boolean;
+  archiveMode?: ArchiveMode;
 }
 
 interface RecurringLeagueResolutionResult {
@@ -46,18 +47,18 @@ interface RecurringLeagueResolutionResult {
 }
 
 /**
- * Annotate-path archive-set lookup that fails OPEN: a transient DB error treats
- * nothing as archived (the UI just loses the `archived` flag) rather than failing
- * the whole league list. The exclude path keeps fail-closed via getSleeperLeagues
- * letting getArchivedSet's throw propagate — a DB error there fails the read
- * rather than leaking archived leagues to the AI.
+ * Annotate-path archive lookup that fails OPEN: a transient DB error treats
+ * nothing as archived (the UI just loses the `archived`/`archiveMode` flags) rather
+ * than failing the whole league list. The exclude path keeps fail-closed via
+ * getSleeperLeagues letting getArchivedMap's throw propagate — a DB error there
+ * fails the read rather than leaking archived leagues to the AI.
  */
-async function getArchivedSetFailOpen(env: SleeperConnectEnv, userId: string): Promise<Set<string>> {
+async function getArchivedMapFailOpen(env: SleeperConnectEnv, userId: string): Promise<Map<string, ArchiveMode>> {
   try {
-    return await ArchiveStorage.fromEnvironment(env).getArchivedSet(userId, 'sleeper');
+    return await ArchiveStorage.fromEnvironment(env).getArchivedMap(userId, 'sleeper');
   } catch (error) {
-    console.error('[sleeper-connect] getArchivedSet failed; annotating none (fail-open):', error);
-    return new Set();
+    console.error('[sleeper-connect] getArchivedMap failed; annotating none (fail-open):', error);
+    return new Map();
   }
 }
 
@@ -185,7 +186,7 @@ async function resolveRecurringLeagueId(
 
 async function buildSleeperLeagueResponse(
   leagues: SleeperLeague[],
-  archivedSet?: Set<string>
+  archivedMap?: Map<string, ArchiveMode>
 ): Promise<SleeperLeagueResponse[]> {
   const recurringIdCache = new Map<string, string | null>();
   const leagueCache = new Map<string, Promise<SleeperApiLeague | null>>();
@@ -209,8 +210,14 @@ async function buildSleeperLeagueResponse(
       seasonYear: league.seasonYear,
       recurringLeagueId,
       // Public (UI) responses annotate the archive state so the UI can bucket
-      // archived leagues; internal responses omit the flag and exclude the rows.
-      ...(archivedSet ? { archived: archivedSet.has(archivedKey(league.sport, recurringLeagueId)) } : {}),
+      // archived leagues; internal responses omit the flags and exclude the rows.
+      // `archived` = suppressed at all; `archiveMode` distinguishes historical/hidden.
+      ...(archivedMap
+        ? {
+            archived: archivedMap.has(archivedKey(league.sport, recurringLeagueId)),
+            archiveMode: archivedMap.get(archivedKey(league.sport, recurringLeagueId)),
+          }
+        : {}),
     };
   }));
 }
@@ -232,7 +239,7 @@ export async function backfillSleeperRecurringIds(
   userId: string
 ): Promise<{ processed: number; resolved: number }> {
   const storage = SleeperStorage.fromEnvironment(env);
-  const leagues = await storage.getSleeperLeagues(userId, true);
+  const leagues = await storage.getSleeperLeagues(userId, 'include-all');
 
   const recurringIdCache = new Map<string, string | null>();
   const leagueCache = new Map<string, Promise<SleeperApiLeague | null>>();
@@ -283,7 +290,7 @@ export async function resolveSleeperArchiveTarget(
   requestedRecurringId: string
 ): Promise<{ recurringLeagueId: string; leagueName?: string; seasonLeagueIds: string[] }> {
   const storage = SleeperStorage.fromEnvironment(env);
-  const allLeagues = await storage.getSleeperLeagues(userId, true);
+  const allLeagues = await storage.getSleeperLeagues(userId, 'include-all');
 
   // Rows belonging to this recurring group: either their stored recurring id
   // matches, or (fallback) their season-scoped league_id equals the requested id.
@@ -470,7 +477,7 @@ export async function handleSleeperStatus(
       });
     }
     // Status-card leagueCount excludes archived to match the visible active list.
-    const leagues = await storage.getSleeperLeagues(userId, false);
+    const leagues = await storage.getSleeperLeagues(userId, 'exclude-archived');
     return new Response(
       JSON.stringify({
         connected: true,
@@ -515,23 +522,23 @@ export async function handleSleeperLeagues(
   env: SleeperConnectEnv,
   userId: string,
   corsHeaders: Record<string, string>,
-  options: { includeArchived?: boolean } = {}
+  options: { archived?: ArchivedFilter } = {}
 ): Promise<Response> {
   try {
-    const includeArchived = options.includeArchived ?? true;
+    const archived = options.archived ?? 'include-all';
     const storage = SleeperStorage.fromEnvironment(env);
-    // Internal (gateway-facing) callers pass includeArchived:false so archived
-    // leagues are excluded from the AI surfaces. Public (UI) callers keep the
-    // default and annotate each league with an `archived` boolean instead.
-    const leagues = await storage.getSleeperLeagues(userId, includeArchived);
-    // Annotate path (includeArchived:true, public UI) fails OPEN: a transient
-    // archive-set error just drops the `archived` flag rather than 500-ing the
-    // list. The exclude path (includeArchived:false) lets getSleeperLeagues
-    // propagate the throw — fail-closed so archived leagues never leak to the AI.
-    const archivedSet = includeArchived
-      ? await getArchivedSetFailOpen(env, userId)
+    // Internal (gateway-facing) callers pass 'exclude-archived' (active view) or
+    // 'exclude-hidden' (history view) so archived leagues are filtered for the AI.
+    // Public (UI) callers keep 'include-all' and annotate each league instead.
+    const leagues = await storage.getSleeperLeagues(userId, archived);
+    // Annotate path ('include-all', public UI) fails OPEN: a transient archive
+    // error just drops the flags rather than 500-ing the list. The exclude paths
+    // let getSleeperLeagues propagate the throw — fail-closed so archived leagues
+    // never leak to the AI.
+    const archivedMap = archived === 'include-all'
+      ? await getArchivedMapFailOpen(env, userId)
       : undefined;
-    const responseLeagues = await buildSleeperLeagueResponse(leagues, archivedSet);
+    const responseLeagues = await buildSleeperLeagueResponse(leagues, archivedMap);
     return new Response(
       JSON.stringify({
         leagues: responseLeagues,
@@ -559,8 +566,8 @@ export async function handleSleeperLeagueDelete(
     // Return the public (annotated) list — this feeds the UI directly. Annotate
     // path fails open on an archive-set error (drops the flag rather than failing the list).
     const leagues = await storage.getSleeperLeagues(userId);
-    const archivedSet = await getArchivedSetFailOpen(env, userId);
-    const responseLeagues = await buildSleeperLeagueResponse(leagues, archivedSet);
+    const archivedMap = await getArchivedMapFailOpen(env, userId);
+    const responseLeagues = await buildSleeperLeagueResponse(leagues, archivedMap);
     return new Response(
       JSON.stringify({
         success: true,

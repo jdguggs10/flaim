@@ -15,7 +15,7 @@
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { clearDefaultsForLeague as _clearDefaultsForLeague, clearDefaultsForPlatform as _clearDefaultsForPlatform } from './preference-defaults';
-import { ArchiveStorage, archivedKey } from './archive-storage';
+import { ArchiveStorage, archivedKey, isSuppressed, type ArchivedFilter } from './archive-storage';
 
 export const REFRESH_COOLDOWN_OWNER_PREFIX = 'cooldown:';
 
@@ -614,13 +614,15 @@ export class YahooStorage {
   /**
    * Get all Yahoo leagues for a user.
    *
-   * When `includeArchived` is false, rows whose recurring identity
-   * (`recurring_league_id ?? league_key`) is in the user's archived set are
-   * excluded. The default (`true`) keeps dedupe/discovery readers unfiltered.
-   * Mirrors getSleeperLeagues; the season-scoped `league_key` is the fallback key
-   * (Yahoo's analogue of Sleeper's per-season `league_id`).
+   * `archived` controls how suppressed leagues are treated; the recurring identity
+   * is `recurring_league_id ?? league_key` (the season-scoped `league_key` is the
+   * fallback, Yahoo's analogue of Sleeper's per-season `league_id`):
+   *   'include-all'      (default) — dedupe/discovery readers, unfiltered
+   *   'exclude-archived' — drop both archive modes (active get_user_session view)
+   *   'exclude-hidden'   — drop only 'hidden' (get_ancient_history view)
+   * Mirrors getSleeperLeagues.
    */
-  async getYahooLeagues(clerkUserId: string, includeArchived: boolean = true): Promise<YahooLeague[]> {
+  async getYahooLeagues(clerkUserId: string, archived: ArchivedFilter = 'include-all'): Promise<YahooLeague[]> {
     const { data, error } = await this.supabase
       .from('yahoo_leagues')
       .select('*')
@@ -631,14 +633,14 @@ export class YahooStorage {
       throw new Error('Failed to get Yahoo leagues');
     }
 
-    const archivedSet = includeArchived
+    const archivedMap = archived === 'include-all'
       ? null
-      : await this.archive.getArchivedSet(clerkUserId, 'yahoo');
+      : await this.archive.getArchivedMap(clerkUserId, 'yahoo');
 
     const rows = (data || []).filter((row) => {
-      if (!archivedSet) return true;
+      if (!archivedMap) return true;
       const recurringId = row.recurring_league_id ?? row.league_key;
-      return !archivedSet.has(archivedKey(row.sport, recurringId));
+      return !isSuppressed(archived, archivedMap, archivedKey(row.sport, recurringId));
     });
 
     return rows.map((row) => ({

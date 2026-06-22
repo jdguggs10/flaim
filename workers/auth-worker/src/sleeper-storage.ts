@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { clearDefaultsForLeague as _clearDefaultsForLeague, clearDefaultsForPlatform as _clearDefaultsForPlatform } from './preference-defaults';
-import { ArchiveStorage, archivedKey } from './archive-storage';
+import { ArchiveStorage, archivedKey, isSuppressed, type ArchivedFilter } from './archive-storage';
 
 function maskUserId(userId: string): string {
   if (!userId || userId.length <= 8) return '***';
@@ -113,11 +113,13 @@ export class SleeperStorage {
 
   /**
    * Retrieve Sleeper leagues for a user.
-   * When `includeArchived` is false, rows whose recurring identity
-   * (`recurring_league_id ?? league_id`) is in the user's archived set are
-   * excluded. The default (`true`) keeps dedupe/discovery readers unfiltered.
+   * `archived` controls how suppressed leagues are treated; the recurring identity
+   * is `recurring_league_id ?? league_id`:
+   *   'include-all'      (default) — dedupe/discovery readers, unfiltered
+   *   'exclude-archived' — drop both archive modes (active get_user_session view)
+   *   'exclude-hidden'   — drop only 'hidden' (get_ancient_history view)
    */
-  async getSleeperLeagues(clerkUserId: string, includeArchived: boolean = true): Promise<SleeperLeague[]> {
+  async getSleeperLeagues(clerkUserId: string, archived: ArchivedFilter = 'include-all'): Promise<SleeperLeague[]> {
     const { data, error } = await this.supabase
       .from('sleeper_leagues')
       .select('*')
@@ -127,14 +129,14 @@ export class SleeperStorage {
     if (error) throw new Error(`Failed to get Sleeper leagues: ${error.message}`);
     if (!data) return [];
 
-    const archivedSet = includeArchived
+    const archivedMap = archived === 'include-all'
       ? null
-      : await this.archive.getArchivedSet(clerkUserId, 'sleeper');
+      : await this.archive.getArchivedMap(clerkUserId, 'sleeper');
 
     const rows = (data as SleeperLeagueRow[]).filter((row) => {
-      if (!archivedSet) return true;
+      if (!archivedMap) return true;
       const recurringId = row.recurring_league_id ?? row.league_id;
-      return !archivedSet.has(archivedKey(row.sport, recurringId));
+      return !isSuppressed(archived, archivedMap, archivedKey(row.sport, recurringId));
     });
 
     return rows.map((row) => ({
