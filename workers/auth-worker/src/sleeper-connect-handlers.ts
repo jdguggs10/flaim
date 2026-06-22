@@ -200,6 +200,7 @@ async function buildSleeperLeagueResponse(
   return Promise.all(leagues.map(async (league) => {
     const recurringLeagueId = league.recurringLeagueId
       ?? await resolveRecurringLeagueId(league.leagueId, recurringIdCache, leagueCache);
+    const key = archivedKey(league.sport, recurringLeagueId);
 
     return {
       id: league.id,
@@ -214,8 +215,8 @@ async function buildSleeperLeagueResponse(
       // `archived` = suppressed at all; `archiveMode` distinguishes historical/hidden.
       ...(archivedMap
         ? {
-            archived: archivedMap.has(archivedKey(league.sport, recurringLeagueId)),
-            archiveMode: archivedMap.get(archivedKey(league.sport, recurringLeagueId)),
+            archived: archivedMap.has(key),
+            archiveMode: archivedMap.get(key),
           }
         : {}),
     };
