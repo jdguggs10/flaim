@@ -4,20 +4,26 @@
  * Proxies the manual league archive endpoints to the Auth-Worker (FLA-124).
  *
  * - GET    → list the user's archived leagues (feeds the Archived UI section)
- * - POST   → archive a league (hide it from the AI; survives re-sync)
+ * - POST   → set a league's archive mode (hide it from the AI's active view; survives re-sync)
  * - DELETE → unarchive a league (restore it to the visible/AI surfaces)
  *
- * Body for POST/DELETE: { platform, sport, recurringLeagueId }. ESPN + Sleeper
- * only — Yahoo archive is deferred to a later phase, enforced by the Auth-Worker.
+ * Body for POST: { platform, sport, recurringLeagueId, mode }, where `mode` is
+ * 'historical' (Archive — still browsable for past seasons) or 'hidden' (Hide —
+ * completely hidden from the AI); it defaults to 'historical' when omitted.
+ * Body for DELETE: { platform, sport, recurringLeagueId }. All three platforms
+ * (ESPN, Yahoo, Sleeper) support the three-state visibility flow.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 
+type ArchiveMode = 'historical' | 'hidden';
+
 interface ArchiveRequestBody {
   platform?: string;
   sport?: string;
   recurringLeagueId?: string;
+  mode?: ArchiveMode;
 }
 
 // Shared auth/url/token resolution for the GET/POST/DELETE handlers. Returns the
@@ -88,6 +94,13 @@ export async function POST(request: NextRequest) {
         error: 'platform, sport, and recurringLeagueId are required',
       }, { status: 400 });
     }
+    // `mode` is optional; the Auth-Worker defaults it to 'historical'. Validate it
+    // when present so only the two supported modes are forwarded.
+    if (body.mode !== undefined && body.mode !== 'historical' && body.mode !== 'hidden') {
+      return NextResponse.json({
+        error: "mode must be 'historical' or 'hidden'",
+      }, { status: 400 });
+    }
 
     const workerResponse = await fetch(`${workerUrl}/leagues/archive`, {
       method: 'POST',
@@ -99,6 +112,7 @@ export async function POST(request: NextRequest) {
         platform: body.platform,
         sport: body.sport,
         recurringLeagueId: body.recurringLeagueId,
+        ...(body.mode !== undefined ? { mode: body.mode } : {}),
       }),
     });
 
