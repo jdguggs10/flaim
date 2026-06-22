@@ -71,8 +71,8 @@ describe('parseArchiveBody', () => {
   });
 
   it('accepts a valid dotted Yahoo-style id (e.g. 449.l.123) for a supported platform', () => {
-    // Yahoo as a platform is deferred, but the dotted-id charset must pass so the
-    // charset rule never becomes the reason a future Yahoo id is rejected.
+    // The dotted-id charset (e.g. a Yahoo league_key like 449.l.123) must pass so
+    // the charset rule never becomes the reason such an id is rejected.
     const result = parseArchiveBody({ platform: 'sleeper', sport: 'football', recurringLeagueId: '449.l.123' });
     expect(result).toEqual({ ok: true, platform: 'sleeper', sport: 'football', recurringLeagueId: '449.l.123', mode: 'historical' });
   });
