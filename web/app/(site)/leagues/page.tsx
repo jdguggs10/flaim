@@ -401,8 +401,7 @@ function LeaguesPageContent() {
   const displaySleeperLeagues = isAccountStateCurrent ? sleeperLeagues : EMPTY_SLEEPER_LEAGUES;
   const displayPreferences = isAccountStateCurrent ? preferences : EMPTY_USER_PREFERENCES;
   const defaultSport = displayPreferences.defaultSport;
-  const [showOldLeagues, setShowOldLeagues] = useState(false);
-  const [showArchivedLeagues, setShowArchivedLeagues] = useState(false);
+  const [showInactiveLeagues, setShowInactiveLeagues] = useState(false);
   const [showHiddenLeagues, setShowHiddenLeagues] = useState(false);
   // Keyed by `${platform}:${recurringLeagueId}` while an archive/unarchive request is in flight.
   const [archivingLeagueKey, setArchivingLeagueKey] = useState<string | null>(null);
@@ -1735,27 +1734,28 @@ function LeaguesPageContent() {
                   </div>
                 ))}
 
-                    {/* Old Leagues Section */}
-                    {leaguesBySport.old.length > 0 && (
+                    {/* Inactive Leagues Section (aged-out + manually archived) */}
+                    {(leaguesBySport.old.length + leaguesBySport.archived.length) > 0 && (
                       <div className="space-y-3 pt-3 border-t">
                         <button
                           type="button"
                           className="flex items-center gap-2 font-medium text-muted-foreground hover:text-foreground transition-colors w-full"
-                          onClick={() => setShowOldLeagues(!showOldLeagues)}
+                          onClick={() => setShowInactiveLeagues(!showInactiveLeagues)}
                         >
-                          <span className="text-lg">🗄️</span>
-                          <span className="text-base">Old Leagues ({leaguesBySport.old.length})</span>
-                          <ChevronDown className={`h-4 w-4 ml-auto transition-transform ${showOldLeagues ? 'rotate-180' : ''}`} />
+                          <Archive className="h-4 w-4" />
+                          <span className="text-base">Inactive ({leaguesBySport.old.length + leaguesBySport.archived.length})</span>
+                          <ChevronDown className={`h-4 w-4 ml-auto transition-transform ${showInactiveLeagues ? 'rotate-180' : ''}`} />
                         </button>
 
-                        {showOldLeagues && (
+                        {showInactiveLeagues && (
                           <div className="space-y-3">
                             <p className="text-sm text-muted-foreground">
-                              Leagues that are no longer active. Your AI can still pull their results when you ask about past seasons.
+                              Leagues that are old or that you&apos;ve manually archived. These are still available to your AI when you ask about past seasons.
                             </p>
                             {leaguesBySport.old.map((group) => {
                               const baseKey = `${group.leagueId}-${group.sport}`;
                               const isDeleting = deletingLeagueKey === baseKey;
+                              const isArchiving = archivingLeagueKey === `${group.platform}:${getArchiveRecurringId(group)}`;
                               const mostRecentYear = group.seasons[0]?.seasonYear;
 
                               return (
@@ -1772,13 +1772,16 @@ function LeaguesPageContent() {
                                       </div>
                                     </div>
                                     <div className="flex items-center gap-1 shrink-0">
-                                      {/* Visibility controls: all three platforms (ESPN, Yahoo, Sleeper). */}
-                                      <ArchiveButtons
-                                        group={group}
-                                        archivingLeagueKey={archivingLeagueKey}
-                                        onArchive={(g) => performArchiveAction(g, 'archive', 'historical')}
-                                        onHide={(g) => performArchiveAction(g, 'archive', 'hidden')}
-                                      />
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                                        onClick={() => performArchiveAction(group, 'archive', 'hidden')}
+                                        disabled={isArchiving}
+                                        title="Hide (completely hidden from the AI)"
+                                      >
+                                        {isArchiving ? <Loader2 className="h-4 w-4 animate-spin" /> : <EyeOff className="h-4 w-4" />}
+                                      </Button>
                                       <Button
                                         variant="ghost"
                                         size="icon"
@@ -1814,29 +1817,6 @@ function LeaguesPageContent() {
                                 </div>
                               );
                             })}
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Archived Leagues Section (mode: 'historical') */}
-                    {leaguesBySport.archived.length > 0 && (
-                      <div className="space-y-3 pt-3 border-t">
-                        <button
-                          type="button"
-                          className="flex items-center gap-2 font-medium text-muted-foreground hover:text-foreground transition-colors w-full"
-                          onClick={() => setShowArchivedLeagues(!showArchivedLeagues)}
-                        >
-                          <Archive className="h-4 w-4" />
-                          <span className="text-base">Archived ({leaguesBySport.archived.length})</span>
-                          <ChevronDown className={`h-4 w-4 ml-auto transition-transform ${showArchivedLeagues ? 'rotate-180' : ''}`} />
-                        </button>
-
-                        {showArchivedLeagues && (
-                          <div className="space-y-3">
-                            <p className="text-sm text-muted-foreground">
-                              Leagues you&apos;ve set aside. Your AI won&apos;t bring these up on its own, but it can still pull their history when you ask about past seasons.
-                            </p>
                             {leaguesBySport.archived.map((group) => {
                               const baseKey = `${group.leagueId}-${group.sport}`;
                               const isDeleting =
