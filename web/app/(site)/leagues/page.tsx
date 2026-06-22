@@ -1539,7 +1539,7 @@ function LeaguesPageContent() {
               <div className="space-y-6">
                 {leaguesBySport.active.length > 0 && (
                   <p className="text-sm text-muted-foreground">
-                    Live for your AI — for each league it uses the current season. Older seasons stay available when you ask about the past.
+                    Active leagues with current seasons. These are automatically sent to your AI at the start of every conversation. Non-current seasons are also available if you ask.
                   </p>
                 )}
                 {leaguesBySport.active.map(([sport, sportLeagues]) => (
@@ -1751,7 +1751,7 @@ function LeaguesPageContent() {
                         {showOldLeagues && (
                           <div className="space-y-3">
                             <p className="text-sm text-muted-foreground">
-                              Leagues that wrapped up on their own. Your AI can still pull their results when you ask about past seasons.
+                              Leagues that are no longer active. Your AI can still pull their results when you ask about past seasons.
                             </p>
                             {leaguesBySport.old.map((group) => {
                               const baseKey = `${group.leagueId}-${group.sport}`;
