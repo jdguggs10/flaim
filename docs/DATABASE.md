@@ -100,7 +100,9 @@ Notes:
 - During rollout, auth-worker retries writes without `recurring_league_id` if the live schema does not have the column yet; those legacy or unresolved rows still rely on read-time fallback until they are rediscovered.
 
 ### archived_leagues
-Manual league archive (FLA-124). One row per archived recurring league. Archived leagues are hidden from the AI's MCP tools (`get_user_session`, `get_ancient_history`) but remain visible and restorable in `/leagues`.
+Manual league suppression (FLA-124; three-state model FLA-150). One row per suppressed recurring league, across ESPN, Yahoo, and Sleeper. The `mode` column places a league in one of two suppressed states; both remain visible and restorable in `/leagues`:
+- `historical` (Archive) — hidden from `get_user_session` but browsable in `get_ancient_history`.
+- `hidden` (Hide) — hidden from both AI tools.
 
 | Column | Type | Notes |
 |---|---|---|
@@ -108,18 +110,18 @@ Manual league archive (FLA-124). One row per archived recurring league. Archived
 | clerk_user_id | text | User owner |
 | platform | text | `espn`, `yahoo`, or `sleeper` |
 | sport | text | football/baseball/basketball/hockey |
-| recurring_league_id | text | Stable recurring-league identity (ESPN: `league_id`; Sleeper: `recurring_league_id ?? league_id`; Yahoo reserved for a later phase) |
-| league_name | text | Denormalized name for the Archived UI list (optional) |
-| archived_at | timestamptz | When the league was archived |
+| recurring_league_id | text | Stable recurring-league identity (ESPN: `league_id`; Sleeper: `recurring_league_id ?? league_id`; Yahoo: `recurring_league_id ?? league_key`) |
+| league_name | text | Denormalized name for the UI list (optional) |
+| archived_at | timestamptz | When the league was suppressed |
+| mode | text | `historical` or `hidden` (default `historical`; migration 025 backfilled existing rows to `hidden`). NOT part of the unique key. |
 
 Constraints/Indexes:
-- Unique per archived league: `(clerk_user_id, platform, sport, recurring_league_id)`.
+- Unique per league: `(clerk_user_id, platform, sport, recurring_league_id)` — `mode` is a mutable attribute, so re-archiving overwrites it (moves the league between Archived/Hidden).
 - Index on `clerk_user_id`.
 
 Notes:
-- Keyed on a recurring identity (not a season-scoped row) so an archived league stays archived across annual re-syncs — discovery upserts new season rows without touching this table.
-- Read paths: internal/AI-facing league reads exclude archived rows (fail-closed on a lookup error); public/UI league reads annotate an `archived` flag instead.
-- Phase 1a covers ESPN and Sleeper; Yahoo archive is deferred to a later phase.
+- Keyed on a recurring identity (not a season-scoped row) so suppression survives annual re-syncs — discovery upserts new season rows without touching this table.
+- Read paths: internal/AI-facing reads take a tri-state filter — `exclude-archived` (both modes, for `get_user_session`) or `exclude-hidden` (drops only `hidden`, for `get_ancient_history`); fail-closed on a lookup error. Public/UI reads annotate `archived` + `archiveMode`. The read tolerates a pre-migration schema (treats rows as `hidden` if `mode` is absent).
 
 ### platform_oauth_states
 Short-lived OAuth state values for platform-connect flows (separate from MCP OAuth state table).
