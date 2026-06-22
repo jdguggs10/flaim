@@ -1539,7 +1539,7 @@ function LeaguesPageContent() {
               <div className="space-y-6">
                 {leaguesBySport.active.length > 0 && (
                   <p className="text-sm text-muted-foreground">
-                    Used in your AI conversations.
+                    Live for your AI — for each league it uses the current season. Older seasons stay available when you ask about the past.
                   </p>
                 )}
                 {leaguesBySport.active.map(([sport, sportLeagues]) => (
@@ -1750,6 +1750,9 @@ function LeaguesPageContent() {
 
                         {showOldLeagues && (
                           <div className="space-y-3">
+                            <p className="text-sm text-muted-foreground">
+                              Leagues that wrapped up on their own. Your AI can still pull their results when you ask about past seasons.
+                            </p>
                             {leaguesBySport.old.map((group) => {
                               const baseKey = `${group.leagueId}-${group.sport}`;
                               const isDeleting = deletingLeagueKey === baseKey;
@@ -1832,7 +1835,7 @@ function LeaguesPageContent() {
                         {showArchivedLeagues && (
                           <div className="space-y-3">
                             <p className="text-sm text-muted-foreground">
-                              Still browsable when you ask about past seasons
+                              Leagues you&apos;ve set aside. Your AI won&apos;t bring these up on its own, but it can still pull their history when you ask about past seasons.
                             </p>
                             {leaguesBySport.archived.map((group) => {
                               const baseKey = `${group.leagueId}-${group.sport}`;
@@ -1933,7 +1936,7 @@ function LeaguesPageContent() {
                         {showHiddenLeagues && (
                           <div className="space-y-3">
                             <p className="text-sm text-muted-foreground">
-                              Completely hidden from the AI
+                              Leagues you&apos;ve fully hidden. Your AI never sees these, in any conversation.
                             </p>
                             {leaguesBySport.hidden.map((group) => {
                               const baseKey = `${group.leagueId}-${group.sport}`;
