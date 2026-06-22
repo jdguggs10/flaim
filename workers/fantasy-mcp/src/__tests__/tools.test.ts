@@ -282,6 +282,44 @@ describe('fantasy-mcp tools', () => {
     });
   });
 
+  it('get_ancient_history requests ?archived=exclude-hidden; get_user_session sends no archived param', async () => {
+    // Guards the leak-critical MCP->endpoint contract: get_user_session must drop
+    // ALL archived leagues (no param => endpoint default 'exclude-archived'), while
+    // get_ancient_history opts into 'exclude-hidden' so 'historical' leagues remain
+    // browsable but 'hidden' ones stay suppressed.
+    const sessionTool = getUnifiedTools().find((t) => t.name === 'get_user_session');
+    const historyTool = getUnifiedTools().find((t) => t.name === 'get_ancient_history');
+
+    const seenUrls: string[] = [];
+    const env = {
+      INTERNAL_SERVICE_TOKEN: 'internal-secret',
+      AUTH_WORKER: {
+        fetch: async (req: Request) => {
+          seenUrls.push(req.url);
+          return new Response(JSON.stringify({ leagues: [] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        },
+      },
+    } as unknown as Env;
+
+    await sessionTool!.handler({}, env, 'Bearer test-token');
+    const sessionLeagueUrls = seenUrls.filter((u) => new URL(u).pathname.startsWith('/internal/leagues'));
+    expect(sessionLeagueUrls.length).toBeGreaterThanOrEqual(3); // espn + yahoo + sleeper
+    for (const u of sessionLeagueUrls) {
+      expect(new URL(u).searchParams.has('archived')).toBe(false);
+    }
+
+    seenUrls.length = 0;
+    await historyTool!.handler({}, env, 'Bearer test-token');
+    const historyLeagueUrls = seenUrls.filter((u) => new URL(u).pathname.startsWith('/internal/leagues'));
+    expect(historyLeagueUrls.length).toBeGreaterThanOrEqual(3);
+    for (const u of historyLeagueUrls) {
+      expect(new URL(u).searchParams.get('archived')).toBe('exclude-hidden');
+    }
+  });
+
   it('get_league_info routes to client and formats a success payload', async () => {
     const tool = getUnifiedTools().find((t) => t.name === 'get_league_info');
     expect(tool).toBeTruthy();

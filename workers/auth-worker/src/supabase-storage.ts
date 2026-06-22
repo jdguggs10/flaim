@@ -689,10 +689,10 @@ export class EspnSupabaseStorage {
 
   /**
    * Annotate/validation-path wrapper around `getArchivedSet` (which throws on a DB
-   * error to fail-closed for the exclude path). Here we fail-OPEN: a transient
-   * archive-set error treats nothing as archived rather than blocking default
-   * validation. The exclude path (internal `includeArchived:false`) calls
-   * `getArchivedSet` directly and lets the throw propagate (fail-closed).
+   * error to fail-closed for the exclude paths). Here we fail-OPEN: a transient
+   * archive lookup error treats nothing as archived rather than blocking default
+   * validation. The AI-facing exclude paths (`exclude-archived` / `exclude-hidden`)
+   * call `getArchivedMap` directly and let the throw propagate (fail-closed).
    */
   private async getArchivedSetFailOpen(
     clerkUserId: string,

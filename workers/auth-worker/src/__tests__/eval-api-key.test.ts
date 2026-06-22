@@ -214,6 +214,17 @@ describe('eval API key auth', () => {
     expect(mockGetLeagues).toHaveBeenCalledWith(EVAL_USER_ID, 'exclude-hidden');
   });
 
+  it('GET /auth/internal/leagues with a malformed archived param falls back to exclude-archived (fail-safe)', async () => {
+    // A garbled or hostile value must NOT widen the AI view — strict equality means
+    // anything other than 'exclude-hidden' resolves to the most-suppressive default.
+    await appFetch(
+      makeRequest('/auth/internal/leagues?archived=include-all', {
+        headers: internalHeaders(EVAL_API_KEY),
+      })
+    );
+    expect(mockGetLeagues).toHaveBeenCalledWith(EVAL_USER_ID, 'exclude-archived');
+  });
+
   it('GET /auth/internal/leagues/yahoo with valid API key returns leagues', async () => {
     const res = await appFetch(
       makeRequest('/auth/internal/leagues/yahoo', {
