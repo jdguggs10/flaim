@@ -60,7 +60,7 @@ import {
   YahooConnectEnv,
 } from './yahoo-connect-handlers';
 import { YahooStorage, type YahooLeague } from './yahoo-storage';
-import { ArchiveStorage, archivedKey, type ArchivePlatform, type ArchiveSport } from './archive-storage';
+import { ArchiveStorage, archivedKey, type ArchivePlatform, type ArchiveSport, type ArchiveMode, type ArchivedFilter } from './archive-storage';
 import { logSetupSignal, type SetupSignalEvent } from '@flaim/worker-shared';
 import {
   handleSleeperDiscover,
@@ -1107,18 +1107,22 @@ async function annotateYahooLeaguesArchived(
   env: Env,
   userId: string,
   leagues: YahooLeague[]
-): Promise<Array<YahooLeague & { archived: boolean }>> {
-  let archivedSet: Set<string>;
+): Promise<Array<YahooLeague & { archived: boolean; archiveMode?: ArchiveMode }>> {
+  let archivedMap: Map<string, ArchiveMode>;
   try {
-    archivedSet = await ArchiveStorage.fromEnvironment(env).getArchivedSet(userId, 'yahoo');
+    archivedMap = await ArchiveStorage.fromEnvironment(env).getArchivedMap(userId, 'yahoo');
   } catch (error) {
-    console.error('[index-hono] getArchivedSet (yahoo) failed; annotating none (fail-open):', error);
-    archivedSet = new Set();
+    console.error('[index-hono] getArchivedMap (yahoo) failed; annotating none (fail-open):', error);
+    archivedMap = new Map();
   }
-  return leagues.map((league) => ({
-    ...league,
-    archived: archivedSet.has(archivedKey(league.sport, league.recurringLeagueId ?? league.leagueKey)),
-  }));
+  return leagues.map((league) => {
+    const key = archivedKey(league.sport, league.recurringLeagueId ?? league.leagueKey);
+    return {
+      ...league,
+      archived: archivedMap.has(key),
+      archiveMode: archivedMap.get(key),
+    };
+  });
 }
 
 // List Yahoo leagues (requires auth)
@@ -1148,9 +1152,11 @@ api.get('/internal/leagues/yahoo', async (c) => {
   }
 
   const storage = YahooStorage.fromEnvironment(c.env);
-  // Internal (gateway-facing) endpoint excludes archived leagues so they vanish
-  // from the AI surfaces. Yahoo archive is active, so this filter is real.
-  const leagues = await storage.getYahooLeagues(userId, false);
+  // Internal (gateway-facing) endpoint. Default excludes archived (both modes) for
+  // get_user_session; get_ancient_history passes ?archived=exclude-hidden to keep
+  // 'historical' leagues browsable while still hiding 'hidden' ones.
+  const archived: ArchivedFilter = c.req.query('archived') === 'exclude-hidden' ? 'exclude-hidden' : 'exclude-archived';
+  const leagues = await storage.getYahooLeagues(userId, archived);
 
   return c.json({ leagues }, 200);
 });
@@ -1238,8 +1244,11 @@ api.get('/internal/leagues/sleeper', async (c) => {
       error_description: authError || 'Authentication required',
     }, authStatus ?? 401);
   }
-  // Internal (gateway-facing) endpoint excludes archived leagues from the AI.
-  return handleSleeperLeagues(c.env as SleeperConnectEnv, userId, getCorsHeaders(c.req.raw), { includeArchived: false });
+  // Internal (gateway-facing) endpoint. Default excludes archived (both modes) for
+  // get_user_session; get_ancient_history passes ?archived=exclude-hidden to keep
+  // 'historical' leagues browsable while still hiding 'hidden' ones.
+  const archived: ArchivedFilter = c.req.query('archived') === 'exclude-hidden' ? 'exclude-hidden' : 'exclude-archived';
+  return handleSleeperLeagues(c.env as SleeperConnectEnv, userId, getCorsHeaders(c.req.raw), { archived });
 });
 
 // Delete Sleeper league (requires auth)
@@ -1262,6 +1271,7 @@ api.delete('/leagues/sleeper/:id', async (c) => {
 
 const ARCHIVE_PLATFORMS: ArchivePlatform[] = ['espn', 'sleeper', 'yahoo'];
 const ARCHIVE_SPORTS: ArchiveSport[] = ['football', 'baseball', 'basketball', 'hockey'];
+const ARCHIVE_MODES: ArchiveMode[] = ['historical', 'hidden'];
 
 // recurringLeagueId allowlist: numeric ESPN/Sleeper ids plus dotted Yahoo-style
 // league_keys (e.g. "449.l.123"). Dots, dashes, and underscores are permitted; no
@@ -1273,13 +1283,14 @@ interface ArchiveRequestBody {
   platform?: string;
   sport?: string;
   recurringLeagueId?: string;
+  mode?: string;
 }
 
 // Exported for unit tests — pure validation, no side effects.
 export function parseArchiveBody(body: ArchiveRequestBody):
-  | { ok: true; platform: ArchivePlatform; sport: ArchiveSport; recurringLeagueId: string }
+  | { ok: true; platform: ArchivePlatform; sport: ArchiveSport; recurringLeagueId: string; mode: ArchiveMode }
   | { ok: false; error: string } {
-  const { platform, sport, recurringLeagueId } = body;
+  const { platform, sport, recurringLeagueId, mode } = body;
   if (!platform || !sport || !recurringLeagueId) {
     return { ok: false, error: 'platform, sport, and recurringLeagueId are required' };
   }
@@ -1295,11 +1306,17 @@ export function parseArchiveBody(body: ArchiveRequestBody):
   if (!RECURRING_LEAGUE_ID_PATTERN.test(recurringLeagueId)) {
     return { ok: false, error: 'Invalid recurringLeagueId' };
   }
+  // mode is optional; defaults to 'historical' (the primary "Archive" action).
+  // 'hidden' is the stronger "Hide" action (suppressed from both AI tools).
+  if (mode !== undefined && !ARCHIVE_MODES.includes(mode as ArchiveMode)) {
+    return { ok: false, error: 'Invalid mode' };
+  }
   return {
     ok: true,
     platform: platform as ArchivePlatform,
     sport: sport as ArchiveSport,
     recurringLeagueId,
+    mode: (mode as ArchiveMode) ?? 'historical',
   };
 }
 
@@ -1328,7 +1345,7 @@ api.post('/leagues/archive', async (c) => {
   if (!parsed.ok) {
     return c.json({ error: parsed.error }, 400);
   }
-  const { platform, sport } = parsed;
+  const { platform, sport, mode } = parsed;
 
   const archiveStorage = ArchiveStorage.fromEnvironment(c.env);
   // clearStaleDefaultForLeague operates on user_preferences and is platform-agnostic,
@@ -1356,7 +1373,7 @@ api.post('/leagues/archive', async (c) => {
     seasonLeagueIds = target.seasonLeagueKeys.length > 0 ? target.seasonLeagueKeys : [recurringLeagueId];
   }
 
-  const archived = await archiveStorage.archiveLeague(userId, platform, sport, recurringLeagueId, leagueName);
+  const archived = await archiveStorage.archiveLeague(userId, platform, sport, recurringLeagueId, leagueName, mode);
   if (!archived) {
     return c.json({ error: 'Failed to archive league' }, 500);
   }
@@ -1367,7 +1384,7 @@ api.post('/leagues/archive', async (c) => {
     await sharedStorage.clearStaleDefaultForLeague(userId, platform, seasonLeagueId, undefined, sport);
   }
 
-  return c.json({ success: true, platform, sport, recurringLeagueId });
+  return c.json({ success: true, platform, sport, recurringLeagueId, mode });
 });
 
 // Unarchive a league (restore it to the visible/AI surfaces).
@@ -1732,9 +1749,11 @@ api.get('/internal/leagues', async (c) => {
   }
 
   const storage = EspnSupabaseStorage.fromEnvironment(c.env);
-  // Internal (gateway-facing) endpoint excludes archived leagues so they vanish
-  // from get_user_session and get_ancient_history automatically.
-  const leagues = await storage.getLeagues(clerkUserId, false);
+  // Internal (gateway-facing) endpoint. Default excludes archived (both modes) for
+  // get_user_session; get_ancient_history passes ?archived=exclude-hidden to keep
+  // 'historical' leagues browsable while still hiding 'hidden' ones.
+  const archived: ArchivedFilter = c.req.query('archived') === 'exclude-hidden' ? 'exclude-hidden' : 'exclude-archived';
+  const leagues = await storage.getLeagues(clerkUserId, archived);
   const leaguesWithPlatform = leagues.map(league => ({
     ...league,
     platform: 'espn' as const
@@ -1790,25 +1809,29 @@ async function handleLeagues(c: Context<{ Bindings: Env }>, method: string): Pro
     });
 
   } else if (method === 'GET') {
-    // Public (UI) endpoint returns ALL leagues with an `archived` boolean so the
-    // UI can bucket them into the Archived section. ESPN recurring id = league_id.
+    // Public (UI) endpoint returns ALL leagues with `archived` + `archiveMode` so
+    // the UI can bucket them into Archived/Hidden. ESPN recurring id = league_id.
     const leagues = await storage.getLeagues(clerkUserId);
     const archiveStorage = ArchiveStorage.fromEnvironment(env);
-    // Annotate path fails OPEN: a transient archive-set error just drops the flag
-    // (the UI loses bucketing) rather than failing the whole league list.
-    let archivedSet: Set<string>;
+    // Annotate path fails OPEN: a transient archive lookup error just drops the
+    // flags (the UI loses bucketing) rather than failing the whole league list.
+    let archivedMap: Map<string, ArchiveMode>;
     try {
-      archivedSet = await archiveStorage.getArchivedSet(clerkUserId, 'espn');
+      archivedMap = await archiveStorage.getArchivedMap(clerkUserId, 'espn');
     } catch (error) {
-      console.error('[auth-worker] /leagues archived-set lookup failed; annotating none:', error);
-      archivedSet = new Set();
+      console.error('[auth-worker] /leagues archived lookup failed; annotating none:', error);
+      archivedMap = new Map();
     }
 
-    const leaguesWithPlatform = leagues.map(league => ({
-      ...league,
-      platform: 'espn' as const,
-      archived: archivedSet.has(archivedKey(league.sport, league.leagueId)),
-    }));
+    const leaguesWithPlatform = leagues.map(league => {
+      const key = archivedKey(league.sport, league.leagueId);
+      return {
+        ...league,
+        platform: 'espn' as const,
+        archived: archivedMap.has(key),
+        archiveMode: archivedMap.get(key),
+      };
+    });
 
     return c.json({
       success: true,

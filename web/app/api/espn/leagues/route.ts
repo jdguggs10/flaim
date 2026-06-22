@@ -19,6 +19,8 @@ interface WorkerLeaguesResponse extends WorkerErrorResponse {
     leagueName?: string;
     teamId?: string;
     seasonYear?: number;
+    archived?: boolean;
+    archiveMode?: 'historical' | 'hidden';
   }>;
   deleted?: boolean;
 }

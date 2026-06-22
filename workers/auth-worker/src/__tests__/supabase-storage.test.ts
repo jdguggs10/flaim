@@ -157,7 +157,7 @@ describe('EspnSupabaseStorage', () => {
       return {};
     });
 
-    const filtered = await storage.getLeagues('user_123', false);
+    const filtered = await storage.getLeagues('user_123', 'exclude-archived');
     expect(filtered.map(l => l.leagueId)).toEqual(['111']);
   });
 
@@ -183,7 +183,7 @@ describe('EspnSupabaseStorage', () => {
       return {};
     });
 
-    const filtered = await storage.getLeagues('user_123', false);
+    const filtered = await storage.getLeagues('user_123', 'exclude-archived');
     // Only the football `123` is hidden; the basketball `123` survives.
     expect(filtered.map(l => ({ leagueId: l.leagueId, sport: l.sport }))).toEqual([
       { leagueId: '123', sport: 'basketball' },
@@ -210,7 +210,70 @@ describe('EspnSupabaseStorage', () => {
       return {};
     });
 
-    await expect(storage.getLeagues('user_123', false)).rejects.toThrow('Failed to get archived set');
+    await expect(storage.getLeagues('user_123', 'exclude-archived')).rejects.toThrow('Failed to get archived map');
+  });
+
+  it('getLeagues exclude-hidden keeps historical archived rows, drops only hidden ones', async () => {
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'espn_leagues') {
+        const eq = vi.fn().mockResolvedValue({
+          data: [
+            { league_id: '111', sport: 'football', team_id: 't1', team_name: 'A', league_name: 'Active', season_year: 2025 },
+            { league_id: '222', sport: 'football', team_id: 't2', team_name: 'B', league_name: 'Historical', season_year: 2025 },
+            { league_id: '333', sport: 'football', team_id: 't3', team_name: 'C', league_name: 'Hidden', season_year: 2025 },
+          ],
+          error: null,
+        });
+        return { select: vi.fn().mockReturnValue({ eq }) };
+      }
+      if (table === 'archived_leagues') {
+        const eqPlatform = vi.fn().mockResolvedValue({
+          data: [
+            { sport: 'football', recurring_league_id: '222', mode: 'historical' },
+            { sport: 'football', recurring_league_id: '333', mode: 'hidden' },
+          ],
+          error: null,
+        });
+        const eqUser = vi.fn().mockReturnValue({ eq: eqPlatform });
+        return { select: vi.fn().mockReturnValue({ eq: eqUser }) };
+      }
+      return {};
+    });
+
+    const filtered = await storage.getLeagues('user_123', 'exclude-hidden');
+    // Active + historical survive (the get_ancient_history view); only 'hidden' drops.
+    expect(filtered.map(l => l.leagueId)).toEqual(['111', '222']);
+  });
+
+  it('getLeagues exclude-archived drops BOTH historical and hidden archived rows', async () => {
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'espn_leagues') {
+        const eq = vi.fn().mockResolvedValue({
+          data: [
+            { league_id: '111', sport: 'football', team_id: 't1', team_name: 'A', league_name: 'Active', season_year: 2025 },
+            { league_id: '222', sport: 'football', team_id: 't2', team_name: 'B', league_name: 'Historical', season_year: 2025 },
+            { league_id: '333', sport: 'football', team_id: 't3', team_name: 'C', league_name: 'Hidden', season_year: 2025 },
+          ],
+          error: null,
+        });
+        return { select: vi.fn().mockReturnValue({ eq }) };
+      }
+      if (table === 'archived_leagues') {
+        const eqPlatform = vi.fn().mockResolvedValue({
+          data: [
+            { sport: 'football', recurring_league_id: '222', mode: 'historical' },
+            { sport: 'football', recurring_league_id: '333', mode: 'hidden' },
+          ],
+          error: null,
+        });
+        const eqUser = vi.fn().mockReturnValue({ eq: eqPlatform });
+        return { select: vi.fn().mockReturnValue({ eq: eqUser }) };
+      }
+      return {};
+    });
+
+    const filtered = await storage.getLeagues('user_123', 'exclude-archived');
+    expect(filtered.map(l => l.leagueId)).toEqual(['111']);
   });
 
   it('setDefaultLeague fails OPEN on an archive-set error — allows the default', async () => {

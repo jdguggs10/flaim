@@ -104,15 +104,20 @@ Refresh diagnostics are emitted as structured, non-secret `yahoo-connect` log ev
 
 ### League Archive
 
-Cross-platform manual archive (ESPN + Sleeper; Yahoo deferred to a later phase). Archive state lives in the `archived_leagues` table, keyed on a stable recurring-league identity so it survives re-sync. Archived leagues are **excluded** from the AI-facing `/internal/leagues*` reads and **annotated** with an `archived` flag on the public `/leagues*` reads.
+Cross-platform manual suppression (ESPN, Yahoo, Sleeper). State lives in the `archived_leagues` table, keyed on a stable recurring-league identity so it survives re-sync. Each row has a **`mode`** that places the league in one of two suppressed states:
+
+- **`historical`** (Archive) — excluded from the active `get_user_session` view but still browsable in `get_ancient_history` (so "when did I win / my record" stays answerable).
+- **`hidden`** (Hide) — excluded from **both** AI tools.
+
+The internal `/internal/leagues*` reads take a `?archived` query param: default `exclude-archived` (drops both modes, for `get_user_session`); `?archived=exclude-hidden` drops only `hidden` (for `get_ancient_history`). The public `/leagues*` reads **annotate** each league with `archived` (suppressed at all) + `archiveMode`.
 
 | Endpoint | Auth | Purpose |
 |----------|------|---------|
-| `POST /leagues/archive` | Clerk JWT | Archive a league `{ platform, sport, recurringLeagueId }` (ESPN/Sleeper) |
-| `DELETE /leagues/archive` | Clerk JWT | Unarchive a league (same body) |
-| `GET /leagues/archive` | Clerk JWT | List the user's archived leagues |
+| `POST /leagues/archive` | Clerk JWT | Suppress a league `{ platform, sport, recurringLeagueId, mode? }` (`mode` defaults to `historical`). Re-posting with a different `mode` moves it between Archived/Hidden. ESPN/Yahoo/Sleeper. |
+| `DELETE /leagues/archive` | Clerk JWT | Restore a league (`{ platform, sport, recurringLeagueId }`) |
+| `GET /leagues/archive` | Clerk JWT | List the user's suppressed leagues (incl. `mode`) |
 
-The internal (AI-facing) league reads fail closed: if the archive lookup errors, the read fails rather than returning archived leagues unfiltered. The public/UI reads fail open (they just lose the `archived` flag).
+The internal (AI-facing) league reads fail closed: if the archive lookup errors, the read fails rather than returning suppressed leagues unfiltered. The public/UI reads fail open (they just lose the `archived`/`archiveMode` flags). The mode-aware read tolerates the pre-migration schema (treats rows as `hidden` if the `mode` column is absent).
 
 ### Extension APIs
 

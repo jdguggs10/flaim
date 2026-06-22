@@ -20,13 +20,15 @@ vi.mock('../sleeper-storage', () => ({
 // ArchiveStorage is constructed inside the public/internal Sleeper league handlers
 // (annotate / exclude). Mock it so no real Supabase client is created and the
 // archived set is controllable per test (defaults to empty).
-const mockGetArchivedSet = vi.fn(async () => new Set<string>());
+// The public annotate path now reads getArchivedMap (mode-tagged) rather than the
+// flat getArchivedSet, so stub the map. Default: nothing archived (empty map).
+const mockGetArchivedMap = vi.fn(async () => new Map<string, 'historical' | 'hidden'>());
 // Keep the real archivedKey so the handler's composite-key membership check
 // (sport:recurringId) uses the production key format.
 const archivedKey = (sport: string, recurringLeagueId: string) => `${sport}:${recurringLeagueId}`;
 vi.mock('../archive-storage', () => ({
   ArchiveStorage: {
-    fromEnvironment: vi.fn(() => ({ getArchivedSet: mockGetArchivedSet })),
+    fromEnvironment: vi.fn(() => ({ getArchivedMap: mockGetArchivedMap })),
   },
   archivedKey: (sport: string, recurringLeagueId: string) => `${sport}:${recurringLeagueId}`,
 }));
@@ -67,7 +69,7 @@ describe('sleeper-connect-handlers', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockFetch.mockReset();
-    mockGetArchivedSet.mockImplementation(async () => new Set<string>());
+    mockGetArchivedMap.mockImplementation(async () => new Map<string, 'historical' | 'hidden'>());
 
     mockStorage = {
       saveSleeperConnection: vi.fn().mockResolvedValue(undefined),
@@ -767,7 +769,7 @@ describe('sleeper-connect-handlers', () => {
         sleeperUsername: 'demo_user',
         updatedAt: '2026-01-25T12:00:00.000Z',
       });
-      // Status passes includeArchived:false; the storage mock here returns the
+      // Status excludes archived (both modes); the storage mock here returns the
       // already-filtered set, so assert the count reflects what the handler got.
       mockStorage.getSleeperLeagues.mockResolvedValue([]);
 
@@ -775,7 +777,7 @@ describe('sleeper-connect-handlers', () => {
       const body = (await response.json()) as Record<string, unknown>;
 
       expect(body.leagueCount).toBe(0);
-      expect(mockStorage.getSleeperLeagues).toHaveBeenCalledWith('user_1', false);
+      expect(mockStorage.getSleeperLeagues).toHaveBeenCalledWith('user_1', 'exclude-archived');
     });
   });
 
@@ -800,42 +802,56 @@ describe('sleeper-connect-handlers', () => {
 
     it('public path annotates archived=true when the recurring id is archived', async () => {
       mockStorage.getSleeperLeagues.mockResolvedValue(stored);
-      // Composite key: the archived set is keyed by sport:recurringId.
-      mockGetArchivedSet.mockResolvedValue(new Set([archivedKey('football', 'sleeper-root')]));
+      // Composite key: the archived map is keyed by sport:recurringId.
+      mockGetArchivedMap.mockResolvedValue(new Map([[archivedKey('football', 'sleeper-root'), 'historical']]));
 
       const response = await handleSleeperLeagues(env, 'user_1', corsHeaders);
-      const body = (await response.json()) as { leagues: Array<{ archived?: boolean }> };
+      const body = (await response.json()) as { leagues: Array<{ archived?: boolean; archiveMode?: string }> };
 
-      expect(mockStorage.getSleeperLeagues).toHaveBeenCalledWith('user_1', true);
+      expect(mockStorage.getSleeperLeagues).toHaveBeenCalledWith('user_1', 'include-all');
       expect(body.leagues[0].archived).toBe(true);
+      // Public annotate now also surfaces the mode so the UI can bucket historical vs hidden.
+      expect(body.leagues[0].archiveMode).toBe('historical');
+    });
+
+    it('public path annotates archiveMode=hidden for a hidden league', async () => {
+      mockStorage.getSleeperLeagues.mockResolvedValue(stored);
+      mockGetArchivedMap.mockResolvedValue(new Map([[archivedKey('football', 'sleeper-root'), 'hidden']]));
+
+      const response = await handleSleeperLeagues(env, 'user_1', corsHeaders);
+      const body = (await response.json()) as { leagues: Array<{ archived?: boolean; archiveMode?: string }> };
+
+      expect(body.leagues[0].archived).toBe(true);
+      expect(body.leagues[0].archiveMode).toBe('hidden');
     });
 
     it('public path does NOT annotate archived for a same recurring id in a different sport', async () => {
       // Stored league is football; archiving basketball:sleeper-root must not flag it.
       mockStorage.getSleeperLeagues.mockResolvedValue(stored);
-      mockGetArchivedSet.mockResolvedValue(new Set([archivedKey('basketball', 'sleeper-root')]));
+      mockGetArchivedMap.mockResolvedValue(new Map([[archivedKey('basketball', 'sleeper-root'), 'historical']]));
 
       const response = await handleSleeperLeagues(env, 'user_1', corsHeaders);
-      const body = (await response.json()) as { leagues: Array<{ archived?: boolean }> };
+      const body = (await response.json()) as { leagues: Array<{ archived?: boolean; archiveMode?: string }> };
 
       expect(body.leagues[0].archived).toBe(false);
+      expect(body.leagues[0].archiveMode).toBeUndefined();
     });
 
     it('internal path excludes archived rows and omits the flag', async () => {
       mockStorage.getSleeperLeagues.mockResolvedValue(stored);
 
-      const response = await handleSleeperLeagues(env, 'user_1', corsHeaders, { includeArchived: false });
+      const response = await handleSleeperLeagues(env, 'user_1', corsHeaders, { archived: 'exclude-archived' });
       const body = (await response.json()) as { leagues: Array<{ archived?: boolean }> };
 
-      // Storage was asked to exclude archived; archive set is not consulted for annotation.
-      expect(mockStorage.getSleeperLeagues).toHaveBeenCalledWith('user_1', false);
-      expect(mockGetArchivedSet).not.toHaveBeenCalled();
+      // Storage was asked to exclude archived; archive map is not consulted for annotation.
+      expect(mockStorage.getSleeperLeagues).toHaveBeenCalledWith('user_1', 'exclude-archived');
+      expect(mockGetArchivedMap).not.toHaveBeenCalled();
       expect(body.leagues[0].archived).toBeUndefined();
     });
 
-    it('public path fails OPEN on an archive-set error — returns leagues unflagged', async () => {
+    it('public path fails OPEN on an archive-map error — returns leagues unflagged', async () => {
       mockStorage.getSleeperLeagues.mockResolvedValue(stored);
-      mockGetArchivedSet.mockRejectedValue(new Error('Failed to get archived set: boom'));
+      mockGetArchivedMap.mockRejectedValue(new Error('Failed to get archived map: boom'));
 
       const response = await handleSleeperLeagues(env, 'user_1', corsHeaders);
       const body = (await response.json()) as { leagues: Array<{ archived?: boolean }> };

@@ -54,7 +54,7 @@ describe('YahooStorage archive surface', () => {
         return {};
       });
 
-      const result = await storage.getYahooLeagues('u', false);
+      const result = await storage.getYahooLeagues('u', 'exclude-archived');
       expect(result.map((l) => l.leagueKey)).toEqual(['449.l.20']);
     });
 
@@ -71,7 +71,7 @@ describe('YahooStorage archive surface', () => {
         return {};
       });
 
-      const result = await storage.getYahooLeagues('u', false);
+      const result = await storage.getYahooLeagues('u', 'exclude-archived');
       expect(result.map((l) => l.leagueKey)).toEqual(['449.l.20']);
     });
 
@@ -87,7 +87,7 @@ describe('YahooStorage archive surface', () => {
         return {};
       });
 
-      const result = await storage.getYahooLeagues('u', false);
+      const result = await storage.getYahooLeagues('u', 'exclude-archived');
       expect(result.map((l) => ({ leagueKey: l.leagueKey, sport: l.sport }))).toEqual([
         { leagueKey: '454.l.10', sport: 'basketball' },
       ]);
@@ -109,7 +109,67 @@ describe('YahooStorage archive surface', () => {
         return {};
       });
 
-      await expect(storage.getYahooLeagues('u', false)).rejects.toThrow('Failed to get archived set');
+      await expect(storage.getYahooLeagues('u', 'exclude-archived')).rejects.toThrow('Failed to get archived map');
+    });
+
+    // archived_leagues read with explicit modes: pass [sport, id, mode] tuples.
+    function mockArchiveReadModes(rows: [string, string, 'historical' | 'hidden'][]) {
+      const eqPlatform = vi.fn().mockResolvedValue({
+        data: rows.map(([sport, recurring_league_id, mode]) => ({ sport, recurring_league_id, mode })),
+        error: null,
+      });
+      const eqUser = vi.fn().mockReturnValue({ eq: eqPlatform });
+      return { select: vi.fn().mockReturnValue({ eq: eqUser }) };
+    }
+
+    function threeRows() {
+      return [
+        { id: 'a', clerk_user_id: 'u', sport: 'football', season_year: 2025, league_key: '449.l.10', league_name: 'Active', team_id: null, team_key: null, team_name: null, recurring_league_id: 'ACTROOT' },
+        { id: 'b', clerk_user_id: 'u', sport: 'football', season_year: 2025, league_key: '449.l.20', league_name: 'Historical', team_id: null, team_key: null, team_name: null, recurring_league_id: 'HISTROOT' },
+        { id: 'c', clerk_user_id: 'u', sport: 'football', season_year: 2025, league_key: '449.l.30', league_name: 'Hidden', team_id: null, team_key: null, team_name: null, recurring_league_id: 'HIDROOT' },
+      ];
+    }
+
+    it('exclude-hidden keeps a historical row, drops a hidden one, and keeps non-archived', async () => {
+      mockFrom.mockImplementation((table: string) => {
+        if (table === 'yahoo_leagues') return mockLeaguesRead(threeRows());
+        if (table === 'archived_leagues') return mockArchiveReadModes([
+          ['football', 'HISTROOT', 'historical'],
+          ['football', 'HIDROOT', 'hidden'],
+        ]);
+        return {};
+      });
+
+      const result = await storage.getYahooLeagues('u', 'exclude-hidden');
+      expect(result.map((l) => l.leagueKey)).toEqual(['449.l.10', '449.l.20']);
+    });
+
+    it('exclude-archived drops BOTH historical and hidden rows', async () => {
+      mockFrom.mockImplementation((table: string) => {
+        if (table === 'yahoo_leagues') return mockLeaguesRead(threeRows());
+        if (table === 'archived_leagues') return mockArchiveReadModes([
+          ['football', 'HISTROOT', 'historical'],
+          ['football', 'HIDROOT', 'hidden'],
+        ]);
+        return {};
+      });
+
+      const result = await storage.getYahooLeagues('u', 'exclude-archived');
+      expect(result.map((l) => l.leagueKey)).toEqual(['449.l.10']);
+    });
+
+    it('include-all returns everything regardless of mode', async () => {
+      mockFrom.mockImplementation((table: string) => {
+        if (table === 'yahoo_leagues') return mockLeaguesRead(threeRows());
+        if (table === 'archived_leagues') return mockArchiveReadModes([
+          ['football', 'HISTROOT', 'historical'],
+          ['football', 'HIDROOT', 'hidden'],
+        ]);
+        return {};
+      });
+
+      const result = await storage.getYahooLeagues('u', 'include-all');
+      expect(result.map((l) => l.leagueKey)).toEqual(['449.l.10', '449.l.20', '449.l.30']);
     });
 
     it('returns all rows and skips the archive read when includeArchived is true', async () => {

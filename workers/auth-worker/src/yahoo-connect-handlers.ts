@@ -1866,7 +1866,7 @@ export async function handleYahooStatus(
       storage.getYahooCredentialHealth(userId),
       // Exclude archived to match the visible active-list count semantics; Yahoo
       // now has a real archived set, so this excludes archived recurring groups.
-      storage.getYahooLeagues(userId, false),
+      storage.getYahooLeagues(userId, 'exclude-archived'),
     ]);
     const checkedAtNowMs = Date.now();
 
@@ -2201,7 +2201,7 @@ export async function resolveYahooArchiveTarget(
   requestedRecurringId: string
 ): Promise<{ recurringLeagueId: string; leagueName?: string; seasonLeagueKeys: string[] }> {
   const storage = YahooStorage.fromEnvironment(env);
-  const allLeagues = await storage.getYahooLeagues(userId, true);
+  const allLeagues = await storage.getYahooLeagues(userId, 'include-all');
 
   // Rows in this recurring group: stored recurring id matches, or (fallback) the
   // season-scoped league_key equals the requested id.

@@ -41,6 +41,28 @@ describe('ArchiveStorage', () => {
       expect(options).toEqual({ onConflict: 'clerk_user_id,platform,sport,recurring_league_id' });
     });
 
+    it('defaults the upsert mode to historical when not specified', async () => {
+      const mockUpsert = vi.fn().mockResolvedValue({ error: null });
+      mockFrom.mockReturnValue({ upsert: mockUpsert });
+
+      await storage.archiveLeague('user_123', 'espn', 'football', 'league-9', 'Zombie League');
+
+      expect(mockUpsert.mock.calls[0][0]).toMatchObject({ mode: 'historical' });
+    });
+
+    it('writes the given mode into the upsert payload', async () => {
+      const mockUpsert = vi.fn().mockResolvedValue({ error: null });
+      mockFrom.mockReturnValue({ upsert: mockUpsert });
+
+      const ok = await storage.archiveLeague('user_123', 'espn', 'football', 'league-9', 'Zombie League', 'hidden');
+
+      expect(ok).toBe(true);
+      expect(mockUpsert.mock.calls[0][0]).toMatchObject({
+        recurring_league_id: 'league-9',
+        mode: 'hidden',
+      });
+    });
+
     it('returns false when the recurring id is missing', async () => {
       const mockUpsert = vi.fn();
       mockFrom.mockReturnValue({ upsert: mockUpsert });
@@ -87,8 +109,8 @@ describe('ArchiveStorage', () => {
     it('returns the set keyed by sport:recurringId for a platform', async () => {
       const eqPlatform = vi.fn().mockResolvedValue({
         data: [
-          { sport: 'football', recurring_league_id: 'a' },
-          { sport: 'basketball', recurring_league_id: 'b' },
+          { sport: 'football', recurring_league_id: 'a', mode: 'historical' },
+          { sport: 'basketball', recurring_league_id: 'b', mode: 'hidden' },
         ],
         error: null,
       });
@@ -98,7 +120,8 @@ describe('ArchiveStorage', () => {
 
       const set = await storage.getArchivedSet('user_123', 'espn');
 
-      expect(select).toHaveBeenCalledWith('sport, recurring_league_id');
+      // getArchivedSet now delegates to getArchivedMap, which selects the mode column too.
+      expect(select).toHaveBeenCalledWith('sport, recurring_league_id, mode');
       expect(set.has(archivedKey('football', 'a'))).toBe(true);
       expect(set.has(archivedKey('basketball', 'b'))).toBe(true);
       expect(set.size).toBe(2);
@@ -129,7 +152,62 @@ describe('ArchiveStorage', () => {
       const select = vi.fn().mockReturnValue({ eq: eqUser });
       mockFrom.mockReturnValue({ select });
 
-      await expect(storage.getArchivedSet('user_123', 'sleeper')).rejects.toThrow('Failed to get archived set');
+      await expect(storage.getArchivedSet('user_123', 'sleeper')).rejects.toThrow('Failed to get archived map');
+    });
+  });
+
+  describe('getArchivedMap', () => {
+    it('returns a mode-tagged map keyed by sport:recurringId', async () => {
+      const eqPlatform = vi.fn().mockResolvedValue({
+        data: [
+          { sport: 'football', recurring_league_id: 'a', mode: 'historical' },
+          { sport: 'basketball', recurring_league_id: 'b', mode: 'hidden' },
+        ],
+        error: null,
+      });
+      const eqUser = vi.fn().mockReturnValue({ eq: eqPlatform });
+      const select = vi.fn().mockReturnValue({ eq: eqUser });
+      mockFrom.mockReturnValue({ select });
+
+      const map = await storage.getArchivedMap('user_123', 'espn');
+
+      expect(select).toHaveBeenCalledWith('sport, recurring_league_id, mode');
+      expect(map.get(archivedKey('football', 'a'))).toBe('historical');
+      expect(map.get(archivedKey('basketball', 'b'))).toBe('hidden');
+      expect(map.size).toBe(2);
+    });
+
+    it('falls back to a mode-less select and treats all rows as hidden when the mode column is missing', async () => {
+      // First select (with mode) errors with Postgres undefined_column (42703); the
+      // code retries without the mode column and tags every legacy row as 'hidden'.
+      const eqPlatformWithMode = vi.fn().mockResolvedValue({
+        data: null,
+        error: { code: '42703', message: 'column archived_leagues.mode does not exist' },
+      });
+      const eqPlatformLegacy = vi.fn().mockResolvedValue({
+        data: [
+          { sport: 'football', recurring_league_id: 'a' },
+          { sport: 'basketball', recurring_league_id: 'b' },
+        ],
+        error: null,
+      });
+      let call = 0;
+      const select = vi.fn().mockImplementation((columns: string) => {
+        call += 1;
+        const eqPlatform = columns.includes('mode') ? eqPlatformWithMode : eqPlatformLegacy;
+        const eqUser = vi.fn().mockReturnValue({ eq: eqPlatform });
+        return { eq: eqUser };
+      });
+      mockFrom.mockReturnValue({ select });
+
+      const map = await storage.getArchivedMap('user_123', 'espn');
+
+      expect(call).toBe(2);
+      expect(select).toHaveBeenNthCalledWith(1, 'sport, recurring_league_id, mode');
+      expect(select).toHaveBeenNthCalledWith(2, 'sport, recurring_league_id');
+      expect(map.get(archivedKey('football', 'a'))).toBe('hidden');
+      expect(map.get(archivedKey('basketball', 'b'))).toBe('hidden');
+      expect(map.size).toBe(2);
     });
   });
 
@@ -159,8 +237,32 @@ describe('ArchiveStorage', () => {
           recurringLeagueId: 'root-1',
           leagueName: 'Dynasty',
           archivedAt: '2026-06-20T00:00:00.000Z',
+          // Row has no `mode` (pre-migration); normalizeArchiveMode maps missing → 'hidden'.
+          mode: 'hidden',
         },
       ]);
+    });
+
+    it('maps an explicit historical mode through to the ArchivedLeague', async () => {
+      const eqUser = vi.fn().mockResolvedValue({
+        data: [
+          {
+            platform: 'espn',
+            sport: 'football',
+            recurring_league_id: '123',
+            league_name: 'Keepers',
+            archived_at: '2026-06-20T00:00:00.000Z',
+            mode: 'historical',
+          },
+        ],
+        error: null,
+      });
+      const select = vi.fn().mockReturnValue({ eq: eqUser });
+      mockFrom.mockReturnValue({ select });
+
+      const result = await storage.listArchived('user_123');
+
+      expect(result[0].mode).toBe('historical');
     });
   });
 });

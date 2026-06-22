@@ -11,9 +11,10 @@ const DEMO_USER_ID = 'user_demo_test_54321';
 const INTERNAL_SERVICE_TOKEN = 'internal-service-secret';
 
 const mockRateLimiter = { limit: async () => ({ success: true }) };
-const { mockClearDefaultLeague, mockClearStaleDefaultForLeague } = vi.hoisted(() => ({
+const { mockClearDefaultLeague, mockClearStaleDefaultForLeague, mockGetLeagues } = vi.hoisted(() => ({
   mockClearDefaultLeague: vi.fn().mockResolvedValue({ success: true }),
   mockClearStaleDefaultForLeague: vi.fn().mockResolvedValue(undefined),
+  mockGetLeagues: vi.fn().mockResolvedValue([]),
 }));
 
 const baseEnv = {
@@ -55,7 +56,7 @@ async function appFetch(req: Request, env = baseEnv): Promise<Response> {
 vi.mock('../supabase-storage', () => {
   const mockStorage = {
     getCredentials: vi.fn().mockResolvedValue({ swid: 'test-swid', s2: 'test-s2' }),
-    getLeagues: vi.fn().mockResolvedValue([]),
+    getLeagues: mockGetLeagues,
     getCurrentSeasonLeagues: vi.fn().mockResolvedValue([]),
     hasCredentials: vi.fn().mockResolvedValue(true),
     getSetupStatus: vi.fn().mockResolvedValue({ hasCredentials: true, hasLeagues: false, hasDefaultTeam: false }),
@@ -131,6 +132,7 @@ describe('eval API key auth', () => {
     vi.clearAllMocks();
     mockClearDefaultLeague.mockResolvedValue({ success: true });
     mockClearStaleDefaultForLeague.mockResolvedValue(undefined);
+    mockGetLeagues.mockResolvedValue([]);
   });
 
   // =========================================================================
@@ -192,6 +194,35 @@ describe('eval API key auth', () => {
     expect(res.status).toBe(200);
     const body = await res.json() as { success: boolean };
     expect(body.success).toBe(true);
+  });
+
+  it('GET /auth/internal/leagues with no archived param forwards exclude-archived (get_user_session view)', async () => {
+    await appFetch(
+      makeRequest('/auth/internal/leagues', {
+        headers: internalHeaders(EVAL_API_KEY),
+      })
+    );
+    expect(mockGetLeagues).toHaveBeenCalledWith(EVAL_USER_ID, 'exclude-archived');
+  });
+
+  it('GET /auth/internal/leagues?archived=exclude-hidden forwards exclude-hidden (get_ancient_history view)', async () => {
+    await appFetch(
+      makeRequest('/auth/internal/leagues?archived=exclude-hidden', {
+        headers: internalHeaders(EVAL_API_KEY),
+      })
+    );
+    expect(mockGetLeagues).toHaveBeenCalledWith(EVAL_USER_ID, 'exclude-hidden');
+  });
+
+  it('GET /auth/internal/leagues with a malformed archived param falls back to exclude-archived (fail-safe)', async () => {
+    // A garbled or hostile value must NOT widen the AI view — strict equality means
+    // anything other than 'exclude-hidden' resolves to the most-suppressive default.
+    await appFetch(
+      makeRequest('/auth/internal/leagues?archived=include-all', {
+        headers: internalHeaders(EVAL_API_KEY),
+      })
+    );
+    expect(mockGetLeagues).toHaveBeenCalledWith(EVAL_USER_ID, 'exclude-archived');
   });
 
   it('GET /auth/internal/leagues/yahoo with valid API key returns leagues', async () => {

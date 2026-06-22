@@ -493,7 +493,7 @@ describe('SleeperStorage', () => {
         return {};
       });
 
-      const result = await storage.getSleeperLeagues('u', false);
+      const result = await storage.getSleeperLeagues('u', 'exclude-archived');
       expect(result.map((l) => l.leagueId)).toEqual(['K2025']);
     });
 
@@ -511,7 +511,7 @@ describe('SleeperStorage', () => {
         return {};
       });
 
-      const result = await storage.getSleeperLeagues('u', false);
+      const result = await storage.getSleeperLeagues('u', 'exclude-archived');
       // Only the football ROOT is hidden; the basketball ROOT survives.
       expect(result.map((l) => ({ leagueId: l.leagueId, sport: l.sport }))).toEqual([
         { leagueId: 'B2025', sport: 'basketball' },
@@ -531,7 +531,7 @@ describe('SleeperStorage', () => {
         return {};
       });
 
-      const result = await storage.getSleeperLeagues('u', false);
+      const result = await storage.getSleeperLeagues('u', 'exclude-archived');
       expect(result.map((l) => l.leagueId)).toEqual(['K2025']);
     });
 
@@ -553,7 +553,77 @@ describe('SleeperStorage', () => {
         return {};
       });
 
-      await expect(storage.getSleeperLeagues('u', false)).rejects.toThrow('Failed to get archived set');
+      await expect(storage.getSleeperLeagues('u', 'exclude-archived')).rejects.toThrow('Failed to get archived map');
+    });
+
+    // archived_leagues read with explicit modes: pass [sport, id, mode] tuples.
+    function mockArchiveReadModes(rows: [string, string, 'historical' | 'hidden'][]) {
+      const eqPlatform = vi.fn().mockResolvedValue({
+        data: rows.map(([sport, recurring_league_id, mode]) => ({ sport, recurring_league_id, mode })),
+        error: null,
+      });
+      const eqUser = vi.fn().mockReturnValue({ eq: eqPlatform });
+      return { select: vi.fn().mockReturnValue({ eq: eqUser }) };
+    }
+
+    it('exclude-hidden keeps a historical row, drops a hidden one, and keeps non-archived', async () => {
+      mockFrom.mockImplementation((table: string) => {
+        if (table === 'sleeper_leagues') {
+          return mockLeaguesRead([
+            { id: 'a', clerk_user_id: 'u', league_id: 'ACT', sport: 'football', season_year: 2025, league_name: 'Active', roster_id: 1, recurring_league_id: 'ACTROOT', sleeper_user_id: 's' },
+            { id: 'b', clerk_user_id: 'u', league_id: 'HIST', sport: 'football', season_year: 2025, league_name: 'Historical', roster_id: 2, recurring_league_id: 'HISTROOT', sleeper_user_id: 's' },
+            { id: 'c', clerk_user_id: 'u', league_id: 'HID', sport: 'football', season_year: 2025, league_name: 'Hidden', roster_id: 3, recurring_league_id: 'HIDROOT', sleeper_user_id: 's' },
+          ]);
+        }
+        if (table === 'archived_leagues') return mockArchiveReadModes([
+          ['football', 'HISTROOT', 'historical'],
+          ['football', 'HIDROOT', 'hidden'],
+        ]);
+        return {};
+      });
+
+      const result = await storage.getSleeperLeagues('u', 'exclude-hidden');
+      expect(result.map((l) => l.leagueId)).toEqual(['ACT', 'HIST']);
+    });
+
+    it('exclude-archived drops BOTH historical and hidden rows', async () => {
+      mockFrom.mockImplementation((table: string) => {
+        if (table === 'sleeper_leagues') {
+          return mockLeaguesRead([
+            { id: 'a', clerk_user_id: 'u', league_id: 'ACT', sport: 'football', season_year: 2025, league_name: 'Active', roster_id: 1, recurring_league_id: 'ACTROOT', sleeper_user_id: 's' },
+            { id: 'b', clerk_user_id: 'u', league_id: 'HIST', sport: 'football', season_year: 2025, league_name: 'Historical', roster_id: 2, recurring_league_id: 'HISTROOT', sleeper_user_id: 's' },
+            { id: 'c', clerk_user_id: 'u', league_id: 'HID', sport: 'football', season_year: 2025, league_name: 'Hidden', roster_id: 3, recurring_league_id: 'HIDROOT', sleeper_user_id: 's' },
+          ]);
+        }
+        if (table === 'archived_leagues') return mockArchiveReadModes([
+          ['football', 'HISTROOT', 'historical'],
+          ['football', 'HIDROOT', 'hidden'],
+        ]);
+        return {};
+      });
+
+      const result = await storage.getSleeperLeagues('u', 'exclude-archived');
+      expect(result.map((l) => l.leagueId)).toEqual(['ACT']);
+    });
+
+    it('include-all returns everything regardless of mode', async () => {
+      mockFrom.mockImplementation((table: string) => {
+        if (table === 'sleeper_leagues') {
+          return mockLeaguesRead([
+            { id: 'a', clerk_user_id: 'u', league_id: 'ACT', sport: 'football', season_year: 2025, league_name: 'Active', roster_id: 1, recurring_league_id: 'ACTROOT', sleeper_user_id: 's' },
+            { id: 'b', clerk_user_id: 'u', league_id: 'HIST', sport: 'football', season_year: 2025, league_name: 'Historical', roster_id: 2, recurring_league_id: 'HISTROOT', sleeper_user_id: 's' },
+            { id: 'c', clerk_user_id: 'u', league_id: 'HID', sport: 'football', season_year: 2025, league_name: 'Hidden', roster_id: 3, recurring_league_id: 'HIDROOT', sleeper_user_id: 's' },
+          ]);
+        }
+        if (table === 'archived_leagues') return mockArchiveReadModes([
+          ['football', 'HISTROOT', 'historical'],
+          ['football', 'HIDROOT', 'hidden'],
+        ]);
+        return {};
+      });
+
+      const result = await storage.getSleeperLeagues('u', 'include-all');
+      expect(result.map((l) => l.leagueId)).toEqual(['ACT', 'HIST', 'HID']);
     });
 
     it('returns all rows and skips the archive read when includeArchived is true', async () => {
@@ -626,7 +696,7 @@ describe('SleeperStorage', () => {
       storedRecurring = 'ROOT2024';
 
       // (b) The exclude filter now keys on the stored root and drops the row.
-      const result = await storage.getSleeperLeagues('u', false);
+      const result = await storage.getSleeperLeagues('u', 'exclude-archived');
       expect(result.map((l) => l.leagueId)).toEqual([]);
     });
 
