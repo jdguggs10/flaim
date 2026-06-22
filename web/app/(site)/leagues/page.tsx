@@ -509,9 +509,9 @@ function LeaguesPageContent() {
       group.teamId = group.seasons.find((s) => s.teamId)?.teamId;
     }
 
-    // Separate suppressed groups, then active vs old. Suppressed leagues are pulled
-    // out of both the active and old buckets into their own sections: 'historical'
-    // (Archived — still browsable for past seasons) and 'hidden' (completely hidden).
+    // Separate suppressed groups, then active vs old. The data split stays four-way
+    // (active/old/archived/hidden); the UI renders old + archived together in the
+    // merged "Inactive" section, while 'hidden' gets its own "Hidden" section.
     const activeLeagues: UnifiedLeagueGroup[] = [];
     const oldLeagueGroups: UnifiedLeagueGroup[] = [];
     const archivedLeagueGroups: UnifiedLeagueGroup[] = [];

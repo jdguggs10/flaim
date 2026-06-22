@@ -3,7 +3,7 @@
  * ---------------------------------------------------------------------------
  * Proxies the manual league archive endpoints to the Auth-Worker (FLA-124).
  *
- * - GET    → list the user's archived leagues (feeds the Archived UI section)
+ * - GET    → list the user's suppressed leagues (feeds the Inactive/Hidden UI sections)
  * - POST   → set a league's archive mode (hide it from the AI's active view; survives re-sync)
  * - DELETE → unarchive a league (restore it to the visible/AI surfaces)
  *
