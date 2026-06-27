@@ -3,8 +3,6 @@ import app from '../index-hono';
 import { validateOAuthToken } from '../oauth-handlers';
 import { UsageStorage } from '../usage-storage';
 
-const mockInsertEvent = vi.fn().mockResolvedValue({ error: null });
-
 // Mock Clerk JWKS fetch so JWT verification always fails (no real Clerk in tests)
 vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('no network in test')));
 
@@ -15,10 +13,11 @@ const DEMO_USER_ID = 'user_demo_test_54321';
 const INTERNAL_SERVICE_TOKEN = 'internal-service-secret';
 
 const mockRateLimiter = { limit: async () => ({ success: true }) };
-const { mockClearDefaultLeague, mockClearStaleDefaultForLeague, mockGetLeagues } = vi.hoisted(() => ({
+const { mockClearDefaultLeague, mockClearStaleDefaultForLeague, mockGetLeagues, mockInsertEvent } = vi.hoisted(() => ({
   mockClearDefaultLeague: vi.fn().mockResolvedValue({ success: true }),
   mockClearStaleDefaultForLeague: vi.fn().mockResolvedValue(undefined),
   mockGetLeagues: vi.fn().mockResolvedValue([]),
+  mockInsertEvent: vi.fn().mockResolvedValue({ error: null }),
 }));
 
 const baseEnv = {

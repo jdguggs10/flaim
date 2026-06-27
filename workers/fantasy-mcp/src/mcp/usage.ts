@@ -31,7 +31,9 @@ interface UsageEventBody {
 
 /** Best-effort string extraction from an unknown args/result field. */
 function asStringOrNull(value: unknown): string | null {
-  return typeof value === 'string' && value.length > 0 ? value : null;
+  if (typeof value === 'string' && value.length > 0) return value;
+  if (typeof value === 'number') return String(value);
+  return null;
 }
 
 /**
@@ -52,7 +54,9 @@ async function computeLeagueHash(args: Record<string, unknown>): Promise<string 
 /** Best-effort structured error code from the tool result (often null). */
 function extractErrorCode(result?: McpToolResponse): string | null {
   const code = result?.structuredContent?.code;
-  return typeof code === 'string' && code.length > 0 ? code : null;
+  if (typeof code === 'string' && code.length > 0) return code;
+  if (typeof code === 'number') return String(code);
+  return null;
 }
 
 /**
