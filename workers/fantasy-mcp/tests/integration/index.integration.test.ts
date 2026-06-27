@@ -1,8 +1,19 @@
 import { describe, expect, it, vi } from 'vitest';
 import app from '../../src/index';
 import type { Env } from '../../src/types';
-import { getUnifiedTools } from '../../src/mcp/tools';
+import { getUnifiedTools, type UnifiedTool } from '../../src/mcp/tools';
 import { INTERNAL_SERVICE_TOKEN_HEADER, getDefaultSeasonYear } from '@flaim/worker-shared';
+
+// Mock the tools module so a single test can inject a custom tool (e.g. a
+// throwing handler) via mockReturnValueOnce, while every other test/request
+// transparently falls through to the real getUnifiedTools implementation.
+vi.mock('../../src/mcp/tools', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/mcp/tools')>();
+  return {
+    ...actual,
+    getUnifiedTools: vi.fn(actual.getUnifiedTools),
+  };
+});
 
 function buildMcpRequest(pathname: '/mcp' | '/fantasy/mcp'): Request {
   return buildMcpJsonRpcRequest(pathname, 'tools/list');
@@ -110,6 +121,24 @@ function mockExecutionContext(): ExecutionContext {
     waitUntil: vi.fn(),
     passThroughOnException: vi.fn(),
   } as unknown as ExecutionContext;
+}
+
+// Execution context that collects waitUntil promises so fire-and-forget work
+// (e.g. the FLA-156 usage-event emit) can be awaited and asserted in tests.
+function collectingExecutionContext(): { ctx: ExecutionContext; settled: () => Promise<void> } {
+  const pending: Promise<unknown>[] = [];
+  const ctx = {
+    waitUntil: vi.fn((p: Promise<unknown>) => {
+      pending.push(Promise.resolve(p));
+    }),
+    passThroughOnException: vi.fn(),
+  } as unknown as ExecutionContext;
+  return {
+    ctx,
+    settled: async () => {
+      await Promise.allSettled(pending);
+    },
+  };
 }
 
 function emittedSetupSignal(spy: { mock: { calls: unknown[][] } }): boolean {
@@ -700,5 +729,222 @@ describe('fantasy-mcp gateway integration', () => {
     expect(payloadText).toContain('Test ESPN League');
     expect(payloadText).toContain('Test Yahoo League');
     expect(payloadText).toContain('Test Sleeper League');
+  });
+
+  it('emits a fire-and-forget usage event to /internal/usage-event after a tool call', async () => {
+    const usageRequests: Request[] = [];
+    const authFetch = vi.fn(async (request: Request) => {
+      const url = new URL(request.url);
+      if (url.pathname === '/internal/introspect') {
+        return new Response(
+          JSON.stringify({
+            valid: true,
+            userId: 'user-123',
+            scope: 'mcp:read mcp:write',
+            authType: 'oauth',
+            client_name: 'Claude',
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+      if (url.pathname === '/internal/usage-event') {
+        // Clone so the body stays readable after the gateway consumes it.
+        usageRequests.push(request.clone());
+        return new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response('not found', { status: 404 });
+    });
+    const espnFetch = vi.fn(async () =>
+      new Response(
+        JSON.stringify({ success: true, data: { leagueId: '123', standings: [] } }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      )
+    );
+    const env = buildEnv(authFetch);
+    env.ESPN = { fetch: espnFetch } as unknown as Fetcher;
+
+    const { ctx, settled } = collectingExecutionContext();
+    const request = new Request('https://api.flaim.app/mcp', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer test-token',
+        'Content-Type': 'application/json',
+        Accept: 'application/json, text/event-stream',
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 'usage-event-test-1',
+        method: 'tools/call',
+        params: {
+          name: 'get_standings',
+          arguments: { platform: 'espn', sport: 'football', league_id: '123', season_year: 2025 },
+        },
+      }),
+    });
+
+    const response = await app.fetch(request, env, ctx);
+    expect(response.status).toBe(200);
+    // Drain the SSE body so the streamed tool handler (and its finally emit) runs.
+    await response.text();
+
+    // The emit must be fire-and-forget via executionCtx.waitUntil — never awaited inline.
+    expect(ctx.waitUntil).toHaveBeenCalled();
+    await settled();
+
+    expect(usageRequests).toHaveLength(1);
+    const usageReq = usageRequests[0];
+    expect(usageReq.method).toBe('POST');
+    expect(usageReq.headers.get(INTERNAL_SERVICE_TOKEN_HEADER)).toBe('internal-secret');
+
+    const body = await usageReq.json() as Record<string, unknown>;
+    expect(body.tool_name).toBe('get_standings');
+    expect(body.status).toBe('ok');
+    expect(body.user_id).toBe('user-123');
+    expect(body.auth_type).toBe('oauth');
+    expect(body.client_name).toBe('Claude');
+    expect(body.platform).toBe('espn');
+    expect(body.sport).toBe('football');
+    expect(typeof body.latency_ms).toBe('number');
+    // league_hash is the SHA-256 hex of `espn:123` (64 hex chars).
+    expect(typeof body.league_hash).toBe('string');
+    expect(body.league_hash).toHaveLength(64);
+    expect(body).toHaveProperty('correlation_id');
+    expect(espnFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('emits a single denied usage event (latency null) and skips the handler when the scope check fails', async () => {
+    const usageRequests: Request[] = [];
+    const authFetch = vi.fn(async (request: Request) => {
+      const url = new URL(request.url);
+      if (url.pathname === '/internal/introspect') {
+        // 'mcp:write' is non-empty so it clears the gateway scope gate, but it
+        // lacks 'mcp:read' — which get_standings requires — so the per-tool
+        // scope check in server.ts denies the call before the handler runs.
+        return new Response(
+          JSON.stringify({ valid: true, userId: 'user-123', scope: 'mcp:write', authType: 'oauth', client_name: 'Claude' }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+      if (url.pathname === '/internal/usage-event') {
+        usageRequests.push(request.clone());
+        return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response('not found', { status: 404 });
+    });
+    const espnFetch = vi.fn(async () =>
+      new Response(JSON.stringify({ success: true, data: {} }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    );
+    const env = buildEnv(authFetch);
+    env.ESPN = { fetch: espnFetch } as unknown as Fetcher;
+
+    const { ctx, settled } = collectingExecutionContext();
+    const request = new Request('https://api.flaim.app/mcp', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer test-token',
+        'Content-Type': 'application/json',
+        Accept: 'application/json, text/event-stream',
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 'usage-denied-1',
+        method: 'tools/call',
+        params: {
+          name: 'get_standings',
+          arguments: { platform: 'espn', sport: 'football', league_id: '123', season_year: 2025 },
+        },
+      }),
+    });
+
+    const response = await app.fetch(request, env, ctx);
+    expect(response.status).toBe(200);
+    const text = await response.text();
+    const data = text.split(/\r?\n/).filter((l) => l.startsWith('data:')).map((l) => l.slice(5).trim()).join('\n').trim();
+    const parsed = JSON.parse(data) as { result?: { isError?: boolean; content?: Array<{ text?: string }> } };
+    // The tool call resolves to the MCP auth error, not a handler result.
+    expect(parsed.result?.isError).toBe(true);
+    expect(parsed.result?.content?.[0]?.text).toContain('AUTH_FAILED');
+
+    // Handler must NOT run on the denied path.
+    expect(espnFetch).not.toHaveBeenCalled();
+
+    await settled();
+    expect(usageRequests).toHaveLength(1);
+    const body = await usageRequests[0].json() as Record<string, unknown>;
+    expect(body.tool_name).toBe('get_standings');
+    expect(body.status).toBe('denied');
+    expect(body.latency_ms).toBeNull();
+    expect(body.user_id).toBe('user-123');
+  });
+
+  it('propagates a thrown handler error and emits a single error usage event', async () => {
+    const usageRequests: Request[] = [];
+    const authFetch = vi.fn(async (request: Request) => {
+      const url = new URL(request.url);
+      if (url.pathname === '/internal/introspect') {
+        return new Response(
+          JSON.stringify({ valid: true, userId: 'user-123', scope: 'mcp:read', authType: 'oauth', client_name: 'Claude' }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+      if (url.pathname === '/internal/usage-event') {
+        usageRequests.push(request.clone());
+        return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response('not found', { status: 404 });
+    });
+    const env = buildEnv(authFetch);
+
+    // Inject a single tool whose handler throws. The MCP SDK wraps a *propagated*
+    // throw into an isError CallToolResult carrying the thrown message — so seeing
+    // that message in the response proves server.ts re-propagated the throw and
+    // its finally-block emit did not swallow it. status stays 'error' on this path.
+    const explodingTool: UnifiedTool = {
+      name: 'explode',
+      title: 'Explode',
+      description: 'Test-only tool whose handler always throws.',
+      inputSchema: {},
+      requiredScope: 'mcp:read',
+      securitySchemes: [{ type: 'oauth2', scopes: ['mcp:read'] }],
+      handler: async () => {
+        throw new Error('handler boom');
+      },
+    };
+    vi.mocked(getUnifiedTools).mockReturnValueOnce([explodingTool]);
+
+    const { ctx, settled } = collectingExecutionContext();
+    const request = new Request('https://api.flaim.app/mcp', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer test-token',
+        'Content-Type': 'application/json',
+        Accept: 'application/json, text/event-stream',
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 'usage-error-1',
+        method: 'tools/call',
+        params: { name: 'explode', arguments: {} },
+      }),
+    });
+
+    const response = await app.fetch(request, env, ctx);
+    expect(response.status).toBe(200);
+    const text = await response.text();
+    const data = text.split(/\r?\n/).filter((l) => l.startsWith('data:')).map((l) => l.slice(5).trim()).join('\n').trim();
+    const parsed = JSON.parse(data) as { result?: { isError?: boolean; content?: Array<{ text?: string }> } };
+    // The thrown message surfaces — only possible if the throw propagated.
+    expect(parsed.result?.isError).toBe(true);
+    expect(parsed.result?.content?.[0]?.text).toContain('handler boom');
+
+    await settled();
+    expect(usageRequests).toHaveLength(1);
+    const body = await usageRequests[0].json() as Record<string, unknown>;
+    expect(body.tool_name).toBe('explode');
+    expect(body.status).toBe('error');
+    expect(typeof body.latency_ms).toBe('number');
   });
 });

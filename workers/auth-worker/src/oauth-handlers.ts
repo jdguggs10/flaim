@@ -1042,7 +1042,7 @@ export async function validateOAuthToken(
   token: string,
   env: OAuthEnv,
   expectedResource?: string
-): Promise<{ userId: string; scope: string } | null> {
+): Promise<{ userId: string; scope: string; clientName: string | null } | null> {
   const storage = OAuthStorage.fromEnvironment(env);
   const result = await storage.validateAccessToken(token, expectedResource);
 
@@ -1058,6 +1058,7 @@ export async function validateOAuthToken(
   return {
     userId: result.userId,
     scope: result.scope || 'mcp:read',
+    clientName: result.clientName ?? null,
   };
 }
 

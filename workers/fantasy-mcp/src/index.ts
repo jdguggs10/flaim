@@ -274,6 +274,10 @@ async function handleMcpRequest(c: Context<{ Bindings: Env }>): Promise<Response
     : 'https://api.flaim.app/mcp';
 
   let tokenScope: string | undefined;
+  // Captured for usage analytics (FLA-156) — passed into the MCP server context.
+  let userId: string | undefined;
+  let authType: 'clerk' | 'oauth' | 'eval-api-key' | 'demo-api-key' | undefined;
+  let clientName: string | null = null;
   if (authHeader) {
     try {
       const introspectRes = await c.env.AUTH_WORKER.fetch(
@@ -301,6 +305,7 @@ async function handleMcpRequest(c: Context<{ Bindings: Env }>): Promise<Response
         scope?: string;
         userId?: string;
         authType?: 'clerk' | 'oauth' | 'eval-api-key' | 'demo-api-key';
+        client_name?: string | null;
       };
       if (!tokenInfo.valid) {
         logFantasySetupFailure(c, 'auth_trust_path_failed', {
@@ -327,6 +332,11 @@ async function handleMcpRequest(c: Context<{ Bindings: Env }>): Promise<Response
         });
         return buildMcpAuthErrorResponse(c.req.raw);
       }
+
+      // Capture identity for usage analytics after the token is validated.
+      userId = tokenInfo.userId;
+      authType = tokenInfo.authType;
+      clientName = tokenInfo.client_name ?? null;
 
       // Rate limit authenticated MCP requests.
       // Opt-out: all auth types are rate-limited unless explicitly exempted.
@@ -388,6 +398,10 @@ async function handleMcpRequest(c: Context<{ Bindings: Env }>): Promise<Response
     correlationId,
     evalRunId,
     evalTraceId,
+    userId,
+    authType,
+    clientName,
+    executionCtx: c.executionCtx,
   });
   const handler = createMcpHandler(server, { enableJsonResponse: false });
   const normalizedRequest = normalizeMcpAcceptHeader(c.req.raw);

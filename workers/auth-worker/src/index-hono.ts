@@ -37,6 +37,7 @@ import {
   validateOAuthToken,
   OAuthEnv,
 } from './oauth-handlers';
+import { UsageStorage, type UsageEvent } from './usage-storage';
 import {
   handleSyncCredentials,
   handleGetExtensionStatus,
@@ -343,6 +344,7 @@ interface AuthResult {
   status?: 401 | 403 | 500;
   authType?: 'clerk' | 'oauth' | 'eval-api-key' | 'demo-api-key';
   scope?: string;
+  clientName?: string | null; // OAuth-only; null/absent for clerk/eval-api-key/demo-api-key
 }
 
 async function constantTimeEqual(a: string, b: string): Promise<boolean> {
@@ -441,7 +443,7 @@ async function getVerifiedUserId(
       const oauthResult = await validateOAuthToken(token, env as OAuthEnv, expectedResource);
       if (oauthResult) {
         debugLog(env, `✅ [auth-worker] OAuth token validated, userId: ${maskUserId(oauthResult.userId)}`);
-        return { userId: oauthResult.userId, authType: 'oauth', scope: oauthResult.scope };
+        return { userId: oauthResult.userId, authType: 'oauth', scope: oauthResult.scope, clientName: oauthResult.clientName ?? null };
       }
       debugLog(env, `⚠️ [auth-worker] OAuth token validation returned null`);
     } catch (e) {
@@ -741,7 +743,7 @@ api.post('/revoke', (c) => {
 // Token introspection (internal — called by fantasy-mcp gateway via service binding)
 api.get('/internal/introspect', async (c) => {
   const expectedResource = c.req.header('X-Flaim-Expected-Resource') || undefined;
-  const { userId, error: authError, status: authStatus, scope, authType } = await getInternalUserId(c.req.raw, c.env, expectedResource, { allowStaticApiKey: true });
+  const { userId, error: authError, status: authStatus, scope, authType, clientName } = await getInternalUserId(c.req.raw, c.env, expectedResource, { allowStaticApiKey: true });
 
   if (!userId) {
     // 403/500 internal-service auth failures are already logged by getInternalUserId.
@@ -758,7 +760,34 @@ api.get('/internal/introspect', async (c) => {
     return c.json({ valid: false, error: authError || 'Invalid token' }, authStatus ?? 401);
   }
 
-  return c.json({ valid: true, userId, scope: scope || 'mcp:read', authType });
+  return c.json({ valid: true, userId, scope: scope || 'mcp:read', authType, client_name: clientName ?? null });
+});
+
+// Usage analytics ingest (internal — called by fantasy-mcp gateway via service binding).
+// Service-token only: the gateway has already verified the user and passes user_id
+// in the body, so we do NOT re-verify identity here. Best-effort and tolerant — a
+// failed insert must never break the caller's request path.
+api.post('/internal/usage-event', async (c) => {
+  const internalError = await requireInternalService(c.req.raw, c.env);
+  if (internalError) {
+    return c.json({ ok: false, error: internalError.error }, internalError.status);
+  }
+
+  try {
+    const body = await c.req.json() as UsageEvent;
+    // correlation_id is accepted on the wire (for log joining) but is not a column
+    // on mcp_tool_events; UsageStorage.insertEvent drops it.
+    const { error } = await UsageStorage.fromEnvironment(c.env).insertEvent(body);
+    if (error) {
+      // Swallow storage errors — analytics is non-critical. Already logged in storage.
+      return c.json({ ok: true });
+    }
+  } catch (e) {
+    // Never throw back to the caller; usage events are fire-and-forget.
+    debugLog(c.env, `[auth-worker] usage-event ingest failed: ${e instanceof Error ? e.message : 'unknown error'}`);
+  }
+
+  return c.json({ ok: true });
 });
 
 // =============================================================================
