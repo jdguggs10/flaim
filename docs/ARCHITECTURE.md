@@ -203,6 +203,23 @@ See `workers/README.md` for worker-to-worker communication requirements.
 3. User connects through ChatGPT Apps or an optional manual MCP client → OAuth flow → token stored in Supabase.
 4. ChatGPT Apps or the manual MCP client calls an MCP tool after connection → MCP worker fetches creds from auth-worker → calls ESPN → returns data.
 
+## Usage Analytics
+
+The gateway emits one best-effort telemetry event per MCP tool call (FLA-156), independent of the tool-call path — it cannot slow or break a tool call.
+
+```
+fantasy-mcp tool call → waitUntil(POST /internal/usage-event) → auth-worker → Supabase mcp_tool_events
+                                                                            ↓ nightly pg_cron rollup (05:15 UTC)
+                                                              mcp_user_daily + mcp_tool_daily (permanent)
+```
+
+- **Fire-and-forget:** emitted in `ctx.waitUntil` with swallowed errors — never awaited, adds no latency, and a logging failure can never break a tool call.
+- **Tagged for filtering:** every event carries `env` (`prod`/`preview`/`dev`) and `auth_type` (`oauth`/`clerk`/`eval-api-key`/`demo-api-key`). Real-user metrics filter `env='prod' AND auth_type='oauth'`, which excludes preview traffic, the demo runner (`demo-api-key`), and eval runs (`eval-api-key`).
+- **Two tiers:** raw `mcp_tool_events` is pruned after 90 days; `pg_cron` rolls each UTC day into the permanent, tiny `mcp_user_daily` / `mcp_tool_daily` rollups.
+- **Telemetry only:** tool, platform, sport, status, latency, and a hashed league id — never rosters, players, or question text.
+
+Schema is in `docs/DATABASE.md`; migrations `026`/`027` live in the private `flaim-docs` repo. Clerk cannot see this usage (it only observes website-session activity), so these metrics — not Clerk's dashboard — are the source of truth for DAU/WAU/MAU and retention.
+
 ---
 
 ## Deployment
