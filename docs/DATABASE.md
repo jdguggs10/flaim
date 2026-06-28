@@ -309,7 +309,7 @@ Notes:
 Permanent per-user daily rollup of MCP usage, populated by `pg_cron` from `mcp_tool_events`.
 
 ### mcp_tool_daily
-Permanent per-tool daily rollup of MCP usage, populated by `pg_cron` from `mcp_tool_events`.
+Permanent per-tool daily rollup of MCP usage, populated by `pg_cron` from `mcp_tool_events`. Grain: `(day, env, auth_type, tool_name, platform, sport, status)` plus `call_count`, `p50_ms`, `p95_ms`. The `auth_type` dimension (added by migration 027) lets tool/platform trends filter to real users (`auth_type='oauth'`), excluding demo-runner and eval traffic — matching the separation `mcp_user_daily` already provides.
 
 ## Legacy/Deprecated Tables
 
