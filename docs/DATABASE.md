@@ -278,6 +278,39 @@ Recommended indexes:
 - `demo_refresh_runs_sport_created_at_idx` on `(sport, created_at desc)` for runner health/scheduler reads
 - `demo_refresh_runs_preset_sport_created_at_idx` on `(preset_id, sport, created_at desc)` for website latest-failure lookups
 
+## Analytics Tables (MCP Usage)
+
+Added by migration 026. The fantasy-mcp gateway writes one best-effort, fire-and-forget row to `mcp_tool_events` per MCP tool call (via the auth-worker `/internal/usage-event` endpoint). The two `*_daily` tables are permanent rollups populated by `pg_cron`, not written by the worker.
+
+### mcp_tool_events
+Raw per-tool-call event log. One row per MCP tool invocation, including scope-denied and error cases.
+
+| Column | Type | Notes |
+|---|---|---|
+| id | uuid | Primary key |
+| ts | timestamptz | Event time; defaults to `now()` |
+| env | text | Deployment environment (`prod`, `preview`, `dev`, or `unknown`) |
+| user_id | text | Clerk user ID (rows with no user_id are not emitted) |
+| auth_type | text | `clerk`, `oauth`, `eval-api-key`, `demo-api-key`, or `unknown` |
+| client_name | text | MCP client name (e.g. Claude, ChatGPT); nullable |
+| tool_name | text | MCP tool invoked (e.g. `get_standings`) |
+| platform | text | Fantasy platform when present on the call; nullable |
+| sport | text | Sport when present on the call; nullable |
+| status | text | `ok`, `error`, or `denied` |
+| error_code | text | Structured error code from the tool result when available; nullable |
+| latency_ms | int | Tool-call duration; null on the scope-denied path (no handler run) |
+| league_hash | text | SHA-256 of `<platform>:<league_id>` (pseudonymized league identity); nullable |
+
+Notes:
+- `correlation_id` is intentionally NOT stored here — events are aggregate analytics, not request traces.
+- Raw events are pruned after 90 days via `pg_cron`; the rollup tables below retain the long-term history.
+
+### mcp_user_daily
+Permanent per-user daily rollup of MCP usage, populated by `pg_cron` from `mcp_tool_events`.
+
+### mcp_tool_daily
+Permanent per-tool daily rollup of MCP usage, populated by `pg_cron` from `mcp_tool_events`.
+
 ## Legacy/Deprecated Tables
 
 ### extension_pairing_codes (deprecated)

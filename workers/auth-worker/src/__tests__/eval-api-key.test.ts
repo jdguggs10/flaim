@@ -1,5 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import app from '../index-hono';
+import { validateOAuthToken } from '../oauth-handlers';
+import { UsageStorage } from '../usage-storage';
 
 // Mock Clerk JWKS fetch so JWT verification always fails (no real Clerk in tests)
 vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('no network in test')));
@@ -11,10 +13,11 @@ const DEMO_USER_ID = 'user_demo_test_54321';
 const INTERNAL_SERVICE_TOKEN = 'internal-service-secret';
 
 const mockRateLimiter = { limit: async () => ({ success: true }) };
-const { mockClearDefaultLeague, mockClearStaleDefaultForLeague, mockGetLeagues } = vi.hoisted(() => ({
+const { mockClearDefaultLeague, mockClearStaleDefaultForLeague, mockGetLeagues, mockInsertEvent } = vi.hoisted(() => ({
   mockClearDefaultLeague: vi.fn().mockResolvedValue({ success: true }),
   mockClearStaleDefaultForLeague: vi.fn().mockResolvedValue(undefined),
   mockGetLeagues: vi.fn().mockResolvedValue([]),
+  mockInsertEvent: vi.fn().mockResolvedValue({ error: null }),
 }));
 
 const baseEnv = {
@@ -127,12 +130,20 @@ vi.mock('../oauth-handlers', () => ({
   OAuthEnv: {},
 }));
 
+vi.mock('../usage-storage', () => ({
+  UsageStorage: {
+    fromEnvironment: vi.fn(() => ({ insertEvent: mockInsertEvent })),
+  },
+}));
+
 describe('eval API key auth', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockClearDefaultLeague.mockResolvedValue({ success: true });
     mockClearStaleDefaultForLeague.mockResolvedValue(undefined);
     mockGetLeagues.mockResolvedValue([]);
+    mockInsertEvent.mockResolvedValue({ error: null });
+    vi.mocked(validateOAuthToken).mockResolvedValue(null);
   });
 
   // =========================================================================
@@ -149,11 +160,35 @@ describe('eval API key auth', () => {
       })
     );
     expect(res.status).toBe(200);
-    const body = await res.json() as { valid: boolean; userId: string; scope: string; authType: string };
+    const body = await res.json() as { valid: boolean; userId: string; scope: string; authType: string; client_name: string | null };
     expect(body.valid).toBe(true);
     expect(body.userId).toBe(EVAL_USER_ID);
     expect(body.scope).toBe('mcp:read');
     expect(body.authType).toBe('eval-api-key');
+    // client_name is OAuth-only — null for static API key auth
+    expect(body.client_name).toBeNull();
+  });
+
+  it('GET /auth/internal/introspect with OAuth token returns client_name', async () => {
+    vi.mocked(validateOAuthToken).mockResolvedValueOnce({
+      userId: 'user_oauth_test',
+      scope: 'mcp:read',
+      clientName: 'ChatGPT',
+    });
+    const res = await appFetch(
+      makeRequest('/auth/internal/introspect', {
+        headers: {
+          ...internalHeaders('oauth-access-token'),
+          'X-Flaim-Expected-Resource': 'https://api.flaim.app/mcp',
+        },
+      })
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json() as { valid: boolean; userId: string; authType: string; client_name: string | null };
+    expect(body.valid).toBe(true);
+    expect(body.userId).toBe('user_oauth_test');
+    expect(body.authType).toBe('oauth');
+    expect(body.client_name).toBe('ChatGPT');
   });
 
   it('GET /auth/internal/introspect with valid demo API key returns demo user', async () => {
@@ -171,6 +206,87 @@ describe('eval API key auth', () => {
     expect(body.userId).toBe(DEMO_USER_ID);
     expect(body.scope).toBe('mcp:read');
     expect(body.authType).toBe('demo-api-key');
+  });
+
+  // =========================================================================
+  // Usage analytics ingest (POST /internal/usage-event)
+  // =========================================================================
+
+  it('POST /auth/internal/usage-event with internal token inserts and returns ok', async () => {
+    const event = {
+      env: 'prod',
+      user_id: 'user_123',
+      auth_type: 'oauth',
+      client_name: 'ChatGPT',
+      tool_name: 'get_players',
+      platform: 'espn',
+      sport: 'baseball',
+      status: 'ok',
+      error_code: null,
+      latency_ms: 123,
+      league_hash: 'abc123',
+      correlation_id: 'corr-xyz',
+    };
+    const res = await appFetch(
+      makeRequest('/auth/internal/usage-event', {
+        method: 'POST',
+        headers: {
+          'X-Flaim-Internal-Token': INTERNAL_SERVICE_TOKEN,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(event),
+      })
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json() as { ok: boolean };
+    expect(body.ok).toBe(true);
+    expect(mockInsertEvent).toHaveBeenCalledTimes(1);
+    expect(mockInsertEvent).toHaveBeenCalledWith(expect.objectContaining(event));
+  });
+
+  it('POST /auth/internal/usage-event without internal token is rejected (403)', async () => {
+    const res = await appFetch(
+      makeRequest('/auth/internal/usage-event', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ env: 'prod', user_id: 'u', auth_type: 'oauth', tool_name: 't', status: 'ok' }),
+      })
+    );
+    expect(res.status).toBe(403);
+    expect(mockInsertEvent).not.toHaveBeenCalled();
+  });
+
+  it('POST /auth/internal/usage-event tolerates storage errors (still 200)', async () => {
+    mockInsertEvent.mockResolvedValueOnce({ error: { message: 'insert failed' } });
+    const res = await appFetch(
+      makeRequest('/auth/internal/usage-event', {
+        method: 'POST',
+        headers: {
+          'X-Flaim-Internal-Token': INTERNAL_SERVICE_TOKEN,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ env: 'prod', user_id: 'u', auth_type: 'oauth', tool_name: 't', status: 'ok' }),
+      })
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json() as { ok: boolean };
+    expect(body.ok).toBe(true);
+  });
+
+  it('POST /auth/internal/usage-event tolerates malformed JSON body (still 200)', async () => {
+    const res = await appFetch(
+      makeRequest('/auth/internal/usage-event', {
+        method: 'POST',
+        headers: {
+          'X-Flaim-Internal-Token': INTERNAL_SERVICE_TOKEN,
+          'Content-Type': 'application/json',
+        },
+        body: 'not-json',
+      })
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json() as { ok: boolean };
+    expect(body.ok).toBe(true);
   });
 
   it('GET /auth/internal/credentials/espn/raw with valid API key returns credentials', async () => {

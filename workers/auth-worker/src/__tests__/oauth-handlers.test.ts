@@ -1025,7 +1025,7 @@ describe('validateOAuthToken resource enforcement', () => {
     } as unknown as OAuthStorage);
 
     const result = await validateOAuthToken('test-token', env, 'https://api.flaim.app/mcp');
-    expect(result).toEqual({ userId: 'user-123', scope: 'mcp:read' });
+    expect(result).toEqual({ userId: 'user-123', scope: 'mcp:read', clientName: null });
   });
 
   it('accepts token when no resource was stored (backwards compat)', async () => {
@@ -1039,6 +1039,6 @@ describe('validateOAuthToken resource enforcement', () => {
     } as unknown as OAuthStorage);
 
     const result = await validateOAuthToken('test-token', env, 'https://api.flaim.app/mcp');
-    expect(result).toEqual({ userId: 'user-123', scope: 'mcp:read' });
+    expect(result).toEqual({ userId: 'user-123', scope: 'mcp:read', clientName: null });
   });
 });

@@ -1,7 +1,8 @@
 // workers/fantasy-mcp/src/mcp/server.ts
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { Env } from '../types';
-import { getUnifiedTools, hasRequiredScope, mcpAuthError } from './tools';
+import { getUnifiedTools, hasRequiredScope, mcpAuthError, type McpToolResponse } from './tools';
+import { emitUsageEvent, type UsageStatus } from './usage';
 import { USER_SESSION_WIDGET_HTML } from '../widgets/user-session-widget';
 import { FLAIM_MCP_INSTRUCTIONS } from './instructions';
 
@@ -12,6 +13,34 @@ export interface McpContext {
   correlationId?: string;
   evalRunId?: string;
   evalTraceId?: string;
+  // Identity + execution context for usage analytics (FLA-156).
+  userId?: string;
+  authType?: 'clerk' | 'oauth' | 'eval-api-key' | 'demo-api-key';
+  clientName?: string | null;
+  executionCtx: ExecutionContext;
+}
+
+/**
+ * Fire the best-effort usage emit without ever influencing the tool call. The
+ * emit itself is async-and-swallowed (.catch), but wrapping the waitUntil in a
+ * try/catch also guards against a *synchronous* throw from waitUntil (e.g. a
+ * disposed ExecutionContext) altering tool-call control flow.
+ */
+function safeEmit(
+  ctx: McpContext,
+  toolName: string,
+  args: Record<string, unknown>,
+  status: UsageStatus,
+  latencyMs: number | null,
+  result?: McpToolResponse,
+): void {
+  try {
+    ctx.executionCtx.waitUntil(
+      emitUsageEvent(ctx, toolName, args, status, latencyMs, result).catch(() => {})
+    );
+  } catch {
+    /* never affect the tool call */
+  }
 }
 
 /**
@@ -92,10 +121,27 @@ export function createFantasyMcpServer(ctx: McpContext): McpServer {
         },
       },
       async (args) => {
+        // Scope-denied path: emit a 'denied' event (no latency timing) before the
+        // auth error returns. Its own waitUntil so it never blocks the response.
         if (!hasRequiredScope(tokenScope, tool.requiredScope)) {
+          safeEmit(ctx, tool.name, args, 'denied', null);
           return mcpAuthError('https://api.flaim.app/mcp');
         }
-        return tool.handler(args, env, authHeader || undefined, correlationId, evalRunId, evalTraceId);
+
+        // Time and emit exactly one event per tool call. Default status 'error'
+        // covers the throw path (a handler can throw; withToolLogging re-throws).
+        // The emit runs in waitUntil AFTER the response, so it adds no latency, and
+        // the original throw still propagates out of finally — never swallowed.
+        const start = Date.now();
+        let status: 'ok' | 'error' = 'error';
+        let result: McpToolResponse | undefined;
+        try {
+          result = await tool.handler(args, env, authHeader || undefined, correlationId, evalRunId, evalTraceId);
+          status = result?.isError === true ? 'error' : 'ok';
+          return result;
+        } finally {
+          safeEmit(ctx, tool.name, args, status, Date.now() - start, result);
+        }
       }
     );
   }

@@ -92,6 +92,7 @@ export interface TokenValidationResult {
   userId?: string;
   scope?: string;
   resource?: string | null;
+  clientName?: string | null;
   error?: string;
 }
 
@@ -534,7 +535,7 @@ export class OAuthStorage {
   async validateAccessToken(accessToken: string, expectedResource?: string): Promise<TokenValidationResult> {
     const { data, error } = await this.supabase
       .from('oauth_tokens')
-      .select('user_id, scope, resource, expires_at, revoked_at')
+      .select('user_id, scope, resource, client_name, expires_at, revoked_at')
       .eq('access_token', accessToken)
       .single();
 
@@ -562,6 +563,7 @@ export class OAuthStorage {
       userId: data.user_id,
       scope: data.scope,
       resource: data.resource || null,
+      clientName: data.client_name || null,
     };
   }
 
