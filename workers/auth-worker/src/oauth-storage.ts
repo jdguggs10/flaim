@@ -78,6 +78,7 @@ export interface CreateTokenParams {
   expiresInSeconds?: number; // Default: 3600 (1 hour)
   includeRefreshToken?: boolean;
   refreshTokenExpiresInSeconds?: number; // Default: 31536000 (1 year)
+  grantType?: 'authorization_code' | 'refresh_token'; // Separates new connections from keepalive refreshes
 }
 
 export interface CreateStateParams {
@@ -465,6 +466,7 @@ export class OAuthStorage {
       redirectUri: authCode.redirectUri, // For deriving clientName
       clientId: authCode.clientId,
       includeRefreshToken: true,
+      grantType: 'authorization_code',
     });
 
     return token;
@@ -506,6 +508,7 @@ export class OAuthStorage {
       expires_at: expiresAt.toISOString(),
       refresh_token: refreshToken || null,
       refresh_token_expires_at: refreshTokenExpiresAt?.toISOString() || null,
+      grant_type: params.grantType ?? null,
     }).select('id').single();
 
     if (error) {
@@ -611,6 +614,7 @@ export class OAuthStorage {
       clientId: tokenClientId,
       clientName: data.client_name || undefined, // Preserve clientName
       includeRefreshToken: true,
+      grantType: 'refresh_token',
     });
 
     return newToken;
