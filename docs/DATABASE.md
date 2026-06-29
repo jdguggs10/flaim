@@ -187,6 +187,7 @@ Access and refresh tokens for MCP clients.
 | refresh_token | text | Optional refresh token; confidential-client refresh tokens encode a signed client binding |
 | refresh_token_expires_at | timestamptz | MCP refresh-token inactivity expiry (1 year by default; `OAUTH_REFRESH_TOKEN_TTL_SECONDS`) |
 | created_at | timestamptz | Created timestamp |
+| grant_type | text | Mint path (migration 028): `authorization_code` (new connection) or `refresh_token` (keepalive); null for pre-migration rows |
 
 When extending the MCP refresh-token inactivity window for an existing deployment, non-revoked rows with still-valid refresh tokens can be backfilled so current connectors inherit the longer window without reconnecting:
 
@@ -200,6 +201,9 @@ WHERE refresh_token IS NOT NULL
   AND revoked_at IS NULL
   AND refresh_token_expires_at > now();
 ```
+
+### oauth_connections (view)
+Connection-health view (migration 028, `security_invoker` so it inherits `oauth_tokens` RLS). One row per `(user_id, client_name)`: `connected` (a live, non-expired refresh token exists), `first_seen`, `last_refresh`, `token_rows`, and `auth_grants` (count of `authorization_code` mints). Use for connection status/health — distinct from the gateway engagement analytics (`mcp_tool_events`).
 
 ### oauth_states
 Short-lived OAuth state values used for server-side validation.

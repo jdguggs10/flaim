@@ -241,9 +241,51 @@ describe('OAuthStorage MCP token lifetimes', () => {
 
     expect(token).not.toBeNull();
     expect(updateEq).toHaveBeenCalledWith('access_token', 'old-access-token');
+    expect(insertPayloads[0].grant_type).toBe('refresh_token');
     const refreshTokenExpiresAt = new Date(insertPayloads[0].refresh_token_expires_at as string).getTime();
     expect(refreshTokenExpiresAt).toBeGreaterThanOrEqual(before + 2592000 * 1000 - 1000);
     expect(refreshTokenExpiresAt).toBeLessThanOrEqual(after + 2592000 * 1000 + 1000);
+  });
+
+  it('records grant_type=authorization_code when exchanging an authorization code', async () => {
+    const redirectUri = 'https://claude.ai/api/mcp/auth_callback';
+    const code = 'plain-auth-code';
+
+    const claimSingle = vi.fn().mockResolvedValue({
+      data: {
+        code,
+        user_id: 'user_123',
+        redirect_uri: redirectUri,
+        code_challenge: null,
+        code_challenge_method: null,
+        scope: 'mcp:read',
+        resource: null,
+        expires_at: new Date(Date.now() + 60_000).toISOString(),
+      },
+      error: null,
+    });
+    const claimSelect = vi.fn().mockReturnValue({ single: claimSingle });
+    const claimGt = vi.fn().mockReturnValue({ select: claimSelect });
+    const claimIs = vi.fn().mockReturnValue({ gt: claimGt });
+    const claimEq = vi.fn().mockReturnValue({ is: claimIs });
+    const update = vi.fn().mockReturnValue({ eq: claimEq });
+
+    const insertPayloads: Record<string, unknown>[] = [];
+    const insertSingle = vi.fn().mockResolvedValue({ data: { id: 'token-id' }, error: null });
+    const insertSelect = vi.fn().mockReturnValue({ single: insertSingle });
+    const insert = vi.fn((payload: Record<string, unknown>) => {
+      insertPayloads.push(payload);
+      return { select: insertSelect };
+    });
+
+    mockFrom.mockReturnValue({ update, insert });
+    const storage = new OAuthStorage('https://example.supabase.co', 'test-key');
+
+    const token = await storage.exchangeCodeForToken(code, redirectUri);
+
+    expect(token).not.toBeNull();
+    expect(insertPayloads).toHaveLength(1);
+    expect(insertPayloads[0].grant_type).toBe('authorization_code');
   });
 
   it('refresh rotation preserves confidential client binding', async () => {
