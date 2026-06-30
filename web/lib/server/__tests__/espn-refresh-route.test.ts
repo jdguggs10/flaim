@@ -54,16 +54,19 @@ describe('ESPN refresh normalization helpers', () => {
       found: 0,
       added: 0,
       alreadySaved: 0,
+      refreshed: 0,
     });
     expect(normalizeSeasonCounts(null)).toEqual({
       found: 0,
       added: 0,
       alreadySaved: 0,
+      refreshed: 0,
     });
     expect(normalizeSeasonCounts({ found: 3 })).toEqual({
       found: 3,
       added: 0,
       alreadySaved: 0,
+      refreshed: 0,
     });
   });
 
@@ -144,6 +147,7 @@ describe('POST /api/espn/refresh', () => {
         found: 2,
         added: 1,
         alreadySaved: 1,
+        refreshed: 1,
       },
     }));
     vi.stubGlobal('fetch', fetchMock);
@@ -157,11 +161,13 @@ describe('POST /api/espn/refresh', () => {
         found: 2,
         added: 1,
         alreadySaved: 1,
+        refreshed: 1,
       },
       pastSeasons: {
         found: 0,
         added: 0,
         alreadySaved: 0,
+        refreshed: 0,
       },
     });
     expect(fetchMock).toHaveBeenCalledWith(

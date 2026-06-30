@@ -88,7 +88,7 @@ Season year defaults are deterministic and use America/New_York time. The canoni
 | Sport | Rollover Date | Rationale |
 |-------|--------------|-----------|
 | Baseball | Feb 1 | ~10 weeks before Opening Day (late March) |
-| Football | Jul 1 | ~10 weeks before NFL kickoff (early September) |
+| Football | Jun 1 | Longer pre-draft window before NFL kickoff (early September) |
 | Basketball | Aug 1 | ~10 weeks before NBA opening night (late October) |
 | Hockey | Aug 1 | ~10 weeks before NHL opening night (early October) |
 

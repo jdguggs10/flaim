@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi, type MockedFunction } from 'vitest';
 vi.mock('../v3/get-league-info', () => ({
   getLeagueInfo: vi.fn(),
+  getLeagueInfoSafe: vi.fn(),
 }));
 vi.mock('../v3/get-league-teams', () => ({
   getLeagueTeams: vi.fn(),
@@ -11,7 +12,7 @@ import {
   discoverAndSaveLeagues,
 } from '../v3/league-discovery';
 import { EspnCredentialsRequired, AutomaticLeagueDiscoveryFailed } from '../espn-types';
-import { getLeagueInfo } from '../v3/get-league-info';
+import { getLeagueInfo, getLeagueInfoSafe } from '../v3/get-league-info';
 import { getLeagueTeams } from '../v3/get-league-teams';
 
 // Mock global fetch
@@ -20,6 +21,7 @@ global.fetch = mockFetch;
 let logSpy: ReturnType<typeof vi.spyOn>;
 let errorSpy: ReturnType<typeof vi.spyOn>;
 const mockGetLeagueInfo = vi.mocked(getLeagueInfo);
+const mockGetLeagueInfoSafe = vi.mocked(getLeagueInfoSafe);
 const mockGetLeagueTeams = vi.mocked(getLeagueTeams);
 
 describe('discoverLeaguesV3', () => {
@@ -28,6 +30,7 @@ describe('discoverLeaguesV3', () => {
     errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     mockFetch.mockReset();
     mockGetLeagueInfo.mockReset();
+    mockGetLeagueInfoSafe.mockReset();
     mockGetLeagueTeams.mockReset();
   });
 
@@ -99,6 +102,7 @@ describe('discoverAndSaveLeagues', () => {
     errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     mockFetch.mockReset();
     mockGetLeagueInfo.mockReset();
+    mockGetLeagueInfoSafe.mockReset();
     mockGetLeagueTeams.mockReset();
   });
 
@@ -167,7 +171,63 @@ describe('discoverAndSaveLeagues', () => {
     }));
   });
 
-  it('repairs existing historical rows with the season-specific team name', async () => {
+  it('refreshes existing current-season rows with latest ESPN metadata', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({
+        preferences: [
+          {
+            id: 'pref-1',
+            type: { code: 'fantasy' },
+            metaData: {
+              entry: {
+                entryId: 8,
+                gameId: 1,
+                seasonId: 2025,
+                entryMetadata: { teamName: 'Updated Team Name' },
+                groups: [{ groupId: 12345, groupName: 'Updated League Name' }],
+              },
+            },
+          },
+        ],
+      }),
+    } as Response);
+
+    mockGetLeagueInfo.mockResolvedValueOnce({
+      status: { previousSeasons: [] },
+    } as any);
+
+    const storage = {
+      leagueExists: vi.fn().mockResolvedValueOnce(true),
+      addLeague: vi.fn().mockResolvedValue({ success: true }),
+      updateLeague: vi.fn().mockResolvedValue(true),
+    } as any;
+
+    const result = await discoverAndSaveLeagues('user_123', '{swid}', 's2token', storage);
+
+    expect(storage.addLeague).not.toHaveBeenCalled();
+    expect(result.currentSeason).toEqual({
+      found: 1,
+      added: 0,
+      alreadySaved: 1,
+      refreshed: 1,
+    });
+    expect(storage.updateLeague).toHaveBeenCalledWith(
+      'user_123',
+      '12345',
+      'football',
+      2025,
+      expect.objectContaining({
+        leagueName: 'Updated League Name',
+        teamId: '8',
+        teamName: 'Updated Team Name',
+      })
+    );
+  });
+
+  it('repairs existing historical rows with the season-specific league and team name', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
       status: 200,
@@ -191,12 +251,77 @@ describe('discoverAndSaveLeagues', () => {
       }),
     } as Response);
 
-    mockGetLeagueInfo.mockResolvedValueOnce({
-      status: { previousSeasons: [2024] },
-    } as any);
+    mockGetLeagueInfo
+      .mockResolvedValueOnce({
+        status: { previousSeasons: [2024] },
+      } as any);
+    mockGetLeagueInfoSafe.mockResolvedValueOnce({ leagueName: 'Test League 2024' } as any);
 
     mockGetLeagueTeams.mockResolvedValueOnce([
       { teamId: '8', teamName: 'Old Team Name 2024' },
+    ]);
+
+    const storage = {
+      leagueExists: vi.fn()
+        .mockResolvedValueOnce(true)
+        .mockResolvedValueOnce(true),
+      addLeague: vi.fn().mockResolvedValue({ success: true }),
+      updateLeague: vi.fn().mockResolvedValue(true),
+    } as any;
+
+    const result = await discoverAndSaveLeagues('user_123', '{swid}', 's2token', storage);
+
+    expect(result.pastSeasons).toEqual({
+      found: 1,
+      added: 0,
+      alreadySaved: 1,
+      refreshed: 1,
+    });
+    expect(storage.updateLeague).toHaveBeenCalledWith(
+      'user_123',
+      '12345',
+      'football',
+      2024,
+      expect.objectContaining({
+        leagueName: 'Test League 2024',
+        teamId: '8',
+        teamName: 'Old Team Name 2024',
+      })
+    );
+  });
+
+  it('does not overwrite an existing historical league name when ESPN omits the season-specific name', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({
+        preferences: [
+          {
+            id: 'pref-1',
+            type: { code: 'fantasy' },
+            metaData: {
+              entry: {
+                entryId: 8,
+                gameId: 1,
+                seasonId: 2025,
+                entryMetadata: { teamName: 'Current Team Name' },
+                groups: [{ groupId: 12345, groupName: 'Current League Name' }],
+              },
+            },
+          },
+        ],
+      }),
+    } as Response);
+
+    mockGetLeagueInfo
+      .mockResolvedValueOnce({
+        status: { previousSeasons: [2024] },
+      } as any);
+    mockGetLeagueInfoSafe.mockResolvedValueOnce({} as any);
+
+    mockGetLeagueTeams.mockResolvedValueOnce([
+      { teamId: '8', teamName: 'Historical Team Name' },
     ]);
 
     const storage = {
@@ -214,9 +339,78 @@ describe('discoverAndSaveLeagues', () => {
       '12345',
       'football',
       2024,
+      expect.not.objectContaining({
+        leagueName: 'Current League Name',
+      })
+    );
+    expect(storage.updateLeague).toHaveBeenCalledWith(
+      'user_123',
+      '12345',
+      'football',
+      2024,
       expect.objectContaining({
         teamId: '8',
-        teamName: 'Old Team Name 2024',
+        teamName: 'Historical Team Name',
+      })
+    );
+  });
+
+  it('preserves existing historical counts when season-specific league info cannot be refreshed', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({
+        preferences: [
+          {
+            id: 'pref-1',
+            type: { code: 'fantasy' },
+            metaData: {
+              entry: {
+                entryId: 8,
+                gameId: 1,
+                seasonId: 2025,
+                entryMetadata: { teamName: 'Current Team Name' },
+                groups: [{ groupId: 12345, groupName: 'Current League Name' }],
+              },
+            },
+          },
+        ],
+      }),
+    } as Response);
+
+    mockGetLeagueInfo.mockResolvedValueOnce({
+      status: { previousSeasons: [2024] },
+    } as any);
+    mockGetLeagueInfoSafe.mockResolvedValueOnce(null);
+    mockGetLeagueTeams.mockResolvedValueOnce([
+      { teamId: '8', teamName: 'Historical Team Name' },
+    ]);
+
+    const storage = {
+      leagueExists: vi.fn()
+        .mockResolvedValueOnce(true)
+        .mockResolvedValueOnce(true),
+      addLeague: vi.fn().mockResolvedValue({ success: true }),
+      updateLeague: vi.fn().mockResolvedValue(true),
+    } as any;
+
+    const result = await discoverAndSaveLeagues('user_123', '{swid}', 's2token', storage);
+
+    expect(result.pastSeasons).toEqual({
+      found: 1,
+      added: 0,
+      alreadySaved: 1,
+      refreshed: 1,
+    });
+    expect(storage.updateLeague).toHaveBeenCalledWith(
+      'user_123',
+      '12345',
+      'football',
+      2024,
+      expect.objectContaining({
+        teamId: '8',
+        teamName: 'Historical Team Name',
       })
     );
   });
