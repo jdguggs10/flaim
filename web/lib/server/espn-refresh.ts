@@ -2,6 +2,7 @@ export interface SeasonCounts {
   found: number;
   added: number;
   alreadySaved: number;
+  refreshed: number;
 }
 
 export function normalizeSeasonCountValue(value: unknown): number | null {
@@ -12,7 +13,7 @@ export function normalizeSeasonCountValue(value: unknown): number | null {
 
 export function normalizeSeasonCounts(value: unknown): SeasonCounts | null {
   if (value === undefined || value === null) {
-    return { found: 0, added: 0, alreadySaved: 0 };
+    return { found: 0, added: 0, alreadySaved: 0, refreshed: 0 };
   }
 
   if (typeof value !== 'object' || Array.isArray(value)) return null;
@@ -21,10 +22,11 @@ export function normalizeSeasonCounts(value: unknown): SeasonCounts | null {
   const found = normalizeSeasonCountValue(record.found);
   const added = normalizeSeasonCountValue(record.added);
   const alreadySaved = normalizeSeasonCountValue(record.alreadySaved);
+  const refreshed = normalizeSeasonCountValue(record.refreshed);
 
-  if (found === null || added === null || alreadySaved === null) return null;
+  if (found === null || added === null || alreadySaved === null || refreshed === null) return null;
 
-  return { found, added, alreadySaved };
+  return { found, added, alreadySaved, refreshed };
 }
 
 export function normalizeWorkerErrorStatus(status: number): number {

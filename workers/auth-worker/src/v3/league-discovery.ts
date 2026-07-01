@@ -14,7 +14,7 @@ import {
   DiscoveredEspnLeague,
   gameIdToSport
 } from '../espn-types';
-import { getLeagueInfo } from './get-league-info';
+import { getLeagueInfo, getLeagueInfoSafe } from './get-league-info';
 import { getLeagueTeams } from './get-league-teams';
 import { toCanonicalYear, toPlatformYear } from '../season-utils';
 
@@ -214,6 +214,7 @@ export interface SeasonCounts {
   found: number;
   added: number;
   alreadySaved: number;
+  refreshed: number;
 }
 
 /**
@@ -223,6 +224,7 @@ interface HistoricalResult {
   found: number;        // Seasons where user was a member
   added: number;        // Successfully added to DB
   alreadySaved: number; // Already existed in DB
+  refreshed: number;    // Existing rows refreshed with latest ESPN metadata
 }
 
 /**
@@ -254,8 +256,8 @@ export async function discoverAndSaveLeagues(
   const leagues = await discoverLeaguesV3(swid, s2);
 
   const discovered: DiscoveredLeague[] = [];
-  const currentSeason: SeasonCounts = { found: 0, added: 0, alreadySaved: 0 };
-  const pastSeasons: SeasonCounts = { found: 0, added: 0, alreadySaved: 0 };
+  const currentSeason: SeasonCounts = { found: 0, added: 0, alreadySaved: 0, refreshed: 0 };
+  const pastSeasons: SeasonCounts = { found: 0, added: 0, alreadySaved: 0, refreshed: 0 };
 
   // 2. Process each league with per-league try/catch
   for (const league of leagues) {
@@ -283,6 +285,14 @@ export async function discoverAndSaveLeagues(
       );
 
       if (exists) {
+        const refreshed = await storage.updateLeague(userId, league.leagueId, sport, canonicalSeasonYear, {
+          leagueName: league.leagueName,
+          teamId: String(league.teamId),
+          teamName: league.teamName,
+        });
+        if (refreshed) {
+          currentSeason.refreshed++;
+        }
         currentSeason.alreadySaved++;
       } else {
         // Add the league with canonical year
@@ -323,6 +333,7 @@ export async function discoverAndSaveLeagues(
       pastSeasons.found += histResult.found;
       pastSeasons.added += histResult.added;
       pastSeasons.alreadySaved += histResult.alreadySaved;
+      pastSeasons.refreshed += histResult.refreshed;
 
     } catch (error) {
       // Per-league error handling - continue with other leagues
@@ -357,7 +368,7 @@ async function discoverHistoricalSeasons(
   s2: string,
   storage: EspnSupabaseStorage
 ): Promise<HistoricalResult> {
-  const result: HistoricalResult = { found: 0, added: 0, alreadySaved: 0 };
+  const result: HistoricalResult = { found: 0, added: 0, alreadySaved: 0, refreshed: 0 };
   const sport = gameIdToSport(league.gameId);
   if (!sport) return result;
 
@@ -392,11 +403,17 @@ async function discoverHistoricalSeasons(
         // Check if already saved (DB stores canonical year)
         const exists = await storage.leagueExists(userId, sport, league.leagueId, canonicalYear);
         if (exists) {
-          // Heal prior bad writes where historical seasons inherited the current season name.
-          await storage.updateLeague(userId, league.leagueId, sport, canonicalYear, {
+          // Heal prior bad writes where historical seasons inherited current-season metadata.
+          const historicalInfo = await getLeagueInfoSafe(swid, s2, league.leagueId, espnYear, league.gameId);
+          const updates = {
+            ...(historicalInfo?.leagueName ? { leagueName: historicalInfo.leagueName } : {}),
             teamId: historicalTeam.teamId,
             teamName: historicalTeam.teamName || league.teamName,
-          });
+          };
+          const refreshed = await storage.updateLeague(userId, league.leagueId, sport, canonicalYear, updates);
+          if (refreshed) {
+            result.refreshed++;
+          }
           result.alreadySaved++;
           continue;
         }

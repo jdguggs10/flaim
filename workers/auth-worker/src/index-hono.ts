@@ -969,7 +969,9 @@ api.post('/extension/discover', async (c) => {
       pastSeasons: result.pastSeasons,
       added: result.currentSeason.added,
       skipped: result.currentSeason.alreadySaved,
+      refreshed: result.currentSeason.refreshed,
       historical: result.pastSeasons.added,
+      historicalRefreshed: result.pastSeasons.refreshed,
     });
 
   } catch (error) {
@@ -999,11 +1001,13 @@ api.post('/extension/discover', async (c) => {
       return c.json({
         discovered,
         currentSeasonLeagues: currentSeasonWithDefault,
-        currentSeason: { found: savedCount, added: 0, alreadySaved: savedCount },
-        pastSeasons: { found: 0, added: 0, alreadySaved: 0 },
+        currentSeason: { found: savedCount, added: 0, alreadySaved: savedCount, refreshed: 0 },
+        pastSeasons: { found: 0, added: 0, alreadySaved: 0, refreshed: 0 },
         added: 0,
         skipped: savedCount,
+        refreshed: 0,
         historical: 0,
+        historicalRefreshed: 0,
       });
     }
 
