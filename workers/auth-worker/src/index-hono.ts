@@ -73,6 +73,10 @@ import {
   type SleeperConnectEnv,
 } from './sleeper-connect-handlers';
 import { logEvalEvent } from './logging';
+import {
+  parseLeagueRefreshRequest,
+  refreshLeaguesForUser,
+} from './league-refresh';
 
 // =============================================================================
 // TYPES
@@ -126,6 +130,20 @@ const EVAL_TRACE_HEADER = 'X-Flaim-Eval-Trace';
 const INTERNAL_SERVICE_TOKEN_HEADER = 'X-Flaim-Internal-Token';
 const MASKED_ESPN_SWID = '{********-****-****-****-************}';
 const MASKED_ESPN_S2 = '************';
+
+async function enforceLeagueRefreshRateLimit(c: Context<{ Bindings: Env }>, userId: string) {
+  const { success } = await c.env.CREDENTIALS_RATE_LIMITER.limit({ key: `refresh:${userId}` });
+  if (success) return null;
+
+  return c.json(
+    {
+      error: 'rate_limit_exceeded',
+      error_description: 'Too many refresh requests. Please try again later.',
+    },
+    429,
+    { 'Retry-After': '60' }
+  );
+}
 
 const ALLOWED_ORIGINS = [
   'https://flaim-*.vercel.app',
@@ -681,7 +699,7 @@ api.get('/.well-known/oauth-protected-resource', (c) => {
     resource: 'https://api.flaim.app/mcp',
     authorization_servers: ['https://api.flaim.app'],
     bearer_methods_supported: ['header'],
-    scopes_supported: ['mcp:read'],
+    scopes_supported: ['mcp:read', 'mcp:write'],
   }, 200, {
     'Cache-Control': 'public, max-age=3600',
   });
@@ -698,7 +716,7 @@ api.get('/.well-known/oauth-protected-resource/*', (c) => {
     resource: `https://api.flaim.app${resourcePath}`,
     authorization_servers: ['https://api.flaim.app'],
     bearer_methods_supported: ['header'],
-    scopes_supported: ['mcp:read'],
+    scopes_supported: ['mcp:read', 'mcp:write'],
   }, 200, {
     'Cache-Control': 'public, max-age=3600',
   });
@@ -761,6 +779,42 @@ api.get('/internal/introspect', async (c) => {
   }
 
   return c.json({ valid: true, userId, scope: scope || 'mcp:read', authType, client_name: clientName ?? null });
+});
+
+// Refresh provider league caches. fantasy-mcp enforces mcp:write before
+// forwarding, and this route checks it again as defense in depth.
+api.post('/internal/leagues/refresh', async (c) => {
+  const { userId, error: authError, status: authStatus, scope } = await getInternalUserId(c.req.raw, c.env, undefined, { allowStaticApiKey: true });
+  if (!userId) {
+    return c.json({
+      error: 'unauthorized',
+      error_description: authError || 'Authentication required',
+    }, authStatus ?? 401);
+  }
+
+  if (!scope?.split(/\s+/).includes('mcp:write')) {
+    return c.json({
+      error: 'insufficient_scope',
+      error_description: 'mcp:write scope is required to refresh leagues',
+    }, 403);
+  }
+
+  const rateLimited = await enforceLeagueRefreshRateLimit(c, userId);
+  if (rateLimited) return rateLimited;
+
+  const validation = await parseLeagueRefreshRequest(c.req.raw);
+  if (validation.error) {
+    return c.json(validation.error.body, validation.error.status);
+  }
+
+  const result = await refreshLeaguesForUser(
+    c.env,
+    userId,
+    validation.platforms ?? ['espn', 'yahoo', 'sleeper'],
+    getCorsHeaders(c.req.raw),
+    c.req.header('X-Correlation-ID') || undefined
+  );
+  return c.json(result, 200);
 });
 
 // Usage analytics ingest (internal — called by fantasy-mcp gateway via service binding).
@@ -1032,6 +1086,34 @@ api.post('/extension/discover', async (c) => {
       error_description: errorMessage,
     }, isAuthError ? 401 : 500);
   }
+});
+
+// Refresh provider league caches (Clerk-authenticated web UI).
+api.post('/leagues/refresh', async (c) => {
+  const { userId, error: authError } = await getClerkUserId(c.req.raw, c.env);
+  if (!userId) {
+    return c.json({
+      error: 'unauthorized',
+      error_description: authError || 'Authentication required',
+    }, 401);
+  }
+
+  const rateLimited = await enforceLeagueRefreshRateLimit(c, userId);
+  if (rateLimited) return rateLimited;
+
+  const validation = await parseLeagueRefreshRequest(c.req.raw);
+  if (validation.error) {
+    return c.json(validation.error.body, validation.error.status);
+  }
+
+  const result = await refreshLeaguesForUser(
+    c.env,
+    userId,
+    validation.platforms ?? ['espn', 'yahoo', 'sleeper'],
+    getCorsHeaders(c.req.raw),
+    c.req.header('X-Correlation-ID') || undefined
+  );
+  return c.json(result, 200);
 });
 
 // =============================================================================

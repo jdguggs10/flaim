@@ -4,7 +4,8 @@ import { getUnifiedTools, hasRequiredScope, mcpAuthError } from '../mcp/tools';
 import { buildMcpAuthErrorResponse } from '../auth-response';
 import type { Env } from '../types';
 import { routeToClient } from '../router';
-import { USER_SESSION_WIDGET_HTML } from '../widgets/user-session-widget';
+import { USER_SESSION_WIDGET_HTML, USER_SESSION_WIDGET_URI } from '../widgets/user-session-widget';
+import { INTERNAL_SERVICE_TOKEN_HEADER } from '@flaim/worker-shared';
 
 /** Helper to cast an AnySchema value to z3 ZodTypeAny for .parse() in tests. */
 const asZod = (schema: unknown) => schema as z.ZodTypeAny;
@@ -38,6 +39,7 @@ describe('fantasy-mcp tools', () => {
       'get_standings',
       'get_transactions',
       'get_user_session',
+      'refresh_leagues',
     ]);
   });
 
@@ -84,8 +86,8 @@ describe('fantasy-mcp tools', () => {
     // structuredContent mirrors the text payload
     expect(result.structuredContent).toBeDefined();
     expect((result.structuredContent as Record<string, unknown>).totalLeaguesFound).toBe(0);
-    expect(result._meta?.ui).toEqual({ resourceUri: 'ui://widget/user-session.html' });
-    expect(result._meta?.['openai/outputTemplate']).toBe('ui://widget/user-session.html');
+    expect(result._meta?.ui).toEqual({ resourceUri: USER_SESSION_WIDGET_URI });
+    expect(result._meta?.['openai/outputTemplate']).toBe(USER_SESSION_WIDGET_URI);
     expect(result._meta?.['openai/widgetAccessible']).toBe(true);
     expect(result._meta?.['openai/resultCanProduceWidget']).toBe(true);
   });
@@ -122,7 +124,7 @@ describe('fantasy-mcp tools', () => {
 
   it('get_user_session includes widgetUri in tool definition', () => {
     const tool = getUnifiedTools().find((t) => t.name === 'get_user_session');
-    expect(tool?.widgetUri).toBe('ui://widget/user-session.html');
+    expect(tool?.widgetUri).toBe(USER_SESSION_WIDGET_URI);
   });
 
   it('user session widget declares the MCP Apps lifecycle messages', () => {
@@ -134,6 +136,200 @@ describe('fantasy-mcp tools', () => {
     expect(USER_SESSION_WIDGET_HTML).toContain("msg.method === 'ui/notifications/tool-result'");
     expect(USER_SESSION_WIDGET_HTML).toContain("msg.method === 'ui/resource-teardown'");
     expect(USER_SESSION_WIDGET_HTML).toContain('isTrustedMessageEvent(event)');
+  });
+
+  it('user session widget refreshes through callTool and reloads session output', () => {
+    expect(USER_SESSION_WIDGET_HTML).toContain("window.openai.callTool('refresh_leagues', {})");
+    expect(USER_SESSION_WIDGET_HTML).toContain("window.openai.callTool('get_user_session', {})");
+    expect(USER_SESSION_WIDGET_HTML).toContain('extractRefreshResult');
+    expect(USER_SESSION_WIDGET_HTML).toContain('refreshPayload.success === false');
+    expect(USER_SESSION_WIDGET_HTML).toContain('Leagues refreshed.');
+    expect(USER_SESSION_WIDGET_HTML).toContain('Refresh failed.');
+    expect(USER_SESSION_WIDGET_HTML).toContain('Open leagues');
+    expect(USER_SESSION_WIDGET_HTML).toContain('var hasRendered = false');
+    expect(USER_SESSION_WIDGET_HTML).not.toContain('if (rendered) return');
+  });
+
+  it('refresh_leagues forwards the user auth and internal token to auth-worker', async () => {
+    const tool = getUnifiedTools().find((t) => t.name === 'refresh_leagues');
+    expect(tool).toBeTruthy();
+
+    let capturedRequest: Request | null = null;
+    const env = {
+      INTERNAL_SERVICE_TOKEN: 'internal-secret',
+      AUTH_WORKER: {
+        fetch: async (req: Request) => {
+          capturedRequest = req;
+          return new Response(JSON.stringify({
+            success: true,
+            requestedPlatforms: ['espn'],
+            results: {
+              espn: { platform: 'espn', status: 'success', httpStatus: 200 },
+            },
+          }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        },
+      },
+    } as unknown as Env;
+
+    const result = await tool!.handler(
+      { platforms: ['espn'] },
+      env,
+      'Bearer user-token',
+      'corr-refresh',
+      'eval-run',
+      'eval-trace'
+    );
+
+    expect(result.isError).toBeUndefined();
+    expect(result.structuredContent).toMatchObject({ success: true });
+    expect(capturedRequest).toBeTruthy();
+    expect(new URL(capturedRequest!.url).pathname).toBe('/internal/leagues/refresh');
+    expect(capturedRequest!.method).toBe('POST');
+    expect(capturedRequest!.headers.get('Authorization')).toBe('Bearer user-token');
+    expect(capturedRequest!.headers.get(INTERNAL_SERVICE_TOKEN_HEADER)).toBe('internal-secret');
+    expect(capturedRequest!.headers.get('X-Correlation-ID')).toBe('corr-refresh');
+    expect(await capturedRequest!.json()).toEqual({ platforms: ['espn'] });
+  });
+
+  it('refresh_leagues rejects invalid platforms instead of widening to all platforms', async () => {
+    const tool = getUnifiedTools().find((t) => t.name === 'refresh_leagues');
+    expect(tool).toBeTruthy();
+
+    let calledAuthWorker = false;
+    const env = {
+      INTERNAL_SERVICE_TOKEN: 'internal-secret',
+      AUTH_WORKER: {
+        fetch: async () => {
+          calledAuthWorker = true;
+          return new Response(JSON.stringify({ success: true }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        },
+      },
+    } as unknown as Env;
+
+    const result = await tool!.handler(
+      { platforms: ['not-real'] },
+      env,
+      'Bearer user-token',
+      'corr-refresh-invalid'
+    );
+
+    expect(calledAuthWorker).toBe(false);
+    expect(result.isError).toBe(true);
+    expect(result.content[0]?.text).toContain('Invalid platform(s): not-real');
+  });
+
+  it('refresh_leagues rejects empty platform arrays instead of widening to all platforms', async () => {
+    const tool = getUnifiedTools().find((t) => t.name === 'refresh_leagues');
+    expect(tool).toBeTruthy();
+
+    let calledAuthWorker = false;
+    const env = {
+      INTERNAL_SERVICE_TOKEN: 'internal-secret',
+      AUTH_WORKER: {
+        fetch: async () => {
+          calledAuthWorker = true;
+          return new Response(JSON.stringify({ success: true }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        },
+      },
+    } as unknown as Env;
+
+    const result = await tool!.handler({ platforms: [] }, env, 'Bearer user-token');
+
+    expect(calledAuthWorker).toBe(false);
+    expect(result.isError).toBe(true);
+    expect(result.content[0]?.text).toContain('platforms must include at least one platform');
+  });
+
+  it('refresh_leagues includes the write scope challenge when auth-worker denies refresh', async () => {
+    const tool = getUnifiedTools().find((t) => t.name === 'refresh_leagues');
+    expect(tool).toBeTruthy();
+
+    const env = {
+      INTERNAL_SERVICE_TOKEN: 'internal-secret',
+      AUTH_WORKER: {
+        fetch: async () => {
+          return new Response(JSON.stringify({
+            error: 'insufficient_scope',
+            error_description: 'mcp:write scope is required to refresh leagues',
+          }), {
+            status: 403,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        },
+      },
+    } as unknown as Env;
+
+    const result = await tool!.handler({ platforms: ['espn'] }, env, 'Bearer user-token');
+    const challenge = (result._meta?.['mcp/www_authenticate'] as string[] | undefined)?.[0];
+
+    expect(result.isError).toBe(true);
+    expect(challenge).toContain('scope="mcp:write"');
+  });
+
+  it('refresh_leagues marks all-provider batch failures as MCP tool errors', async () => {
+    const tool = getUnifiedTools().find((t) => t.name === 'refresh_leagues');
+    expect(tool).toBeTruthy();
+
+    const env = {
+      INTERNAL_SERVICE_TOKEN: 'internal-secret',
+      AUTH_WORKER: {
+        fetch: async () => {
+          return new Response(JSON.stringify({
+            success: false,
+            requestedPlatforms: ['espn', 'yahoo'],
+            results: {
+              espn: { platform: 'espn', status: 'error', httpStatus: 500, error: 'discovery_failed' },
+              yahoo: { platform: 'yahoo', status: 'error', httpStatus: 429, error: 'rate_limited' },
+            },
+          }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        },
+      },
+    } as unknown as Env;
+
+    const result = await tool!.handler({ platforms: ['espn', 'yahoo'] }, env, 'Bearer user-token');
+
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent).toMatchObject({ success: false });
+  });
+
+  it('refresh_leagues marks skipped-only unsuccessful batch results as MCP tool errors', async () => {
+    const tool = getUnifiedTools().find((t) => t.name === 'refresh_leagues');
+    expect(tool).toBeTruthy();
+
+    const env = {
+      INTERNAL_SERVICE_TOKEN: 'internal-secret',
+      AUTH_WORKER: {
+        fetch: async () => {
+          return new Response(JSON.stringify({
+            success: false,
+            requestedPlatforms: ['sleeper'],
+            results: {
+              sleeper: { platform: 'sleeper', status: 'skipped', httpStatus: 404, error: 'not_connected' },
+            },
+          }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        },
+      },
+    } as unknown as Env;
+
+    const result = await tool!.handler({ platforms: ['sleeper'] }, env, 'Bearer user-token');
+
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent).toMatchObject({ success: false });
   });
 
   it('user session widget reports the card size instead of the host frame size', () => {
@@ -1273,8 +1469,8 @@ describe('auth error _meta', () => {
     expect(Array.isArray(result._meta?.['mcp/www_authenticate'])).toBe(true);
   });
 
-  it('scope-denied mcpAuthError includes correct resource_metadata URL', () => {
-    const result = mcpAuthError('https://api.flaim.app/mcp');
+  it('scope-denied mcpAuthError includes correct resource_metadata URL and required scope', () => {
+    const result = mcpAuthError('https://api.flaim.app/mcp', 'mcp:write');
     expect(result.isError).toBe(true);
     expect(result._meta).toBeDefined();
     expect(Array.isArray(result._meta?.['mcp/www_authenticate'])).toBe(true);
@@ -1282,6 +1478,7 @@ describe('auth error _meta', () => {
     expect(challenge).toContain('Bearer');
     // Must point to the actual served route, not /mcp/.well-known
     expect(challenge).toContain('resource_metadata="https://api.flaim.app/.well-known/oauth-protected-resource"');
+    expect(challenge).toContain('scope="mcp:write"');
     expect(challenge).not.toContain('/mcp/.well-known');
   });
 

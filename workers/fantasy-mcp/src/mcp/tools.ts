@@ -13,6 +13,7 @@ import {
   type SetupSignalEvent,
 } from '@flaim/worker-shared';
 import { logEvalEvent } from '../logging';
+import { USER_SESSION_WIDGET_URI } from '../widgets/user-session-widget';
 
 // =============================================================================
 // MCP RESPONSE TYPES
@@ -32,6 +33,13 @@ export type ToolSecuritySchemes = Array<{
   scopes: string[];
 }>;
 
+export interface ToolAnnotations {
+  readOnlyHint: boolean;
+  destructiveHint: boolean;
+  idempotentHint: boolean;
+  openWorldHint: boolean;
+}
+
 export interface UnifiedTool {
   name: string;
   title: string;
@@ -39,6 +47,7 @@ export interface UnifiedTool {
   inputSchema: ZodRawShapeCompat;
   requiredScope: 'mcp:read' | 'mcp:write';
   securitySchemes: ToolSecuritySchemes;
+  annotations: ToolAnnotations;
   openaiMeta?: {
     invoking: string;
     invoked: string;
@@ -67,6 +76,20 @@ export function hasRequiredScope(grantedScope: string | undefined, requiredScope
 function buildSecuritySchemes(scope: 'mcp:read' | 'mcp:write'): ToolSecuritySchemes {
   return [{ type: 'oauth2', scopes: [scope] }];
 }
+
+const READ_ONLY_TOOL_ANNOTATIONS: ToolAnnotations = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: true,
+};
+
+const REFRESH_TOOL_ANNOTATIONS: ToolAnnotations = {
+  readOnlyHint: false,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: true,
+};
 
 // =============================================================================
 // HELPER: Active league threshold
@@ -148,6 +171,88 @@ function getActiveLeagueGroupKey(league: UserLeague): string {
  */
 function archivedQuery(includeHistorical: boolean): string {
   return includeHistorical ? '?archived=exclude-hidden' : '';
+}
+
+async function refreshUserLeagues(
+  env: Env,
+  platforms: Platform[] | undefined,
+  authHeader?: string,
+  correlationId?: string,
+  evalRunId?: string,
+  evalTraceId?: string
+): Promise<McpToolResponse> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
+  const cid = correlationId || 'no-cid';
+
+  try {
+    console.log(`[fantasy-mcp] ${cid} refreshing leagues via auth-worker`);
+    const baseHeaders: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...(authHeader ? { Authorization: authHeader } : {}),
+    };
+    const withCorrelation = correlationId ? withCorrelationId(baseHeaders, correlationId) : new Headers(baseHeaders);
+    const withInternal = withInternalServiceToken(withCorrelation, env, 'auth-worker /internal/leagues/refresh');
+    const headers = withEvalHeaders(withInternal, evalRunId, evalTraceId);
+
+    const response = await env.AUTH_WORKER.fetch(
+      new Request('https://internal/internal/leagues/refresh', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(platforms && platforms.length > 0 ? { platforms } : {}),
+        signal: controller.signal,
+      })
+    );
+
+    clearTimeout(timeoutId);
+
+    if (response.status === 401 || response.status === 403) {
+      return mcpAuthError('https://api.flaim.app/mcp', 'mcp:write');
+    }
+
+    const contentType = response.headers.get('Content-Type') || '';
+    const payload = contentType.includes('application/json')
+      ? await response.json().catch(() => ({ success: false, error: 'Invalid JSON from auth-worker' }))
+      : { success: response.ok, error: await response.text().catch(() => 'No response body') };
+
+    if (!response.ok) {
+      const errorPayload = {
+        success: false,
+        status: response.status,
+        error: typeof payload === 'object' && payload !== null && 'error' in payload
+          ? String((payload as { error?: unknown }).error)
+          : `Auth-worker refresh failed with ${response.status}`,
+        data: payload,
+      };
+      return {
+        content: [{ type: 'text', text: JSON.stringify(errorPayload, null, 2) }],
+        structuredContent: errorPayload,
+        isError: true,
+      };
+    }
+
+    return {
+      content: [{ type: 'text', text: JSON.stringify(payload, null, 2) }],
+      structuredContent: payload as Record<string, unknown>,
+      ...(didRefreshBatchFail(payload) ? { isError: true } : {}),
+    };
+  } catch (error) {
+    clearTimeout(timeoutId);
+    const isTimeout = error instanceof Error && error.name === 'AbortError';
+    const errorPayload = {
+      success: false,
+      code: isTimeout ? 'AUTH_WORKER_TIMEOUT' : 'AUTH_WORKER_REFRESH_FAILED',
+      error: isTimeout
+        ? 'League refresh timed out after 15 seconds'
+        : `League refresh failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+    };
+    console.error(`[fantasy-mcp] ${cid} failed to refresh leagues:`, error);
+    return {
+      content: [{ type: 'text', text: JSON.stringify(errorPayload, null, 2) }],
+      structuredContent: errorPayload,
+      isError: true,
+    };
+  }
 }
 
 async function fetchUserLeagues(
@@ -396,19 +501,26 @@ function mcpError(message: string): McpToolResponse {
   };
 }
 
-export function mcpAuthError(resource: string): McpToolResponse {
+function didRefreshBatchFail(payload: unknown): boolean {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return false;
+  const record = payload as { success?: unknown; results?: unknown };
+  return record.success === false;
+}
+
+export function mcpAuthError(resource: string, requiredScope?: 'mcp:read' | 'mcp:write'): McpToolResponse {
   // Derive metadata URL from resource: strip /mcp path, add .well-known
   // e.g. https://api.flaim.app/mcp → https://api.flaim.app/.well-known/oauth-protected-resource
   //      https://api.flaim.app/fantasy/mcp → https://api.flaim.app/fantasy/.well-known/oauth-protected-resource
   const url = new URL(resource);
   const basePath = url.pathname.replace(/\/mcp$/, '');
   const resourceMetadata = `${url.origin}${basePath}/.well-known/oauth-protected-resource`;
+  const scopeChallenge = requiredScope ? `, scope="${requiredScope}"` : '';
   return {
     content: [{ type: 'text', text: 'AUTH_FAILED: Authentication required' }],
     isError: true,
     _meta: {
       'mcp/www_authenticate': [
-        `Bearer resource_metadata="${resourceMetadata}", error="invalid_token", error_description="Authentication required"`,
+        `Bearer resource_metadata="${resourceMetadata}"${scopeChallenge}, error="invalid_token", error_description="Authentication required"`,
       ],
     },
   };
@@ -526,8 +638,9 @@ export function getUnifiedTools(): UnifiedTool[] {
       title: 'User Session',
       requiredScope: 'mcp:read',
       securitySchemes: buildSecuritySchemes('mcp:read'),
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
       openaiMeta: { invoking: 'Loading your leagues\u2026', invoked: 'Leagues loaded' },
-      widgetUri: 'ui://widget/user-session.html',
+      widgetUri: USER_SESSION_WIDGET_URI,
       description:
         "Use only for fantasy sports questions that need the user's connected league data; do not call for generic coding, scraping, weather, travel, betting, or non-fantasy sports questions. Call this exactly once at the start of each chat before any other Flaim tool. Returns the user's full league landscape: allLeagues (all active leagues), defaultLeagues (per-sport defaults), and defaultLeague (populated only when a single league exists or defaultSport matches). For vague singular prompts, use defaultLeague when present; otherwise use the relevant sport entry in defaultLeagues. For explicit plural or comparative prompts (each, all, compare, across leagues/platforms), enumerate every matching league in allLeagues and call the target tool once per league. In normal chat flows, do not skip this first step. After this, strongly consider calling get_league_info for the target league. season_year always represents the start year of the season. Read-only. If this call errors, do not repeat it unchanged.",
       inputSchema: {},
@@ -773,9 +886,9 @@ export function getUnifiedTools(): UnifiedTool[] {
             structuredContent: sessionData as unknown as Record<string, unknown>,
             _meta: {
               ui: {
-                resourceUri: 'ui://widget/user-session.html',
+                resourceUri: USER_SESSION_WIDGET_URI,
               },
-              'openai/outputTemplate': 'ui://widget/user-session.html',
+              'openai/outputTemplate': USER_SESSION_WIDGET_URI,
               'openai/widgetAccessible': true,
               'openai/resultCanProduceWidget': true,
             },
@@ -789,6 +902,41 @@ export function getUnifiedTools(): UnifiedTool[] {
     },
 
     // -------------------------------------------------------------------------
+    // Tool 2: refresh_leagues
+    // -------------------------------------------------------------------------
+    {
+      name: 'refresh_leagues',
+      title: 'Refresh Leagues',
+      requiredScope: 'mcp:write',
+      securitySchemes: buildSecuritySchemes('mcp:write'),
+      annotations: REFRESH_TOOL_ANNOTATIONS,
+      openaiMeta: { invoking: 'Refreshing leagues\u2026', invoked: 'Leagues refreshed' },
+      description:
+        'Refresh connected fantasy leagues by asking Flaim to rediscover leagues through connected ESPN, Yahoo, and Sleeper accounts. Use only when the user explicitly asks to refresh or after the user presses the widget refresh button. This is non-destructive and idempotent: it may add/update discovered league records but does not make roster moves, trades, drops, or lineup changes. If this call succeeds, call get_user_session again to show the updated league list. If this call errors, do not repeat it unchanged.',
+      inputSchema: {
+        platforms: z
+          .array(z.enum(['espn', 'yahoo', 'sleeper']))
+          .optional()
+          .describe('Optional platforms to refresh. Omit to refresh every connected platform.'),
+      },
+      handler: async (args, env, authHeader, correlationId, evalRunId, evalTraceId) => {
+        const rawPlatforms = Array.isArray(args.platforms) ? args.platforms : undefined;
+        const invalidPlatforms = rawPlatforms
+          ?.filter((platform) => platform !== 'espn' && platform !== 'yahoo' && platform !== 'sleeper');
+        if (invalidPlatforms?.length) {
+          return mcpError(`Invalid platform(s): ${invalidPlatforms.map(String).join(', ')}`);
+        }
+        if (rawPlatforms?.length === 0) {
+          return mcpError('platforms must include at least one platform');
+        }
+        const platforms = rawPlatforms as Platform[] | undefined;
+        return withToolLogging(correlationId, 'refresh_leagues', `platforms=${platforms?.join(',') || 'all'}`, async () => {
+          return refreshUserLeagues(env, platforms, authHeader, correlationId, evalRunId, evalTraceId);
+        }, evalRunId, evalTraceId);
+      },
+    },
+
+    // -------------------------------------------------------------------------
     // GET ANCIENT HISTORY - Retrieve old leagues and seasons
     // -------------------------------------------------------------------------
     {
@@ -796,6 +944,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       title: 'Ancient History',
       requiredScope: 'mcp:read',
       securitySchemes: buildSecuritySchemes('mcp:read'),
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
       openaiMeta: { invoking: 'Searching old seasons\u2026', invoked: 'History loaded' },
       description:
         'Use this only after get_user_session, and only when the user is clearly asking about a non-current season or an inactive league. This is the historical branch: it returns past seasons and historical leagues outside the current season view. Use for last season, older seasons, inactive leagues, or historical performance. Read-only. If this call errors, do not repeat it unchanged.',
@@ -892,6 +1041,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       title: 'League Context',
       requiredScope: 'mcp:read',
       securitySchemes: buildSecuritySchemes('mcp:read'),
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
       openaiMeta: { invoking: 'Fetching league info\u2026', invoked: 'League info ready' },
       description: `Strongly encouraged as the second call after get_user_session for the specified league. This provides the baseline league context for analysis: league name, settings, scoring type, roster configuration, and team/owner context, plus schedule or season-window metadata when the platform provides it. Use it liberally before standings, matchups, roster, free-agent, player, or transaction analysis so team names are resolved and the model has league-type, scoring, and roster context. When fanning out across multiple leagues, call this once per league. The exact team fields vary by platform but all include ownerName. Use values from get_user_session. Read-only. If this call errors, do not repeat it unchanged. Current date is ${currentDate}.`,
       inputSchema: {
@@ -927,6 +1077,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       title: 'League Standings',
       requiredScope: 'mcp:read',
       securitySchemes: buildSecuritySchemes('mcp:read'),
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
       openaiMeta: { invoking: 'Fetching standings\u2026', invoked: 'Standings ready' },
       description: `Get season standings and outcome snapshot; includes verified season-outcome fields when available. Returns team records, rankings, and points summaries. The rank field is a standings sort position (1 = best): on ESPN and Sleeper it is computed by Flaim from win percentage; on Yahoo it is passed through from Yahoo's own standings API. It is NOT a verified postseason finish. For verified postseason outcome, use finalRank and championshipWon instead. Also returns seasonPhase (regular_season/playoffs_in_progress/season_complete), seasonComplete, and per-team outcome fields: finalRank, championshipWon, playoffOutcome, outcomeConfidence, madePlayoffs, playoffSeed. Outcome fields are null when not verifiable — do not infer championship from rank or team name. Note: playoffOutcome returns 'in_progress' on Sleeper for teams in active playoffs; ESPN and Yahoo return null for that state. ESPN may also include projected-rank fields. Best used after get_user_session and after get_league_info for the specified league so team names and league context are already established. For multi-league comparisons, call once per league. For historical finish questions, call get_ancient_history first to discover seasons, then call this tool per season for verified outcomes. Read-only. If this call errors, do not repeat it unchanged. Current date is ${currentDate}.`,
       inputSchema: {
@@ -962,6 +1113,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       title: 'League Matchups',
       requiredScope: 'mcp:read',
       securitySchemes: buildSecuritySchemes('mcp:read'),
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
       openaiMeta: { invoking: 'Fetching matchups\u2026', invoked: 'Matchups ready' },
       description: `Get matchups/scoreboard for a specific week or the current week. Best used after get_user_session and after get_league_info for the specified league so the model already knows the league's team names, owner/team mapping, and league context before interpreting the matchup. For multi-league comparisons, call once per league. Read-only. If this call errors, do not repeat it unchanged. Current date is ${currentDate}.`,
       inputSchema: {
@@ -999,6 +1151,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       title: 'Team Roster',
       requiredScope: 'mcp:read',
       securitySchemes: buildSecuritySchemes('mcp:read'),
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
       openaiMeta: { invoking: 'Fetching roster\u2026', invoked: 'Roster ready' },
       description: `Get roster details for a specific team. Exact payload varies by platform: ESPN and Yahoo return player entries with lineup/position context, while Sleeper returns starters, bench, reserve, and record metadata for the selected roster. Best used after get_user_session and after get_league_info for the specified league so the model already knows the league's team names, owner/team mapping, league settings, and roster context before interpreting this roster. Requires authentication except on Sleeper's public API. Read-only. If this call errors, do not repeat it unchanged. Current date is ${currentDate}.`,
       inputSchema: {
@@ -1038,6 +1191,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       title: 'Free Agents',
       requiredScope: 'mcp:read',
       securitySchemes: buildSecuritySchemes('mcp:read'),
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
       openaiMeta: { invoking: 'Searching free agents\u2026', invoked: 'Free agents ready' },
       description: `Get currently available players for the specified league, optionally filtered by position. Exact payload varies by platform: ESPN and Yahoo include ownership percentages and sort by ownership, while Sleeper returns available-player identities from the public player index without ownership percentages. Best used after get_user_session and usually after get_league_info for the specified league so team names, owner/team mapping, scoring context, and roster-slot context are already established before giving pickup advice. For multi-league comparisons, call once per league. Use this for player availability only. Do not use percentOwned or market ownership to infer who owns a player in the user's league; for ownership questions, use get_league_info (returns teams with ownerName) and get_roster. Requires authentication on ESPN and Yahoo; Sleeper uses the public API. Use values from get_user_session. Read-only. If this call errors, do not repeat it unchanged. Current date is ${currentDate}.`,
       inputSchema: {
@@ -1083,6 +1237,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       title: 'Search Players',
       requiredScope: 'mcp:read',
       securitySchemes: buildSecuritySchemes('mcp:read'),
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
       openaiMeta: { invoking: 'Searching players\u2026', invoked: 'Players ready' },
       description: `Search for player identity by name. Always returns identity fields, but ownership context varies by platform. ESPN and Yahoo return market/global ownership and can also populate league ownership fields when credentials and league context are available. Sleeper returns identity plus ownership_scope="unavailable" with market_percent_owned=null. Best used after get_user_session and often after get_league_info when the user cares about league-specific ownership or team-name resolution. League ownership fields: league_status ("ROSTERED" = on a team, "FREE_AGENT" = available, null = unavailable), league_team_name (fantasy team name if rostered), league_owner_name (team owner if rostered). When those league fields are absent, null, or unavailable, fall back to get_league_info + get_roster to verify manually. Use values from get_user_session. Read-only. If this call errors, do not repeat it unchanged. Current date is ${currentDate}.`,
       inputSchema: {
@@ -1133,6 +1288,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       title: 'League Transactions',
       requiredScope: 'mcp:read',
       securitySchemes: buildSecuritySchemes('mcp:read'),
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
       openaiMeta: { invoking: 'Fetching transactions\u2026', invoked: 'Transactions ready' },
       description: `Get recent league transactions including adds, drops, waivers, and trades. Best used after get_user_session and usually after get_league_info so the model already knows the league's team names and owner/team mapping before summarizing activity. Each normalized transaction includes a date field (YYYY-MM-DD), type, status, week, and optional team_ids. When presenting results, organize by time period (today, yesterday, this week, older) AND by team within each period so the user can see both when moves happened and what each team did. Week handling is platform-specific: ESPN/Sleeper use week windows (default current + previous week), while Yahoo uses a recent 14-day timestamp window and ignores explicit week. Type support is also platform-specific: Sleeper supports add/drop/trade/waiver; Yahoo supports add/drop/trade plus pending waiver/pending_trade views for the authenticated user's own items; ESPN also supports failed_bid and trade lifecycle types (trade_proposal, trade_decline, trade_veto, trade_uphold). ESPN uses mTransactions2 for structured transaction data, and accepted trade player details are supplemented from the activity feed. ESPN responses include a "teams" map (team ID → display name) to resolve the numeric team_ids on each transaction, while Yahoo and Sleeper generally rely on get_league_info for team-name resolution. Use values from get_user_session. Read-only. If this call errors, do not repeat it unchanged. Current date is ${currentDate}.`,
       inputSchema: {

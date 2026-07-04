@@ -4,6 +4,7 @@ import {
   handleSleeperLeagueDelete,
   handleSleeperLeagues,
   handleSleeperStatus,
+  refreshSleeperLeaguesFromStoredConnection,
   resolveSleeperArchiveTarget,
   backfillSleeperRecurringIds,
   type SleeperConnectEnv,
@@ -237,6 +238,89 @@ describe('sleeper-connect-handlers', () => {
         recurringLeagueId: 'league_nfl_1',
       }),
     );
+  });
+
+  it('refreshes Sleeper leagues from the stored connection username', async () => {
+    mockStorage.getSleeperConnection.mockResolvedValueOnce({
+      sleeperUserId: 'old_sleeper_id',
+      sleeperUsername: 'stored_user',
+      updatedAt: '2026-07-04T12:00:00.000Z',
+    });
+
+    mockFetch.mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith('/user/stored_user')) {
+        return jsonResponse({
+          user_id: 'sleeper_stored',
+          username: 'stored_user',
+          display_name: 'Stored User',
+        });
+      }
+      if (url.includes('/user/sleeper_stored/leagues/nfl/2025')) {
+        return jsonResponse([
+          {
+            league_id: 'stored-nfl-1',
+            name: 'Stored NFL',
+            sport: 'nfl',
+            season: '2025',
+            previous_league_id: null,
+          },
+        ]);
+      }
+      if (url.includes('/user/sleeper_stored/leagues/nba/2024')) {
+        return jsonResponse([]);
+      }
+      if (url.includes('/league/stored-nfl-1/rosters')) {
+        return jsonResponse([
+          { roster_id: 3, owner_id: 'sleeper_stored' },
+        ]);
+      }
+      return new Response(null, { status: 404 });
+    });
+
+    const result = await refreshSleeperLeaguesFromStoredConnection(env, 'user_1');
+
+    expect(result.status).toBe('success');
+    if (result.status !== 'success') {
+      throw new Error('Expected success result');
+    }
+    expect(result.details).toEqual({
+      success: true,
+      username: 'stored_user',
+      leagues_found: 1,
+      seasons_discovered: 1,
+    });
+    expect(mockStorage.saveSleeperConnection).toHaveBeenCalledWith('user_1', 'sleeper_stored', 'stored_user');
+    expect(mockStorage.saveSleeperLeague).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clerkUserId: 'user_1',
+        leagueId: 'stored-nfl-1',
+        sport: 'football',
+        seasonYear: 2025,
+        rosterId: 3,
+        recurringLeagueId: 'stored-nfl-1',
+        sleeperUserId: 'sleeper_stored',
+      }),
+    );
+  });
+
+  it('skips stored-connection refresh when the Sleeper username is missing', async () => {
+    mockStorage.getSleeperConnection.mockResolvedValueOnce({
+      sleeperUserId: 'sleeper_without_username',
+      sleeperUsername: null,
+      updatedAt: '2026-07-04T12:00:00.000Z',
+    });
+
+    const result = await refreshSleeperLeaguesFromStoredConnection(env, 'user_1');
+
+    expect(result).toEqual({
+      status: 'skipped',
+      error: 'username_missing',
+      error_description: 'Stored Sleeper connection does not include a username',
+      details: { sleeperUserId: 'sleeper_without_username' },
+    });
+    expect(mockFetch).not.toHaveBeenCalled();
+    expect(mockStorage.saveSleeperLeague).not.toHaveBeenCalled();
   });
 
   it('persists recurringLeagueId during discovery for every season in the history chain', async () => {

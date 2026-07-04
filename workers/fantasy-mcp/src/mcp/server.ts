@@ -3,7 +3,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { Env } from '../types';
 import { getUnifiedTools, hasRequiredScope, mcpAuthError, type McpToolResponse } from './tools';
 import { emitUsageEvent, type UsageStatus } from './usage';
-import { USER_SESSION_WIDGET_HTML } from '../widgets/user-session-widget';
+import { USER_SESSION_WIDGET_HTML, USER_SESSION_WIDGET_URI } from '../widgets/user-session-widget';
 import { FLAIM_MCP_INSTRUCTIONS } from './instructions';
 
 export interface McpContext {
@@ -67,13 +67,13 @@ export function createFantasyMcpServer(ctx: McpContext): McpServer {
   // Register widget resources
   server.registerResource(
     'user-session-widget',
-    'ui://widget/user-session.html',
+    USER_SESSION_WIDGET_URI,
     {
       mimeType: 'text/html;profile=mcp-app',
     },
     async () => ({
       contents: [{
-        uri: 'ui://widget/user-session.html',
+        uri: USER_SESSION_WIDGET_URI,
         mimeType: 'text/html;profile=mcp-app',
         text: USER_SESSION_WIDGET_HTML,
         _meta: {
@@ -102,8 +102,7 @@ export function createFantasyMcpServer(ctx: McpContext): McpServer {
         title: tool.title,
         description: tool.description,
         inputSchema: tool.inputSchema,
-        // OpenAI/Anthropic reviewer-safe annotation profile for read-only external data tools.
-        annotations: { readOnlyHint: true, openWorldHint: true, destructiveHint: false, idempotentHint: true },
+        annotations: tool.annotations,
         _meta: {
           securitySchemes: tool.securitySchemes,
           ...(tool.openaiMeta && {
@@ -125,7 +124,7 @@ export function createFantasyMcpServer(ctx: McpContext): McpServer {
         // auth error returns. Its own waitUntil so it never blocks the response.
         if (!hasRequiredScope(tokenScope, tool.requiredScope)) {
           safeEmit(ctx, tool.name, args, 'denied', null);
-          return mcpAuthError('https://api.flaim.app/mcp');
+          return mcpAuthError('https://api.flaim.app/mcp', tool.requiredScope);
         }
 
         // Time and emit exactly one event per tool call. Default status 'error'
