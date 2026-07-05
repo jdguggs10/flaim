@@ -65,11 +65,14 @@ Perplexity custom remote connectors require HTTPS. In some workspaces, admins mu
 1. `gemini mcp add flaim https://api.flaim.app/mcp --transport http`
 2. In Gemini: `/mcp auth flaim` and complete the OAuth consent screen.
 
-## Tools (Read-Only)
+## Tools
 
 All tools take explicit parameters: `platform`, `sport`, `league_id`, `season_year` (plus optional fields where applicable).
 
+Analysis tools are read-only. `refresh_leagues` requires `mcp:write` because it can add or update Flaim league records after provider discovery, but it does not make roster moves, trades, drops, or lineup changes.
+
 - `get_user_session` (required first call in a normal chat): your leagues and defaults
+- `refresh_leagues`: re-discover connected leagues and update Flaim's league records
 - `get_league_info` (usually second): baseline league context for team-name resolution, owner/team mapping, scoring, and roster-slot context before downstream league tools
 - `get_roster`
 - `get_standings`

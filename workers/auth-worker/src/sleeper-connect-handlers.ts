@@ -46,6 +46,14 @@ interface RecurringLeagueResolutionResult {
   failureReason?: string;
 }
 
+export interface SleeperRefreshResult {
+  success: boolean;
+  username: string;
+  leagues_found: number;
+  seasons_discovered: number;
+  warning?: string;
+}
+
 /**
  * Annotate-path archive lookup that fails OPEN: a transient DB error treats
  * nothing as archived (the UI just loses the `archived`/`archiveMode` flags) rather
@@ -348,119 +356,163 @@ export async function handleSleeperDiscover(
       });
     }
 
-    // Resolve username → user_id
-    // Sleeper returns HTTP 200 with null body for unknown usernames; throws on 429/5xx
-    const sleeperUser = await sleeperGet<SleeperApiUser | null>(`/user/${username}`);
-    if (!sleeperUser || !sleeperUser.user_id) {
+    const result = await refreshSleeperLeaguesForUsername(env, userId, username);
+
+    return new Response(
+      JSON.stringify(result),
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  } catch (error) {
+    console.error('[handleSleeperDiscover]', error);
+    if (error instanceof Error && error.message === 'sleeper_user_not_found') {
       return new Response(JSON.stringify({ error: 'Sleeper user not found. Check the username and try again.' }), {
         status: 404,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
-
-    // Capture as consts so TypeScript retains the non-null narrowing inside closures
-    const sleeperUserId = sleeperUser.user_id;
-    const sleeperUsername = sleeperUser.username;
-
-    const storage = SleeperStorage.fromEnvironment(env);
-    await storage.saveSleeperConnection(userId, sleeperUserId, sleeperUsername ?? username);
-
-    // Discover leagues for current season (NFL + NBA)
-    // Use allSettled so a failure in one sport doesn't discard the other
-    const [nflResult, nbaResult] = await Promise.allSettled([
-      sleeperGet<SleeperApiLeague[]>(`/user/${sleeperUserId}/leagues/nfl/${getDefaultSeasonYear('football')}`),
-      sleeperGet<SleeperApiLeague[]>(`/user/${sleeperUserId}/leagues/nba/${getDefaultSeasonYear('basketball')}`),
-    ]);
-    const nflLeagues = nflResult.status === 'fulfilled' ? nflResult.value : [];
-    const nbaLeagues = nbaResult.status === 'fulfilled' ? nbaResult.value : [];
-    const hadFetchErrors = nflResult.status === 'rejected' || nbaResult.status === 'rejected';
-
-    const currentLeagues = [...(nflLeagues ?? []), ...(nbaLeagues ?? [])];
-    let totalSaved = 0;
-    const seasonsDiscovered = new Set<string>();
-    const recurringIdCache = new Map<string, string | null>();
-    const leagueCache = new Map<string, Promise<SleeperApiLeague | null>>();
-    const processedLeagueIds = new Set<string>();
-
-    // Process each league and traverse history chain
-    async function processLeague(league: SleeperApiLeague, recurringLeagueId: string | undefined, depth = 0): Promise<void> {
-      if (depth >= MAX_HISTORY_YEARS || processedLeagueIds.has(league.league_id)) return;
-
-      processedLeagueIds.add(league.league_id);
-      cacheSleeperLeague(leagueCache, league);
-
-      // Find user's roster_id in this league
-      let rosterId: number | null = null;
-      try {
-        const rosters = await sleeperGet<SleeperApiRoster[]>(`/league/${league.league_id}/rosters`);
-        const userRoster = rosters?.find((r) => r.owner_id === sleeperUserId);
-        rosterId = userRoster?.roster_id ?? null;
-      } catch (error) {
-        console.warn(
-          `[sleeper-connect] Failed to load rosters for ${league.league_id}; saving without rosterId: ${describeSleeperResolutionFailure(league.league_id, error)}`
-        );
-      }
-
-      const leagueToSave: Parameters<SleeperStorage['saveSleeperLeague']>[0] = {
-        clerkUserId: userId,
-        leagueId: league.league_id,
-        sport: mapSport(league.sport),
-        seasonYear: parseInt(league.season, 10) || getDefaultSeasonYear('football'),
-        leagueName: league.name,
-        rosterId,
-        sleeperUserId: sleeperUserId,
-      };
-      if (recurringLeagueId) {
-        leagueToSave.recurringLeagueId = recurringLeagueId;
-      }
-
-      await storage.saveSleeperLeague(leagueToSave);
-      totalSaved++;
-      seasonsDiscovered.add(league.season);
-
-      // Traverse previous season
-      if (league.previous_league_id) {
-        try {
-          const prevLeague = await getSleeperLeague(league.previous_league_id, leagueCache);
-          if (prevLeague?.league_id) {
-            await processLeague(prevLeague, recurringLeagueId, depth + 1);
-          }
-        } catch (error) {
-          console.warn(
-            `[sleeper-connect] Failed to traverse previous league ${league.previous_league_id} from ${league.league_id}: ${describeSleeperResolutionFailure(league.previous_league_id, error)}`
-          );
-        }
-      }
-    }
-
-    await Promise.all(currentLeagues.map(async (league) => {
-      cacheSleeperLeague(leagueCache, league);
-      const resolution = await tryResolveRecurringLeagueId(league.league_id, recurringIdCache, leagueCache);
-      if (!resolution.recurringLeagueId) {
-        console.warn(
-          `[sleeper-connect] Discovery could not persist recurringLeagueId for ${league.league_id}: ${resolution.failureReason ?? 'unresolved recurring chain'}`
-        );
-      }
-      await processLeague(league, resolution.recurringLeagueId);
-    }));
-
-    return new Response(
-      JSON.stringify({
-        success: totalSaved > 0 || !hadFetchErrors,
-        username: sleeperUsername ?? username,
-        leagues_found: totalSaved,
-        seasons_discovered: seasonsDiscovered.size,
-        ...(hadFetchErrors && totalSaved === 0 ? { warning: 'Some league data could not be fetched. Try reconnecting later.' } : {}),
-      }),
-      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
-  } catch (error) {
-    console.error('[handleSleeperDiscover]', error);
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : 'Discovery failed' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
+}
+
+export async function refreshSleeperLeaguesForUsername(
+  env: SleeperConnectEnv,
+  userId: string,
+  username: string
+): Promise<SleeperRefreshResult> {
+  // Resolve username → user_id.
+  // Sleeper returns HTTP 200 with null body for unknown usernames; throws on 429/5xx.
+  const sleeperUser = await sleeperGet<SleeperApiUser | null>(`/user/${username}`);
+  if (!sleeperUser || !sleeperUser.user_id) {
+    throw new Error('sleeper_user_not_found');
+  }
+
+  // Capture as consts so TypeScript retains the non-null narrowing inside closures.
+  const sleeperUserId = sleeperUser.user_id;
+  const sleeperUsername = sleeperUser.username;
+
+  const storage = SleeperStorage.fromEnvironment(env);
+  await storage.saveSleeperConnection(userId, sleeperUserId, sleeperUsername ?? username);
+
+  // Discover leagues for current season (NFL + NBA).
+  // Use allSettled so a failure in one sport doesn't discard the other.
+  const [nflResult, nbaResult] = await Promise.allSettled([
+    sleeperGet<SleeperApiLeague[]>(`/user/${sleeperUserId}/leagues/nfl/${getDefaultSeasonYear('football')}`),
+    sleeperGet<SleeperApiLeague[]>(`/user/${sleeperUserId}/leagues/nba/${getDefaultSeasonYear('basketball')}`),
+  ]);
+  const nflLeagues = nflResult.status === 'fulfilled' ? nflResult.value : [];
+  const nbaLeagues = nbaResult.status === 'fulfilled' ? nbaResult.value : [];
+  const hadFetchErrors = nflResult.status === 'rejected' || nbaResult.status === 'rejected';
+
+  const currentLeagues = [...(nflLeagues ?? []), ...(nbaLeagues ?? [])];
+  let totalSaved = 0;
+  const seasonsDiscovered = new Set<string>();
+  const recurringIdCache = new Map<string, string | null>();
+  const leagueCache = new Map<string, Promise<SleeperApiLeague | null>>();
+  const processedLeagueIds = new Set<string>();
+
+  // Process each league and traverse history chain.
+  async function processLeague(league: SleeperApiLeague, recurringLeagueId: string | undefined, depth = 0): Promise<void> {
+    if (depth >= MAX_HISTORY_YEARS || processedLeagueIds.has(league.league_id)) return;
+
+    processedLeagueIds.add(league.league_id);
+    cacheSleeperLeague(leagueCache, league);
+
+    // Find user's roster_id in this league.
+    let rosterId: number | null = null;
+    try {
+      const rosters = await sleeperGet<SleeperApiRoster[]>(`/league/${league.league_id}/rosters`);
+      const userRoster = rosters?.find((r) => r.owner_id === sleeperUserId);
+      rosterId = userRoster?.roster_id ?? null;
+    } catch (error) {
+      console.warn(
+        `[sleeper-connect] Failed to load rosters for ${league.league_id}; saving without rosterId: ${describeSleeperResolutionFailure(league.league_id, error)}`
+      );
+    }
+
+    const leagueToSave: Parameters<SleeperStorage['saveSleeperLeague']>[0] = {
+      clerkUserId: userId,
+      leagueId: league.league_id,
+      sport: mapSport(league.sport),
+      seasonYear: parseInt(league.season, 10) || getDefaultSeasonYear('football'),
+      leagueName: league.name,
+      rosterId,
+      sleeperUserId: sleeperUserId,
+    };
+    if (recurringLeagueId) {
+      leagueToSave.recurringLeagueId = recurringLeagueId;
+    }
+
+    await storage.saveSleeperLeague(leagueToSave);
+    totalSaved++;
+    seasonsDiscovered.add(league.season);
+
+    // Traverse previous season.
+    if (league.previous_league_id) {
+      try {
+        const prevLeague = await getSleeperLeague(league.previous_league_id, leagueCache);
+        if (prevLeague?.league_id) {
+          await processLeague(prevLeague, recurringLeagueId, depth + 1);
+        }
+      } catch (error) {
+        console.warn(
+          `[sleeper-connect] Failed to traverse previous league ${league.previous_league_id} from ${league.league_id}: ${describeSleeperResolutionFailure(league.previous_league_id, error)}`
+        );
+      }
+    }
+  }
+
+  await Promise.all(currentLeagues.map(async (league) => {
+    cacheSleeperLeague(leagueCache, league);
+    const resolution = await tryResolveRecurringLeagueId(league.league_id, recurringIdCache, leagueCache);
+    if (!resolution.recurringLeagueId) {
+      console.warn(
+        `[sleeper-connect] Discovery could not persist recurringLeagueId for ${league.league_id}: ${resolution.failureReason ?? 'unresolved recurring chain'}`
+      );
+    }
+    await processLeague(league, resolution.recurringLeagueId);
+  }));
+
+  return {
+    success: totalSaved > 0 || !hadFetchErrors,
+    username: sleeperUsername ?? username,
+    leagues_found: totalSaved,
+    seasons_discovered: seasonsDiscovered.size,
+    ...(hadFetchErrors && totalSaved === 0 ? { warning: 'Some league data could not be fetched. Try reconnecting later.' } : {}),
+  };
+}
+
+export async function refreshSleeperLeaguesFromStoredConnection(
+  env: SleeperConnectEnv,
+  userId: string
+): Promise<
+  | { status: 'success'; details: SleeperRefreshResult }
+  | { status: 'skipped'; error: string; error_description: string; details?: Record<string, unknown> }
+> {
+  const storage = SleeperStorage.fromEnvironment(env);
+  const connection = await storage.getSleeperConnection(userId);
+  if (!connection) {
+    return {
+      status: 'skipped',
+      error: 'not_connected',
+      error_description: 'User is not connected to Sleeper',
+    };
+  }
+
+  const username = connection.sleeperUsername?.trim();
+  if (!username) {
+    return {
+      status: 'skipped',
+      error: 'username_missing',
+      error_description: 'Stored Sleeper connection does not include a username',
+      details: { sleeperUserId: connection.sleeperUserId },
+    };
+  }
+
+  const details = await refreshSleeperLeaguesForUsername(env, userId, username);
+  return { status: 'success', details };
 }
 
 export async function handleSleeperStatus(

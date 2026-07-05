@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import app from '../../src/index';
 import type { Env } from '../../src/types';
 import { getUnifiedTools, type UnifiedTool } from '../../src/mcp/tools';
+import { USER_SESSION_WIDGET_URI } from '../../src/widgets/user-session-widget';
 import { INTERNAL_SERVICE_TOKEN_HEADER, getDefaultSeasonYear } from '@flaim/worker-shared';
 
 // Mock the tools module so a single test can inject a custom tool (e.g. a
@@ -307,23 +308,32 @@ describe('fantasy-mcp gateway integration', () => {
     expect(freeAgentsTool?.inputSchema?.properties?.platform?.enum).toContain('sleeper');
     const userSessionTool = tools?.find((tool) => tool.name === 'get_user_session');
     expect(userSessionTool).toBeDefined();
-    expect(userSessionTool?._meta?.ui).toEqual({ resourceUri: 'ui://widget/user-session.html' });
-    expect(userSessionTool?._meta?.['openai/outputTemplate']).toBe('ui://widget/user-session.html');
+    expect(userSessionTool?._meta?.ui).toEqual({ resourceUri: USER_SESSION_WIDGET_URI });
+    expect(userSessionTool?._meta?.['openai/outputTemplate']).toBe(USER_SESSION_WIDGET_URI);
     expect(userSessionTool?._meta?.['openai/widgetAccessible']).toBe(true);
     expect(userSessionTool?._meta?.['openai/resultCanProduceWidget']).toBe(true);
     expect(userSessionTool?._meta?.['openai/widgetDomain']).toBeUndefined();
+    const refreshTool = tools?.find((tool) => tool.name === 'refresh_leagues');
+    expect(refreshTool).toBeDefined();
+    expect(refreshTool?._meta?.securitySchemes?.[0]?.scopes).toContain('mcp:write');
+    expect(refreshTool?.annotations).toEqual({
+      readOnlyHint: false,
+      openWorldHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+    });
 
     const scopeByTool = new Map(getUnifiedTools().map((tool) => [tool.name, tool.requiredScope]));
     for (const tool of tools || []) {
       expect(tool._meta?.securitySchemes?.[0]?.type).toBe('oauth2');
       expect(tool._meta?.securitySchemes?.[0]?.scopes).toContain(scopeByTool.get(tool.name));
       // OpenAI Apps Directory review expects these hints to be explicitly declared.
-      expect(tool.annotations).toEqual({
-        readOnlyHint: true,
+      expect(tool.annotations).toMatchObject({
         openWorldHint: true,
         destructiveHint: false,
         idempotentHint: true,
       });
+      expect(tool.annotations?.readOnlyHint).toBe(tool.name === 'refresh_leagues' ? false : true);
     }
 
     expect(authFetch).toHaveBeenCalledTimes(1);
@@ -349,7 +359,7 @@ describe('fantasy-mcp gateway integration', () => {
     );
     expect(listResponse.status).toBe(200);
     const listPayload = await parseJsonRpcResponse(listResponse);
-    const resource = listPayload.result?.resources?.find((item) => item.uri === 'ui://widget/user-session.html');
+    const resource = listPayload.result?.resources?.find((item) => item.uri === USER_SESSION_WIDGET_URI);
     expect(resource).toBeDefined();
     expect(resource?.mimeType).toBe('text/html;profile=mcp-app');
 
@@ -357,7 +367,7 @@ describe('fantasy-mcp gateway integration', () => {
       buildMcpJsonRpcRequest(
         '/mcp',
         'resources/read',
-        { uri: 'ui://widget/user-session.html' },
+        { uri: USER_SESSION_WIDGET_URI },
         'resources-read-1'
       ),
       env,
@@ -365,7 +375,7 @@ describe('fantasy-mcp gateway integration', () => {
     );
     expect(readResponse.status).toBe(200);
     const readPayload = await parseJsonRpcResponse(readResponse);
-    const content = readPayload.result?.contents?.find((item) => item.uri === 'ui://widget/user-session.html');
+    const content = readPayload.result?.contents?.find((item) => item.uri === USER_SESSION_WIDGET_URI);
     expect(content?.mimeType).toBe('text/html;profile=mcp-app');
     expect(content?.text).toContain('<title>Flaim</title>');
     expect(content?._meta?.ui?.csp?.connectDomains).toEqual([]);
@@ -863,10 +873,13 @@ describe('fantasy-mcp gateway integration', () => {
     expect(response.status).toBe(200);
     const text = await response.text();
     const data = text.split(/\r?\n/).filter((l) => l.startsWith('data:')).map((l) => l.slice(5).trim()).join('\n').trim();
-    const parsed = JSON.parse(data) as { result?: { isError?: boolean; content?: Array<{ text?: string }> } };
+    const parsed = JSON.parse(data) as { result?: { isError?: boolean; content?: Array<{ text?: string }>; _meta?: Record<string, unknown> } };
     // The tool call resolves to the MCP auth error, not a handler result.
     expect(parsed.result?.isError).toBe(true);
     expect(parsed.result?.content?.[0]?.text).toContain('AUTH_FAILED');
+    const challenge = (parsed.result?._meta?.['mcp/www_authenticate'] as string[] | undefined)?.[0];
+    expect(challenge).toContain('scope="mcp:read"');
+    expect(challenge).toContain('resource_metadata="https://api.flaim.app/.well-known/oauth-protected-resource"');
 
     // Handler must NOT run on the denied path.
     expect(espnFetch).not.toHaveBeenCalled();

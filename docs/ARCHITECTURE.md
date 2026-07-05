@@ -168,6 +168,7 @@ ChatGPT Apps / manual MCP clients → fantasy-mcp (gateway) → espn-client    �
 
 **Unified tools:**
 - `get_user_session` — Current-season leagues only with `structuredContent` for ChatGPT widget rendering
+- `refresh_leagues` — Re-discover connected leagues and update Flaim's league records (`mcp:write`; non-destructive)
 - `get_ancient_history` — Past seasons and historical leagues (everything not in the current season)
 - `get_league_info` — Baseline league context: settings, roster config, teams/owners (requires platform, sport, league_id, season_year)
 - `get_standings` — League standings

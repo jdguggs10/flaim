@@ -39,9 +39,12 @@ fantasy-mcp (this worker)
 
 All tools take explicit parameters. Call `get_user_session` first in a normal chat to get league IDs and defaults. `get_league_info` is usually the second call for the selected league so team names, owner/team mapping, scoring, and roster-slot context are established before downstream league tools.
 
+Most tools are read-only analysis calls. `refresh_leagues` requires `mcp:write` because it can add or update Flaim league records after provider discovery, but it never makes roster moves, trades, drops, or lineup changes.
+
 | Tool | Description |
 |------|-------------|
 | `get_user_session` | User's leagues across all platforms (call first) |
+| `refresh_leagues` | Re-discover connected leagues and update Flaim's league records |
 | `get_ancient_history` | Past seasons and historical leagues outside the current season |
 | `get_league_info` | Baseline league context: settings, scoring, roster config, teams/owners |
 | `get_standings` | League standings with records |

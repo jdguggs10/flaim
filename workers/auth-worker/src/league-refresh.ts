@@ -1,0 +1,296 @@
+import { EspnSupabaseStorage } from './supabase-storage';
+import { AutomaticLeagueDiscoveryFailed, EspnAuthenticationFailed } from './espn-types';
+import { discoverAndSaveLeagues, type DiscoveredLeague, type SeasonCounts } from './v3/league-discovery';
+import { handleYahooDiscover, type YahooConnectEnv } from './yahoo-connect-handlers';
+import {
+  refreshSleeperLeaguesFromStoredConnection,
+  type SleeperConnectEnv,
+} from './sleeper-connect-handlers';
+
+export const REFRESH_PLATFORMS = ['espn', 'yahoo', 'sleeper'] as const;
+export type RefreshPlatform = typeof REFRESH_PLATFORMS[number];
+
+type ProviderStatus = 'success' | 'skipped' | 'error';
+
+export interface ProviderRefreshResult {
+  platform: RefreshPlatform;
+  status: ProviderStatus;
+  httpStatus?: number;
+  error?: string;
+  error_description?: string;
+  retryAfter?: string;
+  details?: unknown;
+}
+
+export interface LeagueRefreshResponse {
+  success: boolean;
+  requestedPlatforms: RefreshPlatform[];
+  results: Partial<Record<RefreshPlatform, ProviderRefreshResult>>;
+}
+
+export interface RefreshRequestValidation {
+  platforms?: RefreshPlatform[];
+  error?: {
+    status: 400;
+    body: {
+      error: string;
+      error_description: string;
+      unknownPlatforms?: string[];
+    };
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+export async function parseLeagueRefreshRequest(request: Request): Promise<RefreshRequestValidation> {
+  const rawBody = await request.text();
+  if (!rawBody.trim()) {
+    return { platforms: [...REFRESH_PLATFORMS] };
+  }
+
+  let body: unknown;
+  try {
+    body = JSON.parse(rawBody);
+  } catch {
+    return {
+      error: {
+        status: 400,
+        body: {
+          error: 'invalid_request',
+          error_description: 'Request body must be valid JSON',
+        },
+      },
+    };
+  }
+
+  if (!isRecord(body) || body.platforms === undefined) {
+    return { platforms: [...REFRESH_PLATFORMS] };
+  }
+
+  if (!Array.isArray(body.platforms) || body.platforms.some((platform) => typeof platform !== 'string')) {
+    return {
+      error: {
+        status: 400,
+        body: {
+          error: 'invalid_platforms',
+          error_description: 'platforms must be an array of platform names',
+        },
+      },
+    };
+  }
+
+  if (body.platforms.length === 0) {
+    return {
+      error: {
+        status: 400,
+        body: {
+          error: 'invalid_platforms',
+          error_description: 'platforms must include at least one platform',
+        },
+      },
+    };
+  }
+
+  if (body.platforms.length > REFRESH_PLATFORMS.length) {
+    return {
+      error: {
+        status: 400,
+        body: {
+          error: 'invalid_platforms',
+          error_description: `platforms may include at most ${REFRESH_PLATFORMS.length} entries`,
+        },
+      },
+    };
+  }
+
+  const requested = Array.from(new Set(body.platforms));
+  const known = new Set<string>(REFRESH_PLATFORMS);
+  const unknownPlatforms = requested.filter((platform) => !known.has(platform));
+  if (unknownPlatforms.length > 0) {
+    return {
+      error: {
+        status: 400,
+        body: {
+          error: 'unknown_platform',
+          error_description: `Unknown platform(s): ${unknownPlatforms.join(', ')}`,
+          unknownPlatforms,
+        },
+      },
+    };
+  }
+
+  return { platforms: requested as RefreshPlatform[] };
+}
+
+function errorDescription(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
+}
+
+async function refreshEspnLeagues(env: { SUPABASE_URL: string; SUPABASE_SERVICE_KEY: string }, userId: string): Promise<ProviderRefreshResult> {
+  const storage = EspnSupabaseStorage.fromEnvironment(env);
+  const credentials = await storage.getCredentials(userId);
+  if (!credentials) {
+    return {
+      platform: 'espn',
+      status: 'skipped',
+      httpStatus: 400,
+      error: 'credentials_not_found',
+      error_description: 'ESPN credentials not found. Please sync credentials first.',
+    };
+  }
+
+  try {
+    const result = await discoverAndSaveLeagues(userId, credentials.swid, credentials.s2, storage);
+    return {
+      platform: 'espn',
+      status: 'success',
+      httpStatus: 200,
+      details: {
+        discovered: result.discovered,
+        currentSeason: result.currentSeason,
+        pastSeasons: result.pastSeasons,
+        currentSeasonCount: result.currentSeason.found,
+        pastSeasonsCount: result.pastSeasons.found,
+      },
+    };
+  } catch (error) {
+    if (error instanceof AutomaticLeagueDiscoveryFailed) {
+      const savedLeagues = await storage.getCurrentSeasonLeagues(userId);
+      const discovered: DiscoveredLeague[] = savedLeagues.map((league) => ({
+        sport: league.sport,
+        leagueId: league.leagueId,
+        leagueName: league.leagueName || '',
+        teamId: league.teamId || '',
+        teamName: league.teamName || '',
+        seasonYear: league.seasonYear || 0,
+      }));
+      const currentSeason: SeasonCounts = {
+        found: savedLeagues.length,
+        added: 0,
+        alreadySaved: savedLeagues.length,
+        refreshed: 0,
+      };
+      return {
+        platform: 'espn',
+        status: 'success',
+        httpStatus: 200,
+        details: {
+          discovered,
+          currentSeason,
+          pastSeasons: { found: 0, added: 0, alreadySaved: 0, refreshed: 0 },
+          currentSeasonCount: currentSeason.found,
+          pastSeasonsCount: 0,
+        },
+      };
+    }
+
+    const description = errorDescription(error, 'ESPN league refresh failed');
+    const isAuthError = error instanceof EspnAuthenticationFailed ||
+      description.includes('authentication') ||
+      description.includes('expired') ||
+      description.includes('invalid');
+    return {
+      platform: 'espn',
+      status: 'error',
+      httpStatus: isAuthError ? 401 : 500,
+      error: isAuthError ? 'espn_auth_failed' : 'discovery_failed',
+      error_description: description,
+    };
+  }
+}
+
+async function parseResponseBody(response: Response): Promise<unknown> {
+  const text = await response.text();
+  if (!text.trim()) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
+
+async function refreshYahooLeagues(
+  env: YahooConnectEnv,
+  userId: string,
+  corsHeaders: Record<string, string>,
+  correlationId?: string
+): Promise<ProviderRefreshResult> {
+  const response = await handleYahooDiscover(env, userId, corsHeaders, correlationId);
+  const body = await parseResponseBody(response);
+  const retryAfter = response.headers.get('Retry-After') ?? undefined;
+
+  return {
+    platform: 'yahoo',
+    status: response.ok ? 'success' : response.status === 404 ? 'skipped' : 'error',
+    httpStatus: response.status,
+    ...(retryAfter ? { retryAfter } : {}),
+    ...(isRecord(body) && typeof body.error === 'string' ? { error: body.error } : {}),
+    ...(isRecord(body) && typeof body.error_description === 'string' ? { error_description: body.error_description } : {}),
+    details: body,
+  };
+}
+
+async function refreshSleeperLeagues(env: SleeperConnectEnv, userId: string): Promise<ProviderRefreshResult> {
+  try {
+    const result = await refreshSleeperLeaguesFromStoredConnection(env, userId);
+    return {
+      platform: 'sleeper',
+      status: result.status,
+      httpStatus: result.status === 'success' ? 200 : 404,
+      ...(result.status === 'skipped'
+        ? {
+            error: result.error,
+            error_description: result.error_description,
+            details: result.details,
+          }
+        : { details: result.details }),
+    };
+  } catch (error) {
+    return {
+      platform: 'sleeper',
+      status: 'error',
+      httpStatus: 500,
+      error: 'discovery_failed',
+      error_description: errorDescription(error, 'Sleeper league refresh failed'),
+    };
+  }
+}
+
+export async function refreshLeaguesForUser(
+  env: { SUPABASE_URL: string; SUPABASE_SERVICE_KEY: string },
+  userId: string,
+  platforms: RefreshPlatform[],
+  corsHeaders: Record<string, string>,
+  correlationId?: string
+): Promise<LeagueRefreshResponse> {
+  const refreshOne = async (platform: RefreshPlatform): Promise<[RefreshPlatform, ProviderRefreshResult]> => {
+    try {
+      if (platform === 'espn') {
+        return [platform, await refreshEspnLeagues(env, userId)];
+      }
+      if (platform === 'yahoo') {
+        return [platform, await refreshYahooLeagues(env as YahooConnectEnv, userId, corsHeaders, correlationId)];
+      }
+      return [platform, await refreshSleeperLeagues(env as SleeperConnectEnv, userId)];
+    } catch (error) {
+      return [platform, {
+        platform,
+        status: 'error',
+        httpStatus: 500,
+        error: 'refresh_failed',
+        error_description: errorDescription(error, `${platform} league refresh failed`),
+      }];
+    }
+  };
+
+  const entries = await Promise.all(platforms.map(refreshOne));
+  const results = Object.fromEntries(entries) as Partial<Record<RefreshPlatform, ProviderRefreshResult>>;
+
+  return {
+    success: Object.values(results).some((result) => result?.status === 'success'),
+    requestedPlatforms: platforms,
+    results,
+  };
+}

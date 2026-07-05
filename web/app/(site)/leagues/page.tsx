@@ -94,6 +94,20 @@ interface UserPreferencesState {
   defaultHockey: LeagueDefault | null;
 }
 
+interface LeagueRefreshProviderResult {
+  status?: 'success' | 'skipped' | 'error';
+  error?: string;
+  error_description?: string;
+  retryAfter?: string;
+}
+
+interface LeagueRefreshResponse {
+  success?: boolean;
+  results?: Partial<Record<'espn' | 'yahoo' | 'sleeper', LeagueRefreshProviderResult>>;
+  error?: string;
+  error_description?: string;
+}
+
 type Sport = 'football' | 'baseball' | 'basketball' | 'hockey';
 
 // Unified league for display - combines ESPN, Yahoo, and Sleeper into common format
@@ -195,6 +209,42 @@ function ConnectionBadge({ isChecking, isConnected }: { isChecking: boolean; isC
 
 function canApplyState(shouldApply?: () => boolean): boolean {
   return shouldApply ? shouldApply() : true;
+}
+
+function summarizeLeagueRefresh(data: LeagueRefreshResponse): string {
+  const results = data.results ? Object.values(data.results) : [];
+  const successful = results.filter((result) => result?.status === 'success').length;
+  const skipped = results.filter((result) => result?.status === 'skipped').length;
+  const failed = results.filter((result) => result?.status === 'error').length;
+  const retryAfter = results.find((result) => result?.status === 'error' && result.retryAfter)?.retryAfter;
+  const firstError = results.find(
+    (result) => result?.status === 'error' && (result.error_description || result.error)
+  );
+
+  if (successful > 0 && failed === 0) {
+    return skipped > 0
+      ? 'Synced connected platforms. Some platforms are not connected yet.'
+      : 'Synced connected platforms.';
+  }
+
+  if (retryAfter) {
+    return `Some platforms are temporarily rate limited. Try again in ${retryAfter} seconds.`;
+  }
+
+  if (successful > 0) {
+    return 'Synced some platforms. Check any platform warnings below.';
+  }
+
+  if (skipped > 0 && failed === 0) {
+    return 'No connected platforms needed a sync.';
+  }
+
+  return firstError?.error_description || firstError?.error || data.error_description || data.error || 'No platforms were synced.';
+}
+
+function didEveryRefreshProviderError(data: LeagueRefreshResponse): boolean {
+  const results = data.results ? Object.values(data.results) : [];
+  return results.length > 0 && results.every((result) => result?.status === 'error');
 }
 
 type ConnectionStatusResult = 'connected' | 'disconnected' | 'unknown';
@@ -384,6 +434,7 @@ function LeaguesPageContent() {
   const [isLoadingSleeperLeagues, setIsLoadingSleeperLeagues] = useState(true);
   const [isSleeperDisconnecting, setIsSleeperDisconnecting] = useState(false);
   const [isDiscoveringSleeper, setIsDiscoveringSleeper] = useState(false);
+  const [isRefreshingLeagues, setIsRefreshingLeagues] = useState(false);
   const [sleeperConnectInput, setSleeperConnectInput] = useState('');
   const [sleeperError, setSleeperError] = useState<string | null>(null);
   const [preferences, setPreferences] = useState<UserPreferencesState>(() => createEmptyPreferences());
@@ -440,6 +491,7 @@ function LeaguesPageContent() {
     setIsReconnectingYahoo(false);
     setIsYahooDisconnecting(false);
     setIsDiscoveringSleeper(false);
+    setIsRefreshingLeagues(false);
     setIsSleeperDisconnecting(false);
     setDeletingSleeperKey(null);
   }, [clearSleeperConnectionState, clearYahooConnectionState]);
@@ -738,6 +790,59 @@ function LeaguesPageContent() {
       if (canApplyState(shouldApply)) setIsLoadingSleeperLeagues(false);
     }
   }, []);
+
+  const refreshConnectedLeagues = useCallback(async () => {
+    const shouldApply = createAccountGuard();
+    if (!shouldApply()) return;
+
+    setIsRefreshingLeagues(true);
+    setLeagueError(null);
+    setLeagueNotice(null);
+    setSleeperError(null);
+
+    try {
+      const res = await fetch('/api/leagues/refresh', { method: 'POST' });
+      const data = await res.json().catch(() => ({ error: 'Unknown error' })) as LeagueRefreshResponse;
+      if (!shouldApply()) return;
+
+      if (!res.ok) {
+        throw new Error(data.error_description || data.error || 'Failed to sync leagues');
+      }
+
+      if (data.success === false && didEveryRefreshProviderError(data)) {
+        throw new Error(summarizeLeagueRefresh(data));
+      }
+
+      setIsCheckingYahoo(true);
+      setIsCheckingSleeper(true);
+      await Promise.allSettled([
+        loadLeagues({ showSpinner: false, shouldApply }),
+        loadYahooLeagues(shouldApply),
+        loadSleeperLeagues(shouldApply),
+        checkYahooStatus(shouldApply),
+        checkSleeperStatus(shouldApply),
+      ]);
+
+      if (shouldApply()) {
+        setLeagueNotice(summarizeLeagueRefresh(data));
+      }
+    } catch (err) {
+      if (shouldApply()) {
+        setLeagueError(err instanceof Error ? err.message : 'Failed to sync leagues');
+      }
+    } finally {
+      if (shouldApply()) {
+        setIsRefreshingLeagues(false);
+      }
+    }
+  }, [
+    checkSleeperStatus,
+    checkYahooStatus,
+    createAccountGuard,
+    loadLeagues,
+    loadSleeperLeagues,
+    loadYahooLeagues,
+  ]);
 
   const discoverSleeperLeagues = useCallback(async (username: string) => {
     const shouldApply = createAccountGuard();
@@ -1393,6 +1498,26 @@ function LeaguesPageContent() {
                 </div>
               </button>
               <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={refreshConnectedLeagues}
+                  disabled={!isAccountStateCurrent || isRefreshingLeagues}
+                  className="h-8 shrink-0"
+                >
+                  {isRefreshingLeagues ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Syncing...
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="mr-2 h-4 w-4" />
+                      Sync all
+                    </>
+                  )}
+                </Button>
                 <Popover>
                   <PopoverTrigger asChild>
                     <button

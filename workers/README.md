@@ -108,6 +108,7 @@ Ensure `wrangler.jsonc` has `"workers_dev": true` so the `.workers.dev` URL exis
 All tools take explicit parameters: `platform`, `sport`, `league_id`, `season_year`
 
 - `get_user_session` — All leagues across platforms with IDs (call first to get params)
+- `refresh_leagues` — Re-discover connected leagues and update Flaim's league records (`mcp:write`; non-destructive)
 - `get_ancient_history` — Past seasons and historical leagues outside the current season
 - `get_league_info` — Baseline league context: settings, members, teams/owners
 - `get_standings` — League standings

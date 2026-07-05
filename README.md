@@ -1,12 +1,12 @@
 # Flaim Fantasy
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![MCP Tools](https://img.shields.io/badge/MCP_Tools-9-green.svg)](https://api.flaim.app/mcp)
+[![MCP Tools](https://img.shields.io/badge/MCP_Tools-10-green.svg)](https://api.flaim.app/mcp)
 [![Chrome Web Store](https://img.shields.io/badge/Chrome_Extension-v1.5.2-yellow.svg)](https://chromewebstore.google.com/detail/flaim-espn-fantasy-connec/mbnokejgglkfgkeeenolgdpcnfakpbkn)
 
 Connect your ESPN, Yahoo, and Sleeper leagues, then use Flaim Fantasy in ChatGPT for read-only analysis grounded in your real league. The same MCP service also supports optional manual MCP clients like Claude, Perplexity, and Gemini CLI where their MCP capabilities allow.
 
-Read-only by design. No trades, no drops, no roster changes — just advice.
+Analysis tools are read-only by design. No trades, no drops, no roster changes — just advice. League refresh can update Flaim's connected-league records so newly available seasons show up.
 
 ## How It Works
 
@@ -42,6 +42,7 @@ The AI will detect and activate the skill automatically when you ask fantasy que
 | Tool | What it does |
 |------|-------------|
 | `get_user_session` | Your leagues across all platforms |
+| `refresh_leagues` | Re-discover connected leagues and update Flaim's league records |
 | `get_ancient_history` | Past seasons and historical leagues outside the current season |
 | `get_league_info` | Baseline league context: settings, scoring, roster config, teams/owners |
 | `get_roster` | Team roster with player stats |

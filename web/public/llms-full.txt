@@ -1,6 +1,6 @@
 # Flaim Fantasy
 
-> Flaim connects your ESPN, Yahoo, and Sleeper fantasy leagues to Flaim Fantasy in ChatGPT, with optional manual MCP clients also available for read-only, league-specific analysis using the Model Context Protocol (MCP).
+> Flaim connects your ESPN, Yahoo, and Sleeper fantasy leagues to Flaim Fantasy in ChatGPT, with optional manual MCP clients also available for league-specific analysis using the Model Context Protocol (MCP).
 
 ## What Flaim Is
 
@@ -8,11 +8,12 @@ Flaim is a free, open-source MCP server behind a live ChatGPT-first fantasy anal
 
 Single MCP endpoint: https://api.flaim.app/mcp
 
-## MCP Tools (9 total)
+## MCP Tools (10 total)
 
 | Tool | What it does |
 |------|-------------|
 | get_user_session | Lists all connected leagues across all platforms |
+| refresh_leagues | Re-discovers connected leagues and updates Flaim's league records |
 | get_ancient_history | Historical leagues and seasons (2+ years old) |
 | get_league_info | League settings, scoring format, and members |
 | get_roster | Team roster with player stats and lineup slots |
