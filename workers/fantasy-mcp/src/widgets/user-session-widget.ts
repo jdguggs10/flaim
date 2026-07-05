@@ -21,7 +21,7 @@
  * - https://developers.openai.com/apps-sdk/build/chatgpt-ui/
  * - https://developers.openai.com/apps-sdk/build/mcp-server/
  */
-export const USER_SESSION_WIDGET_URI = 'ui://widget/user-session.v2.html';
+export const USER_SESSION_WIDGET_URI = 'ui://widget/user-session.html';
 
 export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
 <html lang="en">
