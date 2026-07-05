@@ -142,7 +142,9 @@ describe('fantasy-mcp tools', () => {
     expect(USER_SESSION_WIDGET_HTML).toContain("window.openai.callTool('refresh_leagues', {})");
     expect(USER_SESSION_WIDGET_HTML).toContain("window.openai.callTool('get_user_session', {})");
     expect(USER_SESSION_WIDGET_HTML).toContain('extractRefreshResult');
+    expect(USER_SESSION_WIDGET_HTML).toContain('refreshResult.isError');
     expect(USER_SESSION_WIDGET_HTML).toContain('refreshPayload.success === false');
+    expect(USER_SESSION_WIDGET_HTML).toContain('!refreshPayload || refreshPayload.success !== true');
     expect(USER_SESSION_WIDGET_HTML).toContain('Leagues refreshed.');
     expect(USER_SESSION_WIDGET_HTML).toContain('Refresh failed.');
     expect(USER_SESSION_WIDGET_HTML).toContain('Open leagues');

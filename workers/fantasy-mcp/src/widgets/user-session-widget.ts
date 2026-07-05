@@ -534,6 +534,9 @@ export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
       if (refreshPayload && refreshPayload.success === false) {
         throw new Error(refreshPayload.error_description || refreshPayload.error || 'No leagues were refreshed');
       }
+      if (!refreshPayload || refreshPayload.success !== true) {
+        throw new Error('Refresh did not complete');
+      }
       var sessionResult = await window.openai.callTool('get_user_session', {});
       var data = extract(sessionResult);
       if (!data && window.openai.toolOutput != null) {
