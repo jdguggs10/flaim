@@ -146,10 +146,12 @@ function OAuthConsentContent() {
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
         <div className="w-full max-w-md space-y-6">
           <div className="text-center space-y-2">
-            <h1 className="text-2xl font-semibold">Sign in to continue</h1>
-          <p className="text-muted-foreground">
-              Sign in to your Flaim account to authorize access.
-          </p>
+            <h1 className="text-2xl font-semibold">Connect Flaim to your AI app</h1>
+            <p className="text-muted-foreground">
+              Sign in or create a Flaim account to authorize access. New users
+              still need to connect at least one fantasy league in My Leagues
+              before the assistant can answer with league-specific data.
+            </p>
           </div>
           <SignIn
             routing="hash"

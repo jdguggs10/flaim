@@ -53,7 +53,7 @@ export default function ConsentScreen({
         </div>
         <CardTitle>Authorize Flaim Access</CardTitle>
         <CardDescription>
-          An AI app is requesting read-only access to your Flaim account
+          Your AI app is requesting read-only access to your Flaim account
         </CardDescription>
       </CardHeader>
 
@@ -107,9 +107,15 @@ export default function ConsentScreen({
         )}
 
         {/* Security note */}
-        <p className="text-xs text-muted-foreground text-center">
-          You can revoke this access anytime from your AI app&apos;s integration settings.
-        </p>
+        <div className="space-y-2 text-center text-xs text-muted-foreground">
+          <p>
+            New account? After authorizing, open My Leagues to connect ESPN,
+            Yahoo, or Sleeper before asking your assistant for league advice.
+          </p>
+          <p>
+            You can revoke this access anytime from your AI app&apos;s integration settings.
+          </p>
+        </div>
       </CardContent>
 
       <CardFooter className="flex gap-3">
