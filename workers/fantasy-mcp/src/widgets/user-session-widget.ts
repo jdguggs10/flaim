@@ -396,7 +396,7 @@ export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
       container.innerHTML =
         '<div class="empty-state">' +
         'Flaim is connected, but no fantasy leagues are set up yet.<br>' +
-        '<a href="https://flaim.app/leagues" target="_blank" rel="noopener" id="connect-league-link">Open My Leagues</a>' +
+        '<a href="' + LEAGUES_URL + '" target="_blank" rel="noopener" id="connect-league-link">Open My Leagues</a>' +
         '</div>';
       var connectLeagueLink = document.getElementById('connect-league-link');
       if (connectLeagueLink) connectLeagueLink.addEventListener('click', openLeagues);
