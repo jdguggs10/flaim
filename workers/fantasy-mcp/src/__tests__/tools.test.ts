@@ -79,9 +79,15 @@ describe('fantasy-mcp tools', () => {
     const text = result.content?.[0]?.text;
     expect(typeof text).toBe('string');
 
-    const payload = JSON.parse(text as string) as { success?: boolean; totalLeaguesFound?: number };
+    const payload = JSON.parse(text as string) as {
+      success?: boolean;
+      totalLeaguesFound?: number;
+      instructions?: string;
+    };
     expect(payload.success).toBe(true);
     expect(payload.totalLeaguesFound).toBe(0);
+    expect(payload.instructions).toContain('https://flaim.app/leagues');
+    expect(payload.instructions).not.toContain('flaim.app/settings');
 
     // structuredContent mirrors the text payload
     expect(result.structuredContent).toBeDefined();
@@ -150,6 +156,13 @@ describe('fantasy-mcp tools', () => {
     expect(USER_SESSION_WIDGET_HTML).toContain('Open leagues');
     expect(USER_SESSION_WIDGET_HTML).toContain('var hasRendered = false');
     expect(USER_SESSION_WIDGET_HTML).not.toContain('if (rendered) return');
+  });
+
+  it('user session widget opens the empty-state league setup link externally', () => {
+    expect(USER_SESSION_WIDGET_HTML).toContain('Flaim is connected, but no fantasy leagues are set up yet.');
+    expect(USER_SESSION_WIDGET_HTML).toContain('id="connect-league-link"');
+    expect(USER_SESSION_WIDGET_HTML).toContain("connectLeagueLink.addEventListener('click', openLeagues)");
+    expect(USER_SESSION_WIDGET_HTML).toContain('window.openai.openExternal({ href: LEAGUES_URL })');
   });
 
   it('refresh_leagues forwards the user auth and internal token to auth-worker', async () => {

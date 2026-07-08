@@ -198,9 +198,17 @@ export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
     font-size: 13px;
   }
   .empty-state a {
-    color: #0b1222;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 32px;
+    margin-top: 12px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    background: #0b1222;
+    color: #fff;
     font-weight: 600;
-    text-decoration: underline;
+    text-decoration: none;
   }
   .loading {
     text-align: center;
@@ -387,9 +395,11 @@ export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
     if (!data || !data.allLeagues || data.allLeagues.length === 0) {
       container.innerHTML =
         '<div class="empty-state">' +
-        'No leagues found.<br>' +
-        '<a href="https://flaim.app/leagues" target="_blank" rel="noopener">Connect a league</a>' +
+        'Flaim is connected, but no fantasy leagues are set up yet.<br>' +
+        '<a href="' + LEAGUES_URL + '" target="_blank" rel="noopener" id="connect-league-link">Open My Leagues</a>' +
         '</div>';
+      var connectLeagueLink = document.getElementById('connect-league-link');
+      if (connectLeagueLink) connectLeagueLink.addEventListener('click', openLeagues);
       hasRendered = true;
       queueSizeChanged();
       return;

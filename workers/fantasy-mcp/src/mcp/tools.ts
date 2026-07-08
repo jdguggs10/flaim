@@ -741,7 +741,7 @@ export function getUnifiedTools(): UnifiedTool[] {
           if (!hasLeagues) {
             sessionMessage = hasRawLeagues
               ? 'No current-season leagues found. Provider data exists, but every returned league is for a non-current season. Do not treat historical leagues as active; use get_ancient_history only when the user asks about past seasons.'
-              : 'No leagues configured. Please go to flaim.app/settings to add your fantasy platform credentials.';
+              : 'No leagues configured. Ask the user to open https://flaim.app/leagues and connect ESPN, Yahoo, or Sleeper before using Flaim for league-specific advice.';
           } else if (leagues.length === 1) {
             const league = leagues[0];
             sessionMessage = `Use platform="${league.platform}", sport="${league.sport}", leagueId="${league.leagueId}", teamId="${league.teamId || 'none'}", seasonYear=${league.seasonYear} for all tool calls.`;
