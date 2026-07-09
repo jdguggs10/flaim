@@ -183,7 +183,7 @@ describe('fantasy-mcp gateway integration', () => {
         mcp: 'https://api.flaim.app/mcp',
         oauth_authorization_server: 'https://api.flaim.app/.well-known/oauth-authorization-server',
         oauth_protected_resource: 'https://api.flaim.app/.well-known/oauth-protected-resource',
-        health: 'https://api.flaim.app/auth/health',
+        health: 'https://api.flaim.app/fantasy/health',
       },
     });
     expect(authFetch).not.toHaveBeenCalled();
