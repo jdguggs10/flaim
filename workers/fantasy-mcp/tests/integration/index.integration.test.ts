@@ -158,6 +158,53 @@ function buildEnv(authFetch: (request: Request) => Promise<Response>): Env {
 }
 
 describe('fantasy-mcp gateway integration', () => {
+  it('serves controlled metadata at the API host root', async () => {
+    const authFetch = vi.fn(async () => new Response('unexpected', { status: 500 }));
+    const env = buildEnv(authFetch);
+
+    const response = await app.fetch(
+      new Request('https://api.flaim.app/'),
+      env,
+      mockExecutionContext()
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Content-Type')).toContain('application/json');
+    expect(response.headers.get('Cache-Control')).toBe('public, max-age=3600');
+    const payload = await response.json() as {
+      service?: string;
+      status?: string;
+      endpoints?: Record<string, string>;
+    };
+    expect(payload).toMatchObject({
+      service: 'Flaim API',
+      status: 'ok',
+      endpoints: {
+        mcp: 'https://api.flaim.app/mcp',
+        oauth_authorization_server: 'https://api.flaim.app/.well-known/oauth-authorization-server',
+        oauth_protected_resource: 'https://api.flaim.app/.well-known/oauth-protected-resource',
+        health: 'https://api.flaim.app/auth/health',
+      },
+    });
+    expect(authFetch).not.toHaveBeenCalled();
+  });
+
+  it('handles HEAD at the API host root without an auth lookup', async () => {
+    const authFetch = vi.fn(async () => new Response('unexpected', { status: 500 }));
+    const env = buildEnv(authFetch);
+
+    const response = await app.fetch(
+      new Request('https://api.flaim.app/', { method: 'HEAD' }),
+      env,
+      mockExecutionContext()
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Content-Type')).toContain('application/json');
+    expect(await response.text()).toBe('');
+    expect(authFetch).not.toHaveBeenCalled();
+  });
+
   it('rejects GET with 405 on MCP transport endpoints', async () => {
     const authFetch = vi.fn(async () => new Response('unexpected', { status: 500 }));
     const env = buildEnv(authFetch);

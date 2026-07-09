@@ -23,6 +23,10 @@
       },
       "routes": [
         {
+          "pattern": "api.flaim.app",
+          "zone_name": "flaim.app"
+        },
+        {
           "pattern": "api.flaim.app/fantasy/*",
           "zone_name": "flaim.app"
         },
