@@ -27,6 +27,7 @@ fantasy-mcp (this worker)
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
+| `/` | GET/HEAD | API metadata response for `api.flaim.app` root |
 | `/health` | GET | Health check with binding status |
 | `/fantasy/health` | GET | Same (for routed access) |
 | `/.well-known/oauth-protected-resource` | GET | OAuth metadata (RFC 9728) |

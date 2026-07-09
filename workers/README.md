@@ -160,6 +160,7 @@ corepack pnpm --dir workers/sleeper-client run deploy:preview                # o
 ```
 
 Workers use custom routes via `api.flaim.app`:
+- `/` → fantasy-mcp metadata response
 - `/auth/*` → auth-worker
 - `/fantasy/*` → fantasy-mcp (unified gateway)
 - `/mcp*` → fantasy-mcp (primary MCP endpoint, POST required; non-POST returns `405`)

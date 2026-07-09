@@ -35,6 +35,17 @@ const API_ROBOTS_TXT = [
   '',
 ].join('\n');
 
+const API_ROOT_METADATA = {
+  service: 'Flaim API',
+  status: 'ok',
+  endpoints: {
+    mcp: 'https://api.flaim.app/mcp',
+    oauth_authorization_server: 'https://api.flaim.app/.well-known/oauth-authorization-server',
+    oauth_protected_resource: 'https://api.flaim.app/.well-known/oauth-protected-resource',
+    health: 'https://api.flaim.app/fantasy/health',
+  },
+};
+
 function robotsResponse(): Response {
   return new Response(API_ROBOTS_TXT, {
     status: 200,
@@ -42,6 +53,22 @@ function robotsResponse(): Response {
       'Content-Type': 'text/plain; charset=utf-8',
       'Cache-Control': 'public, max-age=3600',
     },
+  });
+}
+
+function apiRootMetadataResponse(method: string): Response {
+  const headers = {
+    'Content-Type': 'application/json',
+    'Cache-Control': 'public, max-age=3600',
+  };
+
+  if (method === 'HEAD') {
+    return new Response(null, { status: 200, headers });
+  }
+
+  return new Response(JSON.stringify(API_ROOT_METADATA), {
+    status: 200,
+    headers,
   });
 }
 
@@ -82,6 +109,8 @@ app.use('*', async (c, next) => {
   });
   return undefined;
 });
+
+app.on(['GET', 'HEAD'], '/', (c) => apiRootMetadataResponse(c.req.method));
 
 // Shared health check logic
 async function buildHealthData(env: Env) {
