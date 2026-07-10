@@ -43,12 +43,31 @@ corepack pnpm --dir web run email:export
 
 This writes ignored preview HTML to `web/.email-out/`.
 
-The first product templates are:
+Current product templates and broadcast starters are:
 
 - `web/emails/welcome.tsx`
 - `web/emails/league-connected.tsx`
+- `web/emails/marketing-broadcast.tsx`
 
 Template URL samples exist in `PreviewProps` for local preview only. Production senders must pass app URLs, action URLs, and unsubscribe/preference URLs explicitly from the send call so preview values do not leak into staging or production messages by accident.
+
+## Broadcast workflow
+
+For recurring product or marketing broadcasts, keep the copy and layout in `web/emails/*.tsx`, export the rendered HTML, then create the Resend draft from that exported file. That keeps Flaim's brand rules, button styling, and footer behavior in one place while still using the Resend Broadcast API for the final draft.
+
+Recommended sequence:
+
+```sh
+corepack pnpm --dir web run email:export
+corepack pnpm --dir web run broadcast:create -- \
+  --template marketing-broadcast \
+  --segment-id <segment-id> \
+  --subject "Product update"
+```
+
+Add `--broadcast-id <id>` when you want to refresh an existing Resend draft in place instead of creating a second one.
+
+Use `--send` only when the draft is ready to go, and add `--scheduled-at` if you want Resend to queue it. If you need a text body, pass `--text-file`; otherwise Resend can derive text from the HTML. The `--template` flag keeps the command anchored to the repo template name and automatically looks up `.email-out/<template>.html`.
 
 `@react-email/render`, `resend`, and `server-only` are production dependencies because the server send helper renders and sends these templates. `react-email` and `@react-email/ui` remain dev-only preview dependencies; do not remove `@react-email/ui` just because templates do not import it directly.
 

@@ -9,6 +9,7 @@
     "dev": "next dev",
     "email:dev": "email dev --dir emails --port 3001",
     "email:export": "email export --dir emails --outDir .email-out --pretty",
+    "broadcast:create": "node scripts/create-resend-broadcast.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
