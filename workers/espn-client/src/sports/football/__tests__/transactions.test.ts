@@ -3,13 +3,15 @@ import { footballHandlers } from '../handlers';
 import type { ToolParams } from '../../../types';
 import { getCredentials } from '../../../shared/auth';
 import { fetchEspnTransactionsByWeeks, fetchEspnMTransactions2, mergeTradePlayerDetails, getEspnLeagueContext, fetchEspnPlayersByIds, enrichTransactions } from '../../../shared/espn-transactions';
-import { withSeasonContext } from '../../../shared/season';
+import { getCurrentSeasonYear, withSeasonContext } from '../../../shared/season';
+
+const SEASON_YEAR = getCurrentSeasonYear('football');
 
 function makeParams(overrides: Partial<ToolParams> = {}) {
   return withSeasonContext({
     sport: 'football',
     league_id: '123',
-    season_year: 2025,
+    season_year: SEASON_YEAR,
     ...overrides,
   });
 }
@@ -31,6 +33,7 @@ vi.mock('../../../shared/espn-transactions', async () => {
     fetchEspnPlayersByIds: vi.fn(),
     enrichTransactions: vi.fn((txns) => txns),
     collectTransactionPlayerIds: actual.collectTransactionPlayerIds,
+    assertTransactionsSeasonSupported: actual.assertTransactionsSeasonSupported,
   };
 });
 
@@ -60,8 +63,8 @@ describe('football get_transactions handler', () => {
     const result = await footballHandlers.get_transactions({} as never, params, 'Bearer x', 'cid-1');
 
     expect(result.success).toBe(true);
-    expect(getLeagueContextMock).toHaveBeenCalledWith('ffl', '123', 2025, { s2: 'token', swid: '{swid}' });
-    expect(fetchMTransactions2Mock).toHaveBeenCalledWith('ffl', '123', 2025, { s2: 'token', swid: '{swid}' }, [10, 9]);
+    expect(getLeagueContextMock).toHaveBeenCalledWith('ffl', '123', SEASON_YEAR, { s2: 'token', swid: '{swid}' });
+    expect(fetchMTransactions2Mock).toHaveBeenCalledWith('ffl', '123', SEASON_YEAR, { s2: 'token', swid: '{swid}' }, [10, 9]);
 
     if (!result.success) return;
     const data = result.data as { count: number; window: { mode: string; weeks: number[] }; teams: Record<string, string> };
@@ -84,7 +87,7 @@ describe('football get_transactions handler', () => {
     const result = await footballHandlers.get_transactions({} as never, params, 'Bearer x', 'cid-2');
 
     expect(result.success).toBe(true);
-    expect(fetchMTransactions2Mock).toHaveBeenCalledWith('ffl', '123', 2025, { s2: 'token', swid: '{swid}' }, [7]);
+    expect(fetchMTransactions2Mock).toHaveBeenCalledWith('ffl', '123', SEASON_YEAR, { s2: 'token', swid: '{swid}' }, [7]);
 
     if (!result.success) return;
     const data = result.data as { count: number; transactions: Array<{ transaction_id: string }> };
@@ -131,7 +134,7 @@ describe('football get_transactions handler', () => {
     const result = await footballHandlers.get_transactions({} as never, params, 'Bearer x', 'cid-enrich');
 
     expect(result.success).toBe(true);
-    expect(fetchPlayersByIdsMock).toHaveBeenCalledWith('ffl', 2025, ['3054211', '4362887']);
+    expect(fetchPlayersByIdsMock).toHaveBeenCalledWith('ffl', SEASON_YEAR, ['3054211', '4362887']);
     expect(enrichTransactionsMock).toHaveBeenCalled();
 
     if (!result.success) return;
@@ -249,7 +252,7 @@ describe('football get_transactions handler', () => {
     const result = await footballHandlers.get_transactions({} as never, params, 'Bearer x', 'cid-fallback');
 
     expect(result.success).toBe(true);
-    expect(fetchTransactionsMock).toHaveBeenCalledWith('ffl', '123', 2025, { s2: 'token', swid: '{swid}' }, [10, 9]);
+    expect(fetchTransactionsMock).toHaveBeenCalledWith('ffl', '123', SEASON_YEAR, { s2: 'token', swid: '{swid}' }, [10, 9]);
     if (!result.success) return;
     const data = result.data as { count: number };
     expect(data.count).toBe(1);
@@ -264,5 +267,17 @@ describe('football get_transactions handler', () => {
 
     expect(result.success).toBe(false);
     expect(result.code).toBe('ESPN_CREDENTIALS_NOT_FOUND');
+  });
+
+  it('rejects prior seasons with ESPN_SEASON_NOT_SUPPORTED before calling ESPN', async () => {
+    const params = makeParams({ season_year: SEASON_YEAR - 1 });
+
+    const result = await footballHandlers.get_transactions({} as never, params, 'Bearer x', 'cid-past');
+
+    expect(result.success).toBe(false);
+    expect(result.code).toBe('ESPN_SEASON_NOT_SUPPORTED');
+    expect(result.error).toContain(`season_year=${SEASON_YEAR}`);
+    expect(getCredentialsMock).not.toHaveBeenCalled();
+    expect(getLeagueContextMock).not.toHaveBeenCalled();
   });
 });

@@ -27,6 +27,10 @@ export async function getCredentials(
     return null;
   }
 
+  if (response.status === 429) {
+    throw new Error('AUTH_RATE_LIMITED: Too many credential requests. Please wait and try again.');
+  }
+
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({})) as { error?: string };
     throw new Error(`Auth-worker error: ${errorData.error || response.statusText}`);

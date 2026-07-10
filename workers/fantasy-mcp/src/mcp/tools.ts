@@ -1052,7 +1052,7 @@ export function getUnifiedTools(): UnifiedTool[] {
           .enum(['football', 'baseball', 'basketball', 'hockey'])
           .describe('Sport type (e.g., "football", "baseball")'),
         league_id: z.string().describe('League ID (get from get_user_session)'),
-        season_year: z.number().describe('Season start year (e.g., 2025 for MLB 2025, 2024 for NBA 2024-25)'),
+        season_year: z.number().describe('Season start year — use the season_year returned by get_user_session for this league; only pass an older year when the user explicitly asks about a past season'),
       },
       handler: async (args, env, authHeader, correlationId, evalRunId, evalTraceId) => {
         const params: ToolParams = {
@@ -1088,7 +1088,7 @@ export function getUnifiedTools(): UnifiedTool[] {
           .enum(['football', 'baseball', 'basketball', 'hockey'])
           .describe('Sport type (e.g., "football", "baseball")'),
         league_id: z.string().describe('League ID (get from get_user_session)'),
-        season_year: z.number().describe('Season start year (e.g., 2025 for MLB 2025, 2024 for NBA 2024-25)'),
+        season_year: z.number().describe('Season start year — use the season_year returned by get_user_session for this league; only pass an older year when the user explicitly asks about a past season'),
       },
       handler: async (args, env, authHeader, correlationId, evalRunId, evalTraceId) => {
         const params: ToolParams = {
@@ -1124,7 +1124,7 @@ export function getUnifiedTools(): UnifiedTool[] {
           .enum(['football', 'baseball', 'basketball', 'hockey'])
           .describe('Sport type (e.g., "football", "baseball")'),
         league_id: z.string().describe('League ID (get from get_user_session)'),
-        season_year: z.number().describe('Season start year (e.g., 2025 for MLB 2025, 2024 for NBA 2024-25)'),
+        season_year: z.number().describe('Season start year — use the season_year returned by get_user_session for this league; only pass an older year when the user explicitly asks about a past season'),
         week: z.number().int().min(1).optional().describe('Week number (optional, must be ≥ 1, defaults to current week)'),
       },
       handler: async (args, env, authHeader, correlationId, evalRunId, evalTraceId) => {
@@ -1162,7 +1162,7 @@ export function getUnifiedTools(): UnifiedTool[] {
           .enum(['football', 'baseball', 'basketball', 'hockey'])
           .describe('Sport type (e.g., "football", "baseball")'),
         league_id: z.string().describe('League ID (get from get_user_session)'),
-        season_year: z.number().describe('Season start year (e.g., 2025 for MLB 2025, 2024 for NBA 2024-25)'),
+        season_year: z.number().describe('Season start year — use the season_year returned by get_user_session for this league; only pass an older year when the user explicitly asks about a past season'),
         team_id: z.string().optional().describe('Team ID for the target roster. Recommended for all platforms; required on Yahoo. If omitted, platform behavior varies and may not resolve to the user\'s team.'),
         week: z.number().int().min(1).optional().describe('Week number (optional, must be ≥ 1, defaults to current week)'),
       },
@@ -1202,7 +1202,7 @@ export function getUnifiedTools(): UnifiedTool[] {
           .enum(['football', 'baseball', 'basketball', 'hockey'])
           .describe('Sport type (e.g., "football", "baseball")'),
         league_id: z.string().describe('League ID (get from get_user_session)'),
-        season_year: z.number().describe('Season start year (e.g., 2025 for MLB 2025, 2024 for NBA 2024-25)'),
+        season_year: z.number().describe('Season start year — use the season_year returned by get_user_session for this league; only pass an older year when the user explicitly asks about a past season'),
         position: z
           .string()
           .optional()
@@ -1252,7 +1252,7 @@ export function getUnifiedTools(): UnifiedTool[] {
           .enum(['football', 'baseball', 'basketball', 'hockey'])
           .describe('Sport type (e.g., "football", "baseball")'),
         league_id: z.string().describe('League ID (get from get_user_session)'),
-        season_year: z.number().describe('Season start year (e.g., 2025 for MLB 2025, 2024 for NBA 2024-25)'),
+        season_year: z.number().describe('Season start year — use the season_year returned by get_user_session for this league; only pass an older year when the user explicitly asks about a past season'),
         position: z
           .string()
           .optional()
@@ -1299,7 +1299,7 @@ export function getUnifiedTools(): UnifiedTool[] {
           .enum(['football', 'baseball', 'basketball', 'hockey'])
           .describe('Sport type (e.g., "football", "baseball")'),
         league_id: z.string().describe('League ID (get from get_user_session)'),
-        season_year: z.number().describe('Season start year (e.g., 2025 for MLB 2025, 2024 for NBA 2024-25)'),
+        season_year: z.number().describe('Season start year — use the season_year returned by get_user_session for this league; only pass an older year when the user explicitly asks about a past season'),
         week: z.number().int().min(0).optional().describe('Week/scoring-period number (optional, 0 = preseason). ESPN/Sleeper support explicit week; Yahoo ignores week and uses a recent 14-day timestamp window'),
         type: z
           .enum(['add', 'drop', 'trade', 'waiver', 'pending_trade', 'trade_proposal', 'trade_decline', 'trade_veto', 'trade_uphold', 'failed_bid'])

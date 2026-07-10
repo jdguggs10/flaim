@@ -2,7 +2,7 @@
 import type { Env, RoutedToolParams, ExecuteResponse, EspnLeagueResponse, EspnPlayerPoolResponse } from '../../types';
 import { getCredentials } from '../../shared/auth';
 import { espnFetch, handleEspnError, requireCredentials } from '../../shared/espn-api';
-import { collectTransactionPlayerIds, fetchEspnTransactionsByWeeks, fetchEspnMTransactions2, mergeTradePlayerDetails, getEspnLeagueContext, fetchEspnPlayersByIds, enrichTransactions } from '../../shared/espn-transactions';
+import { assertTransactionsSeasonSupported, collectTransactionPlayerIds, fetchEspnTransactionsByWeeks, fetchEspnMTransactions2, mergeTradePlayerDetails, getEspnLeagueContext, fetchEspnPlayersByIds, enrichTransactions } from '../../shared/espn-transactions';
 import type { NormalizedTransaction } from '../../shared/espn-transactions';
 import { getEspnPlayersIndex } from '../../shared/espn-players-cache';
 import { fetchLeagueOwnershipMap, enrichPlayerWithOwnership } from '../../shared/league-ownership';
@@ -618,6 +618,8 @@ async function handleGetTransactions(
   const { league_id, season_year, week, count, type } = params;
 
   try {
+    assertTransactionsSeasonSupported('baseball', season_year);
+
     const credentials = await getCredentials(env, authHeader, correlationId);
     requireCredentials(credentials, 'get_transactions');
 

@@ -5,7 +5,7 @@ import { hockeyHandlers } from '../hockey/handlers';
 import type { HandlerToolParams, Sport, ToolParams } from '../../types';
 import { getCredentials } from '../../shared/auth';
 import { fetchEspnTransactionsByWeeks, fetchEspnMTransactions2, mergeTradePlayerDetails, getEspnLeagueContext } from '../../shared/espn-transactions';
-import { withSeasonContext } from '../../shared/season';
+import { getCurrentSeasonYear, toEspnSeasonYear, withSeasonContext } from '../../shared/season';
 
 vi.mock('../../shared/auth', () => ({
   getCredentials: vi.fn(),
@@ -24,20 +24,26 @@ vi.mock('../../shared/espn-transactions', async () => {
     fetchEspnPlayersByIds: vi.fn(),
     enrichTransactions: vi.fn((txns) => txns),
     collectTransactionPlayerIds: actual.collectTransactionPlayerIds,
+    assertTransactionsSeasonSupported: actual.assertTransactionsSeasonSupported,
   };
 });
 
-const scenarios = [
-  { label: 'baseball', sport: 'baseball', gameId: 'flb', handlers: baseballHandlers, expectedEspnYear: 2024, expectedResponseSeasonYear: 2024 },
-  { label: 'basketball', sport: 'basketball', gameId: 'fba', handlers: basketballHandlers, expectedEspnYear: 2025, expectedResponseSeasonYear: 2024 },
-  { label: 'hockey', sport: 'hockey', gameId: 'fhl', handlers: hockeyHandlers, expectedEspnYear: 2025, expectedResponseSeasonYear: 2024 },
-] as const;
+const scenarios = ([
+  { label: 'baseball', sport: 'baseball', gameId: 'flb', handlers: baseballHandlers },
+  { label: 'basketball', sport: 'basketball', gameId: 'fba', handlers: basketballHandlers },
+  { label: 'hockey', sport: 'hockey', gameId: 'fhl', handlers: hockeyHandlers },
+] as const).map((scenario) => ({
+  ...scenario,
+  seasonYear: getCurrentSeasonYear(scenario.sport),
+  expectedEspnYear: toEspnSeasonYear(getCurrentSeasonYear(scenario.sport), scenario.sport),
+  expectedResponseSeasonYear: getCurrentSeasonYear(scenario.sport),
+}));
 
-function makeParams(sport: Sport, overrides: Partial<ToolParams> = {}): HandlerToolParams {
+function makeParams(sport: Sport, seasonYear: number, overrides: Partial<ToolParams> = {}): HandlerToolParams {
   return withSeasonContext({
     sport,
     league_id: '123',
-    season_year: 2024,
+    season_year: seasonYear,
     ...overrides,
   });
 }
@@ -53,7 +59,7 @@ describe('espn cross-sport get_transactions handlers', () => {
     vi.clearAllMocks();
   });
 
-  it.each(scenarios)('$label routes get_transactions using the sport game id', async ({ sport, gameId, handlers, expectedEspnYear, expectedResponseSeasonYear }) => {
+  it.each(scenarios)('$label routes get_transactions using the sport game id', async ({ sport, gameId, handlers, seasonYear, expectedEspnYear, expectedResponseSeasonYear }) => {
     getCredentialsMock.mockResolvedValue({ s2: 'token', swid: '{swid}' });
     getLeagueContextMock.mockResolvedValue({ scoringPeriodId: 10, teams: { '1': 'Team One' } });
     fetchMTransactions2Mock.mockResolvedValue({ truncated: false, transactions: [
@@ -62,7 +68,7 @@ describe('espn cross-sport get_transactions handlers', () => {
       { transaction_id: 't2', type: 'trade', status: 'complete', timestamp: 1000, week: 7, players_added: [{ id: '2' }], players_dropped: [] },
     ] } as never);
 
-    const params = makeParams(sport, {
+    const params = makeParams(sport, seasonYear, {
       week: 7,
       type: 'trade',
       count: 1,
@@ -89,7 +95,7 @@ describe('espn cross-sport get_transactions handlers', () => {
     expect(data.teams).toEqual({ '1': 'Team One' });
   });
 
-  it.each(scenarios)('$label triggers trade fallback when empty trade items detected', async ({ sport, gameId, handlers, expectedEspnYear }) => {
+  it.each(scenarios)('$label triggers trade fallback when empty trade items detected', async ({ sport, gameId, handlers, seasonYear, expectedEspnYear }) => {
     getCredentialsMock.mockResolvedValue({ s2: 'token', swid: '{swid}' });
     getLeagueContextMock.mockResolvedValue({ scoringPeriodId: 10, teams: {} });
     fetchMTransactions2Mock.mockResolvedValue({ truncated: false, transactions: [
@@ -108,7 +114,7 @@ describe('espn cross-sport get_transactions handlers', () => {
     ] } as never);
     fetchTransactionsMock.mockResolvedValue([] as never);
 
-    const params = makeParams(sport);
+    const params = makeParams(sport, seasonYear);
     const result = await handlers.get_transactions({} as never, params, 'Bearer x', `cid-fallback-${sport}`);
 
     expect(result.success).toBe(true);
@@ -116,14 +122,26 @@ describe('espn cross-sport get_transactions handlers', () => {
     expect(mergeTradeDetailsMock).toHaveBeenCalled();
   });
 
-  it.each(scenarios)('$label returns credentials error when ESPN is not connected', async ({ sport, handlers }) => {
+  it.each(scenarios)('$label returns credentials error when ESPN is not connected', async ({ sport, handlers, seasonYear }) => {
     getCredentialsMock.mockResolvedValue(null);
 
-    const params = makeParams(sport);
+    const params = makeParams(sport, seasonYear);
 
     const result = await handlers.get_transactions({} as never, params, 'Bearer x', `cid-missing-${sport}`);
 
     expect(result.success).toBe(false);
     expect(result.code).toBe('ESPN_CREDENTIALS_NOT_FOUND');
+  });
+
+  it.each(scenarios)('$label rejects prior seasons with ESPN_SEASON_NOT_SUPPORTED before calling ESPN', async ({ sport, handlers, seasonYear }) => {
+    const params = makeParams(sport, seasonYear - 1);
+
+    const result = await handlers.get_transactions({} as never, params, 'Bearer x', `cid-past-${sport}`);
+
+    expect(result.success).toBe(false);
+    expect(result.code).toBe('ESPN_SEASON_NOT_SUPPORTED');
+    expect(result.error).toContain(`season_year=${seasonYear}`);
+    expect(getCredentialsMock).not.toHaveBeenCalled();
+    expect(getLeagueContextMock).not.toHaveBeenCalled();
   });
 });
