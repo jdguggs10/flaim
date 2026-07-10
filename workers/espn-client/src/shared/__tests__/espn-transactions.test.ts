@@ -913,7 +913,7 @@ describe('espn-transactions', () => {
     it('throws ESPN_SEASON_NOT_SUPPORTED for a prior season', () => {
       const currentSeason = getCurrentSeasonYear('baseball');
       expect(() => assertTransactionsSeasonSupported('baseball', currentSeason - 1)).toThrow(
-        `ESPN_SEASON_NOT_SUPPORTED: ESPN transactions are only available for the current season. Retry with season_year=${currentSeason}.`
+        `ESPN_SEASON_NOT_SUPPORTED: ESPN only provides transactions for the current season (season_year=${currentSeason}). Prior-season transaction data is unavailable. Retry with the current season only if the user meant the ongoing season.`
       );
     });
 

@@ -32,12 +32,15 @@ const scenarios = ([
   { label: 'baseball', sport: 'baseball', gameId: 'flb', handlers: baseballHandlers },
   { label: 'basketball', sport: 'basketball', gameId: 'fba', handlers: basketballHandlers },
   { label: 'hockey', sport: 'hockey', gameId: 'fhl', handlers: hockeyHandlers },
-] as const).map((scenario) => ({
-  ...scenario,
-  seasonYear: getCurrentSeasonYear(scenario.sport),
-  expectedEspnYear: toEspnSeasonYear(getCurrentSeasonYear(scenario.sport), scenario.sport),
-  expectedResponseSeasonYear: getCurrentSeasonYear(scenario.sport),
-}));
+] as const).map((scenario) => {
+  const seasonYear = getCurrentSeasonYear(scenario.sport);
+  return {
+    ...scenario,
+    seasonYear,
+    expectedEspnYear: toEspnSeasonYear(seasonYear, scenario.sport),
+    expectedResponseSeasonYear: seasonYear,
+  };
+});
 
 function makeParams(sport: Sport, seasonYear: number, overrides: Partial<ToolParams> = {}): HandlerToolParams {
   return withSeasonContext({
