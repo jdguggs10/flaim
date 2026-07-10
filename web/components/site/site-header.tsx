@@ -49,7 +49,7 @@ export function SiteHeader() {
               <SignInButton>
                 <Button variant="outline">Sign In</Button>
               </SignInButton>
-              <SignUpButton>
+              <SignUpButton fallbackRedirectUrl="/leagues">
                 <Button>Get Started</Button>
               </SignUpButton>
             </div>

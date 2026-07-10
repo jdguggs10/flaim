@@ -21,6 +21,7 @@ import {
   Archive,
   ArchiveRestore,
   EyeOff,
+  CheckCircle2,
 } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useEspnCredentials } from '@/lib/use-espn-credentials';
@@ -392,6 +393,43 @@ function ArchiveButtons({
   );
 }
 
+function ChatGptSetupBanner({ accountCreated }: { accountCreated: boolean }) {
+  const steps = [
+    { label: 'Create your Flaim account', done: accountCreated },
+    { label: 'Connect a fantasy league below', done: false },
+    { label: 'Return to ChatGPT and reconnect Flaim to finish', done: false },
+  ];
+
+  return (
+    <Card className="border-primary/30 bg-primary/5">
+      <CardContent className="space-y-3 p-6">
+        <div className="space-y-1">
+          <h2 className="font-medium">Finishing your ChatGPT setup</h2>
+          <p className="text-sm text-muted-foreground">
+            You&apos;re almost there — three quick steps and Flaim is ready in ChatGPT.
+          </p>
+        </div>
+        <ol className="space-y-2 text-sm">
+          {steps.map((step, index) => (
+            <li key={step.label} className="flex items-start gap-2">
+              {step.done ? (
+                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+              ) : (
+                <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground">
+                  {index + 1}
+                </span>
+              )}
+              <span className={step.done ? 'text-muted-foreground line-through' : 'text-foreground'}>
+                {step.label}
+              </span>
+            </li>
+          ))}
+        </ol>
+      </CardContent>
+    </Card>
+  );
+}
+
 function LeaguesPageContent() {
   const { isLoaded, isSignedIn, userId } = useAuth();
   const {
@@ -401,6 +439,8 @@ function LeaguesPageContent() {
   } = useEspnCredentials();
   const searchParams = useSearchParams();
   const router = useRouter();
+  const fromChatGpt = searchParams.get('from') === 'chatgpt';
+  const authRedirectUrl = fromChatGpt ? '/leagues?from=chatgpt' : '/leagues';
 
   // Leagues state
   const [leagues, setLeagues] = useState<League[]>([]);
@@ -1431,6 +1471,7 @@ function LeaguesPageContent() {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
         <div className="w-full max-w-xl space-y-6">
+          {fromChatGpt && <ChatGptSetupBanner accountCreated={false} />}
           <div className="space-y-3 text-center">
             <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground font-bold">
               1
@@ -1451,10 +1492,10 @@ function LeaguesPageContent() {
                 </ul>
               </div>
               <div className="flex flex-col gap-3 sm:flex-row">
-                <SignUpButton mode="modal" forceRedirectUrl="/leagues">
+                <SignUpButton mode="modal" forceRedirectUrl={authRedirectUrl}>
                   <Button className="w-full sm:flex-1">Create Account</Button>
                 </SignUpButton>
-                <SignInButton mode="modal" forceRedirectUrl="/leagues">
+                <SignInButton mode="modal" forceRedirectUrl={authRedirectUrl}>
                   <Button variant="outline" className="w-full sm:flex-1">Sign In</Button>
                 </SignInButton>
               </div>
@@ -1468,6 +1509,10 @@ function LeaguesPageContent() {
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto flex max-w-2xl flex-col gap-6 px-4 py-8">
+        {fromChatGpt && !isLeagueStateLoading && !hasAnyLeagueGroups && (
+          <ChatGptSetupBanner accountCreated />
+        )}
+
         {/* Global alerts */}
         {displayLeagueError && (
           <Alert variant="destructive">
