@@ -4,6 +4,16 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### ESPN Transactions Error Handling (FLA-171)
+- **Fixed**: Prior-season ESPN transaction requests now return a clear `ESPN_SEASON_NOT_SUPPORTED` error (guarded before any upstream calls) instead of a misleading `ESPN_NOT_FOUND`; the message directs a retry only when the user meant the ongoing season.
+- **Changed**: `season_year` tool descriptions no longer hard-code example years (which invited models to pass stale seasons); they now steer to the season returned by `get_user_session`.
+- **Fixed**: Auth-worker 429 responses surface as `AUTH_RATE_LIMITED` instead of `INTERNAL_ERROR`.
+
+### ChatGPT Signup Round-Trip (FLA-173)
+- **Fixed**: Post-signup destination is now `/leagues` instead of the marketing home page (component `fallbackRedirectUrl` + Vercel env; a `redirect_url` param such as the OAuth consent round-trip still takes precedence).
+- **Added**: Widget manage-leagues links carry a host-neutral `?from=widget`; `/leagues` shows a 3-step finish-setup banner (create account → connect a league → return to your AI assistant) for signed-out or zero-league visitors, with screen-reader-accessible step states.
+- **Changed**: `.env.example` moved off deprecated Clerk `AFTER_SIGN_*` redirect vars to the current `*_FALLBACK_REDIRECT_URL` names.
+
 ### League Visibility — Active / Inactive / Hidden (FLA-124, FLA-150, FLA-151, FLA-152)
 - **Added**: Three-state league visibility across ESPN, Yahoo, and Sleeper. From `/leagues`, users can **Archive** a recurring league (dropped from the active `get_user_session` view but still browsable via `get_ancient_history`) or **Hide** it (suppressed from both AI tools), and Restore at any time. Keyed on a stable recurring-league identity (`archived_leagues` table with a `mode` column) so it survives annual re-syncs; the AI-facing read fails closed (a lookup error never leaks a suppressed league) and tolerates the pre-migration schema. Migration 025 adds `mode`, backfilling existing archived rows to `hidden`.
 - **Changed**: `/leagues` now groups leagues into **Active**, **Inactive** (auto-aged-out + manually archived), and **Hidden**, replacing the earlier separate Old Leagues / Archived sections.
