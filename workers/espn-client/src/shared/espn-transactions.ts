@@ -1,5 +1,6 @@
-import type { EspnCredentials } from '@flaim/worker-shared';
+import type { EspnCredentials, SeasonSport } from '@flaim/worker-shared';
 import { espnFetch, handleEspnError } from './espn-api';
+import { getCurrentSeasonYear } from './season';
 
 export type TransactionType = 'add' | 'drop' | 'trade' | 'waiver' | 'trade_proposal' | 'trade_decline' | 'trade_veto' | 'trade_uphold' | 'failed_bid';
 
@@ -19,6 +20,19 @@ export interface NormalizedTransaction {
     gave_up: Array<{ id: string; name?: string; position?: string; team?: string }>;
   }>;
   faab_bid?: number | null;
+}
+
+/**
+ * ESPN's lm-api-reads endpoints only serve transactions for the current season;
+ * prior-season requests fail with misleading not-found errors, so reject them upfront.
+ */
+export function assertTransactionsSeasonSupported(sport: SeasonSport, canonicalYear: number): void {
+  const currentSeason = getCurrentSeasonYear(sport);
+  if (canonicalYear < currentSeason) {
+    throw new Error(
+      `ESPN_SEASON_NOT_SUPPORTED: ESPN only provides transactions for the current season (season_year=${currentSeason}). Prior-season transaction data is unavailable. Retry with the current season only if the user meant the ongoing season.`
+    );
+  }
 }
 
 export function collectTransactionPlayerIds(txn: NormalizedTransaction): string[] {

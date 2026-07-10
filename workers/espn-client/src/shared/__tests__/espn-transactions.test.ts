@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi, type MockedFunction } from 'vitest';
-import { fetchEspnTransactionsByWeeks, fetchEspnMTransactions2, normalizeMTransactions2, mergeTradePlayerDetails, getEspnLeagueContext, fetchEspnPlayersByIds } from '../espn-transactions';
+import { assertTransactionsSeasonSupported, fetchEspnTransactionsByWeeks, fetchEspnMTransactions2, normalizeMTransactions2, mergeTradePlayerDetails, getEspnLeagueContext, fetchEspnPlayersByIds } from '../espn-transactions';
 import type { EspnMTransaction, NormalizedTransaction } from '../espn-transactions';
+import { getCurrentSeasonYear } from '../season';
 
 const mockFetch = vi.fn() as MockedFunction<typeof fetch>;
 global.fetch = mockFetch;
@@ -905,6 +906,25 @@ describe('espn-transactions', () => {
 
       const result = mergeTradePlayerDetails(mTxns, []);
       expect(result).toEqual(mTxns);
+    });
+  });
+
+  describe('assertTransactionsSeasonSupported', () => {
+    it('throws ESPN_SEASON_NOT_SUPPORTED for a prior season', () => {
+      const currentSeason = getCurrentSeasonYear('baseball');
+      expect(() => assertTransactionsSeasonSupported('baseball', currentSeason - 1)).toThrow(
+        `ESPN_SEASON_NOT_SUPPORTED: ESPN only provides transactions for the current season (season_year=${currentSeason}). Prior-season transaction data is unavailable. Retry with the current season only if the user meant the ongoing season.`
+      );
+    });
+
+    it('allows the current season', () => {
+      const currentSeason = getCurrentSeasonYear('football');
+      expect(() => assertTransactionsSeasonSupported('football', currentSeason)).not.toThrow();
+    });
+
+    it('allows a future season', () => {
+      const currentSeason = getCurrentSeasonYear('basketball');
+      expect(() => assertTransactionsSeasonSupported('basketball', currentSeason + 1)).not.toThrow();
     });
   });
 });
