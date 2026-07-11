@@ -102,7 +102,7 @@ describe('hockey get_standings handler — seasonPhase and canonical year', () =
   });
 
   it('returns season_complete for historical year even without rankFinal', async () => {
-    espnFetchMock.mockResolvedValue(jsonResponse({
+    espnFetchMock.mockResolvedValueOnce(jsonResponse({
       scoringPeriodId: 25,
       settings: { regularSeasonMatchupPeriods: 22 },
       teams: [
@@ -113,6 +113,8 @@ describe('hockey get_standings handler — seasonPhase and canonical year', () =
         },
       ],
     }));
+
+    espnFetchMock.mockResolvedValueOnce(jsonResponse({ schedule: [] }));
 
     const result = await hockeyHandlers.get_standings({} as never, makeParams(HISTORICAL_CANONICAL_YEAR), 'Bearer x', 'cid');
 

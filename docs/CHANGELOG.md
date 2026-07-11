@@ -4,6 +4,9 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### ESPN Historical Championship Outcomes (FLA-136)
+- **Fixed**: Historical `get_standings` seasons where ESPN leaves every team's final rank at 0 no longer report false outcomes with `outcomeConfidence: "explicit"`. When explicit final ranks are absent, the champion and runner-up are now derived from the final `WINNERS_BRACKET` matchup and reported with `outcomeConfidence: "derived"`; teams without rank or bracket evidence stay null (unknown) instead of false. Applies to all four ESPN sports.
+
 ### ESPN Transactions Error Handling (FLA-171)
 - **Fixed**: Prior-season ESPN transaction requests now return a clear `ESPN_SEASON_NOT_SUPPORTED` error (guarded before any upstream calls) instead of a misleading `ESPN_NOT_FOUND`; the message directs a retry only when the user meant the ongoing season.
 - **Changed**: `season_year` tool descriptions no longer hard-code example years (which invited models to pass stale seasons); they now steer to the season returned by `get_user_session`.

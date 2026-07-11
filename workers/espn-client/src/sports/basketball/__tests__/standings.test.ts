@@ -102,7 +102,7 @@ describe('basketball get_standings handler — seasonPhase and canonical year', 
   });
 
   it('returns season_complete for historical year even without rankFinal', async () => {
-    espnFetchMock.mockResolvedValue(jsonResponse({
+    espnFetchMock.mockResolvedValueOnce(jsonResponse({
       scoringPeriodId: 25,
       settings: { regularSeasonMatchupPeriods: 20 },
       teams: [
@@ -113,6 +113,8 @@ describe('basketball get_standings handler — seasonPhase and canonical year', 
         },
       ],
     }));
+
+    espnFetchMock.mockResolvedValueOnce(jsonResponse({ schedule: [] }));
 
     const result = await basketballHandlers.get_standings({} as never, makeParams(HISTORICAL_CANONICAL_YEAR), 'Bearer x', 'cid');
 
