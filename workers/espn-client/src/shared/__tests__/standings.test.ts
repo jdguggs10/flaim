@@ -356,6 +356,16 @@ describe('deriveBracketFinal', () => {
     ])).toBeNull();
   });
 
+  it('returns null instead of the semifinal winner when the championship game is tied or undecided', () => {
+    for (const winner of ['TIE', 'UNDECIDED'] as const) {
+      expect(deriveBracketFinal([
+        { matchupPeriodId: 22, home: { teamId: 7 }, away: { teamId: 2 }, winner: 'HOME', playoffTierType: 'WINNERS_BRACKET' },
+        { matchupPeriodId: 22, home: { teamId: 3 }, away: { teamId: 5 }, winner: 'HOME', playoffTierType: 'WINNERS_BRACKET' },
+        { matchupPeriodId: 23, home: { teamId: 7 }, away: { teamId: 3 }, winner, playoffTierType: 'WINNERS_BRACKET' },
+      ])).toBeNull();
+    }
+  });
+
   it('returns null when the schedule is missing or empty', () => {
     expect(deriveBracketFinal(undefined)).toBeNull();
     expect(deriveBracketFinal([])).toBeNull();

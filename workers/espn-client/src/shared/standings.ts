@@ -50,16 +50,18 @@ export function hasExplicitFinalRanks(teams: EspnTeam[]): boolean {
 }
 
 export function deriveBracketFinal(schedule?: EspnMatchup[]): EspnBracketFinal | null {
-  const decided = (schedule ?? []).filter((matchup) =>
+  const bracket = (schedule ?? []).filter((matchup) =>
     matchup.playoffTierType === 'WINNERS_BRACKET'
-    && matchup.matchupPeriodId != null
-    && (matchup.winner === 'HOME' || matchup.winner === 'AWAY'));
-  if (decided.length === 0) {
+    && matchup.matchupPeriodId != null);
+  if (bracket.length === 0) {
     return null;
   }
 
-  const finalPeriod = Math.max(...decided.map((matchup) => matchup.matchupPeriodId as number));
-  const finals = decided.filter((matchup) => matchup.matchupPeriodId === finalPeriod);
+  // The final period must be computed over all winners-bracket matchups, decided
+  // or not — otherwise a tied or unfinished championship game would silently fall
+  // back to the semifinal period and crown the wrong team.
+  const finalPeriod = Math.max(...bracket.map((matchup) => matchup.matchupPeriodId as number));
+  const finals = bracket.filter((matchup) => matchup.matchupPeriodId === finalPeriod);
   // Multiple winners-bracket matchups in the last period means the championship
   // game cannot be identified unambiguously.
   if (finals.length !== 1) {
@@ -67,6 +69,9 @@ export function deriveBracketFinal(schedule?: EspnMatchup[]): EspnBracketFinal |
   }
 
   const [final] = finals;
+  if (final.winner !== 'HOME' && final.winner !== 'AWAY') {
+    return null;
+  }
   const champion = final.winner === 'HOME' ? final.home : final.away;
   const runnerUp = final.winner === 'HOME' ? final.away : final.home;
   if (champion?.teamId == null) {

@@ -187,6 +187,7 @@ describe('baseball get_standings handler — outcome fields', () => {
     expect(eliminated?.championshipWon).toBeNull();
     expect(eliminated?.playoffOutcome).toBeNull();
     expect(eliminated?.outcomeConfidence).toBeNull();
+    expect(eliminated?.madePlayoffs).toBe(true);
   });
 
   it('returns season_complete but null outcome fields when a historical season has no explicit final rank', async () => {
