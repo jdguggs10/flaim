@@ -190,6 +190,60 @@ describe('baseball get_standings handler — outcome fields', () => {
     expect(eliminated?.madePlayoffs).toBe(true);
   });
 
+  it('resolves a tied championship game to the higher seed using the playoff tie rule (FLA-176)', async () => {
+    espnFetchMock.mockResolvedValueOnce(jsonResponse({
+      scoringPeriodId: 180,
+      settings: { regularSeasonMatchupPeriods: 21 },
+      teams: [
+        {
+          id: 7,
+          location: 'Juan Night', nickname: 'at Shorts',
+          rankFinal: 0,
+          rankCalculatedFinal: 0,
+          playoffSeed: 2,
+          record: { overall: { wins: 14, losses: 4, ties: 0, pointsFor: 1200, pointsAgainst: 980 } },
+        },
+        {
+          id: 3,
+          location: 'Feed The', nickname: 'Kitty',
+          rankFinal: 0,
+          rankCalculatedFinal: 0,
+          playoffSeed: 1,
+          record: { overall: { wins: 15, losses: 3, ties: 0, pointsFor: 1250, pointsAgainst: 940 } },
+        },
+      ],
+    }));
+    espnFetchMock.mockResolvedValueOnce(jsonResponse({
+      settings: { scoringSettings: { playoffMatchupTieRule: 'NONE' } },
+      schedule: [
+        { matchupPeriodId: 22, home: { teamId: 7 }, away: { teamId: 5 }, winner: 'HOME', playoffTierType: 'WINNERS_BRACKET' },
+        { matchupPeriodId: 23, home: { teamId: 7 }, away: { teamId: 3 }, winner: 'TIE', playoffTierType: 'WINNERS_BRACKET' },
+      ],
+    }));
+
+    const result = await baseballHandlers.get_standings({} as never, makeParams(2024), 'Bearer x', 'cid');
+
+    expect(result.success).toBe(true);
+    expect(espnFetchMock).toHaveBeenCalledTimes(2);
+    expect(espnFetchMock.mock.calls[1][0]).toContain('view=mMatchupScore');
+    expect(espnFetchMock.mock.calls[1][0]).toContain('view=mSettings');
+
+    const standings = (result.data as Record<string, unknown>).standings as Array<Record<string, unknown>>;
+
+    // Seed 1 (team 3) beats seed 2 (team 7) on the tie under ESPN's default rule.
+    const champion = standings.find((team) => team.teamId === 3);
+    expect(champion?.finalRank).toBe(1);
+    expect(champion?.championshipWon).toBe(true);
+    expect(champion?.playoffOutcome).toBe('champion');
+    expect(champion?.outcomeConfidence).toBe('derived');
+
+    const runnerUp = standings.find((team) => team.teamId === 7);
+    expect(runnerUp?.finalRank).toBe(2);
+    expect(runnerUp?.championshipWon).toBe(false);
+    expect(runnerUp?.playoffOutcome).toBe('runner_up');
+    expect(runnerUp?.outcomeConfidence).toBe('derived');
+  });
+
   it('returns season_complete but null outcome fields when a historical season has no explicit final rank', async () => {
     espnFetchMock.mockResolvedValueOnce(jsonResponse({
       scoringPeriodId: 22,

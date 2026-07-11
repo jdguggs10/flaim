@@ -17,7 +17,7 @@ import {
   POSITION_SLOTS,
 } from './mappings';
 import { getCurrentSeasonYear, getSeasonContext, normalizeEspnLeagueStatus } from '../../shared/season';
-import { deriveStandingsOutcome, deriveStandingsSeasonPhase, fetchBracketFinal, hasExplicitFinalRanks } from '../../shared/standings';
+import { buildPlayoffSeedMap, deriveStandingsOutcome, deriveStandingsSeasonPhase, fetchBracketFinal, hasExplicitFinalRanks } from '../../shared/standings';
 
 const GAME_ID = 'ffl'; // ESPN's game ID for fantasy football
 
@@ -101,7 +101,13 @@ async function handleGetLeagueInfo(
           type: data.settings.scoringSettings?.scoringType,
           matchupPeriods: data.settings.scoringSettings?.matchupPeriods,
           playoffTeamCount: data.settings.playoffTeamCount,
-          regularSeasonMatchupPeriods: data.settings.regularSeasonMatchupPeriods
+          regularSeasonMatchupPeriods: data.settings.regularSeasonMatchupPeriods,
+          matchupTieRule: data.settings.scoringSettings?.matchupTieRule,
+          matchupTieRuleBy: data.settings.scoringSettings?.matchupTieRuleBy,
+          playoffMatchupTieRule: data.settings.scoringSettings?.playoffMatchupTieRule,
+          playoffMatchupTieRuleBy: data.settings.scoringSettings?.playoffMatchupTieRuleBy,
+          homeTeamBonus: data.settings.scoringSettings?.homeTeamBonus,
+          playoffHomeTeamBonus: data.settings.scoringSettings?.playoffHomeTeamBonus
         },
         roster: {
           lineupSlotCounts: data.settings.rosterSettings?.lineupSlotCounts,
@@ -160,7 +166,7 @@ async function handleGetStandings(
     // ESPN leaves final ranks at 0 for some historical seasons; fall back to the
     // playoff bracket to identify the champion and runner-up.
     const bracketFinal = seasonComplete && !hasExplicitFinalRanks(teams)
-      ? await fetchBracketFinal(GAME_ID, league_id, season_year, credentials)
+      ? await fetchBracketFinal(GAME_ID, league_id, season_year, credentials, buildPlayoffSeedMap(teams))
       : null;
 
     // Transform and sort teams by standings

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildPlayoffSeedMap,
   deriveBracketFinal,
   deriveStandingsOutcome,
   deriveStandingsSeasonPhase,
@@ -382,5 +383,81 @@ describe('deriveBracketFinal', () => {
     expect(deriveBracketFinal([
       { matchupPeriodId: 23, home: {}, away: { teamId: 3 }, winner: 'HOME', playoffTierType: 'WINNERS_BRACKET' },
     ])).toBeNull();
+  });
+});
+
+describe('deriveBracketFinal — tie-rule resolution (FLA-176)', () => {
+  const tiedFinal = [
+    { matchupPeriodId: 22, home: { teamId: 7 }, away: { teamId: 2 }, winner: 'HOME', playoffTierType: 'WINNERS_BRACKET' },
+    { matchupPeriodId: 22, home: { teamId: 3 }, away: { teamId: 5 }, winner: 'HOME', playoffTierType: 'WINNERS_BRACKET' },
+    { matchupPeriodId: 23, home: { teamId: 7 }, away: { teamId: 3 }, winner: 'TIE', playoffTierType: 'WINNERS_BRACKET' },
+  ];
+
+  it('resolves a tied final to the higher seed under the NONE (platform default) rule', () => {
+    expect(deriveBracketFinal(tiedFinal, {
+      playoffMatchupTieRule: 'NONE',
+      playoffSeeds: new Map([[7, 2], [3, 1]]),
+    })).toEqual({ championTeamId: 3, runnerUpTeamId: 7 });
+  });
+
+  it('resolves an undecided final the same way (only reached for completed seasons)', () => {
+    const undecidedFinal = tiedFinal.map((matchup) =>
+      matchup.matchupPeriodId === 23 ? { ...matchup, winner: 'UNDECIDED' } : matchup);
+    expect(deriveBracketFinal(undecidedFinal, {
+      playoffMatchupTieRule: 'NONE',
+      playoffSeeds: new Map([[7, 2], [3, 1]]),
+    })).toEqual({ championTeamId: 3, runnerUpTeamId: 7 });
+  });
+
+  it('resolves a tied final to the home team under HOME_TEAM_WINS without needing seeds', () => {
+    expect(deriveBracketFinal(tiedFinal, {
+      playoffMatchupTieRule: 'HOME_TEAM_WINS',
+    })).toEqual({ championTeamId: 7, runnerUpTeamId: 3 });
+  });
+
+  it('returns null for an unrecognized tie rule', () => {
+    expect(deriveBracketFinal(tiedFinal, {
+      playoffMatchupTieRule: 'BENCH_POINTS',
+      playoffSeeds: new Map([[7, 2], [3, 1]]),
+    })).toBeNull();
+  });
+
+  it('returns null when the tie rule is missing', () => {
+    expect(deriveBracketFinal(tiedFinal, {
+      playoffSeeds: new Map([[7, 2], [3, 1]]),
+    })).toBeNull();
+  });
+
+  it('returns null under NONE when a finalist seed is missing or seeds are equal', () => {
+    expect(deriveBracketFinal(tiedFinal, {
+      playoffMatchupTieRule: 'NONE',
+      playoffSeeds: new Map([[7, 2]]),
+    })).toBeNull();
+    expect(deriveBracketFinal(tiedFinal, {
+      playoffMatchupTieRule: 'NONE',
+      playoffSeeds: new Map([[7, 1], [3, 1]]),
+    })).toBeNull();
+    expect(deriveBracketFinal(tiedFinal, {
+      playoffMatchupTieRule: 'NONE',
+    })).toBeNull();
+  });
+
+  it('does not alter a cleanly decided final regardless of tie-break context', () => {
+    const decidedFinal = tiedFinal.map((matchup) =>
+      matchup.matchupPeriodId === 23 ? { ...matchup, winner: 'AWAY' } : matchup);
+    expect(deriveBracketFinal(decidedFinal, {
+      playoffMatchupTieRule: 'HOME_TEAM_WINS',
+      playoffSeeds: new Map([[7, 1], [3, 2]]),
+    })).toEqual({ championTeamId: 3, runnerUpTeamId: 7 });
+  });
+});
+
+describe('buildPlayoffSeedMap', () => {
+  it('maps team ids to playoff seeds and skips teams without a seed', () => {
+    expect(buildPlayoffSeedMap([
+      { id: 7, playoffSeed: 2 },
+      { id: 3, playoffSeed: 1 },
+      { id: 9 },
+    ])).toEqual(new Map([[7, 2], [3, 1]]));
   });
 });
