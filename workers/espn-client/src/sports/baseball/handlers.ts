@@ -18,7 +18,7 @@ import {
   POSITION_SLOTS,
 } from './mappings';
 import { getCurrentSeasonYear, getSeasonContext, normalizeEspnLeagueStatus } from '../../shared/season';
-import { deriveStandingsOutcome, deriveStandingsSeasonPhase } from '../../shared/standings';
+import { deriveStandingsOutcome, deriveStandingsSeasonPhase, fetchBracketFinal, hasExplicitFinalRanks } from '../../shared/standings';
 
 const GAME_ID = 'flb'; // ESPN's game ID for fantasy baseball
 
@@ -292,6 +292,12 @@ async function handleGetStandings(
     });
     const seasonComplete = seasonPhase === 'season_complete';
 
+    // ESPN leaves final ranks at 0 for some historical seasons; fall back to the
+    // playoff bracket to identify the champion and runner-up.
+    const bracketFinal = seasonComplete && !hasExplicitFinalRanks(teams)
+      ? await fetchBracketFinal(GAME_ID, league_id, season_year, credentials)
+      : null;
+
     // Transform and sort teams by standings
     const standings = teams.map((team) => {
       const record = team.record?.overall;
@@ -302,10 +308,12 @@ async function handleGetStandings(
       const winPercentage = totalGames > 0 ? wins / totalGames : 0;
 
       const outcome = deriveStandingsOutcome({
+        teamId: team.id,
         rankFinal: team.rankFinal,
         rankCalculatedFinal: team.rankCalculatedFinal,
         playoffSeed: team.playoffSeed,
         seasonComplete,
+        bracketFinal,
       });
 
       return {
