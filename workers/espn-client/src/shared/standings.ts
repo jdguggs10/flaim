@@ -19,6 +19,13 @@ export interface EspnBracketFinal {
   runnerUpTeamId: number | null;
 }
 
+export interface EspnTieBreakContext {
+  /** From settings.scoringSettings.playoffMatchupTieRule (e.g. "NONE", "HOME_TEAM_WINS"). */
+  playoffMatchupTieRule?: string;
+  /** teamId → playoffSeed (1 = top seed), from the standings mTeam response. */
+  playoffSeeds?: Map<number, number>;
+}
+
 interface DeriveSeasonPhaseInput {
   requestedSeasonYear: number;
   currentSeasonYear: number;
@@ -49,7 +56,54 @@ export function hasExplicitFinalRanks(teams: EspnTeam[]): boolean {
   return teams.some((team) => getValidFinalRank(team.rankFinal, team.rankCalculatedFinal) !== null);
 }
 
-export function deriveBracketFinal(schedule?: EspnMatchup[]): EspnBracketFinal | null {
+export function buildPlayoffSeedMap(teams: EspnTeam[]): Map<number, number> {
+  return new Map(
+    teams
+      // ESPN uses 0 as a "not set" sentinel for seeds, same as final ranks.
+      .filter((team) => team.playoffSeed != null && team.playoffSeed > 0)
+      .map((team) => [team.id, team.playoffSeed as number]),
+  );
+}
+
+// Resolves a championship game that ESPN never marked as decided (TIE, or
+// UNDECIDED for a completed season) using the league's playoff tie rule.
+// Callers only supply tie-break context on the season-complete path, so this
+// never runs for an in-progress season.
+function resolveUndecidedFinal(
+  final: EspnMatchup,
+  tieBreak?: EspnTieBreakContext,
+): EspnBracketFinal | null {
+  const homeTeamId = final.home?.teamId;
+  const awayTeamId = final.away?.teamId;
+  if (homeTeamId == null || awayTeamId == null) {
+    return null;
+  }
+
+  if (tieBreak?.playoffMatchupTieRule === 'HOME_TEAM_WINS') {
+    return { championTeamId: homeTeamId, runnerUpTeamId: awayTeamId };
+  }
+
+  if (tieBreak?.playoffMatchupTieRule === 'NONE') {
+    // ESPN's platform default when no explicit tie rule is configured: the
+    // higher seed (lower playoffSeed number) advances on a tied playoff matchup.
+    const homeSeed = tieBreak.playoffSeeds?.get(homeTeamId);
+    const awaySeed = tieBreak.playoffSeeds?.get(awayTeamId);
+    if (homeSeed == null || awaySeed == null || homeSeed === awaySeed) {
+      return null;
+    }
+    return homeSeed < awaySeed
+      ? { championTeamId: homeTeamId, runnerUpTeamId: awayTeamId }
+      : { championTeamId: awayTeamId, runnerUpTeamId: homeTeamId };
+  }
+
+  // Unknown or missing tie rule — cannot resolve the final safely.
+  return null;
+}
+
+export function deriveBracketFinal(
+  schedule?: EspnMatchup[],
+  tieBreak?: EspnTieBreakContext,
+): EspnBracketFinal | null {
   const bracket = (schedule ?? []).filter((matchup) =>
     matchup.playoffTierType === 'WINNERS_BRACKET'
     && matchup.matchupPeriodId != null);
@@ -70,6 +124,9 @@ export function deriveBracketFinal(schedule?: EspnMatchup[]): EspnBracketFinal |
 
   const [final] = finals;
   if (final.winner !== 'HOME' && final.winner !== 'AWAY') {
+    if (final.winner === 'TIE' || final.winner === 'UNDECIDED') {
+      return resolveUndecidedFinal(final, tieBreak);
+    }
     return null;
   }
   const champion = final.winner === 'HOME' ? final.home : final.away;
@@ -89,15 +146,21 @@ export async function fetchBracketFinal(
   leagueId: string,
   seasonYear: number,
   credentials?: EspnCredentials | null,
+  playoffSeeds?: Map<number, number>,
 ): Promise<EspnBracketFinal | null> {
   try {
-    const path = `/seasons/${seasonYear}/segments/0/leagues/${leagueId}?view=mMatchupScore`;
+    // mSettings rides along on the same request (multi-view is the standard
+    // ESPN API pattern) so the playoff tie rule is available for a tied final.
+    const path = `/seasons/${seasonYear}/segments/0/leagues/${leagueId}?view=mMatchupScore&view=mSettings`;
     const response = await espnFetch(path, gameId, { credentials, timeout: 7000 });
     if (!response.ok) {
       return null;
     }
     const data = await response.json() as EspnLeagueResponse | null;
-    return deriveBracketFinal(data?.schedule);
+    return deriveBracketFinal(data?.schedule, {
+      playoffMatchupTieRule: data?.settings?.scoringSettings?.playoffMatchupTieRule,
+      playoffSeeds,
+    });
   } catch (error) {
     console.warn('[standings] Playoff bracket lookup failed:', error instanceof Error ? error.message : error);
     return null;
