@@ -50,6 +50,7 @@ export interface YahooCredentials {
   updatedAt?: Date;
   refreshLeaseOwner?: string;
   refreshLeaseExpiresAt?: Date;
+  appFingerprint?: string;
 }
 
 export interface YahooCredentialHealth {
@@ -60,6 +61,7 @@ export interface YahooCredentialHealth {
   updatedAt?: Date;
   refreshLeaseOwner?: string;
   refreshLeaseExpiresAt?: Date;
+  appFingerprint?: string;
 }
 
 export interface SaveCredentialsParams {
@@ -68,12 +70,14 @@ export interface SaveCredentialsParams {
   refreshToken: string;
   expiresAt: Date;
   yahooGuid?: string;
+  appFingerprint?: string;
 }
 
 export interface UpdateCredentialsParams {
   accessToken: string;
   refreshToken?: string;
   expiresAt: Date;
+  appFingerprint?: string;
 }
 
 export interface YahooLeague {
@@ -144,6 +148,12 @@ function yahooCredentialUpdateData(params: UpdateCredentialsParams): Record<stri
 
   if (params.refreshToken) {
     updateData.refresh_token = params.refreshToken;
+  }
+
+  // A successful refresh proves the stored tokens belong to the current runtime
+  // app, so stamping here also backfills legacy NULL-fingerprint rows.
+  if (params.appFingerprint) {
+    updateData.app_fingerprint = params.appFingerprint;
   }
 
   return updateData;
@@ -239,6 +249,7 @@ export class YahooStorage {
         refresh_token: params.refreshToken,
         expires_at: params.expiresAt.toISOString(),
         yahoo_guid: params.yahooGuid || null,
+        app_fingerprint: params.appFingerprint || null,
         updated_at: new Date().toISOString(),
         // Reconnect replaces the token set, so any outstanding refresh winner is stale.
         refresh_lease_owner: null,
@@ -262,7 +273,7 @@ export class YahooStorage {
   async getYahooCredentials(clerkUserId: string): Promise<YahooCredentials | null> {
     const { data, error } = await this.supabase
       .from('yahoo_credentials')
-      .select('clerk_user_id, access_token, refresh_token, expires_at, yahoo_guid, updated_at, refresh_lease_owner, refresh_lease_expires_at')
+      .select('clerk_user_id, access_token, refresh_token, expires_at, yahoo_guid, updated_at, refresh_lease_owner, refresh_lease_expires_at, app_fingerprint')
       .eq('clerk_user_id', clerkUserId)
       .single();
 
@@ -285,6 +296,7 @@ export class YahooStorage {
       refreshLeaseExpiresAt: data.refresh_lease_expires_at
         ? new Date(data.refresh_lease_expires_at)
         : undefined,
+      appFingerprint: data.app_fingerprint ?? undefined,
     };
   }
 
@@ -295,7 +307,7 @@ export class YahooStorage {
   async getYahooCredentialHealth(clerkUserId: string): Promise<YahooCredentialHealth | null> {
     const { data, error } = await this.supabase
       .from('yahoo_credentials')
-      .select('clerk_user_id, expires_at, yahoo_guid, updated_at, refresh_lease_owner, refresh_lease_expires_at')
+      .select('clerk_user_id, expires_at, yahoo_guid, updated_at, refresh_lease_owner, refresh_lease_expires_at, app_fingerprint')
       .eq('clerk_user_id', clerkUserId)
       .single();
 
@@ -324,6 +336,7 @@ export class YahooStorage {
       refreshLeaseExpiresAt: data.refresh_lease_expires_at
         ? new Date(data.refresh_lease_expires_at)
         : undefined,
+      appFingerprint: data.app_fingerprint ?? undefined,
     };
   }
 

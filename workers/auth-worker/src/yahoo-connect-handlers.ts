@@ -26,6 +26,11 @@ import {
 } from './yahoo-storage';
 import { getFrontendUrl, resolvePreviewOrigin } from './preview-url';
 import {
+  computeYahooAppFingerprint,
+  yahooAppFingerprintStatus,
+  type YahooAppFingerprintStatus,
+} from './yahoo-app-fingerprint';
+import {
   YAHOO_DEFAULT_TRANSIENT_RETRY_AFTER_SECONDS,
   YAHOO_REFRESH_IN_PROGRESS_RETRY_AFTER_SECONDS,
   classifyYahooApiFailure,
@@ -118,7 +123,8 @@ type YahooRefreshDiagnosticClass =
   | 'timeout'
   | 'cooldown_active'
   | 'lease_not_acquired'
-  | 'lease_window_too_short';
+  | 'lease_window_too_short'
+  | 'app_fingerprint_mismatch';
 
 interface YahooRefreshDiagnosticFields {
   correlationId?: string;
@@ -163,6 +169,11 @@ interface YahooRefreshDiagnosticFields {
   refreshTokenChanged?: boolean;
   recoveryAttempted?: boolean;
   recoverySucceeded?: boolean;
+  // App fingerprints are non-secret (SHA-256 prefix of the client id); the
+  // client id itself is never logged.
+  appFingerprintStatus?: YahooAppFingerprintStatus;
+  storedAppFingerprint?: string;
+  runtimeAppFingerprint?: string;
 }
 
 // Internal annotation from the Yahoo token endpoint parser. This is consumed by
@@ -323,6 +334,9 @@ function logYahooRefreshDiagnostic(event: string, fields: YahooRefreshDiagnostic
   if (fields.refreshTokenChanged !== undefined) payload.refresh_token_changed = fields.refreshTokenChanged;
   if (fields.recoveryAttempted !== undefined) payload.recovery_attempted = fields.recoveryAttempted;
   if (fields.recoverySucceeded !== undefined) payload.recovery_succeeded = fields.recoverySucceeded;
+  if (fields.appFingerprintStatus !== undefined) payload.app_fingerprint_status = fields.appFingerprintStatus;
+  if (fields.storedAppFingerprint !== undefined) payload.stored_app_fingerprint = fields.storedAppFingerprint;
+  if (fields.runtimeAppFingerprint !== undefined) payload.runtime_app_fingerprint = fields.runtimeAppFingerprint;
 
   console.log(JSON.stringify(payload));
 }
@@ -835,6 +849,33 @@ async function getValidYahooAccessToken(
     return yahooRefreshCooldownResult(credentials, logDiagnostic);
   }
 
+  // Pre-refresh guard: tokens minted under a different Yahoo app can never be
+  // refreshed with this worker's client credentials, so skip the doomed Yahoo
+  // call. Legacy NULL-fingerprint rows proceed as before and are backfilled on
+  // their next successful refresh.
+  const runtimeAppFingerprint = await computeYahooAppFingerprint(env.YAHOO_CLIENT_ID);
+  const appFingerprintStatus = yahooAppFingerprintStatus(credentials.appFingerprint, runtimeAppFingerprint);
+  if (appFingerprintStatus === 'mismatch') {
+    logDiagnostic('refresh_app_fingerprint_mismatch', {
+      userId,
+      phase: 'refresh_request',
+      outcome: 'permanent_failure',
+      diagnosticClass: 'app_fingerprint_mismatch',
+      reason: 'stored_tokens_minted_by_different_yahoo_app',
+      appFingerprintStatus,
+      storedAppFingerprint: credentials.appFingerprint,
+      runtimeAppFingerprint,
+      secondsSinceCredentialUpdate: secondsSince(credentials.updatedAt),
+    });
+    console.error(
+      `[yahoo-connect] Yahoo app fingerprint mismatch for user ${maskUserId(userId)}: stored tokens were minted by a different Yahoo app than this worker is configured with`
+    );
+    return {
+      error: YahooAuthWorkerErrorCode.APP_FINGERPRINT_MISMATCH,
+      errorDescription: 'Stored Yahoo tokens were issued by a different Yahoo app than this worker is configured with. Reconnect Yahoo, or fix the worker Yahoo client configuration.',
+    };
+  }
+
   const ownerId = crypto.randomUUID();
   logDiagnostic('lease_acquire_attempt', {
     userId,
@@ -947,6 +988,9 @@ async function getValidYahooAccessToken(
       phase: 'refresh_request',
       outcome: 'attempt_started',
       requestTimeoutMs: YAHOO_TOKEN_REQUEST_TIMEOUT_MS,
+      appFingerprintStatus,
+      storedAppFingerprint: credentials.appFingerprint,
+      runtimeAppFingerprint,
       ...requestDiagnosticFields,
     });
     result = await refreshAccessToken(requestBody, env, controller.signal);
@@ -1133,7 +1177,9 @@ async function getValidYahooAccessToken(
   const refreshTokenChanged = Boolean(result.refresh_token && result.refresh_token !== credentials.refreshToken);
   const wrote = await storage.updateYahooCredentials(
     userId,
-    { accessToken: result.access_token, refreshToken: nextRefreshToken, expiresAt },
+    // A successful refresh proves the row's tokens belong to the runtime app,
+    // so stamping the fingerprint here also backfills legacy NULL rows.
+    { accessToken: result.access_token, refreshToken: nextRefreshToken, expiresAt, appFingerprint: runtimeAppFingerprint },
     ownerId
   );
 
@@ -1160,7 +1206,7 @@ async function getValidYahooAccessToken(
   });
   const recovered = await storage.updateYahooCredentialsIfRefreshTokenMatches(
     userId,
-    { accessToken: result.access_token, refreshToken: nextRefreshToken, expiresAt },
+    { accessToken: result.access_token, refreshToken: nextRefreshToken, expiresAt, appFingerprint: runtimeAppFingerprint },
     credentials.refreshToken
   );
   if (recovered) {
@@ -1235,9 +1281,11 @@ function yahooRefreshFailureResponse(
     );
   }
 
+  // Pass the coded error through (refresh_failed, app_fingerprint_mismatch, ...)
+  // so reconnect-required classification stays code-driven downstream.
   return new Response(
     JSON.stringify({
-      error: 'refresh_failed',
+      error: result.error,
       error_description: result.errorDescription || 'Failed to refresh access token',
       upstream_status: result.upstreamStatus,
     }),
@@ -1587,13 +1635,15 @@ export async function handleYahooCallback(
 
     const expiresAt = new Date(Date.now() + tokenResponse.expires_in * 1000);
 
-    // Save credentials
+    // Save credentials, stamped with the fingerprint of the Yahoo app that
+    // minted them so later refreshes can detect app/secret mismatches.
     await storage.saveYahooCredentials({
       clerkUserId,
       accessToken: tokenResponse.access_token,
       refreshToken: tokenResponse.refresh_token,
       expiresAt,
       yahooGuid,
+      appFingerprint: await computeYahooAppFingerprint(env.YAHOO_CLIENT_ID),
     });
 
     console.log(`[yahoo-connect] Successfully connected user ${maskUserId(clerkUserId)} to Yahoo`);
@@ -1753,6 +1803,7 @@ export async function handleYahooCredentialHealth(
       refresh.retryAfterSeconds = leaseRemainingSeconds;
     }
     const checkedAt = checkedAtDate.toISOString();
+    const runtimeAppFingerprint = await computeYahooAppFingerprint(env.YAHOO_CLIENT_ID);
 
     return new Response(
       JSON.stringify({
@@ -1762,6 +1813,13 @@ export async function handleYahooCredentialHealth(
         checkedAt,
         lastUpdated: credentials.updatedAt?.toISOString() ?? null,
         yahooGuidPresent: credentials.yahooGuidPresent,
+        // Fingerprints are non-secret SHA-256 prefixes of the Yahoo client id;
+        // 'mismatch' means stored tokens were minted by a different Yahoo app.
+        appFingerprint: {
+          stored: credentials.appFingerprint ?? null,
+          runtime: runtimeAppFingerprint ?? null,
+          status: yahooAppFingerprintStatus(credentials.appFingerprint, runtimeAppFingerprint),
+        },
         accessToken: {
           expiresAt: credentials.expiresAt.toISOString(),
           expiresInSeconds: nonNegativeSecondsUntil(credentials.expiresAt, checkedAtNowMs),

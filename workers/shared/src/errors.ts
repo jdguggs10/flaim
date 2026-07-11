@@ -69,6 +69,7 @@ export const ErrorCode = {
 // Internal auth-worker wire/redirect codes. Platform clients map these to the
 // public MCP-level ErrorCode values above, such as YAHOO_AUTH_UNAVAILABLE.
 export const YahooAuthWorkerErrorCode = {
+  APP_FINGERPRINT_MISMATCH: 'app_fingerprint_mismatch',
   REFRESH_TEMPORARILY_UNAVAILABLE: 'refresh_temporarily_unavailable',
   TOKEN_EXCHANGE_UNAVAILABLE: 'token_exchange_unavailable',
   TOKEN_REFRESH_VALIDATION_UNAVAILABLE: 'token_refresh_validation_unavailable',

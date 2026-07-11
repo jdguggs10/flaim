@@ -4,6 +4,11 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Yahoo App Fingerprint Guard (FLA-133)
+- **Added**: Yahoo credential rows now record a non-secret fingerprint of the Yahoo app that minted the stored tokens (first 12 hex chars of SHA-256 of the client id — never the client id, secrets, or tokens). Stamped on reconnect and on every successful refresh, which backfills legacy rows.
+- **Added**: A pre-refresh guard skips the doomed Yahoo token call when the stored fingerprint doesn't match the runtime app and returns a coded `app_fingerprint_mismatch` reconnect-required error, so app-secret swaps no longer masquerade as generic refresh failures. Legacy rows without a fingerprint refresh as before.
+- **Added**: The internal credential-health endpoint and structured refresh diagnostics report stored/runtime fingerprints with a `match`/`mismatch`/`legacy_null` status.
+
 ### ESPN Transactions Error Handling (FLA-171)
 - **Fixed**: Prior-season ESPN transaction requests now return a clear `ESPN_SEASON_NOT_SUPPORTED` error (guarded before any upstream calls) instead of a misleading `ESPN_NOT_FOUND`; the message directs a retry only when the user meant the ongoing season.
 - **Changed**: `season_year` tool descriptions no longer hard-code example years (which invited models to pass stale seasons); they now steer to the season returned by `get_user_session`.

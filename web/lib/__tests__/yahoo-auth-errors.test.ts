@@ -66,6 +66,13 @@ describe('Yahoo auth error helpers', () => {
     expect(isYahooTransientAuthResponse({ error: 'refresh_failed', retryable: true })).toBe(false);
   });
 
+  it('routes app fingerprint mismatches to the reconnect path', () => {
+    const response = { error: YahooAuthWorkerErrorCode.APP_FINGERPRINT_MISMATCH };
+
+    expect(isYahooTransientAuthResponse(response)).toBe(false);
+    expect(isYahooReconnectRequired(401, response)).toBe(true);
+  });
+
   it('uses the upstream description when a retryable response has no known transient code', () => {
     expect(getYahooTransientAuthMessage({
       error: 'server_timeout',

@@ -215,6 +215,7 @@ describe('YahooStorage', () => {
         refreshToken: 'yahoo-refresh-token',
         expiresAt: new Date('2026-01-24T12:00:00Z'),
         yahooGuid: 'yahoo-user-guid',
+        appFingerprint: 'abc123def456',
       });
 
       expect(mockFrom).toHaveBeenCalledWith('yahoo_credentials');
@@ -224,9 +225,26 @@ describe('YahooStorage', () => {
           access_token: 'yahoo-access-token',
           refresh_token: 'yahoo-refresh-token',
           yahoo_guid: 'yahoo-user-guid',
+          app_fingerprint: 'abc123def456',
           refresh_lease_owner: null,
           refresh_lease_expires_at: null,
         }),
+        expect.objectContaining({ onConflict: 'clerk_user_id' })
+      );
+    });
+
+    it('writes a null app_fingerprint when none is provided', async () => {
+      mockUpsert.mockReturnValue({ error: null });
+
+      await storage.saveYahooCredentials({
+        clerkUserId: 'user_xyz',
+        accessToken: 'yahoo-access-token',
+        refreshToken: 'yahoo-refresh-token',
+        expiresAt: new Date('2026-01-24T12:00:00Z'),
+      });
+
+      expect(mockUpsert).toHaveBeenCalledWith(
+        expect.objectContaining({ app_fingerprint: null }),
         expect.objectContaining({ onConflict: 'clerk_user_id' })
       );
     });
@@ -374,7 +392,7 @@ describe('YahooStorage', () => {
       const result = await storage.getYahooCredentialHealth('user_123');
 
       expect(mockSelect).toHaveBeenCalledWith(
-        'clerk_user_id, expires_at, yahoo_guid, updated_at, refresh_lease_owner, refresh_lease_expires_at'
+        'clerk_user_id, expires_at, yahoo_guid, updated_at, refresh_lease_owner, refresh_lease_expires_at, app_fingerprint'
       );
       const selectedFields = String(mockSelect.mock.calls[0][0]);
       expect(selectedFields).not.toContain('access_token');
@@ -457,6 +475,27 @@ describe('YahooStorage', () => {
           refresh_token: 'new-refresh-token',
           refresh_lease_owner: null,
           refresh_lease_expires_at: null,
+        })
+      );
+      // No fingerprint provided: the column must not be touched.
+      expect(mockUpdate.mock.calls[0][0]).not.toHaveProperty('app_fingerprint');
+    });
+
+    it('stamps app_fingerprint when provided (backfills legacy rows on successful refresh)', async () => {
+      mockSelect.mockResolvedValue({ data: [{ clerk_user_id: 'user_123' }], error: null });
+
+      const result = await storage.updateYahooCredentials('user_123', {
+        accessToken: 'new-access-token',
+        refreshToken: 'new-refresh-token',
+        expiresAt: new Date('2026-01-24T14:00:00Z'),
+        appFingerprint: 'abc123def456',
+      });
+
+      expect(result).toBe(true);
+      expect(mockUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          access_token: 'new-access-token',
+          app_fingerprint: 'abc123def456',
         })
       );
     });
