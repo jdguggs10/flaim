@@ -460,4 +460,11 @@ describe('buildPlayoffSeedMap', () => {
       { id: 9 },
     ])).toEqual(new Map([[7, 2], [3, 1]]));
   });
+
+  it('treats a zero seed as absent, matching the final-rank sentinel handling', () => {
+    expect(buildPlayoffSeedMap([
+      { id: 7, playoffSeed: 0 },
+      { id: 3, playoffSeed: 1 },
+    ])).toEqual(new Map([[3, 1]]));
+  });
 });

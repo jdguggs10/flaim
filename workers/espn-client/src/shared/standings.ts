@@ -59,7 +59,8 @@ export function hasExplicitFinalRanks(teams: EspnTeam[]): boolean {
 export function buildPlayoffSeedMap(teams: EspnTeam[]): Map<number, number> {
   return new Map(
     teams
-      .filter((team) => team.playoffSeed != null)
+      // ESPN uses 0 as a "not set" sentinel for seeds, same as final ranks.
+      .filter((team) => team.playoffSeed != null && team.playoffSeed > 0)
       .map((team) => [team.id, team.playoffSeed as number]),
   );
 }
