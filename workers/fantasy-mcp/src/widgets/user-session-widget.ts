@@ -131,7 +131,6 @@ export function classifyRefreshResult(payload: unknown): RefreshResultClassifica
   if (skipped.length === results.length) {
     return { kind: 'unchanged', message: 'No connected leagues to refresh.', reloadSession: false };
   }
-  if (failed.length > 0) return fallback;
   return fallback;
 }
 
@@ -374,7 +373,101 @@ export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
   var initId = 'flaim-init-' + Math.random().toString(36).slice(2);
   var initializedSent = false;
   var hasRendered = false;
-  var classifyRefreshResult = ${classifyRefreshResult.toString()};
+  // Keep this browser implementation static. Serializing the module function
+  // can leak Wrangler-generated module helpers into the iframe.
+  function classifyRefreshResult(payload) {
+    var fallback = { kind: 'failure', message: 'Refresh failed.', reloadSession: false };
+    if (!payload || typeof payload !== 'object') return fallback;
+
+    var batch = payload;
+    if (batch.status === 429) {
+      return { kind: 'retry', message: 'Refresh limited. Try again later.', reloadSession: false };
+    }
+    var rawResults = batch.results;
+    if (!rawResults || typeof rawResults !== 'object' || Array.isArray(rawResults)) return fallback;
+
+    var results = Object.values(rawResults).filter(function(value) {
+      return !!value && typeof value === 'object' && !Array.isArray(value);
+    });
+    if (results.length === 0) return fallback;
+
+    var successes = results.filter(function(result) { return result.status === 'success'; });
+    var skipped = results.filter(function(result) { return result.status === 'skipped'; });
+    var failed = results.filter(function(result) { return result.status === 'error'; });
+    function textFor(result) {
+      return (String(result.error || '') + ' ' + String(result.error_description || '')).toLowerCase();
+    }
+    var explicitlyRequiresReconnect = results.some(function(result) {
+      return result.reconnectRequired === true || result.requiresReconnect === true || result.reconnect_required === true;
+    });
+    var reconnectRequired = explicitlyRequiresReconnect || failed.some(function(result) {
+      var text = textFor(result);
+      return result.httpStatus === 401 || result.httpStatus === 403 ||
+        /auth|credential|connect|expired|invalid.token|revoked/.test(text);
+    });
+    var retryRequired = failed.some(function(result) {
+      var text = textFor(result);
+      return result.httpStatus === 429 || !!result.retryAfter || /rate.?limit|too many|try again/.test(text);
+    });
+
+    if (successes.length > 0) {
+      if (batch.success !== true) return fallback;
+      var changeKeys = new Set(['added', 'refreshed', 'created', 'updated', 'saved']);
+      var changed = false;
+      function inspectCounts(value) {
+        var sawChangeCount = false;
+        if (!value || typeof value !== 'object') return false;
+        Object.entries(value).forEach(function(entry) {
+          var key = entry[0];
+          var nested = entry[1];
+          if (changeKeys.has(key) && typeof nested === 'number') {
+            sawChangeCount = true;
+            if (nested > 0) changed = true;
+          } else if (typeof nested === 'object') {
+            sawChangeCount = inspectCounts(nested) || sawChangeCount;
+          }
+        });
+        return sawChangeCount;
+      }
+      var allSuccessesHaveChangeCounts = true;
+      successes.forEach(function(result) {
+        if (result.platform !== 'espn' || !inspectCounts(result.details)) {
+          allSuccessesHaveChangeCounts = false;
+        }
+      });
+
+      if (failed.length > 0 || explicitlyRequiresReconnect) {
+        var partialMessage = changed ? 'Some leagues refreshed.' : 'Refresh partially complete.';
+        var message = reconnectRequired
+          ? partialMessage + ' Reconnect a provider.'
+          : retryRequired
+            ? partialMessage + ' Try again later.'
+            : partialMessage;
+        var partial = { kind: 'partial', message: message, reloadSession: true };
+        if (reconnectRequired) partial.showLeaguesLink = true;
+        return partial;
+      }
+
+      if (changed) {
+        return { kind: 'success', message: 'Leagues refreshed.', reloadSession: true };
+      }
+      if (!allSuccessesHaveChangeCounts) {
+        return { kind: 'success', message: 'Refresh complete.', reloadSession: true };
+      }
+      return { kind: 'unchanged', message: 'Leagues already up to date.', reloadSession: true };
+    }
+
+    if (reconnectRequired) {
+      return { kind: 'reconnect', message: 'Reconnect a league provider.', reloadSession: false };
+    }
+    if (retryRequired) {
+      return { kind: 'retry', message: 'Refresh limited. Try again later.', reloadSession: false };
+    }
+    if (skipped.length === results.length) {
+      return { kind: 'unchanged', message: 'No connected leagues to refresh.', reloadSession: false };
+    }
+    return fallback;
+  }
 
   function postToParent(message) {
     try {
