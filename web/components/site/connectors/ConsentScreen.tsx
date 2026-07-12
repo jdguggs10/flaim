@@ -23,6 +23,33 @@ interface ConsentScreenProps {
   onDeny: () => void;
 }
 
+export function getConsentContent(scope?: string): {
+  description: string;
+  permissions: string[];
+} {
+  const scopes = new Set((scope || 'mcp:read').trim().split(/\s+/).filter(Boolean));
+
+  if (scopes.has('mcp:write')) {
+    return {
+      description: 'Your AI app is requesting access to read fantasy data and refresh your Flaim league list',
+      permissions: [
+        'View your fantasy league data',
+        'Refresh may add or update Flaim\'s connected-league records, including newly available seasons and renamed leagues',
+        'Provider access remains read-only - cannot change teams on ESPN, Yahoo, or Sleeper',
+      ],
+    };
+  }
+
+  return {
+    description: 'Your AI app is requesting read-only access to your Flaim account',
+    permissions: [
+      'View your fantasy league data',
+      'Access rosters, matchups, standings, and more',
+      'Read-only access - cannot modify your teams or Flaim league list',
+    ],
+  };
+}
+
 export default function ConsentScreen({
   oauthParams,
   onAllow,
@@ -30,6 +57,7 @@ export default function ConsentScreen({
 }: ConsentScreenProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const consentContent = getConsentContent(oauthParams.scope);
 
   const handleAllow = async () => {
     setIsLoading(true);
@@ -53,7 +81,7 @@ export default function ConsentScreen({
         </div>
         <CardTitle>Authorize Flaim Access</CardTitle>
         <CardDescription>
-          Your AI app is requesting read-only access to your Flaim account
+          {consentContent.description}
         </CardDescription>
       </CardHeader>
 
@@ -75,18 +103,12 @@ export default function ConsentScreen({
         <div className="space-y-2">
           <div className="text-sm font-medium">The assistant will be able to:</div>
           <div className="space-y-2">
-            <div className="flex items-start gap-2 text-sm">
-              <CheckCircle className="h-4 w-4 text-success mt-0.5 shrink-0" />
-              <span>View your fantasy league data</span>
-            </div>
-            <div className="flex items-start gap-2 text-sm">
-              <CheckCircle className="h-4 w-4 text-success mt-0.5 shrink-0" />
-              <span>Access rosters, matchups, standings, and more</span>
-            </div>
-            <div className="flex items-start gap-2 text-sm">
-              <CheckCircle className="h-4 w-4 text-success mt-0.5 shrink-0" />
-              <span>Read-only access - cannot modify your teams</span>
-            </div>
+            {consentContent.permissions.map((permission) => (
+              <div key={permission} className="flex items-start gap-2 text-sm">
+                <CheckCircle className="h-4 w-4 text-success mt-0.5 shrink-0" />
+                <span>{permission}</span>
+              </div>
+            ))}
           </div>
         </div>
 

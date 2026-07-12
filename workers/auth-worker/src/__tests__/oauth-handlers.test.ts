@@ -293,6 +293,10 @@ describe('oauth-handlers', () => {
   });
 
   it('uses FRONTEND_URL override for consent redirect', async () => {
+    const createOAuthState = vi.fn().mockResolvedValue(undefined);
+    vi.spyOn(OAuthStorage, 'fromEnvironment').mockReturnValue({
+      createOAuthState,
+    } as unknown as OAuthStorage);
     const req = new Request(
       'https://api.flaim.app/authorize?response_type=code&client_id=test' +
       '&redirect_uri=https://claude.ai/api/mcp/auth_callback' +
@@ -308,6 +312,110 @@ describe('oauth-handlers', () => {
     const location = new URL(res.headers.get('Location')!);
     expect(location.origin).toBe('https://preview.example.com');
     expect(location.pathname).toBe('/oauth/consent');
+    expect(createOAuthState).toHaveBeenCalledWith(expect.objectContaining({
+      state: 'pkce:abc123',
+      scope: 'mcp:read',
+    }));
+  });
+
+  it('adds mcp:read to a write-scope reauthorization before consent', async () => {
+    const createOAuthState = vi.fn().mockResolvedValue(undefined);
+    vi.spyOn(OAuthStorage, 'fromEnvironment').mockReturnValue({
+      createOAuthState,
+    } as unknown as OAuthStorage);
+    const req = new Request(
+      'https://api.flaim.app/authorize?response_type=code&client_id=test' +
+      '&redirect_uri=https://claude.ai/api/mcp/auth_callback' +
+      '&scope=mcp%3Awrite&code_challenge=abc123&code_challenge_method=S256'
+    );
+
+    const res = await handleAuthorize(req, env);
+    const location = expectRedirectLocation(res);
+
+    expect(location.pathname).toBe('/oauth/consent');
+    expect(location.searchParams.get('scope')).toBe('mcp:read mcp:write');
+    expect(createOAuthState).toHaveBeenCalledWith(expect.objectContaining({
+      scope: 'mcp:read mcp:write',
+    }));
+  });
+
+  it('preserves explicit combined read and write consent', async () => {
+    const createOAuthState = vi.fn().mockResolvedValue(undefined);
+    vi.spyOn(OAuthStorage, 'fromEnvironment').mockReturnValue({
+      createOAuthState,
+    } as unknown as OAuthStorage);
+    const req = new Request(
+      'https://api.flaim.app/authorize?response_type=code&client_id=test' +
+      '&redirect_uri=https://claude.ai/api/mcp/auth_callback' +
+      '&scope=mcp%3Aread%20mcp%3Awrite&code_challenge=abc123&code_challenge_method=S256'
+    );
+
+    const res = await handleAuthorize(req, env);
+    const location = expectRedirectLocation(res);
+
+    expect(location.searchParams.get('scope')).toBe('mcp:read mcp:write');
+  });
+
+  it('rejects unsupported scopes before showing consent', async () => {
+    const req = new Request(
+      'https://api.flaim.app/authorize?response_type=code&client_id=test' +
+      '&redirect_uri=https://claude.ai/api/mcp/auth_callback' +
+      '&scope=mcp%3Aadmin&code_challenge=abc123&code_challenge_method=S256'
+    );
+
+    const res = await handleAuthorize(req, env);
+    const location = expectRedirectLocation(res);
+
+    expect(location.searchParams.get('error')).toBe('invalid_scope');
+    expect(location.searchParams.get('error_description')).toBe('Only mcp:read and mcp:write scopes are supported');
+  });
+
+  it.each([
+    'mcp:read mcp:read',
+    'mcp:write mcp:write',
+  ])('rejects duplicate scope tokens before showing consent: %s', async (scope) => {
+    const req = new Request(
+      'https://api.flaim.app/authorize?response_type=code&client_id=test' +
+      '&redirect_uri=https://claude.ai/api/mcp/auth_callback' +
+      `&scope=${encodeURIComponent(scope)}&code_challenge=abc123&code_challenge_method=S256`
+    );
+
+    const res = await handleAuthorize(req, env);
+    const location = expectRedirectLocation(res);
+
+    expect(location.searchParams.get('error')).toBe('invalid_scope');
+  });
+
+  it('rejects duplicate scope query parameters before showing consent', async () => {
+    const req = new Request(
+      'https://api.flaim.app/authorize?response_type=code&client_id=test' +
+      '&redirect_uri=https://claude.ai/api/mcp/auth_callback' +
+      '&scope=mcp%3Aread&scope=mcp%3Awrite&code_challenge=abc123&code_challenge_method=S256'
+    );
+
+    const res = await handleAuthorize(req, env);
+    const location = expectRedirectLocation(res);
+
+    expect(location.searchParams.get('error')).toBe('invalid_scope');
+  });
+
+  it.each([
+    ['tab delimiter', 'scope=mcp%3Aread%09mcp%3Awrite'],
+    ['newline delimiter', 'scope=mcp%3Aread%0Amcp%3Awrite'],
+    ['leading whitespace', 'scope=%20mcp%3Aread'],
+    ['trailing whitespace', 'scope=mcp%3Aread%20'],
+    ['empty value', 'scope='],
+  ])('rejects malformed scope syntax: %s', async (_name, scopeQuery) => {
+    const req = new Request(
+      'https://api.flaim.app/authorize?response_type=code&client_id=test' +
+      '&redirect_uri=https://claude.ai/api/mcp/auth_callback' +
+      `&${scopeQuery}&code_challenge=abc123&code_challenge_method=S256`
+    );
+
+    const res = await handleAuthorize(req, env);
+    const location = expectRedirectLocation(res);
+
+    expect(location.searchParams.get('error')).toBe('invalid_scope');
   });
 
   it('redirects cursor:// client with error query on unsupported response_type', async () => {
@@ -361,6 +469,7 @@ describe('oauth-handlers', () => {
     const client = await registerConfidentialClient();
     const createAuthorizationCode = vi.fn().mockResolvedValue('auth-code');
     vi.spyOn(OAuthStorage, 'fromEnvironment').mockReturnValue({
+      consumeOAuthState: vi.fn().mockResolvedValue(true),
       createAuthorizationCode,
     } as unknown as OAuthStorage);
 
@@ -390,6 +499,186 @@ describe('oauth-handlers', () => {
       codeChallenge: 'challenge',
       codeChallengeMethod: 'S256',
     }));
+  });
+
+  it('issues both read and write scopes for a consented write-scope request', async () => {
+    const createAuthorizationCode = vi.fn().mockResolvedValue('auth-code');
+    vi.spyOn(OAuthStorage, 'fromEnvironment').mockReturnValue({
+      consumeOAuthState: vi.fn().mockResolvedValue(true),
+      createAuthorizationCode,
+    } as unknown as OAuthStorage);
+
+    const req = new Request('https://api.flaim.app/oauth/code', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        redirect_uri: 'https://claude.ai/api/mcp/auth_callback',
+        scope: 'mcp:write',
+        code_challenge: 'challenge',
+        code_challenge_method: 'S256',
+      }),
+    });
+
+    const res = await handleCreateCode(req, env, 'user_123', corsHeaders);
+
+    expect(res.status).toBe(200);
+    expect(createAuthorizationCode).toHaveBeenCalledWith(expect.objectContaining({
+      scope: 'mcp:read mcp:write',
+    }));
+  });
+
+  it.each([
+    ['scope', { scope: 'mcp:read mcp:write' }],
+    ['PKCE challenge', { code_challenge: 'mutated-challenge' }],
+    ['resource', { resource: 'https://api.flaim.app/fantasy/mcp' }],
+    ['client', { client_id: 'mutated-client' }],
+    ['redirect', { redirect_uri: 'https://chatgpt.com/connector_platform_oauth_redirect' }],
+  ])('rejects browser mutation of %s after consent', async (_name, mutation) => {
+    let storedTransaction: {
+      state: string;
+      redirectUri: string;
+      clientId?: string;
+      scope: string;
+      codeChallenge: string;
+      resource?: string;
+    } | undefined;
+    const createAuthorizationCode = vi.fn();
+    const storage = {
+      createOAuthState: vi.fn().mockImplementation(async (transaction) => {
+        storedTransaction = transaction;
+      }),
+      consumeOAuthState: vi.fn().mockImplementation(async (
+        state: string,
+        redirectUri: string,
+        clientId: string | undefined,
+        scope: string,
+        codeChallenge: string | undefined,
+        resource: string | undefined
+      ) => Boolean(
+        storedTransaction &&
+        storedTransaction.state === state &&
+        storedTransaction.redirectUri === redirectUri &&
+        storedTransaction.clientId === clientId &&
+        storedTransaction.scope === scope &&
+        storedTransaction.codeChallenge === codeChallenge &&
+        storedTransaction.resource === resource
+      )),
+      createAuthorizationCode,
+    };
+    vi.spyOn(OAuthStorage, 'fromEnvironment').mockReturnValue(storage as unknown as OAuthStorage);
+
+    const authorizeRequest = new Request(
+      'https://api.flaim.app/authorize?response_type=code&client_id=test' +
+      '&redirect_uri=https://claude.ai/api/mcp/auth_callback' +
+      '&scope=mcp%3Aread&state=read-consent' +
+      '&resource=https%3A%2F%2Fapi.flaim.app%2Fmcp' +
+      '&code_challenge=challenge&code_challenge_method=S256'
+    );
+    const authorizeResponse = await handleAuthorize(authorizeRequest, env);
+    const consentUrl = expectRedirectLocation(authorizeResponse);
+    expect(consentUrl.searchParams.get('scope')).toBe('mcp:read');
+
+    const codeRequest = new Request('https://api.flaim.app/oauth/code', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        redirect_uri: 'https://claude.ai/api/mcp/auth_callback',
+        scope: 'mcp:read',
+        state: 'read-consent',
+        client_id: 'test',
+        code_challenge: 'challenge',
+        code_challenge_method: 'S256',
+        resource: 'https://api.flaim.app/mcp',
+        ...mutation,
+      }),
+    });
+    const codeResponse = await handleCreateCode(codeRequest, env, 'user_123', corsHeaders);
+    const codeBody = await codeResponse.json() as { error_description?: string };
+
+    expect(codeResponse.status).toBe(400);
+    expect(codeBody.error_description).toBe('Invalid or expired authorization transaction');
+    expect(storage.consumeOAuthState).toHaveBeenCalledOnce();
+    expect(createAuthorizationCode).not.toHaveBeenCalled();
+  });
+
+  it('rejects malformed scope syntax during authorization-code creation', async () => {
+    const createAuthorizationCode = vi.fn();
+    vi.spyOn(OAuthStorage, 'fromEnvironment').mockReturnValue({
+      createAuthorizationCode,
+    } as unknown as OAuthStorage);
+
+    const req = new Request('https://api.flaim.app/oauth/code', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        redirect_uri: 'https://claude.ai/api/mcp/auth_callback',
+        scope: 'mcp:read\tmcp:write',
+        code_challenge: 'challenge',
+        code_challenge_method: 'S256',
+      }),
+    });
+
+    const res = await handleCreateCode(req, env, 'user_123', corsHeaders);
+    const body = await res.json() as { error?: string };
+
+    expect(res.status).toBe(400);
+    expect(body.error).toBe('invalid_scope');
+    expect(createAuthorizationCode).not.toHaveBeenCalled();
+  });
+
+  it('rejects unsupported scopes during authorization-code creation', async () => {
+    const createAuthorizationCode = vi.fn();
+    vi.spyOn(OAuthStorage, 'fromEnvironment').mockReturnValue({
+      createAuthorizationCode,
+    } as unknown as OAuthStorage);
+
+    const req = new Request('https://api.flaim.app/oauth/code', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        redirect_uri: 'https://claude.ai/api/mcp/auth_callback',
+        scope: 'mcp:admin',
+        code_challenge: 'challenge',
+        code_challenge_method: 'S256',
+      }),
+    });
+
+    const res = await handleCreateCode(req, env, 'user_123', corsHeaders);
+    const body = await res.json() as { error?: string };
+
+    expect(res.status).toBe(400);
+    expect(body.error).toBe('invalid_scope');
+    expect(createAuthorizationCode).not.toHaveBeenCalled();
+  });
+
+  it('rejects plain PKCE before consuming the authorization transaction', async () => {
+    const consumeOAuthState = vi.fn().mockResolvedValue(true);
+    const createAuthorizationCode = vi.fn();
+    vi.spyOn(OAuthStorage, 'fromEnvironment').mockReturnValue({
+      consumeOAuthState,
+      createAuthorizationCode,
+    } as unknown as OAuthStorage);
+
+    const req = new Request('https://api.flaim.app/oauth/code', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        redirect_uri: 'https://claude.ai/api/mcp/auth_callback',
+        scope: 'mcp:read',
+        state: 'valid-transaction',
+        code_challenge: 'challenge',
+        code_challenge_method: 'plain',
+      }),
+    });
+
+    const res = await handleCreateCode(req, env, 'user_123', corsHeaders);
+    const body = await res.json() as { error?: string; error_description?: string };
+
+    expect(res.status).toBe(400);
+    expect(body.error).toBe('invalid_request');
+    expect(body.error_description).toBe('Only S256 PKCE is supported');
+    expect(consumeOAuthState).not.toHaveBeenCalled();
+    expect(createAuthorizationCode).not.toHaveBeenCalled();
   });
 
   it('authorization server metadata advertises S256 only', async () => {

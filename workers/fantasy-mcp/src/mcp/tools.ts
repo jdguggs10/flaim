@@ -87,7 +87,7 @@ const READ_ONLY_TOOL_ANNOTATIONS: ToolAnnotations = {
 const REFRESH_TOOL_ANNOTATIONS: ToolAnnotations = {
   readOnlyHint: false,
   destructiveHint: false,
-  idempotentHint: true,
+  idempotentHint: false,
   openWorldHint: true,
 };
 
@@ -159,6 +159,9 @@ function getActiveLeagueGroupKey(league: UserLeague): string {
   }
   if (league.platform === 'sleeper') {
     return `${league.platform}:${(league.sport || '').toLowerCase()}:${league.recurringLeagueId || league.leagueId}`;
+  }
+  if (league.platform === 'espn') {
+    return `${league.platform}:${(league.sport || '').toLowerCase()}:${league.leagueId}`;
   }
   return `${league.platform}:${league.leagueId}`;
 }
@@ -910,9 +913,9 @@ export function getUnifiedTools(): UnifiedTool[] {
       requiredScope: 'mcp:write',
       securitySchemes: buildSecuritySchemes('mcp:write'),
       annotations: REFRESH_TOOL_ANNOTATIONS,
-      openaiMeta: { invoking: 'Refreshing leagues\u2026', invoked: 'Leagues refreshed' },
+      openaiMeta: { invoking: 'Refreshing leagues\u2026', invoked: 'Refresh complete' },
       description:
-        'Refresh connected fantasy leagues by asking Flaim to rediscover leagues through connected ESPN, Yahoo, and Sleeper accounts. Use only when the user explicitly asks to refresh or after the user presses the widget refresh button. This is non-destructive and idempotent: it may add/update discovered league records but does not make roster moves, trades, drops, or lineup changes. If this call succeeds, call get_user_session again to show the updated league list. If this call errors, do not repeat it unchanged.',
+        'Refresh connected fantasy leagues by asking Flaim to rediscover leagues through connected ESPN, Yahoo, and Sleeper accounts. Use only when the user explicitly asks to refresh or after the user presses the widget refresh button. This is non-destructive, but repeated refreshes can update Flaim registry timestamps and provider metadata; it does not make roster moves, trades, drops, or lineup changes. If this call succeeds, call get_user_session again to show the updated league list. If this call errors, do not repeat it unchanged.',
       inputSchema: {
         platforms: z
           .array(z.enum(['espn', 'yahoo', 'sleeper']))

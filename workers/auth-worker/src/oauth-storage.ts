@@ -85,7 +85,28 @@ export interface CreateStateParams {
   state: string;
   redirectUri: string;
   clientId?: string;
+  scope: string;
+  codeChallenge: string;
+  resource?: string;
   expiresInSeconds?: number; // Default: 600 (10 minutes)
+}
+
+interface OAuthStateBindingInput {
+  clientId?: string;
+  scope: string;
+  codeChallenge: string;
+  resource?: string;
+}
+
+const OAUTH_STATE_BINDING_PREFIX = 'oauth-state-v1:';
+
+function encodeOAuthStateBinding(params: OAuthStateBindingInput): string {
+  return `${OAUTH_STATE_BINDING_PREFIX}${JSON.stringify({
+    clientId: params.clientId ?? null,
+    scope: params.scope,
+    codeChallenge: params.codeChallenge,
+    resource: params.resource ?? null,
+  })}`;
 }
 
 export interface TokenValidationResult {
@@ -265,7 +286,9 @@ export class OAuthStorage {
     const { error } = await this.supabase.from('oauth_states').insert({
       state: params.state,
       redirect_uri: params.redirectUri,
-      client_id: params.clientId || null,
+      // Reuse the internal text column so scope binding does not require a
+      // schema migration. This value is never exposed as the OAuth client_id.
+      client_id: encodeOAuthStateBinding(params),
       expires_at: expiresAt.toISOString(),
     });
 
@@ -281,43 +304,37 @@ export class OAuthStorage {
   async consumeOAuthState(
     state: string,
     redirectUri: string,
-    clientId?: string
+    clientId: string | undefined,
+    scope: string,
+    codeChallenge: string | undefined,
+    resource: string | undefined
   ): Promise<boolean> {
+    if (!codeChallenge) {
+      return false;
+    }
+
+    const encodedBinding = encodeOAuthStateBinding({
+      clientId,
+      scope,
+      codeChallenge,
+      resource,
+    });
     const { data, error } = await this.supabase
       .from('oauth_states')
-      .select('state, redirect_uri, client_id, expires_at')
+      .delete()
       .eq('state', state)
-      .single();
+      .eq('redirect_uri', redirectUri)
+      .eq('client_id', encodedBinding)
+      .gt('expires_at', new Date().toISOString())
+      .select('state');
 
-    if (error || !data) {
+    if (error || data?.length !== 1) {
       console.log(
-        `[oauth-storage] OAuth state lookup failed: state=${state.substring(0, 8)}..., found=${!!data}, error=${error?.message || 'none'}`
+        `[oauth-storage] OAuth state claim failed: state=${state.substring(0, 8)}..., claimed=${data?.length || 0}, error=${error?.message || 'none'}`
       );
       return false;
     }
 
-    const expiresAt = new Date(data.expires_at);
-    if (Number.isNaN(expiresAt.getTime()) || expiresAt.getTime() < Date.now()) {
-      await this.supabase.from('oauth_states').delete().eq('state', state);
-      console.log(`[oauth-storage] OAuth state expired: ${state.substring(0, 8)}...`);
-      return false;
-    }
-
-    if (!redirectUrisMatch(data.redirect_uri, redirectUri)) {
-      console.log(
-        `[oauth-storage] OAuth state redirect URI mismatch: state=${state.substring(0, 8)}..., expected=${data.redirect_uri}, got=${redirectUri}`
-      );
-      return false;
-    }
-
-    if (clientId && data.client_id && data.client_id !== clientId) {
-      console.log(
-        `[oauth-storage] OAuth state client_id mismatch: state=${state.substring(0, 8)}..., expected=${data.client_id}, got=${clientId}`
-      );
-      return false;
-    }
-
-    await this.supabase.from('oauth_states').delete().eq('state', state);
     return true;
   }
 

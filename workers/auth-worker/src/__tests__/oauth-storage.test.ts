@@ -89,6 +89,31 @@ function buildTableMock(options?: {
   };
 }
 
+function buildOAuthStateClaimMock(results: Array<{
+  data: Array<{ state: string }> | null;
+  error: { message: string } | null;
+}>) {
+  const selectDeleted = vi.fn();
+  for (const result of results) {
+    selectDeleted.mockResolvedValueOnce(result);
+  }
+  const filterExpiry = vi.fn().mockReturnValue({ select: selectDeleted });
+  const filterBinding = vi.fn().mockReturnValue({ gt: filterExpiry });
+  const filterRedirect = vi.fn().mockReturnValue({ eq: filterBinding });
+  const filterState = vi.fn().mockReturnValue({ eq: filterRedirect });
+  const deleteRow = vi.fn().mockReturnValue({ eq: filterState });
+  mockFrom.mockReturnValue({ delete: deleteRow });
+
+  return {
+    deleteRow,
+    filterState,
+    filterRedirect,
+    filterBinding,
+    filterExpiry,
+    selectDeleted,
+  };
+}
+
 describe('OAuthStorage MCP token lifetimes', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -418,5 +443,169 @@ describe('OAuthStorage MCP token lifetimes', () => {
     const storage = new OAuthStorage('https://example.supabase.co', 'test-key');
 
     await expect(storage.hasActiveConnection('user_123')).resolves.toBe(true);
+  });
+});
+
+describe('OAuthStorage authorization state binding', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    vi.clearAllMocks();
+  });
+
+  it('stores the consented scope with the authorization state binding', async () => {
+    const insert = vi.fn().mockResolvedValue({ error: null });
+    mockFrom.mockReturnValue({ insert });
+    const storage = new OAuthStorage('https://example.supabase.co', 'test-key');
+
+    await storage.createOAuthState({
+      state: 'state-123',
+      redirectUri: 'https://claude.ai/api/mcp/auth_callback',
+      clientId: 'client-123',
+      scope: 'mcp:read mcp:write',
+      codeChallenge: 'challenge-123',
+      resource: 'https://api.flaim.app/mcp',
+    });
+
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({
+      state: 'state-123',
+      client_id: 'oauth-state-v1:{"clientId":"client-123","scope":"mcp:read mcp:write","codeChallenge":"challenge-123","resource":"https://api.flaim.app/mcp"}',
+    }));
+  });
+
+  it('atomically claims state with the exact transaction binding and expiry', async () => {
+    const claim = buildOAuthStateClaimMock([{ data: [{ state: 'state-123' }], error: null }]);
+    const storage = new OAuthStorage('https://example.supabase.co', 'test-key');
+
+    const result = await storage.consumeOAuthState(
+      'state-123',
+      'https://claude.ai/api/mcp/auth_callback',
+      'client-123',
+      'mcp:read',
+      'challenge-123',
+      'https://api.flaim.app/mcp'
+    );
+
+    expect(result).toBe(true);
+    expect(claim.deleteRow).toHaveBeenCalledOnce();
+    expect(claim.filterState).toHaveBeenCalledWith('state', 'state-123');
+    expect(claim.filterRedirect).toHaveBeenCalledWith('redirect_uri', 'https://claude.ai/api/mcp/auth_callback');
+    expect(claim.filterBinding).toHaveBeenCalledWith(
+      'client_id',
+      'oauth-state-v1:{"clientId":"client-123","scope":"mcp:read","codeChallenge":"challenge-123","resource":"https://api.flaim.app/mcp"}'
+    );
+    expect(claim.filterExpiry).toHaveBeenCalledWith('expires_at', expect.any(String));
+    expect(claim.selectDeleted).toHaveBeenCalledWith('state');
+  });
+
+  it.each([
+    ['scope', { scope: 'mcp:read mcp:write' }],
+    ['PKCE challenge', { codeChallenge: 'mutated-challenge' }],
+    ['resource', { resource: 'https://api.flaim.app/fantasy/mcp' }],
+    ['client', { clientId: 'mutated-client' }],
+    ['redirect', { redirectUri: 'https://chatgpt.com/connector_platform_oauth_redirect' }],
+    ['loopback redirect spelling', { redirectUri: 'http://127.0.0.1:8787/callback' }],
+  ])('rejects a %s mismatch without consuming the state', async (_name, mutation) => {
+    const claim = buildOAuthStateClaimMock([{ data: [], error: null }]);
+    const storage = new OAuthStorage('https://example.supabase.co', 'test-key');
+
+    const submitted = {
+      redirectUri: 'https://claude.ai/api/mcp/auth_callback',
+      clientId: 'client-123',
+      scope: 'mcp:read',
+      codeChallenge: 'challenge-123',
+      resource: 'https://api.flaim.app/mcp',
+      ...mutation,
+    };
+    const result = await storage.consumeOAuthState(
+      'state-123',
+      submitted.redirectUri,
+      submitted.clientId,
+      submitted.scope,
+      submitted.codeChallenge,
+      submitted.resource
+    );
+
+    expect(result).toBe(false);
+    expect(claim.filterRedirect).toHaveBeenCalledWith('redirect_uri', submitted.redirectUri);
+    expect(claim.filterBinding).toHaveBeenCalledWith(
+      'client_id',
+      `oauth-state-v1:${JSON.stringify({
+        clientId: submitted.clientId,
+        scope: submitted.scope,
+        codeChallenge: submitted.codeChallenge,
+        resource: submitted.resource,
+      })}`
+    );
+  });
+
+  it('returns false when the atomic delete fails', async () => {
+    buildOAuthStateClaimMock([{ data: null, error: { message: 'delete failed' } }]);
+    const storage = new OAuthStorage('https://example.supabase.co', 'test-key');
+
+    const result = await storage.consumeOAuthState(
+      'state-123',
+      'https://claude.ai/api/mcp/auth_callback',
+      'client-123',
+      'mcp:read',
+      'challenge-123',
+      'https://api.flaim.app/mcp'
+    );
+
+    expect(result).toBe(false);
+  });
+
+  it('returns false when no state row is deleted', async () => {
+    buildOAuthStateClaimMock([{ data: [], error: null }]);
+    const storage = new OAuthStorage('https://example.supabase.co', 'test-key');
+
+    const result = await storage.consumeOAuthState(
+      'state-123',
+      'https://claude.ai/api/mcp/auth_callback',
+      'client-123',
+      'mcp:read',
+      'challenge-123',
+      'https://api.flaim.app/mcp'
+    );
+
+    expect(result).toBe(false);
+  });
+
+  it('returns false unless exactly one state row is deleted', async () => {
+    buildOAuthStateClaimMock([{
+      data: [{ state: 'state-123' }, { state: 'state-123' }],
+      error: null,
+    }]);
+    const storage = new OAuthStorage('https://example.supabase.co', 'test-key');
+
+    const result = await storage.consumeOAuthState(
+      'state-123',
+      'https://claude.ai/api/mcp/auth_callback',
+      'client-123',
+      'mcp:read',
+      'challenge-123',
+      'https://api.flaim.app/mcp'
+    );
+
+    expect(result).toBe(false);
+  });
+
+  it('allows only one of two concurrent consumers to claim the state', async () => {
+    buildOAuthStateClaimMock([
+      { data: [{ state: 'state-123' }], error: null },
+      { data: [], error: null },
+    ]);
+    const storage = new OAuthStorage('https://example.supabase.co', 'test-key');
+    const consume = () => storage.consumeOAuthState(
+      'state-123',
+      'https://claude.ai/api/mcp/auth_callback',
+      'client-123',
+      'mcp:read',
+      'challenge-123',
+      'https://api.flaim.app/mcp'
+    );
+
+    const results = await Promise.all([consume(), consume()]);
+
+    expect(results).toEqual([true, false]);
   });
 });
