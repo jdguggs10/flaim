@@ -114,6 +114,41 @@ function buildOAuthStateClaimMock(results: Array<{
   };
 }
 
+function buildOAuthStateRetryLookupMock(options?: {
+  insertError?: { code: string; message: string };
+  lookupData?: { state: string } | null;
+  lookupError?: { message: string } | null;
+}) {
+  const insert = vi.fn().mockResolvedValue({
+    error: options?.insertError ?? {
+      code: '23505',
+      message: 'duplicate key value violates unique constraint',
+    },
+  });
+  const maybeSingle = vi.fn().mockResolvedValue({
+    data: options?.lookupData === undefined
+      ? { state: 'pkce:challenge-123' }
+      : options.lookupData,
+    error: options?.lookupError ?? null,
+  });
+  const filterExpiry = vi.fn().mockReturnValue({ maybeSingle });
+  const filterBinding = vi.fn().mockReturnValue({ gt: filterExpiry });
+  const filterRedirect = vi.fn().mockReturnValue({ eq: filterBinding });
+  const filterState = vi.fn().mockReturnValue({ eq: filterRedirect });
+  const select = vi.fn().mockReturnValue({ eq: filterState });
+  mockFrom.mockReturnValue({ insert, select });
+
+  return {
+    insert,
+    select,
+    filterState,
+    filterRedirect,
+    filterBinding,
+    filterExpiry,
+    maybeSingle,
+  };
+}
+
 describe('OAuthStorage MCP token lifetimes', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -470,6 +505,93 @@ describe('OAuthStorage authorization state binding', () => {
       state: 'state-123',
       client_id: 'oauth-state-v1:{"clientId":"client-123","scope":"mcp:read mcp:write","codeChallenge":"challenge-123","resource":"https://api.flaim.app/mcp"}',
     }));
+  });
+
+  it('accepts an identical retry for a stateless authorization transaction', async () => {
+    const { filterState, filterRedirect, filterBinding, filterExpiry } = buildOAuthStateRetryLookupMock();
+    const storage = new OAuthStorage('https://example.supabase.co', 'test-key');
+
+    await expect(storage.createOAuthState({
+      state: 'pkce:challenge-123',
+      redirectUri: 'https://claude.ai/api/mcp/auth_callback',
+      clientId: 'client-123',
+      scope: 'mcp:read',
+      codeChallenge: 'challenge-123',
+      resource: 'https://api.flaim.app/mcp',
+    })).resolves.toBeUndefined();
+
+    expect(filterState).toHaveBeenCalledWith('state', 'pkce:challenge-123');
+    expect(filterRedirect).toHaveBeenCalledWith('redirect_uri', 'https://claude.ai/api/mcp/auth_callback');
+    expect(filterBinding).toHaveBeenCalledWith(
+      'client_id',
+      'oauth-state-v1:{"clientId":"client-123","scope":"mcp:read","codeChallenge":"challenge-123","resource":"https://api.flaim.app/mcp"}'
+    );
+    expect(filterExpiry).toHaveBeenCalledWith('expires_at', expect.any(String));
+  });
+
+  it('rejects a stateless retry when the PKCE key belongs to a different binding', async () => {
+    buildOAuthStateRetryLookupMock({ lookupData: null });
+    const storage = new OAuthStorage('https://example.supabase.co', 'test-key');
+
+    await expect(storage.createOAuthState({
+      state: 'pkce:challenge-123',
+      redirectUri: 'https://claude.ai/api/mcp/auth_callback',
+      clientId: 'client-123',
+      scope: 'mcp:read mcp:write',
+      codeChallenge: 'challenge-123',
+      resource: 'https://api.flaim.app/mcp',
+    })).rejects.toThrow('Failed to store OAuth state');
+  });
+
+  it('rejects a stateless retry when the existing row is expired and the exact lookup finds no match', async () => {
+    const { filterExpiry } = buildOAuthStateRetryLookupMock({ lookupData: null });
+    const storage = new OAuthStorage('https://example.supabase.co', 'test-key');
+
+    await expect(storage.createOAuthState({
+      state: 'pkce:challenge-123',
+      redirectUri: 'https://claude.ai/api/mcp/auth_callback',
+      clientId: 'client-123',
+      scope: 'mcp:read',
+      codeChallenge: 'challenge-123',
+      resource: 'https://api.flaim.app/mcp',
+    })).rejects.toThrow('Failed to store OAuth state');
+
+    expect(filterExpiry).toHaveBeenCalledWith('expires_at', expect.any(String));
+  });
+
+  it('rejects a stateless retry when the exact-binding lookup fails', async () => {
+    buildOAuthStateRetryLookupMock({
+      lookupData: null,
+      lookupError: { message: 'lookup failed' },
+    });
+    const storage = new OAuthStorage('https://example.supabase.co', 'test-key');
+
+    await expect(storage.createOAuthState({
+      state: 'pkce:challenge-123',
+      redirectUri: 'https://claude.ai/api/mcp/auth_callback',
+      clientId: 'client-123',
+      scope: 'mcp:read',
+      codeChallenge: 'challenge-123',
+      resource: 'https://api.flaim.app/mcp',
+    })).rejects.toThrow('Failed to store OAuth state');
+  });
+
+  it('does not run the retry lookup for a non-unique insert error', async () => {
+    const { select } = buildOAuthStateRetryLookupMock({
+      insertError: { code: '42501', message: 'permission denied' },
+    });
+    const storage = new OAuthStorage('https://example.supabase.co', 'test-key');
+
+    await expect(storage.createOAuthState({
+      state: 'pkce:challenge-123',
+      redirectUri: 'https://claude.ai/api/mcp/auth_callback',
+      clientId: 'client-123',
+      scope: 'mcp:read',
+      codeChallenge: 'challenge-123',
+      resource: 'https://api.flaim.app/mcp',
+    })).rejects.toThrow('Failed to store OAuth state');
+
+    expect(select).not.toHaveBeenCalled();
   });
 
   it('atomically claims state with the exact transaction binding and expiry', async () => {

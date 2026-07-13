@@ -282,15 +282,34 @@ export class OAuthStorage {
   async createOAuthState(params: CreateStateParams): Promise<void> {
     const expiresInSeconds = params.expiresInSeconds ?? 600; // 10 minutes default
     const expiresAt = new Date(Date.now() + expiresInSeconds * 1000);
+    const encodedBinding = encodeOAuthStateBinding(params);
 
     const { error } = await this.supabase.from('oauth_states').insert({
       state: params.state,
       redirect_uri: params.redirectUri,
       // Reuse the internal text column so scope binding does not require a
       // schema migration. This value is never exposed as the OAuth client_id.
-      client_id: encodeOAuthStateBinding(params),
+      client_id: encodedBinding,
       expires_at: expiresAt.toISOString(),
     });
+
+    if (error?.code === '23505') {
+      // Stateless clients deterministically key the transaction by PKCE, so a
+      // retried /authorize can race with or follow the original insert. Accept
+      // only an existing, unexpired row with the exact transaction binding.
+      const { data: existingState, error: lookupError } = await this.supabase
+        .from('oauth_states')
+        .select('state')
+        .eq('state', params.state)
+        .eq('redirect_uri', params.redirectUri)
+        .eq('client_id', encodedBinding)
+        .gt('expires_at', new Date().toISOString())
+        .maybeSingle();
+
+      if (existingState && !lookupError) {
+        return;
+      }
+    }
 
     if (error) {
       console.error('[oauth-storage] Failed to store OAuth state:', error);
