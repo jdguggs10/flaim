@@ -4,6 +4,13 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### League Refresh Hardening
+- **Changed**: Consent is now scope-aware: read-only requests disclose read access, while `mcp:write` requests disclose that refresh may add or update Flaim registry records without changing provider data.
+- **Fixed**: OAuth authorization transactions now use exact, atomic request binding and validation.
+- **Changed**: Refresh widgets now report complete, unchanged, partial, retry, and reconnect outcomes accurately.
+- **Fixed**: ESPN league refresh now groups matching league IDs by sport to avoid cross-sport collisions.
+- **Changed**: `refresh_leagues` is now marked non-idempotent to reflect its write behavior.
+
 ### ESPN Historical Championship Outcomes (FLA-136)
 - **Fixed**: Historical `get_standings` seasons where ESPN leaves every team's final rank at 0 no longer report false outcomes with `outcomeConfidence: "explicit"`. When explicit final ranks are absent, the champion and runner-up are now derived from the final `WINNERS_BRACKET` matchup and reported with `outcomeConfidence: "derived"`; teams without rank or bracket evidence stay null (unknown) instead of false. Applies to all four ESPN sports.
 

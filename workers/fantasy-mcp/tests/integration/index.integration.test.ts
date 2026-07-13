@@ -367,7 +367,7 @@ describe('fantasy-mcp gateway integration', () => {
       readOnlyHint: false,
       openWorldHint: true,
       destructiveHint: false,
-      idempotentHint: true,
+      idempotentHint: false,
     });
 
     const scopeByTool = new Map(getUnifiedTools().map((tool) => [tool.name, tool.requiredScope]));
@@ -378,8 +378,8 @@ describe('fantasy-mcp gateway integration', () => {
       expect(tool.annotations).toMatchObject({
         openWorldHint: true,
         destructiveHint: false,
-        idempotentHint: true,
       });
+      expect(tool.annotations?.idempotentHint).toBe(tool.name === 'refresh_leagues' ? false : true);
       expect(tool.annotations?.readOnlyHint).toBe(tool.name === 'refresh_leagues' ? false : true);
     }
 
