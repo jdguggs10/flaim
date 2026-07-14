@@ -62,8 +62,11 @@ export async function yahooFetch(
 /**
  * Handle Yahoo API error responses
  */
-export function handleYahooError(response: Response): never {
+export async function handleYahooError(response: Response): Promise<never> {
   const classification = classifyYahooApiFailure(response);
+  // Read the body once for diagnostics. Callers invoke this on `!response.ok`
+  // before reading `.json()`, so the body is still unconsumed here.
+  const body = await response.text().catch(() => '');
   switch (classification.kind) {
     case 'auth_error':
       throw new YahooClientError({
@@ -101,8 +104,18 @@ export function handleYahooError(response: Response): never {
         retryable: classification.retryable,
         retryAfter: classification.retryAfter,
       });
+    case 'bad_request':
+      console.error(`[yahoo-api] Yahoo ${classification.upstreamStatus} body: ${body.slice(0, 500)}`);
+      throw new YahooClientError({
+        code: ErrorCode.YAHOO_BAD_REQUEST,
+        message: 'Yahoo rejected the request (400).',
+        status: classification.status,
+        upstreamStatus: classification.upstreamStatus,
+        retryable: false,
+      });
     default:
       console.error(`[yahoo-api] Unexpected Yahoo status: ${classification.upstreamStatus}`);
+      console.error(`[yahoo-api] Yahoo ${classification.upstreamStatus} body: ${body.slice(0, 500)}`);
       throw new YahooClientError({
         code: 'YAHOO_API_ERROR',
         message: 'An unexpected error occurred with Yahoo. Please try again.',

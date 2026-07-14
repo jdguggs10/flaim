@@ -60,6 +60,7 @@ export type YahooApiFailureKind =
   | 'auth_error'
   | 'access_denied'
   | 'not_found'
+  | 'bad_request'
   | 'rate_limited'
   | 'transient'
   | 'unexpected';
@@ -67,7 +68,7 @@ export type YahooApiFailureKind =
 export interface YahooApiFailureClassification {
   kind: YahooApiFailureKind;
   upstreamStatus: number;
-  status: 401 | 403 | 404 | 429 | 502 | 503;
+  status: 400 | 401 | 403 | 404 | 429 | 502 | 503;
   retryable: boolean;
   retryAfter?: number;
 }
@@ -81,6 +82,9 @@ export function classifyYahooApiFailure(
     ? retryAfterSecondsFromHeaders(response.headers, upstreamStatus)
     : undefined;
 
+  if (upstreamStatus === 400) {
+    return { kind: 'bad_request', upstreamStatus, status: 400, retryable: false };
+  }
   if (upstreamStatus === 401) {
     return { kind: 'auth_error', upstreamStatus, status: 401, retryable: false };
   }

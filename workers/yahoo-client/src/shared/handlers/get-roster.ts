@@ -26,7 +26,7 @@ export function createGetRosterHandler(_config: YahooHandlerContext): HandlerFn 
       const weekParam = week ? `;week=${week}` : '';
       const response = await yahooFetch(`/team/${teamKey}/roster${weekParam}`, { credentials });
       if (!response.ok) {
-        handleYahooError(response);
+        await handleYahooError(response);
       }
 
       const raw = await response.json();

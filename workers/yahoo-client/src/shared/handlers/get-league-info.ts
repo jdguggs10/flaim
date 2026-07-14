@@ -23,7 +23,7 @@ export function createGetLeagueInfoHandler(config: YahooHandlerContext): Handler
 
       const response = await yahooFetch(`/league/${league_id}/teams`, { credentials });
       if (!response.ok) {
-        handleYahooError(response);
+        await handleYahooError(response);
       }
 
       const raw = await response.json();
