@@ -22,6 +22,13 @@ export const NORMAL_REFRESH_COOLDOWN_SECONDS = 75;
 export const UPSTREAM_BACKOFF_COOLDOWN_SECONDS = 300;
 /** In-flight lease TTL — must exceed the slowest provider refresh (ESPN discovery). */
 export const SYNC_LEASE_TTL_MS = 120_000;
+/**
+ * Sanity ceiling for the Retry-After we report to blocked callers. Cooldowns
+ * can legitimately exceed the default upstream backoff when a provider sends
+ * a longer Retry-After, so this must not clamp real remaining time (PR #143
+ * review: capping at the default backoff under-reported long cooldowns).
+ */
+export const MAX_REPORTED_RETRY_AFTER_SECONDS = 3_600;
 
 export type SyncProvider = 'espn' | 'yahoo' | 'sleeper';
 export type SyncSource = 'web' | 'mcp' | 'extension' | 'scheduled';
@@ -33,7 +40,13 @@ export type SyncLeaseAcquisition =
   | { acquired: false; state: SyncLeaseState; retryAfterSeconds: number };
 
 export interface SyncSettleOutcome {
-  status: 'success' | 'error';
+  /**
+   * 'skipped' = the provider was never attempted (e.g. no stored credentials).
+   * It releases the lease without touching success/failure telemetry, so an
+   * unconnected provider never gets a false last_success_at and a removed
+   * credential never wipes the last real error (PR #143 review).
+   */
+  status: 'success' | 'error' | 'skipped';
   cooldownSeconds: number;
   syncSource: SyncSource;
   errorCode?: string;
@@ -56,7 +69,7 @@ function boundedRetryAfterSeconds(expiresAt: string | null, nowMs: number): numb
   if (!expiresAt) return NORMAL_REFRESH_COOLDOWN_SECONDS;
   const remainingMs = new Date(expiresAt).getTime() - nowMs;
   if (!Number.isFinite(remainingMs) || remainingMs <= 0) return 1;
-  return Math.min(Math.ceil(remainingMs / 1000), UPSTREAM_BACKOFF_COOLDOWN_SECONDS);
+  return Math.min(Math.ceil(remainingMs / 1000), MAX_REPORTED_RETRY_AFTER_SECONDS);
 }
 
 export class SyncStateStorage {
@@ -149,11 +162,13 @@ export class SyncStateStorage {
           sync_lease_expires_at: cooldownExpiresAt,
           ...(outcome.status === 'success'
             ? { last_success_at: now, last_error_code: null, last_error_message: null }
-            : {
-                last_failure_at: now,
-                last_error_code: outcome.errorCode ?? 'refresh_failed',
-                last_error_message: outcome.errorMessage?.slice(0, 500) ?? null,
-              }),
+            : outcome.status === 'error'
+              ? {
+                  last_failure_at: now,
+                  last_error_code: outcome.errorCode ?? 'refresh_failed',
+                  last_error_message: outcome.errorMessage?.slice(0, 500) ?? null,
+                }
+              : {}),
           ...(outcome.leagueCount !== undefined ? { last_league_count: outcome.leagueCount } : {}),
           ...(outcome.durationMs !== undefined ? { last_duration_ms: outcome.durationMs } : {}),
           last_sync_source: outcome.syncSource,

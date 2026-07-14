@@ -556,13 +556,36 @@ describe('refresh cooldown envelope (FLA-121)', () => {
       retryAfter: '30',
     });
     expect(body.results.sleeper.status).toBe('success');
-    // Only the provider that actually ran settles into a cooldown.
+    // Only the provider that actually ran settles into a cooldown, and the
+    // Sleeper league count (details.leagues_found) reaches telemetry.
     expect(mockSyncState.settle).toHaveBeenCalledOnce();
     expect(mockSyncState.settle).toHaveBeenCalledWith(
       'user_cooldown_partial',
       'sleeper',
       expect.any(String),
-      expect.objectContaining({ status: 'success', syncSource: 'web' }),
+      expect.objectContaining({ status: 'success', syncSource: 'web', leagueCount: 1 }),
+    );
+  });
+
+  it('settles skipped providers as skipped with a minimal cooldown', async () => {
+    mockEspnStorage.getCredentials.mockResolvedValue(null); // no ESPN credentials → skipped
+
+    const token = await signedClerkToken('user_skipped_espn');
+    const res = await app.fetch(makeRequest('/auth/leagues/refresh', {
+      method: 'POST',
+      body: JSON.stringify({ platforms: ['espn'] }),
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    }), baseEnv);
+
+    expect(res.status).toBe(200);
+    expect(mockSyncState.settle).toHaveBeenCalledWith(
+      'user_skipped_espn',
+      'espn',
+      expect.any(String),
+      expect.objectContaining({ status: 'skipped', cooldownSeconds: 1 }),
     );
   });
 

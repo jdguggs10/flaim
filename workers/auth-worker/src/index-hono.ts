@@ -1039,7 +1039,9 @@ api.post('/extension/discover', async (c) => {
     });
     return c.json({
       error: 'refresh_cooldown',
-      error_description: `ESPN refresh is cooling down. Try again in ${lease.retryAfterSeconds} seconds.`,
+      error_description: lease.state === 'in_progress'
+        ? `An ESPN refresh is already in progress. Try again in ${lease.retryAfterSeconds} seconds.`
+        : `ESPN refresh is cooling down. Try again in ${lease.retryAfterSeconds} seconds.`,
       retry_after: lease.retryAfterSeconds,
     }, 429, { 'Retry-After': String(lease.retryAfterSeconds) });
   }

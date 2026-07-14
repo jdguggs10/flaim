@@ -265,13 +265,19 @@ async function refreshSleeperLeagues(env: SleeperConnectEnv, userId: string): Pr
   }
 }
 
-function cooldownBlockedResult(platform: RefreshPlatform, retryAfterSeconds: number): ProviderRefreshResult {
+function cooldownBlockedResult(
+  platform: RefreshPlatform,
+  state: 'in_progress' | 'cooldown',
+  retryAfterSeconds: number
+): ProviderRefreshResult {
   return {
     platform,
     status: 'error',
     httpStatus: 429,
     error: 'refresh_cooldown',
-    error_description: `${platform} refresh is cooling down. Try again in ${retryAfterSeconds} seconds.`,
+    error_description: state === 'in_progress'
+      ? `A ${platform} refresh is already in progress. Try again in ${retryAfterSeconds} seconds.`
+      : `${platform} refresh is cooling down. Try again in ${retryAfterSeconds} seconds.`,
     retryAfter: String(retryAfterSeconds),
   };
 }
@@ -298,6 +304,7 @@ function leagueCountFromResult(result: ProviderRefreshResult): number | undefine
   const record = details as Record<string, unknown>;
   if (typeof record.currentSeasonCount === 'number') return record.currentSeasonCount;
   if (typeof record.count === 'number') return record.count;
+  if (typeof record.leagues_found === 'number') return record.leagues_found;
   return undefined;
 }
 
@@ -325,7 +332,7 @@ export async function refreshLeaguesForUser(
         correlationId,
         ownerId,
       });
-      return [platform, cooldownBlockedResult(platform, lease.retryAfterSeconds)];
+      return [platform, cooldownBlockedResult(platform, lease.state, lease.retryAfterSeconds)];
     }
 
     const startedAt = Date.now();
@@ -351,7 +358,7 @@ export async function refreshLeaguesForUser(
     const durationMs = Date.now() - startedAt;
     const leagueCount = leagueCountFromResult(result);
     await syncState.settle(userId, platform, ownerId, {
-      status: result.status === 'error' ? 'error' : 'success',
+      status: result.status,
       // Skipped providers (no credentials) did no upstream work; don't make a
       // user who connects a platform right after a sync wait out a cooldown.
       cooldownSeconds: result.status === 'skipped' ? 1 : cooldownSecondsForResult(result),

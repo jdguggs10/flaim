@@ -66,6 +66,25 @@ describe('SyncStateStorage.acquireLease', () => {
     }
   });
 
+  it('reports the full remaining time for cooldowns longer than the default backoff', async () => {
+    const expiresAt = new Date(Date.now() + 600_000).toISOString(); // provider Retry-After of 600s
+    const { client } = fakeSupabase([
+      { error: null },
+      { data: [], error: null },
+      { data: { sync_lease_owner: `${SYNC_COOLDOWN_OWNER_PREFIX}other`, sync_lease_expires_at: expiresAt }, error: null },
+    ]);
+    const storage = new SyncStateStorage(client);
+
+    const result = await storage.acquireLease('user_1', 'yahoo', 'owner-long');
+
+    expect(result.acquired).toBe(false);
+    if (!result.acquired) {
+      // Must not be clamped to UPSTREAM_BACKOFF_COOLDOWN_SECONDS (PR #143 review).
+      expect(result.retryAfterSeconds).toBeGreaterThan(UPSTREAM_BACKOFF_COOLDOWN_SECONDS);
+      expect(result.retryAfterSeconds).toBeLessThanOrEqual(600);
+    }
+  });
+
   it('reports in_progress when blocked by a live (non-cooldown) lease', async () => {
     const expiresAt = new Date(Date.now() + 60_000).toISOString();
     const { client } = fakeSupabase([
@@ -139,6 +158,28 @@ describe('SyncStateStorage.settle', () => {
     expect(update.last_failure_at).toBeDefined();
     expect(update.last_error_code).toBe('discovery_failed');
     expect((update.last_error_message as string).length).toBe(500);
+  });
+
+  it('releases the lease for skipped providers without touching success/failure telemetry', async () => {
+    const { client, calls } = fakeSupabase([
+      { data: [{ clerk_user_id: 'user_1' }], error: null },
+    ]);
+    const storage = new SyncStateStorage(client);
+
+    await storage.settle('user_1', 'espn', 'owner-skip', {
+      status: 'skipped',
+      cooldownSeconds: 1,
+      syncSource: 'web',
+    });
+
+    const update = calls[0].update?.[0]?.[0] as Record<string, unknown>;
+    expect(update.sync_lease_owner).toBe(`${SYNC_COOLDOWN_OWNER_PREFIX}owner-skip`);
+    // A never-attempted provider must not gain a false success timestamp,
+    // and a previously recorded error must not be wiped (PR #143 review).
+    expect(update).not.toHaveProperty('last_success_at');
+    expect(update).not.toHaveProperty('last_failure_at');
+    expect(update).not.toHaveProperty('last_error_code');
+    expect(update).not.toHaveProperty('last_error_message');
   });
 
   it('swallows storage errors (fail open)', async () => {
