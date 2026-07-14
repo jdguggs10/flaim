@@ -6,6 +6,13 @@ import {
   refreshSleeperLeaguesFromStoredConnection,
   type SleeperConnectEnv,
 } from './sleeper-connect-handlers';
+import {
+  logSyncEnvelope,
+  NORMAL_REFRESH_COOLDOWN_SECONDS,
+  SyncStateStorage,
+  UPSTREAM_BACKOFF_COOLDOWN_SECONDS,
+  type SyncSource,
+} from './sync-state';
 
 export const REFRESH_PLATFORMS = ['espn', 'yahoo', 'sleeper'] as const;
 export type RefreshPlatform = typeof REFRESH_PLATFORMS[number];
@@ -258,31 +265,116 @@ async function refreshSleeperLeagues(env: SleeperConnectEnv, userId: string): Pr
   }
 }
 
+function cooldownBlockedResult(platform: RefreshPlatform, retryAfterSeconds: number): ProviderRefreshResult {
+  return {
+    platform,
+    status: 'error',
+    httpStatus: 429,
+    error: 'refresh_cooldown',
+    error_description: `${platform} refresh is cooling down. Try again in ${retryAfterSeconds} seconds.`,
+    retryAfter: String(retryAfterSeconds),
+  };
+}
+
+/**
+ * Cooldown classification: upstream 429/timeout gets the long backoff
+ * (or the provider's own Retry-After when longer); everything else gets
+ * the normal post-refresh cooldown.
+ */
+export function cooldownSecondsForResult(result: ProviderRefreshResult): number {
+  const providerRetryAfter = Number(result.retryAfter);
+  const timedOut = /timeout|timed out/i.test(result.error_description ?? '');
+  if (result.httpStatus === 429 || timedOut) {
+    return Number.isFinite(providerRetryAfter) && providerRetryAfter > UPSTREAM_BACKOFF_COOLDOWN_SECONDS
+      ? providerRetryAfter
+      : UPSTREAM_BACKOFF_COOLDOWN_SECONDS;
+  }
+  return NORMAL_REFRESH_COOLDOWN_SECONDS;
+}
+
+function leagueCountFromResult(result: ProviderRefreshResult): number | undefined {
+  const details = result.details;
+  if (typeof details !== 'object' || details === null) return undefined;
+  const record = details as Record<string, unknown>;
+  if (typeof record.currentSeasonCount === 'number') return record.currentSeasonCount;
+  if (typeof record.count === 'number') return record.count;
+  return undefined;
+}
+
 export async function refreshLeaguesForUser(
   env: { SUPABASE_URL: string; SUPABASE_SERVICE_KEY: string },
   userId: string,
   platforms: RefreshPlatform[],
   corsHeaders: Record<string, string>,
-  correlationId?: string
+  correlationId?: string,
+  syncSource: SyncSource = 'web'
 ): Promise<LeagueRefreshResponse> {
+  const syncState = SyncStateStorage.fromEnvironment(env);
+
   const refreshOne = async (platform: RefreshPlatform): Promise<[RefreshPlatform, ProviderRefreshResult]> => {
+    const ownerId = crypto.randomUUID();
+    const lease = await syncState.acquireLease(userId, platform, ownerId);
+    if (!lease.acquired) {
+      logSyncEnvelope({
+        provider: platform,
+        userId,
+        syncSource,
+        status: 'cooldown_blocked',
+        httpStatus: 429,
+        retryAfterSeconds: lease.retryAfterSeconds,
+        correlationId,
+        ownerId,
+      });
+      return [platform, cooldownBlockedResult(platform, lease.retryAfterSeconds)];
+    }
+
+    const startedAt = Date.now();
+    let result: ProviderRefreshResult;
     try {
       if (platform === 'espn') {
-        return [platform, await refreshEspnLeagues(env, userId)];
+        result = await refreshEspnLeagues(env, userId);
+      } else if (platform === 'yahoo') {
+        result = await refreshYahooLeagues(env as YahooConnectEnv, userId, corsHeaders, correlationId);
+      } else {
+        result = await refreshSleeperLeagues(env as SleeperConnectEnv, userId);
       }
-      if (platform === 'yahoo') {
-        return [platform, await refreshYahooLeagues(env as YahooConnectEnv, userId, corsHeaders, correlationId)];
-      }
-      return [platform, await refreshSleeperLeagues(env as SleeperConnectEnv, userId)];
     } catch (error) {
-      return [platform, {
+      result = {
         platform,
         status: 'error',
         httpStatus: 500,
         error: 'refresh_failed',
         error_description: errorDescription(error, `${platform} league refresh failed`),
-      }];
+      };
     }
+
+    const durationMs = Date.now() - startedAt;
+    const leagueCount = leagueCountFromResult(result);
+    await syncState.settle(userId, platform, ownerId, {
+      status: result.status === 'error' ? 'error' : 'success',
+      // Skipped providers (no credentials) did no upstream work; don't make a
+      // user who connects a platform right after a sync wait out a cooldown.
+      cooldownSeconds: result.status === 'skipped' ? 1 : cooldownSecondsForResult(result),
+      syncSource,
+      errorCode: result.error,
+      errorMessage: result.error_description,
+      leagueCount,
+      durationMs,
+    });
+    logSyncEnvelope({
+      provider: platform,
+      userId,
+      syncSource,
+      status: result.status,
+      httpStatus: result.httpStatus,
+      durationMs,
+      leagueCount,
+      errorCode: result.error,
+      ...(result.retryAfter ? { retryAfterSeconds: Number(result.retryAfter) || undefined } : {}),
+      correlationId,
+      ownerId,
+    });
+    return [platform, result];
   };
 
   const entries = await Promise.all(platforms.map(refreshOne));
@@ -293,4 +385,21 @@ export async function refreshLeaguesForUser(
     requestedPlatforms: platforms,
     results,
   };
+}
+
+/**
+ * When every requested provider was blocked by an active cooldown/in-flight
+ * lease, the whole response should be a 429 rather than a 200 with only
+ * cooldown errors inside. Returns the Retry-After seconds to advertise
+ * (the longest remaining cooldown), or null when any provider actually ran.
+ */
+export function allProvidersCooldownRetryAfter(response: LeagueRefreshResponse): number | null {
+  const results = Object.values(response.results);
+  if (results.length === 0) return null;
+  let maxRetryAfter = 0;
+  for (const result of results) {
+    if (!result || result.error !== 'refresh_cooldown') return null;
+    maxRetryAfter = Math.max(maxRetryAfter, Number(result.retryAfter) || 0);
+  }
+  return maxRetryAfter > 0 ? maxRetryAfter : NORMAL_REFRESH_COOLDOWN_SECONDS;
 }

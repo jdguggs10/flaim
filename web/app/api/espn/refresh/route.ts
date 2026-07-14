@@ -37,13 +37,20 @@ export async function POST() {
       const error = await workerRes.json().catch(() => ({ error: 'Unknown error' })) as {
         error?: string;
         error_description?: string;
+        retry_after?: number;
       };
+      const headers = new Headers();
+      const retryAfter = workerRes.headers.get('Retry-After');
+      if (retryAfter) {
+        headers.set('Retry-After', retryAfter);
+      }
       return NextResponse.json(
         {
           error: error.error || 'Failed to refresh ESPN leagues',
           error_description: error.error_description,
+          ...(error.retry_after !== undefined ? { retry_after: error.retry_after } : {}),
         },
-        { status: normalizeWorkerErrorStatus(workerRes.status) }
+        { status: normalizeWorkerErrorStatus(workerRes.status), headers }
       );
     }
 
