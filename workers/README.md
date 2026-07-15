@@ -108,7 +108,7 @@ Ensure `wrangler.jsonc` has `"workers_dev": true` so the `.workers.dev` URL exis
 All tools take explicit parameters: `platform`, `sport`, `league_id`, `season_year`
 
 - `get_user_session` — All leagues across platforms with IDs (call first to get params)
-- `refresh_leagues` — Re-discover connected leagues and update Flaim's league records (`mcp:write`; non-destructive)
+- `refresh_leagues` — Re-discover connected leagues and update Flaim's league records (`mcp:write`; non-destructive; rate-limited, see below)
 - `get_ancient_history` — Past seasons and historical leagues outside the current season
 - `get_league_info` — Baseline league context: settings, members, teams/owners
 - `get_standings` — League standings
@@ -123,6 +123,16 @@ All tools take explicit parameters: `platform`, `sport`, `league_id`, `season_ye
 - Yahoo: explicit `week` ignored; uses a recent 14-day timestamp window.
 - Yahoo: `type=waiver` filter is intentionally unsupported in v1.
 - `get_user_session` should be the first call in a normal chat, and `get_league_info` is usually the second call before most league-specific analysis so team names, owner/team mapping, and league rules are established.
+
+### Refresh cooldown envelope
+
+League refresh and ESPN discovery run under a per-user, per-provider single-flight lease with post-refresh cooldowns (~75s after a normal refresh; 5 minutes or the provider's `Retry-After` after an upstream 429/timeout), backed by the `provider_sync_state` table, which also records last attempt/success/failure telemetry per provider.
+
+- When **every** requested provider is cooling down, refresh endpoints return `429 refresh_cooldown` with a `retry_after` field and a `Retry-After` header.
+- Partially blocked refreshes return `200` with per-provider results; a blocked provider carries `error: "refresh_cooldown"`, `httpStatus: 429`, and `retryAfter` (seconds, as a string).
+- Providers skipped for missing credentials do not incur a cooldown.
+- Each provider refresh emits one structured `provider_sync` log line (provider, masked user, source, status, duration, league count, error code, retry seconds, correlation id), queryable in Workers Logs by the `event` field.
+- The envelope fails open: storage errors never block a refresh.
 
 ## ESPN API Reference
 
