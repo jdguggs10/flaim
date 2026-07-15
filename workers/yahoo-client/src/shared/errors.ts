@@ -52,6 +52,8 @@ export function defaultMetadataForYahooCode(code?: string): Pick<YahooClientErro
       return { status: 403 };
     case 'YAHOO_NOT_FOUND':
       return { status: 404 };
+    case 'YAHOO_BAD_REQUEST':
+      return { status: 400, retryable: false };
     case 'YAHOO_API_ERROR':
       return { status: 502 };
     default:

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { handleYahooError } from '../yahoo-api';
 
 describe('Yahoo API errors', () => {
@@ -63,5 +63,18 @@ describe('Yahoo API errors', () => {
         retryable: false,
       })
     );
+  });
+
+  it('logs the Yahoo response body on a 400 for diagnostics', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const response = new Response('{"error":{"description":"Invalid week"}}', {
+      status: 400,
+    });
+
+    await expect(handleYahooError(response)).rejects.toThrow('YAHOO_BAD_REQUEST');
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Invalid week')
+    );
+    errorSpy.mockRestore();
   });
 });

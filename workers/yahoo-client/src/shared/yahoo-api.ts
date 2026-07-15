@@ -64,9 +64,12 @@ export async function yahooFetch(
  */
 export async function handleYahooError(response: Response): Promise<never> {
   const classification = classifyYahooApiFailure(response);
-  // Read the body once for diagnostics. Callers invoke this on `!response.ok`
-  // before reading `.json()`, so the body is still unconsumed here.
-  const body = await response.text().catch(() => '');
+  // Yahoo's error body, read lazily for diagnostics — only the bad_request and
+  // unexpected branches below use it, so the retryable hot paths (429/503) skip
+  // the extra body read. Callers invoke this on `!response.ok` before `.json()`,
+  // so the body is still unconsumed here.
+  const readErrorBody = () =>
+    response.text().then((b) => b.slice(0, 500)).catch(() => '');
   switch (classification.kind) {
     case 'auth_error':
       throw new YahooClientError({
@@ -105,7 +108,7 @@ export async function handleYahooError(response: Response): Promise<never> {
         retryAfter: classification.retryAfter,
       });
     case 'bad_request':
-      console.error(`[yahoo-api] Yahoo ${classification.upstreamStatus} body: ${body.slice(0, 500)}`);
+      console.error(`[yahoo-api] Yahoo ${classification.upstreamStatus} body: ${await readErrorBody()}`);
       throw new YahooClientError({
         code: ErrorCode.YAHOO_BAD_REQUEST,
         message: 'Yahoo rejected the request (400).',
@@ -115,7 +118,7 @@ export async function handleYahooError(response: Response): Promise<never> {
       });
     default:
       console.error(`[yahoo-api] Unexpected Yahoo status: ${classification.upstreamStatus}`);
-      console.error(`[yahoo-api] Yahoo ${classification.upstreamStatus} body: ${body.slice(0, 500)}`);
+      console.error(`[yahoo-api] Yahoo ${classification.upstreamStatus} body: ${await readErrorBody()}`);
       throw new YahooClientError({
         code: 'YAHOO_API_ERROR',
         message: 'An unexpected error occurred with Yahoo. Please try again.',
