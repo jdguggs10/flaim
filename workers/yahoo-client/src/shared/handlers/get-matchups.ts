@@ -24,7 +24,7 @@ export function createGetMatchupsHandler(_config: YahooHandlerContext): HandlerF
       const weekParam = week ? `;week=${week}` : '';
       const response = await yahooFetch(`/league/${league_id}/scoreboard${weekParam}`, { credentials });
       if (!response.ok) {
-        handleYahooError(response);
+        await handleYahooError(response);
       }
 
       const raw = await response.json();
