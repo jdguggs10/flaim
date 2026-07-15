@@ -4,6 +4,11 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Provider Refresh Cooldown + Sync Telemetry (FLA-121)
+- **Added**: League refresh and ESPN discovery now run under a per-user, per-provider single-flight lease with post-refresh cooldowns (~75s normal; 5 minutes or the provider's `Retry-After` after upstream 429s/timeouts), backed by a new `provider_sync_state` table that also records last attempt/success/failure telemetry for each provider.
+- **Changed**: When every requested provider is cooling down, refresh endpoints return a consistent `429 refresh_cooldown` with `retry_after` and a `Retry-After` header (partially blocked syncs still return 200 with per-provider results); the ESPN refresh proxy now preserves `Retry-After` to the browser.
+- **Added**: One structured `provider_sync` log line per provider refresh (provider, masked user, source, status, duration, league count, error code, retry seconds, correlation id) queryable in Workers Logs.
+
 ### League Refresh Hardening
 - **Changed**: Consent is now scope-aware: read-only requests disclose read access, while `mcp:write` requests disclose that refresh may add or update Flaim registry records without changing provider data.
 - **Fixed**: OAuth authorization transactions now use exact, atomic request binding and validation.

@@ -74,9 +74,13 @@ import {
 } from './sleeper-connect-handlers';
 import { logEvalEvent } from './logging';
 import {
+  allProvidersCooldownRetryAfter,
+  cooldownSecondsForResult,
   parseLeagueRefreshRequest,
   refreshLeaguesForUser,
+  type LeagueRefreshResponse,
 } from './league-refresh';
+import { logSyncEnvelope, SyncStateStorage } from './sync-state';
 
 // =============================================================================
 // TYPES
@@ -142,6 +146,27 @@ async function enforceLeagueRefreshRateLimit(c: Context<{ Bindings: Env }>, user
     },
     429,
     { 'Retry-After': '60' }
+  );
+}
+
+/**
+ * Consistent refresh response (FLA-121): when every requested provider was
+ * blocked by an active cooldown, surface a whole-response 429 refresh_cooldown
+ * with retry_after and a Retry-After header instead of a 200 wrapper.
+ */
+function leagueRefreshResponse(c: Context<{ Bindings: Env }>, result: LeagueRefreshResponse) {
+  const retryAfter = allProvidersCooldownRetryAfter(result);
+  if (retryAfter === null) return c.json(result, 200);
+
+  return c.json(
+    {
+      ...result,
+      error: 'refresh_cooldown',
+      error_description: `Refresh is cooling down. Try again in ${retryAfter} seconds.`,
+      retry_after: retryAfter,
+    },
+    429,
+    { 'Retry-After': String(retryAfter) }
   );
 }
 
@@ -812,9 +837,10 @@ api.post('/internal/leagues/refresh', async (c) => {
     userId,
     validation.platforms ?? ['espn', 'yahoo', 'sleeper'],
     getCorsHeaders(c.req.raw),
-    c.req.header('X-Correlation-ID') || undefined
+    c.req.header('X-Correlation-ID') || undefined,
+    'mcp'
   );
-  return c.json(result, 200);
+  return leagueRefreshResponse(c, result);
 });
 
 // Usage analytics ingest (internal — called by fantasy-mcp gateway via service binding).
@@ -996,6 +1022,63 @@ api.post('/extension/discover', async (c) => {
     });
   }
 
+  // Single-flight + cooldown envelope (FLA-121). Acquired after the
+  // credentials check so credential-less calls never burn a cooldown.
+  const syncState = SyncStateStorage.fromEnvironment(c.env);
+  const ownerId = crypto.randomUUID();
+  const lease = await syncState.acquireLease(userId, 'espn', ownerId);
+  if (!lease.acquired) {
+    logSyncEnvelope({
+      provider: 'espn',
+      userId,
+      syncSource: 'extension',
+      status: 'cooldown_blocked',
+      httpStatus: 429,
+      retryAfterSeconds: lease.retryAfterSeconds,
+      ownerId,
+    });
+    return c.json({
+      error: 'refresh_cooldown',
+      error_description: lease.state === 'in_progress'
+        ? `An ESPN refresh is already in progress. Try again in ${lease.retryAfterSeconds} seconds.`
+        : `ESPN refresh is cooling down. Try again in ${lease.retryAfterSeconds} seconds.`,
+      retry_after: lease.retryAfterSeconds,
+    }, 429, { 'Retry-After': String(lease.retryAfterSeconds) });
+  }
+  const startedAt = Date.now();
+
+  const settleDiscover = async (
+    status: 'success' | 'error',
+    fields: { errorCode?: string; errorMessage?: string; leagueCount?: number; httpStatus?: number }
+  ) => {
+    const durationMs = Date.now() - startedAt;
+    await syncState.settle(userId, 'espn', ownerId, {
+      status,
+      cooldownSeconds: cooldownSecondsForResult({
+        platform: 'espn',
+        status,
+        httpStatus: fields.httpStatus,
+        error_description: fields.errorMessage,
+      }),
+      syncSource: 'extension',
+      errorCode: fields.errorCode,
+      errorMessage: fields.errorMessage,
+      leagueCount: fields.leagueCount,
+      durationMs,
+    });
+    logSyncEnvelope({
+      provider: 'espn',
+      userId,
+      syncSource: 'extension',
+      status,
+      httpStatus: fields.httpStatus ?? 200,
+      durationMs,
+      leagueCount: fields.leagueCount,
+      errorCode: fields.errorCode,
+      ownerId,
+    });
+  };
+
   try {
     // Run discovery (includes historical seasons, fully synchronous)
     const result = await discoverAndSaveLeagues(
@@ -1015,6 +1098,8 @@ api.post('/extension/discover', async (c) => {
       teamName: l.teamName || '',
       seasonYear: l.seasonYear || 0,
     }));
+
+    await settleDiscover('success', { leagueCount: currentSeasonWithDefault.length });
 
     return c.json({
       discovered: result.discovered,
@@ -1052,6 +1137,8 @@ api.post('/extension/discover', async (c) => {
         seasonYear: l.seasonYear,
       }));
 
+      await settleDiscover('success', { leagueCount: savedCount });
+
       return c.json({
         discovered,
         currentSeasonLeagues: currentSeasonWithDefault,
@@ -1079,6 +1166,12 @@ api.post('/extension/discover', async (c) => {
       http_status: isAuthError ? 401 : 500,
       platform: 'espn',
       auth_type: 'clerk',
+    });
+
+    await settleDiscover('error', {
+      errorCode: isAuthError ? 'espn_auth_failed' : 'discovery_failed',
+      errorMessage,
+      httpStatus: isAuthError ? 401 : 500,
     });
 
     return c.json({
@@ -1111,9 +1204,10 @@ api.post('/leagues/refresh', async (c) => {
     userId,
     validation.platforms ?? ['espn', 'yahoo', 'sleeper'],
     getCorsHeaders(c.req.raw),
-    c.req.header('X-Correlation-ID') || undefined
+    c.req.header('X-Correlation-ID') || undefined,
+    'web'
   );
-  return c.json(result, 200);
+  return leagueRefreshResponse(c, result);
 });
 
 // =============================================================================

@@ -141,6 +141,29 @@ describe('POST /api/espn/refresh', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it('preserves Retry-After and retry_after on worker cooldown 429s (FLA-121)', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      error: 'refresh_cooldown',
+      error_description: 'ESPN refresh is cooling down. Try again in 55 seconds.',
+      retry_after: 55,
+    }), {
+      status: 429,
+      headers: { 'content-type': 'application/json', 'Retry-After': '55' },
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const response = await POST();
+    const body = await response.json();
+
+    expect(response.status).toBe(429);
+    expect(response.headers.get('Retry-After')).toBe('55');
+    expect(body).toEqual({
+      error: 'refresh_cooldown',
+      error_description: 'ESPN refresh is cooling down. Try again in 55 seconds.',
+      retry_after: 55,
+    });
+  });
+
   it('proxies to the auth worker and returns normalized counts', async () => {
     const fetchMock = vi.fn(async () => jsonResponse({
       currentSeason: {

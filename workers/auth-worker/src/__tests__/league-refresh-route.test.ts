@@ -58,6 +58,22 @@ vi.mock('../sleeper-connect-handlers', () => ({
   SleeperConnectEnv: {},
 }));
 
+const mockSyncState = vi.hoisted(() => ({
+  acquireLease: vi.fn(),
+  settle: vi.fn(),
+}));
+
+vi.mock('../sync-state', () => ({
+  SyncStateStorage: {
+    fromEnvironment: vi.fn().mockReturnValue(mockSyncState),
+  },
+  logSyncEnvelope: vi.fn(),
+  NORMAL_REFRESH_COOLDOWN_SECONDS: 75,
+  UPSTREAM_BACKOFF_COOLDOWN_SECONDS: 300,
+  SYNC_COOLDOWN_OWNER_PREFIX: 'cooldown:',
+  SYNC_LEASE_TTL_MS: 120_000,
+}));
+
 vi.mock('../oauth-handlers', () => ({
   handleMetadataDiscovery: vi.fn(),
   handleClientRegistration: vi.fn(),
@@ -172,6 +188,8 @@ beforeEach(() => {
       seasons_discovered: 1,
     },
   });
+  mockSyncState.acquireLease.mockResolvedValue({ acquired: true });
+  mockSyncState.settle.mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -479,5 +497,172 @@ describe('refreshLeaguesForUser', () => {
 
     expect(result.success).toBe(true);
     expect(started).toEqual(new Set(['espn', 'yahoo', 'sleeper']));
+  });
+});
+
+describe('refresh cooldown envelope (FLA-121)', () => {
+  it('returns a whole-response 429 with Retry-After when every provider is cooling down', async () => {
+    mockSyncState.acquireLease
+      .mockResolvedValueOnce({ acquired: false, state: 'cooldown', retryAfterSeconds: 42 })
+      .mockResolvedValueOnce({ acquired: false, state: 'in_progress', retryAfterSeconds: 90 });
+
+    const token = await signedClerkToken('user_cooldown_all');
+    const res = await app.fetch(makeRequest('/auth/leagues/refresh', {
+      method: 'POST',
+      body: JSON.stringify({ platforms: ['espn', 'sleeper'] }),
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    }), baseEnv);
+
+    expect(res.status).toBe(429);
+    expect(res.headers.get('Retry-After')).toBe('90');
+    const body = await res.json() as Record<string, unknown>;
+    expect(body.error).toBe('refresh_cooldown');
+    expect(body.retry_after).toBe(90);
+    expect(body.success).toBe(false);
+    expect(refreshSleeperLeaguesFromStoredConnection).not.toHaveBeenCalled();
+    expect(mockSyncState.settle).not.toHaveBeenCalled();
+  });
+
+  it('returns 200 with a per-provider cooldown result when only some providers are blocked', async () => {
+    mockSyncState.acquireLease.mockImplementation(async (_userId: string, provider: string) => (
+      provider === 'espn'
+        ? { acquired: false, state: 'cooldown', retryAfterSeconds: 30 }
+        : { acquired: true }
+    ));
+
+    const token = await signedClerkToken('user_cooldown_partial');
+    const res = await app.fetch(makeRequest('/auth/leagues/refresh', {
+      method: 'POST',
+      body: JSON.stringify({ platforms: ['espn', 'sleeper'] }),
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    }), baseEnv);
+
+    expect(res.status).toBe(200);
+    const body = await res.json() as {
+      success: boolean;
+      results: Record<string, { status: string; httpStatus: number; error?: string; retryAfter?: string }>;
+    };
+    expect(body.success).toBe(true);
+    expect(body.results.espn).toMatchObject({
+      status: 'error',
+      httpStatus: 429,
+      error: 'refresh_cooldown',
+      retryAfter: '30',
+    });
+    expect(body.results.sleeper.status).toBe('success');
+    // Only the provider that actually ran settles into a cooldown, and the
+    // Sleeper league count (details.leagues_found) reaches telemetry.
+    expect(mockSyncState.settle).toHaveBeenCalledOnce();
+    expect(mockSyncState.settle).toHaveBeenCalledWith(
+      'user_cooldown_partial',
+      'sleeper',
+      expect.any(String),
+      expect.objectContaining({ status: 'success', syncSource: 'web', leagueCount: 1 }),
+    );
+  });
+
+  it('settles skipped providers as skipped with a minimal cooldown', async () => {
+    mockEspnStorage.getCredentials.mockResolvedValue(null); // no ESPN credentials → skipped
+
+    const token = await signedClerkToken('user_skipped_espn');
+    const res = await app.fetch(makeRequest('/auth/leagues/refresh', {
+      method: 'POST',
+      body: JSON.stringify({ platforms: ['espn'] }),
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    }), baseEnv);
+
+    expect(res.status).toBe(200);
+    expect(mockSyncState.settle).toHaveBeenCalledWith(
+      'user_skipped_espn',
+      'espn',
+      expect.any(String),
+      expect.objectContaining({ status: 'skipped', cooldownSeconds: 1 }),
+    );
+  });
+
+  it('settles an error refresh with the error code for last-run telemetry', async () => {
+    vi.mocked(refreshSleeperLeaguesFromStoredConnection).mockRejectedValue(new Error('sleeper exploded'));
+
+    const token = await signedClerkToken('user_cooldown_error');
+    const res = await app.fetch(makeRequest('/auth/leagues/refresh', {
+      method: 'POST',
+      body: JSON.stringify({ platforms: ['sleeper'] }),
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    }), baseEnv);
+
+    expect(res.status).toBe(200);
+    expect(mockSyncState.settle).toHaveBeenCalledWith(
+      'user_cooldown_error',
+      'sleeper',
+      expect.any(String),
+      expect.objectContaining({
+        status: 'error',
+        errorCode: 'discovery_failed',
+        cooldownSeconds: 75,
+      }),
+    );
+  });
+
+  it('blocks /extension/discover with 429 + Retry-After during cooldown', async () => {
+    mockEspnStorage.getCredentials.mockResolvedValue({ swid: '{SWID}', s2: 'espn_s2' });
+    mockSyncState.acquireLease.mockResolvedValue({ acquired: false, state: 'cooldown', retryAfterSeconds: 55 });
+
+    const token = await signedClerkToken('user_discover_cooldown');
+    const res = await app.fetch(makeRequest('/auth/extension/discover', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    }), baseEnv);
+
+    expect(res.status).toBe(429);
+    expect(res.headers.get('Retry-After')).toBe('55');
+    expect(await res.json()).toEqual({
+      error: 'refresh_cooldown',
+      error_description: 'ESPN refresh is cooling down. Try again in 55 seconds.',
+      retry_after: 55,
+    });
+    expect(discoverAndSaveLeagues).not.toHaveBeenCalled();
+  });
+
+  it('settles /extension/discover success with league count telemetry', async () => {
+    mockEspnStorage.getCredentials.mockResolvedValue({ swid: '{SWID}', s2: 'espn_s2' });
+    mockEspnStorage.getCurrentSeasonLeagues.mockResolvedValue([
+      { sport: 'football', leagueId: '1', leagueName: 'L1', teamId: '2', teamName: 'T', seasonYear: 2026 },
+    ]);
+    vi.mocked(discoverAndSaveLeagues).mockResolvedValue({
+      discovered: [],
+      currentSeason: { found: 1, added: 1, alreadySaved: 0, refreshed: 0 },
+      pastSeasons: { found: 0, added: 0, alreadySaved: 0, refreshed: 0 },
+    });
+
+    const token = await signedClerkToken('user_discover_ok');
+    const res = await app.fetch(makeRequest('/auth/extension/discover', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    }), baseEnv);
+
+    expect(res.status).toBe(200);
+    expect(mockSyncState.settle).toHaveBeenCalledWith(
+      'user_discover_ok',
+      'espn',
+      expect.any(String),
+      expect.objectContaining({
+        status: 'success',
+        syncSource: 'extension',
+        leagueCount: 1,
+        cooldownSeconds: 75,
+      }),
+    );
   });
 });
