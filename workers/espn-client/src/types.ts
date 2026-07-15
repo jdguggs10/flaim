@@ -35,6 +35,12 @@ export interface EspnLeagueSettings {
   scoringSettings?: {
     scoringType?: string;
     matchupPeriods?: unknown;
+    matchupTieRule?: string;
+    matchupTieRuleBy?: number;
+    playoffMatchupTieRule?: string;
+    playoffMatchupTieRuleBy?: number;
+    homeTeamBonus?: number;
+    playoffHomeTeamBonus?: number;
   };
   rosterSettings?: {
     lineupSlotCounts?: Record<string, number>;

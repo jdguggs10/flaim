@@ -32,7 +32,7 @@ export function createSearchPlayersHandler(config: YahooHandlerContext): Handler
 
       const response = await yahooFetch(`/league/${league_id}/players${queryParams}/ownership`, { credentials });
       if (!response.ok) {
-        handleYahooError(response);
+        await handleYahooError(response);
       }
 
       const raw = await response.json();

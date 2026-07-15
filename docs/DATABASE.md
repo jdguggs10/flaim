@@ -214,7 +214,7 @@ Short-lived OAuth state values used for server-side validation.
 | id | uuid | Primary key |
 | state | text | Unique state value |
 | redirect_uri | text | Must match at `/oauth/code` |
-| client_id | text | Optional client ID to bind state |
+| client_id | text | Versioned encoded authorization transaction binding containing client ID, normalized scope, PKCE challenge, and resource |
 | expires_at | timestamptz | State expiry |
 | created_at | timestamptz | Created timestamp |
 

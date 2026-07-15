@@ -53,7 +53,15 @@ const mockLeagueResponse = {
   settings: {
     name: 'Test League',
     size: 10,
-    scoringSettings: { scoringType: 'H2H_POINTS' },
+    scoringSettings: {
+      scoringType: 'H2H_POINTS',
+      matchupTieRule: 'NONE',
+      matchupTieRuleBy: 0,
+      playoffMatchupTieRule: 'HOME_TEAM_WINS',
+      playoffMatchupTieRuleBy: 1,
+      homeTeamBonus: 0,
+      playoffHomeTeamBonus: 5,
+    },
     rosterSettings: { lineupSlotCounts: {} },
     scheduleSettings: {},
   },
@@ -185,6 +193,29 @@ describe('espn cross-sport get_league_info teams array', () => {
     };
 
     expect(data.status?.previousSeasons).toEqual([2023, 2024]);
+  });
+
+  it.each(scenarios)('$label passes tiebreaker and home-bonus settings through scoringSettings (FLA-176)', async ({ sport, handlers }) => {
+    espnFetchMock.mockResolvedValue(
+      new Response(JSON.stringify(mockLeagueResponse), { status: 200 })
+    );
+
+    const params = makeParams(sport);
+    const result = await handlers.get_league_info({} as never, params, 'Bearer x', 'cid');
+
+    expect(result.success).toBe(true);
+    const data = result.data as {
+      scoringSettings?: Record<string, unknown>;
+    };
+
+    expect(data.scoringSettings).toMatchObject({
+      matchupTieRule: 'NONE',
+      matchupTieRuleBy: 0,
+      playoffMatchupTieRule: 'HOME_TEAM_WINS',
+      playoffMatchupTieRuleBy: 1,
+      homeTeamBonus: 0,
+      playoffHomeTeamBonus: 5,
+    });
   });
 
   it.each(scenarios)('$label requests mTeam view in API path', async ({ sport, handlers, expectedEspnYear }) => {

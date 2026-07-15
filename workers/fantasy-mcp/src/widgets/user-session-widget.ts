@@ -23,6 +23,117 @@
  */
 export const USER_SESSION_WIDGET_URI = 'ui://widget/user-session.html';
 
+export type RefreshResultKind =
+  | 'success'
+  | 'unchanged'
+  | 'partial'
+  | 'retry'
+  | 'reconnect'
+  | 'failure';
+
+export interface RefreshResultClassification {
+  kind: RefreshResultKind;
+  message: string;
+  reloadSession: boolean;
+  showLeaguesLink?: boolean;
+}
+
+/** Classify the auth-worker batch response without trusting aggregate success alone. */
+export function classifyRefreshResult(payload: unknown): RefreshResultClassification {
+  const fallback = { kind: 'failure', message: 'Refresh failed.', reloadSession: false } as const;
+  if (!payload || typeof payload !== 'object') return fallback;
+
+  const batch = payload as Record<string, unknown>;
+  if (batch.status === 429) {
+    return { kind: 'retry', message: 'Refresh limited. Try again later.', reloadSession: false };
+  }
+  const rawResults = batch.results;
+  if (!rawResults || typeof rawResults !== 'object' || Array.isArray(rawResults)) return fallback;
+
+  const results = Object.values(rawResults as Record<string, unknown>).filter(
+    (value): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value),
+  );
+  if (results.length === 0) return fallback;
+
+  const successes = results.filter((result) => result.status === 'success');
+  const skipped = results.filter((result) => result.status === 'skipped');
+  const failed = results.filter((result) => result.status === 'error');
+  const textFor = (result: Record<string, unknown>) =>
+    `${String(result.error || '')} ${String(result.error_description || '')}`.toLowerCase();
+  const explicitlyRequiresReconnect = results.some((result) =>
+    result.reconnectRequired === true || result.requiresReconnect === true || result.reconnect_required === true,
+  );
+  const reconnectRequired = explicitlyRequiresReconnect || failed.some((result) => {
+    const text = textFor(result);
+    return result.httpStatus === 401 || result.httpStatus === 403 ||
+      /auth|credential|connect|expired|invalid.token|revoked/.test(text);
+  });
+  const retryRequired = failed.some((result) => {
+    const text = textFor(result);
+    return result.httpStatus === 429 || !!result.retryAfter || /rate.?limit|too many|try again/.test(text);
+  });
+
+  if (successes.length > 0) {
+    // A successful provider result is not enough: the batch contract must also
+    // explicitly confirm success before the widget reports a positive outcome.
+    if (batch.success !== true) return fallback;
+    const changeKeys = new Set(['added', 'refreshed', 'created', 'updated', 'saved']);
+    let changed = false;
+    const inspectCounts = (value: unknown): boolean => {
+      let sawChangeCount = false;
+      if (!value || typeof value !== 'object') return false;
+      for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
+        if (changeKeys.has(key) && typeof nested === 'number') {
+          sawChangeCount = true;
+          if (nested > 0) changed = true;
+        } else if (typeof nested === 'object') {
+          sawChangeCount = inspectCounts(nested) || sawChangeCount;
+        }
+      }
+      return sawChangeCount;
+    };
+    let allSuccessesHaveChangeCounts = true;
+    successes.forEach((result) => {
+      if (result.platform !== 'espn' || !inspectCounts(result.details)) {
+        allSuccessesHaveChangeCounts = false;
+      }
+    });
+
+    if (failed.length > 0 || explicitlyRequiresReconnect) {
+      const partialMessage = changed ? 'Some leagues refreshed.' : 'Refresh partially complete.';
+      return {
+        kind: 'partial',
+        message: reconnectRequired
+          ? `${partialMessage} Reconnect a provider.`
+          : retryRequired
+            ? `${partialMessage} Try again later.`
+            : partialMessage,
+        reloadSession: true,
+        ...(reconnectRequired ? { showLeaguesLink: true } : {}),
+      };
+    }
+
+    if (changed) {
+      return { kind: 'success', message: 'Leagues refreshed.', reloadSession: true };
+    }
+    if (!allSuccessesHaveChangeCounts) {
+      return { kind: 'success', message: 'Refresh complete.', reloadSession: true };
+    }
+    return { kind: 'unchanged', message: 'Leagues already up to date.', reloadSession: true };
+  }
+
+  if (reconnectRequired) {
+    return { kind: 'reconnect', message: 'Reconnect a league provider.', reloadSession: false };
+  }
+  if (retryRequired) {
+    return { kind: 'retry', message: 'Refresh limited. Try again later.', reloadSession: false };
+  }
+  if (skipped.length === results.length) {
+    return { kind: 'unchanged', message: 'No connected leagues to refresh.', reloadSession: false };
+  }
+  return fallback;
+}
+
 export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -262,6 +373,101 @@ export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
   var initId = 'flaim-init-' + Math.random().toString(36).slice(2);
   var initializedSent = false;
   var hasRendered = false;
+  // Keep this browser implementation static. Serializing the module function
+  // can leak Wrangler-generated module helpers into the iframe.
+  function classifyRefreshResult(payload) {
+    var fallback = { kind: 'failure', message: 'Refresh failed.', reloadSession: false };
+    if (!payload || typeof payload !== 'object') return fallback;
+
+    var batch = payload;
+    if (batch.status === 429) {
+      return { kind: 'retry', message: 'Refresh limited. Try again later.', reloadSession: false };
+    }
+    var rawResults = batch.results;
+    if (!rawResults || typeof rawResults !== 'object' || Array.isArray(rawResults)) return fallback;
+
+    var results = Object.values(rawResults).filter(function(value) {
+      return !!value && typeof value === 'object' && !Array.isArray(value);
+    });
+    if (results.length === 0) return fallback;
+
+    var successes = results.filter(function(result) { return result.status === 'success'; });
+    var skipped = results.filter(function(result) { return result.status === 'skipped'; });
+    var failed = results.filter(function(result) { return result.status === 'error'; });
+    function textFor(result) {
+      return (String(result.error || '') + ' ' + String(result.error_description || '')).toLowerCase();
+    }
+    var explicitlyRequiresReconnect = results.some(function(result) {
+      return result.reconnectRequired === true || result.requiresReconnect === true || result.reconnect_required === true;
+    });
+    var reconnectRequired = explicitlyRequiresReconnect || failed.some(function(result) {
+      var text = textFor(result);
+      return result.httpStatus === 401 || result.httpStatus === 403 ||
+        /auth|credential|connect|expired|invalid.token|revoked/.test(text);
+    });
+    var retryRequired = failed.some(function(result) {
+      var text = textFor(result);
+      return result.httpStatus === 429 || !!result.retryAfter || /rate.?limit|too many|try again/.test(text);
+    });
+
+    if (successes.length > 0) {
+      if (batch.success !== true) return fallback;
+      var changeKeys = new Set(['added', 'refreshed', 'created', 'updated', 'saved']);
+      var changed = false;
+      function inspectCounts(value) {
+        var sawChangeCount = false;
+        if (!value || typeof value !== 'object') return false;
+        Object.entries(value).forEach(function(entry) {
+          var key = entry[0];
+          var nested = entry[1];
+          if (changeKeys.has(key) && typeof nested === 'number') {
+            sawChangeCount = true;
+            if (nested > 0) changed = true;
+          } else if (typeof nested === 'object') {
+            sawChangeCount = inspectCounts(nested) || sawChangeCount;
+          }
+        });
+        return sawChangeCount;
+      }
+      var allSuccessesHaveChangeCounts = true;
+      successes.forEach(function(result) {
+        if (result.platform !== 'espn' || !inspectCounts(result.details)) {
+          allSuccessesHaveChangeCounts = false;
+        }
+      });
+
+      if (failed.length > 0 || explicitlyRequiresReconnect) {
+        var partialMessage = changed ? 'Some leagues refreshed.' : 'Refresh partially complete.';
+        var message = reconnectRequired
+          ? partialMessage + ' Reconnect a provider.'
+          : retryRequired
+            ? partialMessage + ' Try again later.'
+            : partialMessage;
+        var partial = { kind: 'partial', message: message, reloadSession: true };
+        if (reconnectRequired) partial.showLeaguesLink = true;
+        return partial;
+      }
+
+      if (changed) {
+        return { kind: 'success', message: 'Leagues refreshed.', reloadSession: true };
+      }
+      if (!allSuccessesHaveChangeCounts) {
+        return { kind: 'success', message: 'Refresh complete.', reloadSession: true };
+      }
+      return { kind: 'unchanged', message: 'Leagues already up to date.', reloadSession: true };
+    }
+
+    if (reconnectRequired) {
+      return { kind: 'reconnect', message: 'Reconnect a league provider.', reloadSession: false };
+    }
+    if (retryRequired) {
+      return { kind: 'retry', message: 'Refresh limited. Try again later.', reloadSession: false };
+    }
+    if (skipped.length === results.length) {
+      return { kind: 'unchanged', message: 'No connected leagues to refresh.', reloadSession: false };
+    }
+    return fallback;
+  }
 
   function postToParent(message) {
     try {
@@ -541,22 +747,25 @@ export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
       if (refreshResult && refreshResult.isError) {
         throw new Error((refreshPayload && (refreshPayload.error_description || refreshPayload.error)) || 'Refresh failed');
       }
-      if (refreshPayload && refreshPayload.success === false) {
-        throw new Error(refreshPayload.error_description || refreshPayload.error || 'No leagues were refreshed');
+      var classification = classifyRefreshResult(refreshPayload);
+      if (classification.reloadSession) {
+        var sessionResult = await window.openai.callTool('get_user_session', {});
+        var data = extract(sessionResult);
+        if (!data && window.openai.toolOutput != null) {
+          data = extract(window.openai.toolOutput);
+        }
+        if (!data) {
+          throw new Error('Session data unavailable');
+        }
+        render(data);
       }
-      if (!refreshPayload || refreshPayload.success !== true) {
-        throw new Error('Refresh did not complete');
+      if (classification.showLeaguesLink || classification.kind === 'reconnect' || classification.kind === 'failure' ||
+          (classification.kind === 'unchanged' && !classification.reloadSession)) {
+        setRefreshStatus(classification.message + ' <a href="' + LEAGUES_URL + '" target="_blank" rel="noopener">Open leagues</a>.', 'error');
+      } else {
+        var statusKind = classification.kind === 'success' ? 'success' : '';
+        setRefreshStatus(classification.message, statusKind);
       }
-      var sessionResult = await window.openai.callTool('get_user_session', {});
-      var data = extract(sessionResult);
-      if (!data && window.openai.toolOutput != null) {
-        data = extract(window.openai.toolOutput);
-      }
-      if (!data) {
-        throw new Error('Session data unavailable');
-      }
-      render(data);
-      setRefreshStatus('Leagues refreshed.', 'success');
     } catch (_) {
       setRefreshStatus('Refresh failed. <a href="https://flaim.app/leagues?from=widget" target="_blank" rel="noopener">Open leagues</a>.', 'error');
     } finally {

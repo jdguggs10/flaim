@@ -1,14 +1,15 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { handleYahooError } from '../yahoo-api';
 
 describe('Yahoo API errors', () => {
-  it('treats Yahoo HTTP 999 as rate limiting with default retry metadata', () => {
+  it('treats Yahoo HTTP 999 as rate limiting with default retry metadata', async () => {
     const response = {
       status: 999,
       headers: new Headers(),
-    } as Response;
+      text: async () => '',
+    } as unknown as Response;
 
-    expect(() => handleYahooError(response)).toThrow(
+    await expect(handleYahooError(response)).rejects.toThrow(
       expect.objectContaining({
         code: 'YAHOO_RATE_LIMITED',
         status: 429,
@@ -18,13 +19,13 @@ describe('Yahoo API errors', () => {
     );
   });
 
-  it('preserves Retry-After for Yahoo rate-limit responses', () => {
+  it('preserves Retry-After for Yahoo rate-limit responses', async () => {
     const response = new Response(null, {
       status: 429,
       headers: { 'Retry-After': '120' },
     });
 
-    expect(() => handleYahooError(response)).toThrow(
+    await expect(handleYahooError(response)).rejects.toThrow(
       expect.objectContaining({
         code: 'YAHOO_RATE_LIMITED',
         status: 429,
@@ -34,13 +35,13 @@ describe('Yahoo API errors', () => {
     );
   });
 
-  it('classifies upstream 5xx as a transient Yahoo error', () => {
+  it('classifies upstream 5xx as a transient Yahoo error', async () => {
     const response = new Response(null, {
       status: 503,
       headers: { 'Retry-After': '60' },
     });
 
-    expect(() => handleYahooError(response)).toThrow(
+    await expect(handleYahooError(response)).rejects.toThrow(
       expect.objectContaining({
         code: 'YAHOO_TRANSIENT_ERROR',
         status: 503,
@@ -48,5 +49,32 @@ describe('Yahoo API errors', () => {
         retryAfter: 60,
       })
     );
+  });
+
+  it('classifies upstream 400 as a Yahoo bad-request error', async () => {
+    const response = new Response('{"error":"invalid"}', {
+      status: 400,
+    });
+
+    await expect(handleYahooError(response)).rejects.toThrow(
+      expect.objectContaining({
+        code: 'YAHOO_BAD_REQUEST',
+        status: 400,
+        retryable: false,
+      })
+    );
+  });
+
+  it('logs the Yahoo response body on a 400 for diagnostics', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const response = new Response('{"error":{"description":"Invalid week"}}', {
+      status: 400,
+    });
+
+    await expect(handleYahooError(response)).rejects.toThrow('YAHOO_BAD_REQUEST');
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Invalid week')
+    );
+    errorSpy.mockRestore();
   });
 });

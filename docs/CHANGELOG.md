@@ -9,6 +9,25 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 - **Added**: A pre-refresh guard skips the doomed Yahoo token call when the stored fingerprint doesn't match the runtime app and returns a coded `app_fingerprint_mismatch` reconnect-required error, so app-secret swaps no longer masquerade as generic refresh failures. Legacy rows without a fingerprint refresh as before.
 - **Added**: The internal credential-health endpoint and structured refresh diagnostics report stored/runtime fingerprints with a `match`/`mismatch`/`legacy_null` status.
 
+### Provider Refresh Cooldown + Sync Telemetry (FLA-121)
+- **Added**: League refresh and ESPN discovery now run under a per-user, per-provider single-flight lease with post-refresh cooldowns (~75s normal; 5 minutes or the provider's `Retry-After` after upstream 429s/timeouts), backed by a new `provider_sync_state` table that also records last attempt/success/failure telemetry for each provider.
+- **Changed**: When every requested provider is cooling down, refresh endpoints return a consistent `429 refresh_cooldown` with `retry_after` and a `Retry-After` header (partially blocked syncs still return 200 with per-provider results); the ESPN refresh proxy now preserves `Retry-After` to the browser.
+- **Added**: One structured `provider_sync` log line per provider refresh (provider, masked user, source, status, duration, league count, error code, retry seconds, correlation id) queryable in Workers Logs.
+
+### League Refresh Hardening
+- **Changed**: Consent is now scope-aware: read-only requests disclose read access, while `mcp:write` requests disclose that refresh may add or update Flaim registry records without changing provider data.
+- **Fixed**: OAuth authorization transactions now use exact, atomic request binding and validation.
+- **Changed**: Refresh widgets now report complete, unchanged, partial, retry, and reconnect outcomes accurately.
+- **Fixed**: ESPN league refresh now groups matching league IDs by sport to avoid cross-sport collisions.
+- **Changed**: `refresh_leagues` is now marked non-idempotent to reflect its write behavior.
+
+### ESPN Historical Championship Outcomes (FLA-136)
+- **Fixed**: Historical `get_standings` seasons where ESPN leaves every team's final rank at 0 no longer report false outcomes with `outcomeConfidence: "explicit"`. When explicit final ranks are absent, the champion and runner-up are now derived from the final `WINNERS_BRACKET` matchup and reported with `outcomeConfidence: "derived"`; teams without rank or bracket evidence stay null (unknown) instead of false. Applies to all four ESPN sports.
+
+### ESPN Tie-Rule Settings and Tied-Final Resolution (FLA-176)
+- **Added**: `get_league_info` now surfaces the league's tiebreaker configuration from ESPN settings: `matchupTieRule`/`matchupTieRuleBy` (regular season), `playoffMatchupTieRule`/`playoffMatchupTieRuleBy` (playoffs), and `homeTeamBonus`/`playoffHomeTeamBonus`.
+- **Changed**: A tied championship game in a completed season is now resolved using the league's playoff tie rule instead of returning unknown — `NONE` (ESPN's default) advances the higher seed, `HOME_TEAM_WINS` the home finalist; unrecognized rules or missing seeds still return unknown. Results keep `outcomeConfidence: "derived"` because league managers can manually override playoff advancement. The settings ride the existing bracket lookup, adding no extra ESPN calls.
+
 ### ESPN Transactions Error Handling (FLA-171)
 - **Fixed**: Prior-season ESPN transaction requests now return a clear `ESPN_SEASON_NOT_SUPPORTED` error (guarded before any upstream calls) instead of a misleading `ESPN_NOT_FOUND`; the message directs a retry only when the user meant the ongoing season.
 - **Changed**: `season_year` tool descriptions no longer hard-code example years (which invited models to pass stale seasons); they now steer to the season returned by `get_user_session`.

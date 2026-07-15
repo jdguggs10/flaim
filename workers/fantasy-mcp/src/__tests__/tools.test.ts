@@ -4,7 +4,11 @@ import { getUnifiedTools, hasRequiredScope, mcpAuthError } from '../mcp/tools';
 import { buildMcpAuthErrorResponse } from '../auth-response';
 import type { Env } from '../types';
 import { routeToClient } from '../router';
-import { USER_SESSION_WIDGET_HTML, USER_SESSION_WIDGET_URI } from '../widgets/user-session-widget';
+import {
+  classifyRefreshResult,
+  USER_SESSION_WIDGET_HTML,
+  USER_SESSION_WIDGET_URI,
+} from '../widgets/user-session-widget';
 import { INTERNAL_SERVICE_TOKEN_HEADER } from '@flaim/worker-shared';
 
 /** Helper to cast an AnySchema value to z3 ZodTypeAny for .parse() in tests. */
@@ -148,14 +152,298 @@ describe('fantasy-mcp tools', () => {
     expect(USER_SESSION_WIDGET_HTML).toContain("window.openai.callTool('refresh_leagues', {})");
     expect(USER_SESSION_WIDGET_HTML).toContain("window.openai.callTool('get_user_session', {})");
     expect(USER_SESSION_WIDGET_HTML).toContain('extractRefreshResult');
-    expect(USER_SESSION_WIDGET_HTML).toContain('refreshResult.isError');
-    expect(USER_SESSION_WIDGET_HTML).toContain('refreshPayload.success === false');
-    expect(USER_SESSION_WIDGET_HTML).toContain('!refreshPayload || refreshPayload.success !== true');
+    expect(USER_SESSION_WIDGET_HTML).toContain('refreshResult && refreshResult.isError');
+    expect(USER_SESSION_WIDGET_HTML).toContain('classifyRefreshResult(refreshPayload)');
     expect(USER_SESSION_WIDGET_HTML).toContain('Leagues refreshed.');
     expect(USER_SESSION_WIDGET_HTML).toContain('Refresh failed.');
     expect(USER_SESSION_WIDGET_HTML).toContain('Open leagues');
+    expect(USER_SESSION_WIDGET_HTML).toContain('classification.showLeaguesLink');
     expect(USER_SESSION_WIDGET_HTML).toContain('var hasRendered = false');
     expect(USER_SESSION_WIDGET_HTML).not.toContain('if (rendered) return');
+  });
+
+  it.each([
+    {
+      name: 'complete success',
+      payload: { success: true, results: { espn: { platform: 'espn', status: 'success', details: { added: 2 } } } },
+      expected: { kind: 'success', message: 'Leagues refreshed.', reloadSession: true },
+    },
+    {
+      name: 'no changes',
+      payload: { success: true, results: { espn: { platform: 'espn', status: 'success', details: { currentSeason: { added: 0, refreshed: 0 } } } } },
+      expected: { kind: 'unchanged', message: 'Leagues already up to date.', reloadSession: true },
+    },
+    {
+      name: 'partial success',
+      payload: { success: true, results: { espn: { status: 'success' }, yahoo: { status: 'error', httpStatus: 500 } } },
+      expected: { kind: 'partial', message: 'Refresh partially complete.', reloadSession: true },
+    },
+    {
+      name: 'rate limit',
+      payload: { success: false, results: { yahoo: { status: 'error', httpStatus: 429, retryAfter: '30' } } },
+      expected: { kind: 'retry', message: 'Refresh limited. Try again later.', reloadSession: false },
+    },
+    {
+      name: 'reconnect required',
+      payload: { success: false, results: { espn: { status: 'error', httpStatus: 401, error: 'espn_auth_failed' } } },
+      expected: { kind: 'reconnect', message: 'Reconnect a league provider.', reloadSession: false },
+    },
+    {
+      name: 'skipped only',
+      payload: { success: false, results: { sleeper: { status: 'skipped', error: 'not_connected' } } },
+      expected: { kind: 'unchanged', message: 'No connected leagues to refresh.', reloadSession: false },
+    },
+    {
+      name: 'generic failure',
+      payload: { success: false, results: { espn: { status: 'error', httpStatus: 500, error: 'discovery_failed' } } },
+      expected: { kind: 'failure', message: 'Refresh failed.', reloadSession: false },
+    },
+  ])('classifies refresh result: $name', ({ payload, expected }) => {
+    expect(classifyRefreshResult(payload)).toEqual(expected);
+  });
+
+  it.each([
+    {
+      name: 'Yahoo count',
+      payload: {
+        success: true,
+        results: {
+          yahoo: {
+            platform: 'yahoo',
+            status: 'success',
+            httpStatus: 200,
+            details: { success: true, count: 2, leagues: [{ league_key: '449.l.1' }] },
+          },
+        },
+      },
+      expected: { kind: 'success', message: 'Refresh complete.', reloadSession: true },
+    },
+    {
+      name: 'Yahoo zero count',
+      payload: {
+        success: true,
+        results: {
+          yahoo: {
+            platform: 'yahoo',
+            status: 'success',
+            httpStatus: 200,
+            details: { success: true, count: 0, leagues: [] },
+          },
+        },
+      },
+      expected: { kind: 'success', message: 'Refresh complete.', reloadSession: true },
+    },
+    {
+      name: 'Sleeper leagues_found',
+      payload: {
+        success: true,
+        results: {
+          sleeper: {
+            platform: 'sleeper',
+            status: 'success',
+            httpStatus: 200,
+            details: { success: true, username: 'demo', leagues_found: 3, seasons_discovered: 2 },
+          },
+        },
+      },
+      expected: { kind: 'success', message: 'Refresh complete.', reloadSession: true },
+    },
+    {
+      name: 'Sleeper zero leagues_found',
+      payload: {
+        success: true,
+        results: {
+          sleeper: {
+            platform: 'sleeper',
+            status: 'success',
+            httpStatus: 200,
+            details: { success: true, username: 'demo', leagues_found: 0, seasons_discovered: 0 },
+          },
+        },
+      },
+      expected: { kind: 'success', message: 'Refresh complete.', reloadSession: true },
+    },
+    {
+      name: 'ESPN zero mutation counts',
+      payload: {
+        success: true,
+        results: {
+          espn: {
+            platform: 'espn',
+            status: 'success',
+            httpStatus: 200,
+            details: {
+              discovered: [{ sport: 'football', leagueId: '12345' }],
+              currentSeason: { found: 1, added: 0, alreadySaved: 1, refreshed: 0 },
+              pastSeasons: { found: 0, added: 0, alreadySaved: 0, refreshed: 0 },
+              currentSeasonCount: 1,
+              pastSeasonsCount: 0,
+            },
+          },
+        },
+      },
+      expected: { kind: 'unchanged', message: 'Leagues already up to date.', reloadSession: true },
+    },
+  ])('classifies real provider change shape: $name', ({ payload, expected }) => {
+    expect(classifyRefreshResult(payload)).toEqual(expected);
+  });
+
+  it('classifies a top-level 429 wrapper without provider results as retryable', () => {
+    expect(classifyRefreshResult({ success: false, status: 429, error: 'rate_limited' })).toEqual({
+      kind: 'retry',
+      message: 'Refresh limited. Try again later.',
+      reloadSession: false,
+    });
+  });
+
+  it('classifies mixed success and provider auth failure as partial with a leagues link', () => {
+    expect(classifyRefreshResult({
+      success: true,
+      results: {
+        sleeper: { platform: 'sleeper', status: 'success', details: { leagues_found: 1 } },
+        yahoo: { platform: 'yahoo', status: 'error', httpStatus: 401, error: 'token_expired' },
+      },
+    })).toEqual({
+      kind: 'partial',
+      message: 'Refresh partially complete. Reconnect a provider.',
+      reloadSession: true,
+      showLeaguesLink: true,
+    });
+  });
+
+  it('does not claim Yahoo refreshed when Yahoo succeeds without mutation evidence and another provider fails', () => {
+    expect(classifyRefreshResult({
+      success: true,
+      results: {
+        yahoo: {
+          platform: 'yahoo',
+          status: 'success',
+          details: { success: true, count: 2, leagues: [{ league_key: '449.l.1' }] },
+        },
+        sleeper: { platform: 'sleeper', status: 'error', httpStatus: 500, error: 'discovery_failed' },
+      },
+    })).toEqual({
+      kind: 'partial',
+      message: 'Refresh partially complete.',
+      reloadSession: true,
+    });
+  });
+
+  it.each([
+    {
+      platform: 'yahoo',
+      details: { nested: { updated: 4, saved: 2 } },
+    },
+    {
+      platform: 'sleeper',
+      details: { nested: { updated: 0, saved: 0 } },
+    },
+  ])('keeps neutral wording for $platform success with misleading mutation fields', ({ platform, details }) => {
+    expect(classifyRefreshResult({
+      success: true,
+      results: {
+        [platform]: { platform, status: 'success', details },
+      },
+    })).toEqual({
+      kind: 'success',
+      message: 'Refresh complete.',
+      reloadSession: true,
+    });
+  });
+
+  it('checks a tool-level error before classifying a success-looking payload', () => {
+    const errorGuard = USER_SESSION_WIDGET_HTML.indexOf('refreshResult && refreshResult.isError');
+    const classification = USER_SESSION_WIDGET_HTML.indexOf(
+      'var classification = classifyRefreshResult(refreshPayload)',
+    );
+
+    expect(errorGuard).toBeGreaterThan(-1);
+    expect(classification).toBeGreaterThan(errorGuard);
+  });
+
+  it('does not let ESPN zero-change evidence classify an unknown Yahoo success as unchanged', () => {
+    expect(classifyRefreshResult({
+      success: true,
+      results: {
+        espn: {
+          platform: 'espn',
+          status: 'success',
+          details: { currentSeason: { found: 1, added: 0, alreadySaved: 1, refreshed: 0 } },
+        },
+        yahoo: {
+          platform: 'yahoo',
+          status: 'success',
+          details: { success: true, count: 1, leagues: [{ league_key: '449.l.1' }] },
+        },
+      },
+    })).toEqual({
+      kind: 'success',
+      message: 'Refresh complete.',
+      reloadSession: true,
+    });
+  });
+
+  it.each([
+    {
+      name: 'Yahoo success with expected unconnected providers',
+      payload: {
+        success: true,
+        results: {
+          yahoo: { platform: 'yahoo', status: 'success', details: { count: 2 } },
+          espn: { platform: 'espn', status: 'skipped', error: 'credentials_not_found' },
+          sleeper: { platform: 'sleeper', status: 'skipped', error: 'not_connected' },
+        },
+      },
+      expected: { kind: 'success', message: 'Refresh complete.', reloadSession: true },
+    },
+    {
+      name: 'unchanged ESPN success with expected unconnected providers',
+      payload: {
+        success: true,
+        results: {
+          espn: {
+            platform: 'espn',
+            status: 'success',
+            details: { currentSeason: { found: 1, added: 0, alreadySaved: 1, refreshed: 0 } },
+          },
+          yahoo: { platform: 'yahoo', status: 'skipped', error: 'not_connected' },
+          sleeper: { platform: 'sleeper', status: 'skipped', error: 'not_connected' },
+        },
+      },
+      expected: { kind: 'unchanged', message: 'Leagues already up to date.', reloadSession: true },
+    },
+  ])('ignores skipped providers beside a successful refresh: $name', ({ payload, expected }) => {
+    expect(classifyRefreshResult(payload)).toEqual(expected);
+  });
+
+  it('classifies a rate-limit error plus an unconnected skip as retryable', () => {
+    expect(classifyRefreshResult({
+      success: false,
+      results: {
+        yahoo: { platform: 'yahoo', status: 'error', httpStatus: 429, error: 'rate_limited' },
+        sleeper: { platform: 'sleeper', status: 'skipped', error: 'not_connected' },
+      },
+    })).toEqual({
+      kind: 'retry',
+      message: 'Refresh limited. Try again later.',
+      reloadSession: false,
+    });
+  });
+
+  it('does not report provider success without the explicit batch success guard', () => {
+    expect(classifyRefreshResult({
+      success: false,
+      results: { espn: { status: 'success', details: { added: 1 } } },
+    })).toEqual({ kind: 'failure', message: 'Refresh failed.', reloadSession: false });
+  });
+
+  it('describes refresh as repeatable metadata mutation without claiming idempotence', () => {
+    const tool = getUnifiedTools().find((candidate) => candidate.name === 'refresh_leagues');
+
+    expect(tool?.openaiMeta?.invoked).toBe('Refresh complete');
+    expect(tool?.description).toContain('repeated refreshes can update Flaim registry timestamps and provider metadata');
+    expect(tool?.description).toContain('If this call errors, do not repeat it unchanged.');
+    expect(tool?.description).not.toContain('idempotent');
   });
 
   it('user session widget opens the empty-state league setup link externally', () => {
@@ -354,16 +642,16 @@ describe('fantasy-mcp tools', () => {
     expect(USER_SESSION_WIDGET_HTML).not.toContain('document.documentElement.scrollWidth');
   });
 
-  it('get_user_session returns only current-season leagues', async () => {
+  it('get_user_session keeps current ESPN leagues with identical numeric IDs across sports', async () => {
     const tool = getUnifiedTools().find((t) => t.name === 'get_user_session');
     expect(tool).toBeTruthy();
 
     // Today is 2026-03-05: football current season = 2025, baseball current season = 2026
     const espnLeagues = [
-      { platform: 'espn', sport: 'football', leagueId: 'fb1', leagueName: 'Gridiron', teamId: 't1', seasonYear: 2025 },
-      { platform: 'espn', sport: 'football', leagueId: 'fb1', leagueName: 'Gridiron', teamId: 't1', seasonYear: 2024 },
-      { platform: 'espn', sport: 'baseball', leagueId: 'bb1', leagueName: 'Diamond', teamId: 't2', seasonYear: 2026 },
-      { platform: 'espn', sport: 'baseball', leagueId: 'bb1', leagueName: 'Diamond', teamId: 't2', seasonYear: 2025 },
+      { platform: 'espn', sport: 'football', leagueId: '12345', leagueName: 'Gridiron', teamId: 't1', seasonYear: 2025 },
+      { platform: 'espn', sport: 'football', leagueId: '12345', leagueName: 'Gridiron', teamId: 't1', seasonYear: 2024 },
+      { platform: 'espn', sport: 'baseball', leagueId: '12345', leagueName: 'Diamond', teamId: 't2', seasonYear: 2026 },
+      { platform: 'espn', sport: 'baseball', leagueId: '12345', leagueName: 'Diamond', teamId: 't2', seasonYear: 2025 },
     ];
 
     const env = {

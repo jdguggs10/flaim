@@ -86,6 +86,8 @@ When callers pass an explicit `week`, use it. Otherwise prefer `currentMatchupPe
 
 For current ESPN seasons, derive `seasonPhase` from matchup context before trusting final-rank-like fields. Fields such as `rankFinal` and `rankCalculatedFinal` prove season completion for historical seasons, but active leagues can expose them before live play is complete. Keep outcome fields such as `finalRank`, `championshipWon`, and `playoffOutcome` null unless `seasonComplete` is true.
 
+When a completed season's championship game is marked `TIE` (or `UNDECIDED`), the champion is resolved from the league's `playoffMatchupTieRule` setting: `NONE` (ESPN's platform default) advances the higher playoff seed, and `HOME_TEAM_WINS` advances the home team. Any other rule, or missing/equal seeds, leaves the outcome null. These results keep `outcomeConfidence: 'derived'` because league managers can manually override brackets via ESPN's Edit Playoffs page, so a rule-based resolution is not guaranteed to match what actually happened.
+
 ### `get_transactions` Response Shape
 
 The `get_transactions` response includes:

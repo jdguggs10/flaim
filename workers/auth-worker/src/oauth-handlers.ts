@@ -70,6 +70,10 @@ interface TokenRequest {
 // Isolate recycling or redeploys reset this flag, so ops may see it again.
 let warnedAboutSigningKeyFallback = false;
 
+const MCP_READ_SCOPE = 'mcp:read';
+const MCP_WRITE_SCOPE = 'mcp:write';
+const SUPPORTED_MCP_SCOPES = new Set([MCP_READ_SCOPE, MCP_WRITE_SCOPE]);
+
 // Base URL for OAuth endpoints (used in metadata)
 const getBaseUrl = (env: OAuthEnv): string => {
   if (env.ENVIRONMENT === 'dev' || env.NODE_ENV === 'development') {
@@ -95,6 +99,46 @@ function buildSuccessRedirect(redirectUri: string, code: string, state?: string)
   url.searchParams.set('code', code);
   if (state) url.searchParams.set('state', state);
   return url.toString();
+}
+
+function normalizeRequestedScope(scope?: unknown): string | null {
+  if (scope === undefined) {
+    return MCP_READ_SCOPE;
+  }
+
+  if (
+    typeof scope !== 'string' ||
+    !/^(?:mcp:read|mcp:write)(?: (?:mcp:read|mcp:write))*$/.test(scope)
+  ) {
+    return null;
+  }
+
+  const requestedScopes = scope.split(' ');
+
+  if (
+    requestedScopes.some((requestedScope) => !SUPPORTED_MCP_SCOPES.has(requestedScope)) ||
+    new Set(requestedScopes).size !== requestedScopes.length
+  ) {
+    return null;
+  }
+
+  const grantedScopes = new Set(requestedScopes);
+
+  // League refresh updates Flaim's registry, then the widget reads that registry.
+  // Make the full bundle visible on the consent screen before issuing either scope.
+  if (grantedScopes.has(MCP_WRITE_SCOPE)) {
+    grantedScopes.add(MCP_READ_SCOPE);
+  }
+
+  return [MCP_READ_SCOPE, MCP_WRITE_SCOPE]
+    .filter((supportedScope) => grantedScopes.has(supportedScope))
+    .join(' ');
+}
+
+function getAuthorizationTransactionKey(state?: string, codeChallenge?: string): string | null {
+  if (state) return state;
+  if (codeChallenge) return `pkce:${codeChallenge}`;
+  return null;
 }
 
 function maskState(state: string): string {
@@ -458,11 +502,12 @@ export async function handleClientRegistration(
  */
 export async function handleAuthorize(request: Request, env: OAuthEnv): Promise<Response> {
   const url = new URL(request.url);
+  const scopeValues = url.searchParams.getAll('scope');
   const params: AuthorizeParams = {
     response_type: url.searchParams.get('response_type') || '',
     client_id: url.searchParams.get('client_id') || '',
     redirect_uri: url.searchParams.get('redirect_uri') || '',
-    scope: url.searchParams.get('scope') || undefined,
+    scope: scopeValues.length === 1 ? scopeValues[0] : undefined,
     state: url.searchParams.get('state') || undefined,
     code_challenge: url.searchParams.get('code_challenge') || undefined,
     code_challenge_method: url.searchParams.get('code_challenge_method') || undefined,
@@ -521,6 +566,20 @@ export async function handleAuthorize(request: Request, env: OAuthEnv): Promise<
     }), { status: 400, headers: { 'Content-Type': 'application/json' } });
   }
 
+  const normalizedScope = normalizeRequestedScope(params.scope);
+  if (scopeValues.length > 1 || !normalizedScope) {
+    logOAuthFailure(request, env, 'oauth_authorize_failed', {
+      stage: 'scope_validation',
+      failure_kind: 'validation',
+      error_code: 'invalid_scope',
+      http_status: 302,
+    });
+    return Response.redirect(
+      buildErrorRedirect(params.redirect_uri, 'invalid_scope', 'Only mcp:read and mcp:write scopes are supported', params.state),
+      302
+    );
+  }
+
   // PKCE is required (OAuth 2.1)
   if (!params.code_challenge) {
     if (hasStrongAuthorizeAttemptEvidence(params)) {
@@ -551,29 +610,32 @@ export async function handleAuthorize(request: Request, env: OAuthEnv): Promise<
     );
   }
 
-  // Store state for server-side validation (if provided)
-  if (params.state) {
-    try {
-      const storage = OAuthStorage.fromEnvironment(env);
-      await storage.createOAuthState({
-        state: params.state,
-        redirectUri: params.redirect_uri,
-        clientId: params.client_id || undefined,
-        expiresInSeconds: 600,
-      });
-    } catch (error) {
-      logOAuthFailure(request, env, 'oauth_authorize_failed', {
-        stage: 'state_storage',
-        failure_kind: 'storage',
-        error_code: 'state_storage_failed',
-        http_status: 302,
-      });
-      console.error('[oauth] Failed to store state:', error);
-      return Response.redirect(
-        buildErrorRedirect(params.redirect_uri, 'server_error', 'Failed to initialize authorization state', params.state),
-        302
-      );
-    }
+  // Bind the normalized consent scope to a one-time server transaction. PKCE
+  // supplies the transaction key for clients that omit the optional state.
+  const transactionKey = getAuthorizationTransactionKey(params.state, params.code_challenge)!;
+  try {
+    const storage = OAuthStorage.fromEnvironment(env);
+    await storage.createOAuthState({
+      state: transactionKey,
+      redirectUri: params.redirect_uri,
+      clientId: params.client_id || undefined,
+      scope: normalizedScope,
+      codeChallenge: params.code_challenge,
+      resource: params.resource,
+      expiresInSeconds: 600,
+    });
+  } catch (error) {
+    logOAuthFailure(request, env, 'oauth_authorize_failed', {
+      stage: 'state_storage',
+      failure_kind: 'storage',
+      error_code: 'state_storage_failed',
+      http_status: 302,
+    });
+    console.error('[oauth] Failed to store state:', error);
+    return Response.redirect(
+      buildErrorRedirect(params.redirect_uri, 'server_error', 'Failed to initialize authorization state', params.state),
+      302
+    );
   }
 
   // Build frontend consent URL
@@ -582,7 +644,7 @@ export async function handleAuthorize(request: Request, env: OAuthEnv): Promise<
 
   // Pass all OAuth params to frontend
   consentUrl.searchParams.set('redirect_uri', params.redirect_uri);
-  if (params.scope) consentUrl.searchParams.set('scope', params.scope);
+  consentUrl.searchParams.set('scope', normalizedScope);
   // Use oauth_state to avoid collisions with auth providers that may use state.
   // Keep legacy state for backward compatibility with older frontend builds.
   if (params.state) {
@@ -659,30 +721,19 @@ export async function handleCreateCode(
       }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
     }
 
-    const storage = OAuthStorage.fromEnvironment(env);
-
-    if (body.state) {
-      const validState = await storage.consumeOAuthState(
-        body.state,
-        body.redirect_uri,
-        body.client_id
-      );
-      if (!validState) {
-        logOAuthFailure(request, env, 'oauth_code_failed', {
-          stage: 'state_validation',
-          failure_kind: 'validation',
-          error_code: 'invalid_state',
-          http_status: 400,
-          auth_type: 'clerk',
-        });
-        console.log(
-          `[oauth] Invalid state during /oauth/code: state=${maskState(body.state)}, redirect_uri_allowed=${isValidRedirectUri(body.redirect_uri)}, client_id=${body.client_id ? maskClientId(body.client_id) : 'none'}`
-        );
-        return new Response(JSON.stringify({
-          error: 'invalid_request',
-          error_description: 'Invalid or expired state',
-        }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
-      }
+    const normalizedScope = normalizeRequestedScope(body.scope);
+    if (!normalizedScope) {
+      logOAuthFailure(request, env, 'oauth_code_failed', {
+        stage: 'scope_validation',
+        failure_kind: 'validation',
+        error_code: 'invalid_scope',
+        http_status: 400,
+        auth_type: 'clerk',
+      });
+      return new Response(JSON.stringify({
+        error: 'invalid_scope',
+        error_description: 'Only mcp:read and mcp:write scopes are supported',
+      }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
     }
 
     // Only S256 PKCE is supported
@@ -701,11 +752,39 @@ export async function handleCreateCode(
       }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
     }
 
+    const storage = OAuthStorage.fromEnvironment(env);
+
+    const transactionKey = getAuthorizationTransactionKey(body.state, body.code_challenge);
+    const validState = transactionKey && await storage.consumeOAuthState(
+      transactionKey,
+      body.redirect_uri,
+      body.client_id,
+      normalizedScope,
+      body.code_challenge,
+      body.resource
+    );
+    if (!validState) {
+      logOAuthFailure(request, env, 'oauth_code_failed', {
+        stage: 'state_validation',
+        failure_kind: 'validation',
+        error_code: 'invalid_state',
+        http_status: 400,
+        auth_type: 'clerk',
+      });
+      console.log(
+        `[oauth] Invalid state during /oauth/code: state=${maskState(transactionKey || '')}, redirect_uri_allowed=${isValidRedirectUri(body.redirect_uri)}, client_id=${body.client_id ? maskClientId(body.client_id) : 'none'}`
+      );
+      return new Response(JSON.stringify({
+        error: 'invalid_request',
+        error_description: 'Invalid or expired authorization transaction',
+      }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+    }
+
     const code = await storage.createAuthorizationCode({
       userId,
       redirectUri: body.redirect_uri,
       clientId: isConfidentialClientId(body.client_id) ? body.client_id : undefined,
-      scope: body.scope || 'mcp:read',
+      scope: normalizedScope,
       codeChallenge: body.code_challenge,
       codeChallengeMethod: 'S256',
       resource: body.resource, // RFC 8707

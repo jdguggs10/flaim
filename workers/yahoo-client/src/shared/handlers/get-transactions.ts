@@ -31,7 +31,7 @@ export function createGetTransactionsHandler(): HandlerFn {
 
       const response = await yahooFetch(path, { credentials });
       if (!response.ok) {
-        handleYahooError(response);
+        await handleYahooError(response);
       }
 
       const raw = await response.json();

@@ -58,6 +58,11 @@ describe('HTTP helpers', () => {
       retryable: true,
       retryAfter: 30,
     });
+    expect(classifyYahooApiFailure(new Response(null, { status: 400 }))).toMatchObject({
+      kind: 'bad_request',
+      status: 400,
+      retryable: false,
+    });
     expect(classifyYahooApiFailure(new Response(null, { status: 418 }))).toMatchObject({
       kind: 'unexpected',
       status: 502,

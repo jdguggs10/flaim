@@ -87,7 +87,7 @@ const READ_ONLY_TOOL_ANNOTATIONS: ToolAnnotations = {
 const REFRESH_TOOL_ANNOTATIONS: ToolAnnotations = {
   readOnlyHint: false,
   destructiveHint: false,
-  idempotentHint: true,
+  idempotentHint: false,
   openWorldHint: true,
 };
 
@@ -159,6 +159,9 @@ function getActiveLeagueGroupKey(league: UserLeague): string {
   }
   if (league.platform === 'sleeper') {
     return `${league.platform}:${(league.sport || '').toLowerCase()}:${league.recurringLeagueId || league.leagueId}`;
+  }
+  if (league.platform === 'espn') {
+    return `${league.platform}:${(league.sport || '').toLowerCase()}:${league.leagueId}`;
   }
   return `${league.platform}:${league.leagueId}`;
 }
@@ -910,9 +913,9 @@ export function getUnifiedTools(): UnifiedTool[] {
       requiredScope: 'mcp:write',
       securitySchemes: buildSecuritySchemes('mcp:write'),
       annotations: REFRESH_TOOL_ANNOTATIONS,
-      openaiMeta: { invoking: 'Refreshing leagues\u2026', invoked: 'Leagues refreshed' },
+      openaiMeta: { invoking: 'Refreshing leagues\u2026', invoked: 'Refresh complete' },
       description:
-        'Refresh connected fantasy leagues by asking Flaim to rediscover leagues through connected ESPN, Yahoo, and Sleeper accounts. Use only when the user explicitly asks to refresh or after the user presses the widget refresh button. This is non-destructive and idempotent: it may add/update discovered league records but does not make roster moves, trades, drops, or lineup changes. If this call succeeds, call get_user_session again to show the updated league list. If this call errors, do not repeat it unchanged.',
+        'Refresh connected fantasy leagues by asking Flaim to rediscover leagues through connected ESPN, Yahoo, and Sleeper accounts. Use only when the user explicitly asks to refresh or after the user presses the widget refresh button. This is non-destructive, but repeated refreshes can update Flaim registry timestamps and provider metadata; it does not make roster moves, trades, drops, or lineup changes. If this call succeeds, call get_user_session again to show the updated league list. If this call errors, do not repeat it unchanged.',
       inputSchema: {
         platforms: z
           .array(z.enum(['espn', 'yahoo', 'sleeper']))
@@ -1079,7 +1082,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       securitySchemes: buildSecuritySchemes('mcp:read'),
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
       openaiMeta: { invoking: 'Fetching standings\u2026', invoked: 'Standings ready' },
-      description: `Get season standings and outcome snapshot; includes verified season-outcome fields when available. Returns team records, rankings, and points summaries. The rank field is a standings sort position (1 = best): on ESPN and Sleeper it is computed by Flaim from win percentage; on Yahoo it is passed through from Yahoo's own standings API. It is NOT a verified postseason finish. For verified postseason outcome, use finalRank and championshipWon instead. Also returns seasonPhase (regular_season/playoffs_in_progress/season_complete), seasonComplete, and per-team outcome fields: finalRank, championshipWon, playoffOutcome, outcomeConfidence, madePlayoffs, playoffSeed. Outcome fields are null when not verifiable — do not infer championship from rank or team name. Note: playoffOutcome returns 'in_progress' on Sleeper for teams in active playoffs; ESPN and Yahoo return null for that state. ESPN may also include projected-rank fields. Best used after get_user_session and after get_league_info for the specified league so team names and league context are already established. For multi-league comparisons, call once per league. For historical finish questions, call get_ancient_history first to discover seasons, then call this tool per season for verified outcomes. Read-only. If this call errors, do not repeat it unchanged. Current date is ${currentDate}.`,
+      description: `Get season standings and outcome snapshot; includes verified season-outcome fields when available. Returns team records, rankings, and points summaries. The rank field is a standings sort position (1 = best): on ESPN and Sleeper it is computed by Flaim from win percentage; on Yahoo it is passed through from Yahoo's own standings API. It is NOT a verified postseason finish. For verified postseason outcome, use finalRank and championshipWon instead. Also returns seasonPhase (regular_season/playoffs_in_progress/season_complete), seasonComplete, and per-team outcome fields: finalRank, championshipWon, playoffOutcome, outcomeConfidence, madePlayoffs, playoffSeed. Outcome fields are null when not verifiable — do not infer championship from rank or team name. outcomeConfidence is 'explicit' when the platform reports final ranks, or 'derived' when the champion and runner-up were determined from the final winners-bracket matchup (ESPN historical seasons may omit final ranks); a tied championship game is resolved using the league's playoff tie rule (ESPN's default advances the higher seed). Note: playoffOutcome returns 'in_progress' on Sleeper for teams in active playoffs; ESPN and Yahoo return null for that state. ESPN may also include projected-rank fields. Best used after get_user_session and after get_league_info for the specified league so team names and league context are already established. For multi-league comparisons, call once per league. For historical finish questions, call get_ancient_history first to discover seasons, then call this tool per season for verified outcomes. Read-only. If this call errors, do not repeat it unchanged. Current date is ${currentDate}.`,
       inputSchema: {
         platform: z
           .enum(['espn', 'yahoo', 'sleeper'])

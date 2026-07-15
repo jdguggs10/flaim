@@ -99,7 +99,7 @@ describe('football get_standings handler — outcome fields', () => {
   });
 
   it('returns season_complete but all outcome fields null when no rankFinal present', async () => {
-    espnFetchMock.mockResolvedValue(jsonResponse({
+    espnFetchMock.mockResolvedValueOnce(jsonResponse({
       scoringPeriodId: 18,
       settings: { regularSeasonMatchupPeriods: 14 },
       teams: [
@@ -111,6 +111,8 @@ describe('football get_standings handler — outcome fields', () => {
         },
       ],
     }));
+
+    espnFetchMock.mockResolvedValueOnce(jsonResponse({ schedule: [] }));
 
     const result = await footballHandlers.get_standings({} as never, makeParams(HISTORICAL_YEAR), 'Bearer x', 'cid');
 
