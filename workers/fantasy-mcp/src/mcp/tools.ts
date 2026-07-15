@@ -743,7 +743,7 @@ export function getUnifiedTools(): UnifiedTool[] {
           let sessionMessage: string;
           if (!hasLeagues) {
             sessionMessage = hasRawLeagues
-              ? 'No current-season leagues found. Provider data exists, but every returned league is for a non-current season — this usually means the user connected during a previous season and their leagues have not been synced since the new season started. Ask the user to open https://flaim.app/leagues and press "Sync leagues" to pull the current season, then call get_user_session again. Do not treat historical leagues as active; use get_ancient_history only when the user asks about past seasons.'
+              ? 'No current-season leagues found. Provider data exists, but every returned league is for a non-current season — this usually means the user connected during a previous season and their leagues have not been synced since the new season started. Ask the user to open https://flaim.app/leagues and press "Sync all" to pull the current season, then call get_user_session again. Do not treat historical leagues as active; use get_ancient_history only when the user asks about past seasons.'
               : 'No leagues configured. Ask the user to open https://flaim.app/leagues and connect ESPN, Yahoo, or Sleeper before using Flaim for league-specific advice.';
           } else if (leagues.length === 1) {
             const league = leagues[0];
