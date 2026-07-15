@@ -1379,6 +1379,8 @@ describe('fantasy-mcp tools', () => {
     expect(payload.totalLeaguesFound).toBe(0);
     expect(payload.allLeagues).toHaveLength(0);
     expect(payload.instructions).toContain('No current-season leagues found');
+    expect(payload.instructions).toContain('https://flaim.app/leagues');
+    expect(payload.instructions).toContain('Sync leagues');
     expect(payload.instructions).not.toContain('No leagues configured');
   });
 
