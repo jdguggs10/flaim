@@ -1550,26 +1550,6 @@ function LeaguesPageContent() {
                 </div>
               </button>
               <div className="flex items-center gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={refreshConnectedLeagues}
-                  disabled={!isAccountStateCurrent || isRefreshingLeagues}
-                  className="h-8 shrink-0"
-                >
-                  {isRefreshingLeagues ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Syncing...
-                    </>
-                  ) : (
-                    <>
-                      <RefreshCw className="mr-2 h-4 w-4" />
-                      Sync all
-                    </>
-                  )}
-                </Button>
                 <Popover>
                   <PopoverTrigger asChild>
                     <button
@@ -1668,6 +1648,26 @@ function LeaguesPageContent() {
                 </div>
               </button>
               <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={refreshConnectedLeagues}
+                  disabled={!isAccountStateCurrent || isRefreshingLeagues}
+                  className="h-8 shrink-0"
+                >
+                  {isRefreshingLeagues ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Syncing...
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="mr-2 h-4 w-4" />
+                      Sync all
+                    </>
+                  )}
+                </Button>
                 <Popover>
                   <PopoverTrigger asChild>
                     <button
