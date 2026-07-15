@@ -9,7 +9,11 @@ export interface YahooDiscoverErrorResponse {
 
 // Any future auth-worker error that requires a reconnect must be listed here;
 // otherwise retryable: true will route it to the temporary notice path.
-const YAHOO_RECONNECT_ERRORS = new Set<string>(['not_connected', 'refresh_failed']);
+const YAHOO_RECONNECT_ERRORS = new Set<string>([
+  'not_connected',
+  'refresh_failed',
+  YahooAuthWorkerErrorCode.APP_FINGERPRINT_MISMATCH,
+]);
 // Includes OAuth callback redirect codes; yahoo-client's credentials API classifier is intentionally narrower.
 const YAHOO_TRANSIENT_AUTH_ERRORS = new Set<string>([
   YahooAuthWorkerErrorCode.REFRESH_TEMPORARILY_UNAVAILABLE,

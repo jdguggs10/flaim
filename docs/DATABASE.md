@@ -60,6 +60,7 @@ Stores Yahoo OAuth credentials for a Clerk user.
 | refresh_token | text | Yahoo OAuth refresh token |
 | expires_at | timestamptz | Access token expiry |
 | yahoo_guid | text | Optional Yahoo user GUID |
+| app_fingerprint | text | Non-secret fingerprint (first 12 hex chars of SHA-256 of the Yahoo client id) of the Yahoo app that minted the stored tokens; NULL on legacy rows until their next successful refresh backfills it |
 | refresh_lease_owner | text | Short-lived owner ID for single-writer token refresh; `cooldown:*` marks a short shared backoff after Yahoo rate-limit-like refresh failures |
 | refresh_lease_expires_at | timestamptz | Expiry for the active refresh lease or cooldown marker |
 | created_at | timestamptz | Created timestamp |

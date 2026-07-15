@@ -4,6 +4,11 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Yahoo App Fingerprint Guard (FLA-133)
+- **Added**: Yahoo credential rows now record a non-secret fingerprint of the Yahoo app that minted the stored tokens (first 12 hex chars of SHA-256 of the client id — never the client id, secrets, or tokens). Stamped on reconnect and on every successful refresh, which backfills legacy rows.
+- **Added**: A pre-refresh guard skips the doomed Yahoo token call when the stored fingerprint doesn't match the runtime app and returns a coded `app_fingerprint_mismatch` reconnect-required error, so app-secret swaps no longer masquerade as generic refresh failures. Legacy rows without a fingerprint refresh as before.
+- **Added**: The internal credential-health endpoint and structured refresh diagnostics report stored/runtime fingerprints with a `match`/`mismatch`/`legacy_null` status.
+
 ### Provider Refresh Cooldown + Sync Telemetry (FLA-121)
 - **Added**: League refresh and ESPN discovery now run under a per-user, per-provider single-flight lease with post-refresh cooldowns (~75s normal; 5 minutes or the provider's `Retry-After` after upstream 429s/timeouts), backed by a new `provider_sync_state` table that also records last attempt/success/failure telemetry for each provider.
 - **Changed**: When every requested provider is cooling down, refresh endpoints return a consistent `429 refresh_cooldown` with `retry_after` and a `Retry-After` header (partially blocked syncs still return 200 with per-provider results); the ESPN refresh proxy now preserves `Retry-After` to the browser.

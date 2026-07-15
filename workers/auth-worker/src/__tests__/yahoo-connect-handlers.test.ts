@@ -53,6 +53,16 @@ function yahooSetupSignals(spy: { mock: { calls: unknown[][] } }): Array<Record<
   return yahooRefreshDiagnostics(spy).filter((entry) => entry.schema_version === 1);
 }
 
+// Independent re-derivation of the app fingerprint scheme (first 12 hex chars
+// of SHA-256 of the Yahoo client id) so tests pin the exact contract.
+async function expectedAppFingerprint(clientId: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(clientId));
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('')
+    .slice(0, 12);
+}
+
 function expectNoRawYahooTokenFields(value: unknown): void {
   if (Array.isArray(value)) {
     for (const item of value) {
@@ -285,13 +295,14 @@ describe('yahoo-connect-handlers', () => {
       expect(location).toContain('/leagues');
       expect(location).toContain('yahoo=connected');
 
-      // Verify credentials were saved
+      // Verify credentials were saved, stamped with the runtime app fingerprint
       expect(mockStorage.saveYahooCredentials).toHaveBeenCalledWith(
         expect.objectContaining({
           clerkUserId: 'user_abc123',
           accessToken: 'yahoo-access-token',
           refreshToken: 'yahoo-refresh-token',
           yahooGuid: 'yahoo-guid-123',
+          appFingerprint: await expectedAppFingerprint('test-yahoo-client-id'),
         })
       );
       expect(mockFetch).toHaveBeenCalledTimes(1);
@@ -666,6 +677,124 @@ describe('yahoo-connect-handlers', () => {
       expect(response.status).toBe(404);
       const body = (await response.json()) as Record<string, unknown>;
       expect(body.error).toBe('not_connected');
+    });
+
+    it('refreshes normally when the stored app fingerprint matches the runtime app', async () => {
+      const fingerprint = await expectedAppFingerprint('test-yahoo-client-id');
+      mockStorage.getYahooCredentials.mockResolvedValue({
+        clerkUserId: 'user_123',
+        accessToken: 'old-access-token',
+        refreshToken: 'refresh-token',
+        expiresAt: new Date(Date.now() + 2 * 60 * 1000),
+        needsRefresh: true,
+        appFingerprint: fingerprint,
+      });
+
+      mockFetch.mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            access_token: 'new-access-token',
+            refresh_token: 'new-refresh-token',
+            expires_in: 3600,
+          }),
+          { status: 200 }
+        )
+      );
+
+      const response = await handleYahooCredentials(env, 'user_123', corsHeaders);
+
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as Record<string, unknown>;
+      expect(body.access_token).toBe('new-access-token');
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(mockStorage.updateYahooCredentials).toHaveBeenCalledWith(
+        'user_123',
+        expect.objectContaining({
+          accessToken: 'new-access-token',
+          appFingerprint: fingerprint,
+        }),
+        expect.any(String)
+      );
+    });
+
+    it('skips the Yahoo token call and returns reconnect-required on app fingerprint mismatch', async () => {
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      const runtimeFingerprint = await expectedAppFingerprint('test-yahoo-client-id');
+      mockStorage.getYahooCredentials.mockResolvedValue({
+        clerkUserId: 'user_123',
+        accessToken: 'old-access-token',
+        refreshToken: 'refresh-token',
+        expiresAt: new Date(Date.now() + 2 * 60 * 1000),
+        needsRefresh: true,
+        appFingerprint: 'deadbeef0000',
+      });
+
+      const response = await handleYahooCredentials(env, 'user_123', corsHeaders, 'req_fp_mismatch');
+
+      expect(response.status).toBe(401);
+      const body = (await response.json()) as Record<string, unknown>;
+      expect(body.error).toBe('app_fingerprint_mismatch');
+      expect(body.error_description).toContain('Reconnect Yahoo');
+
+      // The doomed Yahoo token call is skipped entirely — no fetch, no lease.
+      expect(mockFetch).not.toHaveBeenCalled();
+      expect(mockStorage.acquireRefreshLease).not.toHaveBeenCalled();
+      expect(mockStorage.updateYahooCredentials).not.toHaveBeenCalled();
+
+      expect(yahooRefreshDiagnostics(logSpy)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            event: 'refresh_app_fingerprint_mismatch',
+            correlation_id: 'req_fp_mismatch',
+            phase: 'refresh_request',
+            outcome: 'permanent_failure',
+            diagnostic_class: 'app_fingerprint_mismatch',
+            app_fingerprint_status: 'mismatch',
+            stored_app_fingerprint: 'deadbeef0000',
+            runtime_app_fingerprint: runtimeFingerprint,
+          }),
+        ])
+      );
+      expect(errorSpy).toHaveBeenCalled();
+    });
+
+    it('proceeds for legacy rows without a stored fingerprint and backfills it on successful refresh', async () => {
+      const runtimeFingerprint = await expectedAppFingerprint('test-yahoo-client-id');
+      mockStorage.getYahooCredentials.mockResolvedValue({
+        clerkUserId: 'user_123',
+        accessToken: 'old-access-token',
+        refreshToken: 'refresh-token',
+        expiresAt: new Date(Date.now() + 2 * 60 * 1000),
+        needsRefresh: true,
+        // Legacy row: no appFingerprint — guard must not trip.
+      });
+
+      mockFetch.mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            access_token: 'new-access-token',
+            refresh_token: 'new-refresh-token',
+            expires_in: 3600,
+          }),
+          { status: 200 }
+        )
+      );
+
+      const response = await handleYahooCredentials(env, 'user_123', corsHeaders);
+
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as Record<string, unknown>;
+      expect(body.access_token).toBe('new-access-token');
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(mockStorage.updateYahooCredentials).toHaveBeenCalledWith(
+        'user_123',
+        expect.objectContaining({
+          accessToken: 'new-access-token',
+          appFingerprint: runtimeFingerprint,
+        }),
+        expect.any(String)
+      );
     });
 
     it('returns error when refresh fails', async () => {
@@ -2436,6 +2565,7 @@ describe('yahoo-connect-handlers', () => {
     it('returns non-secret credential health for a fresh token', async () => {
       const expiresAt = new Date('2026-05-12T02:00:00Z');
       const updatedAt = new Date('2026-05-12T01:00:00Z');
+      const runtimeFingerprint = await expectedAppFingerprint('test-yahoo-client-id');
       vi.useFakeTimers();
       vi.setSystemTime(new Date('2026-05-12T01:30:00Z'));
       try {
@@ -2446,6 +2576,7 @@ describe('yahoo-connect-handlers', () => {
           needsRefresh: false,
           updatedAt,
           refreshLeaseExpiresAt: new Date('2026-05-12T01:31:00Z'),
+          appFingerprint: runtimeFingerprint,
         });
 
         const response = await handleYahooCredentialHealth(env, 'user_123', corsHeaders);
@@ -2460,6 +2591,11 @@ describe('yahoo-connect-handlers', () => {
           checkedAt: '2026-05-12T01:30:00.000Z',
           lastUpdated: '2026-05-12T01:00:00.000Z',
           yahooGuidPresent: true,
+          appFingerprint: {
+            stored: runtimeFingerprint,
+            runtime: runtimeFingerprint,
+            status: 'match',
+          },
           accessToken: {
             expiresAt: '2026-05-12T02:00:00.000Z',
             expiresInSeconds: 1800,
@@ -2475,6 +2611,47 @@ describe('yahoo-connect-handlers', () => {
       } finally {
         vi.useRealTimers();
       }
+    });
+
+    it('reports app fingerprint mismatch in credential health', async () => {
+      const runtimeFingerprint = await expectedAppFingerprint('test-yahoo-client-id');
+      mockStorage.getYahooCredentialHealth.mockResolvedValue({
+        clerkUserId: 'user_123',
+        expiresAt: new Date(Date.now() + 30 * 60 * 1000),
+        yahooGuidPresent: true,
+        needsRefresh: false,
+        appFingerprint: 'deadbeef0000',
+      });
+
+      const response = await handleYahooCredentialHealth(env, 'user_123', corsHeaders);
+
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as Record<string, unknown>;
+      expect(body.appFingerprint).toEqual({
+        stored: 'deadbeef0000',
+        runtime: runtimeFingerprint,
+        status: 'mismatch',
+      });
+    });
+
+    it('reports legacy_null fingerprint status for rows without a stored fingerprint', async () => {
+      const runtimeFingerprint = await expectedAppFingerprint('test-yahoo-client-id');
+      mockStorage.getYahooCredentialHealth.mockResolvedValue({
+        clerkUserId: 'user_123',
+        expiresAt: new Date(Date.now() + 30 * 60 * 1000),
+        yahooGuidPresent: true,
+        needsRefresh: false,
+      });
+
+      const response = await handleYahooCredentialHealth(env, 'user_123', corsHeaders);
+
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as Record<string, unknown>;
+      expect(body.appFingerprint).toEqual({
+        stored: null,
+        runtime: runtimeFingerprint,
+        status: 'legacy_null',
+      });
     });
 
     it('returns cooldown state without exposing the lease owner', async () => {
