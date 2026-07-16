@@ -444,6 +444,11 @@ async function discoverHistoricalSeasons(
 
         if (addResult.success) {
           result.added++;
+        } else if (addResult.code === 'LIMIT_EXCEEDED') {
+          // Every further add for this league is guaranteed to fail the same
+          // way — stop probing ESPN for seasons we cannot save.
+          console.error(`League cap reached; stopping historical backfill for league ${league.leagueId}:`, addResult.error);
+          break;
         } else if (addResult.code !== 'DUPLICATE') {
           console.error(`Failed to add historical season ${canonicalYear} for league ${league.leagueId}:`, addResult.error);
         }

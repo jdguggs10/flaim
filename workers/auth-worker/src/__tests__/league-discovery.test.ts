@@ -232,6 +232,52 @@ describe('discoverAndSaveLeagues', () => {
     expect(seasonYearsInCallOrder).toEqual([2025, 2025, 2024, 2024]);
   });
 
+  it('stops probing a league\'s historical seasons once the league cap is hit', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({
+        preferences: [
+          {
+            id: 'pref-1',
+            type: { code: 'fantasy' },
+            metaData: {
+              entry: {
+                entryId: 8,
+                gameId: 1,
+                seasonId: 2025,
+                entryMetadata: { teamName: 'Capped Team' },
+                groups: [{ groupId: 12345, groupName: 'Capped League' }],
+              },
+            },
+          },
+        ],
+      }),
+    } as Response);
+
+    mockGetLeagueInfo
+      .mockResolvedValueOnce({ status: { previousSeasons: [2024, 2023] } } as any)
+      .mockResolvedValue({ leagueName: 'Capped League Past' } as any);
+
+    mockGetLeagueTeams.mockResolvedValue([{ teamId: '8', teamName: 'Capped Team Past' }]);
+
+    const storage = {
+      // Current season already saved; historical rows are new.
+      leagueExists: vi.fn()
+        .mockResolvedValueOnce(true)
+        .mockResolvedValue(false),
+      addLeague: vi.fn().mockResolvedValue({ success: false, code: 'LIMIT_EXCEEDED', error: 'cap' }),
+      updateLeague: vi.fn().mockResolvedValue(true),
+    } as any;
+
+    await discoverAndSaveLeagues('user_123', '{swid}', 's2token', storage);
+
+    // First historical season (2024) hits the cap; 2023 must not be attempted.
+    expect(storage.addLeague).toHaveBeenCalledTimes(1);
+    expect(mockGetLeagueTeams).toHaveBeenCalledTimes(1);
+  });
+
   it('refreshes existing current-season rows with latest ESPN metadata', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
