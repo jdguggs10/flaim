@@ -259,7 +259,11 @@ export async function discoverAndSaveLeagues(
   const currentSeason: SeasonCounts = { found: 0, added: 0, alreadySaved: 0, refreshed: 0 };
   const pastSeasons: SeasonCounts = { found: 0, added: 0, alreadySaved: 0, refreshed: 0 };
 
-  // 2. Process each league with per-league try/catch
+  // 2. Save the current season for every league first. Historical backfill
+  // runs afterwards (step 3) so old seasons can never consume the per-user
+  // league budget ahead of a new season — the failure mode that silently
+  // blocked season rollover for multi-season users.
+  const savedLeagues: DiscoveredEspnLeague[] = [];
   for (const league of leagues) {
     try {
       const sport = gameIdToSport(league.gameId);
@@ -322,7 +326,17 @@ export async function discoverAndSaveLeagues(
         seasonYear: canonicalSeasonYear,
       });
 
-      // 3. Discover historical seasons for this league (synchronously)
+      savedLeagues.push(league);
+    } catch (error) {
+      // Per-league error handling - continue with other leagues
+      console.error(`Error processing league ${league.leagueId}:`, error);
+      continue;
+    }
+  }
+
+  // 3. Discover historical seasons only after every current season is saved
+  for (const league of savedLeagues) {
+    try {
       const histResult = await discoverHistoricalSeasons(
         userId,
         league,
@@ -334,10 +348,8 @@ export async function discoverAndSaveLeagues(
       pastSeasons.added += histResult.added;
       pastSeasons.alreadySaved += histResult.alreadySaved;
       pastSeasons.refreshed += histResult.refreshed;
-
     } catch (error) {
-      // Per-league error handling - continue with other leagues
-      console.error(`Error processing league ${league.leagueId}:`, error);
+      console.error(`Error discovering history for league ${league.leagueId}:`, error);
       continue;
     }
   }
@@ -432,6 +444,11 @@ async function discoverHistoricalSeasons(
 
         if (addResult.success) {
           result.added++;
+        } else if (addResult.code === 'LIMIT_EXCEEDED') {
+          // Every further add for this league is guaranteed to fail the same
+          // way — stop probing ESPN for seasons we cannot save.
+          console.error(`League cap reached; stopping historical backfill for league ${league.leagueId}:`, addResult.error);
+          break;
         } else if (addResult.code !== 'DUPLICATE') {
           console.error(`Failed to add historical season ${canonicalYear} for league ${league.leagueId}:`, addResult.error);
         }

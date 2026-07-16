@@ -171,6 +171,113 @@ describe('discoverAndSaveLeagues', () => {
     }));
   });
 
+  it('saves every current season before any historical backfill so old seasons cannot exhaust the league cap first', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({
+        preferences: [
+          {
+            id: 'pref-1',
+            type: { code: 'fantasy' },
+            metaData: {
+              entry: {
+                entryId: 1,
+                gameId: 1,
+                seasonId: 2025,
+                entryMetadata: { teamName: 'Team A' },
+                groups: [{ groupId: 111, groupName: 'League A' }],
+              },
+            },
+          },
+          {
+            id: 'pref-2',
+            type: { code: 'fantasy' },
+            metaData: {
+              entry: {
+                entryId: 2,
+                gameId: 1,
+                seasonId: 2025,
+                entryMetadata: { teamName: 'Team B' },
+                groups: [{ groupId: 222, groupName: 'League B' }],
+              },
+            },
+          },
+        ],
+      }),
+    } as Response);
+
+    mockGetLeagueInfo
+      .mockResolvedValueOnce({ status: { previousSeasons: [2024] } } as any)
+      .mockResolvedValueOnce({ leagueName: 'League A 2024' } as any)
+      .mockResolvedValueOnce({ status: { previousSeasons: [2024] } } as any)
+      .mockResolvedValueOnce({ leagueName: 'League B 2024' } as any);
+
+    mockGetLeagueTeams
+      .mockResolvedValueOnce([{ teamId: '1', teamName: 'Team A 2024' }])
+      .mockResolvedValueOnce([{ teamId: '2', teamName: 'Team B 2024' }]);
+
+    const storage = {
+      leagueExists: vi.fn().mockResolvedValue(false),
+      addLeague: vi.fn().mockResolvedValue({ success: true }),
+      updateLeague: vi.fn().mockResolvedValue(true),
+    } as any;
+
+    await discoverAndSaveLeagues('user_123', '{swid}', 's2token', storage);
+
+    const seasonYearsInCallOrder = storage.addLeague.mock.calls.map(
+      ([, league]: [string, { seasonYear: number }]) => league.seasonYear
+    );
+    expect(seasonYearsInCallOrder).toEqual([2025, 2025, 2024, 2024]);
+  });
+
+  it('stops probing a league\'s historical seasons once the league cap is hit', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({
+        preferences: [
+          {
+            id: 'pref-1',
+            type: { code: 'fantasy' },
+            metaData: {
+              entry: {
+                entryId: 8,
+                gameId: 1,
+                seasonId: 2025,
+                entryMetadata: { teamName: 'Capped Team' },
+                groups: [{ groupId: 12345, groupName: 'Capped League' }],
+              },
+            },
+          },
+        ],
+      }),
+    } as Response);
+
+    mockGetLeagueInfo
+      .mockResolvedValueOnce({ status: { previousSeasons: [2024, 2023] } } as any)
+      .mockResolvedValue({ leagueName: 'Capped League Past' } as any);
+
+    mockGetLeagueTeams.mockResolvedValue([{ teamId: '8', teamName: 'Capped Team Past' }]);
+
+    const storage = {
+      // Current season already saved; historical rows are new.
+      leagueExists: vi.fn()
+        .mockResolvedValueOnce(true)
+        .mockResolvedValue(false),
+      addLeague: vi.fn().mockResolvedValue({ success: false, code: 'LIMIT_EXCEEDED', error: 'cap' }),
+      updateLeague: vi.fn().mockResolvedValue(true),
+    } as any;
+
+    await discoverAndSaveLeagues('user_123', '{swid}', 's2token', storage);
+
+    // First historical season (2024) hits the cap; 2023 must not be attempted.
+    expect(storage.addLeague).toHaveBeenCalledTimes(1);
+    expect(mockGetLeagueTeams).toHaveBeenCalledTimes(1);
+  });
+
   it('refreshes existing current-season rows with latest ESPN metadata', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
