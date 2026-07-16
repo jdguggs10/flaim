@@ -171,6 +171,67 @@ describe('discoverAndSaveLeagues', () => {
     }));
   });
 
+  it('saves every current season before any historical backfill so old seasons cannot exhaust the league cap first', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({
+        preferences: [
+          {
+            id: 'pref-1',
+            type: { code: 'fantasy' },
+            metaData: {
+              entry: {
+                entryId: 1,
+                gameId: 1,
+                seasonId: 2025,
+                entryMetadata: { teamName: 'Team A' },
+                groups: [{ groupId: 111, groupName: 'League A' }],
+              },
+            },
+          },
+          {
+            id: 'pref-2',
+            type: { code: 'fantasy' },
+            metaData: {
+              entry: {
+                entryId: 2,
+                gameId: 1,
+                seasonId: 2025,
+                entryMetadata: { teamName: 'Team B' },
+                groups: [{ groupId: 222, groupName: 'League B' }],
+              },
+            },
+          },
+        ],
+      }),
+    } as Response);
+
+    mockGetLeagueInfo
+      .mockResolvedValueOnce({ status: { previousSeasons: [2024] } } as any)
+      .mockResolvedValueOnce({ leagueName: 'League A 2024' } as any)
+      .mockResolvedValueOnce({ status: { previousSeasons: [2024] } } as any)
+      .mockResolvedValueOnce({ leagueName: 'League B 2024' } as any);
+
+    mockGetLeagueTeams
+      .mockResolvedValueOnce([{ teamId: '1', teamName: 'Team A 2024' }])
+      .mockResolvedValueOnce([{ teamId: '2', teamName: 'Team B 2024' }]);
+
+    const storage = {
+      leagueExists: vi.fn().mockResolvedValue(false),
+      addLeague: vi.fn().mockResolvedValue({ success: true }),
+      updateLeague: vi.fn().mockResolvedValue(true),
+    } as any;
+
+    await discoverAndSaveLeagues('user_123', '{swid}', 's2token', storage);
+
+    const seasonYearsInCallOrder = storage.addLeague.mock.calls.map(
+      ([, league]: [string, { seasonYear: number }]) => league.seasonYear
+    );
+    expect(seasonYearsInCallOrder).toEqual([2025, 2025, 2024, 2024]);
+  });
+
   it('refreshes existing current-season rows with latest ESPN metadata', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,

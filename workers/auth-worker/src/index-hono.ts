@@ -22,7 +22,7 @@
  */
 
 import { Hono, Context } from 'hono';
-import { EspnSupabaseStorage } from './supabase-storage';
+import { EspnSupabaseStorage, MAX_LEAGUES_PER_USER } from './supabase-storage';
 import { EspnCredentials, EspnLeague, AutomaticLeagueDiscoveryFailed } from './espn-types';
 import {
   handleMetadataDiscovery,
@@ -1998,9 +1998,9 @@ async function handleLeagues(c: Context<{ Bindings: Env }>, method: string): Pro
       }, 400);
     }
 
-    if (leagues.length > 10) {
+    if (leagues.length > MAX_LEAGUES_PER_USER) {
       return c.json({
-        error: 'Maximum of 10 leagues allowed per user'
+        error: `Maximum of ${MAX_LEAGUES_PER_USER} leagues allowed per user`
       }, 400);
     }
 

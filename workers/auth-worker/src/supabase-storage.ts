@@ -19,6 +19,15 @@ import { clearDefaultsForLeague as _clearDefaultsForLeague, clearDefaultsForPlat
 import { ArchiveStorage, archivedKey, isSuppressed, type ArchivedFilter } from './archive-storage';
 
 /**
+ * Per-user cap on stored league rows. Each league-season is one row, so a
+ * user with a few leagues and several seasons of history accumulates rows
+ * quickly — this is a runaway-sync guard, not a product limit. Raised from
+ * 10 (July 2026) after season rollover silently failed for multi-season
+ * users whose historical rows had consumed the cap.
+ */
+export const MAX_LEAGUES_PER_USER = 100;
+
+/**
  * Mask user ID for logging to avoid PII exposure
  * Shows first 8 chars + "..." for debugging while protecting privacy
  */
@@ -285,8 +294,8 @@ export class EspnSupabaseStorage {
     try {
       if (!clerkUserId) return false;
 
-      if (leagues.length > 10) {
-        throw new Error('Maximum of 10 leagues allowed per user');
+      if (leagues.length > MAX_LEAGUES_PER_USER) {
+        throw new Error(`Maximum of ${MAX_LEAGUES_PER_USER} leagues allowed per user`);
       }
 
       // First, delete existing leagues for this user
@@ -454,11 +463,11 @@ export class EspnSupabaseStorage {
       }
 
       // Check league limit
-      if (existingLeagues.length >= 10) {
+      if (existingLeagues.length >= MAX_LEAGUES_PER_USER) {
         return {
           success: false,
           code: 'LIMIT_EXCEEDED',
-          error: 'Maximum of 10 leagues allowed per user'
+          error: `Maximum of ${MAX_LEAGUES_PER_USER} leagues allowed per user`
         };
       }
 
