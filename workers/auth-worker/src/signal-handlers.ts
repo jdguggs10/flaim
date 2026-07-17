@@ -48,6 +48,9 @@ export async function handleWebSetupSignal(
     service: 'web',
     component: 'leagues_page',
     event,
+    // View signals are informational, but downstream log tooling expects an
+    // outcome on every setup signal — omit it and some clients drop the event.
+    outcome: 'success',
     platform: 'espn',
     device,
     connected,

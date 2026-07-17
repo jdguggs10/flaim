@@ -33,6 +33,7 @@ describe('handleWebSetupSignal', () => {
       service: 'web',
       component: 'leagues_page',
       event: 'espn_connect_ui_view',
+      outcome: 'success',
       platform: 'espn',
       device: 'mobile',
       connected: false,
