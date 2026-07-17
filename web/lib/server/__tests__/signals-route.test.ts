@@ -87,6 +87,22 @@ describe('POST /api/signals', () => {
     expect(init.body).toBe(JSON.stringify(body));
   });
 
+  it('prefers the direct AUTH_WORKER_URL over the public gateway when both are set', async () => {
+    process.env.AUTH_WORKER_URL = 'https://direct.workers.dev';
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await POST(makeRequest({ event: 'espn_connect_ui_view' }));
+
+    const [url] = fetchMock.mock.calls[0] as unknown as [string];
+    expect(url).toBe('https://direct.workers.dev/signals/web');
+  });
+
   it('passes through auth-worker rejections', async () => {
     const fetchMock = vi.fn(async () =>
       new Response(JSON.stringify({ error: 'unknown_event' }), {

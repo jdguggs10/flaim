@@ -15,11 +15,18 @@ vi.mock('@/lib/server/product-email', () => ({
 
 import { POST } from '../../../app/api/espn/setup-link-email/route';
 
+// Unique user id per test so the route's per-user send cooldown never
+// carries over between unrelated cases.
+let userSequence = 0;
+
 function mockSignedInUser(email: string | null = 'fan@example.com') {
+  const id = `user_${++userSequence}`;
   mocks.currentUser.mockResolvedValue({
+    id,
     primaryEmailAddress: email ? { emailAddress: email } : null,
     emailAddresses: email ? [{ emailAddress: email }] : [],
   });
+  return id;
 }
 
 beforeEach(() => {
@@ -86,5 +93,16 @@ describe('POST /api/espn/setup-link-email', () => {
 
     expect(response.status).toBe(502);
     expect(await response.json()).toMatchObject({ error: 'send_failed' });
+  });
+
+  it('rate-limits a second send from the same user within the cooldown', async () => {
+    const first = await POST();
+    expect(first.status).toBe(200);
+
+    const second = await POST();
+
+    expect(second.status).toBe(429);
+    expect(await second.json()).toMatchObject({ error: 'rate_limited' });
+    expect(mocks.sendEspnSetupLinkEmail).toHaveBeenCalledTimes(1);
   });
 });

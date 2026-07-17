@@ -61,6 +61,14 @@ describe('handleWebSetupSignal', () => {
     expect(await response.json()).toEqual({ error: 'invalid_json' });
   });
 
+  it('rejects non-object JSON bodies like null without crashing', async () => {
+    for (const raw of ['null', '[]', '"event"']) {
+      const response = await handleWebSetupSignal(makeRequest(raw), 'prod', CORS);
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({ error: 'invalid_json' });
+    }
+  });
+
   it('drops out-of-allowlist device values but still logs the event', async () => {
     const spy = vi.spyOn(console, 'log').mockImplementation(() => {});
 

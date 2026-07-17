@@ -4,6 +4,12 @@ import { CHROME_EXTENSION_URL } from '@/config/constants';
 import { emailBrand } from '@/emails/brand';
 import { sendEspnSetupLinkEmail } from '@/lib/server/product-email';
 
+// Best-effort per-user cooldown. In-memory, so it only holds within a warm
+// serverless instance — enough to stop a retry loop or button hammering from
+// turning into repeated Resend sends, without needing shared infrastructure.
+const SETUP_LINK_COOLDOWN_MS = 60_000;
+const lastSendByUser = new Map<string, number>();
+
 /**
  * POST /api/espn/setup-link-email
  * Sends the ESPN send-to-desktop setup link to the signed-in user's own
@@ -14,6 +20,14 @@ export async function POST() {
     const user = await currentUser();
     if (!user) {
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    }
+
+    const lastSend = lastSendByUser.get(user.id);
+    if (lastSend !== undefined && Date.now() - lastSend < SETUP_LINK_COOLDOWN_MS) {
+      return NextResponse.json(
+        { error: 'rate_limited', error_description: 'Setup link was just sent — check your inbox' },
+        { status: 429 }
+      );
     }
 
     const email =
@@ -46,6 +60,7 @@ export async function POST() {
       );
     }
 
+    lastSendByUser.set(user.id, Date.now());
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error('ESPN setup-link email route error:', error);

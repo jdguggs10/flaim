@@ -25,7 +25,11 @@ export async function handleWebSetupSignal(
 ): Promise<Response> {
   let body: WebSignalBody;
   try {
-    body = await request.json() as WebSignalBody;
+    const parsed: unknown = await request.json();
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return jsonResponse({ error: 'invalid_json' }, 400, corsHeaders);
+    }
+    body = parsed as WebSignalBody;
   } catch {
     return jsonResponse({ error: 'invalid_json' }, 400, corsHeaders);
   }

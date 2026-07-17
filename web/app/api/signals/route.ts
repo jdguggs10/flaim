@@ -18,7 +18,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
     }
 
-    const authWorkerUrl = process.env.NEXT_PUBLIC_AUTH_WORKER_URL || process.env.AUTH_WORKER_URL;
+    // Server-only route: prefer the direct .workers.dev URL over the
+    // browser-facing NEXT_PUBLIC_* gateway (see docs/ARCHITECTURE.md).
+    const authWorkerUrl = process.env.AUTH_WORKER_URL || process.env.NEXT_PUBLIC_AUTH_WORKER_URL;
     if (!authWorkerUrl) {
       return NextResponse.json({ error: 'AUTH_WORKER_URL is not configured' }, { status: 500 });
     }
