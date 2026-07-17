@@ -2301,9 +2301,9 @@ function LeaguesPageContent() {
                   {isMobileDevice && !displayEspnConnected && !isEspnStatusChecking ? (
                     <>
                       <p className="text-sm text-muted-foreground">
-                        ESPN setup takes about 2 minutes on a computer. It links
-                        your account through our Chrome extension, and phone
-                        browsers can&apos;t run extensions.
+                        ESPN setup takes sixty seconds on a computer. Credentials
+                        link through a Chrome extension, and phone browsers
+                        can&apos;t run extensions.
                       </p>
                       {setupLinkState === 'sent' ? (
                         <Alert className="bg-info/10 border-info/30 text-info">
