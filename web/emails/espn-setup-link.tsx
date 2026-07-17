@@ -22,17 +22,16 @@ export default function EspnSetupLinkEmail({
       eyebrow="ESPN SETUP"
       footerDescription="Flaim connects your real fantasy leagues to your AI assistant for read-only, league-specific analysis."
       footerDisclosure="You're receiving this one-time email because you requested an ESPN setup link from your Flaim leagues page."
-      preview="Your ESPN setup link — takes about two minutes on a computer."
+      preview="Your ESPN setup link. Takes sixty seconds on a computer."
       title="Finish ESPN setup on your computer"
     >
       <FlaimText>
-        ESPN is the one platform that needs a computer: it links through our
-        Chrome extension, and phone browsers can&apos;t run extensions.
+        ESPN is the one platform that needs a computer. Credentials link
+        through a Chrome extension.
       </FlaimText>
       <FlaimText>
-        Next time you&apos;re at a computer, open your leagues page in Chrome,
-        sign in, and follow the ESPN steps. The whole thing takes about two
-        minutes.
+        Next time you&apos;re at a computer, open flaim.app/leagues and follow
+        the ESPN steps. The whole thing takes sixty seconds.
       </FlaimText>
       <FlaimButton href={leaguesUrl}>Open your leagues page</FlaimButton>
       <FlaimDivider />
@@ -41,7 +40,7 @@ export default function EspnSetupLinkEmail({
         <FlaimFooterLink href={extensionUrl}>
           here on the Chrome Web Store
         </FlaimFooterLink>
-        . Yahoo and Sleeper don&apos;t need any of this — they connect right
+        . Yahoo and Sleeper don&apos;t need any of this. They connect right
         from your phone.
       </FlaimMutedText>
     </FlaimEmailLayout>
