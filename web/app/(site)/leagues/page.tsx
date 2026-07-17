@@ -455,9 +455,10 @@ function LeaguesPageContent() {
   const authRedirectParams = new URLSearchParams();
   if (fromWidget && fromParam) authRedirectParams.set('from', fromParam);
   if (inboundRef) authRedirectParams.set('ref', inboundRef);
-  const authRedirectUrl = authRedirectParams.size > 0
-    ? `/leagues?${authRedirectParams.toString()}`
-    : '/leagues';
+  // .toString() rather than .size: size is missing on older Safari/Node 18
+  // and would silently strip the params exactly where they matter.
+  const authRedirectQuery = authRedirectParams.toString();
+  const authRedirectUrl = authRedirectQuery ? `/leagues?${authRedirectQuery}` : '/leagues';
 
   // Leagues state
   const [leagues, setLeagues] = useState<League[]>([]);
