@@ -8,14 +8,19 @@ import { logSetupSignal } from '@flaim/worker-shared';
  * Allowlist-only: unknown event names are rejected so this endpoint can't be
  * used to spray arbitrary strings into structured logs.
  */
-const WEB_SIGNAL_EVENTS = new Set(['espn_connect_ui_view']);
+const WEB_SIGNAL_EVENTS = new Set(['espn_connect_ui_view', 'leagues_page_view']);
 
 const WEB_SIGNAL_DEVICES = new Set(['mobile', 'desktop']);
+
+// Attribution tags from inbound links (e.g. ref=email-july-rollout). Shape-
+// validated rather than allowlisted so new campaigns don't need a deploy.
+const WEB_SIGNAL_REF_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/;
 
 interface WebSignalBody {
   event?: unknown;
   device?: unknown;
   connected?: unknown;
+  ref?: unknown;
 }
 
 export async function handleWebSetupSignal(
@@ -43,6 +48,9 @@ export async function handleWebSetupSignal(
     ? body.device
     : undefined;
   const connected = typeof body.connected === 'boolean' ? body.connected : undefined;
+  const ref = typeof body.ref === 'string' && WEB_SIGNAL_REF_PATTERN.test(body.ref)
+    ? body.ref
+    : undefined;
 
   logSetupSignal({
     service: 'web',
@@ -51,9 +59,10 @@ export async function handleWebSetupSignal(
     // View signals are informational, but downstream log tooling expects an
     // outcome on every setup signal — omit it and some clients drop the event.
     outcome: 'success',
-    platform: 'espn',
+    ...(event === 'espn_connect_ui_view' ? { platform: 'espn' } : {}),
     device,
     connected,
+    ref,
     environment,
   });
 

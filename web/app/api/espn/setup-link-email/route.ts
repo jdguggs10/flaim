@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { currentUser } from '@clerk/nextjs/server';
 import { CHROME_EXTENSION_URL } from '@/config/constants';
 import { emailBrand } from '@/emails/brand';
+import { withEmailRef } from '@/emails/link-ref';
 import { sendEspnSetupLinkEmail } from '@/lib/server/product-email';
 
 // Best-effort per-user cooldown. In-memory, so it only holds within a warm
@@ -42,7 +43,7 @@ export async function POST() {
 
     const result = await sendEspnSetupLinkEmail({
       extensionUrl: CHROME_EXTENSION_URL,
-      leaguesUrl: `${emailBrand.url}/leagues`,
+      leaguesUrl: withEmailRef(`${emailBrand.url}/leagues`, 'email-espn-setup-link'),
       to: email,
     });
 
