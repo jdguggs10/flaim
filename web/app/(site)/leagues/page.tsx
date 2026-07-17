@@ -17,6 +17,7 @@ import {
   Chrome,
   BookOpen,
   Info,
+  Mail,
   RefreshCw,
   Archive,
   ArchiveRestore,
@@ -43,6 +44,7 @@ import {
 import { CHROME_EXTENSION_URL } from '@/config/constants';
 import { StepConnectAI } from '@/components/site/StepConnectAI';
 import { getPreviousSeasonYear } from '@/lib/season-utils';
+import { getDeviceClass, type DeviceClass } from '@/lib/device';
 
 interface League {
   leagueId: string;
@@ -488,10 +490,49 @@ function LeaguesPageContent() {
   const [accountScopedUserId, setAccountScopedUserId] = useState<string | null>(null);
   const [settingSportDefault, setSettingSportDefault] = useState<string | null>(null);
   const currentUserIdRef = useRef<string | null>(null);
+  // Device class resolves after mount so SSR and hydration render identically.
+  const [deviceClass, setDeviceClass] = useState<DeviceClass | null>(null);
+  const [setupLinkState, setSetupLinkState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
+  const espnViewSignalSent = useRef(false);
 
   useEffect(() => {
     currentUserIdRef.current = isSignedIn ? userId ?? null : null;
   }, [isSignedIn, userId]);
+
+  useEffect(() => {
+    setDeviceClass(getDeviceClass());
+  }, []);
+
+  const isMobileDevice = deviceClass === 'mobile';
+
+  // Measure the ESPN extension wall: one signal per page load when the ESPN
+  // connect UI is first viewed, on any device, once the credential check has
+  // settled so `connected` is accurate.
+  useEffect(() => {
+    if (!isEspnSetupOpen || espnViewSignalSent.current) return;
+    if (!isSignedIn || deviceClass === null || isCheckingCreds) return;
+    espnViewSignalSent.current = true;
+    void fetch('/api/signals', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        event: 'espn_connect_ui_view',
+        device: deviceClass,
+        connected: hasCredentials,
+      }),
+    }).catch(() => {});
+  }, [isEspnSetupOpen, isSignedIn, deviceClass, isCheckingCreds, hasCredentials]);
+
+  const handleEmailSetupLink = useCallback(async () => {
+    setSetupLinkState('sending');
+    try {
+      const res = await fetch('/api/espn/setup-link-email', { method: 'POST' });
+      if (!res.ok) throw new Error('send failed');
+      setSetupLinkState('sent');
+    } catch {
+      setSetupLinkState('error');
+    }
+  }, []);
 
   const isAccountStateCurrent = Boolean(isSignedIn && userId && accountScopedUserId === userId);
   const displayLeagues = isAccountStateCurrent ? leagues : EMPTY_ESPN_LEAGUES;
@@ -2257,32 +2298,82 @@ function LeaguesPageContent() {
               </button>
               {isEspnSetupOpen && (
                 <div id="espn-setup-content" className="px-4 pb-4 space-y-3">
-                  <p className="text-sm text-muted-foreground">
-                    {displayEspnConnected
-                      ? 'Manage ESPN leagues, seasons, accounts, and credentials with the Flaim Chrome extension.'
-                      : 'Add ESPN credentials with the Flaim Chrome extension.'}
-                  </p>
-                  {displayEspnLastUpdated && (
-                    <p className="text-xs text-muted-foreground">
-                      Credentials updated: {formatLastUpdated(displayEspnLastUpdated)}
-                    </p>
-                  )}
-                  {isEspnStatusChecking ? (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Checking ESPN connection...
-                    </div>
+                  {isMobileDevice && !displayEspnConnected && !isEspnStatusChecking ? (
+                    <>
+                      <p className="text-sm text-muted-foreground">
+                        ESPN setup takes sixty seconds on a computer. Credentials
+                        link through a Chrome extension, and phone browsers
+                        can&apos;t run extensions.
+                      </p>
+                      {setupLinkState === 'sent' ? (
+                        <Alert className="bg-info/10 border-info/30 text-info">
+                          <CheckCircle2 className="h-4 w-4" />
+                          <AlertDescription>
+                            Sent! The setup link is waiting in your inbox for the
+                            next time you&apos;re at a computer.
+                          </AlertDescription>
+                        </Alert>
+                      ) : (
+                        <Button
+                          size="sm"
+                          className="w-full sm:w-auto"
+                          onClick={handleEmailSetupLink}
+                          disabled={setupLinkState === 'sending'}
+                        >
+                          {setupLinkState === 'sending' ? (
+                            <>
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              Sending...
+                            </>
+                          ) : (
+                            <>
+                              <Mail className="h-4 w-4 mr-2" />
+                              Email me the setup link
+                            </>
+                          )}
+                        </Button>
+                      )}
+                      {setupLinkState === 'error' && (
+                        <p className="text-sm text-destructive">
+                          Couldn&apos;t send right now. Open flaim.app/leagues on
+                          a computer to finish ESPN setup.
+                        </p>
+                      )}
+                      <p className="text-sm text-muted-foreground">
+                        On your phone right now? Yahoo and Sleeper connect right
+                        here — no extension needed.
+                      </p>
+                    </>
                   ) : (
-                    <Button asChild size="sm" className="w-full sm:w-auto">
-                      <a
-                        href={CHROME_EXTENSION_URL}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        <Chrome className="h-4 w-4 mr-2" />
-                        Open Extension
-                      </a>
-                    </Button>
+                    <>
+                      <p className="text-sm text-muted-foreground">
+                        {displayEspnConnected
+                          ? 'Manage ESPN leagues, seasons, accounts, and credentials with the Flaim Chrome extension.'
+                          : 'Add ESPN credentials with the Flaim Chrome extension.'}
+                      </p>
+                      {displayEspnLastUpdated && (
+                        <p className="text-xs text-muted-foreground">
+                          Credentials updated: {formatLastUpdated(displayEspnLastUpdated)}
+                        </p>
+                      )}
+                      {isEspnStatusChecking ? (
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Checking ESPN connection...
+                        </div>
+                      ) : (
+                        <Button asChild size="sm" className="w-full sm:w-auto">
+                          <a
+                            href={CHROME_EXTENSION_URL}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            <Chrome className="h-4 w-4 mr-2" />
+                            Open Extension
+                          </a>
+                        </Button>
+                      )}
+                    </>
                   )}
                 </div>
               )}

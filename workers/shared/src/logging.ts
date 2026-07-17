@@ -51,10 +51,14 @@ export interface SetupSignalEvent {
   retry_after_source?: string;
   platform?: string;
   sport?: string;
+  /** Client device class for web-surface signals ('mobile' | 'desktop'). */
+  device?: string;
   season_year?: number;
   league_count?: number;
   current_season_found?: boolean;
   past_seasons_found?: boolean;
+  /** Whether the platform was already connected when the signal fired. */
+  connected?: boolean;
   auth_type?: string;
   has_auth_header?: boolean;
   correlation_id?: string;
@@ -78,6 +82,7 @@ const SETUP_SIGNAL_STRING_FIELDS = [
   'retry_after_source',
   'platform',
   'sport',
+  'device',
   'auth_type',
   'correlation_id',
   'cf_ray',
@@ -100,6 +105,7 @@ const SETUP_SIGNAL_BOOLEAN_FIELDS = [
   'current_season_found',
   'past_seasons_found',
   'has_auth_header',
+  'connected',
 ] as const;
 
 function boundedString(value: unknown): string | undefined {
