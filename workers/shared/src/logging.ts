@@ -53,6 +53,8 @@ export interface SetupSignalEvent {
   sport?: string;
   /** Client device class for web-surface signals ('mobile' | 'desktop'). */
   device?: string;
+  /** Attribution tag carried by an inbound link (e.g. email-<campaign>). */
+  ref?: string;
   season_year?: number;
   league_count?: number;
   current_season_found?: boolean;
@@ -83,6 +85,7 @@ const SETUP_SIGNAL_STRING_FIELDS = [
   'platform',
   'sport',
   'device',
+  'ref',
   'auth_type',
   'correlation_id',
   'cf_ray',

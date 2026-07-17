@@ -84,4 +84,53 @@ describe('handleWebSetupSignal', () => {
     expect(payload.device).toBeUndefined();
     expect(payload.connected).toBeUndefined();
   });
+
+  it('logs leagues_page_view with a well-formed ref and no platform field', async () => {
+    const spy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    const response = await handleWebSetupSignal(
+      makeRequest({ event: 'leagues_page_view', device: 'mobile', ref: 'email-july-rollout' }),
+      'prod',
+      CORS
+    );
+
+    expect(response.status).toBe(200);
+    const payload = JSON.parse(String(spy.mock.calls[0][0])) as Record<string, unknown>;
+    expect(payload).toMatchObject({
+      event: 'leagues_page_view',
+      outcome: 'success',
+      device: 'mobile',
+      ref: 'email-july-rollout',
+    });
+    expect(payload.platform).toBeUndefined();
+  });
+
+  it('drops malformed ref values but still logs the event', async () => {
+    const spy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    for (const badRef of ['Email Blast!', '-x', 'a'.repeat(65), 42]) {
+      spy.mockClear();
+      const response = await handleWebSetupSignal(
+        makeRequest({ event: 'leagues_page_view', device: 'desktop', ref: badRef }),
+        'prod',
+        CORS
+      );
+      expect(response.status).toBe(200);
+      const payload = JSON.parse(String(spy.mock.calls[0][0])) as Record<string, unknown>;
+      expect(payload.ref).toBeUndefined();
+    }
+  });
+
+  it('carries ref on espn_connect_ui_view when provided', async () => {
+    const spy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    await handleWebSetupSignal(
+      makeRequest({ event: 'espn_connect_ui_view', device: 'mobile', connected: false, ref: 'email-aug-kickoff' }),
+      'prod',
+      CORS
+    );
+
+    const payload = JSON.parse(String(spy.mock.calls[0][0])) as Record<string, unknown>;
+    expect(payload).toMatchObject({ platform: 'espn', ref: 'email-aug-kickoff' });
+  });
 });

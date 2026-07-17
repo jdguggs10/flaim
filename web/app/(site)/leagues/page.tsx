@@ -449,7 +449,15 @@ function LeaguesPageContent() {
   const fromParam = searchParams.get('from');
   const fromChatGpt = fromParam === 'chatgpt';
   const fromWidget = fromChatGpt || fromParam === 'widget';
-  const authRedirectUrl = fromWidget ? `/leagues?from=${fromParam}` : '/leagues';
+  // Attribution tag from inbound links (e.g. email CTAs append ?ref=email-…).
+  // Captured once on mount because later router.replace calls strip params.
+  const [inboundRef] = useState(() => searchParams.get('ref'));
+  const authRedirectParams = new URLSearchParams();
+  if (fromWidget && fromParam) authRedirectParams.set('from', fromParam);
+  if (inboundRef) authRedirectParams.set('ref', inboundRef);
+  const authRedirectUrl = authRedirectParams.size > 0
+    ? `/leagues?${authRedirectParams.toString()}`
+    : '/leagues';
 
   // Leagues state
   const [leagues, setLeagues] = useState<League[]>([]);
@@ -494,6 +502,7 @@ function LeaguesPageContent() {
   const [deviceClass, setDeviceClass] = useState<DeviceClass | null>(null);
   const [setupLinkState, setSetupLinkState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
   const espnViewSignalSent = useRef(false);
+  const pageViewSignalSent = useRef(false);
 
   useEffect(() => {
     currentUserIdRef.current = isSignedIn ? userId ?? null : null;
@@ -519,9 +528,27 @@ function LeaguesPageContent() {
         event: 'espn_connect_ui_view',
         device: deviceClass,
         connected: hasCredentials,
+        ...(inboundRef ? { ref: inboundRef } : {}),
       }),
     }).catch(() => {});
-  }, [isEspnSetupOpen, isSignedIn, deviceClass, isCheckingCreds, hasCredentials]);
+  }, [isEspnSetupOpen, isSignedIn, deviceClass, isCheckingCreds, hasCredentials, inboundRef]);
+
+  // Attribution: when the page was reached via a tagged link (ref param),
+  // report one landing signal so campaigns are countable in Workers Logs.
+  useEffect(() => {
+    if (!inboundRef || pageViewSignalSent.current) return;
+    if (!isSignedIn || deviceClass === null) return;
+    pageViewSignalSent.current = true;
+    void fetch('/api/signals', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        event: 'leagues_page_view',
+        device: deviceClass,
+        ref: inboundRef,
+      }),
+    }).catch(() => {});
+  }, [inboundRef, isSignedIn, deviceClass]);
 
   const handleEmailSetupLink = useCallback(async () => {
     setSetupLinkState('sending');

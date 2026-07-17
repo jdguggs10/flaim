@@ -50,6 +50,16 @@ The first product templates are:
 
 Template URL samples exist in `PreviewProps` for local preview only. Production senders must pass app URLs, action URLs, and unsubscribe/preference URLs explicitly from the send call so preview values do not leak into staging or production messages by accident.
 
+## Link attribution
+
+Every `flaim.app` link in an outbound email must carry a `ref` query param naming the campaign (`ref=email-<campaign>`, lowercase/digits/hyphens). This is what makes post-send activity attributable instead of timing-guessed.
+
+- **Code-sent email** (transactional templates, API-created broadcasts): build the URL with `withEmailRef(url, 'email-<campaign>')` from `web/emails/link-ref.ts` at the send call.
+- **Dashboard-composed Resend broadcasts**: the helper can't run there — add `?ref=email-<campaign>` to each `flaim.app` link by hand before sending. Treat this as part of the pre-send checklist, alongside the unsubscribe link.
+- Do not tag external links (Chrome Web Store, ChatGPT app listing); only Flaim-owned URLs read the param.
+
+Readout: `/leagues` reports a `leagues_page_view` setup signal (with the `ref` value and device class) whenever a signed-in visitor arrives via a tagged link, and includes `ref` on `espn_connect_ui_view`. Query these in the auth-worker's Workers Logs, filtered by `event` and faceted by `ref`.
+
 `@react-email/render`, `resend`, and `server-only` are production dependencies because the server send helper renders and sends these templates. `react-email` and `@react-email/ui` remain dev-only preview dependencies; do not remove `@react-email/ui` just because templates do not import it directly.
 
 This package includes a server-only Resend send helper, but no user action should call it until the corresponding trigger has an explicit send guard and unsubscribe/preference URL. Product email sending stays disabled unless `FLAIM_EMAILS_ENABLED=true` is set.
