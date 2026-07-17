@@ -81,6 +81,7 @@ import {
   type LeagueRefreshResponse,
 } from './league-refresh';
 import { logSyncEnvelope, SyncStateStorage } from './sync-state';
+import { handleWebSetupSignal } from './signal-handlers';
 
 // =============================================================================
 // TYPES
@@ -1208,6 +1209,22 @@ api.post('/leagues/refresh', async (c) => {
     'web'
   );
   return leagueRefreshResponse(c, result);
+});
+
+// Web-surface setup signals (requires Clerk JWT; see signal-handlers.ts)
+api.post('/signals/web', async (c) => {
+  const { userId, error: authError } = await getClerkUserId(c.req.raw, c.env);
+  if (!userId) {
+    return c.json({
+      error: 'unauthorized',
+      error_description: authError || 'Authentication required',
+    }, 401);
+  }
+  return handleWebSetupSignal(
+    c.req.raw,
+    c.env.ENVIRONMENT || c.env.NODE_ENV,
+    getCorsHeaders(c.req.raw)
+  );
 });
 
 // =============================================================================

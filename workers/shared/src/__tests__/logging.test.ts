@@ -48,6 +48,28 @@ describe('logSetupSignal', () => {
     });
   });
 
+  it('logs the web-surface device and connected fields', () => {
+    const spy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    logSetupSignal({
+      service: 'web',
+      component: 'leagues_page',
+      event: 'espn_connect_ui_view',
+      platform: 'espn',
+      device: 'mobile',
+      connected: false,
+      environment: 'prod',
+    });
+
+    const payload = JSON.parse(String(spy.mock.calls[0][0])) as Record<string, unknown>;
+    expect(payload).toMatchObject({
+      service: 'web',
+      event: 'espn_connect_ui_view',
+      device: 'mobile',
+      connected: false,
+    });
+  });
+
   it('drops forbidden or unknown input keys even when accidentally supplied', () => {
     const spy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
