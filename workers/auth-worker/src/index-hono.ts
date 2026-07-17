@@ -82,6 +82,7 @@ import {
 } from './league-refresh';
 import { logSyncEnvelope, SyncStateStorage } from './sync-state';
 import { handleWebSetupSignal } from './signal-handlers';
+import { runReconciliation } from './reconciliation';
 
 // =============================================================================
 // TYPES
@@ -109,6 +110,14 @@ export interface Env {
   DEMO_API_KEY?: string;   // Static API key for public demo chat
   DEMO_USER_ID?: string;   // Clerk user ID that the demo API key resolves to
   INTERNAL_SERVICE_TOKEN?: string;
+  // Scheduled league rollover reconciliation (FLA-161) — dry-run only.
+  RECONCILIATION_ENABLED?: string;          // 'true' to run; anything else no-ops
+  RECONCILIATION_DRY_RUN?: string;          // must be 'true' (default); writes do not exist
+  RECONCILIATION_MAX_USERS_PER_RUN?: string;
+  RECONCILIATION_BATCH_SIZE?: string;
+  RECONCILIATION_PROVIDERS?: string;        // csv allowlist, default 'espn,sleeper'
+  RECONCILIATION_SPORTS?: string;           // csv allowlist, default 'football'
+  RECONCILIATION_TIMEOUT_BUDGET_MS?: string;
   // Rate limiting (Cloudflare Workers native)
   TOKEN_RATE_LIMITER: RateLimit;
   CREDENTIALS_RATE_LIMITER: RateLimit;
@@ -842,6 +851,21 @@ api.post('/internal/leagues/refresh', async (c) => {
     'mcp'
   );
   return leagueRefreshResponse(c, result);
+});
+
+// Manual trigger for the scheduled rollover reconciliation dry-run (FLA-161).
+// Service-token only; same gates as the cron path, so a disabled or
+// misconfigured job refuses here too. Lets the first runs be triggered and
+// inspected on demand instead of waiting for the cron.
+api.post('/internal/reconciliation/run', async (c) => {
+  const internalError = await requireInternalService(c.req.raw, c.env);
+  if (internalError) {
+    return c.json({ error: internalError.error }, internalError.status);
+  }
+
+  const summary = await runReconciliation(c.env, 'manual');
+  const refused = summary.outcome === 'disabled' || summary.outcome === 'refused_not_dry_run';
+  return c.json(summary, refused ? 409 : 200);
 });
 
 // Usage analytics ingest (internal — called by fantasy-mcp gateway via service binding).
@@ -2387,4 +2411,11 @@ app.route('/', api);
 app.route('/auth', api);
 app.route('/auth-preview', api);
 
-export default app;
+// Module-worker export: keep `fetch` behavior identical to the bare Hono app
+// and add the cron entry point for scheduled reconciliation (FLA-161).
+export default {
+  fetch: app.fetch,
+  scheduled(_controller: unknown, env: Env, ctx: { waitUntil(promise: Promise<unknown>): void }): void {
+    ctx.waitUntil(runReconciliation(env, 'cron'));
+  },
+};

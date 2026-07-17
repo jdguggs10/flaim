@@ -515,6 +515,64 @@ export async function refreshSleeperLeaguesFromStoredConnection(
   return { status: 'success', details };
 }
 
+export interface SleeperReadOnlyLeague {
+  leagueId: string;
+  sport: string;
+  seasonYear: number;
+  previousLeagueId: string | null;
+}
+
+export type SleeperReadOnlyDiscovery =
+  | { status: 'not_connected' }
+  | { status: 'error'; errorCode: string }
+  | { status: 'ok'; leagues: SleeperReadOnlyLeague[] };
+
+/**
+ * Read-only league discovery for scheduled reconciliation (FLA-161): asks the
+ * Sleeper API which leagues exist for the stored connection WITHOUT saving
+ * anything — no connection upsert, no league rows, no history traversal.
+ * `previousLeagueId` is passed through as recurring-identity evidence.
+ */
+export async function fetchSleeperLeaguesReadOnly(
+  env: SleeperConnectEnv,
+  userId: string,
+  requests: Array<{ sleeperSport: string; seasonYear: number }>
+): Promise<SleeperReadOnlyDiscovery> {
+  const storage = SleeperStorage.fromEnvironment(env);
+  const connection = await storage.getSleeperConnection(userId);
+  if (!connection) return { status: 'not_connected' };
+
+  const results = await Promise.allSettled(
+    requests.map((request) =>
+      sleeperGet<SleeperApiLeague[]>(
+        `/user/${connection.sleeperUserId}/leagues/${request.sleeperSport}/${request.seasonYear}`
+      )
+    )
+  );
+
+  const leagues: SleeperReadOnlyLeague[] = [];
+  let failures = 0;
+  for (const result of results) {
+    if (result.status === 'rejected') {
+      failures++;
+      continue;
+    }
+    for (const league of result.value ?? []) {
+      leagues.push({
+        leagueId: league.league_id,
+        sport: mapSport(league.sport),
+        seasonYear: parseInt(league.season, 10) || 0,
+        previousLeagueId: league.previous_league_id,
+      });
+    }
+  }
+
+  if (results.length > 0 && failures === results.length) {
+    return { status: 'error', errorCode: 'sleeper_unavailable' };
+  }
+  return { status: 'ok', leagues };
+}
+
 export async function handleSleeperStatus(
   env: SleeperConnectEnv,
   userId: string,
