@@ -524,7 +524,7 @@ export interface SleeperReadOnlyLeague {
 
 export type SleeperReadOnlyDiscovery =
   | { status: 'not_connected' }
-  | { status: 'error'; errorCode: string }
+  | { status: 'error'; errorCode: string; httpStatus?: number }
   | { status: 'ok'; leagues: SleeperReadOnlyLeague[] };
 
 /**
@@ -568,7 +568,18 @@ export async function fetchSleeperLeaguesReadOnly(
   }
 
   if (results.length > 0 && failures === results.length) {
-    return { status: 'error', errorCode: 'sleeper_unavailable' };
+    // sleeperGet folds the HTTP status into its error message; surface it so
+    // callers can distinguish a 429 (back off) from other failures.
+    const firstRejection = results.find(
+      (result): result is PromiseRejectedResult => result.status === 'rejected'
+    );
+    const message = firstRejection?.reason instanceof Error ? firstRejection.reason.message : '';
+    const statusMatch = /Sleeper API (\d{3})/.exec(message);
+    return {
+      status: 'error',
+      errorCode: 'sleeper_unavailable',
+      ...(statusMatch ? { httpStatus: Number(statusMatch[1]) } : {}),
+    };
   }
   return { status: 'ok', leagues };
 }

@@ -43,7 +43,8 @@ const supabaseStub = vi.hoisted(() => {
   const state: {
     rowsByTable: Record<string, Array<Record<string, unknown>>>;
     tablesQueried: string[];
-  } = { rowsByTable: {}, tablesQueried: [] };
+    gteCalls: Array<{ table: string; column: string; value: unknown }>;
+  } = { rowsByTable: {}, tablesQueried: [], gteCalls: [] };
 
   const writeAttempt = (table: string, method: string) => () => {
     throw new Error(`WRITE ATTEMPTED in dry-run: ${method} on ${table}`);
@@ -55,6 +56,10 @@ const supabaseStub = vi.hoisted(() => {
       const builder = {
         select: () => builder,
         in: () => builder,
+        gte: (column: string, value: unknown) => {
+          state.gteCalls.push({ table, column, value });
+          return builder;
+        },
         order: () => builder,
         range: (from: number, to: number) =>
           Promise.resolve({ data: (state.rowsByTable[table] ?? []).slice(from, to + 1), error: null }),
@@ -84,6 +89,7 @@ import {
   yahooRenewToLeagueKey,
   type StoredLeagueSnapshotRow,
 } from '../reconciliation';
+import { AutomaticLeagueDiscoveryFailed } from '../espn-types';
 import { getDefaultSeasonYear } from '../season-utils';
 import { discoverLeaguesV3 } from '../v3/league-discovery';
 import { fetchSleeperLeaguesReadOnly } from '../sleeper-connect-handlers';
@@ -113,6 +119,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   supabaseStub.state.rowsByTable = {};
   supabaseStub.state.tablesQueried = [];
+  supabaseStub.state.gteCalls = [];
   createClientMock.mockReturnValue(supabaseStub.client);
   mockSyncState.acquireLease.mockResolvedValue({ acquired: true });
   mockSyncState.settle.mockResolvedValue(undefined);
@@ -369,6 +376,13 @@ describe('runReconciliation', () => {
 
     // Only league snapshot tables were read; the stub throws on any write.
     expect(new Set(supabaseStub.state.tablesQueried)).toEqual(new Set(['espn_leagues', 'sleeper_leagues']));
+
+    // Snapshot scan is bounded to last + current season, not full history.
+    expect(supabaseStub.state.gteCalls).toContainEqual({
+      table: 'espn_leagues',
+      column: 'season_year',
+      value: PRIOR,
+    });
   });
 
   it('skips a user whose provider lease is held and does not settle it', async () => {
@@ -437,6 +451,67 @@ describe('runReconciliation', () => {
       expect.any(String),
       expect.objectContaining({ status: 'skipped', cooldownSeconds: 600, syncSource: 'scheduled' })
     );
+  });
+
+  it('applies the upstream backoff when ESPN or Sleeper rate-limit a probe', async () => {
+    supabaseStub.state.rowsByTable = {
+      espn_leagues: [
+        { clerk_user_id: 'user_stale_1', sport: 'football', season_year: PRIOR, league_id: '123' },
+      ],
+      sleeper_leagues: [
+        { clerk_user_id: 'user_stale_1', sport: 'football', season_year: PRIOR, league_id: 'sl_old', recurring_league_id: null },
+      ],
+    };
+    mockEspnStorage.getCredentials.mockResolvedValue({ swid: '{swid}', s2: 's2' });
+    vi.mocked(discoverLeaguesV3).mockRejectedValue(
+      new AutomaticLeagueDiscoveryFailed('Fan API returned 429: Too Many Requests')
+    );
+    vi.mocked(fetchSleeperLeaguesReadOnly).mockResolvedValue({
+      status: 'error',
+      errorCode: 'sleeper_unavailable',
+      httpStatus: 429,
+    });
+
+    const summary = await runReconciliation(baseEnv, 'cron');
+
+    expect(summary.probes.errors).toBe(2);
+    expect(mockSyncState.settle).toHaveBeenCalledWith(
+      'user_stale_1',
+      'espn',
+      expect.any(String),
+      expect.objectContaining({ status: 'skipped', cooldownSeconds: 300 })
+    );
+    expect(mockSyncState.settle).toHaveBeenCalledWith(
+      'user_stale_1',
+      'sleeper',
+      expect.any(String),
+      expect.objectContaining({ status: 'skipped', cooldownSeconds: 300 })
+    );
+  });
+
+  it('isolates an unexpectedly throwing candidate without abandoning the batch', async () => {
+    supabaseStub.state.rowsByTable = {
+      espn_leagues: [
+        { clerk_user_id: 'user_stale_1', sport: 'football', season_year: PRIOR, league_id: '1' },
+        { clerk_user_id: 'user_stale_2', sport: 'football', season_year: PRIOR, league_id: '2' },
+      ],
+      sleeper_leagues: [],
+    };
+    mockEspnStorage.getCredentials.mockResolvedValue({ swid: '{swid}', s2: 's2' });
+    vi.mocked(discoverLeaguesV3).mockResolvedValue([]);
+    // settle throwing is outside the probe's own error handling.
+    mockSyncState.settle
+      .mockRejectedValueOnce(new Error('storage exploded'))
+      .mockResolvedValue(undefined);
+
+    const summary = await runReconciliation(
+      { ...baseEnv, RECONCILIATION_BATCH_SIZE: '1' },
+      'cron'
+    );
+
+    expect(summary.outcome).toBe('completed');
+    expect(summary.probes.errors).toBe(1);
+    expect(summary.probes.probed).toBe(1);
   });
 
   it('marks remaining candidates skipped_budget once the time budget is spent', async () => {

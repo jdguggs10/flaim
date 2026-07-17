@@ -240,10 +240,14 @@ async function probeEspn(
       // fantasy leagues at all — nothing rolled over.
       return { status: 'ok', leagues: [] };
     }
+    // discoverLeaguesV3 folds the Fan API status into the error message; pull
+    // it back out so a 429 settles with the upstream backoff, not 1s.
+    const statusMatch = error instanceof Error ? /Fan API returned (\d{3})/.exec(error.message) : null;
     const timedOut = error instanceof Error && /timed out|timeout/i.test(error.message);
     return {
       status: 'error',
       errorCode: timedOut ? 'espn_timeout' : 'discovery_failed',
+      ...(statusMatch ? { httpStatus: Number(statusMatch[1]) } : {}),
       retryable: true,
     };
   }
@@ -270,7 +274,12 @@ async function probeSleeper(
   const result = await fetchSleeperLeaguesReadOnly(env as SleeperConnectEnv, userId, requests);
   if (result.status === 'not_connected') return { status: 'not_connected' };
   if (result.status === 'error') {
-    return { status: 'error', errorCode: result.errorCode, retryable: true };
+    return {
+      status: 'error',
+      errorCode: result.errorCode,
+      ...(result.httpStatus !== undefined ? { httpStatus: result.httpStatus } : {}),
+      retryable: true,
+    };
   }
 
   const leagues: DiscoveredCurrentLeague[] = [];
@@ -425,7 +434,8 @@ const PROVIDER_TABLES: Record<SyncProvider, ProviderTableSpec> = {
 async function fetchProviderSnapshot(
   supabase: SupabaseClient,
   provider: SyncProvider,
-  sports: SeasonSport[]
+  sports: SeasonSport[],
+  minSeasonYear: number
 ): Promise<StoredLeagueSnapshotRow[]> {
   const spec = PROVIDER_TABLES[provider];
   const columns = `clerk_user_id, sport, season_year, ${spec.idColumn}${spec.hasRecurringColumn ? ', recurring_league_id' : ''}`;
@@ -436,6 +446,11 @@ async function fetchProviderSnapshot(
       .from(spec.table)
       .select(columns)
       .in('sport', sports)
+      // Bound the scan to last season + current season instead of the full
+      // multi-year history: rollover only concerns users active last season,
+      // and it keeps snapshot cost proportional to the active base, not to
+      // accumulated backfill.
+      .gte('season_year', minSeasonYear)
       .order('clerk_user_id', { ascending: true })
       .order(spec.idColumn, { ascending: true })
       .order('season_year', { ascending: true })
@@ -567,9 +582,10 @@ export async function runReconciliation(
       config.sports.map((sport) => [sport, getDefaultSeasonYear(sport)])
     );
 
+    const minSeasonYear = Math.min(...config.sports.map((sport) => currentYearBySport[sport])) - 1;
     const rowsByProvider: Partial<Record<SyncProvider, StoredLeagueSnapshotRow[]>> = {};
     for (const provider of config.providers) {
-      rowsByProvider[provider] = await fetchProviderSnapshot(supabase, provider, config.sports);
+      rowsByProvider[provider] = await fetchProviderSnapshot(supabase, provider, config.sports, minSeasonYear);
     }
 
     const selection = selectCandidates(rowsByProvider, config.sports, currentYearBySport, config.maxUsersPerRun);
@@ -629,11 +645,13 @@ export async function runReconciliation(
       // last_success_at/last_failure_at, so a dry-run probe never masquerades
       // as a real sync in provider_sync_state. Cooldown is 1s (don't block a
       // user's real refresh behind a probe) unless the provider rate-limited
-      // us, in which case the standard upstream backoff protects it.
-      const rateLimited = probe.status === 'error' && probe.httpStatus === 429;
+      // or timed out on us — then the standard upstream backoff protects it,
+      // same classification as cooldownSecondsForResult in league-refresh.
+      const backoffWorthy =
+        probe.status === 'error' && (probe.httpStatus === 429 || probe.errorCode.endsWith('_timeout'));
       await syncState.settle(candidate.userId, candidate.provider, ownerId, {
         status: 'skipped',
-        cooldownSeconds: rateLimited
+        cooldownSeconds: backoffWorthy
           ? Math.max(UPSTREAM_BACKOFF_COOLDOWN_SECONDS, probe.status === 'error' ? probe.retryAfterSeconds ?? 0 : 0)
           : 1,
         syncSource: 'scheduled',
@@ -685,7 +703,28 @@ export async function runReconciliation(
 
     for (let i = 0; i < selection.candidates.length; i += config.batchSize) {
       const batch = selection.candidates.slice(i, i + config.batchSize);
-      await Promise.all(batch.map(probeCandidate));
+      // Isolate candidates: an unexpected throw (probe internals catch their
+      // own) must not reject the batch and abandon the remaining candidates.
+      await Promise.all(
+        batch.map(async (candidate) => {
+          try {
+            await probeCandidate(candidate);
+          } catch (error) {
+            summary.probes.errors++;
+            logReconciliation({
+              run_id: runId,
+              trigger,
+              provider: candidate.provider,
+              user_id: maskUserId(candidate.userId),
+              status: 'candidate_failed',
+            });
+            console.error(
+              `[reconciliation] Candidate processing failed for ${candidate.provider}/${maskUserId(candidate.userId)}:`,
+              error instanceof Error ? error.message : error
+            );
+          }
+        })
+      );
     }
 
     if (summary.probes.skippedBudget > 0) {
