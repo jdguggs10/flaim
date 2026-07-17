@@ -206,7 +206,16 @@ export interface DiscoveredCurrentLeague {
 }
 
 export type ProbeResult =
-  | { status: 'ok'; leagues: DiscoveredCurrentLeague[] }
+  | {
+      status: 'ok';
+      leagues: DiscoveredCurrentLeague[];
+      /**
+       * Sports whose provider fetch failed while others succeeded (Sleeper
+       * fetches per sport). The would-insert diff may undercount these — the
+       * log line must carry them so dry-run evidence is never silently partial.
+       */
+      partialFailureSports?: SeasonSport[];
+    }
   | { status: 'not_connected' }
   | { status: 'error'; errorCode: string; httpStatus?: number; retryable?: boolean; retryAfterSeconds?: number };
 
@@ -293,7 +302,16 @@ async function probeSleeper(
       ...(league.previousLeagueId ? { priorLeagueHint: league.previousLeagueId } : {}),
     });
   }
-  return { status: 'ok', leagues };
+
+  const partialFailureSports = sports.filter((sport) => {
+    const code = SLEEPER_SPORT_CODES[sport];
+    return code !== undefined && result.failedSports.includes(code);
+  });
+  return {
+    status: 'ok',
+    leagues,
+    ...(partialFailureSports.length > 0 ? { partialFailureSports } : {}),
+  };
 }
 
 /** Convert Yahoo's renew pointer (`{game_key}_{league_id}`) to a league_key. */
@@ -685,6 +703,9 @@ export async function runReconciliation(
         status: 'probed',
         would_insert_count: diff.wouldInsert.length,
         already_present_count: diff.alreadyPresent,
+        ...(probe.partialFailureSports?.length
+          ? { partial_failure_sports: probe.partialFailureSports }
+          : {}),
         would_insert: diff.wouldInsert.map((league) => ({
           sport: league.sport,
           season_year: league.seasonYear,

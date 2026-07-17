@@ -144,6 +144,12 @@ including recurring-league identity evidence (ESPN stable league id, Sleeper
 `previous_league_id`, Yahoo renew chain). No league rows, defaults, or
 archive/hidden state are ever written; write mode does not exist in code.
 
+Candidate selection only scans last season + current season rows, so users
+whose newest rows for a sport are two or more seasons old are deliberately
+never selected — rollover reconciliation should not resurrect dormant leagues
+without user intent. The timeout budget is a soft budget checked between
+candidates, not a mid-probe cutoff.
+
 - Gates (env vars): `RECONCILIATION_ENABLED` (default `false`; the cron no-ops
   without it), `RECONCILIATION_DRY_RUN` (must be `true`, the default — any
   other value makes the run refuse), `RECONCILIATION_MAX_USERS_PER_RUN`

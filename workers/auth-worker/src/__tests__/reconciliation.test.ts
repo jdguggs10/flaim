@@ -514,6 +514,33 @@ describe('runReconciliation', () => {
     expect(summary.probes.probed).toBe(1);
   });
 
+  it('surfaces Sleeper partial per-sport failures in the probe log', async () => {
+    const B_CURRENT = getDefaultSeasonYear('basketball');
+    supabaseStub.state.rowsByTable = {
+      sleeper_leagues: [
+        { clerk_user_id: 'user_stale_1', sport: 'football', season_year: PRIOR, league_id: 'sl_f', recurring_league_id: null },
+        { clerk_user_id: 'user_stale_1', sport: 'basketball', season_year: B_CURRENT - 1, league_id: 'sl_b', recurring_league_id: null },
+      ],
+    };
+    vi.mocked(fetchSleeperLeaguesReadOnly).mockResolvedValue({
+      status: 'ok',
+      leagues: [],
+      failedSports: ['nba'],
+    });
+    const logSpy = vi.spyOn(console, 'log');
+
+    const summary = await runReconciliation(
+      { ...baseEnv, RECONCILIATION_PROVIDERS: 'sleeper', RECONCILIATION_SPORTS: 'football,basketball' },
+      'cron'
+    );
+
+    expect(summary.probes.probed).toBe(1);
+    const probeLine = logSpy.mock.calls
+      .map((call) => String(call[0]))
+      .find((line) => line.includes('"status":"probed"'));
+    expect(probeLine).toContain('"partial_failure_sports":["basketball"]');
+  });
+
   it('marks remaining candidates skipped_budget once the time budget is spent', async () => {
     vi.useFakeTimers();
     supabaseStub.state.rowsByTable = {

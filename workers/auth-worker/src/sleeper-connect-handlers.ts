@@ -525,7 +525,16 @@ export interface SleeperReadOnlyLeague {
 export type SleeperReadOnlyDiscovery =
   | { status: 'not_connected' }
   | { status: 'error'; errorCode: string; httpStatus?: number }
-  | { status: 'ok'; leagues: SleeperReadOnlyLeague[] };
+  | {
+      status: 'ok';
+      leagues: SleeperReadOnlyLeague[];
+      /**
+       * Sleeper sport codes whose fetch failed while others succeeded. A
+       * partial failure means the returned leagues may be an undercount for
+       * those sports — callers must surface this, not treat 'ok' as complete.
+       */
+      failedSports: string[];
+    };
 
 /**
  * Read-only league discovery for scheduled reconciliation (FLA-161): asks the
@@ -551,10 +560,10 @@ export async function fetchSleeperLeaguesReadOnly(
   );
 
   const leagues: SleeperReadOnlyLeague[] = [];
-  let failures = 0;
-  for (const result of results) {
+  const failedSports: string[] = [];
+  for (const [index, result] of results.entries()) {
     if (result.status === 'rejected') {
-      failures++;
+      failedSports.push(requests[index].sleeperSport);
       continue;
     }
     for (const league of result.value ?? []) {
@@ -567,7 +576,7 @@ export async function fetchSleeperLeaguesReadOnly(
     }
   }
 
-  if (results.length > 0 && failures === results.length) {
+  if (results.length > 0 && failedSports.length === results.length) {
     // sleeperGet folds the HTTP status into its error message; surface it so
     // callers can distinguish a 429 (back off) from other failures.
     const firstRejection = results.find(
@@ -581,7 +590,7 @@ export async function fetchSleeperLeaguesReadOnly(
       ...(statusMatch ? { httpStatus: Number(statusMatch[1]) } : {}),
     };
   }
-  return { status: 'ok', leagues };
+  return { status: 'ok', leagues, failedSports };
 }
 
 export async function handleSleeperStatus(
