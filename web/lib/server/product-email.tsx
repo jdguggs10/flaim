@@ -1,11 +1,12 @@
 import "server-only";
 import * as React from "react";
 import { emailBrand } from "@/emails/brand";
+import EspnSetupLinkEmail from "@/emails/espn-setup-link";
 import LeagueConnectedEmail from "@/emails/league-connected";
 import WelcomeEmail from "@/emails/welcome";
 import { getResendClient, getResendErrorMessage } from "@/lib/server/resend-client";
 
-type ProductEmailTemplate = "welcome" | "league-connected";
+type ProductEmailTemplate = "welcome" | "league-connected" | "espn-setup-link";
 
 interface ProductEmailResult {
   id?: string;
@@ -34,6 +35,12 @@ interface SendLeagueConnectedEmailParams {
   platform?: string;
   to: string;
   unsubscribeUrl: string;
+}
+
+interface SendEspnSetupLinkEmailParams {
+  extensionUrl: string;
+  leaguesUrl: string;
+  to: string;
 }
 
 function isProductEmailEnabled() {
@@ -119,6 +126,21 @@ export function sendLeagueConnectedEmail({
     ),
     subject: `${resolvedLeagueName} is ready in Flaim`,
     template: "league-connected",
+    to,
+  });
+}
+
+export function sendEspnSetupLinkEmail({
+  extensionUrl,
+  leaguesUrl,
+  to,
+}: SendEspnSetupLinkEmailParams) {
+  return sendProductEmail({
+    react: (
+      <EspnSetupLinkEmail extensionUrl={extensionUrl} leaguesUrl={leaguesUrl} />
+    ),
+    subject: "Your ESPN setup link for Flaim",
+    template: "espn-setup-link",
     to,
   });
 }
