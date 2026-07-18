@@ -85,7 +85,9 @@
         "NODE_ENV": "production",
         "ENVIRONMENT": "prod",
         "FRONTEND_URL": "https://flaim.app",
-        "RECONCILIATION_ENABLED": "false",
+        // Dry-run evidence collection enabled 2026-07-17 (FLA-161). Caps stay
+        // at code defaults: 5 users/run, espn+sleeper, football, 45s budget.
+        "RECONCILIATION_ENABLED": "true",
         "RECONCILIATION_DRY_RUN": "true"
       }
     },
