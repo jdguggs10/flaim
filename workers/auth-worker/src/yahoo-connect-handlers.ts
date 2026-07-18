@@ -2040,7 +2040,7 @@ const SPORT_CODE_MAP: Record<string, 'football' | 'baseball' | 'basketball' | 'h
   nhl: 'hockey',
 };
 
-interface DiscoveredYahooLeague {
+export interface DiscoveredYahooLeague {
   sport: 'football' | 'baseball' | 'basketball' | 'hockey';
   seasonYear: number;
   leagueKey: string;
@@ -2489,6 +2489,80 @@ export async function handleYahooDiscover(
         headers: { 'Content-Type': 'application/json', ...corsHeaders },
       }
     );
+  }
+}
+
+export type YahooReadOnlyDiscovery =
+  | { status: 'not_connected' }
+  | { status: 'error'; errorCode: string; httpStatus?: number; retryable?: boolean; retryAfterSeconds?: number }
+  | { status: 'ok'; leagues: DiscoveredYahooLeague[] };
+
+/**
+ * Read-only league discovery for scheduled reconciliation (FLA-161): fetches
+ * and parses the user's Yahoo leagues WITHOUT persisting league rows or
+ * walking renew chains. The `renew` pointer on each league is returned as
+ * recurring-identity evidence instead.
+ *
+ * Not fully side-effect free: an expired access token is refreshed through
+ * the existing guarded token path, which rotates yahoo_credentials. That is
+ * credential maintenance, not league state. Deliberately does NOT emit
+ * yahoo setup-failure signals — those track user onboarding funnels and a
+ * scheduled probe would pollute them; failures surface in the caller's own
+ * structured logs.
+ */
+export async function fetchYahooLeaguesReadOnly(
+  env: YahooConnectEnv,
+  userId: string,
+  correlationId?: string
+): Promise<YahooReadOnlyDiscovery> {
+  try {
+    const storage = YahooStorage.fromEnvironment(env);
+    const credentials = await storage.getYahooCredentials(userId);
+    if (!credentials) return { status: 'not_connected' };
+
+    let accessToken = credentials.accessToken;
+    if (credentials.needsRefresh) {
+      const tokenResult = await getValidYahooAccessToken(storage, userId, env, credentials, correlationId, 'scheduled');
+      if ('error' in tokenResult) {
+        return {
+          status: 'error',
+          errorCode: tokenResult.error,
+          httpStatus: tokenResult.upstreamStatus ??
+            (tokenResult.error === YahooAuthWorkerErrorCode.REFRESH_TEMPORARILY_UNAVAILABLE ? 503 : 401),
+          retryable: tokenResult.retryable,
+          ...(Number.isFinite(Number(tokenResult.retryAfter))
+            ? { retryAfterSeconds: Number(tokenResult.retryAfter) }
+            : {}),
+        };
+      }
+      accessToken = tokenResult.accessToken;
+    }
+
+    const apiUrl = `${YAHOO_FANTASY_API_URL}/users;use_login=1/games/leagues;out=teams?format=json`;
+    const apiResponse = await fetch(apiUrl, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+
+    if (!apiResponse.ok) {
+      const classification = classifyYahooApiFailure(apiResponse);
+      return {
+        status: 'error',
+        errorCode: classification.retryable
+          ? YahooAuthWorkerErrorCode.YAHOO_API_TEMPORARILY_UNAVAILABLE
+          : YahooAuthWorkerErrorCode.YAHOO_API_ERROR,
+        httpStatus: classification.upstreamStatus ?? classification.status,
+        retryable: classification.retryable,
+        ...(Number.isFinite(Number(classification.retryAfter))
+          ? { retryAfterSeconds: Number(classification.retryAfter) }
+          : {}),
+      };
+    }
+
+    const rawData = await apiResponse.json();
+    return { status: 'ok', leagues: parseYahooLeaguesResponse(rawData) };
+  } catch (error) {
+    console.error('[yahoo-connect] Read-only discovery error:', error instanceof Error ? error.message : error);
+    return { status: 'error', errorCode: 'server_error', retryable: true };
   }
 }
 

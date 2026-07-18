@@ -134,6 +134,42 @@ League refresh and ESPN discovery run under a per-user, per-provider single-flig
 - Each provider refresh emits one structured `provider_sync` log line (provider, masked user, source, status, duration, league count, error code, retry seconds, correlation id), queryable in Workers Logs by the `event` field.
 - The envelope fails open: storage errors never block a refresh.
 
+### Scheduled rollover reconciliation (dry-run)
+
+auth-worker has a daily cron (`17 10 * * *` UTC) that dry-runs league rollover
+reconciliation: it selects a small cohort of users whose stored leagues for a
+sport are prior-season only, asks each provider read-only whether
+current-season leagues exist, and logs what a write pass *would* insert —
+including recurring-league identity evidence (ESPN stable league id, Sleeper
+`previous_league_id`, Yahoo renew chain). No league rows, defaults, or
+archive/hidden state are ever written; write mode does not exist in code.
+
+Candidate selection only scans last season + current season rows, so users
+whose newest rows for a sport are two or more seasons old are deliberately
+never selected — rollover reconciliation should not resurrect dormant leagues
+without user intent. The timeout budget is a soft budget checked between
+candidates, not a mid-probe cutoff.
+
+- Gates (env vars): `RECONCILIATION_ENABLED` (default `false`; the cron no-ops
+  without it), `RECONCILIATION_DRY_RUN` (must be `true`, the default — any
+  other value makes the run refuse), `RECONCILIATION_MAX_USERS_PER_RUN`
+  (default 5), `RECONCILIATION_BATCH_SIZE` (default 2),
+  `RECONCILIATION_PROVIDERS` (default `espn,sleeper`; Yahoo requires opting in
+  because its probe refreshes OAuth tokens via the guarded token path),
+  `RECONCILIATION_SPORTS` (default `football`),
+  `RECONCILIATION_TIMEOUT_BUDGET_MS` (default 45000).
+- Probes take the same `provider_sync_state` lease as manual refresh
+  (`sync_source: 'scheduled'`), so a scheduled probe never runs concurrently
+  with a user's own refresh; leases settle attempt-only with a 1s cooldown
+  (upstream backoff if the provider rate-limited).
+- Each run emits structured `league_reconciliation` log lines (run_start, one
+  per user+provider, run_end) with run id, correlation ids, counts, and retry
+  metadata — a separate event from `provider_sync` so refresh metrics stay
+  clean.
+- Manual trigger: `POST /auth/internal/reconciliation/run` guarded by
+  `X-Flaim-Internal-Token`; returns the run summary (409 when disabled or
+  refused).
+
 ## ESPN API Reference
 
 Host: `https://lm-api-reads.fantasy.espn.com`

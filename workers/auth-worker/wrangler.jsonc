@@ -73,12 +73,20 @@
           "zone_name": "flaim.app"
         }
       ],
+      // Scheduled league rollover reconciliation (FLA-161). The cron is inert
+      // until RECONCILIATION_ENABLED is set to "true": the handler logs a
+      // single `disabled` line and exits.
+      "triggers": {
+        "crons": ["17 10 * * *"]
+      },
       // Environment variables for production
       // Note: SUPABASE_URL and SUPABASE_SERVICE_KEY set via Cloudflare secrets
       "vars": {
         "NODE_ENV": "production",
         "ENVIRONMENT": "prod",
-        "FRONTEND_URL": "https://flaim.app"
+        "FRONTEND_URL": "https://flaim.app",
+        "RECONCILIATION_ENABLED": "false",
+        "RECONCILIATION_DRY_RUN": "true"
       }
     },
     // Preview environment (remote dev/staging)
@@ -110,12 +118,18 @@
           "zone_name": "flaim.app"
         }
       ],
+      // FLA-161 reconciliation cron — inert until RECONCILIATION_ENABLED="true".
+      "triggers": {
+        "crons": ["17 10 * * *"]
+      },
       // Environment variables for preview
       // Note: SUPABASE_URL and SUPABASE_SERVICE_KEY set via Cloudflare secrets
       "vars": {
         "NODE_ENV": "production",
         "ENVIRONMENT": "preview",
-        "FRONTEND_URL": "https://preview.flaim.app"
+        "FRONTEND_URL": "https://preview.flaim.app",
+        "RECONCILIATION_ENABLED": "false",
+        "RECONCILIATION_DRY_RUN": "true"
       }
     },
     // Development environment (local)
