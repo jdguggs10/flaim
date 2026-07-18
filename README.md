@@ -4,7 +4,7 @@
 [![MCP Tools](https://img.shields.io/badge/MCP_Tools-10-green.svg)](https://api.flaim.app/mcp)
 [![Chrome Web Store](https://img.shields.io/badge/Chrome_Extension-v1.5.2-yellow.svg)](https://chromewebstore.google.com/detail/flaim-espn-fantasy-connec/mbnokejgglkfgkeeenolgdpcnfakpbkn)
 
-Connect your ESPN, Yahoo, and Sleeper leagues, then use Flaim Fantasy in ChatGPT for read-only analysis grounded in your real league. The same MCP service also supports optional manual MCP clients like Claude, Perplexity, and Gemini CLI where their MCP capabilities allow.
+Connect your ESPN, Yahoo, and Sleeper leagues, then use Flaim Fantasy in ChatGPT for read-only analysis grounded in your real league. The same MCP service also supports optional manual MCP clients like Claude, Perplexity, Gemini CLI, and Kiro where their MCP capabilities allow.
 
 Analysis tools are read-only by design. No trades, no drops, no roster changes — just advice. League refresh can update Flaim's connected-league records so newly available seasons show up.
 
@@ -18,7 +18,7 @@ The **Flaim skill** teaches your AI assistant how to behave like a fantasy analy
 2. **Connect your platforms** — ESPN via [Chrome extension](https://chromewebstore.google.com/detail/flaim-espn-fantasy-connec/mbnokejgglkfgkeeenolgdpcnfakpbkn), Yahoo via OAuth, Sleeper by username
 3. **Leagues discovered** — Flaim finds supported leagues where possible; some private leagues or historical seasons may need manual follow-up
 4. **Pick a default league** for AI conversations
-5. **Use Flaim in AI** — open Flaim Fantasy in ChatGPT, or add the MCP URL in an optional manual MCP client such as Claude, Perplexity, or Gemini CLI
+5. **Use Flaim in AI** — open Flaim Fantasy in ChatGPT, or add the MCP URL in an optional manual MCP client such as Claude, Perplexity, Gemini CLI, or Kiro (see [Connector Setup](docs/CONNECTOR-DOCS.md))
 6. **Optional: install the skill** — recommended for agent-skill tools; copy `.agents/skills/flaim-fantasy/` into your project or home directory (see [The Skill](#the-skill) below)
 7. **Ask questions** — "Who should I start this week?", "What's on the waiver wire?", etc.
 
@@ -96,6 +96,7 @@ Root, web, and workers use `pnpm` via Corepack. The Chrome extension is intentio
 |----------|-------------|
 | [Architecture](docs/ARCHITECTURE.md) | System design, deployment, troubleshooting |
 | [Changelog](docs/CHANGELOG.md) | Release history |
+| [Connector Setup](docs/CONNECTOR-DOCS.md) | MCP client setup: ChatGPT, Claude, Perplexity, Gemini CLI, Kiro, and more |
 | [Web App](web/README.md) | Next.js routes, components, environment |
 | [Workers](workers/README.md) | Cloudflare Workers, MCP tools, ESPN API |
 | [Extension](extension/README.md) | Chrome extension build, Sync Host, CWS |

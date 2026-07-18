@@ -37,6 +37,7 @@ Flaim cannot place trades, add/drop players, or modify league settings.
 | Claude | Optional custom connector | Add Flaim as a Claude custom connector where your Claude account supports it |
 | Perplexity | Optional custom remote connector | Add Flaim as a custom remote connector with OAuth and Streamable HTTP |
 | Gemini CLI | Optional terminal MCP client | Add Flaim as a Gemini CLI MCP server |
+| Kiro, Cursor, and other coding tools | Optional terminal MCP client | Add Flaim as an MCP server with URL `https://api.flaim.app/mcp` |
 
 ### ChatGPT
 
@@ -64,6 +65,22 @@ Perplexity custom remote connectors require HTTPS. In some workspaces, admins mu
 
 1. `gemini mcp add flaim https://api.flaim.app/mcp --transport http`
 2. In Gemini: `/mcp auth flaim` and complete the OAuth consent screen.
+
+### Kiro and Other Coding Tools
+
+Any MCP client that supports remote HTTP servers with OAuth should work. Add Flaim as an MCP server using this config:
+
+```json
+{
+  "mcpServers": {
+    "flaim": {
+      "url": "https://api.flaim.app/mcp"
+    }
+  }
+}
+```
+
+Then trigger the OAuth flow in your client (e.g. Kiro CLI: `/mcp auth flaim`) and complete the OAuth consent screen.
 
 ## Tools
 
@@ -126,6 +143,7 @@ For Yahoo in v1, avoid requesting `type=waiver` and avoid relying on explicit `w
 - **ESPN stopped working**: ESPN session cookies expire periodically; re-sync using the extension (or re-enter cookies).
 - **No default league**: set one at `https://flaim.app/leagues` to avoid needing to specify IDs in prompts.
 - **Rate limits**: Flaim enforces a per-user daily call limit.
+- **`redirect_uri is not in the allowed list`**: your MCP client is sending an unsupported loopback path. Pin `"redirectUri": "http://127.0.0.1:7778/oauth/callback"` in your MCP config (any port works; only the path matters).
 
 ## Privacy + Support
 
