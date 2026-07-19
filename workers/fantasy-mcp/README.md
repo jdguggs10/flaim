@@ -50,11 +50,12 @@ Most tools are read-only analysis calls. `refresh_leagues` requires `mcp:write` 
 | `get_league_info` | Baseline league context: settings, scoring, roster config, teams/owners |
 | `get_standings` | League standings with records |
 | `get_matchups` | Weekly matchups/scoreboard |
-| `get_roster` | Team roster with player stats |
+| `get_roster` | Team roster with player stats — current by default, historical via `week` or `as_of_date` |
 | `get_free_agents` | Available players; ESPN/Yahoo include ownership percentages, Sleeper returns identities without ownership percentages |
 | `get_players` | Player lookup; ESPN and Yahoo can add league ownership, Sleeper ownership is unavailable |
 | `get_transactions` | Recent transactions (adds, drops, waivers, trades) |
 
+`get_roster` returns the current roster when no selector is passed. Historical snapshots take exactly one selector, validated against a per-(platform, sport) capability map: `week` for football on every platform and for Sleeper basketball (matchup week/leg), `as_of_date` (`YYYY-MM-DD`, calendar-valid) for ESPN and Yahoo baseball/basketball/hockey, whose provider rosters are daily. Wrong or conflicting selectors return a corrective `INVALID_ROSTER_SNAPSHOT_SELECTOR` error before any provider call. Valid input is normalized to an internal snapshot object that platform workers consume; raw ESPN `scoringPeriodId` is never part of the public contract (it appears only as `providerScoringPeriodId` diagnostic metadata). Every roster response carries a `snapshot` block (`type: current | week | date`), and historical responses may add limitation flags: `acquisitionMetadataAvailable: false` when ESPN's older snapshots omit acquisition data, `reserveAndTaxiClassificationAvailable: false` for Sleeper weekly history (membership is complete; IR/taxi classification is not recoverable).
 `get_transactions` uses platform-specific week semantics in v1: ESPN/Sleeper support explicit `week`, while Yahoo ignores explicit `week` and uses a recent 14-day timestamp window. Yahoo `type=waiver` filtering is intentionally unsupported in v1. ESPN responses include a `teams` map (team ID → display name) so the LLM can resolve numeric `team_ids` on each transaction to human-readable names. Player entries are enriched with name, position, and pro team.
 `get_free_agents` returns platform-specific availability context: ESPN/Yahoo include ownership percentages and sort by ownership, while Sleeper returns available-player identities from the public player index without ownership percentages.
 `get_players` always returns identity, but ownership context is platform-specific: ESPN and Yahoo include market/global ownership and may also include league ownership fields (`league_status`, `league_team_name`, `league_owner_name`); Sleeper returns identity with unavailable ownership context. If league ownership fields are absent, null, or unavailable, fall back to `get_league_info` + `get_roster`.
@@ -69,8 +70,9 @@ Recurring seasons are grouped by stable league identity before active/history se
   sport: 'football' | 'baseball' | 'basketball' | 'hockey';
   league_id: string;             // From get_user_session
   season_year: number;           // e.g., 2024
-  team_id?: string;              // Strongly recommended for roster queries; required on Yahoo
-  week?: number;                 // For matchups; and transactions on ESPN/Sleeper (ignored by Yahoo transactions)
+  team_id?: string;              // Strongly recommended for roster queries; required on Yahoo and for historical Sleeper rosters
+  week?: number;                 // For matchups; transactions on ESPN/Sleeper; historical get_roster on football (all platforms) + Sleeper basketball
+  as_of_date?: string;           // Historical get_roster on ESPN/Yahoo daily sports (YYYY-MM-DD); at most one of week/as_of_date
   type?: 'add' | 'drop' | 'trade' | 'waiver'; // Base transaction types; live tool metadata also supports ESPN lifecycle types and Yahoo pending_trade
   query?: string;                // For get_players (required when calling that tool)
   position?: string;             // For free agents filter

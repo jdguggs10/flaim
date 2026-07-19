@@ -84,6 +84,12 @@ ESPN exposes both `scoringPeriodId` and `currentMatchupPeriod`. Treat `currentMa
 
 When callers pass an explicit `week`, use it. Otherwise prefer `currentMatchupPeriod` from the league response or `status.currentMatchupPeriod`, then fall back to `scoringPeriodId`.
 
+### Roster Snapshots (`get_roster`)
+
+`get_roster` consumes a normalized snapshot request instead of a raw `week`. Football maps `week` directly to `scoringPeriodId` (one NFL week per scoring period). Daily sports (baseball/basketball/hockey) take an `as_of_date` instead: a matchup week is *not* a scoring period there — scoring periods are calendar days — so a `week` selector fails closed with a corrective error rather than silently returning a months-old roster.
+
+Dates resolve through `shared/scoring-period.ts`: the public `proTeamSchedules_wl` season calendar is fetched once per sport+season (ESPN-native year), validated to have a constant Eastern-time day-offset between calendar date and `scoringPeriodId` across every game-bearing period, and cached as a three-field anchor. Resolution is then pure arithmetic, so off-days (e.g. the All-Star break) resolve without a game entry; out-of-season dates and any invariant violation fail closed. Historical responses include the resolved `providerScoringPeriodId` as diagnostic metadata plus `acquisitionMetadataAvailable: false` when ESPN's older snapshots omit acquisition type/date (observed on snapshots more than a few days old).
+
 For current ESPN seasons, derive `seasonPhase` from matchup context before trusting final-rank-like fields. Fields such as `rankFinal` and `rankCalculatedFinal` prove season completion for historical seasons, but active leagues can expose them before live play is complete. Keep outcome fields such as `finalRank`, `championshipWon`, and `playoffOutcome` null unless `seasonComplete` is true.
 
 When a completed season's championship game is marked `TIE` (or `UNDECIDED`), the champion is resolved from the league's `playoffMatchupTieRule` setting: `NONE` (ESPN's platform default) advances the higher playoff seed, and `HOME_TEAM_WINS` advances the home team. Any other rule, or missing/equal seeds, leaves the outcome null. These results keep `outcomeConfidence: 'derived'` because league managers can manually override brackets via ESPN's Edit Playoffs page, so a rule-based resolution is not guaranteed to match what actually happened.

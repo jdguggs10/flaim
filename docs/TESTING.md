@@ -38,17 +38,17 @@ corepack pnpm --dir workers/sleeper-client run type-check
 
 ## Sleeper Smoke Test Fixtures
 
-Public Sleeper leagues last verified on **2026-02-20** (via `GET /v1/league/{id}`). Re-validate before relying on these for regression testing.
+Public Sleeper leagues last verified on **2026-07-18** (via `GET /v1/league/{id}`; the two starred leagues also had `/matchups/{week}` weekly history verified live). Re-validate before relying on these for regression testing.
 Use these for local smoke tests of `workers/sleeper-client` and gateway routing.
 
 | Sport | League ID | Season | Status (at verification) |
 |---|---|---:|---|
 | football | `1002102487509295104` | 2023 | complete |
-| football | `1180208192901685248` | 2025 | complete |
+| football | `1180208192901685248` ★ | 2025 | complete |
 | football | `1121209248362463232` | 2024 | complete |
 | basketball | `1243369670405267456` | 2025 | post_season |
-| basketball | `1284871999146979328` | 2025 | in_season |
-| basketball | `1283572291543777280` | 2025 | in_season |
+| basketball | `1284871999146979328` ★ | 2025 | complete |
+| basketball | `1283572291543777280` | 2025 | in_season (as of 2026-02-20) |
 
 Quick local checks:
 

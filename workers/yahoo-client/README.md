@@ -9,7 +9,12 @@ Internal Yahoo Fantasy API client used by the unified gateway (`fantasy-mcp`). H
 Consolidates all Yahoo Fantasy API interactions for multiple sports into a single worker:
 - Football handlers ✅
 - Baseball handlers ✅
-- (Future: Basketball, Hockey)
+- Basketball handlers ✅
+- Hockey handlers ✅
+
+### Roster Selectors (`get_roster`)
+
+Yahoo's roster resource is sport-sensitive: `;week=` is valid for football only, while baseball/basketball/hockey take `;date=YYYY-MM-DD`. The handler consumes the normalized snapshot request from the gateway and emits the sport-correct selector (or none for the current roster); a wrong selector fails closed with a corrective `INVALID_ROSTER_SNAPSHOT_SELECTOR` error instead of sending a malformed Yahoo request. Responses carry a `snapshot` block identifying current vs `week` vs `date` coverage.
 
 ## Architecture
 
