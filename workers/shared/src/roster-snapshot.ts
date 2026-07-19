@@ -135,35 +135,55 @@ export function validateRosterSnapshotInput(
   return { ok: true, snapshot: { type: 'current' } };
 }
 
+/** Strict parse of an injected snapshot value: valid exact shape or null. */
+function parseSnapshotShape(candidate: unknown): RosterSnapshot | null {
+  if (candidate === null || typeof candidate !== 'object' || Array.isArray(candidate)) {
+    return null;
+  }
+  const snap = candidate as Record<string, unknown>;
+  switch (snap.type) {
+    case 'current':
+      // A "current" snapshot carrying selector fields signals a confused
+      // producer; refuse it rather than guess which intent wins.
+      return snap.week === undefined && snap.date === undefined ? { type: 'current' } : null;
+    case 'week':
+      if (snap.date !== undefined) return null;
+      return Number.isInteger(snap.week) && (snap.week as number) >= 1
+        ? { type: 'week', week: snap.week as number }
+        : null;
+    case 'date':
+      if (snap.week !== undefined) return null;
+      return typeof snap.date === 'string' && isCalendarValidDate(snap.date)
+        ? { type: 'date', date: snap.date }
+        : null;
+    default:
+      return null;
+  }
+}
+
 /**
  * Defensive re-derivation at a platform worker's /execute boundary
- * (get_roster only). An explicitly present `snapshot` is parsed strictly —
- * malformed or internally conflicting shapes return null so callers can
- * reject with a corrective error instead of silently degrading a historical
- * request to a current-roster fetch. Legacy `week` from an older gateway is
- * consulted only when `snapshot` is entirely absent; it maps to
- * { type: 'week' } for every sport so daily-sport handlers reject it rather
- * than reproducing the week→scoringPeriodId bug.
+ * (get_roster only). Any present `snapshot` — including null — is parsed
+ * strictly: valid exact shape or null, so malformed and internally
+ * conflicting shapes are rejected with a corrective error instead of
+ * silently degrading a historical request to a current-roster fetch. Legacy
+ * `week` from an older gateway is consulted only when `snapshot` is entirely
+ * absent, and is equally strict: a present week must be a positive integer.
+ * Only total selector absence resolves to current. Valid legacy weeks map to
+ * { type: 'week' } for every sport so daily-sport handlers reject them
+ * rather than reproducing the week→scoringPeriodId bug.
  */
 export function resolveRosterSnapshotFromParams(params: {
   snapshot?: unknown;
-  week?: number;
+  week?: number | null;
 }): RosterSnapshot | null {
-  const candidate = params.snapshot;
-  if (candidate !== undefined && candidate !== null) {
-    if (typeof candidate !== 'object') return null;
-    const snap = candidate as Record<string, unknown>;
-    if (snap.type === 'current') return { type: 'current' };
-    if (snap.type === 'week' && Number.isInteger(snap.week) && (snap.week as number) >= 1) {
-      return { type: 'week', week: snap.week as number };
-    }
-    if (snap.type === 'date' && typeof snap.date === 'string' && isCalendarValidDate(snap.date)) {
-      return { type: 'date', date: snap.date };
-    }
-    return null;
+  if (params.snapshot !== undefined) {
+    return parseSnapshotShape(params.snapshot);
   }
-  if (params.week !== undefined && Number.isInteger(params.week) && params.week >= 1) {
-    return { type: 'week', week: params.week };
+  if (params.week !== undefined) {
+    return Number.isInteger(params.week) && (params.week as number) >= 1
+      ? { type: 'week', week: params.week as number }
+      : null;
   }
   return { type: 'current' };
 }

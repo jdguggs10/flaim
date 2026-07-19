@@ -397,7 +397,7 @@ async function handleGetRoster(
 
     const acquisitionMetadataMissing = snapshot.type !== 'current'
       && roster.length > 0
-      && roster.some((entry) => entry.acquisitionType == null && entry.acquisitionDate == null);
+      && roster.some((entry) => entry.acquisitionType == null || entry.acquisitionDate == null);
 
     return {
       success: true,

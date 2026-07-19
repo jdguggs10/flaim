@@ -126,17 +126,36 @@ describe('resolveRosterSnapshotFromParams', () => {
     expect(resolveRosterSnapshotFromParams({ snapshot: undefined, week: 15 })).toEqual({ type: 'week', week: 15 });
   });
 
-  it('returns null for a malformed present snapshot instead of degrading to current', () => {
-    expect(resolveRosterSnapshotFromParams({ snapshot: { type: 'date', date: '2026-02-30' } })).toBeNull();
-    expect(resolveRosterSnapshotFromParams({ snapshot: { type: 'week', week: 0 } })).toBeNull();
-    expect(resolveRosterSnapshotFromParams({ snapshot: { type: 'week', week: 1.5 } })).toBeNull();
-    expect(resolveRosterSnapshotFromParams({ snapshot: { type: 'yesterday' } })).toBeNull();
-    expect(resolveRosterSnapshotFromParams({ snapshot: 'current' })).toBeNull();
-    // a malformed snapshot never falls through to legacy week
-    expect(resolveRosterSnapshotFromParams({ snapshot: { type: 'date', date: 'bad' }, week: 4 })).toBeNull();
+  const malformedSnapshots: Array<[string, unknown]> = [
+    ['calendar-invalid date', { type: 'date', date: '2026-02-30' }],
+    ['zero week', { type: 'week', week: 0 }],
+    ['fractional week', { type: 'week', week: 1.5 }],
+    ['unknown type', { type: 'yesterday' }],
+    ['non-object', 'current'],
+    ['array', ['current']],
+    ['null snapshot', null],
+    ['current with date field', { type: 'current', date: '2026-07-10' }],
+    ['current with week field', { type: 'current', week: 5 }],
+    ['week carrying date', { type: 'week', week: 5, date: '2026-07-10' }],
+    ['date carrying week', { type: 'date', date: '2026-07-10', week: 5 }],
+    ['week with null week', { type: 'week', week: null }],
+    ['date with null date', { type: 'date', date: null }],
+  ];
+
+  it.each(malformedSnapshots)('returns null for %s instead of degrading to current', (_label, snapshot) => {
+    expect(resolveRosterSnapshotFromParams({ snapshot })).toBeNull();
+    // a malformed snapshot never falls through to legacy week either
+    expect(resolveRosterSnapshotFromParams({ snapshot, week: 4 })).toBeNull();
   });
 
-  it('returns current when neither snapshot nor legacy week is present', () => {
+  it('rejects a present but invalid legacy week instead of degrading to current', () => {
+    expect(resolveRosterSnapshotFromParams({ week: 0 })).toBeNull();
+    expect(resolveRosterSnapshotFromParams({ week: 1.5 })).toBeNull();
+    expect(resolveRosterSnapshotFromParams({ week: null })).toBeNull();
+    expect(resolveRosterSnapshotFromParams({ week: Number.NaN })).toBeNull();
+  });
+
+  it('returns current only on total selector absence', () => {
     expect(resolveRosterSnapshotFromParams({})).toEqual({ type: 'current' });
   });
 });

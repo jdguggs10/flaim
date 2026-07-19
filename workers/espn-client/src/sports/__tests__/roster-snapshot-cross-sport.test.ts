@@ -172,7 +172,13 @@ describe('espn get_roster snapshot contract', () => {
       expect(data.limitations).toBeUndefined();
     });
 
-    it('flags partially missing acquisition metadata conservatively', async () => {
+    const partialAcquisitionEntries: Array<[string, Record<string, unknown>]> = [
+      ['both fields missing', {}],
+      ['type only', { acquisitionType: 'DRAFT' }],
+      ['date only', { acquisitionDate: 1710000000000 }],
+    ];
+
+    it.each(partialAcquisitionEntries)('flags incomplete acquisition metadata (%s) conservatively', async (_label, partialFields) => {
       espnFetchMock.mockImplementation(async (path: string) => {
         if (path.includes('proTeamSchedules_wl')) return calendarResponse();
         return rosterResponse([
@@ -185,6 +191,7 @@ describe('espn get_roster snapshot contract', () => {
           {
             playerPoolEntry: { player: { id: 2, fullName: 'Player Two' } },
             lineupSlotId: 1,
+            ...partialFields,
           },
         ]);
       });
