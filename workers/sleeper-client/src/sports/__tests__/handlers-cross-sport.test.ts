@@ -202,6 +202,126 @@ describe('sleeper cross-sport handler characterization tests', () => {
     });
   });
 
+  describe('get_roster historical weeks', () => {
+    function mockHistoricalWeek() {
+      mockFetch
+        .mockResolvedValueOnce(jsonResponse([
+          {
+            roster_id: 1, matchup_id: 1, points: 120.5, custom_points: null,
+            players: ['p1', 'p2', 'p3'], starters: ['p1', 'p2'],
+            players_points: { p1: 60.5, p2: 40, p3: 20 }, starters_points: [60.5, 40],
+          },
+          {
+            roster_id: 2, matchup_id: 1, points: 99.1, custom_points: null,
+            players: ['p9'], starters: ['p9'],
+            players_points: { p9: 99.1 }, starters_points: [99.1],
+          },
+        ]))
+        .mockResolvedValueOnce(jsonResponse([
+          {
+            roster_id: 1, owner_id: 'u1',
+            players: ['p1', 'p4'], starters: ['p4'], reserve: [], taxi: [],
+            settings: { wins: 9, losses: 5, ties: 0, fpts: 1400, fpts_decimal: 0 },
+          },
+        ]))
+        .mockResolvedValueOnce(jsonResponse([
+          { user_id: 'u1', display_name: 'Alice', avatar: null },
+        ]));
+    }
+
+    it.each(scenarios)('$label returns the frozen weekly roster by roster id', async ({ sport, handlers }) => {
+      mockHistoricalWeek();
+
+      const params: ToolParams = { sport, league_id: '12345', season_year: 2025, team_id: '1', week: 9 };
+      const result = await handlers.get_roster({} as never, params);
+
+      expect(result.success).toBe(true);
+      expect(mockFetch.mock.calls[0][0]).toContain('/league/12345/matchups/9');
+      const data = result.data as Record<string, unknown>;
+      // membership comes from the week's matchup payload, not the current roster
+      expect(data.starters).toEqual(['p1', 'p2']);
+      expect(data.bench).toEqual(['p3']);
+      expect(data.points).toBe(120.5);
+      expect(data.playersPoints).toEqual({ p1: 60.5, p2: 40, p3: 20 });
+      expect(data.ownerName).toBe('Alice');
+      expect(data.snapshot).toEqual({ type: 'week', week: 9 });
+      expect(data.limitations).toEqual({ reserveAndTaxiClassificationAvailable: false });
+      // temporally pure: no current-state fields leak into historical responses
+      expect(data).not.toHaveProperty('record');
+      expect(data).not.toHaveProperty('reserve');
+      expect(data).not.toHaveProperty('taxi');
+    });
+
+    it.each(scenarios)('$label resolves team_id by owner id too', async ({ sport, handlers }) => {
+      mockHistoricalWeek();
+
+      const params: ToolParams = { sport, league_id: '12345', season_year: 2025, team_id: 'u1', week: 9 };
+      const result = await handlers.get_roster({} as never, params);
+
+      expect(result.success).toBe(true);
+      const data = result.data as Record<string, unknown>;
+      expect(data.rosterId).toBe(1);
+    });
+
+    it.each(scenarios)('$label errors on a week with no matchup data', async ({ sport, handlers }) => {
+      mockFetch
+        .mockResolvedValueOnce(jsonResponse([]))
+        .mockResolvedValueOnce(jsonResponse([]))
+        .mockResolvedValueOnce(jsonResponse([]));
+
+      const params: ToolParams = { sport, league_id: '12345', season_year: 2025, team_id: '1', week: 40 };
+      const result = await handlers.get_roster({} as never, params);
+
+      expect(result.success).toBe(false);
+      expect(result.code).toBe('SLEEPER_NOT_FOUND');
+      expect(result.error).toContain('week 40');
+    });
+
+    it.each(scenarios)('$label requires team_id for historical weeks', async ({ sport, handlers }) => {
+      const params: ToolParams = { sport, league_id: '12345', season_year: 2025, week: 9 };
+      const result = await handlers.get_roster({} as never, params);
+
+      expect(result.success).toBe(false);
+      expect(result.code).toBe('MISSING_PARAM');
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it.each(scenarios)('$label rejects an injected date snapshot with a corrective error', async ({ sport, handlers }) => {
+      const params: ToolParams = {
+        sport, league_id: '12345', season_year: 2025, team_id: '1',
+        snapshot: { type: 'date', date: '2025-11-05' },
+      };
+      const result = await handlers.get_roster({} as never, params);
+
+      expect(result.success).toBe(false);
+      expect(result.code).toBe('INVALID_ROSTER_SNAPSHOT_SELECTOR');
+      expect(result.error).toContain('week');
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it.each(scenarios)('$label current roster carries a current snapshot block', async ({ sport, handlers }) => {
+      mockFetch
+        .mockResolvedValueOnce(jsonResponse([
+          {
+            roster_id: 1, owner_id: 'u1',
+            players: ['p1', 'p2'], starters: ['p1'], reserve: [],
+            settings: { wins: 0, losses: 0, ties: 0, fpts: 0, fpts_decimal: 0 },
+          },
+        ]))
+        .mockResolvedValueOnce(jsonResponse([
+          { user_id: 'u1', display_name: 'Alice', avatar: null },
+        ]));
+
+      const params: ToolParams = { sport, league_id: '12345', season_year: 2025, team_id: '1' };
+      const result = await handlers.get_roster({} as never, params);
+
+      expect(result.success).toBe(true);
+      const data = result.data as Record<string, unknown>;
+      expect(data.snapshot).toEqual({ type: 'current' });
+      expect(data).toHaveProperty('record');
+    });
+  });
+
   describe('get_matchups', () => {
     it.each(scenarios)('$label fetches sport-specific state for default week', async ({ sport, handlers, statePath }) => {
       // State fetch for current week
