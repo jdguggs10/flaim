@@ -59,7 +59,10 @@ export function createGetRosterHandler(): HandlerFn {
       const starters = roster.starters ?? [];
       const allPlayers = roster.players ?? [];
       const reserve = roster.reserve ?? [];
-      const bench = allPlayers.filter((p) => !starters.includes(p) && !reserve.includes(p));
+      const taxi = roster.taxi ?? [];
+      const bench = allPlayers.filter(
+        (p) => !starters.includes(p) && !reserve.includes(p) && !taxi.includes(p)
+      );
       const settings = roster.settings;
 
       return {
@@ -72,6 +75,7 @@ export function createGetRosterHandler(): HandlerFn {
           starters,
           bench,
           reserve,
+          taxi,
           record: {
             wins: settings?.wins ?? 0,
             losses: settings?.losses ?? 0,

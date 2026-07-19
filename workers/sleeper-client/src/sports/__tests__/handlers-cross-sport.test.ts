@@ -136,12 +136,12 @@ describe('sleeper cross-sport handler characterization tests', () => {
   });
 
   describe('get_roster', () => {
-    it.each(scenarios)('$label returns roster with starters/bench/reserve', async ({ sport, handlers }) => {
+    it.each(scenarios)('$label returns roster with starters/bench/reserve/taxi', async ({ sport, handlers }) => {
       mockFetch
         .mockResolvedValueOnce(jsonResponse([
           {
             roster_id: 1, owner_id: 'u1',
-            players: ['p1', 'p2', 'p3'], starters: ['p1'], reserve: ['p3'],
+            players: ['p1', 'p2', 'p3', 'p4'], starters: ['p1'], reserve: ['p3'], taxi: ['p4'],
             settings: { wins: 5, losses: 3, ties: 0, fpts: 800, fpts_decimal: 0, fpts_against: 750, fpts_against_decimal: 0 },
           },
         ]))
@@ -157,7 +157,30 @@ describe('sleeper cross-sport handler characterization tests', () => {
       expect(data.starters).toEqual(['p1']);
       expect(data.bench).toEqual(['p2']);
       expect(data.reserve).toEqual(['p3']);
+      expect(data.taxi).toEqual(['p4']);
       expect(data.ownerName).toBe('Alice');
+    });
+
+    it.each(scenarios)('$label treats missing taxi as empty and keeps bench derivation', async ({ sport, handlers }) => {
+      mockFetch
+        .mockResolvedValueOnce(jsonResponse([
+          {
+            roster_id: 1, owner_id: 'u1',
+            players: ['p1', 'p2'], starters: ['p1'], reserve: [],
+            settings: { wins: 0, losses: 0, ties: 0, fpts: 0, fpts_decimal: 0 },
+          },
+        ]))
+        .mockResolvedValueOnce(jsonResponse([
+          { user_id: 'u1', display_name: 'Alice', avatar: null },
+        ]));
+
+      const params: ToolParams = { sport, league_id: '12345', season_year: 2025, team_id: '1' };
+      const result = await handlers.get_roster({} as never, params);
+
+      expect(result.success).toBe(true);
+      const data = result.data as Record<string, unknown>;
+      expect(data.bench).toEqual(['p2']);
+      expect(data.taxi).toEqual([]);
     });
 
     it.each(scenarios)('$label returns all rosters summary when no team_id', async ({ sport, handlers }) => {

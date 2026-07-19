@@ -55,6 +55,7 @@ export interface SleeperRoster {
   players: string[] | null;
   starters: string[] | null;
   reserve: string[] | null;
+  taxi: string[] | null;
   settings: {
     wins: number;
     losses: number;
