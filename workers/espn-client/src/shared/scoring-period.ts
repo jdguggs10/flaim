@@ -44,7 +44,12 @@ function dateOfDayIndex(dayIndex: number): string {
   return new Date(dayIndex * 86_400_000).toISOString().slice(0, 10);
 }
 
-const anchorCache = new Map<string, ScoringPeriodAnchor>();
+// Anchors are cached for the isolate's lifetime by design: the day↔period
+// mapping is calendar-structural (a rescheduled game moves between periods;
+// it does not move a period's calendar date), so a season's anchor does not
+// go stale. Promises are cached so concurrent cold-isolate misses share one
+// calendar fetch; failed builds are evicted so later requests can retry.
+const anchorCache = new Map<string, Promise<ScoringPeriodAnchor>>();
 
 /** Test hook: clear the per-isolate anchor cache. */
 export function clearScoringPeriodAnchorCache(): void {
@@ -68,7 +73,7 @@ async function buildAnchor(gameId: string, espnYear: number): Promise<ScoringPer
   for (const team of proTeams) {
     for (const [periodKey, games] of Object.entries(team.proGamesByScoringPeriod ?? {})) {
       const period = Number(periodKey);
-      if (!Number.isInteger(period)) continue;
+      if (!Number.isInteger(period) || !Array.isArray(games)) continue;
       for (const game of games) {
         if (typeof game.date !== 'number') continue;
         let dates = periodDates.get(period);
@@ -123,11 +128,15 @@ export async function resolveScoringPeriodForDate(
   date: string
 ): Promise<{ scoringPeriodId: number }> {
   const cacheKey = `${gameId}:${espnYear}`;
-  let anchor = anchorCache.get(cacheKey);
-  if (!anchor) {
-    anchor = await buildAnchor(gameId, espnYear);
-    anchorCache.set(cacheKey, anchor);
+  let anchorPromise = anchorCache.get(cacheKey);
+  if (!anchorPromise) {
+    anchorPromise = buildAnchor(gameId, espnYear).catch((error) => {
+      anchorCache.delete(cacheKey);
+      throw error;
+    });
+    anchorCache.set(cacheKey, anchorPromise);
   }
+  const anchor = await anchorPromise;
 
   const scoringPeriodId = dayIndexOf(date) - anchor.epochDayOffset;
   if (scoringPeriodId < anchor.firstScoringPeriod || scoringPeriodId > anchor.lastScoringPeriod) {

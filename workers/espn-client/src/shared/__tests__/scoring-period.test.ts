@@ -70,6 +70,47 @@ describe('resolveScoringPeriodForDate', () => {
     expect(espnFetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it('shares one in-flight calendar fetch across concurrent misses', async () => {
+    espnFetchMock.mockImplementation(async () => calendarResponse(happyCalendar));
+    const [a, b, c] = await Promise.all([
+      resolveScoringPeriodForDate('flb', 2026, '2026-03-25'),
+      resolveScoringPeriodForDate('flb', 2026, '2026-03-26'),
+      resolveScoringPeriodForDate('flb', 2026, '2026-03-27'),
+    ]);
+    expect([a, b, c]).toEqual([
+      { scoringPeriodId: 1 },
+      { scoringPeriodId: 2 },
+      { scoringPeriodId: 3 },
+    ]);
+    expect(espnFetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('evicts a failed anchor build so the next request retries', async () => {
+    espnFetchMock.mockResolvedValueOnce(new Response('upstream down', { status: 500 }));
+    await expect(resolveScoringPeriodForDate('flb', 2026, '2026-03-26')).rejects.toThrow();
+
+    espnFetchMock.mockResolvedValueOnce(calendarResponse(happyCalendar));
+    await expect(resolveScoringPeriodForDate('flb', 2026, '2026-03-26'))
+      .resolves.toEqual({ scoringPeriodId: 2 });
+    expect(espnFetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('skips non-array period entries in a malformed calendar payload', async () => {
+    espnFetchMock.mockResolvedValue(new Response(JSON.stringify({
+      settings: {
+        proTeams: [{
+          proGamesByScoringPeriod: {
+            '1': [eveningGame('2026-03-25')],
+            '2': null,
+            '3': [eveningGame('2026-03-27')],
+          },
+        }],
+      },
+    }), { status: 200 }));
+    await expect(resolveScoringPeriodForDate('flb', 2026, '2026-03-26'))
+      .resolves.toEqual({ scoringPeriodId: 2 });
+  });
+
   it('counts a late-evening ET game on its ET calendar day', async () => {
     // 02:00 UTC on Mar 27 is 22:00 ET on Mar 26.
     espnFetchMock.mockResolvedValue(calendarResponse({
