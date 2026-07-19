@@ -102,6 +102,15 @@ describe('espn get_roster snapshot contract', () => {
       expect(data.snapshot).toEqual({ type: 'current' });
       expect(data.limitations).toBeUndefined();
     });
+
+    it('rejects a malformed injected snapshot without degrading to current', async () => {
+      const params = makeParams('football', { team_id: '6', snapshot: { type: 'date', date: '2024-02-30' } });
+      const result = await footballHandlers.get_roster({} as never, params, 'Bearer x', 'cid');
+
+      expect(result.success).toBe(false);
+      expect(result.code).toBe('INVALID_ROSTER_SNAPSHOT_SELECTOR');
+      expect(espnFetchMock).not.toHaveBeenCalled();
+    });
   });
 
   describe.each(dailyScenarios)('$label (daily)', ({ sport, handlers }) => {
@@ -144,7 +153,7 @@ describe('espn get_roster snapshot contract', () => {
       expect(data.limitations).toEqual({ acquisitionMetadataAvailable: false });
     });
 
-    it('omits the acquisition limitation when historical entries carry acquisition data', async () => {
+    it('omits the acquisition limitation when every historical entry carries acquisition data', async () => {
       espnFetchMock.mockImplementation(async (path: string) => {
         if (path.includes('proTeamSchedules_wl')) return calendarResponse();
         return rosterResponse([{
@@ -161,6 +170,40 @@ describe('espn get_roster snapshot contract', () => {
       expect(result.success).toBe(true);
       const data = result.data as { limitations?: unknown };
       expect(data.limitations).toBeUndefined();
+    });
+
+    it('flags partially missing acquisition metadata conservatively', async () => {
+      espnFetchMock.mockImplementation(async (path: string) => {
+        if (path.includes('proTeamSchedules_wl')) return calendarResponse();
+        return rosterResponse([
+          {
+            playerPoolEntry: { player: { id: 1, fullName: 'Player One' } },
+            lineupSlotId: 0,
+            acquisitionType: 'DRAFT',
+            acquisitionDate: 1710000000000,
+          },
+          {
+            playerPoolEntry: { player: { id: 2, fullName: 'Player Two' } },
+            lineupSlotId: 1,
+          },
+        ]);
+      });
+
+      const params = makeParams(sport, { team_id: '6', snapshot: { type: 'date', date: '2024-04-15' } });
+      const result = await handlers.get_roster({} as never, params, 'Bearer x', 'cid');
+
+      expect(result.success).toBe(true);
+      const data = result.data as { limitations?: Record<string, unknown> };
+      expect(data.limitations).toEqual({ acquisitionMetadataAvailable: false });
+    });
+
+    it('rejects a malformed injected snapshot without degrading to current', async () => {
+      const params = makeParams(sport, { team_id: '6', snapshot: { type: 'date', date: '2024-02-30' } });
+      const result = await handlers.get_roster({} as never, params, 'Bearer x', 'cid');
+
+      expect(result.success).toBe(false);
+      expect(result.code).toBe('INVALID_ROSTER_SNAPSHOT_SELECTOR');
+      expect(espnFetchMock).not.toHaveBeenCalled();
     });
 
     it('surfaces out-of-season dates as corrective errors', async () => {

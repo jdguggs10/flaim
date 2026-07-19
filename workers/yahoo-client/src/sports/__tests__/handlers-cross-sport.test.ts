@@ -595,6 +595,19 @@ describe('yahoo cross-sport handler characterization tests', () => {
       expect(fetchMock).not.toHaveBeenCalled();
     });
 
+    it.each(scenarios)('$label rejects a malformed injected snapshot without degrading to current', async ({ sport, handlers }) => {
+      const params: ToolParams = {
+        sport, league_id: '449.l.123', season_year: 2025, team_id: '449.l.123.t.1',
+        snapshot: { type: 'date', date: '2025-02-30' } as never,
+      };
+      const result = await handlers.get_roster({} as never, params, 'Bearer x', 'cid');
+
+      expect(result.success).toBe(false);
+      expect(result.code).toBe('INVALID_ROSTER_SNAPSHOT_SELECTOR');
+      expect(result.status).toBe(400);
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
     it.each(scenarios)('$label current roster omits both selectors from the URL', async ({ sport, handlers }) => {
       fetchMock.mockResolvedValue(jsonResponse(buildRosterResponse()));
 

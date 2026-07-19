@@ -871,9 +871,13 @@ describe('fantasy-mcp tools', () => {
       { platform: 'espn', sport: 'football', extra: { week: 5, as_of_date: '2024-10-06' }, corrective: 'at most one' },
       { platform: 'espn', sport: 'baseball', extra: { as_of_date: '2024-02-30' }, corrective: 'calendar-valid' },
       { platform: 'espn', sport: 'baseball', extra: { as_of_date: 'last tuesday' }, corrective: 'calendar-valid' },
+      { platform: 'espn', sport: 'football', extra: { week: 0 }, corrective: 'positive integer' },
+      { platform: 'espn', sport: 'football', extra: { week: 1.5 }, corrective: 'positive integer' },
+      { platform: 'sleeper', sport: 'baseball', extra: { week: 2 }, corrective: 'does not support baseball', code: 'SPORT_NOT_SUPPORTED' },
+      { platform: 'sleeper', sport: 'hockey', extra: { as_of_date: '2024-01-05' }, corrective: 'does not support hockey', code: 'SPORT_NOT_SUPPORTED' },
     ] as const;
 
-    it.each(rejectionMatrix)('$platform $sport rejects $extra without routing', async ({ platform, sport, extra, corrective }) => {
+    it.each(rejectionMatrix)('$platform $sport rejects $extra without routing', async ({ platform, sport, extra, corrective, ...rest }) => {
       const routeToClientMock = routeToClient as MockedFunction<typeof routeToClient>;
       routeToClientMock.mockClear();
 
@@ -886,7 +890,7 @@ describe('fantasy-mcp tools', () => {
 
       expect(result.isError).toBe(true);
       const payload = result.structuredContent as { code?: string; error?: string };
-      expect(payload.code).toBe('INVALID_ROSTER_SNAPSHOT_SELECTOR');
+      expect(payload.code).toBe((rest as { code?: string }).code ?? 'INVALID_ROSTER_SNAPSHOT_SELECTOR');
       expect(payload.error?.toLowerCase()).toContain(corrective.toLowerCase());
       expect(routeToClientMock).not.toHaveBeenCalled();
     });
@@ -1787,15 +1791,17 @@ describe('fantasy-mcp tools', () => {
     expect(weekSchema.safeParse(1.5).success).toBe(false);
   });
 
-  it('get_roster week schema rejects zero and negative values', () => {
+  it('get_roster week schema accepts any number so shared validation owns the corrective error', () => {
     const tool = getUnifiedTools().find((t) => t.name === 'get_roster');
     expect(tool).toBeTruthy();
 
     const weekSchema = asZod(tool!.inputSchema.week);
     expect(weekSchema.safeParse(undefined).success).toBe(true);
     expect(weekSchema.safeParse(1).success).toBe(true);
-    expect(weekSchema.safeParse(0).success).toBe(false);
-    expect(weekSchema.safeParse(-1).success).toBe(false);
+    // Deliberately not schema-rejected: the handler returns
+    // INVALID_ROSTER_SNAPSHOT_SELECTOR instead of a generic MCP schema error.
+    expect(weekSchema.safeParse(0).success).toBe(true);
+    expect(weekSchema.safeParse(1.5).success).toBe(true);
   });
 
   it('get_roster schema exposes an optional as_of_date string', () => {

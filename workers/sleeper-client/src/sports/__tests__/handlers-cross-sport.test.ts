@@ -299,6 +299,19 @@ describe('sleeper cross-sport handler characterization tests', () => {
       expect(mockFetch).not.toHaveBeenCalled();
     });
 
+    it.each(scenarios)('$label rejects a malformed injected snapshot without degrading to current', async ({ sport, handlers }) => {
+      const params: ToolParams = {
+        sport, league_id: '12345', season_year: 2025, team_id: '1',
+        snapshot: { type: 'week', week: 0 } as never,
+      };
+      const result = await handlers.get_roster({} as never, params);
+
+      expect(result.success).toBe(false);
+      expect(result.code).toBe('INVALID_ROSTER_SNAPSHOT_SELECTOR');
+      expect(result.status).toBe(400);
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
     it.each(scenarios)('$label current roster carries a current snapshot block', async ({ sport, handlers }) => {
       mockFetch
         .mockResolvedValueOnce(jsonResponse([

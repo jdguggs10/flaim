@@ -52,7 +52,9 @@ app.post('/execute', async (c) => {
   const { sport, league_id, season_year } = params;
   const routedParams = withSeasonContext(params);
   if (tool === 'get_roster') {
-    routedParams.rosterSnapshot = resolveRosterSnapshotFromParams(params);
+    // null (malformed injected snapshot) stays unset; the handler re-derives
+    // it and rejects with the corrective error.
+    routedParams.rosterSnapshot = resolveRosterSnapshotFromParams(params) ?? undefined;
   }
   const { espnYear } = routedParams.seasonContext;
 

@@ -5,6 +5,7 @@ import { asArray, getPath, unwrapTeam } from '../normalizers';
 import {
   ErrorCode,
   getRosterSelectorCapability,
+  malformedRosterSnapshotError,
   resolveRosterSnapshotFromParams,
   rosterSnapshotUnsupportedError,
   toSnapshotMetadata,
@@ -18,6 +19,9 @@ export function createGetRosterHandler(config: YahooHandlerContext): HandlerFn {
     const sport = config.sport as SeasonSport;
 
     const snapshot = params.rosterSnapshot ?? resolveRosterSnapshotFromParams(params);
+    if (!snapshot) {
+      return malformedRosterSnapshotError();
+    }
     const capability = getRosterSelectorCapability('yahoo', sport);
     if (
       (snapshot.type === 'week' && capability !== 'week') ||

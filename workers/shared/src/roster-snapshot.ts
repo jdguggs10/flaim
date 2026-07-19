@@ -63,19 +63,29 @@ function describeValidSelector(
       return `${platform} ${sport} tracks roster history by week. Pass week (a positive integer), or omit both selectors for the current roster.`;
     case 'date':
       return `${platform} ${sport} rosters are daily. Pass as_of_date in YYYY-MM-DD format for a historical roster, or omit both selectors for the current roster.`;
-    default:
+    case null:
       return `${platform} ${sport} does not support historical rosters. Omit week and as_of_date for the current roster.`;
+    default:
+      return `${platform} does not support ${sport} fantasy leagues.`;
   }
 }
 
 export type RosterSnapshotValidation =
   | { ok: true; snapshot: RosterSnapshot }
-  | { ok: false; error: string; code: typeof ErrorCode.INVALID_ROSTER_SNAPSHOT_SELECTOR };
+  | {
+      ok: false;
+      error: string;
+      code:
+        | typeof ErrorCode.INVALID_ROSTER_SNAPSHOT_SELECTOR
+        | typeof ErrorCode.SPORT_NOT_SUPPORTED;
+    };
 
 /**
  * Validate public get_roster selector inputs for a platform+sport and
  * normalize them to a RosterSnapshot. At most one selector; wrong-selector,
- * malformed, and calendar-invalid inputs return a corrective error.
+ * malformed, and calendar-invalid inputs return a corrective error. A
+ * selector on a platform that doesn't offer the sport at all returns
+ * SPORT_NOT_SUPPORTED rather than implying a selector-free retry would work.
  */
 export function validateRosterSnapshotInput(
   platform: string,
@@ -86,8 +96,10 @@ export function validateRosterSnapshotInput(
   const capability = getRosterSelectorCapability(platform, sport);
   const reject = (detail: string): RosterSnapshotValidation => ({
     ok: false,
-    error: `${detail} ${describeValidSelector(platform, sport, capability)}`,
-    code: ErrorCode.INVALID_ROSTER_SNAPSHOT_SELECTOR,
+    error: `${detail} ${describeValidSelector(platform, sport, capability)}`.trim(),
+    code: capability === undefined
+      ? ErrorCode.SPORT_NOT_SUPPORTED
+      : ErrorCode.INVALID_ROSTER_SNAPSHOT_SELECTOR,
   });
 
   if (week !== undefined && asOfDate !== undefined) {
@@ -95,6 +107,9 @@ export function validateRosterSnapshotInput(
   }
 
   if (week !== undefined) {
+    if (capability === undefined) {
+      return reject('');
+    }
     if (!Number.isInteger(week) || week < 1) {
       return reject(`week must be a positive integer (received ${week}).`);
     }
@@ -105,6 +120,9 @@ export function validateRosterSnapshotInput(
   }
 
   if (asOfDate !== undefined) {
+    if (capability === undefined) {
+      return reject('');
+    }
     if (!isCalendarValidDate(asOfDate)) {
       return reject(`as_of_date must be a calendar-valid YYYY-MM-DD date (received "${asOfDate}").`);
     }
@@ -119,17 +137,21 @@ export function validateRosterSnapshotInput(
 
 /**
  * Defensive re-derivation at a platform worker's /execute boundary
- * (get_roster only). A well-formed injected snapshot wins; otherwise legacy
- * `week` from an older gateway maps to { type: 'week' } for every sport —
- * daily-sport handlers then reject it with the corrective error instead of
- * reproducing the week→scoringPeriodId bug.
+ * (get_roster only). An explicitly present `snapshot` is parsed strictly —
+ * malformed or internally conflicting shapes return null so callers can
+ * reject with a corrective error instead of silently degrading a historical
+ * request to a current-roster fetch. Legacy `week` from an older gateway is
+ * consulted only when `snapshot` is entirely absent; it maps to
+ * { type: 'week' } for every sport so daily-sport handlers reject it rather
+ * than reproducing the week→scoringPeriodId bug.
  */
 export function resolveRosterSnapshotFromParams(params: {
   snapshot?: unknown;
   week?: number;
-}): RosterSnapshot {
+}): RosterSnapshot | null {
   const candidate = params.snapshot;
-  if (candidate && typeof candidate === 'object') {
+  if (candidate !== undefined && candidate !== null) {
+    if (typeof candidate !== 'object') return null;
     const snap = candidate as Record<string, unknown>;
     if (snap.type === 'current') return { type: 'current' };
     if (snap.type === 'week' && Number.isInteger(snap.week) && (snap.week as number) >= 1) {
@@ -138,6 +160,7 @@ export function resolveRosterSnapshotFromParams(params: {
     if (snap.type === 'date' && typeof snap.date === 'string' && isCalendarValidDate(snap.date)) {
       return { type: 'date', date: snap.date };
     }
+    return null;
   }
   if (params.week !== undefined && Number.isInteger(params.week) && params.week >= 1) {
     return { type: 'week', week: params.week };
@@ -149,12 +172,31 @@ export function resolveRosterSnapshotFromParams(params: {
 export function rosterSnapshotUnsupportedError(
   platform: string,
   sport: SeasonSport
-): { success: false; error: string; code: string } {
+): { success: false; error: string; code: string; status: 400 } {
   const capability = getRosterSelectorCapability(platform, sport);
   return {
     success: false,
     error: describeValidSelector(platform, sport, capability),
+    code: capability === undefined
+      ? ErrorCode.SPORT_NOT_SUPPORTED
+      : ErrorCode.INVALID_ROSTER_SNAPSHOT_SELECTOR,
+    status: 400,
+  };
+}
+
+/** Corrective error body for a malformed injected snapshot object. */
+export function malformedRosterSnapshotError(): {
+  success: false;
+  error: string;
+  code: string;
+  status: 400;
+} {
+  return {
+    success: false,
+    error:
+      'The roster snapshot request was malformed. Retry with week (a positive integer) or as_of_date (a calendar-valid YYYY-MM-DD date), or omit both selectors for the current roster.',
     code: ErrorCode.INVALID_ROSTER_SNAPSHOT_SELECTOR,
+    status: 400,
   };
 }
 

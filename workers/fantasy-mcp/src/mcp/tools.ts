@@ -1168,7 +1168,10 @@ export function getUnifiedTools(): UnifiedTool[] {
         league_id: z.string().describe('League ID (get from get_user_session)'),
         season_year: z.number().describe('Season start year — use the season_year returned by get_user_session for this league; only pass an older year when the user explicitly asks about a past season'),
         team_id: z.string().optional().describe('Team ID for the target roster. Recommended for all platforms; required on Yahoo and for historical Sleeper rosters. If omitted, platform behavior varies and may not resolve to the user\'s team.'),
-        week: z.number().int().min(1).optional().describe('Historical weekly roster snapshot (must be ≥ 1). Football on all platforms, plus Sleeper basketball (matchup week). Not valid for ESPN/Yahoo daily sports — use as_of_date there. Omit for the current roster; pass at most one of week or as_of_date.'),
+        // Numeric constraints live in shared validation (not zod) so week: 0
+        // and fractional weeks get the corrective selector error instead of a
+        // generic MCP invalid-arguments failure.
+        week: z.number().optional().describe('Historical weekly roster snapshot (positive integer). Football on all platforms, plus Sleeper basketball (matchup week). Not valid for ESPN/Yahoo daily sports — use as_of_date there. Omit for the current roster; pass at most one of week or as_of_date.'),
         as_of_date: z.string().optional().describe('Historical calendar-day roster snapshot in YYYY-MM-DD format. ESPN and Yahoo baseball, basketball, and hockey only — football and Sleeper use week. Omit for the current roster; pass at most one of week or as_of_date.'),
       },
       handler: async (args, env, authHeader, correlationId, evalRunId, evalTraceId) => {

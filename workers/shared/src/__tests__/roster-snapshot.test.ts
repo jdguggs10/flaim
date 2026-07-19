@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   getRosterSelectorCapability,
   isCalendarValidDate,
+  malformedRosterSnapshotError,
   resolveRosterSnapshotFromParams,
   rosterSnapshotUnsupportedError,
   toSnapshotMetadata,
@@ -54,6 +55,7 @@ describe('validateRosterSnapshotInput', () => {
     week?: number;
     date?: string;
     expect: 'current' | 'week' | 'date' | 'reject';
+    code?: 'INVALID_ROSTER_SNAPSHOT_SELECTOR' | 'SPORT_NOT_SUPPORTED';
   }> = [
     { label: 'no selector -> current', platform: 'espn', sport: 'baseball', expect: 'current' },
     { label: 'espn football week ok', platform: 'espn', sport: 'football', week: 5, expect: 'week' },
@@ -65,7 +67,8 @@ describe('validateRosterSnapshotInput', () => {
     { label: 'sleeper football week ok', platform: 'sleeper', sport: 'football', week: 9, expect: 'week' },
     { label: 'sleeper basketball week ok', platform: 'sleeper', sport: 'basketball', week: 15, expect: 'week' },
     { label: 'sleeper basketball date rejected', platform: 'sleeper', sport: 'basketball', date: '2026-01-05', expect: 'reject' },
-    { label: 'sleeper baseball week rejected', platform: 'sleeper', sport: 'baseball', week: 2, expect: 'reject' },
+    { label: 'sleeper baseball week -> sport unsupported', platform: 'sleeper', sport: 'baseball', week: 2, expect: 'reject', code: 'SPORT_NOT_SUPPORTED' },
+    { label: 'sleeper hockey date -> sport unsupported', platform: 'sleeper', sport: 'hockey', date: '2026-01-05', expect: 'reject', code: 'SPORT_NOT_SUPPORTED' },
     { label: 'both selectors rejected', platform: 'espn', sport: 'football', week: 5, date: '2026-07-10', expect: 'reject' },
     { label: 'calendar-invalid date rejected', platform: 'espn', sport: 'baseball', date: '2026-02-30', expect: 'reject' },
     { label: 'malformed date rejected', platform: 'espn', sport: 'baseball', date: 'July 10', expect: 'reject' },
@@ -73,12 +76,12 @@ describe('validateRosterSnapshotInput', () => {
     { label: 'fractional week rejected', platform: 'espn', sport: 'football', week: 1.5, expect: 'reject' },
   ];
 
-  it.each(cases)('$label', ({ platform, sport, week, date, expect: expected }) => {
+  it.each(cases)('$label', ({ platform, sport, week, date, expect: expected, code }) => {
     const result = validateRosterSnapshotInput(platform, sport, week, date);
     if (expected === 'reject') {
       expect(result.ok).toBe(false);
       if (!result.ok) {
-        expect(result.code).toBe('INVALID_ROSTER_SNAPSHOT_SELECTOR');
+        expect(result.code).toBe(code ?? 'INVALID_ROSTER_SNAPSHOT_SELECTOR');
         expect(result.error.length).toBeGreaterThan(20);
       }
     } else {
@@ -96,6 +99,16 @@ describe('validateRosterSnapshotInput', () => {
     expect(dateOnFootball.ok).toBe(false);
     if (!dateOnFootball.ok) expect(dateOnFootball.error).toContain('week');
   });
+
+  it('sport-unsupported error does not suggest a selector-free retry', () => {
+    const result = validateRosterSnapshotInput('sleeper', 'baseball', 2, undefined);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.code).toBe('SPORT_NOT_SUPPORTED');
+      expect(result.error).toContain('does not support baseball');
+      expect(result.error).not.toContain('current roster');
+    }
+  });
 });
 
 describe('resolveRosterSnapshotFromParams', () => {
@@ -108,25 +121,43 @@ describe('resolveRosterSnapshotFromParams', () => {
       .toEqual({ type: 'week', week: 9 });
   });
 
-  it('maps legacy week to type week when snapshot is absent (old gateway)', () => {
+  it('maps legacy week to type week only when snapshot is absent (old gateway)', () => {
     expect(resolveRosterSnapshotFromParams({ week: 15 })).toEqual({ type: 'week', week: 15 });
+    expect(resolveRosterSnapshotFromParams({ snapshot: undefined, week: 15 })).toEqual({ type: 'week', week: 15 });
   });
 
-  it('falls back to current on malformed snapshot and no legacy week', () => {
-    expect(resolveRosterSnapshotFromParams({ snapshot: { type: 'date', date: '2026-02-30' } }))
-      .toEqual({ type: 'current' });
-    expect(resolveRosterSnapshotFromParams({ snapshot: { type: 'week', week: 0 } }))
-      .toEqual({ type: 'current' });
+  it('returns null for a malformed present snapshot instead of degrading to current', () => {
+    expect(resolveRosterSnapshotFromParams({ snapshot: { type: 'date', date: '2026-02-30' } })).toBeNull();
+    expect(resolveRosterSnapshotFromParams({ snapshot: { type: 'week', week: 0 } })).toBeNull();
+    expect(resolveRosterSnapshotFromParams({ snapshot: { type: 'week', week: 1.5 } })).toBeNull();
+    expect(resolveRosterSnapshotFromParams({ snapshot: { type: 'yesterday' } })).toBeNull();
+    expect(resolveRosterSnapshotFromParams({ snapshot: 'current' })).toBeNull();
+    // a malformed snapshot never falls through to legacy week
+    expect(resolveRosterSnapshotFromParams({ snapshot: { type: 'date', date: 'bad' }, week: 4 })).toBeNull();
+  });
+
+  it('returns current when neither snapshot nor legacy week is present', () => {
     expect(resolveRosterSnapshotFromParams({})).toEqual({ type: 'current' });
   });
 });
 
 describe('rosterSnapshotUnsupportedError', () => {
-  it('returns corrective error with canonical code', () => {
+  it('returns corrective error with canonical code and a 400 classification', () => {
     const err = rosterSnapshotUnsupportedError('espn', 'baseball');
     expect(err.success).toBe(false);
     expect(err.code).toBe('INVALID_ROSTER_SNAPSHOT_SELECTOR');
     expect(err.error).toContain('as_of_date');
+    expect(err.status).toBe(400);
+  });
+});
+
+describe('malformedRosterSnapshotError', () => {
+  it('returns the canonical corrective error with a 400 classification', () => {
+    const err = malformedRosterSnapshotError();
+    expect(err.success).toBe(false);
+    expect(err.code).toBe('INVALID_ROSTER_SNAPSHOT_SELECTOR');
+    expect(err.error).toContain('as_of_date');
+    expect(err.status).toBe(400);
   });
 });
 

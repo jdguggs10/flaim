@@ -70,6 +70,7 @@ export {
   validateRosterSnapshotInput,
   resolveRosterSnapshotFromParams,
   rosterSnapshotUnsupportedError,
+  malformedRosterSnapshotError,
   toSnapshotMetadata,
 } from './roster-snapshot.js';
 export type {

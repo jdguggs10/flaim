@@ -6,7 +6,7 @@ import { assertTransactionsSeasonSupported, collectTransactionPlayerIds, fetchEs
 import type { NormalizedTransaction } from '../../shared/espn-transactions';
 import { getEspnPlayersIndex } from '../../shared/espn-players-cache';
 import { fetchLeagueOwnershipMap, enrichPlayerWithOwnership } from '../../shared/league-ownership';
-import { extractErrorCode, resolveRosterSnapshotFromParams, rosterSnapshotUnsupportedError, toSnapshotMetadata } from '@flaim/worker-shared';
+import { extractErrorCode, malformedRosterSnapshotError, resolveRosterSnapshotFromParams, rosterSnapshotUnsupportedError, toSnapshotMetadata } from '@flaim/worker-shared';
 import {
   getPositionName,
   getLineupSlotName,
@@ -325,6 +325,9 @@ async function handleGetRoster(
 ): Promise<ExecuteResponse> {
   const { league_id, season_year, team_id } = params;
   const snapshot = params.rosterSnapshot ?? resolveRosterSnapshotFromParams(params);
+  if (!snapshot) {
+    return malformedRosterSnapshotError();
+  }
   if (snapshot.type === 'date') {
     return rosterSnapshotUnsupportedError('espn', 'football');
   }
@@ -394,7 +397,7 @@ async function handleGetRoster(
 
     const acquisitionMetadataMissing = snapshot.type !== 'current'
       && roster.length > 0
-      && roster.every((entry) => entry.acquisitionType == null && entry.acquisitionDate == null);
+      && roster.some((entry) => entry.acquisitionType == null && entry.acquisitionDate == null);
 
     return {
       success: true,

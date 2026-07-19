@@ -49,7 +49,9 @@ app.post('/execute', async (c) => {
     const { tool, params } = body;
     const authHeader = c.req.header('Authorization');
     if (tool === 'get_roster') {
-      params.rosterSnapshot = resolveRosterSnapshotFromParams(params);
+      // null (malformed injected snapshot) stays unset; the handler re-derives
+      // it and rejects with the corrective error.
+      params.rosterSnapshot = resolveRosterSnapshotFromParams(params) ?? undefined;
     }
     const { sport, league_id, season_year } = params;
 

@@ -2,6 +2,7 @@ import type { HandlerFn } from './types';
 import type { SleeperLeagueUser, SleeperMatchup, SleeperRoster, ToolParams } from '../../types';
 import {
   ErrorCode,
+  malformedRosterSnapshotError,
   resolveRosterSnapshotFromParams,
   rosterSnapshotUnsupportedError,
   toSnapshotMetadata,
@@ -106,6 +107,9 @@ export function createGetRosterHandler(): HandlerFn {
     }
 
     const snapshot = params.rosterSnapshot ?? resolveRosterSnapshotFromParams(params);
+    if (!snapshot) {
+      return malformedRosterSnapshotError();
+    }
     if (snapshot.type === 'date') {
       return rosterSnapshotUnsupportedError('sleeper', sport as SeasonSport);
     }
