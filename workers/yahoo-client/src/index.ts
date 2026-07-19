@@ -12,6 +12,7 @@ import {
   extractErrorCode,
   getCorrelationId,
   getEvalContext,
+  resolveRosterSnapshotFromParams,
   validateInternalService,
 } from '@flaim/worker-shared';
 import { logEvalEvent } from './logging';
@@ -47,6 +48,9 @@ app.post('/execute', async (c) => {
     const body = await c.req.json<ExecuteRequest>();
     const { tool, params } = body;
     const authHeader = c.req.header('Authorization');
+    if (tool === 'get_roster') {
+      params.rosterSnapshot = resolveRosterSnapshotFromParams(params);
+    }
     const { sport, league_id, season_year } = params;
 
     console.log(`[yahoo-client] ${correlationId} ${tool} ${sport} league=${league_id} season=${season_year}`);

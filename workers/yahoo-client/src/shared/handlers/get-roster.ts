@@ -2,12 +2,29 @@ import type { HandlerFn, YahooHandlerContext } from './types';
 import { getYahooCredentials } from '../auth';
 import { yahooFetch, handleYahooError, requireCredentials } from '../yahoo-api';
 import { asArray, getPath, unwrapTeam } from '../normalizers';
-import { ErrorCode } from '@flaim/worker-shared';
+import {
+  ErrorCode,
+  getRosterSelectorCapability,
+  resolveRosterSnapshotFromParams,
+  rosterSnapshotUnsupportedError,
+  toSnapshotMetadata,
+  type SeasonSport,
+} from '@flaim/worker-shared';
 import { extractManagerName, extractPlayerMeta, toExecuteErrorResponse } from './utils';
 
-export function createGetRosterHandler(_config: YahooHandlerContext): HandlerFn {
+export function createGetRosterHandler(config: YahooHandlerContext): HandlerFn {
   return async (env, params, authHeader, correlationId) => {
-    const { team_id, league_id, week } = params;
+    const { team_id, league_id } = params;
+    const sport = config.sport as SeasonSport;
+
+    const snapshot = params.rosterSnapshot ?? resolveRosterSnapshotFromParams(params);
+    const capability = getRosterSelectorCapability('yahoo', sport);
+    if (
+      (snapshot.type === 'week' && capability !== 'week') ||
+      (snapshot.type === 'date' && capability !== 'date')
+    ) {
+      return rosterSnapshotUnsupportedError('yahoo', sport);
+    }
 
     if (!team_id) {
       return {
@@ -23,8 +40,12 @@ export function createGetRosterHandler(_config: YahooHandlerContext): HandlerFn 
       const credentials = await getYahooCredentials(env, authHeader, correlationId);
       requireCredentials(credentials, 'get_roster');
 
-      const weekParam = week ? `;week=${week}` : '';
-      const response = await yahooFetch(`/team/${teamKey}/roster${weekParam}`, { credentials });
+      const selector = snapshot.type === 'week'
+        ? `;week=${snapshot.week}`
+        : snapshot.type === 'date'
+          ? `;date=${snapshot.date}`
+          : '';
+      const response = await yahooFetch(`/team/${teamKey}/roster${selector}`, { credentials });
       if (!response.ok) {
         await handleYahooError(response);
       }
@@ -62,7 +83,7 @@ export function createGetRosterHandler(_config: YahooHandlerContext): HandlerFn 
           teamKey: team.team_key,
           teamName: team.name,
           ownerName: extractManagerName(team),
-          week: week || 'current',
+          snapshot: toSnapshotMetadata(snapshot),
           players,
         },
       };
