@@ -1,5 +1,5 @@
 // workers/fantasy-mcp/src/types.ts
-import type { BaseEnvWithAuth } from '@flaim/worker-shared';
+import type { BaseEnvWithAuth, RosterSnapshot } from '@flaim/worker-shared';
 
 interface RateLimit {
   limit(options: { key: string }): Promise<{ success: boolean }>;
@@ -24,6 +24,9 @@ export interface ToolParams {
   season_year: number;
   team_id?: string;
   week?: number;
+  as_of_date?: string;
+  /** Normalized get_roster snapshot, injected after capability validation. */
+  snapshot?: RosterSnapshot;
   type?: 'add' | 'drop' | 'trade' | 'waiver' | 'pending_trade' | 'trade_proposal' | 'trade_decline' | 'trade_veto' | 'trade_uphold' | 'failed_bid';
   position?: string;
   count?: number;
