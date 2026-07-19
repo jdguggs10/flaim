@@ -6,7 +6,8 @@ import { assertTransactionsSeasonSupported, collectTransactionPlayerIds, fetchEs
 import type { NormalizedTransaction } from '../../shared/espn-transactions';
 import { getEspnPlayersIndex } from '../../shared/espn-players-cache';
 import { fetchLeagueOwnershipMap, enrichPlayerWithOwnership } from '../../shared/league-ownership';
-import { extractErrorCode } from '@flaim/worker-shared';
+import { extractErrorCode, resolveRosterSnapshotFromParams, rosterSnapshotUnsupportedError, toSnapshotMetadata } from '@flaim/worker-shared';
+import { resolveScoringPeriodForDate } from '../../shared/scoring-period';
 import {
   getPositionName,
   getLineupSlotName,
@@ -387,16 +388,23 @@ async function handleGetRoster(
   authHeader?: string,
   correlationId?: string
 ): Promise<ExecuteResponse> {
-  const { league_id, team_id, week } = params;
+  const { league_id, team_id } = params;
   const { espnYear } = getSeasonContext(params);
+  const snapshot = params.rosterSnapshot ?? resolveRosterSnapshotFromParams(params);
+  if (snapshot.type === 'week') {
+    return rosterSnapshotUnsupportedError('espn', 'hockey');
+  }
 
   try {
     const credentials = await getCredentials(env, authHeader, correlationId);
     requireCredentials(credentials, 'roster data');
 
     let path = `/seasons/${espnYear}/segments/0/leagues/${league_id}?view=mRoster&view=mTeam`;
-    if (week) {
-      path += `&scoringPeriodId=${week}`;
+    let providerScoringPeriodId: number | undefined;
+    if (snapshot.type === 'date') {
+      const resolved = await resolveScoringPeriodForDate(GAME_ID, espnYear, snapshot.date);
+      providerScoringPeriodId = resolved.scoringPeriodId;
+      path += `&scoringPeriodId=${resolved.scoringPeriodId}`;
     }
 
     const response = await espnFetch(path, GAME_ID, { credentials, timeout: 7000 });
@@ -451,6 +459,10 @@ async function handleGetRoster(
 
     const ownerName = team.owners?.map((o) => o.displayName || o.firstName).find(Boolean) || undefined;
 
+    const acquisitionMetadataMissing = snapshot.type !== 'current'
+      && roster.length > 0
+      && roster.every((entry) => entry.acquisitionType == null && entry.acquisitionDate == null);
+
     return {
       success: true,
       data: {
@@ -460,6 +472,8 @@ async function handleGetRoster(
           ? `${team.location} ${team.nickname}`
           : team.name || `Team ${team.id}`,
         ownerName,
+        snapshot: toSnapshotMetadata(snapshot, { providerScoringPeriodId }),
+        ...(acquisitionMetadataMissing ? { limitations: { acquisitionMetadataAvailable: false } } : {}),
         roster
       }
     };

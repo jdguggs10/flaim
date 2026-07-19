@@ -13,6 +13,7 @@ import {
   extractErrorCode,
   getCorrelationId,
   getEvalContext,
+  resolveRosterSnapshotFromParams,
   validateInternalService,
 } from '@flaim/worker-shared';
 import { withSeasonContext } from './shared/season';
@@ -50,6 +51,9 @@ app.post('/execute', async (c) => {
   const authHeader = c.req.header('Authorization');
   const { sport, league_id, season_year } = params;
   const routedParams = withSeasonContext(params);
+  if (tool === 'get_roster') {
+    routedParams.rosterSnapshot = resolveRosterSnapshotFromParams(params);
+  }
   const { espnYear } = routedParams.seasonContext;
 
   const startTime = Date.now();
