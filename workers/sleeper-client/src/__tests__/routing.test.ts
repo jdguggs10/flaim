@@ -75,6 +75,38 @@ describe('sleeper-client sport routing', () => {
     expect(body.code).toBe('UNKNOWN_TOOL');
   });
 
+  it('rejects a malformed get_roster snapshot at the /execute boundary without any upstream fetch', async () => {
+    const env = {
+      INTERNAL_SERVICE_TOKEN: 'internal-secret',
+      SLEEPER_PLAYERS_CACHE: {} as KVNamespace,
+    } as Env;
+
+    const req = new Request('https://internal/execute', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Flaim-Internal-Token': 'internal-secret',
+      },
+      body: JSON.stringify({
+        tool: 'get_roster',
+        params: {
+          sport: 'football',
+          league_id: 'lg1',
+          season_year: 2025,
+          team_id: '1',
+          snapshot: { type: 'date', date: '2025-02-30' },
+        },
+      }),
+    });
+
+    const res = await app.fetch(req, env, mockExecutionContext());
+    const body = await res.json() as { success: boolean; code?: string };
+
+    expect(body.success).toBe(false);
+    expect(body.code).toBe('INVALID_ROSTER_SNAPSHOT_SELECTOR');
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
   it('routes get_free_agents for supported sport with structured success payload', async () => {
     const env = {
       INTERNAL_SERVICE_TOKEN: 'internal-secret',

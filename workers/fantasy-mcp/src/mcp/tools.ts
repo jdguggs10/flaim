@@ -7,6 +7,7 @@ import {
   getDefaultSeasonYear,
   getSeasonLabel,
   logSetupSignal,
+  validateRosterSnapshotInput,
   withCorrelationId,
   withEvalHeaders,
   withInternalServiceToken,
@@ -1156,7 +1157,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       securitySchemes: buildSecuritySchemes('mcp:read'),
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
       openaiMeta: { invoking: 'Fetching roster\u2026', invoked: 'Roster ready' },
-      description: `Get roster details for a specific team. Exact payload varies by platform: ESPN and Yahoo return player entries with lineup/position context, while Sleeper returns starters, bench, reserve, and record metadata for the selected roster. Best used after get_user_session and after get_league_info for the specified league so the model already knows the league's team names, owner/team mapping, league settings, and roster context before interpreting this roster. Requires authentication except on Sleeper's public API. Read-only. If this call errors, do not repeat it unchanged. Current date is ${currentDate}.`,
+      description: `Get roster details for a specific team — current by default, historical on request. Exact payload varies by platform: ESPN and Yahoo return player entries with lineup/position context, while Sleeper returns starters, bench, reserve, taxi, and record metadata for the selected roster. Historical snapshots: pass week for football (all platforms) and Sleeper basketball (matchup week), or as_of_date (YYYY-MM-DD) for ESPN/Yahoo baseball, basketball, and hockey — never both; an invalid selector returns a corrective error naming the right one. Every response includes a snapshot block identifying what was returned (current vs week vs date); historical responses may add limitation flags (acquisitionMetadataAvailable, reserveAndTaxiClassificationAvailable) when provider history omits those details. For "roster during matchup week N" questions in daily sports, ask the user for a specific date rather than guessing — one matchup spans several daily rosters. Best used after get_user_session and after get_league_info for the specified league so the model already knows the league's team names, owner/team mapping, league settings, and roster context before interpreting this roster. Requires authentication except on Sleeper's public API. Read-only. If this call errors, do not repeat it unchanged. Current date is ${currentDate}.`,
       inputSchema: {
         platform: z
           .enum(['espn', 'yahoo', 'sleeper'])
@@ -1166,20 +1167,37 @@ export function getUnifiedTools(): UnifiedTool[] {
           .describe('Sport type (e.g., "football", "baseball")'),
         league_id: z.string().describe('League ID (get from get_user_session)'),
         season_year: z.number().describe('Season start year — use the season_year returned by get_user_session for this league; only pass an older year when the user explicitly asks about a past season'),
-        team_id: z.string().optional().describe('Team ID for the target roster. Recommended for all platforms; required on Yahoo. If omitted, platform behavior varies and may not resolve to the user\'s team.'),
-        week: z.number().int().min(1).optional().describe('Week number (optional, must be ≥ 1, defaults to current week)'),
+        team_id: z.string().optional().describe('Team ID for the target roster. Recommended for all platforms; required on Yahoo and for historical Sleeper rosters. If omitted, platform behavior varies and may not resolve to the user\'s team.'),
+        // Numeric constraints live in shared validation (not zod) so week: 0
+        // and fractional weeks get the corrective selector error instead of a
+        // generic MCP invalid-arguments failure.
+        week: z.number().optional().describe('Historical weekly roster snapshot (positive integer). Football on all platforms, plus Sleeper basketball (matchup week). Not valid for ESPN/Yahoo daily sports — use as_of_date there. Omit for the current roster; pass at most one of week or as_of_date.'),
+        as_of_date: z.string().optional().describe('Historical calendar-day roster snapshot in YYYY-MM-DD format. ESPN and Yahoo baseball, basketball, and hockey only — football and Sleeper use week. Omit for the current roster; pass at most one of week or as_of_date.'),
       },
       handler: async (args, env, authHeader, correlationId, evalRunId, evalTraceId) => {
+        const validation = validateRosterSnapshotInput(
+          args.platform as Platform,
+          args.sport as Sport,
+          args.week as number | undefined,
+          args.as_of_date as string | undefined
+        );
+        if (!validation.ok) {
+          return routeResultToMcp({ success: false, code: validation.code, error: validation.error });
+        }
+
         const params: ToolParams = {
           platform: args.platform as Platform,
           sport: args.sport as Sport,
           league_id: args.league_id as string,
           season_year: args.season_year as number,
           team_id: args.team_id as string | undefined,
-          week: args.week as number | undefined,
+          // Legacy field kept alongside the normalized snapshot for one deploy
+          // cycle of provider compatibility; providers prefer `snapshot`.
+          week: validation.snapshot.type === 'week' ? validation.snapshot.week : undefined,
+          snapshot: validation.snapshot,
         };
 
-        return withToolLogging(correlationId, 'get_roster', `${params.platform} ${params.sport} league=provided team=${params.team_id ? 'provided' : 'self'}`, async () => {
+        return withToolLogging(correlationId, 'get_roster', `${params.platform} ${params.sport} league=provided team=${params.team_id ? 'provided' : 'self'} snapshot=${validation.snapshot.type}`, async () => {
           const result = await routeToClient(env, 'get_roster', params, authHeader, correlationId, evalRunId, evalTraceId);
           return routeResultToMcp(result);
         }, evalRunId, evalTraceId);

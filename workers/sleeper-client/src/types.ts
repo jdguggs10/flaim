@@ -1,4 +1,4 @@
-import type { BaseEnvWithAuth } from '@flaim/worker-shared';
+import type { BaseEnvWithAuth, RosterSnapshot } from '@flaim/worker-shared';
 
 export interface Env extends BaseEnvWithAuth {
   SLEEPER_PLAYERS_CACHE: KVNamespace;
@@ -17,6 +17,10 @@ export interface ToolParams {
   season_year: number;
   team_id?: string;        // roster_id as string (e.g., "1")
   week?: number;
+  /** Normalized get_roster snapshot request injected by the gateway. */
+  snapshot?: RosterSnapshot;
+  /** Defensively re-derived snapshot, attached at /execute for get_roster only. */
+  rosterSnapshot?: RosterSnapshot;
   type?: 'add' | 'drop' | 'trade' | 'waiver';
   position?: string;
   count?: number;
@@ -55,6 +59,7 @@ export interface SleeperRoster {
   players: string[] | null;
   starters: string[] | null;
   reserve: string[] | null;
+  taxi: string[] | null;
   settings: {
     wins: number;
     losses: number;

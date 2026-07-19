@@ -1,4 +1,4 @@
-import type { BaseEnvWithAuth } from '@flaim/worker-shared';
+import type { BaseEnvWithAuth, RosterSnapshot } from '@flaim/worker-shared';
 
 export interface Env extends BaseEnvWithAuth {
   // Yahoo-client uses AUTH_WORKER from BaseEnvWithAuth
@@ -17,6 +17,10 @@ export interface ToolParams {
   season_year: number;
   team_id?: string;       // Yahoo team_key (e.g., "449.l.12345.t.3")
   week?: number;
+  /** Normalized get_roster snapshot request injected by the gateway. */
+  snapshot?: RosterSnapshot;
+  /** Defensively re-derived snapshot, attached at /execute for get_roster only. */
+  rosterSnapshot?: RosterSnapshot;
   type?: 'add' | 'drop' | 'trade' | 'waiver' | 'pending_trade';
   position?: string;
   count?: number;

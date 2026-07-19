@@ -10,6 +10,7 @@ import {
   extractErrorCode,
   getCorrelationId,
   getEvalContext,
+  resolveRosterSnapshotFromParams,
   validateInternalService,
 } from '@flaim/worker-shared';
 import { logEvalEvent } from './logging';
@@ -44,6 +45,11 @@ app.post('/execute', async (c) => {
   try {
     const body = await c.req.json<ExecuteRequest>();
     const { tool, params } = body;
+    if (tool === 'get_roster') {
+      // null (malformed injected snapshot) stays unset; the handler re-derives
+      // it and rejects with the corrective error.
+      params.rosterSnapshot = resolveRosterSnapshotFromParams(params) ?? undefined;
+    }
     const { sport, league_id, season_year } = params;
 
     console.log(`[sleeper-client] ${correlationId} ${tool} ${sport} league=${league_id} season=${season_year}`);

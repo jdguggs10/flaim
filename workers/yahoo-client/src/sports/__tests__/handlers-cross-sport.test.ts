@@ -535,6 +535,94 @@ describe('yahoo cross-sport handler characterization tests', () => {
     });
   });
 
+  describe('get_roster snapshot selectors', () => {
+    const dailySports = ['baseball', 'basketball', 'hockey'] as const;
+    const handlersBySport = {
+      football: footballHandlers,
+      baseball: baseballHandlers,
+      basketball: basketballHandlers,
+      hockey: hockeyHandlers,
+    } as const;
+
+    it('football week emits ;week= and reports snapshot metadata', async () => {
+      fetchMock.mockResolvedValue(jsonResponse(buildRosterResponse()));
+
+      const params: ToolParams = { sport: 'football', league_id: '449.l.123', season_year: 2025, team_id: '449.l.123.t.1', week: 5 };
+      const result = await footballHandlers.get_roster({} as never, params, 'Bearer x', 'cid');
+
+      expect(result.success).toBe(true);
+      expect(fetchMock.mock.calls[0][0]).toContain('/roster;week=5');
+      const data = result.data as { snapshot: Record<string, unknown> };
+      expect(data.snapshot).toEqual({ type: 'week', week: 5 });
+    });
+
+    it('football rejects an injected date snapshot', async () => {
+      const params: ToolParams = {
+        sport: 'football', league_id: '449.l.123', season_year: 2025, team_id: '449.l.123.t.1',
+        snapshot: { type: 'date', date: '2025-10-05' },
+      };
+      const result = await footballHandlers.get_roster({} as never, params, 'Bearer x', 'cid');
+
+      expect(result.success).toBe(false);
+      expect(result.code).toBe('INVALID_ROSTER_SNAPSHOT_SELECTOR');
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it.each(dailySports)('%s date emits ;date= and never ;week=', async (sport) => {
+      fetchMock.mockResolvedValue(jsonResponse(buildRosterResponse()));
+
+      const params: ToolParams = {
+        sport, league_id: '449.l.123', season_year: 2025, team_id: '449.l.123.t.1',
+        snapshot: { type: 'date', date: '2025-07-10' },
+      };
+      const result = await handlersBySport[sport].get_roster({} as never, params, 'Bearer x', 'cid');
+
+      expect(result.success).toBe(true);
+      const path = fetchMock.mock.calls[0][0] as string;
+      expect(path).toContain('/roster;date=2025-07-10');
+      expect(path).not.toContain(';week=');
+      const data = result.data as { snapshot: Record<string, unknown> };
+      expect(data.snapshot).toEqual({ type: 'date', date: '2025-07-10' });
+    });
+
+    it.each(dailySports)('%s rejects legacy week instead of emitting ;week=', async (sport) => {
+      const params: ToolParams = { sport, league_id: '449.l.123', season_year: 2025, team_id: '449.l.123.t.1', week: 15 };
+      const result = await handlersBySport[sport].get_roster({} as never, params, 'Bearer x', 'cid');
+
+      expect(result.success).toBe(false);
+      expect(result.code).toBe('INVALID_ROSTER_SNAPSHOT_SELECTOR');
+      expect(result.error).toContain('as_of_date');
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it.each(scenarios)('$label rejects a malformed injected snapshot without degrading to current', async ({ sport, handlers }) => {
+      const params: ToolParams = {
+        sport, league_id: '449.l.123', season_year: 2025, team_id: '449.l.123.t.1',
+        snapshot: { type: 'date', date: '2025-02-30' } as never,
+      };
+      const result = await handlers.get_roster({} as never, params, 'Bearer x', 'cid');
+
+      expect(result.success).toBe(false);
+      expect(result.code).toBe('INVALID_ROSTER_SNAPSHOT_SELECTOR');
+      expect(result.status).toBe(400);
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it.each(scenarios)('$label current roster omits both selectors from the URL', async ({ sport, handlers }) => {
+      fetchMock.mockResolvedValue(jsonResponse(buildRosterResponse()));
+
+      const params: ToolParams = { sport, league_id: '449.l.123', season_year: 2025, team_id: '449.l.123.t.1' };
+      const result = await handlers.get_roster({} as never, params, 'Bearer x', 'cid');
+
+      expect(result.success).toBe(true);
+      const path = fetchMock.mock.calls[0][0] as string;
+      expect(path).not.toContain(';week=');
+      expect(path).not.toContain(';date=');
+      const data = result.data as { snapshot: Record<string, unknown> };
+      expect(data.snapshot).toEqual({ type: 'current' });
+    });
+  });
+
   describe('get_matchups', () => {
     it.each(scenarios)('$label returns matchups with team scores and winner', async ({ sport, handlers }) => {
       fetchMock.mockResolvedValue(jsonResponse(buildMatchupsResponse()));

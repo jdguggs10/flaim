@@ -855,6 +855,77 @@ describe('fantasy-mcp tools', () => {
     expect(payload.data).toEqual({ league: { id: 123, name: 'Test League' } });
   });
 
+  describe('get_roster snapshot selector validation', () => {
+    const rosterTool = () => getUnifiedTools().find((t) => t.name === 'get_roster')!;
+    const baseArgs = { league_id: '123', season_year: 2024, team_id: '1' };
+
+    const rejectionMatrix = [
+      { platform: 'espn', sport: 'baseball', extra: { week: 15 }, corrective: 'as_of_date' },
+      { platform: 'espn', sport: 'basketball', extra: { week: 3 }, corrective: 'as_of_date' },
+      { platform: 'espn', sport: 'hockey', extra: { week: 3 }, corrective: 'as_of_date' },
+      { platform: 'yahoo', sport: 'baseball', extra: { week: 15 }, corrective: 'as_of_date' },
+      { platform: 'espn', sport: 'football', extra: { as_of_date: '2024-10-06' }, corrective: 'week' },
+      { platform: 'yahoo', sport: 'football', extra: { as_of_date: '2024-10-06' }, corrective: 'week' },
+      { platform: 'sleeper', sport: 'football', extra: { as_of_date: '2024-10-06' }, corrective: 'week' },
+      { platform: 'sleeper', sport: 'basketball', extra: { as_of_date: '2024-12-01' }, corrective: 'week' },
+      { platform: 'espn', sport: 'football', extra: { week: 5, as_of_date: '2024-10-06' }, corrective: 'at most one' },
+      { platform: 'espn', sport: 'baseball', extra: { as_of_date: '2024-02-30' }, corrective: 'calendar-valid' },
+      { platform: 'espn', sport: 'baseball', extra: { as_of_date: 'last tuesday' }, corrective: 'calendar-valid' },
+      { platform: 'espn', sport: 'football', extra: { week: 0 }, corrective: 'positive integer' },
+      { platform: 'espn', sport: 'football', extra: { week: 1.5 }, corrective: 'positive integer' },
+      { platform: 'sleeper', sport: 'baseball', extra: { week: 2 }, corrective: 'does not support baseball', code: 'SPORT_NOT_SUPPORTED' },
+      { platform: 'sleeper', sport: 'hockey', extra: { as_of_date: '2024-01-05' }, corrective: 'does not support hockey', code: 'SPORT_NOT_SUPPORTED' },
+    ] as const;
+
+    it.each(rejectionMatrix)('$platform $sport rejects $extra without routing', async ({ platform, sport, extra, corrective, ...rest }) => {
+      const routeToClientMock = routeToClient as MockedFunction<typeof routeToClient>;
+      routeToClientMock.mockClear();
+
+      const result = await rosterTool().handler(
+        { ...baseArgs, platform, sport, ...extra },
+        {} as Env,
+        'Bearer token',
+        'corr-1'
+      );
+
+      expect(result.isError).toBe(true);
+      const payload = result.structuredContent as { code?: string; error?: string };
+      expect(payload.code).toBe((rest as { code?: string }).code ?? 'INVALID_ROSTER_SNAPSHOT_SELECTOR');
+      expect(payload.error?.toLowerCase()).toContain(corrective.toLowerCase());
+      expect(routeToClientMock).not.toHaveBeenCalled();
+    });
+
+    const acceptanceMatrix = [
+      { platform: 'espn', sport: 'football', extra: { week: 5 }, snapshot: { type: 'week', week: 5 }, week: 5 },
+      { platform: 'yahoo', sport: 'football', extra: { week: 5 }, snapshot: { type: 'week', week: 5 }, week: 5 },
+      { platform: 'sleeper', sport: 'football', extra: { week: 9 }, snapshot: { type: 'week', week: 9 }, week: 9 },
+      { platform: 'sleeper', sport: 'basketball', extra: { week: 15 }, snapshot: { type: 'week', week: 15 }, week: 15 },
+      { platform: 'espn', sport: 'baseball', extra: { as_of_date: '2024-07-10' }, snapshot: { type: 'date', date: '2024-07-10' }, week: undefined },
+      { platform: 'yahoo', sport: 'hockey', extra: { as_of_date: '2024-01-05' }, snapshot: { type: 'date', date: '2024-01-05' }, week: undefined },
+      { platform: 'espn', sport: 'baseball', extra: {}, snapshot: { type: 'current' }, week: undefined },
+    ] as const;
+
+    it.each(acceptanceMatrix)('$platform $sport forwards normalized snapshot for $extra', async ({ platform, sport, extra, snapshot, week }) => {
+      const routeToClientMock = routeToClient as MockedFunction<typeof routeToClient>;
+      routeToClientMock.mockClear();
+      routeToClientMock.mockResolvedValue({ success: true, data: { roster: [] } });
+
+      const result = await rosterTool().handler(
+        { ...baseArgs, platform, sport, ...extra },
+        {} as Env,
+        'Bearer token',
+        'corr-1'
+      );
+
+      expect(result.isError).toBeUndefined();
+      expect(routeToClientMock).toHaveBeenCalledTimes(1);
+      const forwarded = routeToClientMock.mock.calls[0][2] as unknown as Record<string, unknown>;
+      expect(forwarded.snapshot).toEqual(snapshot);
+      expect(forwarded.week).toBe(week);
+      expect(forwarded.as_of_date).toBeUndefined();
+    });
+  });
+
   it('get_transactions routes with clamped count and preserves filters', async () => {
     const tool = getUnifiedTools().find((t) => t.name === 'get_transactions');
     expect(tool).toBeTruthy();
@@ -1720,15 +1791,26 @@ describe('fantasy-mcp tools', () => {
     expect(weekSchema.safeParse(1.5).success).toBe(false);
   });
 
-  it('get_roster week schema rejects zero and negative values', () => {
+  it('get_roster week schema accepts any number so shared validation owns the corrective error', () => {
     const tool = getUnifiedTools().find((t) => t.name === 'get_roster');
     expect(tool).toBeTruthy();
 
     const weekSchema = asZod(tool!.inputSchema.week);
     expect(weekSchema.safeParse(undefined).success).toBe(true);
     expect(weekSchema.safeParse(1).success).toBe(true);
-    expect(weekSchema.safeParse(0).success).toBe(false);
-    expect(weekSchema.safeParse(-1).success).toBe(false);
+    // Deliberately not schema-rejected: the handler returns
+    // INVALID_ROSTER_SNAPSHOT_SELECTOR instead of a generic MCP schema error.
+    expect(weekSchema.safeParse(0).success).toBe(true);
+    expect(weekSchema.safeParse(1.5).success).toBe(true);
+  });
+
+  it('get_roster schema exposes an optional as_of_date string', () => {
+    const tool = getUnifiedTools().find((t) => t.name === 'get_roster');
+    expect(tool).toBeTruthy();
+
+    const dateSchema = asZod(tool!.inputSchema.as_of_date);
+    expect(dateSchema.safeParse(undefined).success).toBe(true);
+    expect(dateSchema.safeParse('2026-07-10').success).toBe(true);
   });
 
   it('each tool declares a required scope', () => {

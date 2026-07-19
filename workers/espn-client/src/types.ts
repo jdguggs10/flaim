@@ -1,5 +1,5 @@
 // workers/espn-client/src/types.ts
-import type { BaseEnvWithAuth, ExecuteResponse as SharedExecuteResponse } from '@flaim/worker-shared';
+import type { BaseEnvWithAuth, ExecuteResponse as SharedExecuteResponse, RosterSnapshot } from '@flaim/worker-shared';
 
 // ---------------------------------------------------------------------------
 // ESPN Fantasy API response types
@@ -171,6 +171,8 @@ export interface ToolParams {
   season_year: number;
   team_id?: string;
   week?: number;
+  /** Normalized get_roster snapshot request injected by the gateway. */
+  snapshot?: RosterSnapshot;
   type?: 'add' | 'drop' | 'trade' | 'waiver' | 'trade_proposal' | 'trade_decline' | 'trade_veto' | 'trade_uphold' | 'failed_bid';
   position?: string;
   count?: number;
@@ -184,6 +186,8 @@ export interface EspnSeasonContext {
 
 export interface RoutedToolParams extends ToolParams {
   seasonContext: EspnSeasonContext;
+  /** Defensively re-derived snapshot, attached at /execute for get_roster only. */
+  rosterSnapshot?: RosterSnapshot;
 }
 
 export type HandlerToolParams = RoutedToolParams;

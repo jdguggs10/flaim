@@ -15,4 +15,5 @@ Scope resolution rules:
 5. For ambiguous prompts with no applicable default, ask which league.
 6. Call get_league_info early for any league-specific tool chain so team names, scoring, and roster slots are resolved before downstream calls. When fanning out, call it once per league.
 7. Never infer league ownership from a player's market_percent_owned or ownership_scope. For "who owns X in my league", enumerate teams via get_league_info and call get_roster per team.
-8. Do not retry the same tool with the same parameters on error. season_year is always the start year of the season.`;
+8. For a past roster, use get_roster with exactly one selector: week for football (all platforms) and Sleeper basketball, or as_of_date (YYYY-MM-DD) for ESPN/Yahoo baseball, basketball, and hockey. Never pass a matchup week for ESPN/Yahoo daily sports — ask the user for a date instead. Omit both selectors for the current roster.
+9. Do not retry the same tool with the same parameters on error. season_year is always the start year of the season.`;

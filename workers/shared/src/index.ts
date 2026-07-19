@@ -63,6 +63,22 @@ export {
 } from './season.js';
 export type { SeasonSport } from './season.js';
 
+// Roster snapshot contract (get_roster week / as_of_date selectors)
+export {
+  getRosterSelectorCapability,
+  isCalendarValidDate,
+  validateRosterSnapshotInput,
+  resolveRosterSnapshotFromParams,
+  rosterSnapshotUnsupportedError,
+  malformedRosterSnapshotError,
+  toSnapshotMetadata,
+} from './roster-snapshot.js';
+export type {
+  RosterSnapshot,
+  RosterSelectorCapability,
+  RosterSnapshotValidation,
+} from './roster-snapshot.js';
+
 // Auth-worker fetch helper
 export { authWorkerFetch } from './auth-fetch.js';
 

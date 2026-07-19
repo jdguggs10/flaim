@@ -196,13 +196,15 @@ Credentials are fetched from auth-worker per request; MCP workers don't store th
 ## Deployment
 
 ```bash
-# Usually handled by GitHub Actions (.github/workflows/deploy-workers.yml)
-# Manual fallback (deploy each worker explicitly):
+# Usually handled by GitHub Actions (.github/workflows/deploy-workers.yml),
+# which deploys the platform workers first and fantasy-mcp in a dependent job.
+# Manual fallback — keep the same order: platform workers before the gateway,
+# so a new fantasy-mcp never sends normalized params to an old provider:
 corepack pnpm --dir workers/auth-worker exec wrangler deploy --env preview   # or --env prod
-corepack pnpm --dir workers/fantasy-mcp run deploy:preview                   # or deploy:prod
 corepack pnpm --dir workers/espn-client run deploy:preview                   # or deploy:prod
 corepack pnpm --dir workers/yahoo-client run deploy:preview                  # or deploy:prod
 corepack pnpm --dir workers/sleeper-client run deploy:preview                # or deploy:prod
+corepack pnpm --dir workers/fantasy-mcp run deploy:preview                   # or deploy:prod (last)
 ```
 
 Workers use custom routes via `api.flaim.app`:

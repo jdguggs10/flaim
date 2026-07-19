@@ -4,6 +4,14 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Roster Snapshot Contract (FLA-192)
+- **Fixed**: `get_roster` no longer conflates matchup weeks with ESPN's daily scoring periods. Passing a `week` for an ESPN baseball/basketball/hockey league previously returned a snapshot from early in the season (e.g. matchup week 15 → an April roster) presented as current; it now returns a corrective error naming the right selector.
+- **Added**: `as_of_date` (`YYYY-MM-DD`) selector for historical calendar-day rosters on ESPN and Yahoo daily sports. ESPN dates resolve through a validated season-calendar anchor (constant Eastern-time day-offset, off-days included, fail-closed on invariant violations); Yahoo daily sports now emit `;date=` instead of the football-only `;week=`.
+- **Added**: Sleeper historical weekly rosters (NFL weeks, NBA legs) from the matchups endpoint — frozen starters, derived bench, points, and player points — instead of silently ignoring `week`.
+- **Added**: Every roster response carries a `snapshot` block (`current` | `week` | `date`, plus `providerScoringPeriodId` diagnostics on ESPN); historical responses flag `acquisitionMetadataAvailable` / `reserveAndTaxiClassificationAvailable` when provider history omits that detail.
+- **Fixed**: Sleeper taxi-squad players are no longer misclassified as bench; current rosters now report a `taxi` list.
+- **Changed**: Worker deploys are ordered in CI — platform workers first, then the fantasy-mcp gateway — so contract changes can't race ahead of providers.
+
 ### Yahoo App Fingerprint Guard (FLA-133)
 - **Added**: Yahoo credential rows now record a non-secret fingerprint of the Yahoo app that minted the stored tokens (first 12 hex chars of SHA-256 of the client id — never the client id, secrets, or tokens). Stamped on reconnect and on every successful refresh, which backfills legacy rows.
 - **Added**: A pre-refresh guard skips the doomed Yahoo token call when the stored fingerprint doesn't match the runtime app and returns a coded `app_fingerprint_mismatch` reconnect-required error, so app-secret swaps no longer masquerade as generic refresh failures. Legacy rows without a fingerprint refresh as before.
