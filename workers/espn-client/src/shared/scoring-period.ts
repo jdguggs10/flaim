@@ -44,11 +44,12 @@ function dateOfDayIndex(dayIndex: number): string {
   return new Date(dayIndex * 86_400_000).toISOString().slice(0, 10);
 }
 
-// Anchors are cached for the isolate's lifetime by design: the day↔period
-// mapping is calendar-structural (a rescheduled game moves between periods;
-// it does not move a period's calendar date), so a season's anchor does not
-// go stale. Promises are cached so concurrent cold-isolate misses share one
-// calendar fetch; failed builds are evicted so later requests can retry.
+// Anchors are cached for the isolate's lifetime by design: ordinary
+// rescheduling moves a game between periods without changing the structural
+// day↔period offset. ESPN could theoretically extend a season's first/last
+// bounds after this build; accepting that short isolate-lifetime window avoids
+// repeatedly fetching the large calendar. Promises are cached so concurrent
+// cold-isolate misses share one fetch; failed builds are evicted for retries.
 const anchorCache = new Map<string, Promise<ScoringPeriodAnchor>>();
 
 /** Test hook: clear the per-isolate anchor cache. */
