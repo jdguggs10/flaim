@@ -104,6 +104,14 @@ corepack pnpm --dir web exec node scripts/backfill-resend-contacts.mjs --apply -
 
 React Email's preview server may add lockfile entries for its own bundled Next.js version. Those entries are isolated to the preview tooling; the Flaim web app should continue to resolve the app-pinned Next.js version. Keep the React Email preview packages pinned to exact versions so preview tooling upgrades do not silently churn the lockfile.
 
+## Personalization
+
+**Broadcasts must not depend on `{{{FIRST_NAME}}}` or other name merge fields.** Signup is email verification code only — no name field exists anywhere in the flow, so Resend contacts have no names to merge (verified against all production users, July 2026). A bare `{{{FIRST_NAME}}}` renders as an empty string for every recipient.
+
+- House style is a collective greeting: "Hey everyone," (as used in the July 2026 football send).
+- If a merge field is ever used, always include a fallback so it degrades safely: `{{{FIRST_NAME|there}}}`.
+- The contact backfill script above only matters if a name source is ever added to signup; until then there is nothing to backfill.
+
 ## Clerk templates
 
 Clerk should keep handling auth email. Production Clerk dashboard templates are customized directly in Clerk, then documented here so the dashboard state remains reproducible.
