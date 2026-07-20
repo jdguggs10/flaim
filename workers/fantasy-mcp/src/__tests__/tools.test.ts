@@ -896,16 +896,16 @@ describe('fantasy-mcp tools', () => {
     });
 
     const acceptanceMatrix = [
-      { platform: 'espn', sport: 'football', extra: { week: 5 }, snapshot: { type: 'week', week: 5 }, week: 5 },
-      { platform: 'yahoo', sport: 'football', extra: { week: 5 }, snapshot: { type: 'week', week: 5 }, week: 5 },
-      { platform: 'sleeper', sport: 'football', extra: { week: 9 }, snapshot: { type: 'week', week: 9 }, week: 9 },
-      { platform: 'sleeper', sport: 'basketball', extra: { week: 15 }, snapshot: { type: 'week', week: 15 }, week: 15 },
-      { platform: 'espn', sport: 'baseball', extra: { as_of_date: '2024-07-10' }, snapshot: { type: 'date', date: '2024-07-10' }, week: undefined },
-      { platform: 'yahoo', sport: 'hockey', extra: { as_of_date: '2024-01-05' }, snapshot: { type: 'date', date: '2024-01-05' }, week: undefined },
-      { platform: 'espn', sport: 'baseball', extra: {}, snapshot: { type: 'current' }, week: undefined },
+      { platform: 'espn', sport: 'football', extra: { week: 5 }, snapshot: { type: 'week', week: 5 } },
+      { platform: 'yahoo', sport: 'football', extra: { week: 5 }, snapshot: { type: 'week', week: 5 } },
+      { platform: 'sleeper', sport: 'football', extra: { week: 9 }, snapshot: { type: 'week', week: 9 } },
+      { platform: 'sleeper', sport: 'basketball', extra: { week: 15 }, snapshot: { type: 'week', week: 15 } },
+      { platform: 'espn', sport: 'baseball', extra: { as_of_date: '2024-07-10' }, snapshot: { type: 'date', date: '2024-07-10' } },
+      { platform: 'yahoo', sport: 'hockey', extra: { as_of_date: '2024-01-05' }, snapshot: { type: 'date', date: '2024-01-05' } },
+      { platform: 'espn', sport: 'baseball', extra: {}, snapshot: { type: 'current' } },
     ] as const;
 
-    it.each(acceptanceMatrix)('$platform $sport forwards normalized snapshot for $extra', async ({ platform, sport, extra, snapshot, week }) => {
+    it.each(acceptanceMatrix)('$platform $sport forwards only the normalized snapshot for $extra', async ({ platform, sport, extra, snapshot }) => {
       const routeToClientMock = routeToClient as MockedFunction<typeof routeToClient>;
       routeToClientMock.mockClear();
       routeToClientMock.mockResolvedValue({ success: true, data: { roster: [] } });
@@ -921,7 +921,7 @@ describe('fantasy-mcp tools', () => {
       expect(routeToClientMock).toHaveBeenCalledTimes(1);
       const forwarded = routeToClientMock.mock.calls[0][2] as unknown as Record<string, unknown>;
       expect(forwarded.snapshot).toEqual(snapshot);
-      expect(forwarded.week).toBe(week);
+      expect(forwarded).not.toHaveProperty('week');
       expect(forwarded.as_of_date).toBeUndefined();
     });
   });

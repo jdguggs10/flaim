@@ -1191,9 +1191,6 @@ export function getUnifiedTools(): UnifiedTool[] {
           league_id: args.league_id as string,
           season_year: args.season_year as number,
           team_id: args.team_id as string | undefined,
-          // Legacy field kept alongside the normalized snapshot for one deploy
-          // cycle of provider compatibility; providers prefer `snapshot`.
-          week: validation.snapshot.type === 'week' ? validation.snapshot.week : undefined,
           snapshot: validation.snapshot,
         };
 
