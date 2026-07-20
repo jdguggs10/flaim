@@ -87,8 +87,6 @@ CLERK_SECRET_KEY=sk_...
 AUTH_WORKER_URL=https://<auth-worker-subdomain>.workers.dev
 NEXT_PUBLIC_AUTH_WORKER_URL=https://api.flaim.app/auth
 NEXT_PUBLIC_FANTASY_MCP_URL=https://api.flaim.app/mcp
-# Shared internal token for server-to-worker helper calls
-INTERNAL_SERVICE_TOKEN=...
 ```
 
 For local development with workers, point to `http://localhost:8786` etc.
