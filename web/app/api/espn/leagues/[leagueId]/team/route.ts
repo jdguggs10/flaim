@@ -2,7 +2,7 @@
  * ESPN League Team Selection API Route
  * ---------------------------------------------------------------------------
  * Proxy to auth-worker PATCH /leagues/:leagueId/team endpoint.
- * Handles saving team selection for a specific league after auto-pull.
+ * Handles saving team selection for a specific ESPN league.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
