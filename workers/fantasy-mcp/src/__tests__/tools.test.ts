@@ -9,7 +9,7 @@ import {
   USER_SESSION_WIDGET_HTML,
   USER_SESSION_WIDGET_URI,
 } from '../widgets/user-session-widget';
-import { INTERNAL_SERVICE_TOKEN_HEADER } from '@flaim/worker-shared';
+import { INTERNAL_SERVICE_TOKEN_HEADER, toSnapshotMetadata, type RosterSnapshot } from '@flaim/worker-shared';
 
 /** Helper to cast an AnySchema value to z3 ZodTypeAny for .parse() in tests. */
 const asZod = (schema: unknown) => schema as z.ZodTypeAny;
@@ -860,10 +860,6 @@ describe('fantasy-mcp tools', () => {
     const baseArgs = { league_id: '123', season_year: 2024, team_id: '1' };
 
     const rejectionMatrix = [
-      { platform: 'espn', sport: 'baseball', extra: { week: 15 }, corrective: 'as_of_date' },
-      { platform: 'espn', sport: 'basketball', extra: { week: 3 }, corrective: 'as_of_date' },
-      { platform: 'espn', sport: 'hockey', extra: { week: 3 }, corrective: 'as_of_date' },
-      { platform: 'yahoo', sport: 'baseball', extra: { week: 15 }, corrective: 'as_of_date' },
       { platform: 'espn', sport: 'football', extra: { as_of_date: '2024-10-06' }, corrective: 'week' },
       { platform: 'yahoo', sport: 'football', extra: { as_of_date: '2024-10-06' }, corrective: 'week' },
       { platform: 'sleeper', sport: 'football', extra: { as_of_date: '2024-10-06' }, corrective: 'week' },
@@ -923,6 +919,108 @@ describe('fantasy-mcp tools', () => {
       expect(forwarded.snapshot).toEqual(snapshot);
       expect(forwarded).not.toHaveProperty('week');
       expect(forwarded.as_of_date).toBeUndefined();
+    });
+
+    // Published-client compatibility (FLA-209): clients pinned to an older
+    // tool schema still send `week` for daily sports and cannot send
+    // `as_of_date`. Those requests normalize to a current-roster snapshot
+    // carrying the ignored selector instead of erroring.
+    describe('published-client week compatibility (FLA-209)', () => {
+      const compatMatrix = [
+        { platform: 'espn', sport: 'baseball', week: 15 },
+        { platform: 'espn', sport: 'basketball', week: 3 },
+        { platform: 'espn', sport: 'hockey', week: 3 },
+        { platform: 'yahoo', sport: 'baseball', week: 15 },
+        { platform: 'yahoo', sport: 'basketball', week: 7 },
+        { platform: 'yahoo', sport: 'hockey', week: 3 },
+      ] as const;
+
+      it.each(compatMatrix)('$platform $sport week $week normalizes to a current snapshot instead of rejecting', async ({ platform, sport, week }) => {
+        const routeToClientMock = routeToClient as MockedFunction<typeof routeToClient>;
+        routeToClientMock.mockClear();
+        routeToClientMock.mockResolvedValue({ success: true, data: { roster: [] } });
+
+        const result = await rosterTool().handler(
+          { ...baseArgs, platform, sport, week },
+          {} as Env,
+          'Bearer token',
+          'corr-1'
+        );
+
+        expect(result.isError).toBeUndefined();
+        expect(routeToClientMock).toHaveBeenCalledTimes(1);
+        const forwarded = routeToClientMock.mock.calls[0][2] as unknown as Record<string, unknown>;
+        expect(forwarded.snapshot).toEqual({ type: 'current', requestedWeek: week });
+        expect(forwarded).not.toHaveProperty('week');
+      });
+
+      it('published-client request shape surfaces the ignored-week note end to end', async () => {
+        const routeToClientMock = routeToClient as MockedFunction<typeof routeToClient>;
+        routeToClientMock.mockClear();
+        // The platform worker builds the response snapshot block from the
+        // forwarded snapshot via shared toSnapshotMetadata; mirror that here.
+        routeToClientMock.mockImplementation(async (_env, _tool, params) => {
+          const forwarded = params as unknown as { snapshot: RosterSnapshot };
+          return {
+            success: true,
+            data: { roster: [], snapshot: toSnapshotMetadata(forwarded.snapshot) },
+          };
+        });
+
+        // Exact argument shape a pinned published client sends for baseball.
+        const result = await rosterTool().handler(
+          { platform: 'espn', sport: 'baseball', league_id: '123', season_year: 2024, week: 15 },
+          {} as Env,
+          'Bearer token',
+          'corr-1'
+        );
+
+        expect(result.isError).toBeUndefined();
+        const payload = JSON.parse(result.content?.[0]?.text as string) as {
+          success?: boolean;
+          data?: { snapshot?: { type?: string; requested_week?: number; note?: string } };
+        };
+        expect(payload.success).toBe(true);
+        expect(payload.data?.snapshot?.type).toBe('current');
+        expect(payload.data?.snapshot?.requested_week).toBe(15);
+        expect(payload.data?.snapshot?.note).toContain('current roster');
+        expect(payload.data?.snapshot?.note).toContain('as_of_date');
+      });
+
+      it('week alongside as_of_date on a daily sport still rejects without routing', async () => {
+        const routeToClientMock = routeToClient as MockedFunction<typeof routeToClient>;
+        routeToClientMock.mockClear();
+
+        const result = await rosterTool().handler(
+          { ...baseArgs, platform: 'espn', sport: 'baseball', week: 15, as_of_date: '2024-07-10' },
+          {} as Env,
+          'Bearer token',
+          'corr-1'
+        );
+
+        expect(result.isError).toBe(true);
+        const payload = result.structuredContent as { code?: string };
+        expect(payload.code).toBe('INVALID_ROSTER_SNAPSHOT_SELECTOR');
+        expect(routeToClientMock).not.toHaveBeenCalled();
+      });
+
+      it.each([{ week: 0 }, { week: 1.5 }])('malformed week $week on a daily sport still rejects without routing', async ({ week }) => {
+        const routeToClientMock = routeToClient as MockedFunction<typeof routeToClient>;
+        routeToClientMock.mockClear();
+
+        const result = await rosterTool().handler(
+          { ...baseArgs, platform: 'espn', sport: 'baseball', week },
+          {} as Env,
+          'Bearer token',
+          'corr-1'
+        );
+
+        expect(result.isError).toBe(true);
+        const payload = result.structuredContent as { code?: string; error?: string };
+        expect(payload.code).toBe('INVALID_ROSTER_SNAPSHOT_SELECTOR');
+        expect(payload.error).toContain('positive integer');
+        expect(routeToClientMock).not.toHaveBeenCalled();
+      });
     });
   });
 

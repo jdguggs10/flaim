@@ -1194,7 +1194,12 @@ export function getUnifiedTools(): UnifiedTool[] {
           snapshot: validation.snapshot,
         };
 
-        return withToolLogging(correlationId, 'get_roster', `${params.platform} ${params.sport} league=provided team=${params.team_id ? 'provided' : 'self'} snapshot=${validation.snapshot.type}`, async () => {
+        // Published-client compatibility (FLA-209): a normalized week shows up
+        // in logs so shim traffic stays visible.
+        const snapshotLog = validation.snapshot.type === 'current' && validation.snapshot.requestedWeek !== undefined
+          ? `current(week ${validation.snapshot.requestedWeek} normalized)`
+          : validation.snapshot.type;
+        return withToolLogging(correlationId, 'get_roster', `${params.platform} ${params.sport} league=provided team=${params.team_id ? 'provided' : 'self'} snapshot=${snapshotLog}`, async () => {
           const result = await routeToClient(env, 'get_roster', params, authHeader, correlationId, evalRunId, evalTraceId);
           return routeResultToMcp(result);
         }, evalRunId, evalTraceId);
