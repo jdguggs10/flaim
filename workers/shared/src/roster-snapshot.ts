@@ -7,9 +7,16 @@ import { ErrorCode } from './errors.js';
  * this discriminated value into routed params; platform workers re-derive it
  * defensively at their /execute boundary (get_roster only) so handlers never
  * consume a raw `week` again.
+ *
+ * `requestedWeek` on the 'current' variant is the published-client
+ * compatibility marker (FLA-209): clients pinned to an older tool schema
+ * (where `week` was valid for every sport) still send `week` for daily
+ * sports and cannot send `as_of_date`. Such requests normalize to the
+ * current roster, and the ignored selector is preserved here so response
+ * metadata can state explicitly what happened.
  */
 export type RosterSnapshot =
-  | { type: 'current' }
+  | { type: 'current'; requestedWeek?: number }
   | { type: 'week'; week: number }
   | { type: 'date'; date: string };
 
@@ -113,6 +120,13 @@ export function validateRosterSnapshotInput(
     if (!Number.isInteger(week) || week < 1) {
       return reject(`week must be a positive integer (received ${week}).`);
     }
+    if (capability === 'date') {
+      // Published-client compatibility (FLA-209): clients pinned to an older
+      // tool schema still send `week` for daily sports and cannot send
+      // `as_of_date`. Serve the current roster instead of erroring, carrying
+      // the ignored selector so response metadata surfaces what happened.
+      return { ok: true, snapshot: { type: 'current', requestedWeek: week } };
+    }
     if (capability !== 'week') {
       return reject('week is not a valid selector here.');
     }
@@ -145,14 +159,20 @@ function parseSnapshotShape(candidate: unknown): RosterSnapshot | null {
     case 'current':
       // A "current" snapshot carrying selector fields signals a confused
       // producer; refuse it rather than guess which intent wins.
-      return snap.week === undefined && snap.date === undefined ? { type: 'current' } : null;
+      if (snap.week !== undefined || snap.date !== undefined) return null;
+      if (snap.requestedWeek === undefined) return { type: 'current' };
+      // Published-client compatibility marker (FLA-209): preserve the
+      // gateway-normalized ignored week so metadata can report it.
+      return Number.isInteger(snap.requestedWeek) && (snap.requestedWeek as number) >= 1
+        ? { type: 'current', requestedWeek: snap.requestedWeek as number }
+        : null;
     case 'week':
-      if (snap.date !== undefined) return null;
+      if (snap.date !== undefined || snap.requestedWeek !== undefined) return null;
       return Number.isInteger(snap.week) && (snap.week as number) >= 1
         ? { type: 'week', week: snap.week as number }
         : null;
     case 'date':
-      if (snap.week !== undefined) return null;
+      if (snap.week !== undefined || snap.requestedWeek !== undefined) return null;
       return typeof snap.date === 'string' && isCalendarValidDate(snap.date)
         ? { type: 'date', date: snap.date }
         : null;
@@ -220,12 +240,21 @@ export function malformedRosterSnapshotError(): {
   };
 }
 
-/** Normalized snapshot response block shared by all roster payloads. */
+/**
+ * Normalized snapshot response block shared by all roster payloads. A
+ * current snapshot produced by the published-client week shim (FLA-209)
+ * additionally reports `requested_week` and a human-readable `note` so the
+ * model can see the selector was ignored rather than silently honored.
+ */
 export function toSnapshotMetadata(
   snapshot: RosterSnapshot,
   extras?: { providerScoringPeriodId?: number }
 ): Record<string, unknown> {
   const base: Record<string, unknown> = { type: snapshot.type };
+  if (snapshot.type === 'current' && snapshot.requestedWeek !== undefined) {
+    base.requested_week = snapshot.requestedWeek;
+    base.note = `The requested week ${snapshot.requestedWeek} selector was ignored: this platform and sport track roster history by date, not week, so the current roster was returned. For a historical roster, pass as_of_date (YYYY-MM-DD) instead.`;
+  }
   if (snapshot.type === 'week') base.week = snapshot.week;
   if (snapshot.type === 'date') base.date = snapshot.date;
   if (extras?.providerScoringPeriodId !== undefined) {

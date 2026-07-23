@@ -4,6 +4,9 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Published-Client Week Compatibility for Daily-Sport Rosters (FLA-209)
+- **Changed**: `get_roster` no longer rejects a well-formed `week` on ESPN/Yahoo daily sports (baseball, basketball, hockey). Clients pinned to an older tool schema — where `week` was valid for every sport — can only send `week`, so those requests now return the current roster instead of an `INVALID_ROSTER_SNAPSHOT_SELECTOR` error. The response's `snapshot` block reports `requested_week` and a human-readable `note` stating the week selector was ignored because the sport tracks roster history by date (`as_of_date`), so nothing is silently dropped. All other validation is unchanged: `week` + `as_of_date` together, malformed weeks, wrong-selector `as_of_date` on weekly sports, and unsupported sports still return corrective errors. This behavior must remain until no published client depends on the week-for-daily-sports request shape.
+
 ### Roster Snapshot Contract (FLA-192)
 - **Fixed**: `get_roster` no longer conflates matchup weeks with ESPN's daily scoring periods. Passing a `week` for an ESPN baseball/basketball/hockey league previously returned a snapshot from early in the season (e.g. matchup week 15 → an April roster) presented as current; it now returns a corrective error naming the right selector.
 - **Added**: `as_of_date` (`YYYY-MM-DD`) selector for historical calendar-day rosters on ESPN and Yahoo daily sports. ESPN dates resolve through a validated season-calendar anchor (constant Eastern-time day-offset, off-days included, fail-closed on invariant violations); Yahoo daily sports now emit `;date=` instead of the football-only `;week=`.

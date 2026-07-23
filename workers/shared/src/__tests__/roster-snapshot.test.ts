@@ -59,11 +59,11 @@ describe('validateRosterSnapshotInput', () => {
   }> = [
     { label: 'no selector -> current', platform: 'espn', sport: 'baseball', expect: 'current' },
     { label: 'espn football week ok', platform: 'espn', sport: 'football', week: 5, expect: 'week' },
-    { label: 'espn baseball week rejected', platform: 'espn', sport: 'baseball', week: 15, expect: 'reject' },
+    { label: 'espn baseball week normalized to current (published-client compat)', platform: 'espn', sport: 'baseball', week: 15, expect: 'current' },
     { label: 'espn baseball date ok', platform: 'espn', sport: 'baseball', date: '2026-07-10', expect: 'date' },
     { label: 'espn football date rejected', platform: 'espn', sport: 'football', date: '2026-07-10', expect: 'reject' },
     { label: 'yahoo hockey date ok', platform: 'yahoo', sport: 'hockey', date: '2026-01-05', expect: 'date' },
-    { label: 'yahoo hockey week rejected', platform: 'yahoo', sport: 'hockey', week: 3, expect: 'reject' },
+    { label: 'yahoo hockey week normalized to current (published-client compat)', platform: 'yahoo', sport: 'hockey', week: 3, expect: 'current' },
     { label: 'sleeper football week ok', platform: 'sleeper', sport: 'football', week: 9, expect: 'week' },
     { label: 'sleeper basketball week ok', platform: 'sleeper', sport: 'basketball', week: 15, expect: 'week' },
     { label: 'sleeper basketball date rejected', platform: 'sleeper', sport: 'basketball', date: '2026-01-05', expect: 'reject' },
@@ -91,9 +91,9 @@ describe('validateRosterSnapshotInput', () => {
   });
 
   it('corrective error names the valid selector', () => {
-    const weekOnDaily = validateRosterSnapshotInput('espn', 'baseball', 15, undefined);
-    expect(weekOnDaily.ok).toBe(false);
-    if (!weekOnDaily.ok) expect(weekOnDaily.error).toContain('as_of_date');
+    const bothOnDaily = validateRosterSnapshotInput('espn', 'baseball', 15, '2026-07-10');
+    expect(bothOnDaily.ok).toBe(false);
+    if (!bothOnDaily.ok) expect(bothOnDaily.error).toContain('as_of_date');
 
     const dateOnFootball = validateRosterSnapshotInput('yahoo', 'football', undefined, '2026-07-10');
     expect(dateOnFootball.ok).toBe(false);
@@ -108,6 +108,76 @@ describe('validateRosterSnapshotInput', () => {
       expect(result.error).toContain('does not support baseball');
       expect(result.error).not.toContain('current roster');
     }
+  });
+});
+
+// Published-client compatibility (FLA-209): clients pinned to an older tool
+// schema still send `week` for daily sports and cannot send `as_of_date`.
+// A well-formed week on a date-capability sport normalizes to the current
+// roster with the ignored selector carried in metadata — never silently.
+describe('published-client week compatibility (FLA-209)', () => {
+  const dailyCases: Array<[string, SeasonSport, number]> = [
+    ['espn', 'baseball', 15],
+    ['espn', 'basketball', 3],
+    ['espn', 'hockey', 3],
+    ['yahoo', 'baseball', 15],
+    ['yahoo', 'basketball', 7],
+    ['yahoo', 'hockey', 3],
+  ];
+
+  it.each(dailyCases)('%s %s week %i -> current snapshot carrying requestedWeek', (platform, sport, week) => {
+    const result = validateRosterSnapshotInput(platform, sport, week, undefined);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.snapshot).toEqual({ type: 'current', requestedWeek: week });
+    }
+  });
+
+  it('week-capability sports still get a week snapshot, not the shim', () => {
+    for (const platform of ['espn', 'yahoo', 'sleeper']) {
+      const result = validateRosterSnapshotInput(platform, 'football', 5, undefined);
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.snapshot).toEqual({ type: 'week', week: 5 });
+    }
+  });
+
+  it('week alongside as_of_date on a daily sport still rejects', () => {
+    const result = validateRosterSnapshotInput('espn', 'baseball', 15, '2026-07-10');
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.code).toBe('INVALID_ROSTER_SNAPSHOT_SELECTOR');
+  });
+
+  it.each([[0], [-2], [1.5], [Number.NaN]])('malformed week %d on a daily sport still rejects', (week) => {
+    const result = validateRosterSnapshotInput('espn', 'baseball', week, undefined);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.code).toBe('INVALID_ROSTER_SNAPSHOT_SELECTOR');
+      expect(result.error).toContain('positive integer');
+    }
+  });
+
+  it('metadata reports the ignored selector with a human-readable note', () => {
+    const metadata = toSnapshotMetadata({ type: 'current', requestedWeek: 15 });
+    expect(metadata.type).toBe('current');
+    expect(metadata.requested_week).toBe(15);
+    expect(metadata.note).toContain('week 15');
+    expect(metadata.note).toContain('current roster');
+    expect(metadata.note).toContain('as_of_date');
+  });
+
+  it('worker re-derivation preserves the normalized-week marker', () => {
+    expect(resolveRosterSnapshotFromParams({ snapshot: { type: 'current', requestedWeek: 15 } }))
+      .toEqual({ type: 'current', requestedWeek: 15 });
+  });
+
+  it.each([
+    ['zero requestedWeek', { type: 'current', requestedWeek: 0 }],
+    ['fractional requestedWeek', { type: 'current', requestedWeek: 1.5 }],
+    ['non-numeric requestedWeek', { type: 'current', requestedWeek: '15' }],
+    ['requestedWeek on a week snapshot', { type: 'week', week: 5, requestedWeek: 15 }],
+    ['requestedWeek on a date snapshot', { type: 'date', date: '2026-07-10', requestedWeek: 15 }],
+  ])('worker re-derivation rejects %s', (_label, snapshot) => {
+    expect(resolveRosterSnapshotFromParams({ snapshot })).toBeNull();
   });
 });
 
