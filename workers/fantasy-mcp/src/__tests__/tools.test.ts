@@ -6,6 +6,7 @@ import type { Env } from '../types';
 import { routeToClient } from '../router';
 import {
   classifyRefreshResult,
+  LEGACY_USER_SESSION_WIDGET_URI,
   USER_SESSION_WIDGET_HTML,
   USER_SESSION_WIDGET_URI,
 } from '../widgets/user-session-widget';
@@ -96,10 +97,12 @@ describe('fantasy-mcp tools', () => {
     // structuredContent mirrors the text payload
     expect(result.structuredContent).toBeDefined();
     expect((result.structuredContent as Record<string, unknown>).totalLeaguesFound).toBe(0);
-    expect(result._meta?.ui).toEqual({ resourceUri: USER_SESSION_WIDGET_URI });
-    expect(result._meta?.['openai/outputTemplate']).toBe(USER_SESSION_WIDGET_URI);
-    expect(result._meta?.['openai/widgetAccessible']).toBe(true);
-    expect(result._meta?.['openai/resultCanProduceWidget']).toBe(true);
+    // Template linkage belongs to the frozen tool descriptor. Returning it
+    // here could override the descriptor used by a published client.
+    expect(result._meta?.ui).toBeUndefined();
+    expect(result._meta?.['openai/outputTemplate']).toBeUndefined();
+    expect(result._meta?.['openai/widgetAccessible']).toBeUndefined();
+    expect(result._meta?.['openai/resultCanProduceWidget']).toBeUndefined();
   });
 
   it('get_user_session keeps canonical current-season labels in the session payload', async () => {
@@ -134,7 +137,10 @@ describe('fantasy-mcp tools', () => {
 
   it('get_user_session includes widgetUri in tool definition', () => {
     const tool = getUnifiedTools().find((t) => t.name === 'get_user_session');
+    expect(LEGACY_USER_SESSION_WIDGET_URI).toBe('ui://widget/user-session.html');
+    expect(USER_SESSION_WIDGET_URI).toBe('ui://widget/user-session-v2.html');
     expect(tool?.widgetUri).toBe(USER_SESSION_WIDGET_URI);
+    expect(tool?.widgetUri).not.toBe(LEGACY_USER_SESSION_WIDGET_URI);
   });
 
   it('user session widget declares the MCP Apps lifecycle messages', () => {

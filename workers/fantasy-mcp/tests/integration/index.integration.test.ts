@@ -2,7 +2,11 @@ import { describe, expect, it, vi } from 'vitest';
 import app from '../../src/index';
 import type { Env } from '../../src/types';
 import { getUnifiedTools, type UnifiedTool } from '../../src/mcp/tools';
-import { USER_SESSION_WIDGET_URI } from '../../src/widgets/user-session-widget';
+import {
+  LEGACY_USER_SESSION_WIDGET_URI,
+  USER_SESSION_WIDGET_HTML,
+  USER_SESSION_WIDGET_URI,
+} from '../../src/widgets/user-session-widget';
 import { INTERNAL_SERVICE_TOKEN_HEADER, getDefaultSeasonYear } from '@flaim/worker-shared';
 
 // Mock the tools module so a single test can inject a custom tool (e.g. a
@@ -42,6 +46,27 @@ function buildMcpJsonRpcRequest(
   });
 }
 
+function buildUnauthenticatedMcpJsonRpcRequest(
+  pathname: '/mcp' | '/fantasy/mcp',
+  method: string,
+  params: Record<string, unknown> = {},
+  id = 'unauthenticated-wire-test-1'
+): Request {
+  return new Request(`https://api.flaim.app${pathname}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json, text/event-stream',
+    },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id,
+      method,
+      params,
+    }),
+  });
+}
+
 function buildMcpGetRequest(pathname: '/mcp' | '/fantasy/mcp'): Request {
   return new Request(`https://api.flaim.app${pathname}`, {
     method: 'GET',
@@ -52,6 +77,10 @@ function buildMcpGetRequest(pathname: '/mcp' | '/fantasy/mcp'): Request {
 }
 
 type JsonRpcTestPayload = {
+  error?: {
+    code?: number;
+    message?: string;
+  };
   result?: {
     tools?: Array<{
       name: string;
@@ -357,6 +386,7 @@ describe('fantasy-mcp gateway integration', () => {
     expect(userSessionTool).toBeDefined();
     expect(userSessionTool?._meta?.ui).toEqual({ resourceUri: USER_SESSION_WIDGET_URI });
     expect(userSessionTool?._meta?.['openai/outputTemplate']).toBe(USER_SESSION_WIDGET_URI);
+    expect(userSessionTool?._meta?.ui?.resourceUri).not.toBe(LEGACY_USER_SESSION_WIDGET_URI);
     expect(userSessionTool?._meta?.['openai/widgetAccessible']).toBe(true);
     expect(userSessionTool?._meta?.['openai/resultCanProduceWidget']).toBe(true);
     expect(userSessionTool?._meta?.['openai/widgetDomain']).toBeUndefined();
@@ -406,34 +436,181 @@ describe('fantasy-mcp gateway integration', () => {
     );
     expect(listResponse.status).toBe(200);
     const listPayload = await parseJsonRpcResponse(listResponse);
-    const resource = listPayload.result?.resources?.find((item) => item.uri === USER_SESSION_WIDGET_URI);
-    expect(resource).toBeDefined();
-    expect(resource?.mimeType).toBe('text/html;profile=mcp-app');
+    const expectedUris = [LEGACY_USER_SESSION_WIDGET_URI, USER_SESSION_WIDGET_URI];
+    expect(new Set(listPayload.result?.resources?.map((item) => item.uri))).toEqual(
+      new Set(expectedUris)
+    );
+
+    const widgetBodies: string[] = [];
+    for (const [index, uri] of expectedUris.entries()) {
+      const resource = listPayload.result?.resources?.find((item) => item.uri === uri);
+      expect(resource).toBeDefined();
+      expect(resource?.mimeType).toBe('text/html;profile=mcp-app');
+
+      const readResponse = await app.fetch(
+        buildMcpJsonRpcRequest(
+          '/mcp',
+          'resources/read',
+          { uri },
+          `resources-read-${index + 1}`
+        ),
+        env,
+        mockExecutionContext()
+      );
+      expect(readResponse.status).toBe(200);
+      const readPayload = await parseJsonRpcResponse(readResponse);
+      const content = readPayload.result?.contents?.find((item) => item.uri === uri);
+      expect(content?.mimeType).toBe('text/html;profile=mcp-app');
+      expect(content?.text).toContain('<title>Flaim</title>');
+      expect(content?.text).toBe(USER_SESSION_WIDGET_HTML);
+      widgetBodies.push(content?.text || '');
+      expect(content?._meta?.ui?.csp?.connectDomains).toEqual([]);
+      expect(content?._meta?.ui?.csp?.resourceDomains).toEqual([]);
+      expect(content?._meta?.ui?.domain).toBeUndefined();
+      expect(content?._meta?.['openai/widgetDomain']).toBeUndefined();
+      expect(content?._meta?.['openai/widgetCSP']).toEqual({
+        connect_domains: [],
+        resource_domains: [],
+        redirect_domains: ['https://flaim.app'],
+      });
+    }
+    expect(widgetBodies).toHaveLength(2);
+    expect(widgetBodies[0]).toBe(widgetBodies[1]);
+    expect(authFetch).not.toHaveBeenCalled();
+  });
+
+  it('serves only the two static widget resources without authorization', async () => {
+    const authFetch = vi.fn();
+    const env = buildEnv(authFetch);
+    const expectedUris = [LEGACY_USER_SESSION_WIDGET_URI, USER_SESSION_WIDGET_URI];
+
+    const listResponse = await app.fetch(
+      buildUnauthenticatedMcpJsonRpcRequest('/mcp', 'resources/list'),
+      env,
+      mockExecutionContext()
+    );
+    expect(listResponse.status).toBe(200);
+    const listPayload = await parseJsonRpcResponse(listResponse);
+    expect(listPayload.result?.resources?.map((item) => item.uri).sort()).toEqual(
+      [...expectedUris].sort()
+    );
+
+    const widgetBodies: string[] = [];
+    for (const [index, uri] of expectedUris.entries()) {
+      const readResponse = await app.fetch(
+        buildUnauthenticatedMcpJsonRpcRequest(
+          '/mcp',
+          'resources/read',
+          { uri },
+          `unauthenticated-resources-read-${index + 1}`
+        ),
+        env,
+        mockExecutionContext()
+      );
+      expect(readResponse.status).toBe(200);
+      const readPayload = await parseJsonRpcResponse(readResponse);
+      const content = readPayload.result?.contents?.find((item) => item.uri === uri);
+      expect(content?.mimeType).toBe('text/html;profile=mcp-app');
+      expect(content?.text).toBe(USER_SESSION_WIDGET_HTML);
+      widgetBodies.push(content?.text || '');
+    }
+    expect(widgetBodies).toHaveLength(2);
+    expect(widgetBodies[0]).toBe(widgetBodies[1]);
+    expect(authFetch).not.toHaveBeenCalled();
+  });
+
+  it('serves a known static resource despite an invalid incidental bearer but still rejects tools', async () => {
+    const authFetch = vi.fn(async () => new Response('invalid token', { status: 401 }));
+    const env = buildEnv(authFetch);
 
     const readResponse = await app.fetch(
       buildMcpJsonRpcRequest(
         '/mcp',
         'resources/read',
         { uri: USER_SESSION_WIDGET_URI },
-        'resources-read-1'
+        'invalid-bearer-static-resource'
       ),
       env,
       mockExecutionContext()
     );
     expect(readResponse.status).toBe(200);
     const readPayload = await parseJsonRpcResponse(readResponse);
-    const content = readPayload.result?.contents?.find((item) => item.uri === USER_SESSION_WIDGET_URI);
+    const content = readPayload.result?.contents?.find(
+      (item) => item.uri === USER_SESSION_WIDGET_URI
+    );
     expect(content?.mimeType).toBe('text/html;profile=mcp-app');
-    expect(content?.text).toContain('<title>Flaim</title>');
-    expect(content?._meta?.ui?.csp?.connectDomains).toEqual([]);
-    expect(content?._meta?.ui?.csp?.resourceDomains).toEqual([]);
-    expect(content?._meta?.ui?.domain).toBeUndefined();
-    expect(content?._meta?.['openai/widgetDomain']).toBeUndefined();
-    expect(content?._meta?.['openai/widgetCSP']).toEqual({
-      connect_domains: [],
-      resource_domains: [],
-      redirect_domains: ['https://flaim.app'],
-    });
+    expect(content?.text).toBe(USER_SESSION_WIDGET_HTML);
+    expect(authFetch).not.toHaveBeenCalled();
+
+    const toolResponse = await app.fetch(
+      buildMcpJsonRpcRequest(
+        '/mcp',
+        'tools/call',
+        { name: 'get_user_session', arguments: {} },
+        'invalid-bearer-user-data-tool'
+      ),
+      env,
+      mockExecutionContext()
+    );
+    expect(toolResponse.status).toBe(401);
+    expect(toolResponse.headers.get('WWW-Authenticate')).toContain(
+      'resource_metadata="https://api.flaim.app/.well-known/oauth-protected-resource"'
+    );
+    expect(authFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps unknown resources and user-data tools protected without authorization', async () => {
+    const authFetch = vi.fn();
+    const env = buildEnv(authFetch);
+
+    const requests = [
+      buildUnauthenticatedMcpJsonRpcRequest(
+        '/mcp',
+        'resources/read',
+        { uri: 'ui://widget/user-session-v999.html' },
+        'unauthenticated-unknown-resource'
+      ),
+      buildUnauthenticatedMcpJsonRpcRequest(
+        '/mcp',
+        'tools/call',
+        { name: 'get_user_session', arguments: {} },
+        'unauthenticated-user-data-tool'
+      ),
+    ];
+
+    for (const request of requests) {
+      const response = await app.fetch(request, env, mockExecutionContext());
+      expect(response.status).toBe(401);
+      expect(response.headers.get('WWW-Authenticate')).toContain(
+        'resource_metadata="https://api.flaim.app/.well-known/oauth-protected-resource"'
+      );
+    }
+    expect(authFetch).not.toHaveBeenCalled();
+  });
+
+  it('rejects unknown widget resource URIs', async () => {
+    const authFetch = vi.fn(async () =>
+      new Response(JSON.stringify({ valid: true, userId: 'user-123', scope: 'mcp:read mcp:write', authType: 'oauth' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    );
+    const env = buildEnv(authFetch);
+
+    const response = await app.fetch(
+      buildMcpJsonRpcRequest(
+        '/mcp',
+        'resources/read',
+        { uri: 'ui://widget/user-session-v999.html' },
+        'resources-read-unknown'
+      ),
+      env,
+      mockExecutionContext()
+    );
+    expect(response.status).toBe(200);
+    const payload = await parseJsonRpcResponse(response);
+    expect(payload.error?.code).toBe(-32602);
+    expect(payload.error?.message).toContain('ui://widget/user-session-v999.html not found');
   });
 
   it('fails closed with 401 when introspection returns non-OK', async () => {

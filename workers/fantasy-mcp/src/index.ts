@@ -15,7 +15,11 @@ import {
 import type { Env } from './types';
 import { createFantasyMcpServer } from './mcp/server';
 import { createMcpHandler } from './mcp/create-mcp-handler';
-import { isPublicMcpHandshakeRequest, normalizeMcpAcceptHeader } from './mcp/auth-gate';
+import {
+  isPublicMcpHandshakeRequest,
+  isPublicStaticWidgetResourceRequest,
+  normalizeMcpAcceptHeader,
+} from './mcp/auth-gate';
 import { logRequestBoundary } from './logging';
 import { buildMcpAuthErrorResponse } from './auth-response';
 import { USER_SESSION_WIDGET_HTML } from './widgets/user-session-widget';
@@ -281,8 +285,15 @@ async function handleMcpRequest(c: Context<{ Bindings: Env }>): Promise<Response
   });
 
   const authHeader = c.req.header('Authorization');
-  const allowPublicHandshake = !authHeader && await isPublicMcpHandshakeRequest(c.req.raw);
-  if (!authHeader && !allowPublicHandshake) {
+  // Static widget resources are public based on method + exact URI, even when
+  // a client happens to attach a stale bearer token. User-data paths still
+  // require normal token introspection.
+  const allowPublicStaticResource = await isPublicStaticWidgetResourceRequest(c.req.raw);
+  const allowPublicHandshake =
+    !authHeader &&
+    !allowPublicStaticResource &&
+    await isPublicMcpHandshakeRequest(c.req.raw);
+  if (!authHeader && !allowPublicHandshake && !allowPublicStaticResource) {
     if (await isAuthenticatedMcpToolAttemptRequest(c.req.raw)) {
       logFantasySetupFailure(c, 'auth_trust_path_failed', {
         component: 'mcp-auth',
@@ -307,7 +318,7 @@ async function handleMcpRequest(c: Context<{ Bindings: Env }>): Promise<Response
   let userId: string | undefined;
   let authType: 'clerk' | 'oauth' | 'eval-api-key' | 'demo-api-key' | undefined;
   let clientName: string | null = null;
-  if (authHeader) {
+  if (authHeader && !allowPublicStaticResource) {
     try {
       const introspectRes = await c.env.AUTH_WORKER.fetch(
         new Request('https://internal/internal/introspect', {
@@ -430,6 +441,7 @@ async function handleMcpRequest(c: Context<{ Bindings: Env }>): Promise<Response
     userId,
     authType,
     clientName,
+    staticResourcesOnly: allowPublicStaticResource,
     executionCtx: c.executionCtx,
   });
   const handler = createMcpHandler(server, { enableJsonResponse: false });
