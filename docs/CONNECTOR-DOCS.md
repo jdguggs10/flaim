@@ -24,7 +24,7 @@ Flaim cannot place trades, add/drop players, or modify league settings.
 
 1. Create an account at `https://flaim.app`.
 2. Add fantasy credentials:
-   - ESPN: install the Chrome extension and click Sync, or enter cookies manually in the Flaim UI.
+   - ESPN: install the Chrome extension and click Sync.
    - Yahoo: connect via OAuth in the Flaim UI (if applicable for your setup).
    - Sleeper: connect your Sleeper username in the Flaim UI.
 3. Visit `https://flaim.app/leagues` and set a **default** league (recommended).
@@ -100,8 +100,8 @@ Analysis tools are read-only. `refresh_leagues` requires `mcp:write` because it 
 - `get_ancient_history` (historical branch for non-current seasons or inactive leagues)
 
 Supported today: ESPN, Yahoo, and Sleeper.
-Sleeper support is currently football + basketball (Phase 1).
-`get_transactions` note: ESPN/Sleeper support week filtering; Yahoo ignores explicit `week` and uses a recent 14-day timestamp window. Yahoo `type=waiver` filtering is not supported in v1.
+Sleeper supports football and basketball.
+`get_transactions` note: ESPN/Sleeper support week filtering; Yahoo ignores explicit `week` and uses a recent 14-day timestamp window for completed league transactions. On Yahoo, `type=waiver` and `type=pending_trade` return pending items for the authenticated user's own team.
 `get_free_agents` note: ESPN and Yahoo include ownership percentages and sort by ownership. Sleeper returns available-player identities without ownership percentages.
 `get_players` note: ESPN and Yahoo may return league ownership fields (`league_status`, `league_team_name`, `league_owner_name`) when available. Sleeper returns identity with unavailable ownership context. If league ownership fields are absent, null, or unavailable, verify with `get_league_info` plus `get_roster`.
 
@@ -133,16 +133,15 @@ These are intentionally short and easy to copy/paste.
    - “Show week 8 transactions for ESPN football league 12345678 in 2025.”
    - “Show recent Yahoo transactions for league 423.l.193847 in 2025 (adds/drops/trades).”
 
-For Yahoo in v1, avoid requesting `type=waiver` and avoid relying on explicit `week` filtering:
+For Yahoo, avoid relying on explicit `week` filtering:
 - Yahoo ignores explicit `week` and always uses a recent 14-day timestamp window.
-- Yahoo `type=waiver` filtering is intentionally unsupported in v1.
+- Yahoo `type=waiver` and `type=pending_trade` return pending items for the authenticated user's own team; other supported types use Yahoo's recent league transaction feed.
 
 ## Troubleshooting
 
 - **“Authentication required” / “token expired”**: re-run the client’s connect flow (Gemini CLI: `/mcp auth flaim`; manual MCP clients: click Connect and approve when prompted).
-- **ESPN stopped working**: ESPN session cookies expire periodically; re-sync using the extension (or re-enter cookies).
+- **ESPN stopped working**: re-sync using the extension, then confirm the league appears at `https://flaim.app/leagues`.
 - **No default league**: set one at `https://flaim.app/leagues` to avoid needing to specify IDs in prompts.
-- **Rate limits**: Flaim enforces a per-user daily call limit.
 - **`redirect_uri is not in the allowed list`**: your MCP client is sending an unsupported loopback path. Pin `"redirectUri": "http://127.0.0.1:7778/oauth/callback"` in your MCP config (any port works; only the path matters).
 
 ## Privacy + Support

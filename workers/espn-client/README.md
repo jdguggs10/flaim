@@ -49,7 +49,7 @@ interface ExecuteRequest {
 }
 ```
 
-`/execute` reads end-user auth from the HTTP `Authorization` header and requires `X-Flaim-Internal-Token` for internal calls. Manual ESPN onboarding now runs in the web server layer, not through public ESPN worker routes.
+`/execute` reads end-user auth from the HTTP `Authorization` header and requires `X-Flaim-Internal-Token` for internal calls. ESPN setup uses the Flaim Chrome extension; credential sync flows through the web and auth-worker layers, not public ESPN worker routes.
 
 **Season year convention:** Callers always pass canonical start-year (e.g., 2024 for the 2024-25 NBA season). `/execute` preserves that external `params.season_year` value and adds explicit internal season context before dispatching to handlers. ESPN uses end-year for basketball and hockey (e.g., 2025 for 2024-25); football and baseball are unchanged.
 

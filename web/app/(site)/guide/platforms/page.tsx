@@ -177,10 +177,6 @@ export default function PlatformsGuidePage() {
                 Sync succeeds but no leagues show up: make sure you are logged
                 into the correct ESPN account and try the sync again.
               </li>
-              <li>
-                Credentials expire or become invalid later: rerun extension
-                sync from the browser profile that is signed in to ESPN.
-              </li>
             </ul>
           </div>
         </section>
