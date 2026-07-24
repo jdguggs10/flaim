@@ -61,9 +61,9 @@ export async function espnFetch(
 export function handleEspnError(response: Response): never {
   switch (response.status) {
     case 401:
-      throw new Error('ESPN_COOKIES_EXPIRED: ESPN session expired. Update credentials at /settings/espn');
+      throw new Error('ESPN_AUTHENTICATION_FAILED: ESPN authentication failed. Re-sync with the Flaim Chrome extension and confirm the league at https://flaim.app/leagues');
     case 403:
-      throw new Error('ESPN_ACCESS_DENIED: Access denied to this league. Set up ESPN credentials at /settings/espn');
+      throw new Error('ESPN_ACCESS_DENIED: Access denied to this league. Re-sync with the Flaim Chrome extension and confirm the league at https://flaim.app/leagues');
     case 404:
       throw new Error('ESPN_NOT_FOUND: League or resource not found');
     case 429:
@@ -84,7 +84,7 @@ export function requireCredentials(
   if (!credentials) {
     throw new Error(
       `ESPN_CREDENTIALS_NOT_FOUND: ESPN credentials required for ${context}. ` +
-      `Add your espn_s2 and SWID cookies at /settings/espn`
+      `Connect ESPN with the Flaim Chrome extension from https://flaim.app/leagues`
     );
   }
 }
