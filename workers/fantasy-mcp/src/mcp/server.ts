@@ -3,7 +3,11 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { Env } from '../types';
 import { getUnifiedTools, hasRequiredScope, mcpAuthError, type McpToolResponse } from './tools';
 import { emitUsageEvent, type UsageStatus } from './usage';
-import { USER_SESSION_WIDGET_HTML, USER_SESSION_WIDGET_URI } from '../widgets/user-session-widget';
+import {
+  LEGACY_USER_SESSION_WIDGET_URI,
+  USER_SESSION_WIDGET_HTML,
+  USER_SESSION_WIDGET_URI,
+} from '../widgets/user-session-widget';
 import { FLAIM_MCP_INSTRUCTIONS } from './instructions';
 
 export interface McpContext {
@@ -17,6 +21,7 @@ export interface McpContext {
   userId?: string;
   authType?: 'clerk' | 'oauth' | 'eval-api-key' | 'demo-api-key';
   clientName?: string | null;
+  staticResourcesOnly?: boolean;
   executionCtx: ExecutionContext;
 }
 
@@ -48,7 +53,15 @@ function safeEmit(
  * Uses closure capture to make env/authHeader available to tool handlers.
  */
 export function createFantasyMcpServer(ctx: McpContext): McpServer {
-  const { env, authHeader, tokenScope, correlationId, evalRunId, evalTraceId } = ctx;
+  const {
+    env,
+    authHeader,
+    tokenScope,
+    correlationId,
+    evalRunId,
+    evalTraceId,
+    staticResourcesOnly = false,
+  } = ctx;
 
   const server = new McpServer(
     {
@@ -64,35 +77,47 @@ export function createFantasyMcpServer(ctx: McpContext): McpServer {
     { instructions: FLAIM_MCP_INSTRUCTIONS }
   );
 
-  // Register widget resources
-  server.registerResource(
-    'user-session-widget',
-    USER_SESSION_WIDGET_URI,
-    {
-      mimeType: 'text/html;profile=mcp-app',
-    },
-    async () => ({
-      contents: [{
-        uri: USER_SESSION_WIDGET_URI,
+  // Keep the published v1 resource readable while current descriptors use a
+  // new immutable cache key. Template URIs are cache keys in ChatGPT.
+  const widgetResources = [
+    ['user-session-widget', LEGACY_USER_SESSION_WIDGET_URI],
+    ['user-session-widget-v2', USER_SESSION_WIDGET_URI],
+  ] as const;
+
+  for (const [name, uri] of widgetResources) {
+    server.registerResource(
+      name,
+      uri,
+      {
         mimeType: 'text/html;profile=mcp-app',
-        text: USER_SESSION_WIDGET_HTML,
-        _meta: {
-          ui: {
-            csp: {
-              connectDomains: [],
-              resourceDomains: [],
+      },
+      async () => ({
+        contents: [{
+          uri,
+          mimeType: 'text/html;profile=mcp-app',
+          text: USER_SESSION_WIDGET_HTML,
+          _meta: {
+            ui: {
+              csp: {
+                connectDomains: [],
+                resourceDomains: [],
+              },
+            },
+            'openai/widgetCSP': {
+              connect_domains: [],
+              resource_domains: [],
+              // Keep external-link allowlisting without reintroducing a stable widget domain.
+              redirect_domains: ['https://flaim.app'],
             },
           },
-          'openai/widgetCSP': {
-            connect_domains: [],
-            resource_domains: [],
-            // Keep external-link allowlisting without reintroducing a stable widget domain.
-            redirect_domains: ['https://flaim.app'],
-          },
-        },
-      }],
-    })
-  );
+        }],
+      })
+    );
+  }
+
+  if (staticResourcesOnly) {
+    return server;
+  }
 
   const tools = getUnifiedTools();
   for (const tool of tools) {

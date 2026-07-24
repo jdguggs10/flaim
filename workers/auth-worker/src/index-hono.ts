@@ -445,6 +445,10 @@ async function getVerifiedUserId(
     const allowedResources = [
       'https://api.flaim.app/mcp',
       'https://api.flaim.app/fantasy/mcp',
+      // FLA-217: the preview gateway announces its own workers.dev origin per
+      // RFC 9728, so static keys must remain usable on the preview lane too.
+      'https://fantasy-mcp-preview.gerrygugger.workers.dev/mcp',
+      'https://fantasy-mcp-preview.gerrygugger.workers.dev/fantasy/mcp',
     ];
     const staticKeys = [
       {

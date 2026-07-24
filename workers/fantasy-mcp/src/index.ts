@@ -15,7 +15,11 @@ import {
 import type { Env } from './types';
 import { createFantasyMcpServer } from './mcp/server';
 import { createMcpHandler } from './mcp/create-mcp-handler';
-import { isPublicMcpHandshakeRequest, normalizeMcpAcceptHeader } from './mcp/auth-gate';
+import {
+  isPublicMcpHandshakeRequest,
+  isPublicStaticWidgetResourceRequest,
+  normalizeMcpAcceptHeader,
+} from './mcp/auth-gate';
 import { logRequestBoundary } from './logging';
 import { buildMcpAuthErrorResponse } from './auth-response';
 import { USER_SESSION_WIDGET_HTML } from './widgets/user-session-widget';
@@ -35,16 +39,27 @@ const API_ROBOTS_TXT = [
   '',
 ].join('\n');
 
-const API_ROOT_METADATA = {
-  service: 'Flaim API',
-  status: 'ok',
-  endpoints: {
-    mcp: 'https://api.flaim.app/mcp',
-    oauth_authorization_server: 'https://api.flaim.app/.well-known/oauth-authorization-server',
-    oauth_protected_resource: 'https://api.flaim.app/.well-known/oauth-protected-resource',
-    health: 'https://api.flaim.app/fantasy/health',
-  },
-};
+// RFC 9728 requires `resource` (and discovery pointers) to match the URL the
+// client is actually connecting to, so metadata responses derive their origin
+// from the incoming request. This keeps the preview lane's workers.dev origin
+// self-describing while production (api.flaim.app) stays byte-identical.
+// The authorization server stays https://api.flaim.app on every lane by design.
+function requestOrigin(c: Context<{ Bindings: Env }>): string {
+  return new URL(c.req.raw.url).origin;
+}
+
+function buildApiRootMetadata(origin: string) {
+  return {
+    service: 'Flaim API',
+    status: 'ok',
+    endpoints: {
+      mcp: `${origin}/mcp`,
+      oauth_authorization_server: `${origin}/.well-known/oauth-authorization-server`,
+      oauth_protected_resource: `${origin}/.well-known/oauth-protected-resource`,
+      health: `${origin}/fantasy/health`,
+    },
+  };
+}
 
 function robotsResponse(): Response {
   return new Response(API_ROBOTS_TXT, {
@@ -56,7 +71,7 @@ function robotsResponse(): Response {
   });
 }
 
-function apiRootMetadataResponse(method: string): Response {
+function apiRootMetadataResponse(method: string, origin: string): Response {
   const headers = {
     'Content-Type': 'application/json',
     'Cache-Control': 'public, max-age=3600',
@@ -66,7 +81,7 @@ function apiRootMetadataResponse(method: string): Response {
     return new Response(null, { status: 200, headers });
   }
 
-  return new Response(JSON.stringify(API_ROOT_METADATA), {
+  return new Response(JSON.stringify(buildApiRootMetadata(origin)), {
     status: 200,
     headers,
   });
@@ -110,7 +125,7 @@ app.use('*', async (c, next) => {
   return undefined;
 });
 
-app.on(['GET', 'HEAD'], '/', (c) => apiRootMetadataResponse(c.req.method));
+app.on(['GET', 'HEAD'], '/', (c) => apiRootMetadataResponse(c.req.method, requestOrigin(c)));
 
 // Shared health check logic
 async function buildHealthData(env: Env) {
@@ -179,12 +194,12 @@ function buildOauthMetadata(resource: string) {
   };
 }
 
-function buildResourceFromSuffix(baseResource: string, suffix: string): string {
+function buildResourceFromSuffix(origin: string, baseResource: string, suffix: string): string {
   if (!suffix || suffix === '/') {
     return baseResource;
   }
   const normalizedSuffix = suffix.startsWith('/') ? suffix : `/${suffix}`;
-  return `https://api.flaim.app${normalizedSuffix}`;
+  return `${origin}${normalizedSuffix}`;
 }
 
 // OpenAI Apps Directory domain verification (token set via `wrangler secret put OPENAI_APPS_VERIFICATION_TOKEN`)
@@ -197,11 +212,11 @@ app.get('/.well-known/openai-apps-challenge', (c) => {
 });
 
 app.get('/.well-known/oauth-protected-resource', (c) => {
-  return c.json(buildOauthMetadata('https://api.flaim.app/mcp'), 200, { 'Cache-Control': 'public, max-age=3600' });
+  return c.json(buildOauthMetadata(`${requestOrigin(c)}/mcp`), 200, { 'Cache-Control': 'public, max-age=3600' });
 });
 
 app.get('/fantasy/.well-known/oauth-protected-resource', (c) => {
-  return c.json(buildOauthMetadata('https://api.flaim.app/fantasy/mcp'), 200, { 'Cache-Control': 'public, max-age=3600' });
+  return c.json(buildOauthMetadata(`${requestOrigin(c)}/fantasy/mcp`), 200, { 'Cache-Control': 'public, max-age=3600' });
 });
 
 async function proxyAuthorizationServerMetadata(c: Context<{ Bindings: Env }>): Promise<Response> {
@@ -281,8 +296,15 @@ async function handleMcpRequest(c: Context<{ Bindings: Env }>): Promise<Response
   });
 
   const authHeader = c.req.header('Authorization');
-  const allowPublicHandshake = !authHeader && await isPublicMcpHandshakeRequest(c.req.raw);
-  if (!authHeader && !allowPublicHandshake) {
+  // Static widget resources are public based on method + exact URI, even when
+  // a client happens to attach a stale bearer token. User-data paths still
+  // require normal token introspection.
+  const allowPublicStaticResource = await isPublicStaticWidgetResourceRequest(c.req.raw);
+  const allowPublicHandshake =
+    !authHeader &&
+    !allowPublicStaticResource &&
+    await isPublicMcpHandshakeRequest(c.req.raw);
+  if (!authHeader && !allowPublicHandshake && !allowPublicStaticResource) {
     if (await isAuthenticatedMcpToolAttemptRequest(c.req.raw)) {
       logFantasySetupFailure(c, 'auth_trust_path_failed', {
         component: 'mcp-auth',
@@ -296,18 +318,23 @@ async function handleMcpRequest(c: Context<{ Bindings: Env }>): Promise<Response
     return buildMcpAuthErrorResponse(c.req.raw);
   }
 
-  // Scope pre-flight: resolve token scope via auth-worker introspection
-  const pathname = new URL(c.req.raw.url).pathname;
+  // Scope pre-flight: resolve token scope via auth-worker introspection.
+  // Origin-derived to match what the metadata routes advertise (RFC 9728), so
+  // preview-lane tokens minted for the workers.dev resource introspect cleanly.
+  // Post-introspection in-band tool errors (mcp/server.ts, mcp/tools.ts) keep
+  // canonical production strings deliberately — they fire only after auth
+  // succeeds, so on preview they are cosmetic.
+  const { origin, pathname } = new URL(c.req.raw.url);
   const expectedResource = pathname.startsWith('/fantasy/')
-    ? 'https://api.flaim.app/fantasy/mcp'
-    : 'https://api.flaim.app/mcp';
+    ? `${origin}/fantasy/mcp`
+    : `${origin}/mcp`;
 
   let tokenScope: string | undefined;
   // Captured for usage analytics (FLA-156) — passed into the MCP server context.
   let userId: string | undefined;
   let authType: 'clerk' | 'oauth' | 'eval-api-key' | 'demo-api-key' | undefined;
   let clientName: string | null = null;
-  if (authHeader) {
+  if (authHeader && !allowPublicStaticResource) {
     try {
       const introspectRes = await c.env.AUTH_WORKER.fetch(
         new Request('https://internal/internal/introspect', {
@@ -430,6 +457,7 @@ async function handleMcpRequest(c: Context<{ Bindings: Env }>): Promise<Response
     userId,
     authType,
     clientName,
+    staticResourcesOnly: allowPublicStaticResource,
     executionCtx: c.executionCtx,
   });
   const handler = createMcpHandler(server, { enableJsonResponse: false });
@@ -489,15 +517,16 @@ app.get('/mcp/.well-known/oauth-authorization-server/*', async (c) => {
 });
 
 app.get('/mcp/.well-known/oauth-protected-resource', (c) => {
-  return c.json(buildOauthMetadata('https://api.flaim.app/mcp'), 200, {
+  return c.json(buildOauthMetadata(`${requestOrigin(c)}/mcp`), 200, {
     'Cache-Control': 'public, max-age=3600',
   });
 });
 
 app.get('/mcp/.well-known/oauth-protected-resource/*', (c) => {
+  const origin = requestOrigin(c);
   const path = new URL(c.req.raw.url).pathname;
   const suffix = path.slice('/mcp/.well-known/oauth-protected-resource'.length);
-  return c.json(buildOauthMetadata(buildResourceFromSuffix('https://api.flaim.app/mcp', suffix)), 200, {
+  return c.json(buildOauthMetadata(buildResourceFromSuffix(origin, `${origin}/mcp`, suffix)), 200, {
     'Cache-Control': 'public, max-age=3600',
   });
 });
@@ -526,15 +555,16 @@ app.get('/fantasy/mcp/.well-known/oauth-authorization-server/*', async (c) => {
 });
 
 app.get('/fantasy/mcp/.well-known/oauth-protected-resource', (c) => {
-  return c.json(buildOauthMetadata('https://api.flaim.app/fantasy/mcp'), 200, {
+  return c.json(buildOauthMetadata(`${requestOrigin(c)}/fantasy/mcp`), 200, {
     'Cache-Control': 'public, max-age=3600',
   });
 });
 
 app.get('/fantasy/mcp/.well-known/oauth-protected-resource/*', (c) => {
+  const origin = requestOrigin(c);
   const path = new URL(c.req.raw.url).pathname;
   const suffix = path.slice('/fantasy/mcp/.well-known/oauth-protected-resource'.length);
-  return c.json(buildOauthMetadata(buildResourceFromSuffix('https://api.flaim.app/fantasy/mcp', suffix)), 200, {
+  return c.json(buildOauthMetadata(buildResourceFromSuffix(origin, `${origin}/fantasy/mcp`, suffix)), 200, {
     'Cache-Control': 'public, max-age=3600',
   });
 });

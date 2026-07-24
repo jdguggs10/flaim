@@ -21,7 +21,12 @@
  * - https://developers.openai.com/apps-sdk/build/chatgpt-ui/
  * - https://developers.openai.com/apps-sdk/build/mcp-server/
  */
-export const USER_SESSION_WIDGET_URI = 'ui://widget/user-session.html';
+/**
+ * Published v1 clients are pinned to the original resource URI. Keep serving
+ * it while current descriptors use a new immutable cache key.
+ */
+export const LEGACY_USER_SESSION_WIDGET_URI = 'ui://widget/user-session.html';
+export const USER_SESSION_WIDGET_URI = 'ui://widget/user-session-v2.html';
 
 export type RefreshResultKind =
   | 'success'
