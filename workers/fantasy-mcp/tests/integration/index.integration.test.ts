@@ -1424,6 +1424,55 @@ describe('origin-derived OAuth protected-resource metadata (FLA-217)', () => {
     expect(authFetch).not.toHaveBeenCalled();
   });
 
+  it('sends an origin-derived expected resource to introspection', async () => {
+    const cases: Array<[origin: string, pathname: '/mcp' | '/fantasy/mcp', expectedResource: string]> = [
+      // Frozen behavior: api.flaim.app requests introspect with today's values.
+      [PROD_ORIGIN, '/mcp', 'https://api.flaim.app/mcp'],
+      [PROD_ORIGIN, '/fantasy/mcp', 'https://api.flaim.app/fantasy/mcp'],
+      // Preview lane: tokens are minted for the workers.dev resource the
+      // metadata advertises, so introspection must expect that same value.
+      [PREVIEW_ORIGIN, '/mcp', `${PREVIEW_ORIGIN}/mcp`],
+      [PREVIEW_ORIGIN, '/fantasy/mcp', `${PREVIEW_ORIGIN}/fantasy/mcp`],
+    ];
+
+    for (const [origin, pathname, expectedResource] of cases) {
+      const authFetch = vi.fn(async () =>
+        new Response(
+          JSON.stringify({ valid: true, userId: 'user-123', scope: 'mcp:read mcp:write', authType: 'oauth' }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        )
+      );
+      const env = buildEnv(authFetch);
+
+      const response = await app.fetch(
+        new Request(`${origin}${pathname}`, {
+          method: 'POST',
+          headers: {
+            Authorization: 'Bearer test-token',
+            'Content-Type': 'application/json',
+            Accept: 'application/json, text/event-stream',
+          },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: 'expected-resource-wire-test',
+            method: 'tools/list',
+            params: {},
+          }),
+        }),
+        env,
+        mockExecutionContext()
+      );
+      expect(response.status, `${origin}${pathname}`).toBe(200);
+      expect(authFetch, `${origin}${pathname}`).toHaveBeenCalledTimes(1);
+      const introspectReq = authFetch.mock.calls[0]?.[0] as Request;
+      expect(introspectReq.url).toBe('https://internal/internal/introspect');
+      expect(
+        introspectReq.headers.get('X-Flaim-Expected-Resource'),
+        `${origin}${pathname}`
+      ).toBe(expectedResource);
+    }
+  });
+
   it('points the workers.dev 401 discovery challenge at the request origin', async () => {
     const authFetch = vi.fn();
     const env = buildEnv(authFetch);

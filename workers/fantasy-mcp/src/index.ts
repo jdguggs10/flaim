@@ -318,11 +318,16 @@ async function handleMcpRequest(c: Context<{ Bindings: Env }>): Promise<Response
     return buildMcpAuthErrorResponse(c.req.raw);
   }
 
-  // Scope pre-flight: resolve token scope via auth-worker introspection
-  const pathname = new URL(c.req.raw.url).pathname;
+  // Scope pre-flight: resolve token scope via auth-worker introspection.
+  // Origin-derived to match what the metadata routes advertise (RFC 9728), so
+  // preview-lane tokens minted for the workers.dev resource introspect cleanly.
+  // Post-introspection in-band tool errors (mcp/server.ts, mcp/tools.ts) keep
+  // canonical production strings deliberately — they fire only after auth
+  // succeeds, so on preview they are cosmetic.
+  const { origin, pathname } = new URL(c.req.raw.url);
   const expectedResource = pathname.startsWith('/fantasy/')
-    ? 'https://api.flaim.app/fantasy/mcp'
-    : 'https://api.flaim.app/mcp';
+    ? `${origin}/fantasy/mcp`
+    : `${origin}/mcp`;
 
   let tokenScope: string | undefined;
   // Captured for usage analytics (FLA-156) — passed into the MCP server context.

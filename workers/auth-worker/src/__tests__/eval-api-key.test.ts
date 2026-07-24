@@ -535,6 +535,43 @@ describe('eval API key auth', () => {
     expect(body.valid).toBe(true);
   });
 
+  // FLA-217: the preview gateway announces its own workers.dev origin per
+  // RFC 9728, so its origin-derived expected resource must stay allowed for
+  // static keys or the preview eval/demo lanes break.
+  it('valid API key with preview-origin resources passes', async () => {
+    const previewResources = [
+      'https://fantasy-mcp-preview.gerrygugger.workers.dev/mcp',
+      'https://fantasy-mcp-preview.gerrygugger.workers.dev/fantasy/mcp',
+    ];
+    for (const resource of previewResources) {
+      const res = await appFetch(
+        makeRequest('/auth/internal/introspect', {
+          headers: {
+            ...internalHeaders(EVAL_API_KEY),
+            'X-Flaim-Expected-Resource': resource,
+          },
+        })
+      );
+      expect(res.status, resource).toBe(200);
+      const body = await res.json() as { valid: boolean };
+      expect(body.valid, resource).toBe(true);
+    }
+  });
+
+  it('valid API key with a non-allowlisted workers.dev resource is still rejected', async () => {
+    const res = await appFetch(
+      makeRequest('/auth/internal/introspect', {
+        headers: {
+          ...internalHeaders(EVAL_API_KEY),
+          'X-Flaim-Expected-Resource': 'https://fantasy-mcp-dev.gerrygugger.workers.dev/mcp',
+        },
+      })
+    );
+    expect(res.status).toBe(401);
+    const body = await res.json() as { error: string };
+    expect(body.error).toContain('Resource not allowed');
+  });
+
   it('equal-length wrong key is still rejected', async () => {
     // Same length as EVAL_API_KEY but different content
     const wrongKey = 'flaim_eval_xyz789wrongkey';
