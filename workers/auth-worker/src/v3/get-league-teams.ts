@@ -69,7 +69,7 @@ export async function getLeagueTeams(
 
   if (!response.ok) {
     if (response.status === 401 || response.status === 403) {
-      throw new EspnAuthenticationFailed('ESPN authentication failed - invalid or expired cookies');
+      throw new EspnAuthenticationFailed('ESPN authentication failed');
     }
     throw new EspnApiError(`ESPN API error: ${response.status} ${response.statusText}`);
   }
@@ -90,4 +90,3 @@ export async function getLeagueTeams(
     teamName: team.name || `${team.location || ''} ${team.nickname || ''}`.trim() || `Team ${team.id}`
   }));
 }
-

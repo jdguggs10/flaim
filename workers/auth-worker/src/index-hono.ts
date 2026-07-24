@@ -1957,7 +1957,7 @@ async function getRawEspnCredentialsResponse(env: Env, clerkUserId: string, cors
   if (!credentials) {
     return new Response(JSON.stringify({
       error: 'Credentials not found',
-      message: 'No ESPN credentials found for user. Add your ESPN credentials at /settings/espn'
+      message: 'No ESPN credentials found for user. Connect ESPN with the Flaim Chrome extension from https://flaim.app/leagues'
     }), {
       status: 404,
       headers: { 'Content-Type': 'application/json', ...corsHeaders }

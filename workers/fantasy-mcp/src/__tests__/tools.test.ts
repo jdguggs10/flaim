@@ -48,6 +48,40 @@ describe('fantasy-mcp tools', () => {
     ]);
   });
 
+  it('describes the three get_user_session routing paths without a global bootstrap', () => {
+    const tool = getUnifiedTools().find((candidate) => candidate.name === 'get_user_session');
+    expect(tool).toBeTruthy();
+
+    expect(tool!.description).toContain(
+      'Do not call for Flaim capability, permission, or generic setup how-to questions'
+    );
+    expect(tool!.description).toContain(
+      'Use this alone for user-specific connection, league, or account-status questions'
+    );
+    expect(tool!.description).toContain(
+      'For a normal selected-league request, call this once before any other data tool'
+    );
+    expect(tool!.description).toContain(
+      'For an explicit refresh request, call refresh_leagues first and then call this tool after success'
+    );
+    expect(tool!.description).not.toContain('at the start of each chat');
+    expect(tool!.description).toContain('generic coding, scraping, weather');
+    expect(tool!.description).toContain(
+      'For a selected active league, call get_league_info next before the requested league-specific data tool'
+    );
+    expect(tool!.description).toContain('call it again even if it ran earlier in the chat');
+  });
+
+  it('describes refresh_leagues as explicit, registry-only, and provider-write incapable', () => {
+    const tool = getUnifiedTools().find((candidate) => candidate.name === 'refresh_leagues');
+    expect(tool).toBeTruthy();
+
+    expect(tool!.description).toContain('Use only when the user explicitly asks to refresh');
+    expect(tool!.description).toContain('update Flaim registry timestamps and provider metadata');
+    expect(tool!.description).toContain('submit waiver claims or trades');
+    expect(tool!.description).toContain('call get_user_session again');
+  });
+
   it('get_user_session returns auth error with _meta on 401', async () => {
     const tool = getUnifiedTools().find((t) => t.name === 'get_user_session');
     expect(tool).toBeTruthy();
@@ -443,14 +477,15 @@ describe('fantasy-mcp tools', () => {
     })).toEqual({ kind: 'failure', message: 'Refresh failed.', reloadSession: false });
   });
 
-  it('describes refresh as repeatable metadata mutation without claiming idempotence', () => {
-    const tool = getUnifiedTools().find((candidate) => candidate.name === 'refresh_leagues');
+    it('describes refresh as repeatable metadata mutation with bounded retry guidance', () => {
+      const tool = getUnifiedTools().find((candidate) => candidate.name === 'refresh_leagues');
 
-    expect(tool?.openaiMeta?.invoked).toBe('Refresh complete');
-    expect(tool?.description).toContain('repeated refreshes can update Flaim registry timestamps and provider metadata');
-    expect(tool?.description).toContain('If this call errors, do not repeat it unchanged.');
-    expect(tool?.description).not.toContain('idempotent');
-  });
+      expect(tool?.openaiMeta?.invoked).toBe('Refresh complete');
+      expect(tool?.description).toContain('repeated refreshes can update Flaim registry timestamps and provider metadata');
+      expect(tool?.description).toContain('follow the error retry guidance and any retry_after value');
+      expect(tool?.description).toContain('do not retry in a loop');
+      expect(tool?.description).not.toContain('idempotent');
+    });
 
   it('user session widget opens the empty-state league setup link externally', () => {
     expect(USER_SESSION_WIDGET_HTML).toContain('Flaim is connected, but no fantasy leagues are set up yet.');
@@ -1133,6 +1168,45 @@ describe('fantasy-mcp tools', () => {
     const schema = tool!.inputSchema;
     expect(asZod(schema.platform).parse('espn')).toBe('espn');
     expect(asZod(schema.platform).parse('yahoo')).toBe('yahoo');
+  });
+
+  it('get_free_agents distinguishes fantasy availability from market and professional context', () => {
+    const tool = getUnifiedTools().find((t) => t.name === 'get_free_agents');
+    expect(tool).toBeTruthy();
+
+    expect(tool!.title).toBe('Available Players');
+    expect(tool!.openaiMeta).toEqual({
+      invoking: 'Searching available players\u2026',
+      invoked: 'Available players ready',
+    });
+    expect(tool!.description).toContain('fantasy-league availability, not professional-contract status');
+    expect(tool!.description).toContain(
+      'ESPN percentOwned/percentStarted are the percentages of all ESPN leagues where the player is rostered/started'
+    );
+    expect(tool!.description).toContain('Yahoo percentOwned, when present, is Yahoo-wide');
+    expect(tool!.description).toContain(
+      'Label every reported percentage as an ESPN-wide roster/start rate or Yahoo-wide market rate'
+    );
+    expect(tool!.description).toContain(
+      'If a rate is missing, write "[Provider] market ownership rate: not provided"; do not repeat response field names or null values, call get_players, or offer a lookup'
+    );
+    expect(tool!.description).toContain(
+      'A returned player is already confirmed available in that league'
+    );
+    expect(tool!.description).toContain('Only ESPN status/waiverProcessDate represents fantasy acquisition state');
+    expect(tool!.description).toContain(
+      'Call Yahoo/Sleeper rows "available players," never specifically free agents or waivers'
+    );
+    expect(tool!.description).toContain('For a returned list or field explanation, end after the requested facts');
+    expect(tool!.description).toContain('never add an "if you want" offer');
+    expect(tool!.description).toContain(
+      'Translate ESPN status codes silently into plain language; never print raw codes such as FREEAGENT or WAIVERS'
+    );
+    expect(tool!.description).toContain('Use get_roster for a separate player-ownership question');
+    expect(tool!.description).toContain('Use current web evidence before adding analysis or pickup recommendations');
+    expect(asZod(tool!.inputSchema.count).description).toContain(
+      'Pass the user-requested number exactly'
+    );
   });
 
   it('get_free_agents routes sleeper params to client', async () => {

@@ -95,7 +95,7 @@ export async function getLeagueInfo(
       if (response.status === 401 || response.status === 403) {
         const errorText = await response.text().catch(() => 'Failed to read error response');
         console.error('Authentication error response:', errorText);
-        throw new EspnAuthenticationFailed('ESPN authentication failed - invalid or expired cookies');
+        throw new EspnAuthenticationFailed('ESPN authentication failed');
       }
       if (response.status === 404) {
         throw new EspnLeagueNotFound(`League with ID ${leagueId} not found for season ${requestSeason}`);

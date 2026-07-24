@@ -111,7 +111,7 @@ export async function discoverLeaguesV3(swid: string, s2: string): Promise<Disco
     console.log(`📡 Fan API Response: ${res.status} ${res.statusText}`);
 
     if (res.status === 401 || res.status === 403) {
-      throw new EspnAuthenticationFailed('ESPN authentication failed – invalid or expired cookies');
+      throw new EspnAuthenticationFailed('ESPN authentication failed');
     }
 
     if (!res.ok) {

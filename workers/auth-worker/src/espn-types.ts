@@ -3,7 +3,7 @@
  * 
  * Consolidated types for ESPN integration with multi-league architecture.
  * 
- * @version 2.0 - Multi-league support with manual entry
+ * @version 2.0 - Multi-league support
  */
 
 // =============================================================================

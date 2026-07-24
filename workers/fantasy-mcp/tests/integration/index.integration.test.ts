@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import app from '../../src/index';
 import type { Env } from '../../src/types';
 import { getUnifiedTools, type UnifiedTool } from '../../src/mcp/tools';
+import { FLAIM_MCP_INSTRUCTIONS } from '../../src/mcp/instructions';
 import {
   LEGACY_USER_SESSION_WIDGET_URI,
   USER_SESSION_WIDGET_HTML,
@@ -423,6 +424,30 @@ describe('fantasy-mcp gateway integration', () => {
     expect(introspectReq.url).toBe('https://internal/internal/introspect');
     expect(introspectReq.headers.get('X-Flaim-Expected-Resource')).toBe('https://api.flaim.app/mcp');
     expect(introspectReq.headers.get(INTERNAL_SERVICE_TOKEN_HEADER)).toBe('internal-secret');
+  });
+
+  it('emits the Flaim instructions in the MCP initialize response', async () => {
+    const authFetch = vi.fn(async () =>
+      new Response(JSON.stringify({ valid: true, userId: 'user-123', scope: 'mcp:read mcp:write', authType: 'oauth' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    );
+    const env = buildEnv(authFetch);
+
+    const response = await app.fetch(
+      buildMcpJsonRpcRequest('/mcp', 'initialize', {
+        protocolVersion: '2025-06-18',
+        capabilities: {},
+        clientInfo: { name: 'flaim-instructions-test', version: '1.0.0' },
+      }, 'initialize-instructions-1'),
+      env,
+      mockExecutionContext()
+    );
+
+    expect(response.status).toBe(200);
+    const payload = await parseJsonRpcResponse(response);
+    expect(payload.result?.instructions).toBe(FLAIM_MCP_INSTRUCTIONS);
   });
 
   it('exposes the user session MCP Apps resource metadata', async () => {

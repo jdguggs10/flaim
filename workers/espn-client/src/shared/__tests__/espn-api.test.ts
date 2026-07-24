@@ -51,7 +51,7 @@ describe('espn-api helpers', () => {
 
   it('maps ESPN HTTP statuses to explicit error codes', () => {
     expect(() => handleEspnError(new Response(null, { status: 401 }))).toThrow(
-      'ESPN_COOKIES_EXPIRED:',
+      'ESPN_AUTHENTICATION_FAILED:',
     );
     expect(() => handleEspnError(new Response(null, { status: 403 }))).toThrow(
       'ESPN_ACCESS_DENIED:',
