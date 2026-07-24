@@ -82,6 +82,11 @@ type JsonRpcTestPayload = {
     message?: string;
   };
   result?: {
+    serverInfo?: {
+      name?: string;
+      version?: string;
+    };
+    instructions?: string;
     tools?: Array<{
       name: string;
       inputSchema?: {
@@ -585,6 +590,90 @@ describe('fantasy-mcp gateway integration', () => {
         'resource_metadata="https://api.flaim.app/.well-known/oauth-protected-resource"'
       );
     }
+    expect(authFetch).not.toHaveBeenCalled();
+  });
+
+  // ChatGPT's directory review fetches the widget template before the user's
+  // OAuth header is attached, so the anonymous handshake must stay open.
+  // These tests pin that at the wire level: tightening the auth gate to 401
+  // anonymous initialize would reintroduce the FLA-217 rejection class while
+  // every unit test stayed green.
+  it('accepts an anonymous initialize handshake without authorization', async () => {
+    const authFetch = vi.fn();
+    const env = buildEnv(authFetch);
+
+    const response = await app.fetch(
+      buildUnauthenticatedMcpJsonRpcRequest(
+        '/mcp',
+        'initialize',
+        {
+          protocolVersion: '2025-06-18',
+          capabilities: {},
+          clientInfo: { name: 'wire-test-client', version: '1.0.0' },
+        },
+        'unauthenticated-initialize'
+      ),
+      env,
+      mockExecutionContext()
+    );
+
+    expect(response.status).not.toBe(401);
+    expect(response.status).toBe(200);
+    const payload = await parseJsonRpcResponse(response);
+    expect(payload.error).toBeUndefined();
+    expect(payload.result?.serverInfo?.name).toBe('fantasy-mcp');
+    expect(payload.result?.instructions).toBeTruthy();
+    expect(authFetch).not.toHaveBeenCalled();
+  });
+
+  it('accepts an anonymous notifications/initialized without authorization', async () => {
+    const authFetch = vi.fn();
+    const env = buildEnv(authFetch);
+
+    // Notifications carry no id, so build the request inline rather than via
+    // the JSON-RPC request helper.
+    const response = await app.fetch(
+      new Request('https://api.flaim.app/mcp', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json, text/event-stream',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'notifications/initialized',
+        }),
+      }),
+      env,
+      mockExecutionContext()
+    );
+
+    expect(response.status).not.toBe(401);
+    expect(response.status).toBe(202);
+    expect(authFetch).not.toHaveBeenCalled();
+  });
+
+  it('serves a static widget resource anonymously on the /fantasy/mcp alias', async () => {
+    const authFetch = vi.fn();
+    const env = buildEnv(authFetch);
+
+    const readResponse = await app.fetch(
+      buildUnauthenticatedMcpJsonRpcRequest(
+        '/fantasy/mcp',
+        'resources/read',
+        { uri: USER_SESSION_WIDGET_URI },
+        'unauthenticated-fantasy-alias-resources-read'
+      ),
+      env,
+      mockExecutionContext()
+    );
+    expect(readResponse.status).toBe(200);
+    const readPayload = await parseJsonRpcResponse(readResponse);
+    const content = readPayload.result?.contents?.find(
+      (item) => item.uri === USER_SESSION_WIDGET_URI
+    );
+    expect(content?.mimeType).toBe('text/html;profile=mcp-app');
+    expect(content?.text).toBe(USER_SESSION_WIDGET_HTML);
     expect(authFetch).not.toHaveBeenCalled();
   });
 
