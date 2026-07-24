@@ -82,11 +82,11 @@ Recurring seasons are grouped by stable league identity before active/history se
 
 ## Authentication
 
-Requires Bearer token in Authorization header. Tokens are:
+Tool calls and user data require a Bearer token in the Authorization header. Tokens are:
 - Clerk JWTs (from web app)
 - OAuth tokens (from Claude/ChatGPT/Gemini)
 
-Auth is validated by auth-worker via service binding.
+Auth is validated by auth-worker via service binding. The MCP handshake (`initialize`, `notifications/initialized`, `tools/list`) and the two static widget template resources are intentionally public so clients can complete discovery before user auth.
 
 ## Development
 
