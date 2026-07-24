@@ -1,7 +1,7 @@
 /**
  * ESPN Leagues Management API Route
  * ---------------------------------------------------------------------------
- * Handles saving and managing ESPN league arrays for the new manual entry flow.
+ * Handles saving and managing ESPN league arrays for the leagues page.
  * Supports up to 100 leagues per user with duplicate validation.
  */
 

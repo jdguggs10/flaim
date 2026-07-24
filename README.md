@@ -16,7 +16,7 @@ The **Flaim skill** teaches your AI assistant how to behave like a fantasy analy
 
 1. **Sign up** at [flaim.app](https://flaim.app)
 2. **Connect your platforms** — ESPN via [Chrome extension](https://chromewebstore.google.com/detail/flaim-espn-fantasy-connec/mbnokejgglkfgkeeenolgdpcnfakpbkn), Yahoo via OAuth, Sleeper by username
-3. **Leagues discovered** — Flaim finds supported leagues where possible; some private leagues or historical seasons may need manual follow-up
+3. **Leagues discovered** — Flaim finds supported leagues where possible; confirm and manage them at [flaim.app/leagues](https://flaim.app/leagues)
 4. **Pick a default league** for AI conversations
 5. **Use Flaim in AI** — open Flaim Fantasy in ChatGPT, or add the MCP URL in an optional manual MCP client such as Claude, Perplexity, Gemini CLI, or Kiro (see [Connector Setup](docs/CONNECTOR-DOCS.md))
 6. **Optional: install the skill** — recommended for agent-skill tools; copy `.agents/skills/flaim-fantasy/` into your project or home directory (see [The Skill](#the-skill) below)
@@ -58,7 +58,7 @@ All tools connect through a single MCP endpoint: `https://api.flaim.app/mcp`
 
 | Platform | Sports | Auth |
 |----------|--------|------|
-| **ESPN** | Football, Baseball, Basketball, Hockey | Chrome extension or manual cookies |
+| **ESPN** | Football, Baseball, Basketball, Hockey | Chrome extension |
 | **Yahoo** | Football, Baseball, Basketball, Hockey | OAuth 2.0 |
 | **Sleeper** | Football, Basketball | Username (public API) |
 

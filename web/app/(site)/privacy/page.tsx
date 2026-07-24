@@ -192,8 +192,7 @@ export default function PrivacyPage() {
             <ul className="list-disc list-inside text-muted-foreground mt-2 space-y-1">
               <li>
                 <strong>ESPN credentials:</strong> Retained until you
-                disconnect, or automatically invalidated when ESPN expires them
-                (typically ~30 days).
+                disconnect.
               </li>
               <li>
                 <strong>Yahoo tokens:</strong> Retained until you disconnect

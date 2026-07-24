@@ -57,7 +57,7 @@ Flaim is an **authentication and data service**, not a chatbot:
 
 - **MCP Server**: Exposes fantasy league data to ChatGPT Apps and optional manual MCP clients via Model Context Protocol
 - **OAuth Provider**: Handles secure authentication between AI clients and ESPN data
-- **Credential Manager**: Securely stores ESPN session cookies (via extension or manual entry)
+- **Credential Manager**: Securely stores ESPN session cookies captured by the Chrome extension
 
 The public live showcase lives on the homepage, with `/chat` retained as a redirect to `/#live-demo`. The live demo is backed by a dedicated demo account and server-owned auth. The interactive dev console has been extracted to a separate `flaim-chat` repo (`chat.flaim.app`).
 
@@ -69,16 +69,7 @@ The public live showcase lives on the homepage, with `/chat` retained as a redir
 3. **Auto-discover leagues + past seasons** — Runs during sync/re-sync
 4. **Set defaults** — Manage at `/leagues` (extension v1.4.0 no longer handles defaults)
 
-**Manual site path (independent):**
-1. **Sign in** — Create an account at `flaim.app`
-2. **Add credentials manually** — Use the manual credentials dialog in `/leagues`
-3. **Add leagues** at `/leagues` — Enter league ID + season
-4. **Discover seasons (optional)** — Manual per-league action
-5. **Pick a default** — `/leagues` default toggle
-
-Both paths write to the same `espn_leagues` storage.
-
-**Connect AI (both paths):**
+**Connect AI:**
 - Open Flaim Fantasy in ChatGPT, or copy the MCP URL from `/leagues` and add it in an optional manual MCP client such as Claude, Perplexity, Gemini CLI, or developer testing tools.
 
 ## Season Year Defaults
@@ -178,7 +169,7 @@ ChatGPT Apps / manual MCP clients → fantasy-mcp (gateway) → espn-client    �
 - `get_players` — Player lookup across roster statuses with market/global ownership context (`market_percent_owned`, `ownership_scope`) and league ownership when available
 - `get_transactions` — Recent transactions (adds, drops, waivers, trades)
   - Week semantics are platform-specific in v1: ESPN/Sleeper support explicit week windows; Yahoo uses a recent 14-day timestamp window and ignores explicit week.
-  - Yahoo `type=waiver` filter is intentionally unsupported in v1 (waiver enrichment is a separate phase).
+  - Yahoo `type=waiver` and `type=pending_trade` return pending items for the authenticated user's own team; other supported types use Yahoo's recent league transaction feed.
 
 **Status:**
 - Unified gateway is the sole MCP endpoint (Jan 2026)
@@ -199,8 +190,8 @@ See `workers/README.md` for worker-to-worker communication requirements.
 
 ## Data Flow
 
-1. User syncs ESPN credentials via extension (or manual entry) → stored in Supabase via auth-worker.
-2. User adds leagues at `/leagues` (per-season rows) → stored in Supabase.
+1. User syncs ESPN credentials via the Chrome extension → stored in Supabase via auth-worker.
+2. User confirms and manages discovered leagues at `/leagues` (per-season rows) → stored in Supabase.
 3. User connects through ChatGPT Apps or an optional manual MCP client → OAuth flow → token stored in Supabase.
 4. ChatGPT Apps or the manual MCP client calls an MCP tool after connection → MCP worker fetches creds from auth-worker → calls ESPN → returns data.
 
