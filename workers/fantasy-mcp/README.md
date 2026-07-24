@@ -86,7 +86,7 @@ Tool calls and user data require a Bearer token in the Authorization header. Tok
 - Clerk JWTs (from web app)
 - OAuth tokens (from Claude/ChatGPT/Gemini)
 
-Auth is validated by auth-worker via service binding. The MCP handshake (`initialize`, `notifications/initialized`, `tools/list`) and the two static widget template resources are intentionally public so clients can complete discovery before user auth.
+Auth is validated by auth-worker via service binding. The MCP handshake and discovery methods (`initialize`, `notifications/initialized`, `tools/list`, `resources/list`) and the two static widget template resources are intentionally public so clients can complete discovery before user auth.
 
 ## Development
 

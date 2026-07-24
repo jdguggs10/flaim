@@ -653,6 +653,25 @@ describe('fantasy-mcp gateway integration', () => {
     expect(authFetch).not.toHaveBeenCalled();
   });
 
+  it('accepts an anonymous tools/list without authorization', async () => {
+    const authFetch = vi.fn();
+    const env = buildEnv(authFetch);
+
+    const response = await app.fetch(
+      buildUnauthenticatedMcpJsonRpcRequest('/mcp', 'tools/list', {}, 'unauthenticated-tools-list'),
+      env,
+      mockExecutionContext()
+    );
+
+    expect(response.status).not.toBe(401);
+    expect(response.status).toBe(200);
+    const payload = await parseJsonRpcResponse(response);
+    expect(payload.error).toBeUndefined();
+    expect(Array.isArray(payload.result?.tools)).toBe(true);
+    expect(payload.result?.tools?.length).toBeGreaterThan(0);
+    expect(authFetch).not.toHaveBeenCalled();
+  });
+
   it('serves a static widget resource anonymously on the /fantasy/mcp alias', async () => {
     const authFetch = vi.fn();
     const env = buildEnv(authFetch);
