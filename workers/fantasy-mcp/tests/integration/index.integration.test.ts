@@ -1293,3 +1293,161 @@ describe('fantasy-mcp gateway integration', () => {
     expect(typeof body.latency_ms).toBe('number');
   });
 });
+
+// FLA-217: ChatGPT validates that RFC 9728 `resource` matches the server URL it
+// is connecting to, so the preview lane (workers.dev origin) must describe
+// itself. Meanwhile OpenAI scanned the production metadata surface, so every
+// api.flaim.app response body is pinned byte-for-byte below — fields, ordering,
+// and values must not drift.
+describe('origin-derived OAuth protected-resource metadata (FLA-217)', () => {
+  const PROD_ORIGIN = 'https://api.flaim.app';
+  const PREVIEW_ORIGIN = 'https://fantasy-mcp-preview.gerrygugger.workers.dev';
+
+  const PROD_MCP_METADATA_JSON =
+    '{"resource":"https://api.flaim.app/mcp","authorization_servers":["https://api.flaim.app"],"bearer_methods_supported":["header"],"scopes_supported":["mcp:read","mcp:write"]}';
+  const PROD_FANTASY_MCP_METADATA_JSON =
+    '{"resource":"https://api.flaim.app/fantasy/mcp","authorization_servers":["https://api.flaim.app"],"bearer_methods_supported":["header"],"scopes_supported":["mcp:read","mcp:write"]}';
+  const PROD_ROOT_METADATA_JSON =
+    '{"service":"Flaim API","status":"ok","endpoints":{"mcp":"https://api.flaim.app/mcp","oauth_authorization_server":"https://api.flaim.app/.well-known/oauth-authorization-server","oauth_protected_resource":"https://api.flaim.app/.well-known/oauth-protected-resource","health":"https://api.flaim.app/fantasy/health"}}';
+
+  function buildUnauthenticatedToolsCallRequest(origin: string, pathname: '/mcp' | '/fantasy/mcp'): Request {
+    return new Request(`${origin}${pathname}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json, text/event-stream',
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 'origin-metadata-tools-call',
+        method: 'tools/call',
+        params: { name: 'get_user_session', arguments: {} },
+      }),
+    });
+  }
+
+  it('keeps every api.flaim.app metadata body byte-identical to the scanned production surface', async () => {
+    const authFetch = vi.fn();
+    const env = buildEnv(authFetch);
+
+    const cases: Array<[path: string, expectedBody: string]> = [
+      ['/.well-known/oauth-protected-resource', PROD_MCP_METADATA_JSON],
+      ['/mcp/.well-known/oauth-protected-resource', PROD_MCP_METADATA_JSON],
+      ['/mcp/.well-known/oauth-protected-resource/mcp', PROD_MCP_METADATA_JSON],
+      ['/fantasy/.well-known/oauth-protected-resource', PROD_FANTASY_MCP_METADATA_JSON],
+      ['/fantasy/mcp/.well-known/oauth-protected-resource', PROD_FANTASY_MCP_METADATA_JSON],
+      ['/fantasy/mcp/.well-known/oauth-protected-resource/fantasy/mcp', PROD_FANTASY_MCP_METADATA_JSON],
+      ['/', PROD_ROOT_METADATA_JSON],
+    ];
+
+    for (const [path, expectedBody] of cases) {
+      const response = await app.fetch(
+        new Request(`${PROD_ORIGIN}${path}`),
+        env,
+        mockExecutionContext()
+      );
+      expect(response.status, path).toBe(200);
+      expect(await response.text(), path).toBe(expectedBody);
+    }
+    expect(authFetch).not.toHaveBeenCalled();
+  });
+
+  it('keeps the api.flaim.app 401 WWW-Authenticate challenge byte-identical', async () => {
+    const authFetch = vi.fn();
+    const env = buildEnv(authFetch);
+
+    const response = await app.fetch(
+      buildUnauthenticatedToolsCallRequest(PROD_ORIGIN, '/mcp'),
+      env,
+      mockExecutionContext()
+    );
+    expect(response.status).toBe(401);
+    expect(response.headers.get('WWW-Authenticate')).toBe(
+      'Bearer realm="fantasy-mcp", resource="https://api.flaim.app/mcp", resource_metadata="https://api.flaim.app/.well-known/oauth-protected-resource"'
+    );
+    expect(authFetch).not.toHaveBeenCalled();
+  });
+
+  it('derives resource from a workers.dev origin while keeping the production authorization server', async () => {
+    const authFetch = vi.fn();
+    const env = buildEnv(authFetch);
+
+    const cases: Array<[path: string, expectedResource: string]> = [
+      ['/.well-known/oauth-protected-resource', `${PREVIEW_ORIGIN}/mcp`],
+      ['/mcp/.well-known/oauth-protected-resource', `${PREVIEW_ORIGIN}/mcp`],
+      ['/mcp/.well-known/oauth-protected-resource/mcp', `${PREVIEW_ORIGIN}/mcp`],
+      ['/fantasy/.well-known/oauth-protected-resource', `${PREVIEW_ORIGIN}/fantasy/mcp`],
+      ['/fantasy/mcp/.well-known/oauth-protected-resource', `${PREVIEW_ORIGIN}/fantasy/mcp`],
+      ['/fantasy/mcp/.well-known/oauth-protected-resource/fantasy/mcp', `${PREVIEW_ORIGIN}/fantasy/mcp`],
+    ];
+
+    for (const [path, expectedResource] of cases) {
+      const response = await app.fetch(
+        new Request(`${PREVIEW_ORIGIN}${path}`),
+        env,
+        mockExecutionContext()
+      );
+      expect(response.status, path).toBe(200);
+      const payload = await response.json() as {
+        resource?: string;
+        authorization_servers?: string[];
+        bearer_methods_supported?: string[];
+        scopes_supported?: string[];
+      };
+      expect(payload.resource, path).toBe(expectedResource);
+      // Deliberately NOT origin-derived: all lanes share the production
+      // authorization server (preview mints nothing of its own).
+      expect(payload.authorization_servers, path).toEqual(['https://api.flaim.app']);
+      expect(payload.bearer_methods_supported, path).toEqual(['header']);
+      expect(payload.scopes_supported, path).toEqual(['mcp:read', 'mcp:write']);
+    }
+    expect(authFetch).not.toHaveBeenCalled();
+  });
+
+  it('derives the API root metadata endpoints from a workers.dev origin', async () => {
+    const authFetch = vi.fn();
+    const env = buildEnv(authFetch);
+
+    const response = await app.fetch(
+      new Request(`${PREVIEW_ORIGIN}/`),
+      env,
+      mockExecutionContext()
+    );
+    expect(response.status).toBe(200);
+    const payload = await response.json() as { endpoints?: Record<string, string> };
+    expect(payload.endpoints).toEqual({
+      mcp: `${PREVIEW_ORIGIN}/mcp`,
+      oauth_authorization_server: `${PREVIEW_ORIGIN}/.well-known/oauth-authorization-server`,
+      oauth_protected_resource: `${PREVIEW_ORIGIN}/.well-known/oauth-protected-resource`,
+      health: `${PREVIEW_ORIGIN}/fantasy/health`,
+    });
+    expect(authFetch).not.toHaveBeenCalled();
+  });
+
+  it('points the workers.dev 401 discovery challenge at the request origin', async () => {
+    const authFetch = vi.fn();
+    const env = buildEnv(authFetch);
+
+    const canonicalResponse = await app.fetch(
+      buildUnauthenticatedToolsCallRequest(PREVIEW_ORIGIN, '/mcp'),
+      env,
+      mockExecutionContext()
+    );
+    expect(canonicalResponse.status).toBe(401);
+    expect(canonicalResponse.headers.get('WWW-Authenticate')).toBe(
+      `Bearer realm="fantasy-mcp", resource="${PREVIEW_ORIGIN}/mcp", resource_metadata="${PREVIEW_ORIGIN}/.well-known/oauth-protected-resource"`
+    );
+
+    const fantasyResponse = await app.fetch(
+      buildUnauthenticatedToolsCallRequest(PREVIEW_ORIGIN, '/fantasy/mcp'),
+      env,
+      mockExecutionContext()
+    );
+    expect(fantasyResponse.status).toBe(401);
+    expect(fantasyResponse.headers.get('WWW-Authenticate')).toBe(
+      `Bearer realm="fantasy-mcp", resource="${PREVIEW_ORIGIN}/fantasy/mcp", resource_metadata="${PREVIEW_ORIGIN}/fantasy/.well-known/oauth-protected-resource"`
+    );
+
+    expect(authFetch).not.toHaveBeenCalled();
+  });
+});
