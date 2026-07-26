@@ -108,9 +108,8 @@ export default function SportsGuidePage() {
         <section className="mb-10">
           <h2 className="mb-3 text-xl font-semibold">What Flaim can see</h2>
           <p className="mb-4 text-muted-foreground">
-            Flaim provides 9 read-only tools that give your AI access to your
-            league data. These tools work the same way across all supported
-            sports:
+            Flaim provides 10 tools that give your AI access to your league
+            data. These tools work the same way across all supported sports:
           </p>
           <div className="grid gap-2">
             {[
@@ -150,6 +149,10 @@ export default function SportsGuidePage() {
                 name: "Leagues",
                 desc: "All connected leagues across platforms, with your defaults and preferences.",
               },
+              {
+                name: "Refresh Leagues",
+                desc: "Updates Flaim's list of your connected leagues so new seasons and renamed leagues show up.",
+              },
             ].map(({ name, desc }) => (
               <div
                 key={name}
@@ -161,8 +164,9 @@ export default function SportsGuidePage() {
             ))}
           </div>
           <p className="mt-4 text-sm text-muted-foreground">
-            All tools are read-only. Flaim cannot make trades, drop players, or
-            change anything in your leagues.
+            Nine of the ten tools are read-only, and Refresh Leagues only
+            updates Flaim&apos;s own list of your connected leagues. Flaim cannot
+            make trades, drop players, or change anything in your leagues.
           </p>
         </section>
 
