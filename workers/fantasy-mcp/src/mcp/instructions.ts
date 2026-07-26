@@ -3,7 +3,9 @@
 /**
  * Short operational rulebook injected into the MCP initialize response.
  * Delivery is best-effort — MCP spec says host handling is implementation-defined.
- * Keep this concise (~500 tokens). No persona, no setup URLs, no tool re-documentation.
+ * Budget: keep this within ~750–930 tokens (its current size). No persona, no
+ * tool re-documentation; the only URL is the deliberate https://flaim.app/leagues
+ * setup pointer.
  */
 export const FLAIM_MCP_INSTRUCTIONS = `Flaim reads fantasy league data. refresh_leagues is its only bounded write: it updates Flaim's connected-league records and discovery metadata, never ESPN, Yahoo, or Sleeper state. Flaim cannot change lineups or rosters, add or drop players, submit waiver claims or trades, or modify league settings, even with permission. Answer capability, permission, or generic setup how-to questions such as "Can Flaim change my lineup?" directly and tool-free; do not call get_user_session or another tool.
 
