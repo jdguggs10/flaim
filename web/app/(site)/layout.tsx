@@ -35,6 +35,10 @@ export default function SiteLayout({
                 Terms
               </Link>
               <span aria-hidden="true">·</span>
+              <Link href="/support" className="underline hover:text-foreground">
+                Support
+              </Link>
+              <span aria-hidden="true">·</span>
               <Link
                 href="/inspirations"
                 className="underline hover:text-foreground"
