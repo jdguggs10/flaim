@@ -165,17 +165,17 @@ Three user auth mechanisms, depending on caller:
 
 Public app routes are Clerk-only. Internal helper routes additionally require `X-Flaim-Internal-Token` and can resolve Clerk, OAuth, or eval auth to a user ID.
 
-### Eval API Key
+### Static API Keys (Eval and Demo)
 
-A static Bearer token that resolves to a specific Clerk user ID with `mcp:read` scope. Designed for headless eval/CI where browser-based OAuth is impractical.
+Static Bearer tokens that each resolve to a fixed Clerk user ID with a per-key scope. Designed for headless eval/CI and the public demo surface, where browser-based OAuth is impractical.
 
 **Security model:**
-- **Default-deny:** Only routes that explicitly opt in via `{ allowEvalApiKey: true }` accept the key. New routes reject it by default.
-- **Fixed scope:** Always `mcp:read` — no write/admin access.
+- **Default-deny:** Only routes that explicitly opt in via `{ allowStaticApiKey: true }` accept a static key. New routes reject them by default.
+- **Per-key scope:** The eval key introspects as `mcp:read mcp:write` so the eval harness can exercise the full ten-tool contract, including the bounded `refresh_leagues` registry rewrite. The demo key is fixed at `mcp:read` — the public demo surface has no write access. The only write the eval scope enables is `POST /auth/internal/leagues/refresh`, which rewrites Flaim's own connected-league registry (never provider platforms) and is rate-limited per user.
 - **Constant-time comparison:** Uses SHA-256 digest comparison to prevent timing attacks.
-- **Both secrets required:** `EVAL_API_KEY` + `EVAL_USER_ID` must both be set. If only `EVAL_API_KEY` is set, API key auth is skipped (logged) and falls through to OAuth.
+- **Both secrets required:** `EVAL_API_KEY` + `EVAL_USER_ID` (and `DEMO_API_KEY` + `DEMO_USER_ID`) must both be set. If only the key is set, static-key auth is skipped (logged) and falls through to OAuth.
 
-**Allowlisted internal routes (MCP-read path only):**
+**Allowlisted internal routes (read path, both keys):**
 - `GET /auth/internal/introspect`
 - `GET /auth/internal/credentials/espn/raw`
 - `GET /auth/internal/connect/yahoo/credentials`
@@ -183,6 +183,9 @@ A static Bearer token that resolves to a specific Clerk user ID with `mcp:read` 
 - `GET /auth/internal/leagues/yahoo`
 - `GET /auth/internal/leagues/sleeper`
 - `GET /auth/internal/user/preferences`
+
+**Write route (eval key only, `mcp:write` scope-gated):**
+- `POST /auth/internal/leagues/refresh` — bounded registry refresh; demo key receives `403 insufficient_scope`.
 
 **Current mapping:** `EVAL_USER_ID` → `user_36UBCM4x2hK1aJYY1F7iV1svNw6` (test email on Clerk prod).
 
