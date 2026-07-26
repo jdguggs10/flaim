@@ -411,7 +411,7 @@ describe('fantasy-mcp gateway integration', () => {
       readOnlyHint: false,
       openWorldHint: false,
       destructiveHint: false,
-      idempotentHint: true,
+      idempotentHint: false,
     });
 
     const scopeByTool = new Map(getUnifiedTools().map((tool) => [tool.name, tool.requiredScope]));
@@ -432,13 +432,14 @@ describe('fantasy-mcp gateway integration', () => {
       expect(tool.outputSchema?.required).toContain('success');
       // OpenAI Apps Directory review expects these hints to be explicitly
       // declared. Closed-system reads: openWorldHint false everywhere; the
-      // registry refresh is a repeatable, recoverable rewrite (idempotent).
+      // registry refresh stays non-idempotent (each call re-runs discovery
+      // and can update registry timestamps/metadata).
       expect(tool.annotations).toMatchObject({
         openWorldHint: false,
         destructiveHint: false,
-        idempotentHint: true,
       });
       expect(tool.annotations?.readOnlyHint).toBe(tool.name === 'refresh_leagues' ? false : true);
+      expect(tool.annotations?.idempotentHint).toBe(tool.name === 'refresh_leagues' ? false : true);
     }
 
     // Routed tools advertise the {success, data} envelope; gateway tools their own shape.

@@ -101,9 +101,10 @@ const READ_ONLY_TOOL_ANNOTATIONS: ToolAnnotations = {
 const REFRESH_TOOL_ANNOTATIONS: ToolAnnotations = {
   readOnlyHint: false,
   destructiveHint: false,
-  // Repeatable registry rewrite: re-running converges on the same registry
-  // state and is always recoverable.
-  idempotentHint: true,
+  // Not idempotent under the strict MCP definition: each call re-runs provider
+  // discovery and can update registry timestamps/metadata, so repeating the
+  // call has additional effect even though the end state converges.
+  idempotentHint: false,
   openWorldHint: false,
 };
 
