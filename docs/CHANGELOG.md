@@ -4,6 +4,9 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Eval Static Key Gains Bounded Write Scope
+- **Changed**: The eval static API key now introspects with `mcp:read mcp:write` so the eval harness can exercise the full ten-tool contract, including the bounded `refresh_leagues` registry rewrite. The demo static key remains read-only (`mcp:read`).
+
 ### MCP Descriptor Modernization (FLA-177)
 - **Added**: All ten MCP tools now declare an `outputSchema`, and every success path emits matching `structuredContent` alongside the unchanged text content.
 - **Added**: Top-level per-tool `securitySchemes` on the tools/list wire shape, alongside the existing `_meta.securitySchemes` mirror.

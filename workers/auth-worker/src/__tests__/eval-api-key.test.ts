@@ -163,7 +163,9 @@ describe('eval API key auth', () => {
     const body = await res.json() as { valid: boolean; userId: string; scope: string; authType: string; client_name: string | null };
     expect(body.valid).toBe(true);
     expect(body.userId).toBe(EVAL_USER_ID);
-    expect(body.scope).toBe('mcp:read');
+    // The eval identity carries write scope so the harness can exercise the
+    // bounded registry refresh; the demo key below stays read-only.
+    expect(body.scope).toBe('mcp:read mcp:write');
     expect(body.authType).toBe('eval-api-key');
     // client_name is OAuth-only — null for static API key auth
     expect(body.client_name).toBeNull();
