@@ -1,7 +1,7 @@
 // workers/fantasy-mcp/src/mcp/server.ts
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { Env } from '../types';
-import { getUnifiedTools, hasRequiredScope, mcpAuthError, type McpToolResponse } from './tools';
+import { getUnifiedTools, hasRequiredScope, mcpInsufficientScopeError, type McpToolResponse } from './tools';
 import { emitUsageEvent, type UsageStatus } from './usage';
 import {
   LEGACY_USER_SESSION_WIDGET_URI,
@@ -96,6 +96,9 @@ export function createFantasyMcpServer(ctx: McpContext): McpServer {
           uri,
           mimeType: 'text/html;profile=mcp-app',
           text: USER_SESSION_WIDGET_HTML,
+          // The legacy URI is the frozen published-v1 contract: its read-result
+          // _meta must stay byte-identical to the snapshot OpenAI scanned.
+          // Descriptor additions (FLA-177) go on the v2 URI only.
           _meta: {
             ui: {
               csp: {
@@ -103,10 +106,18 @@ export function createFantasyMcpServer(ctx: McpContext): McpServer {
                 resourceDomains: [],
               },
             },
+            ...(uri === USER_SESSION_WIDGET_URI && {
+              // Plain-language widget summary for directory/host surfaces (v2 only).
+              'openai/widgetDescription':
+                'Summary card of your connected fantasy leagues, showing league names, sports, and your default league.',
+            }),
             'openai/widgetCSP': {
               connect_domains: [],
               resource_domains: [],
-              // Keep external-link allowlisting without reintroducing a stable widget domain.
+              // Keep external-link allowlisting without reintroducing a stable
+              // widget domain — the widget is fully self-contained (empty
+              // connect/resource CSP), so a dedicated domain adds no capability;
+              // revisit only if a portal scan explicitly requires _meta.ui.domain.
               redirect_domains: ['https://flaim.app'],
             },
           },
@@ -127,6 +138,7 @@ export function createFantasyMcpServer(ctx: McpContext): McpServer {
         title: tool.title,
         description: tool.description,
         inputSchema: tool.inputSchema,
+        outputSchema: tool.outputSchema,
         annotations: tool.annotations,
         _meta: {
           securitySchemes: tool.securitySchemes,
@@ -146,10 +158,12 @@ export function createFantasyMcpServer(ctx: McpContext): McpServer {
       },
       async (args) => {
         // Scope-denied path: emit a 'denied' event (no latency timing) before the
-        // auth error returns. Its own waitUntil so it never blocks the response.
+        // insufficient-scope error returns. Its own waitUntil so it never blocks
+        // the response. The token authenticated (introspection passed), so this
+        // is insufficient_scope, not invalid_token.
         if (!hasRequiredScope(tokenScope, tool.requiredScope)) {
           safeEmit(ctx, tool.name, args, 'denied', null);
-          return mcpAuthError('https://api.flaim.app/mcp', tool.requiredScope);
+          return mcpInsufficientScopeError('https://api.flaim.app/mcp', tool.requiredScope);
         }
 
         // Time and emit exactly one event per tool call. Default status 'error'

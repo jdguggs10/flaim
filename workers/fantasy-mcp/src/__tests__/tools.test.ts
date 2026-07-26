@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi, type MockedFunction } from 'vitest';
 import type { z } from 'zod';
-import { getUnifiedTools, hasRequiredScope, mcpAuthError } from '../mcp/tools';
+import { getUnifiedTools, hasRequiredScope, mcpAuthError, mcpInsufficientScopeError } from '../mcp/tools';
 import { buildMcpAuthErrorResponse } from '../auth-response';
 import type { Env } from '../types';
 import { routeToClient } from '../router';
@@ -593,7 +593,7 @@ describe('fantasy-mcp tools', () => {
     expect(result.content[0]?.text).toContain('platforms must include at least one platform');
   });
 
-  it('refresh_leagues includes the write scope challenge when auth-worker denies refresh', async () => {
+  it('refresh_leagues surfaces the insufficient_scope challenge when auth-worker returns 403', async () => {
     const tool = getUnifiedTools().find((t) => t.name === 'refresh_leagues');
     expect(tool).toBeTruthy();
 
@@ -616,7 +616,73 @@ describe('fantasy-mcp tools', () => {
     const challenge = (result._meta?.['mcp/www_authenticate'] as string[] | undefined)?.[0];
 
     expect(result.isError).toBe(true);
+    expect(result.content[0]?.text).toBe('INSUFFICIENT_SCOPE: mcp:write scope is required to refresh leagues');
+    expect(result.structuredContent).toEqual({
+      success: false,
+      code: 'INSUFFICIENT_SCOPE',
+      error: 'mcp:write scope is required to refresh leagues',
+    });
     expect(challenge).toContain('scope="mcp:write"');
+    // ChatGPT requires BOTH error and error_description present to trigger consent UI.
+    expect(challenge).toContain('error="insufficient_scope"');
+    expect(challenge).toContain('error_description="mcp:write scope is required to refresh leagues"');
+    expect(challenge).not.toContain('invalid_token');
+  });
+
+  it('refresh_leagues treats a non-scope 403 (internal service token misconfig) as a plain tool error', async () => {
+    const tool = getUnifiedTools().find((t) => t.name === 'refresh_leagues');
+    expect(tool).toBeTruthy();
+
+    // auth-worker also answers 403 when X-Internal-Service-Token is missing or
+    // invalid (requireInternalService) — an ops misconfiguration, not a consent
+    // problem. That body does NOT carry error="insufficient_scope", so no auth
+    // challenge may be emitted: a consent-upgrade prompt cannot fix it.
+    const misconfigBody = {
+      error: 'unauthorized',
+      error_description: 'Missing or invalid X-Internal-Service-Token',
+    };
+    const env = {
+      INTERNAL_SERVICE_TOKEN: 'internal-secret',
+      AUTH_WORKER: {
+        fetch: async () => new Response(JSON.stringify(misconfigBody), {
+          status: 403,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      },
+    } as unknown as Env;
+
+    const result = await tool!.handler({ platforms: ['espn'] }, env, 'Bearer user-token');
+
+    expect(result.isError).toBe(true);
+    expect(result._meta?.['mcp/www_authenticate']).toBeUndefined();
+    expect(result.content[0]?.text).not.toContain('INSUFFICIENT_SCOPE');
+    expect(result.structuredContent).toEqual({
+      success: false,
+      status: 403,
+      error: 'unauthorized',
+      data: misconfigBody,
+    });
+  });
+
+  it('refresh_leagues keeps the invalid_token challenge when auth-worker returns 401', async () => {
+    const tool = getUnifiedTools().find((t) => t.name === 'refresh_leagues');
+    expect(tool).toBeTruthy();
+
+    const env = {
+      INTERNAL_SERVICE_TOKEN: 'internal-secret',
+      AUTH_WORKER: {
+        fetch: async () => new Response('unauthorized', { status: 401 }),
+      },
+    } as unknown as Env;
+
+    const result = await tool!.handler({ platforms: ['espn'] }, env, 'Bearer user-token');
+    const challenge = (result._meta?.['mcp/www_authenticate'] as string[] | undefined)?.[0];
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0]?.text).toContain('AUTH_FAILED');
+    expect(challenge).toContain('error="invalid_token"');
+    expect(challenge).toContain('scope="mcp:write"');
+    expect(challenge).not.toContain('insufficient_scope');
   });
 
   it('refresh_leagues marks all-provider batch failures as MCP tool errors', async () => {
@@ -2034,7 +2100,7 @@ describe('auth error _meta', () => {
     expect(Array.isArray(result._meta?.['mcp/www_authenticate'])).toBe(true);
   });
 
-  it('scope-denied mcpAuthError includes correct resource_metadata URL and required scope', () => {
+  it('mcpAuthError includes correct resource_metadata URL, required scope, and invalid_token error', () => {
     const result = mcpAuthError('https://api.flaim.app/mcp', 'mcp:write');
     expect(result.isError).toBe(true);
     expect(result._meta).toBeDefined();
@@ -2044,6 +2110,8 @@ describe('auth error _meta', () => {
     // Must point to the actual served route, not /mcp/.well-known
     expect(challenge).toContain('resource_metadata="https://api.flaim.app/.well-known/oauth-protected-resource"');
     expect(challenge).toContain('scope="mcp:write"');
+    expect(challenge).toContain('error="invalid_token"');
+    expect(challenge).not.toContain('insufficient_scope');
     expect(challenge).not.toContain('/mcp/.well-known');
   });
 
@@ -2052,6 +2120,43 @@ describe('auth error _meta', () => {
     const challenge = (result._meta?.['mcp/www_authenticate'] as string[])[0];
     expect(challenge).toContain('resource_metadata="https://api.flaim.app/fantasy/.well-known/oauth-protected-resource"');
     expect(challenge).not.toContain('/fantasy/mcp/.well-known');
+  });
+});
+
+describe('mcpInsufficientScopeError', () => {
+  it('builds the full insufficient_scope challenge for mcp:write', () => {
+    const result = mcpInsufficientScopeError('https://api.flaim.app/mcp', 'mcp:write');
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0]?.text).toBe('INSUFFICIENT_SCOPE: mcp:write scope is required to refresh leagues');
+    expect(result.structuredContent).toEqual({
+      success: false,
+      code: 'INSUFFICIENT_SCOPE',
+      error: 'mcp:write scope is required to refresh leagues',
+    });
+
+    const challenge = (result._meta?.['mcp/www_authenticate'] as string[])[0];
+    expect(challenge).toBe(
+      'Bearer resource_metadata="https://api.flaim.app/.well-known/oauth-protected-resource", scope="mcp:write", error="insufficient_scope", error_description="mcp:write scope is required to refresh leagues"'
+    );
+  });
+
+  it('builds the insufficient_scope challenge for mcp:read tools', () => {
+    const result = mcpInsufficientScopeError('https://api.flaim.app/mcp', 'mcp:read');
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0]?.text).toBe('INSUFFICIENT_SCOPE: mcp:read scope is required for this tool');
+    const challenge = (result._meta?.['mcp/www_authenticate'] as string[])[0];
+    expect(challenge).toContain('scope="mcp:read"');
+    expect(challenge).toContain('error="insufficient_scope"');
+    expect(challenge).toContain('error_description="mcp:read scope is required for this tool"');
+    expect(challenge).not.toContain('invalid_token');
+  });
+
+  it('derives the /fantasy lane metadata URL', () => {
+    const result = mcpInsufficientScopeError('https://api.flaim.app/fantasy/mcp', 'mcp:write');
+    const challenge = (result._meta?.['mcp/www_authenticate'] as string[])[0];
+    expect(challenge).toContain('resource_metadata="https://api.flaim.app/fantasy/.well-known/oauth-protected-resource"');
   });
 });
 
@@ -2064,6 +2169,34 @@ describe('buildMcpAuthErrorResponse', () => {
     const wwwAuth = response.headers.get('WWW-Authenticate')!;
     expect(wwwAuth).toContain('resource_metadata=');
     expect(wwwAuth).toContain('.well-known/oauth-protected-resource');
+  });
+
+  it('401 omits error params when the request carried no credentials (RFC 6750 §3.1)', () => {
+    const request = new Request('https://api.flaim.app/mcp', { method: 'POST' });
+    const response = buildMcpAuthErrorResponse(request);
+
+    // No Authorization header at all → the challenge must not carry an error
+    // code. This bare header is the known-good shape for ChatGPT's initial
+    // connect.
+    const wwwAuth = response.headers.get('WWW-Authenticate')!;
+    expect(wwwAuth).toBe(
+      'Bearer realm="fantasy-mcp", resource="https://api.flaim.app/mcp", resource_metadata="https://api.flaim.app/.well-known/oauth-protected-resource"'
+    );
+  });
+
+  it('401 appends RFC 6750 error params when a presented token failed', () => {
+    const request = new Request('https://api.flaim.app/mcp', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer expired-token' },
+    });
+    const response = buildMcpAuthErrorResponse(request);
+
+    const wwwAuth = response.headers.get('WWW-Authenticate')!;
+    expect(wwwAuth).toContain('error="invalid_token"');
+    expect(wwwAuth).toContain('error_description="Authentication required"');
+    // Additive: error params come after realm/resource/resource_metadata.
+    expect(wwwAuth.indexOf('error="invalid_token"')).toBeGreaterThan(wwwAuth.indexOf('resource_metadata='));
+    expect(wwwAuth).not.toContain('insufficient_scope');
   });
 
   it('uses /fantasy/mcp resource for /fantasy/* paths', () => {

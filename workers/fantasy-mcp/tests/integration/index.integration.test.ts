@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 import app from '../../src/index';
 import type { Env } from '../../src/types';
 import { getUnifiedTools, type UnifiedTool } from '../../src/mcp/tools';
@@ -97,6 +98,13 @@ type JsonRpcTestPayload = {
           };
         };
       };
+      outputSchema?: {
+        type?: string;
+        properties?: Record<string, unknown>;
+        required?: string[];
+        additionalProperties?: unknown;
+      };
+      securitySchemes?: Array<{ type?: string; scopes?: string[] }>;
       annotations?: {
         readOnlyHint?: boolean;
         openWorldHint?: boolean;
@@ -401,7 +409,7 @@ describe('fantasy-mcp gateway integration', () => {
     expect(refreshTool?._meta?.securitySchemes?.[0]?.scopes).toContain('mcp:write');
     expect(refreshTool?.annotations).toEqual({
       readOnlyHint: false,
-      openWorldHint: true,
+      openWorldHint: false,
       destructiveHint: false,
       idempotentHint: false,
     });
@@ -410,14 +418,37 @@ describe('fantasy-mcp gateway integration', () => {
     for (const tool of tools || []) {
       expect(tool._meta?.securitySchemes?.[0]?.type).toBe('oauth2');
       expect(tool._meta?.securitySchemes?.[0]?.scopes).toContain(scopeByTool.get(tool.name));
-      // OpenAI Apps Directory review expects these hints to be explicitly declared.
+      // FLA-177: top-level securitySchemes injected at the transport boundary
+      // for current OpenAI plugin wire shape, mirroring _meta.securitySchemes.
+      expect(tool.securitySchemes).toEqual([
+        { type: 'oauth2', scopes: [scopeByTool.get(tool.name)] },
+      ]);
+      // FLA-177: every tool declares an outputSchema, serialized as a tolerant
+      // (never additionalProperties:false) object schema.
+      expect(tool.outputSchema?.type).toBe('object');
+      expect(tool.outputSchema?.properties).toBeDefined();
+      expect(tool.outputSchema?.additionalProperties).not.toBe(false);
+      expect(tool.outputSchema?.properties?.success).toBeDefined();
+      expect(tool.outputSchema?.required).toContain('success');
+      // OpenAI Apps Directory review expects these hints to be explicitly
+      // declared. Closed-system reads: openWorldHint false everywhere; the
+      // registry refresh stays non-idempotent (each call re-runs discovery
+      // and can update registry timestamps/metadata).
       expect(tool.annotations).toMatchObject({
-        openWorldHint: true,
+        openWorldHint: false,
         destructiveHint: false,
       });
-      expect(tool.annotations?.idempotentHint).toBe(tool.name === 'refresh_leagues' ? false : true);
       expect(tool.annotations?.readOnlyHint).toBe(tool.name === 'refresh_leagues' ? false : true);
+      expect(tool.annotations?.idempotentHint).toBe(tool.name === 'refresh_leagues' ? false : true);
     }
+
+    // Routed tools advertise the {success, data} envelope; gateway tools their own shape.
+    const standingsTool = tools?.find((tool) => tool.name === 'get_standings');
+    expect(standingsTool?.outputSchema?.required).toEqual(expect.arrayContaining(['success', 'data']));
+    expect(userSessionTool?.outputSchema?.required).toEqual(
+      expect.arrayContaining(['success', 'totalLeaguesFound', 'allLeagues', 'instructions'])
+    );
+    expect(userSessionTool?.outputSchema?.required).not.toContain('warnings');
 
     expect(authFetch).toHaveBeenCalledTimes(1);
     const introspectReq = authFetch.mock.calls[0]?.[0] as Request;
@@ -496,6 +527,10 @@ describe('fantasy-mcp gateway integration', () => {
       widgetBodies.push(content?.text || '');
       expect(content?._meta?.ui?.csp?.connectDomains).toEqual([]);
       expect(content?._meta?.ui?.csp?.resourceDomains).toEqual([]);
+      // No stable widget domain on either URI: the widget is fully
+      // self-contained (empty connect/resource CSP), so a dedicated domain adds
+      // no capability. Deliberate decision — revisit only if a portal scan
+      // explicitly requires _meta.ui.domain.
       expect(content?._meta?.ui?.domain).toBeUndefined();
       expect(content?._meta?.['openai/widgetDomain']).toBeUndefined();
       expect(content?._meta?.['openai/widgetCSP']).toEqual({
@@ -503,6 +538,30 @@ describe('fantasy-mcp gateway integration', () => {
         resource_domains: [],
         redirect_domains: ['https://flaim.app'],
       });
+      if (uri === LEGACY_USER_SESSION_WIDGET_URI) {
+        // Frozen published-v1 contract: the legacy read-result _meta must stay
+        // byte-identical to the snapshot OpenAI scanned — strict-equal on the
+        // whole object so no key can be added or removed unnoticed.
+        expect(content?._meta).toEqual({
+          ui: {
+            csp: {
+              connectDomains: [],
+              resourceDomains: [],
+            },
+          },
+          'openai/widgetCSP': {
+            connect_domains: [],
+            resource_domains: [],
+            redirect_domains: ['https://flaim.app'],
+          },
+        });
+        expect(content?._meta?.['openai/widgetDescription']).toBeUndefined();
+      } else {
+        // FLA-177: plain-language widget summary on the v2 URI only.
+        expect(content?._meta?.['openai/widgetDescription']).toBe(
+          'Summary card of your connected fantasy leagues, showing league names, sports, and your default league.'
+        );
+      }
     }
     expect(widgetBodies).toHaveLength(2);
     expect(widgetBodies[0]).toBe(widgetBodies[1]);
@@ -1231,11 +1290,14 @@ describe('fantasy-mcp gateway integration', () => {
     const text = await response.text();
     const data = text.split(/\r?\n/).filter((l) => l.startsWith('data:')).map((l) => l.slice(5).trim()).join('\n').trim();
     const parsed = JSON.parse(data) as { result?: { isError?: boolean; content?: Array<{ text?: string }>; _meta?: Record<string, unknown> } };
-    // The tool call resolves to the MCP auth error, not a handler result.
+    // The tool call resolves to the in-band insufficient_scope error (the token
+    // authenticated, it just lacks the required scope), not a handler result.
     expect(parsed.result?.isError).toBe(true);
-    expect(parsed.result?.content?.[0]?.text).toContain('AUTH_FAILED');
+    expect(parsed.result?.content?.[0]?.text).toContain('INSUFFICIENT_SCOPE');
     const challenge = (parsed.result?._meta?.['mcp/www_authenticate'] as string[] | undefined)?.[0];
     expect(challenge).toContain('scope="mcp:read"');
+    expect(challenge).toContain('error="insufficient_scope"');
+    expect(challenge).toContain('error_description="mcp:read scope is required for this tool"');
     expect(challenge).toContain('resource_metadata="https://api.flaim.app/.well-known/oauth-protected-resource"');
 
     // Handler must NOT run on the denied path.
@@ -1277,6 +1339,7 @@ describe('fantasy-mcp gateway integration', () => {
       title: 'Explode',
       description: 'Test-only tool whose handler always throws.',
       inputSchema: {},
+      outputSchema: z.object({}).passthrough(),
       requiredScope: 'mcp:read',
       securitySchemes: [{ type: 'oauth2', scopes: ['mcp:read'] }],
       handler: async () => {
@@ -1387,10 +1450,29 @@ describe('origin-derived OAuth protected-resource metadata (FLA-217)', () => {
       mockExecutionContext()
     );
     expect(response.status).toBe(401);
+    // RFC 6750 §3.1: no error code when the request carried no credentials at
+    // all — this bare header is the known-good shape for ChatGPT's initial
+    // connect and must stay byte-identical.
     expect(response.headers.get('WWW-Authenticate')).toBe(
       'Bearer realm="fantasy-mcp", resource="https://api.flaim.app/mcp", resource_metadata="https://api.flaim.app/.well-known/oauth-protected-resource"'
     );
     expect(authFetch).not.toHaveBeenCalled();
+  });
+
+  it('appends RFC 6750 error params to the api.flaim.app 401 when a presented token fails', async () => {
+    const authFetch = vi.fn(async () => new Response('invalid token', { status: 401 }));
+    const env = buildEnv(authFetch);
+
+    const request = buildUnauthenticatedToolsCallRequest(PROD_ORIGIN, '/mcp');
+    request.headers.set('Authorization', 'Bearer expired-token');
+    const response = await app.fetch(request, env, mockExecutionContext());
+    expect(response.status).toBe(401);
+    // FLA-177: credentials were presented and failed, so the challenge carries
+    // error/error_description after the discovery params.
+    expect(response.headers.get('WWW-Authenticate')).toBe(
+      'Bearer realm="fantasy-mcp", resource="https://api.flaim.app/mcp", resource_metadata="https://api.flaim.app/.well-known/oauth-protected-resource", error="invalid_token", error_description="Authentication required"'
+    );
+    expect(authFetch).toHaveBeenCalledTimes(1);
   });
 
   it('derives resource from a workers.dev origin while keeping the production authorization server', async () => {
@@ -1502,6 +1584,7 @@ describe('origin-derived OAuth protected-resource metadata (FLA-217)', () => {
     const authFetch = vi.fn();
     const env = buildEnv(authFetch);
 
+    // RFC 6750 §3.1: no credentials presented → no error code on the challenge.
     const canonicalResponse = await app.fetch(
       buildUnauthenticatedToolsCallRequest(PREVIEW_ORIGIN, '/mcp'),
       env,
@@ -1523,5 +1606,19 @@ describe('origin-derived OAuth protected-resource metadata (FLA-217)', () => {
     );
 
     expect(authFetch).not.toHaveBeenCalled();
+  });
+
+  it('appends RFC 6750 error params to the workers.dev 401 when a presented token fails', async () => {
+    const authFetch = vi.fn(async () => new Response('invalid token', { status: 401 }));
+    const env = buildEnv(authFetch);
+
+    const request = buildUnauthenticatedToolsCallRequest(PREVIEW_ORIGIN, '/fantasy/mcp');
+    request.headers.set('Authorization', 'Bearer expired-token');
+    const response = await app.fetch(request, env, mockExecutionContext());
+    expect(response.status).toBe(401);
+    expect(response.headers.get('WWW-Authenticate')).toBe(
+      `Bearer realm="fantasy-mcp", resource="${PREVIEW_ORIGIN}/fantasy/mcp", resource_metadata="${PREVIEW_ORIGIN}/fantasy/.well-known/oauth-protected-resource", error="invalid_token", error_description="Authentication required"`
+    );
+    expect(authFetch).toHaveBeenCalledTimes(1);
   });
 });

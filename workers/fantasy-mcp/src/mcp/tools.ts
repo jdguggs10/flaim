@@ -4,6 +4,7 @@ import type { ZodRawShapeCompat } from '@modelcontextprotocol/sdk/server/zod-com
 import type { Env, Platform, Sport, ToolParams } from '../types';
 import { routeToClient, type RouteResult } from '../router';
 import {
+  ErrorCode,
   getDefaultSeasonYear,
   getSeasonLabel,
   logSetupSignal,
@@ -46,6 +47,14 @@ export interface UnifiedTool {
   title: string;
   description: string;
   inputSchema: ZodRawShapeCompat;
+  /**
+   * Declared output schema for structuredContent (FLA-177). Constructed zod
+   * object schemas (not raw shapes) so the root object can be .passthrough():
+   * the SDK serializes them through the same toJsonSchemaCompat path as
+   * inputSchema, and a raw shape would serialize with additionalProperties:false
+   * at the root — a too-tight advertisement for tolerant envelopes.
+   */
+  outputSchema: z.ZodTypeAny;
   requiredScope: 'mcp:read' | 'mcp:write';
   securitySchemes: ToolSecuritySchemes;
   annotations: ToolAnnotations;
@@ -78,19 +87,319 @@ function buildSecuritySchemes(scope: 'mcp:read' | 'mcp:write'): ToolSecuritySche
   return [{ type: 'oauth2', scopes: [scope] }];
 }
 
+// openWorldHint is false for every Flaim tool: these are closed-system reads
+// (and one registry refresh) against the user's connected leagues — current
+// OpenAI guidance reserves openWorld for tools that change publicly visible
+// internet state.
 const READ_ONLY_TOOL_ANNOTATIONS: ToolAnnotations = {
   readOnlyHint: true,
   destructiveHint: false,
   idempotentHint: true,
-  openWorldHint: true,
+  openWorldHint: false,
 };
 
 const REFRESH_TOOL_ANNOTATIONS: ToolAnnotations = {
   readOnlyHint: false,
   destructiveHint: false,
+  // Not idempotent under the strict MCP definition: each call re-runs provider
+  // discovery and can update registry timestamps/metadata, so repeating the
+  // call has additional effect even though the end state converges.
   idempotentHint: false,
-  openWorldHint: true,
+  openWorldHint: false,
 };
+
+// =============================================================================
+// OUTPUT SCHEMAS (FLA-177)
+// =============================================================================
+// SAFETY: the MCP SDK validates every non-error structuredContent against the
+// declared outputSchema at runtime and turns a mismatch into a protocol error,
+// so a too-tight schema is a production tool outage. Rules:
+// - every object is .passthrough() — never .strict()/additionalProperties:false
+// - required fields are limited to keys the assembly code ALWAYS sets
+// - anything platform-variant is optional and/or nullable
+// When in doubt, loosen.
+
+function looseObject(shape: z.ZodRawShape = {}) {
+  return z.object(shape).passthrough();
+}
+
+/**
+ * League entry as returned by get_user_session.allLeagues and get_ancient_history.
+ * sport is optional/nullable defensively: gateway assembly already guards absent
+ * sport (l.sport?.toLowerCase()), and the registry column's NOT NULL constraint
+ * could not be proven from migrations — a null must never become a protocol error.
+ */
+const leagueEntrySchema = looseObject({
+  leagueId: z.string(),
+  sport: z.string().nullable().optional(),
+  platform: z.string(),
+  teamId: z.string().optional(),
+  seasonYear: z.number().nullable().optional(),
+  leagueName: z.string().nullable().optional(),
+  teamName: z.string().nullable().optional(),
+  recurringLeagueId: z.string().optional(),
+});
+
+/** Default-league summary built by get_user_session (defaultLeague / defaultLeagues values). */
+const defaultLeagueSchema = looseObject({
+  platform: z.string(),
+  leagueId: z.string(),
+  sport: z.string().optional(),
+  teamId: z.string().optional(),
+  seasonYear: z.number().optional(),
+  season: z.string().optional(),
+  leagueName: z.string().optional(),
+  teamName: z.string().optional(),
+});
+
+const seasonInfoSchema = looseObject({
+  year: z.number(),
+  label: z.string(),
+});
+
+const GET_USER_SESSION_OUTPUT_SCHEMA = looseObject({
+  success: z.boolean(),
+  currentDate: z.string(),
+  currentSeasons: looseObject({
+    football: seasonInfoSchema,
+    baseball: seasonInfoSchema,
+    basketball: seasonInfoSchema,
+    hockey: seasonInfoSchema,
+  }),
+  timezone: z.string(),
+  totalLeaguesFound: z.number(),
+  leaguesBySport: z.record(z.number()),
+  defaultSport: z.string().nullable(),
+  defaultLeague: defaultLeagueSchema.nullable(),
+  defaultLeagues: z.record(defaultLeagueSchema),
+  allLeagues: z.array(leagueEntrySchema),
+  warnings: z.array(z.string()).optional(),
+  instructions: z.string(),
+});
+
+const REFRESH_LEAGUES_OUTPUT_SCHEMA = looseObject({
+  success: z.boolean(),
+  requestedPlatforms: z.array(z.string()).optional(),
+  results: z
+    .record(
+      looseObject({
+        platform: z.string(),
+        status: z.string().describe('success, skipped, or error'),
+        httpStatus: z.number().optional(),
+        error: z.string().optional(),
+        error_description: z.string().optional(),
+        retryAfter: z.string().optional(),
+        details: z.unknown().optional(),
+      })
+    )
+    .optional()
+    .describe('Per-platform refresh outcome keyed by platform name'),
+});
+
+const GET_ANCIENT_HISTORY_OUTPUT_SCHEMA = looseObject({
+  success: z.boolean(),
+  thresholdYear: z.number(),
+  oldLeagues: z.array(leagueEntrySchema),
+  oldSeasonsFromActiveLeagues: z.record(z.array(leagueEntrySchema)),
+  totalOldLeagues: z.number(),
+  totalOldSeasons: z.number(),
+  warnings: z.array(z.string()).optional(),
+});
+
+/**
+ * Routed-tool envelope: {success: true, data: <platform envelope>}. The data
+ * shape is the tolerant union of the per-platform envelope fields — every field
+ * optional, deep entries passthrough — because ESPN, Yahoo, and Sleeper return
+ * deliberately different envelopes for the same tool.
+ */
+function routedOutputSchema(dataShape: z.ZodRawShape) {
+  return looseObject({
+    success: z.boolean(),
+    data: looseObject(dataShape).describe(
+      'Platform envelope. Field availability varies by platform (ESPN, Yahoo, Sleeper); absent fields are not provided by that platform.'
+    ),
+  });
+}
+
+const GET_LEAGUE_INFO_OUTPUT_SCHEMA = routedOutputSchema({
+  // ESPN
+  id: z.union([z.string(), z.number()]).optional(),
+  size: z.number().optional(),
+  scoringPeriodId: z.number().optional(),
+  currentMatchupPeriod: z.number().optional(),
+  seasonId: z.number().optional(),
+  segmentId: z.number().optional(),
+  scoringSettings: looseObject().optional(),
+  roster: looseObject().optional(),
+  schedule: looseObject().optional(),
+  // Yahoo
+  leagueKey: z.string().optional(),
+  leagueId: z.union([z.string(), z.number()]).optional(),
+  url: z.string().optional(),
+  numTeams: z.union([z.number(), z.string()]).optional(),
+  scoringType: z.string().optional(),
+  currentWeek: z.union([z.number(), z.string()]).optional(),
+  startWeek: z.union([z.number(), z.string()]).optional(),
+  endWeek: z.union([z.number(), z.string()]).optional(),
+  isFinished: z.boolean().optional(),
+  draftStatus: z.string().optional(),
+  // Sleeper
+  sport: z.string().optional(),
+  season: z.union([z.string(), z.number()]).optional(),
+  totalRosters: z.number().optional(),
+  rosterPositions: z.array(z.unknown()).optional(),
+  previousLeagueId: z.string().nullable().optional(),
+  draftId: z.string().nullable().optional(),
+  // Shared
+  name: z.string().optional(),
+  // ESPN returns a status object; Yahoo/Sleeper return status strings.
+  status: z.unknown().optional(),
+  teams: z
+    .array(looseObject({ ownerName: z.string().nullable().optional() }))
+    .optional()
+    .describe('Team/owner context; exact team fields vary by platform but all include ownerName'),
+});
+
+const standingsEntrySchema = looseObject({
+  playoffSeed: z.number().nullable().optional(),
+  finalRank: z.number().nullable().optional().describe('Verified postseason finish; null when not verifiable'),
+  championshipWon: z.boolean().nullable().optional(),
+  playoffOutcome: z.string().nullable().optional(),
+  outcomeConfidence: z.string().nullable().optional().describe('explicit or derived; null when unknown'),
+  madePlayoffs: z.boolean().nullable().optional(),
+});
+
+const GET_STANDINGS_OUTPUT_SCHEMA = routedOutputSchema({
+  leagueId: z.string().optional(),
+  seasonYear: z.number().optional(),
+  leagueKey: z.string().optional(),
+  leagueName: z.string().optional(),
+  seasonPhase: z.string().optional().describe('regular_season, playoffs_in_progress, or season_complete'),
+  seasonComplete: z.boolean().optional(),
+  standings: z.array(standingsEntrySchema).optional(),
+});
+
+const GET_MATCHUPS_OUTPUT_SCHEMA = routedOutputSchema({
+  leagueId: z.string().optional(),
+  seasonYear: z.number().optional(),
+  currentScoringPeriod: z.number().optional(),
+  matchupPeriod: z.number().nullable().optional(),
+  leagueKey: z.string().optional(),
+  leagueName: z.string().optional(),
+  currentWeek: z.union([z.number(), z.string()]).optional(),
+  matchupWeek: z.union([z.number(), z.string()]).optional(),
+  week: z.number().optional(),
+  matchups: z
+    .array(
+      looseObject({
+        home: looseObject().nullable().optional(),
+        away: looseObject().nullable().optional(),
+      })
+    )
+    .optional(),
+});
+
+const GET_ROSTER_OUTPUT_SCHEMA = routedOutputSchema({
+  leagueId: z.string().optional(),
+  teamId: z.union([z.string(), z.number()]).optional(),
+  teamKey: z.string().optional(),
+  teamName: z.string().optional(),
+  rosterId: z.number().optional(),
+  ownerId: z.string().nullable().optional(),
+  ownerName: z.string().nullable().optional(),
+  snapshot: looseObject({ type: z.string() })
+    .optional()
+    .describe('Identifies what was returned: current, week, or date'),
+  roster: z.array(looseObject()).optional().describe('ESPN roster entries'),
+  players: z.array(looseObject()).optional().describe('Yahoo roster entries'),
+  starters: z.array(z.unknown()).optional(),
+  bench: z.array(z.unknown()).optional(),
+  reserve: z.array(z.unknown()).optional(),
+  taxi: z.array(z.unknown()).optional(),
+  record: looseObject().optional(),
+  points: z.number().nullable().optional(),
+  playersPoints: z.record(z.unknown()).optional(),
+  rosters: z.array(looseObject()).optional().describe('Sleeper league-wide roster list when no team is selected'),
+  limitations: looseObject().optional(),
+});
+
+const freeAgentEntrySchema = looseObject({
+  percentOwned: z
+    .number()
+    .nullable()
+    .optional()
+    .describe('ESPN-wide roster rate or Yahoo-wide market rate; null/absent when the provider reports none'),
+  percentStarted: z.number().nullable().optional(),
+  status: z.string().nullable().optional(),
+  waiverProcessDate: z.union([z.string(), z.number()]).nullable().optional(),
+});
+
+const GET_FREE_AGENTS_OUTPUT_SCHEMA = routedOutputSchema({
+  // ESPN
+  leagueId: z.string().optional(),
+  seasonYear: z.number().optional(),
+  // Yahoo
+  leagueKey: z.string().optional(),
+  leagueName: z.string().optional(),
+  position: z.string().optional(),
+  freeAgents: z.array(freeAgentEntrySchema).optional().describe('ESPN/Yahoo available-player entries'),
+  // Sleeper
+  platform: z.string().optional(),
+  sport: z.string().optional(),
+  league_id: z.string().optional(),
+  season_year: z.number().optional(),
+  players: z.array(freeAgentEntrySchema).optional().describe('Sleeper available-player entries'),
+  warning: z.string().optional(),
+  // Shared
+  count: z.number().optional(),
+});
+
+const searchPlayerEntrySchema = looseObject({
+  id: z.string().optional(),
+  name: z.string().optional(),
+  team: z.string().nullable().optional(),
+  position: z.string().nullable().optional(),
+  market_percent_owned: z.number().nullable().optional(),
+  ownership_scope: z.string().optional(),
+  league_status: z.string().nullable().optional().describe('ROSTERED, FREE_AGENT, or null when unavailable'),
+  league_team_name: z.string().nullable().optional(),
+  league_owner_name: z.string().nullable().optional(),
+});
+
+const GET_PLAYERS_OUTPUT_SCHEMA = routedOutputSchema({
+  platform: z.string().optional(),
+  sport: z.string().optional(),
+  query: z.string().optional(),
+  count: z.number().optional(),
+  leagueKey: z.string().optional(),
+  leagueName: z.string().optional(),
+  players: z.array(searchPlayerEntrySchema).optional(),
+});
+
+const transactionEntrySchema = looseObject({
+  date: z.string().optional(),
+  type: z.string().optional(),
+  status: z.string().nullable().optional(),
+  week: z.number().nullable().optional(),
+  team_ids: z.array(z.union([z.string(), z.number()])).optional(),
+  trade_sides: z.array(looseObject()).nullable().optional(),
+  waiver_priority: z.number().nullable().optional(),
+  draft_picks: z.array(z.unknown()).nullable().optional(),
+});
+
+const GET_TRANSACTIONS_OUTPUT_SCHEMA = routedOutputSchema({
+  platform: z.string().optional(),
+  sport: z.string().optional(),
+  league_id: z.string().optional(),
+  season_year: z.number().optional(),
+  window: looseObject().optional(),
+  count: z.number().optional(),
+  truncated: z.boolean().optional(),
+  transactions: z.array(transactionEntrySchema).optional(),
+  teams: z.record(z.string()).optional().describe('ESPN team ID to display name map'),
+  warning: z.string().optional(),
+  dropped_invalid_timestamp_count: z.number().optional(),
+});
 
 // =============================================================================
 // HELPER: Active league threshold
@@ -210,7 +519,7 @@ async function refreshUserLeagues(
 
     clearTimeout(timeoutId);
 
-    if (response.status === 401 || response.status === 403) {
+    if (response.status === 401) {
       return mcpAuthError('https://api.flaim.app/mcp', 'mcp:write');
     }
 
@@ -218,6 +527,21 @@ async function refreshUserLeagues(
     const payload = contentType.includes('application/json')
       ? await response.json().catch(() => ({ success: false, error: 'Invalid JSON from auth-worker' }))
       : { success: response.ok, error: await response.text().catch(() => 'No response body') };
+
+    if (
+      response.status === 403 &&
+      typeof payload === 'object' &&
+      payload !== null &&
+      (payload as { error?: unknown }).error === 'insufficient_scope'
+    ) {
+      // Genuine scope denial from the auth-worker's mcp:write gate — the body
+      // says error="insufficient_scope". Surface the RFC 6750 challenge so
+      // clients can run a consent upgrade. Auth-worker also returns 403 for a
+      // missing/invalid internal service token (an ops misconfiguration, not a
+      // user-consent problem); that and any other 403 fall through to the plain
+      // structured tool error below with NO auth challenge.
+      return mcpInsufficientScopeError('https://api.flaim.app/mcp', 'mcp:write');
+    }
 
     if (!response.ok) {
       const errorPayload = {
@@ -495,12 +819,14 @@ async function fetchSleeperLeagues(
 function mcpSuccess(data: unknown): McpToolResponse {
   return {
     content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
+    structuredContent: data as Record<string, unknown>,
   };
 }
 
-function mcpError(message: string): McpToolResponse {
+function mcpError(message: string, code: string = 'ERROR'): McpToolResponse {
   return {
     content: [{ type: 'text', text: message }],
+    structuredContent: { success: false, code, error: message },
     isError: true,
   };
 }
@@ -511,13 +837,23 @@ function didRefreshBatchFail(payload: unknown): boolean {
   return record.success === false;
 }
 
-export function mcpAuthError(resource: string, requiredScope?: 'mcp:read' | 'mcp:write'): McpToolResponse {
-  // Derive metadata URL from resource: strip /mcp path, add .well-known
-  // e.g. https://api.flaim.app/mcp → https://api.flaim.app/.well-known/oauth-protected-resource
-  //      https://api.flaim.app/fantasy/mcp → https://api.flaim.app/fantasy/.well-known/oauth-protected-resource
+// Derive metadata URL from resource: strip /mcp path, add .well-known
+// e.g. https://api.flaim.app/mcp → https://api.flaim.app/.well-known/oauth-protected-resource
+//      https://api.flaim.app/fantasy/mcp → https://api.flaim.app/fantasy/.well-known/oauth-protected-resource
+function deriveResourceMetadataUrl(resource: string): string {
   const url = new URL(resource);
   const basePath = url.pathname.replace(/\/mcp$/, '');
-  const resourceMetadata = `${url.origin}${basePath}/.well-known/oauth-protected-resource`;
+  return `${url.origin}${basePath}/.well-known/oauth-protected-resource`;
+}
+
+/**
+ * Genuine authentication failure (invalid/expired token, introspection failure,
+ * provider 401 without valid scope context). Keeps error="invalid_token".
+ * For a valid token that merely lacks the required scope, use
+ * mcpInsufficientScopeError instead.
+ */
+export function mcpAuthError(resource: string, requiredScope?: 'mcp:read' | 'mcp:write'): McpToolResponse {
+  const resourceMetadata = deriveResourceMetadataUrl(resource);
   const scopeChallenge = requiredScope ? `, scope="${requiredScope}"` : '';
   return {
     content: [{ type: 'text', text: 'AUTH_FAILED: Authentication required' }],
@@ -525,6 +861,32 @@ export function mcpAuthError(resource: string, requiredScope?: 'mcp:read' | 'mcp
     _meta: {
       'mcp/www_authenticate': [
         `Bearer resource_metadata="${resourceMetadata}"${scopeChallenge}, error="invalid_token", error_description="Authentication required"`,
+      ],
+    },
+  };
+}
+
+/**
+ * Valid token, missing scope (RFC 6750 insufficient_scope). Used by the
+ * per-tool scope gate in server.ts and by the auth-worker 403 path in
+ * refreshUserLeagues. The challenge carries BOTH error and error_description —
+ * ChatGPT requires both parameters present to trigger its consent UI.
+ */
+export function mcpInsufficientScopeError(
+  resource: string,
+  requiredScope: 'mcp:read' | 'mcp:write'
+): McpToolResponse {
+  const resourceMetadata = deriveResourceMetadataUrl(resource);
+  const description = requiredScope === 'mcp:write'
+    ? 'mcp:write scope is required to refresh leagues'
+    : `${requiredScope} scope is required for this tool`;
+  return {
+    content: [{ type: 'text', text: `INSUFFICIENT_SCOPE: ${description}` }],
+    structuredContent: { success: false, code: ErrorCode.INSUFFICIENT_SCOPE, error: description },
+    isError: true,
+    _meta: {
+      'mcp/www_authenticate': [
+        `Bearer resource_metadata="${resourceMetadata}", scope="${requiredScope}", error="insufficient_scope", error_description="${description}"`,
       ],
     },
   };
@@ -643,6 +1005,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       requiredScope: 'mcp:read',
       securitySchemes: buildSecuritySchemes('mcp:read'),
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
+      outputSchema: GET_USER_SESSION_OUTPUT_SCHEMA,
       openaiMeta: { invoking: 'Loading your leagues\u2026', invoked: 'Leagues loaded' },
       widgetUri: USER_SESSION_WIDGET_URI,
       description:
@@ -906,6 +1269,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       requiredScope: 'mcp:write',
       securitySchemes: buildSecuritySchemes('mcp:write'),
       annotations: REFRESH_TOOL_ANNOTATIONS,
+      outputSchema: REFRESH_LEAGUES_OUTPUT_SCHEMA,
       openaiMeta: { invoking: 'Refreshing leagues\u2026', invoked: 'Refresh complete' },
       description:
         'Refresh connected fantasy leagues by asking Flaim to rediscover leagues through connected ESPN, Yahoo, and Sleeper accounts. Use only when the user explicitly asks to refresh or after the user presses the widget refresh button. This is non-destructive, but repeated refreshes can update Flaim registry timestamps and provider metadata; it does not change provider lineups or rosters, add or drop players, submit waiver claims or trades, or modify league settings. If this call succeeds, call get_user_session again to show the updated league list. If it fails, follow the error retry guidance and any retry_after value; do not retry in a loop.',
@@ -941,6 +1305,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       requiredScope: 'mcp:read',
       securitySchemes: buildSecuritySchemes('mcp:read'),
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
+      outputSchema: GET_ANCIENT_HISTORY_OUTPUT_SCHEMA,
       openaiMeta: { invoking: 'Searching old seasons\u2026', invoked: 'History loaded' },
       description:
         'Use this only after get_user_session, and only when the user is clearly asking about a non-current season or an inactive league. This is the historical branch: it returns past seasons and historical leagues outside the current season view. Use for last season, older seasons, inactive leagues, or historical performance. Read-only.',
@@ -1038,6 +1403,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       requiredScope: 'mcp:read',
       securitySchemes: buildSecuritySchemes('mcp:read'),
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
+      outputSchema: GET_LEAGUE_INFO_OUTPUT_SCHEMA,
       openaiMeta: { invoking: 'Fetching league info\u2026', invoked: 'League info ready' },
       description: `For a selected active league, call this immediately after get_user_session and before the requested standings, matchup, roster, free-agent, player, or transaction tool. Skip it only when answering from session data alone or branching to get_ancient_history. This provides the baseline league context for analysis: league name, settings, scoring type, roster configuration, and team/owner context, plus schedule or season-window metadata when the platform provides it. When fanning out across multiple leagues, call this once per league. The exact team fields vary by platform but all include ownerName. Use values from get_user_session. Read-only. Current date is ${currentDate}.`,
       inputSchema: {
@@ -1074,6 +1440,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       requiredScope: 'mcp:read',
       securitySchemes: buildSecuritySchemes('mcp:read'),
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
+      outputSchema: GET_STANDINGS_OUTPUT_SCHEMA,
       openaiMeta: { invoking: 'Fetching standings\u2026', invoked: 'Standings ready' },
       description: `Get season standings and outcome snapshot; includes verified season-outcome fields when available. Returns team records, rankings, and points summaries. The rank field is a standings sort position (1 = best): on ESPN and Sleeper it is computed by Flaim from win percentage; on Yahoo it is passed through from Yahoo's own standings API. It is NOT a verified postseason finish. For verified postseason outcome, use finalRank and championshipWon instead. Also returns seasonPhase (regular_season/playoffs_in_progress/season_complete), seasonComplete, and per-team outcome fields: finalRank, championshipWon, playoffOutcome, outcomeConfidence, madePlayoffs, playoffSeed. Outcome fields are null when not verifiable — do not infer championship from rank or team name. outcomeConfidence is 'explicit' when the platform reports final ranks, or 'derived' when the champion and runner-up were determined from the final winners-bracket matchup (ESPN historical seasons may omit final ranks); a tied championship game is resolved using the league's playoff tie rule (ESPN's default advances the higher seed). Note: playoffOutcome returns 'in_progress' on Sleeper for teams in active playoffs; ESPN and Yahoo return null for that state. ESPN may also include projected-rank fields. Best used after get_user_session and after get_league_info for the specified league so team names and league context are already established. For multi-league comparisons, call once per league. For historical finish questions, call get_ancient_history first to discover seasons, then call this tool per season for verified outcomes. Read-only. Current date is ${currentDate}.`,
       inputSchema: {
@@ -1110,6 +1477,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       requiredScope: 'mcp:read',
       securitySchemes: buildSecuritySchemes('mcp:read'),
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
+      outputSchema: GET_MATCHUPS_OUTPUT_SCHEMA,
       openaiMeta: { invoking: 'Fetching matchups\u2026', invoked: 'Matchups ready' },
       description: `Get matchups/scoreboard for a specific week or the current week. Best used after get_user_session and after get_league_info for the specified league so the model already knows the league's team names, owner/team mapping, and league context before interpreting the matchup. For multi-league comparisons, call once per league. Read-only. Current date is ${currentDate}.`,
       inputSchema: {
@@ -1148,6 +1516,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       requiredScope: 'mcp:read',
       securitySchemes: buildSecuritySchemes('mcp:read'),
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
+      outputSchema: GET_ROSTER_OUTPUT_SCHEMA,
       openaiMeta: { invoking: 'Fetching roster\u2026', invoked: 'Roster ready' },
       description: `Get roster details for a specific team — current by default, historical on request. Exact payload varies by platform: ESPN and Yahoo return player entries with lineup/position context, while Sleeper returns starters, bench, reserve, taxi, and record metadata for the selected roster. Historical snapshots: pass week for football (all platforms) and Sleeper basketball (matchup week), or as_of_date (YYYY-MM-DD) for ESPN/Yahoo baseball, basketball, and hockey — never both; an invalid selector returns a corrective error naming the right one. Every response includes a snapshot block identifying what was returned (current vs week vs date); historical responses may add limitation flags (acquisitionMetadataAvailable, reserveAndTaxiClassificationAvailable) when provider history omits those details. For "roster during matchup week N" questions in daily sports, ask the user for a specific date rather than guessing — one matchup spans several daily rosters. Best used after get_user_session and after get_league_info for the specified league so the model already knows the league's team names, owner/team mapping, league settings, and roster context before interpreting this roster. Requires authentication except on Sleeper's public API. Read-only. Current date is ${currentDate}.`,
       inputSchema: {
@@ -1207,6 +1576,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       requiredScope: 'mcp:read',
       securitySchemes: buildSecuritySchemes('mcp:read'),
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
+      outputSchema: GET_FREE_AGENTS_OUTPUT_SCHEMA,
       openaiMeta: { invoking: 'Searching available players\u2026', invoked: 'Available players ready' },
       description: `Get players available to acquire in the specified fantasy league, optionally filtered by position. This is fantasy-league availability, not professional-contract status. ESPN percentOwned/percentStarted are the percentages of all ESPN leagues where the player is rostered/started, not the share of rostered teams that start him. Yahoo percentOwned, when present, is Yahoo-wide; none is ownership within the selected league, and Sleeper provides no percentage. Label every reported percentage as an ESPN-wide roster/start rate or Yahoo-wide market rate. If a rate is missing, write "[Provider] market ownership rate: not provided"; do not repeat response field names or null values, call get_players, or offer a lookup. team/proTeam is the real-life club (FA means the provider lists no current pro team). Only ESPN status/waiverProcessDate represents fantasy acquisition state here. Call Yahoo/Sleeper rows "available players," never specifically free agents or waivers, and do not promise an immediate add. A returned player is already confirmed available in that league. For a returned list or field explanation, end after the requested facts—never add an "if you want" offer, qualitative ranking, recommendation, role, health, trend, or outlook. Translate ESPN status codes silently into plain language; never print raw codes such as FREEAGENT or WAIVERS. Use current web evidence before adding analysis or pickup recommendations. Follow get_user_session then get_league_info for the selected league; fan out once per league for comparisons. Use get_roster for a separate player-ownership question. Requires authentication on ESPN/Yahoo; Sleeper uses the public API. Read-only. Current date is ${currentDate}.`,
       inputSchema: {
@@ -1253,6 +1623,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       requiredScope: 'mcp:read',
       securitySchemes: buildSecuritySchemes('mcp:read'),
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
+      outputSchema: GET_PLAYERS_OUTPUT_SCHEMA,
       openaiMeta: { invoking: 'Searching players\u2026', invoked: 'Players ready' },
       description: `Search for player identity by name. Always returns identity fields, but ownership context varies by platform. ESPN and Yahoo return market/global ownership and can also populate league ownership fields when credentials and league context are available. Sleeper returns identity plus ownership_scope="unavailable" with market_percent_owned=null. For a selected active league, call this after get_user_session and get_league_info so league-specific ownership and team names can be resolved. League ownership fields: league_status ("ROSTERED" = on a team, "FREE_AGENT" = available, null = unavailable), league_team_name (fantasy team name if rostered), league_owner_name (team owner if rostered). When those league fields are absent, null, or unavailable, fall back to get_roster to verify manually. Use values from get_user_session. Read-only. Current date is ${currentDate}.`,
       inputSchema: {
@@ -1304,6 +1675,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       requiredScope: 'mcp:read',
       securitySchemes: buildSecuritySchemes('mcp:read'),
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
+      outputSchema: GET_TRANSACTIONS_OUTPUT_SCHEMA,
       openaiMeta: { invoking: 'Fetching transactions\u2026', invoked: 'Transactions ready' },
       description: `Get recent league transactions including adds, drops, waivers, and trades. Best used after get_user_session and usually after get_league_info so the model already knows the league's team names and owner/team mapping before summarizing activity. Each normalized transaction includes a date field (YYYY-MM-DD), type, status, week, and optional team_ids. When presenting results, organize by time period (today, yesterday, this week, older) AND by team within each period so the user can see both when moves happened and what each team did. Week handling is platform-specific: ESPN/Sleeper use week windows (default current + previous week), while Yahoo uses a recent 14-day timestamp window and ignores explicit week. Type support is also platform-specific: Sleeper supports add/drop/trade/waiver; Yahoo supports add/drop/trade plus pending waiver/pending_trade views for the authenticated user's own items; ESPN also supports failed_bid and trade lifecycle types (trade_proposal, trade_decline, trade_veto, trade_uphold). ESPN uses mTransactions2 for structured transaction data, and accepted trade player details are supplemented from the activity feed. ESPN responses include a "teams" map (team ID → display name) to resolve the numeric team_ids on each transaction, while Yahoo and Sleeper generally rely on get_league_info for team-name resolution. Use values from get_user_session. Read-only. Current date is ${currentDate}.`,
       inputSchema: {
