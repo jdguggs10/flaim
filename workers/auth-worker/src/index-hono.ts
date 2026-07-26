@@ -456,12 +456,19 @@ async function getVerifiedUserId(
         userId: env.EVAL_USER_ID,
         authType: 'eval-api-key' as const,
         label: 'EVAL_API_KEY',
+        // The eval harness must exercise the full ten-tool contract, including
+        // the bounded registry refresh (refresh_leagues), so the eval identity
+        // carries write scope. The write only touches Flaim's own league
+        // registry and the refresh route is rate-limited.
+        scope: 'mcp:read mcp:write',
       },
       {
         key: env.DEMO_API_KEY,
         userId: env.DEMO_USER_ID,
         authType: 'demo-api-key' as const,
         label: 'DEMO_API_KEY',
+        // The public demo surface stays read-only.
+        scope: 'mcp:read',
       },
     ];
 
@@ -488,7 +495,7 @@ async function getVerifiedUserId(
       }
 
       debugLog(env, `✅ [auth-worker] ${staticKey.label} validated, userId: ${maskUserId(staticKey.userId)}`);
-      return { userId: staticKey.userId, authType: staticKey.authType, scope: 'mcp:read' };
+      return { userId: staticKey.userId, authType: staticKey.authType, scope: staticKey.scope };
     }
   }
 

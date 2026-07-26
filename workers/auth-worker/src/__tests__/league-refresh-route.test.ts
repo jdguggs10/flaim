@@ -99,6 +99,8 @@ const ISSUER = 'https://flaim-test.clerk.accounts.dev';
 const KEY_ID = 'league-refresh-route-test-key';
 const EVAL_API_KEY = 'flaim_eval_refresh_route_test';
 const EVAL_USER_ID = 'user_eval_refresh';
+const DEMO_API_KEY = 'flaim_demo_refresh_route_test';
+const DEMO_USER_ID = 'user_demo_refresh';
 const INTERNAL_SERVICE_TOKEN = 'internal-refresh-secret';
 
 const baseEnv = {
@@ -109,6 +111,8 @@ const baseEnv = {
   CLERK_ISSUER: ISSUER,
   EVAL_API_KEY,
   EVAL_USER_ID,
+  DEMO_API_KEY,
+  DEMO_USER_ID,
   INTERNAL_SERVICE_TOKEN,
   TOKEN_RATE_LIMITER: { limit: async () => ({ success: true }) },
   CREDENTIALS_RATE_LIMITER: { limit: async () => ({ success: true }) },
@@ -350,12 +354,12 @@ describe('POST /internal/leagues/refresh', () => {
     expect(refreshSleeperLeaguesFromStoredConnection).not.toHaveBeenCalled();
   });
 
-  it('rejects an internal static API key caller without mcp:write scope', async () => {
+  it('rejects the read-only demo static API key without mcp:write scope', async () => {
     const res = await app.fetch(makeRequest('/auth/internal/leagues/refresh', {
       method: 'POST',
       body: JSON.stringify({ platforms: ['sleeper'] }),
       headers: {
-        Authorization: `Bearer ${EVAL_API_KEY}`,
+        Authorization: `Bearer ${DEMO_API_KEY}`,
         'X-Flaim-Internal-Token': INTERNAL_SERVICE_TOKEN,
         'Content-Type': 'application/json',
       },
@@ -367,6 +371,38 @@ describe('POST /internal/leagues/refresh', () => {
       error_description: 'mcp:write scope is required to refresh leagues',
     });
     expect(refreshSleeperLeaguesFromStoredConnection).not.toHaveBeenCalled();
+  });
+
+  it('allows the eval static API key through the mcp:write scope gate', async () => {
+    const res = await app.fetch(makeRequest('/auth/internal/leagues/refresh', {
+      method: 'POST',
+      body: JSON.stringify({ platforms: ['sleeper'] }),
+      headers: {
+        Authorization: `Bearer ${EVAL_API_KEY}`,
+        'X-Flaim-Internal-Token': INTERNAL_SERVICE_TOKEN,
+        'Content-Type': 'application/json',
+      },
+    }), baseEnv);
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      success: true,
+      requestedPlatforms: ['sleeper'],
+      results: {
+        sleeper: {
+          platform: 'sleeper',
+          status: 'success',
+          httpStatus: 200,
+          details: {
+            success: true,
+            username: 'stored_user',
+            leagues_found: 1,
+            seasons_discovered: 1,
+          },
+        },
+      },
+    });
+    expect(refreshSleeperLeaguesFromStoredConnection).toHaveBeenCalledWith(baseEnv, EVAL_USER_ID);
   });
 
   it('allows an internal mcp:write OAuth caller and aggregates Sleeper refresh', async () => {
