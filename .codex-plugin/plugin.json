@@ -1,7 +1,7 @@
 {
   "name": "flaim-fantasy",
-  "version": "1.0.2",
-  "description": "Read-only fantasy sports analysis across ESPN, Yahoo, and Sleeper. Get roster advice, standings, matchups, waiver wire picks, and start/sit decisions.",
+  "version": "2.0.0",
+  "description": "Fantasy sports analysis for ESPN, Yahoo, and Sleeper. Nine read-only league-data tools plus refresh_leagues, a bounded write that updates only Flaim's own connected-league registry and never changes anything on the fantasy platforms.",
   "author": {
     "name": "Flaim"
   },
@@ -12,20 +12,20 @@
     "fantasy-sports",
     "espn",
     "yahoo",
-    "sleeper",
-    "read-only"
+    "sleeper"
   ],
   "skills": "./.agents/skills/",
   "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "Flaim Fantasy",
-    "shortDescription": "Read-only fantasy analysis for ESPN, Yahoo, and Sleeper.",
-    "longDescription": "Use Flaim's fantasy-analysis skills and MCP server to review rosters, matchups, standings, transactions, and waiver options across your real leagues without making account changes.",
+    "shortDescription": "Fantasy analysis for ESPN, Yahoo, and Sleeper leagues.",
+    "longDescription": "Use Flaim's fantasy-analysis skills and MCP server to review rosters, matchups, standings, transactions, and waiver options across your real leagues. Nine tools are read-only; refresh_leagues can update Flaim's own connected-league list and never changes anything on ESPN, Yahoo, or Sleeper.",
     "developerName": "Flaim",
     "category": "Productivity",
     "capabilities": [
       "Interactive",
-      "Read"
+      "Read",
+      "Write"
     ],
     "websiteURL": "https://flaim.app",
     "privacyPolicyURL": "https://flaim.app/privacy",
