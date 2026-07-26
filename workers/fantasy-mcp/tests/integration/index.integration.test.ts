@@ -526,18 +526,41 @@ describe('fantasy-mcp gateway integration', () => {
       widgetBodies.push(content?.text || '');
       expect(content?._meta?.ui?.csp?.connectDomains).toEqual([]);
       expect(content?._meta?.ui?.csp?.resourceDomains).toEqual([]);
-      // FLA-177: MCP Apps ui.domain declared per the documented
-      // ui: { domain: "https://example.com" } wire shape.
-      expect(content?._meta?.ui?.domain).toBe('https://flaim.app');
-      expect(content?._meta?.['openai/widgetDescription']).toBe(
-        'Summary card of your connected fantasy leagues, showing league names, sports, and your default league.'
-      );
+      // No stable widget domain on either URI: the widget is fully
+      // self-contained (empty connect/resource CSP), so a dedicated domain adds
+      // no capability. Deliberate decision — revisit only if a portal scan
+      // explicitly requires _meta.ui.domain.
+      expect(content?._meta?.ui?.domain).toBeUndefined();
       expect(content?._meta?.['openai/widgetDomain']).toBeUndefined();
       expect(content?._meta?.['openai/widgetCSP']).toEqual({
         connect_domains: [],
         resource_domains: [],
         redirect_domains: ['https://flaim.app'],
       });
+      if (uri === LEGACY_USER_SESSION_WIDGET_URI) {
+        // Frozen published-v1 contract: the legacy read-result _meta must stay
+        // byte-identical to the snapshot OpenAI scanned — strict-equal on the
+        // whole object so no key can be added or removed unnoticed.
+        expect(content?._meta).toEqual({
+          ui: {
+            csp: {
+              connectDomains: [],
+              resourceDomains: [],
+            },
+          },
+          'openai/widgetCSP': {
+            connect_domains: [],
+            resource_domains: [],
+            redirect_domains: ['https://flaim.app'],
+          },
+        });
+        expect(content?._meta?.['openai/widgetDescription']).toBeUndefined();
+      } else {
+        // FLA-177: plain-language widget summary on the v2 URI only.
+        expect(content?._meta?.['openai/widgetDescription']).toBe(
+          'Summary card of your connected fantasy leagues, showing league names, sports, and your default league.'
+        );
+      }
     }
     expect(widgetBodies).toHaveLength(2);
     expect(widgetBodies[0]).toBe(widgetBodies[1]);
@@ -1426,11 +1449,29 @@ describe('origin-derived OAuth protected-resource metadata (FLA-217)', () => {
       mockExecutionContext()
     );
     expect(response.status).toBe(401);
-    // FLA-177: RFC 6750 error params appended after the discovery params.
+    // RFC 6750 §3.1: no error code when the request carried no credentials at
+    // all — this bare header is the known-good shape for ChatGPT's initial
+    // connect and must stay byte-identical.
+    expect(response.headers.get('WWW-Authenticate')).toBe(
+      'Bearer realm="fantasy-mcp", resource="https://api.flaim.app/mcp", resource_metadata="https://api.flaim.app/.well-known/oauth-protected-resource"'
+    );
+    expect(authFetch).not.toHaveBeenCalled();
+  });
+
+  it('appends RFC 6750 error params to the api.flaim.app 401 when a presented token fails', async () => {
+    const authFetch = vi.fn(async () => new Response('invalid token', { status: 401 }));
+    const env = buildEnv(authFetch);
+
+    const request = buildUnauthenticatedToolsCallRequest(PROD_ORIGIN, '/mcp');
+    request.headers.set('Authorization', 'Bearer expired-token');
+    const response = await app.fetch(request, env, mockExecutionContext());
+    expect(response.status).toBe(401);
+    // FLA-177: credentials were presented and failed, so the challenge carries
+    // error/error_description after the discovery params.
     expect(response.headers.get('WWW-Authenticate')).toBe(
       'Bearer realm="fantasy-mcp", resource="https://api.flaim.app/mcp", resource_metadata="https://api.flaim.app/.well-known/oauth-protected-resource", error="invalid_token", error_description="Authentication required"'
     );
-    expect(authFetch).not.toHaveBeenCalled();
+    expect(authFetch).toHaveBeenCalledTimes(1);
   });
 
   it('derives resource from a workers.dev origin while keeping the production authorization server', async () => {
@@ -1542,6 +1583,7 @@ describe('origin-derived OAuth protected-resource metadata (FLA-217)', () => {
     const authFetch = vi.fn();
     const env = buildEnv(authFetch);
 
+    // RFC 6750 §3.1: no credentials presented → no error code on the challenge.
     const canonicalResponse = await app.fetch(
       buildUnauthenticatedToolsCallRequest(PREVIEW_ORIGIN, '/mcp'),
       env,
@@ -1549,7 +1591,7 @@ describe('origin-derived OAuth protected-resource metadata (FLA-217)', () => {
     );
     expect(canonicalResponse.status).toBe(401);
     expect(canonicalResponse.headers.get('WWW-Authenticate')).toBe(
-      `Bearer realm="fantasy-mcp", resource="${PREVIEW_ORIGIN}/mcp", resource_metadata="${PREVIEW_ORIGIN}/.well-known/oauth-protected-resource", error="invalid_token", error_description="Authentication required"`
+      `Bearer realm="fantasy-mcp", resource="${PREVIEW_ORIGIN}/mcp", resource_metadata="${PREVIEW_ORIGIN}/.well-known/oauth-protected-resource"`
     );
 
     const fantasyResponse = await app.fetch(
@@ -1559,9 +1601,23 @@ describe('origin-derived OAuth protected-resource metadata (FLA-217)', () => {
     );
     expect(fantasyResponse.status).toBe(401);
     expect(fantasyResponse.headers.get('WWW-Authenticate')).toBe(
-      `Bearer realm="fantasy-mcp", resource="${PREVIEW_ORIGIN}/fantasy/mcp", resource_metadata="${PREVIEW_ORIGIN}/fantasy/.well-known/oauth-protected-resource", error="invalid_token", error_description="Authentication required"`
+      `Bearer realm="fantasy-mcp", resource="${PREVIEW_ORIGIN}/fantasy/mcp", resource_metadata="${PREVIEW_ORIGIN}/fantasy/.well-known/oauth-protected-resource"`
     );
 
     expect(authFetch).not.toHaveBeenCalled();
+  });
+
+  it('appends RFC 6750 error params to the workers.dev 401 when a presented token fails', async () => {
+    const authFetch = vi.fn(async () => new Response('invalid token', { status: 401 }));
+    const env = buildEnv(authFetch);
+
+    const request = buildUnauthenticatedToolsCallRequest(PREVIEW_ORIGIN, '/fantasy/mcp');
+    request.headers.set('Authorization', 'Bearer expired-token');
+    const response = await app.fetch(request, env, mockExecutionContext());
+    expect(response.status).toBe(401);
+    expect(response.headers.get('WWW-Authenticate')).toBe(
+      `Bearer realm="fantasy-mcp", resource="${PREVIEW_ORIGIN}/fantasy/mcp", resource_metadata="${PREVIEW_ORIGIN}/fantasy/.well-known/oauth-protected-resource", error="invalid_token", error_description="Authentication required"`
+    );
+    expect(authFetch).toHaveBeenCalledTimes(1);
   });
 });

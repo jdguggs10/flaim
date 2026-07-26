@@ -4,6 +4,14 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### MCP Descriptor Modernization (FLA-177)
+- **Added**: All ten MCP tools now declare an `outputSchema`, and every success path emits matching `structuredContent` alongside the unchanged text content.
+- **Added**: Top-level per-tool `securitySchemes` on the tools/list wire shape, alongside the existing `_meta.securitySchemes` mirror.
+- **Changed**: Tool calls with a valid token that merely lacks the required scope now answer with an RFC 6750 `insufficient_scope` challenge (previously `invalid_token`), so clients can run a consent upgrade instead of a full re-auth.
+- **Changed**: HTTP 401 `WWW-Authenticate` responses append `error="invalid_token"`/`error_description` when a presented token fails; requests carrying no credentials keep the bare discovery-only header (RFC 6750 §3.1).
+- **Changed**: Tool annotations corrected: `openWorldHint` is now `false` across all tools (closed-system reads against connected leagues), and `refresh_leagues` is marked idempotent as a repeatable, convergent registry rewrite (supersedes the earlier non-idempotent marking below).
+- **Added**: The v2 widget resource now carries `openai/widgetDescription`; the frozen published-v1 widget resource stays byte-identical to the scanned snapshot.
+
 ### Published-Client Week Compatibility for Daily-Sport Rosters (FLA-209)
 - **Changed**: `get_roster` no longer rejects a well-formed `week` on ESPN/Yahoo daily sports (baseball, basketball, hockey). Clients pinned to an older tool schema — where `week` was valid for every sport — can only send `week`, so those requests now return the current roster instead of an `INVALID_ROSTER_SNAPSHOT_SELECTOR` error. The response's `snapshot` block reports `requested_week` and a human-readable `note` stating the week selector was ignored because the sport tracks roster history by date (`as_of_date`), so nothing is silently dropped. All other validation is unchanged: `week` + `as_of_date` together, malformed weeks, wrong-selector `as_of_date` on weekly sports, and unsupported sports still return corrective errors. This behavior must remain until no published client depends on the week-for-daily-sports request shape.
 

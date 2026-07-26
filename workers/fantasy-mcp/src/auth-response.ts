@@ -18,6 +18,16 @@ export function buildMcpAuthErrorResponse(request: Request): Response {
   const resourceMetadata = isFantasy
     ? `${origin}/fantasy/.well-known/oauth-protected-resource`
     : `${origin}/.well-known/oauth-protected-resource`;
+  // RFC 6750 §3.1: if the request lacks any authentication information, the
+  // challenge SHOULD NOT include an error code — that bare header is the
+  // known-good shape for ChatGPT's initial connect. When credentials WERE
+  // presented and failed (invalid/expired token, failed introspection), append
+  // error/error_description after the discovery params so clients classify the
+  // 401 as a token problem and start the OAuth flow.
+  const credentialsPresented = request.headers.get('Authorization') !== null;
+  const errorParams = credentialsPresented
+    ? ', error="invalid_token", error_description="Authentication required"'
+    : '';
   return new Response(
     JSON.stringify({
       jsonrpc: '2.0',
@@ -31,10 +41,7 @@ export function buildMcpAuthErrorResponse(request: Request): Response {
       status: 401,
       headers: {
         'Content-Type': 'application/json',
-        // RFC 6750: error/error_description are additive after the discovery
-        // params so clients (ChatGPT included) can classify the 401 as a
-        // token problem and start the OAuth flow.
-        'WWW-Authenticate': `Bearer realm="fantasy-mcp", resource="${resource}", resource_metadata="${resourceMetadata}", error="invalid_token", error_description="Authentication required"`,
+        'WWW-Authenticate': `Bearer realm="fantasy-mcp", resource="${resource}", resource_metadata="${resourceMetadata}"${errorParams}`,
         ...corsHeaders,
       },
     }

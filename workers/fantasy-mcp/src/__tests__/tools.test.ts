@@ -629,6 +629,41 @@ describe('fantasy-mcp tools', () => {
     expect(challenge).not.toContain('invalid_token');
   });
 
+  it('refresh_leagues treats a non-scope 403 (internal service token misconfig) as a plain tool error', async () => {
+    const tool = getUnifiedTools().find((t) => t.name === 'refresh_leagues');
+    expect(tool).toBeTruthy();
+
+    // auth-worker also answers 403 when X-Internal-Service-Token is missing or
+    // invalid (requireInternalService) — an ops misconfiguration, not a consent
+    // problem. That body does NOT carry error="insufficient_scope", so no auth
+    // challenge may be emitted: a consent-upgrade prompt cannot fix it.
+    const misconfigBody = {
+      error: 'unauthorized',
+      error_description: 'Missing or invalid X-Internal-Service-Token',
+    };
+    const env = {
+      INTERNAL_SERVICE_TOKEN: 'internal-secret',
+      AUTH_WORKER: {
+        fetch: async () => new Response(JSON.stringify(misconfigBody), {
+          status: 403,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      },
+    } as unknown as Env;
+
+    const result = await tool!.handler({ platforms: ['espn'] }, env, 'Bearer user-token');
+
+    expect(result.isError).toBe(true);
+    expect(result._meta?.['mcp/www_authenticate']).toBeUndefined();
+    expect(result.content[0]?.text).not.toContain('INSUFFICIENT_SCOPE');
+    expect(result.structuredContent).toEqual({
+      success: false,
+      status: 403,
+      error: 'unauthorized',
+      data: misconfigBody,
+    });
+  });
+
   it('refresh_leagues keeps the invalid_token challenge when auth-worker returns 401', async () => {
     const tool = getUnifiedTools().find((t) => t.name === 'refresh_leagues');
     expect(tool).toBeTruthy();
@@ -2136,8 +2171,24 @@ describe('buildMcpAuthErrorResponse', () => {
     expect(wwwAuth).toContain('.well-known/oauth-protected-resource');
   });
 
-  it('401 appends RFC 6750 error params after the discovery params', () => {
+  it('401 omits error params when the request carried no credentials (RFC 6750 §3.1)', () => {
     const request = new Request('https://api.flaim.app/mcp', { method: 'POST' });
+    const response = buildMcpAuthErrorResponse(request);
+
+    // No Authorization header at all → the challenge must not carry an error
+    // code. This bare header is the known-good shape for ChatGPT's initial
+    // connect.
+    const wwwAuth = response.headers.get('WWW-Authenticate')!;
+    expect(wwwAuth).toBe(
+      'Bearer realm="fantasy-mcp", resource="https://api.flaim.app/mcp", resource_metadata="https://api.flaim.app/.well-known/oauth-protected-resource"'
+    );
+  });
+
+  it('401 appends RFC 6750 error params when a presented token failed', () => {
+    const request = new Request('https://api.flaim.app/mcp', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer expired-token' },
+    });
     const response = buildMcpAuthErrorResponse(request);
 
     const wwwAuth = response.headers.get('WWW-Authenticate')!;

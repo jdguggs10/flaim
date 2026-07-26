@@ -122,15 +122,20 @@ function looseObject(shape: z.ZodRawShape = {}) {
   return z.object(shape).passthrough();
 }
 
-/** League entry as returned by get_user_session.allLeagues and get_ancient_history. */
+/**
+ * League entry as returned by get_user_session.allLeagues and get_ancient_history.
+ * sport is optional/nullable defensively: gateway assembly already guards absent
+ * sport (l.sport?.toLowerCase()), and the registry column's NOT NULL constraint
+ * could not be proven from migrations — a null must never become a protocol error.
+ */
 const leagueEntrySchema = looseObject({
   leagueId: z.string(),
-  sport: z.string(),
+  sport: z.string().nullable().optional(),
   platform: z.string(),
   teamId: z.string().optional(),
-  seasonYear: z.number().optional(),
-  leagueName: z.string().optional(),
-  teamName: z.string().optional(),
+  seasonYear: z.number().nullable().optional(),
+  leagueName: z.string().nullable().optional(),
+  teamName: z.string().nullable().optional(),
   recurringLeagueId: z.string().optional(),
 });
 
@@ -515,16 +520,26 @@ async function refreshUserLeagues(
     if (response.status === 401) {
       return mcpAuthError('https://api.flaim.app/mcp', 'mcp:write');
     }
-    if (response.status === 403) {
-      // Token authenticated but lacks mcp:write — surface the RFC 6750
-      // insufficient_scope challenge so clients can run a consent upgrade.
-      return mcpInsufficientScopeError('https://api.flaim.app/mcp', 'mcp:write');
-    }
 
     const contentType = response.headers.get('Content-Type') || '';
     const payload = contentType.includes('application/json')
       ? await response.json().catch(() => ({ success: false, error: 'Invalid JSON from auth-worker' }))
       : { success: response.ok, error: await response.text().catch(() => 'No response body') };
+
+    if (
+      response.status === 403 &&
+      typeof payload === 'object' &&
+      payload !== null &&
+      (payload as { error?: unknown }).error === 'insufficient_scope'
+    ) {
+      // Genuine scope denial from the auth-worker's mcp:write gate — the body
+      // says error="insufficient_scope". Surface the RFC 6750 challenge so
+      // clients can run a consent upgrade. Auth-worker also returns 403 for a
+      // missing/invalid internal service token (an ops misconfiguration, not a
+      // user-consent problem); that and any other 403 fall through to the plain
+      // structured tool error below with NO auth challenge.
+      return mcpInsufficientScopeError('https://api.flaim.app/mcp', 'mcp:write');
+    }
 
     if (!response.ok) {
       const errorPayload = {

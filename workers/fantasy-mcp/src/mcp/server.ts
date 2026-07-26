@@ -96,25 +96,28 @@ export function createFantasyMcpServer(ctx: McpContext): McpServer {
           uri,
           mimeType: 'text/html;profile=mcp-app',
           text: USER_SESSION_WIDGET_HTML,
+          // The legacy URI is the frozen published-v1 contract: its read-result
+          // _meta must stay byte-identical to the snapshot OpenAI scanned.
+          // Descriptor additions (FLA-177) go on the v2 URI only.
           _meta: {
             ui: {
               csp: {
                 connectDomains: [],
                 resourceDomains: [],
               },
-              // Dedicated widget domain (MCP Apps ui.domain, FLA-177). Format per
-              // https://developers.openai.com/plugins/build/chatgpt-ui.md:
-              // ui: { domain: "https://example.com", csp: {...} }.
-              domain: 'https://flaim.app',
             },
-            // Plain-language widget summary for directory/host surfaces.
-            'openai/widgetDescription':
-              'Summary card of your connected fantasy leagues, showing league names, sports, and your default league.',
+            ...(uri === USER_SESSION_WIDGET_URI && {
+              // Plain-language widget summary for directory/host surfaces (v2 only).
+              'openai/widgetDescription':
+                'Summary card of your connected fantasy leagues, showing league names, sports, and your default league.',
+            }),
             'openai/widgetCSP': {
               connect_domains: [],
               resource_domains: [],
-              // External-link allowlisting for ChatGPT (kept byte-identical; the
-              // widget iframe still loads no external resources).
+              // Keep external-link allowlisting without reintroducing a stable
+              // widget domain — the widget is fully self-contained (empty
+              // connect/resource CSP), so a dedicated domain adds no capability;
+              // revisit only if a portal scan explicitly requires _meta.ui.domain.
               redirect_domains: ['https://flaim.app'],
             },
           },

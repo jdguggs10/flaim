@@ -111,6 +111,39 @@ describe('gateway-owned output schemas', () => {
     });
   });
 
+  it('get_user_session accepts a sparse league entry (no sport, null metadata)', () => {
+    // Defensive shape (audit m3): sport absent and nullable metadata null.
+    // Gateway assembly guards absent sport (l.sport?.toLowerCase()) and the
+    // registry column's NOT NULL could not be proven from migrations, so a
+    // sparse row must never become a runtime validation outage.
+    expectValid('get_user_session', {
+      success: true,
+      currentDate: '2026-03-05T17:00:00.000Z',
+      currentSeasons: {
+        football: { year: 2025, label: '2025' },
+        baseball: { year: 2026, label: '2026' },
+        basketball: { year: 2025, label: '2025-26' },
+        hockey: { year: 2025, label: '2025-26' },
+      },
+      timezone: 'America/New_York',
+      totalLeaguesFound: 1,
+      leaguesBySport: {},
+      defaultSport: null,
+      defaultLeague: null,
+      defaultLeagues: {},
+      allLeagues: [
+        {
+          leagueId: '123456',
+          platform: 'espn',
+          seasonYear: null,
+          leagueName: null,
+          teamName: null,
+        },
+      ],
+      instructions: 'Use platform="espn" ... for all tool calls.',
+    });
+  });
+
   it('get_user_session accepts the empty-leagues payload (nullable defaults, undefined warnings)', () => {
     expectValid('get_user_session', {
       success: true,
