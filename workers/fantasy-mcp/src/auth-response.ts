@@ -31,7 +31,10 @@ export function buildMcpAuthErrorResponse(request: Request): Response {
       status: 401,
       headers: {
         'Content-Type': 'application/json',
-        'WWW-Authenticate': `Bearer realm="fantasy-mcp", resource="${resource}", resource_metadata="${resourceMetadata}"`,
+        // RFC 6750: error/error_description are additive after the discovery
+        // params so clients (ChatGPT included) can classify the 401 as a
+        // token problem and start the OAuth flow.
+        'WWW-Authenticate': `Bearer realm="fantasy-mcp", resource="${resource}", resource_metadata="${resourceMetadata}", error="invalid_token", error_description="Authentication required"`,
         ...corsHeaders,
       },
     }
