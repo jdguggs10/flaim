@@ -252,7 +252,8 @@ const GET_LEAGUE_INFO_OUTPUT_SCHEMA = routedOutputSchema({
   draftId: z.string().nullable().optional(),
   // Shared
   name: z.string().optional(),
-  status: z.string().optional(),
+  // ESPN returns a status object; Yahoo/Sleeper return status strings.
+  status: z.unknown().optional(),
   teams: z
     .array(looseObject({ ownerName: z.string().nullable().optional() }))
     .optional()

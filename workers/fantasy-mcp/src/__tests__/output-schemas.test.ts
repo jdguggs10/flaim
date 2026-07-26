@@ -236,7 +236,9 @@ describe('get_league_info output schema', () => {
       id: 336777,
       name: 'Gridiron League',
       size: 10,
-      status: 'active',
+      // ESPN emits a status OBJECT (caught live on preview, 2026-07-26); only
+      // Yahoo/Sleeper use status strings.
+      status: { currentMatchupPeriod: 5, isActive: true, latestScoringPeriod: 5 },
       scoringPeriodId: 5,
       currentMatchupPeriod: 5,
       seasonId: 2025,
