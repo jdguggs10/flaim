@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { SignIn } from '@clerk/nextjs';
+import { AcquisitionAwareSignIn } from '@/components/acquisition-aware-auth';
 
 export const metadata: Metadata = {
   robots: {
@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 export default function Page() {
   return (
     <div className="flex items-center justify-center min-h-[50vh] py-12">
-      <SignIn />
+      <AcquisitionAwareSignIn />
     </div>
   );
 }

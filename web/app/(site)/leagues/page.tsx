@@ -1568,10 +1568,10 @@ function LeaguesPageContent() {
                 </ul>
               </div>
               <div className="flex flex-col gap-3 sm:flex-row">
-                <SignUpButton mode="modal" forceRedirectUrl={authRedirectUrl}>
+                <SignUpButton mode="redirect" forceRedirectUrl={authRedirectUrl}>
                   <Button className="w-full sm:flex-1">Create Account</Button>
                 </SignUpButton>
-                <SignInButton mode="modal" forceRedirectUrl={authRedirectUrl}>
+                <SignInButton mode="redirect" forceRedirectUrl={authRedirectUrl}>
                   <Button variant="outline" className="w-full sm:flex-1">Sign In</Button>
                 </SignInButton>
               </div>

@@ -2,7 +2,8 @@
 
 import React, { Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { useAuth, SignIn } from '@clerk/nextjs';
+import { useAuth } from '@clerk/nextjs';
+import { AcquisitionAwareSignIn } from '@/components/acquisition-aware-auth';
 import ConsentScreen from '@/components/site/connectors/ConsentScreen';
 import { Loader2 } from 'lucide-react';
 import { isValidRedirectUri } from '@flaim/worker-shared';
@@ -153,7 +154,7 @@ function OAuthConsentContent() {
               before the assistant can answer with league-specific data.
             </p>
           </div>
-          <SignIn
+          <AcquisitionAwareSignIn
             routing="hash"
             forceRedirectUrl={returnUrl}
             signUpForceRedirectUrl={returnUrl}

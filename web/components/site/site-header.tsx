@@ -46,10 +46,13 @@ export function SiteHeader() {
         <div className="flex items-center gap-2 sm:gap-4">
           <SignedOut>
             <div className="flex flex-row gap-2">
-              <SignInButton>
+              <SignInButton mode="redirect">
                 <Button variant="outline">Sign In</Button>
               </SignInButton>
-              <SignUpButton fallbackRedirectUrl="/leagues">
+              <SignUpButton
+                mode="redirect"
+                fallbackRedirectUrl="/leagues"
+              >
                 <Button>Get Started</Button>
               </SignUpButton>
             </div>
