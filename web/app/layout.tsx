@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import localFont from "next/font/local";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ClerkThemeWrapper } from "@/components/clerk-theme-wrapper";
+import { AcquisitionFirstTouch } from "@/components/acquisition-first-touch";
 import "./globals.css";
 
 const geistSans = localFont({
@@ -119,7 +120,10 @@ export default function RootLayout({
           disableTransitionOnChange
           storageKey="flaim-theme"
         >
-          <ClerkThemeWrapper>{children}</ClerkThemeWrapper>
+          <ClerkThemeWrapper>
+            <AcquisitionFirstTouch />
+            {children}
+          </ClerkThemeWrapper>
         </ThemeProvider>
       </body>
     </html>

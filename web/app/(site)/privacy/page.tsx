@@ -16,7 +16,7 @@ export default function PrivacyPage() {
       <div className="container max-w-3xl mx-auto py-12 px-4">
         <h1 className="text-3xl font-bold mb-2">Privacy Policy</h1>
         <p className="text-muted-foreground mb-8">
-          Last updated: February 20, 2026
+          Last updated: July 27, 2026
         </p>
 
         <div className="max-w-none space-y-8">
@@ -81,6 +81,18 @@ export default function PrivacyPage() {
               When you sign up for Flaim, we collect basic account information
               through our authentication provider (Clerk), including your email
               address and display name.
+            </p>
+
+            <h3 className="text-lg font-medium mt-4 mb-2">
+              Signup Attribution
+            </h3>
+            <p className="text-muted-foreground">
+              To understand which outreach helps people discover Flaim, we store
+              a limited first-touch record when a new account is created. It may
+              include the first landing page path, the referring website&apos;s
+              hostname, and allowlisted campaign tags such as UTM values or an
+              explicit referral code. We do not store the full referring URL,
+              arbitrary query parameters, or browsing history.
             </p>
 
             <h3 className="text-lg font-medium mt-4 mb-2">
@@ -207,6 +219,12 @@ export default function PrivacyPage() {
                 <strong>Account data:</strong> Retained until you request
                 deletion. Upon deletion, all stored credentials and league data
                 are permanently removed within 30 days.
+              </li>
+              <li>
+                <strong>Signup attribution:</strong> A first-party cookie keeps
+                the limited first-touch record for up to 30 days before signup.
+                If an account is created, that record is retained with the Clerk
+                account until the account is deleted.
               </li>
               <li>
                 <strong>Remove credentials:</strong> Visit{" "}
