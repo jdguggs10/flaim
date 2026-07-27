@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   acquisitionUnsafeMetadata,
   buildFirstTouchAcquisition,
+  clearBrowserFirstTouch,
   firstTouchCookieString,
   parseFirstTouchCookie,
   resolveFirstTouch,
@@ -91,6 +92,45 @@ describe("first-touch acquisition", () => {
     expect(parseFirstTouchCookie("%7Bbad-json")).toBeNull();
   });
 
+  it("reconstructs stored values from the allowlist before forwarding", () => {
+    const tampered = {
+      schemaVersion: 1,
+      capturedAt: CAPTURED_AT,
+      landingPath: "/",
+      utmSource: "threads",
+      arbitraryExtra: "must-not-survive",
+    };
+    const encoded = encodeURIComponent(JSON.stringify(tampered));
+
+    expect(parseFirstTouchCookie(encoded)).toEqual({
+      schemaVersion: 1,
+      capturedAt: CAPTURED_AT,
+      landingPath: "/",
+      utmSource: "threads",
+    });
+    expect(
+      acquisitionUnsafeMetadata(
+        tampered as typeof tampered & {
+          schemaVersion: 1;
+        }
+      )
+    ).toEqual({
+      flaimAcquisition: {
+        schemaVersion: 1,
+        capturedAt: CAPTURED_AT,
+        landingPath: "/",
+        utmSource: "threads",
+      },
+    });
+    expect(
+      parseFirstTouchCookie(
+        encodeURIComponent(
+          JSON.stringify({ ...tampered, landingPath: "/?email=private" })
+        )
+      )
+    ).toBeNull();
+  });
+
   it("keeps an existing first touch instead of replacing it", () => {
     const existing = buildFirstTouchAcquisition({
       url: "https://flaim.app/?utm_source=newsletter",
@@ -117,5 +157,17 @@ describe("first-touch acquisition", () => {
       flaimAcquisition: firstTouch,
     });
     expect(acquisitionUnsafeMetadata(null)).toBeUndefined();
+  });
+
+  it("expires the browser first-touch cookie after authentication", () => {
+    vi.stubGlobal("window", { location: { protocol: "https:" } });
+    vi.stubGlobal("document", { cookie: "" });
+
+    clearBrowserFirstTouch();
+
+    expect(document.cookie).toBe(
+      "flaim_first_touch_v1=; Path=/; Max-Age=0; SameSite=Lax; Secure"
+    );
+    vi.unstubAllGlobals();
   });
 });

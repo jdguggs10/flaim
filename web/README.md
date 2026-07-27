@@ -143,8 +143,9 @@ Important: this cache does not include live sports-news lookups. The homepage se
 
 ## Signup attribution
 
-The web app records one privacy-bounded first touch in a 30-day first-party
-cookie, then passes it to Clerk when a new account is created. The allowlist is
+The web app records one privacy-bounded first touch in a first-party cookie for
+up to 30 days, removes that cookie after authentication, and passes the
+allowlisted record to Clerk only when a new account is created. The allowlist is
 limited to capture time, landing pathname, external referring hostname, UTM
 fields, and an explicit `ref`; full referrer URLs and arbitrary query parameters
 are never stored. Both sign-up and transferable OAuth sign-in surfaces attach

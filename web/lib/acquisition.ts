@@ -43,35 +43,44 @@ function cleanValue(
   return cleaned || undefined;
 }
 
-function isFirstTouchAcquisition(
+function normalizeFirstTouchAcquisition(
   value: unknown
-): value is FirstTouchAcquisition {
-  if (!value || typeof value !== "object") return false;
+): FirstTouchAcquisition | null {
+  if (!value || typeof value !== "object") return null;
   const candidate = value as Record<string, unknown>;
+  const landingPath =
+    typeof candidate.landingPath === "string"
+      ? cleanValue(candidate.landingPath, FIELD_LIMITS.landingPath)
+      : undefined;
   if (
     candidate.schemaVersion !== 1 ||
     typeof candidate.capturedAt !== "string" ||
     Number.isNaN(Date.parse(candidate.capturedAt)) ||
-    typeof candidate.landingPath !== "string" ||
-    !candidate.landingPath.startsWith("/") ||
-    candidate.landingPath.length > FIELD_LIMITS.landingPath
+    !landingPath ||
+    !landingPath.startsWith("/") ||
+    landingPath.includes("?") ||
+    landingPath.includes("#")
   ) {
-    return false;
+    return null;
   }
+
+  const normalized: FirstTouchAcquisition = {
+    schemaVersion: 1,
+    capturedAt: new Date(candidate.capturedAt).toISOString(),
+    landingPath,
+  };
 
   for (const [field, limit] of Object.entries(FIELD_LIMITS)) {
     if (field === "landingPath") continue;
     const fieldValue = candidate[field];
-    if (
-      fieldValue !== undefined &&
-      (typeof fieldValue !== "string" ||
-        fieldValue.length === 0 ||
-        fieldValue.length > limit)
-    ) {
-      return false;
-    }
+    if (fieldValue === undefined) continue;
+    if (typeof fieldValue !== "string" || fieldValue.length > limit) return null;
+    const cleaned = cleanValue(fieldValue, limit);
+    if (!cleaned) return null;
+    normalized[field as keyof typeof FIELD_LIMITS] = cleaned;
   }
-  return true;
+
+  return normalized;
 }
 
 export function buildFirstTouchAcquisition({
@@ -140,7 +149,7 @@ export function parseFirstTouchCookie(
   if (!encoded) return null;
   try {
     const value = JSON.parse(decodeURIComponent(encoded));
-    return isFirstTouchAcquisition(value) ? value : null;
+    return normalizeFirstTouchAcquisition(value);
   } catch {
     return null;
   }
@@ -201,8 +210,20 @@ export function getOrCaptureBrowserFirstTouch(): FirstTouchAcquisition | null {
   return firstTouch;
 }
 
+export function clearBrowserFirstTouch(): void {
+  if (typeof window === "undefined" || typeof document === "undefined") return;
+  document.cookie = [
+    `${ACQUISITION_COOKIE}=`,
+    "Path=/",
+    "Max-Age=0",
+    "SameSite=Lax",
+    ...(window.location.protocol === "https:" ? ["Secure"] : []),
+  ].join("; ");
+}
+
 export function acquisitionUnsafeMetadata(
   firstTouch: FirstTouchAcquisition | null
 ): Record<string, unknown> | undefined {
-  return firstTouch ? { flaimAcquisition: firstTouch } : undefined;
+  const normalized = normalizeFirstTouchAcquisition(firstTouch);
+  return normalized ? { flaimAcquisition: normalized } : undefined;
 }
