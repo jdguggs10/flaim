@@ -38,6 +38,16 @@ Use Node.js 24 and the exact Supabase CLI version pinned in the root
 corepack pnpm exec supabase --version
 ```
 
+Run the complete two-reset proof locally with:
+
+```sh
+bash scripts/check-supabase.sh
+```
+
+The same local-only command runs in GitHub Actions for database-contract,
+toolchain, or workflow changes. It never links to or contacts a hosted
+Supabase project.
+
 The database-contract verification flow is:
 
 ```sh
