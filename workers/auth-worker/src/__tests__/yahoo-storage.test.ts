@@ -164,6 +164,44 @@ describe('YahooStorage', () => {
       });
     });
 
+    it('uses the pre-migration state path when the RPC is missing', async () => {
+      const futureDate = new Date(Date.now() + 5 * 60 * 1000);
+      mockMaybeSingle.mockResolvedValue({
+        data: null,
+        error: { code: 'PGRST202', message: 'function is missing' },
+      });
+      mockRpc.mockReturnValue({ maybeSingle: mockMaybeSingle });
+
+      const legacyMaybeSingle = vi.fn().mockResolvedValue({
+        data: {
+          clerk_user_id: 'user_123',
+          platform: 'yahoo',
+          redirect_after: '/dashboard',
+          expires_at: futureDate.toISOString(),
+        },
+        error: null,
+      });
+      const selectEq = vi.fn().mockReturnValue({
+        maybeSingle: legacyMaybeSingle,
+      });
+      const deleteEq = vi.fn().mockResolvedValue({ error: null });
+      mockFrom.mockReturnValue({
+        select: vi.fn().mockReturnValue({ eq: selectEq }),
+        delete: vi.fn().mockReturnValue({ eq: deleteEq }),
+      });
+
+      await expect(
+        storage.consumePlatformOAuthState('valid-state')
+      ).resolves.toEqual({
+        clerkUserId: 'user_123',
+        platform: 'yahoo',
+        redirectAfter: '/dashboard',
+      });
+
+      expect(mockFrom).toHaveBeenCalledWith('platform_oauth_states');
+      expect(deleteEq).toHaveBeenCalledWith('state', 'valid-state');
+    });
+
     it('returns null for expired state', async () => {
       const pastDate = new Date(Date.now() - 5 * 60 * 1000); // 5 mins ago
       mockMaybeSingle.mockResolvedValue({
@@ -566,6 +604,28 @@ describe('YahooStorage', () => {
         p_expires_at: expect.any(String),
         p_expected_refresh_token: 'refresh-token',
       });
+    });
+
+    it('uses the pre-migration lease path when the RPC is missing', async () => {
+      mockRpc.mockResolvedValue({
+        data: null,
+        error: { code: 'PGRST202', message: 'function is missing' },
+      });
+      mockSelect.mockResolvedValue({
+        data: [{ clerk_user_id: 'user_123' }],
+        error: null,
+      });
+
+      const result = await storage.acquireRefreshLease(
+        'user_123',
+        'owner-1',
+        30_000,
+        'refresh-token'
+      );
+
+      expect(result).toBe(true);
+      expect(mockFrom).toHaveBeenCalledWith('yahoo_credentials');
+      expect(mockEq).toHaveBeenCalledWith('refresh_token', 'refresh-token');
     });
 
     it('returns false when another owner already holds the lease', async () => {

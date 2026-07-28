@@ -19,6 +19,16 @@ import {
   getClientIdFromBoundToken,
   isConfidentialClientId,
 } from './oauth-client-auth';
+import {
+  isMissingTokenRpcError,
+  legacyClaimMcpOAuthCode,
+  legacyClaimMcpOAuthRefreshToken,
+  legacyConsumeMcpOAuthState,
+  legacyCreateMcpOAuthState,
+  legacyFindMcpOAuthAccessToken,
+  legacyRevokeMcpOAuthAccessToken,
+  warnTokenRpcFallback,
+} from './token-rpc-compat';
 
 // =============================================================================
 // TYPES
@@ -311,7 +321,7 @@ export class OAuthStorage {
     const expiresAt = new Date(Date.now() + expiresInSeconds * 1000);
     const encodedBinding = encodeOAuthStateBinding(params);
 
-    const { data, error } = await this.supabase.rpc('create_mcp_oauth_state', {
+    let { data, error } = await this.supabase.rpc('create_mcp_oauth_state', {
       p_state: params.state,
       p_redirect_uri: params.redirectUri,
       // Reuse the internal text column so scope binding does not require a
@@ -319,6 +329,16 @@ export class OAuthStorage {
       p_binding: encodedBinding,
       p_expires_at: expiresAt.toISOString(),
     });
+
+    if (isMissingTokenRpcError(error)) {
+      warnTokenRpcFallback('create_mcp_oauth_state');
+      ({ data, error } = await legacyCreateMcpOAuthState(this.supabase, {
+        state: params.state,
+        redirectUri: params.redirectUri,
+        binding: encodedBinding,
+        expiresAt: expiresAt.toISOString(),
+      }));
+    }
 
     if (error || data !== true) {
       console.error('[oauth-storage] Failed to store OAuth state:', error);
@@ -347,11 +367,20 @@ export class OAuthStorage {
       codeChallenge,
       resource,
     });
-    const { data, error } = await this.supabase.rpc('consume_mcp_oauth_state', {
+    let { data, error } = await this.supabase.rpc('consume_mcp_oauth_state', {
       p_state: state,
       p_redirect_uri: redirectUri,
       p_binding: encodedBinding,
     });
+
+    if (isMissingTokenRpcError(error)) {
+      warnTokenRpcFallback('consume_mcp_oauth_state');
+      ({ data, error } = await legacyConsumeMcpOAuthState(this.supabase, {
+        state,
+        redirectUri,
+        binding: encodedBinding,
+      }));
+    }
 
     if (error || data !== true) {
       console.log(
@@ -386,9 +415,14 @@ export class OAuthStorage {
     }
 
     // Atomically claim the code — only succeeds if not already used and not expired
-    const { data, error } = await this.supabase
+    let { data, error } = await this.supabase
       .rpc('claim_mcp_oauth_code', { p_code: code })
       .maybeSingle();
+
+    if (isMissingTokenRpcError(error)) {
+      warnTokenRpcFallback('claim_mcp_oauth_code');
+      ({ data, error } = await legacyClaimMcpOAuthCode(this.supabase, code));
+    }
 
     if (error || !data) {
       console.log(`[oauth-storage] Auth code not found, expired, or already used: ${code.substring(0, 8)}...`);
@@ -515,9 +549,17 @@ export class OAuthStorage {
    * Returns user ID and scope if valid
    */
   async validateAccessToken(accessToken: string, expectedResource?: string): Promise<TokenValidationResult> {
-    const { data, error } = await this.supabase
+    let { data, error } = await this.supabase
       .rpc('find_mcp_oauth_access_token', { p_access_token: accessToken })
       .maybeSingle();
+
+    if (isMissingTokenRpcError(error)) {
+      warnTokenRpcFallback('find_mcp_oauth_access_token');
+      ({ data, error } = await legacyFindMcpOAuthAccessToken(
+        this.supabase,
+        accessToken
+      ));
+    }
 
     if (error || !data) {
       return { valid: false, error: 'Token not found' };
@@ -558,9 +600,17 @@ export class OAuthStorage {
       return null;
     }
 
-    const { data, error } = await this.supabase
+    let { data, error } = await this.supabase
       .rpc('claim_mcp_oauth_refresh_token', { p_refresh_token: refreshToken })
       .maybeSingle();
+
+    if (isMissingTokenRpcError(error)) {
+      warnTokenRpcFallback('claim_mcp_oauth_refresh_token');
+      ({ data, error } = await legacyClaimMcpOAuthRefreshToken(
+        this.supabase,
+        refreshToken
+      ));
+    }
 
     if (error || !data) {
       console.log('[oauth-storage] Refresh token not found, expired, or already used');
@@ -586,9 +636,17 @@ export class OAuthStorage {
    * Revoke an access token
    */
   async revokeToken(accessToken: string): Promise<boolean> {
-    const { data, error } = await this.supabase.rpc('revoke_mcp_oauth_access_token', {
+    let { data, error } = await this.supabase.rpc('revoke_mcp_oauth_access_token', {
       p_access_token: accessToken,
     });
+
+    if (isMissingTokenRpcError(error)) {
+      warnTokenRpcFallback('revoke_mcp_oauth_access_token');
+      ({ data, error } = await legacyRevokeMcpOAuthAccessToken(
+        this.supabase,
+        accessToken
+      ));
+    }
 
     if (error || data !== true) {
       console.error('[oauth-storage] Failed to revoke token:', error);

@@ -16,6 +16,13 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { clearDefaultsForLeague as _clearDefaultsForLeague, clearDefaultsForPlatform as _clearDefaultsForPlatform } from './preference-defaults';
 import { ArchiveStorage, archivedKey, isSuppressed, type ArchivedFilter } from './archive-storage';
+import {
+  isMissingTokenRpcError,
+  legacyAcquireYahooRefreshLease,
+  legacyConsumeYahooOAuthState,
+  legacyRecoverYahooCredentials,
+  warnTokenRpcFallback,
+} from './token-rpc-compat';
 
 export const REFRESH_COOLDOWN_OWNER_PREFIX = 'cooldown:';
 
@@ -213,9 +220,17 @@ export class YahooStorage {
    * Returns null if state is invalid, expired, or doesn't exist
    */
   async consumePlatformOAuthState(state: string): Promise<PlatformOAuthState | null> {
-    const { data, error } = await this.supabase
+    let { data, error } = await this.supabase
       .rpc('consume_yahoo_oauth_state', { p_state: state })
       .maybeSingle();
+
+    if (isMissingTokenRpcError(error)) {
+      warnTokenRpcFallback('consume_yahoo_oauth_state');
+      ({ data, error } = await legacyConsumeYahooOAuthState(
+        this.supabase,
+        state
+      ));
+    }
 
     if (error || !data) {
       console.log(`[yahoo-storage] OAuth state not found: ${state.substring(0, 8)}...`);
@@ -388,7 +403,7 @@ export class YahooStorage {
     params: UpdateCredentialsParams,
     expectedRefreshToken: string
   ): Promise<boolean> {
-    const { data, error } = await this.supabase.rpc('recover_yahoo_credentials', {
+    let { data, error } = await this.supabase.rpc('recover_yahoo_credentials', {
       p_clerk_user_id: clerkUserId,
       p_access_token: params.accessToken,
       p_refresh_token: params.refreshToken ?? null,
@@ -396,6 +411,15 @@ export class YahooStorage {
       p_app_fingerprint: params.appFingerprint ?? null,
       p_expected_refresh_token: expectedRefreshToken,
     });
+
+    if (isMissingTokenRpcError(error)) {
+      warnTokenRpcFallback('recover_yahoo_credentials');
+      ({ data, error } = await legacyRecoverYahooCredentials(this.supabase, {
+        clerkUserId,
+        updateData: yahooCredentialUpdateData(params),
+        expectedRefreshToken,
+      }));
+    }
 
     if (error) {
       console.error('[yahoo-storage] Failed to recover Yahoo credentials after owner guard miss:', error);
@@ -455,12 +479,22 @@ export class YahooStorage {
     expectedRefreshToken: string
   ): Promise<boolean> {
     const expiresAt = new Date(Date.now() + ttlMs).toISOString();
-    const { data, error } = await this.supabase.rpc('acquire_yahoo_refresh_lease', {
+    let { data, error } = await this.supabase.rpc('acquire_yahoo_refresh_lease', {
       p_clerk_user_id: clerkUserId,
       p_owner_id: ownerId,
       p_expires_at: expiresAt,
       p_expected_refresh_token: expectedRefreshToken,
     });
+
+    if (isMissingTokenRpcError(error)) {
+      warnTokenRpcFallback('acquire_yahoo_refresh_lease');
+      ({ data, error } = await legacyAcquireYahooRefreshLease(this.supabase, {
+        clerkUserId,
+        ownerId,
+        expiresAt,
+        expectedRefreshToken,
+      }));
+    }
 
     if (error) {
       console.error('[yahoo-storage] Failed to acquire Yahoo refresh lease:', error);

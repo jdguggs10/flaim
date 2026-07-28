@@ -10,6 +10,7 @@ import {
   createConfidentialClientRegistration,
   getClientIdFromBoundToken,
 } from '../oauth-client-auth';
+import { isMissingTokenRpcError } from '../token-rpc-compat';
 
 const mockFrom = vi.fn();
 const mockRpc = vi.fn();
@@ -459,6 +460,66 @@ describe('OAuthStorage token RPC routing', () => {
     expect(mockFrom).not.toHaveBeenCalled();
   });
 
+  it('uses the pre-migration access-token path only when the RPC is missing', async () => {
+    const rpcMaybeSingle = vi.fn().mockResolvedValue({
+      data: null,
+      error: { code: 'PGRST202', message: 'function is missing' },
+    });
+    const legacyMaybeSingle = vi.fn().mockResolvedValue({
+      data: {
+        user_id: 'user_123',
+        scope: 'mcp:read',
+        resource: 'https://api.flaim.app/mcp',
+        client_name: 'ChatGPT',
+        expires_at: new Date(Date.now() + 60_000).toISOString(),
+        revoked_at: null,
+      },
+      error: null,
+    });
+    const legacyEq = vi.fn().mockReturnValue({ maybeSingle: legacyMaybeSingle });
+    const legacySelect = vi.fn().mockReturnValue({ eq: legacyEq });
+    mockRpc.mockReturnValue({ maybeSingle: rpcMaybeSingle });
+    mockFrom.mockReturnValue({ select: legacySelect });
+    const storage = new OAuthStorage('https://example.supabase.co', 'test-key');
+
+    await expect(
+      storage.validateAccessToken(
+        'synthetic-access-token',
+        'https://api.flaim.app/mcp'
+      )
+    ).resolves.toEqual({
+      valid: true,
+      userId: 'user_123',
+      scope: 'mcp:read',
+      resource: 'https://api.flaim.app/mcp',
+      clientName: 'ChatGPT',
+    });
+
+    expect(mockFrom).toHaveBeenCalledWith('oauth_tokens');
+    expect(legacyEq).toHaveBeenCalledWith(
+      'access_token',
+      'synthetic-access-token'
+    );
+  });
+
+  it('does not fall back when the token RPC is denied', async () => {
+    const maybeSingle = vi.fn().mockResolvedValue({
+      data: null,
+      error: { code: '42501', message: 'permission denied' },
+    });
+    mockRpc.mockReturnValue({ maybeSingle });
+    const storage = new OAuthStorage('https://example.supabase.co', 'test-key');
+
+    await expect(
+      storage.validateAccessToken('synthetic-access-token')
+    ).resolves.toEqual({
+      valid: false,
+      error: 'Token not found',
+    });
+
+    expect(mockFrom).not.toHaveBeenCalled();
+  });
+
   it('revokes an access token through a body-based RPC', async () => {
     mockRpc.mockResolvedValue({ data: true, error: null });
     const storage = new OAuthStorage('https://example.supabase.co', 'test-key');
@@ -469,6 +530,15 @@ describe('OAuthStorage token RPC routing', () => {
       p_access_token: 'synthetic-access-token',
     });
     expect(mockFrom).not.toHaveBeenCalled();
+  });
+});
+
+describe('token RPC compatibility error routing', () => {
+  it('recognizes only PostgREST missing-function errors', () => {
+    expect(isMissingTokenRpcError({ code: 'PGRST202' })).toBe(true);
+    expect(isMissingTokenRpcError({ code: '42501' })).toBe(false);
+    expect(isMissingTokenRpcError({ code: 'PGRST116' })).toBe(false);
+    expect(isMissingTokenRpcError(null)).toBe(false);
   });
 });
 

@@ -83,6 +83,12 @@ carried in the JSON body rather than PostgREST filter URLs. The functions are
 security invokers with an empty search path; `EXECUTE` is revoked from
 `PUBLIC`, `anon`, and `authenticated`, and granted only to `service_role`.
 
+Hosted databases are promoted separately from Worker code. Until a database
+has this migration, the Worker recognizes only PostgREST's `PGRST202`
+missing-function response and uses the pre-migration query path. Other RPC
+errors fail normally. After the migration is present, the body-based path is
+selected automatically.
+
 `supabase/tests/token_rpc.sql` proves the function ACLs, state/code/refresh
 single-use behavior, idempotent revocation, Yahoo lease exclusion, and guarded
 credential recovery with synthetic rows inside a rolled-back transaction.

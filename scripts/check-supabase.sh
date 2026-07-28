@@ -17,7 +17,8 @@ readonly TOKEN_RPC_PROOF_SQL="supabase/tests/token_rpc.sql"
 if rg --line-number \
   "\\.eq\\('(state|code|access_token|refresh_token)'" \
   workers/auth-worker/src \
-  --glob '!**/__tests__/**'; then
+  --glob '!**/__tests__/**' \
+  --glob '!token-rpc-compat.ts'; then
   printf 'Credential-shaped PostgREST equality filter found in Auth Worker source.\n' >&2
   exit 1
 fi
