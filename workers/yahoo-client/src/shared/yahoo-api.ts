@@ -77,12 +77,17 @@ export async function handleYahooError(response: Response): Promise<never> {
         message: 'Yahoo token expired or invalid',
         status: classification.status,
       });
-    case 'access_denied':
+    case 'access_denied': {
+      // Yahoo's 403 body names the denial reason (scope loss vs app suspension
+      // vs generic forbidden) — log it so platform-wide denials are diagnosable.
+      const deniedBody = await readErrorBody();
+      console.log(`[yahoo-api] access_denied body: ${deniedBody || '(empty)'}`);
       throw new YahooClientError({
         code: 'YAHOO_ACCESS_DENIED',
         message: 'Access denied to this resource',
         status: classification.status,
       });
+    }
     case 'not_found':
       throw new YahooClientError({
         code: 'YAHOO_NOT_FOUND',
