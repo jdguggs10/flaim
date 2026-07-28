@@ -20,6 +20,12 @@ This worker has three distinct responsibilities:
 |----------|------|---------|
 | `GET /health` | None | Health check with Supabase connectivity test |
 
+The health check performs a bounded read against the Supabase Data API. An
+empty result is healthy; missing configuration or any PostgREST/transport error
+returns `503` with a sanitized `supabase_status`. Roll back a bad preview
+deployment with `corepack pnpm --dir workers/auth-worker exec wrangler rollback
+--env preview`, then verify `/health` again before considering production.
+
 ### OAuth 2.1 Provider (AI clients → Flaim)
 
 These endpoints let Claude, ChatGPT, Perplexity, Gemini, and other MCP clients authenticate to Flaim.

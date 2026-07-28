@@ -704,7 +704,7 @@ api.get('/health', async (c) => {
   try {
     if (env.SUPABASE_URL && env.SUPABASE_SERVICE_KEY) {
       const storage = EspnSupabaseStorage.fromEnvironment(env);
-      await storage.hasCredentials('health-check-test');
+      await storage.probeConnection();
       healthData.supabase_status = 'connected';
     } else {
       healthData.supabase_status = 'not_configured';

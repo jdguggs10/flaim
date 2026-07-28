@@ -37,6 +37,56 @@ describe('EspnSupabaseStorage', () => {
     vi.restoreAllMocks();
   });
 
+  describe('probeConnection', () => {
+    function mockProbe(result: { data: unknown; error: unknown }) {
+      const limit = vi.fn().mockResolvedValue(result);
+      const select = vi.fn().mockReturnValue({ limit });
+      mockFrom.mockReturnValue({ select });
+      return { select, limit };
+    }
+
+    it('succeeds when the probe returns one row', async () => {
+      const { select, limit } = mockProbe({
+        data: [{ clerk_user_id: 'user_123' }],
+        error: null,
+      });
+
+      await expect(storage.probeConnection()).resolves.toBeUndefined();
+      expect(mockFrom).toHaveBeenCalledWith('espn_credentials');
+      expect(select).toHaveBeenCalledWith('clerk_user_id');
+      expect(limit).toHaveBeenCalledWith(1);
+    });
+
+    it('succeeds when the probe returns no rows', async () => {
+      mockProbe({ data: [], error: null });
+
+      await expect(storage.probeConnection()).resolves.toBeUndefined();
+    });
+
+    it('throws when PostgREST returns a permission error', async () => {
+      const permissionError = {
+        code: '42501',
+        message: 'permission denied for table espn_credentials',
+      };
+      mockProbe({ data: null, error: permissionError });
+
+      await expect(storage.probeConnection()).rejects.toMatchObject({
+        message: 'Supabase connectivity probe failed',
+        cause: permissionError,
+      });
+    });
+
+    it('propagates a transport or query failure', async () => {
+      const transportError = new Error('network unavailable');
+      const limit = vi.fn().mockRejectedValue(transportError);
+      mockFrom.mockReturnValue({
+        select: vi.fn().mockReturnValue({ limit }),
+      });
+
+      await expect(storage.probeConnection()).rejects.toBe(transportError);
+    });
+  });
+
   it('removeLeague clears only the deleted sport default when league ids collide across sports', async () => {
     const mockPrefsUpsert = vi.fn().mockReturnValue({ error: null });
 

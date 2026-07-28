@@ -73,6 +73,22 @@ export class EspnSupabaseStorage {
     this.archive = new ArchiveStorage(options.supabaseUrl, options.supabaseKey);
   }
 
+  /**
+   * Verify that the configured Supabase Data API is reachable and that the
+   * service role can read a core table. An empty table is a successful probe;
+   * any PostgREST or transport error must propagate to the caller.
+   */
+  async probeConnection(): Promise<void> {
+    const { error } = await this.supabase
+      .from('espn_credentials')
+      .select('clerk_user_id')
+      .limit(1);
+
+    if (error) {
+      throw new Error('Supabase connectivity probe failed', { cause: error });
+    }
+  }
+
   // =============================================================================
   // CREDENTIAL OPERATIONS
   // =============================================================================
