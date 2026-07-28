@@ -87,7 +87,9 @@ Hosted databases are promoted separately from Worker code. Until a database
 has this migration, the Worker recognizes only PostgREST's `PGRST202`
 missing-function response and uses the pre-migration query path. Other RPC
 errors fail normally. After the migration is present, the body-based path is
-selected automatically.
+selected automatically. The compatibility path preserves the previous
+non-atomic behavior; the new single-use and lease concurrency guarantees begin
+only after the hosted database has the RPC migration.
 
 `supabase/tests/token_rpc.sql` proves the function ACLs, state/code/refresh
 single-use behavior, idempotent revocation, Yahoo lease exclusion, and guarded

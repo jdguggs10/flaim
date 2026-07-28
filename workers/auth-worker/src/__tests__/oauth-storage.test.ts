@@ -326,11 +326,44 @@ describe('OAuthStorage MCP token lifetimes', () => {
     expect(insert).not.toHaveBeenCalled();
   });
 
+  it('does not fall back when the authorization-code RPC is denied', async () => {
+    const maybeSingle = vi.fn().mockResolvedValue({
+      data: null,
+      error: { code: '42501', message: 'permission denied' },
+    });
+    mockRpc.mockReturnValue({ maybeSingle });
+    const storage = new OAuthStorage('https://example.supabase.co', 'test-key');
+
+    await expect(
+      storage.exchangeCodeForToken(
+        'plain-auth-code',
+        'https://claude.ai/api/mcp/auth_callback'
+      )
+    ).resolves.toBeNull();
+
+    expect(mockFrom).not.toHaveBeenCalled();
+  });
+
   it('returns null when the refresh-token claim does not win', async () => {
     buildTableMock({ lookupRow: null });
     const storage = new OAuthStorage('https://example.supabase.co', 'test-key');
 
     await expect(storage.refreshAccessToken('old-refresh-token')).resolves.toBeNull();
+  });
+
+  it('does not fall back when the refresh-token RPC is denied', async () => {
+    const maybeSingle = vi.fn().mockResolvedValue({
+      data: null,
+      error: { code: '42501', message: 'permission denied' },
+    });
+    mockRpc.mockReturnValue({ maybeSingle });
+    const storage = new OAuthStorage('https://example.supabase.co', 'test-key');
+
+    await expect(
+      storage.refreshAccessToken('old-refresh-token')
+    ).resolves.toBeNull();
+
+    expect(mockFrom).not.toHaveBeenCalled();
   });
 
   it('allows only one of two simultaneous refresh callers to rotate a token', async () => {
@@ -529,6 +562,20 @@ describe('OAuthStorage token RPC routing', () => {
     expect(mockRpc).toHaveBeenCalledWith('revoke_mcp_oauth_access_token', {
       p_access_token: 'synthetic-access-token',
     });
+    expect(mockFrom).not.toHaveBeenCalled();
+  });
+
+  it('does not fall back when the token-revocation RPC is denied', async () => {
+    mockRpc.mockResolvedValue({
+      data: null,
+      error: { code: '42501', message: 'permission denied' },
+    });
+    const storage = new OAuthStorage('https://example.supabase.co', 'test-key');
+
+    await expect(
+      storage.revokeToken('synthetic-access-token')
+    ).resolves.toBe(false);
+
     expect(mockFrom).not.toHaveBeenCalled();
   });
 });

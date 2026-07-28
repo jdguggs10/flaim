@@ -202,6 +202,19 @@ describe('YahooStorage', () => {
       expect(deleteEq).toHaveBeenCalledWith('state', 'valid-state');
     });
 
+    it('does not fall back when the state RPC is denied', async () => {
+      mockMaybeSingle.mockResolvedValue({
+        data: null,
+        error: { code: '42501', message: 'permission denied' },
+      });
+
+      await expect(
+        storage.consumePlatformOAuthState('denied-state')
+      ).resolves.toBeNull();
+
+      expect(mockFrom).not.toHaveBeenCalled();
+    });
+
     it('returns null for expired state', async () => {
       const pastDate = new Date(Date.now() - 5 * 60 * 1000); // 5 mins ago
       mockMaybeSingle.mockResolvedValue({
@@ -589,6 +602,27 @@ describe('YahooStorage', () => {
 
       expect(result).toBe(false);
     });
+
+    it('does not fall back when the credential-recovery RPC is denied', async () => {
+      mockRpc.mockResolvedValue({
+        data: null,
+        error: { code: '42501', message: 'permission denied' },
+      });
+
+      await expect(
+        storage.updateYahooCredentialsIfRefreshTokenMatches(
+          'user_123',
+          {
+            accessToken: 'new-access-token',
+            refreshToken: 'new-refresh-token',
+            expiresAt: new Date('2026-01-24T14:00:00Z'),
+          },
+          'old-refresh-token'
+        )
+      ).rejects.toThrow('Failed to recover Yahoo credentials');
+
+      expect(mockFrom).not.toHaveBeenCalled();
+    });
   });
 
   describe('acquireRefreshLease', () => {
@@ -665,12 +699,17 @@ describe('YahooStorage', () => {
       }));
     });
 
-    it('throws when lease acquisition hits a storage error', async () => {
-      mockRpc.mockResolvedValue({ data: null, error: { message: 'DB down' } });
+    it('does not fall back when the lease RPC is denied', async () => {
+      mockRpc.mockResolvedValue({
+        data: null,
+        error: { code: '42501', message: 'permission denied' },
+      });
 
       await expect(
         storage.acquireRefreshLease('user_123', 'owner-1', 30_000, 'refresh-token')
       ).rejects.toThrow('Failed to acquire Yahoo refresh lease');
+
+      expect(mockFrom).not.toHaveBeenCalled();
     });
   });
 
