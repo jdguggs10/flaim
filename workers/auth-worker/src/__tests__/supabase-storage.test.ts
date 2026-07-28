@@ -45,22 +45,26 @@ describe('EspnSupabaseStorage', () => {
       return { select, limit };
     }
 
-    it('succeeds when the probe returns one row', async () => {
+    it('uses a payload-free HEAD request and succeeds', async () => {
       const { select, limit } = mockProbe({
-        data: [{ clerk_user_id: 'user_123' }],
+        data: null,
         error: null,
       });
 
       await expect(storage.probeConnection()).resolves.toBeUndefined();
       expect(mockFrom).toHaveBeenCalledWith('espn_credentials');
-      expect(select).toHaveBeenCalledWith('clerk_user_id');
+      expect(select).toHaveBeenCalledWith('clerk_user_id', { head: true });
       expect(limit).toHaveBeenCalledWith(1);
     });
 
-    it('succeeds when the probe returns no rows', async () => {
-      mockProbe({ data: [], error: null });
+    it('does not require count or row data from a successful HEAD response', async () => {
+      const { select } = mockProbe({ data: null, error: null });
 
       await expect(storage.probeConnection()).resolves.toBeUndefined();
+      expect(select).not.toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ count: expect.anything() })
+      );
     });
 
     it('throws when PostgREST returns a permission error', async () => {
