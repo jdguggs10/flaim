@@ -112,6 +112,12 @@ The omission is an intended-schema decision only. It does not drop or alter the
 live production function, and the baseline does not rewrite production
 migration history.
 
+The legacy `public.extension_pairing_codes` and
+`public.extension_tokens` tables named in superseded documentation were absent
+from the refreshed live production catalog, and no current consumer was found
+for either table. They are therefore intentionally excluded from the 22-table
+greenfield baseline.
+
 Production's physical column numbers contain three gaps left by dropped columns
 in `demo_answer_cache`, `demo_refresh_runs`, and `yahoo_leagues`. A greenfield
 database intentionally creates the same logical columns without preserving

@@ -4,6 +4,8 @@
 -- preview databases do not start background jobs. Apply it only to an approved
 -- production lane after the baseline and consumer verification gates pass.
 -- Re-running it replaces each existing job with the same case-sensitive name.
+-- Renaming or retiring a job is a separate approved operation: explicitly call
+-- cron.unschedule() for the old name before scheduling its replacement.
 
 select cron.schedule(
   'mcp-rollup',
