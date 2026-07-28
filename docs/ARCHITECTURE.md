@@ -210,7 +210,10 @@ fantasy-mcp tool call → waitUntil(POST /internal/usage-event) → auth-worker 
 - **Two tiers:** raw `mcp_tool_events` is pruned after 90 days; `pg_cron` rolls each UTC day into the permanent, tiny `mcp_user_daily` / `mcp_tool_daily` rollups.
 - **Telemetry only:** tool, platform, sport, status, latency, and a hashed league id — never rosters, players, or question text.
 
-Schema is in `docs/DATABASE.md`; migrations `026`/`027` live in the private `flaim-docs` repo. Clerk cannot see this usage (it only observes website-session activity), so these metrics — not Clerk's dashboard — are the source of truth for DAU/WAU/MAU and retention.
+Schema is summarized in `docs/DATABASE.md`; the reviewed, secret-free
+deployable contract lives in `supabase/`. Clerk cannot see this usage (it only
+observes website-session activity), so these metrics — not Clerk's dashboard —
+are the source of truth for DAU/WAU/MAU and retention.
 
 ---
 
@@ -284,14 +287,17 @@ Opening a PR triggers a full preview stack: Vercel preview deploy + all 5 Cloudf
 | Frontend | `flaim.app` (Vercel) | `flaim-git-{branch}-gerald-guggers-projects.vercel.app` |
 | Clerk | Production instance (`pk_live_`) | Development instance (`pk_test_`), separate user pool |
 | Workers | `auth-worker`, `fantasy-mcp`, etc. | `auth-worker-preview`, `fantasy-mcp-preview`, etc. |
-| Supabase | Shared (same instance) | Shared (same instance) |
+| Supabase | Isolated production project | Isolated preview project with synthetic data |
 | Worker URLs | Custom domains (`api.flaim.app/*`) | `.workers.dev` URLs |
 
 **Vercel env vars are scoped by environment.** `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, `AUTH_WORKER_URL`, `NEXT_PUBLIC_AUTH_WORKER_URL`, and `NEXT_PUBLIC_FANTASY_MCP_URL` each have separate Production and Preview values. Preview points to dev Clerk and preview worker URLs. Server-only web routes should use `AUTH_WORKER_URL` with the direct `.workers.dev` worker URL; browser-visible configuration uses the `NEXT_PUBLIC_*` names and may point at the public custom gateway.
 
 **Auth-worker resolves frontend redirects dynamically in preview** — no static `FRONTEND_URL` needed. It reads the `Origin` header (OAuth consent) or stored `redirect_after` (Yahoo callback) and accepts any `flaim-*.vercel.app` origin.
 
-**Supabase is shared.** Preview and prod write to the same database. Clerk instance isolation prevents cross-contamination (dev Clerk user IDs never match prod user IDs). Preview testing may leave orphan rows keyed to dev Clerk IDs — these are inert and can be cleaned up periodically.
+**Supabase is isolated.** Preview Workers use the dedicated preview database;
+production Workers use the production database. Preview verification uses
+synthetic or preview-created rows and must not copy production credentials or
+production user data.
 
 **Triggering preview deploys:** Workers only deploy on PRs (not bare branch pushes). A PR must exist for GitHub Actions to run `deploy-workers.yml` with `--env preview`. Vercel deploys on any push.
 

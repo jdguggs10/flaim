@@ -55,7 +55,10 @@ corepack pnpm exec supabase db start
 corepack pnpm exec supabase db reset --local
 docker cp supabase/tests/reproducibility.sql supabase_db_flaim:/tmp/reproducibility.sql
 docker exec supabase_db_flaim psql -v ON_ERROR_STOP=1 -U postgres -d postgres -f /tmp/reproducibility.sql
+docker cp supabase/tests/token_rpc.sql supabase_db_flaim:/tmp/token_rpc.sql
+docker exec supabase_db_flaim psql -v ON_ERROR_STOP=1 -U postgres -d postgres -f /tmp/token_rpc.sql
 corepack pnpm exec supabase db lint --local --schema public,analytics --level warning --fail-on error
+corepack pnpm exec supabase db advisors --local --type security --level warn --fail-on error
 corepack pnpm exec supabase db diff --local --schema public,analytics
 ```
 
@@ -70,3 +73,49 @@ was empty. Local advisors reported no errors and one expected warning for the
 exact duplicate before-state index. This passes the local reproducibility gate
 for considering a separate hosted preview database; it does not authorize
 hosted infrastructure or production changes.
+
+## Token-matching RPCs
+
+The forward migration after the baseline moves MCP OAuth and Yahoo
+credential-shaped comparisons into service-role-only Postgres functions.
+Supabase RPC calls use their default `POST` behavior so function arguments are
+carried in the JSON body rather than PostgREST filter URLs. The functions are
+security invokers with an empty search path; `EXECUTE` is revoked from
+`PUBLIC`, `anon`, and `authenticated`, and granted only to `service_role`.
+
+Hosted databases are promoted separately from Worker code. Until a database
+has this migration, the Worker recognizes only PostgREST's `PGRST202`
+missing-function response and uses the pre-migration query path. Other RPC
+errors fail normally. After the migration is present, the body-based path is
+selected automatically. The compatibility path preserves the previous
+non-atomic behavior; the new single-use and lease concurrency guarantees begin
+only after the hosted database has the RPC migration.
+
+`supabase/tests/token_rpc.sql` proves the function ACLs, state/code/refresh
+single-use behavior, idempotent revocation, Yahoo lease exclusion, and guarded
+credential recovery with synthetic rows inside a rolled-back transaction.
+`supabase/tests/token_rpc_concurrency.sh` independently races two database
+sessions and requires exactly one MCP refresh winner and one Yahoo lease
+winner, then removes its synthetic fixtures.
+
+Rollback is Worker-first: restore the previous Auth Worker version before
+removing any function, so no deployed caller loses its database dependency.
+The additive functions may safely remain unused during observation. If removal
+is later required, drop only the nine signatures introduced by
+`20260728210429_move_token_matching_to_rpc.sql` after the Worker rollback is
+confirmed. Hosted preview application and every production promotion remain
+separate approval gates.
+
+```sql
+begin;
+drop function if exists public.create_mcp_oauth_state(text, text, text, timestamptz);
+drop function if exists public.consume_mcp_oauth_state(text, text, text);
+drop function if exists public.claim_mcp_oauth_code(text);
+drop function if exists public.find_mcp_oauth_access_token(text);
+drop function if exists public.claim_mcp_oauth_refresh_token(text);
+drop function if exists public.revoke_mcp_oauth_access_token(text);
+drop function if exists public.consume_yahoo_oauth_state(text);
+drop function if exists public.acquire_yahoo_refresh_lease(text, text, timestamptz, text);
+drop function if exists public.recover_yahoo_credentials(text, text, text, timestamptz, text, text);
+commit;
+```

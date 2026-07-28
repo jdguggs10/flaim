@@ -211,6 +211,7 @@ wrangler secret put EVAL_USER_ID --env prod    # paste Clerk user ID
 | `index-hono.ts` | Router | All route definitions, JWT verification, middleware |
 | `oauth-handlers.ts` | Provider | OAuth 2.1 authorization server endpoints |
 | `oauth-storage.ts` | Provider | Auth codes, tokens, rate limits in Supabase |
+| `token-rpc-compat.ts` | Storage | Narrow pre-migration fallback for missing token RPCs |
 | `yahoo-connect-handlers.ts` | Client | Yahoo OAuth 2.0 client flow |
 | `yahoo-storage.ts` | Client | Yahoo tokens in Supabase |
 | `supabase-storage.ts` | Storage | ESPN credentials and leagues |
@@ -220,7 +221,16 @@ wrangler secret put EVAL_USER_ID --env prod    # paste Clerk user ID
 
 ### 1. Supabase
 
-Run SQL migrations from the private `flaim-docs` repository (`migrations/` directory, numbered files) in order.
+The reviewed, secret-free database contract lives in `../../supabase/`.
+Validate it locally with `bash ../../scripts/check-supabase.sh`. Applying a
+migration to hosted preview or production is a separate infrastructure step;
+Worker deployment does not apply database migrations automatically.
+
+Token-matching callers prefer the body-based RPCs. During database-first
+promotion, only PostgREST's `PGRST202` missing-function response activates the
+pre-migration query path; permission, transport, and other RPC failures do not
+fall back. Once the functions are present in a hosted database, the Worker
+uses the RPC path without a configuration change.
 
 ### 2. Cloudflare Secrets
 

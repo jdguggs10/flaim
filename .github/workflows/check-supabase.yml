@@ -7,6 +7,7 @@ on:
     paths:
       - 'supabase/**'
       - 'scripts/check-supabase.sh'
+      - 'workers/auth-worker/src/**'
       - 'package.json'
       - 'pnpm-lock.yaml'
       - 'pnpm-workspace.yaml'
@@ -16,6 +17,7 @@ on:
     paths:
       - 'supabase/**'
       - 'scripts/check-supabase.sh'
+      - 'workers/auth-worker/src/**'
       - 'package.json'
       - 'pnpm-lock.yaml'
       - 'pnpm-workspace.yaml'

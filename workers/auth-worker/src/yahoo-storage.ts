@@ -5,7 +5,7 @@
  * Handles platform OAuth state (CSRF protection), Yahoo OAuth credentials,
  * and discovered Yahoo Fantasy leagues.
  *
- * Tables required (see flaim-docs/migrations/009_yahoo_platform.sql):
+ * Database contract: supabase/migrations/
  * - platform_oauth_states: CSRF protection for platform OAuth flows
  * - yahoo_credentials: OAuth tokens for Yahoo Fantasy API access
  * - yahoo_leagues: Discovered Yahoo Fantasy leagues
@@ -16,6 +16,13 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { clearDefaultsForLeague as _clearDefaultsForLeague, clearDefaultsForPlatform as _clearDefaultsForPlatform } from './preference-defaults';
 import { ArchiveStorage, archivedKey, isSuppressed, type ArchivedFilter } from './archive-storage';
+import {
+  isMissingTokenRpcError,
+  legacyAcquireYahooRefreshLease,
+  legacyConsumeYahooOAuthState,
+  legacyRecoverYahooCredentials,
+  warnTokenRpcFallback,
+} from './token-rpc-compat';
 
 export const REFRESH_COOLDOWN_OWNER_PREFIX = 'cooldown:';
 
@@ -30,6 +37,13 @@ export interface PlatformOAuthState {
   clerkUserId: string;
   platform: Platform;
   redirectAfter?: string;
+}
+
+interface PlatformOAuthStateRow {
+  clerk_user_id: string;
+  platform: Platform;
+  redirect_after: string | null;
+  expires_at: string;
 }
 
 export interface CreateStateParams {
@@ -206,31 +220,35 @@ export class YahooStorage {
    * Returns null if state is invalid, expired, or doesn't exist
    */
   async consumePlatformOAuthState(state: string): Promise<PlatformOAuthState | null> {
-    const { data, error } = await this.supabase
-      .from('platform_oauth_states')
-      .select('state, clerk_user_id, platform, redirect_after, expires_at')
-      .eq('state', state)
-      .single();
+    let { data, error } = await this.supabase
+      .rpc('consume_yahoo_oauth_state', { p_state: state })
+      .maybeSingle();
+
+    if (isMissingTokenRpcError(error)) {
+      warnTokenRpcFallback('consume_yahoo_oauth_state');
+      ({ data, error } = await legacyConsumeYahooOAuthState(
+        this.supabase,
+        state
+      ));
+    }
 
     if (error || !data) {
       console.log(`[yahoo-storage] OAuth state not found: ${state.substring(0, 8)}...`);
       return null;
     }
-
-    // Always delete the state (single-use)
-    await this.supabase.from('platform_oauth_states').delete().eq('state', state);
+    const stateRow = data as PlatformOAuthStateRow;
 
     // Check if expired
-    const expiresAt = new Date(data.expires_at);
+    const expiresAt = new Date(stateRow.expires_at);
     if (Number.isNaN(expiresAt.getTime()) || expiresAt.getTime() < Date.now()) {
       console.log(`[yahoo-storage] OAuth state expired: ${state.substring(0, 8)}...`);
       return null;
     }
 
     return {
-      clerkUserId: data.clerk_user_id,
-      platform: data.platform as Platform,
-      redirectAfter: data.redirect_after || undefined,
+      clerkUserId: stateRow.clerk_user_id,
+      platform: stateRow.platform,
+      redirectAfter: stateRow.redirect_after || undefined,
     };
   }
 
@@ -385,22 +403,30 @@ export class YahooStorage {
     params: UpdateCredentialsParams,
     expectedRefreshToken: string
   ): Promise<boolean> {
-    const updateData = yahooCredentialUpdateData(params);
+    let { data, error } = await this.supabase.rpc('recover_yahoo_credentials', {
+      p_clerk_user_id: clerkUserId,
+      p_access_token: params.accessToken,
+      p_refresh_token: params.refreshToken ?? null,
+      p_expires_at: params.expiresAt.toISOString(),
+      p_app_fingerprint: params.appFingerprint ?? null,
+      p_expected_refresh_token: expectedRefreshToken,
+    });
 
-    const { data, error } = await this.supabase
-      .from('yahoo_credentials')
-      .update(updateData)
-      .eq('clerk_user_id', clerkUserId)
-      .eq('refresh_token', expectedRefreshToken)
-      .or(`refresh_lease_owner.is.null,refresh_lease_expires_at.lt.${new Date().toISOString()},refresh_lease_expires_at.is.null`)
-      .select('clerk_user_id');
+    if (isMissingTokenRpcError(error)) {
+      warnTokenRpcFallback('recover_yahoo_credentials');
+      ({ data, error } = await legacyRecoverYahooCredentials(this.supabase, {
+        clerkUserId,
+        updateData: yahooCredentialUpdateData(params),
+        expectedRefreshToken,
+      }));
+    }
 
     if (error) {
       console.error('[yahoo-storage] Failed to recover Yahoo credentials after owner guard miss:', error);
       throw new Error('Failed to recover Yahoo credentials');
     }
 
-    const updated = (data?.length ?? 0) > 0;
+    const updated = data === true;
     if (updated) {
       console.log(`[yahoo-storage] Recovered Yahoo credentials for user ${maskUserId(clerkUserId)} after owner guard miss`);
     }
@@ -453,26 +479,29 @@ export class YahooStorage {
     expectedRefreshToken: string
   ): Promise<boolean> {
     const expiresAt = new Date(Date.now() + ttlMs).toISOString();
-    const now = new Date().toISOString();
-    const query = this.supabase
-      .from('yahoo_credentials')
-      .update({
-        refresh_lease_owner: ownerId,
-        refresh_lease_expires_at: expiresAt,
-      })
-      .eq('clerk_user_id', clerkUserId)
-      .eq('refresh_token', expectedRefreshToken);
+    let { data, error } = await this.supabase.rpc('acquire_yahoo_refresh_lease', {
+      p_clerk_user_id: clerkUserId,
+      p_owner_id: ownerId,
+      p_expires_at: expiresAt,
+      p_expected_refresh_token: expectedRefreshToken,
+    });
 
-    const { data, error } = await query
-      .or(`refresh_lease_owner.is.null,refresh_lease_expires_at.lt.${now},refresh_lease_expires_at.is.null`)
-      .select('clerk_user_id');
+    if (isMissingTokenRpcError(error)) {
+      warnTokenRpcFallback('acquire_yahoo_refresh_lease');
+      ({ data, error } = await legacyAcquireYahooRefreshLease(this.supabase, {
+        clerkUserId,
+        ownerId,
+        expiresAt,
+        expectedRefreshToken,
+      }));
+    }
 
     if (error) {
       console.error('[yahoo-storage] Failed to acquire Yahoo refresh lease:', error);
       throw new Error('Failed to acquire Yahoo refresh lease');
     }
 
-    return (data?.length ?? 0) > 0;
+    return data === true;
   }
 
   /**
