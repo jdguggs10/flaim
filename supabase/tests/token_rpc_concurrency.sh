@@ -69,6 +69,7 @@ docker exec "${DB_CONTAINER}" \
     );
   " >/dev/null
 
+refresh_pids=()
 for attempt in 1 2; do
   docker exec "${DB_CONTAINER}" \
     psql \
@@ -81,8 +82,20 @@ for attempt in 1 2; do
       select count(*)
       from public.claim_mcp_oauth_refresh_token('${REFRESH_TOKEN}');
     " > "${tmp_dir}/refresh-${attempt}.txt" &
+  refresh_pids+=("$!")
 done
-wait
+
+refresh_failed=0
+for index in "${!refresh_pids[@]}"; do
+  if ! wait "${refresh_pids[${index}]}"; then
+    printf 'Concurrent MCP refresh attempt %s failed.\n' \
+      "$((index + 1))" >&2
+    refresh_failed=1
+  fi
+done
+if [[ "${refresh_failed}" != "0" ]]; then
+  exit 1
+fi
 
 refresh_winners="$(
   awk '{ total += $1 } END { print total + 0 }' \
@@ -95,6 +108,7 @@ if [[ "${refresh_winners}" != "1" ]]; then
   exit 1
 fi
 
+yahoo_pids=()
 for attempt in 1 2; do
   docker exec "${DB_CONTAINER}" \
     psql \
@@ -111,8 +125,20 @@ for attempt in 1 2; do
         '${YAHOO_REFRESH_TOKEN}'
       ) then 1 else 0 end;
     " > "${tmp_dir}/yahoo-${attempt}.txt" &
+  yahoo_pids+=("$!")
 done
-wait
+
+yahoo_failed=0
+for index in "${!yahoo_pids[@]}"; do
+  if ! wait "${yahoo_pids[${index}]}"; then
+    printf 'Concurrent Yahoo lease attempt %s failed.\n' \
+      "$((index + 1))" >&2
+    yahoo_failed=1
+  fi
+done
+if [[ "${yahoo_failed}" != "0" ]]; then
+  exit 1
+fi
 
 yahoo_winners="$(
   awk '{ total += $1 } END { print total + 0 }' \
