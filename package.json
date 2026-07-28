@@ -23,6 +23,7 @@
   },
   "devDependencies": {
     "@types/node": "^24.0.3",
-    "concurrently": "^9.2.0"
+    "concurrently": "^9.2.0",
+    "supabase": "2.110.0"
   }
 }
