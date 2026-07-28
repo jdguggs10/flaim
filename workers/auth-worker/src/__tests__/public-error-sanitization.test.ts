@@ -4,8 +4,8 @@ import app from '../index-hono';
 const RAW_SUPABASE_ERROR = 'raw Supabase password=secret failed';
 const RAW_THROWN_ERROR = 'raw OAuth secret stack failed';
 
-const { mockHasCredentials, mockMetadataDiscovery } = vi.hoisted(() => ({
-  mockHasCredentials: vi.fn(),
+const { mockProbeConnection, mockMetadataDiscovery } = vi.hoisted(() => ({
+  mockProbeConnection: vi.fn(),
   mockMetadataDiscovery: vi.fn(),
 }));
 
@@ -13,7 +13,7 @@ vi.mock('../supabase-storage', () => {
   return {
     EspnSupabaseStorage: {
       fromEnvironment: vi.fn().mockReturnValue({
-        hasCredentials: mockHasCredentials,
+        probeConnection: mockProbeConnection,
       }),
     },
   };
@@ -57,8 +57,20 @@ describe('public error sanitization', () => {
     vi.restoreAllMocks();
   });
 
+  it('reports Supabase connected only after the connectivity probe succeeds', async () => {
+    mockProbeConnection.mockResolvedValue(undefined);
+
+    const response = await app.fetch(makeRequest('/auth/health'), baseEnv);
+    const body = await response.json() as Record<string, unknown>;
+
+    expect(response.status).toBe(200);
+    expect(body.status).toBe('healthy');
+    expect(body.supabase_status).toBe('connected');
+    expect(mockProbeConnection).toHaveBeenCalledOnce();
+  });
+
   it('sanitizes Supabase health check failures while logging details', async () => {
-    mockHasCredentials.mockRejectedValue(new Error(RAW_SUPABASE_ERROR));
+    mockProbeConnection.mockRejectedValue(new Error(RAW_SUPABASE_ERROR));
 
     const response = await app.fetch(makeRequest('/auth/health'), baseEnv);
     const text = await response.text();
@@ -73,6 +85,20 @@ describe('public error sanitization', () => {
       '[auth-worker] Supabase health check failed:',
       expect.any(Error)
     );
+  });
+
+  it('returns degraded when Supabase is not configured', async () => {
+    const response = await app.fetch(makeRequest('/auth/health'), {
+      ...baseEnv,
+      SUPABASE_URL: '',
+      SUPABASE_SERVICE_KEY: '',
+    });
+    const body = await response.json() as Record<string, unknown>;
+
+    expect(response.status).toBe(503);
+    expect(body.status).toBe('degraded');
+    expect(body.supabase_status).toBe('not_configured');
+    expect(mockProbeConnection).not.toHaveBeenCalled();
   });
 
   it('sanitizes global 500 responses while logging details', async () => {

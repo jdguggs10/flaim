@@ -37,6 +37,60 @@ describe('EspnSupabaseStorage', () => {
     vi.restoreAllMocks();
   });
 
+  describe('probeConnection', () => {
+    function mockProbe(result: { data: unknown; error: unknown }) {
+      const limit = vi.fn().mockResolvedValue(result);
+      const select = vi.fn().mockReturnValue({ limit });
+      mockFrom.mockReturnValue({ select });
+      return { select, limit };
+    }
+
+    it('uses a payload-free HEAD request and succeeds', async () => {
+      const { select, limit } = mockProbe({
+        data: null,
+        error: null,
+      });
+
+      await expect(storage.probeConnection()).resolves.toBeUndefined();
+      expect(mockFrom).toHaveBeenCalledWith('espn_credentials');
+      expect(select).toHaveBeenCalledWith('clerk_user_id', { head: true });
+      expect(limit).toHaveBeenCalledWith(1);
+    });
+
+    it('does not require count or row data from a successful HEAD response', async () => {
+      const { select } = mockProbe({ data: null, error: null });
+
+      await expect(storage.probeConnection()).resolves.toBeUndefined();
+      expect(select).not.toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ count: expect.anything() })
+      );
+    });
+
+    it('throws when PostgREST returns a permission error', async () => {
+      const permissionError = {
+        code: '42501',
+        message: 'permission denied for table espn_credentials',
+      };
+      mockProbe({ data: null, error: permissionError });
+
+      await expect(storage.probeConnection()).rejects.toMatchObject({
+        message: 'Supabase connectivity probe failed',
+        cause: permissionError,
+      });
+    });
+
+    it('propagates a transport or query failure', async () => {
+      const transportError = new Error('network unavailable');
+      const limit = vi.fn().mockRejectedValue(transportError);
+      mockFrom.mockReturnValue({
+        select: vi.fn().mockReturnValue({ limit }),
+      });
+
+      await expect(storage.probeConnection()).rejects.toBe(transportError);
+    });
+  });
+
   it('removeLeague clears only the deleted sport default when league ids collide across sports', async () => {
     const mockPrefsUpsert = vi.fn().mockReturnValue({ error: null });
 

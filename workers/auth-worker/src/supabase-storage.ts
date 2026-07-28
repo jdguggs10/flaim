@@ -73,6 +73,24 @@ export class EspnSupabaseStorage {
     this.archive = new ArchiveStorage(options.supabaseUrl, options.supabaseKey);
   }
 
+  /**
+   * Verify that the configured Supabase Data API is reachable and that the
+   * service role can read a core table without retrieving row data.
+   * espn_credentials is deliberately part of the health contract: schema drift
+   * or lost service-role access must fail health. An empty table is healthy;
+   * any PostgREST or transport error must propagate to the caller.
+   */
+  async probeConnection(): Promise<void> {
+    const { error } = await this.supabase
+      .from('espn_credentials')
+      .select('clerk_user_id', { head: true })
+      .limit(1);
+
+    if (error) {
+      throw new Error('Supabase connectivity probe failed', { cause: error });
+    }
+  }
+
   // =============================================================================
   // CREDENTIAL OPERATIONS
   // =============================================================================
