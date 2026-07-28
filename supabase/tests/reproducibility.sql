@@ -127,6 +127,8 @@ begin
     raise exception 'expected 6 contract extensions, found %', actual_count;
   end if;
 
+  -- Fresh environments must not activate hosted production schedules. A
+  -- disposable local cron job is the negative control for this assertion.
   select count(*) into actual_count from cron.job;
   if actual_count <> 0 then
     raise exception 'local baseline unexpectedly activated % cron jobs', actual_count;

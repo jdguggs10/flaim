@@ -2,8 +2,14 @@
 
 set -euo pipefail
 
+readonly REPO_ROOT="$(
+  CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd
+)"
+cd "${REPO_ROOT}"
+
 export SUPABASE_TELEMETRY_DISABLED=1
 
+# Supabase derives this container name from project_id = "flaim" in config.toml.
 readonly DB_CONTAINER="supabase_db_flaim"
 readonly PROOF_SQL="supabase/tests/reproducibility.sql"
 
