@@ -13,10 +13,12 @@ const mockMaybeSingle = vi.fn();
 const mockUpsert = vi.fn();
 const mockIs = vi.fn();
 const mockOr = vi.fn();
+const mockRpc = vi.fn();
 
 vi.mock('@supabase/supabase-js', () => ({
   createClient: () => ({
     from: mockFrom,
+    rpc: mockRpc,
   }),
 }));
 
@@ -72,6 +74,7 @@ describe('YahooStorage', () => {
     mockOr.mockReturnValue({
       select: mockSelect,
     });
+    mockRpc.mockReturnValue({ maybeSingle: mockMaybeSingle });
   });
 
   afterEach(() => {
@@ -139,18 +142,13 @@ describe('YahooStorage', () => {
   describe('consumePlatformOAuthState', () => {
     it('returns state data for valid state', async () => {
       const futureDate = new Date(Date.now() + 5 * 60 * 1000); // 5 mins from now
-      mockSingle.mockResolvedValue({
+      mockMaybeSingle.mockResolvedValue({
         data: {
-          state: 'valid-state',
           clerk_user_id: 'user_123',
           platform: 'yahoo',
           redirect_after: '/dashboard',
           expires_at: futureDate.toISOString(),
         },
-        error: null,
-      });
-      mockDelete.mockReturnValue({
-        eq: mockEq,
         error: null,
       });
 
@@ -161,36 +159,32 @@ describe('YahooStorage', () => {
         platform: 'yahoo',
         redirectAfter: '/dashboard',
       });
-      expect(mockFrom).toHaveBeenCalledWith('platform_oauth_states');
-      // Should delete the state after consuming
-      expect(mockDelete).toHaveBeenCalled();
+      expect(mockRpc).toHaveBeenCalledWith('consume_yahoo_oauth_state', {
+        p_state: 'valid-state',
+      });
     });
 
     it('returns null for expired state', async () => {
       const pastDate = new Date(Date.now() - 5 * 60 * 1000); // 5 mins ago
-      mockSingle.mockResolvedValue({
+      mockMaybeSingle.mockResolvedValue({
         data: {
-          state: 'expired-state',
           clerk_user_id: 'user_123',
           platform: 'yahoo',
           expires_at: pastDate.toISOString(),
         },
         error: null,
       });
-      mockDelete.mockReturnValue({
-        eq: mockEq,
-        error: null,
-      });
 
       const result = await storage.consumePlatformOAuthState('expired-state');
 
       expect(result).toBeNull();
-      // Should still delete the expired state
-      expect(mockDelete).toHaveBeenCalled();
+      expect(mockRpc).toHaveBeenCalledWith('consume_yahoo_oauth_state', {
+        p_state: 'expired-state',
+      });
     });
 
     it('returns null for non-existent state', async () => {
-      mockSingle.mockResolvedValue({
+      mockMaybeSingle.mockResolvedValue({
         data: null,
         error: { code: 'PGRST116', message: 'No rows' },
       });
@@ -519,7 +513,7 @@ describe('YahooStorage', () => {
 
   describe('updateYahooCredentialsIfRefreshTokenMatches', () => {
     it('recovers refreshed credentials only when the stored refresh token still matches', async () => {
-      mockSelect.mockResolvedValue({ data: [{ clerk_user_id: 'user_123' }], error: null });
+      mockRpc.mockResolvedValue({ data: true, error: null });
 
       const result = await storage.updateYahooCredentialsIfRefreshTokenMatches(
         'user_123',
@@ -532,25 +526,18 @@ describe('YahooStorage', () => {
       );
 
       expect(result).toBe(true);
-      expect(mockUpdate).toHaveBeenCalledWith(
-        expect.objectContaining({
-          access_token: 'new-access-token',
-          refresh_token: 'new-refresh-token',
-          refresh_lease_owner: null,
-          refresh_lease_expires_at: null,
-        })
-      );
-      expect(mockEq).toHaveBeenCalledWith('clerk_user_id', 'user_123');
-      expect(mockEq).toHaveBeenCalledWith('refresh_token', 'old-refresh-token');
-      expect(mockOr).toHaveBeenCalledWith(expect.stringContaining('refresh_lease_owner.is.null'));
-      expect(mockOr).toHaveBeenCalledWith(expect.stringContaining('refresh_lease_expires_at.lt.'));
-      const recoveryFilter = String(mockOr.mock.calls[0][0]);
-      expect(recoveryFilter).toMatch(/refresh_lease_expires_at\.lt\.\d{4}-/);
-      expect(recoveryFilter).not.toContain('refresh_lease_expires_at.lt."');
+      expect(mockRpc).toHaveBeenCalledWith('recover_yahoo_credentials', {
+        p_clerk_user_id: 'user_123',
+        p_access_token: 'new-access-token',
+        p_refresh_token: 'new-refresh-token',
+        p_expires_at: '2026-01-24T14:00:00.000Z',
+        p_app_fingerprint: null,
+        p_expected_refresh_token: 'old-refresh-token',
+      });
     });
 
     it('returns false when a newer refresh token or active lease blocks recovery', async () => {
-      mockSelect.mockResolvedValue({ data: [], error: null });
+      mockRpc.mockResolvedValue({ data: false, error: null });
 
       const result = await storage.updateYahooCredentialsIfRefreshTokenMatches(
         'user_123',
@@ -563,41 +550,47 @@ describe('YahooStorage', () => {
       );
 
       expect(result).toBe(false);
-      expect(mockOr).toHaveBeenCalledWith(expect.stringContaining('refresh_lease_owner.is.null'));
-      expect(mockOr).toHaveBeenCalledWith(expect.stringContaining('refresh_lease_expires_at.lt.'));
     });
   });
 
   describe('acquireRefreshLease', () => {
     it('returns true when the lease update succeeds', async () => {
-      mockSelect.mockResolvedValue({ data: [{ clerk_user_id: 'user_123' }], error: null });
+      mockRpc.mockResolvedValue({ data: true, error: null });
 
       const result = await storage.acquireRefreshLease('user_123', 'owner-1', 30_000, 'refresh-token');
 
       expect(result).toBe(true);
-      expect(mockUpdate).toHaveBeenCalledWith(
-        expect.objectContaining({
-          refresh_lease_owner: 'owner-1',
-        })
-      );
-      expect(mockEq).toHaveBeenCalledWith('refresh_token', 'refresh-token');
-      expect(mockOr).toHaveBeenCalledTimes(1);
-      expect(mockOr).toHaveBeenCalledWith(expect.stringContaining('refresh_lease_expires_at.is.null'));
-      const leaseFilter = String(mockOr.mock.calls[0][0]);
-      expect(leaseFilter).toMatch(/refresh_lease_expires_at\.lt\.\d{4}-/);
-      expect(leaseFilter).not.toContain('refresh_lease_expires_at.lt."');
+      expect(mockRpc).toHaveBeenCalledWith('acquire_yahoo_refresh_lease', {
+        p_clerk_user_id: 'user_123',
+        p_owner_id: 'owner-1',
+        p_expires_at: expect.any(String),
+        p_expected_refresh_token: 'refresh-token',
+      });
     });
 
     it('returns false when another owner already holds the lease', async () => {
-      mockSelect.mockResolvedValue({ data: [], error: null });
+      mockRpc.mockResolvedValue({ data: false, error: null });
 
       const result = await storage.acquireRefreshLease('user_123', 'owner-1', 30_000, 'refresh-token');
 
       expect(result).toBe(false);
     });
 
+    it('allows only one of two simultaneous lease callers to win', async () => {
+      mockRpc
+        .mockResolvedValueOnce({ data: true, error: null })
+        .mockResolvedValueOnce({ data: false, error: null });
+
+      const results = await Promise.all([
+        storage.acquireRefreshLease('user_123', 'owner-1', 30_000, 'refresh-token'),
+        storage.acquireRefreshLease('user_123', 'owner-2', 30_000, 'refresh-token'),
+      ]);
+
+      expect(results).toEqual([true, false]);
+    });
+
     it('guards lease acquisition by the refresh token the caller read', async () => {
-      mockSelect.mockResolvedValue({ data: [{ clerk_user_id: 'user_123' }], error: null });
+      mockRpc.mockResolvedValue({ data: true, error: null });
 
       const result = await storage.acquireRefreshLease(
         'user_123',
@@ -607,11 +600,13 @@ describe('YahooStorage', () => {
       );
 
       expect(result).toBe(true);
-      expect(mockEq).toHaveBeenCalledWith('refresh_token', 'expected-refresh-token');
+      expect(mockRpc).toHaveBeenCalledWith('acquire_yahoo_refresh_lease', expect.objectContaining({
+        p_expected_refresh_token: 'expected-refresh-token',
+      }));
     });
 
     it('throws when lease acquisition hits a storage error', async () => {
-      mockSelect.mockResolvedValue({ data: null, error: { message: 'DB down' } });
+      mockRpc.mockResolvedValue({ data: null, error: { message: 'DB down' } });
 
       await expect(
         storage.acquireRefreshLease('user_123', 'owner-1', 30_000, 'refresh-token')

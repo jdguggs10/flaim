@@ -220,7 +220,10 @@ wrangler secret put EVAL_USER_ID --env prod    # paste Clerk user ID
 
 ### 1. Supabase
 
-Run SQL migrations from the private `flaim-docs` repository (`migrations/` directory, numbered files) in order.
+The reviewed, secret-free database contract lives in `../../supabase/`.
+Validate it locally with `bash ../../scripts/check-supabase.sh`. Applying a
+migration to hosted preview or production is a separate infrastructure step;
+Worker deployment does not apply database migrations automatically.
 
 ### 2. Cloudflare Secrets
 

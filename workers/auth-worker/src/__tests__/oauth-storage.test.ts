@@ -12,11 +12,13 @@ import {
 } from '../oauth-client-auth';
 
 const mockFrom = vi.fn();
+const mockRpc = vi.fn();
 const clientSigningKey = 'test-key';
 
 vi.mock('@supabase/supabase-js', () => ({
   createClient: () => ({
     from: mockFrom,
+    rpc: mockRpc,
   }),
 }));
 
@@ -73,6 +75,11 @@ function buildTableMock(options?: {
   };
 
   mockFrom.mockReturnValue(table);
+  const rpcMaybeSingle = vi.fn().mockResolvedValue({
+    data: options?.lookupRow ?? null,
+    error: options?.lookupError ?? null,
+  });
+  mockRpc.mockReturnValue({ maybeSingle: rpcMaybeSingle });
 
   return {
     insertPayloads,
@@ -86,66 +93,7 @@ function buildTableMock(options?: {
     lookupSingle,
     update,
     updateEq,
-  };
-}
-
-function buildOAuthStateClaimMock(results: Array<{
-  data: Array<{ state: string }> | null;
-  error: { message: string } | null;
-}>) {
-  const selectDeleted = vi.fn();
-  for (const result of results) {
-    selectDeleted.mockResolvedValueOnce(result);
-  }
-  const filterExpiry = vi.fn().mockReturnValue({ select: selectDeleted });
-  const filterBinding = vi.fn().mockReturnValue({ gt: filterExpiry });
-  const filterRedirect = vi.fn().mockReturnValue({ eq: filterBinding });
-  const filterState = vi.fn().mockReturnValue({ eq: filterRedirect });
-  const deleteRow = vi.fn().mockReturnValue({ eq: filterState });
-  mockFrom.mockReturnValue({ delete: deleteRow });
-
-  return {
-    deleteRow,
-    filterState,
-    filterRedirect,
-    filterBinding,
-    filterExpiry,
-    selectDeleted,
-  };
-}
-
-function buildOAuthStateRetryLookupMock(options?: {
-  insertError?: { code: string; message: string };
-  lookupData?: { state: string } | null;
-  lookupError?: { message: string } | null;
-}) {
-  const insert = vi.fn().mockResolvedValue({
-    error: options?.insertError ?? {
-      code: '23505',
-      message: 'duplicate key value violates unique constraint',
-    },
-  });
-  const maybeSingle = vi.fn().mockResolvedValue({
-    data: options?.lookupData === undefined
-      ? { state: 'pkce:challenge-123' }
-      : options.lookupData,
-    error: options?.lookupError ?? null,
-  });
-  const filterExpiry = vi.fn().mockReturnValue({ maybeSingle });
-  const filterBinding = vi.fn().mockReturnValue({ gt: filterExpiry });
-  const filterRedirect = vi.fn().mockReturnValue({ eq: filterBinding });
-  const filterState = vi.fn().mockReturnValue({ eq: filterRedirect });
-  const select = vi.fn().mockReturnValue({ eq: filterState });
-  mockFrom.mockReturnValue({ insert, select });
-
-  return {
-    insert,
-    select,
-    filterState,
-    filterRedirect,
-    filterBinding,
-    filterExpiry,
-    maybeSingle,
+    rpcMaybeSingle,
   };
 }
 
@@ -276,12 +224,8 @@ describe('OAuthStorage MCP token lifetimes', () => {
   });
 
   it('refresh rotation carries forward the configured refresh-token TTL', async () => {
-    const { insertPayloads, updateEq } = buildTableMock({
+    const { insertPayloads } = buildTableMock({
       lookupRow: {
-        access_token: 'old-access-token',
-        refresh_token: 'old-refresh-token',
-        refresh_token_expires_at: new Date(Date.now() + 60_000).toISOString(),
-        revoked_at: null,
         user_id: 'user_123',
         scope: 'mcp:read',
         resource: 'https://api.flaim.app/mcp',
@@ -300,7 +244,9 @@ describe('OAuthStorage MCP token lifetimes', () => {
     const after = Date.now();
 
     expect(token).not.toBeNull();
-    expect(updateEq).toHaveBeenCalledWith('access_token', 'old-access-token');
+    expect(mockRpc).toHaveBeenCalledWith('claim_mcp_oauth_refresh_token', {
+      p_refresh_token: 'old-refresh-token',
+    });
     expect(insertPayloads[0].grant_type).toBe('refresh_token');
     const refreshTokenExpiresAt = new Date(insertPayloads[0].refresh_token_expires_at as string).getTime();
     expect(refreshTokenExpiresAt).toBeGreaterThanOrEqual(before + 2592000 * 1000 - 1000);
@@ -311,9 +257,8 @@ describe('OAuthStorage MCP token lifetimes', () => {
     const redirectUri = 'https://claude.ai/api/mcp/auth_callback';
     const code = 'plain-auth-code';
 
-    const claimSingle = vi.fn().mockResolvedValue({
+    const claimMaybeSingle = vi.fn().mockResolvedValue({
       data: {
-        code,
         user_id: 'user_123',
         redirect_uri: redirectUri,
         code_challenge: null,
@@ -324,11 +269,7 @@ describe('OAuthStorage MCP token lifetimes', () => {
       },
       error: null,
     });
-    const claimSelect = vi.fn().mockReturnValue({ single: claimSingle });
-    const claimGt = vi.fn().mockReturnValue({ select: claimSelect });
-    const claimIs = vi.fn().mockReturnValue({ gt: claimGt });
-    const claimEq = vi.fn().mockReturnValue({ is: claimIs });
-    const update = vi.fn().mockReturnValue({ eq: claimEq });
+    mockRpc.mockReturnValue({ maybeSingle: claimMaybeSingle });
 
     const insertPayloads: Record<string, unknown>[] = [];
     const insertSingle = vi.fn().mockResolvedValue({ data: { id: 'token-id' }, error: null });
@@ -338,7 +279,7 @@ describe('OAuthStorage MCP token lifetimes', () => {
       return { select: insertSelect };
     });
 
-    mockFrom.mockReturnValue({ update, insert });
+    mockFrom.mockReturnValue({ insert });
     const storage = new OAuthStorage('https://example.supabase.co', 'test-key');
 
     const token = await storage.exchangeCodeForToken(code, redirectUri);
@@ -353,10 +294,6 @@ describe('OAuthStorage MCP token lifetimes', () => {
     const refreshToken = createClientBoundToken('mcp_rt', client.clientId, 'old-refresh-token');
     const { insertPayloads } = buildTableMock({
       lookupRow: {
-        access_token: 'old-access-token',
-        refresh_token: refreshToken,
-        refresh_token_expires_at: new Date(Date.now() + 60_000).toISOString(),
-        revoked_at: null,
         user_id: 'user_123',
         scope: 'mcp:read',
         client_name: 'Perplexity',
@@ -377,49 +314,50 @@ describe('OAuthStorage MCP token lifetimes', () => {
     const otherClient = await createConfidentialClientRegistration(clientSigningKey);
     const code = createClientBoundToken('mcp_ac', client.clientId, 'auth-code');
     const redirectUri = 'https://www.perplexity.ai/rest/connections/oauth_callback';
-    const single = vi.fn().mockResolvedValue({
-      data: {
-        code,
-        user_id: 'user_123',
-        redirect_uri: redirectUri,
-        code_challenge: null,
-        code_challenge_method: null,
-        scope: 'mcp:read',
-        resource: null,
-        expires_at: new Date(Date.now() + 60_000).toISOString(),
-      },
-      error: null,
-    });
-    const select = vi.fn().mockReturnValue({ single });
-    const gt = vi.fn().mockReturnValue({ select });
-    const is = vi.fn().mockReturnValue({ gt });
-    const eq = vi.fn().mockReturnValue({ is });
-    const update = vi.fn().mockReturnValue({ eq });
     const insert = vi.fn();
-    mockFrom.mockReturnValue({ update, insert });
+    mockFrom.mockReturnValue({ insert });
     const storage = new OAuthStorage('https://example.supabase.co', 'test-key');
 
     const token = await storage.exchangeCodeForToken(code, redirectUri, undefined, otherClient.clientId);
 
     expect(token).toBeNull();
-    expect(update).not.toHaveBeenCalled();
+    expect(mockRpc).not.toHaveBeenCalled();
     expect(insert).not.toHaveBeenCalled();
   });
 
-  it('rejects expired refresh tokens', async () => {
-    buildTableMock({
-      lookupRow: {
-        access_token: 'old-access-token',
-        refresh_token: 'old-refresh-token',
-        refresh_token_expires_at: new Date(Date.now() - 60_000).toISOString(),
-        revoked_at: null,
-        user_id: 'user_123',
-        scope: 'mcp:read',
-      },
-    });
+  it('returns null when the refresh-token claim does not win', async () => {
+    buildTableMock({ lookupRow: null });
     const storage = new OAuthStorage('https://example.supabase.co', 'test-key');
 
     await expect(storage.refreshAccessToken('old-refresh-token')).resolves.toBeNull();
+  });
+
+  it('allows only one of two simultaneous refresh callers to rotate a token', async () => {
+    const { insertPayloads } = buildTableMock();
+    mockRpc
+      .mockReturnValueOnce({
+        maybeSingle: vi.fn().mockResolvedValue({
+          data: {
+            user_id: 'user_123',
+            scope: 'mcp:read',
+            resource: null,
+            client_name: 'ChatGPT',
+          },
+          error: null,
+        }),
+      })
+      .mockReturnValueOnce({
+        maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+      });
+    const storage = new OAuthStorage('https://example.supabase.co', 'test-key');
+
+    const results = await Promise.all([
+      storage.refreshAccessToken('old-refresh-token'),
+      storage.refreshAccessToken('old-refresh-token'),
+    ]);
+
+    expect(results.filter(Boolean)).toHaveLength(1);
+    expect(insertPayloads).toHaveLength(1);
   });
 
   it('gets refreshable user tokens using refresh-token expiry, not access-token expiry', async () => {
@@ -481,6 +419,59 @@ describe('OAuthStorage MCP token lifetimes', () => {
   });
 });
 
+describe('OAuthStorage token RPC routing', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    vi.clearAllMocks();
+  });
+
+  it('validates an access token through a body-based RPC', async () => {
+    const maybeSingle = vi.fn().mockResolvedValue({
+      data: {
+        user_id: 'user_123',
+        scope: 'mcp:read',
+        resource: 'https://api.flaim.app/mcp',
+        client_name: 'ChatGPT',
+        expires_at: new Date(Date.now() + 60_000).toISOString(),
+        revoked_at: null,
+      },
+      error: null,
+    });
+    mockRpc.mockReturnValue({ maybeSingle });
+    const storage = new OAuthStorage('https://example.supabase.co', 'test-key');
+
+    await expect(
+      storage.validateAccessToken(
+        'synthetic-access-token',
+        'https://api.flaim.app/mcp'
+      )
+    ).resolves.toEqual({
+      valid: true,
+      userId: 'user_123',
+      scope: 'mcp:read',
+      resource: 'https://api.flaim.app/mcp',
+      clientName: 'ChatGPT',
+    });
+
+    expect(mockRpc).toHaveBeenCalledWith('find_mcp_oauth_access_token', {
+      p_access_token: 'synthetic-access-token',
+    });
+    expect(mockFrom).not.toHaveBeenCalled();
+  });
+
+  it('revokes an access token through a body-based RPC', async () => {
+    mockRpc.mockResolvedValue({ data: true, error: null });
+    const storage = new OAuthStorage('https://example.supabase.co', 'test-key');
+
+    await expect(storage.revokeToken('synthetic-access-token')).resolves.toBe(true);
+
+    expect(mockRpc).toHaveBeenCalledWith('revoke_mcp_oauth_access_token', {
+      p_access_token: 'synthetic-access-token',
+    });
+    expect(mockFrom).not.toHaveBeenCalled();
+  });
+});
+
 describe('OAuthStorage authorization state binding', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -488,8 +479,7 @@ describe('OAuthStorage authorization state binding', () => {
   });
 
   it('stores the consented scope with the authorization state binding', async () => {
-    const insert = vi.fn().mockResolvedValue({ error: null });
-    mockFrom.mockReturnValue({ insert });
+    mockRpc.mockResolvedValue({ data: true, error: null });
     const storage = new OAuthStorage('https://example.supabase.co', 'test-key');
 
     await storage.createOAuthState({
@@ -501,14 +491,16 @@ describe('OAuthStorage authorization state binding', () => {
       resource: 'https://api.flaim.app/mcp',
     });
 
-    expect(insert).toHaveBeenCalledWith(expect.objectContaining({
-      state: 'state-123',
-      client_id: 'oauth-state-v1:{"clientId":"client-123","scope":"mcp:read mcp:write","codeChallenge":"challenge-123","resource":"https://api.flaim.app/mcp"}',
-    }));
+    expect(mockRpc).toHaveBeenCalledWith('create_mcp_oauth_state', {
+      p_state: 'state-123',
+      p_redirect_uri: 'https://claude.ai/api/mcp/auth_callback',
+      p_binding: 'oauth-state-v1:{"clientId":"client-123","scope":"mcp:read mcp:write","codeChallenge":"challenge-123","resource":"https://api.flaim.app/mcp"}',
+      p_expires_at: expect.any(String),
+    });
   });
 
   it('accepts an identical retry for a stateless authorization transaction', async () => {
-    const { filterState, filterRedirect, filterBinding, filterExpiry } = buildOAuthStateRetryLookupMock();
+    mockRpc.mockResolvedValue({ data: true, error: null });
     const storage = new OAuthStorage('https://example.supabase.co', 'test-key');
 
     await expect(storage.createOAuthState({
@@ -520,17 +512,11 @@ describe('OAuthStorage authorization state binding', () => {
       resource: 'https://api.flaim.app/mcp',
     })).resolves.toBeUndefined();
 
-    expect(filterState).toHaveBeenCalledWith('state', 'pkce:challenge-123');
-    expect(filterRedirect).toHaveBeenCalledWith('redirect_uri', 'https://claude.ai/api/mcp/auth_callback');
-    expect(filterBinding).toHaveBeenCalledWith(
-      'client_id',
-      'oauth-state-v1:{"clientId":"client-123","scope":"mcp:read","codeChallenge":"challenge-123","resource":"https://api.flaim.app/mcp"}'
-    );
-    expect(filterExpiry).toHaveBeenCalledWith('expires_at', expect.any(String));
+    expect(mockRpc).toHaveBeenCalledOnce();
   });
 
   it('rejects a stateless retry when the PKCE key belongs to a different binding', async () => {
-    buildOAuthStateRetryLookupMock({ lookupData: null });
+    mockRpc.mockResolvedValue({ data: false, error: null });
     const storage = new OAuthStorage('https://example.supabase.co', 'test-key');
 
     await expect(storage.createOAuthState({
@@ -544,7 +530,7 @@ describe('OAuthStorage authorization state binding', () => {
   });
 
   it('rejects a stateless retry when the existing row is expired and the exact lookup finds no match', async () => {
-    const { filterExpiry } = buildOAuthStateRetryLookupMock({ lookupData: null });
+    mockRpc.mockResolvedValue({ data: false, error: null });
     const storage = new OAuthStorage('https://example.supabase.co', 'test-key');
 
     await expect(storage.createOAuthState({
@@ -556,13 +542,13 @@ describe('OAuthStorage authorization state binding', () => {
       resource: 'https://api.flaim.app/mcp',
     })).rejects.toThrow('Failed to store OAuth state');
 
-    expect(filterExpiry).toHaveBeenCalledWith('expires_at', expect.any(String));
+    expect(mockRpc).toHaveBeenCalledOnce();
   });
 
   it('rejects a stateless retry when the exact-binding lookup fails', async () => {
-    buildOAuthStateRetryLookupMock({
-      lookupData: null,
-      lookupError: { message: 'lookup failed' },
+    mockRpc.mockResolvedValue({
+      data: null,
+      error: { message: 'lookup failed' },
     });
     const storage = new OAuthStorage('https://example.supabase.co', 'test-key');
 
@@ -576,9 +562,10 @@ describe('OAuthStorage authorization state binding', () => {
     })).rejects.toThrow('Failed to store OAuth state');
   });
 
-  it('does not run the retry lookup for a non-unique insert error', async () => {
-    const { select } = buildOAuthStateRetryLookupMock({
-      insertError: { code: '42501', message: 'permission denied' },
+  it('fails closed when the state RPC is denied', async () => {
+    mockRpc.mockResolvedValue({
+      data: null,
+      error: { code: '42501', message: 'permission denied' },
     });
     const storage = new OAuthStorage('https://example.supabase.co', 'test-key');
 
@@ -591,11 +578,11 @@ describe('OAuthStorage authorization state binding', () => {
       resource: 'https://api.flaim.app/mcp',
     })).rejects.toThrow('Failed to store OAuth state');
 
-    expect(select).not.toHaveBeenCalled();
+    expect(mockRpc).toHaveBeenCalledOnce();
   });
 
   it('atomically claims state with the exact transaction binding and expiry', async () => {
-    const claim = buildOAuthStateClaimMock([{ data: [{ state: 'state-123' }], error: null }]);
+    mockRpc.mockResolvedValue({ data: true, error: null });
     const storage = new OAuthStorage('https://example.supabase.co', 'test-key');
 
     const result = await storage.consumeOAuthState(
@@ -608,15 +595,11 @@ describe('OAuthStorage authorization state binding', () => {
     );
 
     expect(result).toBe(true);
-    expect(claim.deleteRow).toHaveBeenCalledOnce();
-    expect(claim.filterState).toHaveBeenCalledWith('state', 'state-123');
-    expect(claim.filterRedirect).toHaveBeenCalledWith('redirect_uri', 'https://claude.ai/api/mcp/auth_callback');
-    expect(claim.filterBinding).toHaveBeenCalledWith(
-      'client_id',
-      'oauth-state-v1:{"clientId":"client-123","scope":"mcp:read","codeChallenge":"challenge-123","resource":"https://api.flaim.app/mcp"}'
-    );
-    expect(claim.filterExpiry).toHaveBeenCalledWith('expires_at', expect.any(String));
-    expect(claim.selectDeleted).toHaveBeenCalledWith('state');
+    expect(mockRpc).toHaveBeenCalledWith('consume_mcp_oauth_state', {
+      p_state: 'state-123',
+      p_redirect_uri: 'https://claude.ai/api/mcp/auth_callback',
+      p_binding: 'oauth-state-v1:{"clientId":"client-123","scope":"mcp:read","codeChallenge":"challenge-123","resource":"https://api.flaim.app/mcp"}',
+    });
   });
 
   it.each([
@@ -627,7 +610,7 @@ describe('OAuthStorage authorization state binding', () => {
     ['redirect', { redirectUri: 'https://chatgpt.com/connector_platform_oauth_redirect' }],
     ['loopback redirect spelling', { redirectUri: 'http://127.0.0.1:8787/callback' }],
   ])('rejects a %s mismatch without consuming the state', async (_name, mutation) => {
-    const claim = buildOAuthStateClaimMock([{ data: [], error: null }]);
+    mockRpc.mockResolvedValue({ data: false, error: null });
     const storage = new OAuthStorage('https://example.supabase.co', 'test-key');
 
     const submitted = {
@@ -648,20 +631,23 @@ describe('OAuthStorage authorization state binding', () => {
     );
 
     expect(result).toBe(false);
-    expect(claim.filterRedirect).toHaveBeenCalledWith('redirect_uri', submitted.redirectUri);
-    expect(claim.filterBinding).toHaveBeenCalledWith(
-      'client_id',
-      `oauth-state-v1:${JSON.stringify({
+    expect(mockRpc).toHaveBeenCalledWith('consume_mcp_oauth_state', {
+      p_state: 'state-123',
+      p_redirect_uri: submitted.redirectUri,
+      p_binding: `oauth-state-v1:${JSON.stringify({
         clientId: submitted.clientId,
         scope: submitted.scope,
         codeChallenge: submitted.codeChallenge,
         resource: submitted.resource,
-      })}`
-    );
+      })}`,
+    });
   });
 
   it('returns false when the atomic delete fails', async () => {
-    buildOAuthStateClaimMock([{ data: null, error: { message: 'delete failed' } }]);
+    mockRpc.mockResolvedValue({
+      data: null,
+      error: { message: 'delete failed' },
+    });
     const storage = new OAuthStorage('https://example.supabase.co', 'test-key');
 
     const result = await storage.consumeOAuthState(
@@ -677,26 +663,7 @@ describe('OAuthStorage authorization state binding', () => {
   });
 
   it('returns false when no state row is deleted', async () => {
-    buildOAuthStateClaimMock([{ data: [], error: null }]);
-    const storage = new OAuthStorage('https://example.supabase.co', 'test-key');
-
-    const result = await storage.consumeOAuthState(
-      'state-123',
-      'https://claude.ai/api/mcp/auth_callback',
-      'client-123',
-      'mcp:read',
-      'challenge-123',
-      'https://api.flaim.app/mcp'
-    );
-
-    expect(result).toBe(false);
-  });
-
-  it('returns false unless exactly one state row is deleted', async () => {
-    buildOAuthStateClaimMock([{
-      data: [{ state: 'state-123' }, { state: 'state-123' }],
-      error: null,
-    }]);
+    mockRpc.mockResolvedValue({ data: false, error: null });
     const storage = new OAuthStorage('https://example.supabase.co', 'test-key');
 
     const result = await storage.consumeOAuthState(
@@ -712,10 +679,9 @@ describe('OAuthStorage authorization state binding', () => {
   });
 
   it('allows only one of two concurrent consumers to claim the state', async () => {
-    buildOAuthStateClaimMock([
-      { data: [{ state: 'state-123' }], error: null },
-      { data: [], error: null },
-    ]);
+    mockRpc
+      .mockResolvedValueOnce({ data: true, error: null })
+      .mockResolvedValueOnce({ data: false, error: null });
     const storage = new OAuthStorage('https://example.supabase.co', 'test-key');
     const consume = () => storage.consumeOAuthState(
       'state-123',

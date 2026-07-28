@@ -46,8 +46,8 @@ begin
   from pg_proc p
   join pg_namespace n on n.oid = p.pronamespace
   where n.nspname = 'public' and p.prokind = 'f';
-  if actual_count <> 9 then
-    raise exception 'expected 9 public functions, found %', actual_count;
+  if actual_count <> 18 then
+    raise exception 'expected 18 public functions, found %', actual_count;
   end if;
 
   select count(*) into actual_count

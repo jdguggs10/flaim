@@ -3,7 +3,7 @@
  * last-run telemetry for league refresh/discovery (FLA-121).
  * ---------------------------------------------------------------------------
  *
- * Table: provider_sync_state (see flaim-docs/migrations/045_provider_sync_state.sql).
+ * Table: provider_sync_state (see supabase/migrations/).
  * The lease columns follow the yahoo_credentials refresh-lease pattern
  * (yahoo-storage.ts): an unexpired sync_lease_owner blocks new refreshes;
  * a 'cooldown:'-prefixed owner marks post-refresh cooldown.

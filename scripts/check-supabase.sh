@@ -12,6 +12,15 @@ export SUPABASE_TELEMETRY_DISABLED=1
 # Supabase derives this container name from project_id = "flaim" in config.toml.
 readonly DB_CONTAINER="supabase_db_flaim"
 readonly PROOF_SQL="supabase/tests/reproducibility.sql"
+readonly TOKEN_RPC_PROOF_SQL="supabase/tests/token_rpc.sql"
+
+if rg --line-number \
+  "\\.eq\\('(state|code|access_token|refresh_token)'" \
+  workers/auth-worker/src \
+  --glob '!**/__tests__/**'; then
+  printf 'Credential-shaped PostgREST equality filter found in Auth Worker source.\n' >&2
+  exit 1
+fi
 
 tmp_dir="$(mktemp -d)"
 
@@ -59,6 +68,15 @@ for reset_number in 1 2; do
     -f - \
     < "${PROOF_SQL}" \
     > "${tmp_dir}/snapshot-${reset_number}.txt"
+
+  docker exec -i "${DB_CONTAINER}" \
+    psql \
+    -v ON_ERROR_STOP=1 \
+    -U postgres \
+    -d postgres \
+    -f - \
+    < "${TOKEN_RPC_PROOF_SQL}" \
+    >> "${tmp_dir}/snapshot-${reset_number}.txt"
 done
 
 if ! diff -u \
@@ -68,10 +86,18 @@ if ! diff -u \
   exit 1
 fi
 
+bash supabase/tests/token_rpc_concurrency.sh
+
 corepack pnpm exec supabase db lint \
   --local \
   --schema public,analytics \
   --level warning \
+  --fail-on error
+
+corepack pnpm exec supabase db advisors \
+  --local \
+  --type security \
+  --level warn \
   --fail-on error
 
 corepack pnpm exec supabase db diff \
