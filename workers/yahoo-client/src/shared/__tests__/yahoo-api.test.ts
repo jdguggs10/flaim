@@ -65,6 +65,36 @@ describe('Yahoo API errors', () => {
     );
   });
 
+  it('surfaces the app-review outage message on an application-level 403', async () => {
+    const response = new Response(
+      '{"error":{"description":"This application is not authorized to perform this action."}}',
+      { status: 403 }
+    );
+
+    await expect(handleYahooError(response)).rejects.toThrow(
+      expect.objectContaining({
+        code: 'YAHOO_ACCESS_DENIED',
+        status: 403,
+        message: expect.stringContaining('Yahoo is currently reviewing third-party app access'),
+      })
+    );
+  });
+
+  it('keeps the generic message for a resource-level 403', async () => {
+    const response = new Response(
+      '{"error":{"description":"You are not allowed to view this league."}}',
+      { status: 403 }
+    );
+
+    await expect(handleYahooError(response)).rejects.toThrow(
+      expect.objectContaining({
+        code: 'YAHOO_ACCESS_DENIED',
+        status: 403,
+        message: 'YAHOO_ACCESS_DENIED: Access denied to this resource',
+      })
+    );
+  });
+
   it('logs the Yahoo response body on a 400 for diagnostics', async () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const response = new Response('{"error":{"description":"Invalid week"}}', {
