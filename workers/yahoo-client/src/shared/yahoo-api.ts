@@ -82,9 +82,17 @@ export async function handleYahooError(response: Response): Promise<never> {
       // vs generic forbidden) — log it so platform-wide denials are diagnosable.
       const deniedBody = await readErrorBody();
       console.log(`[yahoo-api] access_denied body: ${deniedBody || '(empty)'}`);
+      // Since July 2026 Yahoo gates its Fantasy API behind an approval program
+      // and denies unapproved apps platform-wide with this body. Surface an
+      // honest message so AI clients relay the real situation instead of a
+      // generic denial. Self-limiting: the branch stops matching as soon as
+      // Yahoo stops sending this denial string.
+      const isAppLevelDenial = deniedBody.includes('application is not authorized');
       throw new YahooClientError({
         code: 'YAHOO_ACCESS_DENIED',
-        message: 'Access denied to this resource',
+        message: isAppLevelDenial
+          ? 'Yahoo is currently reviewing third-party app access to its Fantasy Sports API, and Yahoo league data is temporarily unavailable in all third-party apps, including this one. This is not a problem with the user\'s account, connection, or league. ESPN and Sleeper leagues are unaffected.'
+          : 'Access denied to this resource',
         status: classification.status,
       });
     }
