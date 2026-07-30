@@ -741,10 +741,12 @@ async function normalizeTradeTopic(
       membership.kind === 'matched',
   );
   if (matched.length === 0) return { transaction: null, omission: null };
-  if (
-    matched.length !== memberships.length
-    || new Set(matched.map((membership) => membership.matchupPeriodId)).size !== 1
-  ) {
+  if (matched.length !== memberships.length) {
+    // A trade whose legs cross the requested window is outside that aggregate,
+    // not proof that ESPN supplied contradictory scope evidence.
+    return { transaction: null, omission: null };
+  }
+  if (new Set(matched.map((membership) => membership.matchupPeriodId)).size !== 1) {
     return { transaction: null, omission: 'conflict' };
   }
 
@@ -822,7 +824,12 @@ export async function getEspnLeagueContext(
       ? `${t.location} ${t.nickname}`
       : t.name || `Team ${t.id}`;
   }
-  const parsedSchedule = gameId === 'ffl'
+  const isDailyPreseasonWithoutSchedule =
+    gameId !== 'ffl'
+    && scoringPeriodId === 0
+    && currentMatchupPeriod === 0
+    && (data.schedule === undefined || data.schedule === null);
+  const parsedSchedule = gameId === 'ffl' || isDailyPreseasonWithoutSchedule
     ? { scoringPeriodsByMatchup: {}, scheduledMatchupPeriodIds: [] }
     : parseMatchupScoreSchedule(data.schedule);
   const matchupPeriods = parsedSchedule.scoringPeriodsByMatchup;

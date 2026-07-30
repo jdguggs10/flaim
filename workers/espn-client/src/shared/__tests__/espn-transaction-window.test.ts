@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi, type MockedFunction } from 'vites
 import {
   executeEspnTransactionOperation,
   fetchEspnTransactionsByWindow,
+  getEspnLeagueContext,
   normalizeMTransactions2,
   parseMatchupScoringPeriods,
   resolveEspnTransactionWindow,
@@ -104,7 +105,13 @@ describe('ESPN transaction matchup-window contract', () => {
       gameId: 'flb',
       seasonYear: 2026,
       sport: 'baseball',
-      context: dailyContext,
+      context: {
+        ...dailyContext,
+        matchupPeriods: {
+          ...dailyContext.matchupPeriods,
+          3: [20, 21, 22, 23, 24, 25, 26, 27],
+        },
+      },
       requestedWeek: 3,
     });
 
@@ -238,6 +245,31 @@ describe('ESPN transaction matchup-window contract', () => {
     expect(window.scoringPeriodIds).toEqual([0]);
   });
 
+  it('accepts a daily preseason league context when ESPN omits the score schedule', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(JSON.stringify({
+        scoringPeriodId: 0,
+        currentMatchupPeriod: 0,
+        teams: [],
+      }), { status: 200 }),
+    );
+
+    const context = await getEspnLeagueContext(
+      'flb',
+      '30201',
+      2026,
+      credentials,
+    );
+
+    expect(context).toMatchObject({
+      scoringPeriodId: 0,
+      currentMatchupPeriod: 0,
+      matchupPeriods: {},
+      scheduledMatchupPeriodIds: [],
+    });
+    fetchMock.mockRestore();
+  });
+
   it('keeps the dormant structured normalizer on the public matchup window', () => {
     const rows = normalizeMTransactions2([{
       id: 7,
@@ -319,6 +351,50 @@ describe('ESPN transaction matchup-window contract', () => {
     expect(result.transactions).toEqual([]);
     expect(result.omittedUnscopedRows).toBe(1);
     expect(result.coverageIncomplete).toBe(false);
+    fetchMock.mockRestore();
+  });
+
+  it('omits a trade that crosses the requested window without calling it a conflict', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(JSON.stringify({
+        topics: [{
+          id: 1,
+          date: Date.parse('2026-04-23T16:00:00Z'),
+          messages: [
+            {
+              id: 10,
+              messageTypeId: 244,
+              targetId: 99,
+              from: 1,
+              to: 2,
+              matchupPeriodId: 4,
+            },
+            {
+              id: 11,
+              messageTypeId: 244,
+              targetId: 100,
+              from: 2,
+              to: 1,
+              matchupPeriodId: 5,
+            },
+          ],
+        }],
+      }), { status: 200 }),
+    );
+
+    const result = await fetchEspnTransactionsByWindow(
+      'flb',
+      '30201',
+      2026,
+      'baseball',
+      credentials,
+      dailyWindow(),
+      Date.now() + 5000,
+    );
+
+    expect(result.transactions).toEqual([]);
+    expect(result.omittedUnscopedRows).toBe(0);
+    expect(result.omittedConflictingRows).toBe(0);
     fetchMock.mockRestore();
   });
 
