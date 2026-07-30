@@ -908,7 +908,15 @@ export async function resolveEspnTransactionWindow({
           Math.max(0, currentMatchupPeriod - 1),
         ])];
     scoringPeriodIds = [...matchupPeriodIds];
-    scoringToMatchup = new Map(scoringPeriodIds.map((period) => [period, period]));
+    // Football scoring periods and matchup periods are identical. Keep the
+    // full current/historical identity map so normal feed rows outside the
+    // requested window are classified as outside, not falsely as unscoped.
+    scoringToMatchup = new Map(
+      Array.from(
+        { length: currentMatchupPeriod + 1 },
+        (_, period) => [period, period] as const,
+      ),
+    );
   } else {
     const matchupPeriods = context.matchupPeriods;
     scoringToMatchup = scoringMap(matchupPeriods);

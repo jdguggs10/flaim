@@ -329,6 +329,52 @@ describe('ESPN transaction matchup-window contract', () => {
     fetchMock.mockRestore();
   });
 
+  it('classifies football scoring-period evidence outside the requested week without a limitation', async () => {
+    const window = await resolveEspnTransactionWindow({
+      gameId: 'ffl',
+      seasonYear: 2026,
+      sport: 'football',
+      context: {
+        scoringPeriodId: 10,
+        currentMatchupPeriod: 10,
+        matchupPeriods: {},
+        scheduledMatchupPeriodIds: [],
+        teams: {},
+      },
+      requestedWeek: 3,
+    });
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(JSON.stringify({
+        topics: [{
+          id: 1,
+          date: Date.parse('2026-11-10T16:00:00Z'),
+          messages: [{
+            id: 10,
+            messageTypeId: 178,
+            targetId: 99,
+            to: 1,
+            scoringPeriodId: 10,
+          }],
+        }],
+      }), { status: 200 }),
+    );
+
+    const result = await fetchEspnTransactionsByWindow(
+      'ffl',
+      '123',
+      2026,
+      'football',
+      credentials,
+      window,
+      Date.now() + 5000,
+    );
+
+    expect(result.transactions).toEqual([]);
+    expect(result.omittedUnscopedRows).toBe(0);
+    expect(result.omittedConflictingRows).toBe(0);
+    fetchMock.mockRestore();
+  });
+
   it('omits and counts rows whose message and topic scope evidence conflicts', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
       new Response(JSON.stringify({
