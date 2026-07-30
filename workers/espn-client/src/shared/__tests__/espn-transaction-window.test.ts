@@ -31,6 +31,7 @@ const dailyContext: EspnLeagueContext = {
     2: [13, 14, 15, 16, 17, 18, 19],
     3: [20, 21, 22, 23, 24, 25, 26],
   },
+  scheduledMatchupPeriodIds: [1, 2, 3, 4],
   teams: {},
 };
 
@@ -128,6 +129,16 @@ describe('ESPN transaction matchup-window contract', () => {
     expect(window.normalization).toBe('legacy_scoring_period_to_matchup');
   });
 
+  it('rejects a scheduled future matchup instead of reinterpreting it as a scoring day', async () => {
+    await expect(resolveEspnTransactionWindow({
+      gameId: 'flb',
+      seasonYear: 2026,
+      sport: 'baseball',
+      context: dailyContext,
+      requestedWeek: 4,
+    })).rejects.toThrow('exists in the ESPN schedule but has not begun');
+  });
+
   it('uses complete current and previous matchup spans for the default window', async () => {
     const window = await resolveEspnTransactionWindow({
       gameId: 'flb',
@@ -189,6 +200,7 @@ describe('ESPN transaction matchup-window contract', () => {
         16: [118, 119, 120, 121, 122, 123, 124],
         17: [125, 126, 127],
       },
+      scheduledMatchupPeriodIds: [15, 16, 17, 18],
       teams: {},
     };
     const window = await resolveEspnTransactionWindow({
@@ -205,6 +217,25 @@ describe('ESPN transaction matchup-window contract', () => {
       111, 112, 113, 114, 115, 116, 117,
     ]);
     expect(window.normalization).toBe('none');
+  });
+
+  it('labels an omitted selector in matchup period zero as preseason', async () => {
+    const window = await resolveEspnTransactionWindow({
+      gameId: 'flb',
+      seasonYear: 2026,
+      sport: 'baseball',
+      context: {
+        scoringPeriodId: 0,
+        currentMatchupPeriod: 0,
+        matchupPeriods: {},
+        scheduledMatchupPeriodIds: [0, 1],
+        teams: {},
+      },
+    });
+
+    expect(window.mode).toBe('preseason');
+    expect(window.matchupPeriodIds).toEqual([0]);
+    expect(window.scoringPeriodIds).toEqual([0]);
   });
 
   it('keeps the dormant structured normalizer on the public matchup window', () => {

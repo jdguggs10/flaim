@@ -134,12 +134,17 @@ interface EspnMatchupScoreEntry {
   away?: EspnMatchupScoreSide;
 }
 
+interface ParsedMatchupScoreSchedule {
+  scoringPeriodsByMatchup: Record<number, number[]>;
+  scheduledMatchupPeriodIds: number[];
+}
+
 /**
  * Build the daily scoring-period membership of each matchup from the score
  * schedule. ESPN's scheduleSettings.matchupPeriods field is a different
  * weekly/playoff grouping and cannot be used for this purpose.
  */
-export function parseMatchupScoringPeriods(raw: unknown): Record<number, number[]> {
+function parseMatchupScoreSchedule(raw: unknown): ParsedMatchupScoreSchedule {
   if (!Array.isArray(raw)) {
     throw new Error(
       `${ErrorCode.ESPN_INVALID_RESPONSE}: ESPN mMatchupScore schedule was missing or malformed`
@@ -147,6 +152,7 @@ export function parseMatchupScoringPeriods(raw: unknown): Record<number, number[
   }
 
   const periodsByMatchup = new Map<number, Set<number>>();
+  const scheduledMatchupPeriodIds = new Set<number>();
   const ownerByScoringPeriod = new Map<number, number>();
   for (const rawEntry of raw) {
     if (rawEntry === null || typeof rawEntry !== 'object' || Array.isArray(rawEntry)) {
@@ -162,6 +168,7 @@ export function parseMatchupScoringPeriods(raw: unknown): Record<number, number[
         `${ErrorCode.ESPN_INVALID_RESPONSE}: ESPN mMatchupScore schedule contained an invalid matchup period`
       );
     }
+    scheduledMatchupPeriodIds.add(matchupId);
 
     const periods = periodsByMatchup.get(matchupId) ?? new Set<number>();
     for (const side of [entry.home, entry.away]) {
@@ -200,7 +207,14 @@ export function parseMatchupScoringPeriods(raw: unknown): Record<number, number[
   for (const [matchupId, periods] of periodsByMatchup) {
     parsed[matchupId] = [...periods].sort((a, b) => a - b);
   }
-  return parsed;
+  return {
+    scoringPeriodsByMatchup: parsed,
+    scheduledMatchupPeriodIds: [...scheduledMatchupPeriodIds].sort((a, b) => a - b),
+  };
+}
+
+export function parseMatchupScoringPeriods(raw: unknown): Record<number, number[]> {
+  return parseMatchupScoreSchedule(raw).scoringPeriodsByMatchup;
 }
 
 function scoringMap(matchupPeriods: Record<number, number[]>): Map<number, number> {
@@ -772,6 +786,7 @@ export interface EspnLeagueContext {
   scoringPeriodId: number;
   currentMatchupPeriod: number;
   matchupPeriods: Record<number, number[]>;
+  scheduledMatchupPeriodIds: number[];
   teams: Record<string, string>;
 }
 
@@ -807,9 +822,10 @@ export async function getEspnLeagueContext(
       ? `${t.location} ${t.nickname}`
       : t.name || `Team ${t.id}`;
   }
-  const matchupPeriods = gameId === 'ffl'
-    ? {}
-    : parseMatchupScoringPeriods(data.schedule);
+  const parsedSchedule = gameId === 'ffl'
+    ? { scoringPeriodsByMatchup: {}, scheduledMatchupPeriodIds: [] }
+    : parseMatchupScoreSchedule(data.schedule);
+  const matchupPeriods = parsedSchedule.scoringPeriodsByMatchup;
   if (gameId !== 'ffl' && scoringPeriodId > 0 && currentMatchupPeriod > 0) {
     const currentOwner = scoringMap(matchupPeriods).get(scoringPeriodId);
     if (currentOwner !== undefined && currentOwner !== currentMatchupPeriod) {
@@ -830,6 +846,7 @@ export async function getEspnLeagueContext(
     scoringPeriodId,
     currentMatchupPeriod,
     matchupPeriods,
+    scheduledMatchupPeriodIds: parsedSchedule.scheduledMatchupPeriodIds,
     teams,
   };
 }
@@ -907,6 +924,13 @@ export async function resolveEspnTransactionWindow({
         matchupPeriodIds = [requested];
         scoringPeriodIds = directPeriods;
       } else {
+        if (context.scheduledMatchupPeriodIds.includes(requested)) {
+          throw invalidWindow(
+            sport,
+            requested,
+            'That matchup period exists in the ESPN schedule but has not begun.',
+          );
+        }
         const legacyMatchup = scoringToMatchup.get(requested);
         const legacyPeriods = legacyMatchup === undefined
           || legacyMatchup > currentMatchupPeriod
@@ -978,7 +1002,9 @@ export async function resolveEspnTransactionWindow({
   return {
     mode: requested !== null
       ? (requested === 0 ? 'preseason' : 'explicit_week')
-      : 'recent_two_weeks',
+      : (matchupPeriodIds.every((matchupId) => matchupId === 0)
+          ? 'preseason'
+          : 'recent_two_weeks'),
     requestedWeek: requested,
     normalization,
     matchupPeriodIds,

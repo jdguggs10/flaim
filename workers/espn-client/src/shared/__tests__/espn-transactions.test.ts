@@ -76,6 +76,7 @@ describe('espn-transactions', () => {
         16: [118, 124],
         17: [125, 126, 127],
       });
+      expect(ctx.scheduledMatchupPeriodIds).toEqual([15, 16, 17]);
     });
 
     it('fails closed when ESPN assigns the current scoring day to another matchup', async () => {
