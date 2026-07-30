@@ -582,11 +582,13 @@ type ActivityMembership =
   | { kind: 'matched'; matchupPeriodId: number; scoringPeriodId?: number }
   | { kind: 'outside' }
   | { kind: 'unscoped' }
+  | { kind: 'timeout' }
   | { kind: 'conflict' };
 
 interface ActivityNormalizationResult {
   transaction: NormalizedTransaction | null;
   omission: 'unscoped' | 'conflict' | null;
+  coverageIncomplete?: true;
 }
 
 function selectMessageThenTopic(
@@ -636,12 +638,23 @@ async function resolveActivityMembership(
   if (matchupPeriodId === null && DAILY_SPORTS.has(sport)) {
     const timestamp = message.date ?? topic.date;
     if (typeof timestamp === 'number' && Number.isFinite(timestamp) && timestamp > 0) {
-      const inferredScoringPeriod = await findScoringPeriodForDate(
-        gameId,
-        seasonYear,
-        etDateOf(timestamp),
-        timeout,
-      );
+      let inferredScoringPeriod: number | null;
+      try {
+        inferredScoringPeriod = await findScoringPeriodForDate(
+          gameId,
+          seasonYear,
+          etDateOf(timestamp),
+          timeout,
+        );
+      } catch (error) {
+        if (
+          error instanceof Error
+          && error.message.startsWith(`${ErrorCode.ESPN_TIMEOUT}:`)
+        ) {
+          return { kind: 'timeout' };
+        }
+        throw error;
+      }
       if (inferredScoringPeriod !== null) {
         const mappedMatchup = window.scoringToMatchup.get(inferredScoringPeriod);
         if (mappedMatchup !== undefined) {
@@ -735,6 +748,13 @@ async function normalizeTradeTopic(
   );
   if (memberships.some((membership) => membership.kind === 'conflict')) {
     return { transaction: null, omission: 'conflict' };
+  }
+  if (memberships.some((membership) => membership.kind === 'timeout')) {
+    return {
+      transaction: null,
+      omission: 'unscoped',
+      coverageIncomplete: true,
+    };
   }
   if (memberships.some((membership) => membership.kind === 'unscoped')) {
     return { transaction: null, omission: 'unscoped' };
@@ -948,10 +968,13 @@ export async function resolveEspnTransactionWindow({
         scoringPeriodIds = directPeriods;
       } else {
         if (context.scheduledMatchupPeriodIds.includes(requested)) {
+          const explanation = requested > currentMatchupPeriod
+            ? 'That matchup period exists in the ESPN schedule but has not begun.'
+            : 'ESPN did not provide scoring-period membership for that scheduled matchup.';
           throw invalidWindow(
             sport,
             requested,
-            'That matchup period exists in the ESPN schedule but has not begun.',
+            explanation,
           );
         }
         const legacyMatchup = scoringToMatchup.get(requested);
@@ -1080,6 +1103,7 @@ export async function fetchEspnTransactionsByWindow(
   let omittedConflictingRows = 0;
   let exhausted = false;
   let coverageProven = false;
+  let membershipCoverageIncomplete = false;
 
   for (let page = 0; page < maxPages; page += 1) {
     const remaining = deadline - Date.now();
@@ -1138,6 +1162,7 @@ export async function fetchEspnTransactionsByWindow(
       );
       if (tradeResult.omission === 'unscoped') omittedUnscopedRows += 1;
       if (tradeResult.omission === 'conflict') omittedConflictingRows += 1;
+      if (tradeResult.coverageIncomplete) membershipCoverageIncomplete = true;
       const messages = topic.messages ?? [];
       const topicTimestamp = topic.date ?? 0;
       for (let msgIndex = 0; msgIndex < messages.length; msgIndex += 1) {
@@ -1156,6 +1181,11 @@ export async function fetchEspnTransactionsByWindow(
           Math.max(1, Math.min(7000, deadline - Date.now())),
         );
         if (membership.kind === 'outside') continue;
+        if (membership.kind === 'timeout') {
+          omittedUnscopedRows += 1;
+          membershipCoverageIncomplete = true;
+          continue;
+        }
         if (membership.kind === 'unscoped') {
           omittedUnscopedRows += 1;
           continue;
@@ -1232,7 +1262,8 @@ export async function fetchEspnTransactionsByWindow(
     transactions: out.sort((a, b) => b.timestamp - a.timestamp),
     omittedUnscopedRows,
     omittedConflictingRows,
-    coverageIncomplete: !(exhausted || coverageProven),
+    coverageIncomplete:
+      membershipCoverageIncomplete || !(exhausted || coverageProven),
   };
 }
 
@@ -1356,9 +1387,10 @@ export async function executeEspnTransactionOperation({
   );
 
   const maxCount = count ?? 25;
-  let transactions = activity.transactions
-    .filter((transaction) => !type || transaction.type === type)
-    .slice(0, maxCount);
+  const matchingTransactions = activity.transactions
+    .filter((transaction) => !type || transaction.type === type);
+  let transactions = matchingTransactions.slice(0, maxCount);
+  const countTruncated = matchingTransactions.length > maxCount;
   const allIds = [...new Set(transactions.flatMap(collectTransactionPlayerIds))];
   const enrichmentRemaining = totalDeadline - Date.now();
   if (allIds.length > 0 && enrichmentRemaining > 0) {
@@ -1416,7 +1448,7 @@ export async function executeEspnTransactionOperation({
     limitations,
     transactions,
     teams: context.teams,
-    truncated: activity.coverageIncomplete,
+    truncated: activity.coverageIncomplete || countTruncated,
   };
 }
 

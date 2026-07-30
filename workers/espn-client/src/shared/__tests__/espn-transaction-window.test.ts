@@ -146,6 +146,22 @@ describe('ESPN transaction matchup-window contract', () => {
     })).rejects.toThrow('exists in the ESPN schedule but has not begun');
   });
 
+  it('reports missing membership for a past scheduled matchup without calling it future', async () => {
+    await expect(resolveEspnTransactionWindow({
+      gameId: 'flb',
+      seasonYear: 2026,
+      sport: 'baseball',
+      context: {
+        ...dailyContext,
+        matchupPeriods: {
+          1: dailyContext.matchupPeriods[1],
+          3: dailyContext.matchupPeriods[3],
+        },
+      },
+      requestedWeek: 2,
+    })).rejects.toThrow('did not provide scoring-period membership');
+  });
+
   it('rejects a future football matchup instead of returning a misleading empty result', async () => {
     await expect(resolveEspnTransactionWindow({
       gameId: 'ffl',
@@ -261,6 +277,28 @@ describe('ESPN transaction matchup-window contract', () => {
     expect(window.scoringPeriodIds).toEqual([0]);
   });
 
+  it('reports an open start bound when the default window mixes preseason and matchup one', async () => {
+    resolveDateMock.mockResolvedValueOnce('2026-03-01');
+    const window = await resolveEspnTransactionWindow({
+      gameId: 'flb',
+      seasonYear: 2026,
+      sport: 'baseball',
+      context: {
+        scoringPeriodId: 1,
+        currentMatchupPeriod: 1,
+        matchupPeriods: { 1: [1] },
+        scheduledMatchupPeriodIds: [1, 2],
+        teams: {},
+      },
+    });
+
+    expect(window.matchupPeriodIds).toEqual([1, 0]);
+    expect(window.scoringPeriodIds).toEqual([0, 1]);
+    expect(window.startDate).toBeNull();
+    expect(window.endDate).toBe('2026-03-01');
+    expect(window.dateBoundsKind).toBe('unavailable');
+  });
+
   it('accepts a daily preseason league context when ESPN omits the score schedule', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
       new Response(JSON.stringify({
@@ -326,6 +364,51 @@ describe('ESPN transaction matchup-window contract', () => {
     expect(result.limitations).toEqual({
       structured_details_incomplete: true,
     });
+    fetchMock.mockRestore();
+  });
+
+  it('marks a caller count cap as truncated even when provider coverage is complete', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        scoringPeriodId: 3,
+        currentMatchupPeriod: 3,
+        teams: [],
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        topics: [{
+          id: 1,
+          date: Date.parse('2026-09-20T16:00:00Z'),
+          messages: [
+            {
+              id: 10,
+              messageTypeId: 178,
+              to: 1,
+              scoringPeriodId: 3,
+            },
+            {
+              id: 11,
+              messageTypeId: 179,
+              to: 1,
+              scoringPeriodId: 3,
+            },
+          ],
+        }],
+      }), { status: 200 }));
+
+    const result = await executeEspnTransactionOperation({
+      gameId: 'ffl',
+      leagueId: '123',
+      seasonYear: 2026,
+      sport: 'football',
+      credentials,
+      count: 1,
+      getPositionName: String,
+      getProTeamAbbrev: String,
+    });
+
+    expect(result.transactions).toHaveLength(1);
+    expect(result.truncated).toBe(true);
+    expect(result.limitations.window_coverage_incomplete).toBeUndefined();
     fetchMock.mockRestore();
   });
 
@@ -439,6 +522,41 @@ describe('ESPN transaction matchup-window contract', () => {
     expect(result.transactions).toEqual([]);
     expect(result.omittedUnscopedRows).toBe(1);
     expect(result.coverageIncomplete).toBe(false);
+    fetchMock.mockRestore();
+  });
+
+  it('degrades a date-membership timeout to honest incomplete coverage', async () => {
+    findPeriodMock.mockRejectedValueOnce(
+      new Error('ESPN_TIMEOUT: Request timed out'),
+    );
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(JSON.stringify({
+        topics: [{
+          id: 1,
+          date: Date.parse('2026-04-23T16:00:00Z'),
+          messages: [{
+            id: 10,
+            messageTypeId: 178,
+            targetId: 99,
+            to: 1,
+          }],
+        }],
+      }), { status: 200 }),
+    );
+
+    const result = await fetchEspnTransactionsByWindow(
+      'flb',
+      '30201',
+      2026,
+      'baseball',
+      credentials,
+      dailyWindow(),
+      Date.now() + 5000,
+    );
+
+    expect(result.transactions).toEqual([]);
+    expect(result.omittedUnscopedRows).toBe(1);
+    expect(result.coverageIncomplete).toBe(true);
     fetchMock.mockRestore();
   });
 
