@@ -998,15 +998,29 @@ export async function resolveEspnTransactionWindow({
   let dateBoundsKind: TransactionDateBoundsKind = 'unavailable';
 
   if (DAILY_SPORTS.has(sport) && !scoringPeriodIds.includes(0)) {
+    const dateResolutionDeadline = Date.now() + timeout;
     startDate = await resolveDateForScoringPeriod(
       gameId,
       seasonYear,
       firstScoringPeriodId,
       timeout,
     );
-    endDate = firstScoringPeriodId === lastScoringPeriodId
-      ? startDate
-      : await resolveDateForScoringPeriod(gameId, seasonYear, lastScoringPeriodId, timeout);
+    if (firstScoringPeriodId === lastScoringPeriodId) {
+      endDate = startDate;
+    } else {
+      const remaining = dateResolutionDeadline - Date.now();
+      if (remaining <= 0) {
+        throw new Error(
+          `${ErrorCode.ESPN_TIMEOUT}: ESPN transaction window date resolution exceeded its budget`
+        );
+      }
+      endDate = await resolveDateForScoringPeriod(
+        gameId,
+        seasonYear,
+        lastScoringPeriodId,
+        remaining,
+      );
+    }
     dateBoundsKind = areContiguous(scoringPeriodIds)
       ? 'exact_contiguous'
       : 'envelope_non_contiguous';

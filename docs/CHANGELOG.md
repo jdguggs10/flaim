@@ -9,6 +9,7 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 - **Guarded**: The legacy daily-scoring compatibility path refuses values that are known future matchup IDs, preventing a future week from being reinterpreted as an unrelated historical scoring day.
 - **Added**: ESPN transaction responses report the normalized matchup window, exact provider scoring periods, Eastern-time date bounds when available, source, and explicit limitation/omission metadata.
 - **Changed**: The activity feed is the authoritative live source while the structured endpoint remains disabled. Rows without trustworthy window evidence are omitted, and structured-only failed-bid/trade-lifecycle filters return `ESPN_TRANSACTION_TYPE_UNAVAILABLE` instead of a false empty result.
+- **Changed**: ESPN activity-feed waiver rows now report `faab_bid: null`; the former message-field heuristic could not prove a bid amount. Structured FAAB amounts remain unavailable until FLA-140 restores the structured transaction source.
 
 ### Eval Static Key Gains Bounded Write Scope
 - **Changed**: The eval static API key now introspects with `mcp:read mcp:write` so the eval harness can exercise the full ten-tool contract, including the bounded `refresh_leagues` registry rewrite. The demo static key remains read-only (`mcp:read`).
