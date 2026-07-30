@@ -499,6 +499,9 @@ function coerceTransactionWindow(
       timezone: 'America/New_York',
     };
   }
+  // Legacy helper/test compatibility only. Production handlers must pass a
+  // fully resolved window; FLA-140 must preserve that boundary when restoring
+  // mTransactions2 so daily scoring periods cannot become public matchups.
   const uniqueWeeks = [...new Set(weeks)];
   return {
     mode: uniqueWeeks.length === 1 && uniqueWeeks[0] === 0
@@ -799,7 +802,10 @@ export async function getEspnLeagueContext(
   credentials: EspnCredentials,
   timeout = 7000,
 ): Promise<EspnLeagueContext> {
-  const path = `/seasons/${seasonYear}/segments/0/leagues/${leagueId}?view=mMatchupScore&view=mSettings&view=mTeam`;
+  const views = gameId === 'ffl'
+    ? 'view=mSettings&view=mTeam'
+    : 'view=mMatchupScore&view=mSettings&view=mTeam';
+  const path = `/seasons/${seasonYear}/segments/0/leagues/${leagueId}?${views}`;
   const res = await espnFetch(path, gameId, { credentials, timeout });
   if (!res.ok) handleEspnError(res);
   const data = await res.json() as {
@@ -907,6 +913,8 @@ export async function resolveEspnTransactionWindow({
     const matchupPeriods = context.matchupPeriods;
     scoringToMatchup = scoringMap(matchupPeriods);
     const mappedCurrentScoringPeriod = scoringToMatchup.get(context.scoringPeriodId);
+    // Real provider contexts fail this invariant in getEspnLeagueContext.
+    // Keep the warning for direct pure-resolver callers and hand-built tests.
     if (
       mappedCurrentScoringPeriod !== undefined
       && mappedCurrentScoringPeriod !== currentMatchupPeriod
@@ -1362,7 +1370,7 @@ export async function executeEspnTransactionOperation({
   if (activity.omittedConflictingRows > 0) {
     limitations.omitted_conflicting_rows = activity.omittedConflictingRows;
   }
-  if (window.dateBoundsKind === 'unavailable') {
+  if (DAILY_SPORTS.has(sport) && window.dateBoundsKind === 'unavailable') {
     limitations.exact_date_bounds_unavailable = true;
   }
   if (activity.coverageIncomplete) {

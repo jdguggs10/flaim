@@ -146,6 +146,22 @@ describe('ESPN transaction matchup-window contract', () => {
     })).rejects.toThrow('exists in the ESPN schedule but has not begun');
   });
 
+  it('rejects a future football matchup instead of returning a misleading empty result', async () => {
+    await expect(resolveEspnTransactionWindow({
+      gameId: 'ffl',
+      seasonYear: 2026,
+      sport: 'football',
+      context: {
+        scoringPeriodId: 3,
+        currentMatchupPeriod: 3,
+        matchupPeriods: {},
+        scheduledMatchupPeriodIds: [],
+        teams: {},
+      },
+      requestedWeek: 4,
+    })).rejects.toThrow('INVALID_TRANSACTION_WINDOW');
+  });
+
   it('uses complete current and previous matchup spans for the default window', async () => {
     const window = await resolveEspnTransactionWindow({
       gameId: 'flb',
@@ -285,6 +301,32 @@ describe('ESPN transaction matchup-window contract', () => {
       week: 4,
       provider_scoring_period_id: 25,
     });
+  });
+
+  it('does not label football daily date bounds as an unavailable-data limitation', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        scoringPeriodId: 3,
+        currentMatchupPeriod: 3,
+        teams: [],
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ topics: [] }), { status: 200 }));
+
+    const result = await executeEspnTransactionOperation({
+      gameId: 'ffl',
+      leagueId: '123',
+      seasonYear: 2026,
+      sport: 'football',
+      credentials,
+      getPositionName: String,
+      getProTeamAbbrev: String,
+    });
+
+    expect(result.window.date_bounds_kind).toBe('unavailable');
+    expect(result.limitations).toEqual({
+      structured_details_incomplete: true,
+    });
+    fetchMock.mockRestore();
   });
 
   it('omits and counts rows whose message and topic scope evidence conflicts', async () => {

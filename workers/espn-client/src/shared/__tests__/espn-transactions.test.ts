@@ -37,9 +37,10 @@ describe('espn-transactions', () => {
         '2': 'Team Two',
         '3': 'Team 3',
       });
-      // Verify URL includes both views
+      // Football does not need the daily matchup-score view.
       const url = mockFetch.mock.calls[0]?.[0] as string;
-      expect(url).toContain('view=mMatchupScore&view=mSettings&view=mTeam');
+      expect(url).toContain('view=mSettings&view=mTeam');
+      expect(url).not.toContain('view=mMatchupScore');
     });
 
     it('derives baseball matchup windows from score-period keys and adds the current day', async () => {

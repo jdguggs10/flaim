@@ -54,7 +54,6 @@ describe('football get_transactions handler', () => {
       source: 'activity_feed',
       limitations: {
         structured_details_incomplete: true,
-        exact_date_bounds_unavailable: true,
       },
       transactions: [],
       teams: { '1': 'Team One' },
