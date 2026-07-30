@@ -106,6 +106,8 @@ The `get_transactions` response includes:
 
 The public `week` selector always means an ESPN matchup period. This matters for baseball, basketball, and hockey, where one matchup normally spans several daily scoring periods. Omitting `week` selects the current and previous matchup periods; `0` explicitly selects preseason. A narrowly bounded compatibility shim recognizes a daily scoring-period value only when it cannot be a usable current/historical matchup and maps uniquely to one.
 
+Daily matchup membership comes from the keys in each `mMatchupScore` schedule side's `pointsByScoringPeriod` object. Those are the scoring days ESPN actually assigned to the matchup, including extended periods such as baseball's All-Star matchup. Do not use `scheduleSettings.matchupPeriods` as this map: that field groups weekly/playoff periods and its values are not daily scoring IDs. If ESPN has not posted a score key for the current day yet, the validated current `scoringPeriodId` is added only to the current matchup.
+
 The activity feed (`kona_league_communication`) is the authoritative live source. Rows are included only when message/topic evidence, or a daily-sport Eastern-time timestamp fallback, proves membership in the requested matchup window. Conflicting or unscoped rows are omitted and counted. Activity data cannot prove failed bids, FAAB amounts, or proposal/decline/veto/uphold lifecycle states, so those explicit filters fail with `ESPN_TRANSACTION_TYPE_UNAVAILABLE` rather than returning a misleading empty result. The dormant `mTransactions2` fetcher remains window-aware for future restoration. Player enrichment uses ESPN's public global `/players?view=players_wl` endpoint, and team names come from `mTeam`.
 
 ## Mappings Architecture

@@ -5,7 +5,7 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 ## [Unreleased]
 
 ### ESPN Transaction Matchup Windows (FLA-193)
-- **Fixed**: ESPN daily-sport transaction selectors now treat public `week` as a matchup period and expand it through `scheduleSettings.matchupPeriods` instead of mistaking it for one calendar-day scoring period.
+- **Fixed**: ESPN daily-sport transaction selectors now treat public `week` as a matchup period and expand it through the actual daily keys in the `mMatchupScore` schedule instead of mistaking it for one calendar-day scoring period. ESPN's similarly named `scheduleSettings.matchupPeriods` field groups weekly/playoff periods and is not a daily-scoring map.
 - **Added**: ESPN transaction responses report the normalized matchup window, exact provider scoring periods, Eastern-time date bounds when available, source, and explicit limitation/omission metadata.
 - **Changed**: The activity feed is the authoritative live source while the structured endpoint remains disabled. Rows without trustworthy window evidence are omitted, and structured-only failed-bid/trade-lifecycle filters return `ESPN_TRANSACTION_TYPE_UNAVAILABLE` instead of a false empty result.
 

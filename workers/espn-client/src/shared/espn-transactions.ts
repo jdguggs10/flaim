@@ -124,57 +124,81 @@ function invalidWindow(sport: SeasonSport, requestedWeek: unknown, detail?: stri
   );
 }
 
-export function parseMatchupPeriods(raw: unknown): Record<number, number[]> {
-  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+interface EspnMatchupScoreSide {
+  pointsByScoringPeriod?: unknown;
+}
+
+interface EspnMatchupScoreEntry {
+  matchupPeriodId?: unknown;
+  home?: EspnMatchupScoreSide;
+  away?: EspnMatchupScoreSide;
+}
+
+/**
+ * Build the daily scoring-period membership of each matchup from the score
+ * schedule. ESPN's scheduleSettings.matchupPeriods field is a different
+ * weekly/playoff grouping and cannot be used for this purpose.
+ */
+export function parseMatchupScoringPeriods(raw: unknown): Record<number, number[]> {
+  if (!Array.isArray(raw)) {
     throw new Error(
-      `${ErrorCode.ESPN_INVALID_RESPONSE}: ESPN scheduleSettings.matchupPeriods was missing or malformed`
+      `${ErrorCode.ESPN_INVALID_RESPONSE}: ESPN mMatchupScore schedule was missing or malformed`
     );
   }
 
-  const parsed: Record<number, number[]> = {};
+  const periodsByMatchup = new Map<number, Set<number>>();
   const ownerByScoringPeriod = new Map<number, number>();
-  for (const [rawMatchupId, rawPeriods] of Object.entries(raw)) {
-    const matchupId = Number(rawMatchupId);
-    if (
-      !isNonNegativeInteger(matchupId)
-      || String(matchupId) !== rawMatchupId
-      || !Array.isArray(rawPeriods)
-      || rawPeriods.length === 0
-    ) {
+  for (const rawEntry of raw) {
+    if (rawEntry === null || typeof rawEntry !== 'object' || Array.isArray(rawEntry)) {
       throw new Error(
-        `${ErrorCode.ESPN_INVALID_RESPONSE}: ESPN matchup-period mapping contained an invalid or empty entry`
+        `${ErrorCode.ESPN_INVALID_RESPONSE}: ESPN mMatchupScore schedule contained a malformed entry`
       );
     }
 
-    const periods: number[] = [];
-    for (const rawPeriod of rawPeriods) {
-      if (!isNonNegativeInteger(rawPeriod)) {
-        throw new Error(
-          `${ErrorCode.ESPN_INVALID_RESPONSE}: ESPN matchup-period mapping contained a non-integer scoring period`
-        );
-      }
-      if (periods.includes(rawPeriod)) {
-        throw new Error(
-          `${ErrorCode.ESPN_INVALID_RESPONSE}: ESPN matchup-period mapping repeated scoring period ${rawPeriod}`
-        );
-      }
-      const existingOwner = ownerByScoringPeriod.get(rawPeriod);
-      if (existingOwner !== undefined && existingOwner !== matchupId) {
-        throw new Error(
-          `${ErrorCode.ESPN_INVALID_RESPONSE}: ESPN scoring period ${rawPeriod} belonged to multiple matchup periods`
-        );
-      }
-      ownerByScoringPeriod.set(rawPeriod, matchupId);
-      periods.push(rawPeriod);
+    const entry = rawEntry as EspnMatchupScoreEntry;
+    const matchupId = entry.matchupPeriodId;
+    if (!isNonNegativeInteger(matchupId)) {
+      throw new Error(
+        `${ErrorCode.ESPN_INVALID_RESPONSE}: ESPN mMatchupScore schedule contained an invalid matchup period`
+      );
     }
 
-    parsed[matchupId] = [...new Set(periods)].sort((a, b) => a - b);
+    const periods = periodsByMatchup.get(matchupId) ?? new Set<number>();
+    for (const side of [entry.home, entry.away]) {
+      const rawPoints = side?.pointsByScoringPeriod;
+      if (rawPoints === undefined || rawPoints === null) continue;
+      if (typeof rawPoints !== 'object' || Array.isArray(rawPoints)) {
+        throw new Error(
+          `${ErrorCode.ESPN_INVALID_RESPONSE}: ESPN mMatchupScore schedule contained malformed scoring-period points`
+        );
+      }
+
+      for (const rawPeriod of Object.keys(rawPoints)) {
+        const scoringPeriodId = Number(rawPeriod);
+        if (
+          !isNonNegativeInteger(scoringPeriodId)
+          || String(scoringPeriodId) !== rawPeriod
+        ) {
+          throw new Error(
+            `${ErrorCode.ESPN_INVALID_RESPONSE}: ESPN mMatchupScore schedule contained an invalid scoring period`
+          );
+        }
+        const existingOwner = ownerByScoringPeriod.get(scoringPeriodId);
+        if (existingOwner !== undefined && existingOwner !== matchupId) {
+          throw new Error(
+            `${ErrorCode.ESPN_INVALID_RESPONSE}: ESPN scoring period ${scoringPeriodId} belonged to multiple matchup periods`
+          );
+        }
+        ownerByScoringPeriod.set(scoringPeriodId, matchupId);
+        periods.add(scoringPeriodId);
+      }
+    }
+    if (periods.size > 0) periodsByMatchup.set(matchupId, periods);
   }
 
-  if (Object.keys(parsed).length === 0) {
-    throw new Error(
-      `${ErrorCode.ESPN_INVALID_RESPONSE}: ESPN scheduleSettings.matchupPeriods contained no usable entries`
-    );
+  const parsed: Record<number, number[]> = {};
+  for (const [matchupId, periods] of periodsByMatchup) {
+    parsed[matchupId] = [...periods].sort((a, b) => a - b);
   }
   return parsed;
 }
@@ -758,18 +782,14 @@ export async function getEspnLeagueContext(
   credentials: EspnCredentials,
   timeout = 7000,
 ): Promise<EspnLeagueContext> {
-  const path = `/seasons/${seasonYear}/segments/0/leagues/${leagueId}?view=mSettings&view=mTeam`;
+  const path = `/seasons/${seasonYear}/segments/0/leagues/${leagueId}?view=mMatchupScore&view=mSettings&view=mTeam`;
   const res = await espnFetch(path, gameId, { credentials, timeout });
   if (!res.ok) handleEspnError(res);
   const data = await res.json() as {
     scoringPeriodId?: number;
     currentMatchupPeriod?: number;
     status?: { currentMatchupPeriod?: number };
-    settings?: {
-      scheduleSettings?: {
-        matchupPeriods?: unknown;
-      };
-    };
+    schedule?: unknown;
     teams?: Array<{ id: number; location?: string; nickname?: string; name?: string }>;
   };
   const scoringPeriodId = data.scoringPeriodId;
@@ -787,12 +807,29 @@ export async function getEspnLeagueContext(
       ? `${t.location} ${t.nickname}`
       : t.name || `Team ${t.id}`;
   }
+  const matchupPeriods = gameId === 'ffl'
+    ? {}
+    : parseMatchupScoringPeriods(data.schedule);
+  if (gameId !== 'ffl' && scoringPeriodId > 0 && currentMatchupPeriod > 0) {
+    const currentOwner = scoringMap(matchupPeriods).get(scoringPeriodId);
+    if (currentOwner !== undefined && currentOwner !== currentMatchupPeriod) {
+      throw new Error(
+        `${ErrorCode.ESPN_INVALID_RESPONSE}: ESPN current scoring period belonged to a different matchup period`
+      );
+    }
+    if (currentOwner === undefined) {
+      matchupPeriods[currentMatchupPeriod] = [
+        ...new Set([
+          ...(matchupPeriods[currentMatchupPeriod] ?? []),
+          scoringPeriodId,
+        ]),
+      ].sort((a, b) => a - b);
+    }
+  }
   return {
     scoringPeriodId,
     currentMatchupPeriod,
-    matchupPeriods: gameId === 'ffl'
-      ? {}
-      : parseMatchupPeriods(data.settings?.scheduleSettings?.matchupPeriods),
+    matchupPeriods,
     teams,
   };
 }
@@ -890,12 +927,15 @@ export async function resolveEspnTransactionWindow({
         currentMatchupPeriod,
         Math.max(0, currentMatchupPeriod - 1),
       ])];
-      scoringPeriodIds = matchupPeriodIds.flatMap(usablePeriodsForMatchup);
-      if (scoringPeriodIds.length === 0) {
+      const missingMatchup = matchupPeriodIds.find(
+        (matchupId) => usablePeriodsForMatchup(matchupId).length === 0,
+      );
+      if (missingMatchup !== undefined) {
         throw new Error(
-          `${ErrorCode.ESPN_INVALID_RESPONSE}: ESPN current and previous matchup periods contained no usable scoring periods`
+          `${ErrorCode.ESPN_INVALID_RESPONSE}: ESPN mMatchupScore schedule contained no scoring periods for matchup period ${missingMatchup}`
         );
       }
+      scoringPeriodIds = matchupPeriodIds.flatMap(usablePeriodsForMatchup);
     }
 
     scoringPeriodIds = [...new Set(scoringPeriodIds)].sort((a, b) => a - b);

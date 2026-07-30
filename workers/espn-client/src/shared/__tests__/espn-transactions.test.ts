@@ -19,7 +19,7 @@ describe('espn-transactions', () => {
   });
 
   describe('getEspnLeagueContext', () => {
-    it('returns scoringPeriodId and teams map from mSettings+mTeam', async () => {
+    it('returns scoringPeriodId and teams map from the league context views', async () => {
       mockFetch.mockResolvedValueOnce(jsonResponse({
         scoringPeriodId: 7,
         currentMatchupPeriod: 7,
@@ -39,7 +39,58 @@ describe('espn-transactions', () => {
       });
       // Verify URL includes both views
       const url = mockFetch.mock.calls[0]?.[0] as string;
-      expect(url).toContain('view=mSettings&view=mTeam');
+      expect(url).toContain('view=mMatchupScore&view=mSettings&view=mTeam');
+    });
+
+    it('derives baseball matchup windows from score-period keys and adds the current day', async () => {
+      mockFetch.mockResolvedValueOnce(jsonResponse({
+        scoringPeriodId: 127,
+        currentMatchupPeriod: 17,
+        schedule: [
+          {
+            matchupPeriodId: 15,
+            home: { pointsByScoringPeriod: { 104: 1, 105: 2, 117: 3 } },
+            away: { pointsByScoringPeriod: { 104: 4, 105: 5, 117: 6 } },
+          },
+          {
+            matchupPeriodId: 16,
+            home: { pointsByScoringPeriod: { 118: 1, 124: 2 } },
+          },
+          {
+            matchupPeriodId: 17,
+            home: { pointsByScoringPeriod: { 125: 1, 126: 2 } },
+          },
+        ],
+        teams: [],
+      }));
+
+      const ctx = await getEspnLeagueContext(
+        'flb',
+        '30201',
+        2026,
+        { s2: 'x', swid: '{y}' },
+      );
+
+      expect(ctx.matchupPeriods).toEqual({
+        15: [104, 105, 117],
+        16: [118, 124],
+        17: [125, 126, 127],
+      });
+    });
+
+    it('fails closed when ESPN assigns the current scoring day to another matchup', async () => {
+      mockFetch.mockResolvedValueOnce(jsonResponse({
+        scoringPeriodId: 127,
+        currentMatchupPeriod: 17,
+        schedule: [{
+          matchupPeriodId: 16,
+          home: { pointsByScoringPeriod: { 127: 1 } },
+        }],
+      }));
+
+      await expect(
+        getEspnLeagueContext('flb', '30201', 2026, { s2: 'x', swid: '{y}' }),
+      ).rejects.toThrow('different matchup period');
     });
 
     it('fails closed when ESPN omits the current period selectors', async () => {

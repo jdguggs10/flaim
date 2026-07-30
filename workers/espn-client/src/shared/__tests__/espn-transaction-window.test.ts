@@ -3,7 +3,7 @@ import {
   executeEspnTransactionOperation,
   fetchEspnTransactionsByWindow,
   normalizeMTransactions2,
-  parseMatchupPeriods,
+  parseMatchupScoringPeriods,
   resolveEspnTransactionWindow,
   type EspnLeagueContext,
   type EspnTransactionWindow,
@@ -25,13 +25,11 @@ vi.mock('../scoring-period', async () => {
 const credentials = { s2: 'token', swid: '{swid}' };
 const dailyContext: EspnLeagueContext = {
   scoringPeriodId: 26,
-  currentMatchupPeriod: 4,
+  currentMatchupPeriod: 3,
   matchupPeriods: {
-    1: [1, 2, 3, 4, 5, 6, 7],
-    2: [8, 9, 10, 11, 12, 13, 14],
-    3: [15, 16, 17, 18, 19, 20, 21],
-    4: [22, 23, 24, 25, 26, 27, 28],
-    26: [176, 177, 178, 179, 180, 181, 182],
+    1: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+    2: [13, 14, 15, 16, 17, 18, 19],
+    3: [20, 21, 22, 23, 24, 25, 26],
   },
   teams: {},
 };
@@ -74,15 +72,30 @@ describe('ESPN transaction matchup-window contract', () => {
     findPeriodMock.mockResolvedValue(null);
   });
 
-  it('parses a sanitized daily-sport matchup map and rejects ambiguous membership', () => {
-    expect(parseMatchupPeriods({ 3: [15, 16], 4: [17, 18] })).toEqual({
+  it('derives daily scoring membership from matchup-score schedule keys', () => {
+    expect(parseMatchupScoringPeriods([
+      {
+        matchupPeriodId: 3,
+        home: { pointsByScoringPeriod: { 15: 1, 16: 2 } },
+        away: { pointsByScoringPeriod: { 15: 3, 16: 4 } },
+      },
+      {
+        matchupPeriodId: 4,
+        home: { pointsByScoringPeriod: { 17: 1, 18: 2 } },
+      },
+    ])).toEqual({
       3: [15, 16],
       4: [17, 18],
     });
-    expect(() => parseMatchupPeriods({ 3: [15, 16], 4: [16, 17] }))
+    expect(() => parseMatchupScoringPeriods([
+      { matchupPeriodId: 3, home: { pointsByScoringPeriod: { 15: 1, 16: 2 } } },
+      { matchupPeriodId: 4, home: { pointsByScoringPeriod: { 16: 1, 17: 2 } } },
+    ]))
       .toThrow('belonged to multiple matchup periods');
-    expect(() => parseMatchupPeriods({ 3: [15, 15] }))
-      .toThrow('repeated scoring period 15');
+    expect(() => parseMatchupScoringPeriods([
+      { matchupPeriodId: 3, home: { pointsByScoringPeriod: { invalid: 1 } } },
+    ]))
+      .toThrow('invalid scoring period');
   });
 
   it('clips the current daily matchup at the current scoring period', async () => {
@@ -91,11 +104,11 @@ describe('ESPN transaction matchup-window contract', () => {
       seasonYear: 2026,
       sport: 'baseball',
       context: dailyContext,
-      requestedWeek: 4,
+      requestedWeek: 3,
     });
 
-    expect(window.matchupPeriodIds).toEqual([4]);
-    expect(window.scoringPeriodIds).toEqual([22, 23, 24, 25, 26]);
+    expect(window.matchupPeriodIds).toEqual([3]);
+    expect(window.scoringPeriodIds).toEqual([20, 21, 22, 23, 24, 25, 26]);
     expect(window.normalization).toBe('none');
     expect(window.endDate).toBe('2026-04-24');
   });
@@ -110,20 +123,48 @@ describe('ESPN transaction matchup-window contract', () => {
     });
 
     expect(window.requestedWeek).toBe(26);
-    expect(window.matchupPeriodIds).toEqual([4]);
-    expect(window.scoringPeriodIds).toEqual([22, 23, 24, 25, 26]);
+    expect(window.matchupPeriodIds).toEqual([3]);
+    expect(window.scoringPeriodIds).toEqual([20, 21, 22, 23, 24, 25, 26]);
     expect(window.normalization).toBe('legacy_scoring_period_to_matchup');
+  });
+
+  it('uses complete current and previous matchup spans for the default window', async () => {
+    const window = await resolveEspnTransactionWindow({
+      gameId: 'flb',
+      seasonYear: 2026,
+      sport: 'baseball',
+      context: dailyContext,
+    });
+
+    expect(window.mode).toBe('recent_two_weeks');
+    expect(window.matchupPeriodIds).toEqual([3, 2]);
+    expect(window.scoringPeriodIds).toEqual([
+      13, 14, 15, 16, 17, 18, 19,
+      20, 21, 22, 23, 24, 25, 26,
+    ]);
+  });
+
+  it('fails closed when the score schedule cannot prove the previous matchup span', async () => {
+    await expect(resolveEspnTransactionWindow({
+      gameId: 'flb',
+      seasonYear: 2026,
+      sport: 'baseball',
+      context: {
+        ...dailyContext,
+        matchupPeriods: { 3: dailyContext.matchupPeriods[3] },
+      },
+    })).rejects.toThrow('no scoring periods for matchup period 2');
   });
 
   it('gives a usable direct matchup precedence over the compatibility interpretation', async () => {
     const context: EspnLeagueContext = {
       ...dailyContext,
-      scoringPeriodId: 16,
+      scoringPeriodId: 23,
       currentMatchupPeriod: 3,
       matchupPeriods: {
-        1: [1, 2, 3, 4, 5, 6, 7],
-        2: [8, 9, 10, 11, 12, 13, 14],
-        3: [15, 16, 17, 18, 19, 20, 21],
+        1: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+        2: [13, 14, 15, 16, 17, 18, 19],
+        3: [20, 21, 22, 23, 24, 25, 26],
       },
     };
     const window = await resolveEspnTransactionWindow({
@@ -135,7 +176,34 @@ describe('ESPN transaction matchup-window contract', () => {
     });
 
     expect(window.matchupPeriodIds).toEqual([2]);
-    expect(window.scoringPeriodIds).toEqual([8, 9, 10, 11, 12, 13, 14]);
+    expect(window.scoringPeriodIds).toEqual([13, 14, 15, 16, 17, 18, 19]);
+    expect(window.normalization).toBe('none');
+  });
+
+  it('preserves ESPN’s full fourteen-day All-Star matchup span', async () => {
+    const context: EspnLeagueContext = {
+      scoringPeriodId: 127,
+      currentMatchupPeriod: 17,
+      matchupPeriods: {
+        15: [104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117],
+        16: [118, 119, 120, 121, 122, 123, 124],
+        17: [125, 126, 127],
+      },
+      teams: {},
+    };
+    const window = await resolveEspnTransactionWindow({
+      gameId: 'flb',
+      seasonYear: 2026,
+      sport: 'baseball',
+      context,
+      requestedWeek: 15,
+    });
+
+    expect(window.matchupPeriodIds).toEqual([15]);
+    expect(window.scoringPeriodIds).toEqual([
+      104, 105, 106, 107, 108, 109, 110,
+      111, 112, 113, 114, 115, 116, 117,
+    ]);
     expect(window.normalization).toBe('none');
   });
 
