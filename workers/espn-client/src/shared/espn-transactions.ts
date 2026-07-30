@@ -1,6 +1,11 @@
-import type { EspnCredentials, SeasonSport } from '@flaim/worker-shared';
+import { ErrorCode, type EspnCredentials, type SeasonSport } from '@flaim/worker-shared';
 import { espnFetch, handleEspnError } from './espn-api';
 import { getCurrentSeasonYear } from './season';
+import {
+  etDateOf,
+  findScoringPeriodForDate,
+  resolveDateForScoringPeriod,
+} from './scoring-period';
 
 export type TransactionType = 'add' | 'drop' | 'trade' | 'waiver' | 'trade_proposal' | 'trade_decline' | 'trade_veto' | 'trade_uphold' | 'failed_bid';
 
@@ -11,6 +16,7 @@ export interface NormalizedTransaction {
   timestamp: number;
   date: string;
   week: number | null;
+  provider_scoring_period_id?: number;
   team_ids?: string[];
   players_added?: Array<{ id: string; name?: string; position?: string; team?: string }>;
   players_dropped?: Array<{ id: string; name?: string; position?: string; team?: string }>;
@@ -44,6 +50,146 @@ export function collectTransactionPlayerIds(txn: NormalizedTransaction): string[
       ...side.gave_up.map((p) => p.id),
     ]),
   ];
+}
+
+export type TransactionWindowMode = 'explicit_week' | 'recent_two_weeks' | 'preseason';
+export type TransactionWindowNormalization = 'none' | 'legacy_scoring_period_to_matchup';
+export type TransactionDateBoundsKind = 'exact_contiguous' | 'envelope_non_contiguous' | 'unavailable';
+
+export interface EspnTransactionWindow {
+  mode: TransactionWindowMode;
+  requestedWeek: number | null;
+  normalization: TransactionWindowNormalization;
+  matchupPeriodIds: number[];
+  scoringPeriodIds: number[];
+  scoringToMatchup: Map<number, number>;
+  firstScoringPeriodId: number;
+  lastScoringPeriodId: number;
+  startDate: string | null;
+  endDate: string | null;
+  dateBoundsKind: TransactionDateBoundsKind;
+  timezone: 'America/New_York';
+}
+
+export interface EspnTransactionLimitations {
+  structured_details_incomplete: true;
+  omitted_unscoped_rows?: number;
+  omitted_conflicting_rows?: number;
+  exact_date_bounds_unavailable?: true;
+  window_coverage_incomplete?: true;
+}
+
+export interface EspnTransactionOperationResult {
+  window: {
+    mode: TransactionWindowMode;
+    unit: 'matchup_period';
+    requested_week: number | null;
+    normalization: TransactionWindowNormalization;
+    weeks: number[];
+    provider_scoring_period_ids: number[];
+    start_date: string | null;
+    end_date: string | null;
+    date_bounds_kind: TransactionDateBoundsKind;
+    timezone: 'America/New_York';
+  };
+  source: 'activity_feed';
+  limitations: EspnTransactionLimitations;
+  transactions: NormalizedTransaction[];
+  teams: Record<string, string>;
+  truncated: boolean;
+}
+
+const DAILY_SPORTS = new Set<SeasonSport>(['baseball', 'basketball', 'hockey']);
+const STRUCTURED_ONLY_TYPES = new Set<TransactionType>([
+  'failed_bid',
+  'trade_proposal',
+  'trade_decline',
+  'trade_veto',
+  'trade_uphold',
+]);
+const TRANSACTION_OPERATION_MS = 20_000;
+const ENRICHMENT_RESERVE_MS = 4_000;
+
+function isNonNegativeInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0;
+}
+
+function invalidWindow(sport: SeasonSport, requestedWeek: unknown, detail?: string): Error {
+  const suffix = detail ? ` ${detail}` : '';
+  return new Error(
+    `${ErrorCode.INVALID_TRANSACTION_WINDOW}: ESPN ${sport} week is a matchup period. `
+      + `Pass a valid current or historical matchup period, pass 0 for preseason, `
+      + `or omit week for the current and previous matchup periods.${suffix} `
+      + `(received ${String(requestedWeek)})`
+  );
+}
+
+export function parseMatchupPeriods(raw: unknown): Record<number, number[]> {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new Error(
+      `${ErrorCode.ESPN_INVALID_RESPONSE}: ESPN scheduleSettings.matchupPeriods was missing or malformed`
+    );
+  }
+
+  const parsed: Record<number, number[]> = {};
+  const ownerByScoringPeriod = new Map<number, number>();
+  for (const [rawMatchupId, rawPeriods] of Object.entries(raw)) {
+    const matchupId = Number(rawMatchupId);
+    if (
+      !isNonNegativeInteger(matchupId)
+      || String(matchupId) !== rawMatchupId
+      || !Array.isArray(rawPeriods)
+      || rawPeriods.length === 0
+    ) {
+      throw new Error(
+        `${ErrorCode.ESPN_INVALID_RESPONSE}: ESPN matchup-period mapping contained an invalid or empty entry`
+      );
+    }
+
+    const periods: number[] = [];
+    for (const rawPeriod of rawPeriods) {
+      if (!isNonNegativeInteger(rawPeriod)) {
+        throw new Error(
+          `${ErrorCode.ESPN_INVALID_RESPONSE}: ESPN matchup-period mapping contained a non-integer scoring period`
+        );
+      }
+      if (periods.includes(rawPeriod)) {
+        throw new Error(
+          `${ErrorCode.ESPN_INVALID_RESPONSE}: ESPN matchup-period mapping repeated scoring period ${rawPeriod}`
+        );
+      }
+      const existingOwner = ownerByScoringPeriod.get(rawPeriod);
+      if (existingOwner !== undefined && existingOwner !== matchupId) {
+        throw new Error(
+          `${ErrorCode.ESPN_INVALID_RESPONSE}: ESPN scoring period ${rawPeriod} belonged to multiple matchup periods`
+        );
+      }
+      ownerByScoringPeriod.set(rawPeriod, matchupId);
+      periods.push(rawPeriod);
+    }
+
+    parsed[matchupId] = [...new Set(periods)].sort((a, b) => a - b);
+  }
+
+  if (Object.keys(parsed).length === 0) {
+    throw new Error(
+      `${ErrorCode.ESPN_INVALID_RESPONSE}: ESPN scheduleSettings.matchupPeriods contained no usable entries`
+    );
+  }
+  return parsed;
+}
+
+function scoringMap(matchupPeriods: Record<number, number[]>): Map<number, number> {
+  const map = new Map<number, number>();
+  for (const [matchupKey, periods] of Object.entries(matchupPeriods)) {
+    const matchupId = Number(matchupKey);
+    for (const period of periods) map.set(period, matchupId);
+  }
+  return map;
+}
+
+function areContiguous(periods: number[]): boolean {
+  return periods.every((period, index) => index === 0 || period === periods[index - 1] + 1);
 }
 
 export interface EspnPlayerBasic {
@@ -143,12 +289,23 @@ function toStatus(type: TransactionType, rawStatus?: string): 'complete' | 'fail
   return 'unknown';
 }
 
-export function normalizeMTransactions2(transactions: EspnMTransaction[]): NormalizedTransaction[] {
+export function normalizeMTransactions2(
+  transactions: EspnMTransaction[],
+  windowOrWeeks?: EspnTransactionWindow | number[],
+): NormalizedTransaction[] {
+  const window = windowOrWeeks === undefined ? null : coerceTransactionWindow(windowOrWeeks);
   const out: NormalizedTransaction[] = [];
+  const requestedMatchups = new Set(window?.matchupPeriodIds ?? []);
 
   for (const txn of transactions) {
     const rawType = toTxnTypeFromMTransaction(txn.type);
     if (!rawType) continue;
+    const scoringPeriodId = txn.scoringPeriodId;
+    if (!isNonNegativeInteger(scoringPeriodId)) continue;
+    const mappedMatchupPeriodId = window?.scoringToMatchup.get(scoringPeriodId);
+    if (window && mappedMatchupPeriodId === undefined) continue;
+    const matchupPeriodId = mappedMatchupPeriodId ?? scoringPeriodId;
+    if (window && !requestedMatchups.has(matchupPeriodId)) continue;
 
     const added: Array<{ id: string }> = [];
     const dropped: Array<{ id: string }> = [];
@@ -177,8 +334,9 @@ export function normalizeMTransactions2(transactions: EspnMTransaction[]): Norma
       type,
       status: toStatus(type, txn.status),
       timestamp,
-      date: new Date(timestamp).toISOString().slice(0, 10),
-      week: txn.scoringPeriodId ?? null,
+      date: etDateOf(timestamp),
+      week: matchupPeriodId,
+      provider_scoring_period_id: scoringPeriodId,
       team_ids: teamIds.length > 0 ? teamIds : undefined,
       players_added: added,
       players_dropped: dropped,
@@ -211,17 +369,18 @@ export async function fetchEspnMTransactions2(
   leagueId: string,
   seasonYear: number,
   credentials: EspnCredentials,
-  weeks: number[],
+  windowOrWeeks: EspnTransactionWindow | number[],
 ): Promise<MTransactions2Result> {
+  const window = coerceTransactionWindow(windowOrWeeks);
   const seen = new Set<string>();
   const all: NormalizedTransaction[] = [];
   let truncated = false;
 
-  for (const week of weeks) {
+  for (const scoringPeriodId of window.scoringPeriodIds) {
     let hitMaxPageWithFullResults = false;
     for (let page = 0; page < MTRANSACTIONS2_MAX_PAGES; page++) {
       const offset = page * MTRANSACTIONS2_PAGE_SIZE;
-      const path = `/seasons/${seasonYear}/segments/0/leagues/${leagueId}?view=mTransactions2&scoringPeriodId=${week}`;
+      const path = `/seasons/${seasonYear}/segments/0/leagues/${leagueId}?view=mTransactions2&scoringPeriodId=${scoringPeriodId}`;
       const headers = {
         'x-fantasy-filter': JSON.stringify({
           transactions: {
@@ -238,7 +397,7 @@ export async function fetchEspnMTransactions2(
 
       const body = await res.json() as EspnMTransactions2Response;
       const rawTxns = body.transactions ?? [];
-      const normalized = normalizeMTransactions2(rawTxns);
+      const normalized = normalizeMTransactions2(rawTxns, window);
 
       for (const txn of normalized) {
         if (!seen.has(txn.transaction_id)) {
@@ -257,7 +416,7 @@ export async function fetchEspnMTransactions2(
 
     if (hitMaxPageWithFullResults) {
       const probeOffset = MTRANSACTIONS2_MAX_PAGES * MTRANSACTIONS2_PAGE_SIZE;
-      const probePath = `/seasons/${seasonYear}/segments/0/leagues/${leagueId}?view=mTransactions2&scoringPeriodId=${week}`;
+      const probePath = `/seasons/${seasonYear}/segments/0/leagues/${leagueId}?view=mTransactions2&scoringPeriodId=${scoringPeriodId}`;
       const probeHeaders = {
         'x-fantasy-filter': JSON.stringify({
           transactions: {
@@ -274,12 +433,51 @@ export async function fetchEspnMTransactions2(
       const probeBody = await probeRes.json() as EspnMTransactions2Response;
       if ((probeBody.transactions?.length ?? 0) > 0) {
         truncated = true;
-        console.warn(`[fetchEspnMTransactions2] Hit page limit for week ${week}, results may be incomplete`);
+        console.warn(`[fetchEspnMTransactions2] Hit page limit for scoring period ${scoringPeriodId}, results may be incomplete`);
       }
     }
   }
 
   return { transactions: all.sort((a, b) => b.timestamp - a.timestamp), truncated };
+}
+
+function coerceTransactionWindow(
+  windowOrWeeks?: EspnTransactionWindow | number[],
+): EspnTransactionWindow {
+  const weeks = Array.isArray(windowOrWeeks) ? windowOrWeeks : [0];
+  if (!Array.isArray(windowOrWeeks)) {
+    return windowOrWeeks ?? {
+      mode: 'preseason',
+      requestedWeek: 0,
+      normalization: 'none',
+      matchupPeriodIds: [0],
+      scoringPeriodIds: [0],
+      scoringToMatchup: new Map([[0, 0]]),
+      firstScoringPeriodId: 0,
+      lastScoringPeriodId: 0,
+      startDate: null,
+      endDate: null,
+      dateBoundsKind: 'unavailable',
+      timezone: 'America/New_York',
+    };
+  }
+  const uniqueWeeks = [...new Set(weeks)];
+  return {
+    mode: uniqueWeeks.length === 1 && uniqueWeeks[0] === 0
+      ? 'preseason'
+      : (uniqueWeeks.length === 1 ? 'explicit_week' : 'recent_two_weeks'),
+    requestedWeek: uniqueWeeks.length === 1 ? uniqueWeeks[0] : null,
+    normalization: 'none',
+    matchupPeriodIds: uniqueWeeks,
+    scoringPeriodIds: uniqueWeeks,
+    scoringToMatchup: new Map(uniqueWeeks.map((week) => [week, week])),
+    firstScoringPeriodId: Math.min(...uniqueWeeks),
+    lastScoringPeriodId: Math.max(...uniqueWeeks),
+    startDate: null,
+    endDate: null,
+    dateBoundsKind: 'unavailable',
+    timezone: 'America/New_York',
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -339,19 +537,92 @@ function toTxnTypeFromMessageId(messageTypeId?: number): TransactionType | null 
   return null;
 }
 
-function getWeekFromActivity(topic: EspnActivityTopic, message: EspnActivityMessage): number | null {
-  const candidates = [
-    message.scoringPeriodId,
+type ActivityMembership =
+  | { kind: 'matched'; matchupPeriodId: number; scoringPeriodId?: number }
+  | { kind: 'outside' }
+  | { kind: 'unscoped' }
+  | { kind: 'conflict' };
+
+interface ActivityNormalizationResult {
+  transaction: NormalizedTransaction | null;
+  omission: 'unscoped' | 'conflict' | null;
+}
+
+function selectMessageThenTopic(
+  messageValue: unknown,
+  topicValue: unknown,
+): { value: number | null; conflict: boolean } {
+  const messageId = isNonNegativeInteger(messageValue) ? messageValue : null;
+  const topicId = isNonNegativeInteger(topicValue) ? topicValue : null;
+  if (messageId !== null && topicId !== null && messageId !== topicId) {
+    return { value: null, conflict: true };
+  }
+  return { value: messageId ?? topicId, conflict: false };
+}
+
+async function resolveActivityMembership(
+  gameId: string,
+  seasonYear: number,
+  sport: SeasonSport,
+  window: EspnTransactionWindow,
+  topic: EspnActivityTopic,
+  message: EspnActivityMessage,
+  timeout: number,
+): Promise<ActivityMembership> {
+  const matchupEvidence = selectMessageThenTopic(
     message.matchupPeriodId,
-    topic.scoringPeriodId,
     topic.matchupPeriodId,
-  ];
-  for (const candidate of candidates) {
-    if (typeof candidate === 'number' && Number.isFinite(candidate) && candidate > 0) {
-      return candidate;
+  );
+  const scoringEvidence = selectMessageThenTopic(
+    message.scoringPeriodId,
+    topic.scoringPeriodId,
+  );
+  if (matchupEvidence.conflict || scoringEvidence.conflict) {
+    return { kind: 'conflict' };
+  }
+
+  let matchupPeriodId = matchupEvidence.value;
+  const scoringPeriodId = scoringEvidence.value;
+  if (scoringPeriodId !== null) {
+    const mappedMatchup = window.scoringToMatchup.get(scoringPeriodId);
+    if (mappedMatchup === undefined) return { kind: 'unscoped' };
+    if (matchupPeriodId !== null && matchupPeriodId !== mappedMatchup) {
+      return { kind: 'conflict' };
+    }
+    matchupPeriodId = matchupPeriodId ?? mappedMatchup;
+  }
+
+  if (matchupPeriodId === null && DAILY_SPORTS.has(sport)) {
+    const timestamp = message.date ?? topic.date;
+    if (typeof timestamp === 'number' && Number.isFinite(timestamp) && timestamp > 0) {
+      const inferredScoringPeriod = await findScoringPeriodForDate(
+        gameId,
+        seasonYear,
+        etDateOf(timestamp),
+        timeout,
+      );
+      if (inferredScoringPeriod !== null) {
+        const mappedMatchup = window.scoringToMatchup.get(inferredScoringPeriod);
+        if (mappedMatchup !== undefined) {
+          matchupPeriodId = mappedMatchup;
+          if (!window.matchupPeriodIds.includes(matchupPeriodId)) return { kind: 'outside' };
+          return {
+            kind: 'matched',
+            matchupPeriodId,
+            scoringPeriodId: inferredScoringPeriod,
+          };
+        }
+      }
     }
   }
-  return null;
+
+  if (matchupPeriodId === null) return { kind: 'unscoped' };
+  if (!window.matchupPeriodIds.includes(matchupPeriodId)) return { kind: 'outside' };
+  return {
+    kind: 'matched',
+    matchupPeriodId,
+    scoringPeriodId: scoringPeriodId ?? undefined,
+  };
 }
 
 function getTeamIds(messageTypeId: number, message: EspnActivityMessage): string[] {
@@ -386,13 +657,17 @@ function buildTradeSides(movements: TradeMovement[]): NonNullable<NormalizedTran
   }));
 }
 
-function normalizeTradeTopic(
+async function normalizeTradeTopic(
+  gameId: string,
+  seasonYear: number,
+  sport: SeasonSport,
   topic: EspnActivityTopic,
-  requestedWeeks: Set<number>,
-  explicitSingleWeek: boolean,
-): NormalizedTransaction | null {
+  window: EspnTransactionWindow,
+  timeout: number,
+): Promise<ActivityNormalizationResult> {
   const messages = topic.messages ?? [];
-  const tradeMessages = messages.filter(
+  const rawTradeMessages = messages.filter((message) => message.messageTypeId === 244);
+  const tradeMessages = rawTradeMessages.filter(
     (msg) =>
       msg.messageTypeId === 244 &&
       msg.targetId !== undefined &&
@@ -401,14 +676,38 @@ function normalizeTradeTopic(
       typeof msg.to === 'number' &&
       msg.to > 0,
   );
-  if (tradeMessages.length === 0) return null;
-
-  const week = getWeekFromActivity(topic, tradeMessages[0]);
-  if (week !== null && requestedWeeks.size > 0 && !requestedWeeks.has(week)) {
-    return null;
+  if (rawTradeMessages.length === 0) return { transaction: null, omission: null };
+  if (tradeMessages.length !== rawTradeMessages.length) {
+    return { transaction: null, omission: 'unscoped' };
   }
-  if (week === null && explicitSingleWeek) {
-    return null;
+
+  const memberships = await Promise.all(
+    tradeMessages.map((message) => resolveActivityMembership(
+      gameId,
+      seasonYear,
+      sport,
+      window,
+      topic,
+      message,
+      timeout,
+    )),
+  );
+  if (memberships.some((membership) => membership.kind === 'conflict')) {
+    return { transaction: null, omission: 'conflict' };
+  }
+  if (memberships.some((membership) => membership.kind === 'unscoped')) {
+    return { transaction: null, omission: 'unscoped' };
+  }
+  const matched = memberships.filter(
+    (membership): membership is Extract<ActivityMembership, { kind: 'matched' }> =>
+      membership.kind === 'matched',
+  );
+  if (matched.length === 0) return { transaction: null, omission: null };
+  if (
+    matched.length !== memberships.length
+    || new Set(matched.map((membership) => membership.matchupPeriodId)).size !== 1
+  ) {
+    return { transaction: null, omission: 'conflict' };
   }
 
   const timestamp = tradeMessages[0].date ?? topic.date ?? 0;
@@ -419,24 +718,36 @@ function normalizeTradeTopic(
   }));
   const tradeSides = buildTradeSides(movements);
   const teamIds = tradeSides.map((side) => side.team_id);
+  const providerScoringPeriods = new Set(
+    matched.flatMap((membership) =>
+      membership.scoringPeriodId === undefined ? [] : [membership.scoringPeriodId]
+    ),
+  );
 
   return {
-    transaction_id: String(topic.id ?? `trade-${timestamp}-${teamIds.join('-')}`),
-    type: 'trade',
-    status: 'complete',
-    timestamp,
-    date: new Date(timestamp).toISOString().slice(0, 10),
-    week,
-    team_ids: teamIds,
-    players_added: [],
-    players_dropped: [],
-    trade_sides: tradeSides,
-    faab_bid: null,
+    omission: null,
+    transaction: {
+      transaction_id: String(topic.id ?? `trade-${timestamp}-${teamIds.join('-')}`),
+      type: 'trade',
+      status: 'complete',
+      timestamp,
+      date: etDateOf(timestamp),
+      week: matched[0].matchupPeriodId,
+      provider_scoring_period_id:
+        providerScoringPeriods.size === 1 ? [...providerScoringPeriods][0] : undefined,
+      team_ids: teamIds,
+      players_added: [],
+      players_dropped: [],
+      trade_sides: tradeSides,
+      faab_bid: null,
+    },
   };
 }
 
 export interface EspnLeagueContext {
   scoringPeriodId: number;
+  currentMatchupPeriod: number;
+  matchupPeriods: Record<number, number[]>;
   teams: Record<string, string>;
 }
 
@@ -445,14 +756,31 @@ export async function getEspnLeagueContext(
   leagueId: string,
   seasonYear: number,
   credentials: EspnCredentials,
+  timeout = 7000,
 ): Promise<EspnLeagueContext> {
   const path = `/seasons/${seasonYear}/segments/0/leagues/${leagueId}?view=mSettings&view=mTeam`;
-  const res = await espnFetch(path, gameId, { credentials, timeout: 7000 });
+  const res = await espnFetch(path, gameId, { credentials, timeout });
   if (!res.ok) handleEspnError(res);
   const data = await res.json() as {
     scoringPeriodId?: number;
+    currentMatchupPeriod?: number;
+    status?: { currentMatchupPeriod?: number };
+    settings?: {
+      scheduleSettings?: {
+        matchupPeriods?: unknown;
+      };
+    };
     teams?: Array<{ id: number; location?: string; nickname?: string; name?: string }>;
   };
+  const scoringPeriodId = data.scoringPeriodId;
+  const currentMatchupPeriod =
+    data.currentMatchupPeriod ?? data.status?.currentMatchupPeriod;
+  if (!isNonNegativeInteger(scoringPeriodId) || !isNonNegativeInteger(currentMatchupPeriod)) {
+    throw new Error(
+      `${ErrorCode.ESPN_INVALID_RESPONSE}: ESPN league context omitted a valid current scoring or matchup period`
+    );
+  }
+
   const teams: Record<string, string> = {};
   for (const t of data.teams ?? []) {
     teams[String(t.id)] = t.location && t.nickname
@@ -460,26 +788,199 @@ export async function getEspnLeagueContext(
       : t.name || `Team ${t.id}`;
   }
   return {
-    scoringPeriodId: data.scoringPeriodId ?? 1,
+    scoringPeriodId,
+    currentMatchupPeriod,
+    matchupPeriods: gameId === 'ffl'
+      ? {}
+      : parseMatchupPeriods(data.settings?.scheduleSettings?.matchupPeriods),
     teams,
   };
 }
 
-export async function fetchEspnTransactionsByWeeks(
+interface ResolveTransactionWindowInput {
+  gameId: string;
+  seasonYear: number;
+  sport: SeasonSport;
+  context: EspnLeagueContext;
+  requestedWeek?: number;
+  timeout?: number;
+}
+
+export async function resolveEspnTransactionWindow({
+  gameId,
+  seasonYear,
+  sport,
+  context,
+  requestedWeek,
+  timeout = 7000,
+}: ResolveTransactionWindowInput): Promise<EspnTransactionWindow> {
+  if (requestedWeek !== undefined && !isNonNegativeInteger(requestedWeek)) {
+    throw invalidWindow(sport, requestedWeek);
+  }
+  if (!isNonNegativeInteger(context.currentMatchupPeriod)) {
+    throw new Error(
+      `${ErrorCode.ESPN_INVALID_RESPONSE}: ESPN league context omitted a valid current matchup period`
+    );
+  }
+  const currentMatchupPeriod = context.currentMatchupPeriod;
+
+  const requested = requestedWeek ?? null;
+  let normalization: TransactionWindowNormalization = 'none';
+  let matchupPeriodIds: number[];
+  let scoringPeriodIds: number[];
+  let scoringToMatchup: Map<number, number>;
+
+  if (sport === 'football') {
+    if (requested !== null && requested > currentMatchupPeriod) {
+      throw invalidWindow(sport, requested);
+    }
+    matchupPeriodIds = requested !== null
+      ? [requested]
+      : [...new Set([
+          currentMatchupPeriod,
+          Math.max(0, currentMatchupPeriod - 1),
+        ])];
+    scoringPeriodIds = [...matchupPeriodIds];
+    scoringToMatchup = new Map(scoringPeriodIds.map((period) => [period, period]));
+  } else {
+    const matchupPeriods = context.matchupPeriods;
+    scoringToMatchup = scoringMap(matchupPeriods);
+    const mappedCurrentScoringPeriod = scoringToMatchup.get(context.scoringPeriodId);
+    if (
+      mappedCurrentScoringPeriod !== undefined
+      && mappedCurrentScoringPeriod !== currentMatchupPeriod
+    ) {
+      console.warn(
+        `[transaction-window] current_period_context_mismatch sport=${sport}`,
+      );
+    }
+    const usablePeriodsForMatchup = (matchupId: number): number[] => {
+      if (matchupId === 0) return [0];
+      const periods = matchupPeriods[matchupId] ?? [];
+      return matchupId === currentMatchupPeriod
+        ? periods.filter((period) => period <= context.scoringPeriodId)
+        : periods;
+    };
+
+    if (requested !== null) {
+      const directPeriods = requested <= currentMatchupPeriod
+        ? usablePeriodsForMatchup(requested)
+        : [];
+      if (directPeriods.length > 0) {
+        matchupPeriodIds = [requested];
+        scoringPeriodIds = directPeriods;
+      } else {
+        const legacyMatchup = scoringToMatchup.get(requested);
+        const legacyPeriods = legacyMatchup === undefined
+          || legacyMatchup > currentMatchupPeriod
+          ? []
+          : usablePeriodsForMatchup(legacyMatchup);
+        if (legacyMatchup === undefined || legacyPeriods.length === 0) {
+          throw invalidWindow(sport, requested);
+        }
+        matchupPeriodIds = [legacyMatchup];
+        scoringPeriodIds = legacyPeriods;
+        normalization = 'legacy_scoring_period_to_matchup';
+        console.info(
+          `[transaction-window] legacy_scoring_period_normalized sport=${sport}`,
+        );
+      }
+    } else {
+      matchupPeriodIds = [...new Set([
+        currentMatchupPeriod,
+        Math.max(0, currentMatchupPeriod - 1),
+      ])];
+      scoringPeriodIds = matchupPeriodIds.flatMap(usablePeriodsForMatchup);
+      if (scoringPeriodIds.length === 0) {
+        throw new Error(
+          `${ErrorCode.ESPN_INVALID_RESPONSE}: ESPN current and previous matchup periods contained no usable scoring periods`
+        );
+      }
+    }
+
+    scoringPeriodIds = [...new Set(scoringPeriodIds)].sort((a, b) => a - b);
+    for (const matchupId of matchupPeriodIds) {
+      if (matchupId === 0) scoringToMatchup.set(0, 0);
+    }
+  }
+
+  const firstScoringPeriodId = scoringPeriodIds[0];
+  const lastScoringPeriodId = scoringPeriodIds[scoringPeriodIds.length - 1];
+  let startDate: string | null = null;
+  let endDate: string | null = null;
+  let dateBoundsKind: TransactionDateBoundsKind = 'unavailable';
+
+  if (DAILY_SPORTS.has(sport) && !scoringPeriodIds.includes(0)) {
+    startDate = await resolveDateForScoringPeriod(
+      gameId,
+      seasonYear,
+      firstScoringPeriodId,
+      timeout,
+    );
+    endDate = firstScoringPeriodId === lastScoringPeriodId
+      ? startDate
+      : await resolveDateForScoringPeriod(gameId, seasonYear, lastScoringPeriodId, timeout);
+    dateBoundsKind = areContiguous(scoringPeriodIds)
+      ? 'exact_contiguous'
+      : 'envelope_non_contiguous';
+  } else if (DAILY_SPORTS.has(sport)) {
+    const positivePeriods = scoringPeriodIds.filter((period) => period > 0);
+    if (positivePeriods.length > 0) {
+      endDate = await resolveDateForScoringPeriod(
+        gameId,
+        seasonYear,
+        positivePeriods[positivePeriods.length - 1],
+        timeout,
+      );
+    }
+  }
+
+  return {
+    mode: requested !== null
+      ? (requested === 0 ? 'preseason' : 'explicit_week')
+      : 'recent_two_weeks',
+    requestedWeek: requested,
+    normalization,
+    matchupPeriodIds,
+    scoringPeriodIds,
+    scoringToMatchup,
+    firstScoringPeriodId,
+    lastScoringPeriodId,
+    startDate,
+    endDate,
+    dateBoundsKind,
+    timezone: 'America/New_York',
+  };
+}
+
+export interface ActivityTransactionsResult {
+  transactions: NormalizedTransaction[];
+  omittedUnscopedRows: number;
+  omittedConflictingRows: number;
+  coverageIncomplete: boolean;
+}
+
+export async function fetchEspnTransactionsByWindow(
   gameId: string,
   leagueId: string,
   seasonYear: number,
+  sport: SeasonSport,
   credentials: EspnCredentials,
-  weeks: number[],
-): Promise<NormalizedTransaction[]> {
-  const requestedWeeks = new Set(weeks);
-  const explicitSingleWeek = weeks.length === 1;
+  window: EspnTransactionWindow,
+  deadline: number,
+): Promise<ActivityTransactionsResult> {
   const pageSize = 25;
   const maxPages = 8;
   const seen = new Set<string>();
   const out: NormalizedTransaction[] = [];
+  let omittedUnscopedRows = 0;
+  let omittedConflictingRows = 0;
+  let exhausted = false;
+  let coverageProven = false;
 
   for (let page = 0; page < maxPages; page += 1) {
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) break;
     const offset = page * pageSize;
     const path = `/seasons/${seasonYear}/segments/0/leagues/${leagueId}/communication/?view=kona_league_communication`;
     const headers = {
@@ -496,16 +997,44 @@ export async function fetchEspnTransactionsByWeeks(
       }),
     };
 
-    const res = await espnFetch(path, gameId, { credentials, timeout: 7000, headers });
+    let res: Response;
+    try {
+      res = await espnFetch(path, gameId, {
+        credentials,
+        timeout: Math.max(1, Math.min(7000, remaining)),
+        headers,
+      });
+    } catch (error) {
+      if (
+        Date.now() >= deadline
+        || (error instanceof Error && error.message.startsWith(`${ErrorCode.ESPN_TIMEOUT}:`))
+      ) {
+        break;
+      }
+      throw error;
+    }
     if (!res.ok) handleEspnError(res);
 
     const body = await res.json() as EspnActivityResponse;
     const topics = body.topics ?? [];
-    if (topics.length === 0) break;
+    if (topics.length === 0) {
+      exhausted = true;
+      break;
+    }
 
     for (let topicIndex = 0; topicIndex < topics.length; topicIndex += 1) {
       const topic = topics[topicIndex];
-      const tradeRow = normalizeTradeTopic(topic, requestedWeeks, explicitSingleWeek);
+      const membershipTimeout = Math.max(1, Math.min(7000, deadline - Date.now()));
+      const tradeResult = await normalizeTradeTopic(
+        gameId,
+        seasonYear,
+        sport,
+        topic,
+        window,
+        membershipTimeout,
+      );
+      if (tradeResult.omission === 'unscoped') omittedUnscopedRows += 1;
+      if (tradeResult.omission === 'conflict') omittedConflictingRows += 1;
       const messages = topic.messages ?? [];
       const topicTimestamp = topic.date ?? 0;
       for (let msgIndex = 0; msgIndex < messages.length; msgIndex += 1) {
@@ -514,16 +1043,30 @@ export async function fetchEspnTransactionsByWeeks(
         if (!normalizedType) continue;
         if (normalizedType === 'trade') continue;
 
-        const inferredWeek = getWeekFromActivity(topic, msg);
-        if (inferredWeek !== null && requestedWeeks.size > 0 && !requestedWeeks.has(inferredWeek)) {
+        const membership = await resolveActivityMembership(
+          gameId,
+          seasonYear,
+          sport,
+          window,
+          topic,
+          msg,
+          Math.max(1, Math.min(7000, deadline - Date.now())),
+        );
+        if (membership.kind === 'outside') continue;
+        if (membership.kind === 'unscoped') {
+          omittedUnscopedRows += 1;
           continue;
         }
-        if (inferredWeek === null && explicitSingleWeek) {
-          // Avoid returning mis-scoped data when caller asked for one explicit week.
+        if (membership.kind === 'conflict') {
+          omittedConflictingRows += 1;
           continue;
         }
 
         const timestamp = msg.date ?? topicTimestamp;
+        if (!Number.isFinite(timestamp) || timestamp <= 0) {
+          omittedUnscopedRows += 1;
+          continue;
+        }
         const id = String(msg.id ?? `${topic.id || `topic-${topicIndex}`}-${msg.messageTypeId || 'unknown'}-${msg.targetId || 'na'}-${timestamp}-${msgIndex}`);
         if (seen.has(id)) continue;
         seen.add(id);
@@ -543,31 +1086,87 @@ export async function fetchEspnTransactionsByWeeks(
           type: normalizedType,
           status: 'complete',
           timestamp,
-          date: new Date(timestamp).toISOString().slice(0, 10),
-          week: inferredWeek,
+          date: etDateOf(timestamp),
+          week: membership.matchupPeriodId,
+          provider_scoring_period_id: membership.scoringPeriodId,
           team_ids: getTeamIds(msg.messageTypeId || 0, msg),
           players_added: added,
           players_dropped: dropped,
-          faab_bid: msg.messageTypeId === 180 && typeof msg.from === 'number' ? msg.from : null,
+          faab_bid: null,
         });
       }
 
-      if (tradeRow && !seen.has(tradeRow.transaction_id)) {
-        seen.add(tradeRow.transaction_id);
-        out.push(tradeRow);
+      if (tradeResult.transaction && !seen.has(tradeResult.transaction.transaction_id)) {
+        seen.add(tradeResult.transaction.transaction_id);
+        out.push(tradeResult.transaction);
       }
     }
 
-    if (topics.length < pageSize) break;
+    const topicDates = topics
+      .flatMap((topic) => [
+        ...(typeof topic.date === 'number' ? [topic.date] : []),
+        ...(topic.messages ?? []).flatMap((message) =>
+          typeof message.date === 'number' ? [message.date] : []
+        ),
+      ])
+      .filter((timestamp) => Number.isFinite(timestamp) && timestamp > 0)
+      .map(etDateOf);
+    if (
+      window.startDate !== null
+      && topicDates.length > 0
+      && topicDates.sort()[0] < window.startDate
+    ) {
+      coverageProven = true;
+      break;
+    }
+    if (topics.length < pageSize) {
+      exhausted = true;
+      break;
+    }
   }
 
-  return out.sort((a, b) => b.timestamp - a.timestamp);
+  return {
+    transactions: out.sort((a, b) => b.timestamp - a.timestamp),
+    omittedUnscopedRows,
+    omittedConflictingRows,
+    coverageIncomplete: !(exhausted || coverageProven),
+  };
+}
+
+/**
+ * Legacy test/helper surface. Production handlers use the matchup-aware window
+ * resolver and fetchEspnTransactionsByWindow.
+ */
+export async function fetchEspnTransactionsByWeeks(
+  gameId: string,
+  leagueId: string,
+  seasonYear: number,
+  credentials: EspnCredentials,
+  weeks: number[],
+): Promise<NormalizedTransaction[]> {
+  const sportByGameId: Record<string, SeasonSport> = {
+    flb: 'baseball',
+    fba: 'basketball',
+    fhl: 'hockey',
+    ffl: 'football',
+  };
+  const result = await fetchEspnTransactionsByWindow(
+    gameId,
+    leagueId,
+    seasonYear,
+    sportByGameId[gameId] ?? 'football',
+    credentials,
+    coerceTransactionWindow(weeks),
+    Date.now() + TRANSACTION_OPERATION_MS,
+  );
+  return result.transactions;
 }
 
 export async function fetchEspnPlayersByIds(
   gameId: string,
   seasonYear: number,
   playerIds: string[],
+  timeout = 10000,
 ): Promise<Map<string, EspnPlayerBasic>> {
   const map = new Map<string, EspnPlayerBasic>();
   if (playerIds.length === 0) return map;
@@ -577,7 +1176,7 @@ export async function fetchEspnPlayersByIds(
   const filterHeader = JSON.stringify({ filterIds: { value: numericIds } });
 
   const res = await espnFetch(path, gameId, {
-    timeout: 10000,
+    timeout,
     headers: { 'x-fantasy-filter': filterHeader },
   });
 
@@ -592,6 +1191,130 @@ export async function fetchEspnPlayersByIds(
 
   console.log(`[fetchEspnPlayersByIds] ${gameId} requested=${playerIds.length} resolved=${map.size}`);
   return map;
+}
+
+interface ExecuteEspnTransactionOperationInput {
+  gameId: string;
+  leagueId: string;
+  seasonYear: number;
+  sport: SeasonSport;
+  credentials: EspnCredentials;
+  requestedWeek?: number;
+  type?: TransactionType;
+  count?: number;
+  getPositionName: (id: number) => string;
+  getProTeamAbbrev: (id: number) => string;
+}
+
+export async function executeEspnTransactionOperation({
+  gameId,
+  leagueId,
+  seasonYear,
+  sport,
+  credentials,
+  requestedWeek,
+  type,
+  count,
+  getPositionName,
+  getProTeamAbbrev,
+}: ExecuteEspnTransactionOperationInput): Promise<EspnTransactionOperationResult> {
+  if (type && STRUCTURED_ONLY_TYPES.has(type)) {
+    throw new Error(
+      `${ErrorCode.ESPN_TRANSACTION_TYPE_UNAVAILABLE}: ESPN ${type} requires the structured transaction source, which is temporarily unavailable. Retry without this type filter for completed activity-feed transactions.`
+    );
+  }
+
+  const startedAt = Date.now();
+  const providerDeadline = startedAt + TRANSACTION_OPERATION_MS - ENRICHMENT_RESERVE_MS;
+  const totalDeadline = startedAt + TRANSACTION_OPERATION_MS;
+  const context = await getEspnLeagueContext(
+    gameId,
+    leagueId,
+    seasonYear,
+    credentials,
+    Math.max(1, Math.min(7000, providerDeadline - Date.now())),
+  );
+  const window = await resolveEspnTransactionWindow({
+    gameId,
+    seasonYear,
+    sport,
+    context,
+    requestedWeek,
+    timeout: Math.max(1, Math.min(7000, providerDeadline - Date.now())),
+  });
+  const activity = await fetchEspnTransactionsByWindow(
+    gameId,
+    leagueId,
+    seasonYear,
+    sport,
+    credentials,
+    window,
+    providerDeadline,
+  );
+
+  const maxCount = count ?? 25;
+  let transactions = activity.transactions
+    .filter((transaction) => !type || transaction.type === type)
+    .slice(0, maxCount);
+  const allIds = [...new Set(transactions.flatMap(collectTransactionPlayerIds))];
+  const enrichmentRemaining = totalDeadline - Date.now();
+  if (allIds.length > 0 && enrichmentRemaining > 0) {
+    try {
+      const playerMap = await fetchEspnPlayersByIds(
+        gameId,
+        seasonYear,
+        allIds,
+        Math.max(1, Math.min(ENRICHMENT_RESERVE_MS, enrichmentRemaining)),
+      );
+      transactions = enrichTransactions(
+        transactions,
+        playerMap,
+        getPositionName,
+        getProTeamAbbrev,
+      );
+    } catch (error) {
+      console.warn(
+        '[get_transactions] Player enrichment failed:',
+        error instanceof Error ? error.message : error,
+      );
+    }
+  }
+
+  const limitations: EspnTransactionLimitations = {
+    structured_details_incomplete: true,
+  };
+  if (activity.omittedUnscopedRows > 0) {
+    limitations.omitted_unscoped_rows = activity.omittedUnscopedRows;
+  }
+  if (activity.omittedConflictingRows > 0) {
+    limitations.omitted_conflicting_rows = activity.omittedConflictingRows;
+  }
+  if (window.dateBoundsKind === 'unavailable') {
+    limitations.exact_date_bounds_unavailable = true;
+  }
+  if (activity.coverageIncomplete) {
+    limitations.window_coverage_incomplete = true;
+  }
+
+  return {
+    window: {
+      mode: window.mode,
+      unit: 'matchup_period',
+      requested_week: window.requestedWeek,
+      normalization: window.normalization,
+      weeks: window.matchupPeriodIds,
+      provider_scoring_period_ids: window.scoringPeriodIds,
+      start_date: window.startDate,
+      end_date: window.endDate,
+      date_bounds_kind: window.dateBoundsKind,
+      timezone: window.timezone,
+    },
+    source: 'activity_feed',
+    limitations,
+    transactions,
+    teams: context.teams,
+    truncated: activity.coverageIncomplete,
+  };
 }
 
 export function enrichTransactions(

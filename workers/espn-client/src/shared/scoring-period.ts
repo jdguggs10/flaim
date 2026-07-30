@@ -32,7 +32,7 @@ const ET_DATE_FORMAT = new Intl.DateTimeFormat('en-CA', {
   day: '2-digit',
 });
 
-function etDateOf(epochMs: number): string {
+export function etDateOf(epochMs: number): string {
   return ET_DATE_FORMAT.format(new Date(epochMs));
 }
 
@@ -57,11 +57,15 @@ export function clearScoringPeriodAnchorCache(): void {
   anchorCache.clear();
 }
 
-async function buildAnchor(gameId: string, espnYear: number): Promise<ScoringPeriodAnchor> {
+async function buildAnchor(
+  gameId: string,
+  espnYear: number,
+  timeout = 10000,
+): Promise<ScoringPeriodAnchor> {
   const response = await espnFetch(
     `/seasons/${espnYear}?view=proTeamSchedules_wl`,
     gameId,
-    { timeout: 10000 }
+    { timeout }
   );
   if (!response.ok) {
     handleEspnError(response);
@@ -118,6 +122,23 @@ async function buildAnchor(gameId: string, espnYear: number): Promise<ScoringPer
   return { epochDayOffset: epochDayOffset as number, firstScoringPeriod, lastScoringPeriod };
 }
 
+async function getAnchor(
+  gameId: string,
+  espnYear: number,
+  timeout = 10000,
+): Promise<ScoringPeriodAnchor> {
+  const cacheKey = `${gameId}:${espnYear}`;
+  let anchorPromise = anchorCache.get(cacheKey);
+  if (!anchorPromise) {
+    anchorPromise = buildAnchor(gameId, espnYear, timeout).catch((error) => {
+      anchorCache.delete(cacheKey);
+      throw error;
+    });
+    anchorCache.set(cacheKey, anchorPromise);
+  }
+  return anchorPromise;
+}
+
 /**
  * Resolve a calendar-valid YYYY-MM-DD date (ET) to the scoringPeriodId for a
  * daily sport's season. Out-of-season dates throw a corrective
@@ -128,16 +149,7 @@ export async function resolveScoringPeriodForDate(
   espnYear: number,
   date: string
 ): Promise<{ scoringPeriodId: number }> {
-  const cacheKey = `${gameId}:${espnYear}`;
-  let anchorPromise = anchorCache.get(cacheKey);
-  if (!anchorPromise) {
-    anchorPromise = buildAnchor(gameId, espnYear).catch((error) => {
-      anchorCache.delete(cacheKey);
-      throw error;
-    });
-    anchorCache.set(cacheKey, anchorPromise);
-  }
-  const anchor = await anchorPromise;
+  const anchor = await getAnchor(gameId, espnYear);
 
   const scoringPeriodId = dayIndexOf(date) - anchor.epochDayOffset;
   if (scoringPeriodId < anchor.firstScoringPeriod || scoringPeriodId > anchor.lastScoringPeriod) {
@@ -149,4 +161,50 @@ export async function resolveScoringPeriodForDate(
   }
 
   return { scoringPeriodId };
+}
+
+/**
+ * Resolve a daily scoring period to its Eastern-time calendar date.
+ * Transaction windows use this inverse over the same validated anchor and
+ * single-flight cache as historical roster snapshots.
+ */
+export async function resolveDateForScoringPeriod(
+  gameId: string,
+  espnYear: number,
+  scoringPeriodId: number,
+  timeout = 10000,
+): Promise<string> {
+  const anchor = await getAnchor(gameId, espnYear, timeout);
+  if (
+    !Number.isInteger(scoringPeriodId)
+    || scoringPeriodId < anchor.firstScoringPeriod
+    || scoringPeriodId > anchor.lastScoringPeriod
+  ) {
+    throw new Error(
+      `${ErrorCode.ESPN_INVALID_RESPONSE}: ESPN scoring period ${scoringPeriodId} is outside the validated ${gameId} ${espnYear} calendar bounds`
+    );
+  }
+  return dateOfDayIndex(scoringPeriodId + anchor.epochDayOffset);
+}
+
+/**
+ * Non-throwing membership lookup for transaction timestamps. Calendar fetch
+ * and invariant failures still throw, but a valid date outside the season
+ * returns null instead of leaking the roster-specific corrective error.
+ */
+export async function findScoringPeriodForDate(
+  gameId: string,
+  espnYear: number,
+  date: string,
+  timeout = 10000,
+): Promise<number | null> {
+  const anchor = await getAnchor(gameId, espnYear, timeout);
+  const scoringPeriodId = dayIndexOf(date) - anchor.epochDayOffset;
+  if (
+    scoringPeriodId < anchor.firstScoringPeriod
+    || scoringPeriodId > anchor.lastScoringPeriod
+  ) {
+    return null;
+  }
+  return scoringPeriodId;
 }

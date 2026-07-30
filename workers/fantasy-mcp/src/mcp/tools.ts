@@ -377,14 +377,74 @@ const GET_PLAYERS_OUTPUT_SCHEMA = routedOutputSchema({
 });
 
 const transactionEntrySchema = looseObject({
+  transaction_id: z.string().optional(),
+  timestamp: z.number().optional(),
   date: z.string().optional(),
   type: z.string().optional(),
   status: z.string().nullable().optional(),
   week: z.number().nullable().optional(),
+  provider_scoring_period_id: z.number().optional(),
   team_ids: z.array(z.union([z.string(), z.number()])).optional(),
-  trade_sides: z.array(looseObject()).nullable().optional(),
+  players_added: z.array(looseObject({
+    id: z.string(),
+    name: z.string().optional(),
+    position: z.string().optional(),
+    team: z.string().optional(),
+  })).optional(),
+  players_dropped: z.array(looseObject({
+    id: z.string(),
+    name: z.string().optional(),
+    position: z.string().optional(),
+    team: z.string().optional(),
+  })).optional(),
+  trade_sides: z.array(looseObject({
+    team_id: z.string().optional(),
+    acquired: z.array(looseObject({
+      id: z.string(),
+      name: z.string().optional(),
+      position: z.string().optional(),
+      team: z.string().optional(),
+    })).optional(),
+    gave_up: z.array(looseObject({
+      id: z.string(),
+      name: z.string().optional(),
+      position: z.string().optional(),
+      team: z.string().optional(),
+    })).optional(),
+  })).nullable().optional(),
+  faab_bid: z.number().nullable().optional(),
   waiver_priority: z.number().nullable().optional(),
   draft_picks: z.array(z.unknown()).nullable().optional(),
+});
+
+const transactionWindowSchema = looseObject({
+  mode: z.enum([
+    'explicit_week',
+    'recent_two_weeks',
+    'recent_two_weeks_timestamp',
+    'preseason',
+  ]).optional(),
+  unit: z.literal('matchup_period').optional(),
+  requested_week: z.number().nullable().optional(),
+  normalization: z.enum(['none', 'legacy_scoring_period_to_matchup']).optional(),
+  weeks: z.array(z.number()).optional(),
+  provider_scoring_period_ids: z.array(z.number()).optional(),
+  start_date: z.string().nullable().optional(),
+  end_date: z.string().nullable().optional(),
+  date_bounds_kind: z.enum([
+    'exact_contiguous',
+    'envelope_non_contiguous',
+    'unavailable',
+  ]).optional(),
+  timezone: z.literal('America/New_York').optional(),
+});
+
+const transactionLimitationsSchema = looseObject({
+  structured_details_incomplete: z.literal(true),
+  omitted_unscoped_rows: z.number().optional(),
+  omitted_conflicting_rows: z.number().optional(),
+  exact_date_bounds_unavailable: z.literal(true).optional(),
+  window_coverage_incomplete: z.literal(true).optional(),
 });
 
 const GET_TRANSACTIONS_OUTPUT_SCHEMA = routedOutputSchema({
@@ -392,7 +452,13 @@ const GET_TRANSACTIONS_OUTPUT_SCHEMA = routedOutputSchema({
   sport: z.string().optional(),
   league_id: z.string().optional(),
   season_year: z.number().optional(),
-  window: looseObject().optional(),
+  window: transactionWindowSchema.optional(),
+  source: z.enum([
+    'mTransactions2',
+    'mTransactions2_with_activity_trade_details',
+    'activity_feed',
+  ]).optional(),
+  limitations: transactionLimitationsSchema.optional(),
   count: z.number().optional(),
   truncated: z.boolean().optional(),
   transactions: z.array(transactionEntrySchema).optional(),
@@ -1677,7 +1743,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
       outputSchema: GET_TRANSACTIONS_OUTPUT_SCHEMA,
       openaiMeta: { invoking: 'Fetching transactions\u2026', invoked: 'Transactions ready' },
-      description: `Get recent league transactions including adds, drops, waivers, and trades. Best used after get_user_session and usually after get_league_info so the model already knows the league's team names and owner/team mapping before summarizing activity. Each normalized transaction includes a date field (YYYY-MM-DD), type, status, week, and optional team_ids. When presenting results, organize by time period (today, yesterday, this week, older) AND by team within each period so the user can see both when moves happened and what each team did. Week handling is platform-specific: ESPN/Sleeper use week windows (default current + previous week), while Yahoo uses a recent 14-day timestamp window and ignores explicit week. Type support is also platform-specific: Sleeper supports add/drop/trade/waiver; Yahoo supports add/drop/trade plus pending waiver/pending_trade views for the authenticated user's own items; ESPN also supports failed_bid and trade lifecycle types (trade_proposal, trade_decline, trade_veto, trade_uphold). ESPN uses mTransactions2 for structured transaction data, and accepted trade player details are supplemented from the activity feed. ESPN responses include a "teams" map (team ID → display name) to resolve the numeric team_ids on each transaction, while Yahoo and Sleeper generally rely on get_league_info for team-name resolution. Use values from get_user_session. Read-only. Current date is ${currentDate}.`,
+      description: `Get recent league transactions including adds, drops, waivers, and completed trades. Best used after get_user_session and usually after get_league_info so the model already knows the league's team names and owner/team mapping before summarizing activity. Each normalized transaction includes a date field (YYYY-MM-DD), type, status, week, and optional team_ids. When presenting results, organize by time period (today, yesterday, this week, older) AND by team within each period so the user can see both when moves happened and what each team did. Week handling is platform-specific: ESPN week always means matchup period, including daily sports where one matchup spans several provider scoring periods; omit it for the current and previous matchup periods. Sleeper uses week windows, while Yahoo uses a recent 14-day timestamp window and ignores explicit week. ESPN currently uses its activity feed as the authoritative source, reports source/limitations/window metadata, and cannot reliably answer failed-bid or trade-lifecycle-only filters until its structured source is restored. ESPN responses include a teams map (team ID to display name) to resolve numeric team_ids. Yahoo and Sleeper generally rely on get_league_info for team-name resolution. Use values from get_user_session. Read-only. Current date is ${currentDate}.`,
       inputSchema: {
         platform: z
           .enum(['espn', 'yahoo', 'sleeper'])
@@ -1687,11 +1753,11 @@ export function getUnifiedTools(): UnifiedTool[] {
           .describe('Sport type (e.g., "football", "baseball")'),
         league_id: z.string().describe('League ID (get from get_user_session)'),
         season_year: z.number().describe('Season start year — use the season_year returned by get_user_session for this league; only pass an older year when the user explicitly asks about a past season'),
-        week: z.number().int().min(0).optional().describe('Week/scoring-period number (optional, 0 = preseason). ESPN/Sleeper support explicit week; Yahoo ignores week and uses a recent 14-day timestamp window'),
+        week: z.number().int().min(0).optional().describe('Optional public week selector (0 = preseason). For ESPN this is always a matchup period, including baseball, basketball, and hockey; omit it for the current and previous matchup periods. Sleeper supports explicit week; Yahoo ignores week and uses a recent 14-day timestamp window'),
         type: z
           .enum(['add', 'drop', 'trade', 'waiver', 'pending_trade', 'trade_proposal', 'trade_decline', 'trade_veto', 'trade_uphold', 'failed_bid'])
           .optional()
-          .describe('Optional transaction type filter. Platform support varies: Sleeper supports add/drop/trade/waiver; Yahoo supports add/drop/trade plus waiver/pending_trade for the authenticated user\'s own pending items; ESPN also supports trade_proposal/trade_decline/trade_veto/trade_uphold/failed_bid.'),
+          .describe('Optional transaction type filter. Sleeper supports add/drop/trade/waiver. Yahoo supports add/drop/trade plus waiver/pending_trade for the authenticated user\'s own pending items. ESPN activity data supports completed add/drop/trade/waiver rows; failed_bid and trade lifecycle filters return ESPN_TRANSACTION_TYPE_UNAVAILABLE while the structured source is disabled.'),
         count: z
           .number()
           .optional()
@@ -1709,7 +1775,7 @@ export function getUnifiedTools(): UnifiedTool[] {
           count: Number.isFinite(requestedCount) ? Math.max(1, Math.min(100, requestedCount)) : 25,
         };
 
-        return withToolLogging(correlationId, 'get_transactions', `${params.platform} ${params.sport} league=provided week=${params.week || 'recent'}`, async () => {
+        return withToolLogging(correlationId, 'get_transactions', `${params.platform} ${params.sport} league=provided week=${params.week ?? 'recent'}`, async () => {
           const result = await routeToClient(env, 'get_transactions', params, authHeader, correlationId, evalRunId, evalTraceId);
           return routeResultToMcp(result);
         }, evalRunId, evalTraceId);

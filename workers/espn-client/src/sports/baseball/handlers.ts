@@ -2,8 +2,7 @@
 import type { Env, RoutedToolParams, ExecuteResponse, EspnLeagueResponse, EspnPlayerPoolResponse } from '../../types';
 import { getCredentials } from '../../shared/auth';
 import { espnFetch, handleEspnError, requireCredentials } from '../../shared/espn-api';
-import { assertTransactionsSeasonSupported, collectTransactionPlayerIds, fetchEspnTransactionsByWeeks, fetchEspnMTransactions2, mergeTradePlayerDetails, getEspnLeagueContext, fetchEspnPlayersByIds, enrichTransactions } from '../../shared/espn-transactions';
-import type { NormalizedTransaction } from '../../shared/espn-transactions';
+import { assertTransactionsSeasonSupported, executeEspnTransactionOperation } from '../../shared/espn-transactions';
 import { getEspnPlayersIndex } from '../../shared/espn-players-cache';
 import { fetchLeagueOwnershipMap, enrichPlayerWithOwnership } from '../../shared/league-ownership';
 import { extractErrorCode, malformedRosterSnapshotError, resolveRosterSnapshotFromParams, rosterSnapshotUnsupportedError, toSnapshotMetadata } from '@flaim/worker-shared';
@@ -235,7 +234,7 @@ async function handleGetLeagueInfo(
         teams,
         scoringSettings: {
           type: data.settings.scoringSettings?.scoringType,
-          matchupPeriods: data.settings.scoringSettings?.matchupPeriods,
+          matchupPeriods: data.settings.scheduleSettings?.matchupPeriods,
           playoffTeamCount: data.settings.playoffTeamCount,
           regularSeasonMatchupPeriods: data.settings.regularSeasonMatchupPeriods,
           matchupTieRule: data.settings.scoringSettings?.matchupTieRule,
@@ -655,61 +654,18 @@ async function handleGetTransactions(
     const credentials = await getCredentials(env, authHeader, correlationId);
     requireCredentials(credentials, 'get_transactions');
 
-    const ctx = await getEspnLeagueContext(GAME_ID, league_id, season_year, credentials);
-    const currentWeek = ctx.scoringPeriodId;
-    const weeks = week != null
-      ? [Math.max(0, week)]
-      : Array.from(new Set([
-          currentWeek,
-          Math.max(0, currentWeek - 1),
-          ...(currentWeek <= 2 ? [0] : []),
-        ]));
-
-    const maxCount = count ?? 25;
-
-    // Primary: mTransactions2 (structured data, FAAB bids, trade lifecycle)
-    // Falls back to activity feed if mTransactions2 fails entirely
-    let merged: NormalizedTransaction[];
-    let truncated = false;
-    try {
-      const mResult = await fetchEspnMTransactions2(GAME_ID, league_id, season_year, credentials, weeks);
-      truncated = mResult.truncated;
-
-      // Trade player detail fallback: activity feed for accepted/upheld trades (ESPN items bug)
-      const hasEmptyTrades = mResult.transactions.some(
-        (t) => (t.type === 'trade' || t.type === 'trade_uphold') &&
-          (t.players_added?.length ?? 0) + (t.players_dropped?.length ?? 0) === 0,
-      );
-      merged = mResult.transactions;
-      if (hasEmptyTrades) {
-        try {
-          const activityRows = await fetchEspnTransactionsByWeeks(GAME_ID, league_id, season_year, credentials, weeks);
-          merged = mergeTradePlayerDetails(mResult.transactions, activityRows);
-        } catch (fallbackErr) {
-          console.warn('[get_transactions] Activity feed trade fallback failed:', fallbackErr instanceof Error ? fallbackErr.message : fallbackErr);
-        }
-      }
-    } catch (mTxnErr) {
-      console.warn('[get_transactions] mTransactions2 failed, falling back to activity feed:', mTxnErr instanceof Error ? mTxnErr.message : mTxnErr);
-      merged = await fetchEspnTransactionsByWeeks(GAME_ID, league_id, season_year, credentials, weeks);
-    }
-
-    let filtered = merged
-      .filter((txn) => !type || txn.type === type)
-      .slice(0, maxCount);
-
-    const allIds = [...new Set(filtered.flatMap(collectTransactionPlayerIds))];
-    if (allIds.length > 0) {
-      try {
-        const playerMap = await fetchEspnPlayersByIds(GAME_ID, season_year, allIds);
-        if (playerMap) {
-          filtered = enrichTransactions(filtered, playerMap, getPositionName, getProTeamAbbrev);
-        }
-      } catch (enrichErr) {
-        // Degrade gracefully — return transactions without player names
-        console.error('[get_transactions] Player enrichment failed:', enrichErr instanceof Error ? enrichErr.message : enrichErr);
-      }
-    }
+    const result = await executeEspnTransactionOperation({
+      gameId: GAME_ID,
+      leagueId: league_id,
+      seasonYear: season_year,
+      sport: 'baseball',
+      credentials,
+      requestedWeek: week,
+      type,
+      count,
+      getPositionName,
+      getProTeamAbbrev,
+    });
 
     return {
       success: true,
@@ -718,14 +674,8 @@ async function handleGetTransactions(
         sport: params.sport,
         league_id,
         season_year,
-        window: {
-          mode: week ? 'explicit_week' : 'recent_two_weeks',
-          weeks
-        },
-        count: filtered.length,
-        truncated: truncated || undefined,
-        transactions: filtered,
-        teams: ctx.teams,
+        ...result,
+        count: result.transactions.length,
       }
     };
   } catch (error) {

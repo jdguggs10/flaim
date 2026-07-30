@@ -101,7 +101,7 @@ Analysis tools are read-only. `refresh_leagues` requires `mcp:write` because it 
 
 Supported today: ESPN, Yahoo, and Sleeper.
 Sleeper supports football and basketball.
-`get_transactions` note: ESPN/Sleeper support week filtering; Yahoo ignores explicit `week` and uses a recent 14-day timestamp window for completed league transactions. On Yahoo, `type=waiver` and `type=pending_trade` return pending items for the authenticated user's own team.
+`get_transactions` note: ESPN `week` always means matchup period, including daily sports; omit it for the current and previous matchup periods. ESPN currently returns completed activity-feed rows and reports source/window/limitation metadata; failed-bid and trade-lifecycle-only filters are unavailable. Sleeper supports week filtering. Yahoo ignores explicit `week` and uses a recent 14-day timestamp window for completed league transactions. On Yahoo, `type=waiver` and `type=pending_trade` return pending items for the authenticated user's own team.
 `get_free_agents` note: ESPN and Yahoo include ownership percentages and sort by ownership. Sleeper returns available-player identities without ownership percentages.
 `get_players` note: ESPN and Yahoo may return league ownership fields (`league_status`, `league_team_name`, `league_owner_name`) when available. Sleeper returns identity with unavailable ownership context. If league ownership fields are absent, null, or unavailable, verify with `get_league_info` plus `get_roster`.
 
