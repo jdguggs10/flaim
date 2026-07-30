@@ -79,6 +79,13 @@ export type {
   RosterSnapshotValidation,
 } from './roster-snapshot.js';
 
+// Transaction week contract (get_transactions platform-specific selector)
+export { validateTransactionWeekInput } from './transaction-week.js';
+export type {
+  TransactionPlatform,
+  TransactionWeekValidation,
+} from './transaction-week.js';
+
 // Auth-worker fetch helper
 export { authWorkerFetch } from './auth-fetch.js';
 

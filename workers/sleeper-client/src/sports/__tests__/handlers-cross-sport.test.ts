@@ -55,6 +55,33 @@ describe('sleeper cross-sport handler characterization tests', () => {
       expect(result.code).toBe('MISSING_PARAM');
       expect(mockFetch).not.toHaveBeenCalled();
     });
+
+    for (const scenario of scenarios) {
+      it.each([
+        ['zero', 0],
+        ['negative', -1],
+        ['fractional', 1.5],
+        ['null', null],
+        ['NaN', Number.NaN],
+        ['infinite', Number.POSITIVE_INFINITY],
+      ])(`${scenario.label} get_transactions rejects %s week before upstream fetches`, async (_label, week) => {
+        const params = {
+          sport: scenario.sport,
+          league_id: '12345',
+          season_year: 2025,
+          week,
+        } as unknown as ToolParams;
+
+        const result = await scenario.handlers.get_transactions({} as never, params);
+
+        expect(result.success).toBe(false);
+        expect(result.code).toBe('INVALID_TRANSACTION_WINDOW');
+        expect(result.status).toBe(400);
+        expect(result.retryable).toBe(false);
+        expect(result.error).toContain('omit week');
+        expect(mockFetch).not.toHaveBeenCalled();
+      });
+    }
   });
 
   describe('get_league_info', () => {

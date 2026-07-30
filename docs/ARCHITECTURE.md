@@ -169,7 +169,7 @@ ChatGPT Apps / manual MCP clients → fantasy-mcp (gateway) → espn-client    �
 - `get_players` — Player lookup across roster statuses with market/global ownership context (`market_percent_owned`, `ownership_scope`) and league ownership when available
 - `get_transactions` — Recent transactions (adds, drops, waivers, trades)
   - ESPN treats the public `week` selector as a matchup period for every sport and returns activity-source/window/limitation metadata; structured-only transaction filters fail explicitly while that source is disabled.
-  - Week semantics are platform-specific in v1: ESPN/Sleeper support explicit week windows; Yahoo uses a recent 14-day timestamp window and ignores explicit week.
+  - Week semantics are platform-specific: ESPN accepts matchup periods starting at 0 (preseason); Sleeper accepts positive matchup weeks starting at 1; Yahoo uses a recent 14-day timestamp window and ignores explicit week.
   - Yahoo `type=waiver` and `type=pending_trade` return pending items for the authenticated user's own team; other supported types use Yahoo's recent league transaction feed.
 
 **Status:**

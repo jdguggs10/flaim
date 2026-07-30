@@ -1,7 +1,7 @@
 import type { HandlerFn, SleeperSportConfig } from './types';
 import { fetchSleeperTransactionsByWeeks, getSleeperCurrentWeek } from '../sleeper-transactions';
 import { getSleeperPlayersIndex } from '../sleeper-players-cache';
-import { ErrorCode } from '@flaim/worker-shared';
+import { ErrorCode, validateTransactionWeekInput } from '@flaim/worker-shared';
 import { toExecuteErrorResponse } from './utils';
 
 export function createGetTransactionsHandler(config: SleeperSportConfig): HandlerFn {
@@ -11,9 +11,23 @@ export function createGetTransactionsHandler(config: SleeperSportConfig): Handle
       return { success: false, error: 'league_id is required for get_transactions', code: ErrorCode.MISSING_PARAM };
     }
 
+    const weekValidation = validateTransactionWeekInput('sleeper', week);
+    if (!weekValidation.ok) {
+      return {
+        success: false,
+        code: weekValidation.code,
+        error: weekValidation.error,
+        status: weekValidation.status,
+        retryable: weekValidation.retryable,
+      };
+    }
+
     try {
-      const currentWeek = week || await getSleeperCurrentWeek(config.statePath);
-      const weeks = week ? [Math.max(1, week)] : Array.from(new Set([currentWeek, Math.max(1, currentWeek - 1)]));
+      const explicitWeek = weekValidation.week;
+      const currentWeek = explicitWeek ?? await getSleeperCurrentWeek(config.statePath);
+      const weeks = explicitWeek !== undefined
+        ? [explicitWeek]
+        : Array.from(new Set([currentWeek, Math.max(1, currentWeek - 1)]));
       const rawCount = Number.isFinite(Number(count)) ? Number(count) : 25;
       const maxCount = Math.max(1, Math.min(100, Math.trunc(rawCount)));
 
@@ -50,7 +64,7 @@ export function createGetTransactionsHandler(config: SleeperSportConfig): Handle
           league_id,
           season_year: params.season_year,
           window: {
-            mode: week ? 'explicit_week' : 'recent_two_weeks',
+            mode: explicitWeek !== undefined ? 'explicit_week' : 'recent_two_weeks',
             weeks,
           },
           count: filtered.length,
