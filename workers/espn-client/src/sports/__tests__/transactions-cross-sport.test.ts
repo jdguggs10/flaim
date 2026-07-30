@@ -104,4 +104,29 @@ describe('ESPN daily-sport get_transactions handlers', () => {
     expect(result.success).toBe(false);
     expect(executeMock).not.toHaveBeenCalled();
   });
+
+  it.each(cases)(
+    '%s rejects prior seasons before accessing credentials or ESPN',
+    async (sport, _gameId, handlers) => {
+      const currentSeasonYear = getCurrentSeasonYear(sport as SeasonSport);
+      const params = withSeasonContext({
+        sport,
+        league_id: '123',
+        season_year: currentSeasonYear - 1,
+      });
+
+      const result = await handlers.get_transactions(
+        {} as never,
+        params,
+        'Bearer x',
+        `cid-past-${sport}`,
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.code).toBe('ESPN_SEASON_NOT_SUPPORTED');
+      expect(result.error).toContain(`season_year=${currentSeasonYear}`);
+      expect(getCredentialsMock).not.toHaveBeenCalled();
+      expect(executeMock).not.toHaveBeenCalled();
+    },
+  );
 });
