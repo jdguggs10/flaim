@@ -114,6 +114,7 @@ describe('yahoo cross-sport get_transactions handlers', () => {
       expect(data.window.start_timestamp_ms).toBe(now - (14 * 24 * 60 * 60 * 1000));
       expect(data.window.end_timestamp_ms).toBe(now);
       expect(data.warning).toContain('ignored week');
+      expect(data.warning).not.toContain('v1');
       expect(data.warning).toContain('excluded because Yahoo did not provide a valid timestamp');
       expect(data.dropped_invalid_timestamp_count).toBe(1);
       expect(data.count).toBe(1);
