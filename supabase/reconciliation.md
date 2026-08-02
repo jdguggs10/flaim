@@ -118,6 +118,19 @@ from the refreshed live production catalog, and no current consumer was found
 for either table. They are therefore intentionally excluded from the 22-table
 greenfield baseline.
 
+## Forward contract changes after the baseline
+
+Production migration 048 later added a `sync_recent` key to the private
+analytics dashboard payload for provider-outcome monitoring. The reviewed
+public counterpart is
+`20260802131749_add_sync_recent_dashboard_payload.sql`. It replaces only
+`analytics.dashboard_payload(boolean)` and refreshes the existing snapshot
+rows; it adds no relation, grant, policy, index, extension, or scheduled job.
+
+The hosted-preview and production migration ledgers remain environment state,
+not repository truth. Applying this or any later migration to a hosted database
+requires its own approval and verification.
+
 Production's physical column numbers contain three gaps left by dropped columns
 in `demo_answer_cache`, `demo_refresh_runs`, and `yahoo_leagues`. A greenfield
 database intentionally creates the same logical columns without preserving

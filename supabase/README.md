@@ -74,6 +74,20 @@ exact duplicate before-state index. This passes the local reproducibility gate
 for considering a separate hosted preview database; it does not authorize
 hosted infrastructure or production changes.
 
+## Analytics monitoring payload
+
+The forward migration
+`20260802131749_add_sync_recent_dashboard_payload.sql` keeps the greenfield
+contract current with the private analytics monitoring behavior introduced by
+production migration 048. It restates `analytics.dashboard_payload(boolean)`
+to add the `sync_recent` provider-outcome key and refreshes the two existing
+dashboard snapshot rows. It creates no tables, grants, policies, indexes,
+extensions, or cron jobs.
+
+The reproducibility proof requires both synthetic snapshot rows to contain one
+recent ESPN success and no recent failure. Applying this migration to any
+hosted database remains a separate approval gate.
+
 ## Token-matching RPCs
 
 The forward migration after the baseline moves MCP OAuth and Yahoo
