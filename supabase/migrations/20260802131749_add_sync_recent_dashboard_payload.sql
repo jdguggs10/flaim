@@ -321,7 +321,7 @@ SELECT jsonb_build_object(
   )),
 
   -- sync_recent (048 / FLA-175) — fresh sync outcomes per provider over the
-  -- trailing 6 hours; the provider-failure alert bridge polls this key.
+  -- trailing 6 hours.
   'sync_recent', (SELECT coalesce(jsonb_agg(sr ORDER BY sr.provider), '[]'::jsonb) FROM (
     SELECT provider,
       count(DISTINCT clerk_user_id) FILTER (WHERE last_failure_at > now() - interval '6 hours')::int AS users_failed_6h,
