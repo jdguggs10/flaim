@@ -2,7 +2,7 @@
 
 Doc routing: see `docs/INDEX.md`.
 
-Flaim is an MCP (Model Context Protocol) service that connects ESPN, Yahoo, and Sleeper fantasy leagues to Flaim Fantasy in ChatGPT and to optional manual MCP clients such as Claude, Perplexity, and Gemini CLI. It handles authentication, credential management, and real-time data fetching. The web app also includes a homepage live demo.
+Flaim is an MCP (Model Context Protocol) service that connects ESPN, Yahoo, and Sleeper fantasy leagues to Flaim Fantasy in ChatGPT and, as an advanced option, to compatible AI platforms through a manual custom connector. It handles authentication, credential management, and real-time data fetching. The web app also includes a homepage live demo.
 
 ## Quick Start
 
@@ -70,7 +70,7 @@ The public live showcase lives on the homepage, with `/chat` retained as a redir
 4. **Set defaults** — Manage at `/leagues` (extension v1.4.0 no longer handles defaults)
 
 **Connect AI:**
-- Open Flaim Fantasy in ChatGPT, or copy the MCP URL from `/leagues` and add it in an optional manual MCP client such as Claude, Perplexity, Gemini CLI, or developer testing tools.
+- Open Flaim Fantasy in ChatGPT, or copy the MCP URL from `/leagues` and add it as an optional custom connector in a compatible AI platform.
 
 ## Season Year Defaults
 
@@ -134,7 +134,7 @@ ChatGPT Apps and optional manual MCP clients connect to Flaim's MCP servers:
 - **Metadata**: `/.well-known/oauth-authorization-server`, `/.well-known/oauth-protected-resource`
 - **Token lifetime**: MCP access tokens are short-lived (1 hour). Refresh tokens rotate on each successful refresh and use a 1-year inactivity window by default (`OAUTH_REFRESH_TOKEN_TTL_SECONDS`, default `31536000`, clamped to 1 hour minimum and 1 year maximum).
 
-**User flow**: Open Flaim Fantasy in ChatGPT, or add the MCP URL in Claude, Perplexity, Gemini CLI, or another optional manual MCP client → 401 triggers OAuth → user consents at `flaim.app/oauth/consent` → token exchange → tools available.
+**User flow**: Open Flaim Fantasy in ChatGPT, or add the MCP URL as an optional custom connector in a compatible AI platform → 401 triggers OAuth → user consents at `flaim.app/oauth/consent` → token exchange → tools available.
 
 ## MCP Tools
 
@@ -181,7 +181,7 @@ ChatGPT Apps / manual MCP clients → fantasy-mcp (gateway) → espn-client    �
 - Per-user isolation via verified `sub`; credentials never sent back to client after setup.
 - Rate limiting: Cloudflare Workers native `rate_limits` bindings — 10 req/60s per IP on token endpoint, 15 req/60s per user on credentials endpoint, and 60 req/60s per user on OAuth/Clerk-authenticated MCP requests (internal eval and demo API keys are exempt).
 - Public demo cache: the homepage reads precomputed answers from `demo_answer_cache`. The live-turn public-chat path has been removed.
-- Public demo refresh pipeline: an external private `flaim-demo` runner uses static MCP bearer auth to populate `demo_answer_cache` out of band on a scheduled cadence. The runner's current production path writes the public demo cache at the prompt and context versions tracked in `web/lib/public-chat.ts`, while the legacy Gemini CLI path remains available as rollback. The website only reads cached answers — it never triggers refresh runs. The shared contract between the website and the runner is the cache key format `{presetId}:{sport}:{promptVersion}:{contextVersion}` plus matching preset IDs; version tags and homepage preset metadata live in `web/lib/public-chat.ts`, while LLM system prompts and per-preset generation instructions live only in the runner codebase.
+- Public demo refresh pipeline: an external private `flaim-demo` runner uses Antigravity CLI with static MCP bearer auth to populate `demo_answer_cache` out of band on a scheduled cadence. The website only reads cached answers — it never triggers refresh runs. The shared contract between the website and the runner is the cache key format `{presetId}:{sport}:{promptVersion}:{contextVersion}` plus matching preset IDs; version tags and homepage preset metadata live in `web/lib/public-chat.ts`, while LLM system prompts and per-preset generation instructions live only in the runner codebase.
 - Public demo prompt lifecycle: add or remove homepage demo prompts in both codebases. Update `web/lib/public-chat.ts` here for site metadata and keep the external runner aligned on preset IDs, prompt versions, and context versions. If a prompt is removed from the site, remove it from the runner too so the Pi stops refreshing an unreachable cache key.
 - OAuth tokens stored in Supabase with expiration tracking.
 - ESPN credentials: AES-256 encrypted at rest (Supabase default).

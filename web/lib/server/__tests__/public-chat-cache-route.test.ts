@@ -134,7 +134,7 @@ describe("sanitizePublicDemoRefreshFailure", () => {
         status: "failed",
         errorCode: "provider_failed",
         errorMessage:
-          "Gemini failed in /home/ggugger/PiCode/flaim-demo/private.log",
+          "Antigravity failed in /home/ggugger/PiCode/flaim-demo/private.log",
         providerAttempted: "antigravity-sticky",
         providerModel: "private-provider-model",
         startedAt: "2026-06-06T12:00:00.000Z",
@@ -171,7 +171,7 @@ describe("GET /api/public-chat/cache", () => {
       cacheKey: "public-demo-answer:wire-watch:baseball:v6:v2",
       presetId: "wire-watch",
       sport: "baseball",
-      provider: "gemini",
+      provider: "antigravity",
       providerModel: "gemini-2.5-flash",
       contextVersion: "v2",
       promptVersion: "v6",
@@ -187,7 +187,7 @@ describe("GET /api/public-chat/cache", () => {
         status: "failed",
         errorCode: "provider_failed",
         errorMessage:
-          "Gemini failed in /home/ggugger/PiCode/flaim-demo/private.log",
+          "Antigravity failed in /home/ggugger/PiCode/flaim-demo/private.log",
         providerAttempted: "antigravity-sticky",
         providerModel: "private-provider-model",
         startedAt: "2026-06-06T12:00:00.000Z",
@@ -195,7 +195,7 @@ describe("GET /api/public-chat/cache", () => {
       },
       sourceMeta: {
         antigravityRunLogFile:
-          "/home/ggugger/PiCode/flaim-demo/logs/gemini-runs/run.json",
+          "/home/ggugger/PiCode/flaim-demo/logs/antigravity-runs/run.json",
         providerMeta: { source: "source_meta" },
       },
       toolTraceSummary: {

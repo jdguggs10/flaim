@@ -3,7 +3,7 @@
  * ---------------------------------------------------------------------------
  *
  * Flaim acts as an OAuth 2.1 authorization server. AI clients (Claude,
- * ChatGPT, Gemini) register via Dynamic Client Registration (RFC 7591),
+ * ChatGPT and compatible custom-connector clients register via Dynamic Client Registration (RFC 7591),
  * then obtain access tokens through the authorization code flow with PKCE.
  *
  * Flow:

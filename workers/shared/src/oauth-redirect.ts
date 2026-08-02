@@ -23,11 +23,11 @@ const ALLOWED_REDIRECT_URIS = [
 
 // Check if a redirect URI is a valid loopback callback (RFC 8252).
 // Accepts dynamic ports on localhost/127.0.0.1 with known callback paths.
-// Covers: Claude Code, Gemini CLI, Windsurf, Kiro, and other MCP CLI/desktop clients.
+// Covers OAuth-capable desktop and local MCP clients that use loopback callbacks.
 const ALLOWED_LOOPBACK_PATHS = new Set([
   '/callback',              // Claude Code
   '/oauth/callback',        // Claude Code (alt), MCP Inspector
-  '/oauth2callback',        // Gemini CLI
+  '/oauth2callback',        // Common desktop-client callback path
   '/windsurf-auth-callback', // Windsurf
   '/',                       // Kiro
 ]);
