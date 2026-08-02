@@ -367,11 +367,39 @@ begin
     raise exception 'dashboard snapshot seed proof failed';
   end if;
 
+  if not (select analytics.dashboard_payload(false) ? 'sync_recent') then
+    raise exception 'dashboard payload is missing sync_recent';
+  end if;
+
+  select count(*) into actual_count
+  from analytics.dashboard_snapshot
+  where jsonb_typeof(payload -> 'sync_recent') = 'array'
+    and jsonb_array_length(payload -> 'sync_recent') = 1
+    and exists (
+      select 1
+      from jsonb_array_elements(payload -> 'sync_recent') as item
+      where item ->> 'provider' = 'espn'
+        and (item ->> 'users_failed_6h')::integer = 0
+        and (item ->> 'users_succeeded_6h')::integer = 1
+        and jsonb_typeof(item -> 'recent_error_codes') = 'array'
+        and jsonb_array_length(item -> 'recent_error_codes') = 0
+    );
+  if actual_count <> 2 then
+    raise exception 'sync_recent dashboard snapshot proof failed';
+  end if;
+
   select count(*) into actual_count
   from supabase_migrations.schema_migrations
   where version = '20260727230606';
   if actual_count <> 1 then
     raise exception 'baseline migration history row is missing';
+  end if;
+
+  select count(*) into actual_count
+  from supabase_migrations.schema_migrations
+  where version = '20260802131749';
+  if actual_count <> 1 then
+    raise exception 'sync_recent migration history row is missing';
   end if;
 end
 $proof$;
