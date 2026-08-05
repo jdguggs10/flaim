@@ -7,6 +7,7 @@ const repoRoot = path.resolve(process.cwd(), "..");
 const activeConsumerSurfaces = [
   "README.md",
   "docs/ARCHITECTURE.md",
+  "docs/CHANGELOG.md",
   "docs/CONNECTOR-DOCS.md",
   "web/app/(site)/guide/ai/page.tsx",
   "web/app/(site)/guide/page.tsx",
