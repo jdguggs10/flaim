@@ -71,7 +71,7 @@ ESPN doesn't offer a public API for private fantasy league data. For private ESP
 Flaim Fantasy is available in ChatGPT. Optional manual MCP clients can also add the single server URL, and Flaim handles authentication and data retrieval after your leagues are linked in /leagues.
 
 ### What AI assistants work with Flaim?
-The primary experience is Flaim Fantasy in ChatGPT. Optional manual MCP clients can also connect to the same endpoint when they support remote HTTP MCP and OAuth, including Claude, Perplexity, and Gemini CLI. Claude uses custom connectors, Perplexity uses custom remote connectors, and Gemini CLI uses terminal MCP server configuration.
+The primary experience is Flaim Fantasy in ChatGPT. Advanced users can also add Flaim manually as a custom connector in an AI platform that supports remote HTTP MCP and OAuth. Compatibility varies by platform; this optional path is not a promise of official support for every MCP client.
 
 ## Links
 

@@ -74,6 +74,37 @@ exact duplicate before-state index. This passes the local reproducibility gate
 for considering a separate hosted preview database; it does not authorize
 hosted infrastructure or production changes.
 
+## Analytics monitoring payload
+
+The forward migration
+`20260802131749_add_sync_recent_dashboard_payload.sql` keeps the greenfield
+contract current with the private analytics monitoring behavior introduced by
+production migration 048. It restates `analytics.dashboard_payload(boolean)`
+to add the `sync_recent` provider-outcome key and refreshes the two existing
+dashboard snapshot rows. It creates no tables, grants, policies, indexes,
+extensions, or cron jobs.
+
+The reproducibility proof requires both synthetic snapshot rows to contain one
+recent ESPN success and no recent failure. Applying this migration to any
+hosted database remains a separate approval gate.
+
+## Demo platform contract
+
+The forward migration `20260805112500_add_platform_to_demo_tables.sql` makes
+the homepage-demo contract multi-platform. It adds a `platform` column
+(`not null default 'espn'`) to `demo_answer_cache`, `demo_antigravity_cache`,
+`demo_refresh_runs`, and `demo_refresh_attempts`; adds four query-derived
+composite indexes; replaces `demo_refresh_attempt_scorecard_7d` to group by
+platform, appending `platform` as the final output column; and creates the
+`demo_target_state` gate table recording the per-platform, per-sport
+public-enable flag and expected prompt/context version tags.
+
+Existing demo rows and single-platform writers keep working through the
+column defaults, and no existing index is touched. `demo_target_state`
+matches the `demo_antigravity_cache` posture: RLS enabled with no policies
+and table privileges granted only to `service_role`. Applying this migration
+to any hosted database remains a separate approval gate.
+
 ## Token-matching RPCs
 
 The forward migration after the baseline moves MCP OAuth and Yahoo

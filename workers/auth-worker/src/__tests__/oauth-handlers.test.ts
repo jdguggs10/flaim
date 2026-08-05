@@ -1256,7 +1256,7 @@ describe('redirect URI validation', () => {
     expect(isValidRedirectUri('https://evil.com/rest/connections/oauth_callback')).toBe(false);
   });
 
-  it('accepts Gemini CLI loopback with /oauth2callback path', () => {
+  it('accepts a loopback redirect with the /oauth2callback path', () => {
     expect(isValidRedirectUri('http://127.0.0.1:9876/oauth2callback')).toBe(true);
     expect(isValidRedirectUri('http://localhost:9876/oauth2callback')).toBe(true);
   });

@@ -16,10 +16,16 @@ contract.
 | Non-internal triggers | 0 | 0 | None created |
 | Cron jobs | 5 | — | Defined separately; not activated by migrations |
 
-All 22 public tables have RLS enabled and no policies. The two public views use
-`security_invoker`. The analytics schema has two tables without RLS because it
-is outside the Data API and is read through the direct `analytics_readonly`
-database role.
+The table above records the baseline before-state. The FLA-247 forward
+migration `20260805112500_add_platform_to_demo_tables.sql` raises the current
+contract to 23 public tables and 71 public indexes; every other count is
+unchanged.
+
+All public tables — the 22 baseline tables and the forward-added
+`demo_target_state` — have RLS enabled and no policies. The two public views
+use `security_invoker`. The analytics schema has two tables without RLS
+because it is outside the Data API and is read through the direct
+`analytics_readonly` database role.
 
 The Data API configuration exposes `public` and `graphql_public`; it does not
 expose `analytics`. The baseline preserves `pg_graphql` and the observed broad
@@ -49,11 +55,14 @@ Tables:
 
 `archived_leagues`, `chat_runs`, `demo_answer_cache`,
 `demo_antigravity_cache`, `demo_context_cache`, `demo_refresh_attempts`,
-`demo_refresh_runs`, `espn_credentials`, `espn_leagues`, `mcp_tool_daily`,
+`demo_refresh_runs`, `demo_target_state` (added by the FLA-247 forward
+migration), `espn_credentials`, `espn_leagues`, `mcp_tool_daily`,
 `mcp_tool_events`, `mcp_user_daily`, `oauth_codes`, `oauth_states`,
 `oauth_tokens`, `platform_oauth_states`, `provider_sync_state`,
 `sleeper_connections`, `sleeper_leagues`, `user_preferences`,
-`yahoo_credentials`, and `yahoo_leagues`.
+`yahoo_credentials`, and `yahoo_leagues`. The same forward migration adds a
+`platform` column to `demo_answer_cache`, `demo_antigravity_cache`,
+`demo_refresh_runs`, and `demo_refresh_attempts`.
 
 Views:
 
@@ -117,6 +126,30 @@ The legacy `public.extension_pairing_codes` and
 from the refreshed live production catalog, and no current consumer was found
 for either table. They are therefore intentionally excluded from the 22-table
 greenfield baseline.
+
+## Forward contract changes after the baseline
+
+Production migration 048 later added a `sync_recent` key to the private
+analytics dashboard payload for provider-outcome monitoring. The reviewed
+public counterpart is
+`20260802131749_add_sync_recent_dashboard_payload.sql`. It replaces only
+`analytics.dashboard_payload(boolean)` and refreshes the existing snapshot
+rows; it adds no relation, grant, policy, index, extension, or scheduled job.
+
+The FLA-247 forward migration
+`20260805112500_add_platform_to_demo_tables.sql` makes the homepage-demo
+contract multi-platform. It adds a `platform` column
+(`not null default 'espn'`) to the four demo tables, four query-derived
+composite indexes, and the service-role-only `demo_target_state` gate table
+(RLS enabled, no policies), and replaces
+`demo_refresh_attempt_scorecard_7d` to group by platform with `platform`
+appended as the final output column. It drops nothing and leaves every
+existing index — including the intentional duplicate pair on
+`demo_refresh_runs` — untouched.
+
+The hosted-preview and production migration ledgers remain environment state,
+not repository truth. Applying this or any later migration to a hosted database
+requires its own approval and verification.
 
 Production's physical column numbers contain three gaps left by dropped columns
 in `demo_answer_cache`, `demo_refresh_runs`, and `yahoo_leagues`. A greenfield
