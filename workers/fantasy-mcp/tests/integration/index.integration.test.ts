@@ -432,6 +432,9 @@ describe('fantasy-mcp gateway integration', () => {
       ['get_players', { readOnlyHint: true, openWorldHint: true, destructiveHint: false, idempotentHint: true }],
       ['get_transactions', { readOnlyHint: true, openWorldHint: true, destructiveHint: false, idempotentHint: true }],
     ]);
+    // Completeness first: a clear count diff beats a per-tool toEqual(undefined)
+    // failure when a tool is added or removed without updating expectations.
+    expect(expectedAnnotations.size).toBe(tools?.length);
     for (const tool of tools || []) {
       expect(tool._meta?.securitySchemes?.[0]?.type).toBe('oauth2');
       expect(tool._meta?.securitySchemes?.[0]?.scopes).toContain(scopeByTool.get(tool.name));
@@ -452,7 +455,6 @@ describe('fantasy-mcp gateway integration', () => {
       // reads and refresh declare the external-system interaction.
       expect(tool.annotations).toEqual(expectedAnnotations.get(tool.name));
     }
-    expect(expectedAnnotations.size).toBe(tools?.length);
 
     // Routed tools advertise the {success, data} envelope; gateway tools their own shape.
     const standingsTool = tools?.find((tool) => tool.name === 'get_standings');
