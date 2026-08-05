@@ -74,14 +74,14 @@ export function PublicToolCall({
   const copy = getToolCopy(name);
 
   return (
-    <div className="w-fit max-w-[90%] rounded-[1rem] border border-border/80 bg-background/90 px-3 py-2.5 shadow-sm">
+    <div className="w-fit max-w-[92%] rounded-[1.15rem] border border-[var(--phone-border)] bg-[var(--phone-panel)] px-3 py-2.5">
       <div className="flex items-start gap-2.5">
         <div
           className={cn(
             "mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border",
             status === "completed"
-              ? "border-primary/20 bg-primary text-primary-foreground"
-              : "border-border bg-muted text-foreground"
+              ? "border-transparent bg-[var(--phone-accent)] text-[var(--phone-accent-text)]"
+              : "border-[var(--phone-border)] bg-[var(--phone-panel-strong)] text-[var(--phone-text)]"
           )}
           aria-label={status === "completed" ? "Complete" : "Running"}
         >
@@ -92,10 +92,10 @@ export function PublicToolCall({
           )}
         </div>
         <div className="min-w-0">
-          <div className="text-sm font-medium leading-5 text-foreground">
+          <div className="text-[length:var(--phone-type-secondary)] font-medium leading-5 text-[var(--phone-text)]">
             {copy.title}
           </div>
-          <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
+          <p className="mt-0.5 text-[length:var(--phone-type-caption)] leading-[1.45] text-[var(--phone-muted)]">
             {copy.description}
           </p>
         </div>
