@@ -1,6 +1,6 @@
-# Flaim Setup Docs (ChatGPT + Optional MCP Clients)
+# Flaim Setup Docs (ChatGPT + Optional Custom Connectors)
 
-This page is the single user-facing guide for using Flaim Fantasy in ChatGPT, plus secondary manual MCP setup for Claude custom connectors, Perplexity custom remote connectors, Gemini CLI, and developer testing.
+This page is the single user-facing guide for using Flaim Fantasy in ChatGPT, plus a secondary manual setup path for compatible AI platforms that accept custom remote MCP connectors.
 
 ## What Flaim Is
 
@@ -34,18 +34,17 @@ Flaim cannot place trades, add/drop players, or modify league settings.
 | Client | Status | Setup path |
 |--------|--------|------------|
 | ChatGPT | Primary | Use Flaim Fantasy in ChatGPT |
-| Claude | Optional custom connector | Add Flaim as a Claude custom connector where your Claude account supports it |
-| Perplexity | Optional custom remote connector | Add Flaim as a custom remote connector with OAuth and Streamable HTTP |
-| Gemini CLI | Optional terminal MCP client | Add Flaim as a Gemini CLI MCP server |
-| Kiro, Cursor, and other coding tools | Optional terminal MCP client | Add Flaim as an MCP server with URL `https://api.flaim.app/mcp` |
+| Claude | Publication pending; optional manual connector | Add Flaim manually where your Claude account supports custom connectors |
+| Perplexity | Curated onboarding pending; optional manual connector | Add Flaim manually where your Perplexity account supports custom remote connectors |
+| Other compatible AI platforms | Advanced, unofficial setup | Add Flaim with the custom connector URL `https://api.flaim.app/mcp` |
 
 ### ChatGPT
 
 Use Flaim Fantasy in ChatGPT as the primary experience. It is distributed through ChatGPT Apps and uses the same read-only league tools and OAuth flow described on this page.
 
-### Manual MCP Clients
+### Manual Custom Connectors
 
-These clients can connect directly to Flaim's MCP endpoint where their MCP support allows remote HTTP servers and OAuth.
+Some AI platforms can connect directly to Flaim where they support custom remote MCP servers and OAuth. This is an advanced, unofficial setup path; ChatGPT remains Flaim's only currently published and officially supported consumer integration.
 
 ### Claude (Custom Connector)
 
@@ -61,26 +60,9 @@ Perplexity custom remote connectors require HTTPS. In some workspaces, admins mu
 1. Add a custom remote connector with URL `https://api.flaim.app/mcp`, OAuth auth, and Streamable HTTP transport.
 2. Complete the OAuth consent screen when prompted.
 
-### Gemini CLI
+### Other Compatible AI Platforms
 
-1. `gemini mcp add flaim https://api.flaim.app/mcp --transport http`
-2. In Gemini: `/mcp auth flaim` and complete the OAuth consent screen.
-
-### Kiro and Other Coding Tools
-
-Any MCP client that supports remote HTTP servers with OAuth should work. Add Flaim as an MCP server using this config:
-
-```json
-{
-  "mcpServers": {
-    "flaim": {
-      "url": "https://api.flaim.app/mcp"
-    }
-  }
-}
-```
-
-Then trigger the OAuth flow in your client (e.g. Kiro CLI: `/mcp auth flaim`) and complete the OAuth consent screen.
+If your AI platform supports custom remote MCP connectors with OAuth, add `https://api.flaim.app/mcp` as the connector URL and complete the browser authorization flow. Compatibility varies by platform, and Flaim does not promise support for every MCP client.
 
 ## Tools
 
@@ -139,7 +121,7 @@ For Yahoo, avoid relying on explicit `week` filtering:
 
 ## Troubleshooting
 
-- **“Authentication required” / “token expired”**: re-run the client’s connect flow (Gemini CLI: `/mcp auth flaim`; manual MCP clients: click Connect and approve when prompted).
+- **“Authentication required” / “token expired”**: re-run the platform's connector flow, then approve access when prompted.
 - **ESPN stopped working**: re-sync using the extension, then confirm the league appears at `https://flaim.app/leagues`.
 - **No default league**: set one at `https://flaim.app/leagues` to avoid needing to specify IDs in prompts.
 - **`redirect_uri is not in the allowed list`**: your MCP client is sending an unsupported loopback path. Pin `"redirectUri": "http://127.0.0.1:7778/oauth/callback"` in your MCP config (any port works; only the path matters).

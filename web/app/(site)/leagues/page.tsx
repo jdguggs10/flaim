@@ -1631,8 +1631,9 @@ function LeaguesPageContent() {
                     </button>
                   </PopoverTrigger>
                   <PopoverContent align="end" className="max-w-xs text-sm text-muted-foreground">
-                    Alternative AI&apos;s are unofficially supported as custom
-                    connectors. Click{" "}
+                    Advanced users can add Flaim manually in a compatible AI
+                    platform that supports custom remote connectors. This is an
+                    unofficial setup path. Click{" "}
                     <Link href="/guide/ai#custom-connectors" className="text-primary underline hover:no-underline">
                       here
                     </Link>{" "}

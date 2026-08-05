@@ -8,7 +8,7 @@
  *    Routes: /credentials/espn, /leagues, /connect/yahoo/*
  *
  * 2. OAUTH 2.1 PROVIDER — Flaim issues access tokens to AI clients
- *    (Claude, ChatGPT, Gemini) so they can call MCP tools on behalf of users.
+ *    so authorized AI clients can call MCP tools on behalf of users.
  *    Routes: /auth/register, /auth/authorize, /auth/token, /auth/revoke
  *    See: oauth-handlers.ts, oauth-storage.ts
  *

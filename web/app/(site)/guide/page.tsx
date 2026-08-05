@@ -9,7 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 export const metadata: Metadata = {
   title: "Flaim Setup Guide",
   description:
-    "Use Flaim in three steps: connect fantasy platforms, review leagues and sports coverage, then use Flaim Fantasy from ChatGPT or another AI agent.",
+    "Use Flaim in three steps: connect fantasy platforms, review leagues and sports coverage, then use Flaim Fantasy in ChatGPT.",
   alternates: {
     canonical: "https://flaim.app/guide",
   },
@@ -37,11 +37,11 @@ const setupSteps = [
   {
     number: "3",
     title: "AI Agents",
-    body: "Flaim Fantasy is an official ChatGPT App. Other AI clients including Claude, Perplexity, and more can also connect as custom connectors.",
+    body: "Flaim Fantasy is an official ChatGPT App. Advanced users can also add Flaim manually in a compatible AI platform that supports custom connectors.",
     primaryHref: "/leagues#connect-ai",
     primaryLabel: "Connect AI agents",
     secondaryHref: "/guide/ai#custom-connectors",
-    secondaryLabel: "Plugins, connectors, and AI help",
+    secondaryLabel: "ChatGPT and custom connector help",
   },
 ] as const;
 
@@ -58,8 +58,8 @@ const guideLinks = [
   },
   {
     href: "/guide/ai",
-    title: "Plugins, connectors, and AI help",
-    body: "ChatGPT setup plus unofficial custom connector notes.",
+    title: "ChatGPT and custom connector help",
+    body: "Official ChatGPT setup plus an advanced, unofficial custom connector option.",
   },
 ] as const;
 

@@ -7,7 +7,7 @@ Centralized Cloudflare Worker for authentication, credential storage, and OAuth.
 This worker has three distinct responsibilities:
 
 1. **Credential/Connection Storage** — ESPN credentials, Yahoo tokens, Sleeper connections, and league data, stored in Supabase.
-2. **OAuth 2.1 Provider** — Flaim *issues* access tokens to AI clients (Claude, ChatGPT, Gemini) so they can call MCP tools on behalf of users.
+2. **OAuth 2.1 Provider** — Flaim *issues* access tokens to authorized AI clients so they can call MCP tools on behalf of users.
 3. **OAuth 2.0 Client** — Flaim *obtains* tokens from Yahoo so it can call Yahoo Fantasy APIs on behalf of users.
 
 > Roles 2 and 3 are opposite sides of OAuth. The provider issues tokens; the client consumes them. They share no code paths.
@@ -29,7 +29,7 @@ again before considering production.
 
 ### OAuth 2.1 Provider (AI clients → Flaim)
 
-These endpoints let Claude, ChatGPT, Perplexity, Gemini, and other MCP clients authenticate to Flaim.
+These endpoints let ChatGPT and compatible custom-connector clients authenticate to Flaim.
 
 | Endpoint | Auth | Purpose |
 |----------|------|---------|
@@ -167,7 +167,7 @@ The internal (AI-facing) league reads fail closed: if the archive lookup errors,
 Three user auth mechanisms, depending on caller:
 
 - **Clerk JWT** — used by the web app, extension, and frontend OAuth consent flow.
-- **OAuth access token** — used by AI clients (Claude, ChatGPT, Gemini) after completing the OAuth 2.1 flow.
+- **OAuth access token** — used by authorized AI clients after completing the OAuth 2.1 flow.
 - **Eval API key** — static key for eval/CI/agent use. Bypasses OAuth browser flow entirely.
 
 Public app routes are Clerk-only. Internal helper routes additionally require `X-Flaim-Internal-Token` and can resolve Clerk, OAuth, or eval auth to a user ID.

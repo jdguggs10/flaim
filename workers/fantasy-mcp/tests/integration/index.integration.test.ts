@@ -409,12 +409,32 @@ describe('fantasy-mcp gateway integration', () => {
     expect(refreshTool?._meta?.securitySchemes?.[0]?.scopes).toContain('mcp:write');
     expect(refreshTool?.annotations).toEqual({
       readOnlyHint: false,
-      openWorldHint: false,
+      openWorldHint: true,
       destructiveHint: false,
       idempotentHint: false,
     });
 
     const scopeByTool = new Map(getUnifiedTools().map((tool) => [tool.name, tool.requiredScope]));
+    const expectedAnnotations = new Map<string, {
+      readOnlyHint: boolean;
+      openWorldHint: boolean;
+      destructiveHint: boolean;
+      idempotentHint: boolean;
+    }>([
+      ['get_user_session', { readOnlyHint: true, openWorldHint: false, destructiveHint: false, idempotentHint: true }],
+      ['refresh_leagues', { readOnlyHint: false, openWorldHint: true, destructiveHint: false, idempotentHint: false }],
+      ['get_ancient_history', { readOnlyHint: true, openWorldHint: false, destructiveHint: false, idempotentHint: true }],
+      ['get_league_info', { readOnlyHint: true, openWorldHint: true, destructiveHint: false, idempotentHint: true }],
+      ['get_standings', { readOnlyHint: true, openWorldHint: true, destructiveHint: false, idempotentHint: true }],
+      ['get_matchups', { readOnlyHint: true, openWorldHint: true, destructiveHint: false, idempotentHint: true }],
+      ['get_roster', { readOnlyHint: true, openWorldHint: true, destructiveHint: false, idempotentHint: true }],
+      ['get_free_agents', { readOnlyHint: true, openWorldHint: true, destructiveHint: false, idempotentHint: true }],
+      ['get_players', { readOnlyHint: true, openWorldHint: true, destructiveHint: false, idempotentHint: true }],
+      ['get_transactions', { readOnlyHint: true, openWorldHint: true, destructiveHint: false, idempotentHint: true }],
+    ]);
+    // Completeness first: a clear count diff beats a per-tool toEqual(undefined)
+    // failure when a tool is added or removed without updating expectations.
+    expect(expectedAnnotations.size).toBe(tools?.length);
     for (const tool of tools || []) {
       expect(tool._meta?.securitySchemes?.[0]?.type).toBe('oauth2');
       expect(tool._meta?.securitySchemes?.[0]?.scopes).toContain(scopeByTool.get(tool.name));
@@ -430,16 +450,10 @@ describe('fantasy-mcp gateway integration', () => {
       expect(tool.outputSchema?.additionalProperties).not.toBe(false);
       expect(tool.outputSchema?.properties?.success).toBeDefined();
       expect(tool.outputSchema?.required).toContain('success');
-      // OpenAI Apps Directory review expects these hints to be explicitly
-      // declared. Closed-system reads: openWorldHint false everywhere; the
-      // registry refresh stays non-idempotent (each call re-runs discovery
-      // and can update registry timestamps/metadata).
-      expect(tool.annotations).toMatchObject({
-        openWorldHint: false,
-        destructiveHint: false,
-      });
-      expect(tool.annotations?.readOnlyHint).toBe(tool.name === 'refresh_leagues' ? false : true);
-      expect(tool.annotations?.idempotentHint).toBe(tool.name === 'refresh_leagues' ? false : true);
+      // OpenAI review requires explicit booleans whose values match the actual
+      // call boundary. Registry-only reads stay closed-world; provider-routed
+      // reads and refresh declare the external-system interaction.
+      expect(tool.annotations).toEqual(expectedAnnotations.get(tool.name));
     }
 
     // Routed tools advertise the {success, data} envelope; gateway tools their own shape.
