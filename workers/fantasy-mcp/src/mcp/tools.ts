@@ -431,6 +431,9 @@ const transactionWindowSchema = looseObject({
     'explicit_week',
     'recent_two_weeks',
     'recent_two_weeks_timestamp',
+    // Yahoo emits 'pending' for type=waiver/pending_trade (own-team pending
+    // views have no timestamp window).
+    'pending',
     'preseason',
   ]).optional(),
   unit: z.literal('matchup_period').optional(),
