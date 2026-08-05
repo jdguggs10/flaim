@@ -699,6 +699,33 @@ describe('get_transactions output schema', () => {
     }));
   });
 
+  it('accepts the Yahoo pending-window envelope for own-team waiver views', () => {
+    expectValid('get_transactions', routed({
+      platform: 'yahoo',
+      sport: 'football',
+      league_id: '449.l.123',
+      season_year: 2025,
+      window: {
+        mode: 'pending',
+        weeks: [],
+        start_timestamp_ms: undefined,
+        end_timestamp_ms: undefined,
+      },
+      count: 1,
+      transactions: [
+        {
+          transaction_id: '449.l.123.tr.11',
+          date: '2026-07-21',
+          type: 'pending_trade',
+          status: 'pending',
+          week: null,
+          team_ids: ['449.l.123.t.1'],
+          draft_picks: null,
+        },
+      ],
+    }));
+  });
+
   it('accepts the minimal Sleeper envelope', () => {
     expectValid('get_transactions', routed({
       platform: 'sleeper',
