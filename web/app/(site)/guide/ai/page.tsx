@@ -21,7 +21,7 @@ export default function AiGuidePage() {
               "@context": "https://schema.org",
               "@type": "HowTo",
               name: "Use Flaim Fantasy in ChatGPT",
-              dateModified: "2026-05-17",
+              dateModified: "2026-08-02",
               description:
                 "Connect your fantasy leagues in Flaim, then use Flaim Fantasy in ChatGPT for read-only league analysis.",
               step: [

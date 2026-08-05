@@ -2,9 +2,9 @@
  * OAuth 2.1 PROVIDER — Flaim issues tokens to AI clients
  * ---------------------------------------------------------------------------
  *
- * Flaim acts as an OAuth 2.1 authorization server. AI clients (Claude,
- * ChatGPT and compatible custom-connector clients register via Dynamic Client Registration (RFC 7591),
- * then obtain access tokens through the authorization code flow with PKCE.
+ * Flaim acts as an OAuth 2.1 authorization server. AI clients register via
+ * Dynamic Client Registration (RFC 7591), then obtain access tokens through
+ * the authorization code flow with PKCE.
  *
  * Flow:
  * 1. AI client → POST /auth/register → Dynamic Client Registration
