@@ -2,7 +2,7 @@
 
 Doc routing: see `docs/INDEX.md`.
 
-Flaim is an MCP (Model Context Protocol) service that connects ESPN, Yahoo, and Sleeper fantasy leagues to Flaim Fantasy in ChatGPT and to optional manual MCP clients such as Claude, Perplexity, and Gemini CLI. It handles authentication, credential management, and real-time data fetching. The web app also includes a homepage live demo.
+Flaim is an MCP (Model Context Protocol) service that connects ESPN, Yahoo, and Sleeper fantasy leagues to Flaim Fantasy in ChatGPT and, as an advanced option, to compatible AI platforms through a manual custom connector. It handles authentication, credential management, and real-time data fetching. The web app also includes a homepage live demo.
 
 ## Quick Start
 
@@ -70,7 +70,7 @@ The public live showcase lives on the homepage, with `/chat` retained as a redir
 4. **Set defaults** — Manage at `/leagues` (extension v1.4.0 no longer handles defaults)
 
 **Connect AI:**
-- Open Flaim Fantasy in ChatGPT, or copy the MCP URL from `/leagues` and add it in an optional manual MCP client such as Claude, Perplexity, Gemini CLI, or developer testing tools.
+- Open Flaim Fantasy in ChatGPT, or copy the MCP URL from `/leagues` and add it as an optional custom connector in a compatible AI platform.
 
 ## Season Year Defaults
 
@@ -134,7 +134,7 @@ ChatGPT Apps and optional manual MCP clients connect to Flaim's MCP servers:
 - **Metadata**: `/.well-known/oauth-authorization-server`, `/.well-known/oauth-protected-resource`
 - **Token lifetime**: MCP access tokens are short-lived (1 hour). Refresh tokens rotate on each successful refresh and use a 1-year inactivity window by default (`OAUTH_REFRESH_TOKEN_TTL_SECONDS`, default `31536000`, clamped to 1 hour minimum and 1 year maximum).
 
-**User flow**: Open Flaim Fantasy in ChatGPT, or add the MCP URL in Claude, Perplexity, Gemini CLI, or another optional manual MCP client → 401 triggers OAuth → user consents at `flaim.app/oauth/consent` → token exchange → tools available.
+**User flow**: Open Flaim Fantasy in ChatGPT, or add the MCP URL as an optional custom connector in a compatible AI platform → 401 triggers OAuth → user consents at `flaim.app/oauth/consent` → token exchange → tools available.
 
 ## MCP Tools
 

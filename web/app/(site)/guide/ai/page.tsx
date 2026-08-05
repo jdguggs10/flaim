@@ -4,7 +4,7 @@ import Link from "next/link";
 export const metadata: Metadata = {
   title: "ChatGPT & AI Setup for Flaim Fantasy",
   description:
-    "Use Flaim Fantasy in ChatGPT, with optional manual MCP setup notes for Claude, Perplexity, and Gemini CLI.",
+    "Use Flaim Fantasy in ChatGPT, with an optional custom-connector path for compatible AI platforms.",
   alternates: {
     canonical: "https://flaim.app/guide/ai",
   },
@@ -21,7 +21,7 @@ export default function AiGuidePage() {
               "@context": "https://schema.org",
               "@type": "HowTo",
               name: "Use Flaim Fantasy in ChatGPT",
-              dateModified: "2026-05-17",
+              dateModified: "2026-08-02",
               description:
                 "Connect your fantasy leagues in Flaim, then use Flaim Fantasy in ChatGPT for read-only league analysis.",
               step: [
@@ -47,96 +47,6 @@ export default function AiGuidePage() {
                 },
               ],
             },
-            {
-              "@context": "https://schema.org",
-              "@type": "HowTo",
-              name: "Use Flaim with Claude for fantasy sports analysis",
-              dateModified: "2026-05-17",
-              description:
-                "Add Flaim as a Claude custom connector and authorize it for read-only fantasy league access.",
-              step: [
-                {
-                  "@type": "HowToStep",
-                  name: "Connect leagues first",
-                  text: "Use https://flaim.app/leagues to connect ESPN, Yahoo, or Sleeper.",
-                },
-                {
-                  "@type": "HowToStep",
-                  name: "Add the connector",
-                  text: "Go to Claude connector settings and add https://api.flaim.app/mcp as a custom connector.",
-                },
-                {
-                  "@type": "HowToStep",
-                  name: "Authorize Flaim",
-                  text: "Sign in to Flaim and approve access.",
-                },
-                {
-                  "@type": "HowToStep",
-                  name: "Test it",
-                  text: "Start a fresh conversation and ask what leagues you have.",
-                },
-              ],
-            },
-            {
-              "@context": "https://schema.org",
-              "@type": "HowTo",
-              name: "Use Flaim with Perplexity for fantasy sports analysis",
-              dateModified: "2026-05-17",
-              description:
-                "Add Flaim as a Perplexity remote connector with OAuth auth and Streamable HTTP transport.",
-              step: [
-                {
-                  "@type": "HowToStep",
-                  name: "Connect leagues first",
-                  text: "Use https://flaim.app/leagues to connect ESPN, Yahoo, or Sleeper.",
-                },
-                {
-                  "@type": "HowToStep",
-                  name: "Create the remote connector",
-                  text: "In Perplexity, add a remote connector with https://api.flaim.app/mcp, OAuth auth, and Streamable HTTP transport.",
-                },
-                {
-                  "@type": "HowToStep",
-                  name: "Authorize Flaim",
-                  text: "Sign in to Flaim and approve access.",
-                },
-                {
-                  "@type": "HowToStep",
-                  name: "Test it",
-                  text: "Start a fresh thread and ask what leagues you have.",
-                },
-              ],
-            },
-            {
-              "@context": "https://schema.org",
-              "@type": "HowTo",
-              name: "Use Flaim with Gemini CLI for fantasy sports analysis",
-              dateModified: "2026-05-17",
-              description:
-                "Add Flaim as a Gemini CLI MCP server and authorize it for read-only fantasy league access.",
-              step: [
-                {
-                  "@type": "HowToStep",
-                  name: "Connect leagues first",
-                  text: "Use https://flaim.app/leagues to connect ESPN, Yahoo, or Sleeper.",
-                },
-                {
-                  "@type": "HowToStep",
-                  name: "Add the MCP server",
-                  text: "Run gemini mcp add flaim https://api.flaim.app/mcp --transport http.",
-                },
-                {
-                  "@type": "HowToStep",
-                  name: "Authorize Flaim",
-                  text: "Run /mcp auth flaim in Gemini CLI, then sign in to Flaim and approve access.",
-                },
-                {
-                  "@type": "HowToStep",
-                  name: "Test it",
-                  text: "Start a fresh Gemini CLI session and ask what leagues you have.",
-                },
-              ],
-            },
           ]),
         }}
       />
@@ -146,15 +56,15 @@ export default function AiGuidePage() {
           ChatGPT is the primary Flaim setup path. Flaim Fantasy is available in
           ChatGPT for read-only fantasy sports analysis.
         </p>
-        <p className="text-xs text-muted-foreground">Last updated May 2026</p>
+        <p className="text-xs text-muted-foreground">Last updated August 2026</p>
         <p className="mt-4 mb-8 text-muted-foreground">
           Start by connecting your fantasy platforms in{" "}
           <Link href="/leagues" className="text-primary hover:underline">
             /leagues
           </Link>
           . That account setup is what ChatGPT uses when you open Flaim
-          Fantasy. Claude, Perplexity, and Gemini CLI remain optional custom
-          connector and manual MCP setup paths using the URL below.
+          Fantasy. Advanced users can also add Flaim manually in compatible AI
+          platforms that support custom remote connectors.
         </p>
 
         <section id="custom-connectors" className="mb-10 scroll-mt-20">
@@ -177,9 +87,8 @@ export default function AiGuidePage() {
               Set the default sport or league ChatGPT should use first.
             </li>
             <li>
-              Open ChatGPT and use Flaim Fantasy. For Claude custom connectors,
-              Perplexity custom remote connectors, Gemini CLI, or developer
-              testing, add Flaim with this MCP URL:
+              Open ChatGPT and use Flaim Fantasy. For an optional manual custom
+              connector, add Flaim with this MCP URL:
             </li>
           </ol>
           <div className="my-4 rounded-lg border bg-muted p-3">
@@ -256,9 +165,9 @@ export default function AiGuidePage() {
         <section id="claude" className="mb-10 scroll-mt-20">
           <h2 className="mb-3 text-xl font-semibold">Claude</h2>
           <p className="mb-4 text-muted-foreground">
-            Flaim is fully live and not in beta. Claude is an optional custom
-            connector setup path, and Claude may still label custom connectors
-            as beta; Free users are limited to one custom connector.
+            Anthropic has approved Flaim for its connector directory, but the
+            public listing is still pending. Until then, Claude is an optional
+            manual custom-connector path where your account supports it.
           </p>
           <ol className="list-decimal list-inside space-y-2 text-muted-foreground">
             <li>
@@ -318,9 +227,9 @@ export default function AiGuidePage() {
         <section id="perplexity" className="mb-10 scroll-mt-20">
           <h2 className="mb-3 text-xl font-semibold">Perplexity</h2>
           <p className="mb-4 text-muted-foreground">
-            Perplexity is an optional custom remote connector setup path. The
-            key difference is you need to set the auth method to OAuth and the
-            transport to Streamable HTTP.
+            Perplexity invited Flaim into its curated connector onboarding, but
+            publication is still pending. Its existing custom remote connector
+            flow is an optional manual path that uses OAuth and Streamable HTTP.
           </p>
           <ol className="list-decimal list-inside space-y-2 text-muted-foreground">
             <li>
@@ -375,37 +284,6 @@ export default function AiGuidePage() {
               </li>
             </ul>
           </div>
-        </section>
-
-        {/* Gemini CLI */}
-        <section id="gemini-cli" className="mb-10 scroll-mt-20">
-          <h2 className="mb-3 text-xl font-semibold">Gemini CLI</h2>
-          <p className="mb-4 text-muted-foreground">
-            Gemini CLI is a manual MCP setup path for terminal-based workflows.
-            It uses the same Flaim MCP URL and OAuth consent flow.
-          </p>
-          <ol className="list-decimal list-inside space-y-2 text-muted-foreground">
-            <li>
-              Add Flaim as an MCP server:
-              <pre className="my-3 overflow-x-auto rounded-lg border bg-muted p-3 text-sm">
-                <code>
-                  {
-                    "gemini mcp add flaim https://api.flaim.app/mcp --transport http"
-                  }
-                </code>
-              </pre>
-            </li>
-            <li>
-              In Gemini CLI, run{" "}
-              <code className="rounded bg-muted px-1 py-0.5 text-xs">
-                /mcp auth flaim
-              </code>{" "}
-              and complete the OAuth consent screen.
-            </li>
-            <li>
-              Start a fresh Gemini CLI session and ask what leagues you have.
-            </li>
-          </ol>
         </section>
 
         {/* Shared success */}
