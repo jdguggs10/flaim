@@ -14,8 +14,8 @@ begin
   from pg_class c
   join pg_namespace n on n.oid = c.relnamespace
   where n.nspname = 'public' and c.relkind = 'r';
-  if actual_count <> 22 then
-    raise exception 'expected 22 public tables, found %', actual_count;
+  if actual_count <> 23 then
+    raise exception 'expected 23 public tables, found %', actual_count;
   end if;
 
   select count(*) into actual_count
@@ -62,8 +62,8 @@ begin
   from pg_class c
   join pg_namespace n on n.oid = c.relnamespace
   where n.nspname = 'public' and c.relkind = 'i';
-  if actual_count <> 66 then
-    raise exception 'expected 66 public indexes, found %', actual_count;
+  if actual_count <> 71 then
+    raise exception 'expected 71 public indexes, found %', actual_count;
   end if;
 
   select count(*) into actual_count
@@ -88,8 +88,8 @@ begin
   where n.nspname = 'public'
     and c.relkind = 'r'
     and c.relrowsecurity;
-  if actual_count <> 22 then
-    raise exception 'expected RLS on all 22 public tables, found %', actual_count;
+  if actual_count <> 23 then
+    raise exception 'expected RLS on all 23 public tables, found %', actual_count;
   end if;
 
   select count(*) into actual_count
@@ -167,6 +167,20 @@ begin
        'SELECT'
      ) then
     raise exception 'demo_antigravity_cache grants do not match before-state';
+  end if;
+
+  if has_table_privilege('anon', 'public.demo_target_state', 'SELECT')
+     or has_table_privilege(
+       'authenticated',
+       'public.demo_target_state',
+       'SELECT'
+     )
+     or not has_table_privilege(
+       'service_role',
+       'public.demo_target_state',
+       'SELECT'
+     ) then
+    raise exception 'demo_target_state grants are not service-role only';
   end if;
 
   select count(*) into actual_count
@@ -291,6 +305,7 @@ begin
       ('public.demo_refresh_runs', 1),
       ('public.demo_refresh_attempts', 1),
       ('public.demo_antigravity_cache', 1),
+      ('public.demo_target_state', 5),
       ('public.archived_leagues', 1),
       ('public.mcp_tool_events', 3),
       ('public.mcp_user_daily', 1),
@@ -400,6 +415,13 @@ begin
   where version = '20260802131749';
   if actual_count <> 1 then
     raise exception 'sync_recent migration history row is missing';
+  end if;
+
+  select count(*) into actual_count
+  from supabase_migrations.schema_migrations
+  where version = '20260805112500';
+  if actual_count <> 1 then
+    raise exception 'demo platform migration history row is missing';
   end if;
 end
 $proof$;

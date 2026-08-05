@@ -22,7 +22,7 @@ preview creation, and production DDL require separate approval and verification.
 Cloudflare Workers and server-side web paths use the Data API as
 `service_role`. Browser clients do not query Supabase directly.
 
-All 22 public tables currently have RLS enabled and no policies. The baseline
+All 23 public tables currently have RLS enabled and no policies. The baseline
 also reproduces the existing broad object grants and future-object defaults so
 permission hardening can be performed later as an isolated, reversible
 forward-only migration. Those before-state grants are not the desired final
@@ -60,7 +60,16 @@ Public-demo operations:
 - `demo_antigravity_cache`
 - `demo_refresh_runs`
 - `demo_refresh_attempts`
+- `demo_target_state`
 - `demo_refresh_attempt_scorecard_7d`
+
+`demo_answer_cache`, `demo_antigravity_cache`, `demo_refresh_runs`, and
+`demo_refresh_attempts` carry a `platform` column (`not null default 'espn'`)
+so the demo contract supports multiple fantasy platforms, and the
+`demo_refresh_attempt_scorecard_7d` view groups by platform with `platform` as
+its final output column. `demo_target_state` is the per-platform, per-sport
+public-enable gate with expected prompt/context version tags; it is
+service-role-only.
 
 `demo_antigravity_cache` is intentionally service-role-only in the reproduced
 before-state; `anon` and `authenticated` do not have table privileges on it.

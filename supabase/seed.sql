@@ -429,6 +429,55 @@ insert into public.demo_antigravity_cache (
   '2026-01-15 12:00:00+00'
 );
 
+insert into public.demo_target_state (
+  platform,
+  sport,
+  public_enabled,
+  expected_prompt_version,
+  expected_context_version,
+  updated_at
+) values
+  (
+    'espn',
+    'baseball',
+    false,
+    'v8',
+    'v3',
+    '2026-08-05 12:00:00+00'
+  ),
+  (
+    'yahoo',
+    'baseball',
+    false,
+    'v8',
+    'v3',
+    '2026-08-05 12:00:00+00'
+  ),
+  (
+    'espn',
+    'football',
+    false,
+    'v8',
+    'v3',
+    '2026-08-05 12:00:00+00'
+  ),
+  (
+    'yahoo',
+    'football',
+    false,
+    'v8',
+    'v3',
+    '2026-08-05 12:00:00+00'
+  ),
+  (
+    'sleeper',
+    'football',
+    false,
+    'v8',
+    'v3',
+    '2026-08-05 12:00:00+00'
+  );
+
 insert into public.archived_leagues (
   id,
   clerk_user_id,
