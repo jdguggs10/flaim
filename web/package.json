@@ -28,6 +28,7 @@
     "@react-email/render": "^2.0.8",
     "@tabler/icons-react": "^3.41.1",
     "@tailwindcss/postcss": "^4.1.18",
+    "@vercel/analytics": "^2.0.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^0.525.0",

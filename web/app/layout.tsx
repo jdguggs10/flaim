@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
+import { Analytics } from "@vercel/analytics/next";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ClerkThemeWrapper } from "@/components/clerk-theme-wrapper";
 import { AcquisitionFirstTouch } from "@/components/acquisition-first-touch";
@@ -125,6 +126,7 @@ export default function RootLayout({
             {children}
           </ClerkThemeWrapper>
         </ThemeProvider>
+        <Analytics />
       </body>
     </html>
   );
