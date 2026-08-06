@@ -140,6 +140,8 @@ Important: this cache does not include live sports-news lookups. The homepage se
 - **PascalCase** for components, `useX` for hooks
 - **Lowercase** for App Router folders
 - Match existing file-local style (no repo-wide formatter)
+- **Brand images in `public/` are immutable**: a `next.config.ts` headers rule serves them with `Cache-Control: public, max-age=31536000, immutable`. To change one, add it under a new filename and update references — never overwrite in place. `/icon-light.png` is also the MCP server icon that AI clients fetch at high volume, so its cache headers directly control edge-request and bandwidth usage.
+- **Web Analytics**: `@vercel/analytics` is mounted in the root layout (`<Analytics />`); pageview data reports to the Vercel dashboard.
 
 ## Signup attribution
 
