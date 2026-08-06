@@ -9,6 +9,7 @@ import {
   getSeasonLabel,
   logSetupSignal,
   validateRosterSnapshotInput,
+  validateTransactionWeekInput,
   withCorrelationId,
   withEvalHeaders,
   withInternalServiceToken,
@@ -1755,7 +1756,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       annotations: PROVIDER_READ_TOOL_ANNOTATIONS,
       outputSchema: GET_TRANSACTIONS_OUTPUT_SCHEMA,
       openaiMeta: { invoking: 'Fetching transactions\u2026', invoked: 'Transactions ready' },
-      description: `Get recent league transactions including adds, drops, waivers, and completed trades. Best used after get_user_session and usually after get_league_info so the model already knows the league's team names and owner/team mapping before summarizing activity. Each normalized transaction includes a date field (YYYY-MM-DD), type, status, week, and optional team_ids. When presenting results, organize by time period (today, yesterday, this week, older) AND by team within each period so the user can see both when moves happened and what each team did. Week handling is platform-specific: ESPN week always means matchup period, including daily sports where one matchup spans several provider scoring periods; omit it for the current and previous matchup periods. Sleeper uses week windows, while Yahoo uses a recent 14-day timestamp window and ignores explicit week. ESPN currently uses its activity feed as the authoritative source, reports source/limitations/window metadata, and cannot reliably answer failed-bid or trade-lifecycle-only filters until its structured source is restored. ESPN responses include a teams map (team ID to display name) to resolve numeric team_ids. Yahoo and Sleeper generally rely on get_league_info for team-name resolution. Use values from get_user_session. Read-only. Current date is ${currentDate}.`,
+      description: `Get recent league transactions including adds, drops, waivers, and completed trades. Best used after get_user_session and usually after get_league_info so the model already knows the league's team names and owner/team mapping before summarizing activity. Each normalized transaction includes a date field (YYYY-MM-DD), type, status, week, and optional team_ids. When presenting results, organize by time period (today, yesterday, this week, older) AND by team within each period so the user can see both when moves happened and what each team did. Week handling is platform-specific: ESPN week always means matchup period, including daily sports where one matchup spans several provider scoring periods; week 0 is ESPN preseason, and omitting week selects the current and previous matchup periods. Sleeper accepts positive matchup weeks starting at 1; omit week for its current and previous week. Yahoo uses a recent 14-day timestamp window and ignores explicit week. ESPN currently uses its activity feed as the authoritative source, reports source/limitations/window metadata, and cannot reliably answer failed-bid or trade-lifecycle-only filters until its structured source is restored. ESPN responses include a teams map (team ID to display name) to resolve numeric team_ids. Yahoo and Sleeper generally rely on get_league_info for team-name resolution. Use values from get_user_session. Read-only. Current date is ${currentDate}.`,
       inputSchema: {
         platform: z
           .enum(['espn', 'yahoo', 'sleeper'])
@@ -1765,7 +1766,7 @@ export function getUnifiedTools(): UnifiedTool[] {
           .describe('Sport type (e.g., "football", "baseball")'),
         league_id: z.string().describe('League ID (get from get_user_session)'),
         season_year: z.number().describe('Season start year — use the season_year returned by get_user_session for this league; only pass an older year when the user explicitly asks about a past season'),
-        week: z.number().int().min(0).optional().describe('Optional public week selector (0 = preseason). For ESPN this is always a matchup period, including baseball, basketball, and hockey; omit it for the current and previous matchup periods. Sleeper supports explicit week; Yahoo ignores week and uses a recent 14-day timestamp window'),
+        week: z.number().int().min(0).optional().describe('Optional public week selector. ESPN accepts matchup period 0 or later (0 = preseason), including baseball, basketball, and hockey; omit it for the current and previous matchup periods. Sleeper accepts matchup week 1 or later; omit it for the current and previous week. Yahoo ignores week and uses a recent 14-day timestamp window'),
         type: z
           .enum(['add', 'drop', 'trade', 'waiver', 'pending_trade', 'trade_proposal', 'trade_decline', 'trade_veto', 'trade_uphold', 'failed_bid'])
           .optional()
@@ -1776,13 +1777,27 @@ export function getUnifiedTools(): UnifiedTool[] {
           .describe('Maximum transactions to return (default: 25, max: 100)'),
       },
       handler: async (args, env, authHeader, correlationId, evalRunId, evalTraceId) => {
+        const weekValidation = validateTransactionWeekInput(
+          args.platform as Platform,
+          args.week
+        );
+        if (!weekValidation.ok) {
+          return routeResultToMcp({
+            success: false,
+            code: weekValidation.code,
+            error: weekValidation.error,
+            status: weekValidation.status,
+            retryable: weekValidation.retryable,
+          });
+        }
+
         const requestedCount = Number(args.count ?? 25);
         const params: ToolParams = {
           platform: args.platform as Platform,
           sport: args.sport as Sport,
           league_id: args.league_id as string,
           season_year: args.season_year as number,
-          week: args.week as number | undefined,
+          week: weekValidation.week,
           type: args.type as 'add' | 'drop' | 'trade' | 'waiver' | 'pending_trade' | 'trade_proposal' | 'trade_decline' | 'trade_veto' | 'trade_uphold' | 'failed_bid' | undefined,
           count: Number.isFinite(requestedCount) ? Math.max(1, Math.min(100, requestedCount)) : 25,
         };

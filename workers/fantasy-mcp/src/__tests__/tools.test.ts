@@ -1177,6 +1177,69 @@ describe('fantasy-mcp tools', () => {
     expect(payload.data?.count).toBe(1);
   });
 
+  it.each([
+    ['zero', 0],
+    ['negative', -1],
+    ['fractional', 1.5],
+    ['null', null],
+    ['NaN', Number.NaN],
+    ['infinite', Number.POSITIVE_INFINITY],
+  ])('get_transactions rejects Sleeper %s week without routing', async (_label, week) => {
+    const tool = getUnifiedTools().find((candidate) => candidate.name === 'get_transactions');
+    expect(tool).toBeTruthy();
+
+    const routeToClientMock = routeToClient as MockedFunction<typeof routeToClient>;
+    routeToClientMock.mockClear();
+
+    const result = await tool!.handler({
+      platform: 'sleeper',
+      sport: 'football',
+      league_id: '12345',
+      season_year: 2025,
+      week,
+    }, {} as Env, 'Bearer token', 'corr-sleeper-week');
+
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent).toMatchObject({
+      success: false,
+      code: 'INVALID_TRANSACTION_WINDOW',
+      status: 400,
+      retryable: false,
+    });
+    expect(result.content?.[0]?.text).toContain('omit week');
+    expect(routeToClientMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['sleeper', 1],
+    ['espn', 0],
+    ['yahoo', 0],
+  ] as const)('get_transactions preserves valid %s week %s', async (platform, week) => {
+    const tool = getUnifiedTools().find((candidate) => candidate.name === 'get_transactions');
+    expect(tool).toBeTruthy();
+
+    const routeToClientMock = routeToClient as MockedFunction<typeof routeToClient>;
+    routeToClientMock.mockResolvedValue({ success: true, data: { count: 0, transactions: [] } });
+
+    await tool!.handler({
+      platform,
+      sport: 'football',
+      league_id: '12345',
+      season_year: 2025,
+      week,
+    }, {} as Env, 'Bearer token', 'corr-valid-week');
+
+    expect(routeToClientMock).toHaveBeenCalledWith(
+      expect.anything(),
+      'get_transactions',
+      expect.objectContaining({ platform, week }),
+      'Bearer token',
+      'corr-valid-week',
+      undefined,
+      undefined
+    );
+  });
+
   it('tool errors preserve retry metadata in structuredContent and _meta', async () => {
     const tool = getUnifiedTools().find((t) => t.name === 'get_standings');
     expect(tool).toBeTruthy();

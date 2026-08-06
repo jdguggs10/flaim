@@ -118,9 +118,9 @@ All tools take explicit parameters: `platform`, `sport`, `league_id`, `season_ye
 - `get_players` — Player lookup; ESPN and Yahoo can add league ownership, Sleeper ownership is unavailable
 - `get_transactions` — Recent transactions (adds, drops, waivers, trades)
 
-`get_transactions` v1 semantics are platform-specific:
-- ESPN: explicit `week` is a matchup period for every sport; omission defaults to the current+previous matchup periods. Daily-sport responses expose underlying scoring-period IDs and date bounds. The activity feed is currently authoritative, so structured-only failed-bid and trade-lifecycle filters return `ESPN_TRANSACTION_TYPE_UNAVAILABLE`.
-- Sleeper: explicit `week` supported; default window is current+previous week.
+`get_transactions` semantics are platform-specific:
+- ESPN: explicit `week` is a matchup period for every sport and accepts `0` for preseason; omission defaults to the current+previous matchup periods. Daily-sport responses expose underlying scoring-period IDs and date bounds. The activity feed is currently authoritative, so structured-only failed-bid and trade-lifecycle filters return `ESPN_TRANSACTION_TYPE_UNAVAILABLE`.
+- Sleeper: explicit positive `week` values start at 1; `week: 0` returns `INVALID_TRANSACTION_WINDOW`; omission defaults to current+previous week.
 - Yahoo: explicit `week` ignored; uses a recent 14-day timestamp window.
 - Yahoo: `type=waiver` and `type=pending_trade` return pending items for the authenticated user's own team; other supported types use the recent league transaction feed.
 - `get_user_session` should be the first call in a normal chat, and `get_league_info` is usually the second call before most league-specific analysis so team names, owner/team mapping, and league rules are established.

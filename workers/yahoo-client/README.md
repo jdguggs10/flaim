@@ -76,7 +76,7 @@ Yahoo auth and rate-limit failures return `success: false` with the matching HTT
 - `get_players` - Player lookup with market/global ownership context
 - `get_transactions` - Recent transactions (adds, drops, waivers, trades)
 
-`get_transactions` Yahoo-specific behavior in v1:
+`get_transactions` Yahoo-specific behavior:
 - Explicit `week` is ignored and replaced with a recent 14-day timestamp window.
 - `type=waiver` and `type=pending_trade` use Yahoo's pending endpoint for the authenticated user's own team.
 - Other supported types use Yahoo's recent league transaction feed.

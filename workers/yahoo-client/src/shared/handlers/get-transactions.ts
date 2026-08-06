@@ -56,7 +56,7 @@ export function createGetTransactionsHandler(): HandlerFn {
 
       const warnings: string[] = [];
       if (week !== undefined) {
-        warnings.push('Explicit week filtering is not supported for Yahoo transactions in v1; Yahoo always uses a recent timestamp window and ignored week.');
+        warnings.push('Explicit week filtering is not supported for Yahoo transactions; Yahoo always uses a recent timestamp window and ignored week.');
       }
       if (invalidTimestampCount > 0) {
         warnings.push(`${invalidTimestampCount} transaction(s) were excluded because Yahoo did not provide a valid timestamp.`);
