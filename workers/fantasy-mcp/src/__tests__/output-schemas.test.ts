@@ -620,13 +620,31 @@ describe('get_players output schema', () => {
 });
 
 describe('get_transactions output schema', () => {
-  it('accepts the ESPN envelope with teams map and trade_sides', () => {
+  it('accepts the ESPN matchup-window envelope and limitations', () => {
     expectValid('get_transactions', routed({
       platform: 'espn',
-      sport: 'football',
+      sport: 'baseball',
       league_id: '336777',
       season_year: 2025,
-      window: { mode: 'recent_two_weeks', weeks: [4, 5] },
+      window: {
+        mode: 'explicit_week',
+        unit: 'matchup_period',
+        requested_week: 4,
+        normalization: 'none',
+        weeks: [4],
+        provider_scoring_period_ids: [22, 23, 24, 25, 26],
+        start_date: '2026-04-20',
+        end_date: '2026-04-24',
+        date_bounds_kind: 'exact_contiguous',
+        timezone: 'America/New_York',
+      },
+      source: 'activity_feed',
+      limitations: {
+        structured_details_incomplete: true,
+        omitted_unscoped_rows: 2,
+        omitted_conflicting_rows: 1,
+        window_coverage_incomplete: true,
+      },
       count: 2,
       truncated: true,
       transactions: [
@@ -635,14 +653,17 @@ describe('get_transactions output schema', () => {
           date: '2026-07-20',
           type: 'trade',
           status: 'EXECUTED',
-          week: 5,
+          timestamp: 1784563200000,
+          week: 4,
+          provider_scoring_period_id: 25,
           team_ids: [1, 2],
           trade_sides: [
-            { from_team_id: 1, to_team_id: 2, players: ['Player A'] },
-            { from_team_id: 2, to_team_id: 1, players: ['Player B'] },
+            { team_id: '1', acquired: [{ id: 'a', name: 'Player A' }], gave_up: [{ id: 'b' }] },
+            { team_id: '2', acquired: [{ id: 'b' }], gave_up: [{ id: 'a' }] },
           ],
+          faab_bid: null,
         },
-        { transaction_id: 'tx-2', date: '2026-07-19', type: 'failed_bid', status: 'FAILED', week: 5, team_ids: [3] },
+        { transaction_id: 'tx-2', date: '2026-07-19', type: 'add', status: 'complete', week: 4, team_ids: [3] },
       ],
       teams: { '1': 'Team One', '2': 'Team Two', '3': 'Team Three' },
     }));
@@ -672,6 +693,33 @@ describe('get_transactions output schema', () => {
           week: null,
           team_ids: ['449.l.123.t.1'],
           waiver_priority: 3,
+          draft_picks: null,
+        },
+      ],
+    }));
+  });
+
+  it('accepts the Yahoo pending-window envelope for own-team waiver views', () => {
+    expectValid('get_transactions', routed({
+      platform: 'yahoo',
+      sport: 'football',
+      league_id: '449.l.123',
+      season_year: 2025,
+      window: {
+        mode: 'pending',
+        weeks: [],
+        start_timestamp_ms: undefined,
+        end_timestamp_ms: undefined,
+      },
+      count: 1,
+      transactions: [
+        {
+          transaction_id: '449.l.123.tr.11',
+          date: '2026-07-21',
+          type: 'pending_trade',
+          status: 'pending',
+          week: null,
+          team_ids: ['449.l.123.t.1'],
           draft_picks: null,
         },
       ],

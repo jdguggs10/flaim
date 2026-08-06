@@ -4,6 +4,13 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### ESPN Transaction Matchup Windows (FLA-193)
+- **Fixed**: ESPN daily-sport transaction selectors now treat public `week` as a matchup period and expand it through the actual daily keys in the `mMatchupScore` schedule instead of mistaking it for one calendar-day scoring period. ESPN's similarly named `scheduleSettings.matchupPeriods` field groups weekly/playoff periods and is not a daily-scoring map.
+- **Guarded**: The legacy daily-scoring compatibility path refuses values that are known future matchup IDs, preventing a future week from being reinterpreted as an unrelated historical scoring day.
+- **Added**: ESPN transaction responses report the normalized matchup window, exact provider scoring periods, Eastern-time date bounds when available, source, and explicit limitation/omission metadata.
+- **Changed**: The activity feed is the authoritative live source while the structured endpoint remains disabled. Rows without trustworthy window evidence are omitted, and structured-only failed-bid/trade-lifecycle filters return `ESPN_TRANSACTION_TYPE_UNAVAILABLE` instead of a false empty result.
+- **Changed**: ESPN activity-feed waiver rows now report `faab_bid: null`; the former message-field heuristic could not prove a bid amount. Structured FAAB amounts remain unavailable until FLA-140 restores the structured transaction source.
+
 ### MCP Annotation Correction (FLA-252)
 - **Changed**: Tool annotations now match each call boundary. The seven read-only analysis tools routed to ESPN, Yahoo, or Sleeper and the provider-reading `refresh_leagues` tool declare `openWorldHint: true`; the two Flaim-registry-only reads (`get_user_session`, `get_ancient_history`) remain `false`. `refresh_leagues` also stays non-read-only, non-destructive, and non-idempotent because each call can update registry timestamps and provider metadata. Supersedes the blanket `openWorldHint: false` declared under FLA-177, which read open-world as publicly-visible internet writes; current OpenAI guidance applies it to any tool that interacts with external systems or accounts.
 

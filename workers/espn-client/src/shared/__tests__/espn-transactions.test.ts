@@ -19,9 +19,10 @@ describe('espn-transactions', () => {
   });
 
   describe('getEspnLeagueContext', () => {
-    it('returns scoringPeriodId and teams map from mSettings+mTeam', async () => {
+    it('returns scoringPeriodId and teams map from the league context views', async () => {
       mockFetch.mockResolvedValueOnce(jsonResponse({
         scoringPeriodId: 7,
+        currentMatchupPeriod: 7,
         teams: [
           { id: 1, location: 'Gotham', nickname: 'Knights' },
           { id: 2, name: 'Team Two' },
@@ -30,21 +31,75 @@ describe('espn-transactions', () => {
       }));
       const ctx = await getEspnLeagueContext('ffl', '123', 2025, { s2: 'x', swid: '{y}' });
       expect(ctx.scoringPeriodId).toBe(7);
+      expect(ctx.currentMatchupPeriod).toBe(7);
       expect(ctx.teams).toEqual({
         '1': 'Gotham Knights',
         '2': 'Team Two',
         '3': 'Team 3',
       });
-      // Verify URL includes both views
+      // Football does not need the daily matchup-score view.
       const url = mockFetch.mock.calls[0]?.[0] as string;
       expect(url).toContain('view=mSettings&view=mTeam');
+      expect(url).not.toContain('view=mMatchupScore');
     });
 
-    it('defaults scoringPeriodId to 1 when missing', async () => {
+    it('derives baseball matchup windows from score-period keys and adds the current day', async () => {
+      mockFetch.mockResolvedValueOnce(jsonResponse({
+        scoringPeriodId: 127,
+        currentMatchupPeriod: 17,
+        schedule: [
+          {
+            matchupPeriodId: 15,
+            home: { pointsByScoringPeriod: { 104: 1, 105: 2, 117: 3 } },
+            away: { pointsByScoringPeriod: { 104: 4, 105: 5, 117: 6 } },
+          },
+          {
+            matchupPeriodId: 16,
+            home: { pointsByScoringPeriod: { 118: 1, 124: 2 } },
+          },
+          {
+            matchupPeriodId: 17,
+            home: { pointsByScoringPeriod: { 125: 1, 126: 2 } },
+          },
+        ],
+        teams: [],
+      }));
+
+      const ctx = await getEspnLeagueContext(
+        'flb',
+        '30201',
+        2026,
+        { s2: 'x', swid: '{y}' },
+      );
+
+      expect(ctx.matchupPeriods).toEqual({
+        15: [104, 105, 117],
+        16: [118, 124],
+        17: [125, 126, 127],
+      });
+      expect(ctx.scheduledMatchupPeriodIds).toEqual([15, 16, 17]);
+    });
+
+    it('fails closed when ESPN assigns the current scoring day to another matchup', async () => {
+      mockFetch.mockResolvedValueOnce(jsonResponse({
+        scoringPeriodId: 127,
+        currentMatchupPeriod: 17,
+        schedule: [{
+          matchupPeriodId: 16,
+          home: { pointsByScoringPeriod: { 127: 1 } },
+        }],
+      }));
+
+      await expect(
+        getEspnLeagueContext('flb', '30201', 2026, { s2: 'x', swid: '{y}' }),
+      ).rejects.toThrow('different matchup period');
+    });
+
+    it('fails closed when ESPN omits the current period selectors', async () => {
       mockFetch.mockResolvedValueOnce(jsonResponse({}));
-      const ctx = await getEspnLeagueContext('ffl', '123', 2025, { s2: 'x', swid: '{y}' });
-      expect(ctx.scoringPeriodId).toBe(1);
-      expect(ctx.teams).toEqual({});
+      await expect(
+        getEspnLeagueContext('ffl', '123', 2025, { s2: 'x', swid: '{y}' }),
+      ).rejects.toThrow('ESPN_INVALID_RESPONSE');
     });
   });
 
@@ -172,7 +227,7 @@ describe('espn-transactions', () => {
     expect(byId['10']?.type).toBe('add');
     expect(byId['11']?.type).toBe('drop');
     expect(byId['12']?.type).toBe('waiver');
-    expect(byId['12']?.faab_bid).toBe(10);
+    expect(byId['12']?.faab_bid).toBeNull();
     expect(byId['13']?.type).toBe('drop');
     expect(byId['14']?.type).toBe('drop');
     expect(byId['1']?.type).toBe('trade');
@@ -265,7 +320,7 @@ describe('espn-transactions', () => {
       type: 'waiver',
       status: 'complete',
       week: 6,
-      faab_bid: 12,
+      faab_bid: null,
     });
     expect(rows[1]).toMatchObject({
       transaction_id: '1',

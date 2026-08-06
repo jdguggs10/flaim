@@ -63,7 +63,11 @@ const mockLeagueResponse = {
       playoffHomeTeamBonus: 5,
     },
     rosterSettings: { lineupSlotCounts: {} },
-    scheduleSettings: {},
+    scheduleSettings: {
+      matchupPeriods: {
+        4: [22, 23, 24, 25, 26, 27, 28],
+      },
+    },
   },
   teams: [
     {
@@ -175,6 +179,31 @@ describe('espn cross-sport get_league_info teams array', () => {
     const data = result.data as { seasonId?: number };
 
     expect(data.seasonId).toBe(2024);
+  });
+
+  it.each(scenarios)('$label exposes matchup periods from scheduleSettings', async ({
+    sport,
+    handlers,
+  }) => {
+    espnFetchMock.mockResolvedValue(
+      new Response(JSON.stringify(mockLeagueResponse), { status: 200 })
+    );
+
+    const result = await handlers.get_league_info(
+      {} as never,
+      makeParams(sport),
+      'Bearer x',
+      'cid',
+    );
+
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    const data = result.data as {
+      scoringSettings?: { matchupPeriods?: unknown };
+    };
+    expect(data.scoringSettings?.matchupPeriods).toEqual({
+      4: [22, 23, 24, 25, 26, 27, 28],
+    });
   });
 
   it.each(crossCalendarScenarios)('$label normalizes status.previousSeasons to canonical years', async ({ sport, handlers }) => {

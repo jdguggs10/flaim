@@ -34,7 +34,6 @@ export interface EspnLeagueSettings {
   regularSeasonMatchupPeriods?: number;
   scoringSettings?: {
     scoringType?: string;
-    matchupPeriods?: unknown;
     matchupTieRule?: string;
     matchupTieRuleBy?: number;
     playoffMatchupTieRule?: string;
@@ -47,6 +46,7 @@ export interface EspnLeagueSettings {
     positionLimits?: Record<string, number>;
   };
   scheduleSettings?: {
+    matchupPeriods?: unknown;
     playoffSeedingRule?: string;
     playoffMatchupPeriodLength?: number;
   };
