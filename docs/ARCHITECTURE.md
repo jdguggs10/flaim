@@ -302,6 +302,19 @@ production user data.
 
 **Triggering preview deploys:** Workers only deploy on PRs (not bare branch pushes). A PR must exist for GitHub Actions to run `deploy-workers.yml` with `--env preview`. Vercel deploys on any push.
 
+**Staging integration preview.** `staging` is a disposable integration-preview
+branch: it is rebuilt from `main` plus selected in-flight branches whenever
+composition changes, so one continuously deployed Vercel preview always shows
+the combined upcoming site (a team preview domain may be pinned to it). Rules:
+
+- Nothing ever merges from `staging` into `main`. Every real change lands
+  through its own PR against `main` with normal review and CI.
+- The branch may be force-pushed or rebuilt at any time; it carries no review
+  or deployment authority, and no PR is opened for it.
+- Preview deployments read the isolated preview database, so the homepage demo
+  shows its unavailable state on `staging` by design; demo answers are only
+  proven in production.
+
 See Notion (Platform + Infrastructure) for decision rationale.
 
 ### DNS for Custom Routes
