@@ -212,8 +212,8 @@ function SportPanel({
   return (
     <>
       <DialogPrimitive.Description className="text-[length:var(--phone-type-secondary)] leading-[1.45] text-[var(--phone-muted)]">
-        The homepage enables only combinations with complete, recently refreshed
-        coverage.
+        The demo runs against one real league at a time, and only combinations
+        with complete, recently refreshed answers are enabled.
       </DialogPrimitive.Description>
 
       <div className="mt-5 rounded-2xl border border-[var(--phone-border)] bg-[var(--phone-panel)] p-4">
@@ -264,9 +264,10 @@ function SportPanel({
       </div>
 
       <p className="mt-4 text-[length:var(--phone-type-caption)] leading-[1.5] text-[var(--phone-muted)]">
-        Flaim supports ESPN and Yahoo across football, baseball, basketball, and
-        hockey, plus Sleeper for football and basketball. Additional demo options
-        stay disabled until their answer caches are ready.
+        Flaim itself supports ESPN and Yahoo across football, baseball,
+        basketball, and hockey, plus Sleeper for football and basketball. The
+        football demo returns for draft season, and more platforms arrive here
+        as their answers are prepared.
       </p>
     </>
   );
