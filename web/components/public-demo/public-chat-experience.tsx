@@ -714,7 +714,7 @@ export function PublicChatExperience({
                       aria-label={
                         platform.available
                           ? `${platform.label} demo selected`
-                          : `${platform.label} demo is not active yet`
+                          : `${platform.label} demo coming soon`
                       }
                       className={cn(
                         "h-11 min-w-0 flex-1 rounded-full px-1.5",
