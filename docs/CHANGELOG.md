@@ -4,6 +4,13 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+## [8.2.0] - 2026-08-06
+
+Corresponds to ChatGPT plugin listing v2.1.0; also includes the annotation correction shipped in listing v2.0.1.
+
+### Sleeper Transaction Week Validation (FLA-198)
+- **Fixed**: Sleeper `get_transactions` with `week: 0` no longer silently returns the recent-activity window. Invalid Sleeper weeks (zero, negative, fractional, non-finite) now fail closed before any provider fetch with a corrective `INVALID_TRANSACTION_WINDOW` error naming both valid request forms (a positive matchup week, or omitting `week` for the recent window). ESPN `week: 0` remains valid preseason; Yahoo behavior is unchanged.
+
 ### ESPN Transaction Matchup Windows (FLA-193)
 - **Fixed**: ESPN daily-sport transaction selectors now treat public `week` as a matchup period and expand it through the actual daily keys in the `mMatchupScore` schedule instead of mistaking it for one calendar-day scoring period. ESPN's similarly named `scheduleSettings.matchupPeriods` field groups weekly/playoff periods and is not a daily-scoring map.
 - **Guarded**: The legacy daily-scoring compatibility path refuses values that are known future matchup IDs, preventing a future week from being reinterpreted as an unrelated historical scoring day.
