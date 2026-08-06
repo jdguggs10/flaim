@@ -2,6 +2,7 @@
 
 import React from "react";
 import ReactMarkdown from "react-markdown";
+import { PhoneFlaimMark } from "@/components/site/phone-demo-frame";
 import { cn } from "@/lib/utils";
 
 interface PublicMessageProps {
@@ -16,21 +17,29 @@ export function PublicMessage({ role, text }: PublicMessageProps) {
     <div className={cn("flex", isUser ? "justify-end" : "justify-start")}>
       <div
         className={cn(
-          "max-w-3xl overflow-hidden rounded-[1.1rem] border px-3 py-3 shadow-sm sm:rounded-[1.35rem] sm:px-4 sm:py-4 lg:rounded-[2rem] lg:px-5",
+          "overflow-hidden",
           isUser
-            ? "max-w-[85%] border-primary/15 bg-primary text-primary-foreground"
-            : "border-border bg-card text-foreground"
+            ? "max-w-[88%] rounded-[1.45rem] bg-[var(--phone-user-bubble)] px-4 py-3 text-[var(--phone-user-text)]"
+            : "w-full bg-transparent text-[var(--phone-text)]"
         )}
       >
-        <div
-          className={cn(
-            "prose prose-sm max-w-none prose-p:my-0 prose-ul:my-2 prose-li:my-0 prose-li:marker:text-muted-foreground",
-            isUser
-              ? "prose-headings:text-primary-foreground prose-strong:text-primary-foreground prose-p:text-primary-foreground prose-li:text-primary-foreground prose-li:marker:text-primary-foreground/70"
-              : "prose-headings:text-foreground prose-strong:text-foreground prose-p:text-foreground prose-li:text-foreground"
-          )}
-        >
-          <ReactMarkdown>{text}</ReactMarkdown>
+        <div className={cn(isUser ? "flex items-start gap-1.5" : "")}>
+          {isUser ? (
+            <span className="mt-0.5 inline-flex shrink-0 items-center gap-1 font-semibold text-[var(--phone-mention)]">
+              <PhoneFlaimMark size={16} />
+              <span>Flaim</span>
+            </span>
+          ) : null}
+          <div
+            className={cn(
+              "prose prose-sm min-w-0 max-w-none flex-1 text-[length:var(--phone-type-body)] leading-[var(--phone-leading-body)] prose-headings:font-semibold prose-headings:tracking-[-0.02em] prose-h2:text-[clamp(1rem,5.2cqw,1.125rem)] prose-h2:leading-[1.35] prose-h3:text-[clamp(0.95rem,4.9cqw,1.05rem)] prose-h3:leading-[1.4] prose-p:my-0 prose-p:leading-[var(--phone-leading-body)] prose-strong:font-semibold prose-ul:my-2.5 prose-li:my-0.5 prose-li:leading-[var(--phone-leading-body)]",
+              isUser
+                ? "prose-headings:text-[var(--phone-user-text)] prose-strong:text-[var(--phone-user-text)] prose-p:text-[var(--phone-user-text)] prose-li:text-[var(--phone-user-text)] prose-li:marker:text-[var(--phone-muted)]"
+                : "prose-headings:text-[var(--phone-text)] prose-strong:text-[var(--phone-text)] prose-p:text-[var(--phone-text)] prose-li:text-[var(--phone-text)] prose-li:marker:text-[var(--phone-muted)]"
+            )}
+          >
+            <ReactMarkdown>{text}</ReactMarkdown>
+          </div>
         </div>
       </div>
     </div>
