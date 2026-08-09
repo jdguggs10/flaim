@@ -2,7 +2,12 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight, ChevronDown } from "lucide-react";
 
+import { FootballMediaShowcase } from "@/components/site/football-media-showcase";
 import { Button } from "@/components/ui/button";
+import {
+  CHATGPT_APP_URL,
+  CLAUDE_CONNECTOR_DIRECTORY_URL,
+} from "@/lib/product-links";
 
 export const metadata: Metadata = {
   title: "Fantasy Football in AI: Analyze Your Real Team",
@@ -19,80 +24,48 @@ export const metadata: Metadata = {
   },
 };
 
-const DRAFT_PROMPTS = [
-  "What grade would you give my draft, and why?",
-  "What is the biggest weakness in my roster construction?",
-  "Where am I strongest compared with the rest of my league?",
-  "Which position should I improve before Week 1?",
-  "Do I have the best team in the league?",
-  "Who should I target in a trade based on what my roster needs?",
-] as const;
-
-const CONTEXT_ITEMS = [
+const FOOTBALL_PROOF = [
   {
-    title: "Your players",
-    body: "See starters, bench depth, player information, and the shape of your roster.",
+    title: "Grade the team you drafted",
+    body: "Use your real roster, scoring rules, league size, and positional depth—not a generic player list.",
   },
   {
-    title: "Your league",
-    body: "Account for scoring rules, roster settings, team count, standings, and league structure.",
+    title: "Work your actual waiver wire",
+    body: "Compare what your roster needs with players who are really available in your league.",
   },
   {
-    title: "Your alternatives",
-    body: "Compare your roster with players who are actually available in your league.",
-  },
-  {
-    title: "Your competition",
-    body: "Evaluate your matchup and compare your team with the rest of the league.",
+    title: "Follow the season",
+    body: "Bring matchups, standings, transactions, and league history into the same conversation.",
   },
 ] as const;
 
-const SEASON_ITEMS = [
-  {
-    title: "Waiver wire",
-    body: "Ask who to add and drop based on your roster and the players available in your league.",
-  },
-  {
-    title: "Start and sit",
-    body: "Use your current lineup, matchup, and scoring format—and current player research when your AI app provides it—to think through weekly decisions.",
-  },
-  {
-    title: "Trades",
-    body: "Evaluate a trade against the strengths and weaknesses of your actual team—not an imaginary roster.",
-  },
-  {
-    title: "Matchups and standings",
-    body: "See who is winning, what the matchup means, and how your team compares with the league.",
-  },
-] as const;
-
-const HOW_IT_WORKS = [
+const CONNECTION_STEPS = [
   {
     title: "Create your Flaim account",
-    body: "Create your free account so Flaim can securely remember the leagues you connect.",
+    body: "Free, with no Flaim subscription.",
   },
   {
-    title: "Connect your fantasy leagues",
-    body: "Connect the ESPN, Yahoo, or Sleeper fantasy football leagues you already play in.",
+    title: "Connect your football leagues",
+    body: "ESPN, Yahoo, or Sleeper.",
   },
   {
-    title: "Connect your AI app",
-    body: "Open Flaim in ChatGPT, Claude, or Perplexity, authorize your account, and start asking about your team.",
+    title: "Add Flaim to your AI",
+    body: "Open Flaim in ChatGPT or Claude and start asking.",
   },
 ] as const;
 
 const PRODUCT_BOUNDARIES = [
   {
     title: "Free",
-    body: "Flaim has no subscription. You bring your own AI app.",
+    body: "No Flaim subscription.",
   },
   {
     title: "Read-only",
-    body: "Flaim cannot make trades, add or drop players, edit your lineup, or change league settings.",
+    body: "No trades, drops, lineup edits, or league changes.",
   },
   {
     title: "Multiple leagues",
-    body: "Connect more than one football league and tell your AI which one you want to discuss.",
+    body: "Keep every football league in one Flaim account.",
   },
 ] as const;
 
@@ -110,7 +83,7 @@ const FOOTBALL_FAQS = [
   {
     question: "Which fantasy football platforms work with Flaim?",
     answer:
-      "Flaim supports fantasy football leagues on ESPN, Yahoo, and Sleeper. Current connection availability and setup instructions are listed in the Platforms guide.",
+      "Flaim supports fantasy football leagues on ESPN, Yahoo, and Sleeper. Current connection information is available on the fantasy platforms page.",
   },
   {
     question: "Can Flaim set my lineup or make a trade for me?",
@@ -124,30 +97,30 @@ const FOOTBALL_FAQS = [
   },
 ] as const;
 
-function DevelopmentScreenshotSlot({
-  title,
-  caption,
-}: {
-  title: string;
-  caption: string;
-}) {
-  if (process.env.NODE_ENV !== "development") return null;
-
+function FootballConnectionButtons() {
   return (
-    <div className="flex min-h-72 items-center justify-center rounded-3xl border border-dashed bg-muted/40 p-8 text-center">
-      <div className="max-w-sm">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-foreground/65">
-          {title}
-        </p>
-        <p className="mt-3 text-sm leading-6 text-muted-foreground">
-          An approved, sanitized mobile screenshot will appear here after the
-          capture pass.
-        </p>
-        <p className="mt-4 text-xs leading-5 text-muted-foreground">{caption}</p>
-      </div>
+    <div className="grid w-full max-w-lg grid-cols-2 gap-3">
+      <Button asChild size="lg" className="col-span-2 w-full">
+        <Link href="/leagues">Connect Your League First</Link>
+      </Button>
+      <Button asChild size="lg" variant="outline" className="w-full">
+        <a href={CHATGPT_APP_URL} target="_blank" rel="noopener noreferrer">
+          Add to ChatGPT
+        </a>
+      </Button>
+      <Button asChild size="lg" variant="outline" className="w-full">
+        <a
+          href={CLAUDE_CONNECTOR_DIRECTORY_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Add to Claude
+        </a>
+      </Button>
     </div>
   );
 }
+
 export default function FantasyFootballPage() {
   return (
     <div className="min-h-screen bg-background">
@@ -169,136 +142,71 @@ export default function FantasyFootballPage() {
         }}
       />
 
-      <section className="border-b px-4 py-16 sm:px-6 md:py-24 lg:px-8">
-        <div className="mx-auto max-w-5xl">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">
-            Your real fantasy football league
-          </p>
-          <h1 className="mt-4 max-w-4xl text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
-            Grade your real fantasy football team with AI
-          </h1>
-          <p className="mt-6 max-w-3xl text-lg leading-8 text-muted-foreground">
-            Connect your ESPN, Yahoo, or Sleeper league to Flaim, then ask
-            ChatGPT, Claude, or Perplexity to analyze the roster you actually
-            drafted—with your league settings, opponents, standings, and
-            available players included.
-          </p>
-          <p className="mt-5 max-w-3xl font-medium leading-7">
-            No screenshots. No copy-pasting every player. No generic team grade
-            built without your league context.
-          </p>
-          <div className="mt-8 flex flex-wrap gap-3">
-            <Button asChild size="lg">
-              <Link href="/leagues">Connect Your Football League</Link>
-            </Button>
-            <Button asChild size="lg" variant="outline">
-              <Link href="#draft-analysis">See a Real Example</Link>
-            </Button>
-          </div>
-        </div>
-      </section>
-
-      <section
-        id="draft-analysis"
-        className="scroll-mt-24 px-4 py-14 sm:px-6 lg:px-8"
-      >
-        <div className="mx-auto grid max-w-5xl gap-10 lg:grid-cols-2 lg:items-start">
+      <section className="border-b px-4 py-12 sm:px-6 md:py-16 lg:px-8">
+        <div className="mx-auto grid max-w-6xl gap-10 lg:grid-cols-[0.82fr_1.18fr] lg:items-center">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">
-              After your draft
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">
+              Your real fantasy football league
             </p>
-            <h2 className="mt-3 text-3xl font-bold tracking-tight">
-              Your draft grade should know your league
-            </h2>
-            <p className="mt-4 leading-7 text-muted-foreground">
-              A useful team grade depends on more than player names. League
-              size, scoring rules, roster settings, positional depth,
-              opponents, and the waiver wire all change what a good roster
-              looks like. Flaim gives your AI that context.
+            <h1 className="mt-4 text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl">
+              Grade your real fantasy football team with AI
+            </h1>
+            <p className="mt-5 max-w-2xl text-lg leading-8 text-muted-foreground">
+              Connect ESPN, Yahoo, or Sleeper, then ask ChatGPT or Claude about
+              the roster you actually drafted—with your league context already
+              included.
             </p>
-            <p className="mt-6 font-semibold">Try asking:</p>
-            <ul className="mt-3 space-y-2 text-sm leading-6 text-muted-foreground">
-              {DRAFT_PROMPTS.map((prompt) => (
-                <li key={prompt} className="flex gap-3">
-                  <span aria-hidden="true" className="text-primary">
-                    •
-                  </span>
-                  <span>{prompt}</span>
-                </li>
-              ))}
-            </ul>
+            <p className="mt-4 font-medium">
+              No roster screenshots. No manual player entry.
+            </p>
+            <div className="mt-7">
+              <FootballConnectionButtons />
+            </div>
           </div>
 
-          <DevelopmentScreenshotSlot
-            title="Post-draft roster grade"
-            caption="A real connected roster—not a manually entered list of players."
-          />
+          <div id="showcase" className="scroll-mt-24">
+            <FootballMediaShowcase />
+          </div>
         </div>
       </section>
 
-      <section className="border-y bg-muted/50 px-4 py-14 sm:px-6 lg:px-8">
+      <section className="border-b bg-muted/50 px-4 py-12 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-5xl">
-          <h2 className="text-3xl font-bold tracking-tight">
-            Your roster is only part of the story
-          </h2>
-          <p className="mt-4 max-w-3xl leading-7 text-muted-foreground">
-            A screenshot may show your starters and bench. It usually does not
-            show your scoring settings, league size, opponents, available free
-            agents, recent transactions, past seasons, or where every team
-            stands. Flaim can supply that missing context directly from your
-            connected league.
-          </p>
-          <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {CONTEXT_ITEMS.map((item) => (
-              <div key={item.title} className="rounded-2xl border bg-background p-5">
-                <h3 className="font-semibold">{item.title}</h3>
+          <div className="grid gap-4 md:grid-cols-3">
+            {FOOTBALL_PROOF.map((item) => (
+              <article key={item.title} className="rounded-2xl border bg-background p-5">
+                <h2 className="text-lg font-semibold">{item.title}</h2>
                 <p className="mt-2 text-sm leading-6 text-muted-foreground">
                   {item.body}
                 </p>
-              </div>
+              </article>
             ))}
           </div>
         </div>
       </section>
 
-      <section className="px-4 py-14 sm:px-6 lg:px-8">
+      <section className="px-4 py-12 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-5xl">
-          <h2 className="text-3xl font-bold tracking-tight">
-            From draft night through the championship
-          </h2>
-          <p className="mt-4 max-w-3xl leading-7 text-muted-foreground">
-            The same connection keeps working after your draft. Ask new
-            questions as matchups, injuries, waivers, trades, and standings
-            change.
-          </p>
-          <div className="mt-8 grid gap-4 md:grid-cols-2">
-            {SEASON_ITEMS.map((item) => (
-              <div key={item.title} className="rounded-2xl border p-5">
-                <h3 className="font-semibold">{item.title}</h3>
-                <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                  {item.body}
-                </p>
-              </div>
-            ))}
+          <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">
+                Three quick steps
+              </p>
+              <h2 className="mt-3 text-3xl font-bold tracking-tight">
+                Connect once. Ask all season.
+              </h2>
+            </div>
+            <Link
+              href="/guide"
+              className="inline-flex items-center text-sm font-medium text-primary hover:underline"
+            >
+              Using Flaim
+              <ArrowRight className="ml-1.5 h-4 w-4" aria-hidden="true" />
+            </Link>
           </div>
-
-          <div className="mt-10">
-            <DevelopmentScreenshotSlot
-              title="Waiver or roster-construction decision"
-              caption="Advice grounded in your roster and your league's available players."
-            />
-          </div>
-        </div>
-      </section>
-
-      <section className="border-y bg-muted/50 px-4 py-14 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-5xl">
-          <h2 className="text-3xl font-bold tracking-tight">
-            Get connected in three steps
-          </h2>
-          <div className="mt-8 grid gap-4 md:grid-cols-3">
-            {HOW_IT_WORKS.map((step, index) => (
-              <div key={step.title} className="rounded-2xl border bg-background p-5">
+          <div className="mt-7 grid gap-4 md:grid-cols-3">
+            {CONNECTION_STEPS.map((step, index) => (
+              <article key={step.title} className="rounded-2xl border p-5">
                 <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">
                   {index + 1}
                 </div>
@@ -306,39 +214,29 @@ export default function FantasyFootballPage() {
                 <p className="mt-2 text-sm leading-6 text-muted-foreground">
                   {step.body}
                 </p>
-              </div>
-            ))}
-          </div>
-          <Button asChild className="mt-8">
-            <Link href="/leagues">Create Your Flaim Account</Link>
-          </Button>
-        </div>
-      </section>
-
-      <section className="px-4 py-14 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-5xl">
-          <h2 className="text-3xl font-bold tracking-tight">
-            Clear product boundaries
-          </h2>
-          <div className="mt-8 grid gap-4 md:grid-cols-3">
-            {PRODUCT_BOUNDARIES.map((item) => (
-              <div key={item.title} className="rounded-2xl border p-5">
-                <h3 className="font-semibold">{item.title}</h3>
-                <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                  {item.body}
-                </p>
-              </div>
+              </article>
             ))}
           </div>
         </div>
       </section>
 
-      <section className="border-y bg-muted/50 px-4 py-14 sm:px-6 lg:px-8">
+      <section className="border-y bg-muted/50 px-4 py-8 sm:px-6 lg:px-8">
+        <div className="mx-auto grid max-w-5xl gap-3 sm:grid-cols-3">
+          {PRODUCT_BOUNDARIES.map((item) => (
+            <div key={item.title} className="rounded-xl border bg-background p-4">
+              <p className="font-semibold">{item.title}</p>
+              <p className="mt-1 text-sm text-muted-foreground">{item.body}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="px-4 py-12 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-3xl">
           <h2 className="text-3xl font-bold tracking-tight">
             Fantasy football FAQs
           </h2>
-          <div className="mt-8 space-y-3">
+          <div className="mt-7 space-y-3">
             {FOOTBALL_FAQS.map((faq) => (
               <details key={faq.question} className="group rounded-xl border bg-background">
                 <summary className="flex cursor-pointer items-center justify-between gap-4 p-4 font-medium">
@@ -354,37 +252,24 @@ export default function FantasyFootballPage() {
         </div>
       </section>
 
-      <section className="px-4 py-16 text-center sm:px-6 lg:px-8">
+      <section className="border-t bg-muted/50 px-4 py-14 text-center sm:px-6 lg:px-8">
         <div className="mx-auto max-w-2xl">
           <h2 className="text-3xl font-bold tracking-tight">
             Ask about the team you actually drafted
           </h2>
-          <p className="mt-4 leading-7 text-muted-foreground">
-            Connect your fantasy football league and give your AI the context it
-            has been missing.
+          <p className="mt-3 leading-7 text-muted-foreground">
+            Connect your football league, add Flaim to your AI, and start asking.
           </p>
-          <div className="mt-7 flex flex-wrap justify-center gap-3">
-            <Button asChild size="lg">
-              <Link href="/leagues">Connect Your Football League</Link>
-            </Button>
-            <Button asChild size="lg" variant="outline">
-              <Link href="/#live-demo">
-                Explore the Live Demo
-                <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />
-              </Link>
-            </Button>
+          <div className="mx-auto mt-7 max-w-lg">
+            <FootballConnectionButtons />
           </div>
-          <p className="mt-6 text-sm text-muted-foreground">
-            Prefer setup instructions? Read the{" "}
-            <Link href="/guide/ai" className="text-primary hover:underline">
-              AI Apps guide
-            </Link>{" "}
-            or the{" "}
-            <Link href="/guide/platforms" className="text-primary hover:underline">
-              Platforms guide
-            </Link>
-            .
-          </p>
+          <Link
+            href="/#live-demo"
+            className="mt-6 inline-flex items-center text-sm font-medium text-primary hover:underline"
+          >
+            Explore the live demo
+            <ArrowRight className="ml-1.5 h-4 w-4" aria-hidden="true" />
+          </Link>
         </div>
       </section>
     </div>

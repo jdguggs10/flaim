@@ -52,7 +52,7 @@ function HomepageCtas() {
     <div className="mx-auto grid w-full max-w-sm grid-cols-2 items-center justify-center gap-3 sm:flex sm:max-w-none sm:flex-row sm:flex-wrap">
       <SignedOut>
         <Button asChild size="lg" className="col-span-2 w-full sm:w-auto">
-          <Link href="/leagues">Connect Your Leagues</Link>
+          <Link href="/leagues">Connect Your Leagues First</Link>
         </Button>
       </SignedOut>
       <SignedIn>
@@ -68,7 +68,7 @@ function HomepageCtas() {
           aria-label="Open Flaim Fantasy in ChatGPT"
           title="Open Flaim Fantasy in the ChatGPT Plugin Store"
         >
-          ChatGPT
+          Add to ChatGPT
         </a>
       </Button>
       <Button asChild variant="outline" size="lg" className="w-full sm:w-auto">
@@ -79,7 +79,7 @@ function HomepageCtas() {
           aria-label="Find Flaim in Claude"
           title="Find Flaim in Claude's connector directory"
         >
-          Claude
+          Add to Claude
         </a>
       </Button>
     </div>

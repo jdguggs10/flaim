@@ -45,16 +45,6 @@ const TOOL_DEFINITIONS = [
 
 const TOOL_GROUPS = [
   {
-    title: "Your account",
-    description: "Find the right league before the analysis starts.",
-    tools: ["Leagues & Defaults", "Refresh Leagues"],
-  },
-  {
-    title: "Your league",
-    description: "Understand the rules and where every team stands.",
-    tools: ["League Info", "Standings", "League History"],
-  },
-  {
     title: "Your team",
     description: "Give your AI the roster and player context it needs.",
     tools: ["Roster", "Players"],
@@ -63,6 +53,16 @@ const TOOL_GROUPS = [
     title: "Your week",
     description: "Evaluate the matchup and the moves available now.",
     tools: ["Matchups", "Free Agents", "Transactions"],
+  },
+  {
+    title: "Your league",
+    description: "Understand the rules and where every team stands.",
+    tools: ["League Info", "Standings", "League History"],
+  },
+  {
+    title: "Your account",
+    description: "Find the right league before the analysis starts.",
+    tools: ["Leagues & Defaults", "Refresh Leagues"],
   },
 ] as const;
 
