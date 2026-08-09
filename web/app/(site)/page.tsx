@@ -47,20 +47,40 @@ const SUPPORTED_SPORTS = [
 ] as const;
 const SUPPORTED_AI_TOOLS = ["ChatGPT", "Claude"] as const;
 
-function HomepageCtas() {
+function HomepageCtas({ closing = false }: { closing?: boolean }) {
+  const connectLabel = closing
+    ? "Connect Your Leagues to Flaim"
+    : "Connect Your Leagues First";
+  const chatGptLabel = closing
+    ? "Connect Flaim to ChatGPT"
+    : "Add to ChatGPT";
+  const claudeLabel = closing ? "Connect Flaim to Claude" : "Add to Claude";
+  const containerClassName = closing
+    ? "mx-auto grid w-full max-w-xl gap-3 sm:grid-cols-2"
+    : "mx-auto grid w-full max-w-sm grid-cols-2 items-center justify-center gap-3 sm:flex sm:max-w-none sm:flex-row sm:flex-wrap";
+  const primaryClassName = closing
+    ? "w-full sm:col-span-2"
+    : "col-span-2 w-full sm:w-auto";
+  const secondaryClassName = closing ? "w-full" : "w-full sm:w-auto";
+
   return (
-    <div className="mx-auto grid w-full max-w-sm grid-cols-2 items-center justify-center gap-3 sm:flex sm:max-w-none sm:flex-row sm:flex-wrap">
+    <div className={containerClassName}>
       <SignedOut>
-        <Button asChild size="lg" className="col-span-2 w-full sm:w-auto">
-          <Link href="/leagues">Connect Your Leagues First</Link>
+        <Button asChild size="lg" className={primaryClassName}>
+          <Link href="/leagues">{connectLabel}</Link>
         </Button>
       </SignedOut>
       <SignedIn>
-        <Button asChild size="lg" className="col-span-2 w-full sm:w-auto">
+        <Button asChild size="lg" className={primaryClassName}>
           <Link href="/leagues">Your Leagues</Link>
         </Button>
       </SignedIn>
-      <Button asChild variant="outline" size="lg" className="w-full sm:w-auto">
+      <Button
+        asChild
+        variant="outline"
+        size="lg"
+        className={secondaryClassName}
+      >
         <a
           href={CHATGPT_APP_URL}
           target="_blank"
@@ -68,10 +88,15 @@ function HomepageCtas() {
           aria-label="Open Flaim Fantasy in ChatGPT"
           title="Open Flaim Fantasy in the ChatGPT Plugin Store"
         >
-          Add to ChatGPT
+          {chatGptLabel}
         </a>
       </Button>
-      <Button asChild variant="outline" size="lg" className="w-full sm:w-auto">
+      <Button
+        asChild
+        variant="outline"
+        size="lg"
+        className={secondaryClassName}
+      >
         <a
           href={CLAUDE_CONNECTOR_DIRECTORY_URL}
           target="_blank"
@@ -79,7 +104,7 @@ function HomepageCtas() {
           aria-label="Find Flaim in Claude"
           title="Find Flaim in Claude's connector directory"
         >
-          Add to Claude
+          {claudeLabel}
         </a>
       </Button>
     </div>
@@ -423,7 +448,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
             connect your AI app. After that, just start asking.
           </p>
           <div className="mt-6 flex flex-row flex-wrap items-center justify-center gap-3">
-            <HomepageCtas />
+            <HomepageCtas closing />
           </div>
         </div>
       </section>
