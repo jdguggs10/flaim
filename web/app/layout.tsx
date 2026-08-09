@@ -113,10 +113,14 @@ export default function RootLayout({
                 alternateName: "Flaim",
                 url: "https://flaim.app",
                 logo: "https://flaim.app/flaim-mark-hero.png",
-                founder: { "@type": "Person", name: "Gerry" },
+                founder: {
+                  "@type": "Person",
+                  name: "Gerry",
+                  sameAs: ["https://www.threads.com/@jdguggs10"],
+                },
                 sameAs: [
                   "https://github.com/jdguggs10/flaim",
-                  "https://www.threads.com/@jdguggs10",
+                  "https://www.threads.com/@flaim_app",
                 ],
               },
             ]),
