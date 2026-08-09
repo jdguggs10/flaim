@@ -457,19 +457,39 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
       <section id="about-flaim" className="scroll-mt-24 px-4 py-12">
         <div className="container mx-auto max-w-2xl text-center">
           <p className="text-muted-foreground">
-            I&apos;m Gerry and I built Flaim because I felt like giving back.
-            Flaim is open source and maintained for the long-term.
+            I&apos;m Gerry, and I built Flaim. Flaim is free to use, open
+            source, and maintained by me as a personal passion project. Please
+            don&apos;t abuse it—and have fun.
           </p>
-          <p className="mt-4 text-sm">
+          <nav
+            aria-label="Founder links"
+            className="mt-4 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-sm"
+          >
+            <a
+              href="https://www.threads.com/@jdguggs10"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary hover:underline"
+            >
+              Gerry&apos;s dev notes
+            </a>
+            <a
+              href="https://www.threads.com/@flaim_app"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary hover:underline"
+            >
+              Flaim updates
+            </a>
             <a
               href="https://github.com/jdguggs10/flaim"
               target="_blank"
               rel="noopener noreferrer"
               className="text-primary hover:underline"
             >
-              About Flaim
+              View source
             </a>
-          </p>
+          </nav>
         </div>
       </section>
     </div>
