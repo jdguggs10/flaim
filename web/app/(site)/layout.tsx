@@ -46,6 +46,18 @@ export default function SiteLayout({
                 Inspirations
               </Link>
             </div>
+            <p className="mx-auto mt-2 max-w-full text-xs text-muted-foreground">
+              Fantasy data provided by{" "}
+              <a
+                href="https://sports.yahoo.com/fantasy/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline hover:text-foreground"
+              >
+                Yahoo Fantasy
+              </a>
+              , ESPN, and Sleeper.
+            </p>
           </footer>
         </div>
       </main>
