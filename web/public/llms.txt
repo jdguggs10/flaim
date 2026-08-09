@@ -1,6 +1,6 @@
 # Flaim Fantasy
 
-> Flaim connects your real ESPN, Yahoo, and Sleeper fantasy leagues to the AI assistants you already use, so the advice is about your team—not generic fantasy takes.
+> Flaim connects your real ESPN, Yahoo, and Sleeper fantasy leagues to the AI assistants you already use, so the advice is about your team instead of generic fantasy takes.
 
 ## What Flaim does
 
@@ -10,7 +10,7 @@
 - Supplies roster, standings, matchups, free agents, transactions, player, league-setting, and history context
 - Uses nine read-only analysis tools plus a bounded Refresh that updates Flaim's own connected-league records
 - Available as Flaim Fantasy in ChatGPT and Claude; Perplexity can connect through its current remote-connector settings
-- Read-only — Flaim cannot make trades, add or drop players, edit lineups, or change anything in ESPN, Yahoo, or Sleeper
+- Read-only: Flaim cannot make trades, add or drop players, edit lineups, or change anything in ESPN, Yahoo, or Sleeper
 - Free, with no Flaim subscription
 
 ## How to connect
@@ -31,6 +31,5 @@ After connecting, Your Leagues is where users can add leagues, sync seasons, and
 - Fantasy platform help: https://flaim.app/guide/platforms
 - ChatGPT: https://chatgpt.com/apps/flaim-fantasy/asdk_app_69a8f78087e081919e52cacacf00ff36
 - Claude connector directory: https://claude.ai/directory
-- GitHub: https://github.com/jdguggs10/flaim
 - Privacy: https://flaim.app/privacy
 - Full details: https://flaim.app/llms-full.txt

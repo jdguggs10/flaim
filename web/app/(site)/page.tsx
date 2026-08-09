@@ -9,10 +9,10 @@ import {
 
 export const metadata: Metadata = {
   title: {
-    absolute: "Flaim Fantasy — Your Real Fantasy Leagues in AI",
+    absolute: "Flaim Fantasy | Your Real Fantasy Leagues in AI",
   },
   description:
-    "Connect your ESPN, Yahoo, or Sleeper fantasy leagues to the AI you already use. Analyze your real roster, matchups, standings, waiver wire, transactions, and league history—without screenshots or copy-pasting.",
+    "Connect your ESPN, Yahoo, or Sleeper fantasy leagues to the AI you already use. Analyze your real roster, matchups, standings, waiver wire, transactions, and league history without screenshots or copy-pasting.",
   alternates: {
     canonical: "https://flaim.app",
   },
@@ -457,22 +457,14 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
       <section id="about-flaim" className="scroll-mt-24 px-4 py-12">
         <div className="container mx-auto max-w-2xl text-center">
           <p className="text-muted-foreground">
-            I&apos;m Gerry, and I built Flaim. Flaim is free to use, open
-            source, and maintained by me as a personal passion project. Please
-            don&apos;t abuse it—and have fun.
+            I&apos;m Gerry, and I built Flaim. It&apos;s free to use and
+            maintained by me as a personal passion project. Please don&apos;t
+            abuse it. Have fun.
           </p>
           <nav
             aria-label="Founder links"
             className="mt-4 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-sm"
           >
-            <a
-              href="https://www.threads.com/@jdguggs10"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-primary hover:underline"
-            >
-              Gerry&apos;s dev notes
-            </a>
             <a
               href="https://www.threads.com/@flaim_app"
               target="_blank"
@@ -482,12 +474,12 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
               Flaim updates
             </a>
             <a
-              href="https://github.com/jdguggs10/flaim"
+              href="https://www.threads.com/@jdguggs10"
               target="_blank"
               rel="noopener noreferrer"
               className="text-primary hover:underline"
             >
-              View source
+              My Threads
             </a>
           </nav>
         </div>

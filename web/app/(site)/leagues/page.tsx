@@ -409,7 +409,7 @@ function WidgetSetupBanner({ accountCreated, isChatGpt }: { accountCreated: bool
         <div className="space-y-1">
           <h2 className="font-medium">{isChatGpt ? 'Finishing your ChatGPT setup' : 'Finishing your AI setup'}</h2>
           <p className="text-sm text-muted-foreground">
-            You&apos;re almost there — three quick steps and Flaim is ready in {assistantName}.
+            You&apos;re almost there. Three quick steps and Flaim is ready in {assistantName}.
           </p>
         </div>
         <ol className="space-y-2 text-sm">
@@ -2371,7 +2371,7 @@ function LeaguesPageContent() {
                       )}
                       <p className="text-sm text-muted-foreground">
                         On your phone right now? Yahoo and Sleeper connect right
-                        here — no extension needed.
+                        here. No extension needed.
                       </p>
                     </>
                   ) : (

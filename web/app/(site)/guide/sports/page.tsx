@@ -53,13 +53,12 @@ export default function SportsGuidePage() {
         <h1 className="mb-4 text-3xl font-bold">Fantasy Sports Analysis</h1>
         <p className="mb-4 text-lg font-medium text-foreground">
           Flaim supports football, baseball, basketball, and hockey on ESPN and
-          Yahoo, plus football and basketball on Sleeper — all read-only.
+          Yahoo, plus football and basketball on Sleeper. Everything is read-only.
         </p>
         <p className="text-xs text-muted-foreground">Last updated March 2026</p>
         <p className="mt-4 mb-8 text-muted-foreground">
-          Flaim is more than a data connection. It gives ChatGPT a read-only
-          way to reason about fantasy sports with tools that work across ESPN,
-          Yahoo, and Sleeper.
+          Flaim gives ChatGPT read-only league context across ESPN, Yahoo, and
+          Sleeper, so the analysis can reflect your actual team and league.
         </p>
 
         {/* The Flaim Skill */}

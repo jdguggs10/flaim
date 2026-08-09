@@ -4,7 +4,7 @@ import { Lock, Shield, User } from "lucide-react";
 export const metadata: Metadata = {
   title: "Privacy Policy",
   description:
-    "Privacy policy for Flaim — read-only fantasy league analysis for ESPN, Yahoo, and Sleeper",
+    "Privacy policy for Flaim: read-only fantasy league analysis for ESPN, Yahoo, and Sleeper",
   alternates: {
     canonical: "https://flaim.app/privacy",
   },

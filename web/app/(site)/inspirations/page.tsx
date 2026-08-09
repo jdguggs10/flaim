@@ -32,11 +32,6 @@ const inspirations = [
     url: "https://www.threads.com/@jweingardt?igshid=NTc4MTIwNjQ2YQ==",
     description: "Baseball done right.",
   },
-  {
-    name: "espn-api",
-    url: "https://github.com/cwendt94/espn-api",
-    description: "Props to cwendt94 for making all this possible.",
-  },
 ];
 
 export default function InspirationsPage() {

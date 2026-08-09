@@ -19,7 +19,7 @@ const geistMono = localFont({
 
 export const metadata: Metadata = {
   title: {
-    default: "Flaim Fantasy — Your Real Fantasy Leagues in AI",
+    default: "Flaim Fantasy | Your Real Fantasy Leagues in AI",
     template: "%s | Flaim Fantasy",
   },
   description:
@@ -118,10 +118,7 @@ export default function RootLayout({
                   name: "Gerry",
                   sameAs: ["https://www.threads.com/@jdguggs10"],
                 },
-                sameAs: [
-                  "https://github.com/jdguggs10/flaim",
-                  "https://www.threads.com/@flaim_app",
-                ],
+                sameAs: ["https://www.threads.com/@flaim_app"],
               },
             ]),
           }}

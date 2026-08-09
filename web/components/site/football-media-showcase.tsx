@@ -20,7 +20,7 @@ const SHOWCASE_ITEMS = [
     label: "Real football answer",
     title: "Claude checking a connected league",
     description:
-      "A real Flaim tool call retrieving fantasy football standings—without a roster screenshot or manual entry.",
+      "Flaim retrieving fantasy football standings from a connected league without a roster screenshot or manual entry.",
     image: "/media/football/claude-football-standings-2026.png",
     alt: "Claude using Flaim to retrieve standings from a connected fantasy football league.",
     imageClassName: "object-contain",

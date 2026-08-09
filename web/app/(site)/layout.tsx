@@ -38,14 +38,6 @@ export default function SiteLayout({
                   Inspirations
                 </Link>
                 <a
-                  href="https://github.com/jdguggs10/flaim"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="hover:text-foreground"
-                >
-                  GitHub
-                </a>
-                <a
                   href="https://www.threads.com/@jdguggs10"
                   target="_blank"
                   rel="noopener noreferrer"

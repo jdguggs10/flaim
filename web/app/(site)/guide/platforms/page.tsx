@@ -4,7 +4,7 @@ import Link from "next/link";
 export const metadata: Metadata = {
   title: "Fantasy Platform Setup: ESPN, Yahoo & Sleeper",
   description:
-    "Connect your ESPN, Yahoo, or Sleeper fantasy leagues to Flaim from /leagues. Step-by-step setup, troubleshooting, and success checks for each platform.",
+    "Connect your ESPN, Yahoo, or Sleeper fantasy leagues to Flaim. Follow the setup, troubleshooting, and success checks for each platform.",
   alternates: {
     canonical: "https://flaim.app/guide/platforms",
   },
@@ -48,7 +48,7 @@ export default function PlatformsGuidePage() {
               name: "Connect Yahoo fantasy leagues to Flaim",
               dateModified: "2026-05-17",
               description:
-                "Start Yahoo OAuth from /leagues, approve access, and wait for league discovery to finish.",
+                "Start Yahoo sign-in from your leagues page, approve access, and wait for league discovery to finish.",
               step: [
                 {
                   "@type": "HowToStep",
@@ -103,10 +103,10 @@ export default function PlatformsGuidePage() {
           Connect Your Fantasy Leagues
         </h1>
         <p className="mb-4 text-lg font-medium text-foreground">
-          Flaim connects to ESPN via Chrome extension, Yahoo via OAuth, and
-          Sleeper via username — all from{" "}
+          Flaim connects to ESPN with the Chrome extension, Yahoo with a secure
+          sign-in, and Sleeper with your username. Start on{" "}
           <Link href="/leagues" className="text-primary hover:underline">
-            /leagues
+            your leagues page
           </Link>
           .
         </p>
@@ -114,7 +114,7 @@ export default function PlatformsGuidePage() {
         <p className="mt-4 mb-8 text-muted-foreground">
           Connect your fantasy platforms in{" "}
           <Link href="/leagues" className="text-primary hover:underline">
-            /leagues
+            your leagues page
           </Link>{" "}
           before connecting your AI app. Each platform connects differently,
           but the goal is the same: get your leagues visible in Flaim so your
@@ -127,7 +127,7 @@ export default function PlatformsGuidePage() {
             <li>
               Sign in to Flaim and open{" "}
               <Link href="/leagues" className="text-primary hover:underline">
-                /leagues
+                your leagues page
               </Link>
               .
             </li>
@@ -146,15 +146,14 @@ export default function PlatformsGuidePage() {
         <section id="espn" className="mb-10 scroll-mt-20">
           <h2 className="mb-3 text-xl font-semibold">ESPN</h2>
           <p className="mb-4 text-muted-foreground">
-            ESPN is the highest-friction setup, and Flaim&apos;s Chrome extension
-            is the only path. Your ESPN credentials are never shared with AI
-            providers.
+            Connect ESPN with Flaim&apos;s Chrome extension. Your ESPN
+            credentials are never shared with AI providers.
           </p>
           <ol className="list-decimal list-inside space-y-2 text-muted-foreground">
             <li>
               Open{" "}
               <Link href="/leagues" className="text-primary hover:underline">
-                /leagues
+                your leagues page
               </Link>{" "}
               and choose ESPN.
             </li>
@@ -190,9 +189,9 @@ export default function PlatformsGuidePage() {
         <section id="yahoo" className="mb-10 scroll-mt-20">
           <h2 className="mb-3 text-xl font-semibold">Yahoo</h2>
           <p className="mb-4 text-muted-foreground">
-            Yahoo is the simplest private-platform setup. Start OAuth from{" "}
+            Yahoo connects through a secure sign-in. Start from{" "}
             <Link href="/leagues" className="text-primary hover:underline">
-              /leagues
+              your leagues page
             </Link>
             , approve access, and wait for league discovery to finish.
           </p>
@@ -200,17 +199,16 @@ export default function PlatformsGuidePage() {
             <li>
               Open{" "}
               <Link href="/leagues" className="text-primary hover:underline">
-                /leagues
+                your leagues page
               </Link>{" "}
               and choose Yahoo.
             </li>
             <li>
-              Start Yahoo authentication and approve Flaim&apos;s access
-              request.
+              Sign in to Yahoo and approve Flaim&apos;s access request.
             </li>
             <li>
-              Return to Flaim and wait for discovery to finish. Auth success
-              does not mean your leagues are ready yet.
+              Return to Flaim and wait for discovery to finish. Completing the
+              sign-in does not mean your leagues are ready yet.
             </li>
             <li>Confirm that the Yahoo section shows leagues you can use.</li>
           </ol>
@@ -227,19 +225,20 @@ export default function PlatformsGuidePage() {
                 reconnect Yahoo if it keeps happening.
               </li>
               <li>
-                Auth completed but Flaim still looks disconnected: retry from{" "}
+                Yahoo sign-in completed but Flaim still looks disconnected:
+                retry from{" "}
                 <Link href="/leagues" className="text-primary hover:underline">
-                  /leagues
+                  your leagues page
                 </Link>{" "}
                 and make sure the popup or redirect fully finishes.
               </li>
               <li>
-                Auth worked but zero leagues appear: confirm the Yahoo account
-                has supported active leagues and reconnect.
+                No leagues appear after sign-in: confirm the Yahoo account has
+                supported active leagues and reconnect.
               </li>
               <li>
                 Yahoo worked before and stopped: reconnect Yahoo to repair the
-                stored authorization.
+                stored connection.
               </li>
             </ul>
           </div>
@@ -249,16 +248,15 @@ export default function PlatformsGuidePage() {
         <section id="sleeper" className="mb-10 scroll-mt-20">
           <h2 className="mb-3 text-xl font-semibold">Sleeper</h2>
           <p className="mb-4 text-muted-foreground">
-            Sleeper uses a public API, so there is no extension and no OAuth.
-            The important part is using your exact username (not your display
-            name) and knowing that Flaim supports football and basketball on
-            Sleeper.
+            Sleeper connects with your username, so there is no extension or
+            additional sign-in. Use your exact username, not your display name.
+            Flaim supports football and basketball on Sleeper.
           </p>
           <ol className="list-decimal list-inside space-y-2 text-muted-foreground">
             <li>
               Open{" "}
               <Link href="/leagues" className="text-primary hover:underline">
-                /leagues
+                your leagues page
               </Link>{" "}
               and choose Sleeper.
             </li>
@@ -280,8 +278,7 @@ export default function PlatformsGuidePage() {
               </li>
               <li>
                 Older leagues are missing: start by testing a current league
-                first. Historical coverage through Sleeper&apos;s history chain
-                may take time.
+                first. Older Sleeper seasons may take time to appear.
               </li>
             </ul>
           </div>
@@ -294,7 +291,7 @@ export default function PlatformsGuidePage() {
             <li>
               Your platform connection in{" "}
               <Link href="/leagues" className="text-primary hover:underline">
-                /leagues
+                your leagues page
               </Link>{" "}
               shows leagues you can use, not just a still-syncing state.
             </li>

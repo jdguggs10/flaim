@@ -1,10 +1,10 @@
 # Flaim Fantasy
 
-> Flaim connects your real ESPN, Yahoo, and Sleeper fantasy leagues to the AI assistants you already use, so the advice is about your team—not generic fantasy takes.
+> Flaim connects your real ESPN, Yahoo, and Sleeper fantasy leagues to the AI assistants you already use, so the advice is about your team instead of generic fantasy takes.
 
 ## What Flaim Is
 
-Flaim is a free, open-source service that gives supported AI assistants read-only access to your real fantasy sports data. It combines connected league context with fantasy analyst guidance so answers are grounded in your league—not generic rankings.
+Flaim is a free service that gives supported AI assistants read-only access to your real fantasy sports data. It combines connected league context with fantasy analyst guidance so answers are grounded in your league instead of generic rankings.
 
 Flaim Fantasy is available in ChatGPT and Claude. Perplexity can connect through its current remote-connector settings.
 
@@ -66,7 +66,7 @@ After connecting, Your Leagues is where users can add leagues, sync seasons, and
 Flaim is a ChatGPT-first fantasy analysis app, a skill that teaches AI how to analyze your league, and a connector to data from your actual fantasy leagues. It lets you ask about your actual roster, matchup, standings, transactions, available free agents, waiver wire, and more.
 
 ### Is my data safe?
-Flaim is read-only. It cannot trade, drop, or modify anything in your league. ESPN credentials are encrypted and stored securely — they are never shared with AI providers.
+Flaim is read-only. It cannot trade, drop, or modify anything in your league. ESPN credentials are encrypted and stored securely. They are never shared with AI providers.
 
 ### Why does ESPN need a Chrome extension?
 ESPN doesn't offer a public API for private fantasy league data. For private ESPN leagues, the Chrome extension syncs the session details Flaim needs for read-only access.
@@ -91,6 +91,5 @@ Flaim Fantasy is available in ChatGPT and Claude. Perplexity can connect through
 - Perplexity: https://flaim.app/guide/ai#perplexity
 - ChatGPT listing: https://chatgpt.com/apps/flaim-fantasy/asdk_app_69a8f78087e081919e52cacacf00ff36
 - Claude connector directory: https://claude.ai/directory
-- GitHub: https://github.com/jdguggs10/flaim
 - Privacy policy: https://flaim.app/privacy
 - Terms of service: https://flaim.app/terms

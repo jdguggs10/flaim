@@ -27,7 +27,7 @@ export const metadata: Metadata = {
 const FOOTBALL_PROOF = [
   {
     title: "Grade the team you drafted",
-    body: "Use your real roster, scoring rules, league size, and positional depth—not a generic player list.",
+    body: "Use your real roster, scoring rules, league size, and positional depth instead of a generic player list.",
   },
   {
     title: "Work your actual waiver wire",
@@ -153,7 +153,7 @@ export default function FantasyFootballPage() {
             </h1>
             <p className="mt-5 max-w-2xl text-lg leading-8 text-muted-foreground">
               Connect ESPN, Yahoo, or Sleeper, then ask ChatGPT or Claude about
-              the roster you actually drafted—with your league context already
+              the roster you actually drafted, with your league context already
               included.
             </p>
             <p className="mt-4 font-medium">
