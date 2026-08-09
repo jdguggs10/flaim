@@ -96,7 +96,12 @@ export default function PlatformsGuidePage() {
         }}
       />
       <div className="container mx-auto max-w-2xl px-4 py-12">
-        <h1 className="mb-4 text-3xl font-bold">Fantasy Platform Setup</h1>
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">
+          Setup step 2 of 3
+        </p>
+        <h1 className="mb-4 mt-3 text-3xl font-bold">
+          Connect Your Fantasy Leagues
+        </h1>
         <p className="mb-4 text-lg font-medium text-foreground">
           Flaim connects to ESPN via Chrome extension, Yahoo via OAuth, and
           Sleeper via username — all from{" "}
@@ -105,15 +110,15 @@ export default function PlatformsGuidePage() {
           </Link>
           .
         </p>
-        <p className="text-xs text-muted-foreground">Last updated May 2026</p>
+        <p className="text-xs text-muted-foreground">Last updated August 2026</p>
         <p className="mt-4 mb-8 text-muted-foreground">
           Connect your fantasy platforms in{" "}
           <Link href="/leagues" className="text-primary hover:underline">
             /leagues
           </Link>{" "}
-          before using Flaim from ChatGPT. Each platform connects differently,
-          but the goal is the same: get your leagues visible in Flaim so
-          ChatGPT has the right account context.
+          before connecting your AI app. Each platform connects differently,
+          but the goal is the same: get your leagues visible in Flaim so your
+          AI has the right account context.
         </p>
 
         <section className="mb-10">
@@ -306,7 +311,9 @@ export default function PlatformsGuidePage() {
         </section>
 
         <section className="mb-10">
-          <h2 className="mb-3 text-xl font-semibold">What happens next</h2>
+          <h2 className="mb-3 text-xl font-semibold">
+            Next: connect your AI app
+          </h2>
           <p className="text-muted-foreground">
             Once your leagues are visible in Flaim,{" "}
             <Link href="/guide/ai" className="text-primary hover:underline">
@@ -320,7 +327,7 @@ export default function PlatformsGuidePage() {
 
         <div className="flex items-center gap-4 border-t pt-4 text-sm">
           <Link href="/guide/ai" className="text-primary hover:underline">
-            AI setup &rarr;
+            Continue to step 3: Connect your AI &rarr;
           </Link>
           <Link href="/guide/sports" className="text-primary hover:underline">
             How Flaim analyzes sports &rarr;

@@ -24,7 +24,7 @@ export function StepConnectAI({
                 3
               </div>
             ) : null}
-            <h3 className="font-semibold text-lg">Connect ChatGPT</h3>
+            <h3 className="font-semibold text-lg">Connect your AI app</h3>
           </div>
 
           <p className="mb-4 text-sm text-muted-foreground">

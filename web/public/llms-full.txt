@@ -1,14 +1,16 @@
 # Flaim Fantasy
 
-> Flaim connects your ESPN, Yahoo, and Sleeper fantasy leagues to Flaim Fantasy in ChatGPT, with optional manual MCP clients also available for league-specific analysis using the Model Context Protocol (MCP).
+> Flaim connects your real ESPN, Yahoo, and Sleeper fantasy leagues to the AI assistants you already use, so the advice is about your team—not generic fantasy takes.
 
 ## What Flaim Is
 
-Flaim is a free, open-source MCP server behind a live ChatGPT-first fantasy analysis experience. It gives AI assistants read-only access to your real fantasy sports data and combines live league data with built-in fantasy analyst guidance so answers are grounded in your league — not generic rankings.
+Flaim is a free, open-source service that gives supported AI assistants read-only access to your real fantasy sports data. It combines connected league context with fantasy analyst guidance so answers are grounded in your league—not generic rankings.
+
+Flaim Fantasy is available in ChatGPT. Claude and Perplexity can connect through their current custom-connector settings. Availability claims are kept distinct from manual connection paths.
 
 Single MCP endpoint: https://api.flaim.app/mcp
 
-## MCP Tools (10 total)
+## Tools (9 read-only analysis tools plus Refresh)
 
 | Tool | What it does |
 |------|-------------|
@@ -34,16 +36,17 @@ Single MCP endpoint: https://api.flaim.app/mcp
 ## How to Connect
 
 1. Create a Flaim account at https://flaim.app
-2. Go to https://flaim.app/leagues
-3. Connect your fantasy platforms there:
+2. Connect your fantasy leagues at https://flaim.app/leagues:
    - ESPN: Install the Chrome extension to sync private ESPN leagues
    - Yahoo: Start Yahoo auth from /leagues and wait for league discovery
    - Sleeper: Enter your exact username and wait for league discovery
-4. Open Flaim Fantasy in ChatGPT
-5. Authorize Flaim when prompted
-6. Start a fresh chat and ask "What leagues do I have?" to confirm setup
+3. Connect your AI app, authorize Flaim, and ask "What fantasy leagues do I have?" to confirm setup:
+   - ChatGPT: Open Flaim Fantasy in ChatGPT
+   - Claude or Perplexity: Follow the connection instructions in the AI Apps guide
 
-Optional manual MCP clients can use the same server URL after leagues are connected: https://api.flaim.app/mcp
+Claude and Perplexity use the same server URL after leagues are connected: https://api.flaim.app/mcp
+
+After setup, Your Leagues is where users can add leagues, sync seasons, and choose optional defaults.
 
 ## Example Prompts
 
@@ -71,13 +74,14 @@ ESPN doesn't offer a public API for private fantasy league data. For private ESP
 Flaim Fantasy is available in ChatGPT. Optional manual MCP clients can also add the single server URL, and Flaim handles authentication and data retrieval after your leagues are linked in /leagues.
 
 ### What AI assistants work with Flaim?
-The primary experience is Flaim Fantasy in ChatGPT. Advanced users can also add Flaim manually as a custom connector in an AI platform that supports remote HTTP MCP and OAuth. Compatibility varies by platform; this optional path is not a promise of official support for every MCP client.
+The primary experience is Flaim Fantasy in ChatGPT. Claude and Perplexity can connect through optional custom-connector settings where supported; their curated publication is still pending. See the AI Apps guide for current availability and setup instructions.
 
 ## Links
 
 - Website: https://flaim.app
 - Leagues setup: https://flaim.app/leagues
 - Help: https://flaim.app/guide
+- Fantasy football analysis: https://flaim.app/fantasy-football
 - Platform guide: https://flaim.app/guide/platforms
 - AI guide: https://flaim.app/guide/ai
 - Sports guide: https://flaim.app/guide/sports

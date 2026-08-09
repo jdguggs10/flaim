@@ -4,46 +4,53 @@ import { ArrowRight, ShieldCheck } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 export const metadata: Metadata = {
   title: "Flaim Setup Guide",
   description:
-    "Use Flaim in three steps: connect fantasy platforms, review leagues and sports coverage, then use Flaim Fantasy in ChatGPT.",
+    "Create your Flaim account, connect ESPN, Yahoo, or Sleeper leagues, then connect Flaim to ChatGPT or an optional Claude or Perplexity custom connector.",
   alternates: {
     canonical: "https://flaim.app/guide",
   },
 };
 
-const setupSteps = [
+interface SetupStep {
+  number: string;
+  title: string;
+  body: string;
+  primaryHref: string;
+  primaryLabel: string;
+  secondaryHref?: string;
+  secondaryLabel?: string;
+}
+
+const setupSteps: readonly SetupStep[] = [
   {
     number: "1",
-    title: "Platforms",
-    body: "Connect ESPN, Yahoo, and/or Sleeper to allow Flaim to access your fantasy league data.",
-    primaryHref: "/leagues#platforms",
-    primaryLabel: "Connect Your Leagues",
-    secondaryHref: "/guide/platforms",
-    secondaryLabel: "Fantasy sports provider help",
+    title: "Create your Flaim account",
+    body: "Create your free account so Flaim can securely remember the fantasy platforms and leagues you connect.",
+    primaryHref: "/leagues",
+    primaryLabel: "Create Your Account",
   },
   {
     number: "2",
-    title: "Leagues & Sports",
-    body: "Confirm the leagues and seasons Flaim discovered. Then, optionally set your default sport and default league per sport.",
-    primaryHref: "/leagues#leagues",
-    primaryLabel: "Manage your leagues",
-    secondaryHref: "/guide/sports",
-    secondaryLabel: "Sports coverage and tools help",
+    title: "Connect your fantasy leagues",
+    body: "Connect ESPN, Yahoo, or Sleeper. Flaim will discover the leagues available through that platform.",
+    primaryHref: "/leagues#platforms",
+    primaryLabel: "Connect Your Leagues",
+    secondaryHref: "/guide/platforms",
+    secondaryLabel: "Platform setup help",
   },
   {
     number: "3",
-    title: "AI Agents",
-    body: "Flaim Fantasy is an official ChatGPT App. Advanced users can also add Flaim manually in a compatible AI platform that supports custom connectors.",
+    title: "Connect your AI app",
+    body: "Open Flaim Fantasy in ChatGPT or use an optional custom connector in Claude or Perplexity, then authorize your account.",
     primaryHref: "/leagues#connect-ai",
-    primaryLabel: "Connect AI agents",
-    secondaryHref: "/guide/ai#custom-connectors",
-    secondaryLabel: "ChatGPT and custom connector help",
+    primaryLabel: "Connect Your AI",
+    secondaryHref: "/guide/ai",
+    secondaryLabel: "AI app setup help",
   },
-] as const;
+];
 
 const guideLinks = [
   {
@@ -58,8 +65,13 @@ const guideLinks = [
   },
   {
     href: "/guide/ai",
-    title: "ChatGPT and custom connector help",
-    body: "Official ChatGPT setup plus an advanced, unofficial custom connector option.",
+    title: "AI app setup help",
+    body: "Official ChatGPT setup plus optional Claude and Perplexity custom-connector guidance.",
+  },
+  {
+    href: "/fantasy-football",
+    title: "Fantasy football analysis",
+    body: "Draft grades, roster analysis, waivers, trades, matchups, and start/sit decisions using your real league.",
   },
 ] as const;
 
@@ -72,47 +84,11 @@ export default function GuidePage() {
       <div className="container mx-auto max-w-3xl px-4 py-12">
         <div className="mb-10 space-y-4">
           <h1 className="text-3xl font-bold">Flaim Setup Guide</h1>
+          <p className="max-w-2xl leading-7 text-muted-foreground">
+            Create your account, connect your fantasy leagues, then connect the
+            AI app you already use. That&apos;s it.
+          </p>
         </div>
-
-        <section className="relative mb-4 rounded-lg border bg-muted/40 p-5 pr-14">
-          <Popover>
-            <PopoverTrigger asChild>
-              <button
-                type="button"
-                className="absolute right-5 top-5 rounded-md border border-muted bg-muted/60 p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                aria-label="Account security info"
-                title="Account security info"
-              >
-                <ShieldCheck className="h-4 w-4" />
-              </button>
-            </PopoverTrigger>
-            <PopoverContent align="end" className="max-w-xs text-sm text-muted-foreground">
-              Your Flaim account stores your connected platform status,
-              discovered leagues, and defaults. Platform credentials are
-              encrypted, and Flaim is read-only by design.
-            </PopoverContent>
-          </Popover>
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div className="flex gap-4">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border bg-background font-bold text-muted-foreground">
-                0
-              </div>
-              <div>
-                <h2 className="text-lg font-semibold">Create a Flaim Account</h2>
-                <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                  Flaim needs an account before it can securely remember your
-                  connected platforms, discovered leagues, and default choices.
-                </p>
-              </div>
-            </div>
-            <Button asChild variant="outline" className="shrink-0 sm:w-44">
-              <Link href="/leagues">
-                Start setup
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </Link>
-            </Button>
-          </div>
-        </section>
 
         <section className="grid gap-4">
           {setupSteps.map((step) => (
@@ -135,13 +111,44 @@ export default function GuidePage() {
                       {step.primaryLabel}
                     </Link>
                   </Button>
-                  <Button asChild variant="outline" className={stepButtonClass}>
-                    <Link href={step.secondaryHref}>{step.secondaryLabel}</Link>
-                  </Button>
+                  {step.secondaryHref && step.secondaryLabel ? (
+                    <Button asChild variant="outline" className={stepButtonClass}>
+                      <Link href={step.secondaryHref}>{step.secondaryLabel}</Link>
+                    </Button>
+                  ) : null}
                 </div>
               </div>
             </Card>
           ))}
+        </section>
+
+        <div className="mt-4 flex items-start gap-3 rounded-lg border bg-muted/40 p-4 text-sm text-muted-foreground">
+          <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+          <p>
+            Flaim is read-only. Your account stores your connected platform
+            status and discovered leagues, but Flaim cannot make trades, edit
+            lineups, or change your league.
+          </p>
+        </div>
+
+        <section className="mt-8 rounded-lg border bg-background p-5 shadow-sm">
+          <h2 className="text-lg font-semibold">After setup: manage your leagues</h2>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">
+            Your Leagues is where you add another league, sync new seasons,
+            choose optional defaults, or disconnect a platform. None of that is
+            required to finish the three-step setup.
+          </p>
+          <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+            <Button asChild variant="outline">
+              <Link href="/leagues#leagues">Manage Your Leagues</Link>
+            </Button>
+            <Button asChild variant="ghost">
+              <Link href="/guide/sports">
+                Sports and tool coverage
+                <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />
+              </Link>
+            </Button>
+          </div>
         </section>
 
         <section className="mt-10 rounded-lg border bg-muted/40 p-5">

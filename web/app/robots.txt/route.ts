@@ -1,4 +1,4 @@
-const CONTENT_SIGNAL = 'search=yes, ai-input=yes, ai-train=no';
+const CONTENT_SIGNAL = 'search=yes, ai-input=yes, ai-train=yes';
 
 export const dynamic = 'force-static';
 

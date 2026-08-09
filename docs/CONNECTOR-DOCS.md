@@ -23,11 +23,13 @@ Flaim cannot place trades, add/drop players, or modify league settings.
 ## Setup (Once)
 
 1. Create an account at `https://flaim.app`.
-2. Add fantasy credentials:
+2. Connect your fantasy leagues at `https://flaim.app/leagues`:
    - ESPN: install the Chrome extension and click Sync.
    - Yahoo: connect via OAuth in the Flaim UI (if applicable for your setup).
    - Sleeper: connect your Sleeper username in the Flaim UI.
-3. Visit `https://flaim.app/leagues` and set a **default** league (recommended).
+3. Connect your AI client using the appropriate path below, authorize Flaim, and ask what fantasy leagues you have.
+
+After setup, use `https://flaim.app/leagues` to add leagues, sync new seasons, or choose optional defaults. Defaults are not required to finish setup.
 
 ## Connect Your AI Client
 

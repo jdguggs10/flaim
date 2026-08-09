@@ -11,72 +11,54 @@ import {
 import { Button } from "@/components/ui/button";
 import Image from "next/image";
 
-const NAV_LINKS = [
-  { href: "/leagues", label: "Your Leagues", labelShort: "Your Leagues" },
-] as const;
-
 /**
- * Site header with full navigation.
- * Used on all public site pages outside the internal /dev surface.
+ * Minimal product header for all public site pages.
+ * Discovery and help navigation stays contextual within page content.
  */
 export function SiteHeader() {
   return (
     <header className="w-full border-b bg-background">
-      <div className="flex min-h-[4rem] w-full flex-row flex-wrap items-center justify-between gap-3 p-4 sm:flex-nowrap">
+      <div className="flex min-h-16 w-full items-center justify-between gap-3 p-4">
         <Link
           href="/"
-          className="inline-flex items-center gap-2 text-xl font-bold transition-opacity hover:opacity-80"
+          className="inline-flex shrink-0 items-center gap-2 text-xl font-bold transition-opacity hover:opacity-80"
         >
           <Image
             src="/flaim-mark-hero.png"
-            alt="Flaim"
+            alt=""
             width={32}
             height={32}
             className="dark:hidden"
           />
           <Image
             src="/flaim-mark-hero-dark.png"
-            alt="Flaim"
+            alt=""
             width={32}
             height={32}
             className="hidden dark:block"
           />
           <span>Flaim</span>
         </Link>
-        <div className="flex items-center gap-2 sm:gap-4">
+
+        <div className="flex shrink-0 items-center gap-2 sm:gap-3">
           <SignedOut>
-            <div className="flex flex-row gap-2">
-              <SignInButton mode="redirect">
-                <Button variant="outline">Sign In</Button>
-              </SignInButton>
-              <SignUpButton
-                mode="redirect"
-                fallbackRedirectUrl="/leagues"
-              >
-                <Button>Get Started</Button>
-              </SignUpButton>
-            </div>
+            <SignInButton mode="redirect">
+              <Button variant="outline" size="sm">
+                Sign In
+              </Button>
+            </SignInButton>
+            <SignUpButton mode="redirect" fallbackRedirectUrl="/leagues">
+              <Button size="sm">Get Started</Button>
+            </SignUpButton>
           </SignedOut>
           <SignedIn>
-            <div className="flex items-center gap-2 sm:gap-3">
-              <nav className="flex items-center gap-1 sm:gap-2">
-                {NAV_LINKS.map((link) => (
-                  <Button
-                    key={link.href}
-                    asChild
-                    variant="ghost"
-                    className="text-sm"
-                  >
-                    <Link href={link.href}>
-                      <span className="sm:hidden">{link.labelShort}</span>
-                      <span className="hidden sm:inline">{link.label}</span>
-                    </Link>
-                  </Button>
-                ))}
-              </nav>
-              <div className="flex items-center gap-2 sm:border-l sm:pl-2">
-                <UserButton />
-              </div>
+            <nav aria-label="Account navigation">
+              <Button asChild variant="ghost" size="sm" className="text-sm">
+                <Link href="/leagues">Your Leagues</Link>
+              </Button>
+            </nav>
+            <div className="flex items-center sm:border-l sm:pl-3">
+              <UserButton />
             </div>
           </SignedIn>
         </div>

@@ -4,27 +4,24 @@ import { PublicChatExperience } from "@/components/public-demo/public-chat-exper
 import { HeroChat } from "@/components/site/hero-chat";
 
 export const metadata: Metadata = {
-  title: "Flaim — Fantasy Leagues for ChatGPT",
+  title: {
+    absolute: "Flaim Fantasy — Your Real Fantasy Leagues in AI",
+  },
   description:
-    "Flaim Fantasy is available in ChatGPT. Connect ESPN, Yahoo, and Sleeper leagues for read-only fantasy analysis.",
+    "Connect your ESPN, Yahoo, or Sleeper fantasy leagues to the AI you already use. Analyze your real roster, matchups, standings, waiver wire, transactions, and league history—without screenshots or copy-pasting.",
   alternates: {
     canonical: "https://flaim.app",
   },
 };
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import {
-  PUBLIC_CHAT_DEEP_PRESETS,
-  PUBLIC_CHAT_SIMPLE_PRESETS,
-  PUBLIC_CHAT_TOOL_DISPLAY_LABELS,
-} from "@/lib/public-chat";
 import { CHATGPT_APP_URL } from "@/lib/product-links";
 import {
   ArrowRight,
   ChevronDown,
+  CircleDollarSign,
   ExternalLink,
   ShieldCheck,
-  SlidersHorizontal,
   Sparkles,
 } from "lucide-react";
 
@@ -41,18 +38,52 @@ const SUPPORTED_SPORTS = [
   "Basketball",
   "Hockey",
 ] as const;
-const SUPPORTED_AI_TOOLS = ["ChatGPT"] as const;
+const SUPPORTED_AI_TOOLS = [
+  "ChatGPT",
+  "Claude (soon)",
+  "Perplexity (soon)",
+] as const;
 
-function getDemoHref(presetId: string) {
-  return `/?preset=${presetId}#live-demo`;
-}
+const HOMEPAGE_PROMPT_PLACEHOLDERS = [
+  {
+    question: "What are the biggest strengths and weaknesses of my roster?",
+    tools: ["Roster", "Standings"],
+  },
+  {
+    question: "Who should I add from my waiver wire?",
+    tools: ["Free Agents", "Players"],
+  },
+  {
+    question: "How does this week's matchup look?",
+    tools: ["Matchups", "Roster"],
+  },
+  {
+    question: "Grade my last trade.",
+    tools: ["Transactions", "Roster", "Players"],
+  },
+  {
+    question: "Which league settings matter most for my strategy?",
+    tools: ["League Info"],
+  },
+  {
+    question: "How has my team changed this season?",
+    tools: ["Transactions", "Roster"],
+  },
+  {
+    question: "Do I have the best team in the league?",
+    tools: ["Standings", "Roster"],
+  },
+  {
+    question: "What happened in past seasons?",
+    tools: ["League History"],
+  },
+] as const;
 
 export default async function LandingPage({ searchParams }: LandingPageProps) {
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
   const preset = resolvedSearchParams?.preset;
   const initialPresetId = Array.isArray(preset) ? preset[0] : preset;
-  const homepageSimplePresets = PUBLIC_CHAT_SIMPLE_PRESETS;
-  const homepageDeepPresets = PUBLIC_CHAT_DEEP_PRESETS;
+  const showScreenshotPlaceholders = process.env.NODE_ENV === "development";
 
   return (
     <div className="min-h-screen bg-background">
@@ -65,10 +96,34 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
             mainEntity: [
               {
                 "@type": "Question",
-                name: "Do I need a Chrome extension?",
+                name: "Can ChatGPT access my fantasy league?",
                 acceptedAnswer: {
                   "@type": "Answer",
-                  text: "Only for ESPN. The Flaim Chrome extension syncs your ESPN cookies automatically so Flaim can read your private leagues. Yahoo connects through OAuth, and Sleeper just needs your username. After that, ChatGPT can use your connected Flaim account for read-only fantasy analysis.",
+                  text: "Yes. First, create a Flaim account. Second, connect your league to Flaim. Third, connect Flaim in your AI app. That's it. Flaim bridges your AI app to your fantasy leagues and back again.",
+                },
+              },
+              {
+                "@type": "Question",
+                name: "Do I need to upload screenshots or type out my roster?",
+                acceptedAnswer: {
+                  "@type": "Answer",
+                  text: "No. Connect your fantasy platforms once, and Flaim supplies the league data on demand.",
+                },
+              },
+              {
+                "@type": "Question",
+                name: "Is Flaim free?",
+                acceptedAnswer: {
+                  "@type": "Answer",
+                  text: "Yes. Flaim is free and has no subscription. I have some server costs, but everything is manageable right now. Enjoy.",
+                },
+              },
+              {
+                "@type": "Question",
+                name: "Do I need the Chrome extension?",
+                acceptedAnswer: {
+                  "@type": "Answer",
+                  text: "Only for initial ESPN setup. The Flaim Fantasy Connector securely syncs the ESPN access needed for your private leagues. Yahoo connects through an authorization flow, and Sleeper connects with your username.",
                 },
               },
               {
@@ -76,7 +131,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
                 name: "Which AI apps work with Flaim?",
                 acceptedAnswer: {
                   "@type": "Answer",
-                  text: "Flaim Fantasy is available in ChatGPT. Connect your leagues in Flaim, then open ChatGPT and use Flaim Fantasy for read-only fantasy analysis.",
+                  text: "Flaim Fantasy is fully available in ChatGPT's App Store. Setup is extremely easy. Flaim can also connect through Claude and Perplexity. See the AI Apps guide for current availability and setup instructions.",
                 },
               },
               {
@@ -84,15 +139,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
                 name: "Can Flaim change anything in my leagues?",
                 acceptedAnswer: {
                   "@type": "Answer",
-                  text: "No. Flaim is read-only by design. It can inspect your rosters, standings, matchups, transactions, free agents, player details, league settings, and league history across ESPN, Yahoo, and Sleeper — but it cannot make trades, drop players, change lineups, or modify any league settings. This applies to all platforms and all sports.",
-                },
-              },
-              {
-                "@type": "Question",
-                name: "Where do I finish setup?",
-                acceptedAnswer: {
-                  "@type": "Answer",
-                  text: "Use flaim.app/leagues to connect ESPN, Yahoo, and Sleeper, then open Flaim Fantasy in ChatGPT.",
+                  text: "No. Flaim cannot make trades, add or drop players, edit lineups, or change settings in ESPN, Yahoo, or Sleeper. A Refresh action may update Flaim's own list of your connected leagues, but it never changes the fantasy platform.",
                 },
               },
             ],
@@ -114,7 +161,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
         <div className="mx-auto grid max-w-5xl gap-4 text-sm text-muted-foreground md:grid-cols-3">
           <div className="rounded-2xl border bg-background/70 p-4">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-foreground/70">
-              Platforms
+              Fantasy platforms
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               {SUPPORTED_PLATFORMS.map((platform) => (
@@ -129,7 +176,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
           </div>
           <div className="rounded-2xl border bg-background/70 p-4">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-foreground/70">
-              Sports
+              Fantasy sports
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               {SUPPORTED_SPORTS.map((sport) => (
@@ -144,7 +191,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
           </div>
           <div className="rounded-2xl border bg-background/70 p-4">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-foreground/70">
-              Works With
+              AI apps
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               {SUPPORTED_AI_TOOLS.map((tool) => (
@@ -165,7 +212,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
         <div className="flex flex-row flex-wrap items-center justify-center gap-3">
           <SignedOut>
             <Button asChild size="lg">
-              <Link href="/leagues">Connect leagues now</Link>
+              <Link href="/leagues">Connect Your Leagues</Link>
             </Button>
           </SignedOut>
           <SignedIn>
@@ -173,6 +220,9 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
               <Link href="/leagues">Your Leagues</Link>
             </Button>
           </SignedIn>
+          <Button asChild variant="outline" size="lg">
+            <Link href="/guide">Setup Guide</Link>
+          </Button>
           <Button asChild variant="outline" size="lg">
             <a
               href={CHATGPT_APP_URL}
@@ -186,108 +236,122 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
         </div>
       </section>
 
-      {/* What You Can Ask */}
-      <section className="py-10 px-4 bg-muted">
-        <div className="container max-w-2xl mx-auto">
-          <h2 className="text-2xl font-bold text-center mb-2">
-            What you can ask
-          </h2>
-          <p className="text-center text-muted-foreground mb-8">
-            Start simple.
-          </p>
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {homepageSimplePresets.map((preset) => (
-              <Link
-                key={preset.id}
-                href={getDemoHref(preset.id)}
-                className="group flex items-center gap-3 rounded-lg border bg-background px-4 py-3 transition-colors hover:border-foreground/20"
-              >
-                <p className="flex-1 text-sm font-medium">
-                  &ldquo;{preset.homepageLabel ?? preset.userMessage}&rdquo;
-                </p>
-                <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground transition-all group-hover:text-primary group-hover:translate-x-0.5" />
+      {/* Seasonal Spotlight */}
+      <section className="px-4 py-14 sm:px-6 lg:px-8">
+        <div
+          className={`mx-auto grid max-w-5xl gap-8 rounded-3xl border bg-background p-6 shadow-sm md:p-9 ${
+            showScreenshotPlaceholders ? "md:grid-cols-[1.3fr_0.7fr]" : ""
+          }`}
+        >
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">
+              Fantasy football draft season
+            </p>
+            <h2 className="mt-3 text-3xl font-bold tracking-tight">
+              Just drafted? Get a second opinion on your real team.
+            </h2>
+            <p className="mt-4 leading-7 text-muted-foreground">
+              Ask your AI to grade the roster you actually drafted, identify
+              your biggest strengths and weaknesses, compare your team with the
+              rest of the league, and show you what to fix before Week 1.
+            </p>
+            <p className="mt-4 font-medium">
+              No roster screenshots. No typing every player into a generic team
+              grader. Flaim brings the league context with it.
+            </p>
+            <Button asChild className="mt-6">
+              <Link href="/fantasy-football">
+                See Fantasy Football Analysis
+                <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />
               </Link>
-            ))}
+            </Button>
           </div>
+
+          {showScreenshotPlaceholders ? (
+            <div className="flex min-h-56 items-center justify-center rounded-2xl border border-dashed bg-muted/40 p-6 text-center">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-foreground/65">
+                  Real mobile example
+                </p>
+                <p className="mt-3 text-sm leading-6 text-muted-foreground">
+                  An approved, sanitized screenshot will appear here after the
+                  capture pass.
+                </p>
+                <p className="mt-4 text-xs leading-5 text-muted-foreground">
+                  Flaim Fantasy analyzing a real connected roster inside an AI
+                  app.
+                </p>
+              </div>
+            </div>
+          ) : null}
         </div>
       </section>
 
-      {/* Go Deeper */}
-      <section className="py-10 px-4">
-        <div className="container max-w-2xl mx-auto">
-          <h2 className="text-2xl font-bold text-center mb-2">
-            Go deeper
+      {/* Prompt examples */}
+      <section className="bg-muted px-4 py-12 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-4xl">
+          <h2 className="text-center text-2xl font-bold">
+            Ask about your real league
           </h2>
-          <p className="text-center text-muted-foreground mb-8">
-            Combine your league data and web search for even better insights.
+          <p className="mx-auto mb-8 mt-2 max-w-2xl text-center text-muted-foreground">
+            Flaim can bring the right league context into questions like these.
           </p>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {homepageDeepPresets.map((preset) => (
-              <Link
-                key={preset.id}
-                href={getDemoHref(preset.id)}
-                className="group flex flex-col rounded-lg border bg-background px-4 py-3 transition-colors hover:border-foreground/20"
+          <div className="grid gap-3 sm:grid-cols-2">
+            {HOMEPAGE_PROMPT_PLACEHOLDERS.map((prompt) => (
+              <article
+                key={prompt.question}
+                data-copy-prompt-placeholder
+                className="rounded-xl border bg-background p-4"
               >
-                <div className="flex items-center gap-3">
-                  <p className="flex-1 text-sm font-medium">
-                    &ldquo;{preset.homepageLabel ?? preset.userMessage}&rdquo;
-                  </p>
-                  <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground transition-all group-hover:text-primary group-hover:translate-x-0.5" />
-                </div>
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {preset.allowedTools.map((tool) => (
+                <p className="font-medium">&ldquo;{prompt.question}&rdquo;</p>
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {prompt.tools.map((tool) => (
                     <span
                       key={tool}
                       className="inline-flex rounded-full border bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground"
                     >
-                      {PUBLIC_CHAT_TOOL_DISPLAY_LABELS[tool]}
+                      {tool}
                     </span>
                   ))}
-                  <span className="inline-flex rounded-full border border-primary/25 bg-primary/5 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.12em] text-primary">
-                    Web Search
-                  </span>
                 </div>
-              </Link>
+              </article>
             ))}
           </div>
         </div>
       </section>
 
       {/* Trust badges */}
-      <section className="px-4 py-10 sm:px-6 lg:px-8 bg-muted">
+      <section className="bg-background px-4 py-10 sm:px-6 lg:px-8">
         <div className="mx-auto grid max-w-5xl gap-4 md:grid-cols-3">
           <div className="rounded-xl border bg-background p-4">
             <div className="flex items-center gap-2 font-medium">
               <ShieldCheck className="h-4 w-4 text-primary" />
-              Read-Only
+              Read-only where it matters
             </div>
             <p className="mt-2 text-sm text-muted-foreground">
-              Flaim can inspect your data, but it cannot make trades, drop
-              players, or change anything in your leagues.
+              Flaim can read your fantasy league data, but it cannot make
+              trades, add or drop players, edit lineups, or change league
+              settings.
             </p>
           </div>
           <div className="rounded-xl border bg-background p-4">
             <div className="flex items-center gap-2 font-medium">
               <Sparkles className="h-4 w-4 text-primary" />
-              Multi-League Support
+              All your leagues in one account
             </div>
             <p className="mt-2 text-sm text-muted-foreground">
-              One account can support multiple leagues across multiple
-              platforms (ESPN, Yahoo, and Sleeper) at the same time.
+              Connect multiple leagues across ESPN, Yahoo, and Sleeper, then
+              choose which league you want to discuss.
             </p>
           </div>
           <div className="rounded-xl border bg-background p-4">
             <div className="flex items-center gap-2 font-medium">
-              <SlidersHorizontal className="h-4 w-4 text-primary" />
-              Set defaults
+              <CircleDollarSign className="h-4 w-4 text-primary" />
+              It&apos;s free
             </div>
             <p className="mt-2 text-sm text-muted-foreground">
-              Use{" "}
-              <Link href="/leagues" className="text-primary hover:underline">
-                Your Leagues
-              </Link>{" "}
-              to save a default sport and favorite league so your AI needs less
-              hand-holding.
+              Flaim has no subscription. You use it through an AI app you
+              already have.
             </p>
           </div>
         </div>
@@ -298,86 +362,91 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
         <div className="container max-w-2xl mx-auto">
           <h2 className="text-2xl font-bold text-center mb-5">FAQs</h2>
           <div className="space-y-3">
-            {/* What does Flaim do */}
             <details className="group border rounded-lg bg-background">
               <summary className="flex cursor-pointer items-center justify-between p-4 font-medium">
-                Do I need a Chrome extension?
+                Can ChatGPT access my fantasy league?
                 <ChevronDown className="ml-2 h-5 w-5 transition-transform group-open:rotate-180" />
               </summary>
-              <div className="px-4 pb-4 text-sm text-muted-foreground space-y-2">
+              <div className="space-y-2 px-4 pb-4 text-sm text-muted-foreground">
                 <p>
-                  Only for ESPN. The Flaim Chrome extension syncs your ESPN
-                  cookies automatically so Flaim can read your private leagues.
-                  Yahoo connects through OAuth, Sleeper just needs your
-                  username. ChatGPT uses the league data you connect here.
+                  Yes. First, create a Flaim account. Second, connect your
+                  league to Flaim. Third, connect Flaim in your AI app. That&apos;s
+                  it. Flaim bridges your AI app to your fantasy leagues and back
+                  again.
                 </p>
               </div>
             </details>
 
-            {/* Supported AI apps */}
+            <details className="group border rounded-lg bg-background">
+              <summary className="flex cursor-pointer items-center justify-between p-4 font-medium">
+                Do I need to upload screenshots or type out my roster?
+                <ChevronDown className="ml-2 h-5 w-5 transition-transform group-open:rotate-180" />
+              </summary>
+              <div className="space-y-2 px-4 pb-4 text-sm text-muted-foreground">
+                <p>
+                  No. Connect your fantasy platforms once, and Flaim supplies
+                  the league data on demand.
+                </p>
+              </div>
+            </details>
+
+            <details className="group border rounded-lg bg-background">
+              <summary className="flex cursor-pointer items-center justify-between p-4 font-medium">
+                Is Flaim free?
+                <ChevronDown className="ml-2 h-5 w-5 transition-transform group-open:rotate-180" />
+              </summary>
+              <div className="space-y-2 px-4 pb-4 text-sm text-muted-foreground">
+                <p>
+                  Yes. Flaim is free and has no subscription. I have some server
+                  costs, but everything is manageable right now. Enjoy.
+                </p>
+              </div>
+            </details>
+
+            <details className="group border rounded-lg bg-background">
+              <summary className="flex cursor-pointer items-center justify-between p-4 font-medium">
+                Do I need the Chrome extension?
+                <ChevronDown className="ml-2 h-5 w-5 transition-transform group-open:rotate-180" />
+              </summary>
+              <div className="space-y-2 px-4 pb-4 text-sm text-muted-foreground">
+                <p>
+                  Only for initial ESPN setup. The Flaim Fantasy Connector
+                  securely syncs the ESPN access needed for your private
+                  leagues. Yahoo connects through an authorization flow, and
+                  Sleeper connects with your username.
+                </p>
+              </div>
+            </details>
+
             <details className="group border rounded-lg bg-background">
               <summary className="flex cursor-pointer items-center justify-between p-4 font-medium">
                 Which AI apps work with Flaim?
                 <ChevronDown className="ml-2 h-5 w-5 transition-transform group-open:rotate-180" />
               </summary>
-              <div className="px-4 pb-4 text-sm text-muted-foreground space-y-2">
+              <div className="space-y-2 px-4 pb-4 text-sm text-muted-foreground">
                 <p>
-                  Flaim Fantasy is available in ChatGPT. Connect your ESPN,
-                  Yahoo, or Sleeper leagues in Flaim, then open ChatGPT and ask
-                  a question about your league.
+                  Flaim Fantasy is fully available in ChatGPT&apos;s App Store.
+                  Setup is extremely easy. Flaim can also connect through Claude
+                  and Perplexity. See the{" "}
+                  <Link href="/guide/ai" className="text-primary hover:underline">
+                    AI Apps guide
+                  </Link>{" "}
+                  for current availability and setup instructions.
                 </p>
               </div>
             </details>
 
-            {/* Read-only trust */}
             <details className="group border rounded-lg bg-background">
               <summary className="flex cursor-pointer items-center justify-between p-4 font-medium">
                 Can Flaim change anything in my leagues?
                 <ChevronDown className="ml-2 h-5 w-5 transition-transform group-open:rotate-180" />
               </summary>
-              <div className="px-4 pb-4 text-sm text-muted-foreground space-y-2">
+              <div className="space-y-2 px-4 pb-4 text-sm text-muted-foreground">
                 <p>
-                  No. Flaim is read-only by design. It can inspect your rosters,
-                  standings, matchups, transactions, free agents, player
-                  details, league settings, and league history across ESPN,
-                  Yahoo, and Sleeper — but it cannot make trades, drop players,
-                  change lineups, or modify any league settings. This applies to
-                  all platforms and all sports.
-                </p>
-              </div>
-            </details>
-
-            {/* Setup location */}
-            <details className="group border rounded-lg bg-background">
-              <summary className="flex cursor-pointer items-center justify-between p-4 font-medium">
-                Where do I finish setup?
-                <ChevronDown className="ml-2 h-5 w-5 transition-transform group-open:rotate-180" />
-              </summary>
-              <div className="px-4 pb-4 text-sm text-muted-foreground space-y-2">
-                <p>
-                  Use{" "}
-                  <Link
-                    href="/leagues"
-                    className="text-primary hover:underline"
-                  >
-                    Your Leagues
-                  </Link>{" "}
-                  to connect ESPN, Yahoo, and Sleeper, then open Flaim Fantasy
-                  in ChatGPT. The{" "}
-                  <Link
-                    href="/guide/platforms"
-                    className="text-primary hover:underline"
-                  >
-                    platform setup guide
-                  </Link>{" "}
-                  and{" "}
-                  <Link
-                    href="/guide/ai"
-                    className="text-primary hover:underline"
-                  >
-                    AI setup guide
-                  </Link>{" "}
-                  shows how to start using Flaim Fantasy in ChatGPT.
+                  No. Flaim cannot make trades, add or drop players, edit
+                  lineups, or change settings in ESPN, Yahoo, or Sleeper. A
+                  Refresh action may update Flaim&apos;s own list of your connected
+                  leagues, but it never changes the fantasy platform.
                 </p>
               </div>
             </details>
@@ -389,12 +458,16 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
       <section className="py-10 px-4 bg-muted">
         <div className="container max-w-2xl mx-auto text-center">
           <h2 className="text-2xl font-bold mb-2">
-            Ready to connect your leagues?
+            Ready to ask about your teams?
           </h2>
+          <p className="mt-3 text-muted-foreground">
+            Create your Flaim account, connect your fantasy leagues, then
+            connect your AI app. After that, just start asking.
+          </p>
           <div className="mt-6 flex flex-row flex-wrap items-center justify-center gap-3">
             <SignedOut>
               <Button asChild size="lg">
-                <Link href="/leagues">Connect leagues now</Link>
+                <Link href="/leagues">Connect Your Leagues</Link>
               </Button>
             </SignedOut>
             <SignedIn>
@@ -403,29 +476,31 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
               </Button>
             </SignedIn>
             <Button asChild variant="outline" size="lg">
-              <Link href="/guide">Help</Link>
+              <Link href="/guide">Read the Setup Guide</Link>
             </Button>
           </div>
         </div>
       </section>
 
-      {/* Share */}
-      <section className="py-10 px-4">
-        <div className="container max-w-2xl mx-auto text-center">
+      {/* Founder note */}
+      <section id="about-flaim" className="scroll-mt-24 px-4 py-12">
+        <div className="container mx-auto max-w-2xl text-center">
           <h2 className="text-2xl font-bold mb-2">
-            Using Flaim for something amazing?
+            Built for my league. Shared with yours.
           </h2>
           <p className="text-muted-foreground">
-            I&apos;d love to hear about it.{" "}
+            I&apos;m Gerry and I built Flaim because I felt like giving back.
+            Flaim is open source and maintained for the long-term.
+          </p>
+          <p className="mt-4 text-sm">
             <a
-              href="https://www.threads.com/@jdguggs10"
+              href="https://github.com/jdguggs10/flaim"
               target="_blank"
               rel="noopener noreferrer"
               className="text-primary hover:underline"
             >
-              Share it with me on Threads
+              About Flaim
             </a>
-            .
           </p>
         </div>
       </section>

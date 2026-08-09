@@ -399,8 +399,8 @@ function WidgetSetupBanner({ accountCreated, isChatGpt }: { accountCreated: bool
   const assistantName = isChatGpt ? 'ChatGPT' : 'your AI assistant';
   const steps = [
     { label: 'Create your Flaim account', done: accountCreated },
-    { label: 'Connect a fantasy league below', done: false },
-    { label: `Return to ${assistantName} and reconnect Flaim to finish`, done: false },
+    { label: 'Connect your fantasy leagues', done: false },
+    { label: `Connect Flaim to ${assistantName}`, done: false },
   ];
 
   return (
@@ -1552,19 +1552,20 @@ function LeaguesPageContent() {
             <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground font-bold">
               1
             </div>
-            <h1 className="text-3xl font-semibold">Set up Your Leagues</h1>
+            <h1 className="text-3xl font-semibold">Create Your Flaim Account</h1>
             <p className="text-muted-foreground">
-              Sign in to connect ESPN, Yahoo, and Sleeper, choose the league ChatGPT should use first, and manage your defaults in one place.
+              Step 1 of 3. Create an account or sign in, then connect your
+              fantasy leagues and your AI app.
             </p>
           </div>
           <Card>
             <CardContent className="space-y-4 p-6">
               <div className="space-y-2">
-                <h2 className="font-medium">What happens here</h2>
+                <h2 className="font-medium">Three steps. Then you&apos;re done.</h2>
                 <ul className="space-y-2 text-sm text-muted-foreground">
-                  <li>Connect your fantasy platforms and sync league data</li>
-                  <li>Pick the sport and league ChatGPT should use by default</li>
-                  <li>Open ChatGPT and use Flaim Fantasy once your leagues are connected</li>
+                  <li>1. Create your Flaim account</li>
+                  <li>2. Connect your fantasy leagues</li>
+                  <li>3. Connect your AI app</li>
                 </ul>
               </div>
               <div className="flex flex-col gap-3 sm:flex-row">
@@ -1615,7 +1616,7 @@ function LeaguesPageContent() {
                 className="flex flex-1 items-start gap-4 text-left"
               >
                 <div className="min-w-0 space-y-2">
-                  <CardTitle className="text-lg">Agents</CardTitle>
+                  <CardTitle className="text-lg">AI Apps</CardTitle>
                 </div>
               </button>
               <div className="flex items-center gap-2">

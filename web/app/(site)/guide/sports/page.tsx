@@ -200,6 +200,14 @@ export default function SportsGuidePage() {
             football makes roster decisions high-stakes, and Flaim helps your AI
             reason through them with your actual lineup and scoring context.
           </p>
+          <p className="mb-4 text-sm text-muted-foreground">
+            For draft grades, roster analysis, waivers, trades, and weekly
+            decisions, see the{" "}
+            <Link href="/fantasy-football" className="text-primary hover:underline">
+              fantasy football analysis guide
+            </Link>
+            .
+          </p>
           <div className="rounded-lg border bg-muted/50 p-4">
             <h3 className="mb-2 font-medium">Example prompts</h3>
             <ul className="space-y-2 text-sm text-muted-foreground">

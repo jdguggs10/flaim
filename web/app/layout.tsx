@@ -19,26 +19,26 @@ const geistMono = localFont({
 
 export const metadata: Metadata = {
   title: {
-    default: "Flaim — Fantasy Leagues for ChatGPT",
-    template: "%s | Flaim",
+    default: "Flaim Fantasy — Your Real Fantasy Leagues in AI",
+    template: "%s | Flaim Fantasy",
   },
   description:
-    "Flaim Fantasy is available in ChatGPT. Connect ESPN, Yahoo, and Sleeper leagues for read-only fantasy analysis.",
+    "Connect your ESPN, Yahoo, or Sleeper fantasy leagues to the AI you already use. Get read-only analysis of your real roster, matchups, standings, waiver wire, transactions, and league history.",
   metadataBase: new URL("https://flaim.app"),
   openGraph: {
-    title: "Flaim — Fantasy Leagues for ChatGPT",
+    title: "Your fantasy league, inside your AI.",
     description:
-      "Flaim Fantasy is available in ChatGPT. Connect ESPN, Yahoo, and Sleeper leagues for read-only, league-specific fantasy analysis.",
+      "Real ESPN, Yahoo, and Sleeper league data. Read-only fantasy analysis. No screenshots or copy-pasting.",
     url: "https://flaim.app",
-    siteName: "Flaim",
+    siteName: "Flaim Fantasy",
     type: "website",
     locale: "en_US",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Flaim — Fantasy Leagues for ChatGPT",
+    title: "Your fantasy league, inside your AI.",
     description:
-      "Flaim Fantasy is available in ChatGPT. Connect ESPN, Yahoo, and Sleeper leagues for read-only fantasy analysis.",
+      "Real ESPN, Yahoo, and Sleeper league data. Read-only fantasy analysis. No screenshots or copy-pasting.",
   },
   icons: {
     icon: [
@@ -82,7 +82,7 @@ export default function RootLayout({
                 "@type": "SoftwareApplication",
                 name: "Flaim Fantasy",
                 description:
-                  "Flaim Fantasy connects ESPN, Yahoo, and Sleeper fantasy league data to ChatGPT for read-only, league-specific analysis through ChatGPT Apps.",
+                  "Flaim Fantasy connects ESPN, Yahoo, and Sleeper fantasy league data to supported AI assistants for league-specific analysis. Fantasy-provider access is read-only: Flaim cannot make trades, add or drop players, edit lineups, or change league settings.",
                 applicationCategory: "SportsApplication",
                 applicationSubCategory: "Fantasy Sports AI Tool",
                 operatingSystem: "Web",
@@ -92,17 +92,25 @@ export default function RootLayout({
                   "ESPN fantasy league integration",
                   "Yahoo fantasy league integration",
                   "Sleeper fantasy league integration",
-                  "Available in ChatGPT",
-                  "ChatGPT fantasy sports analysis",
-                  "Read-only access — no trades, drops, or roster changes",
-                  "9 MCP tools: roster, standings, matchups, free agents, transactions, league info, player search, league history, session",
+                  "Real roster, matchup, standings, waiver, transaction, player, league-setting, and history context",
+                  "Nine read-only analysis tools plus a bounded connected-league Refresh",
+                  "No trades, adds, drops, lineup edits, or fantasy-provider changes",
+                  "Free, with no Flaim subscription",
                 ],
                 author: { "@type": "Person", name: "Gerry" },
               },
               {
                 "@context": "https://schema.org",
+                "@type": "WebSite",
+                name: "Flaim Fantasy",
+                alternateName: "Flaim",
+                url: "https://flaim.app",
+              },
+              {
+                "@context": "https://schema.org",
                 "@type": "Organization",
-                name: "Flaim",
+                name: "Flaim Fantasy",
+                alternateName: "Flaim",
                 url: "https://flaim.app",
                 logo: "https://flaim.app/flaim-mark-hero.png",
                 founder: { "@type": "Person", name: "Gerry" },
