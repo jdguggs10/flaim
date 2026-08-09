@@ -36,7 +36,7 @@ export function StepConnectAI({
 
       <Button asChild size="sm" className="w-full">
         <a href={CHATGPT_APP_URL} target="_blank" rel="noopener noreferrer">
-          Open in ChatGPT App Store
+          Open Flaim in ChatGPT
           <ExternalLink className="ml-2 h-4 w-4" />
         </a>
       </Button>

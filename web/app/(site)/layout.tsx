@@ -23,7 +23,7 @@ export default function SiteLayout({
                 className="flex flex-wrap items-center justify-center gap-x-5 gap-y-3 text-sm text-muted-foreground"
               >
                 <Link href="/guide" className="hover:text-foreground">
-                  Setup Guide
+                  Using Flaim
                 </Link>
                 <Link href="/support" className="hover:text-foreground">
                   Support

@@ -1,6 +1,6 @@
-# Flaim Setup Docs (ChatGPT + Optional Custom Connectors)
+# Flaim Connection Guide (ChatGPT, Claude + Optional Custom Connectors)
 
-This page is the single user-facing guide for using Flaim Fantasy in ChatGPT, plus a secondary manual setup path for compatible AI platforms that accept custom remote MCP connectors.
+This page is the single user-facing guide for using Flaim Fantasy in ChatGPT or Claude, plus a secondary manual connection path for compatible AI platforms that accept custom remote MCP connectors.
 
 ## What Flaim Is
 
@@ -35,25 +35,22 @@ After setup, use `https://flaim.app/leagues` to add leagues, sync new seasons, o
 
 | Client | Status | Setup path |
 |--------|--------|------------|
-| ChatGPT | Primary | Use Flaim Fantasy in ChatGPT |
-| Claude | Publication pending; optional manual connector | Add Flaim manually where your Claude account supports custom connectors |
+| ChatGPT | Official | Open Flaim Fantasy in ChatGPT |
+| Claude | Official | Find Flaim Fantasy in Claude's connector directory |
 | Perplexity | Curated onboarding pending; optional manual connector | Add Flaim manually where your Perplexity account supports custom remote connectors |
 | Other compatible AI platforms | Advanced, unofficial setup | Add Flaim with the custom connector URL `https://api.flaim.app/mcp` |
 
 ### ChatGPT
 
-Use Flaim Fantasy in ChatGPT as the primary experience. It is distributed through ChatGPT Apps and uses the same read-only league tools and OAuth flow described on this page.
+Open Flaim Fantasy directly in ChatGPT. It uses the same read-only league tools and OAuth flow described on this page.
+
+### Claude
+
+Open [Claude's connector directory](https://claude.ai/directory), find **Flaim Fantasy**, and authorize your Flaim account. Claude then uses the same read-only league tools and OAuth flow.
 
 ### Manual Custom Connectors
 
-Some AI platforms can connect directly to Flaim where they support custom remote MCP servers and OAuth. This is an advanced, unofficial setup path; ChatGPT remains Flaim's only currently published and officially supported consumer integration.
-
-### Claude (Custom Connector)
-
-Flaim is fully live and not in beta. Claude custom connectors are an optional setup path and may still be labeled beta by Claude; Free users are limited to one custom connector.
-
-1. Add a remote MCP server with URL `https://api.flaim.app/mcp`.
-2. Complete the OAuth consent screen when prompted.
+Some AI platforms can connect directly to Flaim where they support custom remote MCP servers and OAuth. This is an advanced, unofficial path alongside Flaim's official ChatGPT and Claude listings.
 
 ### Perplexity (Custom Remote Connector)
 

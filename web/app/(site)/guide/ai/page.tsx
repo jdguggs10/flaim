@@ -3,7 +3,10 @@ import Link from "next/link";
 import { ArrowRight, ChevronDown, ExternalLink } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { CHATGPT_APP_URL } from "@/lib/product-links";
+import {
+  CHATGPT_APP_URL,
+  CLAUDE_CONNECTOR_DIRECTORY_URL,
+} from "@/lib/product-links";
 
 export const metadata: Metadata = {
   title: "Use Flaim Fantasy with ChatGPT, Claude & Perplexity",
@@ -26,12 +29,12 @@ const AI_APPS = [
   },
   {
     name: "Claude",
-    status: "Available through Claude's custom connector settings; publication is pending.",
+    status: "Available now in Claude's connector directory.",
     description:
-      "Add Flaim to Claude, authorize your Flaim account, and ask Claude to use your connected fantasy league data.",
-    href: "#claude",
-    cta: "Set Up Claude",
-    external: false,
+      "Open Flaim in Claude, authorize your Flaim account, and ask about your connected fantasy league data.",
+    href: CLAUDE_CONNECTOR_DIRECTORY_URL,
+    cta: "Open Flaim in Claude",
+    external: true,
   },
   {
     name: "Perplexity",
@@ -99,14 +102,14 @@ const HOW_TO_SCHEMAS = [
   {
     "@context": "https://schema.org",
     "@type": "HowTo",
-    name: "Connect Flaim to Claude",
-    dateModified: "2026-08-03",
+    name: "Use Flaim Fantasy in Claude",
+    dateModified: "2026-08-09",
     description:
-      "Add Flaim as a Claude custom connector and authorize it for read-only fantasy league access.",
+      "Open Flaim from Claude's connector directory and authorize it for read-only fantasy league access.",
     step: [
       "Create your Flaim account.",
       "Connect ESPN, Yahoo, or Sleeper in Your Leagues.",
-      "Add Flaim in Claude with https://api.flaim.app/mcp, authorize Flaim, and ask what leagues you have.",
+      "Open Flaim in Claude's connector directory, authorize Flaim, and ask what leagues you have.",
     ],
   },
   {
@@ -158,7 +161,7 @@ export default function AiGuidePage() {
       <section className="border-b px-4 py-16 sm:px-6 md:py-20 lg:px-8">
         <div className="mx-auto max-w-5xl">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">
-            Setup step 3 of 3
+            Step 3 of 3
           </p>
           <h1 className="mt-4 max-w-4xl text-4xl font-bold tracking-tight sm:text-5xl">
             Use your real fantasy leagues in the AI you already use
@@ -243,7 +246,7 @@ export default function AiGuidePage() {
         <div className="mx-auto grid max-w-5xl gap-8 lg:grid-cols-[0.85fr_1.15fr]">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">
-              ChatGPT setup
+              ChatGPT
             </p>
             <h2 className="mt-3 text-3xl font-bold tracking-tight">
               Use Flaim Fantasy in ChatGPT
@@ -305,15 +308,15 @@ export default function AiGuidePage() {
         <div className="mx-auto grid max-w-5xl gap-8 lg:grid-cols-[0.85fr_1.15fr]">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">
-              Claude setup
+              Claude
             </p>
             <h2 className="mt-3 text-3xl font-bold tracking-tight">
-              Connect Flaim to Claude
+              Use Flaim Fantasy in Claude
             </h2>
             <p className="mt-4 leading-7 text-muted-foreground">
-              Claude can use Flaim as a custom connector. Connect your fantasy
-              platforms in Flaim first, then add Flaim through Claude&apos;s
-              connector settings.
+              Flaim is available in Claude&apos;s connector directory. Connect your
+              fantasy platforms in Flaim first, then open Flaim in Claude and
+              authorize your account.
             </p>
           </div>
           <div className="rounded-2xl border bg-background p-5">
@@ -327,19 +330,15 @@ export default function AiGuidePage() {
               <li>
                 Open{" "}
                 <a
-                  href="https://claude.ai/settings/connectors"
+                  href={CLAUDE_CONNECTOR_DIRECTORY_URL}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-primary hover:underline"
                 >
-                  Claude&apos;s connector settings
+                  Claude&apos;s connector directory
                 </a>
-                , add{" "}
-                <code className="rounded bg-muted px-1 py-0.5 text-xs">
-                  https://api.flaim.app/mcp
-                </code>
-                , authorize Flaim, and start a fresh conversation by asking
-                what leagues you have.
+                , find Flaim, authorize your account, and start a fresh
+                conversation by asking what leagues you have.
               </li>
             </ol>
             <div className="mt-6 rounded-xl bg-muted/60 p-4">
@@ -355,9 +354,8 @@ export default function AiGuidePage() {
                   league data.
                 </li>
                 <li>
-                  If Anthropic changes the connector interface, follow its
-                  current connector-settings flow and use the same Flaim server
-                  URL.
+                  If the directory does not open to Flaim directly, search for
+                  the exact name <strong>Flaim Fantasy</strong>.
                 </li>
               </ul>
             </div>
@@ -372,7 +370,7 @@ export default function AiGuidePage() {
         <div className="mx-auto grid max-w-5xl gap-8 lg:grid-cols-[0.85fr_1.15fr]">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">
-              Perplexity setup
+              Perplexity
             </p>
             <h2 className="mt-3 text-3xl font-bold tracking-tight">
               Connect Flaim to Perplexity
@@ -469,7 +467,7 @@ export default function AiGuidePage() {
               <Link href="/leagues">Connect Your Leagues</Link>
             </Button>
             <Button asChild size="lg" variant="outline">
-              <Link href="/guide/platforms">Read the Platform Setup Guide</Link>
+              <Link href="/guide/platforms">Fantasy Platform Help</Link>
             </Button>
           </div>
         </div>

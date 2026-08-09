@@ -2274,8 +2274,8 @@ function LeaguesPageContent() {
                     <button
                       type="button"
                       className="rounded-md border border-muted bg-muted/60 p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                      aria-label="Open platform setup guides"
-                      title="Platform setup guides"
+                      aria-label="Open fantasy platform help"
+                      title="Fantasy platform help"
                     >
                       <BookOpen className="h-4 w-4" />
                     </button>

@@ -353,7 +353,7 @@ export default function SportsGuidePage() {
               href="/guide/platforms"
               className="text-primary hover:underline"
             >
-              platform setup guide
+              fantasy platform help
             </Link>{" "}
             for connection instructions.
           </p>

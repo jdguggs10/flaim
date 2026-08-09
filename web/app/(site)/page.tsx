@@ -2,6 +2,10 @@ import type { Metadata } from "next";
 import { SignedIn, SignedOut } from "@clerk/nextjs";
 import { PublicChatExperience } from "@/components/public-demo/public-chat-experience";
 import { HeroChat } from "@/components/site/hero-chat";
+import {
+  HomepageToolSection,
+  isHomepageToolVariant,
+} from "@/components/site/homepage-tool-section";
 
 export const metadata: Metadata = {
   title: {
@@ -15,12 +19,14 @@ export const metadata: Metadata = {
 };
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { CHATGPT_APP_URL } from "@/lib/product-links";
+import {
+  CHATGPT_APP_URL,
+  CLAUDE_CONNECTOR_DIRECTORY_URL,
+} from "@/lib/product-links";
 import {
   ArrowRight,
   ChevronDown,
   CircleDollarSign,
-  ExternalLink,
   ShieldCheck,
   Sparkles,
 } from "lucide-react";
@@ -28,6 +34,7 @@ import {
 interface LandingPageProps {
   searchParams?: Promise<{
     preset?: string | string[];
+    tools?: string | string[];
   }>;
 }
 
@@ -38,51 +45,56 @@ const SUPPORTED_SPORTS = [
   "Basketball",
   "Hockey",
 ] as const;
-const SUPPORTED_AI_TOOLS = [
-  "ChatGPT",
-  "Claude (soon)",
-  "Perplexity (soon)",
-] as const;
+const SUPPORTED_AI_TOOLS = ["ChatGPT", "Claude"] as const;
 
-const HOMEPAGE_PROMPT_PLACEHOLDERS = [
-  {
-    question: "What are the biggest strengths and weaknesses of my roster?",
-    tools: ["Roster", "Standings"],
-  },
-  {
-    question: "Who should I add from my waiver wire?",
-    tools: ["Free Agents", "Players"],
-  },
-  {
-    question: "How does this week's matchup look?",
-    tools: ["Matchups", "Roster"],
-  },
-  {
-    question: "Grade my last trade.",
-    tools: ["Transactions", "Roster", "Players"],
-  },
-  {
-    question: "Which league settings matter most for my strategy?",
-    tools: ["League Info"],
-  },
-  {
-    question: "How has my team changed this season?",
-    tools: ["Transactions", "Roster"],
-  },
-  {
-    question: "Do I have the best team in the league?",
-    tools: ["Standings", "Roster"],
-  },
-  {
-    question: "What happened in past seasons?",
-    tools: ["League History"],
-  },
-] as const;
+function HomepageCtas() {
+  return (
+    <div className="mx-auto grid w-full max-w-sm grid-cols-2 items-center justify-center gap-3 sm:flex sm:max-w-none sm:flex-row sm:flex-wrap">
+      <SignedOut>
+        <Button asChild size="lg" className="col-span-2 w-full sm:w-auto">
+          <Link href="/leagues">Connect Your Leagues</Link>
+        </Button>
+      </SignedOut>
+      <SignedIn>
+        <Button asChild size="lg" className="col-span-2 w-full sm:w-auto">
+          <Link href="/leagues">Your Leagues</Link>
+        </Button>
+      </SignedIn>
+      <Button asChild variant="outline" size="lg" className="w-full sm:w-auto">
+        <a
+          href={CHATGPT_APP_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Open Flaim Fantasy in ChatGPT"
+          title="Open Flaim Fantasy in the ChatGPT Plugin Store"
+        >
+          ChatGPT
+        </a>
+      </Button>
+      <Button asChild variant="outline" size="lg" className="w-full sm:w-auto">
+        <a
+          href={CLAUDE_CONNECTOR_DIRECTORY_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Find Flaim in Claude"
+          title="Find Flaim in Claude's connector directory"
+        >
+          Claude
+        </a>
+      </Button>
+    </div>
+  );
+}
 
 export default async function LandingPage({ searchParams }: LandingPageProps) {
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
   const preset = resolvedSearchParams?.preset;
   const initialPresetId = Array.isArray(preset) ? preset[0] : preset;
+  const tools = resolvedSearchParams?.tools;
+  const requestedToolVariant = Array.isArray(tools) ? tools[0] : tools;
+  const toolVariant = isHomepageToolVariant(requestedToolVariant)
+    ? requestedToolVariant
+    : "grouped";
   const showScreenshotPlaceholders = process.env.NODE_ENV === "development";
 
   return (
@@ -94,6 +106,14 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
             "@context": "https://schema.org",
             "@type": "FAQPage",
             mainEntity: [
+              {
+                "@type": "Question",
+                name: "Is Flaim free?",
+                acceptedAnswer: {
+                  "@type": "Answer",
+                  text: "Yes. Flaim is free and has no subscription. I have some server costs, but everything is manageable right now. Enjoy.",
+                },
+              },
               {
                 "@type": "Question",
                 name: "Can ChatGPT access my fantasy league?",
@@ -112,14 +132,6 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
               },
               {
                 "@type": "Question",
-                name: "Is Flaim free?",
-                acceptedAnswer: {
-                  "@type": "Answer",
-                  text: "Yes. Flaim is free and has no subscription. I have some server costs, but everything is manageable right now. Enjoy.",
-                },
-              },
-              {
-                "@type": "Question",
                 name: "Do I need the Chrome extension?",
                 acceptedAnswer: {
                   "@type": "Answer",
@@ -131,7 +143,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
                 name: "Which AI apps work with Flaim?",
                 acceptedAnswer: {
                   "@type": "Answer",
-                  text: "Flaim Fantasy is fully available in ChatGPT's App Store. Setup is extremely easy. Flaim can also connect through Claude and Perplexity. See the AI Apps guide for current availability and setup instructions.",
+                  text: "Flaim Fantasy is available in both ChatGPT and Claude. Open it from the ChatGPT Plugin Store or Claude's connector directory, then authorize your Flaim account. Perplexity can also connect through its remote connector settings.",
                 },
               },
               {
@@ -209,31 +221,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
 
       {/* Primary CTA */}
       <section className="px-4 pb-10 text-center">
-        <div className="flex flex-row flex-wrap items-center justify-center gap-3">
-          <SignedOut>
-            <Button asChild size="lg">
-              <Link href="/leagues">Connect Your Leagues</Link>
-            </Button>
-          </SignedOut>
-          <SignedIn>
-            <Button asChild size="lg">
-              <Link href="/leagues">Your Leagues</Link>
-            </Button>
-          </SignedIn>
-          <Button asChild variant="outline" size="lg">
-            <Link href="/guide">Setup Guide</Link>
-          </Button>
-          <Button asChild variant="outline" size="lg">
-            <a
-              href={CHATGPT_APP_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              ChatGPT App Store
-              <ExternalLink className="ml-2 h-4 w-4" aria-hidden="true" />
-            </a>
-          </Button>
-        </div>
+        <HomepageCtas />
       </section>
 
       {/* Seasonal Spotlight */}
@@ -287,38 +275,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
         </div>
       </section>
 
-      {/* Prompt examples */}
-      <section className="bg-muted px-4 py-12 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-4xl">
-          <h2 className="text-center text-2xl font-bold">
-            Ask about your real league
-          </h2>
-          <p className="mx-auto mb-8 mt-2 max-w-2xl text-center text-muted-foreground">
-            Flaim can bring the right league context into questions like these.
-          </p>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {HOMEPAGE_PROMPT_PLACEHOLDERS.map((prompt) => (
-              <article
-                key={prompt.question}
-                data-copy-prompt-placeholder
-                className="rounded-xl border bg-background p-4"
-              >
-                <p className="font-medium">&ldquo;{prompt.question}&rdquo;</p>
-                <div className="mt-3 flex flex-wrap gap-1.5">
-                  {prompt.tools.map((tool) => (
-                    <span
-                      key={tool}
-                      className="inline-flex rounded-full border bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground"
-                    >
-                      {tool}
-                    </span>
-                  ))}
-                </div>
-              </article>
-            ))}
-          </div>
-        </div>
-      </section>
+      <HomepageToolSection variant={toolVariant} />
 
       {/* Trust badges */}
       <section className="bg-background px-4 py-10 sm:px-6 lg:px-8">
@@ -364,6 +321,19 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
           <div className="space-y-3">
             <details className="group border rounded-lg bg-background">
               <summary className="flex cursor-pointer items-center justify-between p-4 font-medium">
+                Is Flaim free?
+                <ChevronDown className="ml-2 h-5 w-5 transition-transform group-open:rotate-180" />
+              </summary>
+              <div className="space-y-2 px-4 pb-4 text-sm text-muted-foreground">
+                <p>
+                  Yes. Flaim is free and has no subscription. I have some server
+                  costs, but everything is manageable right now. Enjoy.
+                </p>
+              </div>
+            </details>
+
+            <details className="group border rounded-lg bg-background">
+              <summary className="flex cursor-pointer items-center justify-between p-4 font-medium">
                 Can ChatGPT access my fantasy league?
                 <ChevronDown className="ml-2 h-5 w-5 transition-transform group-open:rotate-180" />
               </summary>
@@ -392,19 +362,6 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
 
             <details className="group border rounded-lg bg-background">
               <summary className="flex cursor-pointer items-center justify-between p-4 font-medium">
-                Is Flaim free?
-                <ChevronDown className="ml-2 h-5 w-5 transition-transform group-open:rotate-180" />
-              </summary>
-              <div className="space-y-2 px-4 pb-4 text-sm text-muted-foreground">
-                <p>
-                  Yes. Flaim is free and has no subscription. I have some server
-                  costs, but everything is manageable right now. Enjoy.
-                </p>
-              </div>
-            </details>
-
-            <details className="group border rounded-lg bg-background">
-              <summary className="flex cursor-pointer items-center justify-between p-4 font-medium">
                 Do I need the Chrome extension?
                 <ChevronDown className="ml-2 h-5 w-5 transition-transform group-open:rotate-180" />
               </summary>
@@ -425,13 +382,14 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
               </summary>
               <div className="space-y-2 px-4 pb-4 text-sm text-muted-foreground">
                 <p>
-                  Flaim Fantasy is fully available in ChatGPT&apos;s App Store.
-                  Setup is extremely easy. Flaim can also connect through Claude
-                  and Perplexity. See the{" "}
+                  Flaim Fantasy is available in both ChatGPT and Claude. Open it
+                  from the ChatGPT Plugin Store or Claude&apos;s connector directory,
+                  then authorize your Flaim account. Perplexity can also connect
+                  through its remote connector settings. See the{" "}
                   <Link href="/guide/ai" className="text-primary hover:underline">
-                    AI Apps guide
+                    AI apps page
                   </Link>{" "}
-                  for current availability and setup instructions.
+                  for details.
                 </p>
               </div>
             </details>
@@ -465,19 +423,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
             connect your AI app. After that, just start asking.
           </p>
           <div className="mt-6 flex flex-row flex-wrap items-center justify-center gap-3">
-            <SignedOut>
-              <Button asChild size="lg">
-                <Link href="/leagues">Connect Your Leagues</Link>
-              </Button>
-            </SignedOut>
-            <SignedIn>
-              <Button asChild size="lg">
-                <Link href="/leagues">Your Leagues</Link>
-              </Button>
-            </SignedIn>
-            <Button asChild variant="outline" size="lg">
-              <Link href="/guide">Read the Setup Guide</Link>
-            </Button>
+            <HomepageCtas />
           </div>
         </div>
       </section>
@@ -485,9 +431,6 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
       {/* Founder note */}
       <section id="about-flaim" className="scroll-mt-24 px-4 py-12">
         <div className="container mx-auto max-w-2xl text-center">
-          <h2 className="text-2xl font-bold mb-2">
-            Built for my league. Shared with yours.
-          </h2>
           <p className="text-muted-foreground">
             I&apos;m Gerry and I built Flaim because I felt like giving back.
             Flaim is open source and maintained for the long-term.

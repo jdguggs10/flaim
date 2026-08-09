@@ -2,7 +2,7 @@
 
 Doc routing: see `docs/INDEX.md`.
 
-Flaim is an MCP (Model Context Protocol) service that connects ESPN, Yahoo, and Sleeper fantasy leagues to Flaim Fantasy in ChatGPT and, as an advanced option, to compatible AI platforms through a manual custom connector. It handles authentication, credential management, and real-time data fetching. The web app also includes a homepage live demo.
+Flaim is an MCP (Model Context Protocol) service that connects ESPN, Yahoo, and Sleeper fantasy leagues to Flaim Fantasy in ChatGPT and Claude and, as an advanced option, to compatible AI platforms through a manual custom connector. It handles authentication, credential management, and real-time data fetching. The web app also includes a homepage live demo.
 
 ## Quick Start
 
@@ -55,7 +55,7 @@ docs/                       # Documentation
 
 Flaim is an **authentication and data service**, not a chatbot:
 
-- **MCP Server**: Exposes fantasy league data to ChatGPT Apps and optional manual MCP clients via Model Context Protocol
+- **MCP Server**: Exposes fantasy league data to ChatGPT, Claude, and optional manual MCP clients via Model Context Protocol
 - **OAuth Provider**: Handles secure authentication between AI clients and ESPN data
 - **Credential Manager**: Securely stores ESPN session cookies captured by the Chrome extension
 

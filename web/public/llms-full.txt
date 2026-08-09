@@ -6,7 +6,7 @@
 
 Flaim is a free, open-source service that gives supported AI assistants read-only access to your real fantasy sports data. It combines connected league context with fantasy analyst guidance so answers are grounded in your league—not generic rankings.
 
-Flaim Fantasy is available in ChatGPT. Claude and Perplexity can connect through their current custom-connector settings. Availability claims are kept distinct from manual connection paths.
+Flaim Fantasy is available in ChatGPT and Claude. Perplexity can connect through its current remote-connector settings.
 
 Single MCP endpoint: https://api.flaim.app/mcp
 
@@ -42,11 +42,12 @@ Single MCP endpoint: https://api.flaim.app/mcp
    - Sleeper: Enter your exact username and wait for league discovery
 3. Connect your AI app, authorize Flaim, and ask "What fantasy leagues do I have?" to confirm setup:
    - ChatGPT: Open Flaim Fantasy in ChatGPT
-   - Claude or Perplexity: Follow the connection instructions in the AI Apps guide
+   - Claude: Find Flaim Fantasy in Claude's connector directory
+   - Perplexity: Follow the remote-connector instructions on the AI Apps page
 
-Claude and Perplexity use the same server URL after leagues are connected: https://api.flaim.app/mcp
+Optional manual connector paths use the same server URL after leagues are connected: https://api.flaim.app/mcp
 
-After setup, Your Leagues is where users can add leagues, sync seasons, and choose optional defaults.
+After connecting, Your Leagues is where users can add leagues, sync seasons, and choose optional defaults.
 
 ## Example Prompts
 
@@ -74,20 +75,22 @@ ESPN doesn't offer a public API for private fantasy league data. For private ESP
 Flaim Fantasy is available in ChatGPT. Optional manual MCP clients can also add the single server URL, and Flaim handles authentication and data retrieval after your leagues are linked in /leagues.
 
 ### What AI assistants work with Flaim?
-The primary experience is Flaim Fantasy in ChatGPT. Claude and Perplexity can connect through optional custom-connector settings where supported; their curated publication is still pending. See the AI Apps guide for current availability and setup instructions.
+Flaim Fantasy is available in ChatGPT and Claude. Perplexity can connect through optional remote-connector settings where supported; its curated publication is still pending. See the AI Apps page for current availability and connection instructions.
 
 ## Links
 
 - Website: https://flaim.app
-- Leagues setup: https://flaim.app/leagues
-- Help: https://flaim.app/guide
+- Your Leagues: https://flaim.app/leagues
+- Using Flaim: https://flaim.app/guide
 - Fantasy football analysis: https://flaim.app/fantasy-football
-- Platform guide: https://flaim.app/guide/platforms
-- AI guide: https://flaim.app/guide/ai
-- Sports guide: https://flaim.app/guide/sports
-- ChatGPT guide: https://flaim.app/guide/ai#chatgpt
-- Claude guide: https://flaim.app/guide/ai#claude
-- Perplexity guide: https://flaim.app/guide/ai#perplexity
+- Fantasy platform help: https://flaim.app/guide/platforms
+- AI apps: https://flaim.app/guide/ai
+- Sports and tools: https://flaim.app/guide/sports
+- ChatGPT: https://flaim.app/guide/ai#chatgpt
+- Claude: https://flaim.app/guide/ai#claude
+- Perplexity: https://flaim.app/guide/ai#perplexity
+- ChatGPT listing: https://chatgpt.com/apps/flaim-fantasy/asdk_app_69a8f78087e081919e52cacacf00ff36
+- Claude connector directory: https://claude.ai/directory
 - GitHub: https://github.com/jdguggs10/flaim
 - Privacy policy: https://flaim.app/privacy
 - Terms of service: https://flaim.app/terms

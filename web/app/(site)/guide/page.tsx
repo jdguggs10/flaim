@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 
 export const metadata: Metadata = {
-  title: "Flaim Setup Guide",
+  title: "Using Flaim",
   description:
     "Create your Flaim account, connect ESPN, Yahoo, or Sleeper leagues, then connect Flaim to ChatGPT or an optional Claude or Perplexity custom connector.",
   alternates: {
@@ -14,7 +14,7 @@ export const metadata: Metadata = {
   },
 };
 
-interface SetupStep {
+interface GuideStep {
   number: string;
   title: string;
   body: string;
@@ -24,7 +24,7 @@ interface SetupStep {
   secondaryLabel?: string;
 }
 
-const setupSteps: readonly SetupStep[] = [
+const guideSteps: readonly GuideStep[] = [
   {
     number: "1",
     title: "Create your Flaim account",
@@ -39,16 +39,16 @@ const setupSteps: readonly SetupStep[] = [
     primaryHref: "/leagues#platforms",
     primaryLabel: "Connect Your Leagues",
     secondaryHref: "/guide/platforms",
-    secondaryLabel: "Platform setup help",
+    secondaryLabel: "Platform help",
   },
   {
     number: "3",
     title: "Connect your AI app",
-    body: "Open Flaim Fantasy in ChatGPT or use an optional custom connector in Claude or Perplexity, then authorize your account.",
+    body: "Open Flaim Fantasy in ChatGPT or Claude, or use an optional custom connector in Perplexity, then authorize your account.",
     primaryHref: "/leagues#connect-ai",
     primaryLabel: "Connect Your AI",
     secondaryHref: "/guide/ai",
-    secondaryLabel: "AI app setup help",
+    secondaryLabel: "AI app help",
   },
 ];
 
@@ -56,7 +56,7 @@ const guideLinks = [
   {
     href: "/guide/platforms",
     title: "Fantasy sports provider help",
-    body: "ESPN, Yahoo, and Sleeper setup details and troubleshooting.",
+    body: "ESPN, Yahoo, and Sleeper connection details and troubleshooting.",
   },
   {
     href: "/guide/sports",
@@ -65,8 +65,8 @@ const guideLinks = [
   },
   {
     href: "/guide/ai",
-    title: "AI app setup help",
-    body: "Official ChatGPT setup plus optional Claude and Perplexity custom-connector guidance.",
+    title: "Using Flaim in your AI app",
+    body: "Open Flaim in ChatGPT or Claude, plus optional Perplexity custom-connector guidance.",
   },
   {
     href: "/fantasy-football",
@@ -83,7 +83,7 @@ export default function GuidePage() {
     <div className="min-h-screen bg-background">
       <div className="container mx-auto max-w-3xl px-4 py-12">
         <div className="mb-10 space-y-4">
-          <h1 className="text-3xl font-bold">Flaim Setup Guide</h1>
+          <h1 className="text-3xl font-bold">Using Flaim</h1>
           <p className="max-w-2xl leading-7 text-muted-foreground">
             Create your account, connect your fantasy leagues, then connect the
             AI app you already use. That&apos;s it.
@@ -91,7 +91,7 @@ export default function GuidePage() {
         </div>
 
         <section className="grid gap-4">
-          {setupSteps.map((step) => (
+          {guideSteps.map((step) => (
             <Card key={step.number} className="p-5">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div className="flex gap-4">
@@ -132,11 +132,11 @@ export default function GuidePage() {
         </div>
 
         <section className="mt-8 rounded-lg border bg-background p-5 shadow-sm">
-          <h2 className="text-lg font-semibold">After setup: manage your leagues</h2>
+          <h2 className="text-lg font-semibold">Afterward: manage your leagues</h2>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
             Your Leagues is where you add another league, sync new seasons,
             choose optional defaults, or disconnect a platform. None of that is
-            required to finish the three-step setup.
+            required to finish the three steps above.
           </p>
           <div className="mt-4 flex flex-col gap-2 sm:flex-row">
             <Button asChild variant="outline">
