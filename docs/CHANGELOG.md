@@ -4,6 +4,9 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### ESPN Daily-Sport Matchup Scoring-Period Metadata (FLA-194)
+- **Fixed**: ESPN daily-sport (baseball, basketball, hockey) `get_matchups` with an explicit `week` no longer pins `scoringPeriodId` in the provider request, so the response's `currentScoringPeriod` reports the league's true current scoring period instead of echoing the requested matchup week (e.g. baseball week 15 previously reported scoring period 15 — an April day — in midsummer). Matchup teams and scores are unchanged; they were already filtered by matchup period. Football keeps the pin, where week and scoring period coincide. Closes the `week`-vs-scoring-period conflation family (FLA-192 rosters, FLA-193/198 transactions).
+
 ## [8.2.0] - 2026-08-06
 
 Corresponds to ChatGPT plugin listing v2.1.0; also includes the annotation correction shipped in listing v2.0.1.

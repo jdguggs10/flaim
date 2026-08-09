@@ -314,7 +314,10 @@ async function handleGetMatchups(
 
     let path = `/seasons/${espnYear}/segments/0/leagues/${league_id}?view=mMatchupScore&view=mScoreboard&view=mTeam`;
     if (week) {
-      path += `&scoringPeriodId=${week}&matchupPeriodId=${week}`;
+      // Daily sport: pin only the matchup period. Pinning scoringPeriodId makes ESPN echo
+      // it back in data.scoringPeriodId, corrupting currentScoringPeriod (weeks != daily
+      // scoring periods here; matchups themselves are filtered client-side below).
+      path += `&matchupPeriodId=${week}`;
     }
 
     const response = await espnFetch(path, GAME_ID, { credentials, timeout: 7000 });
