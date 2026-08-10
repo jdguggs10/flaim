@@ -25,30 +25,39 @@ interface FreeAgentCapabilities {
   startedRate: boolean;
 }
 
-const CAPABILITIES: Record<Platform, FreeAgentCapabilities> = {
-  espn: { acquisitionState: true, rosteredRate: true, startedRate: true },
-  yahoo: { acquisitionState: false, rosteredRate: true, startedRate: false },
-  sleeper: { acquisitionState: false, rosteredRate: false, startedRate: false },
-};
+interface PlatformFreeAgentConfig {
+  capabilities: FreeAgentCapabilities;
+  ordering: 'platform_rostered_rate_desc' | 'alphabetical';
+  ownershipScope: 'platform_global' | 'unavailable';
+  entryArrayKey: 'freeAgents' | 'players';
+  normalizeEntry: (entry: Record<string, unknown>) => Record<string, unknown>;
+}
 
-const ORDERING: Record<Platform, string> = {
-  // ESPN sorts provider-side by platform-wide rostered rate (draft-rank tiebreak);
-  // Yahoo is sorted locally the same way (nulls last, name/id tiebreak).
-  espn: 'platform_rostered_rate_desc',
-  yahoo: 'platform_rostered_rate_desc',
-  sleeper: 'alphabetical',
-};
-
-const OWNERSHIP_SCOPE: Record<Platform, string> = {
-  espn: 'platform_global',
-  yahoo: 'platform_global',
-  sleeper: 'unavailable',
-};
-
-const ENTRY_ARRAY_KEY: Record<Platform, string> = {
-  espn: 'freeAgents',
-  yahoo: 'freeAgents',
-  sleeper: 'players',
+// One config per platform — adding a platform means adding exactly one entry here.
+// ESPN sorts provider-side by platform-wide rostered rate (draft-rank tiebreak);
+// Yahoo is sorted locally the same way (nulls last, name/id tiebreak).
+const PLATFORM_CONFIG: Record<Platform, PlatformFreeAgentConfig> = {
+  espn: {
+    capabilities: { acquisitionState: true, rosteredRate: true, startedRate: true },
+    ordering: 'platform_rostered_rate_desc',
+    ownershipScope: 'platform_global',
+    entryArrayKey: 'freeAgents',
+    normalizeEntry: normalizeEspnEntry,
+  },
+  yahoo: {
+    capabilities: { acquisitionState: false, rosteredRate: true, startedRate: false },
+    ordering: 'platform_rostered_rate_desc',
+    ownershipScope: 'platform_global',
+    entryArrayKey: 'freeAgents',
+    normalizeEntry: normalizeYahooEntry,
+  },
+  sleeper: {
+    capabilities: { acquisitionState: false, rosteredRate: false, startedRate: false },
+    ordering: 'alphabetical',
+    ownershipScope: 'unavailable',
+    entryArrayKey: 'players',
+    normalizeEntry: normalizeSleeperEntry,
+  },
 };
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -139,12 +148,6 @@ function normalizeSleeperEntry(entry: Record<string, unknown>): Record<string, u
   return normalized;
 }
 
-const ENTRY_NORMALIZERS: Record<Platform, (entry: Record<string, unknown>) => Record<string, unknown>> = {
-  espn: normalizeEspnEntry,
-  yahoo: normalizeYahooEntry,
-  sleeper: normalizeSleeperEntry,
-};
-
 /**
  * Layer the canonical free-agent contract onto a routed provider result.
  * Error results pass through untouched; malformed successes become explicit
@@ -158,8 +161,8 @@ export function normalizeFreeAgentsResult(result: RouteResult, params: ToolParam
   try {
     const data = result.data;
     const platform = params.platform;
-    const entryKey = ENTRY_ARRAY_KEY[platform];
-    const rawEntries = data[entryKey];
+    const config = PLATFORM_CONFIG[platform];
+    const rawEntries = data[config.entryArrayKey];
 
     if (rawEntries !== undefined && !Array.isArray(rawEntries)) return malformed('non-array player list');
 
@@ -168,7 +171,7 @@ export function normalizeFreeAgentsResult(result: RouteResult, params: ToolParam
       entries = [];
       for (const entry of rawEntries) {
         if (!isPlainObject(entry)) return malformed('non-object player entry');
-        entries.push(ENTRY_NORMALIZERS[platform](entry));
+        entries.push(config.normalizeEntry(entry));
       }
     }
 
@@ -180,17 +183,19 @@ export function normalizeFreeAgentsResult(result: RouteResult, params: ToolParam
       seasonYear: params.season_year,
       position: (params.position || 'ALL').toUpperCase(),
       count: entries ? entries.length : 0,
-      ordering: ORDERING[platform],
-      capabilities: { ...CAPABILITIES[platform] },
-      ownershipScope: OWNERSHIP_SCOPE[platform],
+      ordering: config.ordering,
+      capabilities: { ...config.capabilities },
+      ownershipScope: config.ownershipScope,
     };
-    if (entries !== undefined) normalized[entryKey] = entries;
+    if (entries !== undefined) normalized[config.entryArrayKey] = entries;
 
     return { ...result, data: normalized };
-  } catch {
+  } catch (error) {
     // Totality guard: an unanticipated payload shape must degrade to the
     // explicit malformed error, never to a thrown exception or an
-    // un-normalized success that would fail schema validation.
+    // un-normalized success that would fail schema validation. Log the real
+    // error so a normalizer bug is not misread as a provider problem.
+    console.error('[fantasy-mcp] free-agent normalization failed:', error);
     return malformed('unexpected payload structure');
   }
 }

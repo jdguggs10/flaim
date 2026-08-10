@@ -370,7 +370,7 @@ const GET_FREE_AGENTS_OUTPUT_SCHEMA = routedOutputSchema({
   position: z.string().describe('Echoed position filter, ALL when unfiltered'),
   count: z.number(),
   ordering: z
-    .string()
+    .enum(['platform_rostered_rate_desc', 'alphabetical'])
     .describe('List ranking: "platform_rostered_rate_desc" (ESPN provider-side with draft-rank tiebreak; Yahoo locally, nulls last, name/id tiebreak) or "alphabetical" (Sleeper, name then id)'),
   capabilities: looseObject({
     acquisitionState: z.boolean(),
@@ -378,7 +378,7 @@ const GET_FREE_AGENTS_OUTPUT_SCHEMA = routedOutputSchema({
     startedRate: z.boolean(),
   }).describe('Platform capability flags; per-entry canonical fields are omitted where false'),
   ownershipScope: z
-    .string()
+    .enum(['platform_global', 'unavailable'])
     .describe('"platform_global": rates cover all leagues on the platform, never the selected league; "unavailable": the platform reports no rates'),
   // Legacy platform envelopes — retained indefinitely for published pinned clients.
   leagueKey: z.string().optional(),
