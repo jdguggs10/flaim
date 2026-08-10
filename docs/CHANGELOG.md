@@ -4,6 +4,11 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Normalized Free-Agent Contract (FLA-216)
+- **Added**: `get_free_agents` responses now carry a canonical gateway-normalized layer on every platform: an always-present envelope (`leagueId`, `seasonYear`, `position`, `count`, `ordering`, `capabilities`, `ownershipScope`) and, where the platform capability allows, per-entry `acquisitionState` (`free_agent`/`waivers`/`null`, fail-closed on unknown ESPN status values), `waiverClearsAt` (ISO 8601, valid provider timestamps only), `id` (platform-local player id as string), and `team` (real club, `null` when none). Capability gaps are machine-stated (`capabilities`, `ownershipScope: unavailable`) instead of prose-only.
+- **Unchanged**: Every legacy platform field — including Sleeper's `players` array key, ESPN's `proTeam`/`FA` sentinel and `status`/`waiverProcessDate`, and Yahoo's `leagueKey` — remains in place indefinitely for published pinned clients. The normalizer is additive and total; malformed provider values map to `null` or are omitted, never guessed.
+- **Changed**: Tool description, server instructions, and skill guidance now teach the canonical fields first; measured payload cost is envelope-only for Sleeper (~+2% at 100 rows) and mid-teens to high-twenties percent for ESPN depending on stats blocks.
+
 ### ESPN Daily-Sport Matchup Scoring-Period Metadata (FLA-194)
 - **Fixed**: ESPN daily-sport (baseball, basketball, hockey) `get_matchups` with an explicit `week` no longer pins `scoringPeriodId` in the provider request, so the response's `currentScoringPeriod` reports the league's true current scoring period instead of echoing the requested matchup week (e.g. baseball week 15 previously reported scoring period 15 — an April day — in midsummer). Matchup teams and scores are unchanged; they were already filtered by matchup period. Football keeps the pin, where week and scoring period coincide. Closes the `week`-vs-scoring-period conflation family (FLA-192 rosters, FLA-193/198 transactions).
 

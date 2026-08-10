@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { ZodRawShapeCompat } from '@modelcontextprotocol/sdk/server/zod-compat.js';
 import type { Env, Platform, Sport, ToolParams } from '../types';
 import { routeToClient, type RouteResult } from '../router';
+import { normalizeFreeAgentsResult } from './free-agent-normalizer';
 import {
   ErrorCode,
   getDefaultSeasonYear,
@@ -334,34 +335,61 @@ const GET_ROSTER_OUTPUT_SCHEMA = routedOutputSchema({
 });
 
 const freeAgentEntrySchema = looseObject({
+  // Canonical fields (FLA-216) — emitted by the gateway normalizer where
+  // derivable; absent when the platform capability is false.
+  acquisitionState: z
+    .string()
+    .nullable()
+    .optional()
+    .describe('Canonical acquisition state: "free_agent", "waivers", or null when the platform cannot determine the subtype (Yahoo/Sleeper always; ESPN when its status is missing or unknown)'),
+  waiverClearsAt: z
+    .string()
+    .optional()
+    .describe('ISO 8601 waiver clear time (ESPN only, only when the provider supplied a valid timestamp)'),
+  id: z.string().optional().describe('Platform-local player id as a string'),
+  team: z
+    .string()
+    .nullable()
+    .optional()
+    .describe('Real-life club abbreviation, null when the platform lists none'),
+  // Legacy platform fields — retained indefinitely for published pinned clients.
   percentOwned: z
     .number()
     .nullable()
     .optional()
     .describe('ESPN-wide roster rate or Yahoo-wide market rate; null/absent when the provider reports none'),
   percentStarted: z.number().nullable().optional(),
-  status: z.string().nullable().optional(),
-  waiverProcessDate: z.union([z.string(), z.number()]).nullable().optional(),
+  status: z.string().nullable().optional().describe('Legacy: ESPN acquisition enum (prefer acquisitionState); on Yahoo an unrelated player designation'),
+  waiverProcessDate: z.union([z.string(), z.number()]).nullable().optional().describe('Legacy epoch-ms form of waiverClearsAt'),
 });
 
 const GET_FREE_AGENTS_OUTPUT_SCHEMA = routedOutputSchema({
-  // ESPN
-  leagueId: z.string().optional(),
-  seasonYear: z.number().optional(),
-  // Yahoo
+  // Canonical envelope (FLA-216) — always set by the gateway normalizer.
+  leagueId: z.string().describe('Canonical league identity for every platform'),
+  seasonYear: z.number(),
+  position: z.string().describe('Echoed position filter, ALL when unfiltered'),
+  count: z.number(),
+  ordering: z
+    .string()
+    .describe('List ranking: "platform_rostered_rate_desc" (ESPN provider-side with draft-rank tiebreak; Yahoo locally, nulls last, name/id tiebreak) or "alphabetical" (Sleeper, name then id)'),
+  capabilities: looseObject({
+    acquisitionState: z.boolean(),
+    rosteredRate: z.boolean(),
+    startedRate: z.boolean(),
+  }).describe('Platform capability flags; per-entry canonical fields are omitted where false'),
+  ownershipScope: z
+    .string()
+    .describe('"platform_global": rates cover all leagues on the platform, never the selected league; "unavailable": the platform reports no rates'),
+  // Legacy platform envelopes — retained indefinitely for published pinned clients.
   leagueKey: z.string().optional(),
   leagueName: z.string().optional(),
-  position: z.string().optional(),
   freeAgents: z.array(freeAgentEntrySchema).optional().describe('ESPN/Yahoo available-player entries'),
-  // Sleeper
   platform: z.string().optional(),
   sport: z.string().optional(),
   league_id: z.string().optional(),
   season_year: z.number().optional(),
   players: z.array(freeAgentEntrySchema).optional().describe('Sleeper available-player entries'),
   warning: z.string().optional(),
-  // Shared
-  count: z.number().optional(),
 });
 
 const searchPlayerEntrySchema = looseObject({
@@ -1657,7 +1685,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       annotations: PROVIDER_READ_TOOL_ANNOTATIONS,
       outputSchema: GET_FREE_AGENTS_OUTPUT_SCHEMA,
       openaiMeta: { invoking: 'Searching available players\u2026', invoked: 'Available players ready' },
-      description: `Get players available to acquire in the specified fantasy league, optionally filtered by position. This is fantasy-league availability, not professional-contract status. ESPN percentOwned/percentStarted are the percentages of all ESPN leagues where the player is rostered/started, not the share of rostered teams that start him. Yahoo percentOwned, when present, is Yahoo-wide; none is ownership within the selected league, and Sleeper provides no percentage. Label every reported percentage as an ESPN-wide roster/start rate or Yahoo-wide market rate. If a rate is missing, write "[Provider] market ownership rate: not provided"; do not repeat response field names or null values, call get_players, or offer a lookup. team/proTeam is the real-life club (FA means the provider lists no current pro team). Only ESPN status/waiverProcessDate represents fantasy acquisition state here. Call Yahoo/Sleeper rows "available players," never specifically free agents or waivers, and do not promise an immediate add. A returned player is already confirmed available in that league. For a returned list or field explanation, end after the requested facts—never add an "if you want" offer, qualitative ranking, recommendation, role, health, trend, or outlook. Translate ESPN status codes silently into plain language; never print raw codes such as FREEAGENT or WAIVERS. Use current web evidence before adding analysis or pickup recommendations. Follow get_user_session then get_league_info for the selected league; fan out once per league for comparisons. Use get_roster for a separate player-ownership question. Requires authentication on ESPN/Yahoo; Sleeper uses the public API. Read-only. Current date is ${currentDate}.`,
+      description: `Get players available to acquire in the specified fantasy league, optionally filtered by position. This is fantasy-league availability, not professional-contract status. Prefer the canonical fields: every response carries leagueId, position, count, ordering, capabilities, and ownershipScope, and entries carry acquisitionState ("free_agent", "waivers", or null when the platform cannot determine the subtype), waiverClearsAt (ISO time), id, and team (real-life club, null when none) where the platform capability allows; legacy platform fields remain alongside for compatibility and should not be re-explained. ownershipScope "platform_global" means percentOwned/percentStarted cover all leagues on that platform — never ownership within the selected league; label every reported percentage that way (an ESPN-wide roster/start rate or Yahoo-wide market rate). If capabilities marks rates unavailable, write "[Provider] market ownership rate: not provided"; do not repeat response field names or null values, call get_players, or offer a lookup. When acquisitionState is null, call rows "available players," never specifically free agents or waivers, and do not promise an immediate add. A returned player is already confirmed available in that league. For a returned list or field explanation, end after the requested facts—never add an "if you want" offer, qualitative ranking, recommendation, role, health, trend, or outlook. State acquisition status in plain language from acquisitionState; never print raw provider codes such as FREEAGENT or WAIVERS. Use current web evidence before adding analysis or pickup recommendations. Follow get_user_session then get_league_info for the selected league; fan out once per league for comparisons. Use get_roster for a separate player-ownership question. Requires authentication on ESPN/Yahoo; Sleeper uses the public API. Read-only. Current date is ${currentDate}.`,
       inputSchema: {
         platform: z
           .enum(['espn', 'yahoo', 'sleeper'])
@@ -1688,7 +1716,7 @@ export function getUnifiedTools(): UnifiedTool[] {
 
         return withToolLogging(correlationId, 'get_free_agents', `${params.platform} ${params.sport} league=provided pos=${params.position || 'ALL'}`, async () => {
           const result = await routeToClient(env, 'get_free_agents', params, authHeader, correlationId, evalRunId, evalTraceId);
-          return routeResultToMcp(result);
+          return routeResultToMcp(normalizeFreeAgentsResult(result, params));
         }, evalRunId, evalTraceId);
       },
     },

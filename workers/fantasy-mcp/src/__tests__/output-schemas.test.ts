@@ -9,6 +9,8 @@
 import { describe, expect, it } from 'vitest';
 import type { z } from 'zod';
 import { getUnifiedTools } from '../mcp/tools';
+import { normalizeFreeAgentsResult } from '../mcp/free-agent-normalizer';
+import type { ToolParams } from '../types';
 
 function outputSchemaFor(name: string): z.ZodTypeAny {
   const tool = getUnifiedTools().find((candidate) => candidate.name === name);
@@ -485,8 +487,25 @@ describe('get_roster output schema', () => {
 });
 
 describe('get_free_agents output schema', () => {
-  it('accepts the ESPN envelope with status and waiver metadata', () => {
-    expectValid('get_free_agents', routed({
+  // FLA-216: structuredContent for this tool is the gateway-normalized payload,
+  // so fixtures are handler-true provider envelopes (proTeam on ESPN, players
+  // key on Sleeper) run through normalizeFreeAgentsResult — validating exactly
+  // what mcpSuccess will serialize.
+  function normalized(platform: ToolParams['platform'], data: Record<string, unknown>, overrides: Partial<ToolParams> = {}): Record<string, unknown> {
+    const params: ToolParams = {
+      platform,
+      sport: 'football',
+      league_id: '336777',
+      season_year: 2025,
+      ...overrides,
+    };
+    const result = normalizeFreeAgentsResult({ success: true, data }, params);
+    if (!result.success) throw new Error('normalizer must preserve success');
+    return routed(result.data as Record<string, unknown>);
+  }
+
+  it('accepts the normalized ESPN envelope with status and waiver metadata', () => {
+    expectValid('get_free_agents', normalized('espn', {
       leagueId: '336777',
       seasonYear: 2025,
       position: 'RB',
@@ -495,7 +514,7 @@ describe('get_free_agents output schema', () => {
         {
           playerId: 4429795,
           name: 'Rookie Back',
-          team: 'BUF',
+          proTeam: 'BUF',
           percentOwned: 43.1,
           percentStarted: 20.4,
           status: 'WAIVERS',
@@ -504,7 +523,7 @@ describe('get_free_agents output schema', () => {
         {
           playerId: 4429796,
           name: 'Deep Stash',
-          team: 'FA',
+          proTeam: 'FA',
           percentOwned: undefined,
           percentStarted: undefined,
           status: 'FREEAGENT',
@@ -514,29 +533,40 @@ describe('get_free_agents output schema', () => {
     }));
   });
 
-  it('accepts Yahoo entries with percentOwned null (FLA-132)', () => {
-    expectValid('get_free_agents', routed({
+  it('accepts normalized Yahoo entries with percentOwned null (FLA-132)', () => {
+    expectValid('get_free_agents', normalized('yahoo', {
       leagueKey: '449.l.123',
       leagueName: 'Car Ramrod',
       position: 'ALL',
       count: 2,
       freeAgents: [
-        { playerId: '201', name: 'Free Agent', team: 'BOS', percentOwned: 12.5 },
-        { playerId: '202', name: 'Unowned Guy', team: 'NYY', percentOwned: null },
+        { playerKey: '449.p.201', playerId: '201', name: 'Free Agent', team: 'BOS', percentOwned: 12.5 },
+        { playerKey: '449.p.202', playerId: '202', name: 'Unowned Guy', team: 'NYY', percentOwned: null },
       ],
-    }));
+    }, { league_id: '449.l.123' }));
   });
 
-  it('accepts the Sleeper players-key envelope (snake_case ids, no ownership fields)', () => {
-    expectValid('get_free_agents', routed({
+  it('accepts the normalized Sleeper players-key envelope (snake_case ids, no ownership fields)', () => {
+    expectValid('get_free_agents', normalized('sleeper', {
       platform: 'sleeper',
       sport: 'football',
       league_id: 'sleeper-2025',
       season_year: 2025,
       count: 1,
       players: [{ id: '4034', name: 'Sleeper FA', position: 'QB', team: 'BUF' }],
-      warning: 'Position filter not supported for this sport; returning all positions.',
-    }));
+    }, { league_id: 'sleeper-2025' }));
+  });
+
+  it('accepts the normalized Sleeper degraded envelope (player-index failure warning)', () => {
+    expectValid('get_free_agents', normalized('sleeper', {
+      platform: 'sleeper',
+      sport: 'football',
+      league_id: 'sleeper-2025',
+      season_year: 2025,
+      count: 0,
+      players: [],
+      warning: 'PLAYER_ENRICHMENT_UNAVAILABLE: free-agent player index unavailable; returning empty list',
+    }, { league_id: 'sleeper-2025' }));
   });
 });
 

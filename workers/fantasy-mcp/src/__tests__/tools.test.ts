@@ -1309,27 +1309,32 @@ describe('fantasy-mcp tools', () => {
       invoked: 'Available players ready',
     });
     expect(tool!.description).toContain('fantasy-league availability, not professional-contract status');
+    // FLA-216: the description teaches the canonical normalized fields first.
     expect(tool!.description).toContain(
-      'ESPN percentOwned/percentStarted are the percentages of all ESPN leagues where the player is rostered/started'
-    );
-    expect(tool!.description).toContain('Yahoo percentOwned, when present, is Yahoo-wide');
-    expect(tool!.description).toContain(
-      'Label every reported percentage as an ESPN-wide roster/start rate or Yahoo-wide market rate'
+      'every response carries leagueId, position, count, ordering, capabilities, and ownershipScope'
     );
     expect(tool!.description).toContain(
-      'If a rate is missing, write "[Provider] market ownership rate: not provided"; do not repeat response field names or null values, call get_players, or offer a lookup'
+      'acquisitionState ("free_agent", "waivers", or null when the platform cannot determine the subtype)'
+    );
+    expect(tool!.description).toContain(
+      'ownershipScope "platform_global" means percentOwned/percentStarted cover all leagues on that platform — never ownership within the selected league'
+    );
+    expect(tool!.description).toContain(
+      'an ESPN-wide roster/start rate or Yahoo-wide market rate'
+    );
+    expect(tool!.description).toContain(
+      'If capabilities marks rates unavailable, write "[Provider] market ownership rate: not provided"; do not repeat response field names or null values, call get_players, or offer a lookup'
     );
     expect(tool!.description).toContain(
       'A returned player is already confirmed available in that league'
     );
-    expect(tool!.description).toContain('Only ESPN status/waiverProcessDate represents fantasy acquisition state');
     expect(tool!.description).toContain(
-      'Call Yahoo/Sleeper rows "available players," never specifically free agents or waivers'
+      'When acquisitionState is null, call rows "available players," never specifically free agents or waivers'
     );
     expect(tool!.description).toContain('For a returned list or field explanation, end after the requested facts');
     expect(tool!.description).toContain('never add an "if you want" offer');
     expect(tool!.description).toContain(
-      'Translate ESPN status codes silently into plain language; never print raw codes such as FREEAGENT or WAIVERS'
+      'State acquisition status in plain language from acquisitionState; never print raw provider codes such as FREEAGENT or WAIVERS'
     );
     expect(tool!.description).toContain('Use get_roster for a separate player-ownership question');
     expect(tool!.description).toContain('Use current web evidence before adding analysis or pickup recommendations');

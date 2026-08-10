@@ -106,15 +106,25 @@ describe('shipped Flaim fantasy skill contract', () => {
     expect(skill).toContain(
       'A returned player is already confirmed available in the selected league'
     );
-    expect(skill).toContain('`team`/`proTeam` is the real-life club');
-    expect(skill).toContain('Only ESPN `status`/`waiverProcessDate` represents fantasy acquisition state');
+    expect(skill).toContain(
+      'prefer the normalized fields over the legacy provider fields, which stay visible'
+    );
+    expect(skill).toContain('`ownershipScope` is `platform_global` or `unavailable`');
+    expect(skill).toContain('rates are platform-wide, never league-scoped');
+    expect(skill).toContain(
+      'Normalized `team` is the real-life club, `null` when the provider lists none'
+    );
+    expect(skill).toContain(
+      'prefer normalized `acquisitionState` (`free_agent` or `waivers`; `null` when undetermined) and `waiverClearsAt` (ISO 8601) over legacy `status`/`waiverProcessDate`'
+    );
+    expect(skill).toContain('Only ESPN reports fantasy acquisition state here');
     expect(skill).toContain(
       'Call Yahoo/Sleeper rows "available players," never specifically free agents or waivers'
     );
     expect(skill).toContain('For a returned list or field explanation, end after the requested facts');
     expect(skill).toContain('never add an "if you want" offer');
     expect(skill).toContain(
-      'Translate ESPN status codes silently into plain language; never print raw codes such as `FREEAGENT` or `WAIVERS`'
+      'Render acquisition state silently in plain language; never print raw codes such as `FREEAGENT`, `WAIVERS`, or `free_agent`'
     );
     expect(skill).toContain('Use `get_roster` for a separate player-ownership question');
     expect(skill).toContain('Use current web evidence before adding analysis or pickup recommendations');

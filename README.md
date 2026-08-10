@@ -48,7 +48,7 @@ The AI will detect and activate the skill automatically when you ask fantasy que
 | `get_roster` | Team roster with player stats |
 | `get_matchups` | Weekly matchups and scores |
 | `get_standings` | League standings and rankings |
-| `get_free_agents` | Available players; ESPN/Yahoo include ownership percentages, Sleeper returns identities only |
+| `get_free_agents` | Available players with a normalized envelope; ESPN/Yahoo include platform-wide ownership percentages, Sleeper returns identities only |
 | `get_players` | Player lookup; ESPN and Yahoo can add league ownership, Sleeper ownership is unavailable |
 | `get_transactions` | Recent adds, drops, waivers, and trades |
 
