@@ -17,6 +17,10 @@ export const ErrorCode = {
   PLATFORM_NOT_SUPPORTED: 'PLATFORM_NOT_SUPPORTED',
   PLATFORM_ERROR: 'PLATFORM_ERROR',
   ROUTING_ERROR: 'ROUTING_ERROR',
+  // Gateway-detected structural drift in a provider success payload
+  // (distinct from ESPN_INVALID_RESPONSE, which the provider worker itself
+  // raises when ESPN's upstream response cannot be parsed).
+  MALFORMED_PROVIDER_RESPONSE: 'MALFORMED_PROVIDER_RESPONSE',
 
   // Sport/tool
   NOT_SUPPORTED: 'NOT_SUPPORTED',

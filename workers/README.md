@@ -114,7 +114,7 @@ All tools take explicit parameters: `platform`, `sport`, `league_id`, `season_ye
 - `get_standings` — League standings
 - `get_matchups` — Current/specified week matchups
 - `get_roster` — Team roster with player details
-- `get_free_agents` — Available players; ESPN/Yahoo include ownership percentages, Sleeper returns identities without ownership percentages
+- `get_free_agents` — Available players with a normalized envelope (capabilities, ownership scope, ordering); ESPN/Yahoo include platform-wide ownership percentages, Sleeper returns identities without ownership percentages
 - `get_players` — Player lookup; ESPN and Yahoo can add league ownership, Sleeper ownership is unavailable
 - `get_transactions` — Recent transactions (adds, drops, waivers, trades)
 

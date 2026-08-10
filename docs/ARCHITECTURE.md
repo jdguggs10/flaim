@@ -23,7 +23,7 @@ Root, web, and workers use `pnpm` via Corepack. The Chrome extension is intentio
 - **Chrome Extension (`/extension`)**: Captures ESPN cookies (SWID, espn_s2) and syncs them to Flaim using Clerk Sync Host (no pairing codes).
 - **Next.js web app (`/web`)**: Site pages (discovery-first landing page, setup + management hub at `/leagues`, privacy policy), OAuth consent screens, and homepage live demo.
 - **Auth worker (`/workers/auth-worker`)**: Supabase credential + league storage, JWT verification, OAuth token management, extension APIs. Uses Hono for routing.
-- **Unified Gateway (`/workers/fantasy-mcp`)**: Single MCP endpoint exposing unified tools for all platforms and sports. Routes to platform-specific workers via service bindings.
+- **Unified Gateway (`/workers/fantasy-mcp`)**: Single MCP endpoint exposing unified tools for all platforms and sports. Routes to platform-specific workers via service bindings. For most tools the gateway is a pure conduit; where a tool's provider envelopes diverge enough to confuse consumers, the gateway may layer a canonical, additive normalization on the routed result (per-tool normalizer modules applied at the route seam — `get_free_agents` is the template). Canonical gateway fields use camelCase; the older provider-side `ownership_scope` fields emitted inside `get_players` predate this pattern and are a legacy variant to converge in a future reviewed version. Legacy provider fields are never removed or renamed by normalization — published clients pin old schemas.
 - **ESPN Client (`/workers/espn-client`)**: Internal worker handling all ESPN API calls for all sports (football, baseball, basketball, hockey). Called by fantasy-mcp gateway.
 - **Yahoo Client (`/workers/yahoo-client`)**: Internal worker handling all Yahoo Fantasy API calls for all sports (football, baseball, basketball, hockey). Called by fantasy-mcp gateway.
 - **Sleeper Client (`/workers/sleeper-client`)**: Internal worker handling all Sleeper API calls for NFL and NBA (public API, no auth required). Called by fantasy-mcp gateway.
@@ -165,7 +165,7 @@ ChatGPT Apps / manual MCP clients → fantasy-mcp (gateway) → espn-client    �
 - `get_standings` — League standings
 - `get_matchups` — Current/specified week matchups
 - `get_roster` — Team roster with player details
-- `get_free_agents` — Available free agents (platform/sport dependent)
+- `get_free_agents` — Players available in the selected league, with a canonical gateway-normalized envelope (capabilities, ordering, ownership scope) layered over each platform's legacy fields
 - `get_players` — Player lookup across roster statuses with market/global ownership context (`market_percent_owned`, `ownership_scope`) and league ownership when available
 - `get_transactions` — Recent transactions (adds, drops, waivers, trades)
   - ESPN treats the public `week` selector as a matchup period for every sport and returns activity-source/window/limitation metadata; structured-only transaction filters fail explicitly while that source is disabled.

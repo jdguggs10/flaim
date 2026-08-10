@@ -19,7 +19,7 @@ Single MCP endpoint: https://api.flaim.app/mcp
 | get_roster | Team roster with player stats and lineup slots |
 | get_matchups | Weekly matchups and scores |
 | get_standings | League standings and rankings |
-| get_free_agents | Available free agents; ESPN/Yahoo include ownership percentages, Sleeper returns identities |
+| get_free_agents | Available players in your league, with the same core fields on every platform; ESPN/Yahoo include platform-wide ownership percentages, Sleeper returns identities |
 | get_players | Player lookup with ownership context |
 | get_transactions | Recent adds, drops, waivers, and trades |
 
