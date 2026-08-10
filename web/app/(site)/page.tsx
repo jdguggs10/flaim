@@ -2,10 +2,7 @@ import type { Metadata } from "next";
 import { SignedIn, SignedOut } from "@clerk/nextjs";
 import { PublicChatExperience } from "@/components/public-demo/public-chat-experience";
 import { HeroChat } from "@/components/site/hero-chat";
-import {
-  HomepageToolSection,
-  isHomepageToolVariant,
-} from "@/components/site/homepage-tool-section";
+import { HomepageProductProof } from "@/components/site/homepage-product-proof";
 
 export const metadata: Metadata = {
   title: {
@@ -34,7 +31,6 @@ import {
 interface LandingPageProps {
   searchParams?: Promise<{
     preset?: string | string[];
-    tools?: string | string[];
   }>;
 }
 
@@ -45,7 +41,7 @@ const SUPPORTED_SPORTS = [
   "Basketball",
   "Hockey",
 ] as const;
-const SUPPORTED_AI_TOOLS = ["ChatGPT", "Claude"] as const;
+const SUPPORTED_AI_TOOLS = ["ChatGPT", "Claude", "Perplexity"] as const;
 
 function HomepageCtas({ closing = false }: { closing?: boolean }) {
   const connectLabel = closing
@@ -115,11 +111,6 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
   const preset = resolvedSearchParams?.preset;
   const initialPresetId = Array.isArray(preset) ? preset[0] : preset;
-  const tools = resolvedSearchParams?.tools;
-  const requestedToolVariant = Array.isArray(tools) ? tools[0] : tools;
-  const toolVariant = isHomepageToolVariant(requestedToolVariant)
-    ? requestedToolVariant
-    : "grouped";
   const showScreenshotPlaceholders = process.env.NODE_ENV === "development";
 
   return (
@@ -295,7 +286,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
         </div>
       </section>
 
-      <HomepageToolSection variant={toolVariant} />
+      <HomepageProductProof />
 
       {/* Trust badges */}
       <section className="bg-background px-4 py-10 sm:px-6 lg:px-8">
