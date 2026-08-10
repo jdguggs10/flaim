@@ -5,6 +5,7 @@ import type { Env } from '../../src/types';
 import { getUnifiedTools, type UnifiedTool } from '../../src/mcp/tools';
 import { FLAIM_MCP_INSTRUCTIONS } from '../../src/mcp/instructions';
 import {
+  LEGACY_USER_SESSION_WIDGET_HTML,
   LEGACY_USER_SESSION_WIDGET_URI,
   USER_SESSION_WIDGET_HTML,
   USER_SESSION_WIDGET_URI,
@@ -518,6 +519,7 @@ describe('fantasy-mcp gateway integration', () => {
 
     const widgetBodies: string[] = [];
     for (const [index, uri] of expectedUris.entries()) {
+      const isLegacy = uri === LEGACY_USER_SESSION_WIDGET_URI;
       const resource = listPayload.result?.resources?.find((item) => item.uri === uri);
       expect(resource).toBeDefined();
       expect(resource?.mimeType).toBe('text/html;profile=mcp-app');
@@ -537,7 +539,9 @@ describe('fantasy-mcp gateway integration', () => {
       const content = readPayload.result?.contents?.find((item) => item.uri === uri);
       expect(content?.mimeType).toBe('text/html;profile=mcp-app');
       expect(content?.text).toContain('<title>Flaim</title>');
-      expect(content?.text).toBe(USER_SESSION_WIDGET_HTML);
+      expect(content?.text).toBe(
+        isLegacy ? LEGACY_USER_SESSION_WIDGET_HTML : USER_SESSION_WIDGET_HTML
+      );
       widgetBodies.push(content?.text || '');
       expect(content?._meta?.ui?.csp?.connectDomains).toEqual([]);
       expect(content?._meta?.ui?.csp?.resourceDomains).toEqual([]);
@@ -550,9 +554,11 @@ describe('fantasy-mcp gateway integration', () => {
       expect(content?._meta?.['openai/widgetCSP']).toEqual({
         connect_domains: [],
         resource_domains: [],
-        redirect_domains: ['https://flaim.app'],
+        redirect_domains: isLegacy
+          ? ['https://flaim.app']
+          : ['https://flaim.app', 'https://sports.yahoo.com'],
       });
-      if (uri === LEGACY_USER_SESSION_WIDGET_URI) {
+      if (isLegacy) {
         // Frozen published-v1 contract: the legacy read-result _meta must stay
         // byte-identical to the snapshot OpenAI scanned — strict-equal on the
         // whole object so no key can be added or removed unnoticed.
@@ -570,15 +576,23 @@ describe('fantasy-mcp gateway integration', () => {
           },
         });
         expect(content?._meta?.['openai/widgetDescription']).toBeUndefined();
+        // The frozen v1 body stays attribution-free by design.
+        expect(content?.text).not.toContain('Fantasy data provided by');
       } else {
         // FLA-177: plain-language widget summary on the v2 URI only.
         expect(content?._meta?.['openai/widgetDescription']).toBe(
           'Summary card of your connected fantasy leagues, showing league names, sports, and your default league.'
         );
+        // Provider attribution footer ships on the v2 body only.
+        expect(content?.text).toContain(
+          'Fantasy data provided by <a href="https://sports.yahoo.com/fantasy/" target="_blank" rel="noopener">Yahoo Fantasy</a>, ESPN, and Sleeper.'
+        );
       }
     }
     expect(widgetBodies).toHaveLength(2);
-    expect(widgetBodies[0]).toBe(widgetBodies[1]);
+    // The bodies intentionally diverge: v2 is the frozen v1 body plus the
+    // provider attribution footer.
+    expect(widgetBodies[1]).not.toBe(widgetBodies[0]);
     expect(authFetch).not.toHaveBeenCalled();
   });
 
@@ -614,11 +628,16 @@ describe('fantasy-mcp gateway integration', () => {
       const readPayload = await parseJsonRpcResponse(readResponse);
       const content = readPayload.result?.contents?.find((item) => item.uri === uri);
       expect(content?.mimeType).toBe('text/html;profile=mcp-app');
-      expect(content?.text).toBe(USER_SESSION_WIDGET_HTML);
+      expect(content?.text).toBe(
+        uri === LEGACY_USER_SESSION_WIDGET_URI
+          ? LEGACY_USER_SESSION_WIDGET_HTML
+          : USER_SESSION_WIDGET_HTML
+      );
       widgetBodies.push(content?.text || '');
     }
     expect(widgetBodies).toHaveLength(2);
-    expect(widgetBodies[0]).toBe(widgetBodies[1]);
+    // v1 stays frozen; v2 adds the provider attribution footer.
+    expect(widgetBodies[1]).not.toBe(widgetBodies[0]);
     expect(authFetch).not.toHaveBeenCalled();
   });
 

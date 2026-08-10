@@ -4,6 +4,7 @@ import type { Env } from '../types';
 import { getUnifiedTools, hasRequiredScope, mcpInsufficientScopeError, type McpToolResponse } from './tools';
 import { emitUsageEvent, type UsageStatus } from './usage';
 import {
+  LEGACY_USER_SESSION_WIDGET_HTML,
   LEGACY_USER_SESSION_WIDGET_URI,
   USER_SESSION_WIDGET_HTML,
   USER_SESSION_WIDGET_URI,
@@ -78,13 +79,15 @@ export function createFantasyMcpServer(ctx: McpContext): McpServer {
   );
 
   // Keep the published v1 resource readable while current descriptors use a
-  // new immutable cache key. Template URIs are cache keys in ChatGPT.
+  // new immutable cache key. Template URIs are cache keys in ChatGPT. The v1
+  // body is frozen alongside its _meta; the v2 body adds the provider
+  // attribution footer.
   const widgetResources = [
-    ['user-session-widget', LEGACY_USER_SESSION_WIDGET_URI],
-    ['user-session-widget-v2', USER_SESSION_WIDGET_URI],
+    ['user-session-widget', LEGACY_USER_SESSION_WIDGET_URI, LEGACY_USER_SESSION_WIDGET_HTML],
+    ['user-session-widget-v2', USER_SESSION_WIDGET_URI, USER_SESSION_WIDGET_HTML],
   ] as const;
 
-  for (const [name, uri] of widgetResources) {
+  for (const [name, uri, widgetHtml] of widgetResources) {
     server.registerResource(
       name,
       uri,
@@ -95,7 +98,7 @@ export function createFantasyMcpServer(ctx: McpContext): McpServer {
         contents: [{
           uri,
           mimeType: 'text/html;profile=mcp-app',
-          text: USER_SESSION_WIDGET_HTML,
+          text: widgetHtml,
           // The legacy URI is the frozen published-v1 contract: its read-result
           // _meta must stay byte-identical to the snapshot OpenAI scanned.
           // Descriptor additions (FLA-177) go on the v2 URI only.
@@ -118,7 +121,12 @@ export function createFantasyMcpServer(ctx: McpContext): McpServer {
               // widget domain — the widget is fully self-contained (empty
               // connect/resource CSP), so a dedicated domain adds no capability;
               // revisit only if a portal scan explicitly requires _meta.ui.domain.
-              redirect_domains: ['https://flaim.app'],
+              // v2 additionally allowlists the Yahoo Fantasy attribution link
+              // target; the v1 _meta stays byte-identical.
+              redirect_domains:
+                uri === USER_SESSION_WIDGET_URI
+                  ? ['https://flaim.app', 'https://sports.yahoo.com']
+                  : ['https://flaim.app'],
             },
           },
         }],

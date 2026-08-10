@@ -6,6 +6,7 @@ import type { Env } from '../types';
 import { routeToClient } from '../router';
 import {
   classifyRefreshResult,
+  LEGACY_USER_SESSION_WIDGET_HTML,
   LEGACY_USER_SESSION_WIDGET_URI,
   USER_SESSION_WIDGET_HTML,
   USER_SESSION_WIDGET_URI,
@@ -175,6 +176,24 @@ describe('fantasy-mcp tools', () => {
     expect(USER_SESSION_WIDGET_URI).toBe('ui://widget/user-session-v2.html');
     expect(tool?.widgetUri).toBe(USER_SESSION_WIDGET_URI);
     expect(tool?.widgetUri).not.toBe(LEGACY_USER_SESSION_WIDGET_URI);
+  });
+
+  it('v2 widget carries the provider attribution footer; the legacy body stays frozen', () => {
+    // Exact attribution markup is pinned deliberately — the credit line and
+    // its Yahoo Fantasy link are a required product surface on v2.
+    expect(USER_SESSION_WIDGET_HTML).toContain(
+      '<div class="attribution">Fantasy data provided by <a href="https://sports.yahoo.com/fantasy/" target="_blank" rel="noopener">Yahoo Fantasy</a>, ESPN, and Sleeper.</div>'
+    );
+    expect(USER_SESSION_WIDGET_HTML).toContain('.attribution {');
+    // The frozen v1 body must never pick the footer up.
+    expect(LEGACY_USER_SESSION_WIDGET_HTML).not.toContain('Fantasy data provided by');
+    expect(LEGACY_USER_SESSION_WIDGET_HTML).not.toContain('class="attribution"');
+    // v2 differs from v1 only by the injected attribution CSS and footer.
+    expect(
+      USER_SESSION_WIDGET_HTML
+        .replace('  .attribution {\n    padding: 8px 16px 10px;\n    border-top: 1px solid rgba(13, 13, 13, 0.05);\n    font-size: 11px;\n    line-height: 14px;\n    text-align: center;\n    color: #9ca3af;\n  }\n  .attribution a {\n    color: inherit;\n    text-decoration: underline;\n  }\n', '')
+        .replace('\n  <div class="attribution">Fantasy data provided by <a href="https://sports.yahoo.com/fantasy/" target="_blank" rel="noopener">Yahoo Fantasy</a>, ESPN, and Sleeper.</div>', '')
+    ).toBe(LEGACY_USER_SESSION_WIDGET_HTML);
   });
 
   it('user session widget declares the MCP Apps lifecycle messages', () => {

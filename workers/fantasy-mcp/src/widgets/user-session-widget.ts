@@ -139,7 +139,12 @@ export function classifyRefreshResult(payload: unknown): RefreshResultClassifica
   return fallback;
 }
 
-export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
+/**
+ * Frozen v1 widget body. Published v1 clients read this exact document; keep
+ * it byte-identical, matching the frozen v1 read-result _meta contract. All
+ * widget changes go to the derived v2 body at the bottom of this file.
+ */
+export const LEGACY_USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
@@ -828,3 +833,50 @@ export const USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
 </script>
 </body>
 </html>`;
+
+/**
+ * Provider attribution (v2 only): surfaces that display Yahoo Fantasy data
+ * credit "Fantasy data provided by Yahoo Fantasy", linked to an official
+ * Yahoo Fantasy page where the surface supports links. ESPN and Sleeper are
+ * named voluntarily so the three providers read consistently. The v1 body
+ * above is frozen, so the v2 body derives from it by injection.
+ */
+const PROVIDER_ATTRIBUTION_CSS = `  .attribution {
+    padding: 8px 16px 10px;
+    border-top: 1px solid rgba(13, 13, 13, 0.05);
+    font-size: 11px;
+    line-height: 14px;
+    text-align: center;
+    color: #9ca3af;
+  }
+  .attribution a {
+    color: inherit;
+    text-decoration: underline;
+  }
+`;
+
+const PROVIDER_ATTRIBUTION_HTML =
+  '<div class="attribution">Fantasy data provided by <a href="https://sports.yahoo.com/fantasy/" target="_blank" rel="noopener">Yahoo Fantasy</a>, ESPN, and Sleeper.</div>';
+
+const REFRESH_STATUS_MARKER =
+  '<div id="refresh-status" class="refresh-status" aria-live="polite"></div>';
+
+/**
+ * Replace a marker that must appear exactly once. Throwing (at module init,
+ * so tests and deploys fail loudly) beats silently shipping a v2 widget
+ * without the required attribution.
+ */
+function injectOnce(html: string, marker: string, replacement: string): string {
+  const first = html.indexOf(marker);
+  if (first === -1 || html.indexOf(marker, first + marker.length) !== -1) {
+    throw new Error(`Widget attribution marker is not unique: ${marker}`);
+  }
+  return html.replace(marker, replacement);
+}
+
+/** Current (v2) widget body: the frozen v1 body plus the attribution footer. */
+export const USER_SESSION_WIDGET_HTML = injectOnce(
+  injectOnce(LEGACY_USER_SESSION_WIDGET_HTML, '</style>', `${PROVIDER_ATTRIBUTION_CSS}</style>`),
+  REFRESH_STATUS_MARKER,
+  `${REFRESH_STATUS_MARKER}\n  ${PROVIDER_ATTRIBUTION_HTML}`,
+);
