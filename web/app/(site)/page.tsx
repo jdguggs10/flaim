@@ -50,7 +50,7 @@ const SUPPORTED_AI_TOOLS = ["ChatGPT", "Claude"] as const;
 function HomepageCtas({ closing = false }: { closing?: boolean }) {
   const connectLabel = closing
     ? "Connect Your Leagues to Flaim"
-    : "Connect Your Leagues First";
+    : "First, Connect Your Leagues";
   const chatGptLabel = closing
     ? "Connect Flaim to ChatGPT"
     : "Add to ChatGPT";
@@ -269,7 +269,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
             </p>
             <Button asChild className="mt-6">
               <Link href="/fantasy-football">
-                See Fantasy Football Analysis
+                See Fantasy Football Examples
                 <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />
               </Link>
             </Button>
@@ -303,7 +303,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
           <div className="rounded-xl border bg-background p-4">
             <div className="flex items-center gap-2 font-medium">
               <ShieldCheck className="h-4 w-4 text-primary" />
-              Read-only where it matters
+              Read Only
             </div>
             <p className="mt-2 text-sm text-muted-foreground">
               Flaim can read your fantasy league data, but it cannot make
@@ -314,7 +314,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
           <div className="rounded-xl border bg-background p-4">
             <div className="flex items-center gap-2 font-medium">
               <Sparkles className="h-4 w-4 text-primary" />
-              All your leagues in one account
+              All Your Leagues
             </div>
             <p className="mt-2 text-sm text-muted-foreground">
               Connect multiple leagues across ESPN, Yahoo, and Sleeper, then
@@ -452,9 +452,8 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
       <section id="about-flaim" className="scroll-mt-24 px-4 py-12">
         <div className="container mx-auto max-w-2xl text-center">
           <p className="text-muted-foreground">
-            I&apos;m Gerry, and I built Flaim. It&apos;s free to use and
-            maintained by me as a personal passion project. Please don&apos;t
-            abuse it. Have fun.
+            I&apos;m Gerry, and I built Flaim. It&apos;s free to use and my
+            passion project. Please don&apos;t abuse it. Have fun.
           </p>
           <nav
             aria-label="Founder links"

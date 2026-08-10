@@ -82,21 +82,14 @@ export function isHomepageToolVariant(
 }
 
 function SectionIntro({
-  eyebrow,
-  heading,
   description,
 }: {
-  eyebrow: string;
-  heading: string;
   description: string;
 }) {
   return (
     <div className="mx-auto max-w-3xl text-center">
-      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">
-        {eyebrow}
-      </p>
-      <h2 id="league-tools-heading" className="mt-3 text-3xl font-bold tracking-tight">
-        {heading}
+      <h2 id="league-tools-heading" className="text-3xl font-bold tracking-tight">
+        Your Whole League
       </h2>
       <p className="mx-auto mt-3 max-w-2xl leading-7 text-muted-foreground">
         {description}
@@ -109,8 +102,6 @@ function GroupedLayout() {
   return (
     <>
       <SectionIntro
-        eyebrow="Your real league"
-        heading="Your roster, matchup, standings, and more"
         description="Flaim gives ChatGPT or Claude your roster, matchup, standings, available players, recent moves, and league rules."
       />
       <div className="mt-8 grid gap-4 sm:grid-cols-2">
@@ -141,8 +132,6 @@ function CatalogLayout() {
   return (
     <>
       <SectionIntro
-        eyebrow="Your real league"
-        heading="What Flaim can bring into the conversation"
         description="See exactly which parts of your connected fantasy league Flaim can share with ChatGPT or Claude."
       />
       <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -163,18 +152,19 @@ function MinimalLayout() {
   return (
     <>
       <SectionIntro
-        eyebrow="Your real league"
-        heading="Your league, available to your AI"
-        description="Your roster, actual matchup, standings, available players, recent moves, and league history."
+        description="Your team, your week, and the rest of your league are ready whenever you ask."
       />
-      <div className="mx-auto mt-8 flex max-w-3xl flex-wrap justify-center gap-2.5">
-        {TOOL_DEFINITIONS.map((tool) => (
-          <span
-            key={tool.name}
-            className="rounded-full border bg-background px-4 py-2 text-sm font-medium shadow-sm"
+      <div className="mx-auto mt-8 max-w-3xl overflow-hidden rounded-3xl border bg-background shadow-sm">
+        {TOOL_GROUPS.map((group) => (
+          <div
+            key={group.title}
+            className="grid gap-3 border-b px-5 py-5 last:border-b-0 sm:grid-cols-[8rem_1fr] sm:items-center"
           >
-            {tool.name}
-          </span>
+            <h3 className="font-semibold">{group.title}</h3>
+            <p className="text-sm leading-6 text-muted-foreground">
+              {group.tools.join(" · ")}
+            </p>
+          </div>
         ))}
       </div>
     </>
@@ -184,33 +174,31 @@ function MinimalLayout() {
 function FlowLayout() {
   const stages = [
     {
-      eyebrow: "Your leagues",
-      title: "ESPN, Yahoo, and Sleeper",
-      body: "Connect the fantasy platforms where your teams already live.",
+      eyebrow: "Your AI",
+      title: "ChatGPT or Claude",
+      body: "Ask naturally about the team or league you already manage.",
     },
     {
       eyebrow: "Flaim",
-      title: "Your roster and league info",
-      body: "Roster, matchups, standings, free agents, transactions, history, and more.",
+      title: "Checks your whole league",
+      body: "Roster, actual matchup, standings, available players, recent moves, league rules, and history.",
     },
     {
-      eyebrow: "Your AI",
-      title: "ChatGPT or Claude",
-      body: "Ask naturally while Flaim supplies your real team and league details.",
+      eyebrow: "Your answer",
+      title: "Built around your team",
+      body: "Advice that reflects your players, your opponent, and what is really available in your league.",
     },
   ] as const;
 
   return (
     <>
       <SectionIntro
-        eyebrow="Your real league"
-        heading="From your fantasy platform to a useful answer"
-        description="Flaim handles the connection between the leagues you manage and the AI you already use."
+        description="Flaim connects the question you ask with the real team and league information behind the answer."
       />
-      <div className="mt-8 grid items-stretch gap-3 md:grid-cols-[1fr_auto_1fr_auto_1fr]">
+      <div className="mx-auto mt-8 grid max-w-5xl items-center gap-4 rounded-3xl border bg-background px-6 py-8 shadow-sm md:grid-cols-[1fr_auto_1fr_auto_1fr] md:gap-6">
         {stages.map((stage, index) => (
           <div key={stage.eyebrow} className="contents">
-            <article className="rounded-2xl border bg-background p-5">
+            <article className="px-2 text-center">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">
                 {stage.eyebrow}
               </p>
@@ -221,7 +209,7 @@ function FlowLayout() {
             </article>
             {index < stages.length - 1 ? (
               <ArrowRight
-                className="mx-auto hidden h-5 w-5 self-center text-muted-foreground md:block"
+                className="mx-auto h-5 w-5 rotate-90 text-muted-foreground md:rotate-0"
                 aria-hidden="true"
               />
             ) : null}

@@ -37,14 +37,6 @@ export default function SiteLayout({
                 <Link href="/inspirations" className="hover:text-foreground">
                   Inspirations
                 </Link>
-                <a
-                  href="https://www.threads.com/@jdguggs10"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="hover:text-foreground"
-                >
-                  Built by Gerry
-                </a>
               </nav>
 
               <p className="mx-auto mt-6 max-w-3xl border-t pt-5 text-xs leading-5 text-muted-foreground">

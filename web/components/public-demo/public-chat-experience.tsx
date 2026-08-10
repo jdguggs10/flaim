@@ -930,19 +930,6 @@ export function PublicChatExperience({
           </DialogPrimitive.Root>
         </PhoneDemoFrame>
 
-        <div className="mx-auto mt-5 grid max-w-[21.5rem] grid-cols-[auto_minmax(0,1fr)] items-start gap-2 px-3 text-left text-xs leading-relaxed text-muted-foreground">
-          <span
-            className="mt-1 inline-flex h-2 w-2 rounded-full bg-success"
-            aria-hidden="true"
-          />
-          <span>
-            {process.env.NEXT_PUBLIC_VERCEL_ENV === "preview"
-              ? "Preview"
-              : "Live demo"}
-            {" · "}Flaim Fantasy in ChatGPT{" · "}Real answers from Gerry&apos;s ESPN{" "}
-            {PUBLIC_SPORT_COPY[demoSport].label} league
-          </span>
-        </div>
       </div>
     </section>
   );
