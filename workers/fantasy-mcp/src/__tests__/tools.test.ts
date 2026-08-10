@@ -1329,12 +1329,12 @@ describe('fantasy-mcp tools', () => {
       'A returned player is already confirmed available in that league'
     );
     expect(tool!.description).toContain(
-      'When acquisitionState is null, call rows "available players," never specifically free agents or waivers'
+      'When acquisitionState is null or not present, call rows "available players," never specifically free agents or waivers'
     );
     expect(tool!.description).toContain('For a returned list or field explanation, end after the requested facts');
     expect(tool!.description).toContain('never add an "if you want" offer');
     expect(tool!.description).toContain(
-      'State acquisition status in plain language from acquisitionState; never print raw provider codes such as FREEAGENT or WAIVERS'
+      'State acquisition status in plain language from acquisitionState ("a free agent", "on waivers"); never print raw codes — neither provider codes such as FREEAGENT or WAIVERS nor canonical values like free_agent verbatim'
     );
     expect(tool!.description).toContain('Use get_roster for a separate player-ownership question');
     expect(tool!.description).toContain('Use current web evidence before adding analysis or pickup recommendations');

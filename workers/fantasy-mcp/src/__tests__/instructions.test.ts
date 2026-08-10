@@ -67,7 +67,7 @@ describe('Flaim MCP initialization instructions', () => {
       'call Yahoo/Sleeper rows "available players," never specifically free agents or waivers'
     );
     expect(FLAIM_MCP_INSTRUCTIONS).toContain(
-      'Translate ESPN status codes silently; never print raw codes such as FREEAGENT or WAIVERS'
+      'never print raw codes — neither provider codes such as FREEAGENT or WAIVERS nor canonical values like free_agent verbatim'
     );
     expect(FLAIM_MCP_INSTRUCTIONS).toContain(
       'For a returned list or field explanation, end after the requested facts; never add an "if you want" offer or qualitative advice'

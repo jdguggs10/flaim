@@ -1,3 +1,4 @@
+import { ErrorCode } from '@flaim/worker-shared';
 import type { Platform, ToolParams } from '../types';
 import type { RouteResult } from '../router';
 
@@ -64,12 +65,25 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function malformed(detail: string): RouteResult {
+function malformed(platform: Platform, detail: string): RouteResult {
+  // Structured log so fleet-wide provider-envelope drift is visible in
+  // observability queries — the tool-level logger records this as a normal
+  // (non-thrown) error result, and the router already saw a success.
+  console.error(JSON.stringify({
+    schema_version: 1,
+    service: 'fantasy-mcp',
+    component: 'free-agent-normalizer',
+    event: 'malformed_provider_payload',
+    outcome: 'failure',
+    error_code: ErrorCode.MALFORMED_PROVIDER_RESPONSE,
+    platform,
+    detail,
+  }));
   return {
     success: false,
-    code: 'MALFORMED_PROVIDER_RESPONSE',
-    error: `MALFORMED_PROVIDER_RESPONSE: the platform returned an unexpected free-agent payload shape (${detail}); retry, and report the league if it persists`,
-  } as RouteResult;
+    code: ErrorCode.MALFORMED_PROVIDER_RESPONSE,
+    error: `${ErrorCode.MALFORMED_PROVIDER_RESPONSE}: the platform returned an unexpected free-agent payload shape (${detail}); retry, and report the league if it persists`,
+  };
 }
 
 function asIdString(value: unknown): string | undefined {
@@ -107,7 +121,9 @@ function canonicalLeagueId(platform: Platform, data: Record<string, unknown>, pa
 /**
  * Copy an entry with the canonical keys this platform computes removed, so
  * provider-supplied values can never masquerade as gateway normalization.
- * Sleeper's `id` is the one shared legacy/canonical key and is kept.
+ * Two legacy keys are shared with the canonical layer and normalized in
+ * place rather than preserved verbatim: Sleeper's `id` (kept, coerced to
+ * string) and Yahoo/Sleeper's `team` (empty or missing becomes null).
  */
 function stripReservedKeys(entry: Record<string, unknown>, keepId: boolean): Record<string, unknown> {
   const { acquisitionState: _a, waiverClearsAt: _w, team: _t, id, ...rest } = entry;
@@ -156,7 +172,7 @@ function normalizeSleeperEntry(entry: Record<string, unknown>): Record<string, u
  */
 export function normalizeFreeAgentsResult(result: RouteResult, params: ToolParams): RouteResult {
   if (!result.success) return result;
-  if (!isPlainObject(result.data)) return malformed('non-object payload');
+  if (!isPlainObject(result.data)) return malformed(params.platform, 'non-object payload');
 
   try {
     const data = result.data;
@@ -164,15 +180,17 @@ export function normalizeFreeAgentsResult(result: RouteResult, params: ToolParam
     const config = PLATFORM_CONFIG[platform];
     const rawEntries = data[config.entryArrayKey];
 
-    if (rawEntries !== undefined && !Array.isArray(rawEntries)) return malformed('non-array player list');
+    // Every provider handler always sets its entry-array key, even for empty
+    // and degraded results — absence can only mean cross-worker contract
+    // drift, so it fails closed rather than becoming an authoritative
+    // "0 players available".
+    if (rawEntries === undefined) return malformed(platform, 'missing player list');
+    if (!Array.isArray(rawEntries)) return malformed(platform, 'non-array player list');
 
-    let entries: Record<string, unknown>[] | undefined;
-    if (Array.isArray(rawEntries)) {
-      entries = [];
-      for (const entry of rawEntries) {
-        if (!isPlainObject(entry)) return malformed('non-object player entry');
-        entries.push(config.normalizeEntry(entry));
-      }
+    const entries: Record<string, unknown>[] = [];
+    for (const entry of rawEntries) {
+      if (!isPlainObject(entry)) return malformed(platform, 'non-object player entry');
+      entries.push(config.normalizeEntry(entry));
     }
 
     // Request echoes and count come from authoritative inputs (validated
@@ -182,12 +200,12 @@ export function normalizeFreeAgentsResult(result: RouteResult, params: ToolParam
       leagueId: canonicalLeagueId(platform, data, params),
       seasonYear: params.season_year,
       position: (params.position || 'ALL').toUpperCase(),
-      count: entries ? entries.length : 0,
+      count: entries.length,
       ordering: config.ordering,
       capabilities: { ...config.capabilities },
       ownershipScope: config.ownershipScope,
     };
-    if (entries !== undefined) normalized[config.entryArrayKey] = entries;
+    normalized[config.entryArrayKey] = entries;
 
     return { ...result, data: normalized };
   } catch (error) {
@@ -196,6 +214,6 @@ export function normalizeFreeAgentsResult(result: RouteResult, params: ToolParam
     // un-normalized success that would fail schema validation. Log the real
     // error so a normalizer bug is not misread as a provider problem.
     console.error('[fantasy-mcp] free-agent normalization failed:', error);
-    return malformed('unexpected payload structure');
+    return malformed(params.platform, 'unexpected payload structure');
   }
 }

@@ -77,11 +77,11 @@ describe('normalizeFreeAgentsResult — canonical envelope', () => {
     expect(data.count).toBe(2);
   });
 
-  it('defaults position to ALL and count to zero when the provider omits the array', () => {
-    const data = normalizedData(ok({}), params('sleeper'));
+  it('defaults position to ALL and reports count zero for an empty list', () => {
+    const data = normalizedData(ok({ league_id: 'slp-1', players: [] }), params('sleeper', { league_id: 'slp-1' }));
     expect(data.position).toBe('ALL');
     expect(data.count).toBe(0);
-    expect('players' in data).toBe(false);
+    expect(data.players).toEqual([]);
   });
 
   it('stringifies a numeric provider league id', () => {
@@ -224,6 +224,16 @@ describe('normalizeFreeAgentsResult — protocol safety', () => {
     expectMalformed(ok({ freeAgents: [{ playerId: 1 }, 'garbage'] }), params('espn'));
     expectMalformed(ok({ freeAgents: [null] }), params('espn'));
     expectMalformed(ok({ players: 42 }), params('sleeper'));
+  });
+
+  it('fails closed when the entry-array key is missing entirely — never an authoritative empty list', () => {
+    // Every provider handler always sets its key, even for empty/degraded
+    // results; absence means cross-worker contract drift.
+    expectMalformed(ok({}), params('espn'));
+    expectMalformed(ok({ leagueKey: '449.l.123' }), params('yahoo', { league_id: '449.l.123' }));
+    expectMalformed(ok({ league_id: 'slp-1', warning: 'index unavailable' }), params('sleeper'));
+    // The wrong platform's key does not count as this platform's list.
+    expectMalformed(ok({ players: [] }), params('espn'));
   });
 
   it('does not mutate the original payload or entries', () => {
