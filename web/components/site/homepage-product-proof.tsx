@@ -95,12 +95,12 @@ export function HomepageProductProof() {
             id="product-proof-heading"
             className="text-3xl font-bold tracking-tight"
           >
-            See Flaim in action
+            Flaim works where you already ask
           </h2>
           <p className="mx-auto mt-3 max-w-2xl leading-7 text-muted-foreground">
-            Connect your leagues once, then use ChatGPT, Claude, or Perplexity
-            to ask about your actual roster, matchup, standings, available
-            players, recent moves, league rules, and history.
+            Connect once, then ask ChatGPT, Claude, or Perplexity about your
+            roster, matchup, standings, available players, and the rest of your
+            league.
           </p>
         </div>
 

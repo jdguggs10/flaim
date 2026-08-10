@@ -9,7 +9,7 @@ export const metadata: Metadata = {
     absolute: "Flaim Fantasy | Your Real Fantasy Leagues in AI",
   },
   description:
-    "Connect your ESPN, Yahoo, or Sleeper fantasy leagues to the AI you already use. Analyze your real roster, matchups, standings, waiver wire, transactions, and league history without screenshots or copy-pasting.",
+    "Connect ESPN, Yahoo, or Sleeper fantasy leagues to ChatGPT or Claude with Flaim. Ask about your real roster, matchup, standings, waiver wire, recent moves, and league history without screenshots.",
   alternates: {
     canonical: "https://flaim.app",
   },
@@ -135,7 +135,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
                 name: "Can ChatGPT access my fantasy league?",
                 acceptedAnswer: {
                   "@type": "Answer",
-                  text: "Yes. First, create a Flaim account. Second, connect your league to Flaim. Third, connect Flaim in your AI app. That's it. Flaim bridges your AI app to your fantasy leagues and back again.",
+                  text: "Yes. First, create a Flaim account. Second, connect ESPN, Yahoo, or Sleeper. Third, add Flaim to ChatGPT or Claude. Then ask about your actual league.",
                 },
               },
               {
@@ -350,10 +350,9 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
               </summary>
               <div className="space-y-2 px-4 pb-4 text-sm text-muted-foreground">
                 <p>
-                  Yes. First, create a Flaim account. Second, connect your
-                  league to Flaim. Third, connect Flaim in your AI app. That&apos;s
-                  it. Flaim bridges your AI app to your fantasy leagues and back
-                  again.
+                  Yes. First, create a Flaim account. Second, connect ESPN,
+                  Yahoo, or Sleeper. Third, add Flaim to ChatGPT or Claude. Then
+                  ask about your actual league.
                 </p>
               </div>
             </details>
