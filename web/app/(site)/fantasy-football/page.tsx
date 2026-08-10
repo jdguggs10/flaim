@@ -73,7 +73,7 @@ const FOOTBALL_FAQS = [
   {
     question: "Can AI grade the fantasy football team I actually drafted?",
     answer:
-      "Yes. Once your league is connected through Flaim, your AI can inspect your real roster and league context before giving you a grade, explaining your strengths, or identifying weaknesses.",
+      "Yes. Once your league is connected through Flaim, your AI can inspect your real roster, scoring rules, and the rest of your league before giving you a grade, explaining your strengths, or identifying weaknesses.",
   },
   {
     question: "Do I have to upload a screenshot of my roster?",
@@ -153,11 +153,12 @@ export default function FantasyFootballPage() {
             </h1>
             <p className="mt-5 max-w-2xl text-lg leading-8 text-muted-foreground">
               Connect ESPN, Yahoo, or Sleeper, then ask ChatGPT or Claude about
-              the roster you actually drafted, with your league context already
-              included.
+              the roster you actually drafted. Flaim includes your scoring
+              rules, matchup, standings, and the rest of your league.
             </p>
-            <p className="mt-4 font-medium">
-              No roster screenshots. No manual player entry.
+            <p className="mt-4 leading-7 text-muted-foreground">
+              No roster screenshots. No typing every player into a generic team
+              grader. Flaim brings your roster and league info with it.
             </p>
             <div className="mt-7">
               <FootballConnectionButtons />

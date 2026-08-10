@@ -52,7 +52,7 @@ export default function SiteLayout({
                 Yahoo, Sleeper, OpenAI, Anthropic, or Perplexity.
               </p>
             </div>
-            <p className="mx-auto mt-2 max-w-full text-xs text-muted-foreground">
+            <p className="mx-auto mt-2 max-w-3xl text-center text-xs leading-5 text-muted-foreground">
               Fantasy data provided by{" "}
               <a
                 href="https://sports.yahoo.com/fantasy/"

@@ -7,8 +7,8 @@
 - Connects real fantasy league data to supported AI assistants
 - Supports ESPN and Yahoo across football, baseball, basketball, hockey
 - Supports Sleeper for football and basketball
-- Supplies roster, standings, matchups, free agents, transactions, player, league-setting, and history context
-- Uses nine read-only analysis tools plus a bounded Refresh that updates Flaim's own connected-league records
+- Supplies your roster, standings, actual matchups, available players, recent moves, league settings, and league history
+- Uses nine read-only actions plus a bounded Refresh that updates Flaim's own connected-league records
 - Available as Flaim Fantasy in ChatGPT and Claude; Perplexity can connect through its current remote-connector settings
 - Read-only: Flaim cannot make trades, add or drop players, edit lineups, or change anything in ESPN, Yahoo, or Sleeper
 - Free, with no Flaim subscription

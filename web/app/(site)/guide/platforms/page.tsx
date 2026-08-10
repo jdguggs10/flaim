@@ -118,7 +118,7 @@ export default function PlatformsGuidePage() {
           </Link>{" "}
           before connecting your AI app. Each platform connects differently,
           but the goal is the same: get your leagues visible in Flaim so your
-          AI has the right account context.
+          AI is using the right fantasy account.
         </p>
 
         <section className="mb-10">

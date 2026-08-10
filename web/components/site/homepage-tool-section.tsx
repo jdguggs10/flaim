@@ -31,7 +31,7 @@ const TOOL_DEFINITIONS = [
   },
   {
     name: "Players",
-    description: "Player lookup with league and market context.",
+    description: "Player details, current ownership, and availability in your league.",
   },
   {
     name: "Transactions",
@@ -46,7 +46,7 @@ const TOOL_DEFINITIONS = [
 const TOOL_GROUPS = [
   {
     title: "Your team",
-    description: "Give your AI the roster and player context it needs.",
+    description: "Your actual roster and the player details behind it.",
     tools: ["Roster", "Players"],
   },
   {
@@ -109,9 +109,9 @@ function GroupedLayout() {
   return (
     <>
       <SectionIntro
-        eyebrow="10 read-only league tools"
-        heading="The league context your AI can use"
-        description="Flaim gives ChatGPT or Claude the specific league data behind a useful answer."
+        eyebrow="Your real league"
+        heading="Your roster, matchup, standings, and more"
+        description="Flaim gives ChatGPT or Claude your roster, matchup, standings, available players, recent moves, and league rules."
       />
       <div className="mt-8 grid gap-4 sm:grid-cols-2">
         {TOOL_GROUPS.map((group) => (
@@ -141,9 +141,9 @@ function CatalogLayout() {
   return (
     <>
       <SectionIntro
-        eyebrow="10 read-only league tools"
+        eyebrow="Your real league"
         heading="What Flaim can bring into the conversation"
-        description="Each tool gives your AI one reliable slice of your connected fantasy league."
+        description="See exactly which parts of your connected fantasy league Flaim can share with ChatGPT or Claude."
       />
       <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {TOOL_DEFINITIONS.map((tool) => (
@@ -163,9 +163,9 @@ function MinimalLayout() {
   return (
     <>
       <SectionIntro
-        eyebrow="10 read-only league tools"
+        eyebrow="Your real league"
         heading="Your league, available to your AI"
-        description="Roster, matchup, standings, waivers, transactions, history, and the context that ties them together."
+        description="Your roster, actual matchup, standings, available players, recent moves, and league history."
       />
       <div className="mx-auto mt-8 flex max-w-3xl flex-wrap justify-center gap-2.5">
         {TOOL_DEFINITIONS.map((tool) => (
@@ -190,20 +190,20 @@ function FlowLayout() {
     },
     {
       eyebrow: "Flaim",
-      title: "10 read-only league tools",
+      title: "Your roster and league info",
       body: "Roster, matchups, standings, free agents, transactions, history, and more.",
     },
     {
       eyebrow: "Your AI",
       title: "ChatGPT or Claude",
-      body: "Ask naturally while Flaim supplies the league context behind the answer.",
+      body: "Ask naturally while Flaim supplies your real team and league details.",
     },
   ] as const;
 
   return (
     <>
       <SectionIntro
-        eyebrow="Connected league context"
+        eyebrow="Your real league"
         heading="From your fantasy platform to a useful answer"
         description="Flaim handles the connection between the leagues you manage and the AI you already use."
       />

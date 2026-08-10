@@ -264,13 +264,8 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
               Just drafted? Get a second opinion on your real team.
             </h2>
             <p className="mt-4 leading-7 text-muted-foreground">
-              Ask your AI to grade the roster you actually drafted, identify
-              your biggest strengths and weaknesses, compare your team with the
-              rest of the league, and show you what to fix before Week 1.
-            </p>
-            <p className="mt-4 font-medium">
               No roster screenshots. No typing every player into a generic team
-              grader. Flaim brings the league context with it.
+              grader. Flaim brings your roster and league info with it.
             </p>
             <Button asChild className="mt-6">
               <Link href="/fantasy-football">

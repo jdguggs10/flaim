@@ -60,8 +60,8 @@ const guideLinks = [
   },
   {
     href: "/guide/sports",
-    title: "Sports coverage and tools help",
-    body: "Supported sports, available tools, and what Flaim can analyze.",
+    title: "Sports and league coverage",
+    body: "Supported sports and the roster, matchup, and league info Flaim can use.",
   },
   {
     href: "/guide/ai",
@@ -144,7 +144,7 @@ export default function GuidePage() {
             </Button>
             <Button asChild variant="ghost">
               <Link href="/guide/sports">
-                Sports and tool coverage
+                Sports and league coverage
                 <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />
               </Link>
             </Button>

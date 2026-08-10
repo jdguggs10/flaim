@@ -4,7 +4,7 @@ import Link from "next/link";
 export const metadata: Metadata = {
   title: "Fantasy Sports Analysis: How Flaim Works",
   description:
-    "How the Flaim Skill teaches your AI to analyze fantasy sports. Tools, example prompts, and sport-specific coverage for football, baseball, basketball, and hockey.",
+    "See which fantasy sports Flaim supports and the roster, matchup, standings, waiver, and league info it can share with your AI.",
   alternates: {
     canonical: "https://flaim.app/guide/sports",
   },
@@ -19,7 +19,7 @@ export default function SportsGuidePage() {
           __html: JSON.stringify({
             "@context": "https://schema.org",
             "@type": "FAQPage",
-            dateModified: "2026-03-28",
+            dateModified: "2026-08-09",
             mainEntity: [
               {
                 "@type": "Question",
@@ -34,7 +34,7 @@ export default function SportsGuidePage() {
                 name: "What can Flaim analyze in my fantasy league?",
                 acceptedAnswer: {
                   "@type": "Answer",
-                  text: "Flaim gives your AI read-only access to rosters, standings, matchups, free agents, transactions, player details, league settings, and league history. The Flaim Skill teaches your AI how to reason about fantasy strategy using these tools.",
+                  text: "Flaim gives your AI read-only access to rosters, standings, matchups, free agents, transactions, player details, league settings, and league history. It also helps your AI use that information when answering fantasy questions.",
                 },
               },
               {
@@ -42,7 +42,7 @@ export default function SportsGuidePage() {
                 name: "How does the Flaim Skill work?",
                 acceptedAnswer: {
                   "@type": "Answer",
-                  text: "The Flaim Skill is a set of instructions that teach your AI to think like a fantasy analyst. It knows how to evaluate rosters, spot weaknesses, combine league data with live web context, and decide which tools to call and in what order based on your question.",
+                  text: "The Flaim Skill helps your AI think like a fantasy analyst. It knows how to evaluate rosters, spot weaknesses, combine your league info with current news, and find the details needed to answer your question.",
                 },
               },
             ],
@@ -55,49 +55,47 @@ export default function SportsGuidePage() {
           Flaim supports football, baseball, basketball, and hockey on ESPN and
           Yahoo, plus football and basketball on Sleeper. Everything is read-only.
         </p>
-        <p className="text-xs text-muted-foreground">Last updated March 2026</p>
+        <p className="text-xs text-muted-foreground">Last updated August 2026</p>
         <p className="mt-4 mb-8 text-muted-foreground">
-          Flaim gives ChatGPT read-only league context across ESPN, Yahoo, and
-          Sleeper, so the analysis can reflect your actual team and league.
+          Flaim gives ChatGPT and Claude your roster, standings, matchups,
+          available players, recent moves, and league rules, so the answer can
+          reflect your actual team and league.
         </p>
 
         {/* The Flaim Skill */}
         <section className="mb-10">
-          <h2 className="mb-3 text-xl font-semibold">The Flaim Skill</h2>
+          <h2 className="mb-3 text-xl font-semibold">
+            How Flaim improves the answer
+          </h2>
           <p className="mb-4 text-muted-foreground">
-            When you connect Flaim, it does not just expose raw data. The Flaim
-            Skill is a set of instructions that shape how your assistant reasons
-            about fantasy sports. It covers three areas:
+            Flaim does more than send over a list of players. It helps your AI
+            use your real league information like a fantasy analyst would.
           </p>
           <div className="space-y-4">
             <div className="rounded-lg border bg-background p-4">
-              <h3 className="mb-1 font-medium">Fantasy analyst reasoning</h3>
+              <h3 className="mb-1 font-medium">Understands your league</h3>
               <p className="text-sm text-muted-foreground">
-                Your AI learns how to evaluate rosters in context: what
-                positions matter most in your league format, where your team is
-                weak, and how your scoring settings change player value. Instead
-                of generic fantasy advice, Flaim grounds every answer in your
-                actual league&apos;s rules and standings.
+                Your AI considers which positions matter in your format, where
+                your team is weak, and how your scoring rules change player
+                value. The answer is based on your actual league, not generic
+                rankings.
               </p>
             </div>
             <div className="rounded-lg border bg-background p-4">
-              <h3 className="mb-1 font-medium">Web search when it matters</h3>
+              <h3 className="mb-1 font-medium">Checks the latest news</h3>
               <p className="text-sm text-muted-foreground">
-                Your AI knows when to reach beyond your league data for current
-                context. Injury reports, recent performance trends, schedule
-                changes, and breaking news get layered on top of your league
-                data so the answer reflects what is actually happening right
-                now, not just what the box score says.
+                Your AI can combine your league info with injury reports,
+                recent performance, schedule changes, and breaking news, so the
+                answer reflects what is happening now.
               </p>
             </div>
             <div className="rounded-lg border bg-background p-4">
-              <h3 className="mb-1 font-medium">Smart tool orchestration</h3>
+              <h3 className="mb-1 font-medium">Pulls together what matters</h3>
               <p className="text-sm text-muted-foreground">
-                One question can pull from multiple tools automatically. Ask
-                &ldquo;What is the biggest hole in my roster?&rdquo; and your AI
-                inspects your roster, checks the waiver wire, looks up player
-                details, and adds web context, all in the right order, without
-                you specifying which tools to use.
+                Ask &ldquo;What is the biggest hole in my roster?&rdquo; and your
+                AI can inspect your team, check the players available in your
+                league, look up player details, and review current news without
+                making you gather everything yourself.
               </p>
             </div>
           </div>
@@ -107,8 +105,8 @@ export default function SportsGuidePage() {
         <section className="mb-10">
           <h2 className="mb-3 text-xl font-semibold">What Flaim can see</h2>
           <p className="mb-4 text-muted-foreground">
-            Flaim provides 10 tools that give your AI access to your league
-            data. These tools work the same way across all supported sports:
+            Flaim can share these 10 parts of your connected league with your
+            AI. They work the same way across all supported sports:
           </p>
           <div className="grid gap-2">
             {[
@@ -163,9 +161,9 @@ export default function SportsGuidePage() {
             ))}
           </div>
           <p className="mt-4 text-sm text-muted-foreground">
-            Nine of the ten tools are read-only, and Refresh Leagues only
-            updates Flaim&apos;s own list of your connected leagues. Flaim cannot
-            make trades, drop players, or change anything in your leagues.
+            The first nine only read your league info. Refresh Leagues updates
+            Flaim&apos;s own list of connected leagues. Flaim cannot make trades,
+            drop players, or change anything in your leagues.
           </p>
         </section>
 
@@ -197,7 +195,7 @@ export default function SportsGuidePage() {
             . Head-to-head matchups, waiver wire strategy, and bye week
             management are where Flaim shines most. The weekly cadence of
             football makes roster decisions high-stakes, and Flaim helps your AI
-            reason through them with your actual lineup and scoring context.
+            reason through them with your actual lineup and scoring rules.
           </p>
           <p className="mb-4 text-sm text-muted-foreground">
             For draft grades, roster analysis, waivers, trades, and weekly
@@ -326,8 +324,8 @@ export default function SportsGuidePage() {
               Yahoo
             </Link>
             . Flaim gives your AI access to rosters, standings, matchups, and
-            transactions for hockey leagues. The same tools and skill that power
-            football and baseball analysis work here, grounded in your
+            transactions for hockey leagues. The same roster and league details
+            that power football and baseball analysis work here, using your
             league&apos;s scoring and format.
           </p>
           <div className="rounded-lg border bg-muted/50 p-4">

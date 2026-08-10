@@ -377,7 +377,7 @@ export default function AiGuidePage() {
             </h2>
             <p className="mt-4 leading-7 text-muted-foreground">
               Perplexity can use Flaim as a remote connector, combining your
-              actual fantasy league context with its research tools.
+              actual roster and league info with its live research.
             </p>
           </div>
           <div className="rounded-2xl border p-5">
@@ -456,7 +456,7 @@ export default function AiGuidePage() {
       <section className="px-4 py-16 text-center sm:px-6 lg:px-8">
         <div className="mx-auto max-w-2xl">
           <h2 className="text-3xl font-bold tracking-tight">
-            Give your AI the league context it has been missing
+            Give your AI your real roster and league info
           </h2>
           <p className="mt-4 leading-7 text-muted-foreground">
             Connect ESPN, Yahoo, or Sleeper to Flaim, then ask about the team you

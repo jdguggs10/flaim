@@ -4,15 +4,15 @@
 
 ## What Flaim Is
 
-Flaim is a free service that gives supported AI assistants read-only access to your real fantasy sports data. It combines connected league context with fantasy analyst guidance so answers are grounded in your league instead of generic rankings.
+Flaim is a free service that gives supported AI assistants read-only access to your real fantasy sports data. It supplies your roster, matchups, standings, available players, league rules, recent moves, and history so answers are about your league instead of generic rankings.
 
 Flaim Fantasy is available in ChatGPT and Claude. Perplexity can connect through its current remote-connector settings.
 
 Single MCP endpoint: https://api.flaim.app/mcp
 
-## Tools (9 read-only analysis tools plus Refresh)
+## Available League Data (9 read-only actions plus Refresh)
 
-| Tool | What it does |
+| Action | What it does |
 |------|-------------|
 | get_user_session | Lists all connected leagues across all platforms |
 | refresh_leagues | Re-discovers connected leagues and updates Flaim's league records |
@@ -63,7 +63,7 @@ After connecting, Your Leagues is where users can add leagues, sync seasons, and
 ## FAQs
 
 ### What does Flaim do?
-Flaim is a ChatGPT-first fantasy analysis app, a skill that teaches AI how to analyze your league, and a connector to data from your actual fantasy leagues. It lets you ask about your actual roster, matchup, standings, transactions, available free agents, waiver wire, and more.
+Flaim connects your real fantasy leagues to the AI assistants you already use. It lets you ask about your actual roster, matchup, standings, recent moves, available players, waiver wire, and more.
 
 ### Is my data safe?
 Flaim is read-only. It cannot trade, drop, or modify anything in your league. ESPN credentials are encrypted and stored securely. They are never shared with AI providers.
@@ -85,7 +85,7 @@ Flaim Fantasy is available in ChatGPT and Claude. Perplexity can connect through
 - Fantasy football analysis: https://flaim.app/fantasy-football
 - Fantasy platform help: https://flaim.app/guide/platforms
 - AI apps: https://flaim.app/guide/ai
-- Sports and tools: https://flaim.app/guide/sports
+- Sports and league coverage: https://flaim.app/guide/sports
 - ChatGPT: https://flaim.app/guide/ai#chatgpt
 - Claude: https://flaim.app/guide/ai#claude
 - Perplexity: https://flaim.app/guide/ai#perplexity
