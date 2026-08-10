@@ -62,6 +62,10 @@ export const PUBLIC_CHAT_SIMPLE_PRESETS: readonly PublicChatPreset[] = [
     allowedTools: ["get_transactions"] as const,
     rail: "top",
   },
+  // win-history, trade-grades, sell-high, and start-sit intentionally keep
+  // their first-person copy: they leave the picker when the platform/sport
+  // capability wiring lands (FLA-247), so they are not part of the
+  // third-person reword.
   {
     id: "win-history",
     title: "Have I ever won the championship?",
