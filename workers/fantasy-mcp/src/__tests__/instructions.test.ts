@@ -44,6 +44,12 @@ describe('Flaim MCP initialization instructions', () => {
     expect(FLAIM_MCP_INSTRUCTIONS).toContain(
       'In get_free_agents, "available" means available in the selected fantasy league'
     );
+    // FLA-216: the canonical normalized vocabulary is locked here.
+    expect(FLAIM_MCP_INSTRUCTIONS).toContain('Prefer the normalized fields when present');
+    expect(FLAIM_MCP_INSTRUCTIONS).toContain('rates are platform-wide, never league-scoped');
+    expect(FLAIM_MCP_INSTRUCTIONS).toContain(
+      'acquisitionState, waiverClearsAt, id, and team supersede the legacy provider fields'
+    );
     expect(FLAIM_MCP_INSTRUCTIONS).toContain(
       'ESPN percentOwned/percentStarted are the percentages of all ESPN leagues where the player is rostered/started'
     );

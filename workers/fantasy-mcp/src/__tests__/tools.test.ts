@@ -1311,7 +1311,7 @@ describe('fantasy-mcp tools', () => {
     expect(tool!.description).toContain('fantasy-league availability, not professional-contract status');
     // FLA-216: the description teaches the canonical normalized fields first.
     expect(tool!.description).toContain(
-      'every response carries leagueId, position, count, ordering, capabilities, and ownershipScope'
+      'every response carries leagueId, seasonYear, position, count, ordering, capabilities, and ownershipScope'
     );
     expect(tool!.description).toContain(
       'acquisitionState ("free_agent", "waivers", or null when the platform cannot determine the subtype)'
@@ -1387,21 +1387,41 @@ describe('fantasy-mcp tools', () => {
     expect(payload.data?.count).toBe(0);
   });
 
-  it.each(['espn', 'yahoo'] as const)('get_free_agents routing remains unchanged for %s', async (platform) => {
+  it.each(['espn', 'yahoo'] as const)('get_free_agents normalizes the real %s envelope end to end (FLA-216)', async (platform) => {
     const tool = getUnifiedTools().find((t) => t.name === 'get_free_agents');
     expect(tool).toBeTruthy();
 
     const routeToClientMock = routeToClient as MockedFunction<typeof routeToClient>;
     routeToClientMock.mockResolvedValue({
       success: true,
-      data: { count: 2, players: [{ id: 'p1' }, { id: 'p2' }] },
+      data: platform === 'espn'
+        ? {
+            leagueId: '123',
+            seasonYear: 2025,
+            position: 'QB',
+            count: 2,
+            freeAgents: [
+              { playerId: 101, name: 'Waiver Guy', proTeam: 'BUF', status: 'WAIVERS', waiverProcessDate: 1760000000000, percentOwned: 51.2 },
+              { playerId: 102, name: 'Clubless Guy', proTeam: 'FA', status: 'FREEAGENT' },
+            ],
+          }
+        : {
+            leagueKey: '449.l.123',
+            leagueName: 'Car Ramrod',
+            position: 'QB',
+            count: 2,
+            freeAgents: [
+              { playerKey: '449.p.101', playerId: '101', name: 'Available Guy', team: 'BOS', percentOwned: 12.5 },
+              { playerKey: '449.p.102', playerId: '102', name: 'Teamless Guy', team: '', percentOwned: null },
+            ],
+          },
     });
 
     const env = {} as Env;
     const args = {
       platform,
       sport: 'football',
-      league_id: '123',
+      league_id: platform === 'espn' ? '123' : '449.l.123',
       season_year: 2025,
       position: 'QB',
       count: 15,
@@ -1409,27 +1429,37 @@ describe('fantasy-mcp tools', () => {
 
     const correlationId = `corr-free-agents-${platform}`;
     const result = await tool!.handler(args, env, 'Bearer token', correlationId);
-    expect(routeToClient).toHaveBeenCalledWith(
-      env,
-      'get_free_agents',
-      {
-        platform,
-        sport: 'football',
-        league_id: '123',
-        season_year: 2025,
-        position: 'QB',
-        count: 15,
-      },
-      'Bearer token',
-      correlationId,
-      undefined,
-      undefined
-    );
 
     const text = result.content?.[0]?.text;
-    const payload = JSON.parse(text as string) as { success?: boolean; data?: { count?: number } };
+    const payload = JSON.parse(text as string) as { success?: boolean; data?: Record<string, unknown> };
     expect(payload.success).toBe(true);
-    expect(payload.data?.count).toBe(2);
+    const data = payload.data!;
+    expect(data.leagueId).toBe(platform === 'espn' ? '123' : '449.l.123');
+    expect(data.seasonYear).toBe(2025);
+    expect(data.position).toBe('QB');
+    expect(data.count).toBe(2);
+    expect(data.ordering).toBe('platform_rostered_rate_desc');
+    expect(data.ownershipScope).toBe('platform_global');
+    expect((data.capabilities as Record<string, unknown>).acquisitionState).toBe(platform === 'espn');
+
+    const [first, second] = data.freeAgents as Array<Record<string, unknown>>;
+    expect(first.id).toBe('101');
+    if (platform === 'espn') {
+      expect(first.acquisitionState).toBe('waivers');
+      expect(first.waiverClearsAt).toBe(new Date(1760000000000).toISOString());
+      expect(first.team).toBe('BUF');
+      expect(second.acquisitionState).toBe('free_agent');
+      expect(second.team).toBeNull();
+      expect(second.proTeam).toBe('FA');
+    } else {
+      expect('acquisitionState' in first).toBe(false);
+      expect(first.team).toBe('BOS');
+      expect(second.team).toBeNull();
+      expect(data.leagueName).toBe('Car Ramrod');
+    }
+
+    // The pretty text block and structuredContent must be the same object.
+    expect(result.structuredContent).toEqual(payload);
   });
 
   it('get_players schema remains unchanged and includes ownership guardrails in description', () => {
