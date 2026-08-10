@@ -153,6 +153,23 @@ describe('normalizeFreeAgentsResult — ESPN entries', () => {
     }
   });
 
+  it('never emits waiverClearsAt on rows that are not on waivers, even with a valid timestamp', () => {
+    const data = normalizedData(
+      ok({
+        freeAgents: [
+          { playerId: 1, status: 'FREEAGENT', waiverProcessDate: 1760000000000 },
+          { playerId: 2, waiverProcessDate: 1760000000000 },
+        ],
+      }),
+      params('espn')
+    );
+    for (const entry of data.freeAgents as Array<Record<string, unknown>>) {
+      expect('waiverClearsAt' in entry).toBe(false);
+      // The legacy field still rides along untouched.
+      expect(entry.waiverProcessDate).toBe(1760000000000);
+    }
+  });
+
   it('discards provider-supplied values under reserved canonical keys', () => {
     const data = normalizedData(
       ok({

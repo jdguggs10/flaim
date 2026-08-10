@@ -83,6 +83,10 @@ function malformed(platform: Platform, detail: string): RouteResult {
     success: false,
     code: ErrorCode.MALFORMED_PROVIDER_RESPONSE,
     error: `${ErrorCode.MALFORMED_PROVIDER_RESPONSE}: the platform returned an unexpected free-agent payload shape (${detail}); retry, and report the league if it persists`,
+    // The realistic trigger is transient (mid-deploy skew between provider
+    // and gateway workers), so a single retry is worthwhile — matching the
+    // prose advice above.
+    retryable: true,
   };
 }
 
@@ -119,34 +123,45 @@ function canonicalLeagueId(platform: Platform, data: Record<string, unknown>, pa
 }
 
 /**
- * Copy an entry with the canonical keys this platform computes removed, so
- * provider-supplied values can never masquerade as gateway normalization.
- * Two legacy keys are shared with the canonical layer and normalized in
- * place rather than preserved verbatim: Sleeper's `id` (kept, coerced to
- * string) and Yahoo/Sleeper's `team` (empty or missing becomes null).
+ * Copy an entry with every canonical key removed, so provider-supplied
+ * values can never masquerade as gateway normalization — each platform
+ * normalizer recomputes its canonical fields from the legacy source fields.
+ * Two legacy keys are shared with the canonical layer and therefore
+ * normalized in place rather than preserved verbatim: Sleeper's `id`
+ * (recomputed from its own `id`, coerced to string) and Yahoo/Sleeper's
+ * `team` (empty or missing becomes null).
  */
-function stripReservedKeys(entry: Record<string, unknown>, keepId: boolean): Record<string, unknown> {
-  const { acquisitionState: _a, waiverClearsAt: _w, team: _t, id, ...rest } = entry;
-  void _a; void _w; void _t;
-  return keepId && id !== undefined ? { ...rest, id } : rest;
+function stripReservedKeys(entry: Record<string, unknown>): Record<string, unknown> {
+  const copy = { ...entry };
+  delete copy.acquisitionState;
+  delete copy.waiverClearsAt;
+  delete copy.team;
+  delete copy.id;
+  return copy;
 }
 
 function normalizeEspnEntry(entry: Record<string, unknown>): Record<string, unknown> {
-  const normalized = stripReservedKeys(entry, false);
-  normalized.acquisitionState = espnAcquisitionState(entry.status);
+  const normalized = stripReservedKeys(entry);
+  const acquisitionState = espnAcquisitionState(entry.status);
+  normalized.acquisitionState = acquisitionState;
   // Canonical club field; ESPN's legacy proTeam (with its 'FA' no-club
   // sentinel) is intentionally left untouched beside it.
   normalized.team =
     typeof entry.proTeam === 'string' && entry.proTeam !== 'FA' && entry.proTeam !== '' ? entry.proTeam : null;
   const id = asIdString(entry.playerId);
   if (id !== undefined) normalized.id = id;
-  const waiverClearsAt = isoFromEpochMs(entry.waiverProcessDate);
-  if (waiverClearsAt !== undefined) normalized.waiverClearsAt = waiverClearsAt;
+  // A waiver clear time only makes sense on a row that is actually on
+  // waivers; a stray provider timestamp on a free-agent or unknown-status
+  // row would otherwise produce a self-contradictory entry.
+  if (acquisitionState === 'waivers') {
+    const waiverClearsAt = isoFromEpochMs(entry.waiverProcessDate);
+    if (waiverClearsAt !== undefined) normalized.waiverClearsAt = waiverClearsAt;
+  }
   return normalized;
 }
 
 function normalizeYahooEntry(entry: Record<string, unknown>): Record<string, unknown> {
-  const normalized = stripReservedKeys(entry, false);
+  const normalized = stripReservedKeys(entry);
   normalized.team = typeof entry.team === 'string' && entry.team !== '' ? entry.team : null;
   const id = asIdString(entry.playerId);
   if (id !== undefined) normalized.id = id;
@@ -154,13 +169,12 @@ function normalizeYahooEntry(entry: Record<string, unknown>): Record<string, unk
 }
 
 function normalizeSleeperEntry(entry: Record<string, unknown>): Record<string, unknown> {
-  const normalized = stripReservedKeys(entry, true);
+  const normalized = stripReservedKeys(entry);
   normalized.team = typeof entry.team === 'string' && entry.team !== '' ? entry.team : null;
   // Sleeper ids are already strings today; coerce defensively so the canonical
   // id is uniformly a string if the upstream type ever drifts.
   const id = asIdString(entry.id);
   if (id !== undefined) normalized.id = id;
-  else delete normalized.id;
   return normalized;
 }
 

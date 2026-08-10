@@ -345,7 +345,7 @@ const freeAgentEntrySchema = looseObject({
   waiverClearsAt: z
     .string()
     .optional()
-    .describe('ISO 8601 waiver clear time (ESPN only, only when the provider supplied a valid timestamp)'),
+    .describe('ISO 8601 waiver clear time (ESPN only, only on rows whose acquisitionState is "waivers" with a valid provider timestamp)'),
   id: z.string().optional().describe('Platform-local player id as a string'),
   team: z
     .string()
