@@ -749,35 +749,54 @@ describe('ESPN transaction matchup-window contract', () => {
     fetchMock.mockRestore();
   });
 
-  it('falls back with usable budget when the structured source hangs', async () => {
-    // The Codex-audit starvation case: structured requests that hang (rather
-    // than fail fast) must time out against the structured sub-deadline and
-    // leave the activity fallback real budget, not an expired deadline.
+  it('falls back with usable budget when a slow structured source eats its sub-deadline', async () => {
+    // The Codex-audit starvation case, made mutation-sensitive: a daily-sport
+    // window spanning 14 scoring periods needs four request chunks, and each
+    // structured request responds SLOWLY but successfully (6s). Without the
+    // half-budget sub-deadline the chunks would legally consume the entire
+    // 16s provider budget (6s + 7s-abort + ...) and hand the fallback an
+    // expired deadline — an empty response. With it, the structured attempt
+    // is cut off at ~8s and the fallback serves rows with real budget. The
+    // test advances only 12s, so a regression cannot even settle in time.
     vi.useFakeTimers();
     try {
+      const scheduleEntry = (matchupPeriodId: number, periods: number[]) => ({
+        matchupPeriodId,
+        home: {
+          pointsByScoringPeriod: Object.fromEntries(periods.map((p) => [p, 1])),
+        },
+      });
       const contextBody = JSON.stringify({
-        scoringPeriodId: 3,
+        scoringPeriodId: 26,
         currentMatchupPeriod: 3,
+        schedule: [
+          scheduleEntry(2, [13, 14, 15, 16, 17, 18, 19]),
+          scheduleEntry(3, [20, 21, 22, 23, 24, 25, 26]),
+        ],
         teams: [],
       });
       const activityBody = JSON.stringify({
         topics: [{
           id: 1,
-          date: Date.parse('2026-09-20T16:00:00Z'),
+          date: Date.parse('2026-04-24T16:00:00Z'),
           messages: [{
             id: 10,
             messageTypeId: 178,
             to: 1,
-            scoringPeriodId: 3,
+            scoringPeriodId: 26,
           }],
         }],
       });
       const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
         const url = String(input);
         if (url.includes('view=mTransactions2')) {
-          // Hang until espnFetch's own AbortController timeout fires.
-          return new Promise<Response>((_resolve, reject) => {
+          // Slow success: resolves after 6s unless espnFetch aborts first.
+          return new Promise<Response>((resolve, reject) => {
+            const timer = setTimeout(() => {
+              resolve(new Response(JSON.stringify({ transactions: [] }), { status: 200 }));
+            }, 6000);
             init?.signal?.addEventListener('abort', () => {
+              clearTimeout(timer);
               const abortError = new Error('The operation was aborted');
               abortError.name = 'AbortError';
               reject(abortError);
@@ -791,17 +810,17 @@ describe('ESPN transaction matchup-window contract', () => {
       });
 
       const operation = executeEspnTransactionOperation({
-        gameId: 'ffl',
-        leagueId: '123',
+        gameId: 'flb',
+        leagueId: '30201',
         seasonYear: 2026,
-        sport: 'football',
+        sport: 'baseball',
         credentials,
         getPositionName: String,
         getProTeamAbbrev: String,
       });
-      // Advance past the structured per-request timeout so the hanging
-      // requests abort; the fallback then resolves on microtasks.
-      await vi.advanceTimersByTimeAsync(8000);
+      // Chunk 1 resolves slowly at 6s; chunk 2's requests abort at the ~8s
+      // structured sub-deadline; the fallback then resolves on microtasks.
+      await vi.advanceTimersByTimeAsync(12_000);
       const result = await operation;
 
       expect(result.source).toBe('activity_feed');
