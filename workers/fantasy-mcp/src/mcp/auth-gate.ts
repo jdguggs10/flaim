@@ -1,10 +1,15 @@
 import {
   LEGACY_USER_SESSION_WIDGET_URI,
   USER_SESSION_WIDGET_URI,
+  V2_USER_SESSION_WIDGET_URI,
 } from '../widgets/user-session-widget';
 
+// Every published widget URI must stay anonymously readable forever:
+// ChatGPT fetches widget templates without auth (FLA-217), and clients
+// cached on the v1/v2 keys keep reading them after the descriptor moves on.
 const PUBLIC_STATIC_WIDGET_URIS = new Set([
   LEGACY_USER_SESSION_WIDGET_URI,
+  V2_USER_SESSION_WIDGET_URI,
   USER_SESSION_WIDGET_URI,
 ]);
 

@@ -4,9 +4,11 @@ import type { Env } from '../types';
 import { getUnifiedTools, hasRequiredScope, mcpInsufficientScopeError, type McpToolResponse } from './tools';
 import { emitUsageEvent, type UsageStatus } from './usage';
 import {
+  LEGACY_USER_SESSION_WIDGET_HTML,
   LEGACY_USER_SESSION_WIDGET_URI,
   USER_SESSION_WIDGET_HTML,
   USER_SESSION_WIDGET_URI,
+  V2_USER_SESSION_WIDGET_URI,
 } from '../widgets/user-session-widget';
 import { FLAIM_MCP_INSTRUCTIONS } from './instructions';
 
@@ -77,14 +79,18 @@ export function createFantasyMcpServer(ctx: McpContext): McpServer {
     { instructions: FLAIM_MCP_INSTRUCTIONS }
   );
 
-  // Keep the published v1 resource readable while current descriptors use a
-  // new immutable cache key. Template URIs are cache keys in ChatGPT.
+  // Template URIs are immutable cache keys in ChatGPT, so published resources
+  // keep serving their original bytes forever: v1 (original submission) and
+  // v2 (published v2.1 submission) both serve the frozen body with their
+  // frozen _meta. v3 is the current descriptor target; its body adds the
+  // provider attribution footer.
   const widgetResources = [
-    ['user-session-widget', LEGACY_USER_SESSION_WIDGET_URI],
-    ['user-session-widget-v2', USER_SESSION_WIDGET_URI],
+    ['user-session-widget', LEGACY_USER_SESSION_WIDGET_URI, LEGACY_USER_SESSION_WIDGET_HTML],
+    ['user-session-widget-v2', V2_USER_SESSION_WIDGET_URI, LEGACY_USER_SESSION_WIDGET_HTML],
+    ['user-session-widget-v3', USER_SESSION_WIDGET_URI, USER_SESSION_WIDGET_HTML],
   ] as const;
 
-  for (const [name, uri] of widgetResources) {
+  for (const [name, uri, widgetHtml] of widgetResources) {
     server.registerResource(
       name,
       uri,
@@ -95,10 +101,12 @@ export function createFantasyMcpServer(ctx: McpContext): McpServer {
         contents: [{
           uri,
           mimeType: 'text/html;profile=mcp-app',
-          text: USER_SESSION_WIDGET_HTML,
-          // The legacy URI is the frozen published-v1 contract: its read-result
-          // _meta must stay byte-identical to the snapshot OpenAI scanned.
-          // Descriptor additions (FLA-177) go on the v2 URI only.
+          text: widgetHtml,
+          // The v1 and v2 URIs are frozen published contracts: their
+          // read-result _meta must stay byte-identical to the snapshots
+          // OpenAI scanned (v1: original submission; v2: v2.1 submission
+          // incl. the FLA-177 descriptor additions). New additions go on
+          // the v3 URI only.
           _meta: {
             ui: {
               csp: {
@@ -106,8 +114,9 @@ export function createFantasyMcpServer(ctx: McpContext): McpServer {
                 resourceDomains: [],
               },
             },
-            ...(uri === USER_SESSION_WIDGET_URI && {
-              // Plain-language widget summary for directory/host surfaces (v2 only).
+            ...(uri !== LEGACY_USER_SESSION_WIDGET_URI && {
+              // Plain-language widget summary for directory/host surfaces.
+              // Part of v2's frozen _meta (FLA-177); carried forward on v3.
               'openai/widgetDescription':
                 'Summary card of your connected fantasy leagues, showing league names, sports, and your default league.',
             }),
@@ -118,7 +127,12 @@ export function createFantasyMcpServer(ctx: McpContext): McpServer {
               // widget domain — the widget is fully self-contained (empty
               // connect/resource CSP), so a dedicated domain adds no capability;
               // revisit only if a portal scan explicitly requires _meta.ui.domain.
-              redirect_domains: ['https://flaim.app'],
+              // v3 additionally allowlists the Yahoo Fantasy attribution link
+              // target; the published v1/v2 _meta stays byte-identical.
+              redirect_domains:
+                uri === USER_SESSION_WIDGET_URI
+                  ? ['https://flaim.app', 'https://sports.yahoo.com']
+                  : ['https://flaim.app'],
             },
           },
         }],
