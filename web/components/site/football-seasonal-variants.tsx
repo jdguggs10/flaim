@@ -2,15 +2,14 @@ import Image from "next/image";
 import Link from "next/link";
 import {
   ArrowRight,
+  CalendarDays,
   CirclePlay,
-  Film,
   MessageCircleQuestion,
   Search,
   Sparkles,
   Trophy,
 } from "lucide-react";
 
-import { FootballMediaShowcase } from "@/components/site/football-media-showcase";
 import { Button } from "@/components/ui/button";
 import {
   CHATGPT_APP_URL,
@@ -19,25 +18,25 @@ import {
 
 export const FOOTBALL_VARIANTS = [
   {
-    id: "game-film",
-    label: "Game Film",
-    description: "Media wall",
+    id: "season-chapters",
+    label: "Season Chapters",
+    description: "Clean editorial",
   },
   {
-    id: "inside-answer",
-    label: "Inside the Answer",
-    description: "Question to answer",
+    id: "question-journey",
+    label: "Question Journey",
+    description: "Conversation-led",
   },
   {
-    id: "season-story",
-    label: "Season Story",
-    description: "Draft to playoffs",
+    id: "season-timeline",
+    label: "Season Timeline",
+    description: "Visual progression",
   },
 ] as const;
 
 export type FootballVariantId = (typeof FOOTBALL_VARIANTS)[number]["id"];
 
-export const DEFAULT_FOOTBALL_VARIANT: FootballVariantId = "inside-answer";
+export const DEFAULT_FOOTBALL_VARIANT: FootballVariantId = "season-chapters";
 
 export function isFootballVariant(value: string): value is FootballVariantId {
   return FOOTBALL_VARIANTS.some((variant) => variant.id === value);
@@ -53,10 +52,11 @@ export function FootballVariantSwitcher({
       <div className="mx-auto flex max-w-6xl flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">
-            Seasonal page lab
+            Seasonal page lab, round two
           </p>
           <p className="mt-1 text-sm text-muted-foreground">
-            Three staging-only directions. Choose one to compare the full page.
+            Three alternating season-story directions. Choose one to compare the
+            full page.
           </p>
         </div>
         <nav
@@ -127,341 +127,206 @@ export function FootballConnectionButtons({
   );
 }
 
-function FutureClip({
-  label,
-  title,
-  description,
-  compact = false,
-}: {
-  label: string;
-  title: string;
-  description: string;
-  compact?: boolean;
-}) {
+const SEASON_MOMENTS = [
+  {
+    id: "draft-night",
+    label: "Draft night",
+    question: "Grade the team I drafted.",
+    title: "A roster grade that knows the league",
+    description:
+      "Flaim brings your actual roster, scoring rules, league size, and positional depth into the answer. You get more than a generic list of player rankings.",
+    ingredients: ["Your roster", "Scoring rules", "League size"],
+    media: "future",
+  },
+  {
+    id: "waiver-tuesday",
+    label: "Waiver Tuesday",
+    question: "Who can actually help my team?",
+    title: "Waiver advice from players you can add",
+    description:
+      "Start with your roster needs and the players still available in your league. Then compare the best additions without typing out your team.",
+    ingredients: ["Roster needs", "Available players", "Recent moves"],
+    media: "future",
+  },
+  {
+    id: "weekly-matchup",
+    label: "Weekly matchup",
+    question: "What could decide this week?",
+    title: "Start or sit help for your actual opponent",
+    description:
+      "Your lineup, opponent, scoring rules, and matchup stay together, so the answer can focus on the decisions that matter this week.",
+    ingredients: ["Your lineup", "Your opponent", "League scoring"],
+    media: "future",
+  },
+  {
+    id: "playoff-push",
+    label: "Playoff push",
+    question: "What does my path to the playoffs look like?",
+    title: "See where your team stands across the league",
+    description:
+      "Use standings, upcoming matchups, recent moves, and league history to understand what needs to go right down the stretch.",
+    ingredients: ["Standings", "Upcoming matchups", "League history"],
+    media: "standings",
+  },
+] as const;
+
+type SeasonMoment = (typeof SEASON_MOMENTS)[number];
+
+function IngredientPills({ ingredients }: { ingredients: readonly string[] }) {
   return (
-    <div
-      className={`relative flex overflow-hidden rounded-[1.75rem] border bg-gradient-to-br from-primary/10 via-background to-muted p-5 ${
-        compact ? "min-h-64" : "min-h-80"
-      }`}
-    >
+    <div className="mt-5 flex flex-wrap gap-2">
+      {ingredients.map((ingredient) => (
+        <span
+          key={ingredient}
+          className="rounded-full border bg-background px-3 py-1.5 text-xs font-medium text-muted-foreground"
+        >
+          {ingredient}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function FutureClip({ moment }: { moment: SeasonMoment }) {
+  return (
+    <div className="relative flex aspect-[16/11] overflow-hidden rounded-[2rem] border bg-gradient-to-br from-primary/10 via-background to-muted p-6 shadow-sm">
       <div className="absolute right-5 top-5 flex h-11 w-11 items-center justify-center rounded-full border bg-background/80 shadow-sm backdrop-blur">
         <CirclePlay className="h-5 w-5 text-primary" aria-hidden="true" />
       </div>
       <div className="mt-auto max-w-sm">
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">
-          {label}
+          Future phone clip
         </p>
-        <p className="mt-2 text-lg font-semibold">{title}</p>
+        <p className="mt-2 text-lg font-semibold">{moment.label} in action</p>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">
-          {description}
+          An 8 to 12 second sanitized recording can replace this staging
+          placeholder once real 2026 league data is available.
         </p>
       </div>
     </div>
   );
 }
 
-function ImageProof({
-  src,
-  alt,
-  label,
-  title,
-  description,
-  aspectClassName,
-  imageClassName = "object-contain",
-  priority = false,
-}: {
-  src: string;
-  alt: string;
-  label: string;
-  title: string;
-  description: string;
-  aspectClassName: string;
-  imageClassName?: string;
-  priority?: boolean;
-}) {
+function StandingsProof() {
   return (
-    <figure className="overflow-hidden rounded-[1.75rem] border bg-card shadow-sm">
-      <div className={`relative bg-muted/60 ${aspectClassName}`}>
+    <figure className="overflow-hidden rounded-[2rem] border bg-card shadow-sm">
+      <div className="relative aspect-[16/10] bg-muted">
         <Image
-          src={src}
-          alt={alt}
+          src="/media/football/claude-football-standings-2026.png"
+          alt="Claude using Flaim to retrieve standings from a connected fantasy football league."
           fill
-          priority={priority}
-          sizes="(min-width: 1024px) 48vw, (min-width: 640px) 80vw, 94vw"
-          className={imageClassName}
+          sizes="(min-width: 1024px) 46vw, (min-width: 640px) 80vw, 94vw"
+          className="object-contain"
         />
       </div>
       <figcaption className="p-5">
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">
-          {label}
+          Real connected answer
         </p>
-        <p className="mt-2 font-semibold">{title}</p>
-        <p className="mt-2 text-sm leading-6 text-muted-foreground">
-          {description}
+        <p className="mt-2 font-semibold">
+          Claude checking an actual football league
         </p>
       </figcaption>
     </figure>
   );
 }
 
-const FILM_SCENES = [
-  {
-    label: "Draft grade",
-    title: "Grade the team I actually drafted",
-    description:
-      "Show the roster grade, position strengths, and the biggest weakness in one short phone clip.",
-  },
-  {
-    label: "Waiver wire",
-    title: "Find someone I can really add",
-    description:
-      "Show Flaim comparing roster needs with players who are still available in that league.",
-  },
-  {
-    label: "Weekly matchup",
-    title: "Tell me where this matchup can turn",
-    description:
-      "Show a real opponent, scoring rules, and the start or sit decision that matters most.",
-  },
-] as const;
-
-function GameFilmVariant() {
-  return (
-    <>
-      <section className="border-b px-4 py-12 sm:px-6 md:py-16 lg:px-8">
-        <div className="mx-auto max-w-6xl">
-          <div className="mx-auto max-w-3xl text-center">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">
-              Flaim Fantasy for football
-            </p>
-            <h1 className="mt-4 text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl">
-              See AI analyze your real fantasy football team
-            </h1>
-            <p className="mx-auto mt-5 max-w-2xl text-lg leading-8 text-muted-foreground">
-              Connect ESPN, Yahoo, or Sleeper, then ask ChatGPT or Claude about
-              your roster, matchup, standings, waiver wire, trades, and league
-              history.
-            </p>
-            <div className="mx-auto mt-7 flex justify-center">
-              <FootballConnectionButtons />
-            </div>
-          </div>
-
-          <div className="mt-12 grid gap-5 lg:grid-cols-[1.35fr_0.65fr]">
-            <FootballMediaShowcase />
-            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-1">
-              <FutureClip
-                compact
-                label="Future phone clip"
-                title="Draft grade in ChatGPT"
-                description="A short screen recording can replace this slot without changing the layout."
-              />
-              <FutureClip
-                compact
-                label="Future phone clip"
-                title="Waiver answer in Claude"
-                description="A second clip can show an available player matched to a real roster need."
-              />
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="border-b bg-muted/40 px-4 py-14 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-6xl">
-          <div className="max-w-2xl">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">
-              Three proof moments
-            </p>
-            <h2 className="mt-3 text-3xl font-bold tracking-tight">
-              Show the questions fantasy managers already ask
-            </h2>
-            <p className="mt-3 leading-7 text-muted-foreground">
-              Each slot is ready for an 8 to 12 second iPhone recording with a
-              clear tap marker and one useful answer.
-            </p>
-          </div>
-          <div className="mt-8 grid gap-5 md:grid-cols-3">
-            {FILM_SCENES.map((scene) => (
-              <FutureClip
-                key={scene.label}
-                label={scene.label}
-                title={scene.title}
-                description={scene.description}
-              />
-            ))}
-          </div>
-        </div>
-      </section>
-    </>
+function MomentMedia({ moment }: { moment: SeasonMoment }) {
+  return moment.media === "standings" ? (
+    <StandingsProof />
+  ) : (
+    <FutureClip moment={moment} />
   );
 }
 
-const ANSWER_INGREDIENTS = [
-  "Your roster",
-  "Scoring rules",
-  "League standings",
-  "Available players",
-] as const;
+function ConnectedLeaguesProof() {
+  return (
+    <figure className="mx-auto w-full max-w-md overflow-hidden rounded-[2rem] border bg-card shadow-xl shadow-foreground/5">
+      <div className="relative aspect-[4/5] bg-muted/50">
+        <Image
+          src="/media/football/connected-leagues-widget-2026.png"
+          alt="Flaim showing connected ESPN, Yahoo, and Sleeper fantasy football leagues."
+          fill
+          priority
+          sizes="(min-width: 1024px) 36vw, (min-width: 640px) 65vw, 92vw"
+          className="object-cover object-top"
+        />
+      </div>
+      <figcaption className="p-5">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">
+          Connect once
+        </p>
+        <p className="mt-2 font-semibold">
+          Your football leagues, ready in one place
+        </p>
+      </figcaption>
+    </figure>
+  );
+}
 
-const ANSWER_EXAMPLES = [
-  {
-    question: "How good is the team I drafted?",
-    title: "A roster grade that knows the league",
-    body: "Flaim brings your roster, scoring, league size, and the other teams into the answer.",
-    clip: "Draft grade clip",
-  },
-  {
-    question: "Who should I add before Week 1?",
-    title: "Waiver advice from your available players",
-    body: "The answer starts with who is actually unrostered, then compares those players with your needs.",
-    clip: "Waiver wire clip",
-  },
-  {
-    question: "What could decide this week's matchup?",
-    title: "Start or sit help for your actual opponent",
-    body: "Your lineup, opponent, scoring, and matchup all stay in the same conversation.",
-    clip: "Matchup clip",
-  },
-] as const;
-
-function InsideAnswerVariant() {
+function SeasonChaptersVariant() {
   return (
     <>
       <section className="border-b px-4 py-12 sm:px-6 md:py-16 lg:px-8">
-        <div className="mx-auto grid max-w-6xl gap-10 lg:grid-cols-[0.82fr_1.18fr] lg:items-center">
+        <div className="mx-auto grid max-w-6xl gap-10 lg:grid-cols-[0.95fr_1.05fr] lg:items-center">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">
-              Your league inside your AI
+              Your league, all season long
             </p>
             <h1 className="mt-4 text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl">
-              Ask AI about the fantasy football team you actually drafted
+              Your fantasy football season, inside the AI you already use
             </h1>
             <p className="mt-5 max-w-2xl text-lg leading-8 text-muted-foreground">
-              Flaim connects ESPN, Yahoo, or Sleeper to ChatGPT and Claude, so
-              the answer can include your roster, scoring, matchup, standings,
-              available players, and league history.
-            </p>
-            <p className="mt-4 leading-7 text-muted-foreground">
-              No screenshots. No typing every player. Just ask the question.
+              Connect ESPN, Yahoo, or Sleeper once. Then ask ChatGPT or Claude
+              about the team you drafted, weekly matchups, available players,
+              standings, trades, and league history.
             </p>
             <div className="mt-7">
               <FootballConnectionButtons />
             </div>
           </div>
-
-          <ImageProof
-            src="/media/football/claude-football-standings-2026.png"
-            alt="Claude using Flaim to answer a question about standings from a connected fantasy football league."
-            label="Real connected answer"
-            title="Claude checking an actual football league"
-            description="The final page can rotate this proof with equivalent ChatGPT and Perplexity phone clips."
-            aspectClassName="aspect-[16/10]"
-            priority
-          />
-        </div>
-      </section>
-
-      <section className="border-b bg-muted/40 px-4 py-14 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-6xl">
-          <div className="mx-auto max-w-3xl text-center">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">
-              Inside the answer
-            </p>
-            <h2 className="mt-3 text-3xl font-bold tracking-tight">
-              One question. Your whole league behind it.
-            </h2>
-          </div>
-
-          <div className="mt-8 grid gap-4 lg:grid-cols-[1fr_auto_1.2fr_auto_1fr] lg:items-center">
-            <div className="rounded-2xl border bg-background p-5 shadow-sm">
-              <MessageCircleQuestion
-                className="h-6 w-6 text-primary"
-                aria-hidden="true"
-              />
-              <p className="mt-4 text-sm font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                You ask
-              </p>
-              <p className="mt-2 text-lg font-semibold">
-                Who is the best player I can add at wide receiver?
-              </p>
-            </div>
-
-            <ArrowRight
-              className="mx-auto hidden h-5 w-5 text-muted-foreground lg:block"
-              aria-hidden="true"
-            />
-
-            <div className="rounded-2xl border border-primary/30 bg-primary/5 p-5">
-              <Search className="h-6 w-6 text-primary" aria-hidden="true" />
-              <p className="mt-4 text-sm font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                Flaim brings
-              </p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {ANSWER_INGREDIENTS.map((ingredient) => (
-                  <span
-                    key={ingredient}
-                    className="rounded-full border bg-background px-3 py-1.5 text-sm"
-                  >
-                    {ingredient}
-                  </span>
-                ))}
-              </div>
-            </div>
-
-            <ArrowRight
-              className="mx-auto hidden h-5 w-5 text-muted-foreground lg:block"
-              aria-hidden="true"
-            />
-
-            <div className="rounded-2xl border bg-foreground p-5 text-background shadow-sm">
-              <Sparkles className="h-6 w-6" aria-hidden="true" />
-              <p className="mt-4 text-sm font-semibold uppercase tracking-[0.12em] text-background/65">
-                Your AI answers
-              </p>
-              <p className="mt-2 text-lg font-semibold">
-                A recommendation based on your team and your league.
-              </p>
-            </div>
-          </div>
+          <ConnectedLeaguesProof />
         </div>
       </section>
 
       <section className="border-b px-4 py-14 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-6xl">
-          <div className="max-w-2xl">
-            <h2 className="text-3xl font-bold tracking-tight">
-              See three real football questions answered
+          <div className="mx-auto max-w-3xl text-center">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">
+              Four moments, one connected league
+            </p>
+            <h2 className="mt-3 text-3xl font-bold tracking-tight">
+              Ask the next question without starting over
             </h2>
             <p className="mt-3 leading-7 text-muted-foreground">
-              These scenes can become short phone recordings later. The words
-              around them stay visible and searchable.
+              The alternating layout leaves room for real examples and the
+              plain-language football details people search for.
             </p>
           </div>
-          <div className="mt-8 space-y-6">
-            {ANSWER_EXAMPLES.map((example, index) => (
+
+          <div className="mt-12 space-y-14 lg:space-y-20">
+            {SEASON_MOMENTS.map((moment, index) => (
               <article
-                key={example.question}
-                className="grid gap-5 rounded-[2rem] border bg-card p-5 md:grid-cols-[0.8fr_1.2fr] md:items-center md:p-7"
+                key={moment.id}
+                className="grid gap-7 md:grid-cols-2 md:items-center lg:gap-12"
               >
                 <div className={index % 2 === 1 ? "md:order-2" : undefined}>
-                  <p className="text-sm font-medium text-primary">
-                    &ldquo;{example.question}&rdquo;
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">
+                    {moment.label}
                   </p>
-                  <h3 className="mt-3 text-2xl font-semibold tracking-tight">
-                    {example.title}
+                  <p className="mt-4 text-sm font-medium text-muted-foreground">
+                    &ldquo;{moment.question}&rdquo;
+                  </p>
+                  <h3 className="mt-3 text-3xl font-bold tracking-tight">
+                    {moment.title}
                   </h3>
-                  <p className="mt-3 leading-7 text-muted-foreground">
-                    {example.body}
+                  <p className="mt-4 leading-7 text-muted-foreground">
+                    {moment.description}
                   </p>
+                  <IngredientPills ingredients={moment.ingredients} />
                 </div>
                 <div className={index % 2 === 1 ? "md:order-1" : undefined}>
-                  <FutureClip
-                    compact
-                    label="Future phone clip"
-                    title={example.clip}
-                    description="Replace this placeholder with a sanitized screen recording when it is ready."
-                  />
+                  <MomentMedia moment={moment} />
                 </div>
               </article>
             ))}
@@ -472,174 +337,249 @@ function InsideAnswerVariant() {
   );
 }
 
-const SEASON_MOMENTS = [
-  {
-    label: "Draft night",
-    question: "Grade the team I drafted.",
-    body: "Your roster, scoring rules, league size, and positional depth.",
-    media: "leagues",
-  },
-  {
-    label: "Opening week",
-    question: "Who should I start?",
-    body: "Your lineup, opponent, scoring, and matchup.",
-    media: "standings",
-  },
-  {
-    label: "Waiver Tuesday",
-    question: "Who can actually help my team?",
-    body: "Your roster needs, available players, and recent league moves.",
-    media: "future",
-  },
-  {
-    label: "Trade season",
-    question: "Does this deal make me better?",
-    body: "Both rosters, standings, league rules, and positional depth.",
-    media: "future",
-  },
-  {
-    label: "Playoff push",
-    question: "What needs to go right?",
-    body: "Standings, upcoming matchups, roster health, and league history.",
-    media: "future",
-  },
-] as const;
-
-function SeasonMomentMedia({
-  media,
-  label,
-}: {
-  media: (typeof SEASON_MOMENTS)[number]["media"];
-  label: string;
-}) {
-  if (media === "leagues") {
-    return (
-      <div className="relative aspect-[4/5] overflow-hidden rounded-2xl bg-muted">
-        <Image
-          src="/media/football/connected-leagues-widget-2026.png"
-          alt="Connected ESPN, Yahoo, and Sleeper fantasy football leagues in Flaim."
-          fill
-          sizes="18rem"
-          className="object-cover object-top"
-        />
-      </div>
-    );
-  }
-
-  if (media === "standings") {
-    return (
-      <div className="relative aspect-[4/5] overflow-hidden rounded-2xl bg-muted">
-        <Image
-          src="/media/football/claude-football-standings-2026.png"
-          alt="Claude checking standings from a connected fantasy football league through Flaim."
-          fill
-          sizes="18rem"
-          className="object-cover"
-        />
-      </div>
-    );
-  }
-
+function QuestionJourneyHero() {
   return (
-    <div className="flex aspect-[4/5] items-center justify-center rounded-2xl border border-dashed bg-gradient-to-br from-primary/10 to-muted p-5 text-center">
-      <div>
-        <CirclePlay className="mx-auto h-8 w-8 text-primary" aria-hidden="true" />
-        <p className="mt-4 text-sm font-semibold">{label} phone clip</p>
-        <p className="mt-2 text-xs leading-5 text-muted-foreground">
-          Future 8 to 12 second recording
-        </p>
+    <section className="border-b px-4 py-12 sm:px-6 md:py-16 lg:px-8">
+      <div className="mx-auto grid max-w-6xl gap-10 lg:grid-cols-[0.85fr_1.15fr] lg:items-center">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">
+            Ask about the team you actually manage
+          </p>
+          <h1 className="mt-4 text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl">
+            Ask one fantasy football question. Bring your whole league.
+          </h1>
+          <p className="mt-5 max-w-2xl text-lg leading-8 text-muted-foreground">
+            Flaim connects ESPN, Yahoo, or Sleeper to ChatGPT and Claude, so
+            every answer can start with your roster, matchup, standings,
+            available players, recent moves, and league rules.
+          </p>
+          <p className="mt-4 leading-7 text-muted-foreground">
+            No screenshots. No typing every player. Just ask the question.
+          </p>
+          <div className="mt-7">
+            <FootballConnectionButtons />
+          </div>
+        </div>
+
+        <div className="rounded-[2rem] border bg-muted/40 p-5 shadow-sm sm:p-7">
+          <div className="ml-auto max-w-md rounded-[1.5rem] bg-foreground p-5 text-background">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-background/60">
+              You ask
+            </p>
+            <p className="mt-2 text-lg font-semibold">
+              How good is the team I just drafted?
+            </p>
+          </div>
+          <div className="my-4 flex justify-center">
+            <ArrowRight
+              className="h-5 w-5 rotate-90 text-muted-foreground"
+              aria-hidden="true"
+            />
+          </div>
+          <div className="max-w-md rounded-[1.5rem] border bg-background p-5">
+            <div className="flex items-center gap-2 text-primary">
+              <Sparkles className="h-5 w-5" aria-hidden="true" />
+              <p className="text-xs font-semibold uppercase tracking-[0.14em]">
+                Flaim brings your league
+              </p>
+            </div>
+            <p className="mt-3 leading-7 text-muted-foreground">
+              Your roster, scoring rules, league size, standings, and every
+              other team.
+            </p>
+          </div>
+        </div>
       </div>
-    </div>
+    </section>
   );
 }
 
-function SeasonStoryVariant() {
+function QuestionJourneyVariant() {
   return (
     <>
-      <section className="border-b px-4 py-12 sm:px-6 md:py-16 lg:px-8">
+      <QuestionJourneyHero />
+
+      <section className="border-b bg-muted/35 px-4 py-14 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-6xl">
-          <div className="grid gap-8 lg:grid-cols-[1fr_auto] lg:items-end">
-            <div className="max-w-4xl">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">
-                Draft night through the playoffs
-              </p>
-              <h1 className="mt-4 text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl">
-                Your real fantasy football league, all season long
-              </h1>
-              <p className="mt-5 max-w-3xl text-lg leading-8 text-muted-foreground">
-                Connect ESPN, Yahoo, or Sleeper once. Then ask ChatGPT or Claude
-                about the team you drafted, weekly matchups, available players,
-                trades, standings, and league history.
-              </p>
-            </div>
-            <div className="lg:w-[22rem]">
-              <FootballConnectionButtons />
-            </div>
+          <div className="max-w-3xl">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">
+              The questions change with the season
+            </p>
+            <h2 className="mt-3 text-3xl font-bold tracking-tight">
+              See what goes into each answer
+            </h2>
+          </div>
+
+          <div className="mt-12 space-y-14 lg:space-y-20">
+            {SEASON_MOMENTS.map((moment, index) => (
+              <article
+                key={moment.id}
+                className="grid gap-7 md:grid-cols-2 md:items-center lg:gap-12"
+              >
+                <div className={index % 2 === 1 ? "md:order-2" : undefined}>
+                  <div className="rounded-[1.5rem] bg-foreground p-5 text-background shadow-sm">
+                    <div className="flex items-center gap-2 text-background/65">
+                      <MessageCircleQuestion
+                        className="h-5 w-5"
+                        aria-hidden="true"
+                      />
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em]">
+                        {moment.label}
+                      </p>
+                    </div>
+                    <p className="mt-3 text-xl font-semibold">
+                      &ldquo;{moment.question}&rdquo;
+                    </p>
+                  </div>
+
+                  <div className="mt-4 rounded-[1.5rem] border border-primary/25 bg-primary/5 p-5">
+                    <div className="flex items-center gap-2 text-primary">
+                      <Search className="h-5 w-5" aria-hidden="true" />
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em]">
+                        Flaim brings
+                      </p>
+                    </div>
+                    <IngredientPills ingredients={moment.ingredients} />
+                  </div>
+
+                  <h3 className="mt-6 text-3xl font-bold tracking-tight">
+                    {moment.title}
+                  </h3>
+                  <p className="mt-4 leading-7 text-muted-foreground">
+                    {moment.description}
+                  </p>
+                </div>
+                <div className={index % 2 === 1 ? "md:order-1" : undefined}>
+                  <MomentMedia moment={moment} />
+                </div>
+              </article>
+            ))}
           </div>
         </div>
       </section>
+    </>
+  );
+}
 
-      <section className="border-b bg-muted/40 py-14">
-        <div className="px-4 sm:px-6 lg:px-8">
-          <div className="mx-auto flex max-w-6xl items-end justify-between gap-6">
-            <div className="max-w-2xl">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">
-                A season in five moments
-              </p>
-              <h2 className="mt-3 text-3xl font-bold tracking-tight">
-                The questions change. Your league stays connected.
-              </h2>
-            </div>
-            <Film className="hidden h-9 w-9 text-primary sm:block" aria-hidden="true" />
+function TimelineHero() {
+  return (
+    <section className="border-b px-4 py-12 sm:px-6 md:py-16 lg:px-8">
+      <div className="mx-auto grid max-w-6xl gap-10 lg:grid-cols-[1fr_0.8fr] lg:items-center">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">
+            Draft night through the playoff push
+          </p>
+          <h1 className="mt-4 text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl">
+            Keep your real fantasy football league connected all season
+          </h1>
+          <p className="mt-5 max-w-3xl text-lg leading-8 text-muted-foreground">
+            Ask ChatGPT or Claude about the next decision without explaining
+            your ESPN, Yahoo, or Sleeper league again.
+          </p>
+          <div className="mt-7">
+            <FootballConnectionButtons />
           </div>
         </div>
 
-        <div
-          className="mt-8 snap-x snap-mandatory overflow-x-auto px-4 pb-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:px-6 lg:px-8"
-          role="region"
-          aria-label="Fantasy football season examples. Scroll horizontally to see every moment."
-          tabIndex={0}
-        >
-          <ol className="mx-auto flex w-max max-w-none gap-5">
+        <div className="rounded-[2rem] border bg-card p-6 shadow-sm">
+          <div className="flex items-center gap-3">
+            <CalendarDays className="h-6 w-6 text-primary" aria-hidden="true" />
+            <p className="font-semibold">One connection for the whole season</p>
+          </div>
+          <ol className="mt-6 space-y-4">
             {SEASON_MOMENTS.map((moment, index) => (
-              <li
-                key={moment.label}
-                className="w-[18rem] shrink-0 snap-start rounded-[1.75rem] border bg-background p-4 shadow-sm"
-              >
-                <SeasonMomentMedia media={moment.media} label={moment.label} />
-                <div className="pt-5">
-                  <div className="flex items-center gap-3">
-                    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">
-                      {index + 1}
-                    </span>
-                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                      {moment.label}
-                    </p>
-                  </div>
-                  <h3 className="mt-4 text-xl font-semibold tracking-tight">
-                    &ldquo;{moment.question}&rdquo;
-                  </h3>
-                  <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                    {moment.body}
+              <li key={moment.id} className="flex items-center gap-4">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">
+                  {index + 1}
+                </span>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                    {moment.label}
                   </p>
+                  <p className="mt-1 text-sm font-medium">{moment.question}</p>
                 </div>
               </li>
             ))}
           </ol>
         </div>
-      </section>
+      </div>
+    </section>
+  );
+}
 
-      <section className="border-b px-4 py-14 sm:px-6 lg:px-8">
-        <div className="mx-auto grid max-w-6xl gap-8 rounded-[2rem] border bg-card p-6 md:grid-cols-[0.85fr_1.15fr] md:items-center md:p-9">
-          <div>
-            <Trophy className="h-8 w-8 text-primary" aria-hidden="true" />
-            <h2 className="mt-5 text-3xl font-bold tracking-tight">
+function SeasonTimelineVariant() {
+  return (
+    <>
+      <TimelineHero />
+
+      <section className="border-b bg-muted/35 px-4 py-14 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-6xl">
+          <div className="mx-auto max-w-3xl text-center">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">
+              A season in four moments
+            </p>
+            <h2 className="mt-3 text-3xl font-bold tracking-tight">
+              Your questions move forward. Your league stays with you.
+            </h2>
+          </div>
+
+          <div className="relative mt-14 space-y-14 md:space-y-20">
+            <div
+              className="absolute bottom-0 left-1/2 top-0 hidden w-px -translate-x-1/2 bg-border md:block"
+              aria-hidden="true"
+            />
+
+            {SEASON_MOMENTS.map((moment, index) => {
+              const textFirst = index % 2 === 0;
+
+              return (
+                <article
+                  key={moment.id}
+                  className="relative grid gap-7 md:grid-cols-2 md:items-center md:gap-14 lg:gap-20"
+                >
+                  <div
+                    className={`absolute left-1/2 top-1/2 z-10 hidden h-10 w-10 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border bg-background text-sm font-bold shadow-sm md:flex ${
+                      textFirst ? "text-primary" : "text-foreground"
+                    }`}
+                    aria-hidden="true"
+                  >
+                    {index + 1}
+                  </div>
+
+                  <div className={textFirst ? undefined : "md:order-2"}>
+                    <div className="rounded-[1.75rem] border bg-background p-6 shadow-sm">
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">
+                        {moment.label}
+                      </p>
+                      <p className="mt-4 text-sm font-medium text-muted-foreground">
+                        &ldquo;{moment.question}&rdquo;
+                      </p>
+                      <h3 className="mt-3 text-2xl font-bold tracking-tight">
+                        {moment.title}
+                      </h3>
+                      <p className="mt-4 leading-7 text-muted-foreground">
+                        {moment.description}
+                      </p>
+                      <IngredientPills ingredients={moment.ingredients} />
+                    </div>
+                  </div>
+
+                  <div className={textFirst ? undefined : "md:order-1"}>
+                    <MomentMedia moment={moment} />
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+
+          <div className="mx-auto mt-14 max-w-2xl rounded-[2rem] border bg-background p-7 text-center shadow-sm">
+            <Trophy className="mx-auto h-8 w-8 text-primary" aria-hidden="true" />
+            <h2 className="mt-5 text-2xl font-bold tracking-tight">
               More than a draft grade
             </h2>
-            <p className="mt-4 leading-7 text-muted-foreground">
-              Flaim stays useful after the draft. Ask about start or sit calls,
-              waivers, trades, weekly matchups, standings, recent moves, and
-              what happened in past seasons.
+            <p className="mt-3 leading-7 text-muted-foreground">
+              Use the same connection for waivers, start or sit calls, trades,
+              weekly matchups, standings, recent moves, and league history.
             </p>
             <Link
               href="/#live-demo"
@@ -649,12 +589,6 @@ function SeasonStoryVariant() {
               <ArrowRight className="ml-1.5 h-4 w-4" aria-hidden="true" />
             </Link>
           </div>
-          <FutureClip
-            compact
-            label="Future season recap clip"
-            title="Show the league changing over time"
-            description="A final phone recording can demonstrate standings, recent moves, and the playoff picture in one answer."
-          />
         </div>
       </section>
     </>
@@ -666,13 +600,13 @@ export function FootballSeasonalVariant({
 }: {
   variant: FootballVariantId;
 }) {
-  if (variant === "game-film") {
-    return <GameFilmVariant />;
+  if (variant === "question-journey") {
+    return <QuestionJourneyVariant />;
   }
 
-  if (variant === "season-story") {
-    return <SeasonStoryVariant />;
+  if (variant === "season-timeline") {
+    return <SeasonTimelineVariant />;
   }
 
-  return <InsideAnswerVariant />;
+  return <SeasonChaptersVariant />;
 }
