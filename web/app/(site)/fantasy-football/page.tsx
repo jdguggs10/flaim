@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight, ChevronDown } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 
 import {
   DEFAULT_FOOTBALL_VARIANT,
@@ -40,49 +40,6 @@ const CONNECTION_STEPS = [
   },
 ] as const;
 
-const PRODUCT_BOUNDARIES = [
-  {
-    title: "Free",
-    body: "No Flaim subscription.",
-  },
-  {
-    title: "Read-only",
-    body: "No trades, drops, lineup edits, or league changes.",
-  },
-  {
-    title: "Multiple leagues",
-    body: "Keep every football league in one Flaim account.",
-  },
-] as const;
-
-const FOOTBALL_FAQS = [
-  {
-    question: "Can AI grade the fantasy football team I actually drafted?",
-    answer:
-      "Yes. Once your league is connected through Flaim, your AI can inspect your real roster, scoring rules, and the rest of your league before giving you a grade, explaining your strengths, or identifying weaknesses.",
-  },
-  {
-    question: "Do I have to upload a screenshot of my roster?",
-    answer:
-      "No. Flaim supplies your connected roster and league data directly when your AI asks for it.",
-  },
-  {
-    question: "Which fantasy football platforms work with Flaim?",
-    answer:
-      "Flaim supports fantasy football leagues on ESPN, Yahoo, and Sleeper. Current connection information is available on the fantasy platforms page.",
-  },
-  {
-    question: "Can Flaim set my lineup or make a trade for me?",
-    answer:
-      "No. Flaim is for analysis and advice. It cannot change your lineup, make trades, add or drop players, or modify your league.",
-  },
-  {
-    question: "Can I use Flaim after draft season?",
-    answer:
-      "Yes. Use the same connection throughout the season for waiver, start/sit, trade, matchup, standings, transaction, and league-history questions.",
-  },
-] as const;
-
 interface FantasyFootballPageProps {
   searchParams?: Promise<{
     variant?: string | string[];
@@ -104,24 +61,6 @@ export default async function FantasyFootballPage({
 
   return (
     <div className="min-h-screen bg-background">
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{
-          __html: JSON.stringify({
-            "@context": "https://schema.org",
-            "@type": "FAQPage",
-            mainEntity: FOOTBALL_FAQS.map((faq) => ({
-              "@type": "Question",
-              name: faq.question,
-              acceptedAnswer: {
-                "@type": "Answer",
-                text: faq.answer,
-              },
-            })),
-          }),
-        }}
-      />
-
       {showVariantLab ? (
         <FootballVariantSwitcher activeVariant={activeVariant} />
       ) : null}
@@ -158,38 +97,6 @@ export default async function FantasyFootballPage({
                   {step.body}
                 </p>
               </article>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="border-y bg-muted/50 px-4 py-8 sm:px-6 lg:px-8">
-        <div className="mx-auto grid max-w-5xl gap-3 sm:grid-cols-3">
-          {PRODUCT_BOUNDARIES.map((item) => (
-            <div key={item.title} className="rounded-xl border bg-background p-4">
-              <p className="font-semibold">{item.title}</p>
-              <p className="mt-1 text-sm text-muted-foreground">{item.body}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="px-4 py-12 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-3xl">
-          <h2 className="text-3xl font-bold tracking-tight">
-            Fantasy football FAQs
-          </h2>
-          <div className="mt-7 space-y-3">
-            {FOOTBALL_FAQS.map((faq) => (
-              <details key={faq.question} className="group rounded-xl border bg-background">
-                <summary className="flex cursor-pointer items-center justify-between gap-4 p-4 font-medium">
-                  {faq.question}
-                  <ChevronDown className="h-5 w-5 shrink-0 transition-transform group-open:rotate-180" />
-                </summary>
-                <p className="px-4 pb-4 text-sm leading-6 text-muted-foreground">
-                  {faq.answer}
-                </p>
-              </details>
             ))}
           </div>
         </div>

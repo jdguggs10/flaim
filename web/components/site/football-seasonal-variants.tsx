@@ -100,7 +100,7 @@ export function FootballVariantSwitcher({
 }
 
 export function FootballConnectionButtons({
-  primaryLabel = "Connect Your League First",
+  primaryLabel = "First Connect Your Leagues",
 }: {
   primaryLabel?: string;
 }) {
@@ -111,7 +111,7 @@ export function FootballConnectionButtons({
       </Button>
       <Button asChild size="lg" variant="outline" className="w-full">
         <a href={CHATGPT_APP_URL} target="_blank" rel="noopener noreferrer">
-          Add to ChatGPT
+          Add ChatGPT Plugin
         </a>
       </Button>
       <Button asChild size="lg" variant="outline" className="w-full">
@@ -120,7 +120,7 @@ export function FootballConnectionButtons({
           target="_blank"
           rel="noopener noreferrer"
         >
-          Add to Claude
+          Add Claude Plugin
         </a>
       </Button>
     </div>
@@ -271,15 +271,16 @@ function SeasonChaptersVariant() {
         <div className="mx-auto grid max-w-6xl gap-10 lg:grid-cols-[0.95fr_1.05fr] lg:items-center">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">
-              Your league, all season long
+              Your leagues, all season long
             </p>
             <h1 className="mt-4 text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl">
-              Your fantasy football season, inside the AI you already use
+              Add your team to the AI you already use
             </h1>
             <p className="mt-5 max-w-2xl text-lg leading-8 text-muted-foreground">
-              Connect ESPN, Yahoo, or Sleeper once. Then ask ChatGPT or Claude
-              about the team you drafted, weekly matchups, available players,
-              standings, trades, and league history.
+              Connect ESPN, Yahoo, or Sleeper to Flaim once. Then, connect Flaim
+              to ChatGPT or Claude and you&apos;re done. Ask about the team you
+              drafted, weekly matchups, available players, standings, trades,
+              and league history.
             </p>
             <div className="mt-7">
               <FootballConnectionButtons />
@@ -292,16 +293,9 @@ function SeasonChaptersVariant() {
       <section className="border-b px-4 py-14 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-6xl">
           <div className="mx-auto max-w-3xl text-center">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">
-              Four moments, one connected league
-            </p>
-            <h2 className="mt-3 text-3xl font-bold tracking-tight">
+            <h2 className="text-3xl font-bold tracking-tight">
               Ask the next question without starting over
             </h2>
-            <p className="mt-3 leading-7 text-muted-foreground">
-              The alternating layout leaves room for real examples and the
-              plain-language football details people search for.
-            </p>
           </div>
 
           <div className="mt-12 space-y-14 lg:space-y-20">
