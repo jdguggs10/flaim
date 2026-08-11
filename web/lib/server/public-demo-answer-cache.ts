@@ -321,11 +321,10 @@ export async function getLatestPublicDemoRefreshFailure(input: {
   const url = new URL(`${supabaseUrl}/rest/v1/demo_refresh_runs`);
   url.searchParams.set("preset_id", `eq.${input.presetId}`);
   url.searchParams.set("sport", `eq.${input.sport}`);
-  if (input.platform !== undefined) {
-    // Platform-aware targets filter run history by platform; the legacy
-    // no-platform path keeps the original query unchanged.
-    url.searchParams.set("platform", `eq.${input.platform}`);
-  }
+  // The no-platform compatibility lane is the legacy ESPN demo. Scope its
+  // failure history explicitly so future Yahoo or Sleeper runs for the same
+  // preset and sport cannot be surfaced as an ESPN failure.
+  url.searchParams.set("platform", `eq.${input.platform ?? "espn"}`);
   url.searchParams.set(
     "select",
     [

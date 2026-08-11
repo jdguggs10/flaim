@@ -190,7 +190,7 @@ describe("getLatestPublicDemoRefreshFailure", () => {
     expect(url.searchParams.get("platform")).toBe("eq.sleeper");
   });
 
-  it("keeps the legacy query unchanged when no platform is provided", async () => {
+  it("scopes the legacy no-platform failure query to ESPN", async () => {
     const fetchMock = vi.fn(async () => jsonResponse([]));
     vi.stubGlobal("fetch", fetchMock);
 
@@ -201,6 +201,6 @@ describe("getLatestPublicDemoRefreshFailure", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const url = requestedUrl(fetchMock, 0);
-    expect(url.searchParams.has("platform")).toBe(false);
+    expect(url.searchParams.get("platform")).toBe("eq.espn");
   });
 });
