@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { GET } from "../../../app/api/public-chat/capabilities/route";
+import { resetPublicDemoCapabilitiesMemo } from "../public-demo-capabilities";
 import {
   PUBLIC_CHAT_TARGET_PRESET_IDS,
   PUBLIC_DEMO_TARGET_CONTEXT_VERSION,
@@ -103,6 +104,7 @@ function readyCacheRows(
 beforeEach(() => {
   vi.stubEnv("SUPABASE_URL", "https://supabase.example");
   vi.stubEnv("SUPABASE_SERVICE_KEY", "test-service-key");
+  resetPublicDemoCapabilitiesMemo();
 });
 
 afterEach(() => {
@@ -497,5 +499,34 @@ describe("GET /api/public-chat/capabilities", () => {
       sport: "baseball",
       freshness: "stale",
     });
+  });
+
+  it("memoizes evaluations for 60 seconds across requests", async () => {
+    const fetchMock = stubPostgrest({
+      targetState: [enabledTargetState("espn", "baseball")],
+      answerCache: readyCacheRows("espn", "baseball"),
+    });
+
+    await GET();
+    await GET();
+    // One gate-table read plus one cache read total: the second request
+    // must be served from the in-process memo.
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    const realNow = Date.now();
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(realNow + 61_000);
+    await GET();
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    nowSpy.mockRestore();
+  });
+
+  it("memoizes the dormant empty-gate-table result", async () => {
+    const fetchMock = stubPostgrest({ targetState: [], answerCache: [] });
+
+    await GET();
+    await GET();
+    // A single gate-table read; the dormant empty result is memoized so
+    // repeated probes of the unauthenticated routes stay cheap.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
