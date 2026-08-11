@@ -29,8 +29,8 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 function stubPostgrest(handlers: {
-  targetState?: unknown;
-  answerCache?: unknown;
+  targetState?: unknown[];
+  answerCache?: Record<string, unknown>[];
 }) {
   const fetchMock = vi.fn(async (input: unknown) => {
     const url = new URL(String(input));
@@ -38,7 +38,18 @@ function stubPostgrest(handlers: {
       return jsonResponse(handlers.targetState ?? []);
     }
     if (url.pathname === "/rest/v1/demo_answer_cache") {
-      return jsonResponse(handlers.answerCache ?? []);
+      // Honor the version filters like PostgREST would, so a route mutation
+      // that drops its query filters cannot silently pass these tests.
+      const promptFilter = url.searchParams.get("prompt_version");
+      const contextFilter = url.searchParams.get("context_version");
+      const rows = (handlers.answerCache ?? []).filter(
+        (row) =>
+          (promptFilter === null ||
+            `eq.${row.prompt_version}` === promptFilter) &&
+          (contextFilter === null ||
+            `eq.${row.context_version}` === contextFilter),
+      );
+      return jsonResponse(rows);
     }
     throw new Error(`Unexpected fetch: ${url.toString()}`);
   });
@@ -81,6 +92,10 @@ function readyCacheRows(
     status: "ready",
     stale_after: FUTURE_TIMESTAMP,
     expires_at: FUTURE_TIMESTAMP,
+    // Version columns exist on the stored rows and are matched by the
+    // filter-honoring PostgREST stub, mirroring the real query.
+    prompt_version: PUBLIC_DEMO_TARGET_PROMPT_VERSION,
+    context_version: PUBLIC_DEMO_TARGET_CONTEXT_VERSION,
     ...(overridesByPreset[presetId] ?? {}),
   }));
 }
@@ -108,7 +123,7 @@ describe("GET /api/public-chat/capabilities", () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get("Cache-Control")).toBe(
-      "public, s-maxage=60, stale-while-revalidate=300",
+      "public, s-maxage=60, stale-while-revalidate=60",
     );
     expect(body).toEqual({
       targets: [
@@ -199,6 +214,80 @@ describe("GET /api/public-chat/capabilities", () => {
     expect(response.status).toBe(200);
     expect(body.targets).toHaveLength(1);
     expect(body.targets[0].freshness).toBe("degraded");
+  });
+
+  it("reports degraded when a target is simultaneously degraded and stale", async () => {
+    stubPostgrest({
+      targetState: [enabledTargetState("espn", "baseball")],
+      answerCache: readyCacheRows("espn", "baseball", {
+        "hot-hands": { status: "degraded" },
+        "wire-watch": { stale_after: PAST_TIMESTAMP },
+      }),
+    });
+
+    const response = await GET();
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.targets).toHaveLength(1);
+    expect(body.targets[0].freshness).toBe("degraded");
+  });
+
+  it("does not count a row whose platform column disagrees with the target", async () => {
+    const rows = readyCacheRows("espn", "baseball", {
+      "wire-watch": { platform: "yahoo" },
+    });
+    stubPostgrest({
+      targetState: [enabledTargetState("espn", "baseball")],
+      answerCache: rows,
+    });
+
+    const response = await GET();
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toEqual({ targets: [] });
+  });
+
+  it("does not count a row with a lookalike cache_key", async () => {
+    const rows = readyCacheRows("espn", "baseball", {
+      "wire-watch": {
+        cache_key: [
+          "public-demo-answer",
+          "wire-watch",
+          "espn",
+          "baseball",
+          PUBLIC_DEMO_TARGET_PROMPT_VERSION,
+          `${PUBLIC_DEMO_TARGET_CONTEXT_VERSION}-extra`,
+        ].join(":"),
+      },
+    });
+    stubPostgrest({
+      targetState: [enabledTargetState("espn", "baseball")],
+      answerCache: rows,
+    });
+
+    const response = await GET();
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toEqual({ targets: [] });
+  });
+
+  it("does not count a wrong-version row, which the version filters exclude", async () => {
+    const rows = readyCacheRows("espn", "baseball", {
+      "wire-watch": { prompt_version: "v7", context_version: "v2" },
+    });
+    stubPostgrest({
+      targetState: [enabledTargetState("espn", "baseball")],
+      answerCache: rows,
+    });
+
+    const response = await GET();
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toEqual({ targets: [] });
   });
 
   it("returns empty targets when demo_target_state is empty", async () => {
@@ -295,7 +384,7 @@ describe("GET /api/public-chat/capabilities", () => {
   it("never leaks database row contents beyond the allowlisted DTO", async () => {
     const CANARY_LEAGUE_ID = "canary-league-1234567890";
     const CANARY_TOKEN = "sk-canary-token-XYZZY";
-    const CANARY_PATH = "/home/canary/PiCode/private-run.log";
+    const CANARY_PATH = "/srv/private/run.log";
     const canaries = [CANARY_LEAGUE_ID, CANARY_TOKEN, CANARY_PATH];
 
     // Valid selectable rows that also carry canary values in extra columns
@@ -311,8 +400,9 @@ describe("GET /api/public-chat/capabilities", () => {
       tool_trace_summary: { token: CANARY_TOKEN },
     }));
 
-    // A junk row carrying canaries in every projected column; it matches no
-    // matrix target and must be ignored entirely.
+    // A junk row carrying canaries in every projected column; its version
+    // columns pass the query filters so it reaches the route, which must
+    // ignore it entirely.
     const junkRow = {
       cache_key: `public-demo-answer:${CANARY_LEAGUE_ID}:espn:baseball:v8:v3`,
       preset_id: CANARY_LEAGUE_ID,
@@ -321,6 +411,8 @@ describe("GET /api/public-chat/capabilities", () => {
       status: CANARY_LEAGUE_ID,
       stale_after: CANARY_TOKEN,
       expires_at: CANARY_PATH,
+      prompt_version: PUBLIC_DEMO_TARGET_PROMPT_VERSION,
+      context_version: PUBLIC_DEMO_TARGET_CONTEXT_VERSION,
     };
 
     stubPostgrest({

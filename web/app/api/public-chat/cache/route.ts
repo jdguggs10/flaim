@@ -9,6 +9,7 @@ import {
   getCachedPublicDemoAnswer,
   getLatestPublicDemoRefreshFailure,
 } from "@/lib/server/public-demo-answer-cache";
+import { evaluatePublicDemoCapabilities } from "@/lib/server/public-demo-capabilities";
 import {
   sanitizePublicDemoRefreshFailure,
   sanitizePublicDemoToolTraceSummary,
@@ -51,12 +52,25 @@ export async function GET(request: NextRequest) {
   const platformParam = request.nextUrl.searchParams.get("platform");
   let platform: PublicChatDemoPlatform | undefined;
   if (platformParam !== null) {
-    if (
-      !isPublicChatDemoPlatform(platformParam) ||
-      !getPublicChatTarget(platformParam, sport)
-    ) {
+    if (!isPublicChatDemoPlatform(platformParam)) {
       return NextResponse.json(
         { error: "Unsupported platform for the public demo" },
+        { status: 400, headers: { "Cache-Control": "no-store" } },
+      );
+    }
+    const target = getPublicChatTarget(platformParam, sport);
+    if (!target) {
+      // Same generic body as the unknown-platform rejection above.
+      return NextResponse.json(
+        { error: "Unsupported platform for the public demo" },
+        { status: 400, headers: { "Cache-Control": "no-store" } },
+      );
+    }
+    // Platform-aware requests serve only the target's eight cross-target
+    // presets; the legacy no-platform surface keeps its full preset list.
+    if (!(target.presetIds as readonly string[]).includes(preset.id)) {
+      return NextResponse.json(
+        { error: "Unknown public chat preset" },
         { status: 400, headers: { "Cache-Control": "no-store" } },
       );
     }
@@ -64,6 +78,26 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    if (platform !== undefined) {
+      // Live gate: platform-bearing reads are only served for targets the
+      // capabilities endpoint would advertise. Disabled, version-mismatched,
+      // and partially warmed targets get the exact same generic rejection as
+      // unknown combos (and env-unset yields an empty selectable set), so a
+      // prober cannot distinguish rollout state from nonexistence. The legacy
+      // no-platform path never runs this evaluation.
+      const selectableTargets = await evaluatePublicDemoCapabilities();
+      const isSelectable = selectableTargets.some(
+        (candidate) =>
+          candidate.platform === platform && candidate.sport === sport,
+      );
+      if (!isSelectable) {
+        return NextResponse.json(
+          { error: "Unsupported platform for the public demo" },
+          { status: 400, headers: { "Cache-Control": "no-store" } },
+        );
+      }
+    }
+
     const cachedAnswer = await getCachedPublicDemoAnswer({
       presetId: preset.id,
       sport,
