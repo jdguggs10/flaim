@@ -170,6 +170,15 @@ const SEASON_MOMENTS = [
   },
 ] as const;
 
+const EXPLANATION_TO_SKIP = [
+  "No roster screenshots",
+  "No copy and paste",
+  "No retyping your whole team",
+  "No AI guessing your league rules",
+  "No forgetting who is on your roster",
+  "No answers for the wrong week",
+] as const;
+
 type SeasonMoment = (typeof SEASON_MOMENTS)[number];
 
 function IngredientPills({ ingredients }: { ingredients: readonly string[] }) {
@@ -264,6 +273,34 @@ function ConnectedLeaguesProof() {
   );
 }
 
+function LessExplainingSection() {
+  return (
+    <section className="border-b bg-foreground px-4 py-14 text-background sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-6xl">
+        <div className="max-w-3xl">
+          <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
+            Less explaining. More fantasy football.
+          </h2>
+          <p className="mt-4 text-lg leading-8 text-background/70">
+            Connect once and let Flaim bring the league details that generic AI
+            would otherwise miss.
+          </p>
+        </div>
+        <ul className="mt-9 grid gap-px overflow-hidden rounded-[2rem] border border-background/15 bg-background/15 sm:grid-cols-2 lg:grid-cols-3">
+          {EXPLANATION_TO_SKIP.map((item) => (
+            <li
+              key={item}
+              className="bg-foreground px-6 py-7 text-lg font-semibold tracking-tight"
+            >
+              {item}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </section>
+  );
+}
+
 function SeasonChaptersVariant() {
   return (
     <>
@@ -274,13 +311,15 @@ function SeasonChaptersVariant() {
               Your leagues, all season long
             </p>
             <h1 className="mt-4 text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl">
-              Add your team to the AI you already use
+              Add your team to your AI
             </h1>
             <p className="mt-5 max-w-2xl text-lg leading-8 text-muted-foreground">
               Connect ESPN, Yahoo, or Sleeper to Flaim once. Then, connect Flaim
-              to ChatGPT or Claude and you&apos;re done. Ask about the team you
-              drafted, weekly matchups, available players, standings, trades,
-              and league history.
+              to ChatGPT or Claude and you&apos;re done.
+            </p>
+            <p className="mt-4 max-w-2xl leading-7 text-muted-foreground">
+              Ask about the team you drafted, weekly matchups, available
+              players, standings, trades, and league history.
             </p>
             <div className="mt-7">
               <FootballConnectionButtons />
@@ -294,7 +333,7 @@ function SeasonChaptersVariant() {
         <div className="mx-auto max-w-6xl">
           <div className="mx-auto max-w-3xl text-center">
             <h2 className="text-3xl font-bold tracking-tight">
-              Ask the next question without starting over
+              It&apos;s so much nicer this way...
             </h2>
           </div>
 
@@ -327,6 +366,8 @@ function SeasonChaptersVariant() {
           </div>
         </div>
       </section>
+
+      <LessExplainingSection />
     </>
   );
 }
