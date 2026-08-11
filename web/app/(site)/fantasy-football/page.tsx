@@ -2,12 +2,13 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight, ChevronDown } from "lucide-react";
 
-import { FootballMediaShowcase } from "@/components/site/football-media-showcase";
-import { Button } from "@/components/ui/button";
 import {
-  CHATGPT_APP_URL,
-  CLAUDE_CONNECTOR_DIRECTORY_URL,
-} from "@/lib/product-links";
+  DEFAULT_FOOTBALL_VARIANT,
+  FootballConnectionButtons,
+  FootballSeasonalVariant,
+  FootballVariantSwitcher,
+  isFootballVariant,
+} from "@/components/site/football-seasonal-variants";
 
 export const metadata: Metadata = {
   title: "Fantasy Football in AI: Analyze Your Real Team",
@@ -23,21 +24,6 @@ export const metadata: Metadata = {
     url: "https://flaim.app/fantasy-football",
   },
 };
-
-const FOOTBALL_PROOF = [
-  {
-    title: "Grade the team you drafted",
-    body: "Use your real roster, scoring rules, league size, and positional depth instead of a generic player list.",
-  },
-  {
-    title: "Work your actual waiver wire",
-    body: "Compare what your roster needs with players who are really available in your league.",
-  },
-  {
-    title: "Follow the season",
-    body: "Bring matchups, standings, transactions, and league history into the same conversation.",
-  },
-] as const;
 
 const CONNECTION_STEPS = [
   {
@@ -97,31 +83,25 @@ const FOOTBALL_FAQS = [
   },
 ] as const;
 
-function FootballConnectionButtons() {
-  return (
-    <div className="grid w-full max-w-lg grid-cols-2 gap-3">
-      <Button asChild size="lg" className="col-span-2 w-full">
-        <Link href="/leagues">Connect Your League First</Link>
-      </Button>
-      <Button asChild size="lg" variant="outline" className="w-full">
-        <a href={CHATGPT_APP_URL} target="_blank" rel="noopener noreferrer">
-          Add to ChatGPT
-        </a>
-      </Button>
-      <Button asChild size="lg" variant="outline" className="w-full">
-        <a
-          href={CLAUDE_CONNECTOR_DIRECTORY_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Add to Claude
-        </a>
-      </Button>
-    </div>
-  );
+interface FantasyFootballPageProps {
+  searchParams?: Promise<{
+    variant?: string | string[];
+  }>;
 }
 
-export default function FantasyFootballPage() {
+export default async function FantasyFootballPage({
+  searchParams,
+}: FantasyFootballPageProps) {
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
+  const requestedVariant = Array.isArray(resolvedSearchParams?.variant)
+    ? resolvedSearchParams.variant[0]
+    : resolvedSearchParams?.variant;
+  const showVariantLab = process.env.VERCEL_ENV !== "production";
+  const activeVariant =
+    showVariantLab && requestedVariant && isFootballVariant(requestedVariant)
+      ? requestedVariant
+      : DEFAULT_FOOTBALL_VARIANT;
+
   return (
     <div className="min-h-screen bg-background">
       <script
@@ -142,49 +122,11 @@ export default function FantasyFootballPage() {
         }}
       />
 
-      <section className="border-b px-4 py-12 sm:px-6 md:py-16 lg:px-8">
-        <div className="mx-auto grid max-w-6xl gap-10 lg:grid-cols-[0.82fr_1.18fr] lg:items-center">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">
-              Your real fantasy football league
-            </p>
-            <h1 className="mt-4 text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl">
-              Grade your real fantasy football team with AI
-            </h1>
-            <p className="mt-5 max-w-2xl text-lg leading-8 text-muted-foreground">
-              Connect ESPN, Yahoo, or Sleeper, then ask ChatGPT or Claude about
-              the roster you actually drafted. Flaim includes your scoring
-              rules, matchup, standings, and the rest of your league.
-            </p>
-            <p className="mt-4 leading-7 text-muted-foreground">
-              No roster screenshots. No typing every player into a generic team
-              grader. Flaim brings your roster and league info with it.
-            </p>
-            <div className="mt-7">
-              <FootballConnectionButtons />
-            </div>
-          </div>
+      {showVariantLab ? (
+        <FootballVariantSwitcher activeVariant={activeVariant} />
+      ) : null}
 
-          <div id="showcase" className="scroll-mt-24">
-            <FootballMediaShowcase />
-          </div>
-        </div>
-      </section>
-
-      <section className="border-b bg-muted/50 px-4 py-12 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-5xl">
-          <div className="grid gap-4 md:grid-cols-3">
-            {FOOTBALL_PROOF.map((item) => (
-              <article key={item.title} className="rounded-2xl border bg-background p-5">
-                <h2 className="text-lg font-semibold">{item.title}</h2>
-                <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                  {item.body}
-                </p>
-              </article>
-            ))}
-          </div>
-        </div>
-      </section>
+      <FootballSeasonalVariant variant={activeVariant} />
 
       <section className="px-4 py-12 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-5xl">
