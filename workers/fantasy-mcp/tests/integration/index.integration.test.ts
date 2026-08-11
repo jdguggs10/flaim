@@ -9,6 +9,7 @@ import {
   LEGACY_USER_SESSION_WIDGET_URI,
   USER_SESSION_WIDGET_HTML,
   USER_SESSION_WIDGET_URI,
+  V2_USER_SESSION_WIDGET_URI,
 } from '../../src/widgets/user-session-widget';
 import { INTERNAL_SERVICE_TOKEN_HEADER, getDefaultSeasonYear } from '@flaim/worker-shared';
 
@@ -401,7 +402,12 @@ describe('fantasy-mcp gateway integration', () => {
     expect(userSessionTool).toBeDefined();
     expect(userSessionTool?._meta?.ui).toEqual({ resourceUri: USER_SESSION_WIDGET_URI });
     expect(userSessionTool?._meta?.['openai/outputTemplate']).toBe(USER_SESSION_WIDGET_URI);
+    // The descriptor targets the v3 cache key: published clients cached on the
+    // v1/v2 URIs must never be repointed at mutated bytes, and the current
+    // descriptor must carry the attributed body. Literal pin on purpose.
+    expect(userSessionTool?._meta?.ui?.resourceUri).toBe('ui://widget/user-session-v3.html');
     expect(userSessionTool?._meta?.ui?.resourceUri).not.toBe(LEGACY_USER_SESSION_WIDGET_URI);
+    expect(userSessionTool?._meta?.ui?.resourceUri).not.toBe(V2_USER_SESSION_WIDGET_URI);
     expect(userSessionTool?._meta?.['openai/widgetAccessible']).toBe(true);
     expect(userSessionTool?._meta?.['openai/resultCanProduceWidget']).toBe(true);
     expect(userSessionTool?._meta?.['openai/widgetDomain']).toBeUndefined();
@@ -512,14 +518,46 @@ describe('fantasy-mcp gateway integration', () => {
     );
     expect(listResponse.status).toBe(200);
     const listPayload = await parseJsonRpcResponse(listResponse);
-    const expectedUris = [LEGACY_USER_SESSION_WIDGET_URI, USER_SESSION_WIDGET_URI];
+    // Pin the URI literals, not just the imported symbols: a rename or
+    // repoint of the exported constants must fail here, because published
+    // ChatGPT clients cache by these exact strings.
+    const expectedWidgets = [
+      {
+        uri: LEGACY_USER_SESSION_WIDGET_URI,
+        uriLiteral: 'ui://widget/user-session.html',
+        body: LEGACY_USER_SESSION_WIDGET_HTML,
+        hasDescription: false,
+        redirectDomains: ['https://flaim.app'],
+        hasAttribution: false,
+        frozen: true,
+      },
+      {
+        uri: V2_USER_SESSION_WIDGET_URI,
+        uriLiteral: 'ui://widget/user-session-v2.html',
+        body: LEGACY_USER_SESSION_WIDGET_HTML,
+        hasDescription: true,
+        redirectDomains: ['https://flaim.app'],
+        hasAttribution: false,
+        frozen: true,
+      },
+      {
+        uri: USER_SESSION_WIDGET_URI,
+        uriLiteral: 'ui://widget/user-session-v3.html',
+        body: USER_SESSION_WIDGET_HTML,
+        hasDescription: true,
+        redirectDomains: ['https://flaim.app', 'https://sports.yahoo.com'],
+        hasAttribution: true,
+        frozen: false,
+      },
+    ] as const;
     expect(new Set(listPayload.result?.resources?.map((item) => item.uri))).toEqual(
-      new Set(expectedUris)
+      new Set(expectedWidgets.map((w) => w.uri))
     );
 
     const widgetBodies: string[] = [];
-    for (const [index, uri] of expectedUris.entries()) {
-      const isLegacy = uri === LEGACY_USER_SESSION_WIDGET_URI;
+    for (const [index, widget] of expectedWidgets.entries()) {
+      const { uri } = widget;
+      expect(uri).toBe(widget.uriLiteral);
       const resource = listPayload.result?.resources?.find((item) => item.uri === uri);
       expect(resource).toBeDefined();
       expect(resource?.mimeType).toBe('text/html;profile=mcp-app');
@@ -539,13 +577,11 @@ describe('fantasy-mcp gateway integration', () => {
       const content = readPayload.result?.contents?.find((item) => item.uri === uri);
       expect(content?.mimeType).toBe('text/html;profile=mcp-app');
       expect(content?.text).toContain('<title>Flaim</title>');
-      expect(content?.text).toBe(
-        isLegacy ? LEGACY_USER_SESSION_WIDGET_HTML : USER_SESSION_WIDGET_HTML
-      );
+      expect(content?.text).toBe(widget.body);
       widgetBodies.push(content?.text || '');
       expect(content?._meta?.ui?.csp?.connectDomains).toEqual([]);
       expect(content?._meta?.ui?.csp?.resourceDomains).toEqual([]);
-      // No stable widget domain on either URI: the widget is fully
+      // No stable widget domain on any URI: the widget is fully
       // self-contained (empty connect/resource CSP), so a dedicated domain adds
       // no capability. Deliberate decision — revisit only if a portal scan
       // explicitly requires _meta.ui.domain.
@@ -554,14 +590,13 @@ describe('fantasy-mcp gateway integration', () => {
       expect(content?._meta?.['openai/widgetCSP']).toEqual({
         connect_domains: [],
         resource_domains: [],
-        redirect_domains: isLegacy
-          ? ['https://flaim.app']
-          : ['https://flaim.app', 'https://sports.yahoo.com'],
+        redirect_domains: widget.redirectDomains,
       });
-      if (isLegacy) {
-        // Frozen published-v1 contract: the legacy read-result _meta must stay
-        // byte-identical to the snapshot OpenAI scanned — strict-equal on the
-        // whole object so no key can be added or removed unnoticed.
+      if (widget.frozen) {
+        // Frozen published contracts (v1: original submission; v2: v2.1
+        // submission): the read-result _meta must stay byte-identical to the
+        // snapshots OpenAI scanned — strict-equal on the whole object so no
+        // key can be added or removed unnoticed.
         expect(content?._meta).toEqual({
           ui: {
             csp: {
@@ -569,37 +604,45 @@ describe('fantasy-mcp gateway integration', () => {
               resourceDomains: [],
             },
           },
+          ...(widget.hasDescription && {
+            'openai/widgetDescription':
+              'Summary card of your connected fantasy leagues, showing league names, sports, and your default league.',
+          }),
           'openai/widgetCSP': {
             connect_domains: [],
             resource_domains: [],
             redirect_domains: ['https://flaim.app'],
           },
         });
-        expect(content?._meta?.['openai/widgetDescription']).toBeUndefined();
-        // The frozen v1 body stays attribution-free by design.
+        // The frozen v1/v2 bodies stay attribution-free by design: published
+        // clients cached on these URIs keep rendering their scanned bytes.
         expect(content?.text).not.toContain('Fantasy data provided by');
       } else {
-        // FLA-177: plain-language widget summary on the v2 URI only.
         expect(content?._meta?.['openai/widgetDescription']).toBe(
           'Summary card of your connected fantasy leagues, showing league names, sports, and your default league.'
         );
-        // Provider attribution footer ships on the v2 body only.
+        // Provider attribution footer ships on the v3 body only.
         expect(content?.text).toContain(
           'Fantasy data provided by <a href="https://sports.yahoo.com/fantasy/" target="_blank" rel="noopener">Yahoo Fantasy</a>, ESPN, and Sleeper.'
         );
       }
     }
-    expect(widgetBodies).toHaveLength(2);
-    // The bodies intentionally diverge: v2 is the frozen v1 body plus the
-    // provider attribution footer.
-    expect(widgetBodies[1]).not.toBe(widgetBodies[0]);
+    expect(widgetBodies).toHaveLength(3);
+    // v1 and v2 share the frozen body; v3 is that body plus the provider
+    // attribution footer.
+    expect(widgetBodies[1]).toBe(widgetBodies[0]);
+    expect(widgetBodies[2]).not.toBe(widgetBodies[0]);
     expect(authFetch).not.toHaveBeenCalled();
   });
 
-  it('serves only the two static widget resources without authorization', async () => {
+  it('serves only the three static widget resources without authorization', async () => {
     const authFetch = vi.fn();
     const env = buildEnv(authFetch);
-    const expectedUris = [LEGACY_USER_SESSION_WIDGET_URI, USER_SESSION_WIDGET_URI];
+    const expectedUris = [
+      LEGACY_USER_SESSION_WIDGET_URI,
+      V2_USER_SESSION_WIDGET_URI,
+      USER_SESSION_WIDGET_URI,
+    ];
 
     const listResponse = await app.fetch(
       buildUnauthenticatedMcpJsonRpcRequest('/mcp', 'resources/list'),
@@ -629,15 +672,42 @@ describe('fantasy-mcp gateway integration', () => {
       const content = readPayload.result?.contents?.find((item) => item.uri === uri);
       expect(content?.mimeType).toBe('text/html;profile=mcp-app');
       expect(content?.text).toBe(
-        uri === LEGACY_USER_SESSION_WIDGET_URI
-          ? LEGACY_USER_SESSION_WIDGET_HTML
-          : USER_SESSION_WIDGET_HTML
+        uri === USER_SESSION_WIDGET_URI
+          ? USER_SESSION_WIDGET_HTML
+          : LEGACY_USER_SESSION_WIDGET_HTML
       );
       widgetBodies.push(content?.text || '');
     }
-    expect(widgetBodies).toHaveLength(2);
-    // v1 stays frozen; v2 adds the provider attribution footer.
-    expect(widgetBodies[1]).not.toBe(widgetBodies[0]);
+    expect(widgetBodies).toHaveLength(3);
+    // v1/v2 stay frozen; v3 adds the provider attribution footer.
+    expect(widgetBodies[1]).toBe(widgetBodies[0]);
+    expect(widgetBodies[2]).not.toBe(widgetBodies[0]);
+    expect(authFetch).not.toHaveBeenCalled();
+  });
+
+  it('HTTP fallback widget routes serve the current attributed body', async () => {
+    // These version-less routes are a fallback for HTTP-fetching clients and
+    // deliberately track the CURRENT widget: live fetches must carry the
+    // provider attribution the Yahoo agreement requires on rendering
+    // surfaces. Only the immutable ui://widget/... resource URIs serve the
+    // frozen v1/v2 contracts. Pinned so a future body change is deliberate.
+    const authFetch = vi.fn();
+    const env = buildEnv(authFetch);
+
+    for (const path of ['/widgets/user-session', '/fantasy/widgets/user-session']) {
+      const response = await app.fetch(
+        new Request(`https://api.flaim.app${path}`),
+        env,
+        mockExecutionContext()
+      );
+      expect(response.status).toBe(200);
+      expect(response.headers.get('Content-Type')).toContain('text/html');
+      const body = await response.text();
+      expect(body).toBe(USER_SESSION_WIDGET_HTML);
+      expect(body).toContain(
+        'Fantasy data provided by <a href="https://sports.yahoo.com/fantasy/" target="_blank" rel="noopener">Yahoo Fantasy</a>, ESPN, and Sleeper.'
+      );
+    }
     expect(authFetch).not.toHaveBeenCalled();
   });
 

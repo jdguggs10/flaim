@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi, type MockedFunction } from 'vitest';
 import type { z } from 'zod';
 import { getUnifiedTools, hasRequiredScope, mcpAuthError, mcpInsufficientScopeError } from '../mcp/tools';
@@ -10,6 +11,7 @@ import {
   LEGACY_USER_SESSION_WIDGET_URI,
   USER_SESSION_WIDGET_HTML,
   USER_SESSION_WIDGET_URI,
+  V2_USER_SESSION_WIDGET_URI,
 } from '../widgets/user-session-widget';
 import { INTERNAL_SERVICE_TOKEN_HEADER, toSnapshotMetadata, type RosterSnapshot } from '@flaim/worker-shared';
 
@@ -172,23 +174,42 @@ describe('fantasy-mcp tools', () => {
 
   it('get_user_session includes widgetUri in tool definition', () => {
     const tool = getUnifiedTools().find((t) => t.name === 'get_user_session');
+    // Published URIs are immutable ChatGPT cache keys: v1 and v2 are pinned
+    // to their scanned bytes forever, so the attributed body ships under a
+    // new v3 key and the descriptor points there.
     expect(LEGACY_USER_SESSION_WIDGET_URI).toBe('ui://widget/user-session.html');
-    expect(USER_SESSION_WIDGET_URI).toBe('ui://widget/user-session-v2.html');
+    expect(V2_USER_SESSION_WIDGET_URI).toBe('ui://widget/user-session-v2.html');
+    expect(USER_SESSION_WIDGET_URI).toBe('ui://widget/user-session-v3.html');
     expect(tool?.widgetUri).toBe(USER_SESSION_WIDGET_URI);
     expect(tool?.widgetUri).not.toBe(LEGACY_USER_SESSION_WIDGET_URI);
+    expect(tool?.widgetUri).not.toBe(V2_USER_SESSION_WIDGET_URI);
   });
 
-  it('v2 widget carries the provider attribution footer; the legacy body stays frozen', () => {
+  it('pins the frozen v1/v2 widget body to its immutable golden hash', () => {
+    // The self-referential trap: every other byte-identity assertion compares
+    // the runtime output against the same LEGACY_USER_SESSION_WIDGET_HTML
+    // constant, so an accidental edit to the literal would move expected and
+    // actual in lockstep. This golden hash (computed from the body as
+    // published in the OpenAI-scanned v2.1 submission) is the anchor that
+    // cannot move with it. If this test fails, the frozen bytes changed —
+    // revert the literal; do not update the hash.
+    expect(Buffer.byteLength(LEGACY_USER_SESSION_WIDGET_HTML, 'utf8')).toBe(24998);
+    expect(
+      createHash('sha256').update(LEGACY_USER_SESSION_WIDGET_HTML, 'utf8').digest('hex')
+    ).toBe('ca6160c5ccabd329e60885e6bfbe72b35ab48985fb1b6866fa64c0d657e2647b');
+  });
+
+  it('v3 widget carries the provider attribution footer; the legacy body stays frozen', () => {
     // Exact attribution markup is pinned deliberately — the credit line and
-    // its Yahoo Fantasy link are a required product surface on v2.
+    // its Yahoo Fantasy link are a required product surface on v3.
     expect(USER_SESSION_WIDGET_HTML).toContain(
       '<div class="attribution">Fantasy data provided by <a href="https://sports.yahoo.com/fantasy/" target="_blank" rel="noopener">Yahoo Fantasy</a>, ESPN, and Sleeper.</div>'
     );
     expect(USER_SESSION_WIDGET_HTML).toContain('.attribution {');
-    // The frozen v1 body must never pick the footer up.
+    // The frozen v1/v2 body must never pick the footer up.
     expect(LEGACY_USER_SESSION_WIDGET_HTML).not.toContain('Fantasy data provided by');
     expect(LEGACY_USER_SESSION_WIDGET_HTML).not.toContain('class="attribution"');
-    // v2 differs from v1 only by the injected attribution CSS and footer.
+    // v3 differs from the frozen body only by the injected CSS and footer.
     expect(
       USER_SESSION_WIDGET_HTML
         .replace('  .attribution {\n    padding: 8px 16px 10px;\n    border-top: 1px solid rgba(13, 13, 13, 0.05);\n    font-size: 11px;\n    line-height: 14px;\n    text-align: center;\n    color: #9ca3af;\n  }\n  .attribution a {\n    color: inherit;\n    text-decoration: underline;\n  }\n', '')

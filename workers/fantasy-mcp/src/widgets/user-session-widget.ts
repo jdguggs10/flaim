@@ -22,11 +22,17 @@
  * - https://developers.openai.com/apps-sdk/build/mcp-server/
  */
 /**
- * Published v1 clients are pinned to the original resource URI. Keep serving
- * it while current descriptors use a new immutable cache key.
+ * Template URIs are immutable cache keys in ChatGPT: once a client has
+ * rendered a URI, it may serve the cached body forever. Published bodies are
+ * therefore never edited in place — a content change mints a new URI and
+ * repoints the tool descriptor, while every published URI keeps serving its
+ * original bytes. v1 is the original submission's URI, v2 is the published
+ * v2.1 submission's URI (same body as v1), and v3 is the current descriptor
+ * target whose body adds the provider attribution footer.
  */
 export const LEGACY_USER_SESSION_WIDGET_URI = 'ui://widget/user-session.html';
-export const USER_SESSION_WIDGET_URI = 'ui://widget/user-session-v2.html';
+export const V2_USER_SESSION_WIDGET_URI = 'ui://widget/user-session-v2.html';
+export const USER_SESSION_WIDGET_URI = 'ui://widget/user-session-v3.html';
 
 export type RefreshResultKind =
   | 'success'
@@ -835,11 +841,11 @@ export const LEGACY_USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
 </html>`;
 
 /**
- * Provider attribution (v2 only): surfaces that display Yahoo Fantasy data
+ * Provider attribution (v3 only): surfaces that display Yahoo Fantasy data
  * credit "Fantasy data provided by Yahoo Fantasy", linked to an official
  * Yahoo Fantasy page where the surface supports links. ESPN and Sleeper are
- * named voluntarily so the three providers read consistently. The v1 body
- * above is frozen, so the v2 body derives from it by injection.
+ * named voluntarily so the three providers read consistently. The published
+ * v1/v2 body above is frozen, so the v3 body derives from it by injection.
  */
 const PROVIDER_ATTRIBUTION_CSS = `  .attribution {
     padding: 8px 16px 10px;
@@ -874,7 +880,7 @@ function injectOnce(html: string, marker: string, replacement: string): string {
   return html.replace(marker, replacement);
 }
 
-/** Current (v2) widget body: the frozen v1 body plus the attribution footer. */
+/** Current (v3) widget body: the frozen v1/v2 body plus the attribution footer. */
 export const USER_SESSION_WIDGET_HTML = injectOnce(
   injectOnce(LEGACY_USER_SESSION_WIDGET_HTML, '</style>', `${PROVIDER_ATTRIBUTION_CSS}</style>`),
   REFRESH_STATUS_MARKER,
