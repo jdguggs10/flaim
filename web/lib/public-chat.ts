@@ -33,6 +33,95 @@ export interface PublicChatPreset {
 export const PUBLIC_DEMO_PROMPT_VERSION = "v7";
 export const PUBLIC_DEMO_CONTEXT_VERSION = "v2";
 
+export type PublicChatDemoPlatform = "espn" | "yahoo" | "sleeper";
+
+export function isPublicChatDemoPlatform(
+  value: unknown,
+): value is PublicChatDemoPlatform {
+  return value === "espn" || value === "yahoo" || value === "sleeper";
+}
+
+/**
+ * Version tags for the platform-aware ("target") demo cache rows, which use a
+ * six-segment cache key. These are new constants for the multi-platform demo;
+ * the legacy v7/v2 constants above stay untouched for the one-release
+ * espn-baseball fallback window.
+ */
+export const PUBLIC_DEMO_TARGET_PROMPT_VERSION = "v8";
+export const PUBLIC_DEMO_TARGET_CONTEXT_VERSION = "v3";
+
+/** The eight cross-target presets every platform/sport demo target serves. */
+export const PUBLIC_CHAT_TARGET_PRESET_IDS = [
+  "hot-hands",
+  "league-format",
+  "this-matchup",
+  "my-moves",
+  "best-team",
+  "wire-watch",
+  "league-moves",
+  "roster-hole",
+] as const;
+
+export type PublicChatTargetPresetId =
+  (typeof PUBLIC_CHAT_TARGET_PRESET_IDS)[number];
+
+export interface PublicChatTarget {
+  platform: PublicChatDemoPlatform;
+  sport: PublicChatDemoSport;
+  presetIds: readonly PublicChatTargetPresetId[];
+  /** Deterministic sport shown first when this platform is selected. */
+  isDefaultSport: boolean;
+}
+
+/**
+ * Supported platform/sport demo targets, in deterministic order. The first
+ * selectable entry in this order is the overall default target, so
+ * espn-baseball stays the default while it is the only enabled lane.
+ * Default sports per platform: espn baseball (for now), yahoo baseball,
+ * sleeper football.
+ */
+export const PUBLIC_CHAT_TARGET_MATRIX: readonly PublicChatTarget[] = [
+  {
+    platform: "espn",
+    sport: "baseball",
+    presetIds: PUBLIC_CHAT_TARGET_PRESET_IDS,
+    isDefaultSport: true,
+  },
+  {
+    platform: "espn",
+    sport: "football",
+    presetIds: PUBLIC_CHAT_TARGET_PRESET_IDS,
+    isDefaultSport: false,
+  },
+  {
+    platform: "yahoo",
+    sport: "baseball",
+    presetIds: PUBLIC_CHAT_TARGET_PRESET_IDS,
+    isDefaultSport: true,
+  },
+  {
+    platform: "yahoo",
+    sport: "football",
+    presetIds: PUBLIC_CHAT_TARGET_PRESET_IDS,
+    isDefaultSport: false,
+  },
+  {
+    platform: "sleeper",
+    sport: "football",
+    presetIds: PUBLIC_CHAT_TARGET_PRESET_IDS,
+    isDefaultSport: true,
+  },
+] as const;
+
+export function getPublicChatTarget(
+  platform: PublicChatDemoPlatform,
+  sport: PublicChatDemoSport,
+): PublicChatTarget | undefined {
+  return PUBLIC_CHAT_TARGET_MATRIX.find(
+    (target) => target.platform === platform && target.sport === sport,
+  );
+}
+
 export const PUBLIC_CHAT_SIMPLE_PRESETS: readonly PublicChatPreset[] = [
   {
     id: "hot-hands",
