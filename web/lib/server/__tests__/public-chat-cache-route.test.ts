@@ -531,4 +531,81 @@ describe("GET /api/public-chat/cache", () => {
     ]);
     expect(body.answer).toBeNull();
   });
+
+  it("serializes exactly the same allowlisted key sets on a platform-aware hit", async () => {
+    // The platform-aware response must not grow any platform-only property; a
+    // mutation adding one should fail these exact key-set assertions.
+    mocks.evaluatePublicDemoCapabilities.mockResolvedValue([
+      selectableTarget("espn", "baseball"),
+    ]);
+    mocks.getCachedPublicDemoAnswer.mockResolvedValue({
+      cacheKey: "public-demo-answer:wire-watch:espn:baseball:v8:v3",
+      presetId: "wire-watch",
+      sport: "baseball",
+      provider: "provider-a",
+      providerModel: "model-a",
+      contextVersion: "v3",
+      promptVersion: "v8",
+      answerText: "A cached target answer.",
+      generatedAt: "2026-06-06T12:00:00.000Z",
+      expiresAt: "2026-06-06T18:00:00.000Z",
+      staleAfter: "2026-06-06T15:00:00.000Z",
+      updatedAt: "2026-06-06T12:00:00.000Z",
+      status: "ready",
+      isExpired: false,
+      isStale: false,
+      failureSummary: null,
+      sourceMeta: null,
+      toolTraceSummary: null,
+    });
+
+    const response = await GET(
+      publicCacheRequest("presetId=wire-watch&sport=baseball&platform=espn"),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(Object.keys(body).sort()).toEqual([
+      "answer",
+      "hit",
+      "presetId",
+      "sport",
+    ]);
+    expect(Object.keys(body.answer).sort()).toEqual([
+      "expiresAt",
+      "failure",
+      "generatedAt",
+      "isExpired",
+      "isStale",
+      "provider",
+      "providerModel",
+      "staleAfter",
+      "status",
+      "text",
+      "toolTraceSummary",
+    ]);
+  });
+
+  it("serializes exactly the same allowlisted key set on a platform-aware miss", async () => {
+    mocks.evaluatePublicDemoCapabilities.mockResolvedValue([
+      selectableTarget("espn", "baseball"),
+    ]);
+    mocks.getCachedPublicDemoAnswer.mockResolvedValue(null);
+    mocks.getLatestPublicDemoRefreshFailure.mockResolvedValue(null);
+
+    const response = await GET(
+      publicCacheRequest("presetId=wire-watch&sport=baseball&platform=espn"),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(Object.keys(body).sort()).toEqual([
+      "answer",
+      "failure",
+      "hit",
+      "presetId",
+      "sport",
+    ]);
+    expect(body.answer).toBeNull();
+  });
 });
