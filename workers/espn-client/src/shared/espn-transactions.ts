@@ -1407,7 +1407,13 @@ export async function executeEspnTransactionOperation({
   // Primary path: ESPN's structured mTransactions2 view (repaired transport,
   // FLA-140). Any failure — transport, malformed body, budget — falls back to
   // the activity feed so the operation stays contract-correct if the
-  // undocumented primary regresses again.
+  // undocumented primary regresses again. The structured attempt gets at most
+  // half the remaining provider budget: a hanging primary must degrade to a
+  // fallback with usable time, not starve it into an empty response.
+  const structuredDeadline = Math.min(
+    providerDeadline,
+    Date.now() + Math.max(1, Math.floor((providerDeadline - Date.now()) / 2)),
+  );
   let structured: MTransactions2Result | null = null;
   try {
     structured = await fetchEspnMTransactions2(
@@ -1416,7 +1422,7 @@ export async function executeEspnTransactionOperation({
       seasonYear,
       credentials,
       window,
-      providerDeadline,
+      structuredDeadline,
     );
   } catch (error) {
     console.warn(

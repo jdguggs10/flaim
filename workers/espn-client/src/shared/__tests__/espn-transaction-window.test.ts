@@ -749,6 +749,76 @@ describe('ESPN transaction matchup-window contract', () => {
     fetchMock.mockRestore();
   });
 
+  it('falls back with usable budget when the structured source hangs', async () => {
+    // The Codex-audit starvation case: structured requests that hang (rather
+    // than fail fast) must time out against the structured sub-deadline and
+    // leave the activity fallback real budget, not an expired deadline.
+    vi.useFakeTimers();
+    try {
+      const contextBody = JSON.stringify({
+        scoringPeriodId: 3,
+        currentMatchupPeriod: 3,
+        teams: [],
+      });
+      const activityBody = JSON.stringify({
+        topics: [{
+          id: 1,
+          date: Date.parse('2026-09-20T16:00:00Z'),
+          messages: [{
+            id: 10,
+            messageTypeId: 178,
+            to: 1,
+            scoringPeriodId: 3,
+          }],
+        }],
+      });
+      const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+        const url = String(input);
+        if (url.includes('view=mTransactions2')) {
+          // Hang until espnFetch's own AbortController timeout fires.
+          return new Promise<Response>((_resolve, reject) => {
+            init?.signal?.addEventListener('abort', () => {
+              const abortError = new Error('The operation was aborted');
+              abortError.name = 'AbortError';
+              reject(abortError);
+            });
+          });
+        }
+        if (url.includes('kona_league_communication')) {
+          return Promise.resolve(new Response(activityBody, { status: 200 }));
+        }
+        return Promise.resolve(new Response(contextBody, { status: 200 }));
+      });
+
+      const operation = executeEspnTransactionOperation({
+        gameId: 'ffl',
+        leagueId: '123',
+        seasonYear: 2026,
+        sport: 'football',
+        credentials,
+        getPositionName: String,
+        getProTeamAbbrev: String,
+      });
+      // Advance past the structured per-request timeout so the hanging
+      // requests abort; the fallback then resolves on microtasks.
+      await vi.advanceTimersByTimeAsync(8000);
+      const result = await operation;
+
+      expect(result.source).toBe('activity_feed');
+      expect(result.transactions).toHaveLength(1);
+      expect(result.limitations.structured_details_incomplete).toBe(true);
+      // The fallback genuinely issued its request — it was not starved.
+      expect(
+        fetchMock.mock.calls.some(([requestUrl]) =>
+          String(requestUrl).includes('kona_league_communication'),
+        ),
+      ).toBe(true);
+      fetchMock.mockRestore();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('supplements structured trades lacking sides from the activity feed', async () => {
     const tradeTimestamp = Date.parse('2026-09-20T16:00:00Z');
     const fetchMock = vi.spyOn(globalThis, 'fetch')
