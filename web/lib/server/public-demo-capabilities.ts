@@ -152,10 +152,33 @@ function evaluateTarget(
  * freshness. Returns an empty list when Supabase is not configured or the
  * gate table is empty — callers treat that as legacy single-platform mode.
  * PostgREST failures throw; callers decide how to fail.
+ *
+ * Results are memoized in-process for 60 seconds: both public routes consult
+ * this on every request, and the answer route would otherwise pay two
+ * uncached reads per platform-bearing request. Combined with the
+ * capabilities route's edge cache, an emergency-disabled target can remain
+ * visible for at most ~2 minutes. Errors are never memoized.
  */
+const CAPABILITIES_MEMO_TTL_MS = 60_000;
+
+let capabilitiesMemo: {
+  at: number;
+  targets: PublicDemoSelectableTarget[];
+} | null = null;
+
+/** Test hook: clears the in-process memo between test cases. */
+export function resetPublicDemoCapabilitiesMemo(): void {
+  capabilitiesMemo = null;
+}
+
 export async function evaluatePublicDemoCapabilities(): Promise<
   PublicDemoSelectableTarget[]
 > {
+  const now = Date.now();
+  if (capabilitiesMemo && now - capabilitiesMemo.at < CAPABILITIES_MEMO_TTL_MS) {
+    return capabilitiesMemo.targets;
+  }
+
   if (!hasSupabaseConfig()) {
     return [];
   }
@@ -171,7 +194,10 @@ export async function evaluatePublicDemoCapabilities(): Promise<
   });
 
   // An empty gate table means the platform-aware demo is not rolled out yet.
+  // Memoized too: this is the dormant steady state, and the answer route has
+  // no edge cache shielding it from repeated probes.
   if (stateRows.length === 0) {
+    capabilitiesMemo = { at: now, targets: [] };
     return [];
   }
 
@@ -211,5 +237,6 @@ export async function evaluatePublicDemoCapabilities(): Promise<
     });
   }
 
+  capabilitiesMemo = { at: now, targets: selectableTargets };
   return selectableTargets;
 }

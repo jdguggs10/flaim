@@ -17,6 +17,7 @@ vi.mock("@/lib/server/public-demo-capabilities", () => ({
 }));
 
 import { GET } from "../../../app/api/public-chat/cache/route";
+import { PUBLIC_CHAT_TARGET_PRESET_IDS } from "../../public-chat";
 import {
   sanitizePublicDemoRefreshFailure,
   sanitizePublicDemoToolTraceSummary,
@@ -26,16 +27,9 @@ function publicCacheRequest(query = "presetId=wire-watch&sport=baseball") {
   return new NextRequest(`https://flaim.app/api/public-chat/cache?${query}`);
 }
 
-const TARGET_PRESET_IDS = [
-  "hot-hands",
-  "league-format",
-  "this-matchup",
-  "my-moves",
-  "best-team",
-  "wire-watch",
-  "league-moves",
-  "roster-hole",
-] as const;
+// Imported rather than re-literaled so the fixture cannot drift from the
+// canonical eight-target preset list.
+const TARGET_PRESET_IDS = PUBLIC_CHAT_TARGET_PRESET_IDS;
 
 function selectableTarget(
   platform: string,
