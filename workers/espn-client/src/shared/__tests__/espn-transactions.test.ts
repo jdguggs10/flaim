@@ -677,6 +677,13 @@ describe('espn-transactions', () => {
       expect(result.transactions).toHaveLength(120);
     });
 
+    it('throws immediately when the operation budget is already exhausted', async () => {
+      await expect(
+        fetchEspnMTransactions2('ffl', '123', 2025, { s2: 'x', swid: '{y}' }, [7], Date.now() - 1),
+      ).rejects.toThrow('ESPN_TIMEOUT');
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
     it('fails the whole fetch when any scoring period request fails', async () => {
       // All-or-nothing: a partially covered window must not be served as if
       // complete — the caller falls back to the activity feed instead.

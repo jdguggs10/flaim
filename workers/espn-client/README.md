@@ -44,7 +44,7 @@ interface ExecuteRequest {
     week?: number;        // Public matchup period for get_transactions (0 = preseason)
     position?: string;
     count?: number;
-    type?: string;        // Transaction type filter; activity-only ESPN rejects structured-only types
+    type?: string;        // Transaction type filter; the activity-feed fallback rejects structured-only types
   };
 }
 ```
@@ -76,7 +76,7 @@ All four sports (football, baseball, basketball, hockey) support the same 7 tool
 - `get_roster` - Team roster with player stats
 - `get_free_agents` - Available free agents
 - `get_players` - Player lookup with market/global ownership context
-- `get_transactions` - Recent completed activity transactions (adds, drops, waivers, trades)
+- `get_transactions` - Recent league transactions (adds, drops, waivers, trades, failed bids, trade lifecycle) from the structured primary source with an activity-feed fallback
 
 ### ESPN Period Fields
 
