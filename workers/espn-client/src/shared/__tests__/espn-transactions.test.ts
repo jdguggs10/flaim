@@ -618,8 +618,8 @@ describe('espn-transactions', () => {
 
     it('sends only the minimal accepted filter shape — no pagination or sort fields', () => {
       // Regression pin on the FLA-140 root cause: ESPN returns HTTP 400 for
-      // ANY x-fantasy-filter carrying limit/offset on this view (proven by a
-      // credentialed reduction matrix). filterType must be the only key.
+      // ANY x-fantasy-filter carrying limit/offset on this view. filterType
+      // must be the only key.
       return (async () => {
         mockFetch.mockResolvedValueOnce(jsonResponse({ transactions: [] }));
 
@@ -682,6 +682,30 @@ describe('espn-transactions', () => {
         fetchEspnMTransactions2('ffl', '123', 2025, { s2: 'x', swid: '{y}' }, [7], Date.now() - 1),
       ).rejects.toThrow('ESPN_TIMEOUT');
       expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it('times out a body read that stalls after headers arrive', async () => {
+      // espnFetch's abort timer is cleared once response headers arrive, so a
+      // provider stalling mid-body would otherwise hold the structured
+      // attempt past its deadline. The body read must race the budget.
+      vi.useFakeTimers();
+      try {
+        mockFetch.mockResolvedValueOnce(
+          new Response(new ReadableStream({ start() { /* never closes */ } }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        );
+
+        const pending = fetchEspnMTransactions2(
+          'ffl', '123', 2025, { s2: 'x', swid: '{y}' }, [7], Date.now() + 2000,
+        );
+        const outcome = expect(pending).rejects.toThrow('ESPN_TIMEOUT');
+        await vi.advanceTimersByTimeAsync(2100);
+        await outcome;
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('fails the whole fetch when any scoring period request fails', async () => {

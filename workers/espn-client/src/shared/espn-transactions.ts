@@ -431,15 +431,45 @@ const MTRANSACTIONS2_TYPES = [
 
 // ESPN rejects in-filter pagination on mTransactions2: any `limit`/`offset`
 // in the x-fantasy-filter (with or without sort fields) returns HTTP 400 on
-// every request — the cause of the 210/210 production failure rate this view
-// showed before FLA-140. A credentialed reduction matrix proved the minimal
-// filterType-only shape below is the accepted form (matching community ESPN
-// clients). The response for a pinned scoringPeriodId is ESPN's own full
-// result set for that period; the view exposes no way to page it.
+// every request. The minimal filterType-only shape below is the accepted
+// form (matching community ESPN clients). The response for a pinned
+// scoringPeriodId is ESPN's own full result set for that period; the view
+// exposes no way to page it.
 const MTRANSACTIONS2_CONCURRENCY = 4;
 
 export interface MTransactions2Result {
   transactions: NormalizedTransaction[];
+}
+
+/**
+ * espnFetch's abort timer only covers the wait for response headers — it is
+ * cleared the moment fetch() resolves. A provider that stalls while streaming
+ * the JSON body would otherwise hold the structured attempt past its
+ * sub-deadline and starve the activity fallback, so the body read races the
+ * remaining budget independently.
+ */
+async function readJsonWithDeadline<T>(res: Response, deadline: number): Promise<T> {
+  const remaining = deadline - Date.now();
+  if (remaining <= 0) {
+    throw new Error(
+      `${ErrorCode.ESPN_TIMEOUT}: ESPN structured transactions exceeded the operation budget`
+    );
+  }
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      res.json() as Promise<T>,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          reject(new Error(
+            `${ErrorCode.ESPN_TIMEOUT}: ESPN structured transaction body read timed out`
+          ));
+        }, remaining);
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
 }
 
 export async function fetchEspnMTransactions2(
@@ -474,7 +504,7 @@ export async function fetchEspnMTransactions2(
       headers,
     });
     if (!res.ok) handleEspnError(res);
-    const body = await res.json() as EspnMTransactions2Response;
+    const body = await readJsonWithDeadline<EspnMTransactions2Response>(res, effectiveDeadline);
     return body.transactions ?? [];
   };
 
