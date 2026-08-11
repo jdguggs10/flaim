@@ -290,6 +290,42 @@ describe("GET /api/public-chat/capabilities", () => {
     expect(body).toEqual({ targets: [] });
   });
 
+  // The next two cases pin each version filter INDEPENDENTLY: the row is
+  // wrong on exactly one version column (the other stays correct, and the
+  // cache_key still looks right), so deleting just that one production query
+  // filter would let the row through and fail the test.
+  it("does not count a row whose prompt_version alone is wrong", async () => {
+    const rows = readyCacheRows("espn", "baseball", {
+      "wire-watch": { prompt_version: "v7" },
+    });
+    stubPostgrest({
+      targetState: [enabledTargetState("espn", "baseball")],
+      answerCache: rows,
+    });
+
+    const response = await GET();
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toEqual({ targets: [] });
+  });
+
+  it("does not count a row whose context_version alone is wrong", async () => {
+    const rows = readyCacheRows("espn", "baseball", {
+      "wire-watch": { context_version: "v2" },
+    });
+    stubPostgrest({
+      targetState: [enabledTargetState("espn", "baseball")],
+      answerCache: rows,
+    });
+
+    const response = await GET();
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toEqual({ targets: [] });
+  });
+
   it("returns empty targets when demo_target_state is empty", async () => {
     const fetchMock = stubPostgrest({ targetState: [], answerCache: [] });
 
