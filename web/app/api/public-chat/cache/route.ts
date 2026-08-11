@@ -1,5 +1,8 @@
 import {
   getPublicChatPreset,
+  getPublicChatTarget,
+  isPublicChatDemoPlatform,
+  type PublicChatDemoPlatform,
   type PublicChatDemoSport,
 } from "@/lib/public-chat";
 import {
@@ -42,16 +45,36 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  // Optional platform param for the platform-aware demo targets. When absent,
+  // the reader keeps the exact legacy single-platform behavior — the
+  // one-release compatibility default while clients migrate to sending it.
+  const platformParam = request.nextUrl.searchParams.get("platform");
+  let platform: PublicChatDemoPlatform | undefined;
+  if (platformParam !== null) {
+    if (
+      !isPublicChatDemoPlatform(platformParam) ||
+      !getPublicChatTarget(platformParam, sport)
+    ) {
+      return NextResponse.json(
+        { error: "Unsupported platform for the public demo" },
+        { status: 400, headers: { "Cache-Control": "no-store" } },
+      );
+    }
+    platform = platformParam;
+  }
+
   try {
     const cachedAnswer = await getCachedPublicDemoAnswer({
       presetId: preset.id,
       sport,
+      platform,
     });
     const latestFailure =
       !cachedAnswer || cachedAnswer.status !== "ready"
         ? await getLatestPublicDemoRefreshFailure({
             presetId: preset.id,
             sport,
+            platform,
           }).catch((error) => {
             console.error(
               "Failed to load latest public demo refresh failure:",

@@ -1,6 +1,9 @@
 import {
   PUBLIC_DEMO_CONTEXT_VERSION,
   PUBLIC_DEMO_PROMPT_VERSION,
+  PUBLIC_DEMO_TARGET_CONTEXT_VERSION,
+  PUBLIC_DEMO_TARGET_PROMPT_VERSION,
+  type PublicChatDemoPlatform,
   type PublicChatDemoSport,
 } from "@/lib/public-chat";
 import { getSupabaseConfig, hasSupabaseConfig } from "./public-chat-cache";
@@ -121,6 +124,27 @@ export function buildPublicDemoAnswerCacheKey(
   ].join(":");
 }
 
+/**
+ * Six-segment cache key for the platform-aware demo targets:
+ * `public-demo-answer:{presetId}:{platform}:{sport}:{promptVersion}:{contextVersion}`.
+ */
+export function buildPublicDemoTargetAnswerCacheKey(
+  presetId: string,
+  platform: PublicChatDemoPlatform,
+  sport: PublicChatDemoSport,
+  promptVersion = PUBLIC_DEMO_TARGET_PROMPT_VERSION,
+  contextVersion = PUBLIC_DEMO_TARGET_CONTEXT_VERSION,
+) {
+  return [
+    "public-demo-answer",
+    presetId,
+    platform,
+    sport,
+    promptVersion,
+    contextVersion,
+  ].join(":");
+}
+
 function mapRowToCachedAnswer(
   row: PublicDemoAnswerCacheRow,
 ): PublicDemoCachedAnswer | null {
@@ -182,18 +206,16 @@ function mapRefreshRunToFailureSummary(
   };
 }
 
-export async function getCachedPublicDemoAnswer(input: {
-  presetId: string;
-  sport: PublicChatDemoSport;
+async function fetchCachedAnswerRow(input: {
+  cacheKey: string;
+  platform?: PublicChatDemoPlatform;
 }): Promise<PublicDemoCachedAnswer | null> {
-  if (!hasSupabaseConfig()) {
-    return null;
-  }
-
   const { supabaseUrl, supabaseServiceKey } = getSupabaseConfig();
-  const cacheKey = buildPublicDemoAnswerCacheKey(input.presetId, input.sport);
   const url = new URL(`${supabaseUrl}/rest/v1/demo_answer_cache`);
-  url.searchParams.set("cache_key", `eq.${cacheKey}`);
+  url.searchParams.set("cache_key", `eq.${input.cacheKey}`);
+  if (input.platform !== undefined) {
+    url.searchParams.set("platform", `eq.${input.platform}`);
+  }
   url.searchParams.set(
     "select",
     [
@@ -243,9 +265,53 @@ export async function getCachedPublicDemoAnswer(input: {
   return mapRowToCachedAnswer(row);
 }
 
+export async function getCachedPublicDemoAnswer(input: {
+  presetId: string;
+  sport: PublicChatDemoSport;
+  platform?: PublicChatDemoPlatform;
+}): Promise<PublicDemoCachedAnswer | null> {
+  if (!hasSupabaseConfig()) {
+    return null;
+  }
+
+  if (input.platform === undefined) {
+    // Legacy single-platform path: the exact five-segment v7/v2 lookup,
+    // byte-identical to the pre-platform behavior.
+    return fetchCachedAnswerRow({
+      cacheKey: buildPublicDemoAnswerCacheKey(input.presetId, input.sport),
+    });
+  }
+
+  const targetAnswer = await fetchCachedAnswerRow({
+    cacheKey: buildPublicDemoTargetAnswerCacheKey(
+      input.presetId,
+      input.platform,
+      input.sport,
+    ),
+    platform: input.platform,
+  });
+  if (targetAnswer) {
+    return targetAnswer;
+  }
+
+  // One-release transition fallback: while espn-baseball moves from the
+  // legacy five-segment v7/v2 rows to the six-segment v8/v3 rows, serve the
+  // legacy row when no usable v8 row exists yet. This applies to espn-baseball
+  // only — every other target has no legacy rows to fall back to. Remove this
+  // block once the runner has fully backfilled v8/v3 espn-baseball rows.
+  if (input.platform === "espn" && input.sport === "baseball") {
+    return fetchCachedAnswerRow({
+      cacheKey: buildPublicDemoAnswerCacheKey(input.presetId, input.sport),
+    });
+  }
+
+  return null;
+}
+
 export async function getLatestPublicDemoRefreshFailure(input: {
   presetId: string;
   sport: PublicChatDemoSport;
+  platform?: PublicChatDemoPlatform;
 }): Promise<PublicDemoRefreshFailureSummary | null> {
   if (!hasSupabaseConfig()) {
     return null;
@@ -255,6 +321,11 @@ export async function getLatestPublicDemoRefreshFailure(input: {
   const url = new URL(`${supabaseUrl}/rest/v1/demo_refresh_runs`);
   url.searchParams.set("preset_id", `eq.${input.presetId}`);
   url.searchParams.set("sport", `eq.${input.sport}`);
+  if (input.platform !== undefined) {
+    // Platform-aware targets filter run history by platform; the legacy
+    // no-platform path keeps the original query unchanged.
+    url.searchParams.set("platform", `eq.${input.platform}`);
+  }
   url.searchParams.set(
     "select",
     [

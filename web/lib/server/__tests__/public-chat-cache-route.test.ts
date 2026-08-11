@@ -17,10 +17,8 @@ import {
   sanitizePublicDemoToolTraceSummary,
 } from "../public-demo-cache-response";
 
-function publicCacheRequest() {
-  return new NextRequest(
-    "https://flaim.app/api/public-chat/cache?presetId=wire-watch&sport=baseball",
-  );
+function publicCacheRequest(query = "presetId=wire-watch&sport=baseball") {
+  return new NextRequest(`https://flaim.app/api/public-chat/cache?${query}`);
 }
 
 beforeEach(() => {
@@ -292,5 +290,67 @@ describe("GET /api/public-chat/cache", () => {
     expect(serializedBody).not.toContain("antigravity-sticky");
     expect(serializedBody).not.toContain("private-provider-model");
     expect(serializedBody).not.toContain("2026-06-06T12:01:00.000Z");
+  });
+
+  it("keeps the legacy reader behavior when no platform param is sent", async () => {
+    mocks.getCachedPublicDemoAnswer.mockResolvedValue(null);
+    mocks.getLatestPublicDemoRefreshFailure.mockResolvedValue(null);
+
+    const response = await GET(publicCacheRequest());
+
+    expect(response.status).toBe(200);
+    expect(mocks.getCachedPublicDemoAnswer).toHaveBeenCalledTimes(1);
+    expect(
+      mocks.getCachedPublicDemoAnswer.mock.calls[0][0].platform,
+    ).toBeUndefined();
+    expect(
+      mocks.getLatestPublicDemoRefreshFailure.mock.calls[0][0].platform,
+    ).toBeUndefined();
+  });
+
+  it("passes a valid platform through to the reader and failure lookup", async () => {
+    mocks.getCachedPublicDemoAnswer.mockResolvedValue(null);
+    mocks.getLatestPublicDemoRefreshFailure.mockResolvedValue(null);
+
+    const response = await GET(
+      publicCacheRequest("presetId=wire-watch&sport=baseball&platform=espn"),
+    );
+
+    expect(response.status).toBe(200);
+    expect(mocks.getCachedPublicDemoAnswer).toHaveBeenCalledWith({
+      presetId: "wire-watch",
+      sport: "baseball",
+      platform: "espn",
+    });
+    expect(mocks.getLatestPublicDemoRefreshFailure).toHaveBeenCalledWith({
+      presetId: "wire-watch",
+      sport: "baseball",
+      platform: "espn",
+    });
+  });
+
+  it("rejects an unknown platform value without echoing it", async () => {
+    const response = await GET(
+      publicCacheRequest("presetId=wire-watch&sport=baseball&platform=vibes"),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body).toEqual({ error: "Unsupported platform for the public demo" });
+    expect(JSON.stringify(body)).not.toContain("vibes");
+    expect(mocks.getCachedPublicDemoAnswer).not.toHaveBeenCalled();
+    expect(mocks.getLatestPublicDemoRefreshFailure).not.toHaveBeenCalled();
+  });
+
+  it("rejects a platform/sport combo outside the target matrix", async () => {
+    const response = await GET(
+      publicCacheRequest("presetId=wire-watch&sport=baseball&platform=sleeper"),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body).toEqual({ error: "Unsupported platform for the public demo" });
+    expect(mocks.getCachedPublicDemoAnswer).not.toHaveBeenCalled();
+    expect(mocks.getLatestPublicDemoRefreshFailure).not.toHaveBeenCalled();
   });
 });
