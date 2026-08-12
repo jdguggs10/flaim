@@ -220,16 +220,12 @@ export function FootballSeasonalPage() {
         <div className="mx-auto grid max-w-6xl gap-10 lg:grid-cols-[0.95fr_1.05fr] lg:items-center">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">
-              Your leagues, all season long
+              Your actual fantasy football league
             </p>
             <h1 className="mt-4 text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl">
-              Add your team to your AI
+              Add your fantasy football team to your AI
             </h1>
             <p className="mt-5 max-w-2xl text-lg leading-8 text-muted-foreground">
-              Connect ESPN, Yahoo, or Sleeper to Flaim once. Then, connect Flaim
-              to ChatGPT or Claude and you&apos;re done.
-            </p>
-            <p className="mt-4 max-w-2xl leading-7 text-muted-foreground">
               Ask about the team you drafted, weekly matchups, available
               players, standings, trades, and league history.
             </p>
