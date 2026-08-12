@@ -41,6 +41,12 @@ export function isPublicChatDemoPlatform(
   return value === "espn" || value === "yahoo" || value === "sleeper";
 }
 
+export function isPublicChatDemoSport(
+  value: unknown,
+): value is PublicChatDemoSport {
+  return value === "football" || value === "baseball";
+}
+
 /**
  * Version tags for the platform-aware ("target") demo cache rows, which use a
  * six-segment cache key. These are new constants for the multi-platform demo;
