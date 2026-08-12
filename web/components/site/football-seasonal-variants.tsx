@@ -42,33 +42,33 @@ export const DEFAULT_FOOTBALL_VARIANT: FootballVariantId = "season-chapters";
 export const FOOTBALL_CONTRAST_VARIANTS = [
   {
     id: "strike-and-replace",
-    label: "Clean Cut",
-    description: "Fine and direct",
+    label: "Clean Line",
+    description: "Editorial grid",
   },
   {
     id: "coach-marker",
-    label: "Coach's Marker",
-    description: "Hand-drawn double",
+    label: "Coach's Scribble",
+    description: "Hand-drawn cards",
   },
   {
     id: "x-it-out",
-    label: "X It Out",
-    description: "Full cancellation",
+    label: "Red Pen",
+    description: "Full X marks",
   },
   {
     id: "marker-wipe",
-    label: "Marker Wipe",
-    description: "Bold redaction",
+    label: "Marker Swipe",
+    description: "Bold floating pills",
   },
   {
     id: "playbook-route",
-    label: "Playbook Route",
-    description: "Line to payoff",
+    label: "Playbook Trail",
+    description: "Numbered route",
   },
   {
     id: "fade-and-replace",
-    label: "Fade & Replace",
-    description: "Quiet transition",
+    label: "Fade Away",
+    description: "Oversized dissolve",
   },
 ] as const;
 
@@ -216,19 +216,13 @@ const SEASON_MOMENTS = [
   },
 ] as const;
 
-const STRIKE_REPLACEMENTS = [
-  { old: "Roster screenshots", next: "Your real roster" },
-  { old: "Copy and paste", next: "Ask normally" },
-  { old: "Retyping your whole team", next: "Your lineup is already there" },
-  {
-    old: "AI guessing your league rules",
-    next: "Your scoring rules are included",
-  },
-  {
-    old: "Forgetting who is on your roster",
-    next: "Your current team every time",
-  },
-  { old: "Answers for the wrong week", next: "The right week and season" },
+const CROSSOUT_TASKS = [
+  "Roster screenshots",
+  "Copying and pasting players",
+  "Retyping your whole roster",
+  "Explaining your league rules",
+  "Reminding AI about your team",
+  "Starting over every week",
 ] as const;
 
 type SeasonMoment = (typeof SEASON_MOMENTS)[number];
@@ -333,11 +327,11 @@ function ContrastVariantSwitcher({
   return (
     <aside className="border-b border-background/15 pb-7">
       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-background/55">
-        Cross-out style lab
+        Cross-out lab
       </p>
       <nav
         className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6"
-        aria-label="Choose a cross-out style"
+        aria-label="Choose a cross-out treatment"
       >
         {FOOTBALL_CONTRAST_VARIANTS.map((variant) => {
           const isActive = variant.id === activeVariant;
@@ -372,35 +366,74 @@ function ContrastVariantSwitcher({
   );
 }
 
-function StrikeAndReplace({
+const CROSSOUT_LAYOUT_CLASSES: Record<
+  FootballContrastVariantId,
+  { list: string; item: string; text: string }
+> = {
+  "strike-and-replace": {
+    list: "grid overflow-hidden rounded-[2rem] border border-background/15 md:grid-cols-2",
+    item: "flex min-h-28 items-center border-b border-background/15 p-6 last:border-b-0 md:odd:border-r md:[&:nth-last-child(-n+2)]:border-b-0 sm:p-7",
+    text: "text-base min-[375px]:text-lg sm:text-2xl",
+  },
+  "coach-marker": {
+    list: "grid gap-3 sm:grid-cols-2 lg:grid-cols-3",
+    item: "flex min-h-32 items-center rounded-[1.5rem] border border-background/15 p-6",
+    text: "text-base min-[375px]:text-lg sm:text-2xl",
+  },
+  "x-it-out": {
+    list: "grid gap-3 sm:grid-cols-2 lg:grid-cols-3",
+    item: "flex min-h-32 items-center justify-center rounded-[1.5rem] border border-background/15 p-6 text-center",
+    text: "text-base min-[375px]:text-lg sm:text-2xl",
+  },
+  "marker-wipe": {
+    list: "flex flex-wrap gap-3",
+    item: "flex min-h-16 items-center rounded-full border border-background/15 px-5 py-4 sm:px-7",
+    text: "text-base min-[375px]:text-lg sm:text-xl",
+  },
+  "playbook-route": {
+    list: "divide-y divide-background/15 border-y border-background/15",
+    item: "flex items-center gap-5 py-5 sm:py-6",
+    text: "text-base min-[375px]:text-lg sm:text-3xl",
+  },
+  "fade-and-replace": {
+    list: "space-y-1",
+    item: "border-b border-background/15 py-5 last:border-b-0 sm:py-6",
+    text: "text-lg min-[375px]:text-2xl sm:text-5xl",
+  },
+};
+
+function CrossOutOnly({
   styleVariant,
 }: {
   styleVariant: FootballContrastVariantId;
 }) {
+  const layout = CROSSOUT_LAYOUT_CLASSES[styleVariant];
+
   return (
     <FootballStrikeReveal
       className={`football-strike-style-${styleVariant}`}
     >
       <div className="max-w-3xl">
         <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-          Cross out the work. Keep the answer.
+          You can stop doing all of this.
         </h2>
-        <p className="mt-4 text-lg leading-8 text-background/70">
-          Flaim replaces the setup work with your actual league information.
-        </p>
       </div>
-      <ul className="mt-9 grid overflow-hidden rounded-[2rem] border border-background/15 md:grid-cols-2">
-        {STRIKE_REPLACEMENTS.map((item, index) => (
+      <ul className={`mt-9 ${layout.list}`}>
+        {CROSSOUT_TASKS.map((item, index) => (
           <li
-            key={item.old}
-            className="grid gap-2 border-background/15 p-6 odd:border-b even:border-b md:odd:border-r sm:p-7"
+            key={item}
+            className={layout.item}
             data-football-strike-row={index}
           >
-            <span className="football-strike-replace-old relative w-fit text-base font-medium text-background/50">
-              <span className="football-strike-old-copy">{item.old}</span>
-            </span>
-            <span className="football-strike-replace-new relative text-xl font-semibold tracking-tight text-background">
-              {item.next}
+            {styleVariant === "playbook-route" ? (
+              <span className="w-8 shrink-0 text-sm font-semibold tabular-nums text-background/35">
+                0{index + 1}
+              </span>
+            ) : null}
+            <span
+              className={`football-crossout-text relative inline-block w-fit font-semibold tracking-tight text-background/70 ${layout.text}`}
+            >
+              <span className="football-crossout-copy">{item}</span>
             </span>
           </li>
         ))}
@@ -425,7 +458,7 @@ function LessExplainingSection({
           </div>
         ) : null}
 
-        <StrikeAndReplace styleVariant={variant} />
+        <CrossOutOnly styleVariant={variant} />
       </div>
     </section>
   );

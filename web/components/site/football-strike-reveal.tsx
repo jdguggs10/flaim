@@ -5,8 +5,6 @@ import { useEffect, useRef, type ReactNode } from "react";
 const FIRST_ROW_START = 0.12;
 const ROW_STEP = 0.125;
 const OLD_LINE_DURATION = 0.09;
-const NEW_TEXT_OFFSET = 0.075;
-const NEW_TEXT_DURATION = 0.065;
 
 function clampProgress(value: number) {
   return Math.min(1, Math.max(0, value));
@@ -53,12 +51,6 @@ export function FootballStrikeReveal({
           rowStart,
           OLD_LINE_DURATION,
         );
-        const newProgress = rangeProgress(
-          sectionProgress,
-          rowStart + NEW_TEXT_OFFSET,
-          NEW_TEXT_DURATION,
-        );
-
         row.style.setProperty("--strike-old-progress", String(oldProgress));
         row.style.setProperty(
           "--strike-secondary-progress",
@@ -70,7 +62,6 @@ export function FootballStrikeReveal({
             ),
           ),
         );
-        row.style.setProperty("--strike-new-progress", String(newProgress));
         row.style.setProperty(
           "--strike-old-copy-opacity",
           String(1 - oldProgress * 0.62),
@@ -78,18 +69,6 @@ export function FootballStrikeReveal({
         row.style.setProperty(
           "--strike-old-blur",
           `${oldProgress * 0.7}px`,
-        );
-        row.style.setProperty(
-          "--strike-new-offset",
-          `${(1 - newProgress) * 0.4}rem`,
-        );
-        row.style.setProperty(
-          "--strike-route-offset",
-          `${(1 - newProgress) * -0.5}rem`,
-        );
-        row.style.setProperty(
-          "--strike-letter-spacing",
-          `${(1 - newProgress) * 0.035}em`,
         );
       });
     };
