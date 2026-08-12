@@ -223,7 +223,7 @@ export function FootballSeasonalPage() {
               Your actual fantasy football league
             </p>
             <h1 className="mt-4 text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl">
-              Add your fantasy football team to your AI
+              Your Fantasy Football Team + AI
             </h1>
             <p className="mt-5 max-w-2xl text-lg leading-8 text-muted-foreground">
               Ask about the team you drafted, weekly matchups, available
