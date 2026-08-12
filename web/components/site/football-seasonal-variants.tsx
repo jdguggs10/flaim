@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { FootballStrikeReveal } from "@/components/site/football-strike-reveal";
 import {
   CHATGPT_APP_URL,
   CLAUDE_CONNECTOR_DIRECTORY_URL,
@@ -71,7 +72,7 @@ export type FootballContrastVariantId =
   (typeof FOOTBALL_CONTRAST_VARIANTS)[number]["id"];
 
 export const DEFAULT_FOOTBALL_CONTRAST_VARIANT: FootballContrastVariantId =
-  "staggered-strike";
+  "strike-and-replace";
 
 export function isFootballVariant(value: string): value is FootballVariantId {
   return FOOTBALL_VARIANTS.some((variant) => variant.id === value);
@@ -387,6 +388,10 @@ function strikeDelay(index: number, step = 160): CSSProperties {
   return { "--strike-delay": `${240 + index * step}ms` } as CSSProperties;
 }
 
+function strikeAndReplaceDelay(index: number): CSSProperties {
+  return { "--strike-delay": `${500 + index * 950}ms` } as CSSProperties;
+}
+
 function StaggeredStrike() {
   return (
     <div className="grid gap-9 lg:grid-cols-[0.72fr_1.28fr] lg:items-start">
@@ -449,7 +454,7 @@ function DoubleScribble() {
 
 function StrikeAndReplace() {
   return (
-    <>
+    <FootballStrikeReveal>
       <div className="max-w-3xl">
         <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
           Cross out the work. Keep the answer.
@@ -463,7 +468,7 @@ function StrikeAndReplace() {
           <li
             key={item.old}
             className="grid gap-2 border-background/15 p-6 odd:border-b even:border-b md:odd:border-r sm:p-7"
-            style={strikeDelay(index, 140)}
+            style={strikeAndReplaceDelay(index)}
           >
             <span className="football-strike-replace-old relative w-fit text-base font-medium text-background/50">
               {item.old}
@@ -474,7 +479,7 @@ function StrikeAndReplace() {
           </li>
         ))}
       </ul>
-    </>
+    </FootballStrikeReveal>
   );
 }
 

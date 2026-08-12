@@ -437,10 +437,14 @@
     right: -0.08em;
     left: -0.08em;
     height: 2px;
-    transform: scaleX(0);
     transform-origin: left center;
     background: var(--background);
     content: "";
+  }
+
+  .football-strike-draw::after,
+  .football-strike-curtain-item::after {
+    transform: scaleX(0);
     animation: football-strike-grow 580ms cubic-bezier(0.16, 1, 0.3, 1)
       var(--strike-delay) both;
   }
@@ -469,9 +473,28 @@
   }
 
   .football-strike-replace-new {
+    opacity: 1;
+  }
+
+  .football-strike-ready .football-strike-replace-old::after {
+    transform: scaleX(0);
+  }
+
+  .football-strike-ready .football-strike-replace-new {
+    transform: translateY(0.4rem);
     opacity: 0;
-    animation: football-strike-reveal 420ms cubic-bezier(0.16, 1, 0.3, 1)
-      calc(var(--strike-delay) + 480ms) both;
+  }
+
+  .football-strike-ready.football-strike-visible
+    .football-strike-replace-old::after {
+    animation: football-strike-grow 850ms cubic-bezier(0.16, 1, 0.3, 1)
+      var(--strike-delay) both;
+  }
+
+  .football-strike-ready.football-strike-visible
+    .football-strike-replace-new {
+    animation: football-strike-reveal 620ms cubic-bezier(0.16, 1, 0.3, 1)
+      calc(var(--strike-delay) + 780ms) both;
   }
 
   .football-strike-curtain-sweep {
@@ -541,6 +564,17 @@
 
     .football-strike-replace-new,
     .football-strike-statement-payoff {
+      animation: none !important;
+      transform: none;
+      opacity: 1;
+    }
+
+    .football-strike-ready .football-strike-replace-old::after {
+      animation: none !important;
+      transform: scaleX(1);
+    }
+
+    .football-strike-ready .football-strike-replace-new {
       animation: none !important;
       transform: none;
       opacity: 1;
