@@ -53,16 +53,6 @@ export function FootballStrikeReveal({
         );
         row.style.setProperty("--strike-old-progress", String(oldProgress));
         row.style.setProperty(
-          "--strike-secondary-progress",
-          String(
-            rangeProgress(
-              sectionProgress,
-              rowStart + OLD_LINE_DURATION * 0.34,
-              OLD_LINE_DURATION,
-            ),
-          ),
-        );
-        row.style.setProperty(
           "--strike-old-copy-opacity",
           String(1 - oldProgress * 0.62),
         );

@@ -371,19 +371,6 @@
     content: "";
   }
 
-  .football-crossout-text::before {
-    position: absolute;
-    top: 52%;
-    right: -0.08em;
-    left: -0.08em;
-    display: none;
-    height: 2px;
-    transform-origin: left center;
-    background: var(--background);
-    content: "";
-  }
-
-  .football-strike-ready .football-crossout-text::before,
   .football-strike-ready .football-crossout-text::after {
     transform: scaleX(0);
   }
@@ -394,106 +381,12 @@
     animation: none;
   }
 
-  .football-strike-style-coach-marker .football-crossout-text::before,
-  .football-strike-style-coach-marker .football-crossout-text::after {
-    display: block;
-    height: 2px;
-    border-radius: 999px;
-    background: var(--background);
-  }
-
-  .football-strike-style-coach-marker
-    .football-crossout-text::before {
-    top: 43%;
-    transform: rotate(2deg);
-  }
-
-  .football-strike-style-coach-marker
-    .football-crossout-text::after {
-    top: 61%;
-    transform: rotate(-2deg);
-  }
-
-  .football-strike-ready.football-strike-scroll-controlled.football-strike-style-coach-marker
-    .football-crossout-text::before {
-    transform: rotate(2deg) scaleX(var(--strike-old-progress, 0));
-  }
-
-  .football-strike-ready.football-strike-scroll-controlled.football-strike-style-coach-marker
-    .football-crossout-text::after {
-    transform: rotate(-2deg)
-      scaleX(var(--strike-secondary-progress, 0));
-  }
-
-  .football-strike-style-x-it-out .football-crossout-text::before,
-  .football-strike-style-x-it-out .football-crossout-text::after {
-    top: 50%;
-    right: -0.14em;
-    left: -0.14em;
-    display: block;
-    height: 2px;
-    border-radius: 999px;
-    background: var(--destructive);
-  }
-
-  .football-strike-style-x-it-out .football-crossout-text::before {
-    transform: rotate(7deg);
-  }
-
-  .football-strike-style-x-it-out .football-crossout-text::after {
-    transform: rotate(-7deg);
-  }
-
-  .football-strike-ready.football-strike-scroll-controlled.football-strike-style-x-it-out
-    .football-crossout-text::before {
-    transform: rotate(7deg) scaleX(var(--strike-old-progress, 0));
-  }
-
-  .football-strike-ready.football-strike-scroll-controlled.football-strike-style-x-it-out
-    .football-crossout-text::after {
-    transform: rotate(-7deg) scaleX(var(--strike-secondary-progress, 0));
-  }
-
-  .football-strike-style-marker-wipe .football-crossout-text::after {
-    top: 18%;
-    height: 72%;
-    border-radius: 0.18em;
-    background: var(--warning);
-    opacity: 0.7;
-    rotate: -1deg;
-  }
-
-  .football-strike-style-playbook-route .football-crossout-text::after {
-    height: 3px;
-    border-radius: 999px;
-  }
-
-  .football-strike-style-playbook-route .football-crossout-text::before {
-    top: calc(52% - 0.27rem);
-    right: -0.6rem;
-    left: auto;
-    display: block;
-    width: 0.52rem;
-    height: 0.52rem;
-    border-top: 3px solid var(--background);
-    border-right: 3px solid var(--background);
-    background: transparent;
-    transform-origin: center;
-    transform: rotate(45deg);
-  }
-
-  .football-strike-ready.football-strike-scroll-controlled.football-strike-style-playbook-route
-    .football-crossout-text::before {
-    transform: rotate(45deg) scale(var(--strike-secondary-progress, 0));
-  }
-
-  .football-strike-style-fade-and-replace .football-crossout-copy {
+  .football-strike-style-fade-away .football-crossout-copy {
     opacity: var(--strike-old-copy-opacity, 0.38);
     filter: blur(var(--strike-old-blur, 0.7px));
   }
 
-  .football-strike-style-fade-and-replace
-    .football-crossout-text::after {
+  .football-strike-style-fade-away .football-crossout-text::after {
     height: 1px;
   }
 
@@ -528,41 +421,14 @@
       opacity: 1;
     }
 
-    .football-crossout-text::after,
-    .football-crossout-text::before {
+    .football-crossout-text::after {
       animation: none !important;
       transform: scaleX(1);
     }
 
-    .football-strike-ready .football-crossout-text::before,
     .football-strike-ready .football-crossout-text::after {
       animation: none !important;
       transform: scaleX(1) !important;
-    }
-
-    .football-strike-ready.football-strike-style-coach-marker
-      .football-crossout-text::before {
-      transform: rotate(2deg) scaleX(1) !important;
-    }
-
-    .football-strike-ready.football-strike-style-coach-marker
-      .football-crossout-text::after {
-      transform: rotate(-2deg) scaleX(1) !important;
-    }
-
-    .football-strike-ready.football-strike-style-x-it-out
-      .football-crossout-text::before {
-      transform: rotate(7deg) scaleX(1) !important;
-    }
-
-    .football-strike-ready.football-strike-style-x-it-out
-      .football-crossout-text::after {
-      transform: rotate(-7deg) scaleX(1) !important;
-    }
-
-    .football-strike-ready.football-strike-style-playbook-route
-      .football-crossout-text::before {
-      transform: rotate(45deg) scale(1) !important;
     }
 
     .football-strike-ready .football-crossout-copy {
