@@ -237,6 +237,8 @@ export function FootballSeasonalPage() {
         </div>
       </section>
 
+      <LessExplainingSection />
+
       <section className="border-b px-4 py-14 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-6xl">
           <div className="mx-auto max-w-3xl text-center">
@@ -271,8 +273,6 @@ export function FootballSeasonalPage() {
           </div>
         </div>
       </section>
-
-      <LessExplainingSection />
     </>
   );
 }
