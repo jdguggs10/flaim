@@ -388,10 +388,6 @@ function strikeDelay(index: number, step = 160): CSSProperties {
   return { "--strike-delay": `${240 + index * step}ms` } as CSSProperties;
 }
 
-function strikeAndReplaceDelay(index: number): CSSProperties {
-  return { "--strike-delay": `${500 + index * 950}ms` } as CSSProperties;
-}
-
 function StaggeredStrike() {
   return (
     <div className="grid gap-9 lg:grid-cols-[0.72fr_1.28fr] lg:items-start">
@@ -468,7 +464,7 @@ function StrikeAndReplace() {
           <li
             key={item.old}
             className="grid gap-2 border-background/15 p-6 odd:border-b even:border-b md:odd:border-r sm:p-7"
-            style={strikeAndReplaceDelay(index)}
+            data-football-strike-row={index}
           >
             <span className="football-strike-replace-old relative w-fit text-base font-medium text-background/50">
               {item.old}
