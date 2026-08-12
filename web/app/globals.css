@@ -359,7 +359,146 @@
   }
 }
 
+@keyframes football-strike-grow {
+  from {
+    transform: scaleX(0);
+  }
+
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes football-strike-scribble-top {
+  from {
+    transform: rotate(2deg) scaleX(0);
+  }
+
+  to {
+    transform: rotate(2deg) scaleX(1);
+  }
+}
+
+@keyframes football-strike-scribble-bottom {
+  from {
+    transform: rotate(-2deg) scaleX(0);
+  }
+
+  to {
+    transform: rotate(-2deg) scaleX(1);
+  }
+}
+
+@keyframes football-strike-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(0.4rem);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes football-strike-ink {
+  from {
+    text-decoration-color: transparent;
+  }
+
+  to {
+    text-decoration-color: var(--background);
+  }
+}
+
+@keyframes football-strike-curtain {
+  0% {
+    top: 0;
+    opacity: 0;
+  }
+
+  8%,
+  92% {
+    opacity: 0.5;
+  }
+
+  100% {
+    top: calc(100% - 2px);
+    opacity: 0;
+  }
+}
+
 @layer utilities {
+  .football-strike-draw::after,
+  .football-strike-replace-old::after,
+  .football-strike-curtain-item::after {
+    position: absolute;
+    top: 52%;
+    right: -0.08em;
+    left: -0.08em;
+    height: 2px;
+    transform: scaleX(0);
+    transform-origin: left center;
+    background: var(--background);
+    content: "";
+    animation: football-strike-grow 580ms cubic-bezier(0.16, 1, 0.3, 1)
+      var(--strike-delay) both;
+  }
+
+  .football-strike-scribble::before,
+  .football-strike-scribble::after {
+    position: absolute;
+    right: -0.12em;
+    left: -0.12em;
+    height: 2px;
+    transform-origin: left center;
+    background: var(--background);
+    content: "";
+  }
+
+  .football-strike-scribble::before {
+    top: 45%;
+    animation: football-strike-scribble-top 520ms
+      cubic-bezier(0.16, 1, 0.3, 1) var(--strike-delay) both;
+  }
+
+  .football-strike-scribble::after {
+    top: 58%;
+    animation: football-strike-scribble-bottom 620ms
+      cubic-bezier(0.16, 1, 0.3, 1) calc(var(--strike-delay) + 90ms) both;
+  }
+
+  .football-strike-replace-new {
+    opacity: 0;
+    animation: football-strike-reveal 420ms cubic-bezier(0.16, 1, 0.3, 1)
+      calc(var(--strike-delay) + 480ms) both;
+  }
+
+  .football-strike-curtain-sweep {
+    position: absolute;
+    z-index: 2;
+    right: 0;
+    left: 0;
+    height: 2px;
+    background: var(--background);
+    pointer-events: none;
+    animation: football-strike-curtain 1.7s ease-in-out 180ms both;
+  }
+
+  .football-strike-statement-payoff {
+    opacity: 0;
+    animation: football-strike-reveal 520ms cubic-bezier(0.16, 1, 0.3, 1)
+      calc(var(--strike-delay) + 520ms) both;
+  }
+
+  .football-strike-statement {
+    text-decoration-line: line-through;
+    text-decoration-color: transparent;
+    text-decoration-thickness: 2px;
+    text-decoration-skip-ink: none;
+    animation: football-strike-ink 420ms ease-out var(--strike-delay) both;
+  }
+
   .public-chat-chip-active {
     animation: public-chat-chip-activate 220ms cubic-bezier(0.16, 1, 0.3, 1);
   }
@@ -389,6 +528,32 @@
       animation: none !important;
       transform: none;
       opacity: 1;
+    }
+
+    .football-strike-draw::after,
+    .football-strike-replace-old::after,
+    .football-strike-curtain-item::after,
+    .football-strike-scribble::before,
+    .football-strike-scribble::after {
+      animation: none !important;
+      transform: scaleX(1);
+    }
+
+    .football-strike-replace-new,
+    .football-strike-statement-payoff {
+      animation: none !important;
+      transform: none;
+      opacity: 1;
+    }
+
+    .football-strike-statement {
+      animation: none !important;
+      text-decoration-color: var(--background);
+    }
+
+    .football-strike-curtain-sweep {
+      display: none;
+      animation: none !important;
     }
 
     /* The education sheet's tailwindcss-animate enter/exit classes are applied

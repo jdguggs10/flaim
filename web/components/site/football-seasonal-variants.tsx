@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import type { CSSProperties } from "react";
 import {
   ArrowRight,
   CalendarDays,
@@ -40,24 +41,29 @@ export const DEFAULT_FOOTBALL_VARIANT: FootballVariantId = "season-chapters";
 
 export const FOOTBALL_CONTRAST_VARIANTS = [
   {
-    id: "no-more-grid",
-    label: "No More Grid",
-    description: "Clean statements",
+    id: "staggered-strike",
+    label: "Staggered",
+    description: "One by one",
   },
   {
-    id: "crossed-out",
-    label: "Crossed Out",
-    description: "Bold checklist",
+    id: "double-scribble",
+    label: "Double Scribble",
+    description: "Hand-drawn feel",
   },
   {
-    id: "before-after",
-    label: "Before and After",
-    description: "Clear comparison",
+    id: "strike-and-replace",
+    label: "Strike and Replace",
+    description: "Problem to payoff",
   },
   {
-    id: "manifesto",
-    label: "Manifesto",
-    description: "One big thought",
+    id: "curtain-sweep",
+    label: "Curtain Sweep",
+    description: "One moving line",
+  },
+  {
+    id: "big-statement",
+    label: "Big Statement",
+    description: "Full-width type",
   },
 ] as const;
 
@@ -65,7 +71,7 @@ export type FootballContrastVariantId =
   (typeof FOOTBALL_CONTRAST_VARIANTS)[number]["id"];
 
 export const DEFAULT_FOOTBALL_CONTRAST_VARIANT: FootballContrastVariantId =
-  "no-more-grid";
+  "staggered-strike";
 
 export function isFootballVariant(value: string): value is FootballVariantId {
   return FOOTBALL_VARIANTS.some((variant) => variant.id === value);
@@ -214,18 +220,26 @@ const EXPLANATION_TO_SKIP = [
   "No answers for the wrong week",
 ] as const;
 
-const WITHOUT_FLAIM = [
-  "Upload roster screenshots",
-  "Copy and paste player lists",
-  "Explain your league rules again",
-  "Rebuild your league in every chat",
+const STRIKE_REPLACEMENTS = [
+  { old: "Roster screenshots", next: "Your real roster" },
+  { old: "Copy and paste", next: "Ask normally" },
+  { old: "Retyping your whole team", next: "Your lineup is already there" },
+  {
+    old: "AI guessing your league rules",
+    next: "Your scoring rules are included",
+  },
+  {
+    old: "Forgetting who is on your roster",
+    next: "Your current team every time",
+  },
+  { old: "Answers for the wrong week", next: "The right week and season" },
 ] as const;
 
-const WITH_FLAIM = [
-  "Ask the next question",
-  "Bring your real roster",
-  "Include your league rules",
-  "Use the right week and season",
+const STATEMENT_STRIKES = [
+  "No screenshots.",
+  "No copy and paste.",
+  "No rebuilding your roster.",
+  "No AI guessing your rules.",
 ] as const;
 
 type SeasonMoment = (typeof SEASON_MOMENTS)[number];
@@ -330,11 +344,11 @@ function ContrastVariantSwitcher({
   return (
     <aside className="border-b border-background/15 pb-7">
       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-background/55">
-        Dark section lab
+        Cross-out animation lab
       </p>
       <nav
-        className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-4"
-        aria-label="Choose a dark section variant"
+        className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5"
+        aria-label="Choose a cross-out animation variant"
       >
         {FOOTBALL_CONTRAST_VARIANTS.map((variant) => {
           const isActive = variant.id === activeVariant;
@@ -369,33 +383,11 @@ function ContrastVariantSwitcher({
   );
 }
 
-function NoMoreGrid() {
-  return (
-    <>
-      <div className="max-w-3xl">
-        <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-          Less explaining. More fantasy football.
-        </h2>
-        <p className="mt-4 text-lg leading-8 text-background/70">
-          Connect once and let Flaim bring the league details that generic AI
-          would otherwise miss.
-        </p>
-      </div>
-      <ul className="mt-9 grid gap-px overflow-hidden rounded-[2rem] border border-background/15 bg-background/15 sm:grid-cols-2 lg:grid-cols-3">
-        {EXPLANATION_TO_SKIP.map((item) => (
-          <li
-            key={item}
-            className="bg-foreground px-6 py-7 text-lg font-semibold tracking-tight"
-          >
-            {item}
-          </li>
-        ))}
-      </ul>
-    </>
-  );
+function strikeDelay(index: number, step = 160): CSSProperties {
+  return { "--strike-delay": `${240 + index * step}ms` } as CSSProperties;
 }
 
-function CrossedOutList() {
+function StaggeredStrike() {
   return (
     <div className="grid gap-9 lg:grid-cols-[0.72fr_1.28fr] lg:items-start">
       <div>
@@ -412,7 +404,10 @@ function CrossedOutList() {
             <span className="text-sm font-semibold tabular-nums text-background/35">
               0{index + 1}
             </span>
-            <span className="text-xl font-semibold tracking-tight text-background/45 line-through decoration-background/30 decoration-2">
+            <span
+              className="football-strike-draw relative text-xl font-semibold tracking-tight text-background/65"
+              style={strikeDelay(index)}
+            >
               {item.replace(/^No /, "")}
             </span>
           </li>
@@ -422,52 +417,119 @@ function CrossedOutList() {
   );
 }
 
-function BeforeAfterComparison() {
+function DoubleScribble() {
+  return (
+    <>
+      <div className="max-w-3xl">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-background/55">
+          Cross it off for good
+        </p>
+        <h2 className="mt-4 text-4xl font-bold tracking-tight sm:text-5xl">
+          All the annoying parts of asking AI about fantasy sports.
+        </h2>
+      </div>
+      <ul className="mt-9 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {EXPLANATION_TO_SKIP.map((item, index) => (
+          <li
+            key={item}
+            className="rounded-2xl border border-background/15 px-6 py-7"
+          >
+            <span
+              className="football-strike-scribble relative inline-block text-lg font-semibold tracking-tight text-background/65"
+              style={strikeDelay(index, 120)}
+            >
+              {item.replace(/^No /, "")}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </>
+  );
+}
+
+function StrikeAndReplace() {
   return (
     <>
       <div className="max-w-3xl">
         <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-          Same AI. Way less work.
+          Cross out the work. Keep the answer.
         </h2>
         <p className="mt-4 text-lg leading-8 text-background/70">
-          Flaim keeps your actual fantasy league ready for the next question.
+          Flaim replaces the setup work with your actual league information.
         </p>
       </div>
-      <div className="mt-9 grid overflow-hidden rounded-[2rem] border border-background/15 md:grid-cols-2">
-        <div className="border-b border-background/15 p-6 md:border-b-0 md:border-r sm:p-8">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-background/45">
-            Without Flaim
-          </p>
-          <ul className="mt-6 space-y-4 text-lg text-background/55">
-            {WITHOUT_FLAIM.map((item) => (
-              <li key={item}>{item}</li>
-            ))}
-          </ul>
-        </div>
-        <div className="bg-background p-6 text-foreground sm:p-8">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-            With Flaim
-          </p>
-          <ul className="mt-6 space-y-4 text-lg font-semibold">
-            {WITH_FLAIM.map((item) => (
-              <li key={item}>{item}</li>
-            ))}
-          </ul>
-        </div>
+      <ul className="mt-9 grid overflow-hidden rounded-[2rem] border border-background/15 md:grid-cols-2">
+        {STRIKE_REPLACEMENTS.map((item, index) => (
+          <li
+            key={item.old}
+            className="grid gap-2 border-background/15 p-6 odd:border-b even:border-b md:odd:border-r sm:p-7"
+            style={strikeDelay(index, 140)}
+          >
+            <span className="football-strike-replace-old relative w-fit text-base font-medium text-background/50">
+              {item.old}
+            </span>
+            <span className="football-strike-replace-new text-xl font-semibold tracking-tight text-background">
+              {item.next}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </>
+  );
+}
+
+function CurtainSweep() {
+  return (
+    <>
+      <div className="max-w-3xl">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-background/55">
+          One clean sweep
+        </p>
+        <h2 className="mt-4 text-4xl font-bold tracking-tight sm:text-5xl">
+          Six things you never need to explain again.
+        </h2>
+      </div>
+      <div className="relative mt-9 overflow-hidden rounded-[2rem] border border-background/15 px-6 sm:px-8">
+        <div className="football-strike-curtain-sweep" aria-hidden="true" />
+        <ul className="divide-y divide-background/15">
+          {EXPLANATION_TO_SKIP.map((item, index) => (
+            <li key={item} className="py-5 sm:py-6">
+              <span
+                className="football-strike-curtain-item relative text-xl font-semibold tracking-tight text-background/65"
+                style={strikeDelay(index, 150)}
+              >
+                {item.replace(/^No /, "")}
+              </span>
+            </li>
+          ))}
+        </ul>
       </div>
     </>
   );
 }
 
-function ManifestoStatement() {
+function BigStatement() {
   return (
     <div className="max-w-5xl py-2">
       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-background/55">
         Your league comes with you
       </p>
       <h2 className="mt-6 text-4xl font-bold leading-[1.08] tracking-tight sm:text-5xl lg:text-6xl">
-        No screenshots. No copy and paste. No rebuilding your roster. No AI
-        guessing your rules. Just your actual league, ready when you ask.
+        {STATEMENT_STRIKES.map((phrase, index) => (
+          <span
+            key={phrase}
+            className="football-strike-statement mr-[0.22em] inline-block text-background/55"
+            style={strikeDelay(index, 230)}
+          >
+            {phrase}
+          </span>
+        ))}
+        <span
+          className="football-strike-statement-payoff inline-block"
+          style={strikeDelay(STATEMENT_STRIKES.length, 230)}
+        >
+          Just your actual league, ready when you ask.
+        </span>
       </h2>
     </div>
   );
@@ -489,10 +551,11 @@ function LessExplainingSection({
           </div>
         ) : null}
 
-        {variant === "crossed-out" ? <CrossedOutList /> : null}
-        {variant === "before-after" ? <BeforeAfterComparison /> : null}
-        {variant === "manifesto" ? <ManifestoStatement /> : null}
-        {variant === "no-more-grid" ? <NoMoreGrid /> : null}
+        {variant === "staggered-strike" ? <StaggeredStrike /> : null}
+        {variant === "double-scribble" ? <DoubleScribble /> : null}
+        {variant === "strike-and-replace" ? <StrikeAndReplace /> : null}
+        {variant === "curtain-sweep" ? <CurtainSweep /> : null}
+        {variant === "big-statement" ? <BigStatement /> : null}
       </div>
     </section>
   );
