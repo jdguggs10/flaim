@@ -4,11 +4,23 @@ import {
   PhoneFlaimMark,
 } from "@/components/site/phone-demo-frame";
 import {
-  PUBLIC_CHAT_PRESETS,
+  type PublicChatDemoPlatform,
   type PublicChatDemoSport,
   type PublicChatPreset,
-  type PublicChatPresetId,
 } from "@/lib/public-chat";
+import {
+  INITIAL_PUBLIC_DEMO_STATE,
+  PUBLIC_DEMO_PLATFORM_LABELS,
+  buildPublicDemoCacheRequestUrl,
+  canStartPublicDemoRun,
+  loadPublicDemoCapabilities,
+  publicDemoReducer,
+  selectPublicDemoPlatformOptions,
+  selectPublicDemoRequestPlatform,
+  selectPublicDemoSportOptions,
+  selectPublicDemoVisiblePresets,
+  type PublicDemoAnswerMeta,
+} from "@/lib/public-demo-client";
 import { cn } from "@/lib/utils";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { IconBallBaseball, IconBallAmericanFootball } from "@tabler/icons-react";
@@ -24,33 +36,20 @@ import {
   Volume2,
 } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
 import {
   PhoneEducationPanel,
   type PhoneEducationPanelId,
 } from "./phone-education-panel";
 import { PublicMessage } from "./public-message";
 import { PublicToolCall } from "./public-tool-call";
-
-type PublicRunStatus = "idle" | "running" | "completed" | "error";
-type PublicDemoAnswerMeta = {
-  generatedAt: string;
-  expiresAt: string;
-  staleAfter: string;
-  provider: string;
-  providerModel: string;
-  isExpired: boolean;
-  isStale: boolean;
-  status: string;
-  failureCode: string | null;
-  failureMessage: string | null;
-};
-
-interface PublicToolCallState {
-  id: string;
-  name?: string | null;
-  status: "in_progress" | "completed";
-}
 
 type PublicDemoToolTraceSummary = {
   byName?: Record<
@@ -76,22 +75,6 @@ const PUBLIC_PRE_TOOL_STEPS = [
 const PUBLIC_TOOL_CARD_IN_PROGRESS_MS = 650;
 const PUBLIC_TOOL_CARD_COMPLETED_PAUSE_MS = 220;
 const PUBLIC_PROMPT_ROTATION_INTERVAL_MS = 3200;
-
-const PUBLIC_DEMO_PLATFORM_OPTIONS = [
-  { id: "espn", label: "ESPN", available: true },
-  { id: "yahoo", label: "Yahoo", available: false },
-  { id: "sleeper", label: "Sleeper", available: false },
-] as const;
-
-const PUBLIC_DEMO_TARGET = {
-  platformId: "espn",
-  platformLabel: "ESPN",
-  sport: "baseball",
-} as const satisfies {
-  platformId: (typeof PUBLIC_DEMO_PLATFORM_OPTIONS)[number]["id"];
-  platformLabel: string;
-  sport: PublicChatDemoSport;
-};
 
 const PUBLIC_SPORT_COPY: Record<
   PublicChatDemoSport,
@@ -213,7 +196,7 @@ async function waitFor(ms: number, signal: AbortSignal) {
 
 const IDLE_ANIM_STYLES = ["rock", "bounce", "spin"] as const;
 
-function IdleState() {
+function IdleState({ platformLabel }: { platformLabel: string }) {
   const [styleIndex, setStyleIndex] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -254,7 +237,7 @@ function IdleState() {
         Ask about the league
       </p>
       <p className="mt-2 max-w-[16rem] text-[length:var(--phone-type-secondary)] leading-[1.4] text-[var(--phone-muted)]">
-        Real answers from Gerry&apos;s actual ESPN league
+        Real answers from Gerry&apos;s actual {platformLabel} league
       </p>
       {/* Tap logo to cycle animation — easter egg */}
       <button
@@ -282,15 +265,24 @@ export function PublicChatExperience({
   id?: string;
   followTranscript?: boolean;
 }) {
-  const [runStatus, setRunStatus] = useState<PublicRunStatus>("idle");
-  const [selectedPresetId, setSelectedPresetId] =
-    useState<PublicChatPresetId | null>(null);
-  const [assistantText, setAssistantText] = useState("");
-  const [toolCalls, setToolCalls] = useState<PublicToolCallState[]>([]);
-  const [answerMeta, setAnswerMeta] = useState<PublicDemoAnswerMeta | null>(
-    null,
+  const [state, dispatch] = useReducer(
+    publicDemoReducer,
+    INITIAL_PUBLIC_DEMO_STATE,
   );
-  const [error, setError] = useState<string | null>(null);
+  const {
+    answerMeta,
+    assistantText,
+    capabilitiesStatus,
+    error,
+    preToolStatusIndex,
+    runStatus,
+    selectedPresetId,
+    sportTransitionAnnouncement,
+    toolCalls,
+  } = state;
+  // Single generator for run tokens. Every async run and every target change
+  // takes the next value; the reducer drops actions whose token went stale.
+  const runTokenRef = useRef(0);
   const [educationPanel, setEducationPanel] =
     useState<PhoneEducationPanelId | null>(null);
   const [phonePanelContainer, setPhonePanelContainer] =
@@ -309,20 +301,34 @@ export function PublicChatExperience({
   const promptRotationHoverPausedRef = useRef(false);
   const promptRotationUserPausedRef = useRef(false);
   const activeRunAbortControllerRef = useRef<AbortController | null>(null);
-  const autoRunPresetIdRef = useRef<PublicChatPresetId | null>(null);
-  // Keep this aligned with the single runner target until the cache exposes
-  // readiness for each platform/sport combination.
-  const demoSport = PUBLIC_DEMO_TARGET.sport;
-  const [preToolStatusIndex, setPreToolStatusIndex] = useState(0);
+  const autoRunPresetIdRef = useRef<string | null>(null);
+
+  const demoSport = state.sport;
+  // Prompts stay inert until capabilities answer: a run started while loading
+  // would issue a legacy, platform-less cache read that target-mode activation
+  // has to throw away. `capabilitiesLoading` is the reason for the current
+  // block, which is what the prompt controls expose to assistive tech.
+  const capabilitiesLoading = capabilitiesStatus !== "resolved";
+  const canRun = canStartPublicDemoRun(state);
+  const requestPlatform = selectPublicDemoRequestPlatform(state);
+  const platformOptions = selectPublicDemoPlatformOptions(state);
+  const sportOptions = selectPublicDemoSportOptions(state);
+  const visiblePresets = selectPublicDemoVisiblePresets(state);
+  const demoTarget = useMemo(
+    () => ({
+      platformLabel: PUBLIC_DEMO_PLATFORM_LABELS[state.platform],
+      sport: state.sport,
+    }),
+    [state.platform, state.sport],
+  );
 
   const selectedPreset = useMemo(
     () =>
       selectedPresetId
-        ? (PUBLIC_CHAT_PRESETS.find(
-            (preset) => preset.id === selectedPresetId,
-          ) ?? null)
+        ? (visiblePresets.find((preset) => preset.id === selectedPresetId) ??
+          null)
         : null,
-    [selectedPresetId],
+    [selectedPresetId, visiblePresets],
   );
   const hasAssistantText = assistantText.trim().length > 0;
   const showPreToolStatus =
@@ -339,14 +345,15 @@ export function PublicChatExperience({
           ? `Answer ready. ${formatRelativeUpdateTime(answerMeta.generatedAt)}`
           : "Answer ready"
         : "";
+  // Deep links wait for capabilities so the auto-run happens against the real
+  // target, and only run when the target still advertises that preset.
   const initialQueryPreset = useMemo(
     () =>
-      initialPresetId
-        ? (PUBLIC_CHAT_PRESETS.find(
-            (preset) => preset.id === initialPresetId,
-          ) ?? null)
+      initialPresetId && capabilitiesStatus === "resolved"
+        ? (visiblePresets.find((preset) => preset.id === initialPresetId) ??
+          null)
         : null,
-    [initialPresetId],
+    [capabilitiesStatus, initialPresetId, visiblePresets],
   );
 
   useEffect(() => {
@@ -382,9 +389,54 @@ export function PublicChatExperience({
     };
   }, []);
 
+  // Capabilities are progressive enhancement: any failure, an empty advertised
+  // set, or the load deadline leaves the phone in legacy ESPN baseball mode,
+  // which omits `platform` from cache reads. Because prompts stay inert until
+  // this settles, the deadline inside the loader is what guarantees it settles.
+  useEffect(() => {
+    const controller = new AbortController();
+
+    void (async () => {
+      const targets = await loadPublicDemoCapabilities({
+        signal: controller.signal,
+      });
+      // null means this component unmounted mid-load; nobody is listening.
+      if (targets === null) {
+        return;
+      }
+
+      if (targets.length === 0) {
+        dispatch({ type: "capabilities_unavailable" });
+        return;
+      }
+
+      dispatch({
+        type: "capabilities_resolved",
+        targets,
+        token: (runTokenRef.current += 1),
+      });
+    })();
+
+    return () => {
+      controller.abort();
+    };
+  }, []);
+
+  // Single place that stops in-flight work: any move out of "running" —
+  // including a reducer-initiated target reset — releases the request and its
+  // pacing timers. The run token already prevents a late response repainting
+  // the new target, so this only frees resources.
+  useEffect(() => {
+    if (runStatus !== "running") {
+      activeRunAbortControllerRef.current?.abort();
+    }
+  }, [runStatus]);
+
   useEffect(() => {
     const picker = promptPickerRef.current;
-    if (!picker || runStatus === "running" || educationPanel !== null) {
+    // Nothing rotates while the list is unrunnable: during a run, and while
+    // capabilities may still replace these pills with the target's own presets.
+    if (!picker || !canRun || educationPanel !== null) {
       return;
     }
 
@@ -429,35 +481,35 @@ export function PublicChatExperience({
     return () => {
       window.clearInterval(interval);
     };
-  }, [educationPanel, runStatus]);
+  }, [canRun, educationPanel]);
 
   const handleRunPreset = useCallback(
     async (preset: PublicChatPreset) => {
-      if (runStatus === "running") {
+      if (!canRun) {
         return;
       }
 
-      setSelectedPresetId(preset.id);
-      setRunStatus("running");
-      setAssistantText("");
-      setToolCalls([]);
-      setAnswerMeta(null);
-      setError(null);
-      setPreToolStatusIndex(0);
+      // Every dispatch below carries this token; the reducer drops all of them
+      // once a newer run or a target change has taken over.
+      const token = (runTokenRef.current += 1);
+      dispatch({ type: "run_started", presetId: preset.id, token });
       activeRunAbortControllerRef.current?.abort();
       const abortController = new AbortController();
       activeRunAbortControllerRef.current = abortController;
 
       try {
-        const query = new URLSearchParams({
-          presetId: preset.id,
-          sport: demoSport,
-        });
-        const response = await fetch(`/api/public-chat/cache?${query.toString()}`, {
-          method: "GET",
-          cache: "no-store",
-          signal: abortController.signal,
-        });
+        const response = await fetch(
+          buildPublicDemoCacheRequestUrl({
+            presetId: preset.id,
+            sport: demoSport,
+            platform: requestPlatform,
+          }),
+          {
+            method: "GET",
+            cache: "no-store",
+            signal: abortController.signal,
+          },
+        );
 
         if (!response.ok) {
           let message = `${response.status} ${response.statusText}`;
@@ -516,7 +568,7 @@ export function PublicChatExperience({
         );
 
         for (let index = 0; index < PUBLIC_PRE_TOOL_STEPS.length; index += 1) {
-          setPreToolStatusIndex(index);
+          dispatch({ type: "pre_tool_step_advanced", index, token });
           await waitFor(PUBLIC_PRE_TOOL_STEPS[index].durationMs, abortController.signal);
         }
 
@@ -524,31 +576,29 @@ export function PublicChatExperience({
           const toolName = simulatedToolNames[index];
           const toolCallId = `${toolName}-${index}`;
 
-          setToolCalls((current) => [
-            ...current,
-            {
+          dispatch({
+            type: "tool_call_started",
+            toolCall: {
               id: toolCallId,
               name: toolName,
               status: "in_progress",
             },
-          ]);
+            token,
+          });
           await waitFor(PUBLIC_TOOL_CARD_IN_PROGRESS_MS, abortController.signal);
-          setToolCalls((current) =>
-            current.map((toolCall) =>
-              toolCall.id === toolCallId
-                ? { ...toolCall, status: "completed" }
-                : toolCall,
-            ),
-          );
+          dispatch({ type: "tool_call_completed", toolCallId, token });
           await waitFor(PUBLIC_TOOL_CARD_COMPLETED_PAUSE_MS, abortController.signal);
         }
 
-        setAnswerMeta(nextAnswerMeta);
-        setAssistantText(payload.answer.text);
-        setRunStatus("completed");
+        dispatch({
+          type: "run_completed",
+          assistantText: payload.answer.text,
+          answerMeta: nextAnswerMeta,
+          token,
+        });
       } catch (runError) {
         if (abortController.signal.aborted) {
-          setRunStatus((current) => (current === "running" ? "idle" : current));
+          dispatch({ type: "run_aborted", token });
           return;
         }
 
@@ -556,16 +606,34 @@ export function PublicChatExperience({
           runError instanceof Error
             ? runError.message
             : "Unable to run the public chat demo.";
-        setError(message);
-        setRunStatus("error");
+        dispatch({ type: "run_failed", message, token });
       } finally {
         if (activeRunAbortControllerRef.current === abortController) {
           activeRunAbortControllerRef.current = null;
         }
       }
     },
-    [demoSport, runStatus],
+    [canRun, demoSport, requestPlatform],
   );
+
+  const handleSelectPlatform = useCallback(
+    (platform: PublicChatDemoPlatform) => {
+      dispatch({
+        type: "platform_selected",
+        platform,
+        token: (runTokenRef.current += 1),
+      });
+    },
+    [],
+  );
+
+  const handleSelectSport = useCallback((sport: PublicChatDemoSport) => {
+    dispatch({
+      type: "sport_selected",
+      sport,
+      token: (runTokenRef.current += 1),
+    });
+  }, []);
 
   useEffect(() => {
     if (!initialQueryPreset) {
@@ -576,16 +644,27 @@ export function PublicChatExperience({
       return;
     }
 
+    // Claim the deep link only when the run can actually start, so a blocked
+    // attempt retries on the next render instead of being silently consumed.
+    if (!canRun) {
+      return;
+    }
+
     autoRunPresetIdRef.current = initialQueryPreset.id;
     void handleRunPreset(initialQueryPreset);
-  }, [handleRunPreset, initialQueryPreset]);
+  }, [canRun, handleRunPreset, initialQueryPreset]);
 
   const renderPromptPicker = (presets: readonly PublicChatPreset[]) => {
     return (
       <div
         ref={promptPickerRef}
         role="region"
-        aria-label="Prepared demo questions. Interact with the list to stop automatic rotation."
+        aria-busy={capabilitiesLoading || undefined}
+        aria-label={
+          capabilitiesLoading
+            ? "Loading prepared demo questions."
+            : "Prepared demo questions. Interact with the list to stop automatic rotation."
+        }
         onMouseEnter={() => {
           promptRotationHoverPausedRef.current = true;
         }}
@@ -614,21 +693,23 @@ export function PublicChatExperience({
                 data-public-prompt
                 onClick={() => {
                   // Guard instead of `disabled` so the clicked pill keeps
-                  // keyboard focus when a run starts.
-                  if (runStatus === "running") {
+                  // keyboard focus when a run starts, and so a pill pressed
+                  // while capabilities load stays focusable rather than
+                  // dropping focus to the body mid-load.
+                  if (!canRun) {
                     return;
                   }
                   promptRotationIndexRef.current = index;
                   void handleRunPreset(preset);
                 }}
-                aria-disabled={runStatus === "running" ? true : undefined}
+                aria-disabled={canRun ? undefined : true}
                 aria-pressed={isSelected}
                 className={cn(
                   "group relative min-h-11 w-max max-w-[calc(100cqw-2.5rem)] snap-start overflow-hidden rounded-full border px-3 py-2 text-left transition-all duration-200",
                   isSelected
                     ? "border-[var(--phone-accent)] bg-[var(--phone-user-bubble)] text-[var(--phone-user-text)]"
                     : "border-[var(--phone-border)] bg-[var(--phone-panel)] text-[var(--phone-text)] hover:bg-[var(--phone-panel-strong)]",
-                  runStatus === "running" && !isSelected
+                  !canRun && !isSelected
                     ? "cursor-not-allowed opacity-65"
                     : "",
                 )}
@@ -696,40 +777,31 @@ export function PublicChatExperience({
                 role="group"
                 aria-label="Demo platform"
               >
-                {PUBLIC_DEMO_PLATFORM_OPTIONS.map((platform) => {
-                  const isActivePlatform =
-                    platform.id === PUBLIC_DEMO_TARGET.platformId;
-
-                  return (
-                    // Non-interactive until FLA-247 wires platform switching:
-                    // the active segment is aria-disabled and removed from the
-                    // tab order instead of being an enabled no-op button.
-                    <button
-                      key={platform.id}
-                      type="button"
-                      disabled={!platform.available}
-                      aria-disabled={isActivePlatform ? true : undefined}
-                      tabIndex={isActivePlatform ? -1 : undefined}
-                      aria-pressed={isActivePlatform}
-                      aria-label={
-                        platform.available
-                          ? `${platform.label} demo selected`
-                          : `${platform.label} demo coming soon`
-                      }
-                      className={cn(
-                        "h-11 min-w-0 flex-1 rounded-full px-1.5",
-                        isActivePlatform
-                          ? "cursor-default bg-[var(--phone-panel-strong)] text-[var(--phone-text)]"
-                          : "text-[var(--phone-muted)]",
-                        !platform.available
-                          ? "cursor-not-allowed opacity-45"
-                          : "",
-                      )}
-                    >
-                      {platform.label}
-                    </button>
-                  );
-                })}
+                {platformOptions.map((option) => (
+                  <button
+                    key={option.platform}
+                    type="button"
+                    disabled={!option.available}
+                    aria-pressed={option.selected}
+                    aria-label={
+                      option.available
+                        ? `${option.label} demo`
+                        : `${option.label} demo coming soon`
+                    }
+                    onClick={() => handleSelectPlatform(option.platform)}
+                    className={cn(
+                      "h-11 min-w-0 flex-1 rounded-full px-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--phone-accent)]",
+                      option.selected
+                        ? "bg-[var(--phone-panel-strong)] text-[var(--phone-text)]"
+                        : "text-[var(--phone-muted)]",
+                      option.available
+                        ? "cursor-pointer"
+                        : "cursor-not-allowed opacity-45",
+                    )}
+                  >
+                    {option.label}
+                  </button>
+                ))}
               </div>
 
               <button
@@ -750,13 +822,19 @@ export function PublicChatExperience({
               {liveAnnouncement}
             </div>
 
+            {/* Separate region so an automatic sport switch is announced
+                without competing with the run-status line above. */}
+            <div role="status" aria-live="polite" className="sr-only">
+              {sportTransitionAnnouncement}
+            </div>
+
             <div
               ref={transcriptScrollRef}
               className="min-h-0 flex-1 overflow-y-auto overscroll-auto px-4 pb-5 pt-2"
             >
               <div className="mx-auto flex flex-col gap-5">
                 {!selectedPreset && runStatus === "idle" ? (
-                  <IdleState />
+                  <IdleState platformLabel={demoTarget.platformLabel} />
                 ) : null}
 
                 {selectedPreset ? (
@@ -859,7 +937,7 @@ export function PublicChatExperience({
             </div>
 
             <div className="border-t border-[var(--phone-border)] bg-[var(--phone-screen)] px-3 pb-4 pt-3">
-              {renderPromptPicker(PUBLIC_CHAT_PRESETS)}
+              {renderPromptPicker(visiblePresets)}
 
               <div className="mx-2 mb-1 mt-2 flex items-center gap-1.5 rounded-[1.75rem] border border-[var(--phone-border)] bg-[var(--phone-panel)] p-1.5">
                 <button
@@ -922,7 +1000,9 @@ export function PublicChatExperience({
           </div>
           <PhoneEducationPanel
             container={phonePanelContainer}
-            demoTarget={PUBLIC_DEMO_TARGET}
+            demoTarget={demoTarget}
+            sportOptions={sportOptions}
+            onSelectSport={handleSelectSport}
             panel={educationPanel}
             onPanelChange={setEducationPanel}
             returnFocusRef={educationTriggerRef}

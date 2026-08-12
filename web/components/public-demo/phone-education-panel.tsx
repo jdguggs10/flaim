@@ -2,6 +2,7 @@
 
 import { PhoneFlaimMark } from "@/components/site/phone-demo-frame";
 import type { PublicChatDemoSport } from "@/lib/public-chat";
+import type { PublicDemoSportOption } from "@/lib/public-demo-client";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { IconBallAmericanFootball, IconBallBaseball } from "@tabler/icons-react";
 import {
@@ -30,10 +31,18 @@ interface PhoneEducationPanelProps {
     platformLabel: string;
     sport: PublicChatDemoSport;
   };
+  /** Sports for the selected platform, with the ones it advertises enabled. */
+  sportOptions: readonly PublicDemoSportOption[];
+  onSelectSport: (sport: PublicChatDemoSport) => void;
   panel: PhoneEducationPanelId | null;
   onPanelChange: (panel: PhoneEducationPanelId) => void;
   returnFocusRef: RefObject<HTMLButtonElement | null>;
 }
+
+const SPORT_ICONS: Record<PublicChatDemoSport, React.ReactNode> = {
+  baseball: <IconBallBaseball className="h-4 w-4" stroke={1.5} />,
+  football: <IconBallAmericanFootball className="h-4 w-4" stroke={1.5} />,
+};
 
 const PHONE_FLOW_CONTENT = {
   drawer: {
@@ -204,10 +213,17 @@ function AboutPanel({
 
 function SportPanel({
   demoTarget,
+  sportOptions,
+  onSelectSport,
 }: {
   demoTarget: PhoneEducationPanelProps["demoTarget"];
+  sportOptions: PhoneEducationPanelProps["sportOptions"];
+  onSelectSport: PhoneEducationPanelProps["onSelectSport"];
 }) {
   const sportLabel = demoTarget.sport === "baseball" ? "Baseball" : "Football";
+  const hasFootball = sportOptions.some(
+    (option) => option.sport === "football" && option.available,
+  );
 
   return (
     <>
@@ -236,38 +252,43 @@ function SportPanel({
         </div>
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-2" role="list" aria-label="Demo sports">
-        <div
-          role="listitem"
-          aria-current={demoTarget.sport === "baseball" ? "true" : undefined}
-          className={
-            demoTarget.sport === "baseball"
-              ? "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[var(--phone-accent)] bg-[var(--phone-panel-strong)] px-3 text-[length:var(--phone-type-caption)] font-semibold text-[var(--phone-text)]"
-              : "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[var(--phone-border)] bg-[var(--phone-panel)] px-3 text-[length:var(--phone-type-caption)] font-medium text-[var(--phone-muted)] opacity-55"
-          }
-        >
-          <IconBallBaseball className="h-4 w-4" stroke={1.5} />
-          Baseball
-        </div>
-        <div
-          role="listitem"
-          aria-current={demoTarget.sport === "football" ? "true" : undefined}
-          className={
-            demoTarget.sport === "football"
-              ? "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[var(--phone-accent)] bg-[var(--phone-panel-strong)] px-3 text-[length:var(--phone-type-caption)] font-semibold text-[var(--phone-text)]"
-              : "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[var(--phone-border)] bg-[var(--phone-panel)] px-3 text-[length:var(--phone-type-caption)] font-medium text-[var(--phone-muted)] opacity-55"
-          }
-        >
-          <IconBallAmericanFootball className="h-4 w-4" stroke={1.5} />
-          Football
-        </div>
+      <div
+        className="mt-4 grid grid-cols-2 gap-2"
+        role="group"
+        aria-label={`Demo sport for ${demoTarget.platformLabel}`}
+      >
+        {sportOptions.map((option) => (
+          <button
+            key={option.sport}
+            type="button"
+            disabled={!option.available}
+            aria-pressed={option.selected}
+            aria-label={
+              option.available
+                ? `${option.label} demo`
+                : `${option.label} demo not available for ${demoTarget.platformLabel}`
+            }
+            onClick={() => onSelectSport(option.sport)}
+            className={
+              option.selected
+                ? "inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-[var(--phone-accent)] bg-[var(--phone-panel-strong)] px-3 text-[length:var(--phone-type-caption)] font-semibold text-[var(--phone-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--phone-accent)]"
+                : option.available
+                  ? "inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-[var(--phone-border)] bg-[var(--phone-panel)] px-3 text-[length:var(--phone-type-caption)] font-medium text-[var(--phone-text)] transition-colors hover:bg-[var(--phone-panel-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--phone-accent)]"
+                  : "inline-flex min-h-11 cursor-not-allowed items-center justify-center gap-2 rounded-xl border border-[var(--phone-border)] bg-[var(--phone-panel)] px-3 text-[length:var(--phone-type-caption)] font-medium text-[var(--phone-muted)] opacity-55"
+            }
+          >
+            {SPORT_ICONS[option.sport]}
+            {option.label}
+          </button>
+        ))}
       </div>
 
       <p className="mt-4 text-[length:var(--phone-type-caption)] leading-[1.5] text-[var(--phone-muted)]">
         Flaim itself supports ESPN and Yahoo across football, baseball,
-        basketball, and hockey, plus Sleeper for football and basketball. The
-        football demo returns for draft season, and more platforms arrive here
-        as their answers are prepared.
+        basketball, and hockey, plus Sleeper for football and basketball.{" "}
+        {hasFootball
+          ? "More platforms and sports arrive here as their answers are prepared."
+          : "The football demo returns for draft season, and more platforms arrive here as their answers are prepared."}
       </p>
     </>
   );
@@ -312,6 +333,8 @@ function FlowPanel({
 export function PhoneEducationPanel({
   container,
   demoTarget,
+  sportOptions,
+  onSelectSport,
   panel,
   onPanelChange,
   returnFocusRef,
@@ -380,7 +403,11 @@ export function PhoneEducationPanel({
           {panel === "about" ? (
             <AboutPanel demoTarget={demoTarget} onPanelChange={onPanelChange} />
           ) : panel === "sport" ? (
-            <SportPanel demoTarget={demoTarget} />
+            <SportPanel
+              demoTarget={demoTarget}
+              sportOptions={sportOptions}
+              onSelectSport={onSelectSport}
+            />
           ) : (
             <FlowPanel panel={panel} onPanelChange={onPanelChange} />
           )}
