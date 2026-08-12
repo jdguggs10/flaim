@@ -3,10 +3,12 @@ import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 
 import {
+  DEFAULT_FOOTBALL_CONTRAST_VARIANT,
   DEFAULT_FOOTBALL_VARIANT,
   FootballConnectionButtons,
   FootballSeasonalVariant,
   FootballVariantSwitcher,
+  isFootballContrastVariant,
   isFootballVariant,
 } from "@/components/site/football-seasonal-variants";
 
@@ -42,6 +44,7 @@ const CONNECTION_STEPS = [
 
 interface FantasyFootballPageProps {
   searchParams?: Promise<{
+    contrast?: string | string[];
     variant?: string | string[];
   }>;
 }
@@ -53,11 +56,22 @@ export default async function FantasyFootballPage({
   const requestedVariant = Array.isArray(resolvedSearchParams?.variant)
     ? resolvedSearchParams.variant[0]
     : resolvedSearchParams?.variant;
+  const requestedContrastVariant = Array.isArray(
+    resolvedSearchParams?.contrast,
+  )
+    ? resolvedSearchParams.contrast[0]
+    : resolvedSearchParams?.contrast;
   const showVariantLab = process.env.VERCEL_ENV !== "production";
   const activeVariant =
     showVariantLab && requestedVariant && isFootballVariant(requestedVariant)
       ? requestedVariant
       : DEFAULT_FOOTBALL_VARIANT;
+  const activeContrastVariant =
+    showVariantLab &&
+    requestedContrastVariant &&
+    isFootballContrastVariant(requestedContrastVariant)
+      ? requestedContrastVariant
+      : DEFAULT_FOOTBALL_CONTRAST_VARIANT;
 
   return (
     <div className="min-h-screen bg-background">
@@ -65,7 +79,13 @@ export default async function FantasyFootballPage({
         <FootballVariantSwitcher activeVariant={activeVariant} />
       ) : null}
 
-      <FootballSeasonalVariant variant={activeVariant} />
+      <FootballSeasonalVariant
+        variant={activeVariant}
+        contrastVariant={activeContrastVariant}
+        showContrastVariantLab={
+          showVariantLab && activeVariant === "season-chapters"
+        }
+      />
 
       <section className="px-4 py-12 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-5xl">

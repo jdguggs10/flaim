@@ -38,8 +38,43 @@ export type FootballVariantId = (typeof FOOTBALL_VARIANTS)[number]["id"];
 
 export const DEFAULT_FOOTBALL_VARIANT: FootballVariantId = "season-chapters";
 
+export const FOOTBALL_CONTRAST_VARIANTS = [
+  {
+    id: "no-more-grid",
+    label: "No More Grid",
+    description: "Clean statements",
+  },
+  {
+    id: "crossed-out",
+    label: "Crossed Out",
+    description: "Bold checklist",
+  },
+  {
+    id: "before-after",
+    label: "Before and After",
+    description: "Clear comparison",
+  },
+  {
+    id: "manifesto",
+    label: "Manifesto",
+    description: "One big thought",
+  },
+] as const;
+
+export type FootballContrastVariantId =
+  (typeof FOOTBALL_CONTRAST_VARIANTS)[number]["id"];
+
+export const DEFAULT_FOOTBALL_CONTRAST_VARIANT: FootballContrastVariantId =
+  "no-more-grid";
+
 export function isFootballVariant(value: string): value is FootballVariantId {
   return FOOTBALL_VARIANTS.some((variant) => variant.id === value);
+}
+
+export function isFootballContrastVariant(
+  value: string,
+): value is FootballContrastVariantId {
+  return FOOTBALL_CONTRAST_VARIANTS.some((variant) => variant.id === value);
 }
 
 export function FootballVariantSwitcher({
@@ -179,6 +214,20 @@ const EXPLANATION_TO_SKIP = [
   "No answers for the wrong week",
 ] as const;
 
+const WITHOUT_FLAIM = [
+  "Upload roster screenshots",
+  "Copy and paste player lists",
+  "Explain your league rules again",
+  "Rebuild your league in every chat",
+] as const;
+
+const WITH_FLAIM = [
+  "Ask the next question",
+  "Bring your real roster",
+  "Include your league rules",
+  "Use the right week and season",
+] as const;
+
 type SeasonMoment = (typeof SEASON_MOMENTS)[number];
 
 function IngredientPills({ ingredients }: { ingredients: readonly string[] }) {
@@ -273,35 +322,189 @@ function ConnectedLeaguesProof() {
   );
 }
 
-function LessExplainingSection() {
+function ContrastVariantSwitcher({
+  activeVariant,
+}: {
+  activeVariant: FootballContrastVariantId;
+}) {
+  return (
+    <aside className="border-b border-background/15 pb-7">
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-background/55">
+        Dark section lab
+      </p>
+      <nav
+        className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-4"
+        aria-label="Choose a dark section variant"
+      >
+        {FOOTBALL_CONTRAST_VARIANTS.map((variant) => {
+          const isActive = variant.id === activeVariant;
+
+          return (
+            <Link
+              key={variant.id}
+              href={`/fantasy-football?variant=season-chapters&contrast=${variant.id}`}
+              scroll={false}
+              aria-current={isActive ? "page" : undefined}
+              className={`rounded-xl border px-4 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-background ${
+                isActive
+                  ? "border-background bg-background text-foreground"
+                  : "border-background/20 text-background hover:border-background/50"
+              }`}
+            >
+              <span className="block text-sm font-semibold">
+                {variant.label}
+              </span>
+              <span
+                className={`mt-0.5 block text-xs ${
+                  isActive ? "text-muted-foreground" : "text-background/55"
+                }`}
+              >
+                {variant.description}
+              </span>
+            </Link>
+          );
+        })}
+      </nav>
+    </aside>
+  );
+}
+
+function NoMoreGrid() {
+  return (
+    <>
+      <div className="max-w-3xl">
+        <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
+          Less explaining. More fantasy football.
+        </h2>
+        <p className="mt-4 text-lg leading-8 text-background/70">
+          Connect once and let Flaim bring the league details that generic AI
+          would otherwise miss.
+        </p>
+      </div>
+      <ul className="mt-9 grid gap-px overflow-hidden rounded-[2rem] border border-background/15 bg-background/15 sm:grid-cols-2 lg:grid-cols-3">
+        {EXPLANATION_TO_SKIP.map((item) => (
+          <li
+            key={item}
+            className="bg-foreground px-6 py-7 text-lg font-semibold tracking-tight"
+          >
+            {item}
+          </li>
+        ))}
+      </ul>
+    </>
+  );
+}
+
+function CrossedOutList() {
+  return (
+    <div className="grid gap-9 lg:grid-cols-[0.72fr_1.28fr] lg:items-start">
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-background/55">
+          Leave the busywork behind
+        </p>
+        <h2 className="mt-4 text-4xl font-bold tracking-tight sm:text-5xl">
+          Your league should not need an introduction every time.
+        </h2>
+      </div>
+      <ul className="divide-y divide-background/15 border-y border-background/15">
+        {EXPLANATION_TO_SKIP.map((item, index) => (
+          <li key={item} className="flex items-center gap-5 py-5">
+            <span className="text-sm font-semibold tabular-nums text-background/35">
+              0{index + 1}
+            </span>
+            <span className="text-xl font-semibold tracking-tight text-background/45 line-through decoration-background/30 decoration-2">
+              {item.replace(/^No /, "")}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function BeforeAfterComparison() {
+  return (
+    <>
+      <div className="max-w-3xl">
+        <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
+          Same AI. Way less work.
+        </h2>
+        <p className="mt-4 text-lg leading-8 text-background/70">
+          Flaim keeps your actual fantasy league ready for the next question.
+        </p>
+      </div>
+      <div className="mt-9 grid overflow-hidden rounded-[2rem] border border-background/15 md:grid-cols-2">
+        <div className="border-b border-background/15 p-6 md:border-b-0 md:border-r sm:p-8">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-background/45">
+            Without Flaim
+          </p>
+          <ul className="mt-6 space-y-4 text-lg text-background/55">
+            {WITHOUT_FLAIM.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        </div>
+        <div className="bg-background p-6 text-foreground sm:p-8">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+            With Flaim
+          </p>
+          <ul className="mt-6 space-y-4 text-lg font-semibold">
+            {WITH_FLAIM.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function ManifestoStatement() {
+  return (
+    <div className="max-w-5xl py-2">
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-background/55">
+        Your league comes with you
+      </p>
+      <h2 className="mt-6 text-4xl font-bold leading-[1.08] tracking-tight sm:text-5xl lg:text-6xl">
+        No screenshots. No copy and paste. No rebuilding your roster. No AI
+        guessing your rules. Just your actual league, ready when you ask.
+      </h2>
+    </div>
+  );
+}
+
+function LessExplainingSection({
+  variant,
+  showVariantLab,
+}: {
+  variant: FootballContrastVariantId;
+  showVariantLab: boolean;
+}) {
   return (
     <section className="border-b bg-foreground px-4 py-14 text-background sm:px-6 lg:px-8">
       <div className="mx-auto max-w-6xl">
-        <div className="max-w-3xl">
-          <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-            Less explaining. More fantasy football.
-          </h2>
-          <p className="mt-4 text-lg leading-8 text-background/70">
-            Connect once and let Flaim bring the league details that generic AI
-            would otherwise miss.
-          </p>
-        </div>
-        <ul className="mt-9 grid gap-px overflow-hidden rounded-[2rem] border border-background/15 bg-background/15 sm:grid-cols-2 lg:grid-cols-3">
-          {EXPLANATION_TO_SKIP.map((item) => (
-            <li
-              key={item}
-              className="bg-foreground px-6 py-7 text-lg font-semibold tracking-tight"
-            >
-              {item}
-            </li>
-          ))}
-        </ul>
+        {showVariantLab ? (
+          <div className="mb-10">
+            <ContrastVariantSwitcher activeVariant={variant} />
+          </div>
+        ) : null}
+
+        {variant === "crossed-out" ? <CrossedOutList /> : null}
+        {variant === "before-after" ? <BeforeAfterComparison /> : null}
+        {variant === "manifesto" ? <ManifestoStatement /> : null}
+        {variant === "no-more-grid" ? <NoMoreGrid /> : null}
       </div>
     </section>
   );
 }
 
-function SeasonChaptersVariant() {
+function SeasonChaptersVariant({
+  contrastVariant,
+  showContrastVariantLab,
+}: {
+  contrastVariant: FootballContrastVariantId;
+  showContrastVariantLab: boolean;
+}) {
   return (
     <>
       <section className="border-b px-4 py-12 sm:px-6 md:py-16 lg:px-8">
@@ -350,9 +553,6 @@ function SeasonChaptersVariant() {
                   <p className="mt-4 text-sm font-medium text-muted-foreground">
                     &ldquo;{moment.question}&rdquo;
                   </p>
-                  <h3 className="mt-3 text-3xl font-bold tracking-tight">
-                    {moment.title}
-                  </h3>
                   <p className="mt-4 leading-7 text-muted-foreground">
                     {moment.description}
                   </p>
@@ -367,7 +567,10 @@ function SeasonChaptersVariant() {
         </div>
       </section>
 
-      <LessExplainingSection />
+      <LessExplainingSection
+        variant={contrastVariant}
+        showVariantLab={showContrastVariantLab}
+      />
     </>
   );
 }
@@ -632,8 +835,12 @@ function SeasonTimelineVariant() {
 
 export function FootballSeasonalVariant({
   variant,
+  contrastVariant,
+  showContrastVariantLab,
 }: {
   variant: FootballVariantId;
+  contrastVariant: FootballContrastVariantId;
+  showContrastVariantLab: boolean;
 }) {
   if (variant === "question-journey") {
     return <QuestionJourneyVariant />;
@@ -643,5 +850,10 @@ export function FootballSeasonalVariant({
     return <SeasonTimelineVariant />;
   }
 
-  return <SeasonChaptersVariant />;
+  return (
+    <SeasonChaptersVariant
+      contrastVariant={contrastVariant}
+      showContrastVariantLab={showContrastVariantLab}
+    />
+  );
 }
