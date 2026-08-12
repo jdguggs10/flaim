@@ -30,6 +30,6 @@ After connecting, Your Leagues is where users can add leagues, sync seasons, and
 - AI apps: https://flaim.app/guide/ai
 - Fantasy platform help: https://flaim.app/guide/platforms
 - ChatGPT: https://chatgpt.com/apps/flaim-fantasy/asdk_app_69a8f78087e081919e52cacacf00ff36
-- Claude connector directory: https://claude.ai/directory
+- Claude connector listing: https://claude.ai/directory/connectors/f1a5b6a4-1f5b-470c-af23-71fc7ab13754
 - Privacy: https://flaim.app/privacy
 - Full details: https://flaim.app/llms-full.txt

@@ -46,7 +46,7 @@ Open Flaim Fantasy directly in ChatGPT. It uses the same read-only league tools 
 
 ### Claude
 
-Open [Claude's connector directory](https://claude.ai/directory), find **Flaim Fantasy**, and authorize your Flaim account. Claude then uses the same read-only league tools and OAuth flow.
+Open [Flaim Fantasy in Claude's connector directory](https://claude.ai/directory/connectors/f1a5b6a4-1f5b-470c-af23-71fc7ab13754) and authorize your Flaim account. Claude then uses the same read-only league tools and OAuth flow.
 
 ### Manual Custom Connectors
 

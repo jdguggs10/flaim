@@ -90,6 +90,6 @@ Flaim Fantasy is available in ChatGPT and Claude. Perplexity can connect through
 - Claude: https://flaim.app/guide/ai#claude
 - Perplexity: https://flaim.app/guide/ai#perplexity
 - ChatGPT listing: https://chatgpt.com/apps/flaim-fantasy/asdk_app_69a8f78087e081919e52cacacf00ff36
-- Claude connector directory: https://claude.ai/directory
+- Claude connector listing: https://claude.ai/directory/connectors/f1a5b6a4-1f5b-470c-af23-71fc7ab13754
 - Privacy policy: https://flaim.app/privacy
 - Terms of service: https://flaim.app/terms

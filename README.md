@@ -16,7 +16,7 @@ The **Flaim skill** teaches your AI assistant how to behave like a fantasy analy
 
 1. **Create your Flaim account** at [flaim.app](https://flaim.app).
 2. **Connect your fantasy leagues** — ESPN via [Chrome extension](https://chromewebstore.google.com/detail/flaim-espn-fantasy-connec/mbnokejgglkfgkeeenolgdpcnfakpbkn), Yahoo via OAuth, or Sleeper by username. Flaim discovers supported leagues and shows them in [Your Leagues](https://flaim.app/leagues).
-3. **Connect your AI app** — open Flaim Fantasy in [ChatGPT](https://chatgpt.com/apps/flaim-fantasy/asdk_app_69a8f78087e081919e52cacacf00ff36) or [Claude](https://claude.ai/directory), or follow the optional Perplexity custom-connector path in the [connection guide](docs/CONNECTOR-DOCS.md).
+3. **Connect your AI app** — open Flaim Fantasy in [ChatGPT](https://chatgpt.com/apps/flaim-fantasy/asdk_app_69a8f78087e081919e52cacacf00ff36) or [Claude](https://claude.ai/directory/connectors/f1a5b6a4-1f5b-470c-af23-71fc7ab13754), or follow the optional Perplexity custom-connector path in the [connection guide](docs/CONNECTOR-DOCS.md).
 
 You are done. Ask questions such as "Who should I start this week?" or "What's on the waiver wire?" Defaults and additional league management are optional after setup.
 
