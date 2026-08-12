@@ -16,7 +16,13 @@ function rangeProgress(progress: number, start: number, duration: number) {
   return clampProgress((progress - start) / duration);
 }
 
-export function FootballStrikeReveal({ children }: { children: ReactNode }) {
+export function FootballStrikeReveal({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -54,10 +60,36 @@ export function FootballStrikeReveal({ children }: { children: ReactNode }) {
         );
 
         row.style.setProperty("--strike-old-progress", String(oldProgress));
+        row.style.setProperty(
+          "--strike-secondary-progress",
+          String(
+            rangeProgress(
+              sectionProgress,
+              rowStart + OLD_LINE_DURATION * 0.34,
+              OLD_LINE_DURATION,
+            ),
+          ),
+        );
         row.style.setProperty("--strike-new-progress", String(newProgress));
+        row.style.setProperty(
+          "--strike-old-copy-opacity",
+          String(1 - oldProgress * 0.62),
+        );
+        row.style.setProperty(
+          "--strike-old-blur",
+          `${oldProgress * 0.7}px`,
+        );
         row.style.setProperty(
           "--strike-new-offset",
           `${(1 - newProgress) * 0.4}rem`,
+        );
+        row.style.setProperty(
+          "--strike-route-offset",
+          `${(1 - newProgress) * -0.5}rem`,
+        );
+        row.style.setProperty(
+          "--strike-letter-spacing",
+          `${(1 - newProgress) * 0.035}em`,
         );
       });
     };
@@ -89,7 +121,10 @@ export function FootballStrikeReveal({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <div ref={containerRef} className="football-strike-sequence">
+    <div
+      ref={containerRef}
+      className={`football-strike-sequence ${className ?? ""}`.trim()}
+    >
       {children}
     </div>
   );

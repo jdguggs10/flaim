@@ -359,79 +359,8 @@
   }
 }
 
-@keyframes football-strike-grow {
-  from {
-    transform: scaleX(0);
-  }
-
-  to {
-    transform: scaleX(1);
-  }
-}
-
-@keyframes football-strike-scribble-top {
-  from {
-    transform: rotate(2deg) scaleX(0);
-  }
-
-  to {
-    transform: rotate(2deg) scaleX(1);
-  }
-}
-
-@keyframes football-strike-scribble-bottom {
-  from {
-    transform: rotate(-2deg) scaleX(0);
-  }
-
-  to {
-    transform: rotate(-2deg) scaleX(1);
-  }
-}
-
-@keyframes football-strike-reveal {
-  from {
-    opacity: 0;
-    transform: translateY(0.4rem);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes football-strike-ink {
-  from {
-    text-decoration-color: transparent;
-  }
-
-  to {
-    text-decoration-color: var(--background);
-  }
-}
-
-@keyframes football-strike-curtain {
-  0% {
-    top: 0;
-    opacity: 0;
-  }
-
-  8%,
-  92% {
-    opacity: 0.5;
-  }
-
-  100% {
-    top: calc(100% - 2px);
-    opacity: 0;
-  }
-}
-
 @layer utilities {
-  .football-strike-draw::after,
-  .football-strike-replace-old::after,
-  .football-strike-curtain-item::after {
+  .football-strike-replace-old::after {
     position: absolute;
     top: 52%;
     right: -0.08em;
@@ -442,40 +371,23 @@
     content: "";
   }
 
-  .football-strike-draw::after,
-  .football-strike-curtain-item::after {
-    transform: scaleX(0);
-    animation: football-strike-grow 580ms cubic-bezier(0.16, 1, 0.3, 1)
-      var(--strike-delay) both;
-  }
-
-  .football-strike-scribble::before,
-  .football-strike-scribble::after {
+  .football-strike-replace-old::before {
     position: absolute;
-    right: -0.12em;
-    left: -0.12em;
+    top: 52%;
+    right: -0.08em;
+    left: -0.08em;
+    display: none;
     height: 2px;
     transform-origin: left center;
     background: var(--background);
     content: "";
   }
 
-  .football-strike-scribble::before {
-    top: 45%;
-    animation: football-strike-scribble-top 520ms
-      cubic-bezier(0.16, 1, 0.3, 1) var(--strike-delay) both;
-  }
-
-  .football-strike-scribble::after {
-    top: 58%;
-    animation: football-strike-scribble-bottom 620ms
-      cubic-bezier(0.16, 1, 0.3, 1) calc(var(--strike-delay) + 90ms) both;
-  }
-
   .football-strike-replace-new {
     opacity: 1;
   }
 
+  .football-strike-ready .football-strike-replace-old::before,
   .football-strike-ready .football-strike-replace-old::after {
     transform: scaleX(0);
   }
@@ -485,35 +397,129 @@
     opacity: 0;
   }
 
-  .football-strike-curtain-sweep {
-    position: absolute;
-    z-index: 2;
-    right: 0;
-    left: 0;
-    height: 2px;
-    background: var(--background);
-    pointer-events: none;
-    animation: football-strike-curtain 1.7s ease-in-out 180ms both;
-  }
-
-  .football-strike-statement-payoff {
-    opacity: 0;
-    animation: football-strike-reveal 520ms cubic-bezier(0.16, 1, 0.3, 1)
-      calc(var(--strike-delay) + 520ms) both;
-  }
-
-  .football-strike-statement {
-    text-decoration-line: line-through;
-    text-decoration-color: transparent;
-    text-decoration-thickness: 2px;
-    text-decoration-skip-ink: none;
-    animation: football-strike-ink 420ms ease-out var(--strike-delay) both;
-  }
-
   .football-strike-ready.football-strike-scroll-controlled
     .football-strike-replace-old::after {
     transform: scaleX(var(--strike-old-progress, 0));
     animation: none;
+  }
+
+  .football-strike-style-coach-marker .football-strike-replace-old::before,
+  .football-strike-style-coach-marker .football-strike-replace-old::after {
+    display: block;
+    height: 2px;
+    border-radius: 999px;
+    background: var(--background);
+  }
+
+  .football-strike-style-coach-marker
+    .football-strike-replace-old::before {
+    top: 43%;
+    transform: rotate(2deg);
+  }
+
+  .football-strike-style-coach-marker
+    .football-strike-replace-old::after {
+    top: 61%;
+    transform: rotate(-2deg);
+  }
+
+  .football-strike-ready.football-strike-scroll-controlled.football-strike-style-coach-marker
+    .football-strike-replace-old::before {
+    transform: rotate(2deg) scaleX(var(--strike-old-progress, 0));
+  }
+
+  .football-strike-ready.football-strike-scroll-controlled.football-strike-style-coach-marker
+    .football-strike-replace-old::after {
+    transform: rotate(-2deg)
+      scaleX(var(--strike-secondary-progress, 0));
+  }
+
+  .football-strike-style-x-it-out .football-strike-replace-old::before,
+  .football-strike-style-x-it-out .football-strike-replace-old::after {
+    top: 50%;
+    right: -0.14em;
+    left: -0.14em;
+    display: block;
+    height: 2px;
+    border-radius: 999px;
+    background: var(--destructive);
+  }
+
+  .football-strike-style-x-it-out .football-strike-replace-old::before {
+    transform: rotate(7deg);
+  }
+
+  .football-strike-style-x-it-out .football-strike-replace-old::after {
+    transform: rotate(-7deg);
+  }
+
+  .football-strike-ready.football-strike-scroll-controlled.football-strike-style-x-it-out
+    .football-strike-replace-old::before {
+    transform: rotate(7deg) scaleX(var(--strike-old-progress, 0));
+  }
+
+  .football-strike-ready.football-strike-scroll-controlled.football-strike-style-x-it-out
+    .football-strike-replace-old::after {
+    transform: rotate(-7deg) scaleX(var(--strike-secondary-progress, 0));
+  }
+
+  .football-strike-style-x-it-out .football-strike-replace-new {
+    padding-left: 1.6rem;
+  }
+
+  .football-strike-style-x-it-out .football-strike-replace-new::before {
+    position: absolute;
+    left: 0;
+    color: var(--success);
+    content: "✓";
+    opacity: var(--strike-new-progress, 1);
+  }
+
+  .football-strike-style-marker-wipe .football-strike-replace-old::after {
+    top: 18%;
+    height: 72%;
+    border-radius: 0.18em;
+    background: var(--warning);
+    opacity: 0.7;
+    rotate: -1deg;
+  }
+
+  .football-strike-style-marker-wipe .football-strike-replace-new {
+    color: var(--warning);
+  }
+
+  .football-strike-style-playbook-route .football-strike-replace-old::after {
+    height: 3px;
+    border-radius: 999px;
+  }
+
+  .football-strike-style-playbook-route .football-strike-replace-new {
+    padding-left: 1.75rem;
+  }
+
+  .football-strike-style-playbook-route
+    .football-strike-replace-new::before {
+    position: absolute;
+    left: 0;
+    content: "↳";
+    opacity: var(--strike-new-progress, 1);
+    transform: translateX(var(--strike-route-offset, 0));
+  }
+
+  .football-strike-style-fade-and-replace
+    .football-strike-old-copy {
+    opacity: var(--strike-old-copy-opacity, 0.38);
+    filter: blur(var(--strike-old-blur, 0.7px));
+  }
+
+  .football-strike-style-fade-and-replace
+    .football-strike-replace-old::after {
+    height: 1px;
+  }
+
+  .football-strike-style-fade-and-replace
+    .football-strike-replace-new {
+    letter-spacing: var(--strike-letter-spacing, 0);
   }
 
   .football-strike-ready.football-strike-scroll-controlled
@@ -554,25 +560,42 @@
       opacity: 1;
     }
 
-    .football-strike-draw::after,
     .football-strike-replace-old::after,
-    .football-strike-curtain-item::after,
-    .football-strike-scribble::before,
-    .football-strike-scribble::after {
+    .football-strike-replace-old::before {
       animation: none !important;
       transform: scaleX(1);
     }
 
-    .football-strike-replace-new,
-    .football-strike-statement-payoff {
+    .football-strike-replace-new {
       animation: none !important;
       transform: none;
       opacity: 1;
     }
 
+    .football-strike-ready .football-strike-replace-old::before,
     .football-strike-ready .football-strike-replace-old::after {
       animation: none !important;
       transform: scaleX(1) !important;
+    }
+
+    .football-strike-ready.football-strike-style-coach-marker
+      .football-strike-replace-old::before {
+      transform: rotate(2deg) scaleX(1) !important;
+    }
+
+    .football-strike-ready.football-strike-style-coach-marker
+      .football-strike-replace-old::after {
+      transform: rotate(-2deg) scaleX(1) !important;
+    }
+
+    .football-strike-ready.football-strike-style-x-it-out
+      .football-strike-replace-old::before {
+      transform: rotate(7deg) scaleX(1) !important;
+    }
+
+    .football-strike-ready.football-strike-style-x-it-out
+      .football-strike-replace-old::after {
+      transform: rotate(-7deg) scaleX(1) !important;
     }
 
     .football-strike-ready .football-strike-replace-new {
@@ -581,14 +604,14 @@
       opacity: 1 !important;
     }
 
-    .football-strike-statement {
-      animation: none !important;
-      text-decoration-color: var(--background);
+    .football-strike-ready .football-strike-replace-new::before {
+      transform: none !important;
+      opacity: 1 !important;
     }
 
-    .football-strike-curtain-sweep {
-      display: none;
-      animation: none !important;
+    .football-strike-ready .football-strike-old-copy {
+      opacity: 0.38 !important;
+      filter: none !important;
     }
 
     /* The education sheet's tailwindcss-animate enter/exit classes are applied
