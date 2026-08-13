@@ -1363,7 +1363,16 @@ describe('fantasy-mcp tools', () => {
       'an ESPN-wide roster/start rate or Yahoo-wide market rate'
     );
     expect(tool!.description).toContain(
-      'If capabilities marks rates unavailable, write "[Provider] market ownership rate: not provided"; do not repeat response field names or null values, call get_players, or offer a lookup'
+      'Pass a requested count exactly from 1 through 100; for more than 100, state the limit and ask the user to narrow the request or accept 100'
+    );
+    expect(tool!.description).toContain(
+      'An ESPN-wide started rate is never conditional on the player being rostered'
+    );
+    expect(tool!.description).toContain(
+      'Never print legacy response field names such as percentOwned/percentStarted or null values'
+    );
+    expect(tool!.description).toContain(
+      'If capabilities marks rates unavailable, write "[Provider] market ownership rate: not provided"; do not call get_players or offer a lookup'
     );
     expect(tool!.description).toContain(
       'A returned player is already confirmed available in that league'
@@ -1376,7 +1385,9 @@ describe('fantasy-mcp tools', () => {
     expect(tool!.description).toContain(
       'State acquisition status in plain language from acquisitionState ("a free agent", "on waivers"); never print raw codes — neither provider codes such as FREEAGENT or WAIVERS nor canonical values like free_agent verbatim'
     );
-    expect(tool!.description).toContain('Use get_roster for a separate player-ownership question');
+    expect(tool!.description).toContain(
+      'Use get_roster only when the current request separately asks who owns a player; never offer it after an available-player result'
+    );
     expect(tool!.description).toContain('Use current web evidence before adding analysis or pickup recommendations');
     expect(tool!.description).toContain(
       'Do not include injuryStatus or any injury detail unless the user asks for it; when asked, verify current web evidence and translate provider codes into plain language'

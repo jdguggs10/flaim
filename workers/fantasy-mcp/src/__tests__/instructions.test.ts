@@ -58,7 +58,16 @@ describe('Flaim MCP initialization instructions', () => {
       'Label every reported percentage as an ESPN-wide roster/start rate or Yahoo-wide market rate'
     );
     expect(FLAIM_MCP_INSTRUCTIONS).toContain(
-      'If a rate is missing, write "[Provider] market ownership rate: not provided"; do not repeat response field names/nulls, call get_players, or offer a lookup'
+      'Pass a requested count exactly from 1 through 100; for more than 100, state the limit and ask the user to narrow the request or accept 100'
+    );
+    expect(FLAIM_MCP_INSTRUCTIONS).toContain(
+      'An ESPN-wide started rate is never conditional on the player being rostered'
+    );
+    expect(FLAIM_MCP_INSTRUCTIONS).toContain(
+      'Never print legacy response field names such as percentOwned/percentStarted or null values'
+    );
+    expect(FLAIM_MCP_INSTRUCTIONS).toContain(
+      'If a rate is missing, write "[Provider] market ownership rate: not provided"; do not call get_players or offer a lookup'
     );
     expect(FLAIM_MCP_INSTRUCTIONS).toContain(
       'Only ESPN reports acquisition state here'
@@ -73,10 +82,10 @@ describe('Flaim MCP initialization instructions', () => {
       'For a returned list or field explanation, end after the requested facts; never add an "if you want" offer or qualitative advice'
     );
     expect(FLAIM_MCP_INSTRUCTIONS).toContain(
-      'Do not include injuryStatus or any injury detail unless the user asks for it; when asked, verify current web evidence and translate provider codes into plain language'
+      'Use get_roster only when the current request separately asks who owns a player; never offer it after an available-player result'
     );
     expect(FLAIM_MCP_INSTRUCTIONS).toContain(
-      'Use get_roster for a separate ownership question'
+      'Do not include injuryStatus or any injury detail unless the user asks for it; when asked, verify current web evidence and translate provider codes into plain language'
     );
   });
 
