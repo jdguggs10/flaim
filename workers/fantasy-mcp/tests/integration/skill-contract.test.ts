@@ -101,7 +101,7 @@ describe('shipped Flaim fantasy skill contract', () => {
       'Label every reported percentage as an ESPN-wide roster/start rate or Yahoo-wide market rate'
     );
     expect(skill).toContain(
-      'If a rate is missing, write "[Provider] market ownership rate: not provided"; do not repeat response field names or null values, call `get_players`, or offer a lookup'
+      'If a rate is missing, write "[Provider] market ownership rate: not provided"; do not print a missing response field name or null value, call `get_players`, or offer a lookup'
     );
     expect(skill).toContain(
       'A returned player is already confirmed available in the selected league'
@@ -124,9 +124,26 @@ describe('shipped Flaim fantasy skill contract', () => {
     expect(skill).toContain('For a returned list or field explanation, end after the requested facts');
     expect(skill).toContain('never add an "if you want" offer');
     expect(skill).toContain(
+      'Pass a requested count exactly from 1 through 100; for more than 100, state the limit and ask the user to narrow the request or accept 100'
+    );
+    expect(skill).toContain(
+      'An ESPN-wide started rate is never conditional on the player being rostered'
+    );
+    expect(skill).toContain(
+      'Translate ownership scope silently into that provider-wide wording; never print the `ownershipScope` key, `platform_global` enum, or `get_free_agents` tool name'
+    );
+    expect(skill).toContain(
+      'Final answer check: remove every unrequested follow-up offer before sending'
+    );
+    expect(skill).toContain(
       'Render acquisition state silently in plain language; never print raw codes such as `FREEAGENT`, `WAIVERS`, or `free_agent`'
     );
-    expect(skill).toContain('Use `get_roster` for a separate player-ownership question');
+    expect(skill).toContain(
+      'Use `get_roster` only when the current request separately asks who owns a player; never offer it after an available-player result'
+    );
     expect(skill).toContain('Use current web evidence before adding analysis or pickup recommendations');
+    expect(skill).toContain(
+      'Do not include `injuryStatus` or any injury detail unless the user asks for it; when asked, verify current web evidence and translate provider codes into plain language'
+    );
   });
 });
