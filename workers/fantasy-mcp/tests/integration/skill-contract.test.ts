@@ -130,7 +130,10 @@ describe('shipped Flaim fantasy skill contract', () => {
       'An ESPN-wide started rate is never conditional on the player being rostered'
     );
     expect(skill).toContain(
-      'Never print legacy response field names such as `percentOwned`/`percentStarted` or null values'
+      'When explaining a rate, use only those user-facing labels; never include parenthetical field keys, source JSON names, or null values'
+    );
+    expect(skill).toContain(
+      'Final answer check: remove every raw response key and every unrequested follow-up offer before sending'
     );
     expect(skill).toContain(
       'Render acquisition state silently in plain language; never print raw codes such as `FREEAGENT`, `WAIVERS`, or `free_agent`'
