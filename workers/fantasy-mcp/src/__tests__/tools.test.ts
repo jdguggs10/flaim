@@ -1378,6 +1378,9 @@ describe('fantasy-mcp tools', () => {
     );
     expect(tool!.description).toContain('Use get_roster for a separate player-ownership question');
     expect(tool!.description).toContain('Use current web evidence before adding analysis or pickup recommendations');
+    expect(tool!.description).toContain(
+      'Do not include injuryStatus or any injury detail unless the user asks for it; when asked, verify current web evidence and translate provider codes into plain language'
+    );
     expect(asZod(tool!.inputSchema.count).description).toContain(
       'Pass the user-requested number exactly'
     );

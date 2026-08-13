@@ -73,6 +73,9 @@ describe('Flaim MCP initialization instructions', () => {
       'For a returned list or field explanation, end after the requested facts; never add an "if you want" offer or qualitative advice'
     );
     expect(FLAIM_MCP_INSTRUCTIONS).toContain(
+      'Do not include injuryStatus or any injury detail unless the user asks for it; when asked, verify current web evidence and translate provider codes into plain language'
+    );
+    expect(FLAIM_MCP_INSTRUCTIONS).toContain(
       'Use get_roster for a separate ownership question'
     );
   });

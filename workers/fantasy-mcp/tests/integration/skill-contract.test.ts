@@ -128,5 +128,8 @@ describe('shipped Flaim fantasy skill contract', () => {
     );
     expect(skill).toContain('Use `get_roster` for a separate player-ownership question');
     expect(skill).toContain('Use current web evidence before adding analysis or pickup recommendations');
+    expect(skill).toContain(
+      'Do not include `injuryStatus` or any injury detail unless the user asks for it; when asked, verify current web evidence and translate provider codes into plain language'
+    );
   });
 });
