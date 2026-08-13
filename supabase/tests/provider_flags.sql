@@ -137,7 +137,10 @@ begin
     raise exception 'single-provider failure payload is wrong: %', external_payload;
   end if;
 
-  -- Outside the six-hour window the row drops out entirely.
+  -- Aging the failure past the six-hour window zeroes the counts and empties
+  -- the error codes, but the provider keeps its row: the grouping sees every
+  -- sync-state row, and only the counters are windowed. A provider with no
+  -- sync-state row at all is what produces no row (asserted above).
   update public.provider_sync_state
   set last_attempt_at = now() - interval '7 hours',
       last_failure_at = now() - interval '7 hours',

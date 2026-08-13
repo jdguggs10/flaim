@@ -138,17 +138,26 @@ provider-outage monitoring. The order is therefore load-bearing:
    `*/5` while `dashboard-snapshot` keeps its `*/5` cadence. Both signals stay
    fresh and no consumer changes behavior. This file remains safe to re-run.
 2. **Phase 2 — `cron/production-cadence-cutover.sql`.** Moves the external
-   dashboard row to hourly and the internal-inclusive row to nightly. It runs
-   only after the consumer has been verified against the dedicated snapshot,
-   and refuses to run otherwise: it checks that the relation exists, that the
-   phase 1 job is active at `*/5`, and that both variants are fresh, and it
-   requires an explicit in-session acknowledgement of the consumer
-   verification, which it cannot check itself.
+   dashboard row to hourly and the internal-inclusive row to nightly. The
+   whole file is one transaction, so a failed precondition rolls the schedule
+   changes back rather than merely printing an error — `psql` runs the
+   statements after a failed one unless `ON_ERROR_STOP` is set, so a guard
+   that only raises is not a guard. It requires the relation to exist, the
+   phase 1 job to be active at `*/5` with the expected command, that job to
+   have succeeded at least twice in the last 20 minutes, both variants to be
+   fresh, and an explicit in-session acknowledgement of the consumer
+   verification it cannot check itself.
 
-`scripts/check-supabase.sh` asserts this posture statically, so phase 2 cannot
-be folded into the canonical schedule file by accident. After phase 2 has been
-applied and verified in production, update `cron/production.sql` and those
-assertions together.
+   The execution-history check matters because the phase 1 migration
+   populates the relation itself: fresh rows prove nothing about whether the
+   schedule is firing.
+
+`scripts/check-supabase.sh` asserts this posture. Statically: the canonical
+schedule file stays in phase 1, and the cutover file keeps its guard and its
+transaction. Behaviorally: it runs the cutover artifact under the invocation
+that would step over a raising guard and requires that no job was activated.
+After phase 2 has been applied and verified in production, update
+`cron/production.sql` and those assertions together.
 
 The internal-inclusive dashboard variant is not on the alerting path. Once
 phase 2 is applied it ages to roughly 24 hours; the provider-flags variant of

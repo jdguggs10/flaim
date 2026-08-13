@@ -64,6 +64,16 @@ if ! rg --quiet "provider-flags-snapshot" "${CRON_CUTOVER_SQL}"; then
   exit 1
 fi
 
+# A raising guard is not a blocking guard: psql runs the statements after a
+# failed one unless ON_ERROR_STOP is set, so the guard has to abort a
+# transaction that wraps the schedule changes. Assert the file is that
+# transaction; the behavioral proof below runs it and checks it stayed inert.
+if ! rg --multiline --quiet '(?s)^begin;.*^commit;' "${CRON_CUTOVER_SQL}"; then
+  printf '%s must wrap its guard and schedule changes in one transaction.\n' \
+    "${CRON_CUTOVER_SQL}" >&2
+  exit 1
+fi
+
 if rg --line-number \
   "\\.eq\\('(state|code|access_token|refresh_token)'" \
   workers/auth-worker/src \
@@ -143,6 +153,33 @@ if ! diff -u \
   "${tmp_dir}/snapshot-1.txt" \
   "${tmp_dir}/snapshot-2.txt"; then
   printf 'Supabase reset snapshots were not deterministic.\n' >&2
+  exit 1
+fi
+
+# Run the phase 2 cutover artifact exactly as a careless operator would — no
+# ON_ERROR_STOP, so psql keeps going past the failed guard — and prove it
+# activated nothing. This is the assertion that catches a guard which raises
+# but does not block. The second pass adds the consumer acknowledgement so the
+# database-side preconditions are the only thing left standing.
+for cutover_pgoptions in "" "-c flaim.flags_consumer_verified=yes"; do
+  docker exec -i \
+    -e PGOPTIONS="${cutover_pgoptions}" \
+    "${DB_CONTAINER}" \
+    psql \
+    -U postgres \
+    -d postgres \
+    -f - \
+    < "${CRON_CUTOVER_SQL}" \
+    > /dev/null 2>&1 || true
+done
+
+activated_jobs="$(
+  docker exec "${DB_CONTAINER}" \
+    psql -At -U postgres -d postgres -c 'select count(*) from cron.job;'
+)"
+if [[ "${activated_jobs}" != "0" ]]; then
+  printf 'The phase 2 cutover artifact scheduled %s job(s) with its preconditions unmet.\n' \
+    "${activated_jobs}" >&2
   exit 1
 fi
 
