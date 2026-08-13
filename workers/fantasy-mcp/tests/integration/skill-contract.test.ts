@@ -121,8 +121,9 @@ describe('shipped Flaim fantasy skill contract', () => {
     expect(skill).toContain(
       'Call Yahoo/Sleeper rows "available players," never specifically free agents or waivers'
     );
-    expect(skill).toContain('For a returned list or field explanation, end after the requested facts');
-    expect(skill).toContain('never add an "if you want" offer');
+    expect(skill).toContain(
+      'Hard stop: after satisfying a returned-list or field-explanation request, end the answer immediately after the requested facts'
+    );
     expect(skill).toContain(
       'Pass a requested count exactly from 1 through 100; for more than 100, state the limit and ask the user to narrow the request or accept 100'
     );
@@ -133,7 +134,7 @@ describe('shipped Flaim fantasy skill contract', () => {
       'Translate ownership scope silently into that provider-wide wording; never print the `ownershipScope` key, `platform_global` enum, or `get_free_agents` tool name'
     );
     expect(skill).toContain(
-      'Final answer check: remove every unrequested follow-up offer before sending'
+      'never append "if you want", "tell me which player", or a similar invitation unless the user\'s current request explicitly asks for that additional work'
     );
     expect(skill).toContain(
       'Render acquisition state silently in plain language; never print raw codes such as `FREEAGENT`, `WAIVERS`, or `free_agent`'
@@ -142,6 +143,12 @@ describe('shipped Flaim fantasy skill contract', () => {
       'Use `get_roster` only when the current request separately asks who owns a player; never offer it after an available-player result'
     );
     expect(skill).toContain('Use current web evidence before adding analysis or pickup recommendations');
+    expect(skill.indexOf('Pass a requested count exactly from 1 through 100')).toBeGreaterThan(
+      skill.indexOf('Returns players available to acquire in the selected fantasy league')
+    );
+    expect(skill.indexOf('Hard stop:')).toBeGreaterThan(
+      skill.indexOf('Use current web evidence before adding analysis or pickup recommendations')
+    );
     expect(skill).toContain(
       'Do not include `injuryStatus` or any injury detail unless the user asks for it; when asked, verify current web evidence and translate provider codes into plain language'
     );
