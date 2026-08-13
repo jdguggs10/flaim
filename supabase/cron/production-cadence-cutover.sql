@@ -58,6 +58,10 @@ begin
       using hint = 'Apply the phase 1 migration first.';
   end if;
 
+  -- Exact string, not a pattern. Reformatting the scheduled command in
+  -- production.sql will make this refuse to run — that is the safe direction,
+  -- and scripts/check-supabase.sh asserts the two spellings stay in step so
+  -- the drift is caught in review rather than at cutover time.
   if not exists (
     select 1
     from cron.job

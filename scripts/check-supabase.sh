@@ -86,7 +86,10 @@ fi
 # failed one unless ON_ERROR_STOP is set, so the guard has to abort a
 # transaction that wraps the schedule changes. Assert the file is that
 # transaction; the behavioral proof below runs it and checks it stayed inert.
-if ! rg --multiline --quiet '(?s)^begin;.*^commit;' "${CRON_CUTOVER_SQL}"; then
+# (?m) is ripgrep's default for these anchors, but state it: the file opens
+# with a long comment block, so a buffer-anchored ^ would never match and this
+# guard would fail unconditionally.
+if ! rg --multiline --quiet '(?ms)^begin;.*^commit;' "${CRON_CUTOVER_SQL}"; then
   printf '%s must wrap its guard and schedule changes in one transaction.\n' \
     "${CRON_CUTOVER_SQL}" >&2
   exit 1

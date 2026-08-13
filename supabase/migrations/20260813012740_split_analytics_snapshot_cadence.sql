@@ -107,16 +107,26 @@ end;
 $function$;
 
 -- The no-argument function stays as the compatibility and local-seed entry
--- point: it still refreshes both variants in one transaction, so existing
--- callers, seeds, and the pre-cutover cron job behave exactly as before.
+-- point, and keeps its original single-statement body rather than delegating
+-- twice to the overload above. Under READ COMMITTED each statement takes its
+-- own snapshot, so two PERFORM calls could compute id=1 and id=2 from
+-- different database states while stamping them with the same transaction
+-- timestamp. One multi-row INSERT computes both payloads under one statement
+-- snapshot, which is what existing callers, seeds, and the pre-cutover cron
+-- job already rely on.
 create or replace function analytics.refresh_dashboard_snapshot()
 returns void
 language plpgsql
 set search_path to ''
 as $function$
 begin
-  perform analytics.refresh_dashboard_snapshot(false);
-  perform analytics.refresh_dashboard_snapshot(true);
+  insert into analytics.dashboard_snapshot (id, payload, computed_at)
+  values
+    (1, analytics.dashboard_payload(false), now()),
+    (2, analytics.dashboard_payload(true), now())
+  on conflict (id) do update
+  set payload = excluded.payload,
+      computed_at = excluded.computed_at;
 end;
 $function$;
 
