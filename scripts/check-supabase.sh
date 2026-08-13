@@ -13,6 +13,56 @@ export SUPABASE_TELEMETRY_DISABLED=1
 readonly DB_CONTAINER="supabase_db_flaim"
 readonly PROOF_SQL="supabase/tests/reproducibility.sql"
 readonly TOKEN_RPC_PROOF_SQL="supabase/tests/token_rpc.sql"
+readonly PROVIDER_FLAGS_PROOF_SQL="supabase/tests/provider_flags.sql"
+readonly CRON_PRODUCTION_SQL="supabase/cron/production.sql"
+readonly CRON_CUTOVER_SQL="supabase/cron/production-cadence-cutover.sql"
+
+# FLA-264 cron cutover ordering, asserted statically because the failure is
+# silent: the provider-failure consumer fails open on a stale snapshot, so
+# dropping the dashboard cadence before that consumer reads the dedicated
+# provider snapshot stops outage alerting without an error anywhere.
+#
+# The canonical production schedule must stay in phase 1 — the dedicated job
+# added at */5 while the dashboard job is still */5. Phase 2 lives in its own
+# guarded file. Once phase 2 has been applied and verified in production, fold
+# the new cadence into production.sql and update these assertions in the same
+# change.
+if ! rg --multiline --quiet \
+  "cron\.schedule\(\s*'provider-flags-snapshot',\s*'\*/5 \* \* \* \*'" \
+  "${CRON_PRODUCTION_SQL}"; then
+  printf '%s must schedule provider-flags-snapshot at */5.\n' \
+    "${CRON_PRODUCTION_SQL}" >&2
+  exit 1
+fi
+
+if ! rg --multiline --quiet \
+  "cron\.schedule\(\s*'dashboard-snapshot',\s*'\*/5 \* \* \* \*'" \
+  "${CRON_PRODUCTION_SQL}"; then
+  printf '%s changed the dashboard-snapshot cadence. Phase 2 belongs in %s.\n' \
+    "${CRON_PRODUCTION_SQL}" \
+    "${CRON_CUTOVER_SQL}" >&2
+  exit 1
+fi
+
+if rg --quiet "dashboard-snapshot-internal|refresh_dashboard_snapshot\(true\)" \
+  "${CRON_PRODUCTION_SQL}"; then
+  printf '%s contains phase 2 cadence changes; they belong in %s.\n' \
+    "${CRON_PRODUCTION_SQL}" \
+    "${CRON_CUTOVER_SQL}" >&2
+  exit 1
+fi
+
+if ! rg --quiet "flaim\.flags_consumer_verified" "${CRON_CUTOVER_SQL}"; then
+  printf '%s must keep its consumer-verification guard.\n' \
+    "${CRON_CUTOVER_SQL}" >&2
+  exit 1
+fi
+
+if ! rg --quiet "provider-flags-snapshot" "${CRON_CUTOVER_SQL}"; then
+  printf '%s must require the phase 1 job before changing cadence.\n' \
+    "${CRON_CUTOVER_SQL}" >&2
+  exit 1
+fi
 
 if rg --line-number \
   "\\.eq\\('(state|code|access_token|refresh_token)'" \
@@ -77,6 +127,15 @@ for reset_number in 1 2; do
     -d postgres \
     -f - \
     < "${TOKEN_RPC_PROOF_SQL}" \
+    >> "${tmp_dir}/snapshot-${reset_number}.txt"
+
+  docker exec -i "${DB_CONTAINER}" \
+    psql \
+    -v ON_ERROR_STOP=1 \
+    -U postgres \
+    -d postgres \
+    -f - \
+    < "${PROVIDER_FLAGS_PROOF_SQL}" \
     >> "${tmp_dir}/snapshot-${reset_number}.txt"
 done
 
