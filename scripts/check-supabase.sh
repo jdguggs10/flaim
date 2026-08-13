@@ -9,6 +9,14 @@ cd "${REPO_ROOT}"
 
 export SUPABASE_TELEMETRY_DISABLED=1
 
+# Every guard below is a ripgrep search, and a missing binary exits 127 — which
+# an `if rg ...` treats as "no match", i.e. as passing. Require it explicitly so
+# an absent tool can never quietly stand in for a clean result.
+if ! command -v rg >/dev/null 2>&1; then
+  printf 'ripgrep (rg) is required by this check and was not found on PATH.\n' >&2
+  exit 1
+fi
+
 # Supabase derives this container name from project_id = "flaim" in config.toml.
 readonly DB_CONTAINER="supabase_db_flaim"
 readonly PROOF_SQL="supabase/tests/reproducibility.sql"
