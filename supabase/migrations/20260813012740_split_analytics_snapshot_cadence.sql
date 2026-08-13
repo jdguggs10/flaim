@@ -44,6 +44,8 @@ set search_path to ''
 as $function$
 with excluded as (
   -- Empty when include_internal=true: NOT IN (empty set) then passes every row.
+  -- NOT IN against this set is only safe because internal_users.user_id is
+  -- NOT NULL — a single NULL here would make the predicate exclude every row.
   select user_id from analytics.internal_users where not include_internal
 )
 select coalesce(jsonb_agg(sr order by sr.provider), '[]'::jsonb)
@@ -86,6 +88,10 @@ $function$;
 -- Refresh a single dashboard variant. This is what lets a scheduler run the
 -- external row hourly and the internal-inclusive row nightly without paying
 -- for both payload computations on every tick.
+--
+-- The upsert shape below is deliberately duplicated in the no-argument
+-- function further down rather than shared; see the comment there for why.
+-- Changing the target columns or the conflict clause means changing both.
 create or replace function analytics.refresh_dashboard_snapshot(
   include_internal boolean
 )
@@ -114,6 +120,10 @@ $function$;
 -- timestamp. One multi-row INSERT computes both payloads under one statement
 -- snapshot, which is what existing callers, seeds, and the pre-cutover cron
 -- job already rely on.
+--
+-- The cost of that correctness is a second copy of the upsert. Any change to
+-- the target columns or the conflict clause here must be mirrored in
+-- analytics.refresh_dashboard_snapshot(boolean) above, and vice versa.
 create or replace function analytics.refresh_dashboard_snapshot()
 returns void
 language plpgsql

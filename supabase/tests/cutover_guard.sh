@@ -71,7 +71,12 @@ assert_jobs() {
 }
 
 # Waits for the scheduler to log successful runs of a specific command. pg_cron
-# supports sub-minute schedules, so this is seconds, not minutes.
+# supports sub-minute schedules, so this is seconds, not minutes: the jobs below
+# are scheduled at 1-second intervals and two successes normally land within a
+# few seconds — all three scenarios together measured ~6s. The 30 attempts are
+# a failure ceiling, not the expected cost: if this script starts dominating
+# the check's runtime, the scheduler is not firing and the timeout is the
+# symptom rather than the price.
 await_successes() {
   local command=$1 wanted=$2 attempt count
   for attempt in $(seq 1 30); do
