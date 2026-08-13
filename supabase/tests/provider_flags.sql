@@ -74,12 +74,17 @@ begin
     raise exception 'refresh_dashboard_snapshot(false) did not refresh id=1 alone';
   end if;
 
+  -- id=2 is the load-bearing half here: it read 1 immediately above and must
+  -- now read 2. Asserting it alone keeps the proof honest, since id=1 would
+  -- already read 2 from the previous call whether or not this one did
+  -- anything.
   perform analytics.refresh_dashboard_snapshot(true);
 
-  select count(*) into actual_count
-  from analytics.dashboard_snapshot
-  where id in (1, 2) and (payload ->> 'internal_user_count')::int = 2;
-  if actual_count <> 2 then
+  if (
+    select (payload ->> 'internal_user_count')::int
+    from analytics.dashboard_snapshot
+    where id = 2
+  ) <> 2 then
     raise exception 'refresh_dashboard_snapshot(true) did not refresh id=2';
   end if;
 

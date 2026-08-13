@@ -31,6 +31,12 @@ represented by this baseline and its one intentional omission.
 
 ## Tooling
 
+Running the checks locally needs Docker (the CLI starts a local Postgres
+container) and `ripgrep` on `PATH`. `scripts/check-supabase.sh` greps its
+source and cron-artifact guards with `rg` and exits early if it is absent,
+because a missing binary would otherwise make those guards pass by never
+running.
+
 Use Node.js 24 and the exact Supabase CLI version pinned in the root
 `package.json` and lockfile:
 

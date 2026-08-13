@@ -24,7 +24,9 @@
 --   3. That job has actually run, successfully, more than once recently —
 --      the migration populates the relation on its own, so fresh rows alone
 --      do not prove the schedule fires.
---   4. Both snapshot variants are fresh.
+--   4. Both provider-flags variants are fresh. The dashboard's own freshness
+--      is not checked, and does not need to be — its cadence is what this
+--      file changes.
 --   5. The provider-failure consumer has been observed across a full poll
 --      cycle reporting availability with a fresh timestamp taken from the
 --      dedicated snapshot rather than from the dashboard payload fallback.
