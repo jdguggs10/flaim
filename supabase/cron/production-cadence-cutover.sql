@@ -64,25 +64,30 @@ begin
     where jobname = 'provider-flags-snapshot'
       and schedule = '*/5 * * * *'
       and active
-      and command like '%analytics.refresh_provider_flags_snapshot()%'
+      and command = 'select analytics.refresh_provider_flags_snapshot();'
   ) then
     raise exception 'FLA-264 phase 2 blocked: provider-flags-snapshot is not active at */5 with the expected command'
       using hint = 'Apply supabase/cron/production.sql first.';
   end if;
 
   -- Execution history, not row freshness: the phase 1 migration populates the
-  -- relation itself, so a fresh row proves nothing about the schedule. Two
-  -- successful runs inside a 20-minute window can only come from a */5 job
-  -- that is actually firing.
+  -- relation itself, so a fresh row proves nothing about the schedule.
+  --
+  -- Matching on d.command, not just the job id, is the load-bearing part.
+  -- cron.schedule() updates a job with an existing name in place and keeps its
+  -- jobid, while cron.job_run_details keeps the command each historical run
+  -- actually executed. Joining on jobid alone therefore lets successes from a
+  -- previous, unrelated command vouch for a refresh that has never run.
   if (
     select count(*)
     from cron.job_run_details d
     join cron.job j on j.jobid = d.jobid
     where j.jobname = 'provider-flags-snapshot'
+      and d.command = j.command
       and d.status = 'succeeded'
       and d.end_time > now() - interval '20 minutes'
   ) < 2 then
-    raise exception 'FLA-264 phase 2 blocked: provider-flags-snapshot has not run successfully twice in the last 20 minutes'
+    raise exception 'FLA-264 phase 2 blocked: provider-flags-snapshot has not run its current command successfully twice in the last 20 minutes'
       using hint = 'Let the */5 job run, then re-check cron.job_run_details.';
   end if;
 

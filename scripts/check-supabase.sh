@@ -16,6 +16,16 @@ readonly TOKEN_RPC_PROOF_SQL="supabase/tests/token_rpc.sql"
 readonly PROVIDER_FLAGS_PROOF_SQL="supabase/tests/provider_flags.sql"
 readonly CRON_PRODUCTION_SQL="supabase/cron/production.sql"
 readonly CRON_CUTOVER_SQL="supabase/cron/production-cadence-cutover.sql"
+readonly CUTOVER_GUARD_PROOF_SH="supabase/tests/cutover_guard.sh"
+
+# The phase 2 guard matches this command exactly, because cron.job_run_details
+# keeps the command each historical run executed and a renamed-in-place job
+# would otherwise be vouched for by unrelated history. Exact matching only
+# works while the scheduled command and the guard's expectation agree, so
+# assert they cannot drift apart silently.
+readonly PROVIDER_FLAGS_COMMAND='select analytics.refresh_provider_flags_snapshot();'
+readonly PROVIDER_FLAGS_JOB_BODY='$job$'"${PROVIDER_FLAGS_COMMAND}"'$job$'
+readonly PROVIDER_FLAGS_GUARD_MATCH="command = '${PROVIDER_FLAGS_COMMAND}'"
 
 # FLA-264 cron cutover ordering, asserted statically because the failure is
 # silent: the provider-failure consumer fails open on a stale snapshot, so
@@ -70,6 +80,26 @@ fi
 # transaction; the behavioral proof below runs it and checks it stayed inert.
 if ! rg --multiline --quiet '(?s)^begin;.*^commit;' "${CRON_CUTOVER_SQL}"; then
   printf '%s must wrap its guard and schedule changes in one transaction.\n' \
+    "${CRON_CUTOVER_SQL}" >&2
+  exit 1
+fi
+
+if ! rg --fixed-strings --quiet "${PROVIDER_FLAGS_JOB_BODY}" \
+  "${CRON_PRODUCTION_SQL}"; then
+  printf '%s must schedule provider-flags-snapshot with the exact command the phase 2 guard requires.\n' \
+    "${CRON_PRODUCTION_SQL}" >&2
+  exit 1
+fi
+
+if ! rg --fixed-strings --quiet "${PROVIDER_FLAGS_GUARD_MATCH}" \
+  "${CRON_CUTOVER_SQL}"; then
+  printf '%s must match the scheduled command exactly, not by pattern.\n' \
+    "${CRON_CUTOVER_SQL}" >&2
+  exit 1
+fi
+
+if ! rg --fixed-strings --quiet 'd.command = j.command' "${CRON_CUTOVER_SQL}"; then
+  printf '%s must tie run history to the current command, not just the job id.\n' \
     "${CRON_CUTOVER_SQL}" >&2
   exit 1
 fi
@@ -156,32 +186,7 @@ if ! diff -u \
   exit 1
 fi
 
-# Run the phase 2 cutover artifact exactly as a careless operator would — no
-# ON_ERROR_STOP, so psql keeps going past the failed guard — and prove it
-# activated nothing. This is the assertion that catches a guard which raises
-# but does not block. The second pass adds the consumer acknowledgement so the
-# database-side preconditions are the only thing left standing.
-for cutover_pgoptions in "" "-c flaim.flags_consumer_verified=yes"; do
-  docker exec -i \
-    -e PGOPTIONS="${cutover_pgoptions}" \
-    "${DB_CONTAINER}" \
-    psql \
-    -U postgres \
-    -d postgres \
-    -f - \
-    < "${CRON_CUTOVER_SQL}" \
-    > /dev/null 2>&1 || true
-done
-
-activated_jobs="$(
-  docker exec "${DB_CONTAINER}" \
-    psql -At -U postgres -d postgres -c 'select count(*) from cron.job;'
-)"
-if [[ "${activated_jobs}" != "0" ]]; then
-  printf 'The phase 2 cutover artifact scheduled %s job(s) with its preconditions unmet.\n' \
-    "${activated_jobs}" >&2
-  exit 1
-fi
+bash "${CUTOVER_GUARD_PROOF_SH}"
 
 bash supabase/tests/token_rpc_concurrency.sh
 

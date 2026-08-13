@@ -59,6 +59,7 @@ docker cp supabase/tests/token_rpc.sql supabase_db_flaim:/tmp/token_rpc.sql
 docker exec supabase_db_flaim psql -v ON_ERROR_STOP=1 -U postgres -d postgres -f /tmp/token_rpc.sql
 docker cp supabase/tests/provider_flags.sql supabase_db_flaim:/tmp/provider_flags.sql
 docker exec supabase_db_flaim psql -v ON_ERROR_STOP=1 -U postgres -d postgres -f /tmp/provider_flags.sql
+bash supabase/tests/cutover_guard.sh
 corepack pnpm exec supabase db lint --local --schema public,analytics --level warning --fail-on error
 corepack pnpm exec supabase db advisors --local --type security --level warn --fail-on error
 corepack pnpm exec supabase db diff --local --schema public,analytics
@@ -143,21 +144,29 @@ provider-outage monitoring. The order is therefore load-bearing:
    changes back rather than merely printing an error — `psql` runs the
    statements after a failed one unless `ON_ERROR_STOP` is set, so a guard
    that only raises is not a guard. It requires the relation to exist, the
-   phase 1 job to be active at `*/5` with the expected command, that job to
-   have succeeded at least twice in the last 20 minutes, both variants to be
-   fresh, and an explicit in-session acknowledgement of the consumer
-   verification it cannot check itself.
+   phase 1 job to be active at `*/5` running exactly the expected command,
+   that command to have succeeded at least twice in the last 20 minutes, both
+   variants to be fresh, and an explicit in-session acknowledgement of the
+   consumer verification it cannot check itself.
 
    The execution-history check matters because the phase 1 migration
    populates the relation itself: fresh rows prove nothing about whether the
-   schedule is firing.
+   schedule is firing. It matches on the command as well as the job id,
+   because `cron.schedule()` updates a job with an existing name in place and
+   keeps its `jobid`, while `cron.job_run_details` records the command each
+   historical run executed — so a job id alone lets successes from a previous,
+   unrelated command vouch for a refresh that has never run.
 
 `scripts/check-supabase.sh` asserts this posture. Statically: the canonical
-schedule file stays in phase 1, and the cutover file keeps its guard and its
-transaction. Behaviorally: it runs the cutover artifact under the invocation
-that would step over a raising guard and requires that no job was activated.
-After phase 2 has been applied and verified in production, update
-`cron/production.sql` and those assertions together.
+schedule file stays in phase 1, the scheduled command and the guard's expected
+command cannot drift apart, and the cutover file keeps its transaction and its
+command-matched history check. Behaviorally, `tests/cutover_guard.sh` runs the
+real artifact against the local scheduler and requires that it activates
+nothing with preconditions unmet, activates nothing when the only successful
+history belongs to a previous command, and activates exactly the two expected
+schedules once every precondition genuinely holds. After phase 2 has been
+applied and verified in production, update `cron/production.sql` and those
+assertions together.
 
 The internal-inclusive dashboard variant is not on the alerting path. Once
 phase 2 is applied it ages to roughly 24 hours; the provider-flags variant of
