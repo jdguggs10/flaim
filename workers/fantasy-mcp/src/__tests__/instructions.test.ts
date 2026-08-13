@@ -64,10 +64,7 @@ describe('Flaim MCP initialization instructions', () => {
       'An ESPN-wide started rate is never conditional on the player being rostered'
     );
     expect(FLAIM_MCP_INSTRUCTIONS).toContain(
-      'When explaining a rate, use only those user-facing labels; never include parenthetical field keys, source JSON names, or null values'
-    );
-    expect(FLAIM_MCP_INSTRUCTIONS).toContain(
-      'If a rate is missing, write "[Provider] market ownership rate: not provided"; do not call get_players or offer a lookup'
+      'If a rate is missing, write "[Provider] market ownership rate: not provided"; do not print a missing response field name or null value, call get_players, or offer a lookup'
     );
     expect(FLAIM_MCP_INSTRUCTIONS).toContain(
       'Only ESPN reports acquisition state here'
@@ -82,7 +79,7 @@ describe('Flaim MCP initialization instructions', () => {
       'For a returned list or field explanation, end after the requested facts; never add an "if you want" offer or qualitative advice'
     );
     expect(FLAIM_MCP_INSTRUCTIONS).toContain(
-      'Final answer check: remove every raw response key and every unrequested follow-up offer before sending'
+      'Final answer check: remove every unrequested follow-up offer before sending'
     );
     expect(FLAIM_MCP_INSTRUCTIONS).toContain(
       'Use get_roster only when the current request separately asks who owns a player; never offer it after an available-player result'

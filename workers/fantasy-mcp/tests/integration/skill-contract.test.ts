@@ -101,7 +101,7 @@ describe('shipped Flaim fantasy skill contract', () => {
       'Label every reported percentage as an ESPN-wide roster/start rate or Yahoo-wide market rate'
     );
     expect(skill).toContain(
-      'If a rate is missing, write "[Provider] market ownership rate: not provided"; do not call `get_players` or offer a lookup'
+      'If a rate is missing, write "[Provider] market ownership rate: not provided"; do not print a missing response field name or null value, call `get_players`, or offer a lookup'
     );
     expect(skill).toContain(
       'A returned player is already confirmed available in the selected league'
@@ -130,10 +130,7 @@ describe('shipped Flaim fantasy skill contract', () => {
       'An ESPN-wide started rate is never conditional on the player being rostered'
     );
     expect(skill).toContain(
-      'When explaining a rate, use only those user-facing labels; never include parenthetical field keys, source JSON names, or null values'
-    );
-    expect(skill).toContain(
-      'Final answer check: remove every raw response key and every unrequested follow-up offer before sending'
+      'Final answer check: remove every unrequested follow-up offer before sending'
     );
     expect(skill).toContain(
       'Render acquisition state silently in plain language; never print raw codes such as `FREEAGENT`, `WAIVERS`, or `free_agent`'

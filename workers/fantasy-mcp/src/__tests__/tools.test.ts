@@ -1369,10 +1369,7 @@ describe('fantasy-mcp tools', () => {
       'An ESPN-wide started rate is never conditional on the player being rostered'
     );
     expect(tool!.description).toContain(
-      'When explaining a rate, use only those user-facing labels; never include parenthetical field keys, source JSON names, or null values'
-    );
-    expect(tool!.description).toContain(
-      'If capabilities marks rates unavailable, write "[Provider] market ownership rate: not provided"; do not call get_players or offer a lookup'
+      'If capabilities marks rates unavailable, write "[Provider] market ownership rate: not provided"; do not print a missing response field name or null value, call get_players, or offer a lookup'
     );
     expect(tool!.description).toContain(
       'A returned player is already confirmed available in that league'
@@ -1382,7 +1379,7 @@ describe('fantasy-mcp tools', () => {
     );
     expect(tool!.description).toContain('For a returned list or field explanation, end after the requested facts');
     expect(tool!.description).toContain(
-      'Final answer check: remove every raw response key and every unrequested follow-up offer before sending'
+      'Final answer check: remove every unrequested follow-up offer before sending'
     );
     expect(tool!.description).toContain('never add an "if you want" offer');
     expect(tool!.description).toContain(
