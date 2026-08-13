@@ -130,6 +130,9 @@ describe('shipped Flaim fantasy skill contract', () => {
       'An ESPN-wide started rate is never conditional on the player being rostered'
     );
     expect(skill).toContain(
+      'Translate ownership scope silently into that provider-wide wording; never print the `ownershipScope` key, `platform_global` enum, or `get_free_agents` tool name'
+    );
+    expect(skill).toContain(
       'Final answer check: remove every unrequested follow-up offer before sending'
     );
     expect(skill).toContain(

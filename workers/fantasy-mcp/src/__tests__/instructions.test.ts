@@ -64,6 +64,9 @@ describe('Flaim MCP initialization instructions', () => {
       'An ESPN-wide started rate is never conditional on the player being rostered'
     );
     expect(FLAIM_MCP_INSTRUCTIONS).toContain(
+      'Translate ownership scope silently into that provider-wide wording; never print the ownershipScope key, platform_global enum, or get_free_agents tool name'
+    );
+    expect(FLAIM_MCP_INSTRUCTIONS).toContain(
       'If a rate is missing, write "[Provider] market ownership rate: not provided"; do not print a missing response field name or null value, call get_players, or offer a lookup'
     );
     expect(FLAIM_MCP_INSTRUCTIONS).toContain(

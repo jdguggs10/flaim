@@ -1369,6 +1369,9 @@ describe('fantasy-mcp tools', () => {
       'An ESPN-wide started rate is never conditional on the player being rostered'
     );
     expect(tool!.description).toContain(
+      'Translate ownership scope silently into that provider-wide wording; never print the ownershipScope key, platform_global enum, or get_free_agents tool name'
+    );
+    expect(tool!.description).toContain(
       'If capabilities marks rates unavailable, write "[Provider] market ownership rate: not provided"; do not print a missing response field name or null value, call get_players, or offer a lookup'
     );
     expect(tool!.description).toContain(
