@@ -31,8 +31,25 @@ select cron.schedule(
   $job$select public.cleanup_expired_oauth_ephemeral();$job$
 );
 
+-- FLA-264 phase 1. This file is the *current* production schedule and is safe
+-- to re-run at any time: it adds the dedicated provider-flags job while the
+-- dashboard job keeps its five-minute cadence, so both signals stay fresh and
+-- no consumer changes behavior.
+--
+-- Phase 2 — dashboard hourly, internal-inclusive nightly — is deliberately NOT
+-- here. It lives in production-cadence-cutover.sql behind a precondition
+-- guard, because applying it before the provider-flags consumer has been
+-- verified would silently stop provider-outage alerting on a stale-snapshot
+-- gate. Fold the post-cutover cadence into this file only after phase 2 has
+-- been applied and verified in production.
 select cron.schedule(
   'dashboard-snapshot',
   '*/5 * * * *',
   $job$select analytics.refresh_dashboard_snapshot();$job$
+);
+
+select cron.schedule(
+  'provider-flags-snapshot',
+  '*/5 * * * *',
+  $job$select analytics.refresh_provider_flags_snapshot();$job$
 );

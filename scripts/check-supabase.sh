@@ -9,10 +9,111 @@ cd "${REPO_ROOT}"
 
 export SUPABASE_TELEMETRY_DISABLED=1
 
+# Every guard below is a ripgrep search, and a missing binary exits 127 — which
+# an `if rg ...` treats as "no match", i.e. as passing. Require it explicitly so
+# an absent tool can never quietly stand in for a clean result.
+if ! command -v rg >/dev/null 2>&1; then
+  printf 'ripgrep (rg) is required by this check and was not found on PATH.\n' >&2
+  exit 1
+fi
+
 # Supabase derives this container name from project_id = "flaim" in config.toml.
 readonly DB_CONTAINER="supabase_db_flaim"
 readonly PROOF_SQL="supabase/tests/reproducibility.sql"
 readonly TOKEN_RPC_PROOF_SQL="supabase/tests/token_rpc.sql"
+readonly PROVIDER_FLAGS_PROOF_SQL="supabase/tests/provider_flags.sql"
+readonly CRON_PRODUCTION_SQL="supabase/cron/production.sql"
+readonly CRON_CUTOVER_SQL="supabase/cron/production-cadence-cutover.sql"
+readonly CUTOVER_GUARD_PROOF_SH="supabase/tests/cutover_guard.sh"
+
+# The phase 2 guard matches this command exactly, because cron.job_run_details
+# keeps the command each historical run executed and a renamed-in-place job
+# would otherwise be vouched for by unrelated history. Exact matching only
+# works while the scheduled command and the guard's expectation agree, so
+# assert they cannot drift apart silently.
+readonly PROVIDER_FLAGS_COMMAND='select analytics.refresh_provider_flags_snapshot();'
+readonly PROVIDER_FLAGS_JOB_BODY='$job$'"${PROVIDER_FLAGS_COMMAND}"'$job$'
+readonly PROVIDER_FLAGS_GUARD_MATCH="command = '${PROVIDER_FLAGS_COMMAND}'"
+
+# FLA-264 cron cutover ordering, asserted statically because the failure is
+# silent: the provider-failure consumer fails open on a stale snapshot, so
+# dropping the dashboard cadence before that consumer reads the dedicated
+# provider snapshot stops outage alerting without an error anywhere.
+#
+# The canonical production schedule must stay in phase 1 — the dedicated job
+# added at */5 while the dashboard job is still */5. Phase 2 lives in its own
+# guarded file. Once phase 2 has been applied and verified in production, fold
+# the new cadence into production.sql and update these assertions in the same
+# change.
+if ! rg --multiline --quiet \
+  "cron\.schedule\(\s*'provider-flags-snapshot',\s*'\*/5 \* \* \* \*'" \
+  "${CRON_PRODUCTION_SQL}"; then
+  printf '%s must schedule provider-flags-snapshot at */5.\n' \
+    "${CRON_PRODUCTION_SQL}" >&2
+  exit 1
+fi
+
+if ! rg --multiline --quiet \
+  "cron\.schedule\(\s*'dashboard-snapshot',\s*'\*/5 \* \* \* \*'" \
+  "${CRON_PRODUCTION_SQL}"; then
+  printf '%s changed the dashboard-snapshot cadence. Phase 2 belongs in %s.\n' \
+    "${CRON_PRODUCTION_SQL}" \
+    "${CRON_CUTOVER_SQL}" >&2
+  exit 1
+fi
+
+if rg --quiet "dashboard-snapshot-internal|refresh_dashboard_snapshot\(true\)" \
+  "${CRON_PRODUCTION_SQL}"; then
+  printf '%s contains phase 2 cadence changes; they belong in %s.\n' \
+    "${CRON_PRODUCTION_SQL}" \
+    "${CRON_CUTOVER_SQL}" >&2
+  exit 1
+fi
+
+if ! rg --quiet "flaim\.flags_consumer_verified" "${CRON_CUTOVER_SQL}"; then
+  printf '%s must keep its consumer-verification guard.\n' \
+    "${CRON_CUTOVER_SQL}" >&2
+  exit 1
+fi
+
+if ! rg --quiet "provider-flags-snapshot" "${CRON_CUTOVER_SQL}"; then
+  printf '%s must require the phase 1 job before changing cadence.\n' \
+    "${CRON_CUTOVER_SQL}" >&2
+  exit 1
+fi
+
+# A raising guard is not a blocking guard: psql runs the statements after a
+# failed one unless ON_ERROR_STOP is set, so the guard has to abort a
+# transaction that wraps the schedule changes. Assert the file is that
+# transaction; the behavioral proof below runs it and checks it stayed inert.
+# (?m) is ripgrep's default for these anchors, but state it: the file opens
+# with a long comment block, so a buffer-anchored ^ would never match and this
+# guard would fail unconditionally.
+if ! rg --multiline --quiet '(?ms)^begin;.*^commit;' "${CRON_CUTOVER_SQL}"; then
+  printf '%s must wrap its guard and schedule changes in one transaction.\n' \
+    "${CRON_CUTOVER_SQL}" >&2
+  exit 1
+fi
+
+if ! rg --fixed-strings --quiet "${PROVIDER_FLAGS_JOB_BODY}" \
+  "${CRON_PRODUCTION_SQL}"; then
+  printf '%s must schedule provider-flags-snapshot with the exact command the phase 2 guard requires.\n' \
+    "${CRON_PRODUCTION_SQL}" >&2
+  exit 1
+fi
+
+if ! rg --fixed-strings --quiet "${PROVIDER_FLAGS_GUARD_MATCH}" \
+  "${CRON_CUTOVER_SQL}"; then
+  printf '%s must match the scheduled command exactly, not by pattern.\n' \
+    "${CRON_CUTOVER_SQL}" >&2
+  exit 1
+fi
+
+if ! rg --fixed-strings --quiet 'd.command = j.command' "${CRON_CUTOVER_SQL}"; then
+  printf '%s must tie run history to the current command, not just the job id.\n' \
+    "${CRON_CUTOVER_SQL}" >&2
+  exit 1
+fi
 
 if rg --line-number \
   "\\.eq\\('(state|code|access_token|refresh_token)'" \
@@ -78,6 +179,15 @@ for reset_number in 1 2; do
     -f - \
     < "${TOKEN_RPC_PROOF_SQL}" \
     >> "${tmp_dir}/snapshot-${reset_number}.txt"
+
+  docker exec -i "${DB_CONTAINER}" \
+    psql \
+    -v ON_ERROR_STOP=1 \
+    -U postgres \
+    -d postgres \
+    -f - \
+    < "${PROVIDER_FLAGS_PROOF_SQL}" \
+    >> "${tmp_dir}/snapshot-${reset_number}.txt"
 done
 
 if ! diff -u \
@@ -86,6 +196,8 @@ if ! diff -u \
   printf 'Supabase reset snapshots were not deterministic.\n' >&2
   exit 1
 fi
+
+bash "${CUTOVER_GUARD_PROOF_SH}"
 
 bash supabase/tests/token_rpc_concurrency.sh
 

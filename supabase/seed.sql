@@ -585,5 +585,32 @@ insert into analytics.internal_users (
   '2026-01-15 12:00:00+00'
 );
 
+-- A recent failure owned by the internal account, on a provider no external
+-- account uses. It gives the provider-flags proof something to separate: the
+-- external variant must not mention yahoo at all, and the internal-inclusive
+-- variant must carry it with its error code.
+insert into public.provider_sync_state (
+  clerk_user_id,
+  provider,
+  last_attempt_at,
+  last_failure_at,
+  last_error_code,
+  last_sync_source,
+  updated_at
+) values (
+  'seed-internal-user-001',
+  'yahoo',
+  now() - interval '5 minutes',
+  now() - interval '5 minutes',
+  'SYNTHETIC_SEED_SYNC_ERROR',
+  'seed',
+  now() - interval '5 minutes'
+);
+
 select public.rollup_mcp_usage(current_date);
 select analytics.refresh_dashboard_snapshot();
+
+-- The migration populates the provider-flags snapshot against an empty
+-- database; refresh it again here so both snapshot relations describe the same
+-- seeded state.
+select analytics.refresh_provider_flags_snapshot();

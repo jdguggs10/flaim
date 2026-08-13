@@ -22,8 +22,8 @@ begin
   from pg_class c
   join pg_namespace n on n.oid = c.relnamespace
   where n.nspname = 'analytics' and c.relkind = 'r';
-  if actual_count <> 2 then
-    raise exception 'expected 2 analytics tables, found %', actual_count;
+  if actual_count <> 3 then
+    raise exception 'expected 3 analytics tables, found %', actual_count;
   end if;
 
   select count(*) into actual_count
@@ -54,8 +54,11 @@ begin
   from pg_proc p
   join pg_namespace n on n.oid = p.pronamespace
   where n.nspname = 'analytics' and p.prokind = 'f';
-  if actual_count <> 2 then
-    raise exception 'expected 2 analytics functions, found %', actual_count;
+  -- dashboard_payload, refresh_dashboard_snapshot(), the FLA-264 per-variant
+  -- refresh_dashboard_snapshot(boolean), provider_flags_payload, and
+  -- refresh_provider_flags_snapshot.
+  if actual_count <> 5 then
+    raise exception 'expected 5 analytics functions, found %', actual_count;
   end if;
 
   select count(*) into actual_count
@@ -70,8 +73,8 @@ begin
   from pg_class c
   join pg_namespace n on n.oid = c.relnamespace
   where n.nspname = 'analytics' and c.relkind = 'i';
-  if actual_count <> 2 then
-    raise exception 'expected 2 analytics indexes, found %', actual_count;
+  if actual_count <> 3 then
+    raise exception 'expected 3 analytics indexes, found %', actual_count;
   end if;
 
   select count(*) into actual_count
@@ -147,8 +150,91 @@ begin
        'analytics_readonly',
        'analytics.dashboard_snapshot',
        'SELECT'
+     )
+     or not has_table_privilege(
+       'analytics_readonly',
+       'analytics.provider_flags_snapshot',
+       'SELECT'
      ) then
     raise exception 'analytics_readonly is missing required read privileges';
+  end if;
+
+  -- The provider flags snapshot keeps the private analytics posture: the
+  -- internal read-only role is the ONLY non-owner grantee, and it gets SELECT
+  -- and nothing else. anon, authenticated, service_role, and PUBLIC get none.
+  select count(*) into actual_count
+  from pg_class c
+  join pg_namespace n on n.oid = c.relnamespace
+  cross join lateral aclexplode(
+    coalesce(c.relacl, acldefault('r', c.relowner))
+  ) a
+  where n.nspname = 'analytics'
+    and c.relname = 'provider_flags_snapshot'
+    and case a.grantee
+      when 0 then 'PUBLIC'
+      else pg_get_userbyid(a.grantee)
+    end <> pg_get_userbyid(c.relowner);
+  if actual_count <> 1 then
+    raise exception
+      'provider_flags_snapshot has % non-owner grants, expected exactly 1',
+      actual_count;
+  end if;
+
+  if not exists (
+    select 1
+    from pg_class c
+    join pg_namespace n on n.oid = c.relnamespace
+    cross join lateral aclexplode(c.relacl) a
+    where n.nspname = 'analytics'
+      and c.relname = 'provider_flags_snapshot'
+      and pg_get_userbyid(a.grantee) = 'analytics_readonly'
+      and a.privilege_type = 'SELECT'
+  ) then
+    raise exception
+      'the single provider_flags_snapshot grant is not analytics_readonly SELECT';
+  end if;
+
+  -- The refresh path is owner-only, and never reachable as a definer shortcut.
+  select count(*) into actual_count
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  cross join lateral aclexplode(
+    coalesce(p.proacl, acldefault('f', p.proowner))
+  ) a
+  where n.nspname = 'analytics'
+    and (
+      p.proname in (
+        'provider_flags_payload',
+        'refresh_provider_flags_snapshot'
+      )
+      or (p.proname = 'refresh_dashboard_snapshot' and p.pronargs = 1)
+    )
+    and case a.grantee
+      when 0 then 'PUBLIC'
+      else pg_get_userbyid(a.grantee)
+    end <> pg_get_userbyid(p.proowner);
+  if actual_count <> 0 then
+    raise exception
+      'FLA-264 functions expose % non-owner EXECUTE grants',
+      actual_count;
+  end if;
+
+  select count(*) into actual_count
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'analytics'
+    and p.proname in (
+      'provider_flags_payload',
+      'refresh_provider_flags_snapshot',
+      'refresh_dashboard_snapshot'
+    )
+    and not p.prosecdef
+    -- `set search_path to ''` is stored with the empty value quoted.
+    and p.proconfig @> array['search_path=""'];
+  if actual_count <> 4 then
+    raise exception
+      'expected 4 security-invoker FLA-264 functions with an empty search_path, found %',
+      actual_count;
   end if;
 
   if has_schema_privilege('service_role', 'analytics', 'USAGE') then
@@ -310,8 +396,9 @@ begin
       ('public.mcp_tool_events', 3),
       ('public.mcp_user_daily', 1),
       ('public.mcp_tool_daily', 3),
-      ('public.provider_sync_state', 1),
+      ('public.provider_sync_state', 2),
       ('analytics.dashboard_snapshot', 2),
+      ('analytics.provider_flags_snapshot', 2),
       ('analytics.internal_users', 1)
     ) expected(relation_name, expected_count)
   loop
@@ -386,21 +473,119 @@ begin
     raise exception 'dashboard payload is missing sync_recent';
   end if;
 
+  -- The seed gives the external account one recent ESPN success and the
+  -- internal account one recent Yahoo failure. The external variant must show
+  -- ESPN only; the internal-inclusive variant must add Yahoo. Neither may
+  -- invent a Sleeper row for a provider with no sync state at all.
+  if not exists (
+    select 1
+    from analytics.dashboard_snapshot
+    where id = 1
+      and jsonb_typeof(payload -> 'sync_recent') = 'array'
+      and jsonb_array_length(payload -> 'sync_recent') = 1
+      and exists (
+        select 1
+        from jsonb_array_elements(payload -> 'sync_recent') as item
+        where item ->> 'provider' = 'espn'
+          and (item ->> 'users_failed_6h')::integer = 0
+          and (item ->> 'users_succeeded_6h')::integer = 1
+          and jsonb_typeof(item -> 'recent_error_codes') = 'array'
+          and jsonb_array_length(item -> 'recent_error_codes') = 0
+      )
+  ) then
+    raise exception 'external sync_recent dashboard snapshot proof failed';
+  end if;
+
+  if not exists (
+    select 1
+    from analytics.dashboard_snapshot
+    where id = 2
+      and jsonb_array_length(payload -> 'sync_recent') = 2
+      and exists (
+        select 1
+        from jsonb_array_elements(payload -> 'sync_recent') as item
+        where item ->> 'provider' = 'yahoo'
+          and (item ->> 'users_failed_6h')::integer = 1
+          and (item ->> 'users_succeeded_6h')::integer = 0
+          and item -> 'recent_error_codes'
+              = '["SYNTHETIC_SEED_SYNC_ERROR"]'::jsonb
+      )
+  ) then
+    raise exception 'internal-inclusive sync_recent dashboard snapshot proof failed';
+  end if;
+
+  -- FLA-264 dedicated provider-flags snapshot.
+  if to_regclass('analytics.provider_flags_snapshot') is null then
+    raise exception 'analytics.provider_flags_snapshot is missing';
+  end if;
+
+  if to_regprocedure('analytics.provider_flags_payload(boolean)') is null
+     or to_regprocedure('analytics.refresh_provider_flags_snapshot()') is null
+     or to_regprocedure('analytics.refresh_dashboard_snapshot(boolean)') is null
+     or to_regprocedure('analytics.refresh_dashboard_snapshot()') is null then
+    raise exception 'FLA-264 analytics functions are incomplete';
+  end if;
+
   select count(*) into actual_count
-  from analytics.dashboard_snapshot
-  where jsonb_typeof(payload -> 'sync_recent') = 'array'
-    and jsonb_array_length(payload -> 'sync_recent') = 1
-    and exists (
-      select 1
-      from jsonb_array_elements(payload -> 'sync_recent') as item
-      where item ->> 'provider' = 'espn'
-        and (item ->> 'users_failed_6h')::integer = 0
-        and (item ->> 'users_succeeded_6h')::integer = 1
-        and jsonb_typeof(item -> 'recent_error_codes') = 'array'
-        and jsonb_array_length(item -> 'recent_error_codes') = 0
-    );
+  from analytics.provider_flags_snapshot
+  where id in (1, 2)
+    and jsonb_typeof(providers) = 'array'
+    and computed_at is not null;
   if actual_count <> 2 then
-    raise exception 'sync_recent dashboard snapshot proof failed';
+    raise exception 'provider flags snapshot variants are incomplete';
+  end if;
+
+  if not exists (
+    select 1
+    from analytics.provider_flags_snapshot
+    where id = 1
+      and jsonb_array_length(providers) = 1
+      and exists (
+        select 1
+        from jsonb_array_elements(providers) as item
+        where item ->> 'provider' = 'espn'
+          and (item ->> 'users_failed_6h')::integer = 0
+          and (item ->> 'users_succeeded_6h')::integer = 1
+          and jsonb_typeof(item -> 'recent_error_codes') = 'array'
+          and jsonb_array_length(item -> 'recent_error_codes') = 0
+      )
+  ) then
+    raise exception 'external provider flags variant proof failed';
+  end if;
+
+  if not exists (
+    select 1
+    from analytics.provider_flags_snapshot
+    where id = 2
+      and jsonb_array_length(providers) = 2
+      and exists (
+        select 1
+        from jsonb_array_elements(providers) as item
+        where item ->> 'provider' = 'yahoo'
+          and (item ->> 'users_failed_6h')::integer = 1
+          and (item ->> 'users_succeeded_6h')::integer = 0
+          and item -> 'recent_error_codes'
+              = '["SYNTHETIC_SEED_SYNC_ERROR"]'::jsonb
+      )
+      and not exists (
+        select 1
+        from jsonb_array_elements(providers) as item
+        where item ->> 'provider' = 'sleeper'
+      )
+  ) then
+    raise exception 'internal-inclusive provider flags variant proof failed';
+  end if;
+
+  -- The dedicated relation must carry exactly what the dashboard payload's
+  -- sync_recent key carries, per variant. A consumer switching sources reads
+  -- the same rows; only the timestamp's cadence changes.
+  select count(*) into actual_count
+  from analytics.provider_flags_snapshot p
+  join analytics.dashboard_snapshot d on d.id = p.id
+  where p.providers = (d.payload -> 'sync_recent');
+  if actual_count <> 2 then
+    raise exception
+      'provider flags variants do not match the dashboard sync_recent key';
   end if;
 
   select count(*) into actual_count
@@ -422,6 +607,13 @@ begin
   where version = '20260805112500';
   if actual_count <> 1 then
     raise exception 'demo platform migration history row is missing';
+  end if;
+
+  select count(*) into actual_count
+  from supabase_migrations.schema_migrations
+  where version = '20260813012740';
+  if actual_count <> 1 then
+    raise exception 'snapshot cadence migration history row is missing';
   end if;
 end
 $proof$;
@@ -736,6 +928,9 @@ select jsonb_pretty(jsonb_build_object(
     'tool_rollups', (select count(*) from public.mcp_tool_daily),
     'dashboard_snapshots', (
       select count(*) from analytics.dashboard_snapshot
+    ),
+    'provider_flags_snapshots', (
+      select count(*) from analytics.provider_flags_snapshot
     )
   )
 )) as reproducibility_snapshot;

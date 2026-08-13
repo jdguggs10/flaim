@@ -18,12 +18,14 @@ contract.
 
 The table above records the baseline before-state. The FLA-247 forward
 migration `20260805112500_add_platform_to_demo_tables.sql` raises the current
-contract to 23 public tables and 71 public indexes; every other count is
-unchanged.
+contract to 23 public tables and 71 public indexes. The FLA-264 forward
+migration `20260813012740_split_analytics_snapshot_cadence.sql` raises it to 3
+analytics tables, 3 analytics indexes, and 5 analytics functions, and adds a
+sixth separately controlled cron job. Every other count is unchanged.
 
 All public tables — the 22 baseline tables and the forward-added
 `demo_target_state` — have RLS enabled and no policies. The two public views
-use `security_invoker`. The analytics schema has two tables without RLS
+use `security_invoker`. The analytics schema has three tables without RLS
 because it is outside the Data API and is read through the direct
 `analytics_readonly` database role.
 
@@ -80,7 +82,8 @@ Functions retained:
 
 Tables:
 
-`dashboard_snapshot` and `internal_users`.
+`dashboard_snapshot` and `internal_users`, plus `provider_flags_snapshot`
+added by the FLA-264 forward migration.
 
 Views:
 
@@ -91,7 +94,10 @@ Views:
 
 Functions:
 
-`dashboard_payload` and `refresh_dashboard_snapshot`.
+`dashboard_payload` and `refresh_dashboard_snapshot`, plus the FLA-264
+forward-added `provider_flags_payload(boolean)`,
+`refresh_provider_flags_snapshot()`, and the
+`refresh_dashboard_snapshot(boolean)` overload.
 
 ## Extensions and scheduled work
 
@@ -109,6 +115,13 @@ The separately controlled production schedule defines:
 | `oauth-tokens-cleanup` | `45 5 * * *` | `public.cleanup_expired_oauth_tokens()` |
 | `oauth-ephemeral-cleanup` | `47 5 * * *` | `public.cleanup_expired_oauth_ephemeral()` |
 | `dashboard-snapshot` | `*/5 * * * *` | `analytics.refresh_dashboard_snapshot()` |
+| `provider-flags-snapshot` | `*/5 * * * *` | `analytics.refresh_provider_flags_snapshot()` |
+
+That table is the phase 1 posture defined by `cron/production.sql`. The FLA-264
+phase 2 cutover — `dashboard-snapshot` hourly against
+`analytics.refresh_dashboard_snapshot(false)` plus a nightly
+`dashboard-snapshot-internal` — is defined separately in
+`cron/production-cadence-cutover.sql` and is gated on consumer verification.
 
 ## Intentional and environment-managed differences
 
@@ -146,6 +159,24 @@ composite indexes, and the service-role-only `demo_target_state` gate table
 appended as the final output column. It drops nothing and leaves every
 existing index — including the intentional duplicate pair on
 `demo_refresh_runs` — untouched.
+
+The FLA-264 forward migration
+`20260813012740_split_analytics_snapshot_cadence.sql` splits the analytics
+refresh cadence. It adds the `analytics.provider_flags_snapshot` relation with
+the same id=1/id=2 variant contract as `dashboard_snapshot` and its own
+`computed_at`, the `analytics.provider_flags_payload(boolean)` and
+`analytics.refresh_provider_flags_snapshot()` functions, and a
+`analytics.refresh_dashboard_snapshot(boolean)` overload that refreshes a
+single dashboard variant. The no-argument `refresh_dashboard_snapshot()` is
+restated as a wrapper over that overload and still refreshes both variants.
+`analytics.dashboard_payload(boolean)` is untouched, including its
+`sync_recent` key, which remains as a consumer fallback during rollout.
+
+The new relation grants `SELECT` to `analytics_readonly` and to nothing else;
+the new functions are security invokers with a fixed empty search path and no
+non-owner `EXECUTE` grants. The migration adds no policy, index outside the new
+primary key, extension, or scheduled job. Its cron activation is the two-phase
+operation described in `README.md`.
 
 The hosted-preview and production migration ledgers remain environment state,
 not repository truth. Applying this or any later migration to a hosted database

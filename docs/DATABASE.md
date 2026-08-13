@@ -76,27 +76,43 @@ before-state; `anon` and `authenticated` do not have table privileges on it.
 
 ## Analytics
 
-The `analytics` schema contains the `internal_users` exclusion list and two
-materialized payload rows in `dashboard_snapshot`, plus views that calculate
-usage, retention, client mix, tool health, funnel, platform, sport, and user
-concentration metrics.
+The `analytics` schema contains the `internal_users` exclusion list, two
+materialized payload rows in `dashboard_snapshot`, and two provider-outcome
+rows in `provider_flags_snapshot`, plus views that calculate usage, retention,
+client mix, tool health, funnel, platform, sport, and user concentration
+metrics.
 
-`analytics.refresh_dashboard_snapshot()` refreshes both payload variants:
-external-only and internal-inclusive.
+Both snapshot relations carry the same two variants: id=1 excludes internal
+accounts, id=2 includes them.
+
+`analytics.refresh_dashboard_snapshot()` refreshes both dashboard variants;
+`analytics.refresh_dashboard_snapshot(boolean)` refreshes one, so the two
+variants can run on different cadences.
+`analytics.refresh_provider_flags_snapshot()` refreshes the provider snapshot,
+whose payload is the same provider-outcome data as the dashboard payload's
+`sync_recent` key but with its own `computed_at`. Splitting it out lets the
+signal that needs five-minute freshness keep it while the expensive dashboard
+payload does not.
 
 ## Scheduled maintenance
 
-Production has five database-native jobs:
+The reviewed production schedule defines six database-native jobs:
 
 - daily MCP rollup
 - daily MCP raw-event pruning
 - daily OAuth token cleanup
 - daily ephemeral OAuth cleanup
 - five-minute dashboard snapshot refresh
+- five-minute provider flags snapshot refresh
 
-Their reviewed definitions live in `supabase/cron/production.sql`, outside the
+Their definitions live in `supabase/cron/production.sql`, outside the
 migration path. A local reset or preview database therefore does not activate
-background work.
+background work, and activating a job on a hosted database is a separate
+approval gate from the migration that adds the function it calls.
+
+Reducing the dashboard refresh cadence is a separate, gated second phase in
+`supabase/cron/production-cadence-cutover.sql`; see `supabase/README.md` for
+why the order matters and what the guard checks.
 
 Exact columns, constraints, indexes, views, functions, and grants belong in the
 SQL contract rather than a second prose copy here.
