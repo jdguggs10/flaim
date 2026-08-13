@@ -72,7 +72,7 @@ export interface EspnTransactionWindow {
 }
 
 export interface EspnTransactionLimitations {
-  structured_details_incomplete: true;
+  structured_details_incomplete?: true;
   omitted_unscoped_rows?: number;
   omitted_conflicting_rows?: number;
   exact_date_bounds_unavailable?: true;
@@ -92,7 +92,11 @@ export interface EspnTransactionOperationResult {
     date_bounds_kind: TransactionDateBoundsKind;
     timezone: 'America/New_York';
   };
-  source: 'activity_feed';
+  // Source values are part of the published get_transactions contract (the
+  // gateway outputSchema enumerates exactly these three): pure structured
+  // rows, structured rows whose trade sides were filled from the activity
+  // feed, and the activity-feed fallback.
+  source: 'mTransactions2' | 'mTransactions2_with_activity_trade_details' | 'activity_feed';
   limitations: EspnTransactionLimitations;
   transactions: NormalizedTransaction[];
   teams: Record<string, string>;
@@ -360,7 +364,37 @@ export function normalizeMTransactions2(
     }
 
     const timestamp = txn.processDate ?? txn.proposedDate ?? 0;
-    const teamIds = txn.teamId ? [String(txn.teamId)] : [];
+
+    // Directional trade detail from structured movement items (FLA-140):
+    // each item on a resolved trade carries the player's from/to team ids,
+    // which is exactly the movement data the activity-feed fallback has to
+    // reconstruct by matching. Only rows where every populated item resolves
+    // get sides; partial movement data leaves sides absent so the activity
+    // merge can fill them instead of us emitting a half-directional trade.
+    let tradeSides: NormalizedTransaction['trade_sides'];
+    if (rawType === 'trade' || rawType === 'trade_uphold') {
+      const items = (txn.items ?? []).filter((item) => item.playerId);
+      const movements: TradeMovement[] = [];
+      for (const item of items) {
+        if (
+          typeof item.fromTeamId === 'number' && item.fromTeamId > 0
+          && typeof item.toTeamId === 'number' && item.toTeamId > 0
+        ) {
+          movements.push({
+            playerId: String(item.playerId),
+            fromTeamId: String(item.fromTeamId),
+            toTeamId: String(item.toTeamId),
+          });
+        }
+      }
+      if (movements.length > 0 && movements.length === items.length) {
+        tradeSides = buildTradeSides(movements);
+      }
+    }
+
+    const teamIds = tradeSides
+      ? tradeSides.map((side) => side.team_id)
+      : (txn.teamId ? [String(txn.teamId)] : []);
 
     // ESPN marks standalone free-agent drops as FREEAGENT with only drop items.
     const type: TransactionType = rawType === 'add' && added.length === 0 && dropped.length > 0
@@ -378,6 +412,7 @@ export function normalizeMTransactions2(
       team_ids: teamIds.length > 0 ? teamIds : undefined,
       players_added: added,
       players_dropped: dropped,
+      trade_sides: tradeSides,
       faab_bid: typeof txn.bidAmount === 'number' ? txn.bidAmount : null,
     });
   }
@@ -394,12 +429,47 @@ const MTRANSACTIONS2_TYPES = [
   'TRADE_ACCEPT', 'TRADE_UPHOLD', 'TRADE_PROPOSAL', 'TRADE_DECLINE', 'TRADE_VETO',
 ];
 
-const MTRANSACTIONS2_PAGE_SIZE = 50;
-const MTRANSACTIONS2_MAX_PAGES = 4;
+// ESPN rejects in-filter pagination on mTransactions2: any `limit`/`offset`
+// in the x-fantasy-filter (with or without sort fields) returns HTTP 400 on
+// every request. The minimal filterType-only shape below is the accepted
+// form (matching community ESPN clients). The response for a pinned
+// scoringPeriodId is ESPN's own full result set for that period; the view
+// exposes no way to page it.
+const MTRANSACTIONS2_CONCURRENCY = 4;
 
 export interface MTransactions2Result {
   transactions: NormalizedTransaction[];
-  truncated: boolean;
+}
+
+/**
+ * espnFetch's abort timer only covers the wait for response headers — it is
+ * cleared the moment fetch() resolves. A provider that stalls while streaming
+ * the JSON body would otherwise hold the structured attempt past its
+ * sub-deadline and starve the activity fallback, so the body read races the
+ * remaining budget independently.
+ */
+async function readJsonWithDeadline<T>(res: Response, deadline: number): Promise<T> {
+  const remaining = deadline - Date.now();
+  if (remaining <= 0) {
+    throw new Error(
+      `${ErrorCode.ESPN_TIMEOUT}: ESPN structured transactions exceeded the operation budget`
+    );
+  }
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      res.json() as Promise<T>,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          reject(new Error(
+            `${ErrorCode.ESPN_TIMEOUT}: ESPN structured transaction body read timed out`
+          ));
+        }, remaining);
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
 }
 
 export async function fetchEspnMTransactions2(
@@ -408,75 +478,59 @@ export async function fetchEspnMTransactions2(
   seasonYear: number,
   credentials: EspnCredentials,
   windowOrWeeks: EspnTransactionWindow | number[],
+  deadline?: number,
 ): Promise<MTransactions2Result> {
   const window = coerceTransactionWindow(windowOrWeeks);
+  const effectiveDeadline = deadline ?? Date.now() + TRANSACTION_OPERATION_MS;
+
+  const fetchScoringPeriod = async (scoringPeriodId: number): Promise<EspnMTransaction[]> => {
+    const remaining = effectiveDeadline - Date.now();
+    if (remaining <= 0) {
+      throw new Error(
+        `${ErrorCode.ESPN_TIMEOUT}: ESPN structured transactions exceeded the operation budget`
+      );
+    }
+    const path = `/seasons/${seasonYear}/segments/0/leagues/${leagueId}?view=mTransactions2&scoringPeriodId=${scoringPeriodId}`;
+    const headers = {
+      'x-fantasy-filter': JSON.stringify({
+        transactions: {
+          filterType: { value: MTRANSACTIONS2_TYPES },
+        },
+      }),
+    };
+    const res = await espnFetch(path, gameId, {
+      credentials,
+      timeout: Math.max(1, Math.min(7000, remaining)),
+      headers,
+    });
+    if (!res.ok) handleEspnError(res);
+    const body = await readJsonWithDeadline<EspnMTransactions2Response>(res, effectiveDeadline);
+    return body.transactions ?? [];
+  };
+
+  // All-or-nothing across the window's scoring periods: a partially covered
+  // window is indistinguishable from a quiet one, so any per-period failure
+  // aborts the structured source and the caller falls back to the activity
+  // feed instead of serving silent gaps. Daily-sport windows can span many
+  // scoring periods, so requests run in small concurrent batches.
+  const raw: EspnMTransaction[] = [];
+  const periods = [...window.scoringPeriodIds];
+  for (let start = 0; start < periods.length; start += MTRANSACTIONS2_CONCURRENCY) {
+    const chunk = periods.slice(start, start + MTRANSACTIONS2_CONCURRENCY);
+    const results = await Promise.all(chunk.map(fetchScoringPeriod));
+    for (const rows of results) raw.push(...rows);
+  }
+
   const seen = new Set<string>();
   const all: NormalizedTransaction[] = [];
-  let truncated = false;
-
-  for (const scoringPeriodId of window.scoringPeriodIds) {
-    let hitMaxPageWithFullResults = false;
-    for (let page = 0; page < MTRANSACTIONS2_MAX_PAGES; page++) {
-      const offset = page * MTRANSACTIONS2_PAGE_SIZE;
-      const path = `/seasons/${seasonYear}/segments/0/leagues/${leagueId}?view=mTransactions2&scoringPeriodId=${scoringPeriodId}`;
-      const headers = {
-        'x-fantasy-filter': JSON.stringify({
-          transactions: {
-            filterType: { value: MTRANSACTIONS2_TYPES },
-            limit: MTRANSACTIONS2_PAGE_SIZE,
-            offset,
-            sortDatePublished: { sortPriority: 1, sortAsc: false },
-          },
-        }),
-      };
-
-      const res = await espnFetch(path, gameId, { credentials, timeout: 7000, headers });
-      if (!res.ok) handleEspnError(res);
-
-      const body = await res.json() as EspnMTransactions2Response;
-      const rawTxns = body.transactions ?? [];
-      const normalized = normalizeMTransactions2(rawTxns, window);
-
-      for (const txn of normalized) {
-        if (!seen.has(txn.transaction_id)) {
-          seen.add(txn.transaction_id);
-          all.push(txn);
-        }
-      }
-
-      if (rawTxns.length < MTRANSACTIONS2_PAGE_SIZE) break;
-
-      // Hit max pages for this week with a full page; probe one extra row later.
-      if (page === MTRANSACTIONS2_MAX_PAGES - 1) {
-        hitMaxPageWithFullResults = true;
-      }
-    }
-
-    if (hitMaxPageWithFullResults) {
-      const probeOffset = MTRANSACTIONS2_MAX_PAGES * MTRANSACTIONS2_PAGE_SIZE;
-      const probePath = `/seasons/${seasonYear}/segments/0/leagues/${leagueId}?view=mTransactions2&scoringPeriodId=${scoringPeriodId}`;
-      const probeHeaders = {
-        'x-fantasy-filter': JSON.stringify({
-          transactions: {
-            filterType: { value: MTRANSACTIONS2_TYPES },
-            limit: 1,
-            offset: probeOffset,
-            sortDatePublished: { sortPriority: 1, sortAsc: false },
-          },
-        }),
-      };
-
-      const probeRes = await espnFetch(probePath, gameId, { credentials, timeout: 7000, headers: probeHeaders });
-      if (!probeRes.ok) handleEspnError(probeRes);
-      const probeBody = await probeRes.json() as EspnMTransactions2Response;
-      if ((probeBody.transactions?.length ?? 0) > 0) {
-        truncated = true;
-        console.warn(`[fetchEspnMTransactions2] Hit page limit for scoring period ${scoringPeriodId}, results may be incomplete`);
-      }
+  for (const txn of normalizeMTransactions2(raw, window)) {
+    if (!seen.has(txn.transaction_id)) {
+      seen.add(txn.transaction_id);
+      all.push(txn);
     }
   }
 
-  return { transactions: all.sort((a, b) => b.timestamp - a.timestamp), truncated };
+  return { transactions: all };
 }
 
 function coerceTransactionWindow(
@@ -539,8 +593,17 @@ export function mergeTradePlayerDetails(
   return mTxns.map((txn) => {
     if (!TRADE_TYPES.includes(txn.type)) return txn;
 
-    const hasPlayers = collectTransactionPlayerIds(txn).length > 0;
-    if (hasPlayers) return txn;
+    // A trade is complete only when it has directional sides. Rows with flat
+    // players_added/players_dropped but no sides ("mixed completeness",
+    // FLA-140) still take the activity-feed sides; their own flat lists are
+    // preserved rather than overwritten.
+    const hasSides = (txn.trade_sides ?? []).some(
+      (side) => side.acquired.length > 0 || side.gave_up.length > 0,
+    );
+    if (hasSides) return txn;
+
+    const hasFlatPlayers =
+      (txn.players_added?.length ?? 0) > 0 || (txn.players_dropped?.length ?? 0) > 0;
 
     const txnTeams = new Set(txn.team_ids ?? []);
     const matchIdx = activityTrades.findIndex((at, idx) => {
@@ -559,8 +622,8 @@ export function mergeTradePlayerDetails(
 
     return {
       ...txn,
-      players_added: match.players_added,
-      players_dropped: match.players_dropped,
+      players_added: hasFlatPlayers ? txn.players_added : match.players_added,
+      players_dropped: hasFlatPlayers ? txn.players_dropped : match.players_dropped,
       trade_sides: match.trade_sides,
       team_ids: match.team_ids?.length ? match.team_ids : txn.team_ids,
     };
@@ -1352,12 +1415,6 @@ export async function executeEspnTransactionOperation({
   getPositionName,
   getProTeamAbbrev,
 }: ExecuteEspnTransactionOperationInput): Promise<EspnTransactionOperationResult> {
-  if (type && STRUCTURED_ONLY_TYPES.has(type)) {
-    throw new Error(
-      `${ErrorCode.ESPN_TRANSACTION_TYPE_UNAVAILABLE}: ESPN ${type} requires the structured transaction source, which is temporarily unavailable. Retry without this type filter for completed activity-feed transactions.`
-    );
-  }
-
   const startedAt = Date.now();
   const providerDeadline = startedAt + TRANSACTION_OPERATION_MS - ENRICHMENT_RESERVE_MS;
   const totalDeadline = startedAt + TRANSACTION_OPERATION_MS;
@@ -1376,18 +1433,106 @@ export async function executeEspnTransactionOperation({
     requestedWeek,
     timeout: Math.max(1, Math.min(7000, providerDeadline - Date.now())),
   });
-  const activity = await fetchEspnTransactionsByWindow(
-    gameId,
-    leagueId,
-    seasonYear,
-    sport,
-    credentials,
-    window,
+
+  // Primary path: ESPN's structured mTransactions2 view (repaired transport,
+  // FLA-140). Any failure — transport, malformed body, budget — falls back to
+  // the activity feed so the operation stays contract-correct if the
+  // undocumented primary regresses again. The structured attempt gets at most
+  // half the remaining provider budget: a hanging primary must degrade to a
+  // fallback with usable time, not starve it into an empty response.
+  const structuredDeadline = Math.min(
     providerDeadline,
+    Date.now() + Math.max(1, Math.floor((providerDeadline - Date.now()) / 2)),
   );
+  let structured: MTransactions2Result | null = null;
+  try {
+    structured = await fetchEspnMTransactions2(
+      gameId,
+      leagueId,
+      seasonYear,
+      credentials,
+      window,
+      structuredDeadline,
+    );
+  } catch (error) {
+    console.warn(
+      '[get_transactions] structured source unavailable, using activity feed:',
+      error instanceof Error ? error.message : error,
+    );
+  }
+
+  const tradesMissingSides = (transactions: NormalizedTransaction[]): number =>
+    transactions.filter(
+      (txn) =>
+        TRADE_TYPES.includes(txn.type)
+        && !(txn.trade_sides ?? []).some(
+          (side) => side.acquired.length > 0 || side.gave_up.length > 0,
+        ),
+    ).length;
+
+  let source: EspnTransactionOperationResult['source'];
+  let sourceTransactions: NormalizedTransaction[];
+  let activity: ActivityTransactionsResult | null = null;
+  let structuredDetailsIncomplete = false;
+
+  if (structured) {
+    source = 'mTransactions2';
+    sourceTransactions = structured.transactions;
+
+    const missingBefore = tradesMissingSides(sourceTransactions);
+    if (missingBefore > 0 && providerDeadline - Date.now() > 0) {
+      // Structured trade rows without movement items get their directional
+      // sides from the activity feed. A supplement failure only degrades
+      // trade detail, never the primary rows.
+      try {
+        const supplement = await fetchEspnTransactionsByWindow(
+          gameId,
+          leagueId,
+          seasonYear,
+          sport,
+          credentials,
+          window,
+          providerDeadline,
+        );
+        sourceTransactions = mergeTradePlayerDetails(
+          sourceTransactions,
+          supplement.transactions,
+        );
+        if (tradesMissingSides(sourceTransactions) < missingBefore) {
+          source = 'mTransactions2_with_activity_trade_details';
+        }
+      } catch (error) {
+        console.warn(
+          '[get_transactions] activity trade-detail supplement failed:',
+          error instanceof Error ? error.message : error,
+        );
+      }
+      structuredDetailsIncomplete = tradesMissingSides(sourceTransactions) > 0;
+    } else {
+      structuredDetailsIncomplete = missingBefore > 0;
+    }
+  } else {
+    if (type && STRUCTURED_ONLY_TYPES.has(type)) {
+      throw new Error(
+        `${ErrorCode.ESPN_TRANSACTION_TYPE_UNAVAILABLE}: ESPN ${type} requires the structured transaction source, which is temporarily unavailable. Retry without this type filter for completed activity-feed transactions.`
+      );
+    }
+    source = 'activity_feed';
+    activity = await fetchEspnTransactionsByWindow(
+      gameId,
+      leagueId,
+      seasonYear,
+      sport,
+      credentials,
+      window,
+      providerDeadline,
+    );
+    sourceTransactions = activity.transactions;
+    structuredDetailsIncomplete = true;
+  }
 
   const maxCount = count ?? 25;
-  const matchingTransactions = activity.transactions
+  const matchingTransactions = sourceTransactions
     .filter((transaction) => !type || transaction.type === type);
   let transactions = matchingTransactions.slice(0, maxCount);
   const countTruncated = matchingTransactions.length > maxCount;
@@ -1415,20 +1560,25 @@ export async function executeEspnTransactionOperation({
     }
   }
 
-  const limitations: EspnTransactionLimitations = {
-    structured_details_incomplete: true,
-  };
-  if (activity.omittedUnscopedRows > 0) {
-    limitations.omitted_unscoped_rows = activity.omittedUnscopedRows;
+  const limitations: EspnTransactionLimitations = {};
+  if (structuredDetailsIncomplete) {
+    limitations.structured_details_incomplete = true;
   }
-  if (activity.omittedConflictingRows > 0) {
-    limitations.omitted_conflicting_rows = activity.omittedConflictingRows;
+  if (activity) {
+    // Row-sourcing limitations apply only when the activity feed IS the row
+    // source, not when it merely supplemented trade detail.
+    if (activity.omittedUnscopedRows > 0) {
+      limitations.omitted_unscoped_rows = activity.omittedUnscopedRows;
+    }
+    if (activity.omittedConflictingRows > 0) {
+      limitations.omitted_conflicting_rows = activity.omittedConflictingRows;
+    }
+    if (activity.coverageIncomplete) {
+      limitations.window_coverage_incomplete = true;
+    }
   }
   if (DAILY_SPORTS.has(sport) && window.dateBoundsKind === 'unavailable') {
     limitations.exact_date_bounds_unavailable = true;
-  }
-  if (activity.coverageIncomplete) {
-    limitations.window_coverage_incomplete = true;
   }
 
   return {
@@ -1444,11 +1594,11 @@ export async function executeEspnTransactionOperation({
       date_bounds_kind: window.dateBoundsKind,
       timezone: window.timezone,
     },
-    source: 'activity_feed',
+    source,
     limitations,
     transactions,
     teams: context.teams,
-    truncated: activity.coverageIncomplete || countTruncated,
+    truncated: (activity?.coverageIncomplete ?? false) || countTruncated,
   };
 }
 

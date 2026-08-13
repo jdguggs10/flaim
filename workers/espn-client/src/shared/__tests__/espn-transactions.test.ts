@@ -602,7 +602,6 @@ describe('espn-transactions', () => {
 
       expect(result.transactions).toHaveLength(1);
       expect(result.transactions[0].type).toBe('add');
-      expect(result.truncated).toBe(false);
 
       const url = mockFetch.mock.calls[0]?.[0] as string;
       expect(url).toContain('/leagues/123');
@@ -615,6 +614,25 @@ describe('espn-transactions', () => {
       expect(parsed.transactions.filterType.value).toContain('WAIVER');
       expect(parsed.transactions.filterType.value).toContain('FREEAGENT');
       expect(parsed.transactions.filterType.value).toContain('TRADE_ACCEPT');
+    });
+
+    it('sends only the minimal accepted filter shape — no pagination or sort fields', () => {
+      // Regression pin on the FLA-140 root cause: ESPN returns HTTP 400 for
+      // ANY x-fantasy-filter carrying limit/offset on this view. filterType
+      // must be the only key.
+      return (async () => {
+        mockFetch.mockResolvedValueOnce(jsonResponse({ transactions: [] }));
+
+        await fetchEspnMTransactions2('ffl', '123', 2025, { s2: 'x', swid: '{y}' }, [7]);
+
+        const init = mockFetch.mock.calls[0]?.[1] as RequestInit;
+        const parsed = JSON.parse((init.headers as Record<string, string>)['x-fantasy-filter']);
+        expect(Object.keys(parsed)).toEqual(['transactions']);
+        expect(Object.keys(parsed.transactions)).toEqual(['filterType']);
+        expect(parsed.transactions.limit).toBeUndefined();
+        expect(parsed.transactions.offset).toBeUndefined();
+        expect(parsed.transactions.sortDatePublished).toBeUndefined();
+      })();
     });
 
     it('iterates multiple weeks and deduplicates by transaction ID', async () => {
@@ -633,7 +651,6 @@ describe('espn-transactions', () => {
       const result = await fetchEspnMTransactions2('ffl', '123', 2025, { s2: 'x', swid: '{y}' }, [7, 8]);
 
       expect(result.transactions).toHaveLength(2);
-      expect(result.truncated).toBe(false);
       expect(mockFetch).toHaveBeenCalledTimes(2);
     });
 
@@ -643,74 +660,129 @@ describe('espn-transactions', () => {
       const result = await fetchEspnMTransactions2('ffl', '123', 2025, { s2: 'x', swid: '{y}' }, [7]);
 
       expect(result.transactions).toHaveLength(0);
-      expect(result.truncated).toBe(false);
     });
 
-    it('paginates when a page is full (50 transactions)', async () => {
-      // Page 1: exactly 50 transactions → triggers page 2
-      const fullPage = Array.from({ length: 50 }, (_, i) => ({
+    it('issues exactly one unpaginated request per scoring period', async () => {
+      // A large unpaginated response comes back in one request — there is no
+      // follow-up page or probe traffic (the view cannot be paged).
+      const bigResponse = Array.from({ length: 120 }, (_, i) => ({
         id: i + 1, type: 'FREEAGENT', status: 'EXECUTED', teamId: 1,
-        processDate: 50000 - i, scoringPeriodId: 7, items: [],
+        processDate: 500000 - i, scoringPeriodId: 7, items: [],
       }));
-      mockFetch.mockResolvedValueOnce(jsonResponse({ transactions: fullPage }));
-      // Page 2: partial page → stops
+      mockFetch.mockResolvedValueOnce(jsonResponse({ transactions: bigResponse }));
+
+      const result = await fetchEspnMTransactions2('ffl', '123', 2025, { s2: 'x', swid: '{y}' }, [7]);
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(result.transactions).toHaveLength(120);
+    });
+
+    it('throws immediately when the operation budget is already exhausted', async () => {
+      await expect(
+        fetchEspnMTransactions2('ffl', '123', 2025, { s2: 'x', swid: '{y}' }, [7], Date.now() - 1),
+      ).rejects.toThrow('ESPN_TIMEOUT');
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it('times out a body read that stalls after headers arrive', async () => {
+      // espnFetch's abort timer is cleared once response headers arrive, so a
+      // provider stalling mid-body would otherwise hold the structured
+      // attempt past its deadline. The body read must race the budget.
+      vi.useFakeTimers();
+      try {
+        mockFetch.mockResolvedValueOnce(
+          new Response(new ReadableStream({ start() { /* never closes */ } }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        );
+
+        const pending = fetchEspnMTransactions2(
+          'ffl', '123', 2025, { s2: 'x', swid: '{y}' }, [7], Date.now() + 2000,
+        );
+        const outcome = expect(pending).rejects.toThrow('ESPN_TIMEOUT');
+        await vi.advanceTimersByTimeAsync(2100);
+        await outcome;
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('fails the whole fetch when any scoring period request fails', async () => {
+      // All-or-nothing: a partially covered window must not be served as if
+      // complete — the caller falls back to the activity feed instead.
+      mockFetch.mockResolvedValueOnce(jsonResponse({ transactions: [] }));
+      mockFetch.mockResolvedValueOnce(new Response('nope', { status: 400 }));
+
+      await expect(
+        fetchEspnMTransactions2('ffl', '123', 2025, { s2: 'x', swid: '{y}' }, [7, 8]),
+      ).rejects.toThrow();
+    });
+
+    it('builds directional trade_sides from structured movement items', async () => {
       mockFetch.mockResolvedValueOnce(jsonResponse({
         transactions: [
-          { id: 999, type: 'WAIVER', status: 'EXECUTED', teamId: 2, processDate: 1, scoringPeriodId: 7, items: [] },
+          {
+            id: 555,
+            type: 'TRADE_ACCEPT',
+            status: 'EXECUTED',
+            teamId: 3,
+            processDate: 1700000000000,
+            scoringPeriodId: 7,
+            items: [
+              { playerId: 1001, fromTeamId: 3, toTeamId: 5 },
+              { playerId: 2002, fromTeamId: 5, toTeamId: 3 },
+            ],
+          },
         ],
       }));
 
       const result = await fetchEspnMTransactions2('ffl', '123', 2025, { s2: 'x', swid: '{y}' }, [7]);
 
-      expect(mockFetch).toHaveBeenCalledTimes(2);
-      expect(result.transactions).toHaveLength(51);
-      expect(result.truncated).toBe(false);
-
-      // Verify offset was sent on second call
-      const secondInit = mockFetch.mock.calls[1]?.[1] as RequestInit;
-      const filter = JSON.parse((secondInit.headers as Record<string, string>)['x-fantasy-filter']);
-      expect(filter.transactions.offset).toBe(50);
+      expect(result.transactions).toHaveLength(1);
+      const trade = result.transactions[0];
+      expect(trade.type).toBe('trade');
+      expect(trade.team_ids).toEqual(['3', '5']);
+      expect(trade.trade_sides).toEqual([
+        {
+          team_id: '3',
+          acquired: [{ id: '2002' }],
+          gave_up: [{ id: '1001' }],
+        },
+        {
+          team_id: '5',
+          acquired: [{ id: '1001' }],
+          gave_up: [{ id: '2002' }],
+        },
+      ]);
     });
 
-    it('does not mark truncated when exactly 200 rows exist for a week', async () => {
-      const fullPage = Array.from({ length: 50 }, (_, i) => ({
-        id: i + 1, type: 'FREEAGENT', status: 'EXECUTED', teamId: 1,
-        processDate: 50000 - i, scoringPeriodId: 7, items: [],
-      }));
-
-      mockFetch.mockResolvedValueOnce(jsonResponse({ transactions: fullPage }));
-      mockFetch.mockResolvedValueOnce(jsonResponse({ transactions: fullPage.map((p) => ({ ...p, id: p.id + 100 })) }));
-      mockFetch.mockResolvedValueOnce(jsonResponse({ transactions: fullPage.map((p) => ({ ...p, id: p.id + 200 })) }));
-      mockFetch.mockResolvedValueOnce(jsonResponse({ transactions: fullPage.map((p) => ({ ...p, id: p.id + 300 })) }));
-      // Probe offset 200 returns no rows => not truncated.
-      mockFetch.mockResolvedValueOnce(jsonResponse({ transactions: [] }));
-
-      const result = await fetchEspnMTransactions2('ffl', '123', 2025, { s2: 'x', swid: '{y}' }, [7]);
-
-      expect(result.transactions).toHaveLength(200);
-      expect(result.truncated).toBe(false);
-      expect(mockFetch).toHaveBeenCalledTimes(5);
-    });
-
-    it('marks truncated when probe finds rows beyond max page limit', async () => {
-      const fullPage = Array.from({ length: 50 }, (_, i) => ({
-        id: i + 1, type: 'FREEAGENT', status: 'EXECUTED', teamId: 1,
-        processDate: 50000 - i, scoringPeriodId: 7, items: [],
-      }));
-
-      mockFetch.mockResolvedValueOnce(jsonResponse({ transactions: fullPage }));
-      mockFetch.mockResolvedValueOnce(jsonResponse({ transactions: fullPage.map((p) => ({ ...p, id: p.id + 100 })) }));
-      mockFetch.mockResolvedValueOnce(jsonResponse({ transactions: fullPage.map((p) => ({ ...p, id: p.id + 200 })) }));
-      mockFetch.mockResolvedValueOnce(jsonResponse({ transactions: fullPage.map((p) => ({ ...p, id: p.id + 300 })) }));
-      // Probe offset 200 returns one row => truncated.
+    it('leaves trade_sides absent when movement items are incomplete', async () => {
+      // One item lacks team movement info: emitting half-directional sides
+      // would be worse than none, so sides stay absent for the activity-feed
+      // merge to fill.
       mockFetch.mockResolvedValueOnce(jsonResponse({
-        transactions: [{ id: 999, type: 'WAIVER', status: 'EXECUTED', teamId: 3, processDate: 1, scoringPeriodId: 7, items: [] }],
+        transactions: [
+          {
+            id: 556,
+            type: 'TRADE_UPHOLD',
+            status: 'EXECUTED',
+            teamId: 3,
+            processDate: 1700000000000,
+            scoringPeriodId: 7,
+            items: [
+              { playerId: 1001, fromTeamId: 3, toTeamId: 5 },
+              { playerId: 2002, type: 'ADD', toTeamId: 3 },
+            ],
+          },
+        ],
       }));
 
       const result = await fetchEspnMTransactions2('ffl', '123', 2025, { s2: 'x', swid: '{y}' }, [7]);
 
-      expect(result.truncated).toBe(true);
-      expect(mockFetch).toHaveBeenCalledTimes(5);
+      expect(result.transactions).toHaveLength(1);
+      expect(result.transactions[0].type).toBe('trade_uphold');
+      expect(result.transactions[0].trade_sides).toBeUndefined();
     });
   });
 
@@ -801,7 +873,10 @@ describe('espn-transactions', () => {
       expect(result[0].team_ids).toEqual(['1', '3']);
     });
 
-    it('does not overwrite trade transactions that already have player items', () => {
+    it('fills missing sides on mixed rows while preserving their flat player lists', () => {
+      // The FLA-140 mixed-completeness case: a structured trade row with flat
+      // players but no directional sides still takes sides from the activity
+      // feed — but its own flat lists are never overwritten.
       const mTxns: NormalizedTransaction[] = [
         {
           transaction_id: '500',
@@ -828,6 +903,10 @@ describe('espn-transactions', () => {
           team_ids: ['3', '7'],
           players_added: [{ id: '9999' }],
           players_dropped: [{ id: '8888' }],
+          trade_sides: [
+            { team_id: '3', acquired: [{ id: '3001' }], gave_up: [{ id: '3002' }] },
+            { team_id: '7', acquired: [{ id: '3002' }], gave_up: [{ id: '3001' }] },
+          ],
           faab_bid: null,
         },
       ];
@@ -835,6 +914,53 @@ describe('espn-transactions', () => {
       const result = mergeTradePlayerDetails(mTxns, activityTxns);
       expect(result[0].players_added).toEqual([{ id: '3001' }]);
       expect(result[0].players_dropped).toEqual([{ id: '3002' }]);
+      expect(result[0].trade_sides).toEqual(activityTxns[0].trade_sides);
+      expect(result[0].team_ids).toEqual(['3', '7']);
+    });
+
+    it('leaves trades with populated directional sides untouched', () => {
+      const sides = [
+        { team_id: '3', acquired: [{ id: '3001' }], gave_up: [{ id: '3002' }] },
+        { team_id: '7', acquired: [{ id: '3002' }], gave_up: [{ id: '3001' }] },
+      ];
+      const mTxns: NormalizedTransaction[] = [
+        {
+          transaction_id: '500',
+          type: 'trade',
+          status: 'complete',
+          timestamp: 1700400000000,
+          date: '2023-11-19',
+          week: 10,
+          team_ids: ['3', '7'],
+          players_added: [],
+          players_dropped: [],
+          trade_sides: sides,
+          faab_bid: null,
+        },
+      ];
+
+      const activityTxns: NormalizedTransaction[] = [
+        {
+          transaction_id: 'act-trade-other',
+          type: 'trade',
+          status: 'complete',
+          timestamp: 1700400000000,
+          date: '2023-11-19',
+          week: 10,
+          team_ids: ['3', '7'],
+          players_added: [{ id: '9999' }],
+          players_dropped: [{ id: '8888' }],
+          trade_sides: [
+            { team_id: '3', acquired: [{ id: '9999' }], gave_up: [{ id: '8888' }] },
+            { team_id: '7', acquired: [{ id: '8888' }], gave_up: [{ id: '9999' }] },
+          ],
+          faab_bid: null,
+        },
+      ];
+
+      const result = mergeTradePlayerDetails(mTxns, activityTxns);
+      expect(result[0].trade_sides).toEqual(sides);
+      expect(result[0].players_added).toEqual([]);
     });
 
     it('treats empty trade sides as missing player data', () => {

@@ -44,7 +44,7 @@ interface ExecuteRequest {
     week?: number;        // Public matchup period for get_transactions (0 = preseason)
     position?: string;
     count?: number;
-    type?: string;        // Transaction type filter; activity-only ESPN rejects structured-only types
+    type?: string;        // Transaction type filter; the activity-feed fallback rejects structured-only types
   };
 }
 ```
@@ -76,7 +76,7 @@ All four sports (football, baseball, basketball, hockey) support the same 7 tool
 - `get_roster` - Team roster with player stats
 - `get_free_agents` - Available free agents
 - `get_players` - Player lookup with market/global ownership context
-- `get_transactions` - Recent completed activity transactions (adds, drops, waivers, trades)
+- `get_transactions` - Recent league transactions (adds, drops, waivers, trades, failed bids, trade lifecycle) from the structured primary source with an activity-feed fallback
 
 ### ESPN Period Fields
 
@@ -100,15 +100,17 @@ The `get_transactions` response includes:
 - **`transactions`**: Array of normalized transactions with enriched player entries (name, position, pro team) and numeric `team_ids`.
 - **`teams`**: A `Record<string, string>` map of team ID → display name, so consumers can resolve `team_ids` to human-readable names.
 - **`window`**: Matchup-period semantics plus the exact underlying provider scoring periods, Eastern-time date bounds when available, and any legacy scoring-period normalization.
-- **`source`**: Currently always `activity_feed`.
-- **`limitations`**: Structured-detail limitations and counts for activity rows omitted because their scope was missing or contradictory.
-- **`truncated`**: `true` when the operation deadline or eight-page activity cap prevented proof that the full requested window was covered.
+- **`source`**: `mTransactions2` (structured primary), `mTransactions2_with_activity_trade_details` (structured rows whose trade sides were filled from the activity feed), or `activity_feed` (fallback).
+- **`limitations`**: `structured_details_incomplete` appears only when trade detail is actually incomplete or the activity-feed fallback served the rows; activity-sourced responses also count rows omitted because their scope was missing or contradictory.
+- **`truncated`**: `true` when the caller's count cap cut results, or — on the activity fallback — when the operation deadline or eight-page cap prevented proof that the full requested window was covered.
 
 The public `week` selector always means an ESPN matchup period. This matters for baseball, basketball, and hockey, where one matchup normally spans several daily scoring periods. Omitting `week` selects the current and previous matchup periods; `0` explicitly selects preseason. A narrowly bounded compatibility shim recognizes a daily scoring-period value only when it cannot be a usable current/historical matchup, is not any known future matchup in ESPN's schedule, and maps uniquely to one.
 
 Daily matchup membership comes from the keys in each `mMatchupScore` schedule side's `pointsByScoringPeriod` object. Those are the scoring days ESPN actually assigned to the matchup, including extended periods such as baseball's All-Star matchup. Do not use `scheduleSettings.matchupPeriods` as this map: that field groups weekly/playoff periods and its values are not daily scoring IDs. If ESPN has not posted a score key for the current day yet, the validated current `scoringPeriodId` is added only to the current matchup.
 
-The activity feed (`kona_league_communication`) is the authoritative live source. Rows are included only when message/topic evidence, or a daily-sport Eastern-time timestamp fallback, proves membership in the requested matchup window. Conflicting or unscoped rows are omitted and counted. Activity data cannot prove failed bids, FAAB amounts, or proposal/decline/veto/uphold lifecycle states, so those explicit filters fail with `ESPN_TRANSACTION_TYPE_UNAVAILABLE` rather than returning a misleading empty result. The dormant `mTransactions2` fetcher remains window-aware for future restoration. Player enrichment uses ESPN's public global `/players?view=players_wl` endpoint, and team names come from `mTeam`.
+The structured `mTransactions2` view is the primary source. Its transport sends only the minimal `filterType` fantasy-filter: ESPN returns HTTP 400 for any filter carrying `limit`/`offset` (with or without sort fields), and the view exposes no pagination — each pinned scoring period returns ESPN's full result set for that period in one request. Structured rows carry failed bids, FAAB amounts, trade proposal/decline/veto/uphold lifecycle states, and — when movement items are complete — directional `trade_sides`; trades missing directional detail are filled from the activity feed. Any structured failure (including partial window coverage) falls back entirely to the activity feed rather than serving silent gaps.
+
+The activity feed (`kona_league_communication`) is the fallback source. Rows are included only when message/topic evidence, or a daily-sport Eastern-time timestamp fallback, proves membership in the requested matchup window. Conflicting or unscoped rows are omitted and counted. Activity data cannot prove failed bids, FAAB amounts, or lifecycle states, so on the fallback those explicit filters fail with `ESPN_TRANSACTION_TYPE_UNAVAILABLE` rather than returning a misleading empty result. Player enrichment uses ESPN's public global `/players?view=players_wl` endpoint, and team names come from `mTeam`.
 
 ## Mappings Architecture
 

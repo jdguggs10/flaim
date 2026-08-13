@@ -342,13 +342,16 @@ describe('ESPN transaction matchup-window contract', () => {
   });
 
   it('does not label football daily date bounds as an unavailable-data limitation', async () => {
+    // Context fetch, then one structured mTransactions2 fetch per scoring
+    // period in the default window (current + previous matchup).
     const fetchMock = vi.spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce(new Response(JSON.stringify({
         scoringPeriodId: 3,
         currentMatchupPeriod: 3,
         teams: [],
       }), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ topics: [] }), { status: 200 }));
+      .mockResolvedValueOnce(new Response(JSON.stringify({ transactions: [] }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ transactions: [] }), { status: 200 }));
 
     const result = await executeEspnTransactionOperation({
       gameId: 'ffl',
@@ -361,9 +364,11 @@ describe('ESPN transaction matchup-window contract', () => {
     });
 
     expect(result.window.date_bounds_kind).toBe('unavailable');
-    expect(result.limitations).toEqual({
-      structured_details_incomplete: true,
-    });
+    expect(result.source).toBe('mTransactions2');
+    // A complete structured result carries no limitations at all — in
+    // particular no date-bounds limitation for football and no
+    // structured_details_incomplete.
+    expect(result.limitations).toEqual({});
     fetchMock.mockRestore();
   });
 
@@ -375,25 +380,28 @@ describe('ESPN transaction matchup-window contract', () => {
         teams: [],
       }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({
-        topics: [{
-          id: 1,
-          date: Date.parse('2026-09-20T16:00:00Z'),
-          messages: [
-            {
-              id: 10,
-              messageTypeId: 178,
-              to: 1,
-              scoringPeriodId: 3,
-            },
-            {
-              id: 11,
-              messageTypeId: 179,
-              to: 1,
-              scoringPeriodId: 3,
-            },
-          ],
-        }],
-      }), { status: 200 }));
+        transactions: [
+          {
+            id: 10,
+            type: 'FREEAGENT',
+            status: 'EXECUTED',
+            teamId: 1,
+            processDate: Date.parse('2026-09-20T16:00:00Z'),
+            scoringPeriodId: 3,
+            items: [],
+          },
+          {
+            id: 11,
+            type: 'FREEAGENT',
+            status: 'EXECUTED',
+            teamId: 1,
+            processDate: Date.parse('2026-09-20T15:00:00Z'),
+            scoringPeriodId: 3,
+            items: [],
+          },
+        ],
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ transactions: [] }), { status: 200 }));
 
     const result = await executeEspnTransactionOperation({
       gameId: 'ffl',
@@ -636,16 +644,274 @@ describe('ESPN transaction matchup-window contract', () => {
     fetchMock.mockRestore();
   });
 
-  it('rejects structured-only filters while the activity feed is authoritative', async () => {
+  it('rejects structured-only filters when the structured source is unavailable', async () => {
+    // Both structured requests 400 (the pre-FLA-140 production behavior);
+    // the structured-only type filter must then fail with the honest
+    // unavailable error instead of silently returning activity-feed rows
+    // that can never contain the requested type.
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        scoringPeriodId: 3,
+        currentMatchupPeriod: 3,
+        teams: [],
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response('bad filter', { status: 400 }))
+      .mockResolvedValueOnce(new Response('bad filter', { status: 400 }));
+
     await expect(executeEspnTransactionOperation({
-      gameId: 'flb',
-      leagueId: '30201',
+      gameId: 'ffl',
+      leagueId: '123',
       seasonYear: 2026,
-      sport: 'baseball',
+      sport: 'football',
       credentials,
       type: 'failed_bid',
       getPositionName: String,
       getProTeamAbbrev: String,
     })).rejects.toThrow('ESPN_TRANSACTION_TYPE_UNAVAILABLE');
+    fetchMock.mockRestore();
+  });
+
+  it('serves structured-only types from the primary source when it is live', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        scoringPeriodId: 3,
+        currentMatchupPeriod: 3,
+        teams: [],
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        transactions: [{
+          id: 77,
+          type: 'TRADE_PROPOSAL',
+          status: 'PENDING',
+          teamId: 4,
+          proposedDate: Date.parse('2026-09-20T16:00:00Z'),
+          scoringPeriodId: 3,
+          items: [],
+        }],
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ transactions: [] }), { status: 200 }));
+
+    const result = await executeEspnTransactionOperation({
+      gameId: 'ffl',
+      leagueId: '123',
+      seasonYear: 2026,
+      sport: 'football',
+      credentials,
+      type: 'trade_proposal',
+      getPositionName: String,
+      getProTeamAbbrev: String,
+    });
+
+    expect(result.source).toBe('mTransactions2');
+    expect(result.transactions).toHaveLength(1);
+    expect(result.transactions[0]).toMatchObject({
+      type: 'trade_proposal',
+      status: 'pending',
+    });
+    fetchMock.mockRestore();
+  });
+
+  it('falls back to the activity feed when the structured source fails', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        scoringPeriodId: 3,
+        currentMatchupPeriod: 3,
+        teams: [],
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response('bad filter', { status: 400 }))
+      .mockResolvedValueOnce(new Response('bad filter', { status: 400 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        topics: [{
+          id: 1,
+          date: Date.parse('2026-09-20T16:00:00Z'),
+          messages: [{
+            id: 10,
+            messageTypeId: 178,
+            to: 1,
+            scoringPeriodId: 3,
+          }],
+        }],
+      }), { status: 200 }));
+
+    const result = await executeEspnTransactionOperation({
+      gameId: 'ffl',
+      leagueId: '123',
+      seasonYear: 2026,
+      sport: 'football',
+      credentials,
+      getPositionName: String,
+      getProTeamAbbrev: String,
+    });
+
+    expect(result.source).toBe('activity_feed');
+    expect(result.limitations.structured_details_incomplete).toBe(true);
+    expect(result.transactions).toHaveLength(1);
+    fetchMock.mockRestore();
+  });
+
+  it('falls back with usable budget when a slow structured source eats its sub-deadline', async () => {
+    // The Codex-audit starvation case, made mutation-sensitive: a daily-sport
+    // window spanning 14 scoring periods needs four request chunks, and each
+    // structured request responds SLOWLY but successfully (6s). Without the
+    // half-budget sub-deadline the chunks would legally consume the entire
+    // 16s provider budget (6s + 7s-abort + ...) and hand the fallback an
+    // expired deadline — an empty response. With it, the structured attempt
+    // is cut off at ~8s and the fallback serves rows with real budget. The
+    // test advances only 12s, so a regression cannot even settle in time.
+    vi.useFakeTimers();
+    try {
+      const scheduleEntry = (matchupPeriodId: number, periods: number[]) => ({
+        matchupPeriodId,
+        home: {
+          pointsByScoringPeriod: Object.fromEntries(periods.map((p) => [p, 1])),
+        },
+      });
+      const contextBody = JSON.stringify({
+        scoringPeriodId: 26,
+        currentMatchupPeriod: 3,
+        schedule: [
+          scheduleEntry(2, [13, 14, 15, 16, 17, 18, 19]),
+          scheduleEntry(3, [20, 21, 22, 23, 24, 25, 26]),
+        ],
+        teams: [],
+      });
+      const activityBody = JSON.stringify({
+        topics: [{
+          id: 1,
+          date: Date.parse('2026-04-24T16:00:00Z'),
+          messages: [{
+            id: 10,
+            messageTypeId: 178,
+            to: 1,
+            scoringPeriodId: 26,
+          }],
+        }],
+      });
+      const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+        const url = String(input);
+        if (url.includes('view=mTransactions2')) {
+          // Slow success: resolves after 6s unless espnFetch aborts first.
+          return new Promise<Response>((resolve, reject) => {
+            const timer = setTimeout(() => {
+              resolve(new Response(JSON.stringify({ transactions: [] }), { status: 200 }));
+            }, 6000);
+            init?.signal?.addEventListener('abort', () => {
+              clearTimeout(timer);
+              const abortError = new Error('The operation was aborted');
+              abortError.name = 'AbortError';
+              reject(abortError);
+            });
+          });
+        }
+        if (url.includes('kona_league_communication')) {
+          return Promise.resolve(new Response(activityBody, { status: 200 }));
+        }
+        return Promise.resolve(new Response(contextBody, { status: 200 }));
+      });
+
+      const operation = executeEspnTransactionOperation({
+        gameId: 'flb',
+        leagueId: '30201',
+        seasonYear: 2026,
+        sport: 'baseball',
+        credentials,
+        getPositionName: String,
+        getProTeamAbbrev: String,
+      });
+      // Chunk 1 resolves slowly at 6s; chunk 2's requests abort at the ~8s
+      // structured sub-deadline; the fallback then resolves on microtasks.
+      await vi.advanceTimersByTimeAsync(12_000);
+      const result = await operation;
+
+      expect(result.source).toBe('activity_feed');
+      expect(result.transactions).toHaveLength(1);
+      expect(result.limitations.structured_details_incomplete).toBe(true);
+      // The fallback genuinely issued its request — it was not starved.
+      expect(
+        fetchMock.mock.calls.some(([requestUrl]) =>
+          String(requestUrl).includes('kona_league_communication'),
+        ),
+      ).toBe(true);
+      fetchMock.mockRestore();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('supplements structured trades lacking sides from the activity feed', async () => {
+    const tradeTimestamp = Date.parse('2026-09-20T16:00:00Z');
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        scoringPeriodId: 3,
+        currentMatchupPeriod: 3,
+        teams: [],
+      }), { status: 200 }))
+      // Structured trade row with no movement items → no sides.
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        transactions: [{
+          id: 500,
+          type: 'TRADE_ACCEPT',
+          status: 'EXECUTED',
+          teamId: 3,
+          processDate: tradeTimestamp,
+          scoringPeriodId: 3,
+          items: [],
+        }],
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ transactions: [] }), { status: 200 }))
+      // Activity feed supplement carrying the directional movements.
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        topics: [{
+          id: 900,
+          date: tradeTimestamp,
+          messages: [
+            {
+              id: 20,
+              messageTypeId: 244,
+              targetId: 1001,
+              from: 3,
+              to: 5,
+              scoringPeriodId: 3,
+            },
+            {
+              id: 21,
+              messageTypeId: 244,
+              targetId: 2002,
+              from: 5,
+              to: 3,
+              scoringPeriodId: 3,
+            },
+          ],
+        }],
+      }), { status: 200 }))
+      // Player enrichment for the trade-side player ids.
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }));
+
+    const result = await executeEspnTransactionOperation({
+      gameId: 'ffl',
+      leagueId: '123',
+      seasonYear: 2026,
+      sport: 'football',
+      credentials,
+      getPositionName: String,
+      getProTeamAbbrev: String,
+    });
+
+    expect(result.source).toBe('mTransactions2_with_activity_trade_details');
+    expect(result.limitations.structured_details_incomplete).toBeUndefined();
+    expect(result.transactions).toHaveLength(1);
+    expect(result.transactions[0].trade_sides).toEqual([
+      {
+        team_id: '3',
+        acquired: [{ id: '2002' }],
+        gave_up: [{ id: '1001' }],
+      },
+      {
+        team_id: '5',
+        acquired: [{ id: '1001' }],
+        gave_up: [{ id: '2002' }],
+      },
+    ]);
+    fetchMock.mockRestore();
   });
 });
