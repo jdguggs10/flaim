@@ -1380,11 +1380,12 @@ describe('fantasy-mcp tools', () => {
     expect(tool!.description).toContain(
       'When acquisitionState is null or not present, call rows "available players," never specifically free agents or waivers'
     );
-    expect(tool!.description).toContain('For a returned list or field explanation, end after the requested facts');
     expect(tool!.description).toContain(
-      'Final answer check: remove every unrequested follow-up offer before sending'
+      'Hard stop: after satisfying a returned-list or field-explanation request, end the answer immediately after the requested facts'
     );
-    expect(tool!.description).toContain('never add an "if you want" offer');
+    expect(tool!.description).toContain(
+      'never append "if you want", "tell me which player", or a similar invitation unless the user\'s current request explicitly asks for that additional work'
+    );
     expect(tool!.description).toContain(
       'State acquisition status in plain language from acquisitionState ("a free agent", "on waivers"); never print raw codes — neither provider codes such as FREEAGENT or WAIVERS nor canonical values like free_agent verbatim'
     );
@@ -1392,6 +1393,12 @@ describe('fantasy-mcp tools', () => {
       'Use get_roster only when the current request separately asks who owns a player; never offer it after an available-player result'
     );
     expect(tool!.description).toContain('Use current web evidence before adding analysis or pickup recommendations');
+    expect(tool!.description.indexOf('Hard stop:')).toBeGreaterThan(
+      tool!.description.indexOf('Use current web evidence before adding analysis or pickup recommendations')
+    );
+    expect(tool!.description.endsWith(
+      'never append "if you want", "tell me which player", or a similar invitation unless the user\'s current request explicitly asks for that additional work.'
+    )).toBe(true);
     expect(tool!.description).toContain(
       'Do not include injuryStatus or any injury detail unless the user asks for it; when asked, verify current web evidence and translate provider codes into plain language'
     );

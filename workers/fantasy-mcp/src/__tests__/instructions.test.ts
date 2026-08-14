@@ -79,16 +79,19 @@ describe('Flaim MCP initialization instructions', () => {
       'never print raw codes — neither provider codes such as FREEAGENT or WAIVERS nor canonical values like free_agent verbatim'
     );
     expect(FLAIM_MCP_INSTRUCTIONS).toContain(
-      'For a returned list or field explanation, end after the requested facts; never add an "if you want" offer or qualitative advice'
+      'Hard stop: after satisfying a returned-list or field-explanation request, end the answer immediately after the requested facts'
     );
     expect(FLAIM_MCP_INSTRUCTIONS).toContain(
-      'Final answer check: remove every unrequested follow-up offer before sending'
+      'never append "if you want", "tell me which player", or a similar invitation unless the user\'s current request explicitly asks for that additional work'
     );
     expect(FLAIM_MCP_INSTRUCTIONS).toContain(
       'Use get_roster only when the current request separately asks who owns a player; never offer it after an available-player result'
     );
     expect(FLAIM_MCP_INSTRUCTIONS).toContain(
       'Do not include injuryStatus or any injury detail unless the user asks for it; when asked, verify current web evidence and translate provider codes into plain language'
+    );
+    expect(FLAIM_MCP_INSTRUCTIONS.indexOf('Hard stop:')).toBeGreaterThan(
+      FLAIM_MCP_INSTRUCTIONS.indexOf('Do not include injuryStatus')
     );
   });
 
