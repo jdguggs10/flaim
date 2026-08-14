@@ -1396,6 +1396,9 @@ describe('fantasy-mcp tools', () => {
     expect(tool!.description.indexOf('Hard stop:')).toBeGreaterThan(
       tool!.description.indexOf('Use current web evidence before adding analysis or pickup recommendations')
     );
+    expect(tool!.description.endsWith(
+      'never append "if you want", "tell me which player", or a similar invitation unless the user\'s current request explicitly asks for that additional work.'
+    )).toBe(true);
     expect(tool!.description).toContain(
       'Do not include injuryStatus or any injury detail unless the user asks for it; when asked, verify current web evidence and translate provider codes into plain language'
     );
