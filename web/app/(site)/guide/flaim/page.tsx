@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ChevronDown, ShieldCheck } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 
@@ -106,86 +106,7 @@ export default function FlaimGuidePage() {
         </div>
       </section>
 
-      <section className="px-4 py-16 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-5xl">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">
-            Flaim help
-          </p>
-          <h2 className="mt-3 text-3xl font-bold tracking-tight">
-            Start with the right account
-          </h2>
-          <p className="mt-4 max-w-3xl leading-7 text-muted-foreground">
-            New users only need one Flaim account. Returning users should sign
-            in to the account that already holds their league connections.
-          </p>
-
-          <div className="mt-8 grid gap-5 md:grid-cols-2">
-            <article className="flex flex-col rounded-2xl border p-6">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">
-                New to Flaim
-              </p>
-              <h3 className="mt-3 text-2xl font-semibold">Create an account</h3>
-              <p className="mt-3 flex-1 leading-7 text-muted-foreground">
-                Create your free account, then Flaim will take you to Your
-                Leagues so you can connect ESPN, Yahoo, or Sleeper.
-              </p>
-              <Button asChild className="mt-6 w-full">
-                <Link href="/sign-up">Create Your Account</Link>
-              </Button>
-              <details className="group mt-4 rounded-xl bg-muted/60">
-                <summary className="flex cursor-pointer items-center justify-between gap-3 p-4 text-sm font-medium">
-                  A little help
-                  <ChevronDown className="h-4 w-4 shrink-0 transition-transform group-open:rotate-180" />
-                </summary>
-                <p className="px-4 pb-4 text-sm leading-6 text-muted-foreground">
-                  Creating the account is only Step 1. Your fantasy platforms
-                  are connected separately in Step 2, and your AI app is
-                  connected separately in Step 3.
-                </p>
-              </details>
-            </article>
-
-            <article className="flex flex-col rounded-2xl border p-6">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">
-                Returning to Flaim
-              </p>
-              <h3 className="mt-3 text-2xl font-semibold">Sign in</h3>
-              <p className="mt-3 flex-1 leading-7 text-muted-foreground">
-                Use your existing Flaim account so you return to the leagues
-                and AI connections you already set up.
-              </p>
-              <Button asChild className="mt-6 w-full">
-                <Link href="/sign-in">Sign In</Link>
-              </Button>
-              <details className="group mt-4 rounded-xl bg-muted/60">
-                <summary className="flex cursor-pointer items-center justify-between gap-3 p-4 text-sm font-medium">
-                  A little help
-                  <ChevronDown className="h-4 w-4 shrink-0 transition-transform group-open:rotate-180" />
-                </summary>
-                <p className="px-4 pb-4 text-sm leading-6 text-muted-foreground">
-                  If your leagues are missing after sign-in, you may be in a
-                  different Flaim account. Try the email or sign-in method you
-                  originally used before reconnecting anything.
-                </p>
-              </details>
-            </article>
-          </div>
-
-          <div className="mt-8 flex items-start gap-3 rounded-xl border bg-muted/40 p-5 text-sm text-muted-foreground">
-            <ShieldCheck
-              className="mt-0.5 h-5 w-5 shrink-0 text-primary"
-              aria-hidden="true"
-            />
-            <p className="leading-6">
-              Flaim is read-only. Your account can share your league info with
-              the AI you authorize, but it cannot make trades, edit lineups, or
-              change your fantasy leagues.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      <section className="border-y bg-muted/50 px-4 py-16 sm:px-6 lg:px-8">
+      <section className="border-b bg-muted/50 px-4 py-16 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-3xl">
           <h2 className="text-3xl font-bold tracking-tight">Account help</h2>
           <p className="mt-4 leading-7 text-muted-foreground">
