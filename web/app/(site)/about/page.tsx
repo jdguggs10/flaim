@@ -45,7 +45,7 @@ export default function AboutPage() {
               I&apos;m Gerry, and I built Flaim because I want to win my fantasy
               baseball league again. Badly. I deserve more than one championship
               in 22 years, and I&apos;m doing everything I can to bring back the
-              belt. Nothing else matters.
+              belt again. Nothing else matters.
             </p>
             <p>
               Flaim is free to use and my passion project. Please don&apos;t
