@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight, ShieldCheck } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -46,7 +46,7 @@ const guideSteps: readonly GuideStep[] = [
   {
     number: "3",
     title: "Connect your AI app",
-    body: "Open Flaim Fantasy in ChatGPT or Claude, or use an optional custom connector in Perplexity, then authorize your account.",
+    body: "Open Flaim Fantasy in ChatGPT or Claude, or use an optional custom connector in apps like Perplexity, then authorize your account.",
     primaryHref: "/leagues#connect-ai",
     primaryLabel: "Connect Your AI",
     secondaryHref: "/docs/ai",
@@ -100,15 +100,6 @@ export default function GuidePage() {
             </Card>
           ))}
         </section>
-
-        <div className="mt-4 flex items-start gap-3 rounded-lg border bg-muted/40 p-4 text-sm text-muted-foreground">
-          <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
-          <p>
-            Flaim is read-only. Your account stores your connected platform
-            status and discovered leagues, but Flaim cannot make trades, edit
-            lineups, or change your league.
-          </p>
-        </div>
 
         <section className="mt-8 rounded-lg border bg-background p-5 shadow-sm">
           <h2 className="text-lg font-semibold">After setup</h2>
