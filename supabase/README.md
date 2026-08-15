@@ -79,9 +79,11 @@ On 2026-07-27, two clean local resets produced identical reviewed catalog,
 privilege, extension, role, policy, migration, cron-absence, and seed-summary
 hashes. Both lint runs found no schema errors, and the final local schema diff
 was empty. Local advisors reported no errors and one expected warning for the
-exact duplicate before-state index. This passes the local reproducibility gate
-for considering a separate hosted preview database; it does not authorize
-hosted infrastructure or production changes.
+exact duplicate before-state index. That proof satisfied the reproducibility
+gate for creating the dedicated hosted preview database, which is now the
+synthetic-data rehearsal lane. It does not prove that hosted preview contains
+every later migration, or authorize a hosted preview migration, production
+change, or production-data copy; each remains a separate approval gate.
 
 ## Analytics monitoring payload
 
