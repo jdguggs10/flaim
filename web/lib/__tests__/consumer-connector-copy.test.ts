@@ -13,6 +13,7 @@ const activeConsumerSurfaces = [
   "web/app/(site)/guide/flaim/page.tsx",
   "web/app/(site)/guide/page.tsx",
   "web/app/(site)/guide/platforms/page.tsx",
+  "web/app/(site)/guide/sports/page.tsx",
   "web/emails/flaim-email-links.json",
   "web/lib/product-links.ts",
   "web/public/llms.txt",
