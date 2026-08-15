@@ -30,7 +30,7 @@ const inspirations = [
   {
     name: "Mosaic",
     url: "https://www.threads.com/@jweingardt?igshid=NTc4MTIwNjQ2YQ==",
-    description: "Baseball done right.",
+    description: "The best baseball app, ever.",
   },
 ];
 
@@ -46,10 +46,6 @@ export default function AboutPage() {
               baseball league again. Badly. I deserve more than one championship
               in 22 years, and I&apos;m doing everything I can to bring back the
               belt again. Nothing else matters.
-            </p>
-            <p>
-              Flaim is free to use and my passion project. Please don&apos;t
-              abuse it. Have fun.
             </p>
           </div>
           <nav
