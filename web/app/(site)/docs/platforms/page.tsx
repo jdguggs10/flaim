@@ -11,7 +11,7 @@ export const metadata: Metadata = {
   description:
     "Connect ESPN, Yahoo, or Sleeper fantasy leagues to Flaim. Use the ESPN Chrome extension, Yahoo sign-in, or your Sleeper username.",
   alternates: {
-    canonical: "https://flaim.app/guide/platforms",
+    canonical: "https://flaim.app/docs/platforms",
   },
 };
 
@@ -123,7 +123,7 @@ export default function PlatformsGuidePage() {
               <Link href="/leagues#platforms">Open Your Leagues</Link>
             </Button>
             <Button asChild size="lg" variant="outline">
-              <Link href="/guide/ai">AI App Help</Link>
+              <Link href="/docs/ai">AI App Docs</Link>
             </Button>
           </div>
         </div>
@@ -167,7 +167,7 @@ export default function PlatformsGuidePage() {
               </Button>
               <details className="group mt-4 rounded-xl bg-muted/60">
                 <summary className="flex cursor-pointer items-center justify-between gap-3 p-4 text-sm font-medium">
-                  A little help
+                  Good to know
                   <ChevronDown className="h-4 w-4 shrink-0 transition-transform group-open:rotate-180" />
                 </summary>
                 <p className="px-4 pb-4 text-sm leading-6 text-muted-foreground">
@@ -196,7 +196,7 @@ export default function PlatformsGuidePage() {
               </Button>
               <details className="group mt-4 rounded-xl bg-muted/60">
                 <summary className="flex cursor-pointer items-center justify-between gap-3 p-4 text-sm font-medium">
-                  A little help
+                  Good to know
                   <ChevronDown className="h-4 w-4 shrink-0 transition-transform group-open:rotate-180" />
                 </summary>
                 <p className="px-4 pb-4 text-sm leading-6 text-muted-foreground">
@@ -225,7 +225,7 @@ export default function PlatformsGuidePage() {
               </Button>
               <details className="group mt-4 rounded-xl bg-muted/60">
                 <summary className="flex cursor-pointer items-center justify-between gap-3 p-4 text-sm font-medium">
-                  A little help
+                  Good to know
                   <ChevronDown className="h-4 w-4 shrink-0 transition-transform group-open:rotate-180" />
                 </summary>
                 <p className="px-4 pb-4 text-sm leading-6 text-muted-foreground">
@@ -251,7 +251,7 @@ export default function PlatformsGuidePage() {
           </p>
 
           <h2 className="mt-12 text-2xl font-bold tracking-tight">
-            Connection help
+            Connection FAQs
           </h2>
           <div className="mt-6 space-y-3">
             {CONNECTION_FAQS.map((faq) => (
@@ -271,10 +271,10 @@ export default function PlatformsGuidePage() {
           </div>
 
           <GuideStepNavigation
-            backHref="/guide/flaim"
-            backLabel="Back to Flaim Help"
-            nextHref="/guide/ai"
-            nextLabel="Continue to AI Help"
+            backHref="/docs/flaim"
+            backLabel="Back to Account Docs"
+            nextHref="/docs/ai"
+            nextLabel="Continue to AI App Docs"
           />
         </div>
       </section>

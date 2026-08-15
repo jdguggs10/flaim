@@ -35,27 +35,27 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 0.7,
     },
     {
-      url: `${baseUrl}/guide`,
+      url: `${baseUrl}/docs`,
       changeFrequency: 'monthly',
       priority: 0.9,
     },
     {
-      url: `${baseUrl}/guide/flaim`,
+      url: `${baseUrl}/docs/flaim`,
       changeFrequency: 'monthly',
       priority: 0.8,
     },
     {
-      url: `${baseUrl}/guide/platforms`,
+      url: `${baseUrl}/docs/platforms`,
       changeFrequency: 'monthly',
       priority: 0.9,
     },
     {
-      url: `${baseUrl}/guide/sports`,
+      url: `${baseUrl}/docs/sports`,
       changeFrequency: 'monthly',
       priority: 0.8,
     },
     {
-      url: `${baseUrl}/guide/ai`,
+      url: `${baseUrl}/docs/ai`,
       changeFrequency: 'monthly',
       priority: 0.9,
     },

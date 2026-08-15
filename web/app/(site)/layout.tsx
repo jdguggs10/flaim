@@ -22,7 +22,7 @@ export default function SiteLayout({
                 aria-label="Footer navigation"
                 className="flex flex-wrap items-center justify-center gap-x-5 gap-y-3 text-sm text-muted-foreground"
               >
-                <Link href="/guide" className="hover:text-foreground">
+                <Link href="/docs" className="hover:text-foreground">
                   Docs
                 </Link>
                 <Link href="/support" className="hover:text-foreground">

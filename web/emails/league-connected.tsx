@@ -56,7 +56,7 @@ export default function LeagueConnectedEmail({
 }
 
 LeagueConnectedEmail.PreviewProps = {
-  aiGuideUrl: "https://flaim.app/guide/ai",
+  aiGuideUrl: "https://flaim.app/docs/ai",
   leagueName: "Acme Fantasy League",
   platform: "Yahoo",
   unsubscribeUrl: "https://flaim.app/notifications/unsubscribe?token=PREVIEW_ONLY",

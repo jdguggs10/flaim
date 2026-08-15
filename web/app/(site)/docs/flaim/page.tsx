@@ -6,11 +6,11 @@ import { GuideStepNavigation } from "@/components/site/guide-step-navigation";
 import { Button } from "@/components/ui/button";
 
 export const metadata: Metadata = {
-  title: "Flaim Account Help",
+  title: "Create Your Flaim Account",
   description:
-    "Create your free Flaim account, sign in, manage your connected leagues, and get help with account access and privacy.",
+    "Create your free Flaim account, sign in, manage your connected leagues, and find answers about account access and privacy.",
   alternates: {
-    canonical: "https://flaim.app/guide/flaim",
+    canonical: "https://flaim.app/docs/flaim",
   },
 };
 
@@ -28,7 +28,7 @@ const ACCOUNT_FAQS = [
   {
     question: "I signed in, but my leagues are missing",
     answer:
-      "First make sure you signed in to the Flaim account you used before. Then open Your Leagues. If the platform is connected, sync or refresh it. If it is not connected, continue to Platform Help.",
+      "First make sure you signed in to the Flaim account you used before. Then open Your Leagues. If the platform is connected, sync or refresh it. If it is not connected, continue to the platform docs.",
   },
   {
     question: "Is my Flaim account the same as my fantasy account?",
@@ -109,7 +109,7 @@ export default function FlaimGuidePage() {
 
       <section className="border-b bg-muted/50 px-4 py-16 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-3xl">
-          <h2 className="text-3xl font-bold tracking-tight">Account help</h2>
+          <h2 className="text-3xl font-bold tracking-tight">Account FAQs</h2>
 
           <div className="mt-6 space-y-3">
             {ACCOUNT_FAQS.map((faq) => (
@@ -129,10 +129,10 @@ export default function FlaimGuidePage() {
           </div>
 
           <GuideStepNavigation
-            backHref="/guide"
-            backLabel="Back to Using Flaim"
-            nextHref="/guide/platforms"
-            nextLabel="Continue to Platform Help"
+            backHref="/docs"
+            backLabel="Back to Docs"
+            nextHref="/docs/platforms"
+            nextLabel="Continue to Platform Docs"
           />
         </div>
       </section>

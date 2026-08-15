@@ -54,10 +54,10 @@ export default function FantasyFootballPage() {
               </h2>
             </div>
             <Link
-              href="/guide"
+              href="/docs"
               className="inline-flex items-center text-sm font-medium text-primary hover:underline"
             >
-              Using Flaim
+              Flaim Docs
               <ArrowRight className="ml-1.5 h-4 w-4" aria-hidden="true" />
             </Link>
           </div>

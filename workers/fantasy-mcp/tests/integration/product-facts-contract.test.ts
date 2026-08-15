@@ -10,7 +10,7 @@ const activeFactSurfaces = [
   'docs/ARCHITECTURE.md',
   'docs/CONNECTOR-DOCS.md',
   'web/README.md',
-  'web/app/(site)/guide/platforms/page.tsx',
+  'web/app/(site)/docs/platforms/page.tsx',
   'web/app/(site)/privacy/page.tsx',
   'workers/README.md',
   'workers/espn-client/README.md',

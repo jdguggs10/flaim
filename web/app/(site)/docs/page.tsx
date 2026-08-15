@@ -6,11 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 
 export const metadata: Metadata = {
-  title: "Using Flaim",
+  title: "Docs",
   description:
     "Create your Flaim account, connect ESPN, Yahoo, or Sleeper leagues, then connect Flaim to ChatGPT or Claude, with Perplexity as an optional custom connector.",
   alternates: {
-    canonical: "https://flaim.app/guide",
+    canonical: "https://flaim.app/docs",
   },
 };
 
@@ -31,8 +31,8 @@ const guideSteps: readonly GuideStep[] = [
     body: "Create your free account so Flaim can securely remember the fantasy platforms and leagues you connect.",
     primaryHref: "/leagues",
     primaryLabel: "Create Your Account",
-    secondaryHref: "/guide/flaim",
-    secondaryLabel: "Flaim help",
+    secondaryHref: "/docs/flaim",
+    secondaryLabel: "Account docs",
   },
   {
     number: "2",
@@ -40,8 +40,8 @@ const guideSteps: readonly GuideStep[] = [
     body: "Connect ESPN, Yahoo, or Sleeper. Flaim will discover the leagues available through that platform.",
     primaryHref: "/leagues#platforms",
     primaryLabel: "Connect Your Leagues",
-    secondaryHref: "/guide/platforms",
-    secondaryLabel: "Platform help",
+    secondaryHref: "/docs/platforms",
+    secondaryLabel: "Platform docs",
   },
   {
     number: "3",
@@ -49,8 +49,8 @@ const guideSteps: readonly GuideStep[] = [
     body: "Open Flaim Fantasy in ChatGPT or Claude, or use an optional custom connector in Perplexity, then authorize your account.",
     primaryHref: "/leagues#connect-ai",
     primaryLabel: "Connect Your AI",
-    secondaryHref: "/guide/ai",
-    secondaryLabel: "AI app help",
+    secondaryHref: "/docs/ai",
+    secondaryLabel: "AI app docs",
   },
 ];
 
@@ -62,7 +62,7 @@ export default function GuidePage() {
     <div className="min-h-screen bg-background">
       <div className="container mx-auto max-w-3xl px-4 py-12">
         <div className="mb-10 space-y-4">
-          <h1 className="text-3xl font-bold">Using Flaim</h1>
+          <h1 className="text-3xl font-bold">Flaim Docs</h1>
           <p className="max-w-2xl leading-7 text-muted-foreground">
             Create your account, connect your fantasy leagues, then connect the
             AI app you already use. That&apos;s it.
@@ -123,7 +123,7 @@ export default function GuidePage() {
               <Link href="/leagues#leagues">Manage Your Leagues</Link>
             </Button>
             <Button asChild variant="ghost">
-              <Link href="/guide/sports">
+              <Link href="/docs/sports">
                 Sports and league coverage
                 <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />
               </Link>

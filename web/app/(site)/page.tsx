@@ -400,7 +400,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
                   Connector Directory, and authorize your Flaim account.
                   Perplexity and other AIs can also be manually connected as
                   custom connectors. See the{" "}
-                  <Link href="/guide/ai" className="text-primary hover:underline">
+                  <Link href="/docs/ai" className="text-primary hover:underline">
                     AI apps page
                   </Link>{" "}
                   for details.

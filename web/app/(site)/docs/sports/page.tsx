@@ -9,13 +9,13 @@ export const metadata: Metadata = {
   description:
     "See Flaim's ESPN, Yahoo, and Sleeper sport coverage and the roster, matchup, standings, available player, transaction, and league history information it can give your AI.",
   alternates: {
-    canonical: "https://flaim.app/guide/sports",
+    canonical: "https://flaim.app/docs/sports",
   },
   openGraph: {
     title: "Supported Fantasy Sports and League Data | Flaim Fantasy",
     description:
       "See which fantasy sports Flaim supports and what league information ChatGPT and Claude can use.",
-    url: "https://flaim.app/guide/sports",
+    url: "https://flaim.app/docs/sports",
   },
 };
 
@@ -207,7 +207,7 @@ export default function SportsGuidePage() {
               <Link href="/leagues">Open Your Leagues</Link>
             </Button>
             <Button asChild size="lg" variant="outline">
-              <Link href="/guide">Back to Using Flaim</Link>
+              <Link href="/docs">Back to Docs</Link>
             </Button>
           </div>
         </div>
@@ -225,10 +225,10 @@ export default function SportsGuidePage() {
             ESPN and Yahoo support all four sports. Sleeper supports football
             and basketball. See{" "}
             <Link
-              href="/guide/platforms"
+              href="/docs/platforms"
               className="font-medium text-primary hover:underline"
             >
-              Fantasy Platform Help
+              Fantasy Platform Docs
             </Link>{" "}
             for connection instructions.
           </p>
@@ -435,7 +435,7 @@ export default function SportsGuidePage() {
           </div>
 
           <nav
-            aria-label="Sports guide navigation"
+            aria-label="Sports docs navigation"
             className="mt-10 flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between"
           >
             <Button
@@ -444,7 +444,7 @@ export default function SportsGuidePage() {
               variant="outline"
               className="w-full sm:w-auto"
             >
-              <Link href="/guide">Back to Using Flaim</Link>
+              <Link href="/docs">Back to Docs</Link>
             </Button>
             <Button asChild size="lg" className="w-full sm:w-auto">
               <Link href="/leagues">Open Your Leagues</Link>

@@ -5,13 +5,18 @@ const nextConfig: NextConfig = {
   devIndicators: false,
   async redirects() {
     return [
-      { source: '/guide/espn', destination: '/guide/platforms', permanent: true },
-      { source: '/guide/yahoo', destination: '/guide/platforms', permanent: true },
-      { source: '/guide/sleeper', destination: '/guide/platforms', permanent: true },
-      { source: '/guide/claude', destination: '/guide/ai', permanent: true },
-      { source: '/guide/chatgpt', destination: '/guide/ai', permanent: true },
-      { source: '/guide/perplexity', destination: '/guide/ai', permanent: true },
-      { source: '/guide/gemini', destination: '/guide/ai', permanent: true },
+      // Legacy per-provider and per-AI guide routes collapse straight to the
+      // shared docs pages (no chained redirect through /guide/*).
+      { source: '/guide/espn', destination: '/docs/platforms', permanent: true },
+      { source: '/guide/yahoo', destination: '/docs/platforms', permanent: true },
+      { source: '/guide/sleeper', destination: '/docs/platforms', permanent: true },
+      { source: '/guide/claude', destination: '/docs/ai', permanent: true },
+      { source: '/guide/chatgpt', destination: '/docs/ai', permanent: true },
+      { source: '/guide/perplexity', destination: '/docs/ai', permanent: true },
+      { source: '/guide/gemini', destination: '/docs/ai', permanent: true },
+      // The guide hub and its remaining pages moved to /docs.
+      { source: '/guide', destination: '/docs', permanent: true },
+      { source: '/guide/:path*', destination: '/docs/:path*', permanent: true },
       { source: '/chat', destination: '/#live-demo', permanent: true },
       { source: '/inspirations', destination: '/about', permanent: true },
     ];
