@@ -98,8 +98,8 @@ export function HeroChat() {
         </h1>
         <p className="max-w-xl text-lg leading-7 text-foreground/70 md:text-xl md:leading-8">
           Connect ChatGPT or Claude to your ESPN, Yahoo, and Sleeper fantasy
-          leagues with Flaim. Ask about your actual roster, matchup, standings,
-          waiver wire, recent moves, and league history.
+          leagues. Ask about your actual roster, matchup, standings, waiver
+          wire, moves, and more.
         </p>
       </div>
     </section>

@@ -85,9 +85,8 @@ export function HomepageProductProof() {
             Flaim works where you already ask
           </h2>
           <p className="mx-auto mt-3 max-w-2xl leading-7 text-muted-foreground">
-            Connect once, then ask ChatGPT, Claude, or Perplexity about your
-            roster, matchup, standings, available players, and the rest of your
-            league.
+            Connect once, then ask ChatGPT, Claude, or Perplexity on your
+            phone, tablet, computer, or wherever.
           </p>
         </div>
 

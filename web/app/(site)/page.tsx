@@ -124,18 +124,18 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
             mainEntity: [
               {
                 "@type": "Question",
-                name: "Is Flaim free?",
+                name: "Is there a subscription?",
                 acceptedAnswer: {
                   "@type": "Answer",
-                  text: "Yes. Flaim is free and has no subscription. I have some server costs, but everything is manageable right now. Enjoy.",
+                  text: "Flaim is free to use and has no subscription, plus, premium, pro plus premium anything. I have some server costs, but everything is manageable right now. Enjoy.",
                 },
               },
               {
                 "@type": "Question",
-                name: "Can ChatGPT access my fantasy league?",
+                name: "Can ChatGPT directly access my fantasy league?",
                 acceptedAnswer: {
                   "@type": "Answer",
-                  text: "Yes. First, create a Flaim account. Second, connect ESPN, Yahoo, or Sleeper. Third, add Flaim to ChatGPT or Claude. Then ask about your actual league.",
+                  text: "Yes. Flaim enables your AI to access your league data, read-only. Once you sync your leagues to Flaim, your AI will securely get up-to-date, accurate information on your private leagues.",
                 },
               },
               {
@@ -143,7 +143,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
                 name: "Do I need to upload screenshots or type out my roster?",
                 acceptedAnswer: {
                   "@type": "Answer",
-                  text: "No. Connect your fantasy platforms once, and Flaim brings your league info into the conversation.",
+                  text: "No. Connect your fantasy platforms once, and Flaim connects your league info directly.",
                 },
               },
               {
@@ -151,7 +151,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
                 name: "Do I need the Chrome extension?",
                 acceptedAnswer: {
                   "@type": "Answer",
-                  text: "Only for initial ESPN setup. The Flaim Fantasy Connector securely syncs the ESPN access needed for your private leagues. Yahoo connects through Yahoo sign-in, and Sleeper connects with your username.",
+                  text: "Only for initial ESPN setup. The Flaim Fantasy Connector securely syncs the ESPN access needed for your private leagues. Yahoo connects through Yahoo sign-in, and Sleeper connects with your username. Sync your ESPN credentials once, then use from your phone, on the road, anywhere.",
                 },
               },
               {
@@ -159,7 +159,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
                 name: "Which AI apps work with Flaim?",
                 acceptedAnswer: {
                   "@type": "Answer",
-                  text: "Flaim Fantasy is available in both ChatGPT and Claude. Open it from the ChatGPT Plugin Store or Claude's connector directory, then authorize your Flaim account. Perplexity can also connect through its remote connector settings.",
+                  text: "Flaim Fantasy is officially available in both ChatGPT and Claude. Open it from the ChatGPT Plugin Store or Claude's Connector Directory, and authorize your Flaim account. Perplexity and other AIs can also be manually connected as custom connectors.",
                 },
               },
               {
@@ -167,7 +167,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
                 name: "Can Flaim change anything in my leagues?",
                 acceptedAnswer: {
                   "@type": "Answer",
-                  text: "No. Flaim cannot make trades, add or drop players, edit lineups, or change settings in ESPN, Yahoo, or Sleeper. A Refresh action may update Flaim's own list of your connected leagues, but it never changes the fantasy platform.",
+                  text: "No. Flaim cannot make trades, add or drop players, edit lineups, or change settings in ESPN, Yahoo, or Sleeper.",
                 },
               },
             ],
@@ -332,27 +332,29 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
           <div className="space-y-3">
             <details className="group border rounded-lg bg-background">
               <summary className="flex cursor-pointer items-center justify-between p-4 font-medium">
-                Is Flaim free?
+                Is there a subscription?
                 <ChevronDown className="ml-2 h-5 w-5 transition-transform group-open:rotate-180" />
               </summary>
               <div className="space-y-2 px-4 pb-4 text-sm text-muted-foreground">
                 <p>
-                  Yes. Flaim is free and has no subscription. I have some server
-                  costs, but everything is manageable right now. Enjoy.
+                  Flaim is free to use and has no subscription, plus, premium,
+                  pro plus premium anything. I have some server costs, but
+                  everything is manageable right now. Enjoy.
                 </p>
               </div>
             </details>
 
             <details className="group border rounded-lg bg-background">
               <summary className="flex cursor-pointer items-center justify-between p-4 font-medium">
-                Can ChatGPT access my fantasy league?
+                Can ChatGPT directly access my fantasy league?
                 <ChevronDown className="ml-2 h-5 w-5 transition-transform group-open:rotate-180" />
               </summary>
               <div className="space-y-2 px-4 pb-4 text-sm text-muted-foreground">
                 <p>
-                  Yes. First, create a Flaim account. Second, connect ESPN,
-                  Yahoo, or Sleeper. Third, add Flaim to ChatGPT or Claude. Then
-                  ask about your actual league.
+                  Yes. Flaim enables your AI to access your league data,
+                  read-only. Once you sync your leagues to Flaim, your AI will
+                  securely get up-to-date, accurate information on your private
+                  leagues.
                 </p>
               </div>
             </details>
@@ -364,8 +366,8 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
               </summary>
               <div className="space-y-2 px-4 pb-4 text-sm text-muted-foreground">
                 <p>
-                  No. Connect your fantasy platforms once, and Flaim brings
-                  your league info into the conversation.
+                  No. Connect your fantasy platforms once, and Flaim connects
+                  your league info directly.
                 </p>
               </div>
             </details>
@@ -380,7 +382,8 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
                   Only for initial ESPN setup. The Flaim Fantasy Connector
                   securely syncs the ESPN access needed for your private
                   leagues. Yahoo connects through Yahoo sign-in, and Sleeper
-                  connects with your username.
+                  connects with your username. Sync your ESPN credentials once,
+                  then use from your phone, on the road, anywhere.
                 </p>
               </div>
             </details>
@@ -392,10 +395,11 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
               </summary>
               <div className="space-y-2 px-4 pb-4 text-sm text-muted-foreground">
                 <p>
-                  Flaim Fantasy is available in both ChatGPT and Claude. Open it
-                  from the ChatGPT Plugin Store or Claude&apos;s connector directory,
-                  then authorize your Flaim account. Perplexity can also connect
-                  through its remote connector settings. See the{" "}
+                  Flaim Fantasy is officially available in both ChatGPT and
+                  Claude. Open it from the ChatGPT Plugin Store or Claude&apos;s
+                  Connector Directory, and authorize your Flaim account.
+                  Perplexity and other AIs can also be manually connected as
+                  custom connectors. See the{" "}
                   <Link href="/guide/ai" className="text-primary hover:underline">
                     AI apps page
                   </Link>{" "}
@@ -412,9 +416,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
               <div className="space-y-2 px-4 pb-4 text-sm text-muted-foreground">
                 <p>
                   No. Flaim cannot make trades, add or drop players, edit
-                  lineups, or change settings in ESPN, Yahoo, or Sleeper. A
-                  Refresh action may update Flaim&apos;s own list of your connected
-                  leagues, but it never changes the fantasy platform.
+                  lineups, or change settings in ESPN, Yahoo, or Sleeper.
                 </p>
               </div>
             </details>
