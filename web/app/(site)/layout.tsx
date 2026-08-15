@@ -34,8 +34,8 @@ export default function SiteLayout({
                 <Link href="/terms" className="hover:text-foreground">
                   Terms
                 </Link>
-                <Link href="/inspirations" className="hover:text-foreground">
-                  Inspirations
+                <Link href="/about" className="hover:text-foreground">
+                  About
                 </Link>
               </nav>
 

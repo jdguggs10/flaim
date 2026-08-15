@@ -440,36 +440,15 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
         </div>
       </section>
 
-      {/* Founder note */}
+      {/* Founder pointer */}
       <section id="about-flaim" className="scroll-mt-24 px-4 py-12">
         <div className="container mx-auto max-w-2xl text-center">
           <p className="text-muted-foreground">
-            I&apos;m Gerry, and I built Flaim. It&apos;s free to use and my
-            passion project. Please don&apos;t abuse it. Have fun.
+            Flaim is free to use and built by one fantasy player.{" "}
+            <Link href="/about" className="text-primary hover:underline">
+              About Flaim
+            </Link>
           </p>
-          <nav
-            aria-label="Founder links"
-            className="mt-4 flex flex-wrap items-center justify-center gap-x-2 gap-y-2 text-sm text-muted-foreground"
-          >
-            <span>On Threads:</span>
-            <a
-              href="https://www.threads.com/@flaim_app"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-primary hover:underline"
-            >
-              @flaim_app
-            </a>
-            <span aria-hidden="true">·</span>
-            <a
-              href="https://www.threads.com/@jdguggs10"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-primary hover:underline"
-            >
-              @jdguggs10
-            </a>
-          </nav>
         </div>
       </section>
     </div>

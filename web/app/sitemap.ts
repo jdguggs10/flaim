@@ -60,7 +60,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 0.9,
     },
     {
-      url: `${baseUrl}/inspirations`,
+      url: `${baseUrl}/about`,
       changeFrequency: 'monthly',
       priority: 0.6,
     },
