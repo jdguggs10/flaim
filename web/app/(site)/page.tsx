@@ -447,10 +447,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
             I&apos;m Gerry, and I built Flaim. It&apos;s free to use and my
             passion project. Please don&apos;t abuse it. Have fun.
           </p>
-          <nav
-            aria-label="Founder links"
-            className="mt-4 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-sm"
-          >
+          <p className="mt-4 text-sm">
             <a
               href="https://www.threads.com/@flaim_app"
               target="_blank"
@@ -459,10 +456,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
             >
               @flaim_app on Threads
             </a>
-            <Link href="/about" className="text-primary hover:underline">
-              About Flaim
-            </Link>
-          </nav>
+          </p>
         </div>
       </section>
     </div>
