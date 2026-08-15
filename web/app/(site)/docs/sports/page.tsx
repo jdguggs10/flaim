@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Check, ChevronDown, Minus, ShieldCheck } from "lucide-react";
+import { Check, ChevronDown, Minus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 
@@ -119,11 +119,6 @@ const SPORTS = [
 ] as const;
 
 const FAQS = [
-  {
-    question: "Which fantasy sports and platforms does Flaim support?",
-    answer:
-      "Flaim supports fantasy football, baseball, basketball, and hockey on ESPN and Yahoo. It supports fantasy football and basketball on Sleeper.",
-  },
   {
     question: "What league information can Flaim use?",
     answer:
@@ -395,29 +390,7 @@ export default function SportsGuidePage() {
 
       <section className="px-4 py-16 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-3xl">
-          <div className="rounded-2xl border p-6 sm:p-8">
-            <div className="flex items-start gap-4">
-              <div className="rounded-full bg-primary/10 p-2 text-primary">
-                <ShieldCheck className="h-5 w-5" aria-hidden="true" />
-              </div>
-              <div>
-                <h2 className="text-2xl font-bold tracking-tight">Read-only</h2>
-                <p className="mt-3 leading-7 text-muted-foreground">
-                  Flaim cannot edit lineups, add or drop players, submit waiver
-                  claims or trades, or change league settings. Refresh Leagues
-                  only updates Flaim&apos;s own list of connected leagues so new
-                  seasons and renamed leagues can appear.
-                </p>
-                <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                  When your AI asks for league information, Flaim requests the
-                  latest available data from the fantasy platform. Past seasons
-                  stay separate from your active, current-season leagues.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <h2 className="mt-16 text-3xl font-bold tracking-tight">
+          <h2 className="text-3xl font-bold tracking-tight">
             Sports and league FAQs
           </h2>
           <div className="mt-6 space-y-3">
