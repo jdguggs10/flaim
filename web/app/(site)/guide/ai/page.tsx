@@ -226,21 +226,25 @@ export default function AiGuidePage() {
             Custom connectors
           </p>
           <h2 className="mt-3 text-3xl font-bold tracking-tight">
-            Add Flaim Fantasy to Perplexity
+            Other AI apps, like Perplexity
           </h2>
           <p className="mt-4 max-w-3xl leading-7 text-muted-foreground">
-            Perplexity supports Flaim as a custom remote connector for now.
-            Connector availability may depend on your Perplexity account or
-            workspace settings.
+            Flaim uses Model Context Protocol (MCP), so you can add it to AI
+            apps that support remote MCP connectors with OAuth and Streamable
+            HTTP. Perplexity is one example.
           </p>
 
           <div className="mt-8 rounded-2xl border bg-background p-6">
             <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
               <div className="max-w-2xl">
-                <h3 className="text-2xl font-semibold">Perplexity</h3>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">
+                  Example setup
+                </p>
+                <h3 className="mt-3 text-2xl font-semibold">Perplexity</h3>
                 <p className="mt-3 leading-7 text-muted-foreground">
                   Add a remote connector named Flaim Fantasy, then authorize
-                  your Flaim account.
+                  your Flaim account. Availability may depend on your
+                  Perplexity account or workspace settings.
                 </p>
               </div>
               <div className="flex shrink-0 flex-wrap gap-3">
@@ -294,18 +298,6 @@ export default function AiGuidePage() {
                 account when Perplexity asks.
               </li>
             </ol>
-
-            <details className="group mt-5 rounded-xl border">
-              <summary className="flex cursor-pointer items-center justify-between gap-3 p-4 text-sm font-medium">
-                Other AI apps with custom connectors
-                <ChevronDown className="h-4 w-4 shrink-0 transition-transform group-open:rotate-180" />
-              </summary>
-              <p className="px-4 pb-4 text-sm leading-6 text-muted-foreground">
-                Advanced users can try the same Flaim connection address in AI
-                apps that support remote MCP connectors, OAuth, and Streamable
-                HTTP. The exact setup depends on the AI app.
-              </p>
-            </details>
           </div>
         </div>
       </section>
