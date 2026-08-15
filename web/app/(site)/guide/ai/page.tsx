@@ -1,87 +1,40 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight, ChevronDown, ExternalLink } from "lucide-react";
+import { ChevronDown, ExternalLink } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
   CHATGPT_APP_URL,
   CLAUDE_CONNECTOR_DIRECTORY_URL,
+  FLAIM_MCP_URL,
+  PERPLEXITY_CONNECTOR_HELP_URL,
+  PERPLEXITY_CONNECTOR_SETTINGS_URL,
 } from "@/lib/product-links";
 
 export const metadata: Metadata = {
-  title: "Use Flaim Fantasy with ChatGPT, Claude & Perplexity",
+  title: "Connect Flaim to ChatGPT, Claude & Perplexity",
   description:
-    "Connect your ESPN, Yahoo, or Sleeper fantasy leagues to ChatGPT, Claude, or Perplexity with Flaim. Get read-only analysis of your real roster, matchups, standings, waiver wire, transactions, and league history.",
+    "Connect Flaim Fantasy to ChatGPT or Claude, or add Flaim to Perplexity as a custom connector. Ask about your real ESPN, Yahoo, or Sleeper leagues.",
   alternates: {
     canonical: "https://flaim.app/guide/ai",
   },
 };
 
-const AI_APPS = [
-  {
-    name: "ChatGPT",
-    status: "Available now as Flaim Fantasy in ChatGPT.",
-    description:
-      "Connect your leagues in Flaim, open Flaim Fantasy in ChatGPT, authorize your account, and start asking about your league.",
-    href: CHATGPT_APP_URL,
-    cta: "Open Flaim Fantasy in ChatGPT",
-    external: true,
-  },
-  {
-    name: "Claude",
-    status: "Available now in Claude's connector directory.",
-    description:
-      "Open Flaim in Claude, authorize your Flaim account, and ask about your connected fantasy league data.",
-    href: CLAUDE_CONNECTOR_DIRECTORY_URL,
-    cta: "Open Flaim in Claude",
-    external: true,
-  },
-  {
-    name: "Perplexity",
-    status: "Available through Perplexity's remote connector settings; curated publication is pending.",
-    description:
-      "Add Flaim to Perplexity, authorize your Flaim account, and use your connected league alongside Perplexity's research.",
-    href: "#perplexity",
-    cta: "Set Up Perplexity",
-    external: false,
-  },
-] as const;
-
-const SHARED_SETUP = [
-  {
-    title: "Create your Flaim account",
-    body: "Create your free account so Flaim can securely link your leagues to your AI app.",
-  },
-  {
-    title: "Connect your fantasy leagues",
-    body: "Connect ESPN, Yahoo, or Sleeper from Your Leagues and wait for Flaim to discover your leagues.",
-  },
-  {
-    title: "Connect your AI app",
-    body: 'Open Flaim in ChatGPT, Claude, or Perplexity, authorize your account, and ask, “What fantasy leagues do I have?”',
-  },
-] as const;
-
-const SHARED_FAQS = [
+const CONNECTION_FAQS = [
   {
     question: "My AI cannot see any leagues",
     answer:
-      "Return to Your Leagues and confirm that ESPN, Yahoo, or Sleeper is connected and that Flaim discovered the league you want to use.",
+      "Open Your Leagues in Flaim and confirm that ESPN, Yahoo, or Sleeper is connected. Then return to your AI and start a new conversation.",
   },
   {
-    question: "My AI is not using Flaim automatically",
+    question: "My AI is not using Flaim",
     answer:
-      "Start a fresh conversation and explicitly ask the AI to use Flaim or your connected fantasy league data.",
+      "Start a new conversation and ask it to use Flaim Fantasy for your question. You may need to choose Flaim from the AI app's plugin or connector menu first.",
   },
   {
-    question: "I connected my AI before my fantasy platform",
+    question: "Can Flaim change my league?",
     answer:
-      "Finish connecting your fantasy platform first, then return to the AI app and start a fresh conversation.",
-  },
-  {
-    question: "Can my AI change my league?",
-    answer:
-      "No. Flaim cannot make trades, add or drop players, edit lineups, or change settings in ESPN, Yahoo, or Sleeper.",
+      "No. Flaim is read-only. It cannot make trades, add or drop players, edit lineups, or change settings in ESPN, Yahoo, or Sleeper.",
   },
 ] as const;
 
@@ -90,39 +43,41 @@ const HOW_TO_SCHEMAS = [
     "@context": "https://schema.org",
     "@type": "HowTo",
     name: "Use Flaim Fantasy in ChatGPT",
-    dateModified: "2026-08-03",
+    dateModified: "2026-08-15",
     description:
-      "Connect your fantasy leagues in Flaim, then use Flaim Fantasy in ChatGPT for read-only league analysis.",
+      "Open the Flaim Fantasy plugin in ChatGPT and connect your Flaim account.",
     step: [
-      "Create your Flaim account.",
-      "Connect ESPN, Yahoo, or Sleeper in Your Leagues.",
-      "Open Flaim Fantasy in ChatGPT, authorize Flaim, and ask what leagues you have.",
+      "Connect your ESPN, Yahoo, or Sleeper leagues to Flaim.",
+      "Open the Flaim Fantasy plugin in ChatGPT and choose Try in chat.",
+      "Authorize your Flaim account, then ask what fantasy leagues you have.",
     ],
   },
   {
     "@context": "https://schema.org",
     "@type": "HowTo",
     name: "Use Flaim Fantasy in Claude",
-    dateModified: "2026-08-09",
+    dateModified: "2026-08-15",
     description:
-      "Open Flaim from Claude's connector directory and authorize it for read-only fantasy league access.",
+      "Open Flaim Fantasy in Claude's connector directory and connect your Flaim account.",
     step: [
-      "Create your Flaim account.",
-      "Connect ESPN, Yahoo, or Sleeper in Your Leagues.",
-      "Open Flaim in Claude's connector directory, authorize Flaim, and ask what leagues you have.",
+      "Connect your ESPN, Yahoo, or Sleeper leagues to Flaim.",
+      "Open Flaim Fantasy in Claude's connector directory and choose Connect.",
+      "Authorize your Flaim account, then ask what fantasy leagues you have.",
     ],
   },
   {
     "@context": "https://schema.org",
     "@type": "HowTo",
-    name: "Connect Flaim to Perplexity",
-    dateModified: "2026-08-03",
+    name: "Connect Flaim Fantasy to Perplexity",
+    dateModified: "2026-08-15",
     description:
-      "Add Flaim as a Perplexity remote connector with OAuth authentication and Streamable HTTP transport.",
+      "Add Flaim Fantasy to Perplexity as a custom remote connector.",
     step: [
-      "Create your Flaim account.",
-      "Connect ESPN, Yahoo, or Sleeper in Your Leagues.",
-      "Add Flaim in Perplexity with https://api.flaim.app/mcp, choose OAuth and Streamable HTTP, authorize Flaim, and ask what leagues you have.",
+      "Connect your ESPN, Yahoo, or Sleeper leagues to Flaim.",
+      "In Perplexity, open Account settings, choose Connectors, and add a custom remote connector.",
+      "Name it Flaim Fantasy and enter " + FLAIM_MCP_URL + ".",
+      "Choose OAuth and Streamable HTTP, accept the acknowledgement, and add the connector.",
+      "Open the Flaim Fantasy connector, authorize your account, and ask what fantasy leagues you have.",
     ],
   },
 ].map((howTo) => ({
@@ -145,7 +100,7 @@ export default function AiGuidePage() {
             {
               "@context": "https://schema.org",
               "@type": "FAQPage",
-              mainEntity: SHARED_FAQS.map((faq) => ({
+              mainEntity: CONNECTION_FAQS.map((faq) => ({
                 "@type": "Question",
                 name: faq.question,
                 acceptedAnswer: {
@@ -164,282 +119,213 @@ export default function AiGuidePage() {
             Step 3 of 3
           </p>
           <h1 className="mt-4 max-w-4xl text-4xl font-bold tracking-tight sm:text-5xl">
-            Use your real fantasy leagues in the AI you already use
+            Connect Flaim to your AI
           </h1>
           <p className="mt-6 max-w-3xl text-lg leading-8 text-muted-foreground">
-            Connect your leagues to Flaim once, then ask ChatGPT, Claude, or
-            Perplexity about your actual roster, matchups, standings, free
-            agents, transactions, league settings, and history.
+            Connect your leagues first. Then open Flaim Fantasy in ChatGPT or
+            Claude, or add it to Perplexity as a custom connector.
           </p>
-          <p className="mt-5 font-medium">
-            Free. Read-only. No screenshots or copy-pasting.
-          </p>
-          <Button asChild size="lg" className="mt-8">
-            <Link href="/leagues">Connect Your Leagues</Link>
-          </Button>
+          <div className="mt-8 flex flex-wrap gap-3">
+            <Button asChild size="lg">
+              <Link href="/leagues">First Connect Your Leagues</Link>
+            </Button>
+            <Button asChild size="lg" variant="outline">
+              <Link href="/guide/platforms">Fantasy Platform Help</Link>
+            </Button>
+          </div>
         </div>
       </section>
 
-      <section className="px-4 py-14 sm:px-6 lg:px-8">
+      <section className="px-4 py-16 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-5xl">
-          <h2 className="text-3xl font-bold tracking-tight">
-            Choose your AI app
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">
+            Direct links
+          </p>
+          <h2 className="mt-3 text-3xl font-bold tracking-tight">
+            ChatGPT and Claude
           </h2>
-          <div className="mt-8 grid gap-4 lg:grid-cols-3">
-            {AI_APPS.map((app) => (
-              <article key={app.name} className="flex flex-col rounded-2xl border p-5">
-                <h3 className="text-xl font-semibold">{app.name}</h3>
-                <p className="mt-3 text-sm font-medium text-foreground/80">
-                  {app.status}
+          <p className="mt-4 max-w-3xl leading-7 text-muted-foreground">
+            Open Flaim Fantasy from either directory, connect your account, and
+            start asking about your real leagues.
+          </p>
+
+          <div className="mt-8 grid gap-5 md:grid-cols-2">
+            <article className="flex flex-col rounded-2xl border p-6">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">
+                ChatGPT Plugin
+              </p>
+              <h3 className="mt-3 text-2xl font-semibold">
+                Flaim Fantasy in ChatGPT
+              </h3>
+              <p className="mt-3 flex-1 leading-7 text-muted-foreground">
+                Open the Flaim Fantasy plugin, choose Try in chat, and authorize
+                your Flaim account if asked.
+              </p>
+              <Button asChild className="mt-6 w-full">
+                <a href={CHATGPT_APP_URL} target="_blank" rel="noopener noreferrer">
+                  Open in ChatGPT
+                  <ExternalLink className="ml-2 h-4 w-4" aria-hidden="true" />
+                </a>
+              </Button>
+              <details className="group mt-4 rounded-xl bg-muted/60">
+                <summary className="flex cursor-pointer items-center justify-between gap-3 p-4 text-sm font-medium">
+                  A little help
+                  <ChevronDown className="h-4 w-4 shrink-0 transition-transform group-open:rotate-180" />
+                </summary>
+                <p className="px-4 pb-4 text-sm leading-6 text-muted-foreground">
+                  If ChatGPT does not open Flaim automatically, choose Flaim
+                  Fantasy from the plugin menu or ask ChatGPT to use Flaim for
+                  your fantasy league question.
                 </p>
-                <p className="mt-3 flex-1 text-sm leading-6 text-muted-foreground">
-                  {app.description}
+              </details>
+            </article>
+
+            <article className="flex flex-col rounded-2xl border p-6">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">
+                Claude Connector
+              </p>
+              <h3 className="mt-3 text-2xl font-semibold">
+                Flaim Fantasy in Claude
+              </h3>
+              <p className="mt-3 flex-1 leading-7 text-muted-foreground">
+                Open Flaim Fantasy in Claude&apos;s connector directory and
+                connect your Flaim account.
+              </p>
+              <Button asChild className="mt-6 w-full">
+                <a
+                  href={CLAUDE_CONNECTOR_DIRECTORY_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Open in Claude
+                  <ExternalLink className="ml-2 h-4 w-4" aria-hidden="true" />
+                </a>
+              </Button>
+              <details className="group mt-4 rounded-xl bg-muted/60">
+                <summary className="flex cursor-pointer items-center justify-between gap-3 p-4 text-sm font-medium">
+                  A little help
+                  <ChevronDown className="h-4 w-4 shrink-0 transition-transform group-open:rotate-180" />
+                </summary>
+                <p className="px-4 pb-4 text-sm leading-6 text-muted-foreground">
+                  Claude shows Flaim Fantasy as Connected when it is ready. If
+                  it does not use Flaim automatically, ask Claude to use Flaim
+                  for your fantasy league question.
                 </p>
-                <Button asChild variant="outline" className="mt-6 w-full">
-                  {app.external ? (
-                    <a href={app.href} target="_blank" rel="noopener noreferrer">
-                      {app.cta}
-                      <ExternalLink className="ml-2 h-4 w-4" aria-hidden="true" />
-                    </a>
-                  ) : (
-                    <Link href={app.href}>
-                      {app.cta}
-                      <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />
-                    </Link>
-                  )}
-                </Button>
-              </article>
-            ))}
+              </details>
+            </article>
           </div>
         </div>
       </section>
 
       <section
         id="custom-connectors"
-        className="scroll-mt-24 border-y bg-muted/50 px-4 py-14 sm:px-6 lg:px-8"
+        className="scroll-mt-24 border-y bg-muted/50 px-4 py-16 sm:px-6 lg:px-8"
       >
         <div className="mx-auto max-w-5xl">
-          <h2 className="text-3xl font-bold tracking-tight">
-            Three steps. Then start asking.
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">
+            Custom connectors
+          </p>
+          <h2 className="mt-3 text-3xl font-bold tracking-tight">
+            Add Flaim Fantasy to Perplexity
           </h2>
           <p className="mt-4 max-w-3xl leading-7 text-muted-foreground">
-            Create your account, connect your fantasy leagues, then connect your
-            AI app. Every supported AI app uses the same leagues saved in Flaim.
+            Perplexity supports Flaim as a custom remote connector for now.
+            Connector availability may depend on your Perplexity account or
+            workspace settings.
           </p>
-          <div className="mt-8 grid gap-4 md:grid-cols-3">
-            {SHARED_SETUP.map((step, index) => (
-              <div key={step.title} className="rounded-2xl border bg-background p-5">
-                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">
-                  {index + 1}
-                </div>
-                <h3 className="mt-4 font-semibold">{step.title}</h3>
-                <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                  {step.body}
+
+          <div className="mt-8 rounded-2xl border bg-background p-6">
+            <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+              <div className="max-w-2xl">
+                <h3 className="text-2xl font-semibold">Perplexity</h3>
+                <p className="mt-3 leading-7 text-muted-foreground">
+                  Add a remote connector named Flaim Fantasy, then authorize
+                  your Flaim account.
                 </p>
               </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section id="chatgpt" className="scroll-mt-24 px-4 py-14 sm:px-6 lg:px-8">
-        <div className="mx-auto grid max-w-5xl gap-8 lg:grid-cols-[0.85fr_1.15fr]">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">
-              ChatGPT
-            </p>
-            <h2 className="mt-3 text-3xl font-bold tracking-tight">
-              Use Flaim Fantasy in ChatGPT
-            </h2>
-            <p className="mt-4 leading-7 text-muted-foreground">
-              Flaim Fantasy is available in ChatGPT. Your Flaim account
-              supplies the connected league data; ChatGPT handles the
-              conversation and analysis.
-            </p>
-          </div>
-          <div className="rounded-2xl border p-5">
-            <ol className="list-decimal space-y-3 pl-5 text-sm leading-6 text-muted-foreground">
-              <li>Create your Flaim account.</li>
-              <li>Connect ESPN, Yahoo, or Sleeper in Your Leagues.</li>
-              <li>
-                Open Flaim Fantasy in ChatGPT, authorize Flaim, and start a
-                fresh chat by asking what leagues you have.
-              </li>
-            </ol>
-            <h3 className="mt-6 font-semibold">Try asking:</h3>
-            <ul className="mt-3 grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
-              <li>Grade my fantasy football team.</li>
-              <li>Who should I add and drop?</li>
-              <li>Who is winning my matchup?</li>
-              <li>What is the biggest weakness on my roster?</li>
-            </ul>
-            <p className="mt-4 text-sm text-muted-foreground">
-              See more connected-roster examples in the{" "}
-              <Link href="/fantasy-football" className="text-primary hover:underline">
-                fantasy football analysis guide
-              </Link>
-              .
-            </p>
-            <div className="mt-6 rounded-xl bg-muted/60 p-4">
-              <h3 className="font-semibold">ChatGPT troubleshooting</h3>
-              <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-muted-foreground">
-                <li>
-                  If Flaim does not appear, search for the exact name{" "}
-                  <strong>Flaim Fantasy</strong>.
-                </li>
-                <li>
-                  If ChatGPT cannot see any leagues, return to Your Leagues and
-                  finish connecting a fantasy platform.
-                </li>
-                <li>
-                  If ChatGPT does not choose Flaim automatically, start a fresh
-                  chat and explicitly ask about your connected fantasy league.
-                </li>
-              </ul>
+              <div className="flex shrink-0 flex-wrap gap-3">
+                <Button asChild>
+                  <a
+                    href={PERPLEXITY_CONNECTOR_SETTINGS_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Open Perplexity Settings
+                    <ExternalLink className="ml-2 h-4 w-4" aria-hidden="true" />
+                  </a>
+                </Button>
+                <Button asChild variant="outline">
+                  <a
+                    href={PERPLEXITY_CONNECTOR_HELP_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Perplexity Instructions
+                    <ExternalLink className="ml-2 h-4 w-4" aria-hidden="true" />
+                  </a>
+                </Button>
+              </div>
             </div>
-          </div>
-        </div>
-      </section>
 
-      <section
-        id="claude"
-        className="scroll-mt-24 border-y bg-muted/50 px-4 py-14 sm:px-6 lg:px-8"
-      >
-        <div className="mx-auto grid max-w-5xl gap-8 lg:grid-cols-[0.85fr_1.15fr]">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">
-              Claude
-            </p>
-            <h2 className="mt-3 text-3xl font-bold tracking-tight">
-              Use Flaim Fantasy in Claude
-            </h2>
-            <p className="mt-4 leading-7 text-muted-foreground">
-              Flaim is available in Claude&apos;s connector directory. Connect your
-              fantasy platforms in Flaim first, then open Flaim in Claude and
-              authorize your account.
-            </p>
-          </div>
-          <div className="rounded-2xl border bg-background p-5">
-            <ol className="list-decimal space-y-3 pl-5 text-sm leading-6 text-muted-foreground">
-              <li>
-                Create your Flaim account.
+            <ol className="mt-7 grid gap-4 text-sm leading-6 text-muted-foreground md:grid-cols-2">
+              <li className="rounded-xl bg-muted/60 p-4">
+                <strong className="block text-foreground">1. Add a connector</strong>
+                In Account settings, open Connectors, choose Custom connector,
+                then choose Remote.
               </li>
-              <li>
-                Connect ESPN, Yahoo, or Sleeper in Your Leagues.
-              </li>
-              <li>
-                Open{" "}
-                <a
-                  href={CLAUDE_CONNECTOR_DIRECTORY_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-primary hover:underline"
-                >
-                  Claude&apos;s connector directory
-                </a>
-                , find Flaim, authorize your account, and start a fresh
-                conversation by asking what leagues you have.
-              </li>
-            </ol>
-            <div className="mt-6 rounded-xl bg-muted/60 p-4">
-              <h3 className="font-semibold">Claude troubleshooting</h3>
-              <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-muted-foreground">
-                <li>
-                  If Claude connects but returns no leagues, finish
-                  fantasy-platform setup in Your Leagues.
-                </li>
-                <li>
-                  If Claude does not use Flaim automatically, start a fresh
-                  conversation and explicitly ask it to use your connected
-                  league data.
-                </li>
-                <li>
-                  If the directory does not open to Flaim directly, search for
-                  the exact name <strong>Flaim Fantasy</strong>.
-                </li>
-              </ul>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section
-        id="perplexity"
-        className="scroll-mt-24 px-4 py-14 sm:px-6 lg:px-8"
-      >
-        <div className="mx-auto grid max-w-5xl gap-8 lg:grid-cols-[0.85fr_1.15fr]">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">
-              Perplexity
-            </p>
-            <h2 className="mt-3 text-3xl font-bold tracking-tight">
-              Connect Flaim to Perplexity
-            </h2>
-            <p className="mt-4 leading-7 text-muted-foreground">
-              Perplexity can use Flaim as a remote connector, combining your
-              actual roster and league info with its live research.
-            </p>
-          </div>
-          <div className="rounded-2xl border p-5">
-            <ol className="list-decimal space-y-3 pl-5 text-sm leading-6 text-muted-foreground">
-              <li>
-                Create your Flaim account.
-              </li>
-              <li>
-                Connect ESPN, Yahoo, or Sleeper in Your Leagues.
-              </li>
-              <li>
-                Open Perplexity&apos;s connector settings, add{" "}
-                <code className="rounded bg-muted px-1 py-0.5 text-xs">
-                  https://api.flaim.app/mcp
+              <li className="rounded-xl bg-muted/60 p-4">
+                <strong className="block text-foreground">2. Enter Flaim</strong>
+                Name it Flaim Fantasy and use this address:{" "}
+                <code className="break-all rounded bg-background px-1 py-0.5 text-xs">
+                  {FLAIM_MCP_URL}
                 </code>
-                , choose OAuth authentication and Streamable HTTP transport,
-                authorize Flaim, and start a fresh thread by asking what
-                leagues you have.
+                .
+              </li>
+              <li className="rounded-xl bg-muted/60 p-4">
+                <strong className="block text-foreground">
+                  3. Choose the connection
+                </strong>
+                Select OAuth for authentication and Streamable HTTP for the
+                connection type. Accept the acknowledgement and choose Add.
+              </li>
+              <li className="rounded-xl bg-muted/60 p-4">
+                <strong className="block text-foreground">4. Authorize Flaim</strong>
+                Open the new Flaim Fantasy connector and sign in to your Flaim
+                account when Perplexity asks.
               </li>
             </ol>
-            <div className="mt-6 rounded-xl bg-muted/60 p-4">
-              <h3 className="font-semibold">Perplexity troubleshooting</h3>
-              <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-muted-foreground">
-                <li>
-                  If the connection reports an authentication or transport
-                  error, confirm OAuth and Streamable HTTP are selected.
-                </li>
-                <li>
-                  If Perplexity connects but returns no leagues, finish
-                  fantasy-platform setup in Your Leagues.
-                </li>
-                <li>
-                  If testing created duplicate Flaim connectors, remove the
-                  extras and keep one authorized connection.
-                </li>
-              </ul>
-            </div>
+
+            <details className="group mt-5 rounded-xl border">
+              <summary className="flex cursor-pointer items-center justify-between gap-3 p-4 text-sm font-medium">
+                Other AI apps with custom connectors
+                <ChevronDown className="h-4 w-4 shrink-0 transition-transform group-open:rotate-180" />
+              </summary>
+              <p className="px-4 pb-4 text-sm leading-6 text-muted-foreground">
+                Advanced users can try the same Flaim connection address in AI
+                apps that support remote MCP connectors, OAuth, and Streamable
+                HTTP. The exact setup depends on the AI app.
+              </p>
+            </details>
           </div>
         </div>
       </section>
 
-      <section className="border-y bg-muted/50 px-4 py-14 sm:px-6 lg:px-8">
+      <section className="px-4 py-16 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-3xl">
           <h2 className="text-3xl font-bold tracking-tight">
-            Ask one simple question first
+            Check your connection
           </h2>
           <p className="mt-4 leading-7 text-muted-foreground">
             Start a new conversation and ask, &ldquo;What fantasy leagues do I
-            have?&rdquo; A successful connection should return your current
-            connected leagues without another authorization prompt.
-          </p>
-          <p className="mt-3 leading-7 text-muted-foreground">
-            After that, try a roster, matchup, standings, waiver, transaction,
-            or league-history question.
+            have?&rdquo; Flaim should return the leagues connected to your account.
           </p>
 
           <h2 className="mt-12 text-2xl font-bold tracking-tight">
-            Shared troubleshooting
+            Connection help
           </h2>
           <div className="mt-6 space-y-3">
-            {SHARED_FAQS.map((faq) => (
-              <details key={faq.question} className="group rounded-xl border bg-background">
+            {CONNECTION_FAQS.map((faq) => (
+              <details key={faq.question} className="group rounded-xl border">
                 <summary className="flex cursor-pointer items-center justify-between gap-4 p-4 font-medium">
                   {faq.question}
                   <ChevronDown className="h-5 w-5 shrink-0 transition-transform group-open:rotate-180" />
@@ -450,24 +336,13 @@ export default function AiGuidePage() {
               </details>
             ))}
           </div>
-        </div>
-      </section>
 
-      <section className="px-4 py-16 text-center sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-2xl">
-          <h2 className="text-3xl font-bold tracking-tight">
-            Give your AI your real roster and league info
-          </h2>
-          <p className="mt-4 leading-7 text-muted-foreground">
-            Connect ESPN, Yahoo, or Sleeper to Flaim, then ask about the team you
-            actually manage.
-          </p>
-          <div className="mt-7 flex flex-wrap justify-center gap-3">
+          <div className="mt-10 flex flex-wrap gap-3">
             <Button asChild size="lg">
-              <Link href="/leagues">Connect Your Leagues</Link>
+              <Link href="/leagues">Your Leagues</Link>
             </Button>
             <Button asChild size="lg" variant="outline">
-              <Link href="/guide/platforms">Fantasy Platform Help</Link>
+              <Link href="/guide">Back to Using Flaim</Link>
             </Button>
           </div>
         </div>

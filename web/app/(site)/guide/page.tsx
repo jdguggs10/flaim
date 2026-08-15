@@ -8,7 +8,7 @@ import { Card } from "@/components/ui/card";
 export const metadata: Metadata = {
   title: "Using Flaim",
   description:
-    "Create your Flaim account, connect ESPN, Yahoo, or Sleeper leagues, then connect Flaim to ChatGPT or an optional Claude or Perplexity custom connector.",
+    "Create your Flaim account, connect ESPN, Yahoo, or Sleeper leagues, then connect Flaim to ChatGPT or Claude, with Perplexity as an optional custom connector.",
   alternates: {
     canonical: "https://flaim.app/guide",
   },
@@ -66,7 +66,7 @@ const guideLinks = [
   {
     href: "/guide/ai",
     title: "Using Flaim in your AI app",
-    body: "Open Flaim in ChatGPT or Claude, plus optional Perplexity custom-connector guidance.",
+    body: "Direct ChatGPT and Claude links, plus optional Perplexity custom connector guidance.",
   },
   {
     href: "/fantasy-football",
