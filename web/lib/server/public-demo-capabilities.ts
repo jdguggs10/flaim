@@ -84,6 +84,14 @@ function isTargetEnabled(
   );
 }
 
+/**
+ * The answer route refuses to serve a row whose answer_text is blank, so the
+ * gate must not advertise a target on the strength of such a row.
+ */
+function hasRenderableAnswer(value: unknown): boolean {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
 /** A timestamp column past `now`, missing, or unparseable counts as passed. */
 function timestampPassed(value: unknown, now: number): boolean {
   if (typeof value !== "string") {
@@ -120,7 +128,8 @@ function evaluateTarget(
         candidate.preset_id === presetId &&
         candidate.platform === target.platform &&
         candidate.sport === target.sport &&
-        (candidate.status === "ready" || candidate.status === "degraded"),
+        (candidate.status === "ready" || candidate.status === "degraded") &&
+        hasRenderableAnswer(candidate.answer_text),
     );
 
     if (!row) {
@@ -202,8 +211,9 @@ export async function evaluatePublicDemoCapabilities(): Promise<
   }
 
   // One query for every v8/v3 row across all targets, grouped in code.
-  // Minimal column projection on purpose: nothing else from the cache rows
-  // is needed, so nothing else can leak.
+  // Minimal column projection on purpose: answer_text is read only to prove
+  // the row is renderable and never leaves this module; nothing else from
+  // the cache rows is needed, so nothing else can leak.
   const cacheRows = await fetchPostgrestRows("demo_answer_cache", {
     select: [
       "cache_key",
@@ -213,6 +223,7 @@ export async function evaluatePublicDemoCapabilities(): Promise<
       "status",
       "stale_after",
       "expires_at",
+      "answer_text",
     ].join(","),
     prompt_version: `eq.${PUBLIC_DEMO_TARGET_PROMPT_VERSION}`,
     context_version: `eq.${PUBLIC_DEMO_TARGET_CONTEXT_VERSION}`,

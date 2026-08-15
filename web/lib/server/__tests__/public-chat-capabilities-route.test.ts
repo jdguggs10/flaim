@@ -93,6 +93,7 @@ function readyCacheRows(
     status: "ready",
     stale_after: FUTURE_TIMESTAMP,
     expires_at: FUTURE_TIMESTAMP,
+    answer_text: `Cached answer for ${presetId}.`,
     // Version columns exist on the stored rows and are matched by the
     // filter-honoring PostgREST stub, mirroring the real query.
     prompt_version: PUBLIC_DEMO_TARGET_PROMPT_VERSION,
@@ -152,6 +153,30 @@ describe("GET /api/public-chat/capabilities", () => {
     expect(response.status).toBe(200);
     expect(body).toEqual({ targets: [] });
   });
+
+  it.each([
+    ["an empty string", ""],
+    ["whitespace only", "   \n\t"],
+    ["a non-string value", null],
+  ])(
+    "does not select a target when a ready row's answer_text is %s",
+    async (_label, answerText) => {
+      // The answer route rejects such rows, so advertising the target would
+      // let a visitor pick a prompt that then fails to load.
+      stubPostgrest({
+        targetState: [enabledTargetState("espn", "baseball")],
+        answerCache: readyCacheRows("espn", "baseball", {
+          "wire-watch": { answer_text: answerText },
+        }),
+      });
+
+      const response = await GET();
+      const body = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(body).toEqual({ targets: [] });
+    },
+  );
 
   it("does not select a target whose state row is not public-enabled", async () => {
     stubPostgrest({
