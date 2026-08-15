@@ -85,7 +85,7 @@ const PLATFORM_DIFFERENCES = [
   },
   {
     title: "Recent league moves",
-    body: "The amount and type of transaction history depends on the platform. ESPN and Sleeper organize activity around matchup periods or weeks. Yahoo supplies a recent 14-day window. Some pending Yahoo activity is limited to your own team.",
+    body: "The amount and type of transaction history depends on the platform. ESPN and Sleeper organize activity around matchup periods or weeks, while Yahoo supplies a recent 14-day window. ESPN can also show FAAB bid amounts, failed waiver claims, and trade proposals, rejections, and vetoes. Yahoo and Sleeper show completed adds, drops, waivers, and trades, and Yahoo can add your own team's pending waiver claims and trade offers.",
   },
 ] as const;
 
