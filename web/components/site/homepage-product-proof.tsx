@@ -1,16 +1,15 @@
 "use client";
 
 import Image from "next/image";
-import { Pause, Play } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
 interface ProductProofItem {
   id: string;
   name: string;
   title: string;
   description: string;
-  placeholderClassName: string;
-  videoSrc: string | null;
+  imageSrc: string;
+  imageAlt: string;
 }
 
 const PRODUCT_PROOF_ITEMS: readonly ProductProofItem[] = [
@@ -20,9 +19,10 @@ const PRODUCT_PROOF_ITEMS: readonly ProductProofItem[] = [
     title: "Ask about the team you actually manage",
     description:
       "Grade your roster, check your matchup, or compare your team with the rest of the league.",
-    placeholderClassName:
-      "from-emerald-100 via-white to-emerald-50 dark:from-emerald-950 dark:via-neutral-950 dark:to-emerald-950/70",
-    videoSrc: null,
+    imageSrc:
+      "/media/homepage/homepage-chatgpt-team-status-20260815.png",
+    imageAlt:
+      "ChatGPT answering How is my team doing? with Flaim Fantasy using a connected ESPN baseball league.",
   },
   {
     id: "claude",
@@ -30,9 +30,10 @@ const PRODUCT_PROOF_ITEMS: readonly ProductProofItem[] = [
     title: "See what is happening across your league",
     description:
       "Review standings, recent moves, league rules, and the players available to add.",
-    placeholderClassName:
-      "from-orange-100 via-white to-amber-50 dark:from-orange-950 dark:via-neutral-950 dark:to-amber-950/70",
-    videoSrc: null,
+    imageSrc:
+      "/media/homepage/homepage-claude-matchup-status-20260815.png",
+    imageAlt:
+      "Claude showing a Flaim Fantasy answer about the status of a connected ESPN baseball matchup.",
   },
   {
     id: "perplexity",
@@ -40,9 +41,10 @@ const PRODUCT_PROOF_ITEMS: readonly ProductProofItem[] = [
     title: "Bring your league into your research",
     description:
       "Use your real roster and available players alongside current player research and news.",
-    placeholderClassName:
-      "from-cyan-100 via-white to-sky-50 dark:from-cyan-950 dark:via-neutral-950 dark:to-sky-950/70",
-    videoSrc: null,
+    imageSrc:
+      "/media/homepage/homepage-perplexity-best-team-20260815.png",
+    imageAlt:
+      "Perplexity answering Who has the best team? with Flaim Fantasy using a connected ESPN baseball league.",
   },
 ];
 
@@ -51,7 +53,6 @@ const ROTATION_INTERVAL_MS = 7000;
 export function HomepageProductProof() {
   const [activeIndex, setActiveIndex] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
-  const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
     const prefersReducedMotion = window.matchMedia(
@@ -66,20 +67,6 @@ export function HomepageProductProof() {
 
     return () => window.clearInterval(interval);
   }, [isPaused]);
-
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
-
-    if (isPaused) {
-      video.pause();
-      return;
-    }
-
-    void video.play().catch(() => {
-      setIsPaused(true);
-    });
-  }, [activeIndex, isPaused]);
 
   const activeItem = PRODUCT_PROOF_ITEMS[activeIndex];
 
@@ -142,59 +129,16 @@ export function HomepageProductProof() {
               })}
             </div>
 
-            <div className="relative mx-auto aspect-[9/16] w-full max-w-[19rem] overflow-hidden rounded-[1.6rem] border bg-primary shadow-lg">
-              {activeItem.videoSrc ? (
-                <video
-                  key={activeItem.id}
-                  ref={videoRef}
-                  className="h-full w-full object-cover"
-                  muted
-                  loop
-                  playsInline
-                  preload="metadata"
-                  aria-label={`${activeItem.name} using Flaim Fantasy`}
-                >
-                  <source src={activeItem.videoSrc} type="video/mp4" />
-                </video>
-              ) : (
-                <div
-                  className={`flex h-full flex-col items-center justify-center bg-gradient-to-br p-8 text-center ${activeItem.placeholderClassName}`}
-                >
-                  <div className="rounded-full border border-foreground/10 bg-background/80 p-4 shadow-sm backdrop-blur">
-                    <Image
-                      src="/flaim-mark-hero.png"
-                      alt=""
-                      width={56}
-                      height={56}
-                      aria-hidden="true"
-                    />
-                  </div>
-                  <p className="mt-6 text-xs font-semibold uppercase tracking-[0.18em] text-foreground/55">
-                    Video slot ready
-                  </p>
-                  <p className="mt-3 text-xl font-semibold">
-                    {activeItem.name} example
-                  </p>
-                  <p className="mt-3 max-w-[13rem] text-sm leading-6 text-muted-foreground">
-                    The finished iPhone capture will drop into this frame.
-                  </p>
-                </div>
-              )}
-
-              {activeItem.videoSrc ? (
-                <button
-                  type="button"
-                  onClick={() => setIsPaused((current) => !current)}
-                  className="absolute bottom-4 right-4 inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-black/65 text-white backdrop-blur transition-colors hover:bg-black/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
-                  aria-label={isPaused ? "Play example" : "Pause example"}
-                >
-                  {isPaused ? (
-                    <Play className="h-4 w-4 fill-current" aria-hidden="true" />
-                  ) : (
-                    <Pause className="h-4 w-4 fill-current" aria-hidden="true" />
-                  )}
-                </button>
-              ) : null}
+            <div className="relative mx-auto aspect-[440/956] w-full max-w-[19rem] overflow-hidden rounded-[1.6rem] border bg-primary shadow-lg">
+              <Image
+                key={activeItem.id}
+                src={activeItem.imageSrc}
+                alt={activeItem.imageAlt}
+                fill
+                sizes="(min-width: 768px) 19rem, calc(100vw - 4rem)"
+                className="object-cover"
+                priority={activeItem.id === "chatgpt"}
+              />
             </div>
 
             <div className="px-2 pb-2 pt-5 md:hidden" aria-live="polite">
