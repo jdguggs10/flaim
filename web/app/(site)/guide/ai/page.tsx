@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ChevronDown, ExternalLink } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { GuideStepNavigation } from "@/components/site/guide-step-navigation";
 import {
   CHATGPT_APP_URL,
   CLAUDE_CONNECTOR_DIRECTORY_URL,
@@ -329,14 +330,12 @@ export default function AiGuidePage() {
             ))}
           </div>
 
-          <div className="mt-10 flex flex-wrap gap-3">
-            <Button asChild size="lg">
-              <Link href="/leagues">Your Leagues</Link>
-            </Button>
-            <Button asChild size="lg" variant="outline">
-              <Link href="/guide">Back to Using Flaim</Link>
-            </Button>
-          </div>
+          <GuideStepNavigation
+            backHref="/guide/platforms"
+            backLabel="Back to Platform Help"
+            nextHref="/leagues"
+            nextLabel="Open Your Leagues"
+          />
         </div>
       </section>
     </div>

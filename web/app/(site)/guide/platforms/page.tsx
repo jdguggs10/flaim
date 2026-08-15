@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ChevronDown, ExternalLink } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { GuideStepNavigation } from "@/components/site/guide-step-navigation";
 import { CHROME_EXTENSION_URL } from "@/config/constants";
 
 export const metadata: Metadata = {
@@ -269,14 +270,12 @@ export default function PlatformsGuidePage() {
             ))}
           </div>
 
-          <div className="mt-10 flex flex-wrap gap-3">
-            <Button asChild size="lg">
-              <Link href="/leagues#platforms">Your Leagues</Link>
-            </Button>
-            <Button asChild size="lg" variant="outline">
-              <Link href="/guide/ai">Continue to AI Help</Link>
-            </Button>
-          </div>
+          <GuideStepNavigation
+            backHref="/guide/flaim"
+            backLabel="Back to Flaim Help"
+            nextHref="/guide/ai"
+            nextLabel="Continue to AI Help"
+          />
         </div>
       </section>
     </div>

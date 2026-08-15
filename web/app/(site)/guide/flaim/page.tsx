@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ChevronDown } from "lucide-react";
 
+import { GuideStepNavigation } from "@/components/site/guide-step-navigation";
 import { Button } from "@/components/ui/button";
 
 export const metadata: Metadata = {
@@ -132,14 +133,12 @@ export default function FlaimGuidePage() {
             ))}
           </div>
 
-          <div className="mt-10 flex flex-wrap gap-3">
-            <Button asChild size="lg">
-              <Link href="/guide/platforms">Continue to Platform Help</Link>
-            </Button>
-            <Button asChild size="lg" variant="outline">
-              <a href="mailto:support@flaim.app">Email Support</a>
-            </Button>
-          </div>
+          <GuideStepNavigation
+            backHref="/guide"
+            backLabel="Back to Using Flaim"
+            nextHref="/guide/platforms"
+            nextLabel="Continue to Platform Help"
+          />
         </div>
       </section>
     </div>

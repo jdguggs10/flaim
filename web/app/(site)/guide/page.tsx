@@ -139,11 +139,11 @@ export default function GuidePage() {
         </div>
 
         <section className="mt-8 rounded-lg border bg-background p-5 shadow-sm">
-          <h2 className="text-lg font-semibold">Afterward: manage your leagues</h2>
+          <h2 className="text-lg font-semibold">After setup</h2>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            Your Leagues is where you add another league, sync new seasons,
-            choose optional defaults, or disconnect a platform. None of that is
-            required to finish the three steps above.
+            Use Your Leagues anytime you want to add another league, sync a new
+            season, choose defaults, or disconnect a platform. You can also
+            check which sports and leagues Flaim supports.
           </p>
           <div className="mt-4 flex flex-col gap-2 sm:flex-row">
             <Button asChild variant="outline">
