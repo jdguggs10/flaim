@@ -74,7 +74,8 @@ const PUBLIC_PRE_TOOL_STEPS = [
 
 const PUBLIC_TOOL_CARD_IN_PROGRESS_MS = 650;
 const PUBLIC_TOOL_CARD_COMPLETED_PAUSE_MS = 220;
-const PUBLIC_PROMPT_ROTATION_INTERVAL_MS = 3200;
+/** Seconds of ticker travel per prepared question; ~45px/s at pill width. */
+const PUBLIC_PROMPT_TICKER_SECONDS_PER_PROMPT = 4;
 
 const PUBLIC_SPORT_COPY: Record<
   PublicChatDemoSport,
@@ -296,10 +297,6 @@ export function PublicChatExperience({
     [],
   );
   const transcriptScrollRef = useRef<HTMLDivElement | null>(null);
-  const promptPickerRef = useRef<HTMLDivElement | null>(null);
-  const promptRotationIndexRef = useRef(0);
-  const promptRotationHoverPausedRef = useRef(false);
-  const promptRotationUserPausedRef = useRef(false);
   const activeRunAbortControllerRef = useRef<AbortController | null>(null);
   const autoRunPresetIdRef = useRef<string | null>(null);
 
@@ -431,57 +428,6 @@ export function PublicChatExperience({
       activeRunAbortControllerRef.current?.abort();
     }
   }, [runStatus]);
-
-  useEffect(() => {
-    const picker = promptPickerRef.current;
-    // Nothing rotates while the list is unrunnable: during a run, and while
-    // capabilities may still replace these pills with the target's own presets.
-    if (!picker || !canRun || educationPanel !== null) {
-      return;
-    }
-
-    const rotatePrompt = () => {
-      // Re-checked on every tick so toggling the OS reduced-motion setting
-      // takes effect in both directions without a remount.
-      if (
-        window.matchMedia("(prefers-reduced-motion: reduce)").matches ||
-        promptRotationHoverPausedRef.current ||
-        promptRotationUserPausedRef.current ||
-        document.visibilityState !== "visible"
-      ) {
-        return;
-      }
-
-      const prompts = Array.from(
-        picker.querySelectorAll<HTMLElement>("[data-public-prompt]"),
-      );
-      if (prompts.length < 2) {
-        return;
-      }
-
-      const nextIndex = (promptRotationIndexRef.current + 1) % prompts.length;
-      const nextPrompt = prompts[nextIndex];
-      const pickerBox = picker.getBoundingClientRect();
-      const promptBox = nextPrompt.getBoundingClientRect();
-      const targetLeft =
-        picker.scrollLeft + promptBox.left - pickerBox.left - 4;
-
-      picker.scrollTo({
-        left: nextIndex === 0 ? 0 : targetLeft,
-        behavior: nextIndex === 0 ? "auto" : "smooth",
-      });
-      promptRotationIndexRef.current = nextIndex;
-    };
-
-    const interval = window.setInterval(
-      rotatePrompt,
-      PUBLIC_PROMPT_ROTATION_INTERVAL_MS,
-    );
-
-    return () => {
-      window.clearInterval(interval);
-    };
-  }, [canRun, educationPanel]);
 
   const handleRunPreset = useCallback(
     async (preset: PublicChatPreset) => {
@@ -654,79 +600,76 @@ export function PublicChatExperience({
     void handleRunPreset(initialQueryPreset);
   }, [canRun, handleRunPreset, initialQueryPreset]);
 
-  const renderPromptPicker = (presets: readonly PublicChatPreset[]) => {
+  // The prepared questions scroll continuously like a ticker. The track holds
+  // the list twice so the CSS loop is seamless; the second copy is decorative
+  // (hidden from assistive tech, not focusable, and removed entirely under
+  // reduced motion, where the row becomes a still, scrollable list instead).
+  const renderPromptTicker = (presets: readonly PublicChatPreset[]) => {
+    const tickerPaused = runStatus === "running" || educationPanel !== null;
+    const tickerDurationSeconds = Math.max(
+      12,
+      presets.length * PUBLIC_PROMPT_TICKER_SECONDS_PER_PROMPT,
+    );
+
+    const renderPill = (preset: PublicChatPreset, clone: boolean) => {
+      const isSelected = preset.id === selectedPresetId;
+
+      return (
+        <button
+          key={clone ? `${preset.id}-clone` : preset.id}
+          type="button"
+          onClick={() => {
+            // Guard instead of `disabled` so the clicked pill keeps
+            // keyboard focus when a run starts, and so a pill pressed
+            // while capabilities load stays focusable rather than
+            // dropping focus to the body mid-load.
+            if (!canRun) {
+              return;
+            }
+            void handleRunPreset(preset);
+          }}
+          aria-disabled={canRun ? undefined : true}
+          aria-pressed={clone ? undefined : isSelected}
+          aria-hidden={clone || undefined}
+          tabIndex={clone ? -1 : undefined}
+          className={cn(
+            "group relative min-h-11 w-max overflow-hidden rounded-full border px-3 py-2 text-left transition-colors duration-200",
+            clone ? "public-chat-ticker-clone" : "",
+            isSelected
+              ? "border-[var(--phone-accent)] bg-[var(--phone-user-bubble)] text-[var(--phone-user-text)]"
+              : "border-[var(--phone-border)] bg-[var(--phone-panel)] text-[var(--phone-text)] hover:bg-[var(--phone-panel-strong)]",
+            !canRun && !isSelected ? "cursor-not-allowed opacity-65" : "",
+          )}
+        >
+          <h3 className="whitespace-nowrap text-[length:var(--phone-type-caption)] font-medium leading-[1.25] tracking-[-0.015em] text-[var(--phone-text)]">
+            {preset.title}
+          </h3>
+        </button>
+      );
+    };
+
     return (
       <div
-        ref={promptPickerRef}
         role="region"
         aria-busy={capabilitiesLoading || undefined}
         aria-label={
           capabilitiesLoading
             ? "Loading prepared demo questions."
-            : "Prepared demo questions. Interact with the list to stop automatic rotation."
+            : "Prepared demo questions. The list scrolls on its own and pauses while a question has keyboard focus."
         }
-        onMouseEnter={() => {
-          promptRotationHoverPausedRef.current = true;
-        }}
-        onMouseLeave={() => {
-          promptRotationHoverPausedRef.current = false;
-        }}
-        onPointerDown={() => {
-          promptRotationUserPausedRef.current = true;
-        }}
-        onWheel={() => {
-          promptRotationUserPausedRef.current = true;
-        }}
-        onFocusCapture={() => {
-          promptRotationUserPausedRef.current = true;
-        }}
-        className="-mx-1 snap-x snap-mandatory overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        data-paused={tickerPaused ? "true" : undefined}
+        className="public-chat-ticker -mx-1 px-1 pb-1"
       >
-        <div className="flex w-max gap-2 py-0.5">
-          {presets.map((preset, index) => {
-            const isSelected = preset.id === selectedPresetId;
-
-            return (
-              <button
-                key={preset.id}
-                type="button"
-                data-public-prompt
-                onClick={() => {
-                  // Guard instead of `disabled` so the clicked pill keeps
-                  // keyboard focus when a run starts, and so a pill pressed
-                  // while capabilities load stays focusable rather than
-                  // dropping focus to the body mid-load.
-                  if (!canRun) {
-                    return;
-                  }
-                  promptRotationIndexRef.current = index;
-                  void handleRunPreset(preset);
-                }}
-                aria-disabled={canRun ? undefined : true}
-                aria-pressed={isSelected}
-                className={cn(
-                  "group relative min-h-11 w-max max-w-[calc(100cqw-2.5rem)] snap-start overflow-hidden rounded-full border px-3 py-2 text-left transition-all duration-200",
-                  isSelected
-                    ? "border-[var(--phone-accent)] bg-[var(--phone-user-bubble)] text-[var(--phone-user-text)]"
-                    : "border-[var(--phone-border)] bg-[var(--phone-panel)] text-[var(--phone-text)] hover:bg-[var(--phone-panel-strong)]",
-                  !canRun && !isSelected
-                    ? "cursor-not-allowed opacity-65"
-                    : "",
-                )}
-              >
-                <div className="relative">
-                  <h3
-                    className={cn(
-                      "text-pretty text-[length:var(--phone-type-caption)] font-medium leading-[1.25] tracking-[-0.015em]",
-                      "text-[var(--phone-text)]",
-                    )}
-                  >
-                    {preset.title}
-                  </h3>
-                </div>
-              </button>
-            );
-          })}
+        <div
+          className="public-chat-ticker-track flex w-max gap-2 py-0.5"
+          style={
+            {
+              "--public-chat-ticker-duration": `${tickerDurationSeconds}s`,
+            } as React.CSSProperties
+          }
+        >
+          {presets.map((preset) => renderPill(preset, false))}
+          {presets.map((preset) => renderPill(preset, true))}
         </div>
       </div>
     );
@@ -937,7 +880,7 @@ export function PublicChatExperience({
             </div>
 
             <div className="border-t border-[var(--phone-border)] bg-[var(--phone-screen)] px-3 pb-4 pt-3">
-              {renderPromptPicker(visiblePresets)}
+              {renderPromptTicker(visiblePresets)}
 
               <div className="mx-2 mb-1 mt-2 flex items-center gap-1.5 rounded-[1.75rem] border border-[var(--phone-border)] bg-[var(--phone-panel)] p-1.5">
                 <button

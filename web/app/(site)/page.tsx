@@ -449,23 +449,25 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
           </p>
           <nav
             aria-label="Founder links"
-            className="mt-4 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-sm"
+            className="mt-4 flex flex-wrap items-center justify-center gap-x-2 gap-y-2 text-sm text-muted-foreground"
           >
+            <span>On Threads:</span>
             <a
               href="https://www.threads.com/@flaim_app"
               target="_blank"
               rel="noopener noreferrer"
               className="text-primary hover:underline"
             >
-              Flaim updates
+              @flaim_app
             </a>
+            <span aria-hidden="true">·</span>
             <a
               href="https://www.threads.com/@jdguggs10"
               target="_blank"
               rel="noopener noreferrer"
               className="text-primary hover:underline"
             >
-              My Threads
+              @jdguggs10
             </a>
           </nav>
         </div>

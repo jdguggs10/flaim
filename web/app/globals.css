@@ -359,7 +359,40 @@
   }
 }
 
+/* Prepared-question ticker: the track holds the prompt list twice, so a
+   -50% translate lands exactly on the start of the second copy and the loop
+   is seamless. */
+@keyframes public-chat-ticker-marquee {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
 @layer utilities {
+  .public-chat-ticker {
+    overflow: hidden;
+  }
+
+  .public-chat-ticker-track {
+    animation-name: public-chat-ticker-marquee;
+    animation-duration: var(--public-chat-ticker-duration, 48s);
+    animation-timing-function: linear;
+    animation-iteration-count: infinite;
+    will-change: transform;
+  }
+
+  /* Keyboard focus, an open demo guide, or a running answer hold the ticker
+     still. Pointer hover deliberately does not: the motion is slow enough to
+     click through, and a row that freezes under the cursor reads as broken. */
+  .public-chat-ticker:focus-within .public-chat-ticker-track,
+  .public-chat-ticker[data-paused="true"] .public-chat-ticker-track {
+    animation-play-state: paused;
+  }
+
   .football-crossout-text::after {
     position: absolute;
     top: 52%;
@@ -419,6 +452,25 @@
       animation: none !important;
       transform: none;
       opacity: 1;
+    }
+
+    /* Reduced motion: a still, finger-scrollable row of each question once. */
+    .public-chat-ticker {
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+
+    .public-chat-ticker::-webkit-scrollbar {
+      display: none;
+    }
+
+    .public-chat-ticker-track {
+      animation: none !important;
+      transform: none;
+    }
+
+    .public-chat-ticker-clone {
+      display: none;
     }
 
     .football-crossout-text::after {
