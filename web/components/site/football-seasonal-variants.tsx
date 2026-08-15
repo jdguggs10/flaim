@@ -44,7 +44,7 @@ const SEASON_MOMENTS = [
     description:
       "Flaim brings your actual roster, scoring rules, league size, and positional depth into the answer. You get more than a generic list of player rankings.",
     ingredients: ["Your roster", "Scoring rules", "League size"],
-    imageSrc: "/media/football/chatgpt-draft-grade-20260815.png",
+    imageSrc: "/media/football/chatgpt-draft-grade-20260815-v2.png",
     imageAlt:
       "ChatGPT grading Dart FTW's Week 1 fantasy football roster with Flaim.",
     provider: "ChatGPT",
