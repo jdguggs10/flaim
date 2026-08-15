@@ -10,6 +10,7 @@ const activeConsumerSurfaces = [
   "docs/CHANGELOG.md",
   "docs/CONNECTOR-DOCS.md",
   "web/app/(site)/guide/ai/page.tsx",
+  "web/app/(site)/guide/flaim/page.tsx",
   "web/app/(site)/guide/page.tsx",
   "web/app/(site)/guide/platforms/page.tsx",
   "web/emails/flaim-email-links.json",

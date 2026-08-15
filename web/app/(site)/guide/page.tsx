@@ -31,6 +31,8 @@ const guideSteps: readonly GuideStep[] = [
     body: "Create your free account so Flaim can securely remember the fantasy platforms and leagues you connect.",
     primaryHref: "/leagues",
     primaryLabel: "Create Your Account",
+    secondaryHref: "/guide/flaim",
+    secondaryLabel: "Flaim help",
   },
   {
     number: "2",
@@ -53,6 +55,11 @@ const guideSteps: readonly GuideStep[] = [
 ];
 
 const guideLinks = [
+  {
+    href: "/guide/flaim",
+    title: "Flaim account help",
+    body: "Account creation, sign-in, missing leagues, privacy, and support.",
+  },
   {
     href: "/guide/platforms",
     title: "Fantasy sports provider help",
