@@ -110,11 +110,6 @@ export default function FlaimGuidePage() {
       <section className="border-b bg-muted/50 px-4 py-16 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-3xl">
           <h2 className="text-3xl font-bold tracking-tight">Account help</h2>
-          <p className="mt-4 leading-7 text-muted-foreground">
-            These fixes cover the most common Flaim account questions. ESPN,
-            Yahoo, Sleeper, ChatGPT, and Claude have their own help pages in the
-            next two steps.
-          </p>
 
           <div className="mt-6 space-y-3">
             {ACCOUNT_FAQS.map((faq) => (

@@ -72,10 +72,10 @@ Flaim is read-only. It cannot trade, drop, or modify anything in your league. ES
 ESPN doesn't offer a public API for private fantasy league data. For private ESPN leagues, the Chrome extension syncs the session details Flaim needs for read-only access.
 
 ### How does Flaim connect to AI clients?
-Flaim Fantasy is available in ChatGPT. Optional manual MCP clients can also add the single server URL, and Flaim handles authentication and data retrieval after your leagues are linked in /leagues.
+Flaim Fantasy is available directly in ChatGPT and Claude. Other AI apps that support remote MCP connectors can add the single server URL, and Flaim handles authentication and data retrieval after your leagues are linked in /leagues.
 
 ### What AI assistants work with Flaim?
-Flaim Fantasy is available in ChatGPT and Claude. Perplexity can connect through optional remote-connector settings where supported; its curated publication is still pending. See the AI Apps page for current availability and connection instructions.
+Flaim Fantasy is available in ChatGPT and Claude. Perplexity can connect through its remote-connector settings where supported. See the AI Apps page for current availability and connection instructions.
 
 ## Links
 

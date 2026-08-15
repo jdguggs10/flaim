@@ -41,7 +41,7 @@ function getToolCopy(name?: string | null) {
       };
     case "get_free_agents":
       return {
-        title: "Scanning free agents",
+        title: "Scanning available players",
         description: "Looking for available players who fit Gerry's biggest needs.",
       };
     case "get_transactions":
@@ -51,7 +51,7 @@ function getToolCopy(name?: string | null) {
       };
     case "get_league_info":
       return {
-        title: "Pulling league context",
+        title: "Pulling league details",
         description: "Loading the league details Flaim needs to make sense of the answer.",
       };
     case "get_players":

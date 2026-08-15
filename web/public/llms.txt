@@ -16,7 +16,7 @@
 ## How to connect
 
 1. Create an account at https://flaim.app
-2. Connect your fantasy leagues at https://flaim.app/leagues (private ESPN leagues via Chrome extension, Yahoo via OAuth, Sleeper via username)
+2. Connect your fantasy leagues at https://flaim.app/leagues (private ESPN leagues via Chrome extension, Yahoo via Yahoo sign-in, Sleeper via username)
 3. Connect your AI app, authorize Flaim, and ask what fantasy leagues you have (open Flaim Fantasy in ChatGPT or Claude, or follow the Perplexity connection instructions)
 
 After connecting, Your Leagues is where users can add leagues, sync seasons, and choose optional defaults.

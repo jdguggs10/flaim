@@ -54,34 +54,6 @@ const guideSteps: readonly GuideStep[] = [
   },
 ];
 
-const guideLinks = [
-  {
-    href: "/guide/flaim",
-    title: "Flaim account help",
-    body: "Account creation, sign-in, missing leagues, privacy, and support.",
-  },
-  {
-    href: "/guide/platforms",
-    title: "Fantasy sports provider help",
-    body: "ESPN, Yahoo, and Sleeper connection details and troubleshooting.",
-  },
-  {
-    href: "/guide/sports",
-    title: "Sports and league coverage",
-    body: "Supported sports and the roster, matchup, and league info Flaim can use.",
-  },
-  {
-    href: "/guide/ai",
-    title: "Using Flaim in your AI app",
-    body: "Direct ChatGPT and Claude links, plus optional Perplexity custom connector guidance.",
-  },
-  {
-    href: "/fantasy-football",
-    title: "Fantasy football analysis",
-    body: "Draft grades, roster analysis, waivers, trades, matchups, and start/sit decisions using your real league.",
-  },
-] as const;
-
 const stepButtonClass =
   "h-auto min-h-10 w-full whitespace-normal px-3 py-2 text-center leading-snug";
 
@@ -143,9 +115,10 @@ export default function GuidePage() {
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
             Use Your Leagues anytime you want to add another league, sync a new
             season, choose defaults, or disconnect a platform. You can also
-            check which sports and leagues Flaim supports.
+            check which sports and leagues Flaim supports, or see fantasy
+            football examples using a real league.
           </p>
-          <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+          <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
             <Button asChild variant="outline">
               <Link href="/leagues#leagues">Manage Your Leagues</Link>
             </Button>
@@ -155,27 +128,12 @@ export default function GuidePage() {
                 <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />
               </Link>
             </Button>
-          </div>
-        </section>
-
-        <section className="mt-10 rounded-lg border bg-muted/40 p-5">
-          <h2 className="text-lg font-semibold">Additional Information</h2>
-          <div className="mt-4 grid gap-3">
-            {guideLinks.map((guide) => (
-              <Link
-                key={guide.href}
-                href={guide.href}
-                className="group rounded-lg border bg-background p-4 transition-colors hover:bg-muted/50"
-              >
-                <div className="flex items-center gap-3">
-                  <h3 className="flex-1 text-sm font-semibold">{guide.title}</h3>
-                  <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground transition-all group-hover:translate-x-0.5 group-hover:text-primary" />
-                </div>
-                <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                  {guide.body}
-                </p>
+            <Button asChild variant="ghost">
+              <Link href="/fantasy-football">
+                Fantasy football examples
+                <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />
               </Link>
-            ))}
+            </Button>
           </div>
         </section>
       </div>

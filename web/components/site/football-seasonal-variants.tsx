@@ -20,7 +20,7 @@ export function FootballConnectionButtons({
       </Button>
       <Button asChild size="lg" variant="outline" className="w-full">
         <a href={CHATGPT_APP_URL} target="_blank" rel="noopener noreferrer">
-          Add ChatGPT Plugin
+          Add to ChatGPT
         </a>
       </Button>
       <Button asChild size="lg" variant="outline" className="w-full">
@@ -29,7 +29,7 @@ export function FootballConnectionButtons({
           target="_blank"
           rel="noopener noreferrer"
         >
-          Add Claude Plugin
+          Add to Claude
         </a>
       </Button>
     </div>
@@ -55,13 +55,13 @@ const SEASON_MOMENTS = [
     label: "Waiver Tuesday",
     question: "What was Dart FTW's best roster move around Week 11?",
     description:
-      "Start with your roster needs and the players still available in your league. Then compare the best additions without typing out your team.",
-    ingredients: ["Roster needs", "Available players", "Recent moves"],
+      "Your adds, drops, and waiver claims come along with your roster, so the AI can tell you which pickup actually paid off. No retyping your team.",
+    ingredients: ["Recent moves", "Your roster", "Available players"],
     imageSrc: "/media/football/claude-week11-move-20260815.png",
     imageAlt:
       "Claude identifying Dart FTW's best fantasy football roster move around Week 11 with Flaim.",
     provider: "Claude",
-    proofCaption: "A roster move explained with league context",
+    proofCaption: "A waiver pickup graded from the league's own history",
   },
   {
     id: "weekly-matchup",

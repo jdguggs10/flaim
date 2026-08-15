@@ -277,7 +277,7 @@ export const PUBLIC_CHAT_TOOL_DISPLAY_LABELS: Record<
   get_standings: "Standings",
   get_matchups: "Matchups",
   get_roster: "Roster",
-  get_free_agents: "Free Agents",
+  get_free_agents: "Available Players",
   get_players: "Player Lookup",
   get_transactions: "Transactions",
 };

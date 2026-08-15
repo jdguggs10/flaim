@@ -52,9 +52,9 @@ const PHONE_FLOW_CONTENT = {
     icon: <Plus className="h-6 w-6" />,
     body: (
       <>
-        Open the <strong className="font-semibold text-[var(--phone-text)]">+</strong>{" "}
-        menu in ChatGPT and choose Flaim Fantasy. Add it once, then connect the
-        leagues you want ChatGPT to understand.
+        Connect your leagues in Flaim first. Then open the{" "}
+        <strong className="font-semibold text-[var(--phone-text)]">+</strong>{" "}
+        menu in ChatGPT and choose Flaim Fantasy. You only add it once.
       </>
     ),
   },
@@ -65,7 +65,7 @@ const PHONE_FLOW_CONTENT = {
     icon: <PhoneFlaimMark size={24} />,
     body: (
       <>
-        This badge means ChatGPT can use Flaim&apos;s read-only league tools. It
+        This badge means ChatGPT can use Flaim&apos;s read-only league info. It
         should activate automatically for fantasy questions; if it does not,
         choose Flaim from the drawer.
       </>

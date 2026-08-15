@@ -143,7 +143,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
                 name: "Do I need to upload screenshots or type out my roster?",
                 acceptedAnswer: {
                   "@type": "Answer",
-                  text: "No. Connect your fantasy platforms once, and Flaim supplies the league data on demand.",
+                  text: "No. Connect your fantasy platforms once, and Flaim brings your league info into the conversation.",
                 },
               },
               {
@@ -151,7 +151,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
                 name: "Do I need the Chrome extension?",
                 acceptedAnswer: {
                   "@type": "Answer",
-                  text: "Only for initial ESPN setup. The Flaim Fantasy Connector securely syncs the ESPN access needed for your private leagues. Yahoo connects through an authorization flow, and Sleeper connects with your username.",
+                  text: "Only for initial ESPN setup. The Flaim Fantasy Connector securely syncs the ESPN access needed for your private leagues. Yahoo connects through Yahoo sign-in, and Sleeper connects with your username.",
                 },
               },
               {
@@ -364,8 +364,8 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
               </summary>
               <div className="space-y-2 px-4 pb-4 text-sm text-muted-foreground">
                 <p>
-                  No. Connect your fantasy platforms once, and Flaim supplies
-                  the league data on demand.
+                  No. Connect your fantasy platforms once, and Flaim brings
+                  your league info into the conversation.
                 </p>
               </div>
             </details>
@@ -379,8 +379,8 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
                 <p>
                   Only for initial ESPN setup. The Flaim Fantasy Connector
                   securely syncs the ESPN access needed for your private
-                  leagues. Yahoo connects through an authorization flow, and
-                  Sleeper connects with your username.
+                  leagues. Yahoo connects through Yahoo sign-in, and Sleeper
+                  connects with your username.
                 </p>
               </div>
             </details>

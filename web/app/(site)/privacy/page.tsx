@@ -41,9 +41,9 @@ export default function PrivacyPage() {
                 </div>
                 <h3 className="font-semibold mb-1">Your AI, Your Account</h3>
                 <p className="text-sm text-muted-foreground">
-                  ChatGPT is the primary experience. Claude and Perplexity can
-                  use Flaim through optional custom connector setup when your
-                  plan and workspace allow it.
+                  Flaim Fantasy is available in ChatGPT and Claude. Perplexity
+                  can connect through its remote-connector settings. Your AI
+                  account stays yours.
                 </p>
               </div>
               <div className="text-center">
