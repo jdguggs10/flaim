@@ -1,6 +1,5 @@
 import Image from "next/image";
 import Link from "next/link";
-import { CirclePlay } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { FootballStrikeReveal } from "@/components/site/football-strike-reveal";
@@ -41,38 +40,54 @@ const SEASON_MOMENTS = [
   {
     id: "draft-night",
     label: "Draft night",
-    question: "Grade the team I drafted.",
+    question: "Grade Dart FTW's Week 1 roster.",
     description:
       "Flaim brings your actual roster, scoring rules, league size, and positional depth into the answer. You get more than a generic list of player rankings.",
     ingredients: ["Your roster", "Scoring rules", "League size"],
-    media: "future",
+    imageSrc: "/media/football/chatgpt-draft-grade-20260815.png",
+    imageAlt:
+      "ChatGPT grading Dart FTW's Week 1 fantasy football roster with Flaim.",
+    provider: "ChatGPT",
+    proofCaption: "A roster grade grounded in the actual team",
   },
   {
     id: "waiver-tuesday",
     label: "Waiver Tuesday",
-    question: "Who can actually help my team?",
+    question: "What was Dart FTW's best roster move around Week 11?",
     description:
       "Start with your roster needs and the players still available in your league. Then compare the best additions without typing out your team.",
     ingredients: ["Roster needs", "Available players", "Recent moves"],
-    media: "future",
+    imageSrc: "/media/football/claude-week11-move-20260815.png",
+    imageAlt:
+      "Claude identifying Dart FTW's best fantasy football roster move around Week 11 with Flaim.",
+    provider: "Claude",
+    proofCaption: "A roster move explained with league context",
   },
   {
     id: "weekly-matchup",
     label: "Weekly matchup",
-    question: "What could decide this week?",
+    question: "How did Dart FTW win Week 11?",
     description:
       "Your lineup, opponent, scoring rules, and matchup stay together, so the answer can focus on the decisions that matter this week.",
     ingredients: ["Your lineup", "Your opponent", "League scoring"],
-    media: "future",
+    imageSrc: "/media/football/perplexity-week11-matchup-20260815.png",
+    imageAlt:
+      "Perplexity using Flaim to explain how Dart FTW won its Week 11 fantasy football matchup.",
+    provider: "Perplexity",
+    proofCaption: "A matchup result pulled from the connected league",
   },
   {
     id: "playoff-push",
     label: "Playoff push",
-    question: "What does my path to the playoffs look like?",
+    question: "What happened to Dart FTW's playoff push?",
     description:
       "Use standings, upcoming matchups, recent moves, and league history to understand what needs to go right down the stretch.",
     ingredients: ["Standings", "Upcoming matchups", "League history"],
-    media: "standings",
+    imageSrc: "/media/football/chatgpt-playoff-push-20260815.png",
+    imageAlt:
+      "ChatGPT using Flaim to explain what happened to Dart FTW's fantasy football playoff push.",
+    provider: "ChatGPT",
+    proofCaption: "A playoff story reconstructed from the season",
   },
 ] as const;
 
@@ -101,55 +116,27 @@ function IngredientPills({ ingredients }: { ingredients: readonly string[] }) {
   );
 }
 
-function FutureClip({ moment }: { moment: SeasonMoment }) {
+function MomentMedia({ moment }: { moment: SeasonMoment }) {
   return (
-    <div className="relative flex aspect-[16/11] overflow-hidden rounded-[2rem] border bg-gradient-to-br from-primary/10 via-background to-muted p-6 shadow-sm">
-      <div className="absolute right-5 top-5 flex h-11 w-11 items-center justify-center rounded-full border bg-background/80 shadow-sm backdrop-blur">
-        <CirclePlay className="h-5 w-5 text-primary" aria-hidden="true" />
+    <figure className="mx-auto w-full max-w-[21rem]">
+      <div className="overflow-hidden rounded-[2.5rem] border-[6px] border-foreground bg-foreground shadow-xl shadow-foreground/10">
+        <div className="relative aspect-[201/437] bg-muted">
+          <Image
+            src={moment.imageSrc}
+            alt={moment.imageAlt}
+            fill
+            sizes="(min-width: 1024px) 21rem, (min-width: 640px) 42vw, 92vw"
+            className="object-cover"
+          />
+        </div>
       </div>
-      <div className="mt-auto max-w-sm">
+      <figcaption className="px-4 pt-5 text-center">
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">
-          Future phone clip
+          {moment.provider}, powered by Flaim
         </p>
-        <p className="mt-2 text-lg font-semibold">{moment.label} in action</p>
-        <p className="mt-2 text-sm leading-6 text-muted-foreground">
-          An 8 to 12 second sanitized recording can replace this staging
-          placeholder once real 2026 league data is available.
-        </p>
-      </div>
-    </div>
-  );
-}
-
-function StandingsProof() {
-  return (
-    <figure className="overflow-hidden rounded-[2rem] border bg-card shadow-sm">
-      <div className="relative aspect-[16/10] bg-muted">
-        <Image
-          src="/media/football/claude-football-standings-2026.png"
-          alt="Claude using Flaim to retrieve standings from a connected fantasy football league."
-          fill
-          sizes="(min-width: 1024px) 46vw, (min-width: 640px) 80vw, 94vw"
-          className="object-contain"
-        />
-      </div>
-      <figcaption className="p-5">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">
-          Real connected answer
-        </p>
-        <p className="mt-2 font-semibold">
-          Claude checking an actual football league
-        </p>
+        <p className="mt-2 text-sm font-semibold">{moment.proofCaption}</p>
       </figcaption>
     </figure>
-  );
-}
-
-function MomentMedia({ moment }: { moment: SeasonMoment }) {
-  return moment.media === "standings" ? (
-    <StandingsProof />
-  ) : (
-    <FutureClip moment={moment} />
   );
 }
 
