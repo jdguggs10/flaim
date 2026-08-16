@@ -151,7 +151,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
                 name: "Do I need the Chrome extension?",
                 acceptedAnswer: {
                   "@type": "Answer",
-                  text: "Only for initial ESPN setup. The Flaim Fantasy Connector securely syncs the ESPN access needed for your private leagues. Yahoo connects through Yahoo sign-in, and Sleeper connects with your username. Sync your ESPN credentials once, then use from your phone, on the road, anywhere.",
+                  text: "Only for initial ESPN setup. Yahoo connects through Yahoo sign-in, and Sleeper connects with your username. Sync your ESPN credentials once, and Flaim will access your ESPN league from your phone, on the road, anywhere.",
                 },
               },
               {
@@ -379,11 +379,10 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
               </summary>
               <div className="space-y-2 px-4 pb-4 text-sm text-muted-foreground">
                 <p>
-                  Only for initial ESPN setup. The Flaim Fantasy Connector
-                  securely syncs the ESPN access needed for your private
-                  leagues. Yahoo connects through Yahoo sign-in, and Sleeper
-                  connects with your username. Sync your ESPN credentials once,
-                  then use from your phone, on the road, anywhere.
+                  Only for initial ESPN setup. Yahoo connects through Yahoo
+                  sign-in, and Sleeper connects with your username. Sync your
+                  ESPN credentials once, and Flaim will access your ESPN league
+                  from your phone, on the road, anywhere.
                 </p>
               </div>
             </details>
