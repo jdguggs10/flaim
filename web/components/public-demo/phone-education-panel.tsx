@@ -78,9 +78,8 @@ const PHONE_FLOW_CONTENT = {
     icon: <ArrowUp className="h-5 w-5" />,
     body: (
       <>
-        In ChatGPT, type and send any fantasy question normally. This public
-        preview uses prepared questions so visitors never receive direct access
-        to or make changes in Gerry&apos;s league.
+        In ChatGPT, type and send any fantasy question normally. For the demo,
+        select one of these questions that were recently run.
       </>
     ),
   },
