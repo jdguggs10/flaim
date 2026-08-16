@@ -159,7 +159,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
                 name: "Which AI apps work with Flaim?",
                 acceptedAnswer: {
                   "@type": "Answer",
-                  text: "Flaim Fantasy is officially available in both ChatGPT and Claude. Open it from the ChatGPT Plugin Store or Claude's Connector Directory, and authorize your Flaim account. Perplexity and other AIs can also be manually connected as custom connectors.",
+                  text: "Flaim Fantasy is officially available in both ChatGPT's Plugin Store and Claude's Connector Directory. Perplexity and other AIs can also be manually connected as custom connectors (see docs).",
                 },
               },
               {
@@ -395,15 +395,14 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
               </summary>
               <div className="space-y-2 px-4 pb-4 text-sm text-muted-foreground">
                 <p>
-                  Flaim Fantasy is officially available in both ChatGPT and
-                  Claude. Open it from the ChatGPT Plugin Store or Claude&apos;s
-                  Connector Directory, and authorize your Flaim account.
-                  Perplexity and other AIs can also be manually connected as
-                  custom connectors. See the{" "}
+                  Flaim Fantasy is officially available in both ChatGPT&apos;s
+                  Plugin Store and Claude&apos;s Connector Directory. Perplexity
+                  and other AIs can also be manually connected as custom
+                  connectors (see{" "}
                   <Link href="/docs/ai" className="text-primary hover:underline">
-                    AI apps page
-                  </Link>{" "}
-                  for details.
+                    docs
+                  </Link>
+                  ).
                 </p>
               </div>
             </details>
