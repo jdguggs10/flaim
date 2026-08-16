@@ -1,12 +1,12 @@
-# Flaim Connection Guide (ChatGPT, Claude + Optional Custom Connectors)
+# Flaim Connection Docs (ChatGPT, Claude + Optional Custom Connectors)
 
-This page is the single user-facing guide for using Flaim Fantasy in ChatGPT or Claude, plus a secondary manual connection path for compatible AI platforms that accept custom remote MCP connectors.
+This page is the single user-facing reference for using Flaim Fantasy in ChatGPT or Claude, plus a secondary manual connection path for compatible AI platforms that accept custom remote MCP connectors. The public web version is [flaim.app/docs](https://flaim.app/docs) (AI apps: [flaim.app/docs/ai](https://flaim.app/docs/ai)).
 
 ## What Flaim Is
 
-Flaim is a read-only fantasy analysis service for ESPN, Yahoo, and Sleeper leagues. It provides tools for rosters, standings, matchups, league settings, and free agents with explicit platform and season context.
+Flaim is a read-only fantasy analysis service for ESPN, Yahoo, and Sleeper leagues. It provides tools for rosters, standings, matchups, league info, available players, and recent moves with explicit platform and season context.
 
-Flaim cannot place trades, add/drop players, or modify league settings.
+Flaim cannot make trades, add or drop players, edit lineups, or change league settings.
 
 ## Server + Auth
 
@@ -25,7 +25,7 @@ Flaim cannot place trades, add/drop players, or modify league settings.
 1. Create an account at `https://flaim.app`.
 2. Connect your fantasy leagues at `https://flaim.app/leagues`:
    - ESPN: install the Chrome extension and click Sync.
-   - Yahoo: connect via OAuth in the Flaim UI (if applicable for your setup).
+   - Yahoo: complete Yahoo sign-in from your leagues page.
    - Sleeper: connect your Sleeper username in the Flaim UI.
 3. Connect your AI client using the appropriate path below, authorize Flaim, and ask what fantasy leagues you have.
 
@@ -35,8 +35,8 @@ After setup, use `https://flaim.app/leagues` to add leagues, sync new seasons, o
 
 | Client | Status | Setup path |
 |--------|--------|------------|
-| ChatGPT | Published in ChatGPT Plugins | [Open Flaim Fantasy in ChatGPT](https://chatgpt.com/plugins/plugin_asdk_app_69a8f78087e081919e52cacacf00ff36) |
-| Claude | Published in Claude's connector directory | [Open Flaim Fantasy in Claude](https://claude.ai/directory/connectors/f1a5b6a4-1f5b-470c-af23-71fc7ab13754) |
+| ChatGPT | Published in ChatGPT's Plugin Store | [Open Flaim Fantasy in ChatGPT](https://chatgpt.com/plugins/plugin_asdk_app_69a8f78087e081919e52cacacf00ff36) |
+| Claude | Published in Claude's Connector Directory | [Open Flaim Fantasy in Claude](https://claude.ai/directory/connectors/f1a5b6a4-1f5b-470c-af23-71fc7ab13754) |
 | Perplexity | Manual custom connector | Add Flaim where your Perplexity account supports custom remote connectors |
 | Other compatible AI platforms | Advanced, unofficial setup | Add Flaim with the custom connector URL `https://api.flaim.app/mcp` |
 
@@ -107,8 +107,8 @@ These are intentionally short and easy to copy/paste.
    - “Who is on my roster in my default league?”
    - “Show my roster for Yahoo football league 123.l.456789, season 2025.”
 
-4. **Free agents**
-   - “Who are the best available free agents in my league right now?”
+4. **Available players**
+   - “Who are the best available players in my league right now?”
    - “Show best available QBs in my league.”
 
 5. **Player search**

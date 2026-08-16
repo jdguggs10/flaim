@@ -70,7 +70,7 @@ The public live showcase lives on the homepage, with `/chat` retained as a redir
 4. **Set defaults** — Manage at `/leagues` (extension v1.4.0 no longer handles defaults)
 
 **Connect AI:**
-- Open Flaim Fantasy in ChatGPT, or copy the MCP URL from `/leagues` and add it as an optional custom connector in a compatible AI platform.
+- Open Flaim Fantasy in ChatGPT or Claude, or copy the MCP URL from `/leagues` and add it as an optional custom connector in a compatible AI platform.
 
 ## Season Year Defaults
 
@@ -126,7 +126,7 @@ ESPN Cookies → POST /api/extension/sync → Auth Worker → Supabase
 
 ## AI Client OAuth 2.1
 
-ChatGPT Apps and optional manual MCP clients connect to Flaim's MCP servers:
+ChatGPT, Claude, and optional manual MCP clients connect to Flaim's MCP servers:
 
 - **MCP URL**: `https://api.flaim.app/mcp` (unified gateway - handles all sports; `/fantasy/mcp` also works as legacy alias)
 - **OAuth Flow**: Full OAuth 2.1 with PKCE, Dynamic Client Registration (RFC 7591), Protected Resource Metadata (RFC 9728)
@@ -134,7 +134,7 @@ ChatGPT Apps and optional manual MCP clients connect to Flaim's MCP servers:
 - **Metadata**: `/.well-known/oauth-authorization-server`, `/.well-known/oauth-protected-resource`
 - **Token lifetime**: MCP access tokens are short-lived (1 hour). Refresh tokens rotate on each successful refresh and use a 1-year inactivity window by default (`OAUTH_REFRESH_TOKEN_TTL_SECONDS`, default `31536000`, clamped to 1 hour minimum and 1 year maximum).
 
-**User flow**: Open Flaim Fantasy in ChatGPT, or add the MCP URL as an optional custom connector in a compatible AI platform → 401 triggers OAuth → user consents at `flaim.app/oauth/consent` → token exchange → tools available.
+**User flow**: Open Flaim Fantasy in ChatGPT or Claude, or add the MCP URL as an optional custom connector in a compatible AI platform → 401 triggers OAuth → user consents at `flaim.app/oauth/consent` → token exchange → tools available.
 
 ## MCP Tools
 
@@ -145,7 +145,7 @@ The unified gateway exposes tools with explicit parameters (`platform`, `sport`,
 The unified gateway (`fantasy-mcp`) provides a single MCP endpoint for all platforms and sports, replacing the per-sport workers.
 
 ```
-ChatGPT Apps / manual MCP clients → fantasy-mcp (gateway) → espn-client    → ESPN API
+ChatGPT / Claude / manual MCP clients → fantasy-mcp (gateway) → espn-client → ESPN API
                                                            → yahoo-client   → Yahoo API
                                                            → sleeper-client → Sleeper API (public)
                                                            → auth-worker    → Supabase
@@ -194,8 +194,8 @@ See `workers/README.md` for worker-to-worker communication requirements.
 
 1. User syncs ESPN credentials via the Chrome extension → stored in Supabase via auth-worker.
 2. User confirms and manages discovered leagues at `/leagues` (per-season rows) → stored in Supabase.
-3. User connects through ChatGPT Apps or an optional manual MCP client → OAuth flow → token stored in Supabase.
-4. ChatGPT Apps or the manual MCP client calls an MCP tool after connection → MCP worker fetches creds from auth-worker → calls ESPN → returns data.
+3. User connects through ChatGPT, Claude, or an optional manual MCP client → OAuth flow → token stored in Supabase.
+4. ChatGPT, Claude, or the manual MCP client calls an MCP tool after connection → MCP worker fetches creds from auth-worker → calls ESPN → returns data.
 
 ## Usage Analytics
 

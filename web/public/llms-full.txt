@@ -30,7 +30,7 @@ Single MCP endpoint: https://api.flaim.app/mcp
 | Platform | Sports | Auth Method |
 |----------|--------|-------------|
 | ESPN | Football, Baseball, Basketball, Hockey | Chrome extension required for private ESPN leagues |
-| Yahoo | Football, Baseball, Basketball, Hockey | OAuth 2.0 (sign in with Yahoo) |
+| Yahoo | Football, Baseball, Basketball, Hockey | Yahoo sign-in |
 | Sleeper | Football, Basketball | Username only (public API) |
 
 ## How to Connect
@@ -38,7 +38,7 @@ Single MCP endpoint: https://api.flaim.app/mcp
 1. Create a Flaim account at https://flaim.app
 2. Connect your fantasy leagues at https://flaim.app/leagues:
    - ESPN: Install the Chrome extension to sync private ESPN leagues
-   - Yahoo: Start Yahoo auth from /leagues and wait for league discovery
+   - Yahoo: Sign in with Yahoo from /leagues and wait for league discovery
    - Sleeper: Enter your exact username and wait for league discovery
 3. Connect your AI app, authorize Flaim, and ask "What fantasy leagues do I have?" to confirm setup:
    - ChatGPT: Open Flaim Fantasy in ChatGPT

@@ -15,8 +15,8 @@ The **Flaim skill** teaches your AI assistant how to behave like a fantasy analy
 ## Get Started
 
 1. **Create your Flaim account** at [flaim.app](https://flaim.app).
-2. **Connect your fantasy leagues** — ESPN via [Chrome extension](https://chromewebstore.google.com/detail/flaim-espn-fantasy-connec/mbnokejgglkfgkeeenolgdpcnfakpbkn), Yahoo via OAuth, or Sleeper by username. Flaim discovers supported leagues and shows them in [Your Leagues](https://flaim.app/leagues).
-3. **Connect your AI app:** Open Flaim Fantasy in [ChatGPT](https://chatgpt.com/plugins/plugin_asdk_app_69a8f78087e081919e52cacacf00ff36) or [Claude](https://claude.ai/directory/connectors/f1a5b6a4-1f5b-470c-af23-71fc7ab13754), or follow the optional Perplexity custom-connector path in the [connection guide](docs/CONNECTOR-DOCS.md).
+2. **Connect your fantasy leagues** — ESPN via [Chrome extension](https://chromewebstore.google.com/detail/flaim-espn-fantasy-connec/mbnokejgglkfgkeeenolgdpcnfakpbkn), Yahoo via Yahoo sign-in, or Sleeper by username. Flaim discovers supported leagues and shows them in [Your Leagues](https://flaim.app/leagues).
+3. **Connect your AI app:** Open Flaim Fantasy in [ChatGPT](https://chatgpt.com/plugins/plugin_asdk_app_69a8f78087e081919e52cacacf00ff36) or [Claude](https://claude.ai/directory/connectors/f1a5b6a4-1f5b-470c-af23-71fc7ab13754), or follow the optional Perplexity custom-connector path in the [connection docs](docs/CONNECTOR-DOCS.md). Public setup docs live at [flaim.app/docs](https://flaim.app/docs).
 
 You are done. Ask questions such as "Who should I start this week?" or "What's on the waiver wire?" Defaults and additional league management are optional after setup.
 
@@ -94,7 +94,7 @@ Root, web, and workers use `pnpm` via Corepack. The Chrome extension is intentio
 |----------|-------------|
 | [Architecture](docs/ARCHITECTURE.md) | System design, deployment, troubleshooting |
 | [Changelog](docs/CHANGELOG.md) | Release history |
-| [Connection Guide](docs/CONNECTOR-DOCS.md) | ChatGPT and Claude links plus optional custom-connector guidance |
+| [Connection Docs](docs/CONNECTOR-DOCS.md) | ChatGPT and Claude links plus optional custom-connector guidance (public version: [flaim.app/docs](https://flaim.app/docs)) |
 | [Web App](web/README.md) | Next.js routes, components, environment |
 | [Workers](workers/README.md) | Cloudflare Workers, MCP tools, ESPN API |
 | [Extension](extension/README.md) | Chrome extension build, Sync Host, CWS |
