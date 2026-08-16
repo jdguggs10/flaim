@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  YAHOO_APP_REVIEW_OUTAGE_MESSAGE,
   classifyYahooApiFailure,
   defaultYahooRetryAfterSeconds,
+  isYahooAppLevelDenialBody,
   isYahooRateLimitStatus,
   isYahooTransientHttpStatus,
   parseRetryAfterSeconds,
@@ -68,5 +70,28 @@ describe('HTTP helpers', () => {
       status: 502,
       retryable: false,
     });
+  });
+
+  it('tells an application-level Yahoo denial from a resource-level one', () => {
+    expect(
+      isYahooAppLevelDenialBody('{"error":{"description":"This application is not authorized to perform this action."}}')
+    ).toBe(true);
+    expect(
+      isYahooAppLevelDenialBody('{"error":{"description":"You are not allowed to view this league."}}')
+    ).toBe(false);
+    expect(isYahooAppLevelDenialBody('')).toBe(false);
+  });
+
+  it('keeps the two outage messages telling one story', () => {
+    // Both doors name Yahoo, say it is platform-wide and not the user's fault,
+    // and say what still works. Only discovery adds the "connection is saved,
+    // no reconnect" sentence, because only a new user needs to hear it.
+    for (const message of Object.values(YAHOO_APP_REVIEW_OUTAGE_MESSAGE)) {
+      expect(message).toContain('Yahoo is currently reviewing third-party app access');
+      expect(message).toContain('all third-party apps, including this one');
+      expect(message).toContain('ESPN and Sleeper leagues are unaffected');
+    }
+    expect(YAHOO_APP_REVIEW_OUTAGE_MESSAGE.discovery).toContain('no reconnect is needed');
+    expect(YAHOO_APP_REVIEW_OUTAGE_MESSAGE.data).not.toContain('reconnect');
   });
 });

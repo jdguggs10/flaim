@@ -66,6 +66,22 @@ describe('Yahoo auth error helpers', () => {
     expect(isYahooTransientAuthResponse({ error: 'refresh_failed', retryable: true })).toBe(false);
   });
 
+  it('shows the Yahoo app-review outage as an error banner, not a cooldown notice or a reconnect prompt', () => {
+    // auth-worker's discovery path returns the platform-wide denial as a plain
+    // yahoo_api_error (502, no retryable flag) on purpose: retryable would route
+    // it into the token-cooldown notice, which hides error_description and ends
+    // "reconnect Yahoo" — the one instruction that cannot help. Non-retryable and
+    // non-reconnect means the page throws error_description into the banner.
+    const response = {
+      error: 'yahoo_api_error',
+      error_description:
+        'Yahoo is currently reviewing third-party app access to its Fantasy Sports API, and Yahoo league discovery is temporarily unavailable in all third-party apps, including this one. This is not a problem with the user\'s account or connection — the Yahoo connection is saved and their leagues will appear on the next refresh once Yahoo restores access; no reconnect is needed. ESPN and Sleeper leagues are unaffected.',
+    };
+
+    expect(isYahooTransientAuthResponse(response)).toBe(false);
+    expect(isYahooReconnectRequired(502, response)).toBe(false);
+  });
+
   it('routes app fingerprint mismatches to the reconnect path', () => {
     const response = { error: YahooAuthWorkerErrorCode.APP_FINGERPRINT_MISMATCH };
 

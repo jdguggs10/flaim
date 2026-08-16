@@ -31,10 +31,12 @@ import {
   type YahooAppFingerprintStatus,
 } from './yahoo-app-fingerprint';
 import {
+  YAHOO_APP_REVIEW_OUTAGE_MESSAGE,
   YAHOO_DEFAULT_TRANSIENT_RETRY_AFTER_SECONDS,
   YAHOO_REFRESH_IN_PROGRESS_RETRY_AFTER_SECONDS,
   classifyYahooApiFailure,
   defaultYahooRetryAfterSeconds,
+  isYahooAppLevelDenialBody,
   isYahooRateLimitStatus,
   isYahooTransientHttpStatus,
   parseRetryAfterSeconds,
@@ -1298,13 +1300,35 @@ function yahooRefreshFailureResponse(
 
 function yahooApiFailureResponse(
   response: Pick<Response, 'headers' | 'status'>,
-  corsHeaders: Record<string, string>
+  corsHeaders: Record<string, string>,
+  upstreamBody = ''
 ): Response {
   const classification = classifyYahooApiFailure(response);
   const retryAfter = classification.retryAfter;
   const headers: Record<string, string> = { 'Content-Type': 'application/json', ...corsHeaders };
   if (retryAfter) {
     headers['Retry-After'] = String(retryAfter);
+  }
+
+  // Yahoo's app-approval program denies the APPLICATION platform-wide with a
+  // 403 whose body says so. That is not the user's account, connection, or
+  // league, and reconnecting cannot fix it — so say exactly that, in the same
+  // words yahoo-client uses on the data path. Deliberately NOT retryable: the
+  // web routes retryable discovery failures into the token-cooldown notice
+  // ("try again in a few minutes; if this keeps happening, reconnect Yahoo"),
+  // which is the wrong instruction here and would hide this text; the
+  // non-retryable path puts error_description in the banner verbatim, and MCP
+  // clients relay it. Same error code and 502 as any other 403, so nothing
+  // downstream reclassifies — only the words change.
+  if (classification.kind === 'access_denied' && isYahooAppLevelDenialBody(upstreamBody)) {
+    return new Response(
+      JSON.stringify({
+        error: YahooAuthWorkerErrorCode.YAHOO_API_ERROR,
+        error_description: YAHOO_APP_REVIEW_OUTAGE_MESSAGE.discovery,
+        upstream_status: classification.upstreamStatus,
+      }),
+      { status: 502, headers }
+    );
   }
 
   // Expose upstream_status deliberately: it lets MCP clients distinguish Yahoo
@@ -2407,10 +2431,20 @@ export async function handleYahooDiscover(
         correlation_id: correlationId,
         auth_type: 'clerk',
       });
+      // Only a 403 body carries the app-level vs resource-level distinction,
+      // so only that branch pays for the body read (bounded, never thrown).
+      const deniedBody =
+        classification.kind === 'access_denied'
+          ? await apiResponse.text().then((b) => b.slice(0, 500)).catch(() => '')
+          : '';
+      if (deniedBody) {
+        console.log(`[yahoo-connect] discovery access_denied body: ${deniedBody}`);
+      }
       console.error(`[yahoo-connect] Yahoo API error during discovery: ${apiResponse.status}`);
       return yahooApiFailureResponse(
         { status: apiResponse.status, headers: apiResponse.headers },
-        corsHeaders
+        corsHeaders,
+        deniedBody
       );
     }
 

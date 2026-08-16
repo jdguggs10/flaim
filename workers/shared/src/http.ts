@@ -103,3 +103,29 @@ export function classifyYahooApiFailure(
 
   return { kind: 'unexpected', upstreamStatus, status: 502, retryable: false };
 }
+
+// Since July 2026 Yahoo gates its Fantasy Sports API behind an approval program
+// and denies unapproved apps platform-wide with a 403 whose body says the
+// *application* is not authorized (as opposed to a resource-level 403 such as
+// "not allowed to view this league"). Both Yahoo doors — league discovery in
+// auth-worker and league data in yahoo-client — hit the same wall, so the
+// detection and the words live here and are used by both. Self-limiting: the
+// branch stops matching the moment Yahoo stops sending this denial string.
+export function isYahooAppLevelDenialBody(body: string): boolean {
+  return body.includes('application is not authorized');
+}
+
+/**
+ * What an AI client (or the web app) should relay when Yahoo denies the app
+ * itself. Names Yahoo, says it is platform-wide, says it is not the user's
+ * account or connection, and says what still works — so a reader does not go
+ * hunting for a bug on their side. `data` is for reads of an already-connected
+ * league; `discovery` is for connect/refresh, where the extra sentence tells a
+ * NEW Yahoo user that their connection is saved and nothing needs redoing.
+ */
+export const YAHOO_APP_REVIEW_OUTAGE_MESSAGE = {
+  data:
+    'Yahoo is currently reviewing third-party app access to its Fantasy Sports API, and Yahoo league data is temporarily unavailable in all third-party apps, including this one. This is not a problem with the user\'s account, connection, or league. ESPN and Sleeper leagues are unaffected.',
+  discovery:
+    'Yahoo is currently reviewing third-party app access to its Fantasy Sports API, and Yahoo league discovery is temporarily unavailable in all third-party apps, including this one. This is not a problem with the user\'s account or connection — the Yahoo connection is saved and their leagues will appear on the next refresh once Yahoo restores access; no reconnect is needed. ESPN and Sleeper leagues are unaffected.',
+} as const;
