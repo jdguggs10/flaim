@@ -2,7 +2,7 @@
 
 Doc routing: see `docs/INDEX.md`.
 
-Flaim is an MCP (Model Context Protocol) service that connects ESPN, Yahoo, and Sleeper fantasy leagues to Flaim Fantasy in ChatGPT and, as an advanced option, to compatible AI platforms through a manual custom connector. It handles authentication, credential management, and real-time data fetching. The web app also includes a homepage live demo.
+Flaim is an MCP (Model Context Protocol) service that connects ESPN, Yahoo, and Sleeper fantasy leagues to Flaim Fantasy in ChatGPT and Claude and, as an advanced option, to compatible AI platforms through a manual custom connector. It handles authentication, credential management, and real-time data fetching. The web app also includes a homepage live demo.
 
 ## Quick Start
 
@@ -55,7 +55,7 @@ docs/                       # Documentation
 
 Flaim is an **authentication and data service**, not a chatbot:
 
-- **MCP Server**: Exposes fantasy league data to ChatGPT Apps and optional manual MCP clients via Model Context Protocol
+- **MCP Server**: Exposes fantasy league data to ChatGPT, Claude, and optional manual MCP clients via Model Context Protocol
 - **OAuth Provider**: Handles secure authentication between AI clients and ESPN data
 - **Credential Manager**: Securely stores ESPN session cookies captured by the Chrome extension
 
@@ -182,7 +182,8 @@ ChatGPT Apps / manual MCP clients → fantasy-mcp (gateway) → espn-client    �
 - Per-user isolation via verified `sub`; credentials never sent back to client after setup.
 - Rate limiting: Cloudflare Workers native `rate_limits` bindings — 10 req/60s per IP on token endpoint, 15 req/60s per user on credentials endpoint, and 60 req/60s per user on OAuth/Clerk-authenticated MCP requests (internal eval and demo API keys are exempt).
 - Public demo cache: the homepage reads precomputed answers from `demo_answer_cache`. The live-turn public-chat path has been removed.
-- Public demo refresh pipeline: an external private runner uses static MCP bearer auth to populate `demo_answer_cache` out of band on a scheduled cadence. Its active production path writes the public demo cache at the prompt and context versions tracked in `web/lib/public-chat.ts`; the website only reads cached answers and never triggers refresh runs. The shared contract is the cache key format `{presetId}:{sport}:{promptVersion}:{contextVersion}` plus matching preset IDs. Version tags and homepage preset metadata live in `web/lib/public-chat.ts`, while LLM system prompts and per-preset generation instructions remain outside this public repository.
+- Public demo refresh pipeline: an external private runner uses static MCP bearer auth to populate `demo_answer_cache` out of band on a scheduled cadence. The website only reads cached answers and never triggers refresh runs. The legacy ESPN demo contract is `public-demo-answer:{presetId}:{sport}:v7:v2`. Platform-aware targets use `public-demo-answer:{presetId}:{platform}:{sport}:v8:v3`, with matching `platform`, `sport`, `prompt_version`, and `context_version` columns. The platform-aware reader requires the target to be enabled and fully warmed through `/api/public-chat/capabilities`; during the current transition, only ESPN baseball may fall back from a missing v8/v3 target row to its legacy v7/v2 row. Version tags and homepage preset metadata live in `web/lib/public-chat.ts`, while LLM system prompts and per-preset generation instructions remain outside this public repository.
+- Public demo phone client: the homepage phone reads `/api/public-chat/capabilities` on mount and derives its selectable platforms, sports, and presets from that response. When at least one target is advertised it sends `platform`, `sport`, and `presetId` on every cache read, shows only the selected target's advertised presets, and switches sport automatically when the chosen platform has no demo for the current one. An empty or failed capabilities response keeps the legacy ESPN baseball behavior and omits `platform`, which is what keeps the one-release fallback lane reachable. Prepared prompts stay inert until that response lands, so manual and deep-link runs both wait and the client never issues a read whose identity it is about to change. Activating a target discards any run that predates the response instead of adopting it. Because that request gates the prompts, it carries an 8s client deadline, and a stalled response falls back to legacy mode rather than leaving the demo unusable. The client state model lives in `web/lib/public-demo-client.ts`: capability parsing, target selection, request construction, and the run-token reducer that discards stale responses.
 - Public demo prompt lifecycle: add or remove homepage demo prompts in both codebases. Update `web/lib/public-chat.ts` here for site metadata and keep the external runner aligned on preset IDs, prompt versions, and context versions. If a prompt is removed from the site, remove it from the runner too so the Pi stops refreshing an unreachable cache key.
 - OAuth tokens stored in Supabase with expiration tracking.
 - ESPN credentials: AES-256 encrypted at rest (Supabase default).
@@ -301,6 +302,19 @@ synthetic or preview-created rows and must not copy production credentials or
 production user data.
 
 **Triggering preview deploys:** Workers only deploy on PRs (not bare branch pushes). A PR must exist for GitHub Actions to run `deploy-workers.yml` with `--env preview`. Vercel deploys on any push.
+
+**Staging integration preview.** `staging` is a disposable integration-preview
+branch: it is rebuilt from `main` plus selected in-flight branches whenever
+composition changes, so one continuously deployed Vercel preview always shows
+the combined upcoming site (a team preview domain may be pinned to it). Rules:
+
+- Nothing ever merges from `staging` into `main`. Every real change lands
+  through its own PR against `main` with normal review and CI.
+- The branch may be force-pushed or rebuilt at any time; it carries no review
+  or deployment authority, and no PR is opened for it.
+- Preview deployments read the isolated preview database, so the homepage demo
+  shows its unavailable state on `staging` by design; demo answers are only
+  proven in production.
 
 See Notion (Platform + Infrastructure) for decision rationale.
 

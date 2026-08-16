@@ -97,8 +97,9 @@ export function HeroChat() {
           </span>
         </h1>
         <p className="max-w-xl text-lg leading-7 text-foreground/70 md:text-xl md:leading-8">
-          Connect ChatGPT to ESPN, Yahoo, and Sleeper. Ask about your actual
-          roster, matchup, standings, free agents, league history, and more.
+          Connect ChatGPT or Claude to your ESPN, Yahoo, and Sleeper fantasy
+          leagues. Ask about your actual roster, matchup, standings, waiver
+          wire, moves, and more.
         </p>
       </div>
     </section>

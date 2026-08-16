@@ -4,7 +4,7 @@
 [![MCP Tools](https://img.shields.io/badge/MCP_Tools-10-green.svg)](https://api.flaim.app/mcp)
 [![Chrome Web Store](https://img.shields.io/badge/Chrome_Extension-v1.5.2-yellow.svg)](https://chromewebstore.google.com/detail/flaim-espn-fantasy-connec/mbnokejgglkfgkeeenolgdpcnfakpbkn)
 
-Connect your ESPN, Yahoo, and Sleeper leagues, then use Flaim Fantasy in ChatGPT for read-only analysis grounded in your real league. Advanced users can also add Flaim manually as a custom connector in compatible AI platforms.
+Connect your ESPN, Yahoo, and Sleeper leagues, then use Flaim Fantasy in ChatGPT or Claude for read-only analysis grounded in your real league. Advanced users can also add Flaim manually as a custom connector in compatible AI platforms.
 
 Analysis tools are read-only by design. No trades, no drops, no roster changes — just advice. League refresh can update Flaim's connected-league records so newly available seasons show up.
 
@@ -14,13 +14,11 @@ The **Flaim skill** teaches your AI assistant how to behave like a fantasy analy
 
 ## Get Started
 
-1. **Sign up** at [flaim.app](https://flaim.app)
-2. **Connect your platforms** — ESPN via [Chrome extension](https://chromewebstore.google.com/detail/flaim-espn-fantasy-connec/mbnokejgglkfgkeeenolgdpcnfakpbkn), Yahoo via OAuth, Sleeper by username
-3. **Leagues discovered** — Flaim finds supported leagues where possible; confirm and manage them at [flaim.app/leagues](https://flaim.app/leagues)
-4. **Pick a default league** for AI conversations
-5. **Use Flaim in AI** — open Flaim Fantasy in ChatGPT, or use the optional custom-connector URL with a compatible AI platform (see [Connector Setup](docs/CONNECTOR-DOCS.md))
-6. **Optional: install the skill** — recommended for agent-skill tools; copy `.agents/skills/flaim-fantasy/` into your project or home directory (see [The Skill](#the-skill) below)
-7. **Ask questions** — "Who should I start this week?", "What's on the waiver wire?", etc.
+1. **Create your Flaim account** at [flaim.app](https://flaim.app).
+2. **Connect your fantasy leagues** — ESPN via [Chrome extension](https://chromewebstore.google.com/detail/flaim-espn-fantasy-connec/mbnokejgglkfgkeeenolgdpcnfakpbkn), Yahoo via OAuth, or Sleeper by username. Flaim discovers supported leagues and shows them in [Your Leagues](https://flaim.app/leagues).
+3. **Connect your AI app:** Open Flaim Fantasy in [ChatGPT](https://chatgpt.com/plugins/plugin_asdk_app_69a8f78087e081919e52cacacf00ff36) or [Claude](https://claude.ai/directory/connectors/f1a5b6a4-1f5b-470c-af23-71fc7ab13754), or follow the optional Perplexity custom-connector path in the [connection guide](docs/CONNECTOR-DOCS.md).
+
+You are done. Ask questions such as "Who should I start this week?" or "What's on the waiver wire?" Defaults and additional league management are optional after setup.
 
 ## The Skill
 
@@ -67,7 +65,7 @@ All tools connect through a single MCP endpoint: `https://api.flaim.app/mcp`
 ```
 Chrome Extension → flaim.app → Auth Worker → Supabase
                       ↓
-ChatGPT Apps / manual MCP clients → Fantasy MCP Gateway → ESPN/Yahoo/Sleeper Clients → Platform APIs
+ChatGPT / Claude / manual MCP clients → Fantasy MCP Gateway → ESPN/Yahoo/Sleeper Clients → Platform APIs
 ```
 
 - **Web App (Next.js on Vercel)** — landing/site pages, public live demo, OAuth, league management
@@ -96,7 +94,7 @@ Root, web, and workers use `pnpm` via Corepack. The Chrome extension is intentio
 |----------|-------------|
 | [Architecture](docs/ARCHITECTURE.md) | System design, deployment, troubleshooting |
 | [Changelog](docs/CHANGELOG.md) | Release history |
-| [Connector Setup](docs/CONNECTOR-DOCS.md) | Official ChatGPT setup plus optional custom-connector guidance |
+| [Connection Guide](docs/CONNECTOR-DOCS.md) | ChatGPT and Claude links plus optional custom-connector guidance |
 | [Web App](web/README.md) | Next.js routes, components, environment |
 | [Workers](workers/README.md) | Cloudflare Workers, MCP tools, ESPN API |
 | [Extension](extension/README.md) | Chrome extension build, Sync Host, CWS |

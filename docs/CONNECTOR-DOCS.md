@@ -1,6 +1,6 @@
-# Flaim Setup Docs (ChatGPT + Optional Custom Connectors)
+# Flaim Connection Guide (ChatGPT, Claude + Optional Custom Connectors)
 
-This page is the single user-facing guide for using Flaim Fantasy in ChatGPT, plus a secondary manual setup path for compatible AI platforms that accept custom remote MCP connectors.
+This page is the single user-facing guide for using Flaim Fantasy in ChatGPT or Claude, plus a secondary manual connection path for compatible AI platforms that accept custom remote MCP connectors.
 
 ## What Flaim Is
 
@@ -23,42 +23,47 @@ Flaim cannot place trades, add/drop players, or modify league settings.
 ## Setup (Once)
 
 1. Create an account at `https://flaim.app`.
-2. Add fantasy credentials:
+2. Connect your fantasy leagues at `https://flaim.app/leagues`:
    - ESPN: install the Chrome extension and click Sync.
    - Yahoo: connect via OAuth in the Flaim UI (if applicable for your setup).
    - Sleeper: connect your Sleeper username in the Flaim UI.
-3. Visit `https://flaim.app/leagues` and set a **default** league (recommended).
+3. Connect your AI client using the appropriate path below, authorize Flaim, and ask what fantasy leagues you have.
+
+After setup, use `https://flaim.app/leagues` to add leagues, sync new seasons, or choose optional defaults. Defaults are not required to finish setup.
 
 ## Connect Your AI Client
 
 | Client | Status | Setup path |
 |--------|--------|------------|
-| ChatGPT | Primary | Use Flaim Fantasy in ChatGPT |
-| Claude | Publication pending; optional manual connector | Add Flaim manually where your Claude account supports custom connectors |
-| Perplexity | Curated onboarding pending; optional manual connector | Add Flaim manually where your Perplexity account supports custom remote connectors |
+| ChatGPT | Published in ChatGPT Plugins | [Open Flaim Fantasy in ChatGPT](https://chatgpt.com/plugins/plugin_asdk_app_69a8f78087e081919e52cacacf00ff36) |
+| Claude | Published in Claude's connector directory | [Open Flaim Fantasy in Claude](https://claude.ai/directory/connectors/f1a5b6a4-1f5b-470c-af23-71fc7ab13754) |
+| Perplexity | Manual custom connector | Add Flaim where your Perplexity account supports custom remote connectors |
 | Other compatible AI platforms | Advanced, unofficial setup | Add Flaim with the custom connector URL `https://api.flaim.app/mcp` |
 
 ### ChatGPT
 
-Use Flaim Fantasy in ChatGPT as the primary experience. It is distributed through ChatGPT Apps and uses the same read-only league tools and OAuth flow described on this page.
+Open [Flaim Fantasy in ChatGPT](https://chatgpt.com/plugins/plugin_asdk_app_69a8f78087e081919e52cacacf00ff36), choose **Try in chat**, and authorize your Flaim account if asked.
+
+### Claude
+
+Open [Flaim Fantasy in Claude's connector directory](https://claude.ai/directory/connectors/f1a5b6a4-1f5b-470c-af23-71fc7ab13754), choose **Connect**, and authorize your Flaim account. Claude shows the connector as **Connected** when it is ready.
 
 ### Manual Custom Connectors
 
-Some AI platforms can connect directly to Flaim where they support custom remote MCP servers and OAuth. This is an advanced, unofficial setup path; ChatGPT remains Flaim's only currently published and officially supported consumer integration.
-
-### Claude (Custom Connector)
-
-Flaim is fully live and not in beta. Claude custom connectors are an optional setup path and may still be labeled beta by Claude; Free users are limited to one custom connector.
-
-1. Add a remote MCP server with URL `https://api.flaim.app/mcp`.
-2. Complete the OAuth consent screen when prompted.
+Some AI platforms can connect directly to Flaim where they support custom remote MCP servers and OAuth. This is an advanced path alongside Flaim's direct ChatGPT and Claude directory links.
 
 ### Perplexity (Custom Remote Connector)
 
-Perplexity custom remote connectors require HTTPS. In some workspaces, admins must enable custom remote connectors before members can add them.
+Perplexity custom remote connectors require HTTPS. Availability may depend on your account or workspace settings.
 
-1. Add a custom remote connector with URL `https://api.flaim.app/mcp`, OAuth auth, and Streamable HTTP transport.
-2. Complete the OAuth consent screen when prompted.
+1. Open [Perplexity connector settings](https://www.perplexity.ai/account/connectors).
+2. Choose **Custom connector**, then choose **Remote**.
+3. Name it **Flaim Fantasy** and enter `https://api.flaim.app/mcp`.
+4. Choose **OAuth** for authentication and **Streamable HTTP** for transport.
+5. Accept the acknowledgement and choose **Add**.
+6. Open the Flaim Fantasy connector, complete authorization, and enable it.
+
+See [Perplexity's current custom remote connector instructions](https://www.perplexity.ai/help-center/en/articles/13915507-adding-custom-remote-connectors) if its interface changes.
 
 ### Other Compatible AI Platforms
 

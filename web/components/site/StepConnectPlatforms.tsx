@@ -281,7 +281,7 @@ export function StepConnectPlatforms({ className }: StepConnectPlatformsProps) {
         {/* ESPN Column */}
         <div className="p-4 border rounded-lg space-y-3">
           <div className="font-medium text-sm">
-            <Link href="/guide/espn" className="text-primary hover:underline">ESPN</Link>
+            <Link href="/docs/platforms" className="text-primary hover:underline">ESPN</Link>
           </div>
           <p className="text-xs text-muted-foreground">Chrome extension grabs credentials automatically.</p>
 
@@ -387,7 +387,7 @@ export function StepConnectPlatforms({ className }: StepConnectPlatformsProps) {
         {/* Yahoo Column */}
         <div className="p-4 border rounded-lg space-y-3">
           <div className="font-medium text-sm">
-            <Link href="/guide/yahoo" className="text-primary hover:underline">Yahoo</Link>
+            <Link href="/docs/platforms" className="text-primary hover:underline">Yahoo</Link>
           </div>
           <p className="text-xs text-muted-foreground">Sign in with Yahoo to auto-discover leagues.</p>
 
@@ -418,7 +418,7 @@ export function StepConnectPlatforms({ className }: StepConnectPlatformsProps) {
         {/* Sleeper Column */}
         <div className="p-4 border rounded-lg space-y-3">
           <div className="font-medium text-sm">
-            <Link href="/guide/sleeper" className="text-primary hover:underline">Sleeper</Link>
+            <Link href="/docs/platforms" className="text-primary hover:underline">Sleeper</Link>
           </div>
           <p className="text-xs text-muted-foreground">Enter your Sleeper username to auto-discover leagues.</p>
 

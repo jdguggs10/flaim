@@ -24,7 +24,7 @@ export function StepConnectAI({
                 3
               </div>
             ) : null}
-            <h3 className="font-semibold text-lg">Connect ChatGPT</h3>
+            <h3 className="font-semibold text-lg">Connect your AI app</h3>
           </div>
 
           <p className="mb-4 text-sm text-muted-foreground">
@@ -36,7 +36,7 @@ export function StepConnectAI({
 
       <Button asChild size="sm" className="w-full">
         <a href={CHATGPT_APP_URL} target="_blank" rel="noopener noreferrer">
-          Open in ChatGPT App Store
+          Open Flaim in ChatGPT
           <ExternalLink className="ml-2 h-4 w-4" />
         </a>
       </Button>

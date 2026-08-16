@@ -120,7 +120,9 @@ Notes:
 - The runner populates `demo_answer_cache` out of band on a schedule
 - Each refresh attempt logs a row in `demo_refresh_runs`
 - The website reads cached answers only; it never triggers refresh execution
-- The shared contract is the cache key format plus matching preset IDs and version constants
+- The legacy ESPN cache key is `public-demo-answer:{presetId}:{sport}:v7:v2`
+- Platform-aware targets use `public-demo-answer:{presetId}:{platform}:{sport}:v8:v3` plus matching platform, sport, prompt-version, and context-version columns
+- During the current transition, only ESPN baseball may fall back from a missing v8/v3 target row to its legacy v7/v2 row
 
 ### Scheduler And Health Scripts
 

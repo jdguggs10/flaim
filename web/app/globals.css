@@ -116,6 +116,133 @@
   }
 }
 
+.phone-demo-frame {
+  isolation: isolate;
+  background:
+    linear-gradient(145deg, hsl(220 5% 32%), hsl(220 8% 5%) 22%, hsl(220 8% 2%) 76%, hsl(220 5% 24%));
+  border: 1px solid hsl(220 5% 38%);
+  border-radius: 3.65rem;
+  box-shadow:
+    0 2px 0 hsl(0 0% 100% / 0.2) inset,
+    0 -2px 0 hsl(0 0% 0% / 0.72) inset,
+    0 42px 85px -38px hsl(220 35% 8% / 0.58),
+    0 18px 34px -22px hsl(220 35% 8% / 0.48);
+}
+
+.phone-demo-screen {
+  container-type: inline-size;
+  --phone-screen: hsl(0 0% 100%);
+  --phone-panel: hsl(0 0% 97%);
+  --phone-panel-strong: hsl(0 0% 92%);
+  --phone-border: hsl(0 0% 89%);
+  --phone-text: hsl(0 0% 8%);
+  --phone-muted: hsl(0 0% 44%);
+  --phone-user-bubble: hsl(0 0% 94%);
+  --phone-user-text: hsl(0 0% 8%);
+  --phone-accent: hsl(199 89% 33%);
+  --phone-accent-text: hsl(0 0% 100%);
+  --phone-mention: hsl(199 89% 33%);
+  --phone-type-body: clamp(0.875rem, 4.45cqw, 0.98rem);
+  --phone-type-secondary: clamp(0.75rem, 4.1cqw, 0.875rem);
+  --phone-type-caption: clamp(0.7rem, 3.8cqw, 0.8rem);
+  --phone-type-control: clamp(0.65rem, 3.55cqw, 0.75rem);
+  --phone-leading-body: clamp(1.3rem, 6.5cqw, 1.48rem);
+  background: var(--phone-screen);
+  border-color: hsl(220 5% 28%);
+  color: var(--phone-text);
+  font-family:
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue",
+    "Segoe UI", sans-serif;
+  font-kerning: normal;
+  font-optical-sizing: auto;
+  letter-spacing: -0.01em;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  box-shadow: 0 0 0 1px hsl(0 0% 0% / 0.82) inset;
+}
+
+.dark .phone-demo-screen {
+  --phone-screen: hsl(0 0% 4%);
+  --phone-panel: hsl(0 0% 10%);
+  --phone-panel-strong: hsl(0 0% 14%);
+  --phone-border: hsl(0 0% 22%);
+  --phone-text: hsl(0 0% 97%);
+  --phone-muted: hsl(0 0% 64%);
+  --phone-user-bubble: hsl(268 51% 34%);
+  --phone-user-text: hsl(0 0% 100%);
+  --phone-accent: hsl(268 58% 42%);
+  --phone-accent-text: hsl(0 0% 100%);
+  --phone-mention: hsl(268 92% 82%);
+}
+
+.phone-demo-sensor {
+  position: absolute;
+  z-index: 30;
+  top: 0.5rem;
+  left: 50%;
+  width: 5.35rem;
+  height: 1.65rem;
+  transform: translateX(-50%);
+  border: 1px solid hsl(220 5% 16%);
+  border-radius: 9999px;
+  background: hsl(0 0% 1%);
+  box-shadow: 0 1px 0 hsl(0 0% 100% / 0.06) inset;
+  pointer-events: none;
+}
+
+.phone-demo-side-button {
+  position: absolute;
+  z-index: -1;
+  width: 0.2rem;
+  border: 1px solid hsl(220 5% 20%);
+  background: hsl(220 6% 12%);
+  box-shadow: 0 1px 0 hsl(0 0% 100% / 0.12) inset;
+  pointer-events: none;
+}
+
+.phone-demo-side-button--mute {
+  top: 8.25rem;
+  left: -0.16rem;
+  height: 2.1rem;
+  border-radius: 0.18rem 0 0 0.18rem;
+}
+
+.phone-demo-side-button--volume-up,
+.phone-demo-side-button--volume-down {
+  left: -0.18rem;
+  height: 3.9rem;
+  border-radius: 0.2rem 0 0 0.2rem;
+}
+
+.phone-demo-side-button--volume-up {
+  top: 11.15rem;
+}
+
+.phone-demo-side-button--volume-down {
+  top: 15.55rem;
+}
+
+.phone-demo-side-button--power {
+  top: 12.2rem;
+  right: -0.18rem;
+  height: 5.25rem;
+  border-radius: 0 0.2rem 0.2rem 0;
+}
+
+@media (max-width: 420px) {
+  .phone-demo-frame {
+    border-radius: 3.25rem;
+  }
+
+  .phone-demo-screen {
+    border-radius: 2.78rem;
+  }
+
+  .phone-demo-side-button {
+    display: none;
+  }
+}
+
 @keyframes hero-dot-bounce {
   0%,
   80%,
@@ -151,38 +278,6 @@
   to {
     opacity: 1;
     transform: translateY(0);
-  }
-}
-
-@keyframes public-chat-ticker-marquee {
-  from {
-    transform: translate3d(0, 0, 0);
-  }
-
-  to {
-    transform: translate3d(-50%, 0, 0);
-  }
-}
-
-@keyframes public-chat-selected-prompt {
-  0% {
-    opacity: 0;
-    transform: translate3d(0, 16px, 0) scale(0.94);
-  }
-
-  100% {
-    opacity: 1;
-    transform: translate3d(0, 0, 0) scale(1);
-  }
-}
-
-@keyframes public-chat-selected-prompt-sheen {
-  0% {
-    transform: translate3d(-120%, 0, 0);
-  }
-
-  100% {
-    transform: translate3d(120%, 0, 0);
   }
 }
 
@@ -264,46 +359,68 @@
   }
 }
 
+/* Prepared-question ticker: the track holds the prompt list twice, so a
+   -50% translate lands exactly on the start of the second copy and the loop
+   is seamless. */
+@keyframes public-chat-ticker-marquee {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
 @layer utilities {
+  .public-chat-ticker {
+    overflow: hidden;
+  }
+
   .public-chat-ticker-track {
     animation-name: public-chat-ticker-marquee;
-    animation-duration: 34s;
+    animation-duration: var(--public-chat-ticker-duration, 48s);
     animation-timing-function: linear;
     animation-iteration-count: infinite;
     will-change: transform;
   }
 
-  .public-chat-ticker-track--top {
-    animation-duration: 34s;
-  }
-
-  .public-chat-ticker-track--bottom {
-    animation-duration: 40s;
-  }
-
-  .public-chat-ticker-track--paused {
+  /* Keyboard focus, an open demo guide, or a running answer hold the ticker
+     still. Pointer hover deliberately does not: the motion is slow enough to
+     click through, and a row that freezes under the cursor reads as broken. */
+  .public-chat-ticker:focus-within .public-chat-ticker-track,
+  .public-chat-ticker[data-paused="true"] .public-chat-ticker-track {
     animation-play-state: paused;
   }
 
-  .public-chat-selected-prompt {
-    animation: public-chat-selected-prompt 280ms cubic-bezier(0.16, 1, 0.3, 1);
+  .football-crossout-text::after {
+    position: absolute;
+    top: 52%;
+    right: -0.08em;
+    left: -0.08em;
+    height: 2px;
+    transform-origin: left center;
+    background: var(--background);
+    content: "";
   }
 
-  .public-chat-selected-prompt::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(
-      110deg,
-      transparent 0%,
-      rgba(255, 255, 255, 0.02) 36%,
-      rgba(255, 255, 255, 0.26) 50%,
-      rgba(255, 255, 255, 0.02) 64%,
-      transparent 100%
-    );
-    transform: translate3d(-120%, 0, 0);
-    animation: public-chat-selected-prompt-sheen 1.9s ease-out 120ms 1;
-    pointer-events: none;
+  .football-strike-ready .football-crossout-text::after {
+    transform: scaleX(0);
+  }
+
+  .football-strike-ready.football-strike-scroll-controlled
+    .football-crossout-text::after {
+    transform: scaleX(var(--strike-old-progress, 0));
+    animation: none;
+  }
+
+  .football-strike-style-fade-away .football-crossout-copy {
+    opacity: var(--strike-old-copy-opacity, 0.38);
+    filter: blur(var(--strike-old-blur, 0.7px));
+  }
+
+  .football-strike-style-fade-away .football-crossout-text::after {
+    height: 1px;
   }
 
   .public-chat-chip-active {
@@ -327,11 +444,6 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .public-chat-ticker-track,
-    .public-chat-ticker-track--top,
-    .public-chat-ticker-track--bottom,
-    .public-chat-selected-prompt,
-    .public-chat-selected-prompt::after,
     .public-chat-chip-active,
     .public-chat-send-running,
     .public-chat-idle-rock,
@@ -340,6 +452,54 @@
       animation: none !important;
       transform: none;
       opacity: 1;
+    }
+
+    /* Reduced motion: a still, finger-scrollable row of each question once. */
+    .public-chat-ticker {
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+
+    .public-chat-ticker::-webkit-scrollbar {
+      display: none;
+    }
+
+    .public-chat-ticker-track {
+      animation: none !important;
+      transform: none;
+    }
+
+    .public-chat-ticker-clone {
+      display: none;
+    }
+
+    .football-crossout-text::after {
+      animation: none !important;
+      transform: scaleX(1);
+    }
+
+    .football-strike-ready .football-crossout-text::after {
+      animation: none !important;
+      transform: scaleX(1) !important;
+    }
+
+    .football-strike-ready .football-crossout-copy {
+      opacity: 0.38 !important;
+      filter: none !important;
+    }
+
+    /* The education sheet's tailwindcss-animate enter/exit classes are applied
+       through data-[state] variants, so neutralize them via the Radix state
+       attribute on the dialog overlay and content. */
+    .phone-demo-screen [data-state="open"],
+    .phone-demo-screen [data-state="closed"] {
+      animation: none !important;
+    }
+
+    /* Suppress hover/active transform nudges (translate/scale) across the
+       phone demo tree without touching layout transforms on static chrome. */
+    .phone-demo-screen :is(:hover, :active) {
+      transform: none !important;
     }
   }
 }

@@ -26,7 +26,7 @@ export async function POST() {
     const lastSend = lastSendByUser.get(user.id);
     if (lastSend !== undefined && Date.now() - lastSend < SETUP_LINK_COOLDOWN_MS) {
       return NextResponse.json(
-        { error: 'rate_limited', error_description: 'Setup link was just sent — check your inbox' },
+        { error: 'rate_limited', error_description: 'Setup link was just sent. Check your inbox.' },
         { status: 429 }
       );
     }

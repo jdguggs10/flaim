@@ -1,44 +1,55 @@
 "use client";
-import { Card } from "@/components/ui/card";
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+  PhoneDemoFrame,
+  PhoneFlaimMark,
+} from "@/components/site/phone-demo-frame";
 import {
-  PUBLIC_CHAT_PRESETS,
+  type PublicChatDemoPlatform,
   type PublicChatDemoSport,
   type PublicChatPreset,
-  type PublicChatPresetId,
 } from "@/lib/public-chat";
+import {
+  INITIAL_PUBLIC_DEMO_STATE,
+  PUBLIC_DEMO_PLATFORM_LABELS,
+  buildPublicDemoCacheRequestUrl,
+  canStartPublicDemoRun,
+  loadPublicDemoCapabilities,
+  publicDemoReducer,
+  selectPublicDemoPlatformOptions,
+  selectPublicDemoRequestPlatform,
+  selectPublicDemoSportOptions,
+  selectPublicDemoVisiblePresets,
+  type PublicDemoAnswerMeta,
+} from "@/lib/public-demo-client";
 import { cn } from "@/lib/utils";
+import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { IconBallBaseball, IconBallAmericanFootball } from "@tabler/icons-react";
-import { ArrowUp, LoaderCircle, Plus } from "lucide-react";
-import Image from "next/image";
+import {
+  ArrowUp,
+  Copy,
+  LoaderCircle,
+  Menu,
+  MoreHorizontal,
+  Plus,
+  Share,
+  ThumbsUp,
+  Volume2,
+} from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
+import {
+  PhoneEducationPanel,
+  type PhoneEducationPanelId,
+} from "./phone-education-panel";
 import { PublicMessage } from "./public-message";
 import { PublicToolCall } from "./public-tool-call";
-
-type PublicRunStatus = "idle" | "running" | "completed" | "error";
-type PublicDemoAnswerMeta = {
-  generatedAt: string;
-  expiresAt: string;
-  staleAfter: string;
-  provider: string;
-  providerModel: string;
-  isExpired: boolean;
-  isStale: boolean;
-  status: string;
-  failureCode: string | null;
-  failureMessage: string | null;
-};
-
-interface PublicToolCallState {
-  id: string;
-  name?: string | null;
-  status: "in_progress" | "completed";
-}
 
 type PublicDemoToolTraceSummary = {
   byName?: Record<
@@ -63,32 +74,17 @@ const PUBLIC_PRE_TOOL_STEPS = [
 
 const PUBLIC_TOOL_CARD_IN_PROGRESS_MS = 650;
 const PUBLIC_TOOL_CARD_COMPLETED_PAUSE_MS = 220;
+/** Seconds of ticker travel per prepared question; ~45px/s at pill width. */
+const PUBLIC_PROMPT_TICKER_SECONDS_PER_PROMPT = 4;
 
 const PUBLIC_SPORT_COPY: Record<
   PublicChatDemoSport,
   { icon: React.ReactNode; label: string }
 > =
   {
-    baseball: { icon: <IconBallBaseball className="h-4 w-4" stroke={1.5} />, label: "baseball" },
-    football: { icon: <IconBallAmericanFootball className="h-4 w-4" stroke={1.5} />, label: "football" },
+    baseball: { icon: <IconBallBaseball className="h-5 w-5" stroke={1.5} />, label: "baseball" },
+    football: { icon: <IconBallAmericanFootball className="h-5 w-5" stroke={1.5} />, label: "football" },
   };
-
-function getEasternMonth(now = new Date()) {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/New_York",
-    year: "numeric",
-    month: "numeric",
-  }).formatToParts(now);
-
-  const month = Number(parts.find((part) => part.type === "month")?.value);
-
-  return { month };
-}
-
-function getDefaultPublicSport(now = new Date()): PublicChatDemoSport {
-  const { month } = getEasternMonth(now);
-  return month >= 2 && month <= 9 ? "baseball" : "football";
-}
 
 function formatRelativeUpdateTime(value: string) {
   const timestamp = new Date(value).getTime();
@@ -201,7 +197,7 @@ async function waitFor(ms: number, signal: AbortSignal) {
 
 const IDLE_ANIM_STYLES = ["rock", "bounce", "spin"] as const;
 
-function IdleState() {
+function IdleState({ platformLabel }: { platformLabel: string }) {
   const [styleIndex, setStyleIndex] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -212,59 +208,49 @@ function IdleState() {
     spin: "public-chat-idle-spin",
   }[animStyle];
 
+  // Checked inside the interval callback so toggling the OS setting takes
+  // effect without a remount.
+  const advanceUnlessReducedMotion = useCallback(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      return;
+    }
+    setStyleIndex((i) => i + 1);
+  }, []);
+
   // Auto-cycle every 6s
   useEffect(() => {
-    timerRef.current = setInterval(() => {
-      setStyleIndex((i) => i + 1);
-    }, 6000);
+    timerRef.current = setInterval(advanceUnlessReducedMotion, 6000);
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, []);
+  }, [advanceUnlessReducedMotion]);
 
   // Tap to advance + restart timer
   const handleTap = useCallback(() => {
     setStyleIndex((i) => i + 1);
     if (timerRef.current) clearInterval(timerRef.current);
-    timerRef.current = setInterval(() => {
-      setStyleIndex((i) => i + 1);
-    }, 6000);
-  }, []);
+    timerRef.current = setInterval(advanceUnlessReducedMotion, 6000);
+  }, [advanceUnlessReducedMotion]);
 
   return (
-    <div className="flex min-h-[12rem] flex-1 flex-col items-center justify-end pb-4">
-      <p className="text-3xl font-bold tracking-tight text-foreground/80 sm:text-4xl">
-        Pick something
+    <div className="flex min-h-[15rem] flex-1 flex-col items-center justify-center px-4 text-center">
+      <p className="text-[clamp(1.125rem,6.1cqw,1.3rem)] font-semibold leading-tight tracking-[-0.025em] text-[var(--phone-text)]">
+        Ask about the league
       </p>
-      <p className="mt-1 text-sm text-muted-foreground">
-        Real answers from Gerry&apos;s actual ESPN league
+      <p className="mt-2 max-w-[16rem] text-[length:var(--phone-type-secondary)] leading-[1.4] text-[var(--phone-muted)]">
+        Real answers from Gerry&apos;s actual {platformLabel} league
       </p>
       {/* Tap logo to cycle animation — easter egg */}
       <button
         onClick={handleTap}
-        className="mt-4 cursor-default"
+        className="mt-5 inline-flex h-11 w-11 cursor-default items-center justify-center rounded-full"
         aria-label="Toggle animation"
       >
-        <Image
-          key={`light-${styleIndex}`}
-          src="/flaim-mark-hero.png"
-          alt=""
-          width={32}
-          height={32}
-          className={`dark:hidden ${animClass}`}
-          aria-hidden
-        />
-        <Image
-          key={`dark-${styleIndex}`}
-          src="/flaim-mark-hero-dark.png"
-          alt=""
-          width={32}
-          height={32}
-          className={`hidden dark:block ${animClass}`}
-          aria-hidden
-        />
+        <span key={`mark-${styleIndex}`} className={cn("inline-flex", animClass)}>
+          <PhoneFlaimMark size={32} />
+        </span>
       </button>
-      <span className="mt-1 text-lg text-muted-foreground/60" aria-hidden>
+      <span className="mt-2 text-lg text-[var(--phone-muted)]" aria-hidden>
         ↓
       </span>
     </div>
@@ -280,55 +266,91 @@ export function PublicChatExperience({
   id?: string;
   followTranscript?: boolean;
 }) {
-  const [runStatus, setRunStatus] = useState<PublicRunStatus>("idle");
-  const [selectedPresetId, setSelectedPresetId] =
-    useState<PublicChatPresetId | null>(null);
-  const [assistantText, setAssistantText] = useState("");
-  const [toolCalls, setToolCalls] = useState<PublicToolCallState[]>([]);
-  const [answerMeta, setAnswerMeta] = useState<PublicDemoAnswerMeta | null>(
-    null,
+  const [state, dispatch] = useReducer(
+    publicDemoReducer,
+    INITIAL_PUBLIC_DEMO_STATE,
   );
-  const [error, setError] = useState<string | null>(null);
+  const {
+    answerMeta,
+    assistantText,
+    capabilitiesStatus,
+    error,
+    preToolStatusIndex,
+    runStatus,
+    selectedPresetId,
+    sportTransitionAnnouncement,
+    toolCalls,
+  } = state;
+  // Single generator for run tokens. Every async run and every target change
+  // takes the next value; the reducer drops actions whose token went stale.
+  const runTokenRef = useRef(0);
+  const [educationPanel, setEducationPanel] =
+    useState<PhoneEducationPanelId | null>(null);
+  const [phonePanelContainer, setPhonePanelContainer] =
+    useState<HTMLDivElement | null>(null);
+  const educationTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const openEducationPanel = useCallback(
+    (panel: PhoneEducationPanelId, trigger: HTMLButtonElement) => {
+      educationTriggerRef.current = trigger;
+      setEducationPanel(panel);
+    },
+    [],
+  );
   const transcriptScrollRef = useRef<HTMLDivElement | null>(null);
   const activeRunAbortControllerRef = useRef<AbortController | null>(null);
-  const autoRunPresetIdRef = useRef<PublicChatPresetId | null>(null);
-  const demoSport = useMemo<PublicChatDemoSport>(() => getDefaultPublicSport(), []);
-  const [preToolStatusIndex, setPreToolStatusIndex] = useState(0);
+  const autoRunPresetIdRef = useRef<string | null>(null);
+
+  const demoSport = state.sport;
+  // Prompts stay inert until capabilities answer: a run started while loading
+  // would issue a legacy, platform-less cache read that target-mode activation
+  // has to throw away. `capabilitiesLoading` is the reason for the current
+  // block, which is what the prompt controls expose to assistive tech.
+  const capabilitiesLoading = capabilitiesStatus !== "resolved";
+  const canRun = canStartPublicDemoRun(state);
+  const requestPlatform = selectPublicDemoRequestPlatform(state);
+  const platformOptions = selectPublicDemoPlatformOptions(state);
+  const sportOptions = selectPublicDemoSportOptions(state);
+  const visiblePresets = selectPublicDemoVisiblePresets(state);
+  const demoTarget = useMemo(
+    () => ({
+      platformLabel: PUBLIC_DEMO_PLATFORM_LABELS[state.platform],
+      sport: state.sport,
+    }),
+    [state.platform, state.sport],
+  );
 
   const selectedPreset = useMemo(
     () =>
       selectedPresetId
-        ? (PUBLIC_CHAT_PRESETS.find(
-            (preset) => preset.id === selectedPresetId,
-          ) ?? null)
+        ? (visiblePresets.find((preset) => preset.id === selectedPresetId) ??
+          null)
         : null,
-    [selectedPresetId],
+    [selectedPresetId, visiblePresets],
   );
   const hasAssistantText = assistantText.trim().length > 0;
   const showPreToolStatus =
     runStatus === "running" && !hasAssistantText && toolCalls.length === 0;
   const preToolStatusCopy =
     PUBLIC_PRE_TOOL_STEPS[preToolStatusIndex]?.label ?? "Thinking...";
-  const topRailPresets = useMemo(() => {
-    const presets = PUBLIC_CHAT_PRESETS.filter(
-      (preset) => preset.rail === "top",
-    );
-    return presets.length ? presets : PUBLIC_CHAT_PRESETS;
-  }, []);
-  const bottomRailPresets = useMemo(() => {
-    const presets = PUBLIC_CHAT_PRESETS.filter(
-      (preset) => preset.rail === "bottom",
-    );
-    return presets.length ? presets : PUBLIC_CHAT_PRESETS;
-  }, []);
+  // Single polite live region: pre-tool status while running, then the
+  // ready/freshness line on completion. Errors announce via role="alert".
+  const liveAnnouncement =
+    runStatus === "running"
+      ? preToolStatusCopy
+      : runStatus === "completed"
+        ? answerMeta
+          ? `Answer ready. ${formatRelativeUpdateTime(answerMeta.generatedAt)}`
+          : "Answer ready"
+        : "";
+  // Deep links wait for capabilities so the auto-run happens against the real
+  // target, and only run when the target still advertises that preset.
   const initialQueryPreset = useMemo(
     () =>
-      initialPresetId
-        ? (PUBLIC_CHAT_PRESETS.find(
-            (preset) => preset.id === initialPresetId,
-          ) ?? null)
+      initialPresetId && capabilitiesStatus === "resolved"
+        ? (visiblePresets.find((preset) => preset.id === initialPresetId) ??
+          null)
         : null,
-    [initialPresetId],
+    [capabilitiesStatus, initialPresetId, visiblePresets],
   );
 
   useEffect(() => {
@@ -337,9 +359,16 @@ export function PublicChatExperience({
     }
 
     const scrollContainer = transcriptScrollRef.current;
-    const nextBehavior: ScrollBehavior =
-      assistantText.trim().length > 0 || toolCalls.length > 0 ? "smooth" : "auto";
     const frame = window.requestAnimationFrame(() => {
+      // Checked at scroll time so an OS-level toggle applies immediately.
+      const prefersReducedMotion = window.matchMedia(
+        "(prefers-reduced-motion: reduce)",
+      ).matches;
+      const nextBehavior: ScrollBehavior =
+        !prefersReducedMotion &&
+        (assistantText.trim().length > 0 || toolCalls.length > 0)
+          ? "smooth"
+          : "auto";
       scrollContainer.scrollTo({
         top: scrollContainer.scrollHeight,
         behavior: nextBehavior,
@@ -357,33 +386,76 @@ export function PublicChatExperience({
     };
   }, []);
 
-  const handleRunPreset = useCallback(
-    async (preset: PublicChatPreset) => {
-      if (runStatus === "running") {
+  // Capabilities are progressive enhancement: any failure, an empty advertised
+  // set, or the load deadline leaves the phone in legacy ESPN baseball mode,
+  // which omits `platform` from cache reads. Because prompts stay inert until
+  // this settles, the deadline inside the loader is what guarantees it settles.
+  useEffect(() => {
+    const controller = new AbortController();
+
+    void (async () => {
+      const targets = await loadPublicDemoCapabilities({
+        signal: controller.signal,
+      });
+      // null means this component unmounted mid-load; nobody is listening.
+      if (targets === null) {
         return;
       }
 
-      setSelectedPresetId(preset.id);
-      setRunStatus("running");
-      setAssistantText("");
-      setToolCalls([]);
-      setAnswerMeta(null);
-      setError(null);
-      setPreToolStatusIndex(0);
+      if (targets.length === 0) {
+        dispatch({ type: "capabilities_unavailable" });
+        return;
+      }
+
+      dispatch({
+        type: "capabilities_resolved",
+        targets,
+        token: (runTokenRef.current += 1),
+      });
+    })();
+
+    return () => {
+      controller.abort();
+    };
+  }, []);
+
+  // Single place that stops in-flight work: any move out of "running" —
+  // including a reducer-initiated target reset — releases the request and its
+  // pacing timers. The run token already prevents a late response repainting
+  // the new target, so this only frees resources.
+  useEffect(() => {
+    if (runStatus !== "running") {
+      activeRunAbortControllerRef.current?.abort();
+    }
+  }, [runStatus]);
+
+  const handleRunPreset = useCallback(
+    async (preset: PublicChatPreset) => {
+      if (!canRun) {
+        return;
+      }
+
+      // Every dispatch below carries this token; the reducer drops all of them
+      // once a newer run or a target change has taken over.
+      const token = (runTokenRef.current += 1);
+      dispatch({ type: "run_started", presetId: preset.id, token });
       activeRunAbortControllerRef.current?.abort();
       const abortController = new AbortController();
       activeRunAbortControllerRef.current = abortController;
 
       try {
-        const query = new URLSearchParams({
-          presetId: preset.id,
-          sport: demoSport,
-        });
-        const response = await fetch(`/api/public-chat/cache?${query.toString()}`, {
-          method: "GET",
-          cache: "no-store",
-          signal: abortController.signal,
-        });
+        const response = await fetch(
+          buildPublicDemoCacheRequestUrl({
+            presetId: preset.id,
+            sport: demoSport,
+            platform: requestPlatform,
+          }),
+          {
+            method: "GET",
+            cache: "no-store",
+            signal: abortController.signal,
+          },
+        );
 
         if (!response.ok) {
           let message = `${response.status} ${response.statusText}`;
@@ -442,7 +514,7 @@ export function PublicChatExperience({
         );
 
         for (let index = 0; index < PUBLIC_PRE_TOOL_STEPS.length; index += 1) {
-          setPreToolStatusIndex(index);
+          dispatch({ type: "pre_tool_step_advanced", index, token });
           await waitFor(PUBLIC_PRE_TOOL_STEPS[index].durationMs, abortController.signal);
         }
 
@@ -450,31 +522,29 @@ export function PublicChatExperience({
           const toolName = simulatedToolNames[index];
           const toolCallId = `${toolName}-${index}`;
 
-          setToolCalls((current) => [
-            ...current,
-            {
+          dispatch({
+            type: "tool_call_started",
+            toolCall: {
               id: toolCallId,
               name: toolName,
               status: "in_progress",
             },
-          ]);
+            token,
+          });
           await waitFor(PUBLIC_TOOL_CARD_IN_PROGRESS_MS, abortController.signal);
-          setToolCalls((current) =>
-            current.map((toolCall) =>
-              toolCall.id === toolCallId
-                ? { ...toolCall, status: "completed" }
-                : toolCall,
-            ),
-          );
+          dispatch({ type: "tool_call_completed", toolCallId, token });
           await waitFor(PUBLIC_TOOL_CARD_COMPLETED_PAUSE_MS, abortController.signal);
         }
 
-        setAnswerMeta(nextAnswerMeta);
-        setAssistantText(payload.answer.text);
-        setRunStatus("completed");
+        dispatch({
+          type: "run_completed",
+          assistantText: payload.answer.text,
+          answerMeta: nextAnswerMeta,
+          token,
+        });
       } catch (runError) {
         if (abortController.signal.aborted) {
-          setRunStatus((current) => (current === "running" ? "idle" : current));
+          dispatch({ type: "run_aborted", token });
           return;
         }
 
@@ -482,16 +552,34 @@ export function PublicChatExperience({
           runError instanceof Error
             ? runError.message
             : "Unable to run the public chat demo.";
-        setError(message);
-        setRunStatus("error");
+        dispatch({ type: "run_failed", message, token });
       } finally {
         if (activeRunAbortControllerRef.current === abortController) {
           activeRunAbortControllerRef.current = null;
         }
       }
     },
-    [demoSport, runStatus],
+    [canRun, demoSport, requestPlatform],
   );
+
+  const handleSelectPlatform = useCallback(
+    (platform: PublicChatDemoPlatform) => {
+      dispatch({
+        type: "platform_selected",
+        platform,
+        token: (runTokenRef.current += 1),
+      });
+    },
+    [],
+  );
+
+  const handleSelectSport = useCallback((sport: PublicChatDemoSport) => {
+    dispatch({
+      type: "sport_selected",
+      sport,
+      token: (runTokenRef.current += 1),
+    });
+  }, []);
 
   useEffect(() => {
     if (!initialQueryPreset) {
@@ -502,58 +590,86 @@ export function PublicChatExperience({
       return;
     }
 
+    // Claim the deep link only when the run can actually start, so a blocked
+    // attempt retries on the next render instead of being silently consumed.
+    if (!canRun) {
+      return;
+    }
+
     autoRunPresetIdRef.current = initialQueryPreset.id;
     void handleRunPreset(initialQueryPreset);
-  }, [handleRunPreset, initialQueryPreset]);
+  }, [canRun, handleRunPreset, initialQueryPreset]);
 
-  const renderPromptTicker = (
-    presets: readonly PublicChatPreset[],
-    speedClassName: string,
-  ) => {
-    const repeatedPresets = [...presets, ...presets];
+  // The prepared questions scroll continuously like a ticker. The track holds
+  // the list twice so the CSS loop is seamless; the second copy is decorative
+  // (hidden from assistive tech, not focusable, and removed entirely under
+  // reduced motion, where the row becomes a still, scrollable list instead).
+  const renderPromptTicker = (presets: readonly PublicChatPreset[]) => {
+    const tickerPaused = runStatus === "running" || educationPanel !== null;
+    const tickerDurationSeconds = Math.max(
+      12,
+      presets.length * PUBLIC_PROMPT_TICKER_SECONDS_PER_PROMPT,
+    );
 
-    return (
-      <div className="-mx-1 overflow-hidden px-1">
-        <div
+    const renderPill = (preset: PublicChatPreset, clone: boolean) => {
+      const isSelected = preset.id === selectedPresetId;
+
+      return (
+        <button
+          key={clone ? `${preset.id}-clone` : preset.id}
+          type="button"
+          onClick={() => {
+            // Guard instead of `disabled` so the clicked pill keeps
+            // keyboard focus when a run starts, and so a pill pressed
+            // while capabilities load stays focusable rather than
+            // dropping focus to the body mid-load.
+            if (!canRun) {
+              return;
+            }
+            void handleRunPreset(preset);
+          }}
+          aria-disabled={canRun ? undefined : true}
+          aria-pressed={clone ? undefined : isSelected}
+          aria-hidden={clone || undefined}
+          tabIndex={clone ? -1 : undefined}
           className={cn(
-            "public-chat-ticker-track flex w-max gap-2 py-0.5 sm:gap-2.5",
-            speedClassName,
-            runStatus === "running" ? "public-chat-ticker-track--paused" : "",
+            "group relative min-h-11 w-max overflow-hidden rounded-full border px-3 py-2 text-left transition-colors duration-200",
+            clone ? "public-chat-ticker-clone" : "",
+            isSelected
+              ? "border-[var(--phone-accent)] bg-[var(--phone-user-bubble)] text-[var(--phone-user-text)]"
+              : "border-[var(--phone-border)] bg-[var(--phone-panel)] text-[var(--phone-text)] hover:bg-[var(--phone-panel-strong)]",
+            !canRun && !isSelected ? "cursor-not-allowed opacity-65" : "",
           )}
         >
-          {repeatedPresets.map((preset, index) => {
-            const isSelected = preset.id === selectedPresetId;
+          <h3 className="whitespace-nowrap text-[length:var(--phone-type-caption)] font-medium leading-[1.25] tracking-[-0.015em] text-[var(--phone-text)]">
+            {preset.title}
+          </h3>
+        </button>
+      );
+    };
 
-            return (
-              <button
-                key={`${preset.id}-${index}`}
-                type="button"
-                onClick={() => void handleRunPreset(preset)}
-                disabled={runStatus === "running"}
-                aria-pressed={isSelected}
-                className={cn(
-                  "group relative w-max max-w-none overflow-hidden rounded-full border px-3 py-2 text-left transition-all duration-200 sm:px-4",
-                  isSelected
-                    ? "border-primary/40 bg-primary/10 text-primary"
-                    : "border-border/70 bg-background text-foreground hover:bg-muted",
-                  runStatus === "running" && !isSelected
-                    ? "cursor-not-allowed opacity-65"
-                    : "",
-                )}
-              >
-                <div className="relative">
-                  <h3
-                    className={cn(
-                      "whitespace-nowrap text-[0.76rem] font-medium leading-none tracking-tight sm:text-[0.84rem]",
-                      isSelected ? "text-primary" : "text-foreground",
-                    )}
-                  >
-                    {preset.title}
-                  </h3>
-                </div>
-              </button>
-            );
-          })}
+    return (
+      <div
+        role="region"
+        aria-busy={capabilitiesLoading || undefined}
+        aria-label={
+          capabilitiesLoading
+            ? "Loading prepared demo questions."
+            : "Prepared demo questions. The list scrolls on its own and pauses while a question has keyboard focus."
+        }
+        data-paused={tickerPaused ? "true" : undefined}
+        className="public-chat-ticker -mx-1 px-1 pb-1"
+      >
+        <div
+          className="public-chat-ticker-track flex w-max gap-2 py-0.5"
+          style={
+            {
+              "--public-chat-ticker-duration": `${tickerDurationSeconds}s`,
+            } as React.CSSProperties
+          }
+        >
+          {presets.map((preset) => renderPill(preset, false))}
+          {presets.map((preset) => renderPill(preset, true))}
         </div>
       </div>
     );
@@ -567,55 +683,101 @@ export function PublicChatExperience({
   return (
     <section
       id={id}
-      className="relative bg-background px-4 pb-12 sm:px-6 lg:px-8 lg:pb-16"
+      className="relative scroll-mt-24 bg-background px-4 pb-12 sm:px-6 lg:px-8 lg:pb-16"
     >
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_bottom,transparent_0,transparent_23px,var(--border)_24px)] bg-[length:100%_24px] opacity-20" />
 
-      <div className="relative mx-auto max-w-2xl">
-        <Card className="overflow-hidden rounded-[2rem] border-border/70 bg-card/95 p-0 shadow-[0_30px_90px_-42px_rgba(15,23,42,0.45)] backdrop-blur dark:shadow-[0_30px_90px_-42px_rgba(0,0,0,0.82)] sm:rounded-[2.3rem]">
-          <div className="border-b border-border/70 bg-card px-4 py-3 sm:px-5">
-            <div className="flex items-center justify-between gap-3">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
-                {process.env.NEXT_PUBLIC_VERCEL_ENV === "preview" ? "Preview" : "Live demo"}
-              </div>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <button
-                    type="button"
-                    aria-label="Show demo context"
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-border/70 bg-background text-sm text-foreground transition-colors hover:bg-muted"
-                  >
-                    <span className="leading-none" aria-hidden="true">
-                      {PUBLIC_SPORT_COPY[demoSport].icon}
-                    </span>
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent
-                  align="end"
-                  className="w-[18.5rem] rounded-2xl border-border p-4 text-sm leading-6"
-                >
-                  <p className="text-foreground">
-                    These answers refresh from Gerry&apos;s actual ESPN{" "}
-                    {PUBLIC_SPORT_COPY[demoSport].label} league.
-                  </p>
-                  <p className="mt-2 text-muted-foreground">
-                    Flaim supports ESPN and Yahoo across football, baseball,
-                    basketball, and hockey, plus Sleeper for football and
-                    basketball.
-                  </p>
-                </PopoverContent>
-              </Popover>
-            </div>
-          </div>
+      <div className="relative mx-auto max-w-5xl">
+        <PhoneDemoFrame label="Interactive phone preview of Flaim Fantasy in ChatGPT">
+          <DialogPrimitive.Root
+            open={educationPanel !== null}
+            onOpenChange={(open) => {
+              if (!open) {
+                setEducationPanel(null);
+              }
+            }}
+          >
+          <div
+            ref={setPhonePanelContainer}
+            className="relative flex h-full min-h-0 flex-col bg-[var(--phone-screen)] text-[var(--phone-text)]"
+          >
+            <div className="grid grid-cols-[2.75rem_minmax(0,1fr)_2.75rem] items-center gap-1.5 px-3 pb-3 pt-11 min-[350px]:gap-2 min-[350px]:px-4">
+              <button
+                type="button"
+                onClick={(event) =>
+                  openEducationPanel("about", event.currentTarget)
+                }
+                aria-label="About this demo"
+                aria-haspopup="dialog"
+                aria-expanded={educationPanel === "about"}
+                className="inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full border border-[var(--phone-border)] bg-[var(--phone-panel)] text-[var(--phone-text)] transition-[background-color,box-shadow,transform] hover:-translate-y-0.5 hover:bg-[var(--phone-panel-strong)] hover:shadow-sm active:translate-y-0 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--phone-accent)]"
+              >
+                <Menu className="h-5 w-5" />
+              </button>
 
-          <div className="bg-[radial-gradient(circle_at_top,rgba(59,130,246,0.08),transparent_40%),linear-gradient(to_bottom,rgba(248,250,252,0.98),rgba(241,245,249,0.78))] dark:bg-[radial-gradient(circle_at_top,rgba(96,165,250,0.16),transparent_42%),linear-gradient(to_bottom,rgba(17,24,39,0.98),rgba(3,7,18,0.94))]">
+              <div
+                className="inline-flex min-w-0 items-center overflow-hidden rounded-full border border-[var(--phone-border)] bg-[var(--phone-panel)] p-0.5 text-[length:var(--phone-type-control)] font-medium"
+                role="group"
+                aria-label="Demo platform"
+              >
+                {platformOptions.map((option) => (
+                  <button
+                    key={option.platform}
+                    type="button"
+                    disabled={!option.available}
+                    aria-pressed={option.selected}
+                    aria-label={
+                      option.available
+                        ? `${option.label} demo`
+                        : `${option.label} demo coming soon`
+                    }
+                    onClick={() => handleSelectPlatform(option.platform)}
+                    className={cn(
+                      "h-11 min-w-0 flex-1 rounded-full px-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--phone-accent)]",
+                      option.selected
+                        ? "bg-[var(--phone-panel-strong)] text-[var(--phone-text)]"
+                        : "text-[var(--phone-muted)]",
+                      option.available
+                        ? "cursor-pointer"
+                        : "cursor-not-allowed opacity-45",
+                    )}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+
+              <button
+                type="button"
+                onClick={(event) =>
+                  openEducationPanel("sport", event.currentTarget)
+                }
+                aria-label={`Demo sport: ${PUBLIC_SPORT_COPY[demoSport].label}`}
+                aria-haspopup="dialog"
+                aria-expanded={educationPanel === "sport"}
+                className="inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full border border-[var(--phone-border)] bg-[var(--phone-panel)] text-[var(--phone-text)] transition-[background-color,box-shadow,transform] hover:-translate-y-0.5 hover:bg-[var(--phone-panel-strong)] hover:shadow-sm active:translate-y-0 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--phone-accent)]"
+              >
+                {PUBLIC_SPORT_COPY[demoSport].icon}
+              </button>
+            </div>
+
+            <div role="status" aria-live="polite" className="sr-only">
+              {liveAnnouncement}
+            </div>
+
+            {/* Separate region so an automatic sport switch is announced
+                without competing with the run-status line above. */}
+            <div role="status" aria-live="polite" className="sr-only">
+              {sportTransitionAnnouncement}
+            </div>
+
             <div
               ref={transcriptScrollRef}
-              className="h-[24rem] overflow-y-auto overscroll-contain px-3 py-4 sm:h-[32rem] sm:px-4 sm:py-5"
+              className="min-h-0 flex-1 overflow-y-auto overscroll-auto px-4 pb-5 pt-2"
             >
-              <div className="mx-auto flex max-w-2xl flex-col gap-4">
+              <div className="mx-auto flex flex-col gap-5">
                 {!selectedPreset && runStatus === "idle" ? (
-                  <IdleState />
+                  <IdleState platformLabel={demoTarget.platformLabel} />
                 ) : null}
 
                 {selectedPreset ? (
@@ -625,8 +787,15 @@ export function PublicChatExperience({
                   />
                 ) : null}
 
+                {selectedPreset ? (
+                  <div className="flex items-center gap-2 pt-1 text-[length:var(--phone-type-secondary)] font-medium leading-5 text-[var(--phone-muted)]">
+                    <PhoneFlaimMark />
+                    <span>Flaim Fantasy</span>
+                  </div>
+                ) : null}
+
                 {showPreToolStatus ? (
-                  <div className="flex items-center gap-2 px-1 text-sm text-muted-foreground">
+                  <div className="flex items-center gap-2 text-[length:var(--phone-type-secondary)] leading-5 text-[var(--phone-muted)]">
                     <LoaderCircle className="h-4 w-4 animate-spin" />
                     <span>{preToolStatusCopy}</span>
                   </div>
@@ -648,8 +817,21 @@ export function PublicChatExperience({
                   <PublicMessage role="assistant" text={assistantText} />
                 ) : null}
 
+                {assistantText && runStatus === "completed" ? (
+                  <div
+                    className="flex items-center gap-3 text-[var(--phone-muted)]"
+                    aria-hidden="true"
+                  >
+                    <Copy className="h-4 w-4" />
+                    <Volume2 className="h-4 w-4" />
+                    <ThumbsUp className="h-4 w-4" />
+                    <Share className="h-4 w-4" />
+                    <MoreHorizontal className="h-4 w-4" />
+                  </div>
+                ) : null}
+
                 {runStatus === "completed" ? (
-                  <div className="space-y-2 px-1 pt-2 text-center text-sm text-muted-foreground">
+                  <div className="space-y-2 pt-2 text-center text-[length:var(--phone-type-caption)] leading-[1.45] text-[var(--phone-muted)]">
                     {answerMeta ? (
                       <div>
                         {formatRelativeUpdateTime(answerMeta.generatedAt)}
@@ -675,7 +857,7 @@ export function PublicChatExperience({
                       That&apos;s Gerry&apos;s league.{" "}
                       <Link
                         href="/leagues"
-                        className="text-primary hover:underline"
+                        className="font-medium text-[var(--phone-text)] underline underline-offset-4"
                       >
                         Want to connect yours?
                       </Link>
@@ -684,7 +866,10 @@ export function PublicChatExperience({
                 ) : null}
 
                 {runStatus === "error" ? (
-                  <div className="rounded-[1.75rem] border border-destructive/30 bg-destructive/5 px-5 py-4 text-sm text-destructive">
+                  <div
+                    role="alert"
+                    className="rounded-[1.4rem] border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+                  >
                     <div className="font-semibold">Demo answer unavailable</div>
                     <p className="mt-2 leading-6">
                       {error || "Unknown public chat error."}
@@ -694,123 +879,81 @@ export function PublicChatExperience({
               </div>
             </div>
 
-            <div className="border-t border-border/70 bg-card/95 p-3 sm:p-4">
-              <div className="mx-auto max-w-2xl">
-                <div className="rounded-[1.9rem] border border-border bg-background p-3 shadow-[0_12px_30px_-24px_rgba(15,23,42,0.5)] sm:rounded-[2.2rem] sm:p-4">
-                  <div className="space-y-2">
-                    {renderPromptTicker(
-                      topRailPresets,
-                      "public-chat-ticker-track--top",
-                    )}
-                    {renderPromptTicker(
-                      bottomRailPresets,
-                      "public-chat-ticker-track--bottom",
-                    )}
-                  </div>
+            <div className="border-t border-[var(--phone-border)] bg-[var(--phone-screen)] px-3 pb-4 pt-3">
+              {renderPromptTicker(visiblePresets)}
 
-                  <div className="mt-3 flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2.5">
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <button
-                            type="button"
-                            aria-label="Show how Flaim appears in AI app drawers"
-                            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-border bg-background text-muted-foreground transition-colors hover:bg-muted"
-                          >
-                            <Plus className="h-4.5 w-4.5" />
-                          </button>
-                        </PopoverTrigger>
-                        <PopoverContent
-                          align="start"
-                          side="top"
-                          className="w-[18rem] rounded-2xl border-border p-4 text-sm leading-6"
-                        >
-                          <p className="text-foreground">
-                            Adding Flaim Fantasy to ChatGPT puts it in this
-                            drawer.
-                          </p>
-                        </PopoverContent>
-                      </Popover>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <button
-                            type="button"
-                            className={cn(
-                              "inline-flex h-10 items-center gap-2 rounded-full border px-3.5 text-sm font-medium transition-colors",
-                              chipActive
-                                ? "public-chat-chip-active border-primary/30 bg-primary/10 text-primary"
-                                : "border-border bg-background text-foreground",
-                            )}
-                          >
-                            <Image
-                              src="/flaim-mark-hero.png"
-                              alt=""
-                              width={16}
-                              height={16}
-                              className="dark:hidden"
-                            />
-                            <Image
-                              src="/flaim-mark-hero-dark.png"
-                              alt=""
-                              width={16}
-                              height={16}
-                              className="hidden dark:block"
-                            />
-                            <span>Flaim Fantasy</span>
-                          </button>
-                        </PopoverTrigger>
-                        <PopoverContent
-                          align="start"
-                          side="top"
-                          className="w-[19rem] rounded-2xl border-border p-4 text-sm leading-6"
-                        >
-                          <p className="text-foreground">
-                            Flaim should activate automatically. If it
-                            doesn&apos;t, click it in your drawer to get this
-                            badge here.
-                          </p>
-                        </PopoverContent>
-                      </Popover>
-                    </div>
+              {/* Each composer control opens a short "Inside ChatGPT" sheet:
+                  a title and a sentence or two, no numbered steps. */}
+              <div className="mx-2 mb-1 mt-2 flex items-center gap-1.5 rounded-[1.75rem] border border-[var(--phone-border)] bg-[var(--phone-panel)] p-1.5">
+                <button
+                  type="button"
+                  onClick={(event) =>
+                    openEducationPanel("drawer", event.currentTarget)
+                  }
+                  aria-label="How to add Flaim in ChatGPT"
+                  aria-haspopup="dialog"
+                  aria-expanded={educationPanel === "drawer"}
+                  className="inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full text-[var(--phone-text)] transition-[background-color,transform] hover:-translate-y-0.5 hover:bg-[var(--phone-panel-strong)] active:translate-y-0 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--phone-accent)]"
+                >
+                  <Plus className="h-5 w-5" />
+                </button>
 
-                    <div className="flex items-center">
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <button
-                            type="button"
-                            className={cn(
-                              "inline-flex h-11 w-11 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm transition-transform",
-                              runStatus === "running"
-                                ? "public-chat-send-running"
-                                : "",
-                            )}
-                            aria-label="Run selected prompt"
-                          >
-                            {runStatus === "running" ? (
-                              <LoaderCircle className="h-4.5 w-4.5 animate-spin" />
-                            ) : (
-                              <ArrowUp className="h-4.5 w-4.5" />
-                            )}
-                          </button>
-                        </PopoverTrigger>
-                        <PopoverContent
-                          align="end"
-                          side="top"
-                          className="w-[19rem] rounded-2xl border-border p-4 text-sm leading-6"
-                        >
-                          <p className="text-foreground">
-                            This demo shows recently refreshed answers from
-                            Gerry&apos;s actual league.
-                          </p>
-                        </PopoverContent>
-                      </Popover>
-                    </div>
-                  </div>
-                </div>
+                <span className="min-w-0 flex-1 truncate text-[length:var(--phone-type-body)] leading-5 text-[var(--phone-muted)]">
+                  {selectedPreset ? "Follow up" : "Ask Chat…"}
+                </span>
+
+                <button
+                  type="button"
+                  onClick={(event) =>
+                    openEducationPanel("activation", event.currentTarget)
+                  }
+                  aria-label="What the Flaim badge means"
+                  aria-haspopup="dialog"
+                  aria-expanded={educationPanel === "activation"}
+                  className={cn(
+                    "inline-flex h-11 shrink-0 cursor-pointer items-center gap-1.5 rounded-full border px-2.5 text-[length:var(--phone-type-caption)] font-medium transition-[box-shadow,transform] hover:-translate-y-0.5 hover:shadow-sm active:translate-y-0 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--phone-accent)]",
+                    chipActive
+                      ? "public-chat-chip-active border-[var(--phone-accent)] bg-[var(--phone-accent)] text-[var(--phone-accent-text)]"
+                      : "border-[var(--phone-border)] bg-[var(--phone-panel-strong)] text-[var(--phone-text)]",
+                  )}
+                >
+                  <PhoneFlaimMark size={16} />
+                  <span className="hidden min-[370px]:inline">Flaim</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={(event) =>
+                    openEducationPanel("ask", event.currentTarget)
+                  }
+                  className={cn(
+                    "inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full bg-[var(--phone-text)] text-[var(--phone-screen)] transition-[box-shadow,transform] hover:-translate-y-0.5 hover:shadow-md active:translate-y-0 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--phone-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--phone-screen)]",
+                    runStatus === "running" ? "public-chat-send-running" : "",
+                  )}
+                  aria-label="How to ask in the demo"
+                  aria-haspopup="dialog"
+                  aria-expanded={educationPanel === "ask"}
+                >
+                  {runStatus === "running" ? (
+                    <LoaderCircle className="h-4.5 w-4.5 animate-spin" />
+                  ) : (
+                    <ArrowUp className="h-4.5 w-4.5" />
+                  )}
+                </button>
               </div>
             </div>
           </div>
-        </Card>
+          <PhoneEducationPanel
+            container={phonePanelContainer}
+            demoTarget={demoTarget}
+            sportOptions={sportOptions}
+            onSelectSport={handleSelectSport}
+            panel={educationPanel}
+            returnFocusRef={educationTriggerRef}
+          />
+          </DialogPrimitive.Root>
+        </PhoneDemoFrame>
+
       </div>
     </section>
   );

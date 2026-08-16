@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   getCachedPublicDemoAnswer: vi.fn(),
   getLatestPublicDemoRefreshFailure: vi.fn(),
+  evaluatePublicDemoCapabilities: vi.fn(),
 }));
 
 vi.mock("@/lib/server/public-demo-answer-cache", () => ({
@@ -11,21 +12,40 @@ vi.mock("@/lib/server/public-demo-answer-cache", () => ({
   getLatestPublicDemoRefreshFailure: mocks.getLatestPublicDemoRefreshFailure,
 }));
 
+vi.mock("@/lib/server/public-demo-capabilities", () => ({
+  evaluatePublicDemoCapabilities: mocks.evaluatePublicDemoCapabilities,
+}));
+
 import { GET } from "../../../app/api/public-chat/cache/route";
+import { PUBLIC_CHAT_TARGET_PRESET_IDS } from "../../public-chat";
 import {
   sanitizePublicDemoRefreshFailure,
   sanitizePublicDemoToolTraceSummary,
 } from "../public-demo-cache-response";
 
-function publicCacheRequest() {
-  return new NextRequest(
-    "https://flaim.app/api/public-chat/cache?presetId=wire-watch&sport=baseball",
-  );
+function publicCacheRequest(query = "presetId=wire-watch&sport=baseball") {
+  return new NextRequest(`https://flaim.app/api/public-chat/cache?${query}`);
+}
+
+// Imported rather than re-literaled so the fixture cannot drift from the
+// canonical eight-target preset list.
+const TARGET_PRESET_IDS = PUBLIC_CHAT_TARGET_PRESET_IDS;
+
+function selectableTarget(
+  platform: string,
+  sport: string,
+  freshness = "fresh",
+) {
+  return { platform, sport, presetIds: TARGET_PRESET_IDS, freshness };
 }
 
 beforeEach(() => {
   mocks.getCachedPublicDemoAnswer.mockReset();
   mocks.getLatestPublicDemoRefreshFailure.mockReset();
+  mocks.evaluatePublicDemoCapabilities.mockReset();
+  // Platform-bearing tests override this; the empty set is the fail-closed
+  // default (no target is live).
+  mocks.evaluatePublicDemoCapabilities.mockResolvedValue([]);
 });
 
 describe("sanitizePublicDemoToolTraceSummary", () => {
@@ -292,5 +312,294 @@ describe("GET /api/public-chat/cache", () => {
     expect(serializedBody).not.toContain("antigravity-sticky");
     expect(serializedBody).not.toContain("private-provider-model");
     expect(serializedBody).not.toContain("2026-06-06T12:01:00.000Z");
+  });
+
+  it("keeps the legacy reader behavior when no platform param is sent", async () => {
+    mocks.getCachedPublicDemoAnswer.mockResolvedValue(null);
+    mocks.getLatestPublicDemoRefreshFailure.mockResolvedValue(null);
+
+    const response = await GET(publicCacheRequest());
+
+    expect(response.status).toBe(200);
+    expect(mocks.getCachedPublicDemoAnswer).toHaveBeenCalledTimes(1);
+    expect(
+      mocks.getCachedPublicDemoAnswer.mock.calls[0][0].platform,
+    ).toBeUndefined();
+    expect(
+      mocks.getLatestPublicDemoRefreshFailure.mock.calls[0][0].platform,
+    ).toBeUndefined();
+    // The legacy path must never run the live capabilities evaluation.
+    expect(mocks.evaluatePublicDemoCapabilities).not.toHaveBeenCalled();
+  });
+
+  it("serves legacy presets outside the eight-target set when no platform is sent", async () => {
+    mocks.getCachedPublicDemoAnswer.mockResolvedValue(null);
+    mocks.getLatestPublicDemoRefreshFailure.mockResolvedValue(null);
+
+    const response = await GET(
+      publicCacheRequest("presetId=trade-grades&sport=baseball"),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.presetId).toBe("trade-grades");
+    expect(mocks.evaluatePublicDemoCapabilities).not.toHaveBeenCalled();
+  });
+
+  it("passes a live selectable platform through to the reader and failure lookup", async () => {
+    mocks.evaluatePublicDemoCapabilities.mockResolvedValue([
+      selectableTarget("espn", "baseball"),
+    ]);
+    mocks.getCachedPublicDemoAnswer.mockResolvedValue(null);
+    mocks.getLatestPublicDemoRefreshFailure.mockResolvedValue(null);
+
+    const response = await GET(
+      publicCacheRequest("presetId=wire-watch&sport=baseball&platform=espn"),
+    );
+
+    expect(response.status).toBe(200);
+    expect(mocks.getCachedPublicDemoAnswer).toHaveBeenCalledWith({
+      presetId: "wire-watch",
+      sport: "baseball",
+      platform: "espn",
+    });
+    expect(mocks.getLatestPublicDemoRefreshFailure).toHaveBeenCalledWith({
+      presetId: "wire-watch",
+      sport: "baseball",
+      platform: "espn",
+    });
+  });
+
+  it("rejects an unknown platform value without echoing it", async () => {
+    const response = await GET(
+      publicCacheRequest("presetId=wire-watch&sport=baseball&platform=vibes"),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body).toEqual({ error: "Unsupported platform for the public demo" });
+    expect(JSON.stringify(body)).not.toContain("vibes");
+    expect(mocks.evaluatePublicDemoCapabilities).not.toHaveBeenCalled();
+    expect(mocks.getCachedPublicDemoAnswer).not.toHaveBeenCalled();
+    expect(mocks.getLatestPublicDemoRefreshFailure).not.toHaveBeenCalled();
+  });
+
+  it("rejects a platform/sport combo outside the target matrix", async () => {
+    const response = await GET(
+      publicCacheRequest("presetId=wire-watch&sport=baseball&platform=sleeper"),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body).toEqual({ error: "Unsupported platform for the public demo" });
+    expect(mocks.evaluatePublicDemoCapabilities).not.toHaveBeenCalled();
+    expect(mocks.getCachedPublicDemoAnswer).not.toHaveBeenCalled();
+    expect(mocks.getLatestPublicDemoRefreshFailure).not.toHaveBeenCalled();
+  });
+
+  it("rejects a platform-bearing request for a preset outside the eight-target set", async () => {
+    const response = await GET(
+      publicCacheRequest("presetId=trade-grades&sport=baseball&platform=espn"),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body).toEqual({ error: "Unknown public chat preset" });
+    expect(mocks.evaluatePublicDemoCapabilities).not.toHaveBeenCalled();
+    expect(mocks.getCachedPublicDemoAnswer).not.toHaveBeenCalled();
+  });
+
+  it("rejects a matrix combo that is not live-selectable (disabled or env-unset)", async () => {
+    // The evaluator returns an empty selectable set for disabled targets and
+    // for unset Supabase env alike; both must be indistinguishable from an
+    // unknown combo.
+    mocks.evaluatePublicDemoCapabilities.mockResolvedValue([]);
+
+    const response = await GET(
+      publicCacheRequest("presetId=wire-watch&sport=baseball&platform=espn"),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body).toEqual({ error: "Unsupported platform for the public demo" });
+    expect(mocks.getCachedPublicDemoAnswer).not.toHaveBeenCalled();
+    expect(mocks.getLatestPublicDemoRefreshFailure).not.toHaveBeenCalled();
+  });
+
+  it("rejects a matrix combo that is enabled but not fully warmed", async () => {
+    // Other targets are live, but the requested one is missing from the
+    // selectable set (e.g. only seven of eight presets have rows).
+    mocks.evaluatePublicDemoCapabilities.mockResolvedValue([
+      selectableTarget("espn", "football"),
+      selectableTarget("sleeper", "football"),
+    ]);
+
+    const response = await GET(
+      publicCacheRequest("presetId=wire-watch&sport=baseball&platform=espn"),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body).toEqual({ error: "Unsupported platform for the public demo" });
+    expect(mocks.getCachedPublicDemoAnswer).not.toHaveBeenCalled();
+  });
+
+  it("rejects a matrix combo whose target-state versions disagree with the deploy", async () => {
+    // A version-mismatched target never enters the selectable set, so the
+    // rejection is identical to every other non-live case.
+    mocks.evaluatePublicDemoCapabilities.mockResolvedValue([
+      selectableTarget("yahoo", "baseball"),
+    ]);
+
+    const response = await GET(
+      publicCacheRequest("presetId=wire-watch&sport=baseball&platform=espn"),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body).toEqual({ error: "Unsupported platform for the public demo" });
+    expect(mocks.getCachedPublicDemoAnswer).not.toHaveBeenCalled();
+  });
+
+  it("serializes exactly the allowlisted key sets on a cache hit", async () => {
+    mocks.getCachedPublicDemoAnswer.mockResolvedValue({
+      cacheKey: "public-demo-answer:wire-watch:baseball:v7:v2",
+      presetId: "wire-watch",
+      sport: "baseball",
+      provider: "provider-a",
+      providerModel: "model-a",
+      contextVersion: "v2",
+      promptVersion: "v7",
+      answerText: "A cached answer.",
+      generatedAt: "2026-06-06T12:00:00.000Z",
+      expiresAt: "2026-06-06T18:00:00.000Z",
+      staleAfter: "2026-06-06T15:00:00.000Z",
+      updatedAt: "2026-06-06T12:00:00.000Z",
+      status: "ready",
+      isExpired: false,
+      isStale: false,
+      failureSummary: null,
+      sourceMeta: null,
+      toolTraceSummary: null,
+    });
+
+    const response = await GET(publicCacheRequest());
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(Object.keys(body).sort()).toEqual([
+      "answer",
+      "hit",
+      "presetId",
+      "sport",
+    ]);
+    expect(Object.keys(body.answer).sort()).toEqual([
+      "expiresAt",
+      "failure",
+      "generatedAt",
+      "isExpired",
+      "isStale",
+      "provider",
+      "providerModel",
+      "staleAfter",
+      "status",
+      "text",
+      "toolTraceSummary",
+    ]);
+  });
+
+  it("serializes exactly the allowlisted key set on a cache miss", async () => {
+    mocks.getCachedPublicDemoAnswer.mockResolvedValue(null);
+    mocks.getLatestPublicDemoRefreshFailure.mockResolvedValue(null);
+
+    const response = await GET(publicCacheRequest());
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(Object.keys(body).sort()).toEqual([
+      "answer",
+      "failure",
+      "hit",
+      "presetId",
+      "sport",
+    ]);
+    expect(body.answer).toBeNull();
+  });
+
+  it("serializes exactly the same allowlisted key sets on a platform-aware hit", async () => {
+    // The platform-aware response must not grow any platform-only property; a
+    // mutation adding one should fail these exact key-set assertions.
+    mocks.evaluatePublicDemoCapabilities.mockResolvedValue([
+      selectableTarget("espn", "baseball"),
+    ]);
+    mocks.getCachedPublicDemoAnswer.mockResolvedValue({
+      cacheKey: "public-demo-answer:wire-watch:espn:baseball:v8:v3",
+      presetId: "wire-watch",
+      sport: "baseball",
+      provider: "provider-a",
+      providerModel: "model-a",
+      contextVersion: "v3",
+      promptVersion: "v8",
+      answerText: "A cached target answer.",
+      generatedAt: "2026-06-06T12:00:00.000Z",
+      expiresAt: "2026-06-06T18:00:00.000Z",
+      staleAfter: "2026-06-06T15:00:00.000Z",
+      updatedAt: "2026-06-06T12:00:00.000Z",
+      status: "ready",
+      isExpired: false,
+      isStale: false,
+      failureSummary: null,
+      sourceMeta: null,
+      toolTraceSummary: null,
+    });
+
+    const response = await GET(
+      publicCacheRequest("presetId=wire-watch&sport=baseball&platform=espn"),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(Object.keys(body).sort()).toEqual([
+      "answer",
+      "hit",
+      "presetId",
+      "sport",
+    ]);
+    expect(Object.keys(body.answer).sort()).toEqual([
+      "expiresAt",
+      "failure",
+      "generatedAt",
+      "isExpired",
+      "isStale",
+      "provider",
+      "providerModel",
+      "staleAfter",
+      "status",
+      "text",
+      "toolTraceSummary",
+    ]);
+  });
+
+  it("serializes exactly the same allowlisted key set on a platform-aware miss", async () => {
+    mocks.evaluatePublicDemoCapabilities.mockResolvedValue([
+      selectableTarget("espn", "baseball"),
+    ]);
+    mocks.getCachedPublicDemoAnswer.mockResolvedValue(null);
+    mocks.getLatestPublicDemoRefreshFailure.mockResolvedValue(null);
+
+    const response = await GET(
+      publicCacheRequest("presetId=wire-watch&sport=baseball&platform=espn"),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(Object.keys(body).sort()).toEqual([
+      "answer",
+      "failure",
+      "hit",
+      "presetId",
+      "sport",
+    ]);
+    expect(body.answer).toBeNull();
   });
 });

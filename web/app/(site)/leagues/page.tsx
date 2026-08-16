@@ -399,8 +399,8 @@ function WidgetSetupBanner({ accountCreated, isChatGpt }: { accountCreated: bool
   const assistantName = isChatGpt ? 'ChatGPT' : 'your AI assistant';
   const steps = [
     { label: 'Create your Flaim account', done: accountCreated },
-    { label: 'Connect a fantasy league below', done: false },
-    { label: `Return to ${assistantName} and reconnect Flaim to finish`, done: false },
+    { label: 'Connect your fantasy leagues', done: false },
+    { label: `Connect Flaim to ${assistantName}`, done: false },
   ];
 
   return (
@@ -409,7 +409,7 @@ function WidgetSetupBanner({ accountCreated, isChatGpt }: { accountCreated: bool
         <div className="space-y-1">
           <h2 className="font-medium">{isChatGpt ? 'Finishing your ChatGPT setup' : 'Finishing your AI setup'}</h2>
           <p className="text-sm text-muted-foreground">
-            You&apos;re almost there — three quick steps and Flaim is ready in {assistantName}.
+            You&apos;re almost there. Three quick steps and Flaim is ready in {assistantName}.
           </p>
         </div>
         <ol className="space-y-2 text-sm">
@@ -1552,19 +1552,20 @@ function LeaguesPageContent() {
             <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground font-bold">
               1
             </div>
-            <h1 className="text-3xl font-semibold">Set up Your Leagues</h1>
+            <h1 className="text-3xl font-semibold">Create Your Flaim Account</h1>
             <p className="text-muted-foreground">
-              Sign in to connect ESPN, Yahoo, and Sleeper, choose the league ChatGPT should use first, and manage your defaults in one place.
+              Step 1 of 3. Create an account or sign in, then connect your
+              fantasy leagues and your AI app.
             </p>
           </div>
           <Card>
             <CardContent className="space-y-4 p-6">
               <div className="space-y-2">
-                <h2 className="font-medium">What happens here</h2>
+                <h2 className="font-medium">Three steps. Then you&apos;re done.</h2>
                 <ul className="space-y-2 text-sm text-muted-foreground">
-                  <li>Connect your fantasy platforms and sync league data</li>
-                  <li>Pick the sport and league ChatGPT should use by default</li>
-                  <li>Open ChatGPT and use Flaim Fantasy once your leagues are connected</li>
+                  <li>1. Create your Flaim account</li>
+                  <li>2. Connect your fantasy leagues</li>
+                  <li>3. Connect your AI app</li>
                 </ul>
               </div>
               <div className="flex flex-col gap-3 sm:flex-row">
@@ -1615,7 +1616,7 @@ function LeaguesPageContent() {
                 className="flex flex-1 items-start gap-4 text-left"
               >
                 <div className="min-w-0 space-y-2">
-                  <CardTitle className="text-lg">Agents</CardTitle>
+                  <CardTitle className="text-lg">AI Apps</CardTitle>
                 </div>
               </button>
               <div className="flex items-center gap-2">
@@ -1634,7 +1635,7 @@ function LeaguesPageContent() {
                     Advanced users can add Flaim manually in a compatible AI
                     platform that supports custom remote connectors. This is an
                     unofficial setup path. Click{" "}
-                    <Link href="/guide/ai#custom-connectors" className="text-primary underline hover:no-underline">
+                    <Link href="/docs/ai#custom-connectors" className="text-primary underline hover:no-underline">
                       here
                     </Link>{" "}
                     to learn more.
@@ -2273,15 +2274,15 @@ function LeaguesPageContent() {
                     <button
                       type="button"
                       className="rounded-md border border-muted bg-muted/60 p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                      aria-label="Open platform setup guides"
-                      title="Platform setup guides"
+                      aria-label="Open fantasy platform help"
+                      title="Fantasy platform help"
                     >
                       <BookOpen className="h-4 w-4" />
                     </button>
                   </PopoverTrigger>
                   <PopoverContent align="end" className="max-w-xs text-sm text-muted-foreground">
                     For more help connecting your fantasy platform, click{" "}
-                    <Link href="/guide/platforms" className="text-primary underline hover:no-underline">
+                    <Link href="/docs/platforms" className="text-primary underline hover:no-underline">
                       here
                     </Link>
                     .
@@ -2370,7 +2371,7 @@ function LeaguesPageContent() {
                       )}
                       <p className="text-sm text-muted-foreground">
                         On your phone right now? Yahoo and Sleeper connect right
-                        here — no extension needed.
+                        here. No extension needed.
                       </p>
                     </>
                   ) : (

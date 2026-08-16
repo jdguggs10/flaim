@@ -40,7 +40,7 @@ export default function Image() {
             marginBottom: '16px',
           }}
         >
-          Flaim
+          Flaim Fantasy
         </div>
         <div
           style={{
@@ -49,7 +49,7 @@ export default function Image() {
             textAlign: 'center',
           }}
         >
-          Your Fantasy League, Inside Your AI
+          Your fantasy league, inside your AI.
         </div>
         <div
           style={{

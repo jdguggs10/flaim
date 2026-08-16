@@ -15,6 +15,11 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 1,
     },
     {
+      url: `${baseUrl}/fantasy-football`,
+      changeFrequency: 'weekly',
+      priority: 0.95,
+    },
+    {
       url: `${baseUrl}/privacy`,
       changeFrequency: 'yearly',
       priority: 0.7,
@@ -30,27 +35,32 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 0.7,
     },
     {
-      url: `${baseUrl}/guide`,
+      url: `${baseUrl}/docs`,
       changeFrequency: 'monthly',
       priority: 0.9,
     },
     {
-      url: `${baseUrl}/guide/platforms`,
-      changeFrequency: 'monthly',
-      priority: 0.9,
-    },
-    {
-      url: `${baseUrl}/guide/sports`,
+      url: `${baseUrl}/docs/flaim`,
       changeFrequency: 'monthly',
       priority: 0.8,
     },
     {
-      url: `${baseUrl}/guide/ai`,
+      url: `${baseUrl}/docs/platforms`,
       changeFrequency: 'monthly',
       priority: 0.9,
     },
     {
-      url: `${baseUrl}/inspirations`,
+      url: `${baseUrl}/docs/sports`,
+      changeFrequency: 'monthly',
+      priority: 0.8,
+    },
+    {
+      url: `${baseUrl}/docs/ai`,
+      changeFrequency: 'monthly',
+      priority: 0.9,
+    },
+    {
+      url: `${baseUrl}/about`,
       changeFrequency: 'monthly',
       priority: 0.6,
     },

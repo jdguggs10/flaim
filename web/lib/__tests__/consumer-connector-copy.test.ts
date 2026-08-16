@@ -9,8 +9,14 @@ const activeConsumerSurfaces = [
   "docs/ARCHITECTURE.md",
   "docs/CHANGELOG.md",
   "docs/CONNECTOR-DOCS.md",
-  "web/app/(site)/guide/ai/page.tsx",
-  "web/app/(site)/guide/page.tsx",
+  "web/app/(site)/docs/ai/page.tsx",
+  "web/app/(site)/docs/flaim/page.tsx",
+  "web/app/(site)/docs/page.tsx",
+  "web/app/(site)/docs/platforms/page.tsx",
+  "web/app/(site)/docs/sports/page.tsx",
+  "web/emails/flaim-email-links.json",
+  "web/lib/product-links.ts",
+  "web/public/llms.txt",
   "web/public/llms-full.txt",
   "workers/auth-worker/README.md",
   "workers/fantasy-mcp/README.md",
@@ -29,5 +35,21 @@ describe("consumer connector copy boundaries", () => {
 
   it("does not restore the retired Gemini CLI extension manifest", () => {
     expect(existsSync(path.join(repoRoot, "gemini-extension.json"))).toBe(false);
+  });
+
+  it("uses the current ChatGPT plugin listing URL", () => {
+    const retiredUrl =
+      "https://chatgpt.com/apps/flaim-fantasy/asdk_app_69a8f78087e081919e52cacacf00ff36";
+    const currentUrl =
+      "https://chatgpt.com/plugins/plugin_asdk_app_69a8f78087e081919e52cacacf00ff36";
+
+    for (const relativePath of activeConsumerSurfaces) {
+      const contents = readFileSync(path.join(repoRoot, relativePath), "utf8");
+      expect(contents, relativePath).not.toContain(retiredUrl);
+    }
+
+    expect(
+      readFileSync(path.join(repoRoot, "web/lib/product-links.ts"), "utf8"),
+    ).toContain(currentUrl);
   });
 });

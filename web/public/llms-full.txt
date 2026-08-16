@@ -1,20 +1,22 @@
 # Flaim Fantasy
 
-> Flaim connects your ESPN, Yahoo, and Sleeper fantasy leagues to Flaim Fantasy in ChatGPT, with optional manual MCP clients also available for league-specific analysis using the Model Context Protocol (MCP).
+> Flaim connects your real ESPN, Yahoo, and Sleeper fantasy leagues to the AI assistants you already use, so the advice is about your team instead of generic fantasy takes.
 
 ## What Flaim Is
 
-Flaim is a free, open-source MCP server behind a live ChatGPT-first fantasy analysis experience. It gives AI assistants read-only access to your real fantasy sports data and combines live league data with built-in fantasy analyst guidance so answers are grounded in your league — not generic rankings.
+Flaim is a free service that gives supported AI assistants read-only access to your real fantasy sports data. It supplies your roster, matchups, standings, available players, league rules, recent moves, and history so answers are about your league instead of generic rankings.
+
+Flaim Fantasy is available in ChatGPT and Claude. Perplexity can connect through its current remote-connector settings.
 
 Single MCP endpoint: https://api.flaim.app/mcp
 
-## MCP Tools (10 total)
+## Available League Data (9 read-only actions plus Refresh)
 
-| Tool | What it does |
+| Action | What it does |
 |------|-------------|
 | get_user_session | Lists all connected leagues across all platforms |
 | refresh_leagues | Re-discovers connected leagues and updates Flaim's league records |
-| get_ancient_history | Historical leagues and seasons (2+ years old) |
+| get_ancient_history | Past seasons and historical leagues outside the current-season view |
 | get_league_info | League settings, scoring format, and members |
 | get_roster | Team roster with player stats and lineup slots |
 | get_matchups | Weekly matchups and scores |
@@ -34,16 +36,18 @@ Single MCP endpoint: https://api.flaim.app/mcp
 ## How to Connect
 
 1. Create a Flaim account at https://flaim.app
-2. Go to https://flaim.app/leagues
-3. Connect your fantasy platforms there:
+2. Connect your fantasy leagues at https://flaim.app/leagues:
    - ESPN: Install the Chrome extension to sync private ESPN leagues
    - Yahoo: Start Yahoo auth from /leagues and wait for league discovery
    - Sleeper: Enter your exact username and wait for league discovery
-4. Open Flaim Fantasy in ChatGPT
-5. Authorize Flaim when prompted
-6. Start a fresh chat and ask "What leagues do I have?" to confirm setup
+3. Connect your AI app, authorize Flaim, and ask "What fantasy leagues do I have?" to confirm setup:
+   - ChatGPT: Open Flaim Fantasy in ChatGPT
+   - Claude: Find Flaim Fantasy in Claude's connector directory
+   - Perplexity: Follow the remote-connector instructions on the AI Apps page
 
-Optional manual MCP clients can use the same server URL after leagues are connected: https://api.flaim.app/mcp
+Optional manual connector paths use the same server URL after leagues are connected: https://api.flaim.app/mcp
+
+After connecting, Your Leagues is where users can add leagues, sync seasons, and choose optional defaults.
 
 ## Example Prompts
 
@@ -59,31 +63,33 @@ Optional manual MCP clients can use the same server URL after leagues are connec
 ## FAQs
 
 ### What does Flaim do?
-Flaim is a ChatGPT-first fantasy analysis app, a skill that teaches AI how to analyze your league, and a connector to data from your actual fantasy leagues. It lets you ask about your actual roster, matchup, standings, transactions, available free agents, waiver wire, and more.
+Flaim connects your real fantasy leagues to the AI assistants you already use. It lets you ask about your actual roster, matchup, standings, recent moves, available players, waiver wire, and more.
 
 ### Is my data safe?
-Flaim is read-only. It cannot trade, drop, or modify anything in your league. ESPN credentials are encrypted and stored securely — they are never shared with AI providers.
+Flaim is read-only. It cannot trade, drop, or modify anything in your league. ESPN credentials are encrypted and stored securely. They are never shared with AI providers.
 
 ### Why does ESPN need a Chrome extension?
 ESPN doesn't offer a public API for private fantasy league data. For private ESPN leagues, the Chrome extension syncs the session details Flaim needs for read-only access.
 
 ### How does Flaim connect to AI clients?
-Flaim Fantasy is available in ChatGPT. Optional manual MCP clients can also add the single server URL, and Flaim handles authentication and data retrieval after your leagues are linked in /leagues.
+Flaim Fantasy is available directly in ChatGPT and Claude. Other AI apps that support remote MCP connectors can add the single server URL, and Flaim handles authentication and data retrieval after your leagues are linked in /leagues.
 
 ### What AI assistants work with Flaim?
-The primary experience is Flaim Fantasy in ChatGPT. Advanced users can also add Flaim manually as a custom connector in an AI platform that supports remote HTTP MCP and OAuth. Compatibility varies by platform; this optional path is not a promise of official support for every MCP client.
+Flaim Fantasy is available in ChatGPT and Claude. Perplexity can connect through its remote-connector settings where supported. See the AI Apps page for current availability and connection instructions.
 
 ## Links
 
 - Website: https://flaim.app
-- Leagues setup: https://flaim.app/leagues
-- Help: https://flaim.app/guide
-- Platform guide: https://flaim.app/guide/platforms
-- AI guide: https://flaim.app/guide/ai
-- Sports guide: https://flaim.app/guide/sports
-- ChatGPT guide: https://flaim.app/guide/ai#chatgpt
-- Claude guide: https://flaim.app/guide/ai#claude
-- Perplexity guide: https://flaim.app/guide/ai#perplexity
-- GitHub: https://github.com/jdguggs10/flaim
+- Your Leagues: https://flaim.app/leagues
+- Docs: https://flaim.app/docs
+- Fantasy football analysis: https://flaim.app/fantasy-football
+- Fantasy platform docs: https://flaim.app/docs/platforms
+- AI apps: https://flaim.app/docs/ai
+- Sports and league coverage: https://flaim.app/docs/sports
+- ChatGPT: https://flaim.app/docs/ai#chatgpt
+- Claude: https://flaim.app/docs/ai#claude
+- Perplexity: https://flaim.app/docs/ai#perplexity
+- ChatGPT listing: https://chatgpt.com/plugins/plugin_asdk_app_69a8f78087e081919e52cacacf00ff36
+- Claude connector listing: https://claude.ai/directory/connectors/f1a5b6a4-1f5b-470c-af23-71fc7ab13754
 - Privacy policy: https://flaim.app/privacy
 - Terms of service: https://flaim.app/terms
