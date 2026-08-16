@@ -45,6 +45,11 @@ import {
   useState,
 } from "react";
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
   PhoneEducationPanel,
   type PhoneEducationPanelId,
 } from "./phone-education-panel";
@@ -76,6 +81,10 @@ const PUBLIC_TOOL_CARD_IN_PROGRESS_MS = 650;
 const PUBLIC_TOOL_CARD_COMPLETED_PAUSE_MS = 220;
 /** Seconds of ticker travel per prepared question; ~45px/s at pill width. */
 const PUBLIC_PROMPT_TICKER_SECONDS_PER_PROMPT = 4;
+
+/** One-sentence explainer bubbles for the composer controls, in phone tokens. */
+const PHONE_POPOVER_CLASS =
+  "w-[17rem] rounded-2xl border border-[var(--phone-border)] bg-[var(--phone-screen)] p-3.5 text-[length:var(--phone-type-secondary)] leading-[1.45] text-[var(--phone-text)] shadow-lg";
 
 const PUBLIC_SPORT_COPY: Record<
   PublicChatDemoSport,
@@ -882,62 +891,87 @@ export function PublicChatExperience({
             <div className="border-t border-[var(--phone-border)] bg-[var(--phone-screen)] px-3 pb-4 pt-3">
               {renderPromptTicker(visiblePresets)}
 
+              {/* Each composer control opens a one-sentence explainer, matching
+                  the production demo, instead of a full-screen sheet. */}
               <div className="mx-2 mb-1 mt-2 flex items-center gap-1.5 rounded-[1.75rem] border border-[var(--phone-border)] bg-[var(--phone-panel)] p-1.5">
-                <button
-                  type="button"
-                  onClick={(event) =>
-                    openEducationPanel("drawer", event.currentTarget)
-                  }
-                  aria-label="How to add Flaim in ChatGPT"
-                  aria-haspopup="dialog"
-                  aria-expanded={educationPanel === "drawer"}
-                  className="inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full text-[var(--phone-text)] transition-[background-color,transform] hover:-translate-y-0.5 hover:bg-[var(--phone-panel-strong)] active:translate-y-0 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--phone-accent)]"
-                >
-                  <Plus className="h-5 w-5" />
-                </button>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label="How to add Flaim in ChatGPT"
+                      className="inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full text-[var(--phone-text)] transition-[background-color,transform] hover:-translate-y-0.5 hover:bg-[var(--phone-panel-strong)] active:translate-y-0 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--phone-accent)]"
+                    >
+                      <Plus className="h-5 w-5" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    align="start"
+                    side="top"
+                    className={PHONE_POPOVER_CLASS}
+                  >
+                    Adding Flaim Fantasy to ChatGPT puts it in this drawer.
+                  </PopoverContent>
+                </Popover>
 
                 <span className="min-w-0 flex-1 truncate text-[length:var(--phone-type-body)] leading-5 text-[var(--phone-muted)]">
                   {selectedPreset ? "Follow up" : "Ask Chat…"}
                 </span>
 
-                <button
-                  type="button"
-                  onClick={(event) =>
-                    openEducationPanel("activation", event.currentTarget)
-                  }
-                  aria-label="What the Flaim badge means"
-                  aria-haspopup="dialog"
-                  aria-expanded={educationPanel === "activation"}
-                  className={cn(
-                    "inline-flex h-11 shrink-0 cursor-pointer items-center gap-1.5 rounded-full border px-2.5 text-[length:var(--phone-type-caption)] font-medium transition-[box-shadow,transform] hover:-translate-y-0.5 hover:shadow-sm active:translate-y-0 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--phone-accent)]",
-                    chipActive
-                      ? "public-chat-chip-active border-[var(--phone-accent)] bg-[var(--phone-accent)] text-[var(--phone-accent-text)]"
-                      : "border-[var(--phone-border)] bg-[var(--phone-panel-strong)] text-[var(--phone-text)]",
-                  )}
-                >
-                  <PhoneFlaimMark size={16} />
-                  <span className="hidden min-[370px]:inline">Flaim</span>
-                </button>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label="What the Flaim badge means"
+                      className={cn(
+                        "inline-flex h-11 shrink-0 cursor-pointer items-center gap-1.5 rounded-full border px-2.5 text-[length:var(--phone-type-caption)] font-medium transition-[box-shadow,transform] hover:-translate-y-0.5 hover:shadow-sm active:translate-y-0 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--phone-accent)]",
+                        chipActive
+                          ? "public-chat-chip-active border-[var(--phone-accent)] bg-[var(--phone-accent)] text-[var(--phone-accent-text)]"
+                          : "border-[var(--phone-border)] bg-[var(--phone-panel-strong)] text-[var(--phone-text)]",
+                      )}
+                    >
+                      <PhoneFlaimMark size={16} />
+                      <span className="hidden min-[370px]:inline">Flaim</span>
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    align="center"
+                    side="top"
+                    className={PHONE_POPOVER_CLASS}
+                  >
+                    Flaim should activate automatically. If it doesn&apos;t,
+                    choose it from the drawer to get this badge here.
+                  </PopoverContent>
+                </Popover>
 
-                <button
-                  type="button"
-                  onClick={(event) =>
-                    openEducationPanel("ask", event.currentTarget)
-                  }
-                  className={cn(
-                    "inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full bg-[var(--phone-text)] text-[var(--phone-screen)] transition-[box-shadow,transform] hover:-translate-y-0.5 hover:shadow-md active:translate-y-0 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--phone-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--phone-screen)]",
-                    runStatus === "running" ? "public-chat-send-running" : "",
-                  )}
-                  aria-label="Why the public demo uses prepared prompts"
-                  aria-haspopup="dialog"
-                  aria-expanded={educationPanel === "ask"}
-                >
-                  {runStatus === "running" ? (
-                    <LoaderCircle className="h-4.5 w-4.5 animate-spin" />
-                  ) : (
-                    <ArrowUp className="h-4.5 w-4.5" />
-                  )}
-                </button>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className={cn(
+                        "inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full bg-[var(--phone-text)] text-[var(--phone-screen)] transition-[box-shadow,transform] hover:-translate-y-0.5 hover:shadow-md active:translate-y-0 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--phone-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--phone-screen)]",
+                        runStatus === "running"
+                          ? "public-chat-send-running"
+                          : "",
+                      )}
+                      aria-label="How to ask in the demo"
+                    >
+                      {runStatus === "running" ? (
+                        <LoaderCircle className="h-4.5 w-4.5 animate-spin" />
+                      ) : (
+                        <ArrowUp className="h-4.5 w-4.5" />
+                      )}
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    align="end"
+                    side="top"
+                    className={PHONE_POPOVER_CLASS}
+                  >
+                    In ChatGPT, type and send any fantasy question normally.
+                    For the demo, select one of these questions that were
+                    recently run.
+                  </PopoverContent>
+                </Popover>
               </div>
             </div>
           </div>
@@ -947,7 +981,6 @@ export function PublicChatExperience({
             sportOptions={sportOptions}
             onSelectSport={handleSelectSport}
             panel={educationPanel}
-            onPanelChange={setEducationPanel}
             returnFocusRef={educationTriggerRef}
           />
           </DialogPrimitive.Root>

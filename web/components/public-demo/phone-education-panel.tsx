@@ -1,29 +1,17 @@
 "use client";
 
-import { PhoneFlaimMark } from "@/components/site/phone-demo-frame";
 import type { PublicChatDemoSport } from "@/lib/public-chat";
 import type { PublicDemoSportOption } from "@/lib/public-demo-client";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { IconBallAmericanFootball, IconBallBaseball } from "@tabler/icons-react";
-import {
-  ArrowUp,
-  Database,
-  LockKeyhole,
-  MessageCircle,
-  Plus,
-  ShieldCheck,
-  X,
-} from "lucide-react";
+import { Database, LockKeyhole, ShieldCheck, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, type RefObject } from "react";
 
-export type PhoneEducationPanelId =
-  | "about"
-  | "sport"
-  | "drawer"
-  | "activation"
-  | "ask";
-type PhoneFlowPanelId = Exclude<PhoneEducationPanelId, "about" | "sport">;
+// The composer's plus, Flaim, and send controls explain themselves with small
+// popovers (see public-chat-experience.tsx); only the demo guide and the sport
+// picker use this bottom sheet.
+export type PhoneEducationPanelId = "about" | "sport";
 
 interface PhoneEducationPanelProps {
   container: HTMLElement | null;
@@ -35,7 +23,6 @@ interface PhoneEducationPanelProps {
   sportOptions: readonly PublicDemoSportOption[];
   onSelectSport: (sport: PublicChatDemoSport) => void;
   panel: PhoneEducationPanelId | null;
-  onPanelChange: (panel: PhoneEducationPanelId) => void;
   returnFocusRef: RefObject<HTMLButtonElement | null>;
 }
 
@@ -43,100 +30,6 @@ const SPORT_ICONS: Record<PublicChatDemoSport, React.ReactNode> = {
   baseball: <IconBallBaseball className="h-4 w-4" stroke={1.5} />,
   football: <IconBallAmericanFootball className="h-4 w-4" stroke={1.5} />,
 };
-
-const PHONE_FLOW_CONTENT = {
-  drawer: {
-    number: "1",
-    label: "Add",
-    title: "Find Flaim in the app drawer",
-    icon: <Plus className="h-6 w-6" />,
-    body: (
-      <>
-        Connect your leagues in Flaim first. Then open the{" "}
-        <strong className="font-semibold text-[var(--phone-text)]">+</strong>{" "}
-        menu in ChatGPT and choose Flaim Fantasy. You only add it once.
-      </>
-    ),
-  },
-  activation: {
-    number: "2",
-    label: "Activate",
-    title: "Flaim is active",
-    icon: <PhoneFlaimMark size={24} />,
-    body: (
-      <>
-        This badge means ChatGPT can use Flaim&apos;s read-only league info. It
-        should activate automatically for fantasy questions; if it does not,
-        choose Flaim from the drawer.
-      </>
-    ),
-  },
-  ask: {
-    number: "3",
-    label: "Ask",
-    title: "Ask in your own words",
-    icon: <ArrowUp className="h-5 w-5" />,
-    body: (
-      <>
-        In ChatGPT, type and send any fantasy question normally. For the demo,
-        select one of these questions that were recently run.
-      </>
-    ),
-  },
-} satisfies Record<
-  PhoneFlowPanelId,
-  {
-    number: string;
-    label: string;
-    title: string;
-    icon: React.ReactNode;
-    body: React.ReactNode;
-  }
->;
-
-const PHONE_FLOW_STEPS = Object.keys(PHONE_FLOW_CONTENT) as PhoneFlowPanelId[];
-
-function PhoneFlowSteps({
-  active,
-  onSelect,
-}: {
-  active?: PhoneFlowPanelId;
-  onSelect: (panel: PhoneEducationPanelId) => void;
-}) {
-  return (
-    <div
-      className="grid grid-cols-3 gap-2"
-      role="group"
-      aria-label="How Flaim works in ChatGPT"
-    >
-      {PHONE_FLOW_STEPS.map((stepId) => {
-        const step = PHONE_FLOW_CONTENT[stepId];
-        const isActive = stepId === active;
-
-        return (
-          <button
-            key={stepId}
-            type="button"
-            onClick={() => onSelect(stepId)}
-            aria-pressed={isActive}
-            className={
-              isActive
-                ? "rounded-2xl border border-[var(--phone-accent)] bg-[var(--phone-accent)] px-2 py-2.5 text-[var(--phone-accent-text)]"
-                : "rounded-2xl border border-[var(--phone-border)] bg-[var(--phone-panel)] px-2 py-2.5 text-[var(--phone-text)] transition-colors hover:bg-[var(--phone-panel-strong)]"
-            }
-          >
-            <span className="block text-[length:var(--phone-type-caption)] font-semibold leading-none">
-              {step.number}
-            </span>
-            <span className="mt-1 block text-[length:var(--phone-type-caption)] font-medium leading-none">
-              {step.label}
-            </span>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
 
 function AboutPanel({
   demoTarget,
@@ -284,49 +177,12 @@ function SportPanel({
   );
 }
 
-function FlowPanel({
-  panel,
-  onPanelChange,
-}: {
-  panel: PhoneFlowPanelId;
-  onPanelChange: (panel: PhoneEducationPanelId) => void;
-}) {
-  const content = PHONE_FLOW_CONTENT[panel];
-
-  return (
-    <>
-      <DialogPrimitive.Description className="sr-only">
-        Step {content.number} · {content.label}: {content.title}
-      </DialogPrimitive.Description>
-
-      <div className="mt-1 flex h-14 w-14 items-center justify-center rounded-2xl border border-[var(--phone-border)] bg-[var(--phone-panel)] text-[var(--phone-text)]">
-        {content.icon}
-      </div>
-      <p className="mt-5 text-[length:var(--phone-type-body)] leading-[var(--phone-leading-body)] text-[var(--phone-text)]">
-        {content.body}
-      </p>
-
-      {panel === "ask" ? (
-        <div className="mt-4 flex items-start gap-2.5 rounded-2xl bg-[var(--phone-panel)] p-3.5 text-[length:var(--phone-type-caption)] leading-[1.45] text-[var(--phone-muted)]">
-          <MessageCircle className="mt-0.5 h-4 w-4 shrink-0" />
-          Choose one of the questions above to run the homepage preview.
-        </div>
-      ) : null}
-
-      <div className="mt-6">
-        <PhoneFlowSteps active={panel} onSelect={onPanelChange} />
-      </div>
-    </>
-  );
-}
-
 export function PhoneEducationPanel({
   container,
   demoTarget,
   sportOptions,
   onSelectSport,
   panel,
-  onPanelChange,
   returnFocusRef,
 }: PhoneEducationPanelProps) {
   const titleRef = useRef<HTMLHeadingElement | null>(null);
@@ -344,15 +200,10 @@ export function PhoneEducationPanel({
   const heading =
     panel === "about"
       ? { eyebrow: "Demo guide", title: "About this demo" }
-      : panel === "sport"
-        ? {
-            eyebrow: "Demo coverage",
-            title: `${demoTarget.platformLabel} · ${demoTarget.sport === "baseball" ? "Baseball" : "Football"}`,
-          }
-        : {
-            eyebrow: `${PHONE_FLOW_CONTENT[panel].number} · ${PHONE_FLOW_CONTENT[panel].label}`,
-            title: PHONE_FLOW_CONTENT[panel].title,
-          };
+      : {
+          eyebrow: "Demo coverage",
+          title: `${demoTarget.platformLabel} · ${demoTarget.sport === "baseball" ? "Baseball" : "Football"}`,
+        };
 
   return (
     <DialogPrimitive.Portal container={container}>
@@ -392,14 +243,12 @@ export function PhoneEducationPanel({
         <div className="mt-3">
           {panel === "about" ? (
             <AboutPanel demoTarget={demoTarget} />
-          ) : panel === "sport" ? (
+          ) : (
             <SportPanel
               demoTarget={demoTarget}
               sportOptions={sportOptions}
               onSelectSport={onSelectSport}
             />
-          ) : (
-            <FlowPanel panel={panel} onPanelChange={onPanelChange} />
           )}
         </div>
       </DialogPrimitive.Content>
