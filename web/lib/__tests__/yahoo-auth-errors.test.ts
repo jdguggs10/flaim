@@ -75,7 +75,7 @@ describe('Yahoo auth error helpers', () => {
     const response = {
       error: 'yahoo_api_error',
       error_description:
-        'Yahoo is currently reviewing third-party app access to its Fantasy Sports API, and Yahoo league discovery is temporarily unavailable in all third-party apps, including this one. This is not a problem with the user\'s account or connection — the Yahoo connection is saved and their leagues will appear on the next refresh once Yahoo restores access; no reconnect is needed. ESPN and Sleeper leagues are unaffected.',
+        'Yahoo is currently reviewing third-party app access to its Fantasy Sports API, and Yahoo league discovery is temporarily unavailable in all third-party apps, including this one. This is not a problem with the user\'s account or Yahoo setup. The user\'s Yahoo link is saved and their leagues will appear on the next refresh once Yahoo restores access; nothing needs to be redone. ESPN and Sleeper leagues are unaffected.',
     };
 
     expect(isYahooTransientAuthResponse(response)).toBe(false);

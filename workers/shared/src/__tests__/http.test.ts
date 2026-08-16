@@ -91,7 +91,16 @@ describe('HTTP helpers', () => {
       expect(message).toContain('all third-party apps, including this one');
       expect(message).toContain('ESPN and Sleeper leagues are unaffected');
     }
-    expect(YAHOO_APP_REVIEW_OUTAGE_MESSAGE.discovery).toContain('no reconnect is needed');
-    expect(YAHOO_APP_REVIEW_OUTAGE_MESSAGE.data).not.toContain('reconnect');
+    expect(YAHOO_APP_REVIEW_OUTAGE_MESSAGE.discovery).toContain('nothing needs to be redone');
+    expect(YAHOO_APP_REVIEW_OUTAGE_MESSAGE.data).not.toContain('redone');
+    // The discovery message is classified by TEXT in the fantasy-mcp widget:
+    // any of these substrings would flip it to "reconnect" or "try again".
+    // The authoritative pin lives in fantasy-mcp against the real classifier;
+    // this one just fails fast, next to the words, on the obvious slips.
+    expect(YAHOO_APP_REVIEW_OUTAGE_MESSAGE.discovery.toLowerCase()).not.toMatch(
+      /auth|credential|connect|expired|invalid.token|revoked|rate.?limit|too many|try again/
+    );
+    // No em dashes in public-facing copy.
+    expect(YAHOO_APP_REVIEW_OUTAGE_MESSAGE.discovery).not.toContain('—');
   });
 });

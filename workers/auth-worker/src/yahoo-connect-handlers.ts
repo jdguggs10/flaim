@@ -2432,7 +2432,9 @@ export async function handleYahooDiscover(
         auth_type: 'clerk',
       });
       // Only a 403 body carries the app-level vs resource-level distinction,
-      // so only that branch pays for the body read (bounded, never thrown).
+      // so only that branch pays for the body read. Yahoo's 403 bodies are a
+      // short JSON error; the read is whole-body (same as yahoo-client's), the
+      // slice bounds only what is logged and matched, and it never throws.
       const deniedBody =
         classification.kind === 'access_denied'
           ? await apiResponse.text().then((b) => b.slice(0, 500)).catch(() => '')

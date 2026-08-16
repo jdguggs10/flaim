@@ -118,14 +118,22 @@ export function isYahooAppLevelDenialBody(body: string): boolean {
 /**
  * What an AI client (or the web app) should relay when Yahoo denies the app
  * itself. Names Yahoo, says it is platform-wide, says it is not the user's
- * account or connection, and says what still works — so a reader does not go
- * hunting for a bug on their side. `data` is for reads of an already-connected
- * league; `discovery` is for connect/refresh, where the extra sentence tells a
- * NEW Yahoo user that their connection is saved and nothing needs redoing.
+ * account or setup, and says what still works, so a reader does not go hunting
+ * for a bug on their side. `data` is for reads of an already-linked league;
+ * `discovery` is for the refresh/discover path, where the extra sentence tells
+ * a NEW Yahoo user that their Yahoo link is saved and nothing needs redoing.
+ *
+ * WORDING CONSTRAINT on `discovery`: the fantasy-mcp user-session widget
+ * classifies refresh_leagues failures partly by TEXT, and treats any
+ * error_description matching /auth|credential|connect|expired|invalid.token|
+ * revoked/ as reconnect-required and /rate.?limit|too many|try again/ as
+ * retry-later. "connection" and "reconnect" both contain "connect", so this
+ * message must avoid those words or the widget tells the user to reconnect,
+ * which is the one thing that cannot help. A fantasy-mcp test pins it.
  */
 export const YAHOO_APP_REVIEW_OUTAGE_MESSAGE = {
   data:
     'Yahoo is currently reviewing third-party app access to its Fantasy Sports API, and Yahoo league data is temporarily unavailable in all third-party apps, including this one. This is not a problem with the user\'s account, connection, or league. ESPN and Sleeper leagues are unaffected.',
   discovery:
-    'Yahoo is currently reviewing third-party app access to its Fantasy Sports API, and Yahoo league discovery is temporarily unavailable in all third-party apps, including this one. This is not a problem with the user\'s account or connection — the Yahoo connection is saved and their leagues will appear on the next refresh once Yahoo restores access; no reconnect is needed. ESPN and Sleeper leagues are unaffected.',
+    'Yahoo is currently reviewing third-party app access to its Fantasy Sports API, and Yahoo league discovery is temporarily unavailable in all third-party apps, including this one. This is not a problem with the user\'s account or Yahoo setup. The user\'s Yahoo link is saved and their leagues will appear on the next refresh once Yahoo restores access; nothing needs to be redone. ESPN and Sleeper leagues are unaffected.',
 } as const;

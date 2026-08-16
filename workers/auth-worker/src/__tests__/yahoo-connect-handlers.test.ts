@@ -3135,7 +3135,7 @@ describe('yahoo-connect-handlers', () => {
       const body = (await response.json()) as Record<string, unknown>;
       expect(body.error).toBe('yahoo_api_error');
       expect(body.error_description).toContain('Yahoo is currently reviewing third-party app access');
-      expect(body.error_description).toContain('no reconnect is needed');
+      expect(body.error_description).toContain('nothing needs to be redone');
       expect(body.error_description).toContain('ESPN and Sleeper leagues are unaffected');
       expect(body.retryable).toBeUndefined();
       expect(body.retry_after).toBeUndefined();
