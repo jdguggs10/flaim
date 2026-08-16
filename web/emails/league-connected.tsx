@@ -9,7 +9,7 @@ import {
 } from "./components/FlaimEmailLayout";
 
 interface LeagueConnectedEmailProps {
-  aiGuideUrl: string;
+  aiDocsUrl: string;
   leagueName?: string;
   platform?: string;
   /** Must be a real unsubscribe or notification-preferences URL before connecting to a live sender. */
@@ -17,7 +17,7 @@ interface LeagueConnectedEmailProps {
 }
 
 export default function LeagueConnectedEmail({
-  aiGuideUrl,
+  aiDocsUrl,
   leagueName = "Acme Fantasy League",
   platform = "Yahoo",
   unsubscribeUrl,
@@ -42,10 +42,11 @@ export default function LeagueConnectedEmail({
         league context to supported AI assistants.
       </FlaimText>
       <FlaimText>
-        Add Flaim to Claude, ChatGPT, or Perplexity, then ask about your roster,
-        matchup, waiver options, standings, and recent transactions.
+        Add Flaim to ChatGPT or Claude (or connect Perplexity as a custom
+        connector), then ask about your roster, matchup, available players,
+        standings, and recent moves.
       </FlaimText>
-      <FlaimButton href={aiGuideUrl}>Connect your AI assistant</FlaimButton>
+      <FlaimButton href={aiDocsUrl}>Connect your AI assistant</FlaimButton>
       <FlaimDivider />
       <FlaimMutedText>
         Not expecting this? You can disconnect league access from your Flaim
@@ -56,7 +57,7 @@ export default function LeagueConnectedEmail({
 }
 
 LeagueConnectedEmail.PreviewProps = {
-  aiGuideUrl: "https://flaim.app/docs/ai",
+  aiDocsUrl: "https://flaim.app/docs/ai",
   leagueName: "Acme Fantasy League",
   platform: "Yahoo",
   unsubscribeUrl: "https://flaim.app/notifications/unsubscribe?token=PREVIEW_ONLY",

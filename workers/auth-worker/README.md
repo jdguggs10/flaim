@@ -29,7 +29,7 @@ again before considering production.
 
 ### OAuth 2.1 Provider (AI clients → Flaim)
 
-These endpoints let ChatGPT and compatible custom-connector clients authenticate to Flaim.
+These endpoints let ChatGPT, Claude, and compatible custom-connector clients authenticate to Flaim.
 
 | Endpoint | Auth | Purpose |
 |----------|------|---------|

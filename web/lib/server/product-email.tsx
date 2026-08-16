@@ -30,7 +30,7 @@ interface SendWelcomeEmailParams {
 }
 
 interface SendLeagueConnectedEmailParams {
-  aiGuideUrl: string;
+  aiDocsUrl: string;
   leagueName?: string;
   platform?: string;
   to: string;
@@ -107,7 +107,7 @@ export function sendWelcomeEmail({
 }
 
 export function sendLeagueConnectedEmail({
-  aiGuideUrl,
+  aiDocsUrl,
   leagueName,
   platform,
   to,
@@ -118,7 +118,7 @@ export function sendLeagueConnectedEmail({
   return sendProductEmail({
     react: (
       <LeagueConnectedEmail
-        aiGuideUrl={aiGuideUrl}
+        aiDocsUrl={aiDocsUrl}
         leagueName={resolvedLeagueName}
         platform={platform}
         unsubscribeUrl={unsubscribeUrl}

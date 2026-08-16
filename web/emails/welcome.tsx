@@ -8,6 +8,7 @@ import emailLinks from "./flaim-email-links.json";
 
 interface WelcomeEmailProps {
   chatGptAppUrl?: string;
+  claudeConnectorUrl?: string;
   firstName?: string;
   leaguesUrl?: string;
   /** Must be a real unsubscribe or notification-preferences URL before connecting to a live sender. */
@@ -16,9 +17,11 @@ interface WelcomeEmailProps {
 
 function WelcomeSetupPath({
   chatGptAppUrl,
+  claudeConnectorUrl,
   leaguesUrl,
 }: {
   chatGptAppUrl: string;
+  claudeConnectorUrl: string;
   leaguesUrl: string;
 }) {
   return (
@@ -93,7 +96,21 @@ function WelcomeSetupPath({
                   textUnderlineOffset: "3px",
                 }}
               >
-                Open in ChatGPT →
+                Add to ChatGPT →
+              </a>
+              <br />
+              <a
+                href={claudeConnectorUrl}
+                style={{
+                  color: "#6b7280",
+                  fontSize: "12px",
+                  fontWeight: "700",
+                  lineHeight: "17px",
+                  textDecoration: "underline",
+                  textUnderlineOffset: "3px",
+                }}
+              >
+                Add to Claude →
               </a>
             </td>
           </tr>
@@ -105,6 +122,7 @@ function WelcomeSetupPath({
 
 export default function WelcomeEmail({
   chatGptAppUrl = emailLinks.chatGptAppUrl,
+  claudeConnectorUrl = emailLinks.claudeConnectorUrl,
   firstName = "Alex",
   leaguesUrl = emailLinks.leaguesUrl,
   unsubscribeUrl = "mailto:support@flaim.app?subject=Unsubscribe%20from%20Flaim%20product%20updates",
@@ -128,7 +146,11 @@ export default function WelcomeEmail({
         data. Once connected, you can ask about waiver adds, trade grades,
         roster decisions, and so much more.
       </FlaimText>
-      <WelcomeSetupPath chatGptAppUrl={chatGptAppUrl} leaguesUrl={leaguesUrl} />
+      <WelcomeSetupPath
+        chatGptAppUrl={chatGptAppUrl}
+        claudeConnectorUrl={claudeConnectorUrl}
+        leaguesUrl={leaguesUrl}
+      />
       <p
         style={{
           borderTop: "1px solid #e5e7eb",
@@ -139,8 +161,8 @@ export default function WelcomeEmail({
           paddingTop: "16px",
         }}
       >
-        Flaim is read-only. It can access your league data, but it cannot set
-        lineups, drop players, make trades, or change league settings.
+        Flaim is read-only. It can access your league data, but it cannot make
+        trades, add or drop players, edit lineups, or change league settings.
       </p>
     </FlaimEmailLayout>
   );
@@ -148,6 +170,7 @@ export default function WelcomeEmail({
 
 WelcomeEmail.PreviewProps = {
   chatGptAppUrl: emailLinks.chatGptAppUrl,
+  claudeConnectorUrl: emailLinks.claudeConnectorUrl,
   firstName: "Alex",
   leaguesUrl: emailLinks.leaguesUrl,
   unsubscribeUrl:

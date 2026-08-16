@@ -17,6 +17,7 @@ const emailLinks = JSON.parse(
   readFileSync(join(scriptDir, "../emails/flaim-email-links.json"), "utf8"),
 );
 const CHATGPT_APP_URL = emailLinks.chatGptAppUrl;
+const CLAUDE_CONNECTOR_URL = emailLinks.claudeConnectorUrl;
 const LEAGUES_URL = emailLinks.leaguesUrl;
 const CONTACT_SEGMENT_ID = process.env.RESEND_CONTACT_SEGMENT_ID?.trim();
 
@@ -113,12 +114,12 @@ function buildWelcomeHtml() {
                       </td>
                       <td style="padding:0 0 0 6px;vertical-align:top;width:33.333%;">
                         <p style="margin:0;color:#6b7280;font-size:11px;font-weight:700;line-height:16px;text-transform:uppercase;">Then</p>
-                        <a href="${CHATGPT_APP_URL}" style="color:#6b7280;font-size:12px;font-weight:700;line-height:17px;text-decoration:underline;">Open in ChatGPT →</a>
+                        <a href="${CHATGPT_APP_URL}" style="color:#6b7280;font-size:12px;font-weight:700;line-height:17px;text-decoration:underline;">Add to ChatGPT →</a><br /><a href="${CLAUDE_CONNECTOR_URL}" style="color:#6b7280;font-size:12px;font-weight:700;line-height:17px;text-decoration:underline;">Add to Claude →</a>
                       </td>
                     </tr>
                   </table>
                 </div>
-                <p style="margin:22px 0 0;padding-top:16px;border-top:1px solid #e5e7eb;font-size:13px;line-height:21px;color:#6b7280;">Flaim is read-only. It can access your league data, but it cannot set lineups, drop players, make trades, or change league settings.</p>
+                <p style="margin:22px 0 0;padding-top:16px;border-top:1px solid #e5e7eb;font-size:13px;line-height:21px;color:#6b7280;">Flaim is read-only. It can access your league data, but it cannot make trades, add or drop players, edit lineups, or change league settings.</p>
               </td>
             </tr>
             <tr>
@@ -147,9 +148,10 @@ Finish your setup:
 
 DONE: Create account
 NEXT: Connect a league: ${LEAGUES_URL}
-THEN: Open in ChatGPT: ${CHATGPT_APP_URL}
+THEN: Add to ChatGPT: ${CHATGPT_APP_URL}
+      or Add to Claude: ${CLAUDE_CONNECTOR_URL}
 
-Flaim is read-only. It can access your league data, but it cannot set lineups, drop players, make trades, or change league settings.
+Flaim is read-only. It can access your league data, but it cannot make trades, add or drop players, edit lineups, or change league settings.
 
 Need help? Email support@flaim.app.
 Unsubscribe: {{{RESEND_UNSUBSCRIBE_URL}}}`;
