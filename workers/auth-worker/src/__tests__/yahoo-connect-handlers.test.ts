@@ -3104,6 +3104,73 @@ describe('yahoo-connect-handlers', () => {
       expect(mockStorage.upsertYahooLeague).not.toHaveBeenCalled();
     });
 
+    it('surfaces the app-review outage message on an application-level 403 during discovery', async () => {
+      // Yahoo's approval program denies the APP platform-wide. That is not the
+      // user's connection and reconnecting cannot fix it, so discovery must say
+      // so — in the same words yahoo-client uses on the data path. NOT
+      // retryable: the web routes retryable discovery failures into the
+      // token-cooldown notice, which hides this text and ends "reconnect
+      // Yahoo"; the non-retryable path shows error_description verbatim.
+      // Regression: this path used to say only "Yahoo API returned 403", which
+      // is what a brand-new Yahoo user saw during draft season.
+      mockStorage.getYahooCredentials.mockResolvedValue({
+        clerkUserId: 'user_123',
+        accessToken: 'fresh-token',
+        refreshToken: 'refresh-token',
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+        needsRefresh: false,
+      });
+
+      mockFetch.mockResolvedValue(
+        new Response(
+          '{"error":{"description":"This application is not authorized to perform this action."}}',
+          { status: 403 }
+        )
+      );
+
+      const response = await handleYahooDiscover(env, 'user_123', corsHeaders);
+
+      expect(response.status).toBe(502);
+      expect(response.headers.get('Retry-After')).toBeNull();
+      const body = (await response.json()) as Record<string, unknown>;
+      expect(body.error).toBe('yahoo_api_error');
+      expect(body.error_description).toContain('Yahoo is currently reviewing third-party app access');
+      expect(body.error_description).toContain('nothing needs to be redone');
+      expect(body.error_description).toContain('ESPN and Sleeper leagues are unaffected');
+      expect(body.retryable).toBeUndefined();
+      expect(body.retry_after).toBeUndefined();
+      expect(body.upstream_status).toBe(403);
+      expect(mockStorage.upsertYahooLeague).not.toHaveBeenCalled();
+    });
+
+    it('keeps the generic message on a resource-level 403 during discovery', async () => {
+      // A 403 about a specific resource is not the platform-wide denial and
+      // must not be dressed up as one.
+      mockStorage.getYahooCredentials.mockResolvedValue({
+        clerkUserId: 'user_123',
+        accessToken: 'fresh-token',
+        refreshToken: 'refresh-token',
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+        needsRefresh: false,
+      });
+
+      mockFetch.mockResolvedValue(
+        new Response(
+          '{"error":{"description":"You are not allowed to view this league."}}',
+          { status: 403 }
+        )
+      );
+
+      const response = await handleYahooDiscover(env, 'user_123', corsHeaders);
+
+      expect(response.status).toBe(502);
+      const body = (await response.json()) as Record<string, unknown>;
+      expect(body.error).toBe('yahoo_api_error');
+      expect(body.error_description).toBe('Yahoo API returned 403');
+      expect(body.retryable).toBeUndefined();
+      expect(body.upstream_status).toBe(403);
+    });
+
     it('stores Yahoo team_key during league discovery', async () => {
       mockStorage.getYahooCredentials.mockResolvedValue({
         clerkUserId: 'user_123',

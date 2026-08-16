@@ -13,7 +13,12 @@ import {
   USER_SESSION_WIDGET_URI,
   V2_USER_SESSION_WIDGET_URI,
 } from '../widgets/user-session-widget';
-import { INTERNAL_SERVICE_TOKEN_HEADER, toSnapshotMetadata, type RosterSnapshot } from '@flaim/worker-shared';
+import {
+  INTERNAL_SERVICE_TOKEN_HEADER,
+  YAHOO_APP_REVIEW_OUTAGE_MESSAGE,
+  toSnapshotMetadata,
+  type RosterSnapshot,
+} from '@flaim/worker-shared';
 
 /** Helper to cast an AnySchema value to z3 ZodTypeAny for .parse() in tests. */
 const asZod = (schema: unknown) => schema as z.ZodTypeAny;
@@ -388,6 +393,43 @@ describe('fantasy-mcp tools', () => {
       message: 'Refresh partially complete. Reconnect a provider.',
       reloadSession: true,
       showLeaguesLink: true,
+    });
+  });
+
+  it('does not read the Yahoo app-review outage as reconnect-required or retry-later', () => {
+    // auth-worker's discovery path returns Yahoo's platform-wide app denial as
+    // a 502 yahoo_api_error whose error_description is the shared outage text.
+    // The classifier's text heuristic treats /connect|auth|.../ as reconnect
+    // and /try again|.../ as retry; the shared message is worded to avoid both,
+    // because "reconnect Yahoo" is the one instruction that cannot help. This
+    // pins the coupling from the classifier's side, using the real constant.
+    const yahooOutage = {
+      platform: 'yahoo',
+      status: 'error',
+      httpStatus: 502,
+      error: 'yahoo_api_error',
+      error_description: YAHOO_APP_REVIEW_OUTAGE_MESSAGE.discovery,
+      details: { upstream_status: 403 },
+    };
+
+    // Yahoo-only refresh: same generic failure as any other Yahoo 502, not "Reconnect a league provider."
+    expect(classifyRefreshResult({ success: false, results: { yahoo: yahooOutage } })).toEqual({
+      kind: 'failure',
+      message: 'Refresh failed.',
+      reloadSession: false,
+    });
+
+    // Mixed: another provider succeeded, so partial, and no reconnect nudge or leagues link.
+    expect(classifyRefreshResult({
+      success: true,
+      results: {
+        sleeper: { platform: 'sleeper', status: 'success', details: { leagues_found: 1 } },
+        yahoo: yahooOutage,
+      },
+    })).toEqual({
+      kind: 'partial',
+      message: 'Refresh partially complete.',
+      reloadSession: true,
     });
   });
 
