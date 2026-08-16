@@ -141,10 +141,8 @@ function PhoneFlowSteps({
 
 function AboutPanel({
   demoTarget,
-  onPanelChange,
 }: {
   demoTarget: PhoneEducationPanelProps["demoTarget"];
-  onPanelChange: (panel: PhoneEducationPanelId) => void;
 }) {
   return (
     <>
@@ -192,13 +190,6 @@ function AboutPanel({
             </p>
           </div>
         </div>
-      </div>
-
-      <div className="mt-5">
-        <div className="mb-2 text-[length:var(--phone-type-caption)] font-semibold uppercase tracking-[0.12em] text-[var(--phone-muted)]">
-          Inside ChatGPT
-        </div>
-        <PhoneFlowSteps onSelect={onPanelChange} />
       </div>
 
       <Link
@@ -401,7 +392,7 @@ export function PhoneEducationPanel({
 
         <div className="mt-3">
           {panel === "about" ? (
-            <AboutPanel demoTarget={demoTarget} onPanelChange={onPanelChange} />
+            <AboutPanel demoTarget={demoTarget} />
           ) : panel === "sport" ? (
             <SportPanel
               demoTarget={demoTarget}

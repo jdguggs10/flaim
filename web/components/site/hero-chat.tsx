@@ -6,7 +6,7 @@ const ROTATING_WORDS = [
   "rosters",
   "standings",
   "matchups",
-  "available players",
+  "free agents",
   "transactions",
   "player stats",
   "history",
