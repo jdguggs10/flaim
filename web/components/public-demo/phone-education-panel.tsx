@@ -8,10 +8,37 @@ import { Database, LockKeyhole, ShieldCheck, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, type RefObject } from "react";
 
-// The composer's plus, Flaim, and send controls explain themselves with small
-// popovers (see public-chat-experience.tsx); only the demo guide and the sport
-// picker use this bottom sheet.
-export type PhoneEducationPanelId = "about" | "sport";
+export type PhoneEducationPanelId =
+  | "about"
+  | "sport"
+  | "drawer"
+  | "activation"
+  | "ask";
+type PhoneInsideChatGptPanelId = Exclude<
+  PhoneEducationPanelId,
+  "about" | "sport"
+>;
+
+// The composer's plus, Flaim, and send controls each open a short "Inside
+// ChatGPT" sheet: a title and a sentence or two. They are informational
+// asides, not numbered steps, so there is no step switcher.
+const INSIDE_CHATGPT_CONTENT: Record<
+  PhoneInsideChatGptPanelId,
+  { title: string; body: string }
+> = {
+  drawer: {
+    title: "Find Flaim in the + menu",
+    body: "Adding Flaim Fantasy to ChatGPT puts it in this drawer. Connect your leagues first, then add it once.",
+  },
+  activation: {
+    title: "Flaim is active",
+    body: "This badge means ChatGPT is using Flaim's read-only league info. It should activate on its own for fantasy questions; if it doesn't, choose Flaim from the drawer.",
+  },
+  ask: {
+    title: "Ask in your own words",
+    body: "In ChatGPT, type and send any fantasy question normally. For the demo, select one of these questions that were recently run.",
+  },
+};
 
 interface PhoneEducationPanelProps {
   container: HTMLElement | null;
@@ -200,10 +227,15 @@ export function PhoneEducationPanel({
   const heading =
     panel === "about"
       ? { eyebrow: "Demo guide", title: "About this demo" }
-      : {
-          eyebrow: "Demo coverage",
-          title: `${demoTarget.platformLabel} · ${demoTarget.sport === "baseball" ? "Baseball" : "Football"}`,
-        };
+      : panel === "sport"
+        ? {
+            eyebrow: "Demo coverage",
+            title: `${demoTarget.platformLabel} · ${demoTarget.sport === "baseball" ? "Baseball" : "Football"}`,
+          }
+        : {
+            eyebrow: "Inside ChatGPT",
+            title: INSIDE_CHATGPT_CONTENT[panel].title,
+          };
 
   return (
     <DialogPrimitive.Portal container={container}>
@@ -243,12 +275,16 @@ export function PhoneEducationPanel({
         <div className="mt-3">
           {panel === "about" ? (
             <AboutPanel demoTarget={demoTarget} />
-          ) : (
+          ) : panel === "sport" ? (
             <SportPanel
               demoTarget={demoTarget}
               sportOptions={sportOptions}
               onSelectSport={onSelectSport}
             />
+          ) : (
+            <DialogPrimitive.Description className="text-[length:var(--phone-type-body)] leading-[var(--phone-leading-body)] text-[var(--phone-text)]">
+              {INSIDE_CHATGPT_CONTENT[panel].body}
+            </DialogPrimitive.Description>
           )}
         </div>
       </DialogPrimitive.Content>
