@@ -216,9 +216,6 @@ export function FootballSeasonalPage() {
               Ask about the team you drafted, weekly matchups, available
               players, standings, trades, and league history.
             </p>
-            <div className="mt-7">
-              <FootballConnectionButtons />
-            </div>
           </div>
           <ConnectedLeaguesProof />
         </div>
