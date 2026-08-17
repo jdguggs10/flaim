@@ -1,2 +1,5 @@
 .vercel
 .env*
+
+# clerk local configuration (keyless mode can include secrets)
+/.clerk/
