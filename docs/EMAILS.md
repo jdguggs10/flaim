@@ -78,7 +78,7 @@ The first automated product email is a Resend Automation for new-user welcome em
 
 Keep welcome delivery gated until the Resend event, template, automation, Segment, and real inbox test are verified. Production delivery requires both `RESEND_WELCOME_AUTOMATION_ENABLED=true` in Flaim and the Resend automation enabled in Resend. The event emitter uses `RESEND_EVENTS_API_KEY` when set, otherwise it falls back to `RESEND_CONTACTS_API_KEY`; do not use the send-only `RESEND_API_KEY` for event/automation management.
 
-Before enabling the flag in production, confirm failed welcome event sends are visible in the production logs or alerting path. The Clerk webhook intentionally acknowledges verified user events even if the downstream Resend event call fails, so a Resend outage or expired events key will not retry through Clerk. Deploy order for welcome automation changes is: deploy the app, rerun `web/scripts/setup-resend-welcome-automation.mjs`, verify a real test email, then re-enable the automation in Resend.
+Before enabling the flag in production, confirm failed welcome event sends are visible in the production logs or alerting path. The Clerk webhook intentionally acknowledges verified user events even if the downstream Resend event call fails, so a Resend outage or expired events key will not retry through Clerk. Deploy order for welcome automation changes is: deploy the app, disable the `Flaim Welcome Email` automation in the Resend dashboard, rerun `web/scripts/setup-resend-welcome-automation.mjs`, verify a real test email, then re-enable the automation in Resend.
 
 Create or refresh the Resend-side resources with:
 
