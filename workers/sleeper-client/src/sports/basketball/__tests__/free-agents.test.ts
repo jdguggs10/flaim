@@ -127,6 +127,10 @@ describe('sleeper basketball get_free_agents handler', () => {
       count: 0,
       players: [],
     });
-    expect((result.data as { warning?: string }).warning).toContain('PLAYER_ENRICHMENT_UNAVAILABLE');
+    const data = result.data as { warning?: string; warnings?: string[] };
+    expect(data.warning).toContain('PLAYER_ENRICHMENT_UNAVAILABLE');
+    // warnings[] mirrors the legacy singular warning so Sleeper tools expose
+    // degradation consistently, without removing the field published clients read.
+    expect(data.warnings).toEqual([data.warning]);
   });
 });
