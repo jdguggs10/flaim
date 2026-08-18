@@ -49,7 +49,7 @@ interface ExecuteRequest {
 ## Supported Tools
 
 ### Football (NFL)
-- `get_league_info` — League settings and members
+- `get_league_info` — League settings and members, plus traded draft-pick ownership
 - `get_standings` — League standings (computed from roster settings: wins, losses, ties, points)
 - `get_roster` — Team roster with player details
 - `get_matchups` — Weekly matchups (paired by `matchup_id`)
@@ -58,7 +58,7 @@ interface ExecuteRequest {
 - `get_transactions` — Recent transactions with player name/position enrichment
 
 ### Basketball (NBA)
-- `get_league_info` — League settings and members
+- `get_league_info` — League settings and members, plus traded draft-pick ownership
 - `get_standings` — League standings (computed from roster settings: wins, losses, ties, points)
 - `get_roster` — Team roster with player details
 - `get_matchups` — Weekly matchups (paired by `matchup_id`)
@@ -77,6 +77,10 @@ interface ExecuteRequest {
 - When the player index is unavailable, the response still succeeds and adds a top-level `warnings: string[]` explaining player names/positions are unavailable for that call.
 
 `get_league_info`, `get_standings`, `get_roster`, and `get_matchups` all add `teamName` alongside the existing `ownerName`. Unlike ESPN/Yahoo, Sleeper only exposes a manager-set fantasy team name via `users[].metadata.team_name`; `teamName` is present only when the manager actually set one — it is never fabricated as a fallback.
+
+## Traded Draft-Pick Ownership (Sleeper Only)
+
+`get_league_info` additionally fetches `GET /league/{league_id}/traded_picks` and surfaces `tradedPicks` — but only picks that changed hands; Sleeper does not list untraded picks, so this is not an exhaustive picture of every future draft. Each returned entry resolves the raw roster ids to names via the same user directory: `{ season, round, originalRosterId, originalOwnerName?, originalTeamName?, previousRosterId, currentRosterId, currentOwnerName?, currentTeamName? }`, sorted by season, round, then originalRosterId. `draftRounds` (from `league.settings.draft_rounds`) is also surfaced so a future draft's round count can be reasoned about. When `tradedPicks` is non-empty, a one-sentence `pickOwnershipNote` reminds the caller that every roster owns its own untraded picks and that Sleeper allows pick trading for the current season plus up to three future seasons depending on league settings — seasons beyond what's listed are unverified; the note is suppressed when `tradedPicks` is empty since there is nothing to caveat. Redraft leagues (and any league with nothing traded) return an empty `tradedPicks: []` array with no warning. Every raw entry is runtime-validated (`season` a non-empty string, `round`/`roster_id`/`previous_owner_id`/`owner_id` integers) before use. Malformed entries are dropped and the valid ones are kept, with a `TRADED_PICKS_PARTIAL: N malformed ...` entry added to a top-level `warnings: string[]` so the caller knows the list may be incomplete; if the fetch fails, the body isn't an array, or no entry is valid, `tradedPicks` and `pickOwnershipNote` are omitted and a `TRADED_PICKS_UNAVAILABLE` warning is added instead — never failing the whole `get_league_info` call, so the rest of the league/roster/user data still succeeds. A pick whose roster id has no matching roster resolves with the id fields present and the name fields omitted, never a thrown error.
 
 ## Player Cache (KV)
 

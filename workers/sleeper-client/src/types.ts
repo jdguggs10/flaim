@@ -38,6 +38,20 @@ export interface SleeperUser {
   avatar: string | null;
 }
 
+/**
+ * League settings. draft_rounds is the round count to assume for future
+ * drafts (used alongside traded-pick data to derive pick ownership). `type`
+ * (0/1/2 = redraft/keeper/dynasty) is undocumented community convention —
+ * an unexpected `3` has been observed live, so callers must not gate
+ * behavior on it. Kept as an index signature since Sleeper returns many
+ * more settings fields than Flaim currently models.
+ */
+export interface SleeperLeagueSettings {
+  draft_rounds?: number;
+  type?: number;
+  [key: string]: unknown;
+}
+
 export interface SleeperLeague {
   league_id: string;
   name: string;
@@ -47,10 +61,25 @@ export interface SleeperLeague {
   total_rosters: number;
   roster_positions: string[];
   scoring_settings: Record<string, number>;
-  settings: Record<string, unknown>;
+  settings: SleeperLeagueSettings;
   previous_league_id: string | null;
   draft_id: string;
   avatar: string | null;
+}
+
+/**
+ * A single net traded-pick ownership record from
+ * GET /league/{league_id}/traded_picks. Untraded picks are not listed.
+ * roster_id is the ORIGINAL owner's roster; previous_owner_id is the roster
+ * it most recently came from; owner_id is the CURRENT owner's roster. All
+ * roster ids are numbers.
+ */
+export interface SleeperTradedPick {
+  season: string;
+  round: number;
+  roster_id: number;
+  previous_owner_id: number;
+  owner_id: number;
 }
 
 export interface SleeperRoster {
