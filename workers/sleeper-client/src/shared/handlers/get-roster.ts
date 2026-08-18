@@ -41,6 +41,10 @@ async function getHistoricalRoster(
 
   // Kick off the player-index load in parallel with the roster/matchup
   // fetches (team_id is already validated above, so this path always needs it).
+  // Best-effort by design: on the not-found early returns below the promise is
+  // simply discarded (the loader never rejects, and the isolate drops any
+  // in-flight KV read once the response is sent), so a bad week/team_id costs
+  // at most one wasted lookup — accepted in exchange for the happy-path overlap.
   const playersIndexPromise = loadSleeperPlayersIndexForEnrichment(env, sport, 'get-roster:historical');
 
   const [matchupsRes, rostersRes, usersRes] = await Promise.all([
@@ -133,6 +137,9 @@ export function createGetRosterHandler(): HandlerFn {
 
       // Only kick off the player-index load when a team_id was passed — the
       // no-team_id roster-summary branch below never enriches player IDs.
+      // Best-effort by design: if team_id turns out not to match a roster, the
+      // promise is discarded (the loader never rejects); one wasted lookup on
+      // an invalid team_id is accepted for the happy-path overlap.
       const playersIndexPromise = team_id
         ? loadSleeperPlayersIndexForEnrichment(env, sport, 'get-roster:current')
         : undefined;
