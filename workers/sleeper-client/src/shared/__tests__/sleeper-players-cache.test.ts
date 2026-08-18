@@ -147,7 +147,7 @@ describe('sleeper-players-cache', () => {
     mockFetch.mockResolvedValueOnce(jsonResponse([])); // valid 200, but zero usable players
 
     await expect(getSleeperPlayersIndex(env, 'football')).rejects.toThrow(
-      'SLEEPER_EMPTY_PLAYER_INDEX'
+      'SLEEPER_INVALID_PLAYER_INDEX'
     );
     expect(kvPut).not.toHaveBeenCalled();
   });
@@ -163,5 +163,85 @@ describe('sleeper-players-cache', () => {
     expect(mockFetch).toHaveBeenCalledTimes(1);
     expect(index.get('71')?.full_name).toBe('Fresh Player');
     expect(kvPut).toHaveBeenCalledTimes(1);
+  });
+
+  it('throws instead of caching a mostly-malformed player index from a 200 payload', async () => {
+    kvGet.mockResolvedValueOnce(null); // cache miss
+    // 1 valid entry, 4 malformed (no player_id, so parsePlayerRecord returns
+    // null for each) — skipped (4) > records (1), a majority-unusable payload.
+    mockFetch.mockResolvedValueOnce(jsonResponse([
+      { player_id: '81', full_name: 'Only Valid Player', active: true },
+      { full_name: 'No id A' },
+      { full_name: 'No id B' },
+      { full_name: 'No id C' },
+      { full_name: 'No id D' },
+    ]));
+
+    await expect(getSleeperPlayersIndex(env, 'football')).rejects.toThrow(
+      'SLEEPER_INVALID_PLAYER_INDEX'
+    );
+    expect(kvPut).not.toHaveBeenCalled();
+  });
+
+  it('does not trust a cached mostly-malformed index — refetches instead', async () => {
+    kvGet.mockResolvedValueOnce(JSON.stringify([
+      { player_id: '82', full_name: 'Only Valid Cached Player', active: true },
+      { full_name: 'No id A' },
+      { full_name: 'No id B' },
+      { full_name: 'No id C' },
+    ]));
+    mockFetch.mockResolvedValueOnce(jsonResponse([
+      { player_id: '91', full_name: 'Fresh Player', active: true },
+    ]));
+
+    const index = await getSleeperPlayersIndex(env, 'football');
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(index.get('91')?.full_name).toBe('Fresh Player');
+  });
+
+  it('succeeds when only a minority of entries are malformed', async () => {
+    kvGet.mockResolvedValueOnce(null); // cache miss
+    // 5 valid entries, 1 malformed — skipped (1) is not > records (5), so
+    // this is NOT structurally invalid and the 5 valid players are kept.
+    mockFetch.mockResolvedValueOnce(jsonResponse([
+      { player_id: '101', full_name: 'Player A', active: true },
+      { player_id: '102', full_name: 'Player B', active: true },
+      { player_id: '103', full_name: 'Player C', active: true },
+      { player_id: '104', full_name: 'Player D', active: true },
+      { player_id: '105', full_name: 'Player E', active: true },
+      { full_name: 'No id — dropped, not fatal' },
+    ]));
+
+    const index = await getSleeperPlayersIndex(env, 'football');
+
+    expect(index.size).toBe(5);
+    expect(index.get('101')?.full_name).toBe('Player A');
+    expect(kvPut).toHaveBeenCalledTimes(1);
+  });
+
+  it('clears the in-flight load on rejection so concurrent callers all reject and the next call retries', async () => {
+    kvGet.mockResolvedValue(null); // cache miss on every call in this test
+    mockFetch.mockResolvedValueOnce(new Response(null, { status: 503 })); // first attempt fails
+
+    const results = await Promise.allSettled([
+      getSleeperPlayersIndex(env, 'football'),
+      getSleeperPlayersIndex(env, 'football'),
+    ]);
+
+    expect(results[0].status).toBe('rejected');
+    expect(results[1].status).toBe('rejected');
+    // Both callers shared the single in-flight load (one KV read, one fetch).
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+
+    // inFlightLoads must have cleared on rejection — the next call is a
+    // fresh attempt, not stuck reusing the rejected promise.
+    mockFetch.mockResolvedValueOnce(jsonResponse([
+      { player_id: '111', full_name: 'Retry Player', active: true },
+    ]));
+    const index = await getSleeperPlayersIndex(env, 'football');
+
+    expect(index.get('111')?.full_name).toBe('Retry Player');
+    expect(mockFetch).toHaveBeenCalledTimes(2);
   });
 });

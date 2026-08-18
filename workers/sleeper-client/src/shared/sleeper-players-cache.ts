@@ -68,31 +68,59 @@ function parsePlayerRecord(raw: SleeperPlayersApiRecord, fallbackId?: string): S
   };
 }
 
-function normalizePlayers(input: unknown): SleeperPlayerRecord[] | null {
+interface NormalizedPlayers {
+  records: SleeperPlayerRecord[];
+  /** Entries that were non-objects, or objects that failed parsePlayerRecord. */
+  skipped: number;
+}
+
+function normalizePlayers(input: unknown): NormalizedPlayers | null {
   if (Array.isArray(input)) {
-    const fromArray: SleeperPlayerRecord[] = [];
+    const records: SleeperPlayerRecord[] = [];
+    let skipped = 0;
     for (const item of input) {
-      if (!item || typeof item !== 'object') continue;
+      if (!item || typeof item !== 'object') {
+        skipped++;
+        continue;
+      }
       const parsed = parsePlayerRecord(item as SleeperPlayersApiRecord);
-      if (!parsed) continue;
-      fromArray.push(parsed);
+      if (!parsed) {
+        skipped++;
+        continue;
+      }
+      records.push(parsed);
     }
-    return fromArray;
+    return { records, skipped };
   }
 
   if (!input || typeof input !== 'object') {
     return null;
   }
 
-  const fromObject: SleeperPlayerRecord[] = [];
+  const records: SleeperPlayerRecord[] = [];
+  let skipped = 0;
   for (const [playerId, value] of Object.entries(input as Record<string, unknown>)) {
-    if (!value || typeof value !== 'object') continue;
+    if (!value || typeof value !== 'object') {
+      skipped++;
+      continue;
+    }
     const parsed = parsePlayerRecord(value as SleeperPlayersApiRecord, playerId);
-    if (!parsed) continue;
-    fromObject.push(parsed);
+    if (!parsed) {
+      skipped++;
+      continue;
+    }
+    records.push(parsed);
   }
 
-  return fromObject;
+  return { records, skipped };
+}
+
+// Structurally invalid: nothing usable came out, or more than half of the
+// entries were unusable (a mostly-corrupt payload/cache entry shouldn't
+// become the authoritative index for a full day). No fixed minimum-record
+// threshold — small, fully-valid fixtures (including in tests) must pass.
+function isStructurallyInvalid(normalized: NormalizedPlayers): boolean {
+  return normalized.records.length === 0 || normalized.skipped > normalized.records.length;
 }
 
 function toPlayerIndex(players: SleeperPlayerRecord[]): Map<string, SleeperPlayerRecord> {
@@ -145,11 +173,12 @@ async function loadSleeperPlayersIndex(
   if (cached) {
     try {
       const parsedCached = normalizePlayers(JSON.parse(cached));
-      // A cached-but-empty index is treated the same as a malformed cache
-      // entry below: fall through and refetch rather than serving (and
-      // re-memoizing) zero usable players for the full TTL.
-      if (parsedCached && parsedCached.length > 0) {
-        const index = toPlayerIndex(parsedCached);
+      // A structurally invalid cached entry (empty, or majority-malformed —
+      // e.g. a previously-poisoned entry) is treated the same as unparseable
+      // JSON below: fall through and refetch rather than serving (and
+      // re-memoizing) a bad index for the full TTL.
+      if (parsedCached && !isStructurallyInvalid(parsedCached)) {
+        const index = toPlayerIndex(parsedCached.records);
         memoize(cacheKey, index);
         return index;
       }
@@ -162,18 +191,19 @@ async function loadSleeperPlayersIndex(
   if (!response.ok) handleSleeperError(response);
 
   const payload = await response.json();
-  const parsedPlayers = normalizePlayers(payload) ?? [];
-  if (parsedPlayers.length === 0) {
-    // Never persist an empty index (in memory or KV) from a 200 payload —
-    // that would silently poison the 24h cache. Throwing lets callers
-    // (loadSleeperPlayersIndexForEnrichment, get_free_agents) degrade with a
-    // warning instead, and the next call gets a clean retry.
+  const normalized = normalizePlayers(payload) ?? { records: [], skipped: 0 };
+  if (isStructurallyInvalid(normalized)) {
+    // Never persist a structurally invalid index (in memory or KV) from a
+    // 200 payload — that would silently poison the 24h cache. Throwing lets
+    // callers (loadSleeperPlayersIndexForEnrichment, get_free_agents)
+    // degrade with a warning instead, and the next call gets a clean retry.
     throw new Error(
-      'SLEEPER_EMPTY_PLAYER_INDEX: Sleeper players endpoint returned zero usable player records'
+      `SLEEPER_INVALID_PLAYER_INDEX: Sleeper players endpoint returned an unusable player index ` +
+      `(${normalized.records.length} valid, ${normalized.skipped} skipped)`
     );
   }
 
-  const serialized = JSON.stringify(parsedPlayers);
+  const serialized = JSON.stringify(normalized.records);
   try {
     await env.SLEEPER_PLAYERS_CACHE.put(cacheKey, serialized, {
       expirationTtl: PLAYERS_CACHE_TTL_SECONDS,
@@ -182,7 +212,7 @@ async function loadSleeperPlayersIndex(
     console.error('[sleeper-players-cache] KV write failed; serving from in-memory only:', error);
   }
 
-  const index = toPlayerIndex(parsedPlayers);
+  const index = toPlayerIndex(normalized.records);
   memoize(cacheKey, index);
   return index;
 }
