@@ -80,7 +80,7 @@ interface ExecuteRequest {
 
 `get_free_agents`, `get_transactions`, `get_roster`, and `get_matchups` enrichment all use a shared KV-backed player index (`SLEEPER_PLAYERS_CACHE`):
 - Fetches `GET /v1/players/{sport}` (NFL or NBA) on cache miss.
-- Caches active players only, with a 24-hour TTL.
+- Caches every player Sleeper returns (active and inactive, with an `active` flag) for 24 hours; only `get_free_agents` filters to active players, so rostered IR/retired players still resolve to names.
 - Cache key format: `players:{sport}:v1`.
 - Falls back to in-memory cache if the KV binding is unavailable.
 - Gracefully degrades: if the player index fails, transactions still return player IDs, `get_free_agents` returns an empty list with a `warning` field, and `get_roster`/`get_matchups` return `{ id }`-only entries with a top-level `warnings` array.
