@@ -94,6 +94,7 @@ Defaults are stored centrally in `user_preferences`:
 - `default_baseball` - Default baseball league
 - `default_basketball` - Default basketball league
 - `default_hockey` - Default hockey league
+- `hide_league_widget` - When true, `get_user_session` tells the ChatGPT/Claude league widget to render nothing; the leagues themselves are still returned to the model (FLA-277)
 
 Each per-sport column is nullable JSONB. Cross-platform exclusivity is automatic (one column per sport = one value).
 
@@ -158,7 +159,7 @@ ChatGPT / Claude / manual MCP clients → fantasy-mcp (gateway) → espn-client 
 - Service bindings for worker-to-worker communication (no 522 timeouts)
 
 **Unified tools:**
-- `get_user_session` — Current-season leagues only with `structuredContent` for ChatGPT widget rendering
+- `get_user_session` — Current-season leagues only with `structuredContent` for ChatGPT widget rendering. Adds `widget.hidden: true` to `structuredContent` when the user's `hide_league_widget` preference is set, telling the widget to render nothing without changing which leagues are returned to the model (FLA-277)
 - `refresh_leagues` — Re-discover connected leagues and update Flaim's league records (`mcp:write`; non-destructive)
 - `get_ancient_history` — Past seasons and historical leagues (everything not in the current season)
 - `get_league_info` — Baseline league context: settings, roster config, teams/owners (requires platform, sport, league_id, season_year)
