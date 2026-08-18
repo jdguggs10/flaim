@@ -3,8 +3,12 @@ import { getSleeperPlayersIndex, type SleeperPlayerRecord } from './sleeper-play
 
 const SLEEPER_EMPTY_LINEUP_SLOT_ID = '0';
 
+// Tool-neutral: emitted by get_roster/get_matchups (via
+// loadSleeperPlayersIndexForEnrichment) and by get_transactions, which
+// resolves the player index separately — "player entries" covers both
+// without naming only two of the three tools that use it.
 export const SLEEPER_PLAYER_ENRICHMENT_WARNING =
-  'PLAYER_ENRICHMENT_UNAVAILABLE: Sleeper player index unavailable; roster/matchup player entries include id only.';
+  'PLAYER_ENRICHMENT_UNAVAILABLE: Sleeper player index unavailable; player entries include id only.';
 
 export interface SleeperUserDirectoryEntry {
   displayName: string;

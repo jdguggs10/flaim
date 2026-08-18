@@ -795,7 +795,7 @@ describe('get_transactions output schema', () => {
       // which the passthrough schema accepts without a tools.ts change.
       teams: { '1': 'The Waiver Wire Wizards', '2': 'Team Bob' },
       teamOwners: { '1': 'Alice', '2': 'Bob' },
-      warnings: ['PLAYER_ENRICHMENT_UNAVAILABLE: Sleeper player index unavailable; roster/matchup player entries include id only.'],
+      warnings: ['PLAYER_ENRICHMENT_UNAVAILABLE: Sleeper player index unavailable; player entries include id only.'],
     }));
   });
 });
