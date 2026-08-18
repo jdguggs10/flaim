@@ -1386,8 +1386,14 @@ function LeaguesPageContent() {
 
   // Toggle whether the get_user_session league widget renders in ChatGPT/Claude.
   // Optimistic update: flip immediately, revert if the request fails.
+  // Account-scoped like the other handlers here (createAccountGuard /
+  // shouldApply) so a rejected request that resolves after the user has
+  // switched accounts can't clobber the newly loaded account's state.
   const handleToggleHideLeagueWidget = async () => {
-    const previous = preferences.hideLeagueWidget;
+    const shouldApply = createAccountGuard();
+    if (!shouldApply()) return;
+
+    const previous = displayPreferences.hideLeagueWidget;
     const next = !previous;
     setIsSavingHideLeagueWidget(true);
     setPreferences(prev => ({ ...prev, hideLeagueWidget: next }));
@@ -1397,14 +1403,19 @@ function LeaguesPageContent() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ hideLeagueWidget: next }),
       });
+      if (!shouldApply()) return;
       if (!res.ok) {
         throw new Error('Failed to update preference');
       }
     } catch (err) {
       console.error('Failed to set hide_league_widget:', err);
-      setPreferences(prev => ({ ...prev, hideLeagueWidget: previous }));
+      if (shouldApply()) {
+        setPreferences(prev => ({ ...prev, hideLeagueWidget: previous }));
+      }
     } finally {
-      setIsSavingHideLeagueWidget(false);
+      if (shouldApply()) {
+        setIsSavingHideLeagueWidget(false);
+      }
     }
   };
 
@@ -1709,6 +1720,7 @@ function LeaguesPageContent() {
                   onClick={handleToggleHideLeagueWidget}
                   disabled={isSavingHideLeagueWidget}
                   aria-pressed={displayPreferences.hideLeagueWidget}
+                  aria-label="Hide the league widget in ChatGPT and Claude"
                   title={displayPreferences.hideLeagueWidget ? 'Widget hidden (click to show)' : 'Widget shown (click to hide)'}
                 >
                   {isSavingHideLeagueWidget ? (
