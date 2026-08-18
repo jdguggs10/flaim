@@ -957,7 +957,7 @@ describe('sleeper cross-sport handler characterization tests', () => {
   });
 
   describe('get_transactions', () => {
-    it.each(scenarios)('$label resolves a teams map and per-row team_names for team_ids, with manager-set and default names', async ({ sport, handlers }) => {
+    it.each(scenarios)('$label resolves teams/teamOwners maps and per-row team_names for team_ids, with manager-set and default names', async ({ sport, handlers }) => {
       // Explicit week skips the state fetch. Order: rosters, users, transactions/{week}.
       mockFetch
         .mockResolvedValueOnce(jsonResponse([
@@ -980,15 +980,16 @@ describe('sleeper cross-sport handler characterization tests', () => {
 
       expect(result.success).toBe(true);
       const data = result.data as {
-        teams?: Record<string, { ownerName: string; teamName: string }>;
+        teams?: Record<string, string>;
+        teamOwners?: Record<string, string>;
         transactions: Array<{ team_ids?: string[]; team_names?: string[] }>;
         warnings?: string[];
       };
-      // teamName is the manager-set users[].metadata.team_name, else Sleeper's own "Team <display name>" default
-      expect(data.teams).toEqual({
-        '1': { ownerName: 'Alice', teamName: 'The Waiver Wire Wizards' },
-        '2': { ownerName: 'Bob', teamName: 'Team Bob' },
-      });
+      // teams is ESPN-shaped (Record<string, string>): teamName is the
+      // manager-set users[].metadata.team_name, else Sleeper's own "Team
+      // <display name>" default. teamOwners is the additive owner-name map.
+      expect(data.teams).toEqual({ '1': 'The Waiver Wire Wizards', '2': 'Team Bob' });
+      expect(data.teamOwners).toEqual({ '1': 'Alice', '2': 'Bob' });
       expect(data.transactions[0]).toMatchObject({
         team_ids: ['1', '2'],
         team_names: ['The Waiver Wire Wizards', 'Team Bob'],
@@ -1000,7 +1001,7 @@ describe('sleeper cross-sport handler characterization tests', () => {
       expect(mockFetch).toHaveBeenNthCalledWith(3, expect.stringContaining('/league/12345/transactions/9'), expect.anything());
     });
 
-    it.each(scenarios)('$label omits teams and adds a warning when the rosters/users fetch fails, keeping transaction rows intact', async ({ sport, handlers }) => {
+    it.each(scenarios)('$label omits teams/teamOwners and adds a warning when the rosters/users fetch fails, keeping transaction rows intact', async ({ sport, handlers }) => {
       mockFetch
         .mockResolvedValueOnce(new Response(null, { status: 500 })) // rosters fails
         .mockResolvedValueOnce(jsonResponse([{ user_id: 'u1', display_name: 'Alice', avatar: null }])) // users (unreached)
@@ -1017,10 +1018,12 @@ describe('sleeper cross-sport handler characterization tests', () => {
       expect(result.success).toBe(true);
       const data = result.data as {
         teams?: unknown;
+        teamOwners?: unknown;
         transactions: Array<{ transaction_id: string; team_ids?: string[]; team_names?: string[] }>;
         warnings?: string[];
       };
       expect(data.teams).toBeUndefined();
+      expect(data.teamOwners).toBeUndefined();
       expect(data.warnings).toEqual([TEAMS_UNAVAILABLE_WARNING]);
       // The rest of the response still succeeds — team_names falls back to the raw ids.
       expect(data.transactions).toHaveLength(1);

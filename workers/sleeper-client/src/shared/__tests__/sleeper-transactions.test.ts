@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi, type MockedFunction } from 'vitest';
 import {
   attachTeamNames,
-  fetchSleeperRosterTeamsMap,
+  fetchSleeperRosterTeams,
   fetchSleeperTransactionsByWeeks,
   getSleeperCurrentWeek,
   type NormalizedTransaction,
@@ -94,12 +94,12 @@ describe('sleeper-transactions', () => {
   });
 });
 
-describe('fetchSleeperRosterTeamsMap', () => {
+describe('fetchSleeperRosterTeams', () => {
   beforeEach(() => {
     mockFetch.mockReset();
   });
 
-  it('resolves manager-set and default team names, keyed by roster id', async () => {
+  it('resolves manager-set and default team names into parallel teams/teamOwners maps, keyed by roster id', async () => {
     mockFetch
       .mockResolvedValueOnce(jsonResponse([
         { roster_id: 1, owner_id: 'u1', players: [], starters: [], reserve: [], settings: { wins: 0, losses: 0, ties: 0, fpts: 0 } },
@@ -110,15 +110,15 @@ describe('fetchSleeperRosterTeamsMap', () => {
         { user_id: 'u2', display_name: 'Bob', avatar: null },
       ]));
 
-    const teams = await fetchSleeperRosterTeamsMap('league');
+    const { teams, teamOwners } = await fetchSleeperRosterTeams('league');
 
-    expect(teams).toEqual({
-      '1': { ownerName: 'Alice', teamName: 'The Waiver Wire Wizards' },
-      '2': { ownerName: 'Bob', teamName: 'Team Bob' },
-    });
+    // teams is ESPN-shaped (Record<string, string>) — always a non-empty
+    // teamName string (manager-set, or Sleeper's "Team <name>" default).
+    expect(teams).toEqual({ '1': 'The Waiver Wire Wizards', '2': 'Team Bob' });
+    expect(teamOwners).toEqual({ '1': 'Alice', '2': 'Bob' });
   });
 
-  it('omits a roster whose owner_id has no matching user', async () => {
+  it('omits a roster whose owner_id has no matching user from both maps', async () => {
     mockFetch
       .mockResolvedValueOnce(jsonResponse([
         { roster_id: 1, owner_id: 'u1', players: [], starters: [], reserve: [], settings: { wins: 0, losses: 0, ties: 0, fpts: 0 } },
@@ -128,9 +128,10 @@ describe('fetchSleeperRosterTeamsMap', () => {
         { user_id: 'u1', display_name: 'Alice', avatar: null },
       ]));
 
-    const teams = await fetchSleeperRosterTeamsMap('league');
+    const { teams, teamOwners } = await fetchSleeperRosterTeams('league');
 
-    expect(teams).toEqual({ '1': { ownerName: 'Alice', teamName: 'Team Alice' } });
+    expect(teams).toEqual({ '1': 'Team Alice' });
+    expect(teamOwners).toEqual({ '1': 'Alice' });
   });
 
   it('throws when the rosters fetch fails, before touching users', async () => {
@@ -138,7 +139,7 @@ describe('fetchSleeperRosterTeamsMap', () => {
       .mockResolvedValueOnce(new Response(null, { status: 500 }))
       .mockResolvedValueOnce(jsonResponse([]));
 
-    await expect(fetchSleeperRosterTeamsMap('league')).rejects.toThrow();
+    await expect(fetchSleeperRosterTeams('league')).rejects.toThrow();
   });
 
   it('throws when the users fetch fails', async () => {
@@ -146,7 +147,7 @@ describe('fetchSleeperRosterTeamsMap', () => {
       .mockResolvedValueOnce(jsonResponse([]))
       .mockResolvedValueOnce(new Response(null, { status: 500 }));
 
-    await expect(fetchSleeperRosterTeamsMap('league')).rejects.toThrow();
+    await expect(fetchSleeperRosterTeams('league')).rejects.toThrow();
   });
 });
 
@@ -162,10 +163,7 @@ describe('attachTeamNames', () => {
   };
 
   it('adds team_names parallel to team_ids when the map resolves both ids', () => {
-    const [result] = attachTeamNames([baseTxn], {
-      '1': { ownerName: 'Alice', teamName: 'The Waiver Wire Wizards' },
-      '2': { ownerName: 'Bob', teamName: 'Team Bob' },
-    });
+    const [result] = attachTeamNames([baseTxn], { '1': 'The Waiver Wire Wizards', '2': 'Team Bob' });
 
     expect(result.team_names).toEqual(['The Waiver Wire Wizards', 'Team Bob']);
     expect(result.team_ids).toEqual(['1', '2']);
@@ -177,13 +175,13 @@ describe('attachTeamNames', () => {
   });
 
   it('falls back to the raw id for a roster missing from an otherwise-present map', () => {
-    const [result] = attachTeamNames([baseTxn], { '1': { ownerName: 'Alice', teamName: 'Alpha' } });
+    const [result] = attachTeamNames([baseTxn], { '1': 'Alpha' });
     expect(result.team_names).toEqual(['Alpha', '2']);
   });
 
   it('leaves a row without team_ids unchanged', () => {
     const rowWithoutTeamIds: NormalizedTransaction = { ...baseTxn, team_ids: undefined };
-    const [result] = attachTeamNames([rowWithoutTeamIds], { '1': { ownerName: 'Alice', teamName: 'Alpha' } });
+    const [result] = attachTeamNames([rowWithoutTeamIds], { '1': 'Alpha' });
     expect(result.team_names).toBeUndefined();
   });
 });

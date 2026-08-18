@@ -1,11 +1,10 @@
 import type { HandlerFn, SleeperSportConfig } from './types';
 import {
   attachTeamNames,
-  fetchSleeperRosterTeamsMap,
+  fetchSleeperRosterTeams,
   fetchSleeperTransactionsByWeeks,
   getSleeperCurrentWeek,
   type PlayerResolver,
-  type SleeperRosterTeamsMap,
 } from '../sleeper-transactions';
 import { getSleeperPlayersIndex } from '../sleeper-players-cache';
 import { ErrorCode, validateTransactionWeekInput } from '@flaim/worker-shared';
@@ -42,11 +41,11 @@ export function createGetTransactionsHandler(config: SleeperSportConfig): Handle
       const rawCount = Number.isFinite(Number(count)) ? Number(count) : 25;
       const maxCount = Math.max(1, Math.min(100, Math.trunc(rawCount)));
 
-      // Kick off the roster/owner team-name map fetch in parallel with the
+      // Kick off the roster/owner team-name fetch in parallel with the
       // player-index load and per-week transaction fetches below — it
-      // degrades independently (a warning, no `teams`) rather than failing
-      // the whole get_transactions call.
-      const teamsMapPromise = fetchSleeperRosterTeamsMap(league_id);
+      // degrades independently (a warning, no `teams`/`teamOwners`) rather
+      // than failing the whole get_transactions call.
+      const rosterTeamsPromise = fetchSleeperRosterTeams(league_id);
 
       const warnings: string[] = [];
       let resolvePlayer: PlayerResolver | undefined;
@@ -73,9 +72,12 @@ export function createGetTransactionsHandler(config: SleeperSportConfig): Handle
         .filter((txn) => !type || txn.type === type)
         .slice(0, maxCount);
 
-      let teams: SleeperRosterTeamsMap | undefined;
+      let teams: Record<string, string> | undefined;
+      let teamOwners: Record<string, string> | undefined;
       try {
-        teams = await teamsMapPromise;
+        const resolved = await rosterTeamsPromise;
+        teams = resolved.teams;
+        teamOwners = resolved.teamOwners;
       } catch (error) {
         console.error(`[handleGetTransactions] Failed to load rosters/users for team names in league ${league_id}:`, error);
         warnings.push(TEAMS_UNAVAILABLE_WARNING);
@@ -97,6 +99,7 @@ export function createGetTransactionsHandler(config: SleeperSportConfig): Handle
           count: transactions.length,
           transactions,
           ...(teams ? { teams } : {}),
+          ...(teamOwners ? { teamOwners } : {}),
           ...(warnings.length > 0 ? { warnings } : {}),
         },
       };

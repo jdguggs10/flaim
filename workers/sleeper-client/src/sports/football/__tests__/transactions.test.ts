@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi, type MockedFunction } from 'vites
 import { footballHandlers } from '../handlers';
 import type { ToolParams } from '../../../types';
 import {
-  fetchSleeperRosterTeamsMap,
+  fetchSleeperRosterTeams,
   fetchSleeperTransactionsByWeeks,
   getSleeperCurrentWeek,
 } from '../../../shared/sleeper-transactions';
@@ -21,7 +21,7 @@ vi.mock('../../../shared/sleeper-transactions', async () => {
     ...actual,
     getSleeperCurrentWeek: vi.fn(),
     fetchSleeperTransactionsByWeeks: vi.fn(),
-    fetchSleeperRosterTeamsMap: vi.fn(),
+    fetchSleeperRosterTeams: vi.fn(),
   };
 });
 
@@ -32,11 +32,17 @@ vi.mock('../../../shared/sleeper-players-cache', () => ({
 describe('sleeper football get_transactions handler', () => {
   const getCurrentWeekMock = getSleeperCurrentWeek as MockedFunction<typeof getSleeperCurrentWeek>;
   const fetchTransactionsMock = fetchSleeperTransactionsByWeeks as MockedFunction<typeof fetchSleeperTransactionsByWeeks>;
-  const fetchTeamsMapMock = fetchSleeperRosterTeamsMap as MockedFunction<typeof fetchSleeperRosterTeamsMap>;
+  const fetchRosterTeamsMock = fetchSleeperRosterTeams as MockedFunction<typeof fetchSleeperRosterTeams>;
   const getPlayersIndexMock = getSleeperPlayersIndex as MockedFunction<typeof getSleeperPlayersIndex>;
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Sane default so tests that don't care about teams/teamOwners aren't
+    // tripped up by an unconfigured mock resolving to bare `undefined`
+    // (the real fetchSleeperRosterTeams always resolves to this shape, or
+    // throws — never bare undefined). Tests that exercise the teams feature
+    // override this per-case.
+    fetchRosterTeamsMock.mockResolvedValue({ teams: {}, teamOwners: {} });
   });
 
   it('returns MISSING_PARAM when league_id is omitted', async () => {
@@ -137,11 +143,11 @@ describe('sleeper football get_transactions handler', () => {
     expect((result.data as { warnings?: string[] }).warnings).toEqual([SLEEPER_PLAYER_ENRICHMENT_WARNING]);
   });
 
-  it('includes a teams map and per-row team_names with manager-set and default names', async () => {
+  it('includes teams/teamOwners maps and per-row team_names with manager-set and default names', async () => {
     getPlayersIndexMock.mockResolvedValue(new Map() as never);
-    fetchTeamsMapMock.mockResolvedValue({
-      '1': { ownerName: 'Alice', teamName: 'The Waiver Wire Wizards' },
-      '2': { ownerName: 'Bob', teamName: 'Team Bob' },
+    fetchRosterTeamsMock.mockResolvedValue({
+      teams: { '1': 'The Waiver Wire Wizards', '2': 'Team Bob' },
+      teamOwners: { '1': 'Alice', '2': 'Bob' },
     });
     fetchTransactionsMock.mockResolvedValue([
       { transaction_id: 't1', type: 'trade', status: 'complete', timestamp: 1000, week: 9, team_ids: ['1', '2'] },
@@ -159,21 +165,21 @@ describe('sleeper football get_transactions handler', () => {
     expect(result.success).toBe(true);
     if (!result.success) return;
     const data = result.data as {
-      teams?: Record<string, { ownerName: string; teamName: string }>;
+      teams?: Record<string, string>;
+      teamOwners?: Record<string, string>;
       transactions: Array<{ team_ids?: string[]; team_names?: string[] }>;
       warnings?: string[];
     };
-    expect(data.teams).toEqual({
-      '1': { ownerName: 'Alice', teamName: 'The Waiver Wire Wizards' },
-      '2': { ownerName: 'Bob', teamName: 'Team Bob' },
-    });
+    // teams is ESPN-shaped (Record<string, string>); teamOwners is additive.
+    expect(data.teams).toEqual({ '1': 'The Waiver Wire Wizards', '2': 'Team Bob' });
+    expect(data.teamOwners).toEqual({ '1': 'Alice', '2': 'Bob' });
     expect(data.transactions[0].team_names).toEqual(['The Waiver Wire Wizards', 'Team Bob']);
     expect(data.warnings).toBeUndefined();
   });
 
-  it('omits teams and adds a warning when the rosters/users fetch fails, keeping rows intact', async () => {
+  it('omits teams/teamOwners and adds a warning when the rosters/users fetch fails, keeping rows intact', async () => {
     getPlayersIndexMock.mockResolvedValue(new Map() as never);
-    fetchTeamsMapMock.mockRejectedValue(new Error('SLEEPER_API_ERROR: Sleeper returned 500'));
+    fetchRosterTeamsMock.mockRejectedValue(new Error('SLEEPER_API_ERROR: Sleeper returned 500'));
     fetchTransactionsMock.mockResolvedValue([
       { transaction_id: 't1', type: 'trade', status: 'complete', timestamp: 1000, week: 9, team_ids: ['1', '2'] },
     ] as never);
@@ -191,10 +197,12 @@ describe('sleeper football get_transactions handler', () => {
     if (!result.success) return;
     const data = result.data as {
       teams?: unknown;
+      teamOwners?: unknown;
       transactions: Array<{ transaction_id: string; team_ids?: string[]; team_names?: string[] }>;
       warnings?: string[];
     };
     expect(data.teams).toBeUndefined();
+    expect(data.teamOwners).toBeUndefined();
     expect(data.warnings).toEqual([TEAMS_UNAVAILABLE_WARNING]);
     // Rows are intact — team_names falls back to the raw ids rather than disappearing.
     expect(data.transactions).toHaveLength(1);

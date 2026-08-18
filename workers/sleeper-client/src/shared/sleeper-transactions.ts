@@ -128,28 +128,38 @@ export async function fetchSleeperTransactionsByWeeks(
   return out.sort((a, b) => b.timestamp - a.timestamp);
 }
 
-export interface SleeperRosterTeamsMapEntry {
-  ownerName: string;
-  teamName: string;
+export interface SleeperRosterTeams {
+  /**
+   * roster id (string) -> teamName, exactly ESPN's transactions `teams`
+   * shape (`Record<string, string>`) so both platforms share one schema.
+   * Always a non-empty string: the manager-set fantasy team name, or
+   * Sleeper's own "Team <display name>" default.
+   */
+  teams: Record<string, string>;
+  /**
+   * roster id (string) -> ownerName. Additive — ESPN's `teams` map has no
+   * owner-name equivalent, so this is a separate top-level key rather than
+   * a value shape ESPN's map doesn't use.
+   */
+  teamOwners: Record<string, string>;
 }
-
-/** roster id (string) -> owner/team name, the same shape ESPN's transactions `teams` map uses. */
-export type SleeperRosterTeamsMap = Record<string, SleeperRosterTeamsMapEntry>;
 
 /**
  * Fetches league rosters and users and resolves each roster id to its
- * owner/team name via the shared user directory (manager-set team name, or
- * Sleeper's own "Team <display name>" default). This is what lets
+ * owner and team name via the shared user directory (manager-set team name,
+ * or Sleeper's own "Team <display name>" default). This is what lets
  * get_transactions label `team_ids` with names instead of making the caller
  * cross-reference get_league_info — mirroring ESPN's inline transactions
- * `teams` map. A roster whose owner_id has no matching user (an orphaned or
- * bot-managed roster) is simply omitted from the map rather than guessed.
+ * `teams` map (`teams`), plus an additive `teamOwners` map ESPN has no
+ * equivalent for. A roster whose owner_id has no matching user (an orphaned
+ * or bot-managed roster) is simply omitted from both maps rather than
+ * guessed.
  *
  * Throws on a rosters/users fetch failure so the caller can degrade to
- * omitting `teams` with a warning instead of failing the whole
+ * omitting both maps with a warning instead of failing the whole
  * get_transactions request.
  */
-export async function fetchSleeperRosterTeamsMap(leagueId: string): Promise<SleeperRosterTeamsMap> {
+export async function fetchSleeperRosterTeams(leagueId: string): Promise<SleeperRosterTeams> {
   const [rostersRes, usersRes] = await Promise.all([
     sleeperFetch(`/league/${leagueId}/rosters`),
     sleeperFetch(`/league/${leagueId}/users`),
@@ -161,13 +171,16 @@ export async function fetchSleeperRosterTeamsMap(leagueId: string): Promise<Slee
   const users: SleeperLeagueUser[] = await usersRes.json();
   const userDirectory = buildUserDirectory(users);
 
-  const teams: SleeperRosterTeamsMap = {};
+  const teams: Record<string, string> = {};
+  const teamOwners: Record<string, string> = {};
   for (const roster of rosters) {
     const entry = userDirectory.get(roster.owner_id);
     if (!entry) continue;
-    teams[String(roster.roster_id)] = { ownerName: entry.displayName, teamName: entry.teamName };
+    const rosterId = String(roster.roster_id);
+    teams[rosterId] = entry.teamName;
+    teamOwners[rosterId] = entry.displayName;
   }
-  return teams;
+  return { teams, teamOwners };
 }
 
 /**
@@ -179,10 +192,10 @@ export async function fetchSleeperRosterTeamsMap(leagueId: string): Promise<Slee
  */
 export function attachTeamNames(
   transactions: NormalizedTransaction[],
-  teams: SleeperRosterTeamsMap | undefined,
+  teams: Record<string, string> | undefined,
 ): NormalizedTransaction[] {
   return transactions.map((txn) => {
     if (!txn.team_ids) return txn;
-    return { ...txn, team_names: txn.team_ids.map((id) => teams?.[id]?.teamName ?? id) };
+    return { ...txn, team_names: txn.team_ids.map((id) => teams?.[id] ?? id) };
   });
 }
