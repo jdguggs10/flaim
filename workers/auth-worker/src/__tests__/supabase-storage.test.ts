@@ -100,6 +100,90 @@ describe('EspnSupabaseStorage', () => {
       return { select, eq, single };
     }
 
+    // Deploy-order safety (FLA-277): the Worker may ship before the
+    // hide_league_widget migration is applied to a hosted database. Each
+    // `.from()` call here returns the next queued result in sequence, so we
+    // can assert the primary select happens first and the legacy retry only
+    // fires when that primary select reports the column missing.
+    function mockUserPreferencesSingleSequence(results: Array<{ data: unknown; error: unknown }>) {
+      let call = 0;
+      const froms: Array<{ select: ReturnType<typeof vi.fn> }> = [];
+      mockFrom.mockImplementation(() => {
+        const result = results[Math.min(call, results.length - 1)];
+        call += 1;
+        const single = vi.fn().mockResolvedValue(result);
+        const eq = vi.fn().mockReturnValue({ single });
+        const select = vi.fn().mockReturnValue({ eq });
+        froms.push({ select });
+        return { select };
+      });
+      return { froms, callCount: () => call };
+    }
+
+    it('falls back to the legacy column list and preserves other preferences when hide_league_widget is missing', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const { callCount } = mockUserPreferencesSingleSequence([
+        { data: null, error: { code: '42703', message: 'column "hide_league_widget" does not exist' } },
+        {
+          data: {
+            clerk_user_id: 'user_123',
+            default_sport: 'football',
+            default_football: { platform: 'espn', leagueId: '1', seasonYear: 2025 },
+            default_baseball: null,
+            default_basketball: null,
+            default_hockey: null,
+          },
+          error: null,
+        },
+      ]);
+
+      const prefs = await storage.getUserPreferences('user_123');
+
+      // Other saved preferences must survive the fallback — only
+      // hideLeagueWidget is forced to a safe default.
+      expect(prefs).toEqual({
+        clerkUserId: 'user_123',
+        defaultSport: 'football',
+        defaultFootball: { platform: 'espn', leagueId: '1', seasonYear: 2025 },
+        defaultBaseball: null,
+        defaultBasketball: null,
+        defaultHockey: null,
+        hideLeagueWidget: false,
+      });
+      expect(callCount()).toBe(2);
+      warnSpy.mockRestore();
+    });
+
+    it('returns full defaults when the legacy fallback also finds no row', async () => {
+      mockUserPreferencesSingleSequence([
+        { data: null, error: { code: '42703' } },
+        { data: null, error: { code: 'PGRST116' } },
+      ]);
+
+      const prefs = await storage.getUserPreferences('user_123');
+      expect(prefs).toEqual({
+        clerkUserId: 'user_123',
+        defaultSport: null,
+        defaultFootball: null,
+        defaultBaseball: null,
+        defaultBasketball: null,
+        defaultHockey: null,
+        hideLeagueWidget: false,
+      });
+    });
+
+    it('does not attempt a legacy retry for an unrelated error', async () => {
+      const { callCount } = mockUserPreferencesSingleSequence([
+        { data: null, error: { code: '42501', message: 'permission denied' } },
+      ]);
+
+      const prefs = await storage.getUserPreferences('user_123');
+      expect(prefs.hideLeagueWidget).toBe(false);
+      // Only the primary select ran — no legacy-column retry for an
+      // unrelated error.
+      expect(callCount()).toBe(1);
+    });
+
     it('defaults hideLeagueWidget to false when no row exists', async () => {
       mockUserPreferencesSingle({ data: null, error: { code: 'PGRST116' } });
       const prefs = await storage.getUserPreferences('user_123');

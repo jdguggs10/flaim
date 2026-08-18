@@ -96,7 +96,7 @@ Defaults are stored centrally in `user_preferences`:
 - `default_hockey` - Default hockey league
 - `hide_league_widget` - When true, `get_user_session` tells the ChatGPT/Claude league widget to render nothing; the leagues themselves are still returned to the model (FLA-277)
 
-Each per-sport column is nullable JSONB. Cross-platform exclusivity is automatic (one column per sport = one value).
+Each per-sport column is nullable JSONB. Cross-platform exclusivity is automatic (one column per sport = one value). The auth-worker tolerates `hide_league_widget` being absent (a missing-column error triggers a legacy-column retry, defaulting to `hideLeagueWidget: false` while preserving every other saved preference), so the migration and the Worker deploy that reads the column can land in either order.
 
 ## Chrome Extension
 

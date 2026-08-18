@@ -36,6 +36,27 @@ function maskUserId(userId: string): string {
   return `${userId.substring(0, 8)}...`;
 }
 
+/**
+ * True when a DB error indicates the `hide_league_widget` column doesn't
+ * exist yet — this Worker deployed before the FLA-277 migration was applied
+ * to this database. Mirrors the isMissingModeColumn pattern in
+ * archive-storage.ts so the read path can fall back to the pre-FLA-277
+ * column list instead of failing every user's saved sport/league defaults
+ * closed on an error it can actually recover from. Migration application and
+ * Worker deployment are independent events; this keeps their order
+ * unconstrained.
+ */
+function isMissingHideLeagueWidgetColumn(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  if (error.code === '42703') return true; // Postgres undefined_column
+  return /column\b.*\bhide_league_widget\b.*does not exist/i.test(error.message ?? '');
+}
+
+// Logged once per running isolate (not once per request) — this only fires
+// continuously if the migration truly hasn't been applied yet, and repeating
+// it on every preferences read would be log spam for a known, temporary state.
+let hasLoggedMissingHideLeagueWidgetColumn = false;
+
 export interface SupabaseStorageOptions {
   supabaseUrl: string;
   supabaseKey: string;
@@ -862,6 +883,44 @@ export class EspnSupabaseStorage {
         .select('clerk_user_id, default_sport, default_football, default_baseball, default_basketball, default_hockey, hide_league_widget')
         .eq('clerk_user_id', clerkUserId)
         .single();
+
+      if (isMissingHideLeagueWidgetColumn(error)) {
+        if (!hasLoggedMissingHideLeagueWidgetColumn) {
+          hasLoggedMissingHideLeagueWidgetColumn = true;
+          console.warn(
+            '[supabase-storage] user_preferences.hide_league_widget column not found — falling back to the pre-FLA-277 column list. hideLeagueWidget defaults to false until the migration is applied to this database.'
+          );
+        }
+
+        const { data: legacyData, error: legacyError } = await this.supabase
+          .from('user_preferences')
+          .select('clerk_user_id, default_sport, default_football, default_baseball, default_basketball, default_hockey')
+          .eq('clerk_user_id', clerkUserId)
+          .single();
+
+        if (legacyError || !legacyData) {
+          console.log(`[supabase-storage] getUserPreferences: no preferences found (legacy fallback), returning defaults`);
+          return {
+            clerkUserId,
+            defaultSport: null,
+            defaultFootball: null,
+            defaultBaseball: null,
+            defaultBasketball: null,
+            defaultHockey: null,
+            hideLeagueWidget: false,
+          };
+        }
+
+        return {
+          clerkUserId: legacyData.clerk_user_id,
+          defaultSport: legacyData.default_sport,
+          defaultFootball: legacyData.default_football as LeagueDefault | null,
+          defaultBaseball: legacyData.default_baseball as LeagueDefault | null,
+          defaultBasketball: legacyData.default_basketball as LeagueDefault | null,
+          defaultHockey: legacyData.default_hockey as LeagueDefault | null,
+          hideLeagueWidget: false,
+        };
+      }
 
       if (error || !data) {
         console.log(`[supabase-storage] getUserPreferences: no preferences found, returning defaults`);

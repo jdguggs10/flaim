@@ -199,7 +199,12 @@ The forward migration
 tool tells the ChatGPT/Claude league widget to render nothing; the leagues
 themselves are still returned to the model. This migration creates no other
 table, index, function, or cron job. Applying it to any hosted database
-remains a separate approval gate.
+remains a separate approval gate. Because the Worker auto-deploys independently
+of hosted migration application, `EspnSupabaseStorage.getUserPreferences()`
+detects a missing-column error on `hide_league_widget` and retries with the
+pre-migration column list (returning `hideLeagueWidget: false` and preserving
+every other saved preference) so migration order and deploy order never have
+to be coordinated.
 
 ## Demo platform contract
 
