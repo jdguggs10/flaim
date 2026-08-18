@@ -9,7 +9,7 @@ export const TRADED_PICKS_UNAVAILABLE_WARNING =
   'TRADED_PICKS_UNAVAILABLE: Sleeper traded-pick data unavailable; draft-pick ownership omitted for this league.';
 
 export function tradedPicksPartialWarning(dropped: number): string {
-  return `TRADED_PICKS_PARTIAL: ${dropped} malformed traded-pick ${dropped === 1 ? 'entry was' : 'entries were'} dropped; the listed picks are complete only for the entries Sleeper returned in a valid shape.`;
+  return `TRADED_PICKS_PARTIAL: the traded-pick list may be incomplete; ${dropped} malformed ${dropped === 1 ? 'entry was' : 'entries were'} dropped.`;
 }
 
 const PICK_OWNERSHIP_NOTE =
