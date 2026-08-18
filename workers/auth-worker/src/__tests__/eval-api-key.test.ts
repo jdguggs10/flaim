@@ -70,6 +70,7 @@ vi.mock('../supabase-storage', () => {
       defaultBaseball: null,
       defaultBasketball: null,
       defaultHockey: null,
+      hideLeagueWidget: false,
     }),
     clearDefaultLeague: mockClearDefaultLeague,
     clearStaleDefaultForLeague: mockClearStaleDefaultForLeague,
@@ -379,8 +380,9 @@ describe('eval API key auth', () => {
       })
     );
     expect(res.status).toBe(200);
-    const body = await res.json() as { defaultSport: unknown };
+    const body = await res.json() as { defaultSport: unknown; hideLeagueWidget: unknown };
     expect(body).toHaveProperty('defaultSport');
+    expect(body).toHaveProperty('hideLeagueWidget');
   });
 
   // =========================================================================
@@ -458,6 +460,20 @@ describe('eval API key auth', () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ sport: 'football' }),
+      })
+    );
+    expect(res.status).toBe(401);
+  });
+
+  it('POST /auth/user/preferences/hide-league-widget with API key returns 401', async () => {
+    const res = await appFetch(
+      makeRequest('/auth/user/preferences/hide-league-widget', {
+        method: 'POST',
+        headers: {
+          ...bearerHeaders(EVAL_API_KEY),
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ hideLeagueWidget: true }),
       })
     );
     expect(res.status).toBe(401);

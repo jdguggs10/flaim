@@ -91,6 +91,96 @@ describe('EspnSupabaseStorage', () => {
     });
   });
 
+  describe('getUserPreferences', () => {
+    function mockUserPreferencesSingle(result: { data: unknown; error: unknown }) {
+      const single = vi.fn().mockResolvedValue(result);
+      const eq = vi.fn().mockReturnValue({ single });
+      const select = vi.fn().mockReturnValue({ eq });
+      mockFrom.mockReturnValue({ select });
+      return { select, eq, single };
+    }
+
+    it('defaults hideLeagueWidget to false when no row exists', async () => {
+      mockUserPreferencesSingle({ data: null, error: { code: 'PGRST116' } });
+      const prefs = await storage.getUserPreferences('user_123');
+      expect(prefs.hideLeagueWidget).toBe(false);
+    });
+
+    it('defaults hideLeagueWidget to false on a query error', async () => {
+      mockUserPreferencesSingle({ data: null, error: new Error('boom') });
+      const prefs = await storage.getUserPreferences('user_123');
+      expect(prefs.hideLeagueWidget).toBe(false);
+    });
+
+    it('reads hideLeagueWidget true from the stored row', async () => {
+      mockUserPreferencesSingle({
+        data: {
+          clerk_user_id: 'user_123',
+          default_sport: null,
+          default_football: null,
+          default_baseball: null,
+          default_basketball: null,
+          default_hockey: null,
+          hide_league_widget: true,
+        },
+        error: null,
+      });
+      const prefs = await storage.getUserPreferences('user_123');
+      expect(prefs.hideLeagueWidget).toBe(true);
+    });
+
+    it('reads hideLeagueWidget false from the stored row', async () => {
+      mockUserPreferencesSingle({
+        data: {
+          clerk_user_id: 'user_123',
+          default_sport: null,
+          default_football: null,
+          default_baseball: null,
+          default_basketball: null,
+          default_hockey: null,
+          hide_league_widget: false,
+        },
+        error: null,
+      });
+      const prefs = await storage.getUserPreferences('user_123');
+      expect(prefs.hideLeagueWidget).toBe(false);
+    });
+  });
+
+  describe('setHideLeagueWidget', () => {
+    it('upserts hide_league_widget true', async () => {
+      const upsert = vi.fn().mockResolvedValue({ error: null });
+      mockFrom.mockReturnValue({ upsert });
+      const result = await storage.setHideLeagueWidget('user_123', true);
+      expect(result).toEqual({ success: true });
+      expect(upsert).toHaveBeenCalledOnce();
+      const arg = upsert.mock.calls[0][0];
+      expect(arg.hide_league_widget).toBe(true);
+      expect(arg.clerk_user_id).toBe('user_123');
+    });
+
+    it('upserts hide_league_widget false', async () => {
+      const upsert = vi.fn().mockResolvedValue({ error: null });
+      mockFrom.mockReturnValue({ upsert });
+      const result = await storage.setHideLeagueWidget('user_123', false);
+      expect(result).toEqual({ success: true });
+      const arg = upsert.mock.calls[0][0];
+      expect(arg.hide_league_widget).toBe(false);
+    });
+
+    it('returns an error when the upsert fails', async () => {
+      const upsert = vi.fn().mockResolvedValue({ error: new Error('db down') });
+      mockFrom.mockReturnValue({ upsert });
+      const result = await storage.setHideLeagueWidget('user_123', true);
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects a missing clerkUserId', async () => {
+      const result = await storage.setHideLeagueWidget('', true);
+      expect(result).toEqual({ success: false, error: 'Missing clerkUserId' });
+    });
+  });
+
   it('removeLeague clears only the deleted sport default when league ids collide across sports', async () => {
     const mockPrefsUpsert = vi.fn().mockReturnValue({ error: null });
 
