@@ -25,7 +25,7 @@ describe('parseHideLeagueWidgetBody', () => {
   });
 
   it('rejects a string value', () => {
-    const result = parseHideLeagueWidgetBody({ hideLeagueWidget: 'true' as unknown as boolean });
+    const result = parseHideLeagueWidgetBody({ hideLeagueWidget: 'true' });
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error).toBe('hideLeagueWidget must be a boolean');
@@ -33,12 +33,43 @@ describe('parseHideLeagueWidgetBody', () => {
   });
 
   it('rejects a number value', () => {
-    const result = parseHideLeagueWidgetBody({ hideLeagueWidget: 1 as unknown as boolean });
+    const result = parseHideLeagueWidgetBody({ hideLeagueWidget: 1 });
     expect(result.ok).toBe(false);
   });
 
-  it('rejects null', () => {
-    const result = parseHideLeagueWidgetBody({ hideLeagueWidget: null as unknown as boolean });
+  it('rejects a null hideLeagueWidget field', () => {
+    const result = parseHideLeagueWidgetBody({ hideLeagueWidget: null });
+    expect(result.ok).toBe(false);
+  });
+
+  // A JSON `null` body parses to the JS value `null`, which is `typeof
+  // 'object'` — must be checked explicitly or this throws before validation
+  // instead of returning the documented 400.
+  it('rejects a null body without throwing', () => {
+    const result = parseHideLeagueWidgetBody(null);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBe('hideLeagueWidget must be a boolean');
+    }
+  });
+
+  it('rejects a non-object body (array)', () => {
+    const result = parseHideLeagueWidgetBody([true]);
+    expect(result.ok).toBe(false);
+  });
+
+  it('rejects a non-object body (string)', () => {
+    const result = parseHideLeagueWidgetBody('true');
+    expect(result.ok).toBe(false);
+  });
+
+  it('rejects a non-object body (number)', () => {
+    const result = parseHideLeagueWidgetBody(42);
+    expect(result.ok).toBe(false);
+  });
+
+  it('rejects undefined', () => {
+    const result = parseHideLeagueWidgetBody(undefined);
     expect(result.ok).toBe(false);
   });
 });
