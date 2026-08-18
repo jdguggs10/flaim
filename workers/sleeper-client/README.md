@@ -55,7 +55,7 @@ interface ExecuteRequest {
 - `get_matchups` — Weekly matchups (paired by `matchup_id`)
 - `get_free_agents` — Available free agents (uses KV-backed player index cache)
 - `get_players` — Player lookup with ownership unavailable semantics (`market_percent_owned: null`, `ownership_scope: "unavailable"`)
-- `get_transactions` — Recent transactions with player name/position enrichment and a roster/owner `teams` map
+- `get_transactions` — Recent transactions with player name/position enrichment and `teams`/`teamOwners` roster-name maps
 
 ### Basketball (NBA)
 - `get_league_info` — League settings and members, plus traded draft-pick ownership
@@ -64,7 +64,7 @@ interface ExecuteRequest {
 - `get_matchups` — Weekly matchups (paired by `matchup_id`)
 - `get_free_agents` — Available free agents (uses KV-backed player index cache)
 - `get_players` — Player lookup with ownership unavailable semantics (`market_percent_owned: null`, `ownership_scope: "unavailable"`)
-- `get_transactions` — Recent transactions with player name/position enrichment and a roster/owner `teams` map
+- `get_transactions` — Recent transactions with player name/position enrichment and `teams`/`teamOwners` roster-name maps
 
 ## Roster/Matchup Player Enrichment and Team Names
 
@@ -80,7 +80,7 @@ interface ExecuteRequest {
 
 ## Transaction Team Names
 
-`get_transactions` fetches `GET /league/{league_id}/rosters` and `GET /league/{league_id}/users` alongside the transaction window and player-index lookups, and adds a top-level `teams` map — `{ "<rosterId>": { ownerName, teamName } }`, keyed by the same string roster ids used in `team_ids` — the same purpose as ESPN's inline transactions `teams` map, so the model doesn't have to cross-reference `get_league_info` to say who moved whom. Each row also gets `team_names: string[]`, parallel to `team_ids`, resolved through that map (falling back to the raw roster id when a particular id has no matching roster). If the rosters/users fetch fails, `teams` is omitted and a `TEAMS_UNAVAILABLE` warning is added — the transaction rows themselves are unaffected (`team_names` falls back to raw ids), and the request never fails because of it.
+`get_transactions` fetches `GET /league/{league_id}/rosters` and `GET /league/{league_id}/users` alongside the transaction window and player-index lookups, and adds two top-level maps keyed by the same string roster ids used in `team_ids`: `teams` — `{ "<rosterId>": "<teamName>" }` — is exactly ESPN's transactions `teams` shape (`Record<string, string>`), so the two platforms share one schema; `teamOwners` — `{ "<rosterId>": "<ownerName>" }` — is a new additive key carrying owner names, since ESPN's map has no owner-name equivalent to reuse. Together these mean the model doesn't have to cross-reference `get_league_info` to say who moved whom. Each row also gets `team_names: string[]`, parallel to `team_ids`, resolved through `teams` (falling back to the raw roster id when a particular id has no matching roster). If the rosters/users fetch fails, both `teams` and `teamOwners` are omitted and a `TEAMS_UNAVAILABLE` warning is added — the transaction rows themselves are unaffected (`team_names` falls back to raw ids), and the request never fails because of it.
 
 ## Traded Draft-Pick Ownership (Sleeper Only)
 
