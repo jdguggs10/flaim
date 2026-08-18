@@ -34,6 +34,68 @@ function loadEmbeddedClassifier(): (payload: unknown) => RefreshResultClassifica
   return context.__classifyRefreshResult as (payload: unknown) => RefreshResultClassification;
 }
 
+/**
+ * Loads the embedded widget script into a sandboxed VM context and exposes
+ * render() so the hidden-widget path (FLA-277) can be exercised directly,
+ * along with everything a real MCP Apps host would observe: DOM writes,
+ * .widget display changes, and postMessage notifications sent to the parent
+ * frame.
+ */
+function loadEmbeddedRender() {
+  const script = USER_SESSION_WIDGET_HTML.match(/<script>([\s\S]*?)<\/script>/)?.[1];
+  if (!script) throw new Error('Widget script not found');
+
+  const exposedScript = script.replace(
+    /\}\)\(\);\s*$/,
+    'globalThis.__render = render;\n})();',
+  );
+
+  const postedMessages: Array<Record<string, unknown>> = [];
+  const widgetEl = { style: {} as Record<string, string> };
+  const contentEl = { innerHTML: '' };
+
+  const context: Record<string, unknown> = {
+    document: {
+      addEventListener() {},
+      getElementById(id: string) {
+        if (id === 'content') return contentEl;
+        return null;
+      },
+      querySelector(selector: string) {
+        if (selector === '.widget') return widgetEl;
+        return null;
+      },
+      createElement() {
+        return { set textContent(v: string) { (this as unknown as { _t: string })._t = v; }, get innerHTML() { return (this as unknown as { _t: string })._t ?? ''; } };
+      },
+      body: { scrollHeight: 0 },
+    },
+    URL,
+    setTimeout,
+  };
+
+  // window.parent must be a distinct object from window itself: postToParent
+  // in the real script only posts when `window.parent !== window`, matching
+  // how a sandboxed MCP Apps iframe actually sees its host frame.
+  const parentWindow = {
+    postMessage(message: Record<string, unknown>) {
+      postedMessages.push(message);
+    },
+  };
+  context.window = {
+    addEventListener() {},
+    parent: parentWindow,
+  };
+
+  runInNewContext(exposedScript, context);
+  return {
+    render: context.__render as (data: unknown) => void,
+    postedMessages,
+    widgetEl,
+    contentEl,
+  };
+}
+
 describe('user session widget script', () => {
   it('ships the classifier without module helper dependencies', () => {
     expect(USER_SESSION_WIDGET_HTML).not.toContain('__name');
@@ -286,5 +348,71 @@ describe('user session widget script', () => {
     const embeddedClassifier = loadEmbeddedClassifier();
     expect(classifyRefreshResult(payload)).toEqual(expected);
     expect(embeddedClassifier(payload)).toEqual(expected);
+  });
+
+  // FLA-277 Mechanism B: when widget.hidden is true, the widget must render
+  // no league rows and report a zero size instead of the 353px fallback.
+  describe('hidden widget render (FLA-277)', () => {
+    it('renders no league rows and posts a zero-size notification when widget.hidden is true', () => {
+      const { render, postedMessages, widgetEl, contentEl } = loadEmbeddedRender();
+
+      render({
+        allLeagues: [
+          { platform: 'espn', sport: 'football', leagueId: '1', leagueName: 'Gridiron', seasonYear: 2025 },
+        ],
+        defaultLeagues: {},
+        defaultSport: null,
+        widget: { hidden: true },
+      });
+
+      // No DOM content was ever built for the league list.
+      expect(contentEl.innerHTML).toBe('');
+      // The root widget element is hidden.
+      expect(widgetEl.style.display).toBe('none');
+      // A zero-size notification was sent instead of the real dimensions.
+      const sizeMessages = postedMessages.filter(
+        (message) => message.method === 'ui/notifications/size-changed',
+      );
+      expect(sizeMessages).toHaveLength(1);
+      expect(sizeMessages[0].params).toEqual({ width: 0, height: 0 });
+    });
+
+    it('renders leagues normally and reports real dimensions when widget.hidden is absent', async () => {
+      const { render, postedMessages, widgetEl, contentEl } = loadEmbeddedRender();
+
+      render({
+        allLeagues: [
+          { platform: 'espn', sport: 'football', leagueId: '1', leagueName: 'Gridiron', seasonYear: 2025 },
+        ],
+        defaultLeagues: {},
+        defaultSport: null,
+      });
+
+      expect(contentEl.innerHTML).not.toBe('');
+      expect(widgetEl.style.display).not.toBe('none');
+      // The normal (non-hidden) path reports size via queueSizeChanged(),
+      // which defers through setTimeout when requestAnimationFrame is
+      // unavailable — unlike the hidden path's synchronous sendZeroSize().
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      const sizeMessages = postedMessages.filter(
+        (message) => message.method === 'ui/notifications/size-changed',
+      );
+      expect(sizeMessages).toHaveLength(1);
+      expect(sizeMessages[0].params).not.toEqual({ width: 0, height: 0 });
+    });
+
+    it('renders no league rows when widget.hidden is true even when allLeagues is empty', () => {
+      const { render, postedMessages, contentEl } = loadEmbeddedRender();
+
+      render({ allLeagues: [], widget: { hidden: true } });
+
+      // The empty-state branch (which does build DOM) must not run either.
+      expect(contentEl.innerHTML).toBe('');
+      const sizeMessages = postedMessages.filter(
+        (message) => message.method === 'ui/notifications/size-changed',
+      );
+      expect(sizeMessages).toHaveLength(1);
+      expect(sizeMessages[0].params).toEqual({ width: 0, height: 0 });
+    });
   });
 });

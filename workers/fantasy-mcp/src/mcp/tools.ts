@@ -186,6 +186,10 @@ const GET_USER_SESSION_OUTPUT_SCHEMA = looseObject({
   allLeagues: z.array(leagueEntrySchema),
   warnings: z.array(z.string()).optional(),
   instructions: z.string(),
+  // Present only when the user's hide_league_widget preference is true
+  // (FLA-277, Mechanism B). Omitted entirely otherwise; documentation only —
+  // this schema stays passthrough, so this does not constrain the wire shape.
+  widget: looseObject({ hidden: z.boolean().optional() }).optional(),
 });
 
 const REFRESH_LEAGUES_OUTPUT_SCHEMA = looseObject({
@@ -1241,6 +1245,7 @@ export function getUnifiedTools(): UnifiedTool[] {
             defaultBaseball?: LeagueDefault | null;
             defaultBasketball?: LeagueDefault | null;
             defaultHockey?: LeagueDefault | null;
+            hideLeagueWidget?: boolean;
           }
           let preferences: Preferences = {};
           try {
@@ -1357,6 +1362,10 @@ export function getUnifiedTools(): UnifiedTool[] {
             allLeagues: leagues,
             warnings: warnings.length > 0 ? warnings : undefined,
             instructions: sessionMessage,
+            // Mechanism B (FLA-277): omit the key entirely unless the user's
+            // hide_league_widget preference is true, so existing fixtures
+            // and clients that don't know about it stay byte-identical.
+            widget: preferences.hideLeagueWidget === true ? { hidden: true as const } : undefined,
           };
           return {
             content: [{ type: 'text' as const, text: JSON.stringify(sessionData, null, 2) }],

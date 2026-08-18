@@ -868,6 +868,37 @@ const REFRESH_STATUS_MARKER =
   '<div id="refresh-status" class="refresh-status" aria-live="polite"></div>';
 
 /**
+ * Hidden-widget support (v3 only, FLA-277): when get_user_session's
+ * structuredContent carries widget.hidden === true (the user's
+ * hide_league_widget preference), the widget must render nothing and report
+ * a zero size instead of the 353px fallback, rather than merely leaving the
+ * content area blank. sendZeroSize() posts an explicit { width: 0, height: 0
+ * } size-changed notification so hosts collapse the card instead of
+ * reserving space for it. The frozen legacy body has no notion of this, so
+ * this is injected only into the v3-derived script, immediately ahead of the
+ * render(data) function it guards.
+ */
+const HIDDEN_WIDGET_RENDER_JS = `  function sendZeroSize() {
+    postToParent({
+      jsonrpc: '2.0',
+      method: 'ui/notifications/size-changed',
+      params: {
+        width: 0,
+        height: 0,
+      },
+    });
+  }
+
+  function render(data) {
+    if (data && data.widget && data.widget.hidden === true) {
+      var widgetEl = document.querySelector('.widget');
+      if (widgetEl) widgetEl.style.display = 'none';
+      hasRendered = true;
+      sendZeroSize();
+      return;
+    }`;
+
+/**
  * Replace a marker that must appear exactly once. Throwing (at module init,
  * so tests and deploys fail loudly) beats silently shipping a v2 widget
  * without the required attribution.
@@ -880,9 +911,16 @@ function injectOnce(html: string, marker: string, replacement: string): string {
   return html.replace(marker, replacement);
 }
 
-/** Current (v3) widget body: the frozen v1/v2 body plus the attribution footer. */
+/**
+ * Current (v3) widget body: the frozen v1/v2 body plus the attribution
+ * footer and the hidden-widget render guard (FLA-277).
+ */
 export const USER_SESSION_WIDGET_HTML = injectOnce(
-  injectOnce(LEGACY_USER_SESSION_WIDGET_HTML, '</style>', `${PROVIDER_ATTRIBUTION_CSS}</style>`),
-  REFRESH_STATUS_MARKER,
-  `${REFRESH_STATUS_MARKER}\n  ${PROVIDER_ATTRIBUTION_HTML}`,
+  injectOnce(
+    injectOnce(LEGACY_USER_SESSION_WIDGET_HTML, '</style>', `${PROVIDER_ATTRIBUTION_CSS}</style>`),
+    REFRESH_STATUS_MARKER,
+    `${REFRESH_STATUS_MARKER}\n  ${PROVIDER_ATTRIBUTION_HTML}`,
+  ),
+  '  function render(data) {',
+  HIDDEN_WIDGET_RENDER_JS,
 );
