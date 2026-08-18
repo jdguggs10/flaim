@@ -1362,10 +1362,14 @@ export function getUnifiedTools(): UnifiedTool[] {
             allLeagues: leagues,
             warnings: warnings.length > 0 ? warnings : undefined,
             instructions: sessionMessage,
-            // Mechanism B (FLA-277): omit the key entirely unless the user's
-            // hide_league_widget preference is true, so existing fixtures
-            // and clients that don't know about it stay byte-identical.
-            widget: preferences.hideLeagueWidget === true ? { hidden: true as const } : undefined,
+            // Mechanism B (FLA-277): a conditional spread omits the `widget`
+            // property entirely unless the user's hide_league_widget
+            // preference is true — an own property set to `undefined` would
+            // still be `'widget' in structuredContent`, even though
+            // JSON.stringify drops it from the text payload. Existing
+            // fixtures and clients that don't know about this key stay
+            // byte-identical either way.
+            ...(preferences.hideLeagueWidget === true ? { widget: { hidden: true as const } } : {}),
           };
           return {
             content: [{ type: 'text' as const, text: JSON.stringify(sessionData, null, 2) }],

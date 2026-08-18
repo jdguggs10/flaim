@@ -47,11 +47,22 @@ function loadEmbeddedRender() {
 
   const exposedScript = script.replace(
     /\}\)\(\);\s*$/,
-    'globalThis.__render = render;\n})();',
+    'globalThis.__render = render;\nglobalThis.__sendSizeChanged = sendSizeChanged;\nglobalThis.__queueSizeChanged = queueSizeChanged;\n})();',
   );
 
   const postedMessages: Array<Record<string, unknown>> = [];
-  const widgetEl = { style: {} as Record<string, string> };
+  // getBoundingClientRect reflects style.display like a real element would:
+  // a display:none element measures 0x0 (not null) rather than throwing or
+  // omitting the rect — this is what actually triggers the FLA-277 refresh
+  // bug (a falsy 0 width previously fell through to the WIDGET_WIDTH
+  // fallback instead of staying zero).
+  const widgetEl = {
+    style: {} as Record<string, string>,
+    getBoundingClientRect() {
+      if (this.style.display === 'none') return { width: 0, height: 0 };
+      return { width: 353, height: 240 };
+    },
+  };
   const contentEl = { innerHTML: '' };
 
   const context: Record<string, unknown> = {
@@ -90,6 +101,8 @@ function loadEmbeddedRender() {
   runInNewContext(exposedScript, context);
   return {
     render: context.__render as (data: unknown) => void,
+    sendSizeChanged: context.__sendSizeChanged as () => void,
+    queueSizeChanged: context.__queueSizeChanged as () => void,
     postedMessages,
     widgetEl,
     contentEl,
@@ -413,6 +426,66 @@ describe('user session widget script', () => {
       );
       expect(sizeMessages).toHaveLength(1);
       expect(sizeMessages[0].params).toEqual({ width: 0, height: 0 });
+    });
+
+    // Regression: refreshLeagues() calls render(data) and then
+    // setRefreshStatus() -> queueSizeChanged() -> sendSizeChanged() runs
+    // regardless of outcome. Before the widgetHidden guard, .widget's own
+    // (display:none) getBoundingClientRect() reported a falsy 0 width, which
+    // the original fallback treated as "no rect" and re-posted the 353px
+    // default — silently un-collapsing a hidden widget on every refresh.
+    it('does not re-expand a hidden widget when the refresh flow reports size afterward', async () => {
+      const { render, queueSizeChanged, postedMessages, widgetEl } = loadEmbeddedRender();
+
+      render({
+        allLeagues: [
+          { platform: 'espn', sport: 'football', leagueId: '1', leagueName: 'Gridiron', seasonYear: 2025 },
+        ],
+        widget: { hidden: true },
+      });
+      expect(widgetEl.style.display).toBe('none');
+
+      // Simulate the refresh flow's later, independent size-report call
+      // (setRefreshStatus -> queueSizeChanged -> sendSizeChanged).
+      queueSizeChanged();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      const sizeMessages = postedMessages.filter(
+        (message) => message.method === 'ui/notifications/size-changed',
+      );
+      // One from render()'s own sendZeroSize(), one from the simulated
+      // refresh follow-up — both must report zero, never the 353px fallback.
+      expect(sizeMessages).toHaveLength(2);
+      for (const message of sizeMessages) {
+        expect(message.params).toEqual({ width: 0, height: 0 });
+      }
+    });
+
+    it('clears the hidden guard and reports real size again once a refresh un-hides the widget', async () => {
+      const { render, postedMessages, widgetEl, contentEl } = loadEmbeddedRender();
+
+      render({ allLeagues: [], widget: { hidden: true } });
+      expect(widgetEl.style.display).toBe('none');
+      postedMessages.length = 0;
+
+      // A later refresh returns session data with the preference off (or
+      // simply without the widget key). render() itself queues the
+      // follow-up size report in this branch — no separate call needed.
+      render({
+        allLeagues: [
+          { platform: 'espn', sport: 'football', leagueId: '1', leagueName: 'Gridiron', seasonYear: 2025 },
+        ],
+      });
+      expect(widgetEl.style.display).not.toBe('none');
+      expect(contentEl.innerHTML).not.toBe('');
+
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      const sizeMessages = postedMessages.filter(
+        (message) => message.method === 'ui/notifications/size-changed',
+      );
+      expect(sizeMessages).toHaveLength(1);
+      expect(sizeMessages[0].params).not.toEqual({ width: 0, height: 0 });
     });
   });
 });

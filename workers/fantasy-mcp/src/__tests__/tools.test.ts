@@ -215,13 +215,17 @@ describe('fantasy-mcp tools', () => {
     expect(LEGACY_USER_SESSION_WIDGET_HTML).not.toContain('Fantasy data provided by');
     expect(LEGACY_USER_SESSION_WIDGET_HTML).not.toContain('class="attribution"');
     // v3 differs from the frozen body only by the injected CSS, footer, and
-    // hidden-widget render guard (FLA-277).
+    // hidden-widget render + size-report guards (FLA-277).
     expect(
       USER_SESSION_WIDGET_HTML
         .replace('  .attribution {\n    padding: 8px 16px 10px;\n    border-top: 1px solid rgba(13, 13, 13, 0.05);\n    font-size: 11px;\n    line-height: 14px;\n    text-align: center;\n    color: #9ca3af;\n  }\n  .attribution a {\n    color: inherit;\n    text-decoration: underline;\n  }\n', '')
         .replace('\n  <div class="attribution">Fantasy data provided by <a href="https://sports.yahoo.com/fantasy/" target="_blank" rel="noopener">Yahoo Fantasy</a>, ESPN, and Sleeper.</div>', '')
         .replace(
-          "  function sendZeroSize() {\n    postToParent({\n      jsonrpc: '2.0',\n      method: 'ui/notifications/size-changed',\n      params: {\n        width: 0,\n        height: 0,\n      },\n    });\n  }\n\n  function render(data) {\n    if (data && data.widget && data.widget.hidden === true) {\n      var widgetEl = document.querySelector('.widget');\n      if (widgetEl) widgetEl.style.display = 'none';\n      hasRendered = true;\n      sendZeroSize();\n      return;\n    }",
+          "  function sendSizeChanged() {\n    if (widgetHidden) {\n      sendZeroSize();\n      return;\n    }",
+          '  function sendSizeChanged() {',
+        )
+        .replace(
+          "  var widgetHidden = false;\n\n  function sendZeroSize() {\n    postToParent({\n      jsonrpc: '2.0',\n      method: 'ui/notifications/size-changed',\n      params: {\n        width: 0,\n        height: 0,\n      },\n    });\n  }\n\n  function render(data) {\n    widgetHidden = !!(data && data.widget && data.widget.hidden === true);\n    if (widgetHidden) {\n      var widgetEl = document.querySelector('.widget');\n      if (widgetEl) widgetEl.style.display = 'none';\n      hasRendered = true;\n      sendZeroSize();\n      return;\n    }\n    var visibleWidgetEl = document.querySelector('.widget');\n    if (visibleWidgetEl) visibleWidgetEl.style.display = '';",
           '  function render(data) {',
         )
     ).toBe(LEGACY_USER_SESSION_WIDGET_HTML);
@@ -1669,6 +1673,10 @@ describe('fantasy-mcp tools', () => {
     const payload = JSON.parse(result.content[0].text) as Record<string, unknown>;
     expect('widget' in payload).toBe(false);
     expect(result.structuredContent).toBeDefined();
+    // A conditional spread must omit the property entirely — not merely set
+    // it to `undefined`, which would still satisfy the `in` operator even
+    // though JSON.stringify happens to drop it from the text payload.
+    expect('widget' in (result.structuredContent as Record<string, unknown>)).toBe(false);
   });
 
   it('get_user_session: hideLeagueWidget absent from preferences → no widget key in the payload', async () => {
@@ -1689,6 +1697,7 @@ describe('fantasy-mcp tools', () => {
     const result = await tool!.handler({}, env, 'Bearer test-token');
     const payload = JSON.parse(result.content[0].text) as Record<string, unknown>;
     expect('widget' in payload).toBe(false);
+    expect('widget' in (result.structuredContent as Record<string, unknown>)).toBe(false);
   });
 
   // Test A: multi-league, no defaultSport pref → defaultLeague should be null
