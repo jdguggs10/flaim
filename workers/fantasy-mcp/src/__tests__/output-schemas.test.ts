@@ -770,7 +770,7 @@ describe('get_transactions output schema', () => {
     }));
   });
 
-  it('accepts the Sleeper teams map (roster ID -> { ownerName, teamName }) and per-row team_names (FLA-280)', () => {
+  it('accepts the Sleeper teams map (roster ID -> teamName, ESPN parity), the additive teamOwners map, and per-row team_names (FLA-280)', () => {
     expectValid('get_transactions', routed({
       platform: 'sleeper',
       sport: 'football',
@@ -789,10 +789,12 @@ describe('get_transactions output schema', () => {
           team_names: ['The Waiver Wire Wizards', 'Team Bob'],
         },
       ],
-      teams: {
-        '1': { ownerName: 'Alice', teamName: 'The Waiver Wire Wizards' },
-        '2': { ownerName: 'Bob', teamName: 'Team Bob' },
-      },
+      // teams stays ESPN-shaped (Record<string, string>) — Sleeper's teamName
+      // (manager-set, or Sleeper's own "Team <name>" default) is always a
+      // non-empty string. Owner names live in the new additive teamOwners key,
+      // which the passthrough schema accepts without a tools.ts change.
+      teams: { '1': 'The Waiver Wire Wizards', '2': 'Team Bob' },
+      teamOwners: { '1': 'Alice', '2': 'Bob' },
       warnings: ['PLAYER_ENRICHMENT_UNAVAILABLE: Sleeper player index unavailable; roster/matchup player entries include id only.'],
     }));
   });
