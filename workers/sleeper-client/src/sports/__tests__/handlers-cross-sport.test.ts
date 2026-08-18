@@ -957,23 +957,41 @@ describe('sleeper cross-sport handler characterization tests', () => {
   });
 
   describe('get_transactions', () => {
+    // Dispatches mockFetch responses by URL substring rather than call
+    // position/order, so a test can't pass "for the wrong reason" if
+    // Promise.all or fetch ordering inside the handler ever changes. An
+    // unrouted call rejects loudly instead of silently consuming whatever
+    // response a positional queue happened to have next.
+    function mockFetchByUrl(routes: Record<string, () => Response | Promise<Response>>) {
+      mockFetch.mockImplementation((input) => {
+        const url = String(input);
+        const route = Object.entries(routes).find(([pattern]) => url.includes(pattern));
+        if (!route) return Promise.reject(new Error(`unmocked fetch: ${url}`));
+        return Promise.resolve(route[1]());
+      });
+    }
+
+    const rostersRoute = () => jsonResponse([
+      { roster_id: 1, owner_id: 'u1', players: [], starters: [], reserve: [], settings: { wins: 0, losses: 0, ties: 0, fpts: 0 } },
+      { roster_id: 2, owner_id: 'u2', players: [], starters: [], reserve: [], settings: { wins: 0, losses: 0, ties: 0, fpts: 0 } },
+    ]);
+    const usersRoute = () => jsonResponse([
+      { user_id: 'u1', display_name: 'Alice', avatar: null, metadata: { team_name: 'The Waiver Wire Wizards' } },
+      { user_id: 'u2', display_name: 'Bob', avatar: null },
+    ]);
+    const transactionsRoute = () => jsonResponse([
+      {
+        transaction_id: 't1', type: 'trade', status: 'complete', status_updated: 1000, leg: 9,
+        roster_ids: [1, 2], adds: null, drops: null,
+      },
+    ]);
+
     it.each(scenarios)('$label resolves teams/teamOwners maps and per-row team_names for team_ids, with manager-set and default names', async ({ sport, handlers }) => {
-      // Explicit week skips the state fetch. Order: rosters, users, transactions/{week}.
-      mockFetch
-        .mockResolvedValueOnce(jsonResponse([
-          { roster_id: 1, owner_id: 'u1', players: [], starters: [], reserve: [], settings: { wins: 0, losses: 0, ties: 0, fpts: 0 } },
-          { roster_id: 2, owner_id: 'u2', players: [], starters: [], reserve: [], settings: { wins: 0, losses: 0, ties: 0, fpts: 0 } },
-        ]))
-        .mockResolvedValueOnce(jsonResponse([
-          { user_id: 'u1', display_name: 'Alice', avatar: null, metadata: { team_name: 'The Waiver Wire Wizards' } },
-          { user_id: 'u2', display_name: 'Bob', avatar: null },
-        ]))
-        .mockResolvedValueOnce(jsonResponse([
-          {
-            transaction_id: 't1', type: 'trade', status: 'complete', status_updated: 1000, leg: 9,
-            roster_ids: [1, 2], adds: null, drops: null,
-          },
-        ]));
+      mockFetchByUrl({
+        '/league/12345/rosters': rostersRoute,
+        '/league/12345/users': usersRoute,
+        '/league/12345/transactions/9': transactionsRoute,
+      });
 
       const params: ToolParams = { sport, league_id: '12345', season_year: 2025, week: 9 };
       const result = await handlers.get_transactions(playersCacheEnv(UNUSED_PLAYER), params);
@@ -995,22 +1013,15 @@ describe('sleeper cross-sport handler characterization tests', () => {
         team_names: ['The Waiver Wire Wizards', 'Team Bob'],
       });
       expect(data.warnings).toBeUndefined();
-
-      expect(mockFetch).toHaveBeenNthCalledWith(1, expect.stringContaining('/league/12345/rosters'), expect.anything());
-      expect(mockFetch).toHaveBeenNthCalledWith(2, expect.stringContaining('/league/12345/users'), expect.anything());
-      expect(mockFetch).toHaveBeenNthCalledWith(3, expect.stringContaining('/league/12345/transactions/9'), expect.anything());
+      expect(mockFetch).toHaveBeenCalledTimes(3);
     });
 
     it.each(scenarios)('$label omits teams/teamOwners and adds a warning when the rosters/users fetch fails, keeping transaction rows intact', async ({ sport, handlers }) => {
-      mockFetch
-        .mockResolvedValueOnce(new Response(null, { status: 500 })) // rosters fails
-        .mockResolvedValueOnce(jsonResponse([{ user_id: 'u1', display_name: 'Alice', avatar: null }])) // users (unreached)
-        .mockResolvedValueOnce(jsonResponse([
-          {
-            transaction_id: 't1', type: 'trade', status: 'complete', status_updated: 1000, leg: 9,
-            roster_ids: [1, 2], adds: null, drops: null,
-          },
-        ]));
+      mockFetchByUrl({
+        '/league/12345/rosters': () => new Response(null, { status: 500 }),
+        '/league/12345/users': usersRoute,
+        '/league/12345/transactions/9': transactionsRoute,
+      });
 
       const params: ToolParams = { sport, league_id: '12345', season_year: 2025, week: 9 };
       const result = await handlers.get_transactions(playersCacheEnv(UNUSED_PLAYER), params);
@@ -1028,6 +1039,85 @@ describe('sleeper cross-sport handler characterization tests', () => {
       // The rest of the response still succeeds — team_names falls back to the raw ids.
       expect(data.transactions).toHaveLength(1);
       expect(data.transactions[0]).toMatchObject({ transaction_id: 't1', team_ids: ['1', '2'], team_names: ['1', '2'] });
+    });
+
+    it.each(scenarios)('$label keeps rows intact with no teams/teamOwners and a TEAMS_UNAVAILABLE warning when the rosters fetch rejects after a delay while transactions are still pending (no unhandled rejection)', async ({ sport, handlers }) => {
+      // Rejects on a macrotask delay so the rejection lands well after the
+      // handler has moved on to the player-index/transaction work — exactly
+      // the race get-transactions.ts guards against by attaching .then/.catch
+      // to fetchSleeperRosterTeams immediately at promise creation. Vitest
+      // fails a test run on an unhandled rejection by default, so simply
+      // reaching (and passing) the assertions below confirms none occurred.
+      mockFetchByUrl({
+        '/league/12345/rosters': () => new Promise((_resolve, reject) => {
+          setTimeout(() => reject(new Error('network error')), 10);
+        }),
+        '/league/12345/users': usersRoute,
+        '/league/12345/transactions/9': transactionsRoute,
+      });
+
+      const params: ToolParams = { sport, league_id: '12345', season_year: 2025, week: 9 };
+      const result = await handlers.get_transactions(playersCacheEnv(UNUSED_PLAYER), params);
+
+      expect(result.success).toBe(true);
+      const data = result.data as {
+        teams?: unknown;
+        teamOwners?: unknown;
+        transactions: Array<{ transaction_id: string; team_ids?: string[]; team_names?: string[] }>;
+        warnings?: string[];
+      };
+      expect(data.teams).toBeUndefined();
+      expect(data.teamOwners).toBeUndefined();
+      expect(data.warnings).toEqual([TEAMS_UNAVAILABLE_WARNING]);
+      expect(data.transactions).toHaveLength(1);
+      expect(data.transactions[0]).toMatchObject({ transaction_id: 't1', team_ids: ['1', '2'], team_names: ['1', '2'] });
+    });
+
+    it.each(scenarios)('$label combines TEAMS_UNAVAILABLE and player-enrichment warnings when both the rosters/users and player-index fetches fail, keeping rows id-only with raw team_ids/team_names', async ({ sport, handlers, statePath }) => {
+      const playersPath = statePath.replace('state', 'players');
+      mockFetchByUrl({
+        '/league/12345/rosters': () => new Response(null, { status: 500 }),
+        '/league/12345/users': usersRoute,
+        '/league/12345/transactions/9': () => jsonResponse([
+          {
+            transaction_id: 't1', type: 'trade', status: 'complete', status_updated: 1000, leg: 9,
+            roster_ids: [1, 2], adds: { '999': 1 }, drops: null,
+          },
+        ]),
+        [playersPath]: () => new Response(null, { status: 503 }),
+      });
+
+      const params: ToolParams = { sport, league_id: '12345', season_year: 2025, week: 9 };
+      // cacheMissEnv forces a real network fetch for the player index
+      // (routed to the 503 above) instead of resolving from KV.
+      const result = await handlers.get_transactions(cacheMissEnv(), params);
+
+      expect(result.success).toBe(true);
+      const data = result.data as {
+        teams?: unknown;
+        teamOwners?: unknown;
+        transactions: Array<{
+          transaction_id: string;
+          team_ids?: string[];
+          team_names?: string[];
+          players_added?: Array<{ id: string; name?: string; position?: string; team?: string }>;
+        }>;
+        warnings?: string[];
+      };
+      // Fixed order: the player-index try/catch runs before the transaction
+      // fetch, and the rosters/users result is awaited afterward — so this
+      // order holds regardless of which underlying fetch actually settles first.
+      expect(data.warnings).toEqual([SLEEPER_PLAYER_ENRICHMENT_WARNING, TEAMS_UNAVAILABLE_WARNING]);
+      expect(data.teams).toBeUndefined();
+      expect(data.teamOwners).toBeUndefined();
+      expect(data.transactions[0]).toMatchObject({
+        transaction_id: 't1',
+        // No player index → id-only player entries.
+        players_added: [{ id: '999', name: undefined, position: undefined, team: undefined }],
+        // No teams map → raw roster ids stand in for team_names.
+        team_ids: ['1', '2'],
+        team_names: ['1', '2'],
+      });
     });
   });
 });

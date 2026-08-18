@@ -44,8 +44,18 @@ export function createGetTransactionsHandler(config: SleeperSportConfig): Handle
       // Kick off the roster/owner team-name fetch in parallel with the
       // player-index load and per-week transaction fetches below — it
       // degrades independently (a warning, no `teams`/`teamOwners`) rather
-      // than failing the whole get_transactions call.
-      const rosterTeamsPromise = fetchSleeperRosterTeams(league_id);
+      // than failing the whole get_transactions call. The .then/.catch is
+      // attached immediately, right here at creation (matching the pattern
+      // get-league-info.ts uses for traded_picks), so a rosters/users
+      // rejection can never be observed as unhandled — regardless of how
+      // long the player-index load and transaction fetches below take, or
+      // whether they throw first.
+      const rosterTeamsPromise = fetchSleeperRosterTeams(league_id)
+        .then((value) => ({ ok: true as const, value }))
+        .catch((error) => {
+          console.error(`[handleGetTransactions] Failed to load rosters/users for team names in league ${league_id}:`, error);
+          return { ok: false as const };
+        });
 
       const warnings: string[] = [];
       let resolvePlayer: PlayerResolver | undefined;
@@ -74,12 +84,11 @@ export function createGetTransactionsHandler(config: SleeperSportConfig): Handle
 
       let teams: Record<string, string> | undefined;
       let teamOwners: Record<string, string> | undefined;
-      try {
-        const resolved = await rosterTeamsPromise;
-        teams = resolved.teams;
-        teamOwners = resolved.teamOwners;
-      } catch (error) {
-        console.error(`[handleGetTransactions] Failed to load rosters/users for team names in league ${league_id}:`, error);
+      const rosterTeamsResult = await rosterTeamsPromise;
+      if (rosterTeamsResult.ok) {
+        teams = rosterTeamsResult.value.teams;
+        teamOwners = rosterTeamsResult.value.teamOwners;
+      } else {
         warnings.push(TEAMS_UNAVAILABLE_WARNING);
       }
 

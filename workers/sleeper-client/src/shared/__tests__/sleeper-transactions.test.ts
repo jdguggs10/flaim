@@ -134,7 +134,7 @@ describe('fetchSleeperRosterTeams', () => {
     expect(teamOwners).toEqual({ '1': 'Alice' });
   });
 
-  it('throws when the rosters fetch fails, before touching users', async () => {
+  it('throws when the rosters fetch fails (rosters and users are fetched in parallel; the rosters .ok check runs first)', async () => {
     mockFetch
       .mockResolvedValueOnce(new Response(null, { status: 500 }))
       .mockResolvedValueOnce(jsonResponse([]));
