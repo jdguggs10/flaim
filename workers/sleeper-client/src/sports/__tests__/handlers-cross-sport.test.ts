@@ -4,7 +4,7 @@ import { basketballHandlers } from '../basketball/handlers';
 import type { Env, ToolParams } from '../../types';
 import { clearSleeperPlayersInMemoryCacheForTesting } from '../../shared/sleeper-players-cache';
 import { SLEEPER_PLAYER_ENRICHMENT_WARNING } from '../../shared/sleeper-enrichment';
-import { TRADED_PICKS_UNAVAILABLE_WARNING } from '../../shared/handlers/get-league-info';
+import { TRADED_PICKS_UNAVAILABLE_WARNING, tradedPicksPartialWarning } from '../../shared/handlers/get-league-info';
 
 const mockFetch = vi.fn() as MockedFunction<typeof fetch>;
 global.fetch = mockFetch;
@@ -414,7 +414,7 @@ describe('sleeper cross-sport handler characterization tests', () => {
       expect(data.warnings).toEqual([TRADED_PICKS_UNAVAILABLE_WARNING]);
     });
 
-    it.each(scenarios)('$label degrades gracefully (never throws) when a traded_picks entry is null or has a non-string season', async ({ sport, handlers }) => {
+    it.each(scenarios)('$label treats a traded_picks payload with NO valid entries as unavailable (never throws)', async ({ sport, handlers }) => {
       mockBaseLeagueFetches();
       mockFetch.mockResolvedValueOnce(jsonResponse([
         null,
@@ -424,14 +424,35 @@ describe('sleeper cross-sport handler characterization tests', () => {
       const params: ToolParams = { sport, league_id: '12345', season_year: 2025 };
       const result = await handlers.get_league_info({} as never, params);
 
-      // Must not throw out of the handler and turn into success: false —
-      // one malformed entry invalidates the whole payload, same as a fetch failure.
+      // Must not throw out of the handler and turn into success: false.
       expect(result.success).toBe(true);
       const data = result.data as Record<string, unknown>;
       expect(data.leagueId).toBe('12345');
       expect(data.tradedPicks).toBeUndefined();
       expect(data.pickOwnershipNote).toBeUndefined();
       expect(data.warnings).toEqual([TRADED_PICKS_UNAVAILABLE_WARNING]);
+    });
+
+    it.each(scenarios)('$label keeps valid traded picks and drops malformed entries with a count warning', async ({ sport, handlers }) => {
+      mockBaseLeagueFetches();
+      mockFetch.mockResolvedValueOnce(jsonResponse([
+        { season: '2027', round: 2, roster_id: 2, previous_owner_id: 2, owner_id: 1 }, // valid
+        null,                                                                          // malformed
+        { season: 2027, round: 1, roster_id: 1, previous_owner_id: 1, owner_id: 2 },   // malformed (numeric season)
+        { season: '2026', round: 1, roster_id: 1, previous_owner_id: 1, owner_id: 2 }, // valid
+      ]));
+
+      const params: ToolParams = { sport, league_id: '12345', season_year: 2025 };
+      const result = await handlers.get_league_info({} as never, params);
+
+      expect(result.success).toBe(true);
+      const data = result.data as { tradedPicks: Array<Record<string, unknown>>; pickOwnershipNote?: string; warnings?: string[] };
+      // One malformed entry must not hide legitimate trades for dynasty users.
+      expect(data.tradedPicks).toHaveLength(2);
+      expect(data.tradedPicks[0]).toMatchObject({ season: '2026', round: 1, originalRosterId: 1, currentRosterId: 2 });
+      expect(data.tradedPicks[1]).toMatchObject({ season: '2027', round: 2, originalRosterId: 2, currentRosterId: 1 });
+      expect(data.pickOwnershipNote).toBeDefined();
+      expect(data.warnings).toEqual([tradedPicksPartialWarning(2)]);
     });
 
     it.each(scenarios)('$label resolves an orphaned traded pick (roster id absent from rosters) without names or a throw', async ({ sport, handlers }) => {

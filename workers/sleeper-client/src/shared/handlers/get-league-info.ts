@@ -8,6 +8,10 @@ import { buildUserDirectory, type SleeperUserDirectoryEntry } from '../sleeper-e
 export const TRADED_PICKS_UNAVAILABLE_WARNING =
   'TRADED_PICKS_UNAVAILABLE: Sleeper traded-pick data unavailable; draft-pick ownership omitted for this league.';
 
+export function tradedPicksPartialWarning(dropped: number): string {
+  return `TRADED_PICKS_PARTIAL: ${dropped} malformed traded-pick ${dropped === 1 ? 'entry was' : 'entries were'} dropped; the listed picks are complete only for the entries Sleeper returned in a valid shape.`;
+}
+
 const PICK_OWNERSHIP_NOTE =
   'Only picks that changed hands are listed; every roster owns its own untraded picks. Sleeper allows pick trading for ' +
   'the current season plus up to three future seasons depending on league settings — treat seasons beyond those listed ' +
@@ -133,25 +137,42 @@ export function createGetLeagueInfoHandler(): HandlerFn {
       });
 
       // Traded picks degrade independently of the rest of the response: a
-      // failed or malformed fetch omits tradedPicks and adds a warning
+      // failed fetch or an unusable body omits tradedPicks and adds a warning
       // rather than failing the whole get_league_info call, matching the
-      // FLA-275 player-enrichment degradation pattern.
+      // FLA-275 player-enrichment degradation pattern. Individual malformed
+      // entries are dropped (with a count warning) rather than discarding the
+      // valid ones — dynasty users are the audience, and one odd entry from a
+      // public, undocumented API should not hide every legitimate trade.
       const warnings: string[] = [];
       let tradedPicks: ResolvedTradedPick[] | undefined;
 
       if (tradedPicksRes && tradedPicksRes.ok) {
         let tradedPicksRaw: unknown;
+        let parseFailed = false;
         try {
           tradedPicksRaw = await tradedPicksRes.json();
         } catch (error) {
           console.error(`[get-league-info] Failed to parse traded_picks response for league ${league_id}:`, error);
-          tradedPicksRaw = undefined;
+          parseFailed = true;
         }
 
-        if (Array.isArray(tradedPicksRaw) && tradedPicksRaw.every(isValidTradedPick)) {
-          tradedPicks = resolveTradedPicks(tradedPicksRaw, rosterOwnerById, userDirectory);
+        if (!parseFailed && Array.isArray(tradedPicksRaw)) {
+          const validPicks = tradedPicksRaw.filter(isValidTradedPick);
+          const dropped = tradedPicksRaw.length - validPicks.length;
+          if (dropped > 0 && validPicks.length === 0) {
+            console.error(`[get-league-info] traded_picks response for league ${league_id} contained no valid entries (${dropped} malformed)`);
+            warnings.push(TRADED_PICKS_UNAVAILABLE_WARNING);
+          } else {
+            if (dropped > 0) {
+              console.error(`[get-league-info] traded_picks response for league ${league_id} dropped ${dropped} malformed entries`);
+              warnings.push(tradedPicksPartialWarning(dropped));
+            }
+            tradedPicks = resolveTradedPicks(validPicks, rosterOwnerById, userDirectory);
+          }
         } else {
-          console.error(`[get-league-info] traded_picks response for league ${league_id} was not a valid array of traded-pick entries`);
+          if (!parseFailed) {
+            console.error(`[get-league-info] traded_picks response for league ${league_id} was not an array`);
+          }
           warnings.push(TRADED_PICKS_UNAVAILABLE_WARNING);
         }
       } else {
