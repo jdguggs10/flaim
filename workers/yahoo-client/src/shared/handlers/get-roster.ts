@@ -38,6 +38,14 @@ export function createGetRosterHandler(config: YahooHandlerContext): HandlerFn {
       };
     }
 
+    // Yahoo's roster player object exposes editorial_team_abbr/status as the
+    // player's CURRENT club and CURRENT status — there is no historical
+    // pro-team/status data in this payload for a past week/date snapshot.
+    // Omit both fields entirely on historical snapshots rather than relabel
+    // present-day state as true-as-of-then (FLA-278: temporal purity),
+    // mirroring the same rule already applied to ESPN and Sleeper rosters.
+    const isHistoricalSnapshot = snapshot.type !== 'current';
+
     const teamKey = team_id.includes('.') ? team_id : `${league_id}.t.${team_id}`;
 
     try {
@@ -74,10 +82,10 @@ export function createGetRosterHandler(config: YahooHandlerContext): HandlerFn {
           playerKey: playerMeta.player_key,
           playerId: playerMeta.player_id,
           name: (playerMeta.name as Record<string, unknown>)?.full,
-          team: playerMeta.editorial_team_abbr,
+          ...(isHistoricalSnapshot ? {} : { team: playerMeta.editorial_team_abbr }),
           position: playerMeta.display_position,
           selectedPosition: position,
-          status: playerMeta.status,
+          ...(isHistoricalSnapshot ? {} : { status: playerMeta.status }),
         };
       });
 
@@ -88,6 +96,7 @@ export function createGetRosterHandler(config: YahooHandlerContext): HandlerFn {
           teamName: team.name,
           ownerName: extractManagerName(team),
           snapshot: toSnapshotMetadata(snapshot),
+          ...(isHistoricalSnapshot ? { limitations: { playerProTeamAvailable: false } } : {}),
           players,
         },
       };

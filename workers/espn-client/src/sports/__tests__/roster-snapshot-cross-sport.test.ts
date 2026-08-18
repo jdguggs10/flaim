@@ -111,6 +111,37 @@ describe('espn get_roster snapshot contract', () => {
       expect(result.code).toBe('INVALID_ROSTER_SNAPSHOT_SELECTOR');
       expect(espnFetchMock).not.toHaveBeenCalled();
     });
+
+    it('omits proTeam/injuryStatus on a historical week snapshot and flags playerProTeamAvailable (FLA-278)', async () => {
+      espnFetchMock.mockResolvedValue(rosterResponse([{
+        playerPoolEntry: { player: { id: 1, fullName: 'Player One', proTeamId: 2, injuryStatus: 'QUESTIONABLE' } },
+        lineupSlotId: 0,
+      }]));
+      const params = makeParams('football', { team_id: '6', week: 5 });
+      const result = await footballHandlers.get_roster({} as never, params, 'Bearer x', 'cid');
+
+      expect(result.success).toBe(true);
+      const data = result.data as { roster: Array<Record<string, unknown>>; limitations?: Record<string, unknown> };
+      expect(data.roster[0]).not.toHaveProperty('proTeam');
+      expect(data.roster[0]).not.toHaveProperty('injuryStatus');
+      // this fixture entry also carries no acquisitionType/acquisitionDate
+      expect(data.limitations).toEqual({ acquisitionMetadataAvailable: false, playerProTeamAvailable: false });
+    });
+
+    it('keeps proTeam/injuryStatus on the current roster', async () => {
+      espnFetchMock.mockResolvedValue(rosterResponse([{
+        playerPoolEntry: { player: { id: 1, fullName: 'Player One', proTeamId: 2, injuryStatus: 'QUESTIONABLE' } },
+        lineupSlotId: 0,
+      }]));
+      const params = makeParams('football', { team_id: '6' });
+      const result = await footballHandlers.get_roster({} as never, params, 'Bearer x', 'cid');
+
+      expect(result.success).toBe(true);
+      const data = result.data as { roster: Array<Record<string, unknown>>; limitations?: unknown };
+      expect(data.roster[0].proTeam).toBe('BUF');
+      expect(data.roster[0].injuryStatus).toBe('Questionable');
+      expect(data.limitations).toBeUndefined();
+    });
   });
 
   describe.each(dailyScenarios)('$label (daily)', ({ sport, handlers }) => {
@@ -132,6 +163,43 @@ describe('espn get_roster snapshot contract', () => {
       expect(result.code).toBe('INVALID_ROSTER_SNAPSHOT_SELECTOR');
     });
 
+    // FLA-209 published-client compatibility, contrasted with FLA-278 temporal
+    // purity: a raw `week` on a daily sport is rejected above (the gateway is
+    // the only place a legacy `week` gets normalized to `{ type: 'current',
+    // requestedWeek }` — see validateRosterSnapshotInput in
+    // workers/shared/src/roster-snapshot.ts). This test injects that
+    // already-normalized shape, as the gateway would send it, to prove the
+    // resulting response is genuinely a CURRENT roster: no provider selector,
+    // proTeam/injuryStatus still present, and no `limitations` block — the
+    // FLA-278 historical-omission rule must not fire on this compat path.
+    it('FLA-209: an ignored-week compat snapshot serves current roster with proTeam/injuryStatus intact and no limitations', async () => {
+      espnFetchMock.mockResolvedValue(rosterResponse([{
+        playerPoolEntry: { player: { id: 1, fullName: 'Player One', proTeamId: 2, injuryStatus: 'OUT' } },
+        lineupSlotId: 0,
+      }]));
+
+      const params = makeParams(sport, { team_id: '6', snapshot: { type: 'current', requestedWeek: 15 } });
+      const result = await handlers.get_roster({} as never, params, 'Bearer x', 'cid');
+
+      expect(result.success).toBe(true);
+      const rosterCall = espnFetchMock.mock.calls[0][0] as string;
+      expect(rosterCall).not.toContain('scoringPeriodId');
+      expect(rosterCall).not.toContain('week=');
+      expect(rosterCall).not.toContain('date=');
+
+      const data = result.data as {
+        snapshot: Record<string, unknown>;
+        roster: Array<Record<string, unknown>>;
+        limitations?: unknown;
+      };
+      expect(data.snapshot.type).toBe('current');
+      expect(data.snapshot.requested_week).toBe(15);
+      expect(data.snapshot.note).toBeTruthy();
+      expect(data.roster[0].proTeam).toBeDefined();
+      expect(data.roster[0].injuryStatus).toBeDefined();
+      expect(data.limitations).toBeUndefined();
+    });
+
     it('resolves as_of_date through the season calendar to a scoringPeriodId', async () => {
       espnFetchMock.mockImplementation(async (path: string) => {
         if (path.includes('proTeamSchedules_wl')) return calendarResponse();
@@ -149,11 +217,12 @@ describe('espn get_roster snapshot contract', () => {
       expect(rosterCall?.[0]).toContain('scoringPeriodId=6');
       const data = result.data as { snapshot: Record<string, unknown>; limitations?: Record<string, unknown> };
       expect(data.snapshot).toEqual({ type: 'date', date: '2024-04-15', providerScoringPeriodId: 6 });
-      // historical entries without acquisition fields flag the limitation
-      expect(data.limitations).toEqual({ acquisitionMetadataAvailable: false });
+      // historical entries without acquisition fields flag the limitation,
+      // alongside the always-on historical playerProTeamAvailable flag (FLA-278)
+      expect(data.limitations).toEqual({ acquisitionMetadataAvailable: false, playerProTeamAvailable: false });
     });
 
-    it('omits the acquisition limitation when every historical entry carries acquisition data', async () => {
+    it('omits the acquisition limitation but keeps playerProTeamAvailable when every historical entry carries acquisition data', async () => {
       espnFetchMock.mockImplementation(async (path: string) => {
         if (path.includes('proTeamSchedules_wl')) return calendarResponse();
         return rosterResponse([{
@@ -169,7 +238,10 @@ describe('espn get_roster snapshot contract', () => {
 
       expect(result.success).toBe(true);
       const data = result.data as { limitations?: unknown };
-      expect(data.limitations).toBeUndefined();
+      // acquisition metadata is present, but the snapshot is still historical, so
+      // playerProTeamAvailable: false remains — ESPN's mRoster payload never
+      // carries historical pro-team/injury data regardless of acquisition detail.
+      expect(data.limitations).toEqual({ playerProTeamAvailable: false });
     });
 
     const partialAcquisitionEntries: Array<[string, Record<string, unknown>]> = [
@@ -201,7 +273,7 @@ describe('espn get_roster snapshot contract', () => {
 
       expect(result.success).toBe(true);
       const data = result.data as { limitations?: Record<string, unknown> };
-      expect(data.limitations).toEqual({ acquisitionMetadataAvailable: false });
+      expect(data.limitations).toEqual({ acquisitionMetadataAvailable: false, playerProTeamAvailable: false });
     });
 
     it('rejects a malformed injected snapshot without degrading to current', async () => {
@@ -236,6 +308,43 @@ describe('espn get_roster snapshot contract', () => {
       expect(espnFetchMock).toHaveBeenCalledTimes(1);
       const data = result.data as { snapshot: Record<string, unknown> };
       expect(data.snapshot).toEqual({ type: 'current' });
+    });
+
+    it('omits proTeam/injuryStatus on a historical as_of_date snapshot and flags playerProTeamAvailable (FLA-278)', async () => {
+      espnFetchMock.mockImplementation(async (path: string) => {
+        if (path.includes('proTeamSchedules_wl')) return calendarResponse();
+        return rosterResponse([{
+          playerPoolEntry: { player: { id: 1, fullName: 'Player One', proTeamId: 2, injuryStatus: 'OUT' } },
+          lineupSlotId: 0,
+          acquisitionType: 'DRAFT',
+          acquisitionDate: 1710000000000,
+        }]);
+      });
+
+      const params = makeParams(sport, { team_id: '6', snapshot: { type: 'date', date: '2024-04-15' } });
+      const result = await handlers.get_roster({} as never, params, 'Bearer x', 'cid');
+
+      expect(result.success).toBe(true);
+      const data = result.data as { roster: Array<Record<string, unknown>>; limitations?: Record<string, unknown> };
+      expect(data.roster[0]).not.toHaveProperty('proTeam');
+      expect(data.roster[0]).not.toHaveProperty('injuryStatus');
+      // acquisition metadata is complete here, so only the pro-team flag is set
+      expect(data.limitations).toEqual({ playerProTeamAvailable: false });
+    });
+
+    it('keeps proTeam/injuryStatus on the current roster', async () => {
+      espnFetchMock.mockResolvedValue(rosterResponse([{
+        playerPoolEntry: { player: { id: 1, fullName: 'Player One', proTeamId: 2, injuryStatus: 'OUT' } },
+        lineupSlotId: 0,
+      }]));
+      const params = makeParams(sport, { team_id: '6' });
+      const result = await handlers.get_roster({} as never, params, 'Bearer x', 'cid');
+
+      expect(result.success).toBe(true);
+      const data = result.data as { roster: Array<Record<string, unknown>>; limitations?: unknown };
+      expect(data.roster[0].proTeam).toBeDefined();
+      expect(data.roster[0].injuryStatus).toBeDefined();
+      expect(data.limitations).toBeUndefined();
     });
   });
 });
