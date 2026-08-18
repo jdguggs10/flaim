@@ -21,6 +21,42 @@ function jsonResponse(payload: unknown, status = 200): Response {
   });
 }
 
+// A 200 whose body is not valid JSON — .json() rejects, exercising the
+// get_league_info traded_picks parse-failure path.
+function invalidJsonResponse(): Response {
+  return new Response('not valid json{{{', {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
+// Queues the three fetches get_league_info always needs (league, rosters,
+// users) so traded_picks-focused tests only need to queue their own 4th
+// response. league_id '12345', two rosters (u1=Alice, u2=Bob).
+function mockBaseLeagueFetches() {
+  mockFetch
+    .mockResolvedValueOnce(jsonResponse({
+      league_id: '12345',
+      name: 'Test League',
+      sport: 'nfl',
+      season: '2025',
+      status: 'in_season',
+      total_rosters: 2,
+      roster_positions: ['QB', 'RB'],
+      scoring_settings: { pass_yd: 0.04 },
+      previous_league_id: null,
+      draft_id: 'draft_1',
+    }))
+    .mockResolvedValueOnce(jsonResponse([
+      { roster_id: 1, owner_id: 'u1', players: [], starters: [], reserve: [], settings: { wins: 0, losses: 0, ties: 0, fpts: 0 } },
+      { roster_id: 2, owner_id: 'u2', players: [], starters: [], reserve: [], settings: { wins: 0, losses: 0, ties: 0, fpts: 0 } },
+    ]))
+    .mockResolvedValueOnce(jsonResponse([
+      { user_id: 'u1', display_name: 'Alice', avatar: null },
+      { user_id: 'u2', display_name: 'Bob', avatar: null },
+    ]));
+}
+
 interface TestPlayer {
   player_id: string;
   full_name: string;
@@ -193,9 +229,17 @@ describe('sleeper cross-sport handler characterization tests', () => {
       expect(teams[1]).toMatchObject({ rosterId: 2, ownerName: 'Bob' });
       expect(teams[1].teamName).toBeUndefined();
 
-      // An empty traded_picks array is a normal (redraft) result, not a failure
+      // An empty traded_picks array is a normal (redraft) result, not a failure —
+      // and pickOwnershipNote is suppressed when there's nothing to caveat.
       expect(data.tradedPicks).toEqual([]);
+      expect(data.pickOwnershipNote).toBeUndefined();
       expect(data.warnings).toBeUndefined();
+
+      // The four upstream calls happen in league, rosters, users, traded_picks order
+      expect(mockFetch).toHaveBeenNthCalledWith(1, 'https://api.sleeper.app/v1/league/12345', expect.anything());
+      expect(mockFetch).toHaveBeenNthCalledWith(2, 'https://api.sleeper.app/v1/league/12345/rosters', expect.anything());
+      expect(mockFetch).toHaveBeenNthCalledWith(3, 'https://api.sleeper.app/v1/league/12345/users', expect.anything());
+      expect(mockFetch).toHaveBeenNthCalledWith(4, 'https://api.sleeper.app/v1/league/12345/traded_picks', expect.anything());
     });
 
     it.each(scenarios)('$label resolves traded picks with owner/team names, sorted by season/round/originalRosterId', async ({ sport, handlers }) => {
@@ -308,6 +352,114 @@ describe('sleeper cross-sport handler characterization tests', () => {
       expect(data.tradedPicks).toBeUndefined();
       expect(data.pickOwnershipNote).toBeUndefined();
       expect(data.warnings).toEqual([TRADED_PICKS_UNAVAILABLE_WARNING]);
+    });
+
+    it.each(scenarios)('$label degrades gracefully when the traded_picks fetch rejects (network error)', async ({ sport, handlers }) => {
+      mockBaseLeagueFetches();
+      mockFetch.mockRejectedValueOnce(new Error('network boom'));
+
+      const params: ToolParams = { sport, league_id: '12345', season_year: 2025 };
+      const result = await handlers.get_league_info({} as never, params);
+
+      expect(result.success).toBe(true);
+      const data = result.data as Record<string, unknown>;
+      expect(data.leagueId).toBe('12345');
+      expect(data.tradedPicks).toBeUndefined();
+      expect(data.pickOwnershipNote).toBeUndefined();
+      expect(data.warnings).toEqual([TRADED_PICKS_UNAVAILABLE_WARNING]);
+    });
+
+    it.each(scenarios)('$label degrades gracefully when the traded_picks fetch 404s', async ({ sport, handlers }) => {
+      mockBaseLeagueFetches();
+      mockFetch.mockResolvedValueOnce(jsonResponse({ error: 'not found' }, 404));
+
+      const params: ToolParams = { sport, league_id: '12345', season_year: 2025 };
+      const result = await handlers.get_league_info({} as never, params);
+
+      expect(result.success).toBe(true);
+      const data = result.data as Record<string, unknown>;
+      expect(data.leagueId).toBe('12345');
+      expect(data.tradedPicks).toBeUndefined();
+      expect(data.pickOwnershipNote).toBeUndefined();
+      expect(data.warnings).toEqual([TRADED_PICKS_UNAVAILABLE_WARNING]);
+    });
+
+    it.each(scenarios)('$label degrades gracefully when the traded_picks response body is not valid JSON', async ({ sport, handlers }) => {
+      mockBaseLeagueFetches();
+      mockFetch.mockResolvedValueOnce(invalidJsonResponse());
+
+      const params: ToolParams = { sport, league_id: '12345', season_year: 2025 };
+      const result = await handlers.get_league_info({} as never, params);
+
+      expect(result.success).toBe(true);
+      const data = result.data as Record<string, unknown>;
+      expect(data.leagueId).toBe('12345');
+      expect(data.tradedPicks).toBeUndefined();
+      expect(data.pickOwnershipNote).toBeUndefined();
+      expect(data.warnings).toEqual([TRADED_PICKS_UNAVAILABLE_WARNING]);
+    });
+
+    it.each(scenarios)('$label degrades gracefully when the traded_picks response is not an array', async ({ sport, handlers }) => {
+      mockBaseLeagueFetches();
+      mockFetch.mockResolvedValueOnce(jsonResponse({ picks: 'not an array' }));
+
+      const params: ToolParams = { sport, league_id: '12345', season_year: 2025 };
+      const result = await handlers.get_league_info({} as never, params);
+
+      expect(result.success).toBe(true);
+      const data = result.data as Record<string, unknown>;
+      expect(data.leagueId).toBe('12345');
+      expect(data.tradedPicks).toBeUndefined();
+      expect(data.pickOwnershipNote).toBeUndefined();
+      expect(data.warnings).toEqual([TRADED_PICKS_UNAVAILABLE_WARNING]);
+    });
+
+    it.each(scenarios)('$label degrades gracefully (never throws) when a traded_picks entry is null or has a non-string season', async ({ sport, handlers }) => {
+      mockBaseLeagueFetches();
+      mockFetch.mockResolvedValueOnce(jsonResponse([
+        null,
+        { season: 2027, round: 1, roster_id: 1, previous_owner_id: 1, owner_id: 2 }, // season is a number, not a string
+      ]));
+
+      const params: ToolParams = { sport, league_id: '12345', season_year: 2025 };
+      const result = await handlers.get_league_info({} as never, params);
+
+      // Must not throw out of the handler and turn into success: false —
+      // one malformed entry invalidates the whole payload, same as a fetch failure.
+      expect(result.success).toBe(true);
+      const data = result.data as Record<string, unknown>;
+      expect(data.leagueId).toBe('12345');
+      expect(data.tradedPicks).toBeUndefined();
+      expect(data.pickOwnershipNote).toBeUndefined();
+      expect(data.warnings).toEqual([TRADED_PICKS_UNAVAILABLE_WARNING]);
+    });
+
+    it.each(scenarios)('$label resolves an orphaned traded pick (roster id absent from rosters) without names or a throw', async ({ sport, handlers }) => {
+      mockBaseLeagueFetches();
+      mockFetch.mockResolvedValueOnce(jsonResponse([
+        // roster_id 99 does not exist in the rosters mocked by mockBaseLeagueFetches
+        { season: '2027', round: 3, roster_id: 99, previous_owner_id: 99, owner_id: 1 },
+      ]));
+
+      const params: ToolParams = { sport, league_id: '12345', season_year: 2025 };
+      const result = await handlers.get_league_info({} as never, params);
+
+      expect(result.success).toBe(true);
+      const data = result.data as Record<string, unknown>;
+      expect(data.warnings).toBeUndefined();
+
+      const tradedPicks = data.tradedPicks as Array<Record<string, unknown>>;
+      expect(tradedPicks).toHaveLength(1);
+      expect(tradedPicks[0]).toMatchObject({
+        season: '2027',
+        round: 3,
+        originalRosterId: 99,
+        previousRosterId: 99,
+        currentRosterId: 1,
+        currentOwnerName: 'Alice',
+      });
+      expect(tradedPicks[0].originalOwnerName).toBeUndefined();
+      expect(tradedPicks[0].originalTeamName).toBeUndefined();
     });
   });
 
