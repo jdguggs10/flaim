@@ -1,5 +1,5 @@
 import type { HandlerFn } from './types';
-import type { SleeperLeagueUser, SleeperMatchup, SleeperRoster, ToolParams } from '../../types';
+import type { Env, SleeperLeagueUser, SleeperMatchup, SleeperRoster, ToolParams } from '../../types';
 import {
   ErrorCode,
   malformedRosterSnapshotError,
@@ -11,6 +11,7 @@ import {
 } from '@flaim/worker-shared';
 import { sleeperFetch, handleSleeperError } from '../sleeper-api';
 import { toExecuteErrorResponse } from './utils';
+import { buildUserDirectory, loadSleeperPlayersIndexForEnrichment, resolveSleeperPlayerEntries } from '../sleeper-enrichment';
 
 // team_id matches either the roster ID or the owner's user ID.
 function findRoster(rosters: SleeperRoster[], teamId: string): SleeperRoster | undefined {
@@ -24,10 +25,11 @@ function findRoster(rosters: SleeperRoster[], teamId: string): SleeperRoster | u
  * reserve/taxi assignments, membership) is copied into the response.
  */
 async function getHistoricalRoster(
+  env: Env,
   params: ToolParams,
   snapshot: Extract<RosterSnapshot, { type: 'week' }>
 ) {
-  const { league_id, team_id } = params;
+  const { league_id, team_id, sport } = params;
 
   if (!team_id) {
     return {
@@ -77,10 +79,16 @@ async function getHistoricalRoster(
     };
   }
 
-  const owner = users.find((u) => u.user_id === identity.owner_id);
+  const ownerEntry = buildUserDirectory(users).get(identity.owner_id);
   const starters = matchup.starters ?? [];
   const players = matchup.players ?? [];
   const bench = players.filter((p) => !starters.includes(p));
+
+  const { index: playersIndex, warnings } = await loadSleeperPlayersIndexForEnrichment(
+    env,
+    sport,
+    'get-roster:historical'
+  );
 
   return {
     success: true as const,
@@ -88,19 +96,21 @@ async function getHistoricalRoster(
       leagueId: league_id,
       rosterId: identity.roster_id,
       ownerId: identity.owner_id,
-      ownerName: owner?.display_name ?? 'Unknown',
+      ownerName: ownerEntry?.displayName ?? 'Unknown',
+      teamName: ownerEntry?.teamName,
       snapshot: toSnapshotMetadata(snapshot),
-      starters,
-      bench,
+      starters: resolveSleeperPlayerEntries(starters, playersIndex),
+      bench: resolveSleeperPlayerEntries(bench, playersIndex),
       points: matchup.points,
       playersPoints: matchup.players_points ?? undefined,
       limitations: { reserveAndTaxiClassificationAvailable: false },
+      ...(warnings.length ? { warnings } : {}),
     },
   };
 }
 
 export function createGetRosterHandler(): HandlerFn {
-  return async (_env, params) => {
+  return async (env, params) => {
     const { league_id, team_id, sport } = params;
     if (!league_id) {
       return { success: false, error: 'league_id is required for get_roster', code: ErrorCode.MISSING_PARAM };
@@ -116,7 +126,7 @@ export function createGetRosterHandler(): HandlerFn {
 
     try {
       if (snapshot.type === 'week') {
-        return await getHistoricalRoster(params, snapshot);
+        return await getHistoricalRoster(env, params, snapshot);
       }
 
       const [rostersRes, usersRes] = await Promise.all([
@@ -129,28 +139,28 @@ export function createGetRosterHandler(): HandlerFn {
 
       const rosters: SleeperRoster[] = await rostersRes.json();
       const users: SleeperLeagueUser[] = await usersRes.json();
+      const userDirectory = buildUserDirectory(users);
 
       let roster: SleeperRoster | undefined;
       if (team_id) {
         roster = findRoster(rosters, team_id);
       } else {
-        const userMap = new Map<string, string>();
-        for (const user of users) {
-          userMap.set(user.user_id, user.display_name);
-        }
-
         return {
           success: true,
           data: {
             leagueId: league_id,
             snapshot: toSnapshotMetadata(snapshot),
-            rosters: rosters.map((r) => ({
-              rosterId: r.roster_id,
-              ownerId: r.owner_id,
-              ownerName: userMap.get(r.owner_id) ?? 'Unknown',
-              playerCount: r.players?.length ?? 0,
-              starterCount: r.starters?.length ?? 0,
-            })),
+            rosters: rosters.map((r) => {
+              const entry = userDirectory.get(r.owner_id);
+              return {
+                rosterId: r.roster_id,
+                ownerId: r.owner_id,
+                ownerName: entry?.displayName ?? 'Unknown',
+                teamName: entry?.teamName,
+                playerCount: r.players?.length ?? 0,
+                starterCount: r.starters?.length ?? 0,
+              };
+            }),
           },
         };
       }
@@ -163,7 +173,7 @@ export function createGetRosterHandler(): HandlerFn {
         };
       }
 
-      const owner = users.find((u) => u.user_id === roster.owner_id);
+      const ownerEntry = userDirectory.get(roster.owner_id);
       const starters = roster.starters ?? [];
       const allPlayers = roster.players ?? [];
       const reserve = roster.reserve ?? [];
@@ -173,23 +183,31 @@ export function createGetRosterHandler(): HandlerFn {
       );
       const settings = roster.settings;
 
+      const { index: playersIndex, warnings } = await loadSleeperPlayersIndexForEnrichment(
+        env,
+        sport,
+        'get-roster:current'
+      );
+
       return {
         success: true,
         data: {
           leagueId: league_id,
           rosterId: roster.roster_id,
           ownerId: roster.owner_id,
-          ownerName: owner?.display_name ?? 'Unknown',
+          ownerName: ownerEntry?.displayName ?? 'Unknown',
+          teamName: ownerEntry?.teamName,
           snapshot: toSnapshotMetadata(snapshot),
-          starters,
-          bench,
-          reserve,
-          taxi,
+          starters: resolveSleeperPlayerEntries(starters, playersIndex),
+          bench: resolveSleeperPlayerEntries(bench, playersIndex),
+          reserve: resolveSleeperPlayerEntries(reserve, playersIndex),
+          taxi: resolveSleeperPlayerEntries(taxi, playersIndex),
           record: {
             wins: settings?.wins ?? 0,
             losses: settings?.losses ?? 0,
             ties: settings?.ties ?? 0,
           },
+          ...(warnings.length ? { warnings } : {}),
         },
       };
     } catch (error) {

@@ -1,0 +1,94 @@
+import type { Env, Sport, SleeperLeagueUser } from '../types';
+import { getSleeperPlayersIndex, type SleeperPlayerRecord } from './sleeper-players-cache';
+
+const SLEEPER_EMPTY_LINEUP_SLOT_ID = '0';
+
+export const SLEEPER_PLAYER_ENRICHMENT_WARNING =
+  'PLAYER_ENRICHMENT_UNAVAILABLE: Sleeper player index unavailable; roster/matchup player entries include id only.';
+
+export interface SleeperUserDirectoryEntry {
+  displayName: string;
+  /** Manager-set fantasy team name (users[].metadata.team_name). Absent when never set — never fabricated. */
+  teamName?: string;
+}
+
+export interface SleeperPlayerEntry {
+  id: string;
+  name?: string;
+  position?: string;
+  team?: string;
+  /** True for Sleeper's "0" empty-lineup-slot sentinel; no name lookup is attempted for it. */
+  empty?: true;
+}
+
+function asNonEmptyString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim().length > 0 ? value : undefined;
+}
+
+/**
+ * Maps Sleeper league users by user_id to their display name and, when the
+ * manager set one, their custom fantasy team name. Sleeper only exposes a
+ * team name via users[].metadata.team_name; unlike ESPN/Yahoo, most leagues
+ * never set it, so teamName is commonly absent — never fabricate a "Team X"
+ * fallback.
+ */
+export function buildUserDirectory(users: SleeperLeagueUser[]): Map<string, SleeperUserDirectoryEntry> {
+  const directory = new Map<string, SleeperUserDirectoryEntry>();
+  for (const user of users) {
+    directory.set(user.user_id, {
+      displayName: user.display_name,
+      teamName: asNonEmptyString(user.metadata?.team_name),
+    });
+  }
+  return directory;
+}
+
+/**
+ * Resolves bare Sleeper player-id strings into enriched entries using the
+ * cached player index, preserving array order and length.
+ * - "0" is Sleeper's empty-lineup-slot sentinel: returned as { id: "0", empty: true }, no lookup.
+ * - Index hit: { id, name, position, team } (team omitted when the record has none).
+ * - Index miss (unknown id, or index unavailable/empty): { id } only — never throws.
+ */
+export function resolveSleeperPlayerEntries(
+  ids: string[],
+  index: Map<string, SleeperPlayerRecord>,
+): SleeperPlayerEntry[] {
+  return ids.map((id) => {
+    if (id === SLEEPER_EMPTY_LINEUP_SLOT_ID) {
+      return { id, empty: true };
+    }
+
+    const player = index.get(id);
+    if (!player) {
+      return { id };
+    }
+
+    return {
+      id,
+      name: player.full_name,
+      position: player.position,
+      team: player.team,
+    };
+  });
+}
+
+/**
+ * Loads the shared Sleeper player index for roster/matchup enrichment. On
+ * failure, degrades to an empty index (every entry resolves to { id } only)
+ * plus a warning instead of failing the request — the same degradation
+ * pattern used by get_transactions and get_free_agents.
+ */
+export async function loadSleeperPlayersIndexForEnrichment(
+  env: Env,
+  sport: Sport,
+  logContext: string,
+): Promise<{ index: Map<string, SleeperPlayerRecord>; warnings: string[] }> {
+  try {
+    const index = await getSleeperPlayersIndex(env, sport);
+    return { index, warnings: [] };
+  } catch (error) {
+    console.error(`[${logContext}] Failed to get player index for enrichment:`, error);
+    return { index: new Map(), warnings: [SLEEPER_PLAYER_ENRICHMENT_WARNING] };
+  }
+}

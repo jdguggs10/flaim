@@ -3,9 +3,10 @@ import type { SleeperLeagueUser, SleeperMatchup, SleeperRoster } from '../../typ
 import { ErrorCode } from '@flaim/worker-shared';
 import { sleeperFetch, handleSleeperError } from '../sleeper-api';
 import { toExecuteErrorResponse } from './utils';
+import { buildUserDirectory, loadSleeperPlayersIndexForEnrichment, resolveSleeperPlayerEntries } from '../sleeper-enrichment';
 
 export function createGetMatchupsHandler(config: SleeperSportConfig): HandlerFn {
-  return async (_env, params) => {
+  return async (env, params) => {
     const { league_id, week } = params;
     if (!league_id) {
       return { success: false, error: 'league_id is required for get_matchups', code: ErrorCode.MISSING_PARAM };
@@ -38,14 +39,21 @@ export function createGetMatchupsHandler(config: SleeperSportConfig): HandlerFn 
       const rosters: SleeperRoster[] = await rostersRes.json();
       const users: SleeperLeagueUser[] = await usersRes.json();
 
-      const rosterOwnerMap = new Map<number, string>();
-      const userMap = new Map<string, string>();
-      for (const user of users) {
-        userMap.set(user.user_id, user.display_name);
-      }
+      const userDirectory = buildUserDirectory(users);
+      const rosterOwnerMap = new Map<number, { ownerName: string; teamName?: string }>();
       for (const roster of rosters) {
-        rosterOwnerMap.set(roster.roster_id, userMap.get(roster.owner_id) ?? 'Unknown');
+        const entry = userDirectory.get(roster.owner_id);
+        rosterOwnerMap.set(roster.roster_id, {
+          ownerName: entry?.displayName ?? 'Unknown',
+          teamName: entry?.teamName,
+        });
       }
+
+      const { index: playersIndex, warnings } = await loadSleeperPlayersIndexForEnrichment(
+        env,
+        config.sport,
+        'get-matchups'
+      );
 
       const matchupGroups = new Map<number, SleeperMatchup[]>();
       for (const m of matchups) {
@@ -56,12 +64,16 @@ export function createGetMatchupsHandler(config: SleeperSportConfig): HandlerFn 
       }
 
       const pairedMatchups = Array.from(matchupGroups.entries()).map(([matchupId, pair]) => {
-        const formatTeam = (m: SleeperMatchup) => ({
-          rosterId: m.roster_id,
-          ownerName: rosterOwnerMap.get(m.roster_id) ?? 'Unknown',
-          points: m.points ?? 0,
-          starters: m.starters ?? [],
-        });
+        const formatTeam = (m: SleeperMatchup) => {
+          const owner = rosterOwnerMap.get(m.roster_id);
+          return {
+            rosterId: m.roster_id,
+            ownerName: owner?.ownerName ?? 'Unknown',
+            teamName: owner?.teamName,
+            points: m.points ?? 0,
+            starters: resolveSleeperPlayerEntries(m.starters ?? [], playersIndex),
+          };
+        };
 
         const home = pair[0] ? formatTeam(pair[0]) : null;
         const away = pair[1] ? formatTeam(pair[1]) : null;
@@ -82,6 +94,7 @@ export function createGetMatchupsHandler(config: SleeperSportConfig): HandlerFn 
           leagueId: league_id,
           week: matchupWeek,
           matchups: pairedMatchups,
+          ...(warnings.length ? { warnings } : {}),
         },
       };
     } catch (error) {

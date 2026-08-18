@@ -3,6 +3,7 @@ import type { SleeperLeague, SleeperLeagueUser, SleeperRoster, SleeperBracketMat
 import { ErrorCode } from '@flaim/worker-shared';
 import { sleeperFetch, handleSleeperError } from '../sleeper-api';
 import { toExecuteErrorResponse } from './utils';
+import { buildUserDirectory } from '../sleeper-enrichment';
 
 export function createGetStandingsHandler(): HandlerFn {
   return async (_env, params) => {
@@ -70,10 +71,7 @@ export function createGetStandingsHandler(): HandlerFn {
         }
       }
 
-      const userMap = new Map<string, string>();
-      for (const user of users) {
-        userMap.set(user.user_id, user.display_name);
-      }
+      const userDirectory = buildUserDirectory(users);
 
       const standings = rosters
         .map((roster) => {
@@ -112,10 +110,13 @@ export function createGetStandingsHandler(): HandlerFn {
           const outcomeConfidence = (seasonComplete && championRosterId !== null) ? 'explicit' as const : null;
           const madePlayoffs = bracket.length > 0 ? inWinnersBracket : null;
 
+          const ownerEntry = userDirectory.get(roster.owner_id);
+
           return {
             rosterId: roster.roster_id,
             ownerId: roster.owner_id,
-            ownerName: userMap.get(roster.owner_id) ?? 'Unknown',
+            ownerName: ownerEntry?.displayName ?? 'Unknown',
+            teamName: ownerEntry?.teamName,
             wins,
             losses,
             ties,

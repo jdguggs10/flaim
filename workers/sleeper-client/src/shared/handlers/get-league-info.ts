@@ -3,6 +3,7 @@ import type { SleeperLeague, SleeperLeagueUser, SleeperRoster } from '../../type
 import { ErrorCode } from '@flaim/worker-shared';
 import { sleeperFetch, handleSleeperError } from '../sleeper-api';
 import { toExecuteErrorResponse } from './utils';
+import { buildUserDirectory } from '../sleeper-enrichment';
 
 export function createGetLeagueInfoHandler(): HandlerFn {
   return async (_env, params) => {
@@ -26,16 +27,17 @@ export function createGetLeagueInfoHandler(): HandlerFn {
       const rosters: SleeperRoster[] = await rostersRes.json();
       const users: SleeperLeagueUser[] = await usersRes.json();
 
-      const userMap = new Map<string, string>();
-      for (const user of users) {
-        userMap.set(user.user_id, user.display_name);
-      }
+      const userDirectory = buildUserDirectory(users);
 
-      const teams = rosters.map((roster) => ({
-        rosterId: roster.roster_id,
-        ownerId: roster.owner_id,
-        ownerName: userMap.get(roster.owner_id) || undefined,
-      }));
+      const teams = rosters.map((roster) => {
+        const entry = userDirectory.get(roster.owner_id);
+        return {
+          rosterId: roster.roster_id,
+          ownerId: roster.owner_id,
+          ownerName: entry?.displayName || undefined,
+          teamName: entry?.teamName,
+        };
+      });
 
       return {
         success: true,
