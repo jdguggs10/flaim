@@ -25,6 +25,10 @@ export function createGetMatchupsHandler(config: SleeperSportConfig): HandlerFn 
         }
       }
 
+      // Kick off the player-index load in parallel with the matchup/roster/user
+      // fetches — get_matchups always enriches starters for both sides.
+      const playersIndexPromise = loadSleeperPlayersIndexForEnrichment(env, config.sport, 'get-matchups');
+
       const [matchupsRes, rostersRes, usersRes] = await Promise.all([
         sleeperFetch(`/league/${league_id}/matchups/${matchupWeek}`),
         sleeperFetch(`/league/${league_id}/rosters`),
@@ -49,11 +53,7 @@ export function createGetMatchupsHandler(config: SleeperSportConfig): HandlerFn 
         });
       }
 
-      const { index: playersIndex, warnings } = await loadSleeperPlayersIndexForEnrichment(
-        env,
-        config.sport,
-        'get-matchups'
-      );
+      const { index: playersIndex, warnings } = await playersIndexPromise;
 
       const matchupGroups = new Map<number, SleeperMatchup[]>();
       for (const m of matchups) {

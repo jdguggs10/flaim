@@ -3,6 +3,7 @@ import { footballHandlers } from '../football/handlers';
 import { basketballHandlers } from '../basketball/handlers';
 import type { Env, ToolParams } from '../../types';
 import { clearSleeperPlayersInMemoryCacheForTesting } from '../../shared/sleeper-players-cache';
+import { SLEEPER_PLAYER_ENRICHMENT_WARNING } from '../../shared/sleeper-enrichment';
 
 const mockFetch = vi.fn() as MockedFunction<typeof fetch>;
 global.fetch = mockFetch;
@@ -28,20 +29,58 @@ interface TestPlayer {
 
 // Working KV-backed player index — avoids an extra network fetch and keeps
 // each test's roster/matchup enrichment deterministic and self-contained.
+// A real (Promise-returning) KV mock also matters for call ordering: Sleeper
+// roster/matchup fetches and the player-index load now run in parallel, and
+// only a genuinely async KV call (never a synchronous `{} as never` property
+// throw) preserves the mockFetch call order this file's tests queue against.
 function playersCacheEnv(players: TestPlayer[]): Env {
   const kvGet = vi.fn().mockResolvedValue(JSON.stringify(players.map((p) => ({ ...p, active: true }))));
   const kvPut = vi.fn().mockResolvedValue(undefined);
   return { SLEEPER_PLAYERS_CACHE: { get: kvGet, put: kvPut } } as unknown as Env;
 }
 
-// A KV/network failure for player-index enrichment — get_roster/get_matchups
-// should degrade to { id }-only entries plus a top-level warnings array
-// rather than failing the whole request.
-function failingPlayersCacheEnv(): Env {
-  const kvGet = vi.fn().mockRejectedValue(new Error('kv unavailable'));
+// Player fixture for tests that need a working, non-empty player index but
+// don't care about its content (they don't assert enriched fields).
+const UNUSED_PLAYER: TestPlayer[] = [{ player_id: 'unused', full_name: 'Unused Player' }];
+
+// A real KV cache miss (get resolves null) — used by the player-index
+// failure-degradation tests below, which each queue their own failure
+// response for the GET /players/{sport} network call.
+function cacheMissEnv(): Env {
+  const kvGet = vi.fn().mockResolvedValue(null);
   const kvPut = vi.fn().mockResolvedValue(undefined);
   return { SLEEPER_PLAYERS_CACHE: { get: kvGet, put: kvPut } } as unknown as Env;
 }
+
+interface PlayersIndexFailure {
+  label: string;
+  queueFailure: () => void;
+}
+
+// Three realistic ways the Sleeper players-index network call can fail or
+// come back unusable. get_roster/get_matchups must degrade to { id }-only
+// entries plus a top-level warnings array in every case — never fail the
+// whole request over enrichment.
+const playersIndexFailures: PlayersIndexFailure[] = [
+  {
+    label: 'a 503 from the players endpoint',
+    queueFailure: () => {
+      mockFetch.mockResolvedValueOnce(new Response(null, { status: 503 }));
+    },
+  },
+  {
+    label: 'a rejected players-endpoint fetch (network error)',
+    queueFailure: () => {
+      mockFetch.mockRejectedValueOnce(new Error('network unreachable'));
+    },
+  },
+  {
+    label: 'a malformed 200 players-endpoint payload',
+    queueFailure: () => {
+      mockFetch.mockResolvedValueOnce(jsonResponse('nope'));
+    },
+  },
+];
 
 describe('sleeper cross-sport handler characterization tests', () => {
   beforeEach(() => {
@@ -256,33 +295,10 @@ describe('sleeper cross-sport handler characterization tests', () => {
       expect(data.teamName).toBeUndefined();
     });
 
-    it.each(scenarios)('$label degrades to id-only entries plus a warning when the player index is unavailable', async ({ sport, handlers }) => {
-      mockFetch
-        .mockResolvedValueOnce(jsonResponse([
-          {
-            roster_id: 1, owner_id: 'u1',
-            players: ['p1', 'p2'], starters: ['p1'], reserve: [],
-            settings: { wins: 0, losses: 0, ties: 0, fpts: 0, fpts_decimal: 0 },
-          },
-        ]))
-        .mockResolvedValueOnce(jsonResponse([
-          { user_id: 'u1', display_name: 'Alice', avatar: null },
-        ]));
-      // No mock queued for the players-index network fallback — it 404s via
-      // the exhausted mockFetch queue, exercising the same degradation path
-      // as get_transactions/get_free_agents.
-
-      const params: ToolParams = { sport, league_id: '12345', season_year: 2025, team_id: '1' };
-      const result = await handlers.get_roster(failingPlayersCacheEnv(), params);
-
-      expect(result.success).toBe(true);
-      const data = result.data as Record<string, unknown>;
-      expect(data.starters).toEqual([{ id: 'p1' }]);
-      expect(data.bench).toEqual([{ id: 'p2' }]);
-      expect(data.warnings).toEqual([
-        'PLAYER_ENRICHMENT_UNAVAILABLE: Sleeper player index unavailable; roster/matchup player entries include id only.',
-      ]);
-    });
+    // Player-index failure degradation (503 / network error / malformed
+    // payload) is covered thoroughly by the dedicated describe blocks near
+    // the end of this file, for both get_roster (current + historical) and
+    // get_matchups.
 
     it.each(scenarios)('$label treats missing taxi as empty and keeps bench derivation', async ({ sport, handlers }) => {
       mockFetch
@@ -353,7 +369,7 @@ describe('sleeper cross-sport handler characterization tests', () => {
         ]));
     }
 
-    it.each(scenarios)('$label returns the frozen weekly roster by roster id, enriched with name/position/team and teamName', async ({ sport, handlers }) => {
+    it.each(scenarios)('$label returns the frozen weekly roster by roster id, enriched with name/position (never team — temporal purity) and teamName', async ({ sport, handlers }) => {
       mockHistoricalWeek();
 
       const env = playersCacheEnv([
@@ -366,10 +382,13 @@ describe('sleeper cross-sport handler characterization tests', () => {
       expect(result.success).toBe(true);
       expect(mockFetch.mock.calls[0][0]).toContain('/league/12345/matchups/9');
       const data = result.data as Record<string, unknown>;
-      // membership comes from the week's matchup payload, not the current roster
+      // membership comes from the week's matchup payload, not the current roster.
+      // The player index only tracks each player's CURRENT club, so historical
+      // entries never carry `team` — even though the mocked index has one for
+      // p1/p2 — to avoid showing a club a player joined after this week.
       expect(data.starters).toEqual([
-        { id: 'p1', name: 'Player One', position: 'QB', team: 'BUF' },
-        { id: 'p2', name: 'Player Two', position: 'WR', team: 'MIA' },
+        { id: 'p1', name: 'Player One', position: 'QB' },
+        { id: 'p2', name: 'Player Two', position: 'WR' },
       ]);
       // p3 is not in the mocked player index — still resolves to an id-only entry
       expect(data.bench).toEqual([{ id: 'p3' }]);
@@ -378,7 +397,10 @@ describe('sleeper cross-sport handler characterization tests', () => {
       expect(data.ownerName).toBe('Alice');
       expect(data.teamName).toBe('The Waiver Wire Wizards');
       expect(data.snapshot).toEqual({ type: 'week', week: 9 });
-      expect(data.limitations).toEqual({ reserveAndTaxiClassificationAvailable: false });
+      expect(data.limitations).toEqual({
+        reserveAndTaxiClassificationAvailable: false,
+        playerProTeamAvailable: false,
+      });
       expect(data.warnings).toBeUndefined();
       // temporally pure: no current-state fields leak into historical responses
       expect(data).not.toHaveProperty('record');
@@ -390,7 +412,7 @@ describe('sleeper cross-sport handler characterization tests', () => {
       mockHistoricalWeek();
 
       const params: ToolParams = { sport, league_id: '12345', season_year: 2025, team_id: 'u1', week: 9 };
-      const result = await handlers.get_roster({} as never, params);
+      const result = await handlers.get_roster(playersCacheEnv(UNUSED_PLAYER), params);
 
       expect(result.success).toBe(true);
       const data = result.data as Record<string, unknown>;
@@ -404,7 +426,7 @@ describe('sleeper cross-sport handler characterization tests', () => {
         .mockResolvedValueOnce(jsonResponse([]));
 
       const params: ToolParams = { sport, league_id: '12345', season_year: 2025, team_id: '1', week: 40 };
-      const result = await handlers.get_roster({} as never, params);
+      const result = await handlers.get_roster(playersCacheEnv(UNUSED_PLAYER), params);
 
       expect(result.success).toBe(false);
       expect(result.code).toBe('SLEEPER_NOT_FOUND');
@@ -460,7 +482,7 @@ describe('sleeper cross-sport handler characterization tests', () => {
         ]));
 
       const params: ToolParams = { sport, league_id: '12345', season_year: 2025, team_id: '1' };
-      const result = await handlers.get_roster({} as never, params);
+      const result = await handlers.get_roster(playersCacheEnv(UNUSED_PLAYER), params);
 
       expect(result.success).toBe(true);
       const data = result.data as Record<string, unknown>;
@@ -490,7 +512,7 @@ describe('sleeper cross-sport handler characterization tests', () => {
       ]));
 
       const params: ToolParams = { sport, league_id: '12345', season_year: 2025 };
-      const result = await handlers.get_matchups({} as never, params);
+      const result = await handlers.get_matchups(playersCacheEnv(UNUSED_PLAYER), params);
 
       expect(result.success).toBe(true);
 
@@ -563,7 +585,7 @@ describe('sleeper cross-sport handler characterization tests', () => {
       ]));
 
       const params: ToolParams = { sport, league_id: '12345', season_year: 2025 };
-      const result = await handlers.get_matchups({} as never, params);
+      const result = await handlers.get_matchups(playersCacheEnv(UNUSED_PLAYER), params);
 
       expect(result.success).toBe(true);
       expect(mockFetch.mock.calls.some(([url]) => String(url).includes('/matchups/1'))).toBe(true);
@@ -590,12 +612,116 @@ describe('sleeper cross-sport handler characterization tests', () => {
       ]));
 
       const params: ToolParams = { sport, league_id: '12345', season_year: 2025 };
-      const result = await handlers.get_matchups({} as never, params);
+      const result = await handlers.get_matchups(playersCacheEnv(UNUSED_PLAYER), params);
 
       expect(result.success).toBe(true);
       expect(mockFetch.mock.calls.some(([url]) => String(url).includes('/matchups/1'))).toBe(true);
       const data = result.data as { week: number };
       expect(data.week).toBe(1);
+    });
+  });
+});
+
+// Player-index failure degradation: get_roster (current + historical) and
+// get_matchups all load the shared Sleeper player index in parallel with
+// their own roster/matchup/user fetches (FLA-275 follow-up). Each of these
+// covers three realistic ways that load can fail or come back unusable —
+// none of them should fail the request; all should degrade to { id }-only
+// entries plus a top-level `warnings` array.
+describe('sleeper player-index failure degradation', () => {
+  beforeEach(() => {
+    mockFetch.mockReset();
+    clearSleeperPlayersInMemoryCacheForTesting();
+  });
+
+  describe('get_roster (current roster, team_id provided)', () => {
+    it.each(playersIndexFailures)('degrades gracefully on $label', async ({ queueFailure }) => {
+      mockFetch
+        .mockResolvedValueOnce(jsonResponse([
+          {
+            roster_id: 1, owner_id: 'u1',
+            players: ['p1', 'p2'], starters: ['p1'], reserve: [],
+            settings: { wins: 0, losses: 0, ties: 0, fpts: 0, fpts_decimal: 0 },
+          },
+        ]))
+        .mockResolvedValueOnce(jsonResponse([
+          { user_id: 'u1', display_name: 'Alice', avatar: null },
+        ]));
+      queueFailure(); // GET /players/{sport}
+
+      const params: ToolParams = { sport: 'football', league_id: '12345', season_year: 2025, team_id: '1' };
+      const result = await footballHandlers.get_roster(cacheMissEnv(), params);
+
+      expect(result.success).toBe(true);
+      const data = result.data as Record<string, unknown>;
+      expect(data.starters).toEqual([{ id: 'p1' }]);
+      expect(data.bench).toEqual([{ id: 'p2' }]);
+      expect(data.warnings).toEqual([SLEEPER_PLAYER_ENRICHMENT_WARNING]);
+    });
+  });
+
+  describe('get_roster (historical week roster)', () => {
+    function mockHistoricalWeek() {
+      mockFetch
+        .mockResolvedValueOnce(jsonResponse([
+          {
+            roster_id: 1, matchup_id: 1, points: 100, custom_points: null,
+            players: ['p1', 'p2'], starters: ['p1'],
+            players_points: { p1: 60, p2: 40 }, starters_points: [60],
+          },
+        ]))
+        .mockResolvedValueOnce(jsonResponse([
+          {
+            roster_id: 1, owner_id: 'u1',
+            players: ['p1', 'p2'], starters: [], reserve: [], taxi: [],
+            settings: { wins: 0, losses: 0, ties: 0, fpts: 0, fpts_decimal: 0 },
+          },
+        ]))
+        .mockResolvedValueOnce(jsonResponse([
+          { user_id: 'u1', display_name: 'Alice', avatar: null },
+        ]));
+    }
+
+    it.each(playersIndexFailures)('degrades gracefully on $label', async ({ queueFailure }) => {
+      mockHistoricalWeek();
+      queueFailure(); // GET /players/{sport}
+
+      const params: ToolParams = { sport: 'football', league_id: '12345', season_year: 2025, team_id: '1', week: 9 };
+      const result = await footballHandlers.get_roster(cacheMissEnv(), params);
+
+      expect(result.success).toBe(true);
+      const data = result.data as Record<string, unknown>;
+      expect(data.starters).toEqual([{ id: 'p1' }]);
+      expect(data.bench).toEqual([{ id: 'p2' }]);
+      expect(data.warnings).toEqual([SLEEPER_PLAYER_ENRICHMENT_WARNING]);
+    });
+  });
+
+  describe('get_matchups', () => {
+    it.each(playersIndexFailures)('degrades gracefully on $label', async ({ queueFailure }) => {
+      mockFetch
+        .mockResolvedValueOnce(jsonResponse([
+          { matchup_id: 1, roster_id: 1, points: 10, starters: ['p1'] },
+          { matchup_id: 1, roster_id: 2, points: 5, starters: ['p2'] },
+        ]))
+        .mockResolvedValueOnce(jsonResponse([
+          { roster_id: 1, owner_id: 'u1', players: [], starters: [], reserve: [], settings: { wins: 0, losses: 0, ties: 0, fpts: 0, fpts_decimal: 0 } },
+          { roster_id: 2, owner_id: 'u2', players: [], starters: [], reserve: [], settings: { wins: 0, losses: 0, ties: 0, fpts: 0, fpts_decimal: 0 } },
+        ]))
+        .mockResolvedValueOnce(jsonResponse([
+          { user_id: 'u1', display_name: 'Alice', avatar: null },
+          { user_id: 'u2', display_name: 'Bob', avatar: null },
+        ]));
+      queueFailure(); // GET /players/{sport}
+
+      // Explicit week skips the state-fetch call, keeping the mock queue simple.
+      const params: ToolParams = { sport: 'football', league_id: '12345', season_year: 2025, week: 3 };
+      const result = await footballHandlers.get_matchups(cacheMissEnv(), params);
+
+      expect(result.success).toBe(true);
+      const data = result.data as { matchups: Array<{ home: Record<string, unknown> | null }> };
+      expect(data.matchups[0].home).toMatchObject({ starters: [{ id: 'p1' }] });
+      expect((result.data as Record<string, unknown>).warnings).toEqual([SLEEPER_PLAYER_ENRICHMENT_WARNING]);
     });
   });
 });

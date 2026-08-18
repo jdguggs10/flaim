@@ -2,10 +2,20 @@ import type { Env } from '../types';
 import { handleSleeperError, sleeperFetch } from './sleeper-api';
 
 const PLAYERS_CACHE_TTL_SECONDS = 24 * 60 * 60;
-const inMemoryPlayersCache = new Map<string, { value: string; expiresAt: number }>();
+
+// Memoizes the PARSED, immutable index (not the raw JSON string) so repeat
+// calls within a warm isolate skip re-running JSON.parse/normalize/toPlayerIndex
+// on every roster/matchup/transaction/free-agent request.
+const inMemoryPlayersCache = new Map<string, { index: Map<string, SleeperPlayerRecord>; expiresAt: number }>();
+
+// Dedupes concurrent loads for the same sport within one isolate so a burst
+// of parallel calls (e.g. roster + matchup requests landing together) shares
+// a single KV read / Sleeper fetch instead of racing separate ones.
+const inFlightLoads = new Map<string, Promise<Map<string, SleeperPlayerRecord>>>();
 
 export function clearSleeperPlayersInMemoryCacheForTesting(): void {
   inMemoryPlayersCache.clear();
+  inFlightLoads.clear();
 }
 
 export interface SleeperPlayerRecord {
@@ -102,27 +112,46 @@ export async function getSleeperPlayersIndex(
   sport: SleeperPlayerCacheSport,
 ): Promise<Map<string, SleeperPlayerRecord>> {
   const cacheKey = cacheKeyForSport(sport);
-  const now = Date.now();
-  const cachedInMemory = inMemoryPlayersCache.get(cacheKey);
-  let cached = cachedInMemory && cachedInMemory.expiresAt > now ? cachedInMemory.value : null;
 
-  if (!cached) {
-    try {
-      cached = await env.SLEEPER_PLAYERS_CACHE.get(cacheKey);
-    } catch {
-      // KV read failed — treat as cache miss and fall through to Sleeper fetch.
-    }
+  const cachedInMemory = inMemoryPlayersCache.get(cacheKey);
+  if (cachedInMemory && cachedInMemory.expiresAt > Date.now()) {
+    return cachedInMemory.index;
+  }
+
+  const inFlight = inFlightLoads.get(cacheKey);
+  if (inFlight) {
+    return inFlight;
+  }
+
+  const loadPromise = loadSleeperPlayersIndex(env, sport, cacheKey).finally(() => {
+    inFlightLoads.delete(cacheKey);
+  });
+  inFlightLoads.set(cacheKey, loadPromise);
+  return loadPromise;
+}
+
+async function loadSleeperPlayersIndex(
+  env: Env,
+  sport: SleeperPlayerCacheSport,
+  cacheKey: string,
+): Promise<Map<string, SleeperPlayerRecord>> {
+  let cached: string | null = null;
+  try {
+    cached = await env.SLEEPER_PLAYERS_CACHE.get(cacheKey);
+  } catch {
+    // KV read failed — treat as cache miss and fall through to Sleeper fetch.
   }
 
   if (cached) {
     try {
       const parsedCached = normalizePlayers(JSON.parse(cached));
-      if (parsedCached) {
-        inMemoryPlayersCache.set(cacheKey, {
-          value: cached,
-          expiresAt: now + PLAYERS_CACHE_TTL_SECONDS * 1000,
-        });
-        return toPlayerIndex(parsedCached);
+      // A cached-but-empty index is treated the same as a malformed cache
+      // entry below: fall through and refetch rather than serving (and
+      // re-memoizing) zero usable players for the full TTL.
+      if (parsedCached && parsedCached.length > 0) {
+        const index = toPlayerIndex(parsedCached);
+        memoize(cacheKey, index);
+        return index;
       }
     } catch {
       // Defensive fallback: refetch from Sleeper when cache data is malformed.
@@ -134,6 +163,16 @@ export async function getSleeperPlayersIndex(
 
   const payload = await response.json();
   const parsedPlayers = normalizePlayers(payload) ?? [];
+  if (parsedPlayers.length === 0) {
+    // Never persist an empty index (in memory or KV) from a 200 payload —
+    // that would silently poison the 24h cache. Throwing lets callers
+    // (loadSleeperPlayersIndexForEnrichment, get_free_agents) degrade with a
+    // warning instead, and the next call gets a clean retry.
+    throw new Error(
+      'SLEEPER_EMPTY_PLAYER_INDEX: Sleeper players endpoint returned zero usable player records'
+    );
+  }
+
   const serialized = JSON.stringify(parsedPlayers);
   try {
     await env.SLEEPER_PLAYERS_CACHE.put(cacheKey, serialized, {
@@ -142,10 +181,15 @@ export async function getSleeperPlayersIndex(
   } catch (error) {
     console.error('[sleeper-players-cache] KV write failed; serving from in-memory only:', error);
   }
-  inMemoryPlayersCache.set(cacheKey, {
-    value: serialized,
-    expiresAt: now + PLAYERS_CACHE_TTL_SECONDS * 1000,
-  });
 
-  return toPlayerIndex(parsedPlayers);
+  const index = toPlayerIndex(parsedPlayers);
+  memoize(cacheKey, index);
+  return index;
+}
+
+function memoize(cacheKey: string, index: Map<string, SleeperPlayerRecord>): void {
+  inMemoryPlayersCache.set(cacheKey, {
+    index,
+    expiresAt: Date.now() + PLAYERS_CACHE_TTL_SECONDS * 1000,
+  });
 }

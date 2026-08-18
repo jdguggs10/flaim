@@ -113,6 +113,31 @@ describe('resolveSleeperPlayerEntries', () => {
     expect(entries[0].team).toBeUndefined();
   });
 
+  it('omits team entirely when includeTeam is false, even for an index hit with a team', () => {
+    // Historical/past-week snapshots must not show a player's CURRENT club —
+    // the player index only tracks current team, not team-as-of-that-week.
+    const index = new Map<string, SleeperPlayerRecord>([
+      ['p1', player({ player_id: 'p1', full_name: 'Player One', position: 'RB', team: 'BUF' })],
+    ]);
+
+    const entries = resolveSleeperPlayerEntries(['p1'], index, { includeTeam: false });
+
+    expect(entries).toEqual([{ id: 'p1', name: 'Player One', position: 'RB' }]);
+    expect(entries[0]).not.toHaveProperty('team');
+  });
+
+  it('includeTeam: false does not affect the "0" sentinel or unknown-id entries', () => {
+    const index = new Map<string, SleeperPlayerRecord>([
+      ['p1', player({ player_id: 'p1', full_name: 'Player One', team: 'BUF' })],
+    ]);
+
+    const entries = resolveSleeperPlayerEntries(['0', 'p1', 'unknown'], index, { includeTeam: false });
+
+    expect(entries[0]).toEqual({ id: '0', empty: true });
+    expect(entries[1]).toEqual({ id: 'p1', name: 'Player One', position: undefined });
+    expect(entries[2]).toEqual({ id: 'unknown' });
+  });
+
   it('returns an id-only entry for an unknown id without throwing', () => {
     const entries = resolveSleeperPlayerEntries(['ghost123'], new Map());
 
@@ -172,6 +197,20 @@ describe('loadSleeperPlayersIndexForEnrichment', () => {
       expect.stringContaining('[test-context]'),
       expect.any(Error),
     );
+
+    consoleErrorSpy.mockRestore();
+  });
+
+  it('treats a resolved-but-empty index as degraded (adds the warning instead of silently enriching nothing)', async () => {
+    getPlayersIndexMock.mockResolvedValueOnce(new Map());
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const env = {} as unknown as Env;
+    const result = await loadSleeperPlayersIndexForEnrichment(env, 'football', 'test-context');
+
+    expect(result.index.size).toBe(0);
+    expect(result.warnings).toEqual([SLEEPER_PLAYER_ENRICHMENT_WARNING]);
+    expect(consoleErrorSpy).toHaveBeenCalled();
 
     consoleErrorSpy.mockRestore();
   });

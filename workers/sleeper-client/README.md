@@ -68,11 +68,12 @@ interface ExecuteRequest {
 
 ## Roster/Matchup Player Enrichment and Team Names
 
-`get_roster` (current and historical) and `get_matchups` resolve Sleeper's bare player-ID strings — `starters`, `bench`, `reserve`, `taxi` (roster) and `starters` (matchup, per side) — into enriched entries using the same KV-backed player index described below:
-- Index hit: `{ id, name, position, team }` (`team` omitted when the record has none).
+`get_roster` (current and historical) and `get_matchups` resolve Sleeper's bare player-ID strings into enriched entries using the same KV-backed player index described below:
+- Current roster (`starters`, `bench`, `reserve`, `taxi`) and matchups (`starters`, per side): index hit → `{ id, name, position, team }` (`team` omitted when the record has none).
+- Historical week roster (`starters`, `bench` — reserve/taxi classification isn't available historically): index hit → `{ id, name, position }`, **never** `team`. The player index only tracks each player's CURRENT club, so a past-week roster omits `team` rather than risk showing a club the player joined after that week; `limitations.playerProTeamAvailable: false` marks this explicitly alongside the existing `reserveAndTaxiClassificationAvailable: false`.
 - Sleeper's `"0"` empty-lineup-slot sentinel: `{ id: "0", empty: true }` — no lookup is attempted.
 - Unknown ID or an unavailable player index: `{ id }` only — array order and length are always preserved, and the request never fails because of enrichment.
-- When the player index is unavailable, the response still succeeds and adds a top-level `warnings: string[]` explaining player names/positions/teams are unavailable for that call.
+- When the player index is unavailable, the response still succeeds and adds a top-level `warnings: string[]` explaining player names/positions are unavailable for that call.
 
 `get_league_info`, `get_standings`, `get_roster`, and `get_matchups` all add `teamName` alongside the existing `ownerName`. Unlike ESPN/Yahoo, Sleeper only exposes a manager-set fantasy team name via `users[].metadata.team_name`; `teamName` is present only when the manager actually set one — it is never fabricated as a fallback.
 

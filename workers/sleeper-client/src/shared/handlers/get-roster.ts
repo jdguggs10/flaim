@@ -39,6 +39,10 @@ async function getHistoricalRoster(
     };
   }
 
+  // Kick off the player-index load in parallel with the roster/matchup
+  // fetches (team_id is already validated above, so this path always needs it).
+  const playersIndexPromise = loadSleeperPlayersIndexForEnrichment(env, sport, 'get-roster:historical');
+
   const [matchupsRes, rostersRes, usersRes] = await Promise.all([
     sleeperFetch(`/league/${league_id}/matchups/${snapshot.week}`),
     sleeperFetch(`/league/${league_id}/rosters`),
@@ -84,11 +88,7 @@ async function getHistoricalRoster(
   const players = matchup.players ?? [];
   const bench = players.filter((p) => !starters.includes(p));
 
-  const { index: playersIndex, warnings } = await loadSleeperPlayersIndexForEnrichment(
-    env,
-    sport,
-    'get-roster:historical'
-  );
+  const { index: playersIndex, warnings } = await playersIndexPromise;
 
   return {
     success: true as const,
@@ -99,11 +99,13 @@ async function getHistoricalRoster(
       ownerName: ownerEntry?.displayName ?? 'Unknown',
       teamName: ownerEntry?.teamName,
       snapshot: toSnapshotMetadata(snapshot),
-      starters: resolveSleeperPlayerEntries(starters, playersIndex),
-      bench: resolveSleeperPlayerEntries(bench, playersIndex),
+      // includeTeam: false — the player index only tracks each player's CURRENT
+      // club, so a past-week roster must not show a club they joined later.
+      starters: resolveSleeperPlayerEntries(starters, playersIndex, { includeTeam: false }),
+      bench: resolveSleeperPlayerEntries(bench, playersIndex, { includeTeam: false }),
       points: matchup.points,
       playersPoints: matchup.players_points ?? undefined,
-      limitations: { reserveAndTaxiClassificationAvailable: false },
+      limitations: { reserveAndTaxiClassificationAvailable: false, playerProTeamAvailable: false },
       ...(warnings.length ? { warnings } : {}),
     },
   };
@@ -128,6 +130,12 @@ export function createGetRosterHandler(): HandlerFn {
       if (snapshot.type === 'week') {
         return await getHistoricalRoster(env, params, snapshot);
       }
+
+      // Only kick off the player-index load when a team_id was passed — the
+      // no-team_id roster-summary branch below never enriches player IDs.
+      const playersIndexPromise = team_id
+        ? loadSleeperPlayersIndexForEnrichment(env, sport, 'get-roster:current')
+        : undefined;
 
       const [rostersRes, usersRes] = await Promise.all([
         sleeperFetch(`/league/${league_id}/rosters`),
@@ -183,11 +191,9 @@ export function createGetRosterHandler(): HandlerFn {
       );
       const settings = roster.settings;
 
-      const { index: playersIndex, warnings } = await loadSleeperPlayersIndexForEnrichment(
-        env,
-        sport,
-        'get-roster:current'
-      );
+      // playersIndexPromise is always defined here: we only reach this point
+      // when team_id was truthy (the no-team_id branch returns above).
+      const { index: playersIndex, warnings } = await playersIndexPromise!;
 
       return {
         success: true,

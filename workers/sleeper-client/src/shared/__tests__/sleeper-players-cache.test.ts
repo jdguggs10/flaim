@@ -110,4 +110,58 @@ describe('sleeper-players-cache', () => {
     expect(kvGet).toHaveBeenCalledTimes(1);
     expect(mockFetch).not.toHaveBeenCalled();
   });
+
+  it('memoizes the parsed index and returns the same Map instance on repeat calls', async () => {
+    kvGet.mockResolvedValueOnce(JSON.stringify([
+      { player_id: '51', full_name: 'Memoized Player', active: true },
+    ]));
+
+    const first = await getSleeperPlayersIndex(env, 'football');
+    const second = await getSleeperPlayersIndex(env, 'football');
+
+    // Same Map instance, not just equal content — repeat calls should skip
+    // re-running JSON.parse/normalizePlayers/toPlayerIndex entirely.
+    expect(first).toBe(second);
+    expect(kvGet).toHaveBeenCalledTimes(1);
+  });
+
+  it('dedupes concurrent calls for the same sport into a single load', async () => {
+    kvGet.mockResolvedValueOnce(JSON.stringify([
+      { player_id: '61', full_name: 'Concurrent Player', active: true },
+    ]));
+
+    const [a, b, c] = await Promise.all([
+      getSleeperPlayersIndex(env, 'football'),
+      getSleeperPlayersIndex(env, 'football'),
+      getSleeperPlayersIndex(env, 'football'),
+    ]);
+
+    expect(a).toBe(b);
+    expect(b).toBe(c);
+    expect(kvGet).toHaveBeenCalledTimes(1);
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('throws instead of caching an empty player index from a 200 payload', async () => {
+    kvGet.mockResolvedValueOnce(null); // cache miss
+    mockFetch.mockResolvedValueOnce(jsonResponse([])); // valid 200, but zero usable players
+
+    await expect(getSleeperPlayersIndex(env, 'football')).rejects.toThrow(
+      'SLEEPER_EMPTY_PLAYER_INDEX'
+    );
+    expect(kvPut).not.toHaveBeenCalled();
+  });
+
+  it('does not trust a cached empty index — refetches instead', async () => {
+    kvGet.mockResolvedValueOnce(JSON.stringify([])); // e.g. a previously-poisoned cache entry
+    mockFetch.mockResolvedValueOnce(jsonResponse([
+      { player_id: '71', full_name: 'Fresh Player', active: true },
+    ]));
+
+    const index = await getSleeperPlayersIndex(env, 'football');
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(index.get('71')?.full_name).toBe('Fresh Player');
+    expect(kvPut).toHaveBeenCalledTimes(1);
+  });
 });

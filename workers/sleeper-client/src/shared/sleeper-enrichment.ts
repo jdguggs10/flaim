@@ -43,17 +43,32 @@ export function buildUserDirectory(users: SleeperLeagueUser[]): Map<string, Slee
   return directory;
 }
 
+export interface ResolveSleeperPlayerEntriesOptions {
+  /**
+   * Whether to include the player's real-life club. Defaults to true. The
+   * player index only tracks each player's CURRENT club, so a historical
+   * (past-week) roster must pass `{ includeTeam: false }` — otherwise a
+   * player entry could show a club they joined after that week, breaking
+   * temporal purity (FLA-192: historical rosters resolve identity only).
+   */
+  includeTeam?: boolean;
+}
+
 /**
  * Resolves bare Sleeper player-id strings into enriched entries using the
  * cached player index, preserving array order and length.
  * - "0" is Sleeper's empty-lineup-slot sentinel: returned as { id: "0", empty: true }, no lookup.
- * - Index hit: { id, name, position, team } (team omitted when the record has none).
+ * - Index hit: { id, name, position, team } (team omitted when the record has none, or when
+ *   `includeTeam: false` is passed for a historical/past-week snapshot).
  * - Index miss (unknown id, or index unavailable/empty): { id } only — never throws.
  */
 export function resolveSleeperPlayerEntries(
   ids: string[],
   index: Map<string, SleeperPlayerRecord>,
+  options: ResolveSleeperPlayerEntriesOptions = {},
 ): SleeperPlayerEntry[] {
+  const includeTeam = options.includeTeam ?? true;
+
   return ids.map((id) => {
     if (id === SLEEPER_EMPTY_LINEUP_SLOT_ID) {
       return { id, empty: true };
@@ -68,7 +83,7 @@ export function resolveSleeperPlayerEntries(
       id,
       name: player.full_name,
       position: player.position,
-      team: player.team,
+      ...(includeTeam ? { team: player.team } : {}),
     };
   });
 }
@@ -86,6 +101,14 @@ export async function loadSleeperPlayersIndexForEnrichment(
 ): Promise<{ index: Map<string, SleeperPlayerRecord>; warnings: string[] }> {
   try {
     const index = await getSleeperPlayersIndex(env, sport);
+    if (index.size === 0) {
+      // Belt-and-suspenders: getSleeperPlayersIndex now refuses to cache (or
+      // return, on a fresh fetch) an empty index, but treat a genuinely
+      // empty resolved index as degraded here too rather than silently
+      // enriching nothing.
+      console.error(`[${logContext}] Player index resolved empty; treating as unavailable for enrichment`);
+      return { index, warnings: [SLEEPER_PLAYER_ENRICHMENT_WARNING] };
+    }
     return { index, warnings: [] };
   } catch (error) {
     console.error(`[${logContext}] Failed to get player index for enrichment:`, error);
