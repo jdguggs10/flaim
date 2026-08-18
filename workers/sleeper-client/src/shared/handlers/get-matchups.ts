@@ -13,6 +13,13 @@ export function createGetMatchupsHandler(config: SleeperSportConfig): HandlerFn 
     }
 
     try {
+      // Temporal purity (same rule as historical get_roster): the player index
+      // only knows each player's CURRENT club, so a starter's `team` is only
+      // trustworthy for the current week. When the caller names a week
+      // explicitly we cannot cheaply prove it is the current one, so `team` is
+      // omitted and the limitation is flagged; omitting `week` resolves to the
+      // live week and keeps `team`.
+      const explicitWeek = typeof week === 'number';
       let matchupWeek = week;
       if (!matchupWeek) {
         const stateRes = await sleeperFetch(config.statePath);
@@ -71,7 +78,7 @@ export function createGetMatchupsHandler(config: SleeperSportConfig): HandlerFn 
             ownerName: owner?.ownerName ?? 'Unknown',
             teamName: owner?.teamName,
             points: m.points ?? 0,
-            starters: resolveSleeperPlayerEntries(m.starters ?? [], playersIndex),
+            starters: resolveSleeperPlayerEntries(m.starters ?? [], playersIndex, { includeTeam: !explicitWeek }),
           };
         };
 
@@ -94,6 +101,7 @@ export function createGetMatchupsHandler(config: SleeperSportConfig): HandlerFn 
           leagueId: league_id,
           week: matchupWeek,
           matchups: pairedMatchups,
+          ...(explicitWeek ? { limitations: { playerProTeamAvailable: false } } : {}),
           ...(warnings.length ? { warnings } : {}),
         },
       };

@@ -71,6 +71,7 @@ interface ExecuteRequest {
 `get_roster` (current and historical) and `get_matchups` resolve Sleeper's bare player-ID strings into enriched entries using the same KV-backed player index described below:
 - Current roster (`starters`, `bench`, `reserve`, `taxi`) and matchups (`starters`, per side): index hit → `{ id, name, position, team }` (`team` omitted when the record has none).
 - Historical week roster (`starters`, `bench` — reserve/taxi classification isn't available historically): index hit → `{ id, name, position }`, **never** `team`. The player index only tracks each player's CURRENT club, so a past-week roster omits `team` rather than risk showing a club the player joined after that week; `limitations.playerProTeamAvailable: false` marks this explicitly alongside the existing `reserveAndTaxiClassificationAvailable: false`.
+- Matchups follow the same rule: when `week` is omitted the handler resolves the live week and starters carry `team`; when `week` is passed explicitly (which may be a past week) starters omit `team` and the response carries `limitations.playerProTeamAvailable: false`.
 - Sleeper's `"0"` empty-lineup-slot sentinel: `{ id: "0", empty: true }` — no lookup is attempted.
 - Unknown ID or an unavailable player index: `{ id }` only — array order and length are always preserved, and the request never fails because of enrichment.
 - When the player index is unavailable, the response still succeeds and adds a top-level `warnings: string[]` explaining player names/positions are unavailable for that call.

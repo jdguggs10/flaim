@@ -119,6 +119,9 @@ function normalizePlayers(input: unknown): NormalizedPlayers | null {
 // entries were unusable (a mostly-corrupt payload/cache entry shouldn't
 // become the authoritative index for a full day). No fixed minimum-record
 // threshold — small, fully-valid fixtures (including in tests) must pass.
+// If a future Sleeper format change ever makes most entries unparseable, the
+// index refuses to load and enrichment degrades loudly (id-only + warnings)
+// on every call rather than silently serving a thinned index for 24h.
 function isStructurallyInvalid(normalized: NormalizedPlayers): boolean {
   return normalized.records.length === 0 || normalized.skipped > normalized.records.length;
 }

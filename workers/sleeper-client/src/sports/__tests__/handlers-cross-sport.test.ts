@@ -563,6 +563,49 @@ describe('sleeper cross-sport handler characterization tests', () => {
         starters: [{ id: 'p2', name: 'Player Two', position: 'RB', team: 'MIA' }],
       });
       expect(data.matchups[0].away?.teamName).toBeUndefined();
+      // Omitted week resolves to the live week, so `team` is trustworthy and no limitation is flagged.
+      expect((result.data as Record<string, unknown>).limitations).toBeUndefined();
+    });
+
+    it.each(scenarios)('$label omits starter team and flags playerProTeamAvailable when a week is passed explicitly (temporal purity)', async ({ sport, handlers }) => {
+      // No state fetch when week is explicit: matchups, rosters, users.
+      mockFetch.mockResolvedValueOnce(jsonResponse([
+        { matchup_id: 1, roster_id: 1, points: 120.5, starters: ['p1'] },
+        { matchup_id: 1, roster_id: 2, points: 105.3, starters: ['p2'] },
+      ]));
+      mockFetch.mockResolvedValueOnce(jsonResponse([
+        { roster_id: 1, owner_id: 'u1', players: [], starters: [], reserve: [], settings: { wins: 0, losses: 0, ties: 0, fpts: 0, fpts_decimal: 0 } },
+        { roster_id: 2, owner_id: 'u2', players: [], starters: [], reserve: [], settings: { wins: 0, losses: 0, ties: 0, fpts: 0, fpts_decimal: 0 } },
+      ]));
+      mockFetch.mockResolvedValueOnce(jsonResponse([
+        { user_id: 'u1', display_name: 'Alice', avatar: null, metadata: { team_name: '  Padded Wizards  ' } },
+        { user_id: 'u2', display_name: 'Bob', avatar: null },
+      ]));
+
+      const env = playersCacheEnv([
+        { player_id: 'p1', full_name: 'Player One', position: 'QB', team: 'BUF' },
+        { player_id: 'p2', full_name: 'Player Two', position: 'RB', team: 'MIA' },
+      ]);
+      const params: ToolParams = { sport, league_id: '12345', season_year: 2025, week: 2 };
+      const result = await handlers.get_matchups(env, params);
+
+      expect(result.success).toBe(true);
+      expect(mockFetch.mock.calls[0][0]).toContain('/league/12345/matchups/2');
+      const data = result.data as {
+        week: number;
+        limitations?: Record<string, unknown>;
+        matchups: Array<{ home: Record<string, unknown> | null; away: Record<string, unknown> | null }>;
+      };
+      expect(data.week).toBe(2);
+      // The player index only knows each player's CURRENT club — never attach it to an explicitly requested week.
+      expect(data.matchups[0].home).toMatchObject({
+        starters: [{ id: 'p1', name: 'Player One', position: 'QB' }],
+        // manager-set team names are trimmed, never padded
+        teamName: 'Padded Wizards',
+      });
+      expect((data.matchups[0].home!.starters as Array<Record<string, unknown>>)[0]).not.toHaveProperty('team');
+      expect((data.matchups[0].away!.starters as Array<Record<string, unknown>>)[0]).not.toHaveProperty('team');
+      expect(data.limitations).toEqual({ playerProTeamAvailable: false });
     });
 
     it.each(scenarios)('$label falls back to week 1 when state response has no week', async ({ sport, handlers }) => {
