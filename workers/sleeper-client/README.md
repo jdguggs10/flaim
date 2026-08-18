@@ -76,7 +76,7 @@ interface ExecuteRequest {
 - Unknown ID or an unavailable player index: `{ id }` only — array order and length are always preserved, and the request never fails because of enrichment.
 - When the player index is unavailable, the response still succeeds and adds a top-level `warnings: string[]` explaining player names/positions are unavailable for that call.
 
-`get_league_info`, `get_standings`, `get_roster`, and `get_matchups` all add `teamName` alongside the existing `ownerName`. Unlike ESPN/Yahoo, Sleeper only exposes a manager-set fantasy team name via `users[].metadata.team_name`; `teamName` is present only when the manager actually set one — it is never fabricated as a fallback.
+`get_league_info`, `get_standings`, `get_roster`, and `get_matchups` all add `teamName` alongside the existing `ownerName`. Sleeper only exposes a manager-set fantasy team name via `users[].metadata.team_name`; when it is unset (common), `teamName` falls back to Sleeper's own default `Team <display name>` — the exact name league members see in the Sleeper app — so every team always has a `teamName`. The fallback matches Sleeper's UI convention rather than inventing one; ESPN uses the analogous `Team <id>` fallback.
 
 ## Traded Draft-Pick Ownership (Sleeper Only)
 
