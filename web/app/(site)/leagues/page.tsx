@@ -21,6 +21,7 @@ import {
   RefreshCw,
   Archive,
   ArchiveRestore,
+  Eye,
   EyeOff,
   CheckCircle2,
 } from 'lucide-react';
@@ -95,6 +96,7 @@ interface UserPreferencesState {
   defaultBaseball: LeagueDefault | null;
   defaultBasketball: LeagueDefault | null;
   defaultHockey: LeagueDefault | null;
+  hideLeagueWidget: boolean;
 }
 
 interface LeagueRefreshProviderResult {
@@ -165,6 +167,7 @@ const EMPTY_USER_PREFERENCES: UserPreferencesState = {
   defaultBaseball: null,
   defaultBasketball: null,
   defaultHockey: null,
+  hideLeagueWidget: false,
 };
 const YAHOO_STATUS_RECHECK_FALLBACK_SECONDS = 60;
 const YAHOO_STATUS_RECHECK_MAX_SECONDS = 15 * 60;
@@ -498,6 +501,7 @@ function LeaguesPageContent() {
   const [preferences, setPreferences] = useState<UserPreferencesState>(() => createEmptyPreferences());
   const [accountScopedUserId, setAccountScopedUserId] = useState<string | null>(null);
   const [settingSportDefault, setSettingSportDefault] = useState<string | null>(null);
+  const [isSavingHideLeagueWidget, setIsSavingHideLeagueWidget] = useState(false);
   const currentUserIdRef = useRef<string | null>(null);
   // Device class resolves after mount so SSR and hydration render identically.
   const [deviceClass, setDeviceClass] = useState<DeviceClass | null>(null);
@@ -1214,6 +1218,7 @@ function LeaguesPageContent() {
             defaultBaseball: data.defaultBaseball || null,
             defaultBasketball: data.defaultBasketball || null,
             defaultHockey: data.defaultHockey || null,
+            hideLeagueWidget: data.hideLeagueWidget === true,
           });
         }
       } catch (err) {
@@ -1376,6 +1381,30 @@ function LeaguesPageContent() {
       console.error('Failed to set default sport:', err);
     } finally {
       setSettingSportDefault(null);
+    }
+  };
+
+  // Toggle whether the get_user_session league widget renders in ChatGPT/Claude.
+  // Optimistic update: flip immediately, revert if the request fails.
+  const handleToggleHideLeagueWidget = async () => {
+    const previous = preferences.hideLeagueWidget;
+    const next = !previous;
+    setIsSavingHideLeagueWidget(true);
+    setPreferences(prev => ({ ...prev, hideLeagueWidget: next }));
+    try {
+      const res = await fetch('/api/user/preferences/hide-league-widget', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hideLeagueWidget: next }),
+      });
+      if (!res.ok) {
+        throw new Error('Failed to update preference');
+      }
+    } catch (err) {
+      console.error('Failed to set hide_league_widget:', err);
+      setPreferences(prev => ({ ...prev, hideLeagueWidget: previous }));
+    } finally {
+      setIsSavingHideLeagueWidget(false);
     }
   };
 
@@ -1659,12 +1688,39 @@ function LeaguesPageContent() {
             </div>
           </CardHeader>
           {isAiSectionOpen ? (
-            <CardContent id="ai-card-content" className="pt-0">
+            <CardContent id="ai-card-content" className="pt-0 space-y-4">
               <StepConnectAI
                 showStepNumber={false}
                 renderCard={false}
                 showHeader={false}
               />
+              <div className="flex items-start justify-between gap-4 rounded-lg border bg-card p-3">
+                <div className="min-w-0 space-y-1">
+                  <p className="text-sm font-medium">Hide the league widget in ChatGPT and Claude</p>
+                  <p className="text-xs text-muted-foreground">
+                    Flaim still returns your leagues to the assistant; only the visual card is hidden.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="flex-shrink-0 gap-1.5"
+                  onClick={handleToggleHideLeagueWidget}
+                  disabled={isSavingHideLeagueWidget}
+                  aria-pressed={displayPreferences.hideLeagueWidget}
+                  title={displayPreferences.hideLeagueWidget ? 'Widget hidden (click to show)' : 'Widget shown (click to hide)'}
+                >
+                  {isSavingHideLeagueWidget ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : displayPreferences.hideLeagueWidget ? (
+                    <EyeOff className="h-3.5 w-3.5" />
+                  ) : (
+                    <Eye className="h-3.5 w-3.5" />
+                  )}
+                  {displayPreferences.hideLeagueWidget ? 'Hidden' : 'Shown'}
+                </Button>
+              </div>
             </CardContent>
           ) : null}
         </Card>
