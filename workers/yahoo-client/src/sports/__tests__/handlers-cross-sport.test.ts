@@ -621,6 +621,53 @@ describe('yahoo cross-sport handler characterization tests', () => {
       const data = result.data as { snapshot: Record<string, unknown> };
       expect(data.snapshot).toEqual({ type: 'current' });
     });
+
+    // FLA-278: Yahoo's roster player object only carries the CURRENT club/status
+    // (editorial_team_abbr/status). A historical week/date snapshot must not
+    // relabel that present-day state as true-as-of-then, so `team`/`status`
+    // are omitted entirely and `limitations.playerProTeamAvailable: false` is
+    // added — mirroring the same rule already applied to ESPN and Sleeper.
+    it('football week snapshot omits team/status and flags playerProTeamAvailable', async () => {
+      fetchMock.mockResolvedValue(jsonResponse(buildRosterResponse()));
+
+      const params: ToolParams = { sport: 'football', league_id: '449.l.123', season_year: 2025, team_id: '449.l.123.t.1', week: 5 };
+      const result = await footballHandlers.get_roster({} as never, params, 'Bearer x', 'cid');
+
+      expect(result.success).toBe(true);
+      const data = result.data as { players: Array<Record<string, unknown>>; limitations?: Record<string, unknown> };
+      expect(data.players[0]).not.toHaveProperty('team');
+      expect(data.players[0]).not.toHaveProperty('status');
+      expect(data.limitations).toEqual({ playerProTeamAvailable: false });
+    });
+
+    it.each(dailySports)('%s date snapshot omits team/status and flags playerProTeamAvailable', async (sport) => {
+      fetchMock.mockResolvedValue(jsonResponse(buildRosterResponse()));
+
+      const params: ToolParams = {
+        sport, league_id: '449.l.123', season_year: 2025, team_id: '449.l.123.t.1',
+        snapshot: { type: 'date', date: '2025-07-10' },
+      };
+      const result = await handlersBySport[sport].get_roster({} as never, params, 'Bearer x', 'cid');
+
+      expect(result.success).toBe(true);
+      const data = result.data as { players: Array<Record<string, unknown>>; limitations?: Record<string, unknown> };
+      expect(data.players[0]).not.toHaveProperty('team');
+      expect(data.players[0]).not.toHaveProperty('status');
+      expect(data.limitations).toEqual({ playerProTeamAvailable: false });
+    });
+
+    it.each(scenarios)('$label current roster keeps team/status and has no limitations', async ({ sport, handlers }) => {
+      fetchMock.mockResolvedValue(jsonResponse(buildRosterResponse()));
+
+      const params: ToolParams = { sport, league_id: '449.l.123', season_year: 2025, team_id: '449.l.123.t.1' };
+      const result = await handlers.get_roster({} as never, params, 'Bearer x', 'cid');
+
+      expect(result.success).toBe(true);
+      const data = result.data as { players: Array<Record<string, unknown>>; limitations?: unknown };
+      expect(data.players[0].team).toBe('NYY');
+      expect(data.players[0].status).toBe('healthy');
+      expect(data.limitations).toBeUndefined();
+    });
   });
 
   describe('get_matchups', () => {
