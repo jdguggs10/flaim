@@ -224,10 +224,9 @@ describe('sleeper cross-sport handler characterization tests', () => {
 
       const teams = data.teams as Array<{ rosterId: number; ownerName?: string; teamName?: string }>;
       expect(teams).toHaveLength(2);
-      // teamName is present only when the manager set users[].metadata.team_name
+      // teamName is the manager-set users[].metadata.team_name, else Sleeper's own "Team <display name>" default
       expect(teams[0]).toMatchObject({ rosterId: 1, ownerName: 'Alice', teamName: 'The Waiver Wire Wizards' });
-      expect(teams[1]).toMatchObject({ rosterId: 2, ownerName: 'Bob' });
-      expect(teams[1].teamName).toBeUndefined();
+      expect(teams[1]).toMatchObject({ rosterId: 2, ownerName: 'Bob', teamName: 'Team Bob' });
 
       // An empty traded_picks array is a normal (redraft) result, not a failure —
       // and pickOwnershipNote is suppressed when there's nothing to caveat.
@@ -294,8 +293,9 @@ describe('sleeper cross-sport handler characterization tests', () => {
         originalOwnerName: 'Bob',
         currentOwnerName: 'Alice',
         currentTeamName: 'Alpha Dogs',
+        // Bob never set a team name → Sleeper's own default
+        originalTeamName: 'Team Bob',
       });
-      expect(tradedPicks[0].originalTeamName).toBeUndefined();
       expect(tradedPicks[1]).toMatchObject({
         season: '2027',
         round: 1,
@@ -305,8 +305,8 @@ describe('sleeper cross-sport handler characterization tests', () => {
         originalOwnerName: 'Cara',
         originalTeamName: 'Comet Crew',
         currentOwnerName: 'Bob',
+        currentTeamName: 'Team Bob',
       });
-      expect(tradedPicks[1].currentTeamName).toBeUndefined();
       expect(tradedPicks[2]).toMatchObject({
         season: '2027',
         round: 2,
@@ -516,10 +516,9 @@ describe('sleeper cross-sport handler characterization tests', () => {
       expect(result.success).toBe(true);
       const data = result.data as { standings: Array<Record<string, unknown>> };
       expect(data.standings).toHaveLength(2);
-      // teamName is present only when the manager set users[].metadata.team_name
+      // teamName is the manager-set users[].metadata.team_name, else Sleeper's own "Team <display name>" default
       expect(data.standings[0]).toMatchObject({ rank: 1, ownerName: 'Alice', teamName: 'The Waiver Wire Wizards', wins: 8 });
-      expect(data.standings[1]).toMatchObject({ rank: 2, ownerName: 'Bob', wins: 5 });
-      expect(data.standings[1].teamName).toBeUndefined();
+      expect(data.standings[1]).toMatchObject({ rank: 2, ownerName: 'Bob', teamName: 'Team Bob', wins: 5 });
     });
   });
 
@@ -584,7 +583,7 @@ describe('sleeper cross-sport handler characterization tests', () => {
         { id: 'ghost999' },
       ]);
       expect(data.ownerName).toBe('Bob');
-      expect(data.teamName).toBeUndefined();
+      expect(data.teamName).toBe('Team Bob');
     });
 
     // Player-index failure degradation (503 / network error / malformed
@@ -854,7 +853,7 @@ describe('sleeper cross-sport handler characterization tests', () => {
         ownerName: 'Bob',
         starters: [{ id: 'p2', name: 'Player Two', position: 'RB', team: 'MIA' }],
       });
-      expect(data.matchups[0].away?.teamName).toBeUndefined();
+      expect(data.matchups[0].away?.teamName).toBe('Team Bob');
       // Omitted week resolves to the live week, so `team` is trustworthy and no limitation is flagged.
       expect((result.data as Record<string, unknown>).limitations).toBeUndefined();
     });
