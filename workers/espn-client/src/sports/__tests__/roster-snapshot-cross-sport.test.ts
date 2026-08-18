@@ -163,6 +163,43 @@ describe('espn get_roster snapshot contract', () => {
       expect(result.code).toBe('INVALID_ROSTER_SNAPSHOT_SELECTOR');
     });
 
+    // FLA-209 published-client compatibility, contrasted with FLA-278 temporal
+    // purity: a raw `week` on a daily sport is rejected above (the gateway is
+    // the only place a legacy `week` gets normalized to `{ type: 'current',
+    // requestedWeek }` — see validateRosterSnapshotInput in
+    // workers/shared/src/roster-snapshot.ts). This test injects that
+    // already-normalized shape, as the gateway would send it, to prove the
+    // resulting response is genuinely a CURRENT roster: no provider selector,
+    // proTeam/injuryStatus still present, and no `limitations` block — the
+    // FLA-278 historical-omission rule must not fire on this compat path.
+    it('FLA-209: an ignored-week compat snapshot serves current roster with proTeam/injuryStatus intact and no limitations', async () => {
+      espnFetchMock.mockResolvedValue(rosterResponse([{
+        playerPoolEntry: { player: { id: 1, fullName: 'Player One', proTeamId: 2, injuryStatus: 'OUT' } },
+        lineupSlotId: 0,
+      }]));
+
+      const params = makeParams(sport, { team_id: '6', snapshot: { type: 'current', requestedWeek: 15 } });
+      const result = await handlers.get_roster({} as never, params, 'Bearer x', 'cid');
+
+      expect(result.success).toBe(true);
+      const rosterCall = espnFetchMock.mock.calls[0][0] as string;
+      expect(rosterCall).not.toContain('scoringPeriodId');
+      expect(rosterCall).not.toContain('week=');
+      expect(rosterCall).not.toContain('date=');
+
+      const data = result.data as {
+        snapshot: Record<string, unknown>;
+        roster: Array<Record<string, unknown>>;
+        limitations?: unknown;
+      };
+      expect(data.snapshot.type).toBe('current');
+      expect(data.snapshot.requested_week).toBe(15);
+      expect(data.snapshot.note).toBeTruthy();
+      expect(data.roster[0].proTeam).toBeDefined();
+      expect(data.roster[0].injuryStatus).toBeDefined();
+      expect(data.limitations).toBeUndefined();
+    });
+
     it('resolves as_of_date through the season calendar to a scoringPeriodId', async () => {
       espnFetchMock.mockImplementation(async (path: string) => {
         if (path.includes('proTeamSchedules_wl')) return calendarResponse();

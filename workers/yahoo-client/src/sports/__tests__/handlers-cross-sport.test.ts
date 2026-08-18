@@ -595,6 +595,42 @@ describe('yahoo cross-sport handler characterization tests', () => {
       expect(fetchMock).not.toHaveBeenCalled();
     });
 
+    // FLA-209 published-client compatibility, contrasted with FLA-278 temporal
+    // purity: a raw `week` on a daily sport is rejected above — the gateway is
+    // the only place a legacy `week` gets normalized to `{ type: 'current',
+    // requestedWeek }` (see validateRosterSnapshotInput in
+    // workers/shared/src/roster-snapshot.ts). This injects that
+    // already-normalized shape, as the gateway would send it, to prove the
+    // resulting response is genuinely a CURRENT roster: no ;week=/;date=
+    // selector, team/status still present, and no `limitations` block — the
+    // FLA-278 historical-omission rule must not fire on this compat path.
+    it.each(dailySports)('%s FLA-209 ignored-week compat snapshot serves current roster with team/status intact and no limitations', async (sport) => {
+      fetchMock.mockResolvedValue(jsonResponse(buildRosterResponse()));
+
+      const params: ToolParams = {
+        sport, league_id: '449.l.123', season_year: 2025, team_id: '449.l.123.t.1',
+        snapshot: { type: 'current', requestedWeek: 15 },
+      };
+      const result = await handlersBySport[sport].get_roster({} as never, params, 'Bearer x', 'cid');
+
+      expect(result.success).toBe(true);
+      const path = fetchMock.mock.calls[0][0] as string;
+      expect(path).not.toContain(';week=');
+      expect(path).not.toContain(';date=');
+
+      const data = result.data as {
+        snapshot: Record<string, unknown>;
+        players: Array<Record<string, unknown>>;
+        limitations?: unknown;
+      };
+      expect(data.snapshot.type).toBe('current');
+      expect(data.snapshot.requested_week).toBe(15);
+      expect(data.snapshot.note).toBeTruthy();
+      expect(data.players[0].team).toBe('NYY');
+      expect(data.players[0].status).toBe('healthy');
+      expect(data.limitations).toBeUndefined();
+    });
+
     it.each(scenarios)('$label rejects a malformed injected snapshot without degrading to current', async ({ sport, handlers }) => {
       const params: ToolParams = {
         sport, league_id: '449.l.123', season_year: 2025, team_id: '449.l.123.t.1',
