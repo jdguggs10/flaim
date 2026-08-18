@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it, vi, type MockedFunction } from 'vitest';
-import { fetchSleeperTransactionsByWeeks, getSleeperCurrentWeek } from '../sleeper-transactions';
+import {
+  attachTeamNames,
+  fetchSleeperRosterTeamsMap,
+  fetchSleeperTransactionsByWeeks,
+  getSleeperCurrentWeek,
+  type NormalizedTransaction,
+} from '../sleeper-transactions';
 
 const mockFetch = vi.fn() as MockedFunction<typeof fetch>;
 global.fetch = mockFetch;
@@ -85,5 +91,99 @@ describe('sleeper-transactions', () => {
 
     expect(rows[0].players_added).toEqual([{ id: '123', name: 'Josh Allen', position: 'QB', team: 'BUF' }]);
     expect(rows[0].players_dropped).toEqual([{ id: '456', name: undefined, position: undefined, team: undefined }]);
+  });
+});
+
+describe('fetchSleeperRosterTeamsMap', () => {
+  beforeEach(() => {
+    mockFetch.mockReset();
+  });
+
+  it('resolves manager-set and default team names, keyed by roster id', async () => {
+    mockFetch
+      .mockResolvedValueOnce(jsonResponse([
+        { roster_id: 1, owner_id: 'u1', players: [], starters: [], reserve: [], settings: { wins: 0, losses: 0, ties: 0, fpts: 0 } },
+        { roster_id: 2, owner_id: 'u2', players: [], starters: [], reserve: [], settings: { wins: 0, losses: 0, ties: 0, fpts: 0 } },
+      ]))
+      .mockResolvedValueOnce(jsonResponse([
+        { user_id: 'u1', display_name: 'Alice', avatar: null, metadata: { team_name: 'The Waiver Wire Wizards' } },
+        { user_id: 'u2', display_name: 'Bob', avatar: null },
+      ]));
+
+    const teams = await fetchSleeperRosterTeamsMap('league');
+
+    expect(teams).toEqual({
+      '1': { ownerName: 'Alice', teamName: 'The Waiver Wire Wizards' },
+      '2': { ownerName: 'Bob', teamName: 'Team Bob' },
+    });
+  });
+
+  it('omits a roster whose owner_id has no matching user', async () => {
+    mockFetch
+      .mockResolvedValueOnce(jsonResponse([
+        { roster_id: 1, owner_id: 'u1', players: [], starters: [], reserve: [], settings: { wins: 0, losses: 0, ties: 0, fpts: 0 } },
+        { roster_id: 2, owner_id: 'orphan', players: [], starters: [], reserve: [], settings: { wins: 0, losses: 0, ties: 0, fpts: 0 } },
+      ]))
+      .mockResolvedValueOnce(jsonResponse([
+        { user_id: 'u1', display_name: 'Alice', avatar: null },
+      ]));
+
+    const teams = await fetchSleeperRosterTeamsMap('league');
+
+    expect(teams).toEqual({ '1': { ownerName: 'Alice', teamName: 'Team Alice' } });
+  });
+
+  it('throws when the rosters fetch fails, before touching users', async () => {
+    mockFetch
+      .mockResolvedValueOnce(new Response(null, { status: 500 }))
+      .mockResolvedValueOnce(jsonResponse([]));
+
+    await expect(fetchSleeperRosterTeamsMap('league')).rejects.toThrow();
+  });
+
+  it('throws when the users fetch fails', async () => {
+    mockFetch
+      .mockResolvedValueOnce(jsonResponse([]))
+      .mockResolvedValueOnce(new Response(null, { status: 500 }));
+
+    await expect(fetchSleeperRosterTeamsMap('league')).rejects.toThrow();
+  });
+});
+
+describe('attachTeamNames', () => {
+  const baseTxn: NormalizedTransaction = {
+    transaction_id: 't1',
+    type: 'trade',
+    status: 'complete',
+    timestamp: 100,
+    date: '1970-01-01',
+    week: 9,
+    team_ids: ['1', '2'],
+  };
+
+  it('adds team_names parallel to team_ids when the map resolves both ids', () => {
+    const [result] = attachTeamNames([baseTxn], {
+      '1': { ownerName: 'Alice', teamName: 'The Waiver Wire Wizards' },
+      '2': { ownerName: 'Bob', teamName: 'Team Bob' },
+    });
+
+    expect(result.team_names).toEqual(['The Waiver Wire Wizards', 'Team Bob']);
+    expect(result.team_ids).toEqual(['1', '2']);
+  });
+
+  it('falls back to the raw id when the map is undefined', () => {
+    const [result] = attachTeamNames([baseTxn], undefined);
+    expect(result.team_names).toEqual(['1', '2']);
+  });
+
+  it('falls back to the raw id for a roster missing from an otherwise-present map', () => {
+    const [result] = attachTeamNames([baseTxn], { '1': { ownerName: 'Alice', teamName: 'Alpha' } });
+    expect(result.team_names).toEqual(['Alpha', '2']);
+  });
+
+  it('leaves a row without team_ids unchanged', () => {
+    const rowWithoutTeamIds: NormalizedTransaction = { ...baseTxn, team_ids: undefined };
+    const [result] = attachTeamNames([rowWithoutTeamIds], { '1': { ownerName: 'Alice', teamName: 'Alpha' } });
+    expect(result.team_names).toBeUndefined();
   });
 });

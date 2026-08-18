@@ -769,4 +769,31 @@ describe('get_transactions output schema', () => {
       ],
     }));
   });
+
+  it('accepts the Sleeper teams map (roster ID -> { ownerName, teamName }) and per-row team_names (FLA-280)', () => {
+    expectValid('get_transactions', routed({
+      platform: 'sleeper',
+      sport: 'football',
+      league_id: 'sleeper-2025',
+      season_year: 2025,
+      window: { mode: 'explicit_week', weeks: [15] },
+      count: 1,
+      transactions: [
+        {
+          transaction_id: '9990',
+          date: '2026-07-18',
+          type: 'trade',
+          status: 'complete',
+          week: 15,
+          team_ids: ['1', '2'],
+          team_names: ['The Waiver Wire Wizards', 'Team Bob'],
+        },
+      ],
+      teams: {
+        '1': { ownerName: 'Alice', teamName: 'The Waiver Wire Wizards' },
+        '2': { ownerName: 'Bob', teamName: 'Team Bob' },
+      },
+      warnings: ['PLAYER_ENRICHMENT_UNAVAILABLE: Sleeper player index unavailable; roster/matchup player entries include id only.'],
+    }));
+  });
 });

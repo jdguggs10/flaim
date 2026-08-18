@@ -5,6 +5,7 @@ import type { Env, ToolParams } from '../../types';
 import { clearSleeperPlayersInMemoryCacheForTesting } from '../../shared/sleeper-players-cache';
 import { SLEEPER_PLAYER_ENRICHMENT_WARNING } from '../../shared/sleeper-enrichment';
 import { TRADED_PICKS_UNAVAILABLE_WARNING, tradedPicksPartialWarning } from '../../shared/handlers/get-league-info';
+import { TEAMS_UNAVAILABLE_WARNING } from '../../shared/handlers/get-transactions';
 
 const mockFetch = vi.fn() as MockedFunction<typeof fetch>;
 global.fetch = mockFetch;
@@ -952,6 +953,78 @@ describe('sleeper cross-sport handler characterization tests', () => {
       expect(mockFetch.mock.calls.some(([url]) => String(url).includes('/matchups/1'))).toBe(true);
       const data = result.data as { week: number };
       expect(data.week).toBe(1);
+    });
+  });
+
+  describe('get_transactions', () => {
+    it.each(scenarios)('$label resolves a teams map and per-row team_names for team_ids, with manager-set and default names', async ({ sport, handlers }) => {
+      // Explicit week skips the state fetch. Order: rosters, users, transactions/{week}.
+      mockFetch
+        .mockResolvedValueOnce(jsonResponse([
+          { roster_id: 1, owner_id: 'u1', players: [], starters: [], reserve: [], settings: { wins: 0, losses: 0, ties: 0, fpts: 0 } },
+          { roster_id: 2, owner_id: 'u2', players: [], starters: [], reserve: [], settings: { wins: 0, losses: 0, ties: 0, fpts: 0 } },
+        ]))
+        .mockResolvedValueOnce(jsonResponse([
+          { user_id: 'u1', display_name: 'Alice', avatar: null, metadata: { team_name: 'The Waiver Wire Wizards' } },
+          { user_id: 'u2', display_name: 'Bob', avatar: null },
+        ]))
+        .mockResolvedValueOnce(jsonResponse([
+          {
+            transaction_id: 't1', type: 'trade', status: 'complete', status_updated: 1000, leg: 9,
+            roster_ids: [1, 2], adds: null, drops: null,
+          },
+        ]));
+
+      const params: ToolParams = { sport, league_id: '12345', season_year: 2025, week: 9 };
+      const result = await handlers.get_transactions(playersCacheEnv(UNUSED_PLAYER), params);
+
+      expect(result.success).toBe(true);
+      const data = result.data as {
+        teams?: Record<string, { ownerName: string; teamName: string }>;
+        transactions: Array<{ team_ids?: string[]; team_names?: string[] }>;
+        warnings?: string[];
+      };
+      // teamName is the manager-set users[].metadata.team_name, else Sleeper's own "Team <display name>" default
+      expect(data.teams).toEqual({
+        '1': { ownerName: 'Alice', teamName: 'The Waiver Wire Wizards' },
+        '2': { ownerName: 'Bob', teamName: 'Team Bob' },
+      });
+      expect(data.transactions[0]).toMatchObject({
+        team_ids: ['1', '2'],
+        team_names: ['The Waiver Wire Wizards', 'Team Bob'],
+      });
+      expect(data.warnings).toBeUndefined();
+
+      expect(mockFetch).toHaveBeenNthCalledWith(1, expect.stringContaining('/league/12345/rosters'), expect.anything());
+      expect(mockFetch).toHaveBeenNthCalledWith(2, expect.stringContaining('/league/12345/users'), expect.anything());
+      expect(mockFetch).toHaveBeenNthCalledWith(3, expect.stringContaining('/league/12345/transactions/9'), expect.anything());
+    });
+
+    it.each(scenarios)('$label omits teams and adds a warning when the rosters/users fetch fails, keeping transaction rows intact', async ({ sport, handlers }) => {
+      mockFetch
+        .mockResolvedValueOnce(new Response(null, { status: 500 })) // rosters fails
+        .mockResolvedValueOnce(jsonResponse([{ user_id: 'u1', display_name: 'Alice', avatar: null }])) // users (unreached)
+        .mockResolvedValueOnce(jsonResponse([
+          {
+            transaction_id: 't1', type: 'trade', status: 'complete', status_updated: 1000, leg: 9,
+            roster_ids: [1, 2], adds: null, drops: null,
+          },
+        ]));
+
+      const params: ToolParams = { sport, league_id: '12345', season_year: 2025, week: 9 };
+      const result = await handlers.get_transactions(playersCacheEnv(UNUSED_PLAYER), params);
+
+      expect(result.success).toBe(true);
+      const data = result.data as {
+        teams?: unknown;
+        transactions: Array<{ transaction_id: string; team_ids?: string[]; team_names?: string[] }>;
+        warnings?: string[];
+      };
+      expect(data.teams).toBeUndefined();
+      expect(data.warnings).toEqual([TEAMS_UNAVAILABLE_WARNING]);
+      // The rest of the response still succeeds — team_names falls back to the raw ids.
+      expect(data.transactions).toHaveLength(1);
+      expect(data.transactions[0]).toMatchObject({ transaction_id: 't1', team_ids: ['1', '2'], team_names: ['1', '2'] });
     });
   });
 });

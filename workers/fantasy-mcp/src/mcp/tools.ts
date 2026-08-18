@@ -506,7 +506,14 @@ const GET_TRANSACTIONS_OUTPUT_SCHEMA = routedOutputSchema({
   count: z.number().optional(),
   truncated: z.boolean().optional(),
   transactions: z.array(transactionEntrySchema).optional(),
-  teams: z.record(z.string()).optional().describe('ESPN team ID to display name map'),
+  // ESPN: team ID -> display name string (FLA-140). Sleeper (FLA-280): roster
+  // ID -> { ownerName, teamName }, resolved from league rosters/users — a
+  // richer shape than ESPN's, so the value type widens to a union rather than
+  // narrowing either platform's existing contract.
+  teams: z.record(z.union([
+    z.string(),
+    looseObject({ ownerName: z.string(), teamName: z.string() }),
+  ])).optional().describe('ESPN: team ID to display name map. Sleeper: roster ID to { ownerName, teamName }.'),
   warning: z.string().optional(),
   dropped_invalid_timestamp_count: z.number().optional(),
 });
