@@ -9,7 +9,30 @@ export const TRADED_PICKS_UNAVAILABLE_WARNING =
   'TRADED_PICKS_UNAVAILABLE: Sleeper traded-pick data unavailable; draft-pick ownership omitted for this league.';
 
 const PICK_OWNERSHIP_NOTE =
-  'Each roster owns its own picks for every season/round unless listed here; use draftRounds for future drafts.';
+  'Only picks that changed hands are listed; every roster owns its own untraded picks. Sleeper allows pick trading for ' +
+  'the current season plus up to three future seasons depending on league settings — treat seasons beyond those listed ' +
+  'as unverified. Use draftRounds for rounds per future draft.';
+
+/**
+ * Runtime-validates one raw traded_picks entry before it is trusted. Sleeper
+ * is a public, undocumented API — a null entry, a numeric/missing season, or
+ * a non-integer roster id must never reach resolveTradedPicks (which would
+ * throw, e.g. from localeCompare on a non-string season) and must never
+ * escape the handler's outer try/catch as a full-request failure.
+ */
+function isValidTradedPick(value: unknown): value is SleeperTradedPick {
+  if (typeof value !== 'object' || value === null) return false;
+  const pick = value as Record<string, unknown>;
+  return (
+    typeof pick.season === 'string' &&
+    pick.season.trim().length > 0 &&
+    Number.isInteger(pick.round) &&
+    (pick.round as number) >= 1 &&
+    Number.isInteger(pick.roster_id) &&
+    Number.isInteger(pick.previous_owner_id) &&
+    Number.isInteger(pick.owner_id)
+  );
+}
 
 interface ResolvedTradedPick {
   season: string;
@@ -125,10 +148,10 @@ export function createGetLeagueInfoHandler(): HandlerFn {
           tradedPicksRaw = undefined;
         }
 
-        if (Array.isArray(tradedPicksRaw)) {
-          tradedPicks = resolveTradedPicks(tradedPicksRaw as SleeperTradedPick[], rosterOwnerById, userDirectory);
+        if (Array.isArray(tradedPicksRaw) && tradedPicksRaw.every(isValidTradedPick)) {
+          tradedPicks = resolveTradedPicks(tradedPicksRaw, rosterOwnerById, userDirectory);
         } else {
-          console.error(`[get-league-info] traded_picks response for league ${league_id} was not an array`);
+          console.error(`[get-league-info] traded_picks response for league ${league_id} was not a valid array of traded-pick entries`);
           warnings.push(TRADED_PICKS_UNAVAILABLE_WARNING);
         }
       } else {
@@ -155,7 +178,12 @@ export function createGetLeagueInfoHandler(): HandlerFn {
           draftId: league.draft_id,
           teams,
           draftRounds,
-          ...(tradedPicks ? { tradedPicks, pickOwnershipNote: PICK_OWNERSHIP_NOTE } : {}),
+          // pickOwnershipNote is suppressed when tradedPicks is empty — an
+          // empty list just means redraft or no trades, and the note's
+          // horizon caveat is only useful once there's something to caveat.
+          ...(tradedPicks
+            ? { tradedPicks, ...(tradedPicks.length > 0 ? { pickOwnershipNote: PICK_OWNERSHIP_NOTE } : {}) }
+            : {}),
           ...(warnings.length > 0 ? { warnings } : {}),
         },
       };
