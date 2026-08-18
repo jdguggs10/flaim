@@ -66,14 +66,26 @@ interface ExecuteRequest {
 - `get_players` — Player lookup with ownership unavailable semantics (`market_percent_owned: null`, `ownership_scope: "unavailable"`)
 - `get_transactions` — Recent transactions with player name/position enrichment
 
+## Roster/Matchup Player Enrichment and Team Names
+
+`get_roster` (current and historical) and `get_matchups` resolve Sleeper's bare player-ID strings into enriched entries using the same KV-backed player index described below:
+- Current roster (`starters`, `bench`, `reserve`, `taxi`) and matchups (`starters`, per side): index hit → `{ id, name, position, team }` (`team` omitted when the record has none).
+- Historical week roster (`starters`, `bench` — reserve/taxi classification isn't available historically): index hit → `{ id, name, position }`, **never** `team`. The player index only tracks each player's CURRENT club, so a past-week roster omits `team` rather than risk showing a club the player joined after that week; `limitations.playerProTeamAvailable: false` marks this explicitly alongside the existing `reserveAndTaxiClassificationAvailable: false`.
+- Matchups follow the same rule: when `week` is omitted the handler resolves the live week and starters carry `team`; when `week` is passed explicitly (which may be a past week) starters omit `team` and the response carries `limitations.playerProTeamAvailable: false`.
+- Sleeper's `"0"` empty-lineup-slot sentinel: `{ id: "0", empty: true }` — no lookup is attempted.
+- Unknown ID or an unavailable player index: `{ id }` only — array order and length are always preserved, and the request never fails because of enrichment.
+- When the player index is unavailable, the response still succeeds and adds a top-level `warnings: string[]` explaining player names/positions are unavailable for that call.
+
+`get_league_info`, `get_standings`, `get_roster`, and `get_matchups` all add `teamName` alongside the existing `ownerName`. Unlike ESPN/Yahoo, Sleeper only exposes a manager-set fantasy team name via `users[].metadata.team_name`; `teamName` is present only when the manager actually set one — it is never fabricated as a fallback.
+
 ## Player Cache (KV)
 
-`get_free_agents` and `get_transactions` enrichment both use a shared KV-backed player index (`SLEEPER_PLAYERS_CACHE`):
+`get_free_agents`, `get_transactions`, `get_roster`, and `get_matchups` enrichment all use a shared KV-backed player index (`SLEEPER_PLAYERS_CACHE`):
 - Fetches `GET /v1/players/{sport}` (NFL or NBA) on cache miss.
-- Caches active players only, with a 24-hour TTL.
+- Caches every player Sleeper returns (active and inactive, with an `active` flag) for 24 hours; only `get_free_agents` filters to active players, so rostered IR/retired players still resolve to names.
 - Cache key format: `players:{sport}:v1`.
 - Falls back to in-memory cache if the KV binding is unavailable.
-- Gracefully degrades: if the player index fails, transactions still return player IDs and `get_free_agents` returns an empty list with a `warning` field.
+- Gracefully degrades: if the player index fails, transactions still return player IDs, `get_free_agents` returns an empty list with a `warning` field, and `get_roster`/`get_matchups` return `{ id }`-only entries with a top-level `warnings` array.
 
 ## Sleeper API Notes
 

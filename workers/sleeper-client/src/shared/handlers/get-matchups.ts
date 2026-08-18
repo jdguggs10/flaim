@@ -3,15 +3,23 @@ import type { SleeperLeagueUser, SleeperMatchup, SleeperRoster } from '../../typ
 import { ErrorCode } from '@flaim/worker-shared';
 import { sleeperFetch, handleSleeperError } from '../sleeper-api';
 import { toExecuteErrorResponse } from './utils';
+import { buildUserDirectory, loadSleeperPlayersIndexForEnrichment, resolveSleeperPlayerEntries } from '../sleeper-enrichment';
 
 export function createGetMatchupsHandler(config: SleeperSportConfig): HandlerFn {
-  return async (_env, params) => {
+  return async (env, params) => {
     const { league_id, week } = params;
     if (!league_id) {
       return { success: false, error: 'league_id is required for get_matchups', code: ErrorCode.MISSING_PARAM };
     }
 
     try {
+      // Temporal purity (same rule as historical get_roster): the player index
+      // only knows each player's CURRENT club, so a starter's `team` is only
+      // trustworthy for the current week. When the caller names a week
+      // explicitly we cannot cheaply prove it is the current one, so `team` is
+      // omitted and the limitation is flagged; omitting `week` resolves to the
+      // live week and keeps `team`.
+      const explicitWeek = typeof week === 'number';
       let matchupWeek = week;
       if (!matchupWeek) {
         const stateRes = await sleeperFetch(config.statePath);
@@ -23,6 +31,10 @@ export function createGetMatchupsHandler(config: SleeperSportConfig): HandlerFn 
           matchupWeek = 1;
         }
       }
+
+      // Kick off the player-index load in parallel with the matchup/roster/user
+      // fetches — get_matchups always enriches starters for both sides.
+      const playersIndexPromise = loadSleeperPlayersIndexForEnrichment(env, config.sport, 'get-matchups');
 
       const [matchupsRes, rostersRes, usersRes] = await Promise.all([
         sleeperFetch(`/league/${league_id}/matchups/${matchupWeek}`),
@@ -38,14 +50,17 @@ export function createGetMatchupsHandler(config: SleeperSportConfig): HandlerFn 
       const rosters: SleeperRoster[] = await rostersRes.json();
       const users: SleeperLeagueUser[] = await usersRes.json();
 
-      const rosterOwnerMap = new Map<number, string>();
-      const userMap = new Map<string, string>();
-      for (const user of users) {
-        userMap.set(user.user_id, user.display_name);
-      }
+      const userDirectory = buildUserDirectory(users);
+      const rosterOwnerMap = new Map<number, { ownerName: string; teamName?: string }>();
       for (const roster of rosters) {
-        rosterOwnerMap.set(roster.roster_id, userMap.get(roster.owner_id) ?? 'Unknown');
+        const entry = userDirectory.get(roster.owner_id);
+        rosterOwnerMap.set(roster.roster_id, {
+          ownerName: entry?.displayName ?? 'Unknown',
+          teamName: entry?.teamName,
+        });
       }
+
+      const { index: playersIndex, warnings } = await playersIndexPromise;
 
       const matchupGroups = new Map<number, SleeperMatchup[]>();
       for (const m of matchups) {
@@ -56,12 +71,16 @@ export function createGetMatchupsHandler(config: SleeperSportConfig): HandlerFn 
       }
 
       const pairedMatchups = Array.from(matchupGroups.entries()).map(([matchupId, pair]) => {
-        const formatTeam = (m: SleeperMatchup) => ({
-          rosterId: m.roster_id,
-          ownerName: rosterOwnerMap.get(m.roster_id) ?? 'Unknown',
-          points: m.points ?? 0,
-          starters: m.starters ?? [],
-        });
+        const formatTeam = (m: SleeperMatchup) => {
+          const owner = rosterOwnerMap.get(m.roster_id);
+          return {
+            rosterId: m.roster_id,
+            ownerName: owner?.ownerName ?? 'Unknown',
+            teamName: owner?.teamName,
+            points: m.points ?? 0,
+            starters: resolveSleeperPlayerEntries(m.starters ?? [], playersIndex, { includeTeam: !explicitWeek }),
+          };
+        };
 
         const home = pair[0] ? formatTeam(pair[0]) : null;
         const away = pair[1] ? formatTeam(pair[1]) : null;
@@ -82,6 +101,8 @@ export function createGetMatchupsHandler(config: SleeperSportConfig): HandlerFn 
           leagueId: league_id,
           week: matchupWeek,
           matchups: pairedMatchups,
+          ...(explicitWeek ? { limitations: { playerProTeamAvailable: false } } : {}),
+          ...(warnings.length ? { warnings } : {}),
         },
       };
     } catch (error) {

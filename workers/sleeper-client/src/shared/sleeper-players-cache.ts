@@ -2,10 +2,20 @@ import type { Env } from '../types';
 import { handleSleeperError, sleeperFetch } from './sleeper-api';
 
 const PLAYERS_CACHE_TTL_SECONDS = 24 * 60 * 60;
-const inMemoryPlayersCache = new Map<string, { value: string; expiresAt: number }>();
+
+// Memoizes the PARSED, immutable index (not the raw JSON string) so repeat
+// calls within a warm isolate skip re-running JSON.parse/normalize/toPlayerIndex
+// on every roster/matchup/transaction/free-agent request.
+const inMemoryPlayersCache = new Map<string, { index: Map<string, SleeperPlayerRecord>; expiresAt: number }>();
+
+// Dedupes concurrent loads for the same sport within one isolate so a burst
+// of parallel calls (e.g. roster + matchup requests landing together) shares
+// a single KV read / Sleeper fetch instead of racing separate ones.
+const inFlightLoads = new Map<string, Promise<Map<string, SleeperPlayerRecord>>>();
 
 export function clearSleeperPlayersInMemoryCacheForTesting(): void {
   inMemoryPlayersCache.clear();
+  inFlightLoads.clear();
 }
 
 export interface SleeperPlayerRecord {
@@ -58,31 +68,62 @@ function parsePlayerRecord(raw: SleeperPlayersApiRecord, fallbackId?: string): S
   };
 }
 
-function normalizePlayers(input: unknown): SleeperPlayerRecord[] | null {
+interface NormalizedPlayers {
+  records: SleeperPlayerRecord[];
+  /** Entries that were non-objects, or objects that failed parsePlayerRecord. */
+  skipped: number;
+}
+
+function normalizePlayers(input: unknown): NormalizedPlayers | null {
   if (Array.isArray(input)) {
-    const fromArray: SleeperPlayerRecord[] = [];
+    const records: SleeperPlayerRecord[] = [];
+    let skipped = 0;
     for (const item of input) {
-      if (!item || typeof item !== 'object') continue;
+      if (!item || typeof item !== 'object') {
+        skipped++;
+        continue;
+      }
       const parsed = parsePlayerRecord(item as SleeperPlayersApiRecord);
-      if (!parsed) continue;
-      fromArray.push(parsed);
+      if (!parsed) {
+        skipped++;
+        continue;
+      }
+      records.push(parsed);
     }
-    return fromArray;
+    return { records, skipped };
   }
 
   if (!input || typeof input !== 'object') {
     return null;
   }
 
-  const fromObject: SleeperPlayerRecord[] = [];
+  const records: SleeperPlayerRecord[] = [];
+  let skipped = 0;
   for (const [playerId, value] of Object.entries(input as Record<string, unknown>)) {
-    if (!value || typeof value !== 'object') continue;
+    if (!value || typeof value !== 'object') {
+      skipped++;
+      continue;
+    }
     const parsed = parsePlayerRecord(value as SleeperPlayersApiRecord, playerId);
-    if (!parsed) continue;
-    fromObject.push(parsed);
+    if (!parsed) {
+      skipped++;
+      continue;
+    }
+    records.push(parsed);
   }
 
-  return fromObject;
+  return { records, skipped };
+}
+
+// Structurally invalid: nothing usable came out, or more than half of the
+// entries were unusable (a mostly-corrupt payload/cache entry shouldn't
+// become the authoritative index for a full day). No fixed minimum-record
+// threshold — small, fully-valid fixtures (including in tests) must pass.
+// If a future Sleeper format change ever makes most entries unparseable, the
+// index refuses to load and enrichment degrades loudly (id-only + warnings)
+// on every call rather than silently serving a thinned index for 24h.
+function isStructurallyInvalid(normalized: NormalizedPlayers): boolean {
+  return normalized.records.length === 0 || normalized.skipped > normalized.records.length;
 }
 
 function toPlayerIndex(players: SleeperPlayerRecord[]): Map<string, SleeperPlayerRecord> {
@@ -102,27 +143,47 @@ export async function getSleeperPlayersIndex(
   sport: SleeperPlayerCacheSport,
 ): Promise<Map<string, SleeperPlayerRecord>> {
   const cacheKey = cacheKeyForSport(sport);
-  const now = Date.now();
-  const cachedInMemory = inMemoryPlayersCache.get(cacheKey);
-  let cached = cachedInMemory && cachedInMemory.expiresAt > now ? cachedInMemory.value : null;
 
-  if (!cached) {
-    try {
-      cached = await env.SLEEPER_PLAYERS_CACHE.get(cacheKey);
-    } catch {
-      // KV read failed — treat as cache miss and fall through to Sleeper fetch.
-    }
+  const cachedInMemory = inMemoryPlayersCache.get(cacheKey);
+  if (cachedInMemory && cachedInMemory.expiresAt > Date.now()) {
+    return cachedInMemory.index;
+  }
+
+  const inFlight = inFlightLoads.get(cacheKey);
+  if (inFlight) {
+    return inFlight;
+  }
+
+  const loadPromise = loadSleeperPlayersIndex(env, sport, cacheKey).finally(() => {
+    inFlightLoads.delete(cacheKey);
+  });
+  inFlightLoads.set(cacheKey, loadPromise);
+  return loadPromise;
+}
+
+async function loadSleeperPlayersIndex(
+  env: Env,
+  sport: SleeperPlayerCacheSport,
+  cacheKey: string,
+): Promise<Map<string, SleeperPlayerRecord>> {
+  let cached: string | null = null;
+  try {
+    cached = await env.SLEEPER_PLAYERS_CACHE.get(cacheKey);
+  } catch {
+    // KV read failed — treat as cache miss and fall through to Sleeper fetch.
   }
 
   if (cached) {
     try {
       const parsedCached = normalizePlayers(JSON.parse(cached));
-      if (parsedCached) {
-        inMemoryPlayersCache.set(cacheKey, {
-          value: cached,
-          expiresAt: now + PLAYERS_CACHE_TTL_SECONDS * 1000,
-        });
-        return toPlayerIndex(parsedCached);
+      // A structurally invalid cached entry (empty, or majority-malformed —
+      // e.g. a previously-poisoned entry) is treated the same as unparseable
+      // JSON below: fall through and refetch rather than serving (and
+      // re-memoizing) a bad index for the full TTL.
+      if (parsedCached && !isStructurallyInvalid(parsedCached)) {
+        const index = toPlayerIndex(parsedCached.records);
+        memoize(cacheKey, index);
+        return index;
       }
     } catch {
       // Defensive fallback: refetch from Sleeper when cache data is malformed.
@@ -133,8 +194,19 @@ export async function getSleeperPlayersIndex(
   if (!response.ok) handleSleeperError(response);
 
   const payload = await response.json();
-  const parsedPlayers = normalizePlayers(payload) ?? [];
-  const serialized = JSON.stringify(parsedPlayers);
+  const normalized = normalizePlayers(payload) ?? { records: [], skipped: 0 };
+  if (isStructurallyInvalid(normalized)) {
+    // Never persist a structurally invalid index (in memory or KV) from a
+    // 200 payload — that would silently poison the 24h cache. Throwing lets
+    // callers (loadSleeperPlayersIndexForEnrichment, get_free_agents)
+    // degrade with a warning instead, and the next call gets a clean retry.
+    throw new Error(
+      `SLEEPER_INVALID_PLAYER_INDEX: Sleeper players endpoint returned an unusable player index ` +
+      `(${normalized.records.length} valid, ${normalized.skipped} skipped)`
+    );
+  }
+
+  const serialized = JSON.stringify(normalized.records);
   try {
     await env.SLEEPER_PLAYERS_CACHE.put(cacheKey, serialized, {
       expirationTtl: PLAYERS_CACHE_TTL_SECONDS,
@@ -142,10 +214,15 @@ export async function getSleeperPlayersIndex(
   } catch (error) {
     console.error('[sleeper-players-cache] KV write failed; serving from in-memory only:', error);
   }
-  inMemoryPlayersCache.set(cacheKey, {
-    value: serialized,
-    expiresAt: now + PLAYERS_CACHE_TTL_SECONDS * 1000,
-  });
 
-  return toPlayerIndex(parsedPlayers);
+  const index = toPlayerIndex(normalized.records);
+  memoize(cacheKey, index);
+  return index;
+}
+
+function memoize(cacheKey: string, index: Map<string, SleeperPlayerRecord>): void {
+  inMemoryPlayersCache.set(cacheKey, {
+    index,
+    expiresAt: Date.now() + PLAYERS_CACHE_TTL_SECONDS * 1000,
+  });
 }
