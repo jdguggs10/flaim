@@ -614,6 +614,8 @@ function LeaguesPageContent() {
     setIsRefreshingLeagues(false);
     setIsSleeperDisconnecting(false);
     setDeletingSleeperKey(null);
+    setSettingSportDefault(null);
+    setIsSavingHideLeagueWidget(false);
   }, [clearSleeperConnectionState, clearYahooConnectionState]);
 
   // Helper to determine if a league is "old" (no seasons in last 2 years)
