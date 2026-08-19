@@ -55,7 +55,7 @@ interface ExecuteRequest {
 - `get_matchups` — Weekly matchups (paired by `matchup_id`)
 - `get_free_agents` — Available free agents (uses KV-backed player index cache)
 - `get_players` — Player lookup with ownership unavailable semantics (`market_percent_owned: null`, `ownership_scope: "unavailable"`)
-- `get_transactions` — Recent transactions with player name/position enrichment
+- `get_transactions` — Recent transactions with player name/position enrichment and `teams`/`teamOwners` roster-name maps
 
 ### Basketball (NBA)
 - `get_league_info` — League settings and members, plus traded draft-pick ownership
@@ -64,7 +64,7 @@ interface ExecuteRequest {
 - `get_matchups` — Weekly matchups (paired by `matchup_id`)
 - `get_free_agents` — Available free agents (uses KV-backed player index cache)
 - `get_players` — Player lookup with ownership unavailable semantics (`market_percent_owned: null`, `ownership_scope: "unavailable"`)
-- `get_transactions` — Recent transactions with player name/position enrichment
+- `get_transactions` — Recent transactions with player name/position enrichment and `teams`/`teamOwners` roster-name maps
 
 ## Roster/Matchup Player Enrichment and Team Names
 
@@ -78,6 +78,10 @@ interface ExecuteRequest {
 
 `get_league_info`, `get_standings`, `get_roster`, and `get_matchups` all add `teamName` alongside the existing `ownerName`. Sleeper only exposes a manager-set fantasy team name via `users[].metadata.team_name`; when it is unset (common), `teamName` falls back to Sleeper's own default `Team <display name>` — the exact name league members see in the Sleeper app — so every team always has a `teamName`. The fallback matches Sleeper's UI convention rather than inventing one; ESPN uses the analogous `Team <id>` fallback.
 
+## Transaction Team Names
+
+`get_transactions` fetches `GET /league/{league_id}/rosters` and `GET /league/{league_id}/users` alongside the transaction window and player-index lookups, and adds two top-level maps keyed by the same string roster ids used in `team_ids`: `teams` — `{ "<rosterId>": "<teamName>" }` — is exactly ESPN's transactions `teams` shape (`Record<string, string>`), so the two platforms share one schema; `teamOwners` — `{ "<rosterId>": "<ownerName>" }` — is a new additive key carrying owner names, since ESPN's map has no owner-name equivalent to reuse. Together these mean the model doesn't have to cross-reference `get_league_info` to say who moved whom. Each row also gets `team_names: string[]`, parallel to `team_ids`, resolved through `teams` (falling back to the raw roster id when a particular id has no matching roster). If the rosters/users fetch fails, both `teams` and `teamOwners` are omitted and a `TEAMS_UNAVAILABLE` warning is added — the transaction rows themselves are unaffected (`team_names` falls back to raw ids), and the request never fails because of it.
+
 ## Traded Draft-Pick Ownership (Sleeper Only)
 
 `get_league_info` additionally fetches `GET /league/{league_id}/traded_picks` and surfaces `tradedPicks` — but only picks that changed hands; Sleeper does not list untraded picks, so this is not an exhaustive picture of every future draft. Each returned entry resolves the raw roster ids to names via the same user directory: `{ season, round, originalRosterId, originalOwnerName?, originalTeamName?, previousRosterId, currentRosterId, currentOwnerName?, currentTeamName? }`, sorted by season, round, then originalRosterId. `draftRounds` (from `league.settings.draft_rounds`) is also surfaced so a future draft's round count can be reasoned about. When `tradedPicks` is non-empty, a one-sentence `pickOwnershipNote` reminds the caller that every roster owns its own untraded picks and that Sleeper allows pick trading for the current season plus up to three future seasons depending on league settings — seasons beyond what's listed are unverified; the note is suppressed when `tradedPicks` is empty since there is nothing to caveat. Redraft leagues (and any league with nothing traded) return an empty `tradedPicks: []` array with no warning. Every raw entry is runtime-validated (`season` a non-empty string, `round`/`roster_id`/`previous_owner_id`/`owner_id` integers) before use. Malformed entries are dropped and the valid ones are kept, with a `TRADED_PICKS_PARTIAL: N malformed ...` entry added to a top-level `warnings: string[]` so the caller knows the list may be incomplete; if the fetch fails, the body isn't an array, or no entry is valid, `tradedPicks` and `pickOwnershipNote` are omitted and a `TRADED_PICKS_UNAVAILABLE` warning is added instead — never failing the whole `get_league_info` call, so the rest of the league/roster/user data still succeeds. A pick whose roster id has no matching roster resolves with the id fields present and the name fields omitted, never a thrown error.
@@ -89,7 +93,11 @@ interface ExecuteRequest {
 - Caches every player Sleeper returns (active and inactive, with an `active` flag) for 24 hours; only `get_free_agents` filters to active players, so rostered IR/retired players still resolve to names.
 - Cache key format: `players:{sport}:v1`.
 - Falls back to in-memory cache if the KV binding is unavailable.
-- Gracefully degrades: if the player index fails, transactions still return player IDs, `get_free_agents` returns an empty list with a `warning` field, and `get_roster`/`get_matchups` return `{ id }`-only entries with a top-level `warnings` array.
+- Gracefully degrades: if the player index fails, `get_transactions` still returns player IDs, `get_free_agents` returns an empty list, and `get_roster`/`get_matchups` return `{ id }`-only entries — every one of these now adds a top-level `warnings: string[]` explaining the degradation (see below) rather than degrading silently.
+
+## Degradation Warnings
+
+Every Sleeper tool that can partially degrade (an unavailable player index, or — for `get_transactions` — unavailable roster/owner data for `teams`) reports it the same way: a top-level `warnings: string[]`, present only when non-empty, naming each degraded piece (e.g. `PLAYER_ENRICHMENT_UNAVAILABLE`, `TEAMS_UNAVAILABLE`). `get_free_agents` is the one exception carrying published-client history: it keeps its legacy singular `warning: string` field (never removed) and additionally emits the same message in `warnings: [warning]` so callers can rely on the array form across every Sleeper tool without special-casing free agents.
 
 ## Sleeper API Notes
 

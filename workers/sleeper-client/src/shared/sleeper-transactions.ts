@@ -1,4 +1,6 @@
 import { sleeperFetch, handleSleeperError } from './sleeper-api';
+import type { SleeperLeagueUser, SleeperRoster } from '../types';
+import { buildUserDirectory } from './sleeper-enrichment';
 
 export type TransactionType = 'add' | 'drop' | 'trade' | 'waiver';
 
@@ -10,6 +12,12 @@ export interface NormalizedTransaction {
   date: string;
   week: number | null;
   team_ids?: string[];
+  /**
+   * Owner/team names parallel to `team_ids` (same order, same length): each
+   * entry resolves through the `teams` map, falling back to the raw roster
+   * id when the map is unavailable or the id has no matching roster.
+   */
+  team_names?: string[];
   players_added?: Array<{ id: string; name?: string; position?: string; team?: string }>;
   players_dropped?: Array<{ id: string; name?: string; position?: string; team?: string }>;
   faab_bid?: number | null;
@@ -118,4 +126,76 @@ export async function fetchSleeperTransactionsByWeeks(
   }
 
   return out.sort((a, b) => b.timestamp - a.timestamp);
+}
+
+export interface SleeperRosterTeams {
+  /**
+   * roster id (string) -> teamName, exactly ESPN's transactions `teams`
+   * shape (`Record<string, string>`) so both platforms share one schema.
+   * Always a non-empty string: the manager-set fantasy team name, or
+   * Sleeper's own "Team <display name>" default.
+   */
+  teams: Record<string, string>;
+  /**
+   * roster id (string) -> ownerName. Additive — ESPN's `teams` map has no
+   * owner-name equivalent, so this is a separate top-level key rather than
+   * a value shape ESPN's map doesn't use.
+   */
+  teamOwners: Record<string, string>;
+}
+
+/**
+ * Fetches league rosters and users and resolves each roster id to its
+ * owner and team name via the shared user directory (manager-set team name,
+ * or Sleeper's own "Team <display name>" default). This is what lets
+ * get_transactions label `team_ids` with names instead of making the caller
+ * cross-reference get_league_info — mirroring ESPN's inline transactions
+ * `teams` map (`teams`), plus an additive `teamOwners` map ESPN has no
+ * equivalent for. A roster whose owner_id has no matching user (an orphaned
+ * or bot-managed roster) is simply omitted from both maps rather than
+ * guessed.
+ *
+ * Throws on a rosters/users fetch failure so the caller can degrade to
+ * omitting both maps with a warning instead of failing the whole
+ * get_transactions request.
+ */
+export async function fetchSleeperRosterTeams(leagueId: string): Promise<SleeperRosterTeams> {
+  const [rostersRes, usersRes] = await Promise.all([
+    sleeperFetch(`/league/${leagueId}/rosters`),
+    sleeperFetch(`/league/${leagueId}/users`),
+  ]);
+  if (!rostersRes.ok) handleSleeperError(rostersRes);
+  if (!usersRes.ok) handleSleeperError(usersRes);
+
+  const rosters: SleeperRoster[] = await rostersRes.json();
+  const users: SleeperLeagueUser[] = await usersRes.json();
+  const userDirectory = buildUserDirectory(users);
+
+  const teams: Record<string, string> = {};
+  const teamOwners: Record<string, string> = {};
+  for (const roster of rosters) {
+    const entry = userDirectory.get(roster.owner_id);
+    if (!entry) continue;
+    const rosterId = String(roster.roster_id);
+    teams[rosterId] = entry.teamName;
+    teamOwners[rosterId] = entry.displayName;
+  }
+  return { teams, teamOwners };
+}
+
+/**
+ * Adds `team_names` (parallel to `team_ids`) to each transaction row by
+ * resolving each roster id through `teams`. A roster id absent from `teams`
+ * — because the map itself is unavailable, or that particular id has no
+ * matching roster — falls back to the raw id rather than being dropped or
+ * guessed. Rows without `team_ids` pass through unchanged.
+ */
+export function attachTeamNames(
+  transactions: NormalizedTransaction[],
+  teams: Record<string, string> | undefined,
+): NormalizedTransaction[] {
+  return transactions.map((txn) => {
+    if (!txn.team_ids) return txn;
+    return { ...txn, team_names: txn.team_ids.map((id) => teams?.[id] ?? id) };
+  });
 }

@@ -52,7 +52,11 @@ export function createSleeperGetFreeAgentsHandler(cacheSport: Sport) {
           season_year: params.season_year,
           count: freeAgents.length,
           players: freeAgents,
-          ...(warning ? { warning } : {}),
+          // `warning` is the legacy singular field (kept for published
+          // clients); `warnings` is the array form other Sleeper tools use
+          // (get_roster/get_matchups/get_transactions) so callers can rely on
+          // one shape across Sleeper tools without special-casing this one.
+          ...(warning ? { warning, warnings: [warning] } : {}),
         },
       };
     } catch (error) {
