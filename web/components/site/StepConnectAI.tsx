@@ -35,7 +35,7 @@ export function StepConnectAI({
         </>
       ) : null}
 
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <Button asChild size="sm" className="w-full">
           <a href={CHATGPT_APP_URL} target="_blank" rel="noopener noreferrer">
             Open in ChatGPT
