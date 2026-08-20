@@ -74,10 +74,20 @@ const MCP_READ_SCOPE = 'mcp:read';
 const MCP_WRITE_SCOPE = 'mcp:write';
 const SUPPORTED_MCP_SCOPES = new Set([MCP_READ_SCOPE, MCP_WRITE_SCOPE]);
 
-// Base URL for OAuth endpoints (used in metadata)
-const getBaseUrl = (env: OAuthEnv): string => {
+// Base URL for OAuth endpoints (used in metadata). Preview is a fixed,
+// shared-across-all-PRs worker (not per-branch, see docs/ARCHITECTURE.md
+// Preview Environment), so its own workers.dev origin is a stable literal —
+// same precedent as the preview resource allowlist below. Without this
+// branch, preview fell through to the prod default and every preview OAuth
+// handshake silently ran against production's auth-worker/Supabase, so a
+// preview-minted token could never introspect on the preview gateway
+// (FLA-281).
+export const getBaseUrl = (env: OAuthEnv): string => {
   if (env.ENVIRONMENT === 'dev' || env.NODE_ENV === 'development') {
     return 'http://localhost:8786';
+  }
+  if (env.ENVIRONMENT === 'preview') {
+    return 'https://auth-worker-preview.gerrygugger.workers.dev';
   }
   return 'https://api.flaim.app';
 };

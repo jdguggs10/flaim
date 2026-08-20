@@ -31,16 +31,16 @@ describe('buildUserDirectory', () => {
     expect(directory.get('u1')).toEqual({ displayName: 'Alice', teamName: 'The Waiver Wire Wizards' });
   });
 
-  it('leaves teamName undefined when metadata is absent', () => {
-    const users: SleeperLeagueUser[] = [{ user_id: 'u1', display_name: 'Alice', avatar: null }];
+  it("falls back to Sleeper's default 'Team <display name>' when metadata is absent", () => {
+    const users: SleeperLeagueUser[] = [{ user_id: 'u1', display_name: 'ProGunn', avatar: null }];
 
     const directory = buildUserDirectory(users);
 
-    expect(directory.get('u1')).toEqual({ displayName: 'Alice', teamName: undefined });
-    expect(directory.get('u1')?.teamName).toBeUndefined();
+    // This is exactly what Sleeper's own app shows league members for an unset team name.
+    expect(directory.get('u1')).toEqual({ displayName: 'ProGunn', teamName: 'Team ProGunn' });
   });
 
-  it('leaves teamName undefined for an empty or whitespace-only team_name', () => {
+  it("falls back to Sleeper's default for an empty or whitespace-only team_name", () => {
     const users: SleeperLeagueUser[] = [
       { user_id: 'u1', display_name: 'Alice', avatar: null, metadata: { team_name: '' } },
       { user_id: 'u2', display_name: 'Bob', avatar: null, metadata: { team_name: '   ' } },
@@ -48,26 +48,28 @@ describe('buildUserDirectory', () => {
 
     const directory = buildUserDirectory(users);
 
-    expect(directory.get('u1')?.teamName).toBeUndefined();
-    expect(directory.get('u2')?.teamName).toBeUndefined();
+    expect(directory.get('u1')?.teamName).toBe('Team Alice');
+    expect(directory.get('u2')?.teamName).toBe('Team Bob');
   });
 
-  it('leaves teamName undefined for a non-string metadata.team_name', () => {
+  it("falls back to Sleeper's default for a non-string metadata.team_name", () => {
     const users: SleeperLeagueUser[] = [
       { user_id: 'u1', display_name: 'Alice', avatar: null, metadata: { team_name: 12345 as unknown as string } },
     ];
 
     const directory = buildUserDirectory(users);
 
-    expect(directory.get('u1')?.teamName).toBeUndefined();
+    expect(directory.get('u1')?.teamName).toBe('Team Alice');
   });
 
-  it('never fabricates a fallback team name', () => {
-    const users: SleeperLeagueUser[] = [{ user_id: 'u1', display_name: 'Alice', avatar: null, metadata: {} }];
+  it('trims a padded manager-set team name instead of falling back', () => {
+    const users: SleeperLeagueUser[] = [
+      { user_id: 'u1', display_name: 'Alice', avatar: null, metadata: { team_name: '  Padded Wizards  ' } },
+    ];
 
     const directory = buildUserDirectory(users);
 
-    expect(directory.get('u1')).toEqual({ displayName: 'Alice', teamName: undefined });
+    expect(directory.get('u1')).toEqual({ displayName: 'Alice', teamName: 'Padded Wizards' });
   });
 });
 

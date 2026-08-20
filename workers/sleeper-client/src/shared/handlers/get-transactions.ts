@@ -1,8 +1,18 @@
 import type { HandlerFn, SleeperSportConfig } from './types';
-import { fetchSleeperTransactionsByWeeks, getSleeperCurrentWeek } from '../sleeper-transactions';
+import {
+  attachTeamNames,
+  fetchSleeperRosterTeams,
+  fetchSleeperTransactionsByWeeks,
+  getSleeperCurrentWeek,
+  type PlayerResolver,
+} from '../sleeper-transactions';
 import { getSleeperPlayersIndex } from '../sleeper-players-cache';
 import { ErrorCode, validateTransactionWeekInput } from '@flaim/worker-shared';
 import { toExecuteErrorResponse } from './utils';
+import { SLEEPER_PLAYER_ENRICHMENT_WARNING } from '../sleeper-enrichment';
+
+export const TEAMS_UNAVAILABLE_WARNING =
+  'TEAMS_UNAVAILABLE: Sleeper roster/owner data unavailable; team names omitted from this transactions response.';
 
 export function createGetTransactionsHandler(config: SleeperSportConfig): HandlerFn {
   return async (env, params) => {
@@ -31,9 +41,24 @@ export function createGetTransactionsHandler(config: SleeperSportConfig): Handle
       const rawCount = Number.isFinite(Number(count)) ? Number(count) : 25;
       const maxCount = Math.max(1, Math.min(100, Math.trunc(rawCount)));
 
-      let resolvePlayer:
-        | ((playerId: string) => { name?: string; position?: string; team?: string } | undefined)
-        | undefined;
+      // Kick off the roster/owner team-name fetch in parallel with the
+      // player-index load and per-week transaction fetches below — it
+      // degrades independently (a warning, no `teams`/`teamOwners`) rather
+      // than failing the whole get_transactions call. The .then/.catch is
+      // attached immediately, right here at creation (matching the pattern
+      // get-league-info.ts uses for traded_picks), so a rosters/users
+      // rejection can never be observed as unhandled — regardless of how
+      // long the player-index load and transaction fetches below take, or
+      // whether they throw first.
+      const rosterTeamsPromise = fetchSleeperRosterTeams(league_id)
+        .then((value) => ({ ok: true as const, value }))
+        .catch((error) => {
+          console.error(`[handleGetTransactions] Failed to load rosters/users for team names in league ${league_id}:`, error);
+          return { ok: false as const };
+        });
+
+      const warnings: string[] = [];
+      let resolvePlayer: PlayerResolver | undefined;
 
       try {
         const playersIndex = await getSleeperPlayersIndex(env, config.sport);
@@ -49,12 +74,25 @@ export function createGetTransactionsHandler(config: SleeperSportConfig): Handle
       } catch (error) {
         console.error('[handleGetTransactions] Failed to get player index for enrichment:', error);
         resolvePlayer = undefined;
+        warnings.push(SLEEPER_PLAYER_ENRICHMENT_WARNING);
       }
 
       const rows = await fetchSleeperTransactionsByWeeks(league_id, weeks, resolvePlayer);
       const filtered = rows
         .filter((txn) => !type || txn.type === type)
         .slice(0, maxCount);
+
+      let teams: Record<string, string> | undefined;
+      let teamOwners: Record<string, string> | undefined;
+      const rosterTeamsResult = await rosterTeamsPromise;
+      if (rosterTeamsResult.ok) {
+        teams = rosterTeamsResult.value.teams;
+        teamOwners = rosterTeamsResult.value.teamOwners;
+      } else {
+        warnings.push(TEAMS_UNAVAILABLE_WARNING);
+      }
+
+      const transactions = attachTeamNames(filtered, teams);
 
       return {
         success: true,
@@ -67,8 +105,11 @@ export function createGetTransactionsHandler(config: SleeperSportConfig): Handle
             mode: explicitWeek !== undefined ? 'explicit_week' : 'recent_two_weeks',
             weeks,
           },
-          count: filtered.length,
-          transactions: filtered,
+          count: transactions.length,
+          transactions,
+          ...(teams ? { teams } : {}),
+          ...(teamOwners ? { teamOwners } : {}),
+          ...(warnings.length > 0 ? { warnings } : {}),
         },
       };
     } catch (error) {

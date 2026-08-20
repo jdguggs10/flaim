@@ -3,13 +3,21 @@ import { getSleeperPlayersIndex, type SleeperPlayerRecord } from './sleeper-play
 
 const SLEEPER_EMPTY_LINEUP_SLOT_ID = '0';
 
+// Tool-neutral: emitted by get_roster/get_matchups (via
+// loadSleeperPlayersIndexForEnrichment) and by get_transactions, which
+// resolves the player index separately — "player entries" covers both
+// without naming only two of the three tools that use it.
 export const SLEEPER_PLAYER_ENRICHMENT_WARNING =
-  'PLAYER_ENRICHMENT_UNAVAILABLE: Sleeper player index unavailable; roster/matchup player entries include id only.';
+  'PLAYER_ENRICHMENT_UNAVAILABLE: Sleeper player index unavailable; player entries include id only.';
 
 export interface SleeperUserDirectoryEntry {
   displayName: string;
-  /** Manager-set fantasy team name (users[].metadata.team_name). Absent when never set — never fabricated. */
-  teamName?: string;
+  /**
+   * Fantasy team name as Sleeper displays it: the manager-set
+   * users[].metadata.team_name when present, otherwise Sleeper's own default
+   * "Team <display name>" (which is what league members see in the app).
+   */
+  teamName: string;
 }
 
 export interface SleeperPlayerEntry {
@@ -28,18 +36,22 @@ function asNonEmptyString(value: unknown): string | undefined {
 }
 
 /**
- * Maps Sleeper league users by user_id to their display name and, when the
- * manager set one, their custom fantasy team name. Sleeper only exposes a
- * team name via users[].metadata.team_name; unlike ESPN/Yahoo, most leagues
- * never set it, so teamName is commonly absent — never fabricate a "Team X"
- * fallback.
+ * Maps Sleeper league users by user_id to their display name and fantasy team
+ * name. Sleeper only exposes a manager-set team name via
+ * users[].metadata.team_name; when it is unset, Sleeper's own app displays
+ * "Team <display name>" (confirmed by users), so that is what teamName falls
+ * back to — the value league members actually see, not an invention.
  */
+export function sleeperDefaultTeamName(displayName: string): string {
+  return `Team ${displayName}`;
+}
+
 export function buildUserDirectory(users: SleeperLeagueUser[]): Map<string, SleeperUserDirectoryEntry> {
   const directory = new Map<string, SleeperUserDirectoryEntry>();
   for (const user of users) {
     directory.set(user.user_id, {
       displayName: user.display_name,
-      teamName: asNonEmptyString(user.metadata?.team_name),
+      teamName: asNonEmptyString(user.metadata?.team_name) ?? sleeperDefaultTeamName(user.display_name),
     });
   }
   return directory;

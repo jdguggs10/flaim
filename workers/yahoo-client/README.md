@@ -16,6 +16,8 @@ Consolidates all Yahoo Fantasy API interactions for multiple sports into a singl
 
 Yahoo's roster resource is sport-sensitive: `;week=` is valid for football only, while baseball/basketball/hockey take `;date=YYYY-MM-DD`. The handler consumes the normalized snapshot request from the gateway and emits the sport-correct selector (or none for the current roster); a wrong selector fails closed with a corrective `INVALID_ROSTER_SNAPSHOT_SELECTOR` error instead of sending a malformed Yahoo request. Responses carry a `snapshot` block identifying current vs `week` vs `date` coverage.
 
+Player entries omit `team` and `status` on any historical (`week`/`date`) snapshot, and the response adds `limitations: { playerProTeamAvailable: false }` (FLA-278). Yahoo's roster player object exposes `editorial_team_abbr`/`status` as the player's CURRENT club and CURRENT status only — there is no historical value in this payload for a past week/date, so a player traded or whose status changed since would otherwise show present-day facts mislabeled as historical. Current-roster entries are unaffected.
+
 ## Architecture
 
 ```

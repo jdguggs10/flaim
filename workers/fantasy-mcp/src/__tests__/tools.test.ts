@@ -703,7 +703,15 @@ describe('fantasy-mcp tools', () => {
       },
     } as unknown as Env;
 
-    const result = await tool!.handler({ platforms: ['espn'] }, env, 'Bearer user-token');
+    const result = await tool!.handler(
+      { platforms: ['espn'] },
+      env,
+      'Bearer user-token',
+      undefined,
+      undefined,
+      undefined,
+      'https://fantasy-mcp-preview.gerrygugger.workers.dev/mcp'
+    );
     const challenge = (result._meta?.['mcp/www_authenticate'] as string[] | undefined)?.[0];
 
     expect(result.isError).toBe(true);
@@ -717,6 +725,7 @@ describe('fantasy-mcp tools', () => {
     // ChatGPT requires BOTH error and error_description present to trigger consent UI.
     expect(challenge).toContain('error="insufficient_scope"');
     expect(challenge).toContain('error_description="mcp:write scope is required to refresh leagues"');
+    expect(challenge).toContain('resource_metadata="https://fantasy-mcp-preview.gerrygugger.workers.dev/.well-known/oauth-protected-resource"');
     expect(challenge).not.toContain('invalid_token');
   });
 
@@ -766,13 +775,22 @@ describe('fantasy-mcp tools', () => {
       },
     } as unknown as Env;
 
-    const result = await tool!.handler({ platforms: ['espn'] }, env, 'Bearer user-token');
+    const result = await tool!.handler(
+      { platforms: ['espn'] },
+      env,
+      'Bearer user-token',
+      undefined,
+      undefined,
+      undefined,
+      'https://fantasy-mcp-preview.gerrygugger.workers.dev/mcp'
+    );
     const challenge = (result._meta?.['mcp/www_authenticate'] as string[] | undefined)?.[0];
 
     expect(result.isError).toBe(true);
     expect(result.content[0]?.text).toContain('AUTH_FAILED');
     expect(challenge).toContain('error="invalid_token"');
     expect(challenge).toContain('scope="mcp:write"');
+    expect(challenge).toContain('resource_metadata="https://fantasy-mcp-preview.gerrygugger.workers.dev/.well-known/oauth-protected-resource"');
     expect(challenge).not.toContain('insufficient_scope');
   });
 
@@ -2408,11 +2426,21 @@ describe('auth error _meta', () => {
       },
     } as unknown as Env;
 
-    const result = await tool!.handler({}, env, 'Bearer bad-token');
+    const result = await tool!.handler(
+      {},
+      env,
+      'Bearer bad-token',
+      undefined,
+      undefined,
+      undefined,
+      'https://fantasy-mcp-preview.gerrygugger.workers.dev/mcp'
+    );
     expect(result.isError).toBe(true);
     expect(result._meta).toBeDefined();
     expect(result._meta?.['mcp/www_authenticate']).toBeDefined();
     expect(Array.isArray(result._meta?.['mcp/www_authenticate'])).toBe(true);
+    const challenge = (result._meta?.['mcp/www_authenticate'] as string[])[0];
+    expect(challenge).toContain('resource_metadata="https://fantasy-mcp-preview.gerrygugger.workers.dev/.well-known/oauth-protected-resource"');
   });
 
   it('mcpAuthError includes correct resource_metadata URL, required scope, and invalid_token error', () => {

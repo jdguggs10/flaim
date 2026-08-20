@@ -5,6 +5,7 @@ import { espnFetch, handleEspnError, requireCredentials } from '../../shared/esp
 import { assertTransactionsSeasonSupported, executeEspnTransactionOperation } from '../../shared/espn-transactions';
 import { getEspnPlayersIndex } from '../../shared/espn-players-cache';
 import { fetchLeagueOwnershipMap, enrichPlayerWithOwnership } from '../../shared/league-ownership';
+import { buildRosterLimitations, currentClubAndInjuryFields } from '../../shared/roster-entry';
 import { extractErrorCode, malformedRosterSnapshotError, resolveRosterSnapshotFromParams, rosterSnapshotUnsupportedError, toSnapshotMetadata } from '@flaim/worker-shared';
 import { resolveScoringPeriodForDate } from '../../shared/scoring-period';
 import {
@@ -452,8 +453,11 @@ async function handleGetRoster(
         position: getPositionName(player?.defaultPositionId || 0),
         eligiblePositions: transformEligiblePositions(player?.eligibleSlots || []),
         lineupSlot: getLineupSlotName(entry.lineupSlotId ?? 0),
-        proTeam: getProTeamAbbrev(player?.proTeamId || 0),
-        injuryStatus: player?.injuryStatus ? getInjuryStatus(player.injuryStatus) : undefined,
+        ...currentClubAndInjuryFields(
+          snapshot,
+          getProTeamAbbrev(player?.proTeamId || 0),
+          player?.injuryStatus ? getInjuryStatus(player.injuryStatus) : undefined
+        ),
         percentOwned: player?.ownership?.percentOwned,
         percentStarted: player?.ownership?.percentStarted,
         stats: currentStats?.stats ? transformStats(currentStats.stats) : undefined,
@@ -467,6 +471,7 @@ async function handleGetRoster(
     const acquisitionMetadataMissing = snapshot.type !== 'current'
       && roster.length > 0
       && roster.some((entry) => entry.acquisitionType == null || entry.acquisitionDate == null);
+    const limitations = buildRosterLimitations(snapshot, acquisitionMetadataMissing);
 
     return {
       success: true,
@@ -478,7 +483,7 @@ async function handleGetRoster(
           : team.name || `Team ${team.id}`,
         ownerName,
         snapshot: toSnapshotMetadata(snapshot, { providerScoringPeriodId }),
-        ...(acquisitionMetadataMissing ? { limitations: { acquisitionMetadataAvailable: false } } : {}),
+        ...(limitations ? { limitations } : {}),
         roster
       }
     };
