@@ -71,7 +71,8 @@ export interface UnifiedTool {
     authHeader?: string,
     correlationId?: string,
     evalRunId?: string,
-    evalTraceId?: string
+    evalTraceId?: string,
+    resource?: string
   ) => Promise<McpToolResponse>;
 }
 
@@ -602,7 +603,8 @@ async function refreshUserLeagues(
   authHeader?: string,
   correlationId?: string,
   evalRunId?: string,
-  evalTraceId?: string
+  evalTraceId?: string,
+  resource: string = 'https://api.flaim.app/mcp'
 ): Promise<McpToolResponse> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 15000);
@@ -630,7 +632,7 @@ async function refreshUserLeagues(
     clearTimeout(timeoutId);
 
     if (response.status === 401) {
-      return mcpAuthError('https://api.flaim.app/mcp', 'mcp:write');
+      return mcpAuthError(resource, 'mcp:write');
     }
 
     const contentType = response.headers.get('Content-Type') || '';
@@ -650,7 +652,7 @@ async function refreshUserLeagues(
       // missing/invalid internal service token (an ops misconfiguration, not a
       // user-consent problem); that and any other 403 fall through to the plain
       // structured tool error below with NO auth challenge.
-      return mcpInsufficientScopeError('https://api.flaim.app/mcp', 'mcp:write');
+      return mcpInsufficientScopeError(resource, 'mcp:write');
     }
 
     if (!response.ok) {
@@ -1121,7 +1123,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       description:
         "Use this alone for user-specific connection, league, or account-status questions, and use it as the first data tool when a request needs the user's connected fantasy league data. Do not call for Flaim capability, permission, or generic setup how-to questions, and do not call for generic coding, scraping, weather, travel, betting, sports news, or other requests that do not need connected league data. For a normal selected-league request, call this once before any other data tool. For an explicit refresh request, call refresh_leagues first and then call this tool after success; call it again even if it ran earlier in the chat. Returns the user's full league landscape: allLeagues (all active leagues), defaultLeagues (per-sport defaults), and defaultLeague (populated only when a single league exists or defaultSport matches). For vague singular prompts, use defaultLeague when present; otherwise use the relevant sport entry in defaultLeagues. For explicit plural or comparative prompts (each, all, compare, across leagues/platforms), enumerate every matching league in allLeagues and call the target tool once per league. For a selected active league, call get_league_info next before the requested league-specific data tool. Skip get_league_info only when answering from session data alone or branching to get_ancient_history. season_year always represents the start year of the season. Read-only.",
       inputSchema: {},
-      handler: async (_args, env, authHeader, correlationId, evalRunId, evalTraceId) => {
+      handler: async (_args, env, authHeader, correlationId, evalRunId, evalTraceId, resource = 'https://api.flaim.app/mcp') => {
         return withToolLogging(correlationId, 'get_user_session', 'session', async () => {
         try {
           // Fetch ESPN first so auth failures return immediately.
@@ -1129,7 +1131,7 @@ export function getUnifiedTools(): UnifiedTool[] {
 
           // Check ESPN auth errors
           if (espnData.status === 401 || espnData.status === 403) {
-            return mcpAuthError('https://api.flaim.app/mcp');
+            return mcpAuthError(resource);
           }
 
           // Fetch Yahoo + Sleeper in parallel after ESPN auth passes.
@@ -1389,7 +1391,7 @@ export function getUnifiedTools(): UnifiedTool[] {
           .optional()
           .describe('Optional platforms to refresh. Omit to refresh every connected platform.'),
       },
-      handler: async (args, env, authHeader, correlationId, evalRunId, evalTraceId) => {
+      handler: async (args, env, authHeader, correlationId, evalRunId, evalTraceId, resource) => {
         const rawPlatforms = Array.isArray(args.platforms) ? args.platforms : undefined;
         const invalidPlatforms = rawPlatforms
           ?.filter((platform) => platform !== 'espn' && platform !== 'yahoo' && platform !== 'sleeper');
@@ -1401,7 +1403,7 @@ export function getUnifiedTools(): UnifiedTool[] {
         }
         const platforms = rawPlatforms as Platform[] | undefined;
         return withToolLogging(correlationId, 'refresh_leagues', `platforms=${platforms?.join(',') || 'all'}`, async () => {
-          return refreshUserLeagues(env, platforms, authHeader, correlationId, evalRunId, evalTraceId);
+          return refreshUserLeagues(env, platforms, authHeader, correlationId, evalRunId, evalTraceId, resource);
         }, evalRunId, evalTraceId);
       },
     },

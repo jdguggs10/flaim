@@ -43,9 +43,25 @@ const API_ROBOTS_TXT = [
 // client is actually connecting to, so metadata responses derive their origin
 // from the incoming request. This keeps the preview lane's workers.dev origin
 // self-describing while production (api.flaim.app) stays byte-identical.
-// The authorization server stays https://api.flaim.app on every lane by design.
 function requestOrigin(c: Context<{ Bindings: Env }>): string {
   return new URL(c.req.raw.url).origin;
+}
+
+// The authorization server is a DIFFERENT worker than this gateway, so it
+// can't be derived from requestOrigin() — it must be keyed off which lane
+// this gateway is deployed in. Prod and preview keep fully isolated
+// Supabase projects (docs/ARCHITECTURE.md Preview Environment), so a token
+// minted by production's auth-worker can never introspect against preview's
+// — advertising api.flaim.app as preview's authorization server sent every
+// real OAuth client's handshake through prod while the resulting token was
+// presented to (and rejected by) the preview gateway (FLA-281). Preview is a
+// single fixed worker shared across all open PRs, not per-branch, so its
+// origin is a stable literal — same precedent as auth-worker's own
+// getBaseUrl() preview branch.
+function authorizationServerOrigin(env: Env): string {
+  return env.ENVIRONMENT === 'preview'
+    ? 'https://auth-worker-preview.gerrygugger.workers.dev'
+    : 'https://api.flaim.app';
 }
 
 function buildApiRootMetadata(origin: string) {
@@ -185,10 +201,10 @@ app.get('/fantasy/robots.txt', () => robotsResponse());
 
 // OAuth Protected Resource Metadata (RFC 9728)
 // Path-sensitive: /mcp is canonical, /fantasy/mcp is legacy alias
-function buildOauthMetadata(resource: string) {
+function buildOauthMetadata(resource: string, env: Env) {
   return {
     resource,
-    authorization_servers: ['https://api.flaim.app'],
+    authorization_servers: [authorizationServerOrigin(env)],
     bearer_methods_supported: ['header'],
     scopes_supported: ['mcp:read', 'mcp:write'],
   };
@@ -212,11 +228,11 @@ app.get('/.well-known/openai-apps-challenge', (c) => {
 });
 
 app.get('/.well-known/oauth-protected-resource', (c) => {
-  return c.json(buildOauthMetadata(`${requestOrigin(c)}/mcp`), 200, { 'Cache-Control': 'public, max-age=3600' });
+  return c.json(buildOauthMetadata(`${requestOrigin(c)}/mcp`, c.env), 200, { 'Cache-Control': 'public, max-age=3600' });
 });
 
 app.get('/fantasy/.well-known/oauth-protected-resource', (c) => {
-  return c.json(buildOauthMetadata(`${requestOrigin(c)}/fantasy/mcp`), 200, { 'Cache-Control': 'public, max-age=3600' });
+  return c.json(buildOauthMetadata(`${requestOrigin(c)}/fantasy/mcp`, c.env), 200, { 'Cache-Control': 'public, max-age=3600' });
 });
 
 async function proxyAuthorizationServerMetadata(c: Context<{ Bindings: Env }>): Promise<Response> {
@@ -321,13 +337,19 @@ async function handleMcpRequest(c: Context<{ Bindings: Env }>): Promise<Response
   // Scope pre-flight: resolve token scope via auth-worker introspection.
   // Origin-derived to match what the metadata routes advertise (RFC 9728), so
   // preview-lane tokens minted for the workers.dev resource introspect cleanly.
-  // Post-introspection in-band tool errors (mcp/server.ts, mcp/tools.ts) keep
-  // canonical production strings deliberately — they fire only after auth
-  // succeeds, so on preview they are cosmetic.
+  // Preview's request-derived value is also used for post-introspection
+  // in-band auth/scope challenges so a consent upgrade cannot redirect
+  // discovery back to production.
   const { origin, pathname } = new URL(c.req.raw.url);
   const expectedResource = pathname.startsWith('/fantasy/')
     ? `${origin}/fantasy/mcp`
     : `${origin}/mcp`;
+  // Preserve the frozen production in-band challenge exactly, including the
+  // legacy /fantasy/mcp alias behavior. Preview needs the request-derived
+  // resource so reauthorization stays inside its isolated lane.
+  const inBandAuthResource = c.env.ENVIRONMENT === 'preview'
+    ? expectedResource
+    : 'https://api.flaim.app/mcp';
 
   let tokenScope: string | undefined;
   // Captured for usage analytics (FLA-156) — passed into the MCP server context.
@@ -451,6 +473,7 @@ async function handleMcpRequest(c: Context<{ Bindings: Env }>): Promise<Response
     env: c.env,
     authHeader: authHeader ?? null,
     tokenScope,
+    resource: inBandAuthResource,
     correlationId,
     evalRunId,
     evalTraceId,
@@ -517,7 +540,7 @@ app.get('/mcp/.well-known/oauth-authorization-server/*', async (c) => {
 });
 
 app.get('/mcp/.well-known/oauth-protected-resource', (c) => {
-  return c.json(buildOauthMetadata(`${requestOrigin(c)}/mcp`), 200, {
+  return c.json(buildOauthMetadata(`${requestOrigin(c)}/mcp`, c.env), 200, {
     'Cache-Control': 'public, max-age=3600',
   });
 });
@@ -526,7 +549,7 @@ app.get('/mcp/.well-known/oauth-protected-resource/*', (c) => {
   const origin = requestOrigin(c);
   const path = new URL(c.req.raw.url).pathname;
   const suffix = path.slice('/mcp/.well-known/oauth-protected-resource'.length);
-  return c.json(buildOauthMetadata(buildResourceFromSuffix(origin, `${origin}/mcp`, suffix)), 200, {
+  return c.json(buildOauthMetadata(buildResourceFromSuffix(origin, `${origin}/mcp`, suffix), c.env), 200, {
     'Cache-Control': 'public, max-age=3600',
   });
 });
@@ -555,7 +578,7 @@ app.get('/fantasy/mcp/.well-known/oauth-authorization-server/*', async (c) => {
 });
 
 app.get('/fantasy/mcp/.well-known/oauth-protected-resource', (c) => {
-  return c.json(buildOauthMetadata(`${requestOrigin(c)}/fantasy/mcp`), 200, {
+  return c.json(buildOauthMetadata(`${requestOrigin(c)}/fantasy/mcp`, c.env), 200, {
     'Cache-Control': 'public, max-age=3600',
   });
 });
@@ -564,7 +587,7 @@ app.get('/fantasy/mcp/.well-known/oauth-protected-resource/*', (c) => {
   const origin = requestOrigin(c);
   const path = new URL(c.req.raw.url).pathname;
   const suffix = path.slice('/fantasy/mcp/.well-known/oauth-protected-resource'.length);
-  return c.json(buildOauthMetadata(buildResourceFromSuffix(origin, `${origin}/fantasy/mcp`, suffix)), 200, {
+  return c.json(buildOauthMetadata(buildResourceFromSuffix(origin, `${origin}/fantasy/mcp`, suffix), c.env), 200, {
     'Cache-Control': 'public, max-age=3600',
   });
 });
