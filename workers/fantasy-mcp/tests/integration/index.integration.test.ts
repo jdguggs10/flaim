@@ -1581,6 +1581,42 @@ describe('origin-derived OAuth protected-resource metadata (FLA-217)', () => {
     expect(authFetch).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps preview in-band scope-upgrade discovery on the preview resource', async () => {
+    const authFetch = vi.fn(async () =>
+      new Response(
+        JSON.stringify({ valid: true, userId: 'user-123', scope: 'mcp:read', authType: 'oauth' }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      )
+    );
+    const env = { ...buildEnv(authFetch), ENVIRONMENT: 'preview' };
+    const request = new Request(`${PREVIEW_ORIGIN}/mcp`, {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer read-only-token',
+        'Content-Type': 'application/json',
+        Accept: 'application/json, text/event-stream',
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 'preview-scope-upgrade',
+        method: 'tools/call',
+        params: { name: 'refresh_leagues', arguments: {} },
+      }),
+    });
+
+    const response = await app.fetch(request, env, mockExecutionContext());
+    expect(response.status).toBe(200);
+    const text = await response.text();
+    const data = text.split(/\r?\n/).filter((line) => line.startsWith('data:')).map((line) => line.slice(5).trim()).join('\n').trim();
+    const parsed = JSON.parse(data) as { result?: { _meta?: Record<string, unknown> } };
+    const challenge = (parsed.result?._meta?.['mcp/www_authenticate'] as string[] | undefined)?.[0];
+    expect(challenge).toContain(
+      'resource_metadata="https://fantasy-mcp-preview.gerrygugger.workers.dev/.well-known/oauth-protected-resource"'
+    );
+    expect(challenge).toContain('error="insufficient_scope"');
+    expect(challenge).not.toContain('https://api.flaim.app');
+  });
+
   it('derives resource from a workers.dev origin and advertises the preview authorization server (FLA-281)', async () => {
     const authFetch = vi.fn();
     // Real preview deploys always run with ENVIRONMENT=preview (wrangler.jsonc

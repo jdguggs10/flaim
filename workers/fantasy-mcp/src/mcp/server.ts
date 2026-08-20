@@ -16,6 +16,7 @@ export interface McpContext {
   env: Env;
   authHeader: string | null;
   tokenScope?: string;
+  resource: string;
   correlationId?: string;
   evalRunId?: string;
   evalTraceId?: string;
@@ -59,6 +60,7 @@ export function createFantasyMcpServer(ctx: McpContext): McpServer {
     env,
     authHeader,
     tokenScope,
+    resource,
     correlationId,
     evalRunId,
     evalTraceId,
@@ -177,7 +179,7 @@ export function createFantasyMcpServer(ctx: McpContext): McpServer {
         // is insufficient_scope, not invalid_token.
         if (!hasRequiredScope(tokenScope, tool.requiredScope)) {
           safeEmit(ctx, tool.name, args, 'denied', null);
-          return mcpInsufficientScopeError('https://api.flaim.app/mcp', tool.requiredScope);
+          return mcpInsufficientScopeError(resource, tool.requiredScope);
         }
 
         // Time and emit exactly one event per tool call. Default status 'error'
@@ -188,7 +190,7 @@ export function createFantasyMcpServer(ctx: McpContext): McpServer {
         let status: 'ok' | 'error' = 'error';
         let result: McpToolResponse | undefined;
         try {
-          result = await tool.handler(args, env, authHeader || undefined, correlationId, evalRunId, evalTraceId);
+          result = await tool.handler(args, env, authHeader || undefined, correlationId, evalRunId, evalTraceId, resource);
           status = result?.isError === true ? 'error' : 'ok';
           return result;
         } finally {
