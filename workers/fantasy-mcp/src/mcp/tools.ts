@@ -187,6 +187,10 @@ const GET_USER_SESSION_OUTPUT_SCHEMA = looseObject({
   allLeagues: z.array(leagueEntrySchema),
   warnings: z.array(z.string()).optional(),
   instructions: z.string(),
+  // Present only when the user's hide_league_widget preference is true
+  // (FLA-277, Mechanism B). Omitted entirely otherwise; documentation only —
+  // this schema stays passthrough, so this does not constrain the wire shape.
+  widget: looseObject({ hidden: z.boolean().optional() }).optional(),
 });
 
 const REFRESH_LEAGUES_OUTPUT_SCHEMA = looseObject({
@@ -1243,6 +1247,7 @@ export function getUnifiedTools(): UnifiedTool[] {
             defaultBaseball?: LeagueDefault | null;
             defaultBasketball?: LeagueDefault | null;
             defaultHockey?: LeagueDefault | null;
+            hideLeagueWidget?: boolean;
           }
           let preferences: Preferences = {};
           try {
@@ -1359,6 +1364,14 @@ export function getUnifiedTools(): UnifiedTool[] {
             allLeagues: leagues,
             warnings: warnings.length > 0 ? warnings : undefined,
             instructions: sessionMessage,
+            // Mechanism B (FLA-277): a conditional spread omits the `widget`
+            // property entirely unless the user's hide_league_widget
+            // preference is true — an own property set to `undefined` would
+            // still be `'widget' in structuredContent`, even though
+            // JSON.stringify drops it from the text payload. Existing
+            // fixtures and clients that don't know about this key stay
+            // byte-identical either way.
+            ...(preferences.hideLeagueWidget === true ? { widget: { hidden: true as const } } : {}),
           };
           return {
             content: [{ type: 'text' as const, text: JSON.stringify(sessionData, null, 2) }],

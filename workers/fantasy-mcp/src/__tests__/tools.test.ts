@@ -214,11 +214,20 @@ describe('fantasy-mcp tools', () => {
     // The frozen v1/v2 body must never pick the footer up.
     expect(LEGACY_USER_SESSION_WIDGET_HTML).not.toContain('Fantasy data provided by');
     expect(LEGACY_USER_SESSION_WIDGET_HTML).not.toContain('class="attribution"');
-    // v3 differs from the frozen body only by the injected CSS and footer.
+    // v3 differs from the frozen body only by the injected CSS, footer, and
+    // hidden-widget render + size-report guards (FLA-277).
     expect(
       USER_SESSION_WIDGET_HTML
         .replace('  .attribution {\n    padding: 8px 16px 10px;\n    border-top: 1px solid rgba(13, 13, 13, 0.05);\n    font-size: 11px;\n    line-height: 14px;\n    text-align: center;\n    color: #9ca3af;\n  }\n  .attribution a {\n    color: inherit;\n    text-decoration: underline;\n  }\n', '')
         .replace('\n  <div class="attribution">Fantasy data provided by <a href="https://sports.yahoo.com/fantasy/" target="_blank" rel="noopener">Yahoo Fantasy</a>, ESPN, and Sleeper.</div>', '')
+        .replace(
+          "  function sendSizeChanged() {\n    if (widgetHidden) {\n      sendZeroSize();\n      return;\n    }",
+          '  function sendSizeChanged() {',
+        )
+        .replace(
+          "  var widgetHidden = false;\n\n  function sendZeroSize() {\n    postToParent({\n      jsonrpc: '2.0',\n      method: 'ui/notifications/size-changed',\n      params: {\n        width: 0,\n        height: 0,\n      },\n    });\n  }\n\n  function render(data) {\n    widgetHidden = !!(data && data.widget && data.widget.hidden === true);\n    if (widgetHidden) {\n      var widgetEl = document.querySelector('.widget');\n      if (widgetEl) widgetEl.style.display = 'none';\n      hasRendered = true;\n      sendZeroSize();\n      return;\n    }\n    var visibleWidgetEl = document.querySelector('.widget');\n    if (visibleWidgetEl) visibleWidgetEl.style.display = '';",
+          '  function render(data) {',
+        )
     ).toBe(LEGACY_USER_SESSION_WIDGET_HTML);
   });
 
@@ -1605,6 +1614,108 @@ describe('fantasy-mcp tools', () => {
     expect(tool!.description).toContain('league_owner_name');
     expect(tool!.description).toContain('get_league_info');
     expect(tool!.description).toContain('get_roster');
+  });
+
+  // FLA-277 Mechanism B: get_user_session surfaces widget.hidden from the
+  // user's hide_league_widget preference, without changing which leagues are
+  // returned to the model.
+  it('get_user_session: hideLeagueWidget preference true → structuredContent.widget.hidden is true', async () => {
+    const tool = getUnifiedTools().find((t) => t.name === 'get_user_session');
+    expect(tool).toBeTruthy();
+
+    const oneLeague = [
+      { platform: 'espn', sport: 'football', leagueId: 'fb1', leagueName: 'Gridiron', teamId: 't1', seasonYear: 2025 },
+    ];
+
+    const env = {
+      INTERNAL_SERVICE_TOKEN: 'internal-secret',
+      AUTH_WORKER: {
+        fetch: async (req: Request) => {
+          const url = new URL(req.url);
+          if (url.pathname === '/internal/leagues') {
+            return new Response(JSON.stringify({ leagues: oneLeague }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          if (url.pathname === '/internal/user/preferences') {
+            return new Response(JSON.stringify({ defaultSport: null, hideLeagueWidget: true }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          return new Response(JSON.stringify({ leagues: [] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        },
+      },
+    } as unknown as Env;
+
+    const result = await tool!.handler({}, env, 'Bearer test-token');
+    const payload = JSON.parse(result.content[0].text) as {
+      widget?: { hidden?: boolean };
+      allLeagues: unknown[];
+    };
+    // Leagues themselves are still returned to the model — only the visual
+    // widget is suppressed.
+    expect(payload.allLeagues.length).toBe(1);
+    expect(payload.widget).toEqual({ hidden: true });
+    expect((result.structuredContent as { widget?: { hidden?: boolean } }).widget).toEqual({ hidden: true });
+  });
+
+  it('get_user_session: hideLeagueWidget preference false → no widget key in the payload', async () => {
+    const tool = getUnifiedTools().find((t) => t.name === 'get_user_session');
+    expect(tool).toBeTruthy();
+
+    const env = {
+      INTERNAL_SERVICE_TOKEN: 'internal-secret',
+      AUTH_WORKER: {
+        fetch: async (req: Request) => {
+          const url = new URL(req.url);
+          if (url.pathname === '/internal/user/preferences') {
+            return new Response(JSON.stringify({ defaultSport: null, hideLeagueWidget: false }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          return new Response(JSON.stringify({ leagues: [] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        },
+      },
+    } as unknown as Env;
+
+    const result = await tool!.handler({}, env, 'Bearer test-token');
+    const payload = JSON.parse(result.content[0].text) as Record<string, unknown>;
+    expect('widget' in payload).toBe(false);
+    expect(result.structuredContent).toBeDefined();
+    // A conditional spread must omit the property entirely — not merely set
+    // it to `undefined`, which would still satisfy the `in` operator even
+    // though JSON.stringify happens to drop it from the text payload.
+    expect('widget' in (result.structuredContent as Record<string, unknown>)).toBe(false);
+  });
+
+  it('get_user_session: hideLeagueWidget absent from preferences → no widget key in the payload', async () => {
+    const tool = getUnifiedTools().find((t) => t.name === 'get_user_session');
+    expect(tool).toBeTruthy();
+
+    const env = {
+      INTERNAL_SERVICE_TOKEN: 'internal-secret',
+      AUTH_WORKER: {
+        fetch: async () =>
+          new Response(JSON.stringify({ leagues: [] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+      },
+    } as unknown as Env;
+
+    const result = await tool!.handler({}, env, 'Bearer test-token');
+    const payload = JSON.parse(result.content[0].text) as Record<string, unknown>;
+    expect('widget' in payload).toBe(false);
+    expect('widget' in (result.structuredContent as Record<string, unknown>)).toBe(false);
   });
 
   // Test A: multi-league, no defaultSport pref → defaultLeague should be null

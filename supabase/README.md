@@ -190,6 +190,22 @@ arrays rather than invented provider rows.
 Applying this migration to any hosted database, and activating either cron
 phase, remain separate approval gates.
 
+## League widget preference
+
+The forward migration
+`20260818170000_add_hide_league_widget_preference.sql` adds
+`hide_league_widget` (`boolean not null default false`) to
+`user_preferences`. When true, the fantasy-mcp gateway's `get_user_session`
+tool tells the ChatGPT/Claude league widget to render nothing; the leagues
+themselves are still returned to the model. This migration creates no other
+table, index, function, or cron job. Applying it to any hosted database
+remains a separate approval gate. Because the Worker auto-deploys independently
+of hosted migration application, `EspnSupabaseStorage.getUserPreferences()`
+detects a missing-column error on `hide_league_widget` and retries with the
+pre-migration column list (returning `hideLeagueWidget: false` and preserving
+every other saved preference) so migration order and deploy order never have
+to be coordinated.
+
 ## Demo platform contract
 
 The forward migration `20260805112500_add_platform_to_demo_tables.sql` makes
