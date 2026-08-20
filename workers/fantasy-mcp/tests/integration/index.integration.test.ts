@@ -1490,6 +1490,9 @@ describe('fantasy-mcp gateway integration', () => {
 // itself. Meanwhile OpenAI scanned the production metadata surface, so every
 // api.flaim.app response body is pinned byte-for-byte below — fields, ordering,
 // and values must not drift.
+// FLA-281: `authorization_servers` is lane-aware too (keyed off ENVIRONMENT,
+// not requestOrigin — see authorizationServerOrigin() in index.ts), since
+// prod and preview auth-worker instances keep isolated token stores.
 describe('origin-derived OAuth protected-resource metadata (FLA-217)', () => {
   const PROD_ORIGIN = 'https://api.flaim.app';
   const PREVIEW_ORIGIN = 'https://fantasy-mcp-preview.gerrygugger.workers.dev';
@@ -1578,9 +1581,13 @@ describe('origin-derived OAuth protected-resource metadata (FLA-217)', () => {
     expect(authFetch).toHaveBeenCalledTimes(1);
   });
 
-  it('derives resource from a workers.dev origin while keeping the production authorization server', async () => {
+  it('derives resource from a workers.dev origin and advertises the preview authorization server (FLA-281)', async () => {
     const authFetch = vi.fn();
-    const env = buildEnv(authFetch);
+    // Real preview deploys always run with ENVIRONMENT=preview (wrangler.jsonc
+    // env.preview.vars), which is what the fix keys off — not the request
+    // origin, since the authorization server is a different worker than this
+    // gateway and can't be derived from requestOrigin().
+    const env = { ...buildEnv(authFetch), ENVIRONMENT: 'preview' };
 
     const cases: Array<[path: string, expectedResource: string]> = [
       ['/.well-known/oauth-protected-resource', `${PREVIEW_ORIGIN}/mcp`],
@@ -1605,12 +1612,29 @@ describe('origin-derived OAuth protected-resource metadata (FLA-217)', () => {
         scopes_supported?: string[];
       };
       expect(payload.resource, path).toBe(expectedResource);
-      // Deliberately NOT origin-derived: all lanes share the production
-      // authorization server (preview mints nothing of its own).
-      expect(payload.authorization_servers, path).toEqual(['https://api.flaim.app']);
+      // FLA-281: prod and preview keep fully isolated Supabase projects, so a
+      // token minted by production's auth-worker can never introspect
+      // against preview's. The preview lane must advertise its own
+      // auth-worker as the authorization server, not production's.
+      expect(payload.authorization_servers, path).toEqual(['https://auth-worker-preview.gerrygugger.workers.dev']);
       expect(payload.bearer_methods_supported, path).toEqual(['header']);
       expect(payload.scopes_supported, path).toEqual(['mcp:read', 'mcp:write']);
     }
+    expect(authFetch).not.toHaveBeenCalled();
+  });
+
+  it('keeps the production authorization server when ENVIRONMENT is unset (prod default)', async () => {
+    const authFetch = vi.fn();
+    const env = buildEnv(authFetch);
+
+    const response = await app.fetch(
+      new Request(`${PROD_ORIGIN}/.well-known/oauth-protected-resource`),
+      env,
+      mockExecutionContext()
+    );
+    expect(response.status).toBe(200);
+    const payload = await response.json() as { authorization_servers?: string[] };
+    expect(payload.authorization_servers).toEqual(['https://api.flaim.app']);
     expect(authFetch).not.toHaveBeenCalled();
   });
 

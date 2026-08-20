@@ -687,6 +687,34 @@ describe('oauth-handlers', () => {
     expect(body.code_challenge_methods_supported).toEqual(['S256']);
   });
 
+  it('advertises production api.flaim.app URLs when ENVIRONMENT is prod', async () => {
+    const res = handleMetadataDiscovery({ ...env, ENVIRONMENT: 'prod', NODE_ENV: 'production' }, {});
+    const body = await res.json() as {
+      issuer: string;
+      authorization_endpoint: string;
+      token_endpoint: string;
+      registration_endpoint: string;
+    };
+    expect(body.issuer).toBe('https://api.flaim.app');
+    expect(body.authorization_endpoint).toBe('https://api.flaim.app/auth/authorize');
+    expect(body.token_endpoint).toBe('https://api.flaim.app/auth/token');
+    expect(body.registration_endpoint).toBe('https://api.flaim.app/auth/register');
+  });
+
+  it('advertises its own preview origin, not production, when ENVIRONMENT is preview (FLA-281)', async () => {
+    const res = handleMetadataDiscovery({ ...env, ENVIRONMENT: 'preview' }, {});
+    const body = await res.json() as {
+      issuer: string;
+      authorization_endpoint: string;
+      token_endpoint: string;
+      registration_endpoint: string;
+    };
+    expect(body.issuer).toBe('https://auth-worker-preview.gerrygugger.workers.dev');
+    expect(body.authorization_endpoint).toBe('https://auth-worker-preview.gerrygugger.workers.dev/auth/authorize');
+    expect(body.token_endpoint).toBe('https://auth-worker-preview.gerrygugger.workers.dev/auth/token');
+    expect(body.registration_endpoint).toBe('https://auth-worker-preview.gerrygugger.workers.dev/auth/register');
+  });
+
   it('returns a token response for valid authorization_code exchange', async () => {
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
     const exchangeCodeForToken = vi.fn().mockResolvedValue({

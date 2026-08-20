@@ -35,6 +35,7 @@ import {
   handleRevokeAll,
   handleRevokeSingle,
   validateOAuthToken,
+  getBaseUrl,
   OAuthEnv,
 } from './oauth-handlers';
 import { UsageStorage, type UsageEvent } from './usage-storage';
@@ -391,6 +392,13 @@ function logAuthWorkerFailure(
 // AUTH HELPERS
 // =============================================================================
 
+// Preview is a single fixed worker shared across all open PRs (not
+// per-branch — see docs/ARCHITECTURE.md Preview Environment), so its own
+// workers.dev origin is a stable literal. Introduced for the static-API-key
+// resource allowlist (FLA-217); reused for preview-aware .well-known
+// protected-resource metadata (FLA-281).
+const FANTASY_MCP_PREVIEW_ORIGIN = 'https://fantasy-mcp-preview.gerrygugger.workers.dev';
+
 interface AuthResult {
   userId: string | null;
   error?: string;
@@ -447,8 +455,8 @@ async function getVerifiedUserId(
       'https://api.flaim.app/fantasy/mcp',
       // FLA-217: the preview gateway announces its own workers.dev origin per
       // RFC 9728, so static keys must remain usable on the preview lane too.
-      'https://fantasy-mcp-preview.gerrygugger.workers.dev/mcp',
-      'https://fantasy-mcp-preview.gerrygugger.workers.dev/fantasy/mcp',
+      `${FANTASY_MCP_PREVIEW_ORIGIN}/mcp`,
+      `${FANTASY_MCP_PREVIEW_ORIGIN}/fantasy/mcp`,
     ];
     const staticKeys = [
       {
@@ -739,11 +747,18 @@ api.get('/.well-known/oauth-authorization-server/*', (c) => {
 });
 
 // Protected Resource Metadata (RFC 9728) for the MCP gateway
-// Served here because auth-worker owns /.well-known/* on the custom domain
+// Served here because auth-worker owns /.well-known/* on the custom domain.
+// Prod shares api.flaim.app with the gateway, so `resource` and
+// `authorization_servers` are the same origin there; preview's auth-worker
+// and gateway are separate workers.dev hosts, so the two must diverge
+// (FLA-281) — resource points at the preview gateway, authorization_servers
+// at this worker's own preview origin via getBaseUrl().
 api.get('/.well-known/oauth-protected-resource', (c) => {
+  const env = c.env as OAuthEnv;
+  const resourceBase = env.ENVIRONMENT === 'preview' ? FANTASY_MCP_PREVIEW_ORIGIN : 'https://api.flaim.app';
   return c.json({
-    resource: 'https://api.flaim.app/mcp',
-    authorization_servers: ['https://api.flaim.app'],
+    resource: `${resourceBase}/mcp`,
+    authorization_servers: [getBaseUrl(env)],
     bearer_methods_supported: ['header'],
     scopes_supported: ['mcp:read', 'mcp:write'],
   }, 200, {
@@ -753,14 +768,16 @@ api.get('/.well-known/oauth-protected-resource', (c) => {
 
 // Resource-specific protected metadata alias used by some MCP clients.
 api.get('/.well-known/oauth-protected-resource/*', (c) => {
+  const env = c.env as OAuthEnv;
   const path = new URL(c.req.raw.url).pathname;
   const prefix = '/.well-known/oauth-protected-resource';
   const suffix = path.slice(prefix.length);
   const resourcePath = suffix && suffix !== '/' ? (suffix.startsWith('/') ? suffix : `/${suffix}`) : '/mcp';
+  const resourceBase = env.ENVIRONMENT === 'preview' ? FANTASY_MCP_PREVIEW_ORIGIN : 'https://api.flaim.app';
 
   return c.json({
-    resource: `https://api.flaim.app${resourcePath}`,
-    authorization_servers: ['https://api.flaim.app'],
+    resource: `${resourceBase}${resourcePath}`,
+    authorization_servers: [getBaseUrl(env)],
     bearer_methods_supported: ['header'],
     scopes_supported: ['mcp:read', 'mcp:write'],
   }, 200, {
