@@ -1,6 +1,6 @@
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { CHATGPT_APP_URL } from "@/lib/product-links";
+import { CHATGPT_APP_URL, CLAUDE_CONNECTOR_DIRECTORY_URL } from "@/lib/product-links";
 import { ExternalLink } from "lucide-react";
 
 interface StepConnectAIProps {
@@ -28,18 +28,31 @@ export function StepConnectAI({
           </div>
 
           <p className="mb-4 text-sm text-muted-foreground">
-            Flaim Fantasy is available in ChatGPT. Connect your leagues first,
-            then use ChatGPT for read-only fantasy analysis.
+            Flaim Fantasy is available in ChatGPT and Claude. Connect your
+            leagues first, then use your AI app for read-only fantasy
+            analysis.
           </p>
         </>
       ) : null}
 
-      <Button asChild size="sm" className="w-full">
-        <a href={CHATGPT_APP_URL} target="_blank" rel="noopener noreferrer">
-          Open Flaim in ChatGPT
-          <ExternalLink className="ml-2 h-4 w-4" />
-        </a>
-      </Button>
+      <div className="grid grid-cols-2 gap-2">
+        <Button asChild size="sm" className="w-full">
+          <a href={CHATGPT_APP_URL} target="_blank" rel="noopener noreferrer">
+            Open in ChatGPT
+            <ExternalLink className="ml-2 h-4 w-4" />
+          </a>
+        </Button>
+        <Button asChild size="sm" variant="outline" className="w-full">
+          <a
+            href={CLAUDE_CONNECTOR_DIRECTORY_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Open in Claude
+            <ExternalLink className="ml-2 h-4 w-4" />
+          </a>
+        </Button>
+      </div>
     </div>
   );
 
