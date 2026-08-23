@@ -90,6 +90,33 @@ function buildLeagueInfoResponse(): unknown {
   };
 }
 
+// FLA-284: shape verified against a real captured /league/{key}/settings
+// fixture (hkyplyr/yahoo_fantasy_ex) — settings is a nested array (not a
+// flat object), with a second element carrying unrelated per-week metadata.
+function buildLeagueSettingsResponse(): unknown {
+  return {
+    fantasy_content: {
+      league: [
+        { league_key: '449.l.123', name: 'Test League' },
+        {
+          settings: [
+            {
+              draft_type: 'live',
+              is_auction_draft: '0',
+              can_trade_draft_picks: '1',
+              trade_end_date: '2025-11-20',
+              trade_ratify_type: 'commish',
+              trade_reject_time: '2',
+              uses_faab: '1',
+            },
+            { min_games_played: '' },
+          ],
+        },
+      ],
+    },
+  };
+}
+
 function buildStandingsResponse(): unknown {
   return {
     fantasy_content: {
@@ -141,6 +168,58 @@ function buildRosterResponse(): unknown {
                   ],
                 },
                 count: 1,
+              },
+            },
+          },
+        },
+      ],
+    },
+  };
+}
+
+// FLA-284: two roster players — one carrying Yahoo's undocumented is_keeper
+// field (present-on-every-player-once-keeper-league shape verified against
+// a real captured NHL roster fixture, folkg/auto-coach), one without it.
+function buildRosterResponseWithKeeper(statusKept: unknown): unknown {
+  return {
+    fantasy_content: {
+      team: [
+        [
+          { team_key: '449.l.123.t.1' },
+          { name: 'Team A' },
+        ],
+        {
+          roster: {
+            '0': {
+              players: {
+                '0': {
+                  player: [
+                    [{
+                      player_key: 'p101',
+                      player_id: '101',
+                      name: { full: 'Kept Player' },
+                      editorial_team_abbr: 'PIT',
+                      display_position: 'C',
+                      status: 'healthy',
+                      is_keeper: { status: statusKept, cost: false, kept: statusKept },
+                    }],
+                    { selected_position: [{}, { position: 'C' }] },
+                  ],
+                },
+                '1': {
+                  player: [
+                    [{
+                      player_key: 'p102',
+                      player_id: '102',
+                      name: { full: 'No Keeper Field' },
+                      editorial_team_abbr: 'PIT',
+                      display_position: 'LW',
+                      status: 'healthy',
+                    }],
+                    { selected_position: [{}, { position: 'LW' }] },
+                  ],
+                },
+                count: 2,
               },
             },
           },
@@ -211,6 +290,35 @@ function buildFreeAgentsResponse(): unknown {
   };
 }
 
+// FLA-284: same is_keeper shape as the roster fixture, on a free-agent entry.
+function buildFreeAgentsResponseWithKeeper(): unknown {
+  return {
+    fantasy_content: {
+      league: [
+        { league_key: '449.l.123', name: 'Test League' },
+        {
+          players: {
+            '0': {
+              player: [
+                [{
+                  player_key: 'fa101',
+                  player_id: '201',
+                  name: { full: 'Free Agent Keeper' },
+                  editorial_team_abbr: 'BOS',
+                  display_position: 'OF',
+                  is_keeper: { status: true, cost: false, kept: true },
+                }],
+                { ownership: { percent_owned: '12.5' } },
+              ],
+            },
+            count: 1,
+          },
+        },
+      ],
+    },
+  };
+}
+
 function buildFreeAgentsPageResponse(players: Array<{
   player_key: string;
   player_id: string;
@@ -259,7 +367,15 @@ describe('yahoo cross-sport handler characterization tests', () => {
 
   describe('get_league_info', () => {
     it.each(scenarios)('$label returns consistent league metadata shape', async ({ sport, handlers }) => {
-      fetchMock.mockResolvedValue(jsonResponse(buildLeagueInfoResponse()));
+      // get_league_info now fetches /teams then /settings sequentially
+      // (FLA-284) — mockImplementation returns a fresh Response per call so
+      // the second read doesn't hit a consumed body ("Body has already been
+      // used") from mockResolvedValue's single shared Response. This request
+      // doesn't exercise settings fields, so serving /teams-shaped JSON to
+      // both calls is fine: extractLeagueSettings finds no settings key and
+      // the handler degrades to its warning path, which these assertions
+      // don't check.
+      fetchMock.mockImplementation(async () => jsonResponse(buildLeagueInfoResponse()));
 
       const params: ToolParams = { sport, league_id: '449.l.123', season_year: 2025 };
       const result = await handlers.get_league_info({} as never, params, 'Bearer x', `cid-${sport}`);
@@ -282,7 +398,15 @@ describe('yahoo cross-sport handler characterization tests', () => {
     });
 
     it('baseball includes startDate and endDate', async () => {
-      fetchMock.mockResolvedValue(jsonResponse(buildLeagueInfoResponse()));
+      // get_league_info now fetches /teams then /settings sequentially
+      // (FLA-284) — mockImplementation returns a fresh Response per call so
+      // the second read doesn't hit a consumed body ("Body has already been
+      // used") from mockResolvedValue's single shared Response. This request
+      // doesn't exercise settings fields, so serving /teams-shaped JSON to
+      // both calls is fine: extractLeagueSettings finds no settings key and
+      // the handler degrades to its warning path, which these assertions
+      // don't check.
+      fetchMock.mockImplementation(async () => jsonResponse(buildLeagueInfoResponse()));
 
       const params: ToolParams = { sport: 'baseball', league_id: '449.l.123', season_year: 2025 };
       const result = await baseballHandlers.get_league_info({} as never, params, 'Bearer x', 'cid');
@@ -294,7 +418,15 @@ describe('yahoo cross-sport handler characterization tests', () => {
     });
 
     it.each(scenarios.filter(s => s.label !== 'baseball'))('$label does not include startDate/endDate', async ({ sport, handlers }) => {
-      fetchMock.mockResolvedValue(jsonResponse(buildLeagueInfoResponse()));
+      // get_league_info now fetches /teams then /settings sequentially
+      // (FLA-284) — mockImplementation returns a fresh Response per call so
+      // the second read doesn't hit a consumed body ("Body has already been
+      // used") from mockResolvedValue's single shared Response. This request
+      // doesn't exercise settings fields, so serving /teams-shaped JSON to
+      // both calls is fine: extractLeagueSettings finds no settings key and
+      // the handler degrades to its warning path, which these assertions
+      // don't check.
+      fetchMock.mockImplementation(async () => jsonResponse(buildLeagueInfoResponse()));
 
       const params: ToolParams = { sport, league_id: '449.l.123', season_year: 2025 };
       const result = await handlers.get_league_info({} as never, params, 'Bearer x', 'cid');
@@ -312,6 +444,122 @@ describe('yahoo cross-sport handler characterization tests', () => {
       expect(result.success).toBe(false);
       expect(result.code).toBe('MISSING_PARAM');
       expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    // FLA-284: the new /settings fetch, keyed off the request path so the
+    // /teams and /settings calls resolve to genuinely distinct Response
+    // objects (unlike the single-mockResolvedValue scenarios above) — this
+    // is what a real deployment does, and it exercises the merge logic
+    // end-to-end rather than only the degrade path.
+    it('includes draft/trade settings fields when the /settings fetch succeeds', async () => {
+      fetchMock.mockImplementation(async (path: unknown) => {
+        const p = path as string;
+        return jsonResponse(p.includes('/settings') ? buildLeagueSettingsResponse() : buildLeagueInfoResponse());
+      });
+
+      const params: ToolParams = { sport: 'football', league_id: '449.l.123', season_year: 2025 };
+      const result = await footballHandlers.get_league_info({} as never, params, 'Bearer x', 'cid');
+
+      expect(result.success).toBe(true);
+      const data = result.data as Record<string, unknown>;
+      // Pre-existing /teams-derived fields are unaffected.
+      expect(data.leagueKey).toBe('449.l.123');
+      expect((data.teams as unknown[]).length).toBe(2);
+      // New settings-derived fields, normalized from Yahoo's string flags.
+      expect(data.draftType).toBe('live');
+      expect(data.isAuctionDraft).toBe(false);
+      expect(data.canTradeDraftPicks).toBe(true);
+      expect(data.tradeEndDate).toBe('2025-11-20');
+      expect(data.tradeRatifyType).toBe('commish');
+      expect(data.tradeRejectTime).toBe(2);
+      expect(data.usesFaab).toBe(true);
+      expect(data.warning).toBeUndefined();
+    });
+
+    it('degrades gracefully (teams-only + warning, no throw) when /settings returns a non-2xx response', async () => {
+      fetchMock.mockImplementation(async (path: unknown) => {
+        const p = path as string;
+        if (p.includes('/settings')) {
+          return new Response('Not Found', { status: 404 });
+        }
+        return jsonResponse(buildLeagueInfoResponse());
+      });
+
+      const params: ToolParams = { sport: 'football', league_id: '449.l.123', season_year: 2025 };
+      const result = await footballHandlers.get_league_info({} as never, params, 'Bearer x', 'cid');
+
+      expect(result.success).toBe(true);
+      const data = result.data as Record<string, unknown>;
+      expect(data.leagueKey).toBe('449.l.123');
+      expect((data.teams as unknown[]).length).toBe(2);
+      expect(data.draftType).toBeUndefined();
+      expect(data.isAuctionDraft).toBeUndefined();
+      expect(data.warning).toBe(
+        'LEAGUE_SETTINGS_UNAVAILABLE: could not fetch league settings; draft/trade config fields omitted.'
+      );
+    });
+
+    it('degrades gracefully (teams-only + warning, no throw) when the /settings fetch itself rejects', async () => {
+      fetchMock.mockImplementation(async (path: unknown) => {
+        const p = path as string;
+        if (p.includes('/settings')) {
+          throw new Error('network boom');
+        }
+        return jsonResponse(buildLeagueInfoResponse());
+      });
+
+      const params: ToolParams = { sport: 'football', league_id: '449.l.123', season_year: 2025 };
+      const result = await footballHandlers.get_league_info({} as never, params, 'Bearer x', 'cid');
+
+      expect(result.success).toBe(true);
+      const data = result.data as Record<string, unknown>;
+      expect(data.leagueKey).toBe('449.l.123');
+      expect((data.teams as unknown[]).length).toBe(2);
+      expect(data.warning).toContain('LEAGUE_SETTINGS_UNAVAILABLE');
+    });
+
+    it('degrades gracefully (teams-only + warning, no throw) when /settings returns an unexpected shape', async () => {
+      fetchMock.mockImplementation(async (path: unknown) => {
+        const p = path as string;
+        if (p.includes('/settings')) {
+          return jsonResponse({ fantasy_content: { league: [{ league_key: '449.l.123' }, { settings: 'not-an-array-or-object' }] } });
+        }
+        return jsonResponse(buildLeagueInfoResponse());
+      });
+
+      const params: ToolParams = { sport: 'football', league_id: '449.l.123', season_year: 2025 };
+      const result = await footballHandlers.get_league_info({} as never, params, 'Bearer x', 'cid');
+
+      expect(result.success).toBe(true);
+      const data = result.data as Record<string, unknown>;
+      expect(data.leagueKey).toBe('449.l.123');
+      expect(data.draftType).toBeUndefined();
+      expect(data.warning).toContain('LEAGUE_SETTINGS_UNAVAILABLE');
+    });
+
+    it('surfaces isProLeague from the /teams response metadata without an extra fetch', async () => {
+      const responseWithProLeague = {
+        fantasy_content: {
+          league: [
+            { league_key: '449.l.123', name: 'Test League', is_pro_league: '1' },
+            { teams: { count: 0 } },
+          ],
+        },
+      };
+      fetchMock.mockImplementation(async (path: unknown) => {
+        const p = path as string;
+        if (p.includes('/settings')) {
+          return new Response('Not Found', { status: 404 });
+        }
+        return jsonResponse(responseWithProLeague);
+      });
+
+      const params: ToolParams = { sport: 'football', league_id: '449.l.123', season_year: 2025 };
+      const result = await footballHandlers.get_league_info({} as never, params, 'Bearer x', 'cid');
+
+      expect(result.success).toBe(true);
+      const data = result.data as Record<string, unknown>;
+      expect(data.isProLeague).toBe(true);
     });
   });
 
@@ -532,6 +780,33 @@ describe('yahoo cross-sport handler characterization tests', () => {
 
       expect(result.success).toBe(false);
       expect(result.code).toBe('MISSING_PARAM');
+    });
+
+    // FLA-284: Yahoo's undocumented is_keeper field, reverse-engineered from
+    // real captures. Emitted as normalized booleans only for players that
+    // carry the field at all — absent entirely for a non-keeper league.
+    it.each(scenarios)('$label includes normalized isKeeper only for the player that has is_keeper', async ({ sport, handlers }) => {
+      fetchMock.mockResolvedValue(jsonResponse(buildRosterResponseWithKeeper(true)));
+
+      const params: ToolParams = { sport, league_id: '449.l.123', season_year: 2025, team_id: '449.l.123.t.1' };
+      const result = await handlers.get_roster({} as never, params, 'Bearer x', `cid-${sport}`);
+
+      expect(result.success).toBe(true);
+      const data = result.data as { players: Array<Record<string, unknown>> };
+      expect(data.players).toHaveLength(2);
+      expect(data.players[0]).toMatchObject({ isKeeper: { status: true, cost: false, kept: true } });
+      expect(data.players[1]).not.toHaveProperty('isKeeper');
+    });
+
+    it('football normalizes "0"/"1" string is_keeper flags to booleans', async () => {
+      fetchMock.mockResolvedValue(jsonResponse(buildRosterResponseWithKeeper('0')));
+
+      const params: ToolParams = { sport: 'football', league_id: '449.l.123', season_year: 2025, team_id: '449.l.123.t.1' };
+      const result = await footballHandlers.get_roster({} as never, params, 'Bearer x', 'cid');
+
+      expect(result.success).toBe(true);
+      const data = result.data as { players: Array<Record<string, unknown>> };
+      expect(data.players[0].isKeeper).toEqual({ status: false, cost: false, kept: false });
     });
   });
 
@@ -840,6 +1115,29 @@ describe('yahoo cross-sport handler characterization tests', () => {
         expect.objectContaining({ playerId: '202', name: 'Ben Bat', percentOwned: 99 }),
         expect.objectContaining({ playerId: '203', name: 'Carl Curve', percentOwned: 88.5 }),
       ]);
+    });
+
+    // FLA-284: same is_keeper passthrough as get_roster.
+    it.each(scenarios)('$label includes normalized isKeeper when a free agent has is_keeper', async ({ sport, handlers }) => {
+      fetchMock.mockResolvedValue(jsonResponse(buildFreeAgentsResponseWithKeeper()));
+
+      const params: ToolParams = { sport, league_id: '449.l.123', season_year: 2025 };
+      const result = await handlers.get_free_agents({} as never, params, 'Bearer x', `cid-${sport}`);
+
+      expect(result.success).toBe(true);
+      const data = result.data as { freeAgents: Array<Record<string, unknown>> };
+      expect(data.freeAgents[0]).toMatchObject({ isKeeper: { status: true, cost: false, kept: true } });
+    });
+
+    it.each(scenarios)('$label omits isKeeper when a free agent has no is_keeper field', async ({ sport, handlers }) => {
+      fetchMock.mockResolvedValue(jsonResponse(buildFreeAgentsResponse()));
+
+      const params: ToolParams = { sport, league_id: '449.l.123', season_year: 2025 };
+      const result = await handlers.get_free_agents({} as never, params, 'Bearer x', `cid-${sport}`);
+
+      expect(result.success).toBe(true);
+      const data = result.data as { freeAgents: Array<Record<string, unknown>> };
+      expect(data.freeAgents[0]).not.toHaveProperty('isKeeper');
     });
   });
 });

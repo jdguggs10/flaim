@@ -35,19 +35,23 @@ export function currentClubAndInjuryFields(
  * the existing `acquisitionMetadataAvailable` flag with
  * `playerProTeamAvailable: false` on every historical snapshot (the pro
  * team/injury omission above applies unconditionally to historical rosters,
- * not just when acquisition metadata happens to be missing). Returns
- * `undefined` for a current snapshot so callers can spread it away with
- * `...(limitations ? { limitations } : {})`.
+ * not just when acquisition metadata happens to be missing), and likewise
+ * `keeperValueFutureAvailable: false` (FLA-284): `keeperValueFuture` is next
+ * season's keeper cost, which isn't fixed as of a past week/date, so it is
+ * withheld on every historical snapshot regardless of whether ESPN happened
+ * to report a value. Returns `undefined` for a current snapshot so callers
+ * can spread it away with `...(limitations ? { limitations } : {})`.
  */
 export function buildRosterLimitations(
   snapshot: RosterSnapshot,
   acquisitionMetadataMissing: boolean
-): { acquisitionMetadataAvailable?: false; playerProTeamAvailable: false } | undefined {
+): { acquisitionMetadataAvailable?: false; playerProTeamAvailable: false; keeperValueFutureAvailable: false } | undefined {
   if (snapshot.type === 'current') {
     return undefined;
   }
   return {
     ...(acquisitionMetadataMissing ? { acquisitionMetadataAvailable: false as const } : {}),
     playerProTeamAvailable: false,
+    keeperValueFutureAvailable: false,
   };
 }

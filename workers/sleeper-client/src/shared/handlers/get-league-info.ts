@@ -1,5 +1,5 @@
 import type { HandlerFn } from './types';
-import type { SleeperLeague, SleeperLeagueUser, SleeperRoster, SleeperTradedPick } from '../../types';
+import type { SleeperLeague, SleeperLeagueSettings, SleeperLeagueUser, SleeperRoster, SleeperTradedPick } from '../../types';
 import { ErrorCode } from '@flaim/worker-shared';
 import { sleeperFetch, handleSleeperError } from '../sleeper-api';
 import { toExecuteErrorResponse } from './utils';
@@ -16,6 +16,58 @@ const PICK_OWNERSHIP_NOTE =
   'Only picks that changed hands are listed; every roster owns its own untraded picks. Sleeper allows pick trading for ' +
   'the current season plus up to three future seasons depending on league settings — treat seasons beyond those listed ' +
   'as unverified. Use draftRounds for rounds per future draft.';
+
+const LEAGUE_FORMAT_TYPE_NOTE =
+  'Undocumented Sleeper convention: 0/1/2 are commonly redraft/keeper/dynasty; 3 observed as guillotine. Do not rely on it alone.';
+
+interface LeagueFormatTaxi {
+  slots?: number;
+  years?: number;
+  allowVets?: boolean;
+  deadline?: number;
+}
+
+interface LeagueFormat {
+  typeRaw: number | null;
+  typeNote: string;
+  maxKeepers?: number;
+  tradeDeadlineWeek?: number;
+  tradesDisabled: boolean;
+  pickTrading: boolean;
+  taxi?: LeagueFormatTaxi;
+  reserveSlots?: number;
+}
+
+/**
+ * Builds get_league_info's leagueFormat block from the league's raw
+ * `settings`. Returns undefined when settings itself is absent (nothing to
+ * report); once settings exists, leagueFormat is always included even if
+ * every keeper/taxi-specific field within it is unset — typeRaw falls back
+ * to null and tradesDisabled/pickTrading fall back to false rather than
+ * being omitted, since those two are always derivable (`=== 1`) once
+ * settings is present.
+ */
+function buildLeagueFormat(settings: SleeperLeagueSettings | undefined): LeagueFormat | undefined {
+  if (!settings) return undefined;
+
+  const taxi: LeagueFormatTaxi = {
+    ...(typeof settings.taxi_slots === 'number' ? { slots: settings.taxi_slots } : {}),
+    ...(typeof settings.taxi_years === 'number' ? { years: settings.taxi_years } : {}),
+    ...(settings.taxi_allow_vets !== undefined ? { allowVets: settings.taxi_allow_vets === 1 } : {}),
+    ...(typeof settings.taxi_deadline === 'number' ? { deadline: settings.taxi_deadline } : {}),
+  };
+
+  return {
+    typeRaw: typeof settings.type === 'number' ? settings.type : null,
+    typeNote: LEAGUE_FORMAT_TYPE_NOTE,
+    ...(typeof settings.max_keepers === 'number' ? { maxKeepers: settings.max_keepers } : {}),
+    ...(typeof settings.trade_deadline === 'number' ? { tradeDeadlineWeek: settings.trade_deadline } : {}),
+    tradesDisabled: settings.disable_trades === 1,
+    pickTrading: settings.pick_trading === 1,
+    ...(Object.keys(taxi).length > 0 ? { taxi } : {}),
+    ...(typeof settings.reserve_slots === 'number' ? { reserveSlots: settings.reserve_slots } : {}),
+  };
+}
 
 /**
  * Runtime-validates one raw traded_picks entry before it is trusted. Sleeper
@@ -133,6 +185,12 @@ export function createGetLeagueInfoHandler(): HandlerFn {
           ownerId: roster.owner_id,
           ownerName: entry?.displayName || undefined,
           teamName: entry?.teamName,
+          // Raw player_id[] — name resolution is deferred (see FLA-284 plan
+          // decision #3): this handler doesn't otherwise load the KV-backed
+          // player index, and no live example of a populated keepers[] has
+          // been observed yet to justify the extra fetch. null vs [] is
+          // preserved exactly as Sleeper sends it (both observed live).
+          keepers: roster.keepers,
         };
       });
 
@@ -183,6 +241,7 @@ export function createGetLeagueInfoHandler(): HandlerFn {
       }
 
       const draftRounds = typeof league.settings?.draft_rounds === 'number' ? league.settings.draft_rounds : undefined;
+      const leagueFormat = buildLeagueFormat(league.settings);
 
       return {
         success: true,
@@ -197,6 +256,7 @@ export function createGetLeagueInfoHandler(): HandlerFn {
           scoringSettings: league.scoring_settings,
           previousLeagueId: league.previous_league_id,
           draftId: league.draft_id,
+          ...(leagueFormat ? { leagueFormat } : {}),
           teams,
           draftRounds,
           // pickOwnershipNote is suppressed when tradedPicks is empty — an

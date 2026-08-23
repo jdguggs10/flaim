@@ -483,6 +483,130 @@ describe('sleeper cross-sport handler characterization tests', () => {
       expect(tradedPicks[0].originalOwnerName).toBeUndefined();
       expect(tradedPicks[0].originalTeamName).toBeUndefined();
     });
+
+    it.each(scenarios)('$label surfaces leagueFormat for a guillotine-style keeper league and passes through raw keeper ids, preserving null/[] semantics', async ({ sport, handlers }) => {
+      // Modeled on the live-probed "Get Chopped" league (FLA-284 research brief).
+      mockFetch
+        .mockResolvedValueOnce(jsonResponse({
+          league_id: '999',
+          name: 'Get Chopped',
+          sport: 'nfl',
+          season: '2026',
+          status: 'pre_draft',
+          total_rosters: 3,
+          roster_positions: ['QB', 'RB'],
+          scoring_settings: { pass_yd: 0.04 },
+          previous_league_id: null,
+          draft_id: 'draft_gc',
+          settings: {
+            type: 3,
+            max_keepers: 1,
+            disable_trades: 1,
+            pick_trading: 0,
+            trade_deadline: 11,
+            taxi_slots: 0,
+            draft_rounds: 3,
+          },
+        }))
+        .mockResolvedValueOnce(jsonResponse([
+          { roster_id: 1, owner_id: 'u1', players: [], starters: [], reserve: [], keepers: [], settings: { wins: 0, losses: 0, ties: 0, fpts: 0 } },
+          { roster_id: 2, owner_id: 'u2', players: [], starters: [], reserve: [], keepers: null, settings: { wins: 0, losses: 0, ties: 0, fpts: 0 } },
+          { roster_id: 3, owner_id: 'u3', players: [], starters: [], reserve: [], keepers: ['4046', '6794'], settings: { wins: 0, losses: 0, ties: 0, fpts: 0 } },
+        ]))
+        .mockResolvedValueOnce(jsonResponse([
+          { user_id: 'u1', display_name: 'Alice', avatar: null },
+          { user_id: 'u2', display_name: 'Bob', avatar: null },
+          { user_id: 'u3', display_name: 'Cara', avatar: null },
+        ]))
+        .mockResolvedValueOnce(jsonResponse([]));
+
+      const params: ToolParams = { sport, league_id: '999', season_year: 2026 };
+      const result = await handlers.get_league_info({} as never, params);
+
+      expect(result.success).toBe(true);
+      const data = result.data as Record<string, unknown>;
+      expect(data.leagueFormat).toEqual({
+        typeRaw: 3,
+        typeNote: expect.stringContaining('guillotine'),
+        maxKeepers: 1,
+        tradeDeadlineWeek: 11,
+        tradesDisabled: true,
+        pickTrading: false,
+        taxi: { slots: 0 },
+      });
+      expect(data.draftRounds).toBe(3);
+
+      const teams = data.teams as Array<{ rosterId: number; keepers?: string[] | null }>;
+      expect(teams[0].keepers).toEqual([]);
+      expect(teams[1].keepers).toBeNull();
+      expect(teams[2].keepers).toEqual(['4046', '6794']);
+    });
+
+    it.each(scenarios)('$label surfaces leagueFormat for a dynasty-style league with pick trading, taxi years, and reserve slots', async ({ sport, handlers }) => {
+      mockFetch
+        .mockResolvedValueOnce(jsonResponse({
+          league_id: '888',
+          name: 'Dynasty Vault',
+          sport: 'nfl',
+          season: '2026',
+          status: 'in_season',
+          total_rosters: 2,
+          roster_positions: ['QB', 'RB'],
+          scoring_settings: { pass_yd: 0.04 },
+          previous_league_id: null,
+          draft_id: 'draft_dv',
+          settings: {
+            type: 2,
+            pick_trading: 1,
+            taxi_slots: 3,
+            taxi_years: 1,
+            reserve_slots: 6,
+            trade_deadline: 13,
+          },
+        }))
+        .mockResolvedValueOnce(jsonResponse([
+          { roster_id: 1, owner_id: 'u1', players: [], starters: [], reserve: [], settings: { wins: 0, losses: 0, ties: 0, fpts: 0 } },
+          { roster_id: 2, owner_id: 'u2', players: [], starters: [], reserve: [], settings: { wins: 0, losses: 0, ties: 0, fpts: 0 } },
+        ]))
+        .mockResolvedValueOnce(jsonResponse([
+          { user_id: 'u1', display_name: 'Alice', avatar: null },
+          { user_id: 'u2', display_name: 'Bob', avatar: null },
+        ]))
+        .mockResolvedValueOnce(jsonResponse([]));
+
+      const params: ToolParams = { sport, league_id: '888', season_year: 2026 };
+      const result = await handlers.get_league_info({} as never, params);
+
+      expect(result.success).toBe(true);
+      const data = result.data as Record<string, unknown>;
+      expect(data.leagueFormat).toEqual({
+        typeRaw: 2,
+        typeNote: expect.stringContaining('guillotine'),
+        tradeDeadlineWeek: 13,
+        tradesDisabled: false,
+        pickTrading: true,
+        taxi: { slots: 3, years: 1 },
+        reserveSlots: 6,
+      });
+
+      // Neither roster fixture included a keepers field — omitted, not
+      // coerced to null or [].
+      const teams = data.teams as Array<{ keepers?: string[] | null }>;
+      expect(teams[0].keepers).toBeUndefined();
+      expect(teams[1].keepers).toBeUndefined();
+    });
+
+    it.each(scenarios)('$label omits leagueFormat when the league has no settings', async ({ sport, handlers }) => {
+      mockBaseLeagueFetches();
+      mockFetch.mockResolvedValueOnce(jsonResponse([]));
+
+      const params: ToolParams = { sport, league_id: '12345', season_year: 2025 };
+      const result = await handlers.get_league_info({} as never, params);
+
+      expect(result.success).toBe(true);
+      const data = result.data as Record<string, unknown>;
+      expect(data.leagueFormat).toBeUndefined();
+    });
   });
 
   describe('get_standings', () => {
@@ -631,6 +755,80 @@ describe('sleeper cross-sport handler characterization tests', () => {
       const data = result.data as { rosters: Array<Record<string, unknown>> };
       expect(data.rosters).toHaveLength(1);
       expect(data.rosters[0]).toMatchObject({ rosterId: 1, playerCount: 2, starterCount: 1, teamName: 'The Waiver Wire Wizards' });
+    });
+
+    it.each(scenarios)('$label resolves keepers via the player index, like starters/bench/reserve/taxi', async ({ sport, handlers }) => {
+      mockFetch
+        .mockResolvedValueOnce(jsonResponse([
+          {
+            roster_id: 1, owner_id: 'u1',
+            players: ['p1'], starters: [], reserve: [], taxi: [], keepers: ['p1', 'ghost999'],
+            settings: { wins: 0, losses: 0, ties: 0, fpts: 0 },
+          },
+        ]))
+        .mockResolvedValueOnce(jsonResponse([
+          { user_id: 'u1', display_name: 'Alice', avatar: null },
+        ]));
+
+      const env = playersCacheEnv([
+        { player_id: 'p1', full_name: 'Player One', position: 'QB', team: 'BUF' },
+      ]);
+      const params: ToolParams = { sport, league_id: '12345', season_year: 2025, team_id: '1' };
+      const result = await handlers.get_roster(env, params);
+
+      expect(result.success).toBe(true);
+      const data = result.data as Record<string, unknown>;
+      // p1 resolves like any other roster array entry; ghost999 (unknown to
+      // the index) falls back to an id-only entry rather than throwing.
+      expect(data.keepers).toEqual([
+        { id: 'p1', name: 'Player One', position: 'QB', team: 'BUF' },
+        { id: 'ghost999' },
+      ]);
+    });
+
+    it.each(scenarios)('$label preserves keepers null vs [] rather than collapsing to one shape', async ({ sport, handlers }) => {
+      const rosterFixture = (keepers: string[] | null) => [
+        {
+          roster_id: 1, owner_id: 'u1',
+          players: [], starters: [], reserve: [], taxi: [], keepers,
+          settings: { wins: 0, losses: 0, ties: 0, fpts: 0 },
+        },
+      ];
+      const usersFixture = [{ user_id: 'u1', display_name: 'Alice', avatar: null }];
+      const env = playersCacheEnv([]);
+      const params: ToolParams = { sport, league_id: '12345', season_year: 2025, team_id: '1' };
+
+      mockFetch
+        .mockResolvedValueOnce(jsonResponse(rosterFixture(null)))
+        .mockResolvedValueOnce(jsonResponse(usersFixture));
+      const nullResult = await handlers.get_roster(env, params);
+      expect((nullResult.data as Record<string, unknown>).keepers).toBeNull();
+
+      mockFetch
+        .mockResolvedValueOnce(jsonResponse(rosterFixture([])))
+        .mockResolvedValueOnce(jsonResponse(usersFixture));
+      const emptyResult = await handlers.get_roster(env, params);
+      expect((emptyResult.data as Record<string, unknown>).keepers).toEqual([]);
+    });
+
+    it.each(scenarios)('$label omits keepers when Sleeper does not include it on the roster', async ({ sport, handlers }) => {
+      mockFetch
+        .mockResolvedValueOnce(jsonResponse([
+          {
+            roster_id: 1, owner_id: 'u1',
+            players: [], starters: [], reserve: [], taxi: [],
+            settings: { wins: 0, losses: 0, ties: 0, fpts: 0 },
+          },
+        ]))
+        .mockResolvedValueOnce(jsonResponse([
+          { user_id: 'u1', display_name: 'Alice', avatar: null },
+        ]));
+
+      const params: ToolParams = { sport, league_id: '12345', season_year: 2025, team_id: '1' };
+      const result = await handlers.get_roster(playersCacheEnv([]), params);
+
+      expect(result.success).toBe(true);
+      expect((result.data as Record<string, unknown>).keepers).toBeUndefined();
     });
   });
 

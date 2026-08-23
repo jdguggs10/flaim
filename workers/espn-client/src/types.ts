@@ -50,6 +50,31 @@ export interface EspnLeagueSettings {
     playoffSeedingRule?: string;
     playoffMatchupPeriodLength?: number;
   };
+  /**
+   * Keeper/draft-format settings. `keeperCount`/`keeperCountFuture` are the
+   * per-team keeper caps for this season / next season; `keeperCount > 0`
+   * is the keeper-league signal (there is no separate `isKeeperLeague`
+   * flag from ESPN). `isTradingEnabled` toggles DRAFT-PICK trading, not
+   * in-season player trades (see tradeSettings for that). Verified live
+   * 2026-08-23 (research brief §7) on real ESPN keeper leagues.
+   */
+  draftSettings?: {
+    keeperCount?: number;
+    keeperCountFuture?: number;
+    keeperOrderType?: string; // 'TRADITIONAL' | 'END_OF_DRAFT' | 'SELECTED_ROUND'
+    keeperDeadlineDate?: number; // epoch ms
+    type?: string; // 'AUCTION' | 'SNAKE' | 'OFFLINE' (draft type)
+    auctionBudget?: number;
+    isTradingEnabled?: boolean; // draft-PICK trading toggle, not season trades
+  };
+  /** In-season player-trade rules (distinct from draftSettings.isTradingEnabled). */
+  tradeSettings?: {
+    deadlineDate?: number; // epoch ms
+    revisionHours?: number;
+    vetoVotesRequired?: number;
+    allowOutOfUniverse?: boolean;
+    max?: number;
+  };
 }
 
 export interface EspnTeam {
@@ -76,6 +101,16 @@ export interface EspnTeam {
   roster?: {
     entries?: EspnRosterEntry[];
   };
+  /**
+   * Keeper designations. `keeperPlayerIds` = players kept from last season
+   * into this season's draft (verified: equals the set of `keeper:true`
+   * draft picks). `futureKeeperPlayerIds` = next-season designations,
+   * observed populated only on the authenticated user's own team.
+   */
+  draftStrategy?: {
+    keeperPlayerIds?: number[];
+    futureKeeperPlayerIds?: number[];
+  };
 }
 
 export interface EspnTeamRecord {
@@ -89,6 +124,19 @@ export interface EspnTeamRecord {
 export interface EspnRosterEntry {
   playerPoolEntry?: {
     player?: EspnPlayer;
+    /**
+     * Keeper cost for THIS season (derived from last season's acquisition).
+     * 0 = no cost defined / not keeper-eligible. Unit follows
+     * draftSettings.type: AUCTION -> dollars, SNAKE/AUTOPICK -> draft round.
+     */
+    keeperValue?: number;
+    /**
+     * Keeper cost for NEXT season (= this season's draft/auction price).
+     * Follows the player through trades; reset to 0 when the player passes
+     * through free agency/waivers (observed on real league data, see
+     * research brief §7.3 — may be an ESPN default rather than universal).
+     */
+    keeperValueFuture?: number;
   };
   lineupSlotId?: number;
   acquisitionType?: string;

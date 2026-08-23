@@ -6,6 +6,7 @@ import { assertTransactionsSeasonSupported, executeEspnTransactionOperation } fr
 import { getEspnPlayersIndex } from '../../shared/espn-players-cache';
 import { fetchLeagueOwnershipMap, enrichPlayerWithOwnership } from '../../shared/league-ownership';
 import { buildRosterLimitations, currentClubAndInjuryFields } from '../../shared/roster-entry';
+import { epochMsToIso } from '../../shared/dates';
 import { extractErrorCode, malformedRosterSnapshotError, resolveRosterSnapshotFromParams, rosterSnapshotUnsupportedError, toSnapshotMetadata } from '@flaim/worker-shared';
 import { resolveScoringPeriodForDate } from '../../shared/scoring-period';
 import {
@@ -145,6 +146,12 @@ async function handleGetLeagueInfo(
         abbrev: team.abbrev,
         ownerName: hasOwners ? ownerNames[0] : undefined,
         owners: hasOwners ? ownerNames : undefined,
+        ...(team.draftStrategy?.keeperPlayerIds !== undefined
+          ? { keeperPlayerIds: team.draftStrategy.keeperPlayerIds }
+          : {}),
+        ...(team.draftStrategy?.futureKeeperPlayerIds !== undefined
+          ? { futureKeeperPlayerIds: team.draftStrategy.futureKeeperPlayerIds }
+          : {}),
       };
     });
 
@@ -179,6 +186,29 @@ async function handleGetLeagueInfo(
         schedule: {
           playoffSeedingRule: data.settings.scheduleSettings?.playoffSeedingRule,
           playoffMatchupPeriodLength: data.settings.scheduleSettings?.playoffMatchupPeriodLength
+        },
+        ...(data.settings.draftSettings?.keeperCount != null
+          ? {
+              keeperSettings: {
+                keeperCount: data.settings.draftSettings.keeperCount,
+                keeperCountFuture: data.settings.draftSettings.keeperCountFuture,
+                keeperOrderType: data.settings.draftSettings.keeperOrderType,
+                keeperDeadlineDate: epochMsToIso(data.settings.draftSettings.keeperDeadlineDate),
+              },
+              isKeeperLeague: data.settings.draftSettings.keeperCount > 0,
+            }
+          : {}),
+        draftSettings: {
+          type: data.settings.draftSettings?.type,
+          auctionBudget: data.settings.draftSettings?.auctionBudget,
+          pickTradingEnabled: data.settings.draftSettings?.isTradingEnabled,
+        },
+        tradeSettings: {
+          deadlineDate: epochMsToIso(data.settings.tradeSettings?.deadlineDate),
+          revisionHours: data.settings.tradeSettings?.revisionHours,
+          vetoVotesRequired: data.settings.tradeSettings?.vetoVotesRequired,
+          allowOutOfUniverse: data.settings.tradeSettings?.allowOutOfUniverse,
+          max: data.settings.tradeSettings?.max
         }
       }
     };
@@ -405,7 +435,7 @@ async function handleGetRoster(
     const credentials = await getCredentials(env, authHeader, correlationId);
     requireCredentials(credentials, 'roster data');
 
-    let path = `/seasons/${espnYear}/segments/0/leagues/${league_id}?view=mRoster&view=mTeam`;
+    let path = `/seasons/${espnYear}/segments/0/leagues/${league_id}?view=mRoster&view=mTeam&view=mSettings`;
     let providerScoringPeriodId: number | undefined;
     if (snapshot.type === 'date') {
       const resolved = await resolveScoringPeriodForDate(GAME_ID, espnYear, snapshot.date);
@@ -462,7 +492,15 @@ async function handleGetRoster(
         percentStarted: player?.ownership?.percentStarted,
         stats: currentStats?.stats ? transformStats(currentStats.stats) : undefined,
         acquisitionType: entry.acquisitionType,
-        acquisitionDate: entry.acquisitionDate
+        acquisitionDate: entry.acquisitionDate,
+        keeperValue: entry.playerPoolEntry?.keeperValue,
+        // keeperValueFuture is next season's cost — not yet fixed as of a
+        // past week/date, so historical snapshots withhold it entirely
+        // (FLA-284 temporal purity, mirroring FLA-278's proTeam/injuryStatus
+        // omission below via buildRosterLimitations).
+        ...(snapshot.type === 'current'
+          ? { keeperValueFuture: entry.playerPoolEntry?.keeperValueFuture }
+          : {}),
       };
     });
 
@@ -472,6 +510,14 @@ async function handleGetRoster(
       && roster.length > 0
       && roster.some((entry) => entry.acquisitionType == null || entry.acquisitionDate == null);
     const limitations = buildRosterLimitations(snapshot, acquisitionMetadataMissing);
+
+    // Keeper cost unit depends on the league's draft type; requires mSettings
+    // in this fetch (added above). Omit rather than guess when unavailable.
+    const draftType = data.settings?.draftSettings?.type;
+    const keeperValueUnit = draftType != null
+      ? (draftType === 'AUCTION' ? 'auction_dollars' : 'draft_round')
+      : undefined;
+    const keeperCount = data.settings?.draftSettings?.keeperCount;
 
     return {
       success: true,
@@ -484,6 +530,8 @@ async function handleGetRoster(
         ownerName,
         snapshot: toSnapshotMetadata(snapshot, { providerScoringPeriodId }),
         ...(limitations ? { limitations } : {}),
+        ...(keeperValueUnit ? { keeperValueUnit } : {}),
+        ...(keeperCount != null ? { isKeeperLeague: keeperCount > 0 } : {}),
         roster
       }
     };
