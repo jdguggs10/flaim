@@ -32,6 +32,29 @@ interface FrontendUrlEnv {
 /**
  * Resolve the frontend URL for OAuth redirects.
  * Priority: FRONTEND_URL env var > localhost (dev) > preview origin > flaim.app
+ *
+ * Every current environment (dev/preview/prod, see wrangler.jsonc) sets
+ * FRONTEND_URL explicitly, so the "preview origin" branch below is normally
+ * unreachable — this is intentional, not dead code to prune. It exists as a
+ * defensive fallback for handleAuthorize (the MCP client's /authorize
+ * redirect): if FRONTEND_URL were ever accidentally unset for preview, this
+ * branch tries to recover the calling PR-branch's Vercel URL from the
+ * request's Origin/Referer header before falling through to production.
+ *
+ * That fallback rarely has anything to read in practice. Per the MCP
+ * authorization spec, the client opens the user's browser directly at this
+ * server's /authorize endpoint — there's no preceding Flaim webpage in that
+ * navigation, so no flaim-*.vercel.app Origin/Referer header exists to
+ * recover (browsers also don't send Origin at all on a plain GET
+ * navigation). FRONTEND_URL's static, preview-wide default is what actually
+ * makes the MCP OAuth consent redirect work today; removing it would send
+ * that traffic to the final fallback (production) instead (FLA-281).
+ *
+ * The dynamic Origin/Referer lookup IS load-bearing elsewhere: Yahoo-connect
+ * (yahoo-connect-handlers.ts) calls resolvePreviewOrigin() directly, not
+ * through this function, from a request proxied by the Flaim frontend the
+ * user is actively browsing — that request legitimately carries the header
+ * this function is trying (and normally failing) to read.
  */
 export function getFrontendUrl(env: FrontendUrlEnv, request?: Request): string {
   if (env.FRONTEND_URL) {
