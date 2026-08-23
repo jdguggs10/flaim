@@ -75,6 +75,14 @@ Prefer `corepack pnpm ...` from the repo root unless a package README says other
 - Worker-to-worker calls must use `.workers.dev` URLs, not custom domains.
 - Be explicit about repo-local limits. If a task appears to depend on sibling repos, private workspace context, or broader Flaim decisions that are not present here, say so instead of guessing.
 
+## Release Lanes (Directory-Review Gates)
+
+This repo ships two ways: continuous deploy to production on merge to `main`, and periodic frozen submission packets for AI app directories whose reviews freeze the advertised MCP contract.
+
+Before opening a PR, classify the change. It is **gated** (do not merge while a directory review is in flight; track it against the active review-freeze issue) if it touches any of: tool count; tool names, `description:` strings, annotations, or server instructions; declared input/output schemas in `workers/fantasy-mcp/src/mcp/tools.ts`; shipped skill text under `.agents/skills/`; or a plugin manifest. Everything else — worker internals, additive fields inside passthrough response payloads, web, docs — merges normally, with `docs/CHANGELOG.md` updated in the same PR.
+
+When unsure whether a change touches the frozen surface, treat it as gated and say so in the PR description.
+
 ## Verification
 
 Run the narrowest relevant checks for the area you changed.
