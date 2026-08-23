@@ -3,7 +3,13 @@ import { getYahooCredentials } from '../auth';
 import { yahooFetch, handleYahooError, requireCredentials } from '../yahoo-api';
 import { asArray, getPath, unwrapLeague } from '../normalizers';
 import { ErrorCode } from '@flaim/worker-shared';
-import { extractPlayerMeta, extractPlayerPercentOwned, toExecuteErrorResponse } from './utils';
+import {
+  extractPlayerMeta,
+  extractPlayerPercentOwned,
+  normalizeIsKeeper,
+  toExecuteErrorResponse,
+  type YahooKeeperStatus,
+} from './utils';
 
 const YAHOO_PAGE_SIZE = 100;
 
@@ -15,6 +21,7 @@ type YahooFreeAgent = {
   position: string;
   percentOwned: number | null;
   status: string | undefined;
+  isKeeper?: YahooKeeperStatus;
 };
 
 function compareFreeAgents(a: YahooFreeAgent, b: YahooFreeAgent): number {
@@ -75,6 +82,9 @@ export function createGetFreeAgentsHandler(config: YahooHandlerContext): Handler
           ...playersArray.map((playerWrapper: unknown) => {
             const playerData = getPath(playerWrapper, ['player']) as unknown[];
             const playerMeta = extractPlayerMeta(playerData);
+            // See get-roster.ts for why isKeeper isn't gated on any
+            // historical/snapshot logic — free agents have no such concept.
+            const isKeeper = normalizeIsKeeper(playerMeta.is_keeper);
 
             return {
               playerKey: playerMeta.player_key as string,
@@ -84,6 +94,7 @@ export function createGetFreeAgentsHandler(config: YahooHandlerContext): Handler
               position: playerMeta.display_position as string,
               percentOwned: extractPlayerPercentOwned(playerData),
               status: playerMeta.status as string | undefined,
+              ...(isKeeper ? { isKeeper } : {}),
             };
           })
         );

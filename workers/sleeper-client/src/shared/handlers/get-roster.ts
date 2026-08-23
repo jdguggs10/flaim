@@ -215,6 +215,15 @@ export function createGetRosterHandler(): HandlerFn {
           bench: resolveSleeperPlayerEntries(bench, playersIndex),
           reserve: resolveSleeperPlayerEntries(reserve, playersIndex),
           taxi: resolveSleeperPlayerEntries(taxi, playersIndex),
+          // Populated only during Sleeper's pre-draft keeper-selection window
+          // (see README); null vs [] is preserved exactly as Sleeper sends it
+          // rather than collapsed to one shape.
+          keepers:
+            roster.keepers === undefined
+              ? undefined
+              : roster.keepers === null
+                ? null
+                : resolveSleeperPlayerEntries(roster.keepers, playersIndex),
           record: {
             wins: settings?.wins ?? 0,
             losses: settings?.losses ?? 0,

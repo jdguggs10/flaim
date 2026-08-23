@@ -18,6 +18,23 @@ Yahoo's roster resource is sport-sensitive: `;week=` is valid for football only,
 
 Player entries omit `team` and `status` on any historical (`week`/`date`) snapshot, and the response adds `limitations: { playerProTeamAvailable: false }` (FLA-278). Yahoo's roster player object exposes `editorial_team_abbr`/`status` as the player's CURRENT club and CURRENT status only — there is no historical value in this payload for a past week/date, so a player traded or whose status changed since would otherwise show present-day facts mislabeled as historical. Current-roster entries are unaffected.
 
+### Keeper / League-Format Context (FLA-284)
+
+**Status: coded and fixture-tested only, not live-verified.** Yahoo API access has been cut since 2026-07-27 (FLA-237); the fields below are shaped from real captured fixtures and Yahoo's own (sparse) documentation, not a live call against this worker. Treat them as best-effort until FLA-237 clears and a live check runs.
+
+`get_roster`, `get_free_agents`, and `get_players` (`search-players.ts`) each emit an optional `isKeeper: { status: boolean, cost, kept: boolean }` per player, sourced from Yahoo's `is_keeper` field, when Yahoo returns it — omitted entirely otherwise. Notes:
+- `is_keeper` is **undocumented** — it does not appear in Yahoo's published API samples. It was reverse-engineered from real captured league fixtures and could change silently; some third-party Yahoo API clients explicitly ignore it for that reason.
+- `status`/`kept` are normalized from whatever representation Yahoo sends (native booleans, `"0"`/`"1"` strings, `"true"`/`"false"` strings case-insensitive/trimmed, or `0`/`1` numbers — all appear elsewhere in this API) to plain booleans. An encoding that isn't recognized normalizes to `undefined` (omitted from the JSON response) rather than being guessed at — it is never coerced to `true`. `cost` is passed through unchanged — every known capture shows it `false`; no confirmed populated example exists, so there's no known shape to normalize it to.
+- `is_keeper` was **observed** on every player object in the captured roster, player-collection, and free-agent fixtures for a keeper-format league, with `status`/`kept` explicitly `false` for non-kept players rather than merely absent. Its universality across all Yahoo resources/league configs is unverified — Yahoo doesn't document the field at all, let alone when it's guaranteed to be present — so treat "always present for keeper leagues" as this worker's working assumption from fixtures, not a documented guarantee. `isKeeper` is omitted when the field itself is absent from Yahoo's response (i.e. the league isn't keeper-format, Yahoo didn't return it for this resource, or a future/unobserved response shape simply lacks it); when the field is present but its `status`/`kept` sub-values use an unrecognized encoding, `isKeeper` is still emitted with those keys individually `undefined`.
+- Not gated by roster historical-snapshot logic (unlike `team`/`status`, see above): keeper designation is a season-long constant set pre-draft, not a point-in-time club/status fact, so the FLA-278 temporal-purity rule doesn't apply here.
+- Yahoo also supports a `league/{key}/players;status=K` filter that lists every keeper-designated player league-wide in one call. It is **not used** by this worker — the tools above already carry `is_keeper` per player at no extra fetch cost, and a dedicated keeper-listing tool is out of scope for this phase.
+
+`get_league_info` adds one more fetch, `GET /league/{key}/settings`, and emits `draftType`, `isAuctionDraft`, `canTradeDraftPicks`, `tradeEndDate`, `tradeRatifyType`, `tradeRejectTime`, `usesFaab`, and `isProLeague` (already present on the `/teams` response's league metadata — no extra fetch needed) when available. **Important: Yahoo's API exposes no keeper configuration at all** — no `max_keepers`, no `uses_keeper` flag, no keeper deadline, no cost rule. Yahoo's own help content says as much: "there is no setting to signify being a keeper league." Keeper cost on Yahoo is always a league-specific house rule the commissioner enforces manually — Flaim cannot read or compute it.
+
+The `/settings` fetch runs **sequentially after** `/teams`, not concurrently with it: Yahoo's aggressive throttling (HTTP 999) is sensitive to concurrent requests per the team's operating posture, so this worker deliberately avoids firing them in parallel.
+
+The `/settings` fetch degrades independently and can never fail `get_league_info`: if it 404s/5xxs, times out, rejects outright, or returns an unexpected shape, the response still returns exactly what `/teams` alone would have (unchanged from before this fetch existed) plus a `warning: "LEAGUE_SETTINGS_UNAVAILABLE: ..."` string, matching this worker's existing `get_transactions` degrade-with-warning convention. It never throws out of the handler.
+
 ## Architecture
 
 ```
@@ -103,6 +120,8 @@ Yahoo's JSON is structurally quirky:
 - `unwrapLeague()` - Extracts league data from wrapper arrays
 - `unwrapTeam()` - Extracts team data from wrapper arrays
 - `getPath()` - Safe deep path traversal
+- `toYahooBoolean()` - Normalizes a boolean flag that may arrive as a native boolean, `"0"`/`"1"` string, or `0`/`1` number, depending on resource
+- `toYahooFiniteNumber()` - Parses a numeric field that may arrive as a string
 
 ### Resource Keys
 Yahoo uses hierarchical keys:

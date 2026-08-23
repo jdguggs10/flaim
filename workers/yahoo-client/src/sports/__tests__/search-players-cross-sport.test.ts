@@ -81,6 +81,35 @@ function buildSearchResponse(): unknown {
   };
 }
 
+// FLA-284: same is_keeper shape as the roster/free-agents fixtures, on one
+// searched player.
+function buildSearchResponseWithKeeper(): unknown {
+  return {
+    fantasy_content: {
+      league: [
+        { league_key: '449.l.123', name: 'Test League' },
+        {
+          players: {
+            '0': {
+              player: [
+                [{
+                  player_id: '101',
+                  name: { full: 'Giancarlo Stanton' },
+                  editorial_team_abbr: 'NYY',
+                  display_position: 'OF',
+                  is_keeper: { status: true, cost: false, kept: true },
+                }],
+                { ownership: { percent_owned: '47' } },
+              ],
+            },
+            count: 1,
+          },
+        },
+      ],
+    },
+  };
+}
+
 function buildLeagueInfoWithTeamsResponse(): unknown {
   return {
     fantasy_content: {
@@ -283,5 +312,50 @@ describe('yahoo cross-sport get_players handlers', () => {
     expect(fetchMock.mock.calls[1]?.[0]).toBe('/league/449.l.123/teams');
     expect(fetchMock.mock.calls[2]?.[0]).toBe('/team/449.l.123.t.1/roster');
     expect(fetchMock.mock.calls[3]?.[0]).toBe('/team/449.l.123.t.2/roster');
+  });
+
+  // FLA-284: same is_keeper passthrough as get_roster/get_free_agents.
+  it.each(scenarios)('$label includes normalized isKeeper when a searched player has is_keeper', async ({ sport, handlers }) => {
+    getCredsMock.mockResolvedValue({ accessToken: 'token' });
+    fetchMock
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(buildSearchResponseWithKeeper()), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(buildLeagueInfoWithTeamsResponse()), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(buildRosterResponse('449.l.123.t.1', [])), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(buildRosterResponse('449.l.123.t.2', [])), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+
+    const params: ToolParams = {
+      sport,
+      league_id: '449.l.123',
+      season_year: 2025,
+      query: 'stanton',
+      count: 10,
+    };
+
+    const result = await handlers.get_players({} as never, params, 'Bearer x', `cid-${sport}`);
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+
+    const data = result.data as { players: Array<Record<string, unknown>> };
+    expect(data.players[0]).toMatchObject({ isKeeper: { status: true, cost: false, kept: true } });
   });
 });

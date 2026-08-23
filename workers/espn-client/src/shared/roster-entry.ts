@@ -35,19 +35,46 @@ export function currentClubAndInjuryFields(
  * the existing `acquisitionMetadataAvailable` flag with
  * `playerProTeamAvailable: false` on every historical snapshot (the pro
  * team/injury omission above applies unconditionally to historical rosters,
- * not just when acquisition metadata happens to be missing). Returns
- * `undefined` for a current snapshot so callers can spread it away with
- * `...(limitations ? { limitations } : {})`.
+ * not just when acquisition metadata happens to be missing), and likewise
+ * `keeperValueFutureAvailable: false` (FLA-284): `keeperValueFuture` is next
+ * season's keeper cost, which isn't fixed as of a past week/date, so it is
+ * withheld on every historical snapshot regardless of whether ESPN happened
+ * to report a value. Returns `undefined` for a current snapshot so callers
+ * can spread it away with `...(limitations ? { limitations } : {})`.
  */
 export function buildRosterLimitations(
   snapshot: RosterSnapshot,
   acquisitionMetadataMissing: boolean
-): { acquisitionMetadataAvailable?: false; playerProTeamAvailable: false } | undefined {
+): { acquisitionMetadataAvailable?: false; playerProTeamAvailable: false; keeperValueFutureAvailable: false } | undefined {
   if (snapshot.type === 'current') {
     return undefined;
   }
   return {
     ...(acquisitionMetadataMissing ? { acquisitionMetadataAvailable: false as const } : {}),
     playerProTeamAvailable: false,
+    keeperValueFutureAvailable: false,
   };
+}
+
+/**
+ * Maps ESPN's `draftSettings.type` to the unit that `keeperValue`/
+ * `keeperValueFuture` are denominated in for `get_roster` (FLA-284 audit).
+ *
+ * - `AUCTION` -> `'auction_dollars'`.
+ * - `SNAKE` and `AUTOPICK` -> `'draft_round'` (both are ordinal-pick draft
+ *   formats; keeper cost is a round number either way).
+ * - Any other/unknown type (e.g. `OFFLINE`, or the type field being absent)
+ *   -> `undefined`, so the caller omits `keeperValueUnit` rather than
+ *   guessing at a unit ESPN hasn't told us.
+ */
+export function resolveKeeperValueUnit(draftType: string | undefined): 'auction_dollars' | 'draft_round' | undefined {
+  switch (draftType) {
+    case 'AUCTION':
+      return 'auction_dollars';
+    case 'SNAKE':
+    case 'AUTOPICK':
+      return 'draft_round';
+    default:
+      return undefined;
+  }
 }
