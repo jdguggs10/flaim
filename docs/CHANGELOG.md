@@ -26,6 +26,10 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 - **Changed**: Public copy now names both official consumer channels — ChatGPT's Plugin Store and Claude's Connector Directory — with Perplexity and other AIs as custom connectors; "Yahoo sign-in" replaces "OAuth" in consumer copy; docs and tool copy say "available players" and "recent moves". The homepage prompt ticker is a continuous marquee again, the football page uses authentic screenshots, and `/support` carries a notice about the ongoing Yahoo Fantasy API access outage.
 - **Changed**: The shipped `flaim-fantasy` skill, welcome and league-connected emails, `ai-plugin.json`, connector docs, and README use the same language (Claude named alongside ChatGPT, docs URLs, vocabulary).
 
+## [8.3.0] - 2026-08-20
+
+Corresponds to ChatGPT plugin listing v2.2 submission.
+
 ### ESPN Structured Transactions Restored (FLA-140)
 - **Fixed**: ESPN `get_transactions` once again serves its structured `mTransactions2` source as primary. The transport now sends only the minimal `filterType` fantasy-filter: ESPN returns HTTP 400 for any filter carrying `limit`/`offset` (with or without sort fields), which is why the structured path was previously unusable. The view exposes no pagination; each pinned scoring period returns ESPN's own full result set for that period, fetched once.
 - **Added**: Structured trade rows (`TRADE_ACCEPT`/`TRADE_UPHOLD`) with complete movement items now expose directional `trade_sides` built directly from ESPN's from/to team data; flat `players_added`/`players_dropped` remain. Structured trades missing directional detail are filled from the activity feed (`source: mTransactions2_with_activity_trade_details`), and mixed rows keep their own flat lists while taking activity-derived sides. Failed bids, trade proposals/declines/vetoes/upholds, and FAAB bid amounts are served again via the structured source.
