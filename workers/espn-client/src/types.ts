@@ -62,14 +62,14 @@ export interface EspnLeagueSettings {
     keeperCount?: number;
     keeperCountFuture?: number;
     keeperOrderType?: string; // 'TRADITIONAL' | 'END_OF_DRAFT' | 'SELECTED_ROUND'
-    keeperDeadlineDate?: number; // epoch ms
-    type?: string; // 'AUCTION' | 'SNAKE' | 'OFFLINE' (draft type)
+    keeperDeadlineDate?: number | null; // epoch ms; ESPN sends explicit null for "no deadline set"
+    type?: string; // 'AUCTION' | 'SNAKE' | 'AUTOPICK' | 'OFFLINE' (draft type)
     auctionBudget?: number;
     isTradingEnabled?: boolean; // draft-PICK trading toggle, not season trades
   };
   /** In-season player-trade rules (distinct from draftSettings.isTradingEnabled). */
   tradeSettings?: {
-    deadlineDate?: number; // epoch ms
+    deadlineDate?: number | null; // epoch ms; ESPN sends explicit null for "no deadline set"
     revisionHours?: number;
     vetoVotesRequired?: number;
     allowOutOfUniverse?: boolean;

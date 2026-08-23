@@ -579,15 +579,19 @@ describe('sleeper cross-sport handler characterization tests', () => {
 
       expect(result.success).toBe(true);
       const data = result.data as Record<string, unknown>;
+      // disable_trades is absent from this fixture's settings — Sleeper's
+      // 0/1 encoding gives no way to distinguish "not disabled" from "not
+      // reported," so tradesDisabled is omitted rather than defaulted to
+      // false (FLA-284 audit).
       expect(data.leagueFormat).toEqual({
         typeRaw: 2,
         typeNote: expect.stringContaining('guillotine'),
         tradeDeadlineWeek: 13,
-        tradesDisabled: false,
         pickTrading: true,
         taxi: { slots: 3, years: 1 },
         reserveSlots: 6,
       });
+      expect((data.leagueFormat as Record<string, unknown>)).not.toHaveProperty('tradesDisabled');
 
       // Neither roster fixture included a keepers field — omitted, not
       // coerced to null or [].
@@ -606,6 +610,51 @@ describe('sleeper cross-sport handler characterization tests', () => {
       expect(result.success).toBe(true);
       const data = result.data as Record<string, unknown>;
       expect(data.leagueFormat).toBeUndefined();
+    });
+
+    it.each(scenarios)('$label omits tradesDisabled/pickTrading/taxi.allowVets rather than coercing to false when Sleeper sends a value other than exact numeric 0/1 (FLA-284)', async ({ sport, handlers }) => {
+      mockFetch
+        .mockResolvedValueOnce(jsonResponse({
+          league_id: '777',
+          name: 'Odd Flags League',
+          sport: 'nfl',
+          season: '2026',
+          status: 'in_season',
+          total_rosters: 2,
+          roster_positions: ['QB', 'RB'],
+          scoring_settings: { pass_yd: 0.04 },
+          previous_league_id: null,
+          draft_id: 'draft_odd',
+          settings: {
+            type: 1,
+            // None of these are exact numeric 0/1 — Sleeper's encoding gives
+            // no defined meaning for them, so they must not collapse to false.
+            disable_trades: null,
+            pick_trading: 2,
+            taxi_allow_vets: null,
+            taxi_slots: 1,
+          },
+        }))
+        .mockResolvedValueOnce(jsonResponse([
+          { roster_id: 1, owner_id: 'u1', players: [], starters: [], reserve: [], settings: { wins: 0, losses: 0, ties: 0, fpts: 0 } },
+          { roster_id: 2, owner_id: 'u2', players: [], starters: [], reserve: [], settings: { wins: 0, losses: 0, ties: 0, fpts: 0 } },
+        ]))
+        .mockResolvedValueOnce(jsonResponse([
+          { user_id: 'u1', display_name: 'Alice', avatar: null },
+          { user_id: 'u2', display_name: 'Bob', avatar: null },
+        ]))
+        .mockResolvedValueOnce(jsonResponse([]));
+
+      const params: ToolParams = { sport, league_id: '777', season_year: 2026 };
+      const result = await handlers.get_league_info({} as never, params);
+
+      expect(result.success).toBe(true);
+      const data = result.data as Record<string, unknown>;
+      const leagueFormat = data.leagueFormat as Record<string, unknown>;
+      expect(leagueFormat).not.toHaveProperty('tradesDisabled');
+      expect(leagueFormat).not.toHaveProperty('pickTrading');
+      expect(leagueFormat.taxi).toEqual({ slots: 1 });
+      expect((leagueFormat.taxi as Record<string, unknown>)).not.toHaveProperty('allowVets');
     });
   });
 

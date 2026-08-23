@@ -215,13 +215,24 @@ describe('normalizers', () => {
     it('parses numeric strings (real /settings fixture: trade_reject_time "1")', () => {
       expect(toYahooFiniteNumber('1')).toBe(1);
       expect(toYahooFiniteNumber('42')).toBe(42);
+      expect(toYahooFiniteNumber('0')).toBe(0);
+      expect(toYahooFiniteNumber('12')).toBe(12);
     });
 
     it('returns undefined for missing/non-finite/non-numeric values', () => {
       expect(toYahooFiniteNumber(undefined)).toBeUndefined();
       expect(toYahooFiniteNumber(null)).toBeUndefined();
       expect(toYahooFiniteNumber('N/A')).toBeUndefined();
+      expect(toYahooFiniteNumber('abc')).toBeUndefined();
       expect(toYahooFiniteNumber(Number.NaN)).toBeUndefined();
+    });
+
+    it('returns undefined for empty/whitespace-only strings rather than coercing to 0 (FLA-284 audit)', () => {
+      // Number('') and Number('   ') both evaluate to 0 — without an
+      // explicit guard, a blank/missing string field would misreport as
+      // the finite value 0 instead of "not sent."
+      expect(toYahooFiniteNumber('')).toBeUndefined();
+      expect(toYahooFiniteNumber('  ')).toBeUndefined();
     });
   });
 });

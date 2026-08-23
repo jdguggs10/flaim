@@ -55,3 +55,26 @@ export function buildRosterLimitations(
     keeperValueFutureAvailable: false,
   };
 }
+
+/**
+ * Maps ESPN's `draftSettings.type` to the unit that `keeperValue`/
+ * `keeperValueFuture` are denominated in for `get_roster` (FLA-284 audit).
+ *
+ * - `AUCTION` -> `'auction_dollars'`.
+ * - `SNAKE` and `AUTOPICK` -> `'draft_round'` (both are ordinal-pick draft
+ *   formats; keeper cost is a round number either way).
+ * - Any other/unknown type (e.g. `OFFLINE`, or the type field being absent)
+ *   -> `undefined`, so the caller omits `keeperValueUnit` rather than
+ *   guessing at a unit ESPN hasn't told us.
+ */
+export function resolveKeeperValueUnit(draftType: string | undefined): 'auction_dollars' | 'draft_round' | undefined {
+  switch (draftType) {
+    case 'AUCTION':
+      return 'auction_dollars';
+    case 'SNAKE':
+    case 'AUTOPICK':
+      return 'draft_round';
+    default:
+      return undefined;
+  }
+}

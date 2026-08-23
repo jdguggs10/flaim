@@ -164,6 +164,98 @@ describe('espn cross-sport get_roster keeper value passthrough', () => {
     expect(data.roster[0].keeperValueFuture).toBe(4);
   });
 
+  it.each(scenarios)('$label — autopick league: keeperValueUnit is draft_round', async ({ sport, handlers }) => {
+    const mockResponse = {
+      settings: {
+        draftSettings: { keeperCount: 5, type: 'AUTOPICK' },
+      },
+      teams: [
+        {
+          id: 6,
+          name: 'Team 6',
+          roster: {
+            entries: [rosterEntry(42, 3, 4)],
+          },
+        },
+      ],
+    };
+
+    espnFetchMock.mockResolvedValue(
+      new Response(JSON.stringify(mockResponse), { status: 200 })
+    );
+
+    const params = makeParams(sport, { team_id: '6' });
+    const result = await handlers.get_roster({} as never, params, 'Bearer x', 'cid');
+
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    const data = result.data as RosterData;
+
+    expect(data.keeperValueUnit).toBe('draft_round');
+  });
+
+  it.each(scenarios)('$label — offline draft type: keeperValueUnit is omitted (unknown unit, not guessed)', async ({ sport, handlers }) => {
+    const mockResponse = {
+      settings: {
+        draftSettings: { keeperCount: 5, type: 'OFFLINE' },
+      },
+      teams: [
+        {
+          id: 6,
+          name: 'Team 6',
+          roster: {
+            entries: [rosterEntry(42, 3, 4)],
+          },
+        },
+      ],
+    };
+
+    espnFetchMock.mockResolvedValue(
+      new Response(JSON.stringify(mockResponse), { status: 200 })
+    );
+
+    const params = makeParams(sport, { team_id: '6' });
+    const result = await handlers.get_roster({} as never, params, 'Bearer x', 'cid');
+
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    const data = result.data as RosterData;
+
+    expect(data.keeperValueUnit).toBeUndefined();
+    expect('keeperValueUnit' in data).toBe(false);
+  });
+
+  it.each(scenarios)('$label — unknown/unrecognized draft type string: keeperValueUnit is omitted (unknown unit, not guessed)', async ({ sport, handlers }) => {
+    const mockResponse = {
+      settings: {
+        draftSettings: { keeperCount: 5, type: 'SOME_FUTURE_TYPE' },
+      },
+      teams: [
+        {
+          id: 6,
+          name: 'Team 6',
+          roster: {
+            entries: [rosterEntry(42, 3, 4)],
+          },
+        },
+      ],
+    };
+
+    espnFetchMock.mockResolvedValue(
+      new Response(JSON.stringify(mockResponse), { status: 200 })
+    );
+
+    const params = makeParams(sport, { team_id: '6' });
+    const result = await handlers.get_roster({} as never, params, 'Bearer x', 'cid');
+
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    const data = result.data as RosterData;
+
+    expect(data.keeperValueUnit).toBeUndefined();
+    expect('keeperValueUnit' in data).toBe(false);
+  });
+
   it.each(scenarios)('$label — roster entries without keeperValue leave the field undefined, no crash', async ({ sport, handlers }) => {
     const mockResponse = {
       settings: {

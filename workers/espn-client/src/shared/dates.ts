@@ -16,11 +16,16 @@
  * - Anything else — `NaN`, non-finite numbers, `0`/negative numbers,
  *   strings, objects, arrays — is treated as "not a valid date" and
  *   normalized to `null` rather than thrown or guessed at.
+ * - A finite positive number that is nonetheless outside the ECMAScript
+ *   date range (beyond +/-8.64e15 ms from the epoch, e.g. `Number.MAX_VALUE`)
+ *   also normalizes to `null` instead of throwing from `toISOString()`.
  */
 export function epochMsToIso(value: unknown): string | null | undefined {
   if (value === undefined) return undefined;
   if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
-    return new Date(value).toISOString();
+    const date = new Date(value);
+    if (!Number.isFinite(date.getTime())) return null;
+    return date.toISOString();
   }
   return null;
 }

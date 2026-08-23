@@ -155,18 +155,30 @@ describe('extractLeagueSettings (FLA-284)', () => {
     expect(extractLeagueSettings(raw)).toEqual({ draft_type: 'live' });
   });
 
-  it('returns undefined (not the raw container) when a plain object has no numeric-keyed plain-object entry (FLA-284 audit)', () => {
+  it('returns the object itself when settings is already a flat fields object (FLA-284 audit)', () => {
+    // Previously returned undefined here — a plain object with no numeric
+    // keys has no entry for asArray() to find, so this shape (settings
+    // already IS the fields object, not a wrapper around it) fell through
+    // to "not found" even though the data was right there. Detected by the
+    // presence of a known settings field as a direct property.
+    const raw = { draft_type: 'live', can_trade_draft_picks: '1' };
+    expect(extractLeagueSettings(raw)).toEqual({ draft_type: 'live', can_trade_draft_picks: '1' });
+  });
+
+  it('returns undefined (not the raw container) when a plain object has no known settings field and no numeric-keyed plain-object entry', () => {
     // Previously fell back to returning the raw object itself here — which,
     // for a genuinely numeric-keyed-but-all-scalar container, would hand
     // the caller something shaped nothing like a flat settings object.
     // extractLeagueSettings now treats "no plain-object entry found" as
     // "not found" so the caller pushes its LEAGUE_SETTINGS_UNAVAILABLE
     // warning instead of guessing.
-    const raw = { draft_type: 'live', can_trade_draft_picks: '1' };
-    expect(extractLeagueSettings(raw)).toBeUndefined();
-
     const numericKeyedScalars = { '0': 'unexpected', '1': 42, count: 2 };
     expect(extractLeagueSettings(numericKeyedScalars)).toBeUndefined();
+
+    // A plain object with no numeric keys AND no known settings field
+    // (unrecognized shape) also degrades to undefined rather than guessing.
+    const unrecognizedFlatObject = { some_unknown_field: 'x' };
+    expect(extractLeagueSettings(unrecognizedFlatObject)).toBeUndefined();
   });
 
   it('returns undefined for scalar/unexpected shapes rather than guessing', () => {

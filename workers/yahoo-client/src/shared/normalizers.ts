@@ -138,13 +138,20 @@ export function toYahooBoolean(value: unknown): boolean | undefined {
  * Parse a Yahoo numeric field that may arrive as a string (real
  * `/league/{key}/settings` capture: `trade_reject_time: "1"`). Returns
  * undefined for missing/non-finite values rather than coercing to 0.
+ *
+ * An empty or whitespace-only string is rejected before reaching `Number()`
+ * (FLA-284 audit): `Number('')` and `Number('   ')` both evaluate to `0`,
+ * which would otherwise misreport "field not sent/blank" as the finite
+ * value `0`.
  */
 export function toYahooFiniteNumber(value: unknown): number | undefined {
   if (typeof value === 'number') {
     return Number.isFinite(value) ? value : undefined;
   }
   if (typeof value === 'string') {
-    const parsed = Number(value);
+    const trimmed = value.trim();
+    if (trimmed === '') return undefined;
+    const parsed = Number(trimmed);
     return Number.isFinite(parsed) ? parsed : undefined;
   }
   return undefined;

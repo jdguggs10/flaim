@@ -32,10 +32,25 @@ interface LeagueFormat {
   typeNote: string;
   maxKeepers?: number;
   tradeDeadlineWeek?: number;
-  tradesDisabled: boolean;
-  pickTrading: boolean;
+  tradesDisabled?: boolean;
+  pickTrading?: boolean;
   taxi?: LeagueFormatTaxi;
   reserveSlots?: number;
+}
+
+/**
+ * Sleeper encodes several league-settings booleans as numeric 0/1 (rather
+ * than JSON `true`/`false`), and does not document what other values —
+ * missing, `null`, or something other than 0/1 — mean. Treating "missing"
+ * or "invalid" as `false` would assert a specific disabled/off state that
+ * Sleeper never actually reported (FLA-284 audit). Only exactly numeric `0`
+ * or `1` is trusted; anything else resolves to `undefined` so the caller
+ * omits the field instead of guessing.
+ */
+function sleeperNumericFlag(value: unknown): boolean | undefined {
+  if (value === 1) return true;
+  if (value === 0) return false;
+  return undefined;
 }
 
 /**
@@ -43,27 +58,31 @@ interface LeagueFormat {
  * `settings`. Returns undefined when settings itself is absent (nothing to
  * report); once settings exists, leagueFormat is always included even if
  * every keeper/taxi-specific field within it is unset — typeRaw falls back
- * to null and tradesDisabled/pickTrading fall back to false rather than
- * being omitted, since those two are always derivable (`=== 1`) once
- * settings is present.
+ * to null, while tradesDisabled/pickTrading/taxi.allowVets are omitted
+ * (rather than defaulted to false) whenever Sleeper doesn't send an exact
+ * numeric 0/1 for them.
  */
 function buildLeagueFormat(settings: SleeperLeagueSettings | undefined): LeagueFormat | undefined {
   if (!settings) return undefined;
 
+  const allowVets = sleeperNumericFlag(settings.taxi_allow_vets);
   const taxi: LeagueFormatTaxi = {
     ...(typeof settings.taxi_slots === 'number' ? { slots: settings.taxi_slots } : {}),
     ...(typeof settings.taxi_years === 'number' ? { years: settings.taxi_years } : {}),
-    ...(settings.taxi_allow_vets !== undefined ? { allowVets: settings.taxi_allow_vets === 1 } : {}),
+    ...(allowVets !== undefined ? { allowVets } : {}),
     ...(typeof settings.taxi_deadline === 'number' ? { deadline: settings.taxi_deadline } : {}),
   };
+
+  const tradesDisabled = sleeperNumericFlag(settings.disable_trades);
+  const pickTrading = sleeperNumericFlag(settings.pick_trading);
 
   return {
     typeRaw: typeof settings.type === 'number' ? settings.type : null,
     typeNote: LEAGUE_FORMAT_TYPE_NOTE,
     ...(typeof settings.max_keepers === 'number' ? { maxKeepers: settings.max_keepers } : {}),
     ...(typeof settings.trade_deadline === 'number' ? { tradeDeadlineWeek: settings.trade_deadline } : {}),
-    tradesDisabled: settings.disable_trades === 1,
-    pickTrading: settings.pick_trading === 1,
+    ...(tradesDisabled !== undefined ? { tradesDisabled } : {}),
+    ...(pickTrading !== undefined ? { pickTrading } : {}),
     ...(Object.keys(taxi).length > 0 ? { taxi } : {}),
     ...(typeof settings.reserve_slots === 'number' ? { reserveSlots: settings.reserve_slots } : {}),
   };

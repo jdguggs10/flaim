@@ -38,4 +38,13 @@ describe('epochMsToIso (FLA-284)', () => {
     expect(epochMsToIso([])).toBeNull();
     expect(epochMsToIso(true)).toBeNull();
   });
+
+  it('normalizes finite numbers beyond the ECMAScript date range to null rather than throwing', () => {
+    expect(epochMsToIso(Number.MAX_VALUE)).toBeNull();
+    expect(epochMsToIso(8.64e15 + 1)).toBeNull();
+  });
+
+  it('still converts a normal epoch after the out-of-range guard', () => {
+    expect(epochMsToIso(1773964800000)).toBe('2026-03-20T00:00:00.000Z');
+  });
 });

@@ -84,26 +84,65 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 /**
+ * Settings fields this handler actually reads. Used only to recognize a
+ * FLAT settings object (see below) — presence of any one of these as a
+ * direct property distinguishes "this object already IS the
+ * settings-fields object" from a wrapper/container whose values merely
+ * happen to be objects (e.g. a numeric-keyed container's "0" entry).
+ */
+const KNOWN_LEAGUE_SETTINGS_KEYS = [
+  'draft_type',
+  'is_auction_draft',
+  'uses_faab',
+  'trade_end_date',
+  'trade_ratify_type',
+  'trade_reject_time',
+  'can_trade_draft_picks',
+  'uses_playoff',
+  'max_teams',
+  'waiver_type',
+] as const;
+
+function isFlatLeagueSettingsObject(value: Record<string, unknown>): boolean {
+  return KNOWN_LEAGUE_SETTINGS_KEYS.some((key) => key in value);
+}
+
+/**
  * Extract the flat settings-fields object from Yahoo's
- * `/league/{key}/settings` response. After `unwrapLeague()` merges the
- * league array, `.settings` is itself a nested array — a real captured
- * fixture (hkyplyr/yahoo_fantasy_ex) shows length 2: index 0 holds the
- * fields this handler reads (draft_type, can_trade_draft_picks, trade_end_date,
- * ...), index 1+ holds unrelated per-week/stat metadata — rather than a flat
- * object, unlike most single-value Yahoo nested resources (e.g. `roster`,
- * `standings`). Also defensively handles Yahoo's numeric-keyed-object form
- * ({"0": {...}, "count": 1}) in case this resource's shape varies by
- * game/season. This sub-resource is new to Flaim (FLA-284) and its exact
- * wire shape cannot be live-verified while Yahoo API access is cut
- * (FLA-237), so this degrades to undefined rather than guessing further —
- * including when the numeric-keyed-object fallback finds no plain-object
- * entry: this used to fall back to returning the raw (non-flat) container
- * itself, which would hand callers something shaped nothing like a
- * settings-fields object; treating it as "not found" instead lets the
- * caller push its existing LEAGUE_SETTINGS_UNAVAILABLE-style warning
- * (FLA-284 audit).
+ * `/league/{key}/settings` response. Three shapes are handled:
+ *
+ * 1. FLAT — `settings` is itself already the fields object
+ *    (`{ draft_type: 'live', ... }`), with no nested array/wrapper at all.
+ *    Detected by checking for any of `KNOWN_LEAGUE_SETTINGS_KEYS` as a
+ *    direct property before falling through to the shapes below, since a
+ *    plain-object check alone can't distinguish this from a numeric-keyed
+ *    container (case 3).
+ * 2. NESTED ARRAY — after `unwrapLeague()` merges the league array,
+ *    `.settings` is itself a nested array — a real captured fixture
+ *    (hkyplyr/yahoo_fantasy_ex) shows length 2: index 0 holds the fields
+ *    this handler reads (draft_type, can_trade_draft_picks, trade_end_date,
+ *    ...), index 1+ holds unrelated per-week/stat metadata — rather than a
+ *    flat object, unlike most single-value Yahoo nested resources (e.g.
+ *    `roster`, `standings`).
+ * 3. NUMERIC-KEYED OBJECT — Yahoo's `{"0": {...}, "count": 1}` form,
+ *    defensively handled in case this resource's shape varies by
+ *    game/season; the "count" sibling is ignored by `asArray` (it isn't a
+ *    numeric key) and isn't a known settings key either.
+ *
+ * This sub-resource is new to Flaim (FLA-284) and its exact wire shape
+ * cannot be fully live-verified while Yahoo API access is cut (FLA-237), so
+ * anything outside these three shapes degrades to `undefined` rather than
+ * guessing further — including when the numeric-keyed-object fallback finds
+ * no plain-object entry: this used to fall back to returning the raw
+ * (non-flat) container itself, which would hand callers something shaped
+ * nothing like a settings-fields object; treating it as "not found" instead
+ * lets the caller push its existing LEAGUE_SETTINGS_UNAVAILABLE-style
+ * warning (FLA-284 audit).
  */
 export function extractLeagueSettings(rawSettings: unknown): Record<string, unknown> | undefined {
+  if (isPlainObject(rawSettings) && isFlatLeagueSettingsObject(rawSettings)) {
+    return rawSettings;
+  }
   if (Array.isArray(rawSettings)) {
     return rawSettings.find(isPlainObject);
   }

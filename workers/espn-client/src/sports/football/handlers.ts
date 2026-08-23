@@ -5,7 +5,7 @@ import { espnFetch, handleEspnError, requireCredentials } from '../../shared/esp
 import { assertTransactionsSeasonSupported, executeEspnTransactionOperation } from '../../shared/espn-transactions';
 import { getEspnPlayersIndex } from '../../shared/espn-players-cache';
 import { fetchLeagueOwnershipMap, enrichPlayerWithOwnership } from '../../shared/league-ownership';
-import { buildRosterLimitations, currentClubAndInjuryFields } from '../../shared/roster-entry';
+import { buildRosterLimitations, currentClubAndInjuryFields, resolveKeeperValueUnit } from '../../shared/roster-entry';
 import { epochMsToIso } from '../../shared/dates';
 import { extractErrorCode, malformedRosterSnapshotError, resolveRosterSnapshotFromParams, rosterSnapshotUnsupportedError, toSnapshotMetadata } from '@flaim/worker-shared';
 import {
@@ -444,9 +444,7 @@ async function handleGetRoster(
     // Keeper cost unit depends on the league's draft type; requires mSettings
     // in this fetch (added above). Omit rather than guess when unavailable.
     const draftType = data.settings?.draftSettings?.type;
-    const keeperValueUnit = draftType != null
-      ? (draftType === 'AUCTION' ? 'auction_dollars' : 'draft_round')
-      : undefined;
+    const keeperValueUnit = resolveKeeperValueUnit(draftType);
     const keeperCount = data.settings?.draftSettings?.keeperCount;
 
     return {
